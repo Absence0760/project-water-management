@@ -5,8 +5,10 @@
 // compared with the run and which way the model leans, as the API worked it
 // out; opened, it gives the summary, the season, the dekads newest first with
 // why one wasn't compared, a CSV with the credit on its first line, and the
-// credit. Lower farm has none, the usual case (the fetch is off by default),
-// and says so. On a phone nothing scrolls sideways. Invented data only.
+// credit. With SSEBop's dekads too, a WaPOR | SSEBop switch shows each on
+// its own. Lower farm has none, the usual case (the fetch is off by default,
+// as in e2e, and no parcel is linked to it), and says why. On a phone nothing
+// scrolls sideways. Invented data only.
 import type { Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -146,13 +148,44 @@ test('a viewer reads the comparison and downloads it', async ({ page, owner, sig
 	expect(download.suggestedFilename()).toBe('Upper-farm-actual-et.csv');
 });
 
-test('a unit with no observations says so: the usual case, the fetch being off', async ({ page, owner }) => {
+test('the switch shows SSEBop’s dekads on their own, and the CSV holds both sources', async ({ page, owner }) => {
+	void owner;
+	const { projectId, upper } = await seed(page, 'Actual ET two sources');
+	await plantEtObservations(upper, DEKADS.slice(0, 3), 180_000, 'ssebop');
+	await openDrawer(page, projectId, upper, 'Upper farm');
+	await expect(panel(page).getByTestId('et-observed-line')).toHaveText(/^5 dekads compared · /);
+	await panel(page).locator('details.fold > summary').click();
+	const sw = panel(page).getByRole('group', { name: 'Source' });
+	const wapor = sw.getByRole('button', { name: 'WaPOR (7 dekads)' });
+	const ssebop = sw.getByRole('button', { name: 'SSEBop (3 dekads)' });
+	await expect(wapor).toHaveAttribute('aria-pressed', 'true');
+	await expect(ssebop).toHaveAttribute('aria-pressed', 'false');
+	await ssebop.click();
+	await expect(ssebop).toHaveAttribute('aria-pressed', 'true');
+	await expect(wapor).toHaveAttribute('aria-pressed', 'false');
+	// Three clear dekads inside the run: all compared, the line and the tables SSEBop's.
+	await expect(panel(page).getByTestId('et-observed-line')).toHaveText(/^3 dekads compared · /);
+	await panel(page).getByText('The 3 SSEBop dekads, newest first').click();
+	await expect(panel(page).getByTestId('et-observed-dekads').locator('tbody tr')).toHaveCount(3);
+	await expect(panel(page).getByTestId('et-observed-credit')).toHaveText(['Actual ET (WaPOR): FAO WaPOR v3, CC BY 4.0.', 'Actual ET (SSEBop): USGS FEWS NET SSEBop v6, CC0.']);
+	const [download] = await Promise.all([page.waitForEvent('download'), panel(page).getByTestId('et-observed-csv').click()]);
+	const lines = (await readFile((await download.path())!, 'utf8')).split('\r\n');
+	expect(lines.filter((l) => l.startsWith('wapor,'))).toHaveLength(7);
+	expect(lines.filter((l) => l.startsWith('ssebop,'))).toHaveLength(3);
+	await wapor.click();
+	await expect(panel(page).getByTestId('et-observed-line')).toHaveText(/^5 dekads compared · /);
+	await expectNoViolations(page, { include: '[data-testid="et-observed"]' });
+});
+
+test('a unit with no observations says why: the usual case, the check being off and no parcel linked', async ({ page, owner }) => {
 	void owner;
 	const { projectId, lower } = await seed(page, 'Actual ET none yet');
 	await openDrawer(page, projectId, lower, 'Lower farm');
-	await expect(panel(page).getByTestId('et-observed-line')).toHaveText('no observations');
+	await expect(panel(page).getByTestId('et-observed-line')).toHaveText('off on this site');
 	await panel(page).locator('details.fold > summary').click();
-	await expect(panel(page).getByTestId('et-observed-empty')).toContainText('No satellite actual ET for Lower farm yet.');
+	await expect(panel(page).getByTestId('et-observed-empty')).toContainText(
+		'The satellite check of actual ET is off on this site (it is off by default), and no farm parcels are linked to Lower farm on the Map.'
+	);
 	await expect(panel(page).getByTestId('et-observed-empty').getByRole('link', { name: 'Open the Map' })).toHaveAttribute('href', new RegExp(`node=${lower}`));
 	await expect(panel(page).getByTestId('et-observed-credit')).toHaveCount(0);
 	await expectNoViolations(page, { include: '[data-testid="et-observed"]' });

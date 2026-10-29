@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EtObserved, EtPoint, EtSourceResult, EtTotals } from '#lib/api/types.js';
-import { areaWords, dekadRows, ET_ATTRIBUTION, etCsv, etCsvName, etLine, fmtBias, leadSource, otherSourcesWords, seasonRows, summaryWords } from './etObserved';
+import { areaWords, dekadRows, emptyCase, emptyWords, ET_ATTRIBUTION, etCsv, etCsvName, etLine, fmtBias, leadSource, seasonRows, shownSource, sourceLabel, summaryWords } from './etObserved';
 
 const totals = (o: Partial<EtTotals> = {}): EtTotals => ({
 	compared: 2,
@@ -46,13 +46,16 @@ const source = (o: Partial<EtSourceResult> = {}): EtSourceResult => ({
 	summary: totals(),
 	...o
 });
-const data = (sources: EtSourceResult[] = [source()]): EtObserved => ({
+const data = (sources: EtSourceResult[] = [source()], o: Partial<EtObserved> = {}): EtObserved => ({
 	nodeId: 'n1',
 	name: 'Farm A',
+	enabled: true,
+	parcels: 2,
 	thresholds: { minValidShare: 0.8, withinShare: 0.25, floorMmDay: 0.5, areaRatio: 1.5 },
 	run: { id: 'r1', label: 'Newest', createdAt: '2026-10-29T00:00:00Z', engineVersion: '1.107.0', forecastFrom: null, inRun: true },
 	plantedAreaM2: 100_000,
-	sources
+	sources,
+	...o
 });
 
 describe('etObserved', () => {
@@ -61,10 +64,43 @@ describe('etObserved', () => {
 		expect(ET_ATTRIBUTION.ssebop).toBe('USGS FEWS NET SSEBop v6, CC0');
 	});
 
-	it('says which source the tables show when there are several, and nothing with one', () => {
-		const both = data([source(), source({ source: 'ssebop', attribution: 'USGS FEWS NET SSEBop v6, CC0' })]);
-		expect(otherSourcesWords(both, leadSource(both))).toBe('Shown: WaPOR. SSEBop’s 3 dekads are in the CSV.');
-		expect(otherSourcesWords(data(), leadSource(data()))).toBeNull();
+	it('shows the source picked in the switch while the unit has it, else the lead, and labels each with its dekads', () => {
+		const ssebop = source({ source: 'ssebop', attribution: 'USGS FEWS NET SSEBop v6, CC0', points: [point({ source: 'ssebop' })], summary: totals({ etBiasPct: 5 }) });
+		const both = data([source(), ssebop]);
+		expect(shownSource(both, null)!.source).toBe('wapor');
+		expect(shownSource(both, 'ssebop')!.source).toBe('ssebop');
+		expect(shownSource(both, 'wapor')!.source).toBe('wapor');
+		// Picked on another unit that has only WaPOR: the lead.
+		expect(shownSource(data(), 'ssebop')!.source).toBe('wapor');
+		expect(shownSource(null, 'ssebop')).toBeNull();
+		expect(sourceLabel(source())).toBe('WaPOR (3 dekads)');
+		expect(sourceLabel(ssebop)).toBe('SSEBop (1 dekad)');
+		// The fold's line follows the switch.
+		expect(etLine(both, false, null, 'ssebop')).toBe('2 dekads compared · crop ET +5% · irrigation −25%');
+	});
+
+	it('says why a unit has no observations: the check off (with or without parcels), no parcels linked, or none read yet', () => {
+		const none = (enabled: boolean, parcels: number) => data([], { enabled, parcels });
+		expect([none(false, 2), none(false, 0), none(true, 0), none(true, 1)].map(emptyCase)).toEqual(['off', 'off-no-parcels', 'no-parcels', 'waiting']);
+		expect(emptyWords(none(false, 2))).toBe(
+			'The satellite check of actual ET is off on this site (it is off by default). Once it is switched on, the 2 farm parcels linked to Farm A on the Map are read each dekad from satellite (FAO WaPOR v3, CC BY 4.0) and compared here with the model’s crop water use.'
+		);
+		expect(emptyWords(none(false, 0))).toBe(
+			'The satellite check of actual ET is off on this site (it is off by default), and no farm parcels are linked to Farm A on the Map. Once it is on, the parcels linked to a unit are read each dekad from satellite (FAO WaPOR v3, CC BY 4.0) and compared here with the model’s crop water use.'
+		);
+		expect(emptyWords(none(true, 0))).toBe(
+			'No farm parcels are linked to Farm A on the Map, so there is nothing for the satellite to read. Draw Farm A’s parcels on the Map, or link them to it; their actual ET is then read each dekad from satellite (FAO WaPOR v3, CC BY 4.0) and compared here with the model’s crop water use.'
+		);
+		expect(emptyWords(none(true, 1))).toBe(
+			'1 farm parcel is linked to Farm A, but no dekad has been read for it yet. Each dekad is published about three days after it ends and read newest first, so the first should show within a day.'
+		);
+		expect(emptyWords(none(false, 1))).toContain('the 1 farm parcel linked to Farm A on the Map is read each dekad');
+		expect([none(false, 2), none(false, 0), none(true, 0), none(true, 3)].map((d) => etLine(d, false, null))).toEqual([
+			'off on this site',
+			'off on this site',
+			'no farm parcels linked',
+			'none read yet'
+		]);
 	});
 
 	it('leads with WaPOR, else the first source', () => {
@@ -76,7 +112,7 @@ describe('etObserved', () => {
 
 	it('says in the fold’s line what was compared and which way the model leans', () => {
 		expect(etLine(data(), false, null)).toBe('2 dekads compared · crop ET +20% · irrigation −25%');
-		expect(etLine(data([]), false, null)).toBe('no observations');
+		expect(etLine(data([]), false, null)).toBe('none read yet');
 		expect(etLine(data([source({ summary: totals({ compared: 0, etBiasPct: null, irrigationBiasPct: null }) })]), false, null)).toBe('3 dekads observed, none compared');
 		expect(etLine(null, true, null)).toBe('loading…');
 		expect(etLine(null, false, 'boom')).toBe('couldn’t be loaded');

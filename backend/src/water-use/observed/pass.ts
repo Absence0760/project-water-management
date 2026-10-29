@@ -29,7 +29,18 @@
 //     that dekad, and the loader counts the row's revision;
 //   - a 404 for a dekad that ended in the last RECENT_DAYS is not published
 //     yet: asked again next run. An older one is noted missing and asked
-//     again after RECHECK_DAYS.
+//     again after RECHECK_DAYS;
+//   - a file the reader refuses (FeedFormatError: a header it can't read, a
+//     band scale that isn't 0.1, a tile it can't decode) is noted refused
+//     with its ETag, the whole file (`refused`) or a unit's read of it
+//     (`refusedUnits`), and isn't asked for again until the re-check: then a
+//     conditional GET of the header, whose 304 keeps the mark; a new ETag
+//     clears it and reads the units again. A unit whose parcels change drops
+//     out of `refusedUnits` (its window differs). The mark keeps the unit's
+//     status error (`format`) while it stands, so a refusal never reads as
+//     fixed by a clean read of another dekad. A file served with no ETag
+//     can't be told apart from a rewrite, so its mark lasts until the
+//     re-check and the next read decides again.
 //
 // One file's reads all carry its ETag: a response with another (FAO rewrote
 // it mid-read) abandons that dekad for this run, nothing kept from it.
@@ -55,10 +66,11 @@
 // alone for a day or the Retry-After, whichever is longer (dams/observed/
 // handover.ts pausedUntil, the same rule): the next runs ask nothing, write
 // nothing and publish no heartbeat, so the heartbeat alarm is the alert
-// (infra/et_observations.tf). A file the reader refuses, or a timeout, ends
-// that unit's read of that dekad (counted, with a code); anything else is a
-// bug and throws (the files read so far, the state and the status are
-// written first).
+// (infra/et_observations.tf). A file the reader refuses ends that unit's
+// read of that dekad (counted, with a code, and marked as above); a timeout
+// the same, unmarked, so the next run tries again; anything else is a bug
+// and throws (the files read so far, the state and the status are written
+// first).
 //
 // Locally (FEED_SOURCE=fixtures) the client is the synthetic one
 // (fixtures.ts) and pacing is off.
@@ -91,10 +103,22 @@ const UNIT_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 export const WaporState = z
 	.object({
 		v: z.literal(1),
-		/** Per dekad file read or asked for: its ETag (when it had one) and the day it was last read or checked, or that it was missing. */
+		/**
+		 * Per dekad file read or asked for: its ETag (when it had one) and the day it was last read or checked, or that it was
+		 * missing; and whether the reader refused it, the whole file (`refused`) or the units' reads listed (`refusedUnits`),
+		 * which stands until the ETag changes (see the header).
+		 */
 		files: z.record(
 			IsoDay,
-			z.object({ etag: z.string().min(1).max(200).optional(), missing: z.literal(true).optional(), checkedOn: IsoDay }).strict()
+			z
+				.object({
+					etag: z.string().min(1).max(200).optional(),
+					missing: z.literal(true).optional(),
+					refused: z.literal(true).optional(),
+					refusedUnits: z.array(z.string().regex(UNIT_KEY)).min(1).max(100_000).optional(),
+					checkedOn: IsoDay
+				})
+				.strict()
 		),
 		/** Per unit: the SHA-256 of its parcels and cropland as last read, and why it can't be observed, when it can't. */
 		units: z.record(z.string().regex(UNIT_KEY), z.object({ hash: z.string().regex(/^[0-9a-f]{64}$/), unobservable: z.string().max(40).optional() }).strict())
@@ -150,6 +174,8 @@ export interface WaporPassResult {
 	notModified: number;
 	/** Dekads abandoned because the file changed while being read. */
 	changedMidRead: number;
+	/** Unit reads not asked for because the reader refused that version of the file (a mark in the state; each counted once a run). */
+	refusedHeld: number;
 	requests: number;
 	stopped: WaporStop;
 	pausedUntil?: string;
@@ -193,6 +219,7 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 		filesChanged: 0,
 		notModified: 0,
 		changedMidRead: 0,
+		refusedHeld: 0,
 		requests: 0,
 		stopped: 'done',
 		recencyDays: null,
@@ -259,6 +286,14 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 			failed: null
 		});
 	}
+	// A unit's refusal mark stands for the parcels it was read over: one whose parcels changed, or that left the list, drops out.
+	const unchanged = (key: string) => prevState?.units[key] !== undefined && prevState.units[key].hash === state.units[key]?.hash;
+	for (const [dekad, f] of Object.entries(state.files)) {
+		if (!f.refusedUnits) continue;
+		const { refusedUnits, ...rest } = f;
+		const keep = refusedUnits.filter(unchanged);
+		state.files[dekad] = keep.length ? { ...rest, refusedUnits: keep } : rest;
+	}
 	const observable = (w: UnitWork) => !state.units[w.unit.unitKey]!.unobservable;
 
 	/** One unit's row for a dekad from an open file, or the unit noted unobservable. */
@@ -304,12 +339,20 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 			// Never checked (a lost state file) counts as due: the rows held say which ETag to send.
 			const recheckDue = !f || toEpochDay(f.checkedOn) <= toEpochDay(today) - recheckDays;
 			const units = work.filter(observable);
-			const lacking = units.filter((w) => !w.rows.has(dekad));
+			// The units the reader refused this version of the file for (every unit when it refused the file): not asked for
+			// again until its ETag changes.
+			const refusedKeys = new Set(f?.refusedUnits ?? []);
+			const held = f?.refused ? units : units.filter((w) => refusedKeys.has(w.unit.unitKey));
+			const askable = f?.refused ? [] : units.filter((w) => !refusedKeys.has(w.unit.unitKey));
+			const lacking = askable.filter((w) => !w.rows.has(dekad));
 			const holding = units.filter((w) => w.rows.has(dekad));
 			// Rows read from another version of the file than the one last seen (a re-read the deadline cut short).
-			const stale = f && !f.missing ? holding.filter((w) => rowTag(f.etag) !== w.rows.get(dekad)!.etag) : [];
+			const stale = f && !f.missing ? askable.filter((w) => w.rows.has(dekad) && rowTag(f.etag) !== w.rows.get(dekad)!.etag) : [];
 			if (f?.missing && !recheckDue) continue;
-			if (!lacking.length && !stale.length && !(recheckDue && holding.length)) continue;
+			if (!lacking.length && !stale.length && !(recheckDue && (holding.length || held.length))) {
+				result.refusedHeld += held.length;
+				continue;
+			}
 
 			// The header: conditional when only a re-check is due and there's an ETag to send.
 			let header: Uint8Array;
@@ -323,8 +366,10 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 						continue;
 					}
 					if (got.status === 'not-modified') {
-						state.files[dekad] = { etag: known, checkedOn: today };
+						// The same file: its refusal marks stand.
+						state.files[dekad] = { ...(f && !f.missing ? f : {}), etag: known, checkedOn: today };
 						result.notModified++;
+						result.refusedHeld += held.length;
 						continue;
 					}
 					header = got.bytes;
@@ -351,7 +396,16 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 			result.filesRead++;
 			const current = rowTag(tag);
 			if (known !== undefined && known !== current) result.filesChanged++;
-			const toRead = units.filter((w) => !w.rows.has(dekad) || w.rows.get(dekad)!.etag !== current);
+			// The version the marks were made on (an ETag to tell it by): they stand. Another version clears them.
+			const sameVersion = !!f && !f.missing && current !== undefined && current === rowTag(f.etag);
+			if (sameVersion && f.refused) {
+				state.files[dekad] = { ...f, checkedOn: today };
+				result.refusedHeld += held.length;
+				continue;
+			}
+			const stillHeld = new Set(sameVersion ? held.map((w) => w.unit.unitKey) : []);
+			result.refusedHeld += stillHeld.size;
+			const toRead = units.filter((w) => (!w.rows.has(dekad) || w.rows.get(dekad)!.etag !== current) && !stillHeld.has(w.unit.unitKey));
 
 			// Every read of the file after the header must carry its tag, or it changed while we read.
 			const read: RangeRead = async (start, end) => {
@@ -380,11 +434,14 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 						w.failed = err instanceof FeedFormatError ? 'format' : 'unavailable';
 						result.failures.push({ unitKey: w.unit.unitKey, dekad, code: w.failed, error: err });
 					}
+					// Refused: not asked for again until the file changes (a timeout is asked again next run).
+					if (err instanceof FeedFormatError) state.files[dekad] = { ...(current ? { etag: current } : {}), refused: true, checkedOn: today };
 					continue;
 				}
 				throw err;
 			}
 			let complete = true;
+			const refusedNow = [...stillHeld];
 			for (const w of toRead) {
 				try {
 					await readUnit(w, cog, read, dekad, current);
@@ -395,8 +452,15 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 						break;
 					}
 					if (stopReason(err)) throw err;
-					if (err instanceof FeedFormatError || err instanceof FeedUnavailableError) {
-						w.failed = err instanceof FeedFormatError ? 'format' : 'unavailable';
+					if (err instanceof FeedFormatError) {
+						// Refused for this unit (a tile under its parcels): marked with the file's version, the other units go on.
+						w.failed = 'format';
+						result.failures.push({ unitKey: w.unit.unitKey, dekad, code: w.failed, error: err });
+						refusedNow.push(w.unit.unitKey);
+						continue;
+					}
+					if (err instanceof FeedUnavailableError) {
+						w.failed = 'unavailable';
 						result.failures.push({ unitKey: w.unit.unitKey, dekad, code: w.failed, error: err });
 						complete = false;
 						continue;
@@ -404,8 +468,11 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 					throw err;
 				}
 			}
-			// The file's version is kept once every unit wanting it read it: until then its rows from the old one are stale.
-			if (complete) state.files[dekad] = { ...(current ? { etag: current } : {}), checkedOn: today };
+			// The file's version is kept once every unit wanting it read it (or was refused it): until then its rows from the old
+			// one are stale. Short of that, refusals on the version already recorded are still kept.
+			const marks = refusedNow.length ? { refusedUnits: refusedNow } : {};
+			if (complete) state.files[dekad] = { ...(current ? { etag: current } : {}), ...marks, checkedOn: today };
+			else if (sameVersion && refusedNow.length) state.files[dekad] = { ...f, refusedUnits: refusedNow };
 		}
 	} catch (err) {
 		if (err instanceof Deadline) {
@@ -420,6 +487,11 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 		}
 	} finally {
 		try {
+			const marked = new Set<string>();
+			for (const f of Object.values(state.files)) {
+				if (f.refused) for (const w of work) marked.add(w.unit.unitKey);
+				for (const k of f.refusedUnits ?? []) marked.add(k);
+			}
 			for (const w of work) {
 				const key = w.unit.unitKey;
 				if (w.dirty) {
@@ -442,6 +514,8 @@ export async function runWaporPass(opts: WaporPassOptions): Promise<WaporPassRes
 				if (unobservable) perKey[key] = { ...perKey[key], error: unobservable };
 				else if (w.failed) perKey[key] = { ...perKey[key], error: w.failed };
 				else if (stop && !w.read) perKey[key] = { ...perKey[key], error: stop };
+				// A refusal mark still standing keeps the error: a clean read of another dekad doesn't make that one readable.
+				else if (marked.has(key)) perKey[key] = { ...perKey[key], error: 'format' };
 				else if (w.read && perKey[key]?.error) {
 					// A clean read clears the last run's error.
 					const { error: _, ...rest } = perKey[key]!;

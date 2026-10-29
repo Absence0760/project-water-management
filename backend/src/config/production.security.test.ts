@@ -85,6 +85,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOBS_QUEUE_URL: SQS('jobs'),
 		FEED_SOURCE: 'live',
 		CHIRPS_SOURCE: 'chc',
+		ET_OBSERVATIONS: 'off',
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
 		PACKS_BUCKET: 'water-management-packs-000000000000',

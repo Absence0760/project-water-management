@@ -2757,7 +2757,8 @@ go/no-go.
   `et/` in the mirror bucket (`et-handover`), the worker's put of
   `et/wanted.json` (`et-wanted-list`, and `WorkerWritesEtWantedList` on the
   S3 interface endpoint, `infra/packs.tf`), the worker's `ET_OBSERVATIONS`
-  (`infra/jobs.tf`), and the alarms (essential tier):
+  (`infra/jobs.tf`) and the API's (`infra/lambda.tf`, only so a unit's ET
+  panel can say the check is off), and the alarms (essential tier):
   - `water-management-et-pass-wapor`: `EtPassCompleted{Source=wapor}`
     (namespace `water-management/EtObservations`) under 1 for 18 hours
     (three 6-hour periods), or missing (breaching): the pass stopped

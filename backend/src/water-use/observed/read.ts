@@ -20,6 +20,19 @@ export async function etObservationsOf(db: Db, projectId: string, nodeId: string
 	return rows;
 }
 
+/**
+ * The farm parcels linked to the unit that the ET pass reads: polygons only, as app_et_units (281) hands them over.
+ * Under the caller's RLS, as the Map reads them.
+ */
+export async function etParcelCount(db: Db, projectId: string, nodeId: string): Promise<number> {
+	const { rows } = await db.query<{ n: number }>(
+		`SELECT count(*)::int AS n FROM map_feature
+		 WHERE project_id = $1 AND node_id = $2 AND kind = 'farm_parcel' AND geometry ->> 'type' IN ('Polygon', 'MultiPolygon')`,
+		[projectId, nodeId]
+	);
+	return rows[0]?.n ?? 0;
+}
+
 /** The series the comparison reads (./compare.ts). */
 const KEYS = ['gross_demand', 'effective_rain', 'crop_requirement', 'demand', 'supplied'] as const;
 

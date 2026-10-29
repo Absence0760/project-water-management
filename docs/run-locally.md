@@ -550,7 +550,9 @@ committed `backend/fixtures/mirror/`.
 
 The worker's tick does the same each time it runs only with
 `ET_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored
-`backend/.env.development.local`; it is off by default.
+`backend/.env.development.local`; it is off by default. The same setting
+makes a unit's ET panel say the check is on (the API reads it for
+`enabled`), so with it off the panel says it is off on this site.
 
 ## Reports
 

@@ -7,7 +7,8 @@
 //    days, with the bands, the planted area and the credit; a dekad seen
 //    through cloud and one after the run are listed, not compared;
 //  - a unit with no observations (the usual case: the fetch is off) answers
-//    an empty `sources`;
+//    an empty `sources`, with `enabled` (ET_OBSERVATIONS) and the count of
+//    farm parcels linked to it, so the panel can say why;
 //  - `run` picks another of the project's runs; another project's run, a
 //    malformed id, or a node that isn't the project's is 404, a gauge 400,
 //    and no response carries database text;
@@ -37,6 +38,8 @@ const farmA = node('Farm A', outlet.id);
 const farmB = node('Farm B', outlet.id);
 // 200 ha behind a 1 000 m³ dam: the run can't supply it.
 const farmC = node('Farm C', outlet.id, { damCapacityM3: 1_000 });
+// No parcel on the map.
+const farmD = node('Farm D', outlet.id);
 const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
 const AREA = 100_000;
 
@@ -62,7 +65,7 @@ beforeAll(async () => {
 	process.env.TZ = 'Pacific/Kiritimati';
 	[owner, viewer, farmer, stranger] = (await Promise.all(['ETCowner', 'ETCviewer', 'ETCfarmer', 'ETCstranger'].map((n) => signUp(n)))) as [User, User, User, User];
 	projectId = (await owner.call('POST', '/projects', { name: 'Observed ET compared' })).body.project.id;
-	const model = { nodes: [outlet, farmA, farmB, farmC], crops: [crop], cropAreas: [
+	const model = { nodes: [outlet, farmA, farmB, farmC, farmD], crops: [crop], cropAreas: [
 			{ nodeId: farmA.id, cropId: crop.id, areaM2: AREA },
 			{ nodeId: farmC.id, cropId: crop.id, areaM2: 2_000_000 }
 		], transfers: [] };
@@ -89,6 +92,7 @@ beforeAll(async () => {
 
 	await parcel(farmA.id, 21.3);
 	await parcel(farmB.id, 21.32);
+	await parcel(farmB.id, 21.33);
 	await parcel(farmC.id, 21.34);
 	await withoutUser(async (db) => {
 		// Farm A: two clear dekads, one through cloud, one after the run (it ends 2020-02-29).
@@ -165,6 +169,26 @@ describe('GET /projects/:id/nodes/:nodeId/et-observed', () => {
 		expect(res.body.sources).toEqual([]);
 		// Farm B plants nothing: no area to put a depth on.
 		expect(res.body.plantedAreaM2).toBe(0);
+	});
+
+	it('says whether the check is on here and how many farm parcels are linked to the unit, so an empty answer can say why', async () => {
+		const was = process.env.ET_OBSERVATIONS;
+		try {
+			delete process.env.ET_OBSERVATIONS;
+			const off = await etObserved(viewer, farmB.id);
+			expect(off.body).toMatchObject({ enabled: false, parcels: 2, sources: [] });
+			process.env.ET_OBSERVATIONS = 'on';
+			// On, with parcels: waiting for the pass. On, with none: nothing to read until one is linked on the Map.
+			expect((await etObserved(viewer, farmB.id)).body).toMatchObject({ enabled: true, parcels: 2, sources: [] });
+			expect((await etObserved(viewer, farmD.id)).body).toMatchObject({ enabled: true, parcels: 0, sources: [] });
+			// With observations the count is still the parcels' (positive control: Farm A's one).
+			expect((await etObserved(viewer, farmA.id)).body).toMatchObject({ enabled: true, parcels: 1 });
+			process.env.ET_OBSERVATIONS = 'off';
+			expect((await etObserved(viewer, farmD.id)).body).toMatchObject({ enabled: false, parcels: 0 });
+		} finally {
+			if (was === undefined) delete process.env.ET_OBSERVATIONS;
+			else process.env.ET_OBSERVATIONS = was;
+		}
 	});
 
 	it('compares with the run named, and answers 404 for another project’s run, a malformed id or another project’s node, 400 for a gauge', async () => {

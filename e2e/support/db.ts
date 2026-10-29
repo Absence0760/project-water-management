@@ -635,18 +635,26 @@ export async function dropRunDrought(runId: string): Promise<void> {
  * no user, the way the worker runs it. The unit needs a farm parcel on the
  * map first (the loader refuses a unit without one). Invented values only.
  */
-export async function plantEtObservations(nodeId: string, rows: { dekad: string; etaMmDay: number; validShare: number }[], areaM2 = 180_000): Promise<void> {
+export async function plantEtObservations(
+	nodeId: string,
+	rows: { dekad: string; etaMmDay: number; validShare: number }[],
+	areaM2 = 180_000,
+	source: 'wapor' | 'ssebop' = 'wapor'
+): Promise<void> {
+	const [version, file] = source === 'wapor' ? ['WAPOR-3', (d: string) => `WAPOR-3.L2-AETI-D.${d}.e2e-synthetic.tif`] : ['v6.1', (d: string) => `ssebop-${d}.e2e-synthetic.zip`];
 	await withDb(async (db) => {
 		const { rows: r } = await db.query<{ applied: boolean }>(
-			`SELECT applied FROM app_et_observation_load('wapor', $1, $2::date[], $3::float8[], $4::float8[], $5::float8[], 'cropland', $6::text[], $7::text[], 'WAPOR-3', now())`,
+			`SELECT applied FROM app_et_observation_load($8, $1, $2::date[], $3::float8[], $4::float8[], $5::float8[], 'cropland', $6::text[], $7::text[], $9, now())`,
 			[
 				nodeId,
 				rows.map((x) => x.dekad),
 				rows.map((x) => x.etaMmDay),
 				rows.map((x) => x.validShare),
 				rows.map(() => areaM2),
-				rows.map((x) => `WAPOR-3.L2-AETI-D.${x.dekad}.e2e-synthetic.tif`),
-				rows.map(() => '"e2e"')
+				rows.map((x) => file(x.dekad)),
+				rows.map(() => '"e2e"'),
+				source,
+				version
 			]
 		);
 		if (!r[0]?.applied) throw new Error(`the ET loader refused unit ${nodeId} (no farm parcel?)`);

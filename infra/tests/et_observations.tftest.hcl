@@ -770,6 +770,10 @@ run "et_observations_off_by_default" {
     )
     error_message = "Until et_observations_enabled is set (after FAO's reply, #618 8a) the ET rule is disabled, targets nothing, may invoke nothing, neither Lambda may write et/, no alarm fires, and the worker's ET tick is off."
   }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["ET_OBSERVATIONS"] == "off"
+    error_message = "The API says the ET check is off (GET …/et-observed enabled: false) exactly while the worker's tick is."
+  }
 }
 
 run "et_observations_on" {
@@ -782,6 +786,10 @@ run "et_observations_on" {
   assert {
     condition     = aws_lambda_function.worker.environment[0].variables["ET_OBSERVATIONS"] == "on" && length(terraform_data.et_observations_gate) == 1
     error_message = "With et_observations_enabled the worker runs the ET tick (ET_OBSERVATIONS=on), so the gate passes."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["ET_OBSERVATIONS"] == "on"
+    error_message = "With et_observations_enabled the API says the ET check is on (GET …/et-observed enabled: true), as the worker runs it."
   }
   assert {
     condition = (

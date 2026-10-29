@@ -7,7 +7,10 @@
 // crop ET, effective rain and irrigation reaching the crop over the same
 // dekads, compared (./compare.ts). The run is `run` when given, else the
 // project's newest. Read only, under the caller's RLS. No observations (the
-// usual case: the fetch is off by default) is an empty `sources`, not an error.
+// usual case: the fetch is off by default) is an empty `sources`, not an error;
+// `enabled` (this deployment's ET_OBSERVATIONS) and `parcels` (the farm
+// parcels linked to the unit that the pass reads, 281's rule) let the panel say
+// which of the two it is.
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../../auth/middleware.js';
@@ -15,7 +18,8 @@ import { withUser } from '../../db/tx.js';
 import { ApiError, notFound } from '../../http/errors.js';
 import { requireRole, UUID } from '../../projects/access.js';
 import { compareEt, ET_OBSERVED } from './compare.js';
-import { ET_ATTRIBUTION, etCompareRun, etObservationsOf } from './read.js';
+import { ET_ATTRIBUTION, etCompareRun, etObservationsOf, etParcelCount } from './read.js';
+import { etObservationsOn } from './tick.js';
 
 // Parsed as one object, as every other route parses its query (dams/observed/routes.ts says why).
 const EtObservedQuery = z.object({ run: z.string().optional() });
@@ -34,6 +38,7 @@ export const etObservedRoutes = new Hono<AuthEnv>().get('/:id/nodes/:nodeId/et-o
 		const run = await etCompareRun(db, id, runParam, nodeId);
 		if (runParam && !run) throw notFound();
 		const observations = await etObservationsOf(db, id, nodeId);
+		const parcels = await etParcelCount(db, id, nodeId);
 		const result = compareEt({
 			observations,
 			modelled: run?.modelled ?? null,
@@ -45,6 +50,8 @@ export const etObservedRoutes = new Hono<AuthEnv>().get('/:id/nodes/:nodeId/et-o
 			{
 				nodeId,
 				name: unit.name,
+				enabled: etObservationsOn(),
+				parcels,
 				thresholds: ET_OBSERVED,
 				run: run ? { id: run.id, label: run.label, createdAt: run.createdAt, engineVersion: run.engineVersion, forecastFrom: run.forecastFrom, inRun: !!run.modelled } : null,
 				plantedAreaM2: run?.modelled ? run.plantedAreaM2 : null,

@@ -79,7 +79,7 @@ Every job that fetches from an upstream:
 | [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | built, off by default (#624 step 4: the pass, behind `DAM_OBSERVATIONS_S2` / `dam_s2_enabled`; not shown on a screen yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s2.ts`, `pass.ts`); `wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`) |
 | [deafrica-sentinel-1](#deafrica-sentinel-1) | DE Africa Sentinel-1 RTC (`s1_rtc`), radar water as a secondary dam observation (issue #624) | planned (#624; registered, the hosts allowed, `dam_observation` source `s1`; no pass reads it yet) | `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/wofs/stac.ts` (`assetUrl`, `s1_rtc`); #624 `sentinel/s1.ts` |
 | [wapor-aeti](#wapor-aeti) | FAO WaPOR v3 `L2-AETI-D`, dekadal actual ET and interception at 100 m (a unit's observed water use, issue #623) | built, off (`et_observations_enabled`); blocked in production until FAO's reply is recorded on #618 (step 8a) | `storage.googleapis.com` (bucket `fao-gismgr-wapor-3-data` only) | – | `backend/src/water-use/observed/` (`wapor.ts`, `pass.ts`; the comparison is #623 step 5) |
-| [ssebop-eta](#ssebop-eta) | USGS FEWS NET SSEBop v6.1 global dekadal actual ET at 1 km (WaPOR's fallback, issue #623) | planned (#623 step 6, only if FAO declines or as a second opinion) | `edcintl.cr.usgs.gov` (the `…/global/dekadal/etav61/` tree only) | – | `backend/src/water-use/observed/upstream.ts` |
+| [ssebop-eta](#ssebop-eta) | USGS FEWS NET SSEBop v6.1 global dekadal actual ET at 1 km (WaPOR's fallback, issue #623) | planned (#623 step 6: a bounded whole-file pass, decided; built only if FAO declines or as a second opinion) | `edcintl.cr.usgs.gov` (the `…/global/dekadal/etav61/` tree only) | – | `backend/src/water-use/observed/upstream.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
 | [worldcover](#worldcover) | ESA WorldCover 10 m 2021 v200 (cropland) | reference load | `esa-worldcover.org` (the operator's download) | – | `pnpm import:land-cover` |
@@ -567,7 +567,9 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
   costs one request); a changed ETag on a dekad already read (FAO rewrites
   files: `updated` 2026-05 on 2025 files) means a re-read and a new revision
   of that dekad's rows. Only units with parcels are read. The band scale
-  must read 0.1 with no offset, or the file is refused.
+  must read 0.1 with no offset, or the file is refused; a refused file (or
+  a unit's refused read of it) is marked with its ETag and not asked for
+  again until the 30-day re-check finds a new one.
 - **Limits we keep to:** one request a second, one connection;
   feeds/http.ts's User-Agent, host and path allowlist, 20 s timeout and
   4 MB cap per response; a 403 stops the pass, never retried, and a
@@ -590,10 +592,20 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
 ### ssebop-eta
 
 - **Source:** USGS FEWS NET's global SSEBop actual ET, version 6.1
-  (VIIRS-based), dekadal, 1 km (1/96°), from 2012-02 (the listing checked
+  (VIIRS-based), dekadal, about 1 km, from 2012-02 (the listing checked
   2026-10-29 runs `d2012021.zip` to `d2026102.zip`, the last written
-  2026-10-22). Each dekad is a zip, about 93 MB, holding one GeoTIFF.
-  Dataset: doi:10.5066/P9QJWQ6K.
+  2026-10-22). Dataset: doi:10.5066/P9QJWQ6K.
+- **The file** (read 2026-10-29 from `d2026102.zip` with two range requests,
+  its zip directory and the first 256 KB, nothing kept): a 93 MB zip of
+  two entries, both deflated: `d2026102_viirsSSEBopETv61_actual_mm.tif`
+  (95.9 MB, deflate saves 3 %) and its `.tif.xml`. The GeoTIFF is classic
+  TIFF, tiled 512 × 512, LZW with the horizontal predictor, int16, one
+  band, EPSG:4326 (WGS 84) at 0.009652° (37 200 × 14 500 pixels from
+  180° W, 80° N), nodata −9999, no band scale; the values are the dekad's
+  total in mm (the name's `actual_mm`; GDAL's statistics 0–74), not
+  mm/day. The tiles are stored row by row, so South Africa's (tile rows
+  20–23, columns 39–43, about 2 MB) lie 88.6–97.6 % of the way through the
+  TIFF. The server sends an ETag and Last-Modified and accepts ranges.
 - **Host:** `edcintl.cr.usgs.gov`, under
   `/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/downloads/dekadal/d<YYYYMMD>.zip`
   (`water-use/observed/upstream.ts` `SSEBOP_BASE`). The host carries much
@@ -606,12 +618,45 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
   v6, CC0" (`SSEBOP_ATTRIBUTION`), wherever its values show.
 - **Contact:** USGS EROS (FEWS NET's early-warning team,
   earlywarning.usgs.gov).
-- **Access pattern:** only if FAO declines, or as a second opinion (#623
-  step 6). A zip isn't a COG: its GeoTIFF can't be range-read by tile, and
-  one dekad is far over the live client's 4 MB cap. So the SSEBop slice
-  decides between a whole-file read in a bounded pass (one file a dekad,
-  conditional on the ETag, clipped to the catchments' box at once) and a
-  reference load; that is its design question, not settled here.
+- **Access pattern (decided 2026-10-29, #623 step 6; built only when
+  FAO declines or a second opinion is wanted):** a **bounded whole-file
+  pass**, not a reference load. The TIFF is deflated inside the zip, so no
+  tile can be reached without inflating everything before it: reaching
+  South Africa's tiles costs ~91 MB of the 93, and a range read saves
+  nothing. A reference load would download the same whole files, so it
+  spares the host nothing either, and it would add an operator step every
+  dekad (or let the check go stale) and a second loading path beside the
+  pass, handover, tick and `et_observation` that WaPOR already uses. The
+  pass, as built:
+  - one file a run, newest dekad first, back to 2018 (WaPOR's start, the
+    span a second opinion is wanted for; 2012 only if FAO declines);
+  - one streamed GET, inflated as it arrives (`node:zlib` raw inflate after
+    the zip's local header): the TIFF's header and tile tables from its
+    first ~270 KB go through `raster/cog.ts`, then only the bytes of the
+    tiles under the wanted units' windows are kept (a few MB) and the rest
+    dropped; the connection closes after the last tile wanted. Nothing is
+    stored but the per-unit rows;
+  - an ETag per file in its own state file, re-checked 30 days on by a
+    conditional GET (a 304 costs nothing), and a refused file marked as
+    WaPOR's are;
+  - the values divided by the dekad's days to mm/day before the same
+    `unitMean`, with the 0–50 mm/day sanity range;
+  - its own fetcher mode beside `et-dekadal`, with its own heartbeat.
+- **Cost of that pass:** backfill to 2018 is ~315 files, ~29 GB, at one
+  an hour about 13 days (2.2 GB a day); then ~3 files a month, ~3.4 GB a
+  year. Each file is a few seconds to a minute of the fetcher (512 MB,
+  outside the VPC, so no NAT charge; data into AWS is free): cents a
+  month. It fits the fetcher's 900 s timeout with room, but not the live
+  client's 4 MB cap or 20 s timeout, which stay as they are for every
+  other read: the pass needs a streamed read of its own, allowed only
+  under `FEED_HOST_PATHS`' SSEBop prefix, capped at 120 MB and 300 s.
+- **What building it takes** (why it isn't built yet): that streamed read
+  in `feeds/http.ts` (security review: the allowlist, cap and timeout), a
+  zip local-header reader and the streamed inflate, a range reader over the
+  tiles kept, the pass and its state, the tick loading `ssebop` (it loads
+  WaPOR only), Terraform (the mode's schedule, flag and alarms), a
+  synthetic zip fixture and the panel already showing a second source (the
+  Source switch). About the size of WaPOR's step 4.
 - **Limits we keep to:** one request a second, one connection; feeds/http.ts's
   allowlist and User-Agent; a 403 stops the pass.
 - **Fallback:** none at 1 km and dekadal; the modelled use stands unchecked.
