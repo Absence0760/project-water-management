@@ -13,15 +13,15 @@
 // seasonal level, so a dam's wet area rises and falls through the year;
 // every everyNth day a band of cloud crosses the scenes and every
 // overcastEveryNth day they're all cloud, so partly and wholly unobserved
-// days occur. Scenes are real tiled DEFLATE GeoTIFFs (cogWrite.ts), so the
+// days occur. Scenes are real tiled DEFLATE GeoTIFFs (raster/cogWrite.ts), so the
 // fixture exercises the production reader. No real scene, place or value.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
-import { writeCog } from './cogWrite.js';
+import { writeCog } from '../../../raster/cogWrite.js';
 import { WOFS_S3_BASE, WOFS_STAC_SEARCH } from './stac.js';
-import { toUtm, utmEpsgFor } from './utm.js';
+import { toUtm, utmEpsgFor } from '../../../raster/utm.js';
 import { WOFS_DRY, WOFS_WET } from './sum.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../../fixtures/feeds/wofs-sample.json', import.meta.url));

@@ -15,7 +15,7 @@
 // wofs_ls/…tif` object read over HTTPS from the bucket's public endpoint
 // (WOFS_S3_BASE). Anything else is refused as a FeedFormatError: we never follow
 // an href to another host. The item's CRS is taken from the scene's own
-// GeoKeys (cog.ts), not from the item.
+// GeoKeys (raster/cog.ts), not from the item.
 //
 // assetUrl also knows the two Sentinel collections' buckets (issue #624;
 // docs/data-sources.md, deafrica-sentinel-2-c1 and deafrica-sentinel-1):

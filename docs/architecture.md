@@ -2223,20 +2223,36 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     512 tiles, DEFLATE with the horizontal predictor, `GDAL_NODATA` 1,
     30 m, GeoKeys for WGS 84 / UTM (EPSG 326xx; DE Africa writes the
     southern hemisphere in the **north** zone codes, so northings are
-    negative). The reader takes that and its legal variants (big-endian,
-    no compression or predictor, PixelIsPoint, an empty sparse tile, the
-    south codes) and refuses anything else with a reason: BigTIFF, strips,
-    other sample types or bands, another CRS or units, a rotation matrix,
-    a GDAL scale/offset, implausible sizes; a tile never inflates past its
-    pixels. No dependency (`geotiff` would bring a decoder zoo; the CHIRPS
-    reader, `feeds/sources/tiff.ts`, refuses tiles on purpose and stays
-    so). `cog.test.ts` round-trips it through `cogWrite.ts`.
-  - **Projection** (`utm.ts`): WGS 84 → UTM by Krüger's series to n⁶
+    negative).
+  - **The COG reader** (`backend/src/raster/cog.ts`, shared with the coming
+    WaPOR actual ET pass, #623, and the Sentinel-1/2 passes, #624) reads
+    classic TIFF and BigTIFF of either byte order; tiles; one band of
+    uint8, int16, uint16 or float32; no compression, DEFLATE or LZW (the
+    CHIRPS reader's decoder, `feeds/sources/tiff.ts`); predictor 1, 2 on
+    integers, or 3 (floating point) on float32; WGS 84 / UTM (EPSG
+    326xx / 327xx, metres) or geographic WGS 84 (EPSG:4326, degrees);
+    PixelIsPoint; `GDAL_NODATA` as a value of the sample type (NaN for a
+    float `nan`), and an empty sparse tile as no-data. It refuses anything
+    else with a reason: strips, other sample types or bands, another CRS
+    or units, a rotation matrix, old-style LZW, implausible sizes; a tile
+    never decompresses past its size. Each caller says what it accepts
+    (`CogAccept`): the WOfS pass reads uint8 on UTM only (`WOFS_ACCEPT`,
+    `sum.ts`), and a GDAL scale/offset is refused unless the caller reads
+    it (WaPOR's int16 × 0.1). It reads the header (16 KB), then for a
+    window only the slice of the TileOffsets / TileByteCounts tables from
+    its first tile to its last (a WaPOR dekad's tables are ~2.8 MB; WOfS's
+    sit inside the header read), then the tiles, neighbours as one range.
+    `bboxWindow` gives a geographic scene's pixels under a lon/lat box. No
+    dependency (`geotiff` would bring a decoder zoo; the CHIRPS reader
+    refuses tiles on purpose and stays so). `cog.test.ts` round-trips every
+    form through `cogWrite.ts`, which also writes the fixtures.
+  - **Projection** (`raster/utm.ts`): WGS 84 → UTM by Krüger's series to n⁶
     (Karney 2011), checked against PROJ to a millimetre, with the point
     scale factor k. No dependency: proj4js would carry a CRS database for
     one projection.
   - **Summing**: a pixel counts when its centre is inside the outline
-    (projected vertex by vertex, scanline crossings, even-odd per polygon
+    (`raster/mask.ts`; projected vertex by vertex on a UTM grid, scaled
+    from degrees on a geographic one, scanline crossings, even-odd per polygon
     so holes are out, polygons of a MultiPolygon unioned). Exactly 128 is
     clear wet, exactly 0 clear dry, anything else (cloud, shadow, no data,
     water under a flag) not clear; a pixel inside the outline but off the
@@ -2245,7 +2261,9 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     ÷ inside × 100. An outline no pixel centre falls in (smaller than a
     pixel, or a sliver) gives no row, and so does a scene whose footprint
     missed the dam (every inside pixel no-data); a scene that saw it under
-    cloud gives a 0 % row.
+    cloud gives a 0 % row. On a geographic grid the mask takes a pixel's
+    ground area from the WGS 84 ellipsoid (M·N·cos φ·Δφ·Δλ) at the
+    outline's box centre, for the passes that will read one.
   - **Two scenes on one date** (neighbouring Landsat rows overlap): one
     row, from the scene that saw most of the dam clearly, then the one
     covering most of it, then the lower item id. Not combined pixel by
