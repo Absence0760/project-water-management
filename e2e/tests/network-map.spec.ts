@@ -682,6 +682,54 @@ test('a grid link pressed as the grid closes, before the URL drops it, opens tha
 	await expect(page).toHaveURL(/\?tab=network$/);
 });
 
+test('a closed grid modal’s late close event leaves the grid opened after it alone', async ({ page, owner }) => {
+	// The browser fires a dialog's `close` from a queued task. Done takes the grid modal out of the page
+	// with the URL drop, and a grid opened before that task ran got the removed dialog's event: its `open`
+	// write reached the binding the new modal shares, which shut it and dropped `grid` again (CI run
+	// 40790517572, the test above). The event is held here and let go once the new modal is open: an
+	// order a busy browser can run them in, made certain.
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Grid late close');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const grid = page.getByRole('dialog', { name: 'Planted areas' });
+	await (await gridLink(page, 'Planted areas')).click();
+	await expect(grid).toBeVisible();
+	type Held = { held: EventTarget | null; release: boolean };
+	await page.evaluate(() => {
+		const w = window as unknown as Held;
+		w.held = null;
+		w.release = false;
+		addEventListener(
+			'close',
+			(e) => {
+				if (w.release || w.held) return;
+				e.stopImmediatePropagation();
+				w.held = e.target;
+			},
+			{ capture: true }
+		);
+	});
+
+	await grid.getByRole('button', { name: 'Done' }).click();
+	await expect(grid).toHaveCount(0);
+	await expect(page).toHaveURL(/\?tab=network$/);
+	await (await gridLink(page, 'Planted areas')).click();
+	await expect(grid).toBeVisible();
+
+	// The removed dialog's close event runs now, on a dialog no longer in the page.
+	const removed = await page.evaluate(() => {
+		const w = window as unknown as Held;
+		w.release = true;
+		const d = w.held as HTMLDialogElement;
+		d.dispatchEvent(new Event('close'));
+		return !d.isConnected;
+	});
+	expect(removed).toBe(true);
+	await expect(grid).toBeVisible();
+	await expect(page).toHaveURL(/\?tab=network&grid=planted-areas$/);
+	await expect(page.locator('html:not([data-closing])')).toBeAttached();
+});
+
 test('a unit’s Edit pressed as its sheet closes, before the URL drops it, opens that unit, and Back closes it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Node sheet quick reopen');
