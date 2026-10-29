@@ -7,6 +7,7 @@ import type { FeedHttp } from '../../../feeds/http.js';
 import { writeCog } from '../../../raster/cogWrite.js';
 import { outlineMask, type OutlineMask } from '../../../raster/mask.js';
 import { S1_S3_BASE } from '../wofs/stac.js';
+import { pixelClasses, PX_COVERED, PX_DRY, PX_OFF, PX_WET } from '../wofs/sum.js';
 import { loadS1Fixture } from './s1Fixtures.js';
 import { isRadarWater, s1Item, S1_WATER_DB, S1_WATER_LINEAR, tallyS1, viewS1Scene } from './s1.js';
 
@@ -51,6 +52,14 @@ describe('tallyS1', () => {
 		expect(tallyS1(MASK, WIN, vv, NAN_GRID, new Uint8Array(8).fill(1))).toEqual({ inside: 8, covered: 8, clear: 4, wet: 4 });
 		// A numeric no-data reads the same way.
 		expect(tallyS1(MASK, WIN, [-9999, water, water, water, water, water, water, water], { nodata: -9999 }, new Uint8Array(8).fill(1))).toMatchObject({ clear: 7 });
+	});
+
+	it('gives each pixel its class for joining views (merge.ts): off the scene, shadow, wet, dry', () => {
+		const classes = pixelClasses(MASK);
+		tallyS1(MASK, WIN, [water, water, land, land, water, water, land, land], NAN_GRID, Uint8Array.from([0, 2, 1, 1, 0, 2, 1, 1]), classes);
+		expect([...classes]).toEqual([PX_OFF, PX_COVERED, PX_DRY, PX_DRY, PX_OFF, PX_COVERED, PX_DRY, PX_DRY]);
+		tallyS1(MASK, WIN, new Array(8).fill(water), NAN_GRID, new Uint8Array(8).fill(1), classes);
+		expect([...classes]).toEqual(new Array(8).fill(PX_WET));
 	});
 
 	it('counts only the outline’s pixels', () => {

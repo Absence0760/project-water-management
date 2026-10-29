@@ -949,7 +949,7 @@ describe('the fetcher bundle', () => {
 	// the output, so it doesn't lean on tree-shaking: jobs/transport.ts once
 	// reached the runner through wakeWorker's memory transport (now jobs/wake.ts),
 	// and esbuild only dropped it because nothing called wakeWorker.
-	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar, series provenance and DWS table reader', async () => {
+	it('never reaches pg, the db layer, the job runner, or any engine module but the calendar, series provenance, DWS table reader and Sentinel credit', async () => {
 		const { build } = await import('esbuild');
 		const out = await build({
 			entryPoints: [fileURLToPath(new URL('./lambda-fetcher.ts', import.meta.url))],
@@ -973,7 +973,9 @@ describe('the fetcher bundle', () => {
 		// `/provenance` subpath (seriesProvenance.ts: constants, no imports).
 		// feeds/sources/dws.ts reads rows through the `/dws` subpath (dws.ts:
 		// the row parser it shares with the manual import; imports only calendar.ts).
-		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts', 'packages/engine/src/dws.ts'];
+		// dams/observed/upstream.ts re-exports the Copernicus credit through the
+		// `/sentinel-credit` subpath (evidence/sentinelCredit.ts: no imports), its one definition.
+		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts', 'packages/engine/src/dws.ts', 'packages/engine/src/evidence/sentinelCredit.ts'];
 		expect(inputs.filter((f) => f.includes('packages/engine/') && !allowed.some((a) => f.endsWith(a)))).toEqual([]);
 	});
 });

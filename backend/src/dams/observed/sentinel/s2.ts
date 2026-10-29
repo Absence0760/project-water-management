@@ -43,7 +43,7 @@ import { sceneWindow, type OutlineMask } from '../../../raster/mask.js';
 import type { WantedOutline } from '../handover.js';
 import { maskFor, taggedReader, type SceneView } from '../wofs/pass.js';
 import { assetUrl, S2_C1_COLLECTION, type SceneItem } from '../wofs/stac.js';
-import { observation, type Tally } from '../wofs/sum.js';
+import { observation, pixelClasses, PX_COVERED, PX_DRY, PX_WET, viewPixels, type Tally } from '../wofs/sum.js';
 
 /** The reflectance bands: uint16 on a UTM grid; a GDAL scale and offset is read if a file carries one. */
 export const S2_BAND_ACCEPT: CogAccept = { sampleTypes: ['uint16'], crs: ['utm'], scaleOffset: true };
@@ -140,9 +140,9 @@ export interface S2Tally extends Tally {
 /**
  * Classifies and counts the mask's pixels (see the header). `green` is on the mask's grid; `swir`, `nir` and
  * `scl` are found by each 10 m pixel's centre on their own grids (B08 is 10 m too, but found the same way).
- * `nir` null: a pixel without B11 is counted in needNir and not clear.
+ * `nir` null: a pixel without B11 is counted in needNir and not clear. `classes` (sum.ts pixelClasses) gets each pixel's class.
  */
-export function tallyS2(m: OutlineMask, green: BandRead, scl: Omit<BandRead, 'itemOffset'>, swir: BandRead | null, nir: BandRead | null): S2Tally {
+export function tallyS2(m: OutlineMask, green: BandRead, scl: Omit<BandRead, 'itemOffset'>, swir: BandRead | null, nir: BandRead | null, classes?: Uint8Array): S2Tally {
 	let covered = 0;
 	let clear = 0;
 	let wet = 0;
@@ -156,13 +156,15 @@ export function tallyS2(m: OutlineMask, green: BandRead, scl: Omit<BandRead, 'it
 			const mr = r - m.row0;
 			const y = gx.originY - (r + 0.5) * gx.pixelSizeY;
 			for (let c = win.col0; c <= win.col1; c++) {
-				if (!m.mask[mr * m.width + (c - m.col0)]) continue;
+				const at = mr * m.width + (c - m.col0);
+				if (!m.mask[at]) continue;
 				const g = green.samples[(r - win.row0) * w + (c - win.col0)]!;
 				if (g === gnd) continue;
 				const x = gx.originX + (c + 0.5) * gx.pixelSizeX;
 				const s = sampleAt(scl, x, y);
 				if (s === null || s === SCL_NO_DATA) continue;
 				covered++;
+				if (classes) classes[at] = PX_COVERED;
 				if (SCL_NOT_CLEAR.has(s)) continue;
 				let other: number | null = null;
 				let band: BandRead | null = null;
@@ -185,7 +187,9 @@ export function tallyS2(m: OutlineMask, green: BandRead, scl: Omit<BandRead, 'it
 				if (gv + ov <= 0) continue;
 				clear++;
 				// (gv − ov) / (gv + ov) > 0 with a positive denominator.
-				if (gv - ov > 0) wet++;
+				const water = gv - ov > 0;
+				if (water) wet++;
+				if (classes) classes[at] = water ? PX_WET : PX_DRY;
 			}
 		}
 	}
@@ -236,14 +240,15 @@ export async function viewS2Scene(http: FeedHttp, scene: S2Scene, outline: Wante
 	const swir = scene.swirUrl ? await bandUnder(http, scene.swirUrl, S2_BAND_ACCEPT, green, gwin) : null;
 	const swirBand: BandRead | null = swir && { ...swir, itemOffset: scene.offsets.swir };
 	if (swirBand && hasFileScale(swirBand) !== hasFileScale(greenBand)) throw new FeedFormatError('a Sentinel-2 scene’s bands disagree on their scale');
-	let t = tallyS2(mask, greenBand, scl, swirBand, null);
+	const classes = pixelClasses(mask);
+	let t = tallyS2(mask, greenBand, scl, swirBand, null, classes);
 	// B08 only when some clear inside pixel has no B11.
 	if (t.needNir > 0 && scene.nirUrl) {
 		const nir = await bandUnder(http, scene.nirUrl, S2_BAND_ACCEPT, green, gwin);
 		const nirBand: BandRead = { ...nir, itemOffset: scene.offsets.nir };
 		if (hasFileScale(nirBand) !== hasFileScale(greenBand)) throw new FeedFormatError('a Sentinel-2 scene’s bands disagree on their scale');
-		t = tallyS2(mask, greenBand, scl, swirBand, nirBand);
+		t = tallyS2(mask, greenBand, scl, swirBand, nirBand, classes);
 	}
 	const o = observation(t, mask.pixelAreaM2);
-	return o && { scene, ...(tag.etag ? { etag: tag.etag } : {}), ...o };
+	return o && { scene, ...(tag.etag ? { etag: tag.etag } : {}), ...o, pixels: viewPixels(green, mask, classes) };
 }

@@ -2303,11 +2303,21 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     cloud gives a 0 % row. On a geographic grid the mask takes a pixel's
     ground area from the WGS 84 ellipsoid (M·N·cos φ·Δφ·Δλ) at the
     outline's box centre, for the passes that will read one.
-  - **Two scenes on one date** (neighbouring Landsat rows overlap): one
-    row, from the scene that saw most of the dam clearly, then the one
-    covering most of it, then the lower item id. Not combined pixel by
-    pixel: the rows' grids needn't line up, and the better view is what a
-    reader would pick.
+  - **Two scenes on one date** (neighbouring Landsat rows, MGRS tiles or
+    Sentinel-1's 1° tiles): one row (`wofs/merge.ts`, shared by all three
+    passes). The base is the scene that saw most of the dam clearly, then
+    the one covering most of it, then the lower item id; the row is keyed
+    by its item. Each pixel of the dam the base has NO data for (off its
+    tile or footprint) is filled from the next-best scene of that date that
+    has, when the two grids are one lattice (the same CRS and pixel size,
+    origins whole pixels apart: 1° s1_rtc tiles, MGRS tiles of one UTM
+    zone, Landsat rows of one path). So a dam across a tile edge is seen
+    whole, not as the larger half (under the 90 % a clear view needs). A
+    pixel the base saw, clearly or under cloud, is never replaced: two looks
+    at one pixel (Sentinel-1's ascending and descending passes) aren't
+    mixed. Scenes on other lattices (two UTM zones) aren't joined; the
+    better view is kept. The scenes that filled a row stay in the file's
+    `upstream` list beside the row's own.
   - **Newest first, then history.** `dams/wofs-state.json` (the pass's
     own, never read by the worker) keeps per dam the SHA-256 of its
     outline and the span read so far, `[backfilledFrom, scannedThrough]`.

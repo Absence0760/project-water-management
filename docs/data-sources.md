@@ -394,7 +394,9 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   until `dam_observations_enabled`).
 - **Rows kept:** per dam and date, the wet area (wet pixels × the pixel's
   ground area) and the share of the outline seen clearly; two scenes on one
-  date give the one that saw more. No row for a date the dam's outline
+  date give the one that saw more, its gaps off its footprint filled from
+  the other where their grids line up (architecture.md § Dam observations).
+  No row for a date the dam's outline
   holds no pixel centre or the scene's footprint missed it.
 - **Fallback:** none current: Waterbodies' public series are frozen
   ([deafrica-waterbodies-series](#deafrica-waterbodies-series)), and

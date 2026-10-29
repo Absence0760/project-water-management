@@ -4,7 +4,8 @@
 // NDWI fallback, its pacing (one request a second per host), and a 403
 // stopping it. Then the Sentinel-1 pass against the synthetic s1_rtc
 // (s1Fixtures.ts): the same, radar through Landsat's cloud, the RTC mask's
-// shadow, wind-roughened water, and its agreement with Sentinel-2.
+// shadow, wind-roughened water, its agreement with Sentinel-2, and a dam
+// across a tile edge joined from both tiles (../wofs/merge.ts).
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -432,6 +433,64 @@ describe('runS1Pass', () => {
 		const first = new URL(log.find(({ url }) => url.startsWith(WOFS_STAC_SEARCH))!.url).searchParams.get('datetime');
 		expect(first).toBe(`${day(-20)}T00:00:00Z/${TODAY}T23:59:59Z`);
 		expect(S1_BACKFILL_FROM).toBe(S2_BACKFILL_FROM);
+	});
+
+	// The fixture's tiles are 0.05° squares (s1_rtc's are 1°): the edges at 22.35° E and 32.10° S. The boxes' sides
+	// are a quarter pixel off any pixel centre, so both tiles' masks agree on which pixels are inside (a side through a
+	// centre is decided by rounding, differently on each tile's origin).
+	const STRADDLE: WantedOutline = box('00000000-0000-4000-8000-0000000000a5', 22.34855, -32.11905, 22.35145, -32.11605);
+	const CORNER: WantedOutline = box('00000000-0000-4000-8000-0000000000a6', 22.34855, -32.10145, 22.35145, -32.09855);
+	/** The VV URLs in a file's upstream list, by the date in their path. */
+	const vvByDate = (f: { upstream: { url: string }[] }) => {
+		const out = new Map<string, string[]>();
+		for (const { url } of f.upstream) {
+			const m = /\/(\d{4})\/(\d{2})\/(\d{2})\/\d\/s1_rtc_fixture_VV\.tif$/.exec(url)!;
+			const d = `${m[1]}-${m[2]}-${m[3]}`;
+			out.set(d, [...(out.get(d) ?? []), url]);
+		}
+		return out;
+	};
+
+	it('joins a dam across a tile edge from both tiles’ views of a date: every view whole, not half', async () => {
+		const store = freshStore();
+		await listed(store, [STRADDLE, CORNER]);
+		const r = await runS1Pass({ store, http: s1Http().http, today: TODAY, ...fast });
+		expect(r).toMatchObject({ stopped: 'done', failures: [], sceneFailures: [] });
+		for (const [dam, tiles] of [
+			[STRADDLE, 2],
+			[CORNER, 4]
+		] as const) {
+			const f = (await readObservationFile(store, 's1', dam.featureId))!;
+			expect(f.rows.length).toBeGreaterThan(45);
+			// Radar sees through cloud and no shadow strip crosses these dams: each joined view is the whole dam.
+			for (const x of f.rows) expect(x.pctObserved, x.date).toBe(100);
+			expect(f.rows.filter((x) => !s1FixtureWindy(S1_SPEC, toEpochDay(x.date))).every((x) => x.wetAreaM2 > 0)).toBe(true);
+			// Each row is keyed by one tile's item, and the file keeps every tile that filled it.
+			const urls = vvByDate(f);
+			for (const x of f.rows) {
+				expect(urls.get(x.date), x.date).toHaveLength(tiles);
+				expect(f.upstream.find((u) => u.itemId === x.upstreamKey)).toBeDefined();
+			}
+		}
+	});
+
+	it('keeps the scenes that filled a row in the file when a later run rewrites it', async () => {
+		const store = freshStore();
+		await listed(store, [STRADDLE]);
+		let today = TODAY;
+		const fx = s1Fixture(() => today, S1_SPEC);
+		const http: FeedHttp = { range: async (u, s, e) => fx.scene(u)?.subarray(s, e + 1) ?? null, text: async (u) => fx.search(u) };
+		await runS1Pass({ store, http, today, ...fast });
+		const before = (await readObservationFile(store, 's1', STRADDLE.featureId))!;
+		// A week on: new passes, so the file is written again, its earlier rows untouched.
+		today = day(7);
+		const r = await runS1Pass({ store, http, today, ...fast });
+		expect(r.written).toEqual([STRADDLE.featureId]);
+		const after = (await readObservationFile(store, 's1', STRADDLE.featureId))!;
+		expect(after.rows.length).toBeGreaterThan(before.rows.length);
+		const urls = vvByDate(after);
+		for (const x of after.rows) expect(urls.get(x.date), x.date).toHaveLength(2);
+		expect(after.rows.slice(0, before.rows.length)).toEqual(before.rows);
 	});
 
 	it('runs through the feeds’ fixture client (FEED_SOURCE=fixtures)', async () => {

@@ -55,6 +55,9 @@
 // (decision D3): a team scenario's units are an editor's choice, and
 // baseline evidence names no one's farm, so neither has the section (null).
 import type { RunInputsSnapshot } from '../compare';
+import { SENTINEL_CITATION, sentinelCitation } from './sentinelCredit';
+
+export { SENTINEL_CITATION, sentinelCitation };
 
 /** The counting this code builds: bumped when the section's shape or its counting changes. */
 export const DAM_OBSERVATIONS_VERSION = 'dam-obs-2';
@@ -62,8 +65,6 @@ export const DAM_OBSERVATIONS_VERSION = 'dam-obs-2';
 export const DAM_OBSERVATIONS_V1 = 'dam-obs-1';
 /** WOfS's attribution, printed wherever its counts show (CC BY 4.0). */
 export const WOFS_CITATION = 'Digital Earth Africa WOfS, CC BY 4.0';
-/** The Copernicus credit for Sentinel values ([year]: the years of the dates counted), as the backend's dams/observed/upstream.ts SENTINEL_ATTRIBUTION. */
-export const SENTINEL_CITATION = 'Contains modified Copernicus Sentinel data [year], processed by Digital Earth Africa';
 /** WOfS: a date is wet when at least this many pixels of the outline were water, at any clear share. */
 export const WET_MIN_PIXELS = 2;
 /** A date is dry when no pixel was water and at least this share (%) of the outline was seen clearly (both sources). */
@@ -193,19 +194,6 @@ export type EvidenceDamObservationsAny = EvidenceDamObservations | EvidenceDamOb
 
 /** Whether a frozen § 7 is the WOfS-only counting of evidence-21 to evidence-23. */
 export const isDamObservationsV1 = (s: EvidenceDamObservationsAny): s is EvidenceDamObservationsV1 => s.version === DAM_OBSERVATIONS_V1;
-
-/** The Sentinel credit for dates on these days: one year, or the first and last ("2019–2021"); null with none. */
-export function sentinelCitation(dates: Iterable<string>): string | null {
-	let lo: string | null = null;
-	let hi: string | null = null;
-	for (const d of dates) {
-		const y = d.slice(0, 4);
-		if (lo === null || y < lo) lo = y;
-		if (hi === null || y > hi) hi = y;
-	}
-	if (lo === null || hi === null) return null;
-	return SENTINEL_CITATION.replace('[year]', lo === hi ? lo : `${lo}–${hi}`);
-}
 
 /** A node's name in the runs' stored models (the application's first), or null. */
 const nodeName = (models: (RunInputsSnapshot['model'] | undefined)[], id: string | null) =>

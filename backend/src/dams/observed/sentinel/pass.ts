@@ -23,7 +23,8 @@
 //   small range reads per band header and window, so a dam's year is a few
 //   minutes of requests, spread over the hourly runs;
 // - two MGRS tiles over one dam on a date (they overlap ~10 km) give one row,
-//   the better view, as two Landsat rows do.
+//   the better view with its gaps filled from the other (../wofs/merge.ts), as
+//   two Landsat rows do.
 // A 403 or 429/503 from either host stops the pass and pauses the source for
 // a day (handover.ts pausedUntil), with its own heartbeat and recency alarms
 // (infra/dam_observations.tf, Source = s2). Locally (FEED_SOURCE=fixtures)
@@ -70,8 +71,9 @@ export const runS2Pass = (opts: WofsPassOptions): Promise<WofsPassResult> => run
 //           ─put─► dams/s1/<featureId>.json, dams/s1-status.json, dams/s1-state.json
 //
 // As Sentinel-2's: its own backfill start (S1_BACKFILL_FROM), sinceBy.s1,
-// one bucket read a second, the better of two views of one date (an
-// ascending and a descending pass, or two 1° tiles a dam straddles), its own
+// one bucket read a second, one row a date (../wofs/merge.ts: the better of
+// an ascending and a descending pass; two 1° tiles a dam straddles joined
+// pixel by pixel, so it is seen whole), its own
 // pause, heartbeat and recency alarms (Source = s1). After it the fetcher
 // updates the S1/S2 agreement report (agreement.ts).
 

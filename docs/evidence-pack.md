@@ -556,8 +556,9 @@ with any Sentinel-2 date in the table *Sources: Digital Earth Africa WOfS,
 CC BY 4.0, and Sentinel-2, each summed inside the dams' traced outlines by
 this app. Contains modified Copernicus Sentinel data [year], processed by
 Digital Earth Africa.* (`SENTINEL_CITATION`; [year] the first and last year
-of the Sentinel-2 dates counted, `sentinelCitation`, as the panel's
-`sentinelCredit`), the credit the EU's legal notice asks for
+of the Sentinel-2 dates counted, `sentinelCitation`, in
+`evidence/sentinelCredit.ts`, the one definition the panel's
+`sentinelCredit` reads too), the credit the EU's legal notice asks for
 ([data-sources.md § deafrica-sentinel-2-c1](./data-sources.md#deafrica-sentinel-2-c1)).
 The credit is frozen in `sources[]` and checked against the dates.
 

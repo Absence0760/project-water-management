@@ -22,6 +22,27 @@ export interface ChartSeries extends DailyInput {
 	hidden?: boolean;
 }
 
+/** A points series' marks, as uPlot's `points` options: `stroke` is the series' resolved colour, `k` the print scale. */
+export interface PointMarks {
+	show: true;
+	size: number;
+	width: number;
+	fill: string;
+	stroke: string;
+}
+
+/**
+ * How a points series' marks are drawn: filled dots, or for a `hollow` one (the dam chart's radar views) rings, a
+ * full-strength 2 px outline round a see-through middle, so they read apart from filled dots of the same colour
+ * without leaning on colour (ui-playbook.md § 3). Sizes scale with `k` (printScale).
+ */
+export function pointMarks(s: Pick<ChartSeries, 'pointSize' | 'hollow'>, stroke: string, k = 1): PointMarks {
+	return { show: true, size: (s.pointSize ?? 3) * k, width: s.hollow ? 2 * k : 0, fill: s.hollow ? 'transparent' : stroke, stroke };
+}
+
+/** A series' key swatch fill: a filled dot's colour for a filled points series, none (an outline) for a line or a hollow one. */
+export const swatchFill = (s: Pick<ChartSeries, 'style' | 'hollow'> | undefined, stroke: string): string => (s?.style === 'points' && !s.hollow ? stroke : '');
+
 /**
  * Indices of values with no value either side. A line needs two points, so
  * a lone reading between gaps would draw nothing; the chart marks these with

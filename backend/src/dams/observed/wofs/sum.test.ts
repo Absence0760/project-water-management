@@ -3,7 +3,7 @@ import { outlineMask, sceneWindow, type OutlineGeometry } from '../../../raster/
 import { toUtm } from '../../../raster/utm.js';
 import { openCog } from '../../../raster/cog.js';
 import { writeCog } from '../../../raster/cogWrite.js';
-import { observation, tally, WOFS_ACCEPT, WOFS_DRY, WOFS_WET } from './sum.js';
+import { observation, pixelClasses, PX_COVERED, PX_DRY, PX_OFF, PX_WET, tally, WOFS_ACCEPT, WOFS_DRY, WOFS_WET } from './sum.js';
 
 const EPSG = 32634;
 const P = { lon: 19.05, lat: -33.95 };
@@ -56,8 +56,13 @@ describe('tally and observation', () => {
 			const c = (i % w) + win.col0 - m.col0;
 			return m.mask[r * m.width + c] === 1;
 		}
-		const t = tally(m, win, samples);
+		const classes = pixelClasses(m);
+		const t = tally(m, win, samples, classes);
 		expect(t).toEqual({ inside: m.inside, covered: m.inside - want.nodata, clear: want.clear, wet: want.wet });
+		// Each inside pixel's class, for joining views (merge.ts): the cycle's wet, dry, cloud, wet under shadow, no data.
+		const byClass = [PX_WET, PX_DRY, PX_COVERED, PX_COVERED, PX_OFF];
+		let k = 0;
+		for (let i = 0; i < classes.length; i++) expect(classes[i]).toBe(m.mask[i] ? byClass[k++ % byClass.length] : PX_OFF);
 		const o = observation(t, m.pixelAreaM2)!;
 		expect(o.wetAreaM2).toBeCloseTo(want.wet * m.pixelAreaM2, 2);
 		expect(o.pctObserved).toBeCloseTo((want.clear / m.inside) * 100, 3);

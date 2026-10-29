@@ -11,23 +11,11 @@ export const DEAFRICA_ATTRIBUTION = 'Digital Earth Africa, CC BY 4.0';
 
 /**
  * The Copernicus credit for Sentinel-2 and Sentinel-1 values (issue #624; docs/data-sources.md
- * deafrica-sentinel-2-c1): the EU's legal notice asks for "Contains modified Copernicus Sentinel data [year]", and
- * DE Africa processed them. [year] is the years of the values shown.
+ * deafrica-sentinel-2-c1), and the credit for views on given dates: the engine's, the one definition the evidence
+ * report's § 7 prints too. Its leaf module has no imports, so the fetcher's bundle carries those few lines and none
+ * of the engine.
  */
-export const SENTINEL_ATTRIBUTION = 'Contains modified Copernicus Sentinel data [year], processed by Digital Earth Africa';
-
-/** The Sentinel credit for views on these `YYYY-MM-DD` dates: one year, or the first and last ("2021–2024"); null with none. */
-export function sentinelCredit(dates: Iterable<string>): string | null {
-	let lo: string | null = null;
-	let hi: string | null = null;
-	for (const d of dates) {
-		const y = d.slice(0, 4);
-		if (lo === null || y < lo) lo = y;
-		if (hi === null || y > hi) hi = y;
-	}
-	if (lo === null || hi === null) return null;
-	return SENTINEL_ATTRIBUTION.replace('[year]', lo === hi ? lo : `${lo}–${hi}`);
-}
+export { SENTINEL_CITATION as SENTINEL_ATTRIBUTION, sentinelCitation as sentinelCredit } from '@water-management/engine/sentinel-credit';
 
 /** Whether a source's values are Copernicus Sentinel data, and carry SENTINEL_ATTRIBUTION. */
 export const isSentinel = (source: string) => source === 's2' || source === 's1';
