@@ -171,19 +171,21 @@ export function applyClimateDelta(d: ModelInput, op: Pick<ClimateDeltaOp, 'rainF
 	const rf = op.rainFactorByMonth;
 	const ef = op.evapFactorByMonth;
 	const k = annualRainFactor(d.series, rf);
-	const series: Record<string, DailySeries> = { ...(d.series as Record<string, DailySeries>) };
 	let rainSeries = 0;
 	let evapSeries = 0;
-	for (const [key, s] of Object.entries(series)) {
-		// A key JSON.parse keeps but a plain object answers from its prototype is never written (as overrides.ts).
-		if (!s || !Array.isArray(s.values) || key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-		const f = isClimateRainKey(key) ? rf : (CLIMATE_EVAP_KINDS as readonly string[]).includes(key) ? ef : null;
-		if (!f) continue;
-		series[key] = scaleDaily(s, f).series;
-		if (f === rf) rainSeries++;
-		else evapSeries++;
-	}
-	d.series = series as ModelInput['series'];
+	// Object.fromEntries defines own properties, never an assignment by a key
+	// that could reach a prototype (a JSON-parsed `__proto__`), as cloneData in
+	// overrides.ts. Such a key is neither rain_* nor an evap kind, so it passes
+	// through unscaled.
+	d.series = Object.fromEntries(
+		Object.entries(d.series as Record<string, DailySeries>).map(([key, s]) => {
+			const f = isClimateRainKey(key) ? rf : (CLIMATE_EVAP_KINDS as readonly string[]).includes(key) ? ef : null;
+			if (!f || !s || !Array.isArray(s.values)) return [key, s];
+			if (f === rf) rainSeries++;
+			else evapSeries++;
+			return [key, scaleDaily(s, f).series];
+		})
+	) as ModelInput['series'];
 	const st = d.settings as Record<string, unknown>;
 	const rows: string[] = [];
 	if (Array.isArray(st.apanMm) && st.apanMm.length === 12) {

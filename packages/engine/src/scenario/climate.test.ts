@@ -150,6 +150,8 @@ describe('the climate.delta op', () => {
 		applyClimateDelta(d, { rainFactorByMonth: ones().map(() => 1.1), evapFactorByMonth: ones() });
 		expect(Object.getPrototypeOf(d.series)).toBe(Object.prototype);
 		expect(({} as Record<string, unknown>).values).toBeUndefined();
+		// Kept as the own data property it arrived as, unscaled (it is no rain or evap kind).
+		expect(Object.getOwnPropertyDescriptor(d.series, '__proto__')?.value).toEqual({ startDate: '2020-01-01', values: [1, 2] });
 	});
 
 	it('refuses a series.scale beside it, in either order', () => {
