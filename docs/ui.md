@@ -1936,7 +1936,9 @@ for every workspace tab. Its own chunk.
   capacity) with a summary in words (the span, the mean difference as a share
   of the full area, the share within ±10 %, how often seen full or empty, and
   how many of the views are radar, "never called full or empty on their
-  own"); with more than one source, a line of how many views each gave,
+  own", then, with radar among them, the optical views' own figures,
+  "Without radar (n clear views): …", since wind makes radar read low and
+  pulls the mean down; model.md §2.10l); with more than one source, a line of how many views each gave,
   best first ("Views by source: 3 Sentinel-2, 2 WOfS, 1 Sentinel-1 radar. A
   day more than one saw clearly is compared with the most trusted: Sentinel-2,
   then WOfS, then Waterbodies, then radar.", issue

@@ -3876,8 +3876,11 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
   `no-run`. The flags are set on compared points only, and never on a
   Sentinel-1 (radar) point, which keeps only `modelFull`/`modelEmpty`;
   `mismatch` is `model-full`, `model-empty`, `seen-full` or `seen-empty`.
-- `summary`: `{ compared, skipped, biasPctOfFull, withinShare, seenFull, seenEmpty, mismatches, radar, latestClear }`
-  (`radar`: how many compared points are Sentinel-1's);
+- `summary`: `{ compared, skipped, biasPctOfFull, withinShare, seenFull, seenEmpty, mismatches, radar, optical, latestClear }`
+  (`radar`: how many compared points are Sentinel-1's; `optical`:
+  `{ compared, biasPctOfFull, withinShare }` over the compared points that
+  aren't radar, equal to the summary's own without radar, null figures
+  with no optical point);
   `biasPctOfFull` is the mean of (modelled − observed) as % of the full area
   (+: the model holds more), `withinShare` the share of compared points
   within 10 % of the full area (0–1), `latestClear` the newest view at least

@@ -133,6 +133,12 @@ export interface CompareSummary {
 	mismatches: number;
 	/** Of the compared points, how many are radar (Sentinel-1): in the bias and the share within, never in a flag. */
 	radar: number;
+	/**
+	 * The same figures over the optical points alone (every compared point but radar's): radar reads open water dry
+	 * in wind, so its views pull the average difference down. Shown beside the figures above when radar is among
+	 * them, so the reader sees how far radar moved them. Equal to them without radar; null figures with no optical point.
+	 */
+	optical: { compared: number; biasPctOfFull: number | null; withinShare: number | null };
 	/** The newest clear observation (compared or not for want of a run), for the farmer's "seen from space". */
 	latestClear: { date: string; source: ObservedSource; wetAreaM2: number; pctObserved: number } | null;
 }
@@ -274,21 +280,33 @@ export function flags(
 	return { seenFull, seenEmpty, modelFull, modelEmpty, mismatch };
 }
 
+/** The mean difference (% of full) and the share within OBSERVED.withinShare of the full area, over compared points. */
+function agreement(c: readonly ComparedPoint[], full: number | null): { compared: number; biasPctOfFull: number | null; withinShare: number | null } {
+	const n = c.length;
+	const diff = c.map((p) => p.modelledAreaM2! - p.wetAreaM2);
+	return {
+		compared: n,
+		biasPctOfFull: n && full ? (diff.reduce((s, d) => s + d, 0) / n / full) * 100 : null,
+		withinShare: n && full ? diff.filter((d) => Math.abs(d) <= OBSERVED.withinShare * full).length / n : null
+	};
+}
+
 function summarise(points: readonly ComparedPoint[], full: number | null): CompareSummary {
 	const c = points.filter((p) => p.compared);
 	const n = c.length;
-	const diff = c.map((p) => p.modelledAreaM2! - p.wetAreaM2);
+	const all = agreement(c, full);
 	const clear = points.filter((p) => p.pctObserved >= OBSERVED.minPctObserved && (p.compared || p.skip === 'no-run' || p.skip === 'outside-run'));
 	const last = clear.at(-1) ?? null;
 	return {
 		compared: n,
 		skipped: points.length - n,
-		biasPctOfFull: n && full ? (diff.reduce((s, d) => s + d, 0) / n / full) * 100 : null,
-		withinShare: n && full ? diff.filter((d) => Math.abs(d) <= OBSERVED.withinShare * full).length / n : null,
+		biasPctOfFull: all.biasPctOfFull,
+		withinShare: all.withinShare,
 		seenFull: c.filter((p) => p.seenFull).length,
 		seenEmpty: c.filter((p) => p.seenEmpty).length,
 		mismatches: c.filter((p) => p.mismatch).length,
 		radar: c.filter((p) => isRadar(p.source)).length,
+		optical: agreement(c.filter((p) => !isRadar(p.source)), full),
 		latestClear: last ? { date: last.date, source: last.source, wetAreaM2: last.wetAreaM2, pctObserved: last.pctObserved } : null
 	};
 }

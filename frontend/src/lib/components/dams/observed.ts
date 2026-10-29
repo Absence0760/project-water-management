@@ -83,8 +83,23 @@ export function summaryWords(dam: ObservedDam, withinShare: number): string | nu
 		`${views(s.compared)} from ${fmtDay(c[0]!.date)} to ${fmtDay(c.at(-1)!.date)}: ${bias}; ` +
 		`within ±${fmtNum(withinShare * 100, 0)}% of the full area on ${pct(s.withinShare)} of them.` +
 		(flags.length ? ` ${capital(flags.join(', '))}.` : '') +
-		radar
+		radar +
+		opticalWords(s, withinShare)
 	);
+}
+
+/**
+ * The optical views' own figures, when radar is among the compared views: radar reads open water dry in wind, so it
+ * can move the average difference, and this shows by how much. Empty without radar (the figures above are the optical
+ * ones), and a plain note when every compared view is radar.
+ */
+export function opticalWords(s: ObservedDam['summary'], withinShare: number): string {
+	if (!s.radar) return '';
+	const o = s.optical;
+	if (!o.compared || o.biasPctOfFull === null || o.withinShare === null) return ' No optical view to compare without radar.';
+	const b = o.biasPctOfFull;
+	const bias = Math.abs(b) < 0.5 ? 'the model and the satellites agree on average' : `the model has ${fmtNum(Math.abs(b), 0)}% of the full area ${b > 0 ? 'more' : 'less'} water surface on average`;
+	return ` Without radar (${views(o.compared)}): ${bias}; within ±${fmtNum(withinShare * 100, 0)}% on ${pct(o.withinShare)} of them.`;
 }
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 

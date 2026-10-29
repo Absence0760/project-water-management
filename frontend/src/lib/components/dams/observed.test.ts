@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ObservedDam, ObservedPoint } from '#lib/api/types.js';
 import { readFileSync } from 'node:fs';
 import { SENTINEL_STATEMENT } from '#lib/components/legal/dataCredits.js';
-import { creditLine, sentinelCredit, SOURCE_ORDER, fullAreaWords, matchNotes, OBSERVED_LANE_COLOR, observedChartSeries, observedFor, observedLanes, observedLine, sourcesLine, summaryWords, viewRows } from './observed';
+import { creditLine, sentinelCredit, SOURCE_ORDER, fullAreaWords, matchNotes, OBSERVED_LANE_COLOR, observedChartSeries, observedFor, observedLanes, observedLine, opticalWords, sourcesLine, summaryWords, viewRows } from './observed';
 
 let tz: string | undefined;
 beforeAll(() => {
@@ -52,6 +52,10 @@ const dam = (points: ObservedPoint[], more: Partial<ObservedDam> = {}): Observed
 			seenEmpty: c.filter((p) => p.seenEmpty).length,
 			mismatches: c.filter((p) => p.mismatch).length,
 			radar: c.filter((p) => p.source === 's1').length,
+			// Without radar the model is 1 % over, every optical view within: so a radar view's pull shows.
+			optical: c.some((p) => p.source !== 's1')
+				? { compared: c.filter((p) => p.source !== 's1').length, biasPctOfFull: 1.2, withinShare: 1 }
+				: { compared: 0, biasPctOfFull: null, withinShare: null },
 			latestClear: points.length ? { date: points.at(-1)!.date, source: 'wofs', wetAreaM2: points.at(-1)!.wetAreaM2, pctObserved: 100 } : null
 		},
 		...more
@@ -197,10 +201,26 @@ describe('the sources, the radar and the credit (issue #624)', () => {
 	it('says how many compared views are radar, in the fold’s line and the summary, and that they are never called full or empty', () => {
 		const d = dam([point('2022-01-05', 25_000, { source: 's2' }), point('2022-01-21', 39_000, { source: 's1' })]);
 		expect(sp(observedLine(d, false, null, 0.1))).toBe('2 clear views compared (1 radar) · none disagree · 75% within ±10%');
-		expect(sp(summaryWords(d, 0.1))).toMatch(/ 1 of the 2 views is radar \(Sentinel-1, through cloud\), never called full or empty on its own\.$/);
+		expect(sp(summaryWords(d, 0.1))).toContain(' 1 of the 2 views is radar (Sentinel-1, through cloud), never called full or empty on its own.');
 		const all = dam([point('2022-01-05', 25_000, { source: 's1' }), point('2022-01-21', 39_000, { source: 's1' })]);
-		expect(sp(summaryWords(all, 0.1))).toMatch(/ All are radar \(Sentinel-1, through cloud\), never called full or empty on their own\.$/);
+		expect(sp(summaryWords(all, 0.1))).toContain(' All are radar (Sentinel-1, through cloud), never called full or empty on their own.');
 		expect(sp(observedLine(dam([point('2022-01-05', 25_000)]), false, null, 0.1))).toBe('1 clear view compared · none disagree · 75% within ±10%');
+	});
+
+	it('gives the optical views’ own figures after the radar note, so radar’s pull on the average shows, and nothing extra without radar', () => {
+		const d = dam([point('2022-01-05', 25_000, { source: 's2' }), point('2022-01-21', 39_000, { source: 's1' })]);
+		expect(sp(summaryWords(d, 0.1))).toMatch(/never called full or empty on its own\. Without radar \(1 clear view\): the model has 1% of the full area more water surface on average; within ±10% on 100% of them\.$/);
+		expect(sp(opticalWords({ ...d.summary, optical: { compared: 3, biasPctOfFull: -0.3, withinShare: 2 / 3 } }, 0.1))).toBe(
+			' Without radar (3 clear views): the model and the satellites agree on average; within ±10% on 67% of them.'
+		);
+		expect(sp(opticalWords({ ...d.summary, optical: { compared: 2, biasPctOfFull: -7.6, withinShare: 0.5 } }, 0.1))).toContain('the model has 8% of the full area less water surface on average');
+		// Every compared view radar: nothing optical to show.
+		const all = dam([point('2022-01-05', 25_000, { source: 's1' })]);
+		expect(sp(summaryWords(all, 0.1))).toMatch(/ No optical view to compare without radar\.$/);
+		// No radar: the summary's own figures are the optical ones, so no second sentence.
+		const optical = dam([point('2022-01-05', 25_000, { source: 's2' })]);
+		expect(opticalWords(optical.summary, 0.1)).toBe('');
+		expect(sp(summaryWords(optical, 0.1))).not.toContain('Without radar');
 	});
 
 	it('credits Copernicus beside DE Africa when Sentinel views are listed', () => {

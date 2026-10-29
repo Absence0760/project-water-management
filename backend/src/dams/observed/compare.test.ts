@@ -122,6 +122,38 @@ describe('radar (Sentinel-1) is never alone the reason for a flag (issue #624)',
 		const only = compareDam(base({ observations: [obs('2024-01-05', 4_000, { source: 's1' })] }));
 		expect(only.summary.latestClear).toEqual({ date: '2024-01-05', source: 's1', wetAreaM2: 4_000, pctObserved: 100 });
 	});
+
+	it('gives the optical views’ own average difference beside the summary, so radar reading low in wind shows (followups: radar moves the average)', () => {
+		// The model holds 5 000 m² every day. WOfS and Sentinel-2 see it exactly; radar, on the cloudy days, reads 2 000 low.
+		const r = compareDam(
+			base({
+				observations: [
+					obs('2024-01-02', 5_000),
+					obs('2024-01-03', 5_000, { source: 's2' }),
+					obs('2024-01-04', 3_000, { source: 's1' }),
+					obs('2024-01-05', 3_000, { source: 's1' })
+				]
+			})
+		);
+		// All four: (0 + 0 + 2 000 + 2 000) / 4 = 1 000, +10 % of the full area; two of four within ±10 %.
+		expect(r.summary).toMatchObject({ compared: 4, radar: 2 });
+		expect(r.summary.biasPctOfFull).toBeCloseTo(10, 9);
+		expect(r.summary.withinShare).toBeCloseTo(0.5, 9);
+		// The optical two alone: no difference, both within.
+		expect(r.summary.optical.compared).toBe(2);
+		expect(r.summary.optical.biasPctOfFull).toBeCloseTo(0, 9);
+		expect(r.summary.optical.withinShare).toBe(1);
+	});
+
+	it('the optical figures equal the summary’s without radar, and are null when every compared view is radar', () => {
+		const optical = compareDam(base({ observations: [obs('2024-01-02', 4_000), obs('2024-01-03', 6_500, { source: 's2' })] })).summary;
+		expect(optical.optical).toEqual({ compared: optical.compared, biasPctOfFull: optical.biasPctOfFull, withinShare: optical.withinShare });
+		const radarOnly = compareDam(base({ observations: [obs('2024-01-02', 4_000, { source: 's1' })] })).summary;
+		expect(radarOnly).toMatchObject({ compared: 1, radar: 1, optical: { compared: 0, biasPctOfFull: null, withinShare: null } });
+		expect(radarOnly.biasPctOfFull).toBeCloseTo(10, 9);
+		// No run: nothing compared, every figure null.
+		expect(compareDam(base({ modelled: null, full: null, observations: [obs('2024-01-02', 4_000)] })).summary.optical).toEqual({ compared: 0, biasPctOfFull: null, withinShare: null });
+	});
 });
 
 describe('the sharpest clear source wins the day (issue #624)', () => {
@@ -318,7 +350,7 @@ describe('compareDam', () => {
 	it('is empty with no observations', () => {
 		expect(compareDam(base({}))).toEqual({
 			points: [],
-			summary: { compared: 0, skipped: 0, biasPctOfFull: null, withinShare: null, seenFull: 0, seenEmpty: 0, mismatches: 0, radar: 0, latestClear: null }
+			summary: { compared: 0, skipped: 0, biasPctOfFull: null, withinShare: null, seenFull: 0, seenEmpty: 0, mismatches: 0, radar: 0, optical: { compared: 0, biasPctOfFull: null, withinShare: null }, latestClear: null }
 		});
 	});
 });

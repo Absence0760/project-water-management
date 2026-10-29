@@ -108,6 +108,8 @@ test('Sentinel views: the sharpest clear source wins the day, radar is shown as 
 	const d = api.dams.find((x) => x.nodeId === upper.id)!;
 	// Sentinel-2's full view wins 20 Oct over WOfS's; the two radar views are compared but flag nothing.
 	expect(d.summary).toMatchObject({ compared: 4, radar: 2, seenFull: 1, seenEmpty: 1, mismatches: 2 });
+	// Beside it, the two optical views' own figures, so radar's pull on the average shows.
+	expect(d.summary.optical).toMatchObject({ compared: 2 });
 	expect(d.points.map((p) => [p.date, p.source, p.skip])).toEqual([
 		['2021-10-20', 's2', null],
 		['2021-10-20', 'wofs', 'other-source'],
@@ -123,6 +125,7 @@ test('Sentinel views: the sharpest clear source wins the day, radar is shown as 
 	await expect(box1(page).getByTestId('dam-observed-line')).toHaveText(/^4 clear views compared \(2 radar\) · 2 disagree · \d+% within ±10%$/);
 	await openBox(page);
 	await expect(box1(page).getByTestId('dam-observed-summary')).toContainText('2 of the 4 views are radar (Sentinel-1, through cloud), never called full or empty on their own.');
+	await expect(box1(page).getByTestId('dam-observed-summary')).toContainText(/ Without radar \(2 clear views\): .+; within ±10% on \d+% of them\.$/);
 	await expect(box1(page).getByTestId('dam-observed-sources')).toHaveText(
 		'Views by source: 1 Sentinel-2, 3 WOfS, 2 Sentinel-1 radar. A day more than one saw clearly is compared with the most trusted: Sentinel-2, then WOfS, then Waterbodies, then radar.'
 	);

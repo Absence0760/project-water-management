@@ -10964,10 +10964,19 @@ together.
   precedence, so it takes a day only when no optical source saw it clearly,
   and "never alone" is "never". Radar's errors do move the bias and the
   share within, which is why the summary counts its views (`radar`).
-  Both Sentinel passes are built (their classifications are above), each
-  off until its own flag. The reader takes whatever `s1` rows the store
-  holds; what keeps radar out of production until it is trusted is its own
-  flag, `dam_s1_enabled`, and the agreement below.
+  Beside the summary, `optical` gives the same average difference and
+  share within over the optical views alone (every compared view but
+  radar's), and the Dams panel says it after the radar note ("Without
+  radar (n clear views): …"). Radar isn't simply left out of the average:
+  it takes the days no optical source saw, mostly cloudy (wet-season)
+  ones, so dropping it would skew the sample to clear days; showing both
+  lets the reader see how far radar moved the figure. Both Sentinel passes
+  are built (their classifications are above), each off until its own
+  flag. The reader takes whatever `s1` rows the store holds; what keeps
+  untrusted radar out of it is the worker: with `DAM_OBSERVATIONS_S1=measure`
+  (Terraform `dam_s1_mode`) it loads none, and with `on` only the dams
+  whose own agreement below passes (at least 10 pairs, 85 % within;
+  architecture.md § Dam observations).
 - **The S1/S2 agreement** (`sentinel/agreement.ts`, issue #624's acceptance
   criteria). For each clear radar view of a dam (at least 90 % seen), the
   clear Sentinel-2 view of the same dam on the same day, else the day

@@ -3666,6 +3666,8 @@ export interface ObservedDam {
 		mismatches: number;
 		/** Of the compared views, how many are radar (Sentinel-1). */
 		radar: number;
+		/** biasPctOfFull and withinShare over the optical views alone (all but radar's), shown when radar is among them. */
+		optical: { compared: number; biasPctOfFull: number | null; withinShare: number | null };
 		latestClear: { date: string; source: ObservedSource; wetAreaM2: number; pctObserved: number } | null;
 	};
 }
