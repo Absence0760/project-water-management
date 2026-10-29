@@ -61,6 +61,7 @@ import {
 	type UnitRainSeriesKey
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
+import { CLIMATE_LABEL_MAX, CLIMATE_SOURCE_MAX, climateFactorRowError, type ClimateDeltaOp } from './climate';
 import { droughtRestrictionIssues } from '../network/restriction';
 import { ewrDailySourceIssues, type EwrDailySource } from '../reserve/dailySource';
 import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS } from '../network/demandSchedule';
@@ -1054,6 +1055,8 @@ export type ScenarioOp =
 	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
 	| { op: 'series.scale'; kind: ScalableSeriesKey; factor: number; from?: string; to?: string }
 	| DemandScaleOp
+	/** Future climate (engine 1.107.0, issue #621): every rain and evaporation input × a calendar month's change factor (./climate.ts). */
+	| ClimateDeltaOp
 	| EwrRuleSetOp
 	/** Remove the Reserve rule table of one EWR site (engine ≥ 1.35.0): null = the outlet. Always a baseline assumption. */
 	| { op: 'ewrRule.remove'; siteNodeId: string | null }
@@ -1136,6 +1139,7 @@ export const SCENARIO_OP_NAMES = [
 	'settings.set',
 	'series.scale',
 	'demand.scale',
+	'climate.delta',
 	'ewrRule.set',
 	'ewrRule.remove',
 	'allocation.set',
@@ -1432,6 +1436,14 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 			op = s;
 			break;
 		}
+		case 'climate.delta': {
+			const rain = need('rainFactorByMonth', climateFactorRowError);
+			const evap = need('evapFactorByMonth', climateFactorRowError);
+			const label = need('label', nameOf(1, CLIMATE_LABEL_MAX, 'a label'));
+			const source = need('source', nameOf(1, CLIMATE_SOURCE_MAX, 'a source'));
+			op = { op: 'climate.delta', rainFactorByMonth: cloneValue(rain) as number[], evapFactorByMonth: cloneValue(evap) as number[], label: label as string, source: source as string };
+			break;
+		}
 		case 'ewrRule.set': {
 			const { table, issues } = ewrRuleTableOpIssues(raw.table);
 			for (const [k, m] of issues) errors.push(`${where}.table${k ? `.${k}` : ''}: ${m}`);
@@ -1455,6 +1467,25 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 			errors.push(`${where}.op: must be one of ${SCENARIO_OP_NAMES.join(', ')}`);
 	}
 	return errors.length === n ? op : null;
+}
+
+/**
+ * A climate.delta op already scales every rain and evaporation series
+ * (./climate.ts), so a list holding one may hold no second one and no
+ * series.scale: the two would stack, and which climate the scenario assumes
+ * would depend on their order. One error per clash, on the later op.
+ */
+function climateDeltaClashes(raw: readonly unknown[]): string[] {
+	const first = raw.findIndex((r) => isObj(r) && r.op === 'climate.delta');
+	if (first < 0) return [];
+	const out: string[] = [];
+	raw.forEach((r, i) => {
+		if (!isObj(r) || i === first) return;
+		if (r.op === 'climate.delta') out.push(`ops[${i}]: a scenario holds at most one climate.delta (op ${first + 1} is one)`);
+		else if (r.op === 'series.scale')
+			out.push(`ops[${i}]: op ${first + 1} (climate.delta) already scales every rain and evaporation series, so a series.scale can't sit beside it: put it in another scenario`);
+	});
+	return out;
 }
 
 /**
@@ -1482,5 +1513,6 @@ export function validateScenarioOps(raw: unknown, opts: { stored?: unknown } = {
 	} finally {
 		keptTexts = null;
 	}
+	errors.push(...climateDeltaClashes(raw));
 	return { ops, errors };
 }

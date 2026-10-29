@@ -708,6 +708,8 @@ def unsupported(doc: dict) -> list[str]:
             out.append("non-default data-quality limits")
     if (doc.get("series") or {}).get("evap_apan_mm"):
         out.append("daily A-pan series")
+    if any(op.get("op") != "climate.delta" for op in doc.get("scenarioOps") or []):
+        out.append("scenario ops other than climate.delta")
     if s.get("damStorageReset"):
         out.append("dam storage reset (outlook only)")
     # The seasonal outlook's engine-only per-unit inputs (§2.4h, §2.15): with forecast mode, outside verify/.
@@ -720,6 +722,101 @@ def unsupported(doc: dict) -> list[str]:
     if (s.get("rainStations") or {}).get("pinnedFactors"):
         out.append("pinned station pairing factors (rainStations.pinnedFactors)")
     return sorted(set(out))
+
+
+# --------------------------------------------------------------------------
+# Future climate: the climate.delta scenario op (docs/model.md §2.17)
+# --------------------------------------------------------------------------
+
+# The days each calendar month (January first) weighs in the annual rain factor.
+CLIMATE_MONTH_DAYS = [31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+MAP_MAX_MM = 12000
+
+
+def _climate_reading(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0
+
+
+def _climate_scale_series(sr: dict, f: list[float]) -> dict:
+    o0 = iso_to_ord(sr["startDate"])
+    vals = [v * f[cal_month(o0 + t) - 1] if _climate_reading(v) else v for t, v in enumerate(sr["values"])]
+    return {"startDate": sr["startDate"], "values": vals}
+
+
+def climate_annual_factor(series: dict, f: list[float]) -> float:
+    """§2.17: F = sum(w_m f_m) / sum(w_m), w_m the catchment rain record's mean
+    daily reading in calendar month m times its days, or the days alone."""
+    if all(x == 1 for x in f):
+        return 1.0
+    w = list(CLIMATE_MONTH_DAYS)
+    for key in ("rain_catchment_mm", "rain_chirps_mm"):
+        sr = series.get(key)
+        if not sr or not any(_climate_reading(v) and v > 0 for v in sr["values"]):
+            continue
+        tot = [0.0] * 12
+        cnt = [0] * 12
+        o0 = iso_to_ord(sr["startDate"])
+        for t, v in enumerate(sr["values"]):
+            if _climate_reading(v):
+                m = cal_month(o0 + t) - 1
+                tot[m] += v
+                cnt[m] += 1
+        w = [tot[m] / cnt[m] * CLIMATE_MONTH_DAYS[m] if cnt[m] else 0.0 for m in range(12)]
+        break
+    return sum(w[m] * f[m] for m in range(12)) / sum(w)
+
+
+def apply_climate_delta(doc: dict, op: dict) -> dict:
+    """The op as §2.17 states it: every rain_ series by the rain factors, the daily
+    A-pan and reference ET by the evaporation factors, the A-pan row and a monthly
+    PE row month by month (water-year month w takes calendar month (w + 9) % 12),
+    and every MAP by the annual rain factor. A new document; doc is untouched."""
+    rf = op["rainFactorByMonth"]
+    ef = op["evapFactorByMonth"]
+    for row in (rf, ef):
+        if len(row) != 12 or not all(0.5 <= x <= 1.5 for x in row):
+            raise Refused("climate.delta factors must be 12 values 0.5-1.5")
+    doc = copy.deepcopy(doc)
+    series = doc.get("series") or {}
+    k = climate_annual_factor(series, rf)
+    for key, sr in list(series.items()):
+        if key.startswith("rain_"):
+            series[key] = _climate_scale_series(sr, rf)
+        elif key in ("evap_apan_mm", "evap_et0_mm"):
+            series[key] = _climate_scale_series(sr, ef)
+    s = doc.setdefault("settings", {})
+    if isinstance(s.get("apanMm"), list) and len(s["apanMm"]) == 12:
+        s["apanMm"] = [v * ef[(w + 9) % 12] for w, v in enumerate(s["apanMm"])]
+    pe = s.get("pe")
+    if isinstance(pe, dict) and pe.get("kind") == "monthly":
+        pe["mm"] = [v * ef[(w + 9) % 12] for w, v in enumerate(pe["mm"])]
+
+    def scaled(v):
+        return min(MAP_MAX_MM, v * k) if isinstance(v, (int, float)) and v > 0 else v
+
+    if k != 1:
+        for n in doc["model"]["nodes"]:
+            if "mapMm" in n:
+                n["mapMm"] = scaled(n["mapMm"])
+        if isinstance(s.get("unitRain"), dict) and "gaugeMapMm" in s["unitRain"]:
+            s["unitRain"]["gaugeMapMm"] = scaled(s["unitRain"]["gaugeMapMm"])
+        if isinstance(s.get("rainStations"), dict) and "catchmentMapMm" in s["rainStations"]:
+            s["rainStations"]["catchmentMapMm"] = scaled(s["rainStations"]["catchmentMapMm"])
+        for st in (doc.get("stations") or {}).values():
+            if isinstance(st, dict) and "mapMm" in st:
+                st["mapMm"] = scaled(st["mapMm"])
+    return doc
+
+
+def apply_scenario_ops(doc: dict) -> dict:
+    """verify/'s own field `scenarioOps`: the scenario ops this harness models
+    (climate.delta only), applied in order before the run."""
+    ops = doc.get("scenarioOps") or []
+    for op in ops:
+        if op.get("op") != "climate.delta":
+            raise Refused(f"verify/ models no scenario op {op.get('op')}")
+        doc = apply_climate_delta(doc, op)
+    return {k: v for k, v in doc.items() if k != "scenarioOps"}
 
 
 # --------------------------------------------------------------------------
@@ -1363,6 +1460,7 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
 
 
 def run(doc: dict) -> dict:
+    doc = apply_scenario_ops(doc)
     settings = merge_settings(doc.get("settings") or {})
     model = doc["model"]
     series = doc.get("series") or {}

@@ -34,6 +34,9 @@
 		disabled?: boolean;
 	} = $props();
 
+	// Every op but climate.delta (engine 1.107.0, issue #621): its factors come from the climate projections, which the
+	// Scenarios tab's future-climate picker reads (issue #621 slice 5), never typed in here.
+	const FORM_OP_NAMES = SCENARIO_OP_NAMES.filter((k) => k !== 'climate.delta');
 	let d = $state<OpDraft>(emptyDraft());
 	let error = $state<string | null>(null);
 	let busy = $state(false);
@@ -297,7 +300,7 @@
 		<div class="field">
 			<label for="op-kind">Kind of change</label>
 			<select id="op-kind" value={d.kind} onchange={(e) => pickKind(e.currentTarget.value as ScenarioOpName)}>
-				{#each SCENARIO_OP_NAMES as k (k)}<option value={k}>{OP_LABEL[k]}</option>{/each}
+				{#each FORM_OP_NAMES as k (k)}<option value={k}>{OP_LABEL[k]}</option>{/each}
 			</select>
 		</div>
 

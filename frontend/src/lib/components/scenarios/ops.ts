@@ -199,6 +199,7 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'settings.set': 'Change a setting',
 	'series.scale': 'Scale rainfall or daily A-pan',
 	'demand.scale': 'Scale demand',
+	'climate.delta': 'Future climate (monthly change factors)',
 	'ewrRule.set': "Set an EWR site's rule table",
 	'ewrRule.remove': "Remove an EWR site's rule table",
 	'allocation.set': 'Set a registered volume',
@@ -349,6 +350,11 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const pct = (op.factor - 1) * 100;
 			const days = op.from || op.to ? `, ${op.from ? fmtDay(op.from) : 'start'} to ${op.to ? fmtDay(op.to) : 'end'}` : '';
 			return `${kindLabel(op.kind)}: × ${fmtNum(op.factor, 4, true)} (${pct > 0 ? '+' : ''}${fmtNum(pct, 2, true)} %)${days}`;
+		}
+		case 'climate.delta': {
+			// Engine 1.107.0 (issue #621): no form makes one yet (the picker comes with the Scenarios tab's future climate).
+			const span = (f: readonly number[]) => `× ${fmtNum(Math.min(...f), 3, true)} to × ${fmtNum(Math.max(...f), 3, true)} by month`;
+			return `Future climate, ${op.label}: rain ${span(op.rainFactorByMonth)}, evaporation ${span(op.evapFactorByMonth)} (${op.source})`;
 		}
 		case 'demand.scale': {
 			const user = op.category === 'user';

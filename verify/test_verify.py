@@ -443,6 +443,11 @@ MUTANTS = [
     # diff.py notes a series only the engine writes rather than failing, so the exchange series' zone rule is
     # proven the other way: python writing it under Per unit whatever the zones' X2 is caught.
     ("the exchange series is written under Per unit whatever the zones' X2", 'if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in zone_params(', 'if g["x2"] != 0 or (per_unit or any(p["x2"] != 0 for p in zone_params('),
+    # Future climate (§2.17, engine 1.107.0, issue #621).
+    ("climate.delta leaves the MAPs as they were", "    if k != 1:\n        for n in doc", "    if False:\n        for n in doc"),
+    ("climate.delta reads rain factors by water-year month", "vals = [v * f[cal_month(o0 + t) - 1] if", "vals = [v * f[wy_month(o0 + t)] if"),
+    ("climate.delta's A-pan row takes the water-year month's own index", 's["apanMm"] = [v * ef[(w + 9) % 12] for', 's["apanMm"] = [v * ef[w] for'),
+    ("climate.delta's annual factor is the plain mean of the rain factors", "    return sum(w[m] * f[m] for m in range(12)) / sum(w)", "    return sum(f) / 12"),
 ]
 
 

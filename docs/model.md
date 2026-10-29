@@ -13343,6 +13343,102 @@ its rule table's curves), so storing one per base run stays possible if a
 job ever runs without the base run's input, but it would save only that one
 run.
 
+
+### 2.17 Future climate: monthly change factors (engine 1.107.0, issue #621)
+
+A licence lasts decades, but a run replays the historical record. A
+**future climate** reruns it with the rain and evaporation each calendar
+month is expected to have in a future window, as the scenario op
+`climate.delta` ([scenarios.md § climate.delta](./scenarios.md)). Pure, in
+`packages/engine/src/scenario/climate.ts`. Provisional, pending the
+hydrologist ([engine-audit.md](./engine-audit.md) CD1).
+
+**The factors** (`climateDeltaFactors`). From downscaled daily projections
+(NEX-GDDP-CMIP6, 0.25°, [data-sources.md](./data-sources.md)), stored as
+monthly aggregates per model, SSP and year: each month's rain total `pr`
+and its mean daily maximum and minimum temperatures `tasmax`, `tasmin`
+(°C). For one model, SSP and horizon:
+
+- Each 0.25° cell over the catchment has a weight `a_i`, the catchment's
+  area inside it; a cell with weight 0 counts for nothing, and a catchment
+  with no cell of positive weight is refused.
+- Each window's climate is the mean of its years' months
+  (`windowClimate`): the baseline **1985–2014** (CMIP6's historical run),
+  the future **2036–2065** (mid-century) or **2066–2095** (late century),
+  for **SSP2-4.5** and **SSP5-8.5**. A year missing from a window is
+  refused.
+- **Rain**, per calendar month m: `f_m = Σ a_i P̄f_i,m ÷ Σ a_i P̄b_i,m`, the
+  ratio of the area-weighted means (not the mean of the cells' ratios),
+  `P̄b`, `P̄f` the baseline and future window means.
+- **Evaporation**, per calendar month: the same ratio of Hargreaves–Samani
+  PET (Hargreaves & Samani 1985), `0.0023 · Ra · (T̄ + 17.8) · √(Tmax − Tmin)`
+  mm/day × the month's days, `T̄ = (Tmax + Tmin) ÷ 2`, 0 when the range or
+  `T̄ + 17.8` isn't positive; `Ra` the extraterrestrial radiation at the
+  cell's latitude on the month's middle day (day of the year 15, 46, 74,
+  105, 135, 162, 198, 228, 258, 288, 318, 344), FAO-56 eq. 21 × 0.408 (mm/day).
+  A temperature-only formula, used only as a ratio, never as an evaporation.
+- A month with no baseline rain (or PET) takes factor 1, with a warning: a
+  dry month stays dry under any factor.
+- Each factor is **clamped to 0.5–1.5**, with a warning naming the month
+  and the factor before the clamp.
+
+**The op.** `{ op: 'climate.delta', rainFactorByMonth, evapFactorByMonth,
+label, source }`: 12 factors each, by calendar month (index 0 = January),
+each 0.5–1.5. Each day's reading is multiplied by its calendar month's
+factor:
+
+- **every rain series** (every series key starting `rain_`): the catchment
+  gauge, CHIRPS, the forecast, a rain-source period's series, the
+  reanalysis and the gap-filling products (§2.4b, §2.4e), a land unit's own
+  records (§2.4h), each rainfall station's record and its CHIRPS (§2.4i),
+  the reference unit's CHIRPS cell, by the rain factors;
+- the daily A-pan `evap_apan_mm` (§2.3a) and the daily reference ET
+  `evap_et0_mm` (§2.4a) by the evaporation factors, and the monthly A-pan
+  row `apanMm` and a monthly PE row `pe.mm` month by month (water-year
+  month w takes calendar month (w + 9) mod 12's factor, index 0 =
+  January). The pan coefficient is unchanged: PE moves with the A-pan.
+
+A reading is scaled only when it is a finite number ≥ 0: a blank day and a
+no-data code (a negative reading) stay as they were. Flow records are
+never scaled.
+
+**The MAPs** move by one **annual rain factor** `F = Σ_m w_m f_m ÷ Σ_m w_m`,
+`w_m` the catchment rain record's mean daily reading in calendar month m ×
+the month's days (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31; the
+record is `rain_catchment_mm`, else `rain_chirps_mm`, the first with a
+reading above 0; readings as above, a month with none weighing 0), or
+`w_m` the days alone without such a record. F is exactly 1 when every rain
+factor is 1. Each land unit's MAP, the gauge MAP of per-unit rain, the
+catchment MAP of the rainfall stations and each station's MAP are
+multiplied by F (a MAP that is not a number above 0 stays as it is; at
+most 12 000 mm). One factor keeps every ratio of two MAPs as it was (a
+unit's MAP ÷ the gauge's, §2.4h rule 2; an area's MAP ÷ a station's, §2.4i),
+while a unit's CHIRPS levelled to its MAP (§2.4h rule 3, k_unit) moves
+with the climate instead of being pulled back to today's MAP.
+
+Everything else of the run is as it was: GR4J keeps its calibrated
+parameters, the network, the demand rules, the EWR and its rule tables.
+So irrigation demand (A-pan × crop factor, less effective rain), dam
+evaporation and rain on the dams, and the natural flow all move with the
+climate; the EWR's requirement moves only where it reads the natural flow
+(a rule table's percentiles, a DRM percentile table).
+
+**What it keeps and what it doesn't.** The delta method keeps the
+record's sequence: the order of wet and dry years, how long droughts last
+and how variable daily rain is, with only each month's mean moved. A
+future with longer droughts or heavier storms at the same monthly mean is
+not represented (quantile delta mapping on daily values would be; a
+follow-up). GR4J is held at the historical parameters (a drier
+catchment is assumed to respond as today's). These are known limitations
+(engine-audit.md CD1).
+
+**Invariants** (`climate.invariants.test.ts`): every factor 1 reproduces
+the run to the bit; a run under random factors passes every engine
+invariant (the mass balance, the water account, order invariance); on a
+single dam with no return flow, firm yield (§2.13) doesn't fall as the
+rain factors rise. `verify/` mirrors the op from this section (probes
+`climate-delta`, `climate-delta-unit-map`).
+
 ---
 
 ## 3. Workbook quirks and suspected bugs

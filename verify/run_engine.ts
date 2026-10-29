@@ -5,7 +5,9 @@
 //   tsx verify/run_engine.ts run <input.json> <output.json> [<input.json> <output.json> …]
 //   tsx verify/run_engine.ts examples <out dir>
 //
-// `run` reads a ModelInput document and writes { startDate, endDate, days,
+// `run` reads a ModelInput document (with verify/'s own `scenarioOps`, the
+// scenario ops model.py mirrors, applied first by the public applyScenario;
+// any problem refuses the case) and writes { startDate, endDate, days,
 // warnings, allocations (RunSummary.allocations), series: [{ nodeId, key, values }] } (NaN written as null), or
 // { error } when runModel refuses the input.
 // `examples` writes the three invented example catchments' inputs, as
@@ -13,13 +15,19 @@
 // stored parameters), one `<key>.input.json` each.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runModel, type ModelInput } from '../packages/engine/src/index.ts';
+import { applyScenario, runModel, type ModelInput, type ScenarioOp } from '../packages/engine/src/index.ts';
 import { buildExamples, inputOf } from '../backend/scripts/examples/catchments.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 
 function runOne(inPath: string, outPath: string): void {
-	const input = JSON.parse(readFileSync(inPath, 'utf8')) as ModelInput;
+	const { scenarioOps, ...read } = JSON.parse(readFileSync(inPath, 'utf8')) as ModelInput & { scenarioOps?: ScenarioOp[] };
+	let input = read as ModelInput;
+	if (scenarioOps?.length) {
+		const r = applyScenario(input, scenarioOps);
+		if (r.problems.length) throw new Error(`scenario ops didn't apply: ${r.problems.join('; ')}`);
+		input = r.input;
+	}
 	let out;
 	try {
 		out = runModel(input);
