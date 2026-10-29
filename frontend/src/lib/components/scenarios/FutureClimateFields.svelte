@@ -5,12 +5,14 @@
 	// `climate.delta` op (ops.ts buildOp). The table is worked out by a
 	// background job over the catchment boundary (POST …/climate-factors); this
 	// follows that job, says when the boundary changed since, and shows the
-	// picked case's 24 factors before it is added. Editors only (OpForm is).
+	// picked case's 24 factors before it is added. Its job can be cancelled
+	// (POST …/climate-factors/:jobId/cancel, 284_cancel_future_jobs). Editors
+	// only (OpForm is).
 	import { onDestroy, untrack } from 'svelte';
 	import { CLIMATE_HORIZONS, CLIMATE_SSPS, futureFactorsComplete, SSP_LABEL, type ClimateHorizon, type ClimateSsp, type FutureFactorTable } from '@water-management/engine';
 	import { api, type ClimateFactorsState } from '#lib/api/index.js';
 	import { fmtDate, fmtNum } from '#lib/format/number.js';
-	import { jobStatus } from '#lib/components/yield/yield.js';
+	import { cancellableJobStatus, jobStatus } from '#lib/components/yield/yield.js';
 	import { MONTH_NAMES } from './fields';
 
 	let {
@@ -32,6 +34,9 @@
 	let loadError = $state<string | null>(null);
 	let startError = $state<string | null>(null);
 	let starting = $state(false);
+	/** The job this page asked to cancel, so a running one says it is stopping. */
+	let cancelAskedFor = $state<string | null>(null);
+	let cancelling = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	onDestroy(() => clearTimeout(timer));
 
@@ -68,7 +73,23 @@
 		}
 	}
 
-	const status = $derived(jobStatus(cf?.job ?? null));
+	async function cancel() {
+		const job = cf?.job;
+		if (!job) return;
+		cancelling = true;
+		startError = null;
+		try {
+			await api.climateFactors.cancel(projectId, job.id);
+			cancelAskedFor = job.id;
+			await load();
+		} catch (e) {
+			startError = msg(e);
+		} finally {
+			cancelling = false;
+		}
+	}
+
+	const status = $derived(cancellableJobStatus(cf?.job ?? null, cancelAskedFor));
 	/** The newest job's failure, unless a table was made after it. */
 	const failed = $derived(status?.failed && cf?.job && (!cf.factors || cf.job.createdAt > cf.factors.createdAt) ? status.text : null);
 	const models = $derived(table ? [...new Set(table.cases.map((c) => c.model))] : []);
@@ -94,8 +115,11 @@
 			<p class="alert alert-warning" data-testid="op-climate-changed">The catchment boundary has changed since these factors were worked out. Work them out again to read them over the new one.</p>
 		{/if}
 		{#if status?.busy}
-			<p class="hint" role="status" data-testid="op-climate-job">Working out the change factors. {status.text}</p>
-		{:else if cf.boundary !== 'none' && (!cf.factors || cf.boundary === 'changed' || failed)}
+			<div class="job">
+				<p class="hint" role="status" data-testid="op-climate-job">Working out the change factors. {status.text}</p>
+				{#if status.canCancel}<button type="button" class="btn btn-sm" disabled={cancelling} onclick={cancel}>{cancelling ? 'Cancelling…' : 'Cancel'}</button>{/if}
+			</div>
+		{:else if cf.boundary !== 'none' && (!cf.factors || cf.boundary === 'changed' || failed || status?.cancelled)}
 			<p>
 				<button type="button" class="btn" disabled={starting} onclick={start}>{starting ? 'Queueing…' : cf.factors ? 'Work them out again' : 'Work out the change factors'}</button>
 			</p>
@@ -183,6 +207,16 @@
 		font-size: var(--font-sm);
 		color: var(--text-muted);
 		margin: 0 0 0.75rem;
+	}
+	.job {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0 0 0.75rem;
+	}
+	.job .hint {
+		margin: 0;
 	}
 	.table-wrap {
 		margin: 0 0 0.5rem;

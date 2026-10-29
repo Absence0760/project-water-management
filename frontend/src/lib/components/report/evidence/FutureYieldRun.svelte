@@ -5,12 +5,14 @@
 	// follows it, queued, running, failed or done, here; when it is done the
 	// page reads the report again (onchange), so § 8 shows the result. The
 	// newest job comes with GET …/future-yield, so a reload or another tab
-	// picks it up. Never on a pack: a pack freezes § 8 as it was drafted.
+	// picks it up. Cancel stops a waiting job at once and a running one at its
+	// next step, before it stores anything (POST …/future-yield/:jobId/cancel,
+	// 284_cancel_future_jobs). Never on a pack: a pack freezes § 8 as it was drafted.
 	import { onDestroy, untrack } from 'svelte';
 	import { api, type FutureYieldState } from '#lib/api/index.js';
 	import { fmtDate } from '#lib/format/number.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { jobStatus } from '#lib/components/yield/yield.js';
+	import { cancellableJobStatus, jobStatus } from '#lib/components/yield/yield.js';
 
 	let {
 		projectId,
@@ -29,6 +31,9 @@
 	let fy = $state.raw<FutureYieldState | null>(null);
 	let error = $state<string | null>(null);
 	let starting = $state(false);
+	/** The job this page asked to cancel, so a running one says it is stopping. */
+	let cancelAskedFor = $state<string | null>(null);
+	let cancelling = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	onDestroy(() => clearTimeout(timer));
 
@@ -65,7 +70,23 @@
 		}
 	}
 
-	const status = $derived(jobStatus(fy?.job ?? null));
+	async function cancel() {
+		const job = fy?.job;
+		if (!job) return;
+		cancelling = true;
+		error = null;
+		try {
+			await api.futureYield.cancel(projectId, runId, job.id);
+			cancelAskedFor = job.id;
+			await load();
+		} catch (e) {
+			error = msg(e);
+		} finally {
+			cancelling = false;
+		}
+	}
+
+	const status = $derived(cancellableJobStatus(fy?.job ?? null, cancelAskedFor));
 	/** The newest job's failure, unless a result was made after it. */
 	const failed = $derived(status?.failed && fy?.job && (!fy.result || fy.job.createdAt > fy.result.createdAt) ? status.text : null);
 </script>
@@ -82,9 +103,13 @@
 		{/if}
 	</p>
 	{#if status?.busy}
-		<p class="small" role="status" data-testid="evidence-future-job">{status.text}</p>
+		<div class="job">
+			<p class="small" role="status" data-testid="evidence-future-job">{status.text}</p>
+			{#if status.canCancel}<button type="button" class="btn btn-sm" disabled={cancelling} onclick={cancel}>{cancelling ? 'Cancelling…' : 'Cancel'}</button>{/if}
+		</div>
 		{#if fy?.job?.status === 'running' && fy.job.progress != null}<progress max="100" value={fy.job.progress} aria-label="Future yield progress">{fy.job.progress} %</progress>{/if}
 	{:else}
+		{#if status?.cancelled && !(fy?.result && fy.job && fy.result.createdAt > fy.job.createdAt)}<p class="small" role="status" data-testid="evidence-future-cancelled">The last run was cancelled.</p>{/if}
 		<p>
 			<button type="button" class="btn" disabled={starting || !fy} onclick={start}>{starting ? 'Queueing…' : assessed ? 'Run it again' : 'Run the future yield'}</button>
 		</p>
@@ -100,6 +125,16 @@
 		background: var(--surface);
 		padding: 0.75rem 1rem;
 		margin-bottom: 1.25rem;
+	}
+	.job {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+	.job p {
+		margin: 0;
 	}
 	.board-h {
 		font-weight: 700;

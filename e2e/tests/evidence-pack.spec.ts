@@ -457,6 +457,14 @@ test('§ 8 future yield: run on the synthetic projections, shown with its caveat
 	await board.getByRole('button', { name: 'Run the future yield' }).click();
 	await expect(board.getByTestId('evidence-future-job')).toHaveText('Queued: waiting for the background worker.');
 	await expect(board.getByRole('button', { name: 'Run the future yield' })).toHaveCount(0);
+	// Queued by mistake: Cancel ends the waiting job at once (284_cancel_future_jobs), said plainly, not as a failure.
+	await board.getByRole('button', { name: 'Cancel' }).click();
+	await expect(board.getByTestId('evidence-future-cancelled')).toHaveText('The last run was cancelled.');
+	await expect(board.getByTestId('evidence-future-job')).toHaveCount(0);
+	await expect(board.getByTestId('evidence-future-failed')).toHaveCount(0);
+	await board.getByRole('button', { name: 'Run the future yield' }).click();
+	await expect(board.getByTestId('evidence-future-job')).toHaveText('Queued: waiting for the background worker.');
+	await expect(board.getByTestId('evidence-future-cancelled')).toHaveCount(0);
 	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(page.getByTestId('evidence-future-na')).toHaveCount(0);
 	await expect(board.getByRole('button', { name: 'Run it again' })).toBeVisible();
