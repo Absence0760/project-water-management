@@ -10,6 +10,7 @@ import {
 	DAM_PASS_METRIC,
 	DAM_RECENCY_METRIC,
 	damPassMetricLine,
+	damSourceOn,
 	type ObservationFile,
 	observationKey,
 	readObservationFile,
@@ -101,6 +102,38 @@ describe('the dams handover files', () => {
 		await expect(readObservationFile(s, 'waterbodies', 'zzzzza0002')).rejects.toBeInstanceOf(FeedFormatError);
 		await s.set(WANTED_KEY, new TextEncoder().encode('{nope'));
 		await expect(readWanted(s)).rejects.toBeInstanceOf(FeedFormatError);
+	});
+});
+
+describe('the Sentinel sources (issue #624)', () => {
+	it('keeps s2 and s1 files, statuses and a wanted outline’s sinceBy, each under its own key', async () => {
+		const s = store();
+		expect(observationKey('s2', FID)).toBe(`/dams/s2/${FID}.json`);
+		expect(statusKey('s1')).toBe('/dams/s1-status.json');
+		for (const source of ['s2', 's1'] as const) {
+			await writeObservationFile(s, file({ source, key: FID, rows: [{ date: '2026-10-20', wetAreaM2: 300, pctObserved: 100, upstreamKey: `${source}-item` }] }));
+			expect((await readObservationFile(s, source, FID))!.source).toBe(source);
+			await writeStatus(s, { source, ranAt: '2026-10-27T04:00:00.000Z', stopped: false, perKey: { [FID]: { lastGood: '2026-10-27T04:00:00.000Z', newest: '2026-10-20' } } });
+			expect((await readStatus(s, source))!.source).toBe(source);
+			// A Sentinel file is keyed by a dam, never a waterbody uid.
+			expect(() => writeObservationFile(s, file({ source, key: 'zzzzza0001' }))).toThrow();
+		}
+		// The WOfS file isn't the Sentinel-2 one.
+		expect(await readObservationFile(s, 'wofs', FID)).toBeNull();
+		const outline = { featureId: FID, geometry: { type: 'Polygon' as const, coordinates: [square] }, since: '1984-01-01', sinceBy: { s2: '2026-10-21' } };
+		await writeWanted(s, { generatedAt: '2026-10-27T04:00:00.000Z', waterbodies: [], outlines: [outline] });
+		expect((await readWanted(s))!.outlines[0]).toEqual(outline);
+		expect(() => writeWanted(s, { generatedAt: '2026-10-27T04:00:00.000Z', waterbodies: [], outlines: [{ ...outline, sinceBy: { wofs: '2026-10-21' } as never }] })).toThrow();
+		expect(() => writeWanted(s, { generatedAt: '2026-10-27T04:00:00.000Z', waterbodies: [], outlines: [{ ...outline, sinceBy: { s2: '2026-02-31' } }] })).toThrow();
+	});
+
+	it('runs a Sentinel pass only with its own flag on (unset is off), and refuses anything but on or off', () => {
+		expect(damSourceOn('s2', {})).toBe(false);
+		expect(damSourceOn('s2', { DAM_OBSERVATIONS_S2: 'off' })).toBe(false);
+		expect(damSourceOn('s2', { DAM_OBSERVATIONS_S2: ' on ' })).toBe(true);
+		expect(damSourceOn('s1', { DAM_OBSERVATIONS_S2: 'on' })).toBe(false);
+		expect(damSourceOn('s1', { DAM_OBSERVATIONS_S1: 'on' })).toBe(true);
+		expect(() => damSourceOn('s2', { DAM_OBSERVATIONS_S2: 'true' })).toThrow(/unknown DAM_OBSERVATIONS_S2/);
 	});
 });
 

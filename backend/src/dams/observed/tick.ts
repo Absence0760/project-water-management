@@ -15,7 +15,8 @@
 //      tick after tick. A dam that can't be compared (too large, too complex)
 //      is recorded 'none' with its reason and leaves the stale list.
 //   2. Publishes dams/wanted.json: the uids of the matched dams and every
-//      dam's outline with the date WOfS should start from, written only when
+//      dam's outline with the date WOfS should start from (and Sentinel-2's
+//      and Sentinel-1's, once the dam holds a row of either), written only when
 //      it differs from what this process last wrote (one GET when it hasn't).
 //   3. Loads what the passes fetched, into dam_observation
 //      (app_dam_observation_load). What was loaded is kept in the database
@@ -207,7 +208,16 @@ export async function runDamsTick(
 		try {
 			const wanted: Omit<WantedList, 'generatedAt'> = {
 				waterbodies: [...new Set(outlines.filter((d) => d.status === 'matched' && d.uid).map((d) => d.uid!))].sort(),
-				outlines: outlines.map((d) => ({ featureId: d.feature_id, geometry: d.geometry, since: d.wofs_newest ? nextDay(d.wofs_newest) : WOFS_FIRST_DATE }))
+				outlines: outlines.map((d) => {
+					// A Sentinel source's `since` only once the dam holds a row of it: until then its pass starts from its own backfill.
+					const sinceBy = { ...(d.s2_newest ? { s2: nextDay(d.s2_newest) } : {}), ...(d.s1_newest ? { s1: nextDay(d.s1_newest) } : {}) };
+					return {
+						featureId: d.feature_id,
+						geometry: d.geometry,
+						since: d.wofs_newest ? nextDay(d.wofs_newest) : WOFS_FIRST_DATE,
+						...(Object.keys(sinceBy).length ? { sinceBy } : {})
+					};
+				})
 			};
 			const key = JSON.stringify(wanted);
 			if (published !== key) {

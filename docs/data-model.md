@@ -4900,7 +4900,7 @@ A gap row is a row like any other: DWS listing a day with no value (170
   the live path writes, waiting for days the store doesn't hold, the
   tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
 
-### Dam observations (261_dam_observation.sql, 277_dam_observation_sentinel.sql)
+### Dam observations (261_dam_observation.sql, 277_dam_observation_sentinel.sql, 278_dam_outlines_sentinel.sql)
 
 What satellites saw of each traced dam (issue #604 R5,
 [architecture.md § Dam observations](./architecture.md#dam-observations)):
@@ -4912,7 +4912,8 @@ every traced dam (R5-C). Since 277 (issue #624) two more are allowed,
 Copernicus Sentinel data processed by Digital Earth Africa and classified by
 us inside the dam's own outline as WOfS is: **`s2`** (Sentinel-2 L2A
 Collection 1, 10 m optical) and **`s1`** (Sentinel-1 RTC radar, a secondary
-source); no pass writes them yet. The worker writes them from the files the
+source). The Sentinel-2 pass writes `s2` (issue #624 step 4, off by
+default); no pass writes `s1` yet. The worker writes them from the files the
 fetcher's passes leave in the mirror bucket; no route writes them.
 
 | Table | Holds |
@@ -4948,9 +4949,12 @@ fetcher's passes leave in the mirror bucket; no route writes them.
     oldest traced first, `created_at` then `id`, so past the cap the most
     recently traced wait; the tick logs `dams_outline_cap` at the cap),
     with its match, `match_stale`, `matched_at` and the newest observation
-    date per source (`waterbodies` and `wofs`; the Sentinel passes add
-    theirs when they are built): the match's input and the wanted list's
-    outlines.
+    date per source (`waterbodies_newest`, `wofs_newest`, and since 278
+    `s2_newest` and `s1_newest`): the match's input and the wanted list's
+    outlines (a dam's `since`, and its `sinceBy` for the Sentinel sources).
+    278 dropped and created it again from 261's definition with the two
+    columns added (a function's result columns can't change in place),
+    its grant to `water_app` restated.
   - `app_waterbody_candidates(w, s, e, n)`: the waterbodies whose box meets
     the dam's (a box of at most 1° a side; at most 200, most shared box
     area first).
