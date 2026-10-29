@@ -10,10 +10,11 @@
 // wrote into dam_observation). With DAM_OBSERVATIONS_S2=on (off by default,
 // as in production) the Sentinel-2 pass runs after WOfS, on the synthetic
 // Sentinel-2 scenes (dams/observed/sentinel/fixtures.ts), and with
-// DAM_OBSERVATIONS_S1=on the Sentinel-1 radar pass after it (the synthetic
+// DAM_OBSERVATIONS_S1=measure or on the Sentinel-1 radar pass after it (the synthetic
 // s1_rtc scenes, sentinel/s1Fixtures.ts), then the S1/S2 agreement report
 // (sentinel/agreement.ts: how many radar days agree with Sentinel-2's clear
-// views, against issue #624's 85 % bar). The handover goes through MIRROR_URL when it
+// views, against issue #624's 85 % bar); the last tick loads radar only with
+// on, and only for the dams whose agreement passes. The handover goes through MIRROR_URL when it
 // names a bucket or directory of its own, else a scratch directory under the
 // system's temp directory (one per dev database), never the committed
 // synthetic copy. Needs the synthetic waterbodies (`pnpm import:waterbodies`,
@@ -99,7 +100,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			}
 		}
 		const after = await runDamsTick({ env, store });
-		console.log(`tick: ${after?.loaded ?? 0} file(s) loaded, ${after?.rows ?? 0} row(s) written${after?.failed ? `, ${after.failed} failed` : ''}`);
+		console.log(
+			`tick: ${after?.loaded ?? 0} file(s) loaded, ${after?.rows ?? 0} row(s) written${after?.withheld ? `, ${after.withheld} dam(s)' radar withheld (DAM_OBSERVATIONS_S1 not on, or the dam's agreement not passing)` : ''}${after?.failed ? `, ${after.failed} failed` : ''}`
+		);
 		console.log(`handover: ${url}`);
 		await closePool();
 		process.exit(pass.error || wofs.error || s2Error || s1Error || after?.failed ? 1 : 0);

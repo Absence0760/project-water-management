@@ -113,6 +113,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		DWS_SOURCE: 'live',
 		DWS_WEEKLY: 'off',
 		DAM_OBSERVATIONS: 'off',
+		DAM_OBSERVATIONS_S1: 'off',
 		ET_OBSERVATIONS: 'off',
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		REPORT_RENDERER: 'sqs',
@@ -621,6 +622,14 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		for (const v of [undefined, 'file:///tmp/mirror/', 's3://'])
 			expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
 		expect(problemNames('worker', prod('worker', { DWS_WEEKLY: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+	});
+
+	it('radar’s stage is off, measure or on, on the fetcher and the worker alike, and unset starts both (issue #624 open question 3)', () => {
+		for (const role of ['fetcher', 'worker'] as const) {
+			for (const v of ['yes', 'true', 'measuring']) expect(problemNames(role, prod(role, { DAM_OBSERVATIONS_S1: v })), `${role} DAM_OBSERVATIONS_S1=${v}`).toContain('DAM_OBSERVATIONS_S1');
+			// Positive controls: each stage, and unset (released before the apply that sets it).
+			for (const v of ['off', 'measure', 'on', undefined]) expect(problemNames(role, prod(role, { DAM_OBSERVATIONS_S1: v })), `${role} DAM_OBSERVATIONS_S1=${String(v)}`).toEqual([]);
+		}
 	});
 
 	// Release before apply: a worker or API released with code that reads the flags starts on the env Terraform last

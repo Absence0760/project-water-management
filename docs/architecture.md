@@ -2136,13 +2136,15 @@ EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside th
       writes dams/wofs/<featureId>.json, dams/wofs-status.json
    Sentinel-2 pass (#624, DAM_OBSERVATIONS_S2=on): the same, s2_l2a_c1 classified by us, back to 2019
       writes dams/s2/<featureId>.json, dams/s2-status.json
-   Sentinel-1 pass (#624 step 5, DAM_OBSERVATIONS_S1=on): the same, s1_rtc radar classified by us, back to 2019
+   Sentinel-1 pass (#624 step 5, DAM_OBSERVATIONS_S1=measure|on): the same, s1_rtc radar classified by us, back to 2019
       writes dams/s1/<featureId>.json, dams/s1-status.json, then dams/s1-agreement.json (log: dams_s1_agreement)
    each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
 
 worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
    ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs | s2 | s1)
    ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
+   s1 only with DAM_OBSERVATIONS_S1=on, for the dams dams/s1-agreement.json passes; any other s1 key
+   ──► app_dam_s1_withhold (its rows removed) + a mark with targets S1_WITHHELD, no file read
 ```
 
 - **Why hourly.** The fetcher's 120 s limit, less Waterbodies' share (up to
@@ -2437,17 +2439,36 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     (recomputed for the dams either Sentinel pass wrote, and up to 200
     others a run that have no entry yet), summed into one log line,
     `dams_s1_agreement` (dams, pairs, within, the pooled rate and whether
-    it passes issue #624's bar of 85 %; counts only). The bar decides
-    whether `dam_s1_enabled` stays on (deployment.md § Dam observations).
-  - **Off by default**, behind `DAM_OBSERVATIONS_S1` (Terraform
-    `dam_s1_enabled`, only with `dam_observations_enabled`), with its own
-    heartbeat and recency alarms (`Source = s1`).
+    it passes issue #624's bar of 85 %; counts only).
+  - **Three stages**, `DAM_OBSERVATIONS_S1` on the fetcher and the worker
+    alike (`handover.ts damS1Mode`; Terraform `dam_s1_mode`, only with
+    `dam_observations_enabled`; issue #624 open question 3): `off` (the
+    default) no pass; `measure` the pass, its heartbeat and recency alarms
+    (`Source = s1`) and the agreement report, but **the worker loads no
+    `s1` row**, so radar is measured without being shown; `on` the same,
+    and the worker loads `s1` **only for the dams whose own agreement
+    passes** (`sentinel/agreement.ts s1Passing`: at least 10 pairs and
+    85 % within). A dam with fewer pairs can't be judged, so its radar
+    isn't loaded: the threshold is fixed, not tuned per dam, and an
+    unchecked dam (small, windy, shallow) is where it reads wrong.
+  - **Withheld radar** (the dams tick, `tick.ts` step 4): a dam's `s1` key
+    that may not be loaded is withheld instead of read: its rows are
+    removed (`app_dam_s1_withhold`, 283; none on a first look) and its load
+    mark's `targets` set to `S1_WITHHELD` (`''` when loaded). A dam moving
+    between the two (it starts or stops passing, or the stage changes)
+    makes the key due again, so a dam that stops passing loses its radar on
+    the next tick, without a new fetch, and one that passes again is
+    reloaded from its file. Withholding reads no file (its own cap of 200 a
+    tick). No report in `on` (before any measurement) means no dam passes;
+    a report that can't be read leaves radar alone that tick (logged
+    `dams_tick_failed`, step `s1_agreement`).
   - **Locally** `sentinel/s1Fixtures.ts` answers the search and both bands
     from `backend/fixtures/feeds/s1-sample.json`: WOfS's invented water
     field on the geographic grid, two passes every six days, a strip of
     shadow every 0.1° of longitude, and a windy day every tenth whose open
     water reads dry. `pnpm dev:dams:run` runs it with
-    `DAM_OBSERVATIONS_S1=on` and prints the agreement.
+    `DAM_OBSERVATIONS_S1=measure` or `on` and prints the agreement (and,
+    after its last tick, how many dams' radar was withheld).
 
 ### Observed actual ET: the comparison
 

@@ -10,6 +10,7 @@ import {
 	DAM_PASS_METRIC,
 	DAM_RECENCY_METRIC,
 	damPassMetricLine,
+	damS1Mode,
 	damSourceOn,
 	type ObservationFile,
 	observationKey,
@@ -134,6 +135,19 @@ describe('the Sentinel sources (issue #624)', () => {
 		expect(damSourceOn('s1', { DAM_OBSERVATIONS_S2: 'on' })).toBe(false);
 		expect(damSourceOn('s1', { DAM_OBSERVATIONS_S1: 'on' })).toBe(true);
 		expect(() => damSourceOn('s2', { DAM_OBSERVATIONS_S2: 'true' })).toThrow(/unknown DAM_OBSERVATIONS_S2/);
+		expect(() => damSourceOn('s2', { DAM_OBSERVATIONS_S2: 'measure' })).toThrow(/unknown DAM_OBSERVATIONS_S2/);
+	});
+
+	it('reads radar\'s stage: off (unset), measure or on, and runs its pass in measure and on alike (issue #624 open question 3)', () => {
+		expect(damS1Mode({})).toBe('off');
+		expect(damS1Mode({ DAM_OBSERVATIONS_S1: ' ' })).toBe('off');
+		expect(damS1Mode({ DAM_OBSERVATIONS_S1: 'off' })).toBe('off');
+		expect(damS1Mode({ DAM_OBSERVATIONS_S1: ' measure ' })).toBe('measure');
+		expect(damS1Mode({ DAM_OBSERVATIONS_S1: 'on' })).toBe('on');
+		expect(damSourceOn('s1', { DAM_OBSERVATIONS_S1: 'off' })).toBe(false);
+		expect(damSourceOn('s1', { DAM_OBSERVATIONS_S1: 'measure' })).toBe(true);
+		expect(() => damS1Mode({ DAM_OBSERVATIONS_S1: 'true' })).toThrow(/unknown DAM_OBSERVATIONS_S1 "true" \(expected off, measure or on\)/);
+		expect(() => damSourceOn('s1', { DAM_OBSERVATIONS_S1: 'yes' })).toThrow(/unknown DAM_OBSERVATIONS_S1/);
 	});
 });
 

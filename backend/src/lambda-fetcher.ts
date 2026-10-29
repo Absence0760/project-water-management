@@ -657,7 +657,8 @@ async function s1AgreementLog(written: string[]): Promise<void> {
 /**
  * One run of the dam observation passes: Waterbodies first (at most
  * WATERBODIES_BUDGET_SHARE of the time), then WOfS, then, with
- * DAM_OBSERVATIONS_S2=on, Sentinel-2, then, with DAM_OBSERVATIONS_S1=on,
+ * DAM_OBSERVATIONS_S2=on, Sentinel-2, then, with DAM_OBSERVATIONS_S1=measure
+ * or on (handover.ts damS1Mode; only the worker tells them apart),
  * Sentinel-1 radar and the S1/S2 agreement report (scenePassShares: WOfS up
  * to WOFS_BUDGET_SHARE_WITH_S2 with either on, Sentinel-2 up to
  * S2_BUDGET_SHARE_WITH_S1 with radar after it; the scene passes share the

@@ -655,7 +655,7 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/unknown DAM_OBSERVATIONS_S2/);
 	});
 
-	it('runs the Sentinel-1 pass after Sentinel-2 only with DAM_OBSERVATIONS_S1=on, with its heartbeat and the S1/S2 agreement log (issue #624 step 5)', async () => {
+	it('runs the Sentinel-1 pass after Sentinel-2 only with DAM_OBSERVATIONS_S1=on or measure, with its heartbeat and the S1/S2 agreement log (issue #624 step 5)', async () => {
 		await bucket(undefined, [{ ...dam(), sinceBy: { s2: dam().since, s1: dam().since } }]);
 		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -672,6 +672,12 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		// The agreement report: counts over the one dam, never the dam itself.
 		expect(parsed.find((l) => l.event === 'dams_s1_agreement')).toMatchObject({ dams: 1, damsPaired: expect.any(Number), pairs: expect.any(Number), within: expect.any(Number), passes: expect.any(Boolean) });
 		expect(lines.join('\n')).not.toContain(dam().featureId);
+		// measure: the same pass and report (only the worker tells measure from on: it loads no radar row).
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'measure');
+		info.mockClear();
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		expect(((await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer).s1).toMatchObject({ failed: 0, stopped: 'done' });
+		expect(info.mock.calls.some(([l]) => JSON.parse(l as string).event === 'dams_s1_agreement')).toBe(true);
 		// Off (or unset): no Sentinel-1 pass, no heartbeat and no report.
 		vi.stubEnv('DAM_OBSERVATIONS_S1', 'off');
 		info.mockClear();

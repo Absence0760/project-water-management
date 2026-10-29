@@ -60,8 +60,9 @@ export const runS2Pass = (opts: WofsPassOptions): Promise<WofsPassResult> => run
 // (s1_rtc), VV classified and summed inside each traced dam's outline
 // (s1.ts), into dams/s1/<featureId>.json for the worker to load as source
 // 's1'. The fetcher runs it after the Sentinel-2 pass, only with
-// DAM_OBSERVATIONS_S1=on (infra/dam_observations.tf sets it from
-// dam_s1_enabled):
+// DAM_OBSERVATIONS_S1=measure or on (handover.ts damS1Mode;
+// infra/dam_observations.tf sets it from dam_s1_mode; in measure the worker
+// loads none of it, in on only the dams whose agreement passes):
 //
 //   fetcher ─get─► dams/wanted.json, dams/s1-status.json, dams/s1-state.json
 //           ─GET─► explorer.digitalearth.africa/stac/search  collections=s1_rtc, per dam, a year a search

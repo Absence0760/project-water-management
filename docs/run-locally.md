@@ -521,7 +521,11 @@ Sentinel-1 radar pass after it (`backend/fixtures/feeds/s1-sample.json`,
 radar's 0.0002° grid, two passes every 6 days, a shadow strip every 0.1° of
 longitude, and a windy day every tenth whose open water reads dry), as
 source `s1`, and prints the S1/S2 agreement: how many radar days agree with
-a clear Sentinel-2 view within a day, against issue #624's 85 % bar.
+a clear Sentinel-2 view within a day, against issue #624's 85 % bar. Its
+last tick loads radar only for the dams whose own agreement passes (at
+least 10 pairs); `DAM_OBSERVATIONS_S1=measure` runs the pass and prints the
+agreement but loads no radar, as production's measuring stage does
+(architecture.md § Dam observations).
 
 The worker's tick does the same each time it runs only with
 `DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored

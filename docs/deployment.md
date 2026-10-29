@@ -2663,23 +2663,28 @@ One Terraform variable, off by default:
   pass and migration 279 (the worker's list gives each dam's newest `s2`
   row).
 - **`dam_s2_recency_alarm_days`** (default 21, at least 10).
-- **`dam_s1_enabled`** (default `false`; issue #624 step 5): only with
-  `dam_observations_enabled`, sets the fetcher's `DAM_OBSERVATIONS_S1 = "on"`,
-  so each run's Sentinel-1 radar pass follows Sentinel-2's (WOfS up to 65 %
-  of the run, Sentinel-2 to 85 %, radar the rest), and adds `…-dam-pass-s1`
-  and `water-management-dam-recency-s1` (`DamObservationAgeDays{Source=s1}`
+- **`dam_s1_mode`** (`"off"`, the default, `"measure"` or `"on"`; issue
+  #624 step 5 and open question 3): only with `dam_observations_enabled`,
+  sets `DAM_OBSERVATIONS_S1` on the fetcher and the worker. `"measure"`
+  adds the Sentinel-1 radar pass after Sentinel-2's in each run (WOfS up to
+  65 % of the run, Sentinel-2 to 85 %, radar the rest), `…-dam-pass-s1` and
+  `water-management-dam-recency-s1` (`DamObservationAgeDays{Source=s1}`
   above `dam_s1_recency_alarm_days`, default 30, at least 14, for two days,
-  or missing). **Radar is shown to users once it is on** (as radar, never a
-  full or empty flag), so the bar comes first: after each pass the fetcher
-  logs `dams_s1_agreement` (Logs Insights on the fetcher log group: filter
+  or missing), and the agreement report, **but the worker loads no radar
+  row**, so nobody sees it. After each pass the fetcher logs
+  `dams_s1_agreement` (Logs Insights on the fetcher log group: filter
   `message.event = "dams_s1_agreement"` | fields `message.pairs`,
   `message.within`, `message.rate`, `message.passes`, `message.damsPassing`,
-  `message.damsJudged`). Keep it on only while `passes` is true over at
-  least a few weeks of backfill (issue #624: at least 85 % of radar days
-  within 0.1 of the outline's area of a clear Sentinel-2 view the same day
-  or a day either side); otherwise set it back to `false` and `s1` rows stop
-  arriving. It needs `dam_s2_enabled` too, or there is nothing to agree
-  with. Turn it on only with a backend release that has the pass.
+  `message.damsJudged`). Move to `"on"` once `passes` is true over at least
+  a few weeks of backfill (issue #624: at least 85 % of radar days within
+  0.1 of the outline's area of a clear Sentinel-2 view the same day or a
+  day either side). In `"on"` the worker loads radar **only for the dams
+  whose own agreement passes** (at least 10 pairs, 85 % within); the rest,
+  and a dam with too few pairs to judge, stay withheld, and a dam that
+  stops passing loses its radar rows on the next tick. Back to
+  `"measure"` or `"off"` removes every radar row within a few ticks. It
+  needs `dam_s2_enabled` too, or there is nothing to agree with. Turn it
+  on only with a backend release that has the pass and migration 283.
 - **`dam_s1_recency_alarm_days`** (default 30, at least 14).
 
 The flag also turns on the worker's side (`DAM_OBSERVATIONS`, `infra/jobs.tf`).

@@ -77,7 +77,7 @@ Every job that fetches from an upstream:
 | [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
 | [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `sum.ts`), `backend/src/raster/` (`cog.ts`, `mask.ts`, `utm.ts`) |
 | [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | built, off by default (#624 step 4: the pass, behind `DAM_OBSERVATIONS_S2` / `dam_s2_enabled`; not shown on a screen yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s2.ts`, `pass.ts`); `wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`) |
-| [deafrica-sentinel-1](#deafrica-sentinel-1) | DE Africa Sentinel-1 RTC (`s1_rtc`), radar water as a secondary dam observation (issue #624) | built, off by default (#624 step 5: the pass and the S1/S2 agreement report, behind `DAM_OBSERVATIONS_S1` / `dam_s1_enabled`; on in production only once the agreement passes) | `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s1.ts`, `pass.ts`, `agreement.ts`); `wofs/stac.ts` (`assetUrl`, `s1_rtc`) |
+| [deafrica-sentinel-1](#deafrica-sentinel-1) | DE Africa Sentinel-1 RTC (`s1_rtc`), radar water as a secondary dam observation (issue #624) | built, off by default (#624 step 5: the pass and the S1/S2 agreement report, behind `DAM_OBSERVATIONS_S1` / `dam_s1_mode`: `measure` runs it with no radar shown, `on` also loads radar for the dams whose own agreement passes) | `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s1.ts`, `pass.ts`, `agreement.ts`); `wofs/stac.ts` (`assetUrl`, `s1_rtc`) |
 | [wapor-aeti](#wapor-aeti) | FAO WaPOR v3 `L2-AETI-D`, dekadal actual ET and interception at 100 m (a unit's observed water use, issue #623) | built, off (`et_observations_enabled`); blocked in production until FAO's reply is recorded on #618 (step 8a) | `storage.googleapis.com` (bucket `fao-gismgr-wapor-3-data` only) | – | `backend/src/water-use/observed/` (`wapor.ts`, `pass.ts`; the comparison is #623 step 5) |
 | [ssebop-eta](#ssebop-eta) | USGS FEWS NET SSEBop v6.1 global dekadal actual ET at 1 km (WaPOR's fallback, issue #623) | planned (#623 step 6: a bounded whole-file pass, decided; built only if FAO declines or as a second opinion) | `edcintl.cr.usgs.gov` (the `…/global/dekadal/etav61/` tree only) | – | `backend/src/water-use/observed/upstream.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
@@ -507,11 +507,13 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 - **Limits of the data:** secondary only. Radar sees through cloud, but
   wind roughens open water so it looks dry, and dry sand can look wet, so an
   S1 view is shown as radar and never alone sets "seen full" or "seen
-  empty"; hilly dams with layover get none. It is turned on in production
-  (`dam_s1_enabled`) only once its same-day agreement with Sentinel-2 clear
-  views passes the bar in #624's acceptance criteria (≥ 85 % of days within
-  0.1 F), which the fetcher logs after each pass (`dams_s1_agreement`,
-  `sentinel/agreement.ts`).
+  empty"; hilly dams with layover get none. It is measured first
+  (`dam_s1_mode = "measure"`: the pass and its same-day agreement with
+  Sentinel-2 clear views, logged as `dams_s1_agreement` by
+  `sentinel/agreement.ts`, with no radar shown), and shown (`"on"`) only
+  once the pooled agreement passes the bar in #624's acceptance criteria
+  (≥ 85 % of days within 0.1 F), and then only for the dams whose own
+  agreement passes (at least 10 pairs).
 - **Freshness:** its own heartbeat and recency alarms (`Source = s1`,
   `dam_s1_recency_alarm_days`, default 30).
 - **Rows kept:** `dam_observation` source `s1` (migration

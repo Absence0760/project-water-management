@@ -188,3 +188,21 @@ export async function updateAgreement(store: MirrorStore, changed: Iterable<stri
 	await writeJson(store, AGREEMENT_KEY, AgreementFileSchema.parse({ computedAt: new Date(now()).toISOString(), perDam }));
 	return summarizeAgreement(Object.values(perDam));
 }
+
+// --- Which dams' radar the worker loads (DAM_OBSERVATIONS_S1=on; handover.ts damS1Mode) ------------------
+
+/** The report, checked; null when no run has written one. */
+export const readAgreement = (store: MirrorStore): Promise<AgreementFile | null> =>
+	readJson(store, AGREEMENT_KEY, AgreementFileSchema, 'S1/S2 agreement report') as Promise<AgreementFile | null>;
+
+/**
+ * The dams whose radar the worker loads in `on`: each one's own agreement passes (damAgreement: at least
+ * S1_AGREEMENT.minPairs pairs and S1_AGREEMENT.bar of them within). A dam with fewer pairs can't be judged, so its
+ * radar isn't loaded: radar's threshold is fixed, not tuned per dam, and a dam it hasn't been checked on (a small,
+ * windy or shallow one) is where it reads wrong. No report: no dam.
+ */
+export function s1Passing(file: AgreementFile | null): Set<string> {
+	const out = new Set<string>();
+	for (const [id, d] of Object.entries(file?.perDam ?? {})) if (damAgreement(d.pairs, d.within).passes) out.add(id);
+	return out;
+}

@@ -11,7 +11,7 @@ import { geometryAreaM2 } from '../../../geo/area.js';
 import { openStore, type MirrorStore } from '../../../mirror/store.js';
 import { OBSERVED } from '../compare.js';
 import { writeObservationFile, writeWanted, type ObservationRow, type WantedOutline } from '../handover.js';
-import { AGREEMENT_FILL_PER_RUN, AGREEMENT_KEY, agreementPairs, damAgreement, S1_AGREEMENT, s1Agreement, summarizeAgreement, updateAgreement } from './agreement.js';
+import { AGREEMENT_FILL_PER_RUN, AGREEMENT_KEY, agreementPairs, damAgreement, readAgreement, S1_AGREEMENT, s1Agreement, s1Passing, summarizeAgreement, updateAgreement } from './agreement.js';
 
 const row = (date: string, wetAreaM2: number, pctObserved = 100): ObservationRow => ({ date, wetAreaM2, pctObserved });
 const F = 10_000;
@@ -152,5 +152,45 @@ describe('updateAgreement', () => {
 
 	it('answers null without a wanted list', async () => {
 		expect(await updateAgreement(freshStore(), [])).toBeNull();
+	});
+});
+
+describe('s1Passing (the dams whose radar the worker loads)', () => {
+	const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+	const report = (perDam: Record<string, { pairs: number; within: number }>) => ({
+		computedAt: '2026-10-25T04:00:00.000Z',
+		perDam: Object.fromEntries(Object.entries(perDam).map(([k, d]) => [k, { ...d, fullAreaM2: 1 }]))
+	});
+
+	it('takes a dam only when its own agreement passes: at least 10 pairs and 85 % within', () => {
+		const passing = s1Passing(
+			report({
+				[id(1)]: { pairs: 10, within: 9 },
+				[id(2)]: { pairs: 20, within: 16 },
+				// Too few pairs to judge, however well they agree: not loaded.
+				[id(3)]: { pairs: 9, within: 9 },
+				[id(4)]: { pairs: 0, within: 0 },
+				[id(5)]: { pairs: 20, within: 17 }
+			})
+		);
+		expect([...passing].sort()).toEqual([id(1), id(5)]);
+	});
+
+	it('takes no dam without a report', () => {
+		expect(s1Passing(null).size).toBe(0);
+	});
+
+	it('reads the report the fetcher wrote, null when there is none, and refuses one that isn’t valid', async () => {
+		const dir = mkdtempSync(join(tmpdir(), 'wm-s1-passing-'));
+		try {
+			const store = openStore(pathToFileURL(`${dir}/`).href);
+			expect(await readAgreement(store)).toBeNull();
+			await store.set(AGREEMENT_KEY, new TextEncoder().encode(JSON.stringify(report({ [id(1)]: { pairs: 12, within: 11 } }))));
+			expect([...s1Passing(await readAgreement(store))]).toEqual([id(1)]);
+			await store.set(AGREEMENT_KEY, new TextEncoder().encode(JSON.stringify({ computedAt: 'x', perDam: {} })));
+			await expect(readAgreement(store)).rejects.toThrow(/not valid/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

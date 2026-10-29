@@ -33,14 +33,33 @@ export type OutlineSource = Exclude<ObservationSource, 'waterbodies'>;
 export type SentinelSource = 's2' | 's1';
 
 /**
- * Whether the fetcher runs a Sentinel source's pass: DAM_OBSERVATIONS_S2 / DAM_OBSERVATIONS_S1 on, off or unset (off).
- * infra/dam_observations.tf sets it on only with dam_observations_enabled and the source's own variable.
+ * DAM_OBSERVATIONS_S1, radar's stage (issue #624 open question 3; docs/architecture.md § Dam observations):
+ *   off      (or unset) no radar pass; the worker holds no s1 row (it withholds any loaded before);
+ *   measure  the fetcher runs the radar pass and the S1/S2 agreement report (dams_s1_agreement), but the worker
+ *            loads no s1 row, so nobody sees radar while it is being measured;
+ *   on       the same, and the worker loads s1 for the dams whose own agreement passes (sentinel/agreement.ts
+ *            s1Passing): at least S1_AGREEMENT.minPairs pairs, S1_AGREEMENT.bar of them within. Any other dam's
+ *            s1 rows are withheld (none loaded, those loaded before removed) until it passes.
+ * infra/dam_observations.tf sets it from var.dam_s1_mode, on the fetcher and the worker alike.
+ */
+export type S1Mode = 'off' | 'measure' | 'on';
+export function damS1Mode(env: Record<string, string | undefined> = process.env): S1Mode {
+	const v = env.DAM_OBSERVATIONS_S1?.trim() ?? '';
+	if (v === '') return 'off';
+	if (v === 'off' || v === 'measure' || v === 'on') return v;
+	throw new Error(`unknown DAM_OBSERVATIONS_S1 "${v}" (expected off, measure or on)`);
+}
+
+/**
+ * Whether the fetcher runs a Sentinel source's pass: DAM_OBSERVATIONS_S2 on, off or unset (off); for radar,
+ * DAM_OBSERVATIONS_S1 measure or on (damS1Mode). infra/dam_observations.tf sets them only with
+ * dam_observations_enabled and the source's own variable.
  */
 export function damSourceOn(source: SentinelSource, env: Record<string, string | undefined> = process.env): boolean {
-	// Each flag named in full, so the settings inventory (config/production.security.test.ts) sees it read.
-	const [name, raw] = source === 's2' ? ['DAM_OBSERVATIONS_S2', env.DAM_OBSERVATIONS_S2] : ['DAM_OBSERVATIONS_S1', env.DAM_OBSERVATIONS_S1];
-	const v = raw?.trim() ?? '';
-	if (v !== '' && v !== 'on' && v !== 'off') throw new Error(`unknown ${name} "${v}" (expected on or off)`);
+	if (source === 's1') return damS1Mode(env) !== 'off';
+	// Named in full, so the settings inventory (config/production.security.test.ts) sees it read.
+	const v = env.DAM_OBSERVATIONS_S2?.trim() ?? '';
+	if (v !== '' && v !== 'on' && v !== 'off') throw new Error(`unknown DAM_OBSERVATIONS_S2 "${v}" (expected on or off)`);
 	return v === 'on';
 }
 
