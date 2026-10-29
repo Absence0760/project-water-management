@@ -1522,7 +1522,21 @@ row names a source, where to read it and the series it merges into:
   Throttling below). When that is (`app_feed_next_attempt`,
   243_feed_next_attempt.sql, the same rule `app_feed_is_due` now reads) is
   the feed list's `nextAttemptAt`, and a failing feed's card says it ("It
-  tries again after 10:13."; ui.md § Data feeds). If the acting user is no longer an editor, the enqueue is
+  tries again after 10:13."; ui.md § Data feeds). **A feed whose fetch is
+  still out is not due** (276, `app_feed_fetch_out`): in production a fetch
+  sent to the fetcher (`fetch_job_id`, below) holds the feed until its
+  answer is applied, or for a day at most (an answer lost for good), so the
+  scheduler never sends a second request that would supersede the first.
+  CHC's fetches go one at a time and a 120-day CHIRPS window takes 8–10
+  minutes, so with a dozen CHIRPS feeds an answer takes about two hours to
+  come back; before 276 a failing feed was due again every 15 minutes
+  meanwhile, every answer was dropped as `not_awaited` (so the cell cache
+  never took its days, each request re-read all 120 days from CHC, and the
+  failure and its 15-minute backoff never cleared), and the fetch-requests
+  queue grew without end (production, 2026-10-28 to 29: 98 requests, CHC's
+  slot held around the clock). "Run now" still sends a newer request (its
+  token bucket bounds it), and the feed list's `nextAttemptAt` is the
+  earliest time, which a fetch still out pushes back to its answer. If the acting user is no longer an editor, the enqueue is
   refused, the feed records it (`app_feed_schedule_failed`, keeping the
   claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Data → Data feeds: `ok`,

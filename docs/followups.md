@@ -317,6 +317,23 @@ provenance, `ingest/verify_copy.py`):
       `dws_source = "store"`, whose apply removes the per-feed queues
       ([deployment.md § The cutover](./deployment.md#the-cutover)). Each
       `terraform apply` with the operator's go-ahead.
+- [ ] **The daily rnl and sat runs give up the day when the fetcher holds
+      CHC's slot.** `ingest/lambda_handler.py` ends a daily run on
+      `HostBusy` ("tomorrow's run catches up"), and per-feed CHIRPS fetches
+      go back to back while a backfill runs (each takes the slot for its 8–10
+      minutes, `feeds/hostSlot.ts`), so on 2026-10-29 both runs (02:00Z,
+      02:20Z) found it held; while the scheduler re-queued failing feeds
+      (fixed in 276_feed_fetch_out_hold) that would have been every day. A
+      per-feed backfill (unit `rnl` feeds from their start date) can still
+      hold the slot most of the day for days. Durable fix: the daily runs
+      reserve the next turn as a backfill month does (`lease.py`
+      `hold_host` taking the backfill's `reserve=True`; the fetcher already yields to a live
+      reservation, `hostSlot.ts yieldToReservation`) and are invoked again
+      ~20 minutes later (a second EventBridge schedule, or the Lambda's own
+      async retry), by which time the fetch holding the slot has ended and
+      the next one has yielded. Trigger: before the cutover, since the copy
+      must keep up for `chirps_source = "mirror"`; until then the next
+      daily run after the backfill ends catches up the missed days.
 - [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
       judges feed health without the copy (`feedHealth(f, today, tz)`), so
       a feed the panel shows as **Copy behind** counts there as failing or

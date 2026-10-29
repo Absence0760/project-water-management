@@ -1429,7 +1429,14 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
     `filter message.event = "feed_answer_dropped" | stats count() by message.reason`.
     `feed_changed`: the feed was saved while its fetch was out (expected
     once). `not_awaited` for every answer: a newer fetch keeps superseding
-    it (Run now pressed repeatedly) or the answers are redeliveries; match
+    it (Run now pressed repeatedly) or the answers are redeliveries (before
+    276 also the scheduler re-queuing a failing feed every 15 minutes while
+    its answer waited behind other CHC fetches; architecture.md § Data feeds
+    → Schedule). A backlog of superseded requests in the fetch-requests
+    queue (`ApproximateNumberOfMessages` far above the number of CHIRPS
+    feeds) still costs CHC one full fetch each until it drains: purge the
+    queue (`aws sqs purge-queue`); a feed whose request was purged is due
+    again within a day, or at once with Run now. Match
     `fetchJobId` against the fetcher's `feed_fetch_failed` lines, and look for
     `job_failed` / `job_lease_lost` on `feed_fetch` jobs, which re-send the
     same job.
