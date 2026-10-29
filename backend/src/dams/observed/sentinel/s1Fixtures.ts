@@ -34,6 +34,9 @@ const FIXTURE = fileURLToPath(new URL('../../../../fixtures/feeds/s1-sample.json
 
 export interface S1FixtureSpec {
 	item: Record<string, unknown> & { properties: Record<string, unknown>; assets: Record<string, Record<string, unknown>> };
+	// Smaller than the real 5000-pixel scenes and 256-pixel tiles on purpose: an
+	// outline crosses more tile edges here than in production, so the readers'
+	// edge handling is exercised; raster/cogLayouts.test.ts holds the real sizes.
 	scenes: { sizePx: number; tilePx: number; pixelDeg: number };
 	schedule: { historyDays: number; lagDays: number; revisitDays: number; pathOffsetsDays: number[]; pathMinutes: number[] };
 	backscatter: { water: number; land: number; windWater: number };

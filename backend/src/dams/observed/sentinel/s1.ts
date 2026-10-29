@@ -26,8 +26,10 @@
 // on a 0.0002° geographic grid (EPSG:4326) cut into 1° tiles (5000 × 5000,
 // named by their corner, e.g. S35E019); `mask` is uint8 on the same grid
 // (0 no data, 1 valid, 2 shadow or layover). Checked against one live
-// s1_rtc item's metadata and DE Africa's spec page on 2026-10-29, no pixel
-// fetched. The mask is made on VV's grid (raster/mask.ts, geographic), and
+// s1_rtc item's metadata and DE Africa's spec page, then against the real VV
+// and MASK headers of one tile on 2026-10-29 (256-pixel tiles, DEFLATE with
+// predictor 3 for VV and 2 for MASK, PlanarConfiguration 2; a decoded window
+// confirmed VV is linear; raster/cogLayouts.ts). The mask is made on VV's grid (raster/mask.ts, geographic), and
 // the mask band must be on exactly that grid. The threshold is applied in
 // linear power: VV < 10^(−18 / 10), the same test as 10·log10(VV) < −18
 // without a logarithm a pixel.
