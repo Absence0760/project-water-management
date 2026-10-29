@@ -175,7 +175,8 @@ export function applyClimateDelta(d: ModelInput, op: Pick<ClimateDeltaOp, 'rainF
 	let rainSeries = 0;
 	let evapSeries = 0;
 	for (const [key, s] of Object.entries(series)) {
-		if (!s || !Array.isArray(s.values)) continue;
+		// A key JSON.parse keeps but a plain object answers from its prototype is never written (as overrides.ts).
+		if (!s || !Array.isArray(s.values) || key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
 		const f = isClimateRainKey(key) ? rf : (CLIMATE_EVAP_KINDS as readonly string[]).includes(key) ? ef : null;
 		if (!f) continue;
 		series[key] = scaleDaily(s, f).series;

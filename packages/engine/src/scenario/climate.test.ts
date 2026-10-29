@@ -4,6 +4,7 @@ import type { Monthly } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import {
 	annualRainFactor,
+	applyClimateDelta,
 	climateDeltaFactors,
 	extraterrestrialRadiationMm,
 	hargreavesSamaniMm,
@@ -140,6 +141,15 @@ describe('the climate.delta op', () => {
 			'ops[1]: a scenario holds at most one climate.delta (op 1 is one)',
 			'ops[2]: a scenario holds at most one climate.delta (op 1 is one)'
 		]);
+	});
+
+	it('never writes a series key a plain object answers from its prototype (a JSON-parsed __proto__)', () => {
+		const d = base();
+		const hostile = JSON.parse(`{"__proto__": ${JSON.stringify({ startDate: '2020-01-01', values: [1, 2] })}}`) as Record<string, unknown>;
+		d.series = { ...(d.series as Record<string, unknown>), ...hostile } as ModelInput['series'];
+		applyClimateDelta(d, { rainFactorByMonth: ones().map(() => 1.1), evapFactorByMonth: ones() });
+		expect(Object.getPrototypeOf(d.series)).toBe(Object.prototype);
+		expect(({} as Record<string, unknown>).values).toBeUndefined();
 	});
 
 	it('refuses a series.scale beside it, in either order', () => {
