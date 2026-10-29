@@ -2929,6 +2929,19 @@ In short:
     is refused outside 0–30 mm a day (`feeds/fromMirrorEt0.ts`) before a feed
     writes it. The fetcher refuses an `agera5_et0` request: no per-feed path
     reaches either upstream.
+  - **Observed actual ET** (issue #623; the store only so far,
+    `276_et_observation.sql`). `et_observation` holds a unit's satellite
+    actual ET per dekad: a project's viewers read it, a farmer or contributor
+    only their own linked units' (`et_observation_select_farmer`, through
+    `app_farm_nodes`), and `water_app` holds SELECT only. Only the worker,
+    with no user, writes it (`app_et_observation_load`, `SECURITY DEFINER`,
+    42501 to any signed-in caller), every value bounded, onto a node that is
+    a unit with parcels, refused when its parcels changed after the fetch;
+    the load marks are owner only. Changing a unit's parcels drops its rows
+    (`et_parcels_changed`). The fetch itself, and what leaves the VPC (each
+    unit's parcel outlines, to our own mirror bucket only), come with #623
+    step 4. Guarded by `water-use/observed/observations.security.db.test.ts`
+    (positive controls throughout) and the farmer-privacy sweep.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no

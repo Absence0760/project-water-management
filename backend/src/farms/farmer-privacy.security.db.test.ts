@@ -168,6 +168,16 @@ beforeAll(async () => {
 			new Date()
 		]);
 	}
+	// Observed actual ET on every unit with a parcel (276, issue #623), loaded as the worker loads it: the neighbour's file named with the marker.
+	for (const n of [home, theirs, unlinked]) {
+		const file = n === home ? 'WAPOR-3.L2-AETI-D.2021-11-D1.tif' : `WAPOR-3.${MARKER}.2021-11-D1.tif`;
+		const [r] = await asOwner(
+			`SELECT applied FROM app_et_observation_load('wapor', $1, ARRAY['2021-11-01']::date[], ARRAY[4.5]::float8[], ARRAY[1]::float8[], ARRAY[200000]::float8[],
+				'parcel', ARRAY[$2]::text[], ARRAY[NULL]::text[], 'WAPOR-3', now())`,
+			[n.id, file]
+		);
+		expect(r!.applied).toBe(true);
+	}
 	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(3000) } })).status).toBe(200);
 	const rain = Array.from({ length: 500 }, (_, i) => (i % 23 === 0 ? 12 : 0));
 	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
