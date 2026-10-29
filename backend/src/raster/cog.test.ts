@@ -102,6 +102,22 @@ describe('openCog / readWindow', () => {
 		}
 	});
 
+	it('reads one band written with PlanarConfiguration 2 (the same bytes; WaPOR and Sentinel-1 RTC write it)', async () => {
+		const s = spec({ planar: 2 });
+		const { read } = reader(writeCog(s));
+		const cog = (await openCog(read))!;
+		expect(Array.from(await readWindow(read, cog, { col0: 0, row0: 0, col1: 69, row1: 49 }))).toEqual(Array.from(s.values));
+	});
+
+	it('reads GDAL’s frame: structural metadata before the IFD, tile trailers, overview IFDs after it', async () => {
+		const s = spec({ ghost: true, blockTrailer: true, overviews: 3, resolution: true, geoAscii: { 1026: 'WGS 84 / UTM zone 34S|' } });
+		const bytes = writeCog(s);
+		const { read } = reader(bytes);
+		const cog = (await openCog(read))!;
+		expect([cog.width, cog.height]).toEqual([70, 50]);
+		expect(Array.from(await readWindow(read, cog, { col0: 0, row0: 0, col1: 69, row1: 49 }))).toEqual(Array.from(s.values));
+	});
+
 	it('answers null for a missing scene', async () => {
 		expect(await openCog(reader(null).read)).toBeNull();
 	});
@@ -141,6 +157,8 @@ describe('refusals', () => {
 		['signed 8-bit samples', { 339: [3, [2]] }, /not uint8, int16, uint16 or float32/],
 		['64-bit float samples', { 258: [3, [64]], 339: [3, [3]] }, /not uint8, int16, uint16 or float32/],
 		['two bands', { 277: [3, [2]] }, /more than one band/],
+		['two planar bands', { 277: [3, [2]], 284: [3, [2]] }, /more than one band/],
+		['planar configuration 3', { 284: [3, [3]] }, /planar configuration 3 is not valid/],
 		['JPEG', { 259: [3, [7]] }, /compression 7/],
 		['predictor 4', { 317: [3, [4]] }, /predictor 4/],
 		['the float predictor on integers', { 317: [3, [3]] }, /floating-point predictor on integer/],
