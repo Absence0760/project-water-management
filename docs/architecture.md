@@ -798,9 +798,12 @@ alerts plug in as a further kind.
   its own connection, outside the job's transaction (whose writes nobody sees
   until it commits), so `GET /jobs` shows it at once. Only the lease holder
   of a running job can write it. It answers false once someone cancelled the
-  job (`app_cancel_job`, which kills a waiting job outright and flags a
-  running one) or the lease was lost, and the handler then stops: dead,
-  `cancelled`, its work rolled back.
+  job (`app_cancel_job_outcome`, 285, which kills a waiting job outright and
+  flags a running one, and says whether this call changed it) or the lease
+  was lost, and the handler then stops: dead, `cancelled`, its work rolled
+  back. `future_yield` and `climate_factors` report after each model read
+  from the copy, and `future_yield` after each case it runs
+  (`runFutureYieldAsync`), so a cancel lands before the next.
 - **`yield`** (WP-3.6, `jobs/handlers/yield.ts`, [api.md § Yield](./api.md#yield)):
   the engine's firm-yield search (`network/yield.ts`, model.md §2.13) on a
   saved run's stored inputs or a scenario applied to its base run, as the
