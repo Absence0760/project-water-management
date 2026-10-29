@@ -187,8 +187,13 @@ describe('AssistantPanel', () => {
 			{ id: 'b', title: 'Second', updatedAt: '2026-10-27T08:00:00Z' }
 		];
 		const out = html(c);
-		// Svelte's server output marks the {#if} block with comments (<!--[-->).
-		expect(out.replace(/<!--[^>]*-->/g, '')).toMatch(/data-testid="assistant-past-toggle"[^>]*>\s*Past chats<span class="count[^"]*" aria-hidden="true">2<\/span><span class="visually-hidden"> \(2\)<\/span>/);
+		// Svelte's server output marks the {#if} block with comments (<!--[-->): strip them until none is left.
+		let bare = out;
+		for (let prev = ''; prev !== bare; ) {
+			prev = bare;
+			bare = bare.replace(/<!--[^>]*-->/g, '');
+		}
+		expect(bare).toMatch(/data-testid="assistant-past-toggle"[^>]*>\s*Past chats<span class="count[^"]*" aria-hidden="true">2<\/span><span class="visually-hidden"> \(2\)<\/span>/);
 		expect(out).toMatch(/aria-expanded="false"[^>]*aria-controls="assistant-past"|aria-controls="assistant-past"[^>]*aria-expanded="false"/);
 	});
 
