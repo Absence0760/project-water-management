@@ -80,7 +80,7 @@ jobs:
     # `on: release` fires for every published release; only backend@ ones matter.
     if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'backend@')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 100
     permissions:
       contents: read
       actions: read # read the production environment's protection rules
