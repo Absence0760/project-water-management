@@ -408,7 +408,7 @@ class FixturesRun(unittest.TestCase):
                 raise RuntimeError("the month failed")
         held = self._slot(s3)
         self.assertEqual(held["owner"], lease.backfill_owner(EXECUTION))
-        self.assertGreater(held["expires"], time.time())
+        self.assertEqual(held["expires"], 1000.0 + 60 + lease.BACKFILL_HOLD_MARGIN_S)  # kept through the pause, not released
 
     def test_a_hold_taken_over_meanwhile_is_left_alone_on_the_way_out(self):
         s3 = FakeS3()
