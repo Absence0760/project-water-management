@@ -26,7 +26,7 @@ import { CHC_BASE } from './sources/chirps.js';
 import { CPC_BASE } from './sources/cpc.js';
 import { DWS_BASE } from './sources/dws.js';
 import { DEAFRICA_SERVICES_BASE } from '../dams/observed/upstream.js';
-import { WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { S1_S3_BASE, S2_C1_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
 
 export interface FeedHttp {
 	/** Bytes [start, end] (inclusive) of `url`; null for HTTP 404 (not published yet). */
@@ -125,6 +125,9 @@ export const FEED_HOSTS: readonly string[] = [
 	new URL(DEAFRICA_SERVICES_BASE).host,
 	// Digital Earth Africa's STAC search: the WOfS scenes over a dam (dams/observed/wofs, issue #604 R5-C).
 	new URL(WOFS_STAC_SEARCH).host,
+	// Digital Earth Africa's Sentinel-2 L2A Collection 1 and Sentinel-1 RTC buckets (dams/observed, issue #624).
+	new URL(S2_C1_S3_BASE).host,
+	new URL(S1_S3_BASE).host,
 	// NOAA CPC: the ONI and AAO climate indices (ingest/indices.ts, issue #620).
 	new URL(CPC_BASE).host
 ];

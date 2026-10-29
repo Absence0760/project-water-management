@@ -2773,7 +2773,14 @@ In short:
     to `FEED_HOSTS`. What a STAC answer may point the fetcher at is
     checked too (`stac.ts`): an item's water asset only as a `wofs_ls/…tif`
     key in that bucket (no `..`, no other bucket or host), and a `next`
-    page only to the same search endpoint, at most 20 pages. A request
+    page only to the same search endpoint, at most 20 pages. Issue #624
+    adds the Sentinel-2 L2A Collection 1 and Sentinel-1 RTC buckets
+    (`deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`,
+    `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, anonymous) to
+    `FEED_HOSTS`, and `assetUrl` reads each collection's hrefs only against
+    its own bucket and key prefix (`s2_l2a_c1`: `sentinel-2-c1-l2a/…tif`;
+    `s1_rtc`: `s1_rtc/…tif`), so no item can point at another collection's
+    objects or another key of the bucket. A request
     carries a traced dam's lon/lat box and dates, never its name, project
     or owner; the scenes are public and read anonymously, and the COG
     reader refuses anything but the expected format, with every tile's

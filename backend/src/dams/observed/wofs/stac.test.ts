@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError, FeedRefusedError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
-import { assetUrl, MAX_PAGES, parsePage, WOFS_S3_BASE, searchScenes, searchUrl, snapSearchBox, WOFS_STAC_SEARCH } from './stac.js';
+import { assetUrl, MAX_PAGES, parsePage, S1_S3_BASE, S2_C1_S3_BASE, WOFS_S3_BASE, searchScenes, searchUrl, snapSearchBox, WOFS_STAC_SEARCH } from './stac.js';
 
 /** A synthetic item in the explorer's shape (invented ids and paths). */
 const item = (id: string, datetime: string, href = `s3://deafrica-services/wofs_ls/1-0-0/900/001/${datetime.slice(0, 4)}/x/${id}_water.tif`) => ({
@@ -82,6 +82,53 @@ describe('assetUrl', () => {
 		]) {
 			expect(assetUrl(bad), bad).toBeNull();
 		}
+	});
+
+	const S2_KEY = 'sentinel-2-c1-l2a/34/H/BH/2026/10/S2C_T34HBH_20261020T082000_L2A/B03.tif';
+	const S1_KEY = 's1_rtc/S34E019/2026/10/20/0A1B2C/s1_rtc_0A1B2C_S34E019_2026_10_20_VV.tif';
+
+	it('reads Sentinel-2 C1 objects only from their bucket and key prefix', () => {
+		expect(assetUrl(`s3://deafrica-sentinel-2-l2a-c1/${S2_KEY}`, 's2_l2a_c1')).toBe(`${S2_C1_S3_BASE}/${S2_KEY}`);
+		expect(assetUrl(`${S2_C1_S3_BASE}/${S2_KEY}`, 's2_l2a_c1')).toBe(`${S2_C1_S3_BASE}/${S2_KEY}`);
+		for (const bad of [
+			`s3://deafrica-sentinel-1/${S2_KEY}`,
+			`s3://deafrica-services/${S2_KEY}`,
+			's3://deafrica-sentinel-2-l2a-c1/sentinel-s2-l2a-cogs/34/H/BH/a/B03.tif',
+			's3://deafrica-sentinel-2-l2a-c1/wofs_ls/a.tif',
+			's3://deafrica-sentinel-2-l2a-c1/sentinel-2-c1-l2a/../x.tif',
+			's3://deafrica-sentinel-2-l2a-c1/sentinel-2-c1-l2a/a/metadata.json',
+			`${S1_S3_BASE}/${S2_KEY}`,
+			`https://example.com/${S2_KEY}`
+		]) {
+			expect(assetUrl(bad, 's2_l2a_c1'), bad).toBeNull();
+		}
+	});
+
+	it('reads Sentinel-1 RTC objects only from their bucket and key prefix', () => {
+		expect(assetUrl(`s3://deafrica-sentinel-1/${S1_KEY}`, 's1_rtc')).toBe(`${S1_S3_BASE}/${S1_KEY}`);
+		expect(assetUrl(`${S1_S3_BASE}/${S1_KEY}`, 's1_rtc')).toBe(`${S1_S3_BASE}/${S1_KEY}`);
+		for (const bad of [
+			`s3://deafrica-sentinel-2-l2a-c1/${S1_KEY}`,
+			's3://deafrica-sentinel-1/s1_gamma0/a/b.tif',
+			's3://deafrica-sentinel-1/s1_rtc/./a.tif',
+			's3://deafrica-sentinel-1/s1_rtc/a/b.yaml',
+			`https://example.com/${S1_KEY}`
+		]) {
+			expect(assetUrl(bad, 's1_rtc'), bad).toBeNull();
+		}
+	});
+
+	it('keeps each collection to its own bucket: WOfS refuses Sentinel objects, and an unknown collection refuses all', () => {
+		expect(assetUrl(`s3://deafrica-sentinel-2-l2a-c1/${S2_KEY}`)).toBeNull();
+		expect(assetUrl(`s3://deafrica-sentinel-1/${S1_KEY}`)).toBeNull();
+		expect(assetUrl(`${S2_C1_S3_BASE}/${S2_KEY}`, 'wofs_ls')).toBeNull();
+		expect(assetUrl('s3://deafrica-services/wofs_ls/a.tif', 's2_l2a_c1')).toBeNull();
+		expect(assetUrl('s3://deafrica-services/wofs_ls/a.tif', 'ls_c2' as never)).toBeNull();
+	});
+
+	it('parsePage still refuses a Sentinel object as a WOfS item’s water asset', () => {
+		const item = { id: 'x', properties: { datetime: '2026-10-20T08:20:00Z' }, assets: { water: { href: `s3://deafrica-sentinel-2-l2a-c1/${S2_KEY}` } } };
+		expect(() => parsePage(JSON.stringify({ type: 'FeatureCollection', features: [item] }))).toThrow(/not in the WOfS bucket/);
 	});
 });
 

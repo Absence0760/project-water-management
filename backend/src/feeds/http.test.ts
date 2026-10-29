@@ -223,6 +223,16 @@ describe('liveHttp: where it may go', () => {
 		expect(await http.text(CHC)).toBe('ok');
 	});
 
+	it('asks Digital Earth Africa’s Sentinel-2 C1 and Sentinel-1 buckets, and not their other buckets', async () => {
+		const f = vi.fn(async () => new Response('ok', { status: 200 }));
+		const http = liveHttp(f);
+		expect(await http.text('https://deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com/sentinel-2-c1-l2a/34/H/BH/2026/10/x/B03.tif')).toBe('ok');
+		expect(await http.text('https://deafrica-sentinel-1.s3.af-south-1.amazonaws.com/s1_rtc/S34E019/2026/10/20/0A1B2C/a_VV.tif')).toBe('ok');
+		await expect(http.text('https://deafrica-sentinel-2.s3.af-south-1.amazonaws.com/a.tif')).rejects.toThrow(/not a known source host/);
+		await expect(http.text('https://deafrica-sentinel-1.s3.us-west-2.amazonaws.com/a.tif')).rejects.toThrow(/not a known source host/);
+		expect(f).toHaveBeenCalledTimes(2);
+	});
+
 	it('gives every hop the one 20 s deadline: a single abort signal, set before the first request and shared by the redirect after it', async () => {
 		const timeout = vi.spyOn(AbortSignal, 'timeout');
 		const f = vi.fn<F>().mockResolvedValueOnce(redirect('/products/b.tif')).mockResolvedValueOnce(new Response('ok', { status: 200 }));

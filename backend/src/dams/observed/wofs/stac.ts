@@ -16,6 +16,14 @@
 // (WOFS_S3_BASE). Anything else is refused as a FeedFormatError: we never follow
 // an href to another host. The item's CRS is taken from the scene's own
 // GeoKeys (cog.ts), not from the item.
+//
+// assetUrl also knows the two Sentinel collections' buckets (issue #624;
+// docs/data-sources.md, deafrica-sentinel-2-c1 and deafrica-sentinel-1):
+// `s2_l2a_c1` objects under `sentinel-2-c1-l2a/` in deafrica-sentinel-2-l2a-c1,
+// `s1_rtc` objects under `s1_rtc/` in deafrica-sentinel-1 (both checked on
+// DE Africa's spec pages 2026-10-29). Each collection's hrefs are read only
+// against its own bucket and key prefix: a WOfS item can't point at a
+// Sentinel object, nor a Sentinel item at another key of its bucket.
 import { z } from 'zod';
 import { FeedFormatError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
@@ -31,8 +39,25 @@ export const PAGE_LIMIT = 100;
 /** Pages followed per search at most: a year over one dam is ~50–200 items. */
 export const MAX_PAGES = 20;
 
-/** The asset object key: under wofs_ls/, a .tif, plain path characters, no `..`. */
-const ASSET_KEY = /^wofs_ls\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.tif$/;
+/** The Sentinel-2 L2A Collection 1 collection and the public HTTPS endpoint of its bucket (af-south-1, anonymous). */
+export const S2_C1_COLLECTION = 's2_l2a_c1';
+export const S2_C1_S3_BASE = 'https://deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com';
+/** The Sentinel-1 RTC collection and the public HTTPS endpoint of its bucket (af-south-1, anonymous). */
+export const S1_RTC_COLLECTION = 's1_rtc';
+export const S1_S3_BASE = 'https://deafrica-sentinel-1.s3.af-south-1.amazonaws.com';
+
+/** A collection whose asset hrefs assetUrl reads. */
+export type AssetCollection = typeof WOFS_COLLECTION | typeof S2_C1_COLLECTION | typeof S1_RTC_COLLECTION;
+
+/** A .tif key under `prefix/`: plain path characters (the `..` and `.` parts refused apart). */
+const keyUnder = (prefix: string) => new RegExp(`^${prefix}\\/(?:[A-Za-z0-9_.-]+\\/)*[A-Za-z0-9_.-]+\\.tif$`);
+
+/** Per collection: its bucket (the s3:// name), the bucket's HTTPS endpoint, and the keys an item may name. */
+const ASSET_BUCKETS: Readonly<Record<AssetCollection, { bucket: string; base: string; key: RegExp }>> = {
+	[WOFS_COLLECTION]: { bucket: 'deafrica-services', base: WOFS_S3_BASE, key: keyUnder('wofs_ls') },
+	[S2_C1_COLLECTION]: { bucket: 'deafrica-sentinel-2-l2a-c1', base: S2_C1_S3_BASE, key: keyUnder('sentinel-2-c1-l2a') },
+	[S1_RTC_COLLECTION]: { bucket: 'deafrica-sentinel-1', base: S1_S3_BASE, key: keyUnder('s1_rtc') }
+};
 const Printable = z.string().min(1).max(200).regex(/^[!-~]+$/);
 
 const Item = z.object({
@@ -58,12 +83,18 @@ export interface WofsScene {
 	url: string;
 }
 
-/** The HTTPS URL of an `s3://deafrica-services/wofs_ls/…` asset; null for any other href. */
-export function assetUrl(href: string): string | null {
-	const m = /^s3:\/\/deafrica-services\/(.+)$/.exec(href);
-	const key = m?.[1] ?? (href.startsWith(`${WOFS_S3_BASE}/`) ? href.slice(WOFS_S3_BASE.length + 1) : null);
-	if (!key || !ASSET_KEY.test(key) || key.split('/').some((p) => p === '..' || p === '.')) return null;
-	return `${WOFS_S3_BASE}/${key}`;
+/**
+ * The HTTPS URL of a collection's asset, given as `s3://<its bucket>/<key>` or its bucket's HTTPS endpoint: for
+ * `wofs_ls` (the default) a `wofs_ls/…tif` key in deafrica-services, for `s2_l2a_c1` a `sentinel-2-c1-l2a/…tif` key
+ * in deafrica-sentinel-2-l2a-c1, for `s1_rtc` an `s1_rtc/…tif` key in deafrica-sentinel-1. Null for any other href.
+ */
+export function assetUrl(href: string, collection: AssetCollection = WOFS_COLLECTION): string | null {
+	const at = ASSET_BUCKETS[collection];
+	if (!at) return null;
+	const s3 = `s3://${at.bucket}/`;
+	const key = href.startsWith(s3) ? href.slice(s3.length) : href.startsWith(`${at.base}/`) ? href.slice(at.base.length + 1) : null;
+	if (!key || !at.key.test(key) || key.split('/').some((p) => p === '..' || p === '.')) return null;
+	return `${at.base}/${key}`;
 }
 
 /** The grid the search's box is snapped out to, degrees (~5.5 km): SEARCH_GRID_DEG = 1 / SEARCH_GRID_PER_DEG. */
