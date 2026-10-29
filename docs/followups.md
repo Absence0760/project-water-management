@@ -597,6 +597,60 @@ open:
       worked values, and the method text naming the version. Trigger: a copy
       of the paper, or the validation showing PenPan's bias is too large.
 
+## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
+
+Round 1 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
+op and the CMIP6 ingest; #623's register rows and `et_observation` (276);
+#624's register rows and the `s2`/`s1` sources (277); and the shared COG
+reader (`backend/src/raster/`). The rest of each issue's plan stays on the
+issue. Found while building, and open:
+
+- [ ] **Sensitivity may double-count rain under per-unit station rain
+      (unconfirmed).** `packages/engine/src/uncertainty/sensitivity.ts`
+      scales a station's record and the unit's MAP but not the station's own
+      MAP, so a unit levelled to its station by MAP ratio (§2.4i) may see the
+      rain factor twice. Durable fix: a probe on a one-unit network with an
+      assigned station that compares a rain factor of 1.1 through sensitivity
+      with `climate.delta` (which scales every MAP by one factor, §2.17); fix
+      sensitivity to scale MAPs the same way if they differ, with an
+      `ENGINE_VERSION` bump. Trigger: the next engine round.
+- [ ] **Check the COG reader against real headers.** `raster/cog.ts`'s
+      BigTIFF, LZW, 16-bit predictor 2 and float predictor 3 paths are tested
+      only against our own `cogWrite.ts`. Durable fix: read one real WaPOR
+      `L2-AETI-D` header and one Sentinel-1 RTC header (a few range requests,
+      no data kept), and commit a synthetic fixture with the same tag layout.
+      Trigger: #623 step 4 or #624 step 4, before either source is enabled.
+- [ ] **List the NEX-GDDP-CMIP6 bucket before the copy.** No session has
+      listed `s3://nex-gddp-cmip6`, so the key layout, version suffixes, each
+      model's variant, the HDF5 chunking and the `license` attributes are
+      unverified. Durable fix: the operator runs `cmip6_delta.py plan` in
+      us-west-2 (deployment.md § NEX-GDDP-CMIP6 (one-off)), records the result
+      on #621, and pins each model's variant in `MODELS` and the register's
+      table. Trigger: before the first `copy`, with the operator's go-ahead.
+- [ ] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
+      cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returns 404. Durable fix: find
+      the current tech note and quote its engineering-use caveat word for
+      word, with the URL and the date read, in data-sources.md. Trigger:
+      #621 slice 4 (the evidence pack's Future yield section) can't ship
+      without it.
+- [ ] **The model list's skill screen.** The ten models (one per centre) are
+      provisional. Durable fix: the hydrologist checks each model's historical
+      winter rainfall cycle and its year-to-year variation over the Western
+      Cape, and the register records the verdict. Trigger: before #621
+      slice 4.
+- [ ] **WaPOR's licence per dataset.** FAO's "unless specified otherwise in
+      the metadata" exception is set per dataset, and reference ET
+      (`L1-RET-M`) uses it (CC BY-NC-SA 4.0). Durable fix: the FAO email
+      (#618 step 8a) asks FAO to confirm CC BY 4.0 for `L2-AETI-D` by name, and
+      how they read the "promotion of a commercial enterprise" clause; the
+      answer goes on #618 and the register row. Trigger: before
+      `et_observations_enabled = true` with WaPOR.
+- [ ] **SSEBop isn't range-readable.** Each dekad is a ~93 MB zip, not a COG,
+      and is far over the fetcher's 4 MB cap. Durable fix: #623 step 6 picks a
+      bounded whole-file pass (one file a dekad, clipped at once) or an
+      operator reference load. Trigger: FAO declining WaPOR, or the second
+      opinion being wanted.
+
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
