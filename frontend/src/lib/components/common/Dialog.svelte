@@ -147,9 +147,12 @@
 	// The browser fires `close` from a queued task. If the dialog was closed and shown again before
 	// that task ran (a question answered, the next one asked at once: the leave guard's Stay, then
 	// Back again), the stale event would set `open = false` and shut the new one. Only a dialog
-	// that really is closed follows it.
-	function onclose() {
-		if (el?.open) return;
+	// that really is closed follows it, and only while it is still this one's: a caller that
+	// removes the dialog as it closes (`{#if}` round it, the grid modal) and shows a new one before
+	// the event runs (a grid link pressed as the grid closes) had the removed dialog's event, its
+	// `el` already cleared, set the binding the new one shares to false, shutting it.
+	function onclose(e: Event) {
+		if (!el || e.currentTarget !== el || el.open) return;
 		open = false;
 		// The native dialog hands the focus back to what had it when it opened; with nothing to hand it to
 		// (<body> after a link's navigation) it stays on the closed dialog's control: the opener instead,
