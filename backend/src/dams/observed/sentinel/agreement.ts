@@ -35,6 +35,14 @@ export const S1_AGREEMENT = {
 	withinShare: 0.1,
 	/** The share of paired days that must agree. */
 	bar: 0.85,
+	/**
+	 * Hysteresis (s1Shows): a dam whose radar is already shown keeps it while at least this share agree, so a dam
+	 * hovering at the bar isn't withheld and reloaded tick after tick. Five points under the bar: the rate is over every
+	 * pair the dam has, so once it has 20 or more pairs one new pair moves it by five points at most, and a dam that has
+	 * cleared 85 % needs a real run of disagreeing days (not one windy pass) to fall out; at 80 % still four radar days in
+	 * five sit within 0.1 F of Sentinel-2, so what stays shown is still mostly right.
+	 */
+	keepBar: 0.8,
 	/** A dam's own rate is judged only with at least this many pairs. */
 	minPairs: 10,
 	/**
@@ -196,13 +204,21 @@ export const readAgreement = (store: MirrorStore): Promise<AgreementFile | null>
 	readJson(store, AGREEMENT_KEY, AgreementFileSchema, 'S1/S2 agreement report') as Promise<AgreementFile | null>;
 
 /**
- * The dams whose radar the worker loads in `on`: each one's own agreement passes (damAgreement: at least
- * S1_AGREEMENT.minPairs pairs and S1_AGREEMENT.bar of them within). A dam with fewer pairs can't be judged, so its
+ * Whether the worker shows a dam's radar in `on`, given whether it showed it at its last decision (`wasShown`, the
+ * dam's s1 load mark: tick.ts). A dam starts being shown when its own agreement passes (damAgreement: at least
+ * S1_AGREEMENT.minPairs pairs and S1_AGREEMENT.bar of them within), and stops only below S1_AGREEMENT.keepBar, so a
+ * dam near the bar doesn't flip radar on and off. A dam with fewer pairs can't be judged, shown before or not, so its
  * radar isn't loaded: radar's threshold is fixed, not tuned per dam, and a dam it hasn't been checked on (a small,
- * windy or shallow one) is where it reads wrong. No report: no dam.
+ * windy or shallow one) is where it reads wrong. No entry: not shown.
  */
-export function s1Passing(file: AgreementFile | null): Set<string> {
+export function s1Shows(d: Pick<DamAgreement, 'pairs' | 'within'> | undefined, wasShown: boolean): boolean {
+	if (!d || d.pairs < S1_AGREEMENT.minPairs) return false;
+	return d.within / d.pairs >= (wasShown ? S1_AGREEMENT.keepBar : S1_AGREEMENT.bar);
+}
+
+/** The dams whose radar the worker loads in `on` (s1Shows), given the ones it showed at its last decision. No report: no dam. */
+export function s1Passing(file: AgreementFile | null, shown: ReadonlySet<string> = new Set()): Set<string> {
 	const out = new Set<string>();
-	for (const [id, d] of Object.entries(file?.perDam ?? {})) if (damAgreement(d.pairs, d.within).passes) out.add(id);
+	for (const [id, d] of Object.entries(file?.perDam ?? {})) if (s1Shows(d, shown.has(id))) out.add(id);
 	return out;
 }

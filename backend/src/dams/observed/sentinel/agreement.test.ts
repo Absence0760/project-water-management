@@ -11,7 +11,7 @@ import { geometryAreaM2 } from '../../../geo/area.js';
 import { openStore, type MirrorStore } from '../../../mirror/store.js';
 import { OBSERVED } from '../compare.js';
 import { writeObservationFile, writeWanted, type ObservationRow, type WantedOutline } from '../handover.js';
-import { AGREEMENT_FILL_PER_RUN, AGREEMENT_KEY, agreementPairs, damAgreement, readAgreement, S1_AGREEMENT, s1Agreement, s1Passing, summarizeAgreement, updateAgreement } from './agreement.js';
+import { AGREEMENT_FILL_PER_RUN, AGREEMENT_KEY, agreementPairs, damAgreement, readAgreement, S1_AGREEMENT, s1Agreement, s1Passing, s1Shows, summarizeAgreement, updateAgreement } from './agreement.js';
 
 const row = (date: string, wetAreaM2: number, pctObserved = 100): ObservationRow => ({ date, wetAreaM2, pctObserved });
 const F = 10_000;
@@ -176,6 +176,12 @@ describe('s1Passing (the dams whose radar the worker loads)', () => {
 		expect([...passing].sort()).toEqual([id(1), id(5)]);
 	});
 
+	it('keeps a dam it showed before down to 80 %, and starts one only at 85 % (hysteresis)', () => {
+		const r = report({ [id(1)]: { pairs: 20, within: 16 }, [id(2)]: { pairs: 20, within: 16 }, [id(3)]: { pairs: 20, within: 15 } });
+		// 80 %: kept for the dam shown before, not started for the other; 75 %: dropped either way.
+		expect([...s1Passing(r, new Set([id(1), id(3)]))]).toEqual([id(1)]);
+	});
+
 	it('takes no dam without a report', () => {
 		expect(s1Passing(null).size).toBe(0);
 	});
@@ -192,5 +198,50 @@ describe('s1Passing (the dams whose radar the worker loads)', () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe('s1Shows (start at the bar, stop below the keep bar)', () => {
+	const at = (rate: number, pairs = 1000) => ({ pairs, within: Math.round(rate * pairs) });
+
+	it('pins the two bars five points apart, the keep bar under the start bar', () => {
+		expect(S1_AGREEMENT.bar).toBe(0.85);
+		expect(S1_AGREEMENT.keepBar).toBe(0.8);
+	});
+
+	it('starts a dam not shown before only at 85 % or more', () => {
+		expect(s1Shows(at(0.85), false)).toBe(true);
+		expect(s1Shows(at(0.849), false)).toBe(false);
+		expect(s1Shows(at(0.8), false)).toBe(false);
+		// Exactly 17 of 20: the bar itself, not a float under it.
+		expect(s1Shows({ pairs: 20, within: 17 }, false)).toBe(true);
+	});
+
+	it('keeps a dam shown before down to 80 %, and stops it below', () => {
+		expect(s1Shows(at(0.849), true)).toBe(true);
+		expect(s1Shows(at(0.8), true)).toBe(true);
+		expect(s1Shows({ pairs: 20, within: 16 }, true)).toBe(true);
+		expect(s1Shows(at(0.799), true)).toBe(false);
+		expect(s1Shows({ pairs: 20, within: 15 }, true)).toBe(false);
+	});
+
+	it('shows no dam with too few pairs to judge, or no entry, shown before or not', () => {
+		for (const wasShown of [false, true]) {
+			expect(s1Shows({ pairs: S1_AGREEMENT.minPairs - 1, within: S1_AGREEMENT.minPairs - 1 }, wasShown)).toBe(false);
+			expect(s1Shows({ pairs: 0, within: 0 }, wasShown)).toBe(false);
+			expect(s1Shows(undefined, wasShown)).toBe(false);
+			// Positive control: the fewest pairs judged, all within.
+			expect(s1Shows({ pairs: S1_AGREEMENT.minPairs, within: S1_AGREEMENT.minPairs }, wasShown)).toBe(true);
+		}
+	});
+
+	it('doesn’t flap: a rate wandering between the bars keeps whichever state it last had', () => {
+		let shown = false;
+		const states: boolean[] = [];
+		for (const rate of [0.83, 0.86, 0.84, 0.82, 0.849, 0.81, 0.79, 0.84, 0.849, 0.85]) {
+			shown = s1Shows(at(rate), shown);
+			states.push(shown);
+		}
+		expect(states).toEqual([false, true, true, true, true, true, false, false, false, true]);
 	});
 });

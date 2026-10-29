@@ -781,16 +781,18 @@ plan stays on the issue. Found while building:
       yield and climate factors routes. Durable fix: `app_cancel_job` reports
       whether this call changed anything, and the three routes use it.
       Trigger: the next change to `app_cancel_job`.
-- [ ] **A dam near the 85 % bar can flip radar on and off.** Its `s1` rows
+- [x] **A dam near the 85 % bar can flip radar on and off.** Its `s1` rows
       are withheld and reloaded each time its agreement crosses the bar.
       Durable fix: hysteresis (stop below 80 %, start at 85 %) if the
       hydrologist sees flapping. Trigger: a real dam whose
       `dams_s1_agreement` rate sits within a few points of the bar for weeks.
-- [ ] **Off-mode withholding relies on the status file.** With
+      **Done (follow-ups, U):** `s1Shows` starts at 85 % and keeps a shown dam down to 80 % (`S1_AGREEMENT.keepBar`), its previous state read from its `s1` load mark (no migration).
+- [x] **Off-mode withholding relies on the status file.** With
       `dam_s1_mode = "off"`, the worker withholds radar only for keys still in
       `dams/s1-status.json`; if that file is gone, loaded rows stay. Durable
       fix: also withhold for `s1` load marks with no status entry. Trigger:
       deleting the s1 handover files after radar was on in production.
+      **Done (follow-ups, U):** the tick also withholds every `s1` mark still shown that the status doesn't list, when the stage or agreement no longer allows it.
 - [ ] **Views from two UTM zones aren't joined.** A dam across a zone line
       (S2 or WOfS) gets only the better view, since the grids don't share
       pixels. Durable fix: resample one view onto the other's grid before

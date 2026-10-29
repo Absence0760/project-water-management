@@ -5052,7 +5052,11 @@ fetcher's passes leave in the mirror bucket; no route writes them.
     dam's own agreement below the bar or under 10 pairs); `key` a dam
     feature id (else 23514). Its mark then holds `targets` `S1_WITHHELD`
     (a fixed SHA-256, `tick.ts`), so the key is due again when the dam
-    starts or stops passing (architecture.md § Dam observations).
+    starts or stops passing. A mark with `targets` `''` and a `last_good`
+    is also the tick's record that the dam's radar is shown: its
+    hysteresis (start at 85 %, stay down to 80 %) and its withholding of
+    radar the status file no longer lists read it (architecture.md § Dam
+    observations).
 - **reference_load** takes kind `waterbodies` (named in 258, kept beside `dws` by 261), so a production load
   records its file like the other reference datasets.
 - **Tests**: `dams/observed/observations.security.db.test.ts` (RLS with

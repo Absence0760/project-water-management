@@ -2143,7 +2143,8 @@ EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside th
 worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
    ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs | s2 | s1)
    ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
-   s1 only with DAM_OBSERVATIONS_S1=on, for the dams dams/s1-agreement.json passes; any other s1 key
+   s1 only with DAM_OBSERVATIONS_S1=on, for the dams dams/s1-agreement.json passes (start ≥ 85 %, stay ≥ 80 %);
+   any other s1 key, or an s1 mark still shown that the status no longer lists
    ──► app_dam_s1_withhold (its rows removed) + a mark with targets S1_WITHHELD, no file read
 ```
 
@@ -2477,10 +2478,22 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     (`Source = s1`) and the agreement report, but **the worker loads no
     `s1` row**, so radar is measured without being shown; `on` the same,
     and the worker loads `s1` **only for the dams whose own agreement
-    passes** (`sentinel/agreement.ts s1Passing`: at least 10 pairs and
+    passes** (`sentinel/agreement.ts s1Shows`: at least 10 pairs and
     85 % within). A dam with fewer pairs can't be judged, so its radar
     isn't loaded: the threshold is fixed, not tuned per dam, and an
     unchecked dam (small, windy, shallow) is where it reads wrong.
+  - **Hysteresis.** A dam's radar starts being shown at 85 % and, once
+    shown, stays until its rate falls **below 80 %**
+    (`S1_AGREEMENT.keepBar`), so a dam hovering at the bar isn't withheld
+    and reloaded tick after tick. Five points: the rate is over every pair
+    the dam has, so from 20 pairs one new pair moves it by at most five
+    points, and falling out takes a run of disagreeing days, not one windy
+    pass; at 80 % four radar days in five still sit within 0.1 F of
+    Sentinel-2. Under 10 pairs is never shown. The previous state is the
+    dam's own `s1` load mark (targets `''` with a `last_good`: its last
+    successful decision loaded it), so it needs no file or table of its
+    own and survives a restart; a stage change to `measure` or `off`
+    withholds every dam, so turning `on` again starts each at 85 %.
   - **Withheld radar** (the dams tick, `tick.ts` step 4): a dam's `s1` key
     that may not be loaded is withheld instead of read: its rows are
     removed (`app_dam_s1_withhold`, 283; none on a first look) and its load
@@ -2489,7 +2502,12 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     makes the key due again, so a dam that stops passing loses its radar on
     the next tick, without a new fetch, and one that passes again is
     reloaded from its file. Withholding reads no file (its own cap of 200 a
-    tick). No report in `on` (before any measurement) means no dam passes;
+    tick). Besides the keys `dams/s1-status.json` lists, every `s1` mark
+    still shown is checked, so radar loaded before is withheld in
+    `measure`, `off` or for a dam that stops passing even when the status
+    file is gone or no longer lists the dam (a shown dam the status
+    doesn't list that may still be shown keeps its rows: there is no file
+    to reload). No report in `on` (before any measurement) means no dam passes;
     a report that can't be read leaves radar alone that tick (logged
     `dams_tick_failed`, step `s1_agreement`).
   - **Locally** `sentinel/s1Fixtures.ts` answers the search and both bands

@@ -34,12 +34,14 @@ export type SentinelSource = 's2' | 's1';
 
 /**
  * DAM_OBSERVATIONS_S1, radar's stage (issue #624 open question 3; docs/architecture.md § Dam observations):
- *   off      (or unset) no radar pass; the worker holds no s1 row (it withholds any loaded before);
+ *   off      (or unset) no radar pass; the worker holds no s1 row (it withholds any loaded before, found by its
+ *            load marks, so with dams/s1-status.json gone as well);
  *   measure  the fetcher runs the radar pass and the S1/S2 agreement report (dams_s1_agreement), but the worker
  *            loads no s1 row, so nobody sees radar while it is being measured;
  *   on       the same, and the worker loads s1 for the dams whose own agreement passes (sentinel/agreement.ts
- *            s1Passing): at least S1_AGREEMENT.minPairs pairs, S1_AGREEMENT.bar of them within. Any other dam's
- *            s1 rows are withheld (none loaded, those loaded before removed) until it passes.
+ *            s1Shows): at least S1_AGREEMENT.minPairs pairs, S1_AGREEMENT.bar of them within to start, and
+ *            S1_AGREEMENT.keepBar to stay shown. Any other dam's s1 rows are withheld (none loaded, those loaded
+ *            before removed) until it passes.
  * infra/dam_observations.tf sets it from var.dam_s1_mode, on the fetcher and the worker alike.
  */
 export type S1Mode = 'off' | 'measure' | 'on';

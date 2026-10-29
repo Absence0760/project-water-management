@@ -10975,7 +10975,8 @@ together.
   flag. The reader takes whatever `s1` rows the store holds; what keeps
   untrusted radar out of it is the worker: with `DAM_OBSERVATIONS_S1=measure`
   (Terraform `dam_s1_mode`) it loads none, and with `on` only the dams
-  whose own agreement below passes (at least 10 pairs, 85 % within;
+  whose own agreement below passes (at least 10 pairs, 85 % within to
+  start, and once shown down to 80 %, so a dam near the bar doesn't flip;
   architecture.md § Dam observations).
 - **The S1/S2 agreement** (`sentinel/agreement.ts`, issue #624's acceptance
   criteria). For each clear radar view of a dam (at least 90 % seen), the

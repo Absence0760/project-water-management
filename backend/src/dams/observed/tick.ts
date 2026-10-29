@@ -35,7 +35,11 @@
 //   4. Radar (s1) only as DAM_OBSERVATIONS_S1 allows (handover.ts damS1Mode;
 //      issue #624 open question 3): in `on`, a dam's s1 file is loaded only
 //      when its own S1/S2 agreement passes (dams/s1-agreement.json,
-//      sentinel/agreement.ts s1Passing); in `measure` and `off`, never. A
+//      sentinel/agreement.ts s1Shows), with hysteresis: a dam starts at the
+//      85 % bar and, once shown, stays down to 80 % (S1_AGREEMENT.keepBar).
+//      Whether it was shown is its s1 load mark: targets '' with a lastGood
+//      (a load that succeeded), so the state needs no file or table of its
+//      own and survives a restart. In `measure` and `off`, never. A
 //      dam's s1 key that may not be loaded is withheld instead: its rows are
 //      removed (app_dam_s1_withhold, 283; none on a first look) and its mark
 //      written with targets S1_WITHHELD, without reading the file. The mark's
@@ -43,6 +47,9 @@
 //      the dam starts or stops passing, so a dam that stops passing loses its
 //      radar on the next tick, and one that passes again is reloaded from the
 //      file. Withholding reads no file, so it has its own cap (LOADS_PER_TICK).
+//      Besides the keys dams/s1-status.json lists, every s1 load mark still
+//      shown is checked too, so radar loaded before is withheld even when the
+//      status file is gone (or no longer lists the dam).
 //      An agreement report that can't be read leaves s1 alone that tick.
 // A failure is logged and left to the next tick; the rest of the tick goes on.
 // The log names counts only, never a dam, uid or project.
@@ -175,6 +182,9 @@ export function targetsDigest(dams: readonly Pick<DamOutlineRow, 'feature_id' | 
 
 const ms = (d: Date | null | undefined) => (d ? new Date(d).getTime() : -Infinity);
 
+/** Whether a dam's radar was shown at the worker's last decision: its s1 mark's last success loaded it (targets ''). */
+const s1Shown = (mark: LoadMark | undefined): boolean => !!mark && mark.targets === '' && mark.last_good !== null;
+
 const writeMark = (db: Db, source: ObservationSource, key: string, lastGood: string | null, fetchedAt: string | null, targets: string, failed: boolean) =>
 	db.query('SELECT applied FROM app_dam_load_mark_write($1, $2, $3, $4, $5, $6)', [source, key, lastGood, fetchedAt, targets, failed]);
 
@@ -277,7 +287,8 @@ export async function runDamsTick(
 		try {
 			const mode = damS1Mode(env);
 			if (mode === 'on') {
-				const passing = s1Passing(await readAgreement(store));
+				const shown = new Set([...marks.values()].filter((m) => m.source === 's1' && s1Shown(m)).map((m) => m.key));
+				const passing = s1Passing(await readAgreement(store), shown);
 				s1Loads = (key) => passing.has(key);
 			} else s1Loads = () => false;
 		} catch (err) {
@@ -292,6 +303,19 @@ export async function runDamsTick(
 			if (source === 's1' && !s1Loads) continue;
 			try {
 				const status = await readStatus(store, source);
+				if (source === 's1') {
+					// Radar shown before for a dam the status no longer lists (the file deleted, or the dam dropped from it):
+					// withheld by its mark alone when it may not be shown now. One that may stays as it is: there is no file to read.
+					const listed = (key: string) => {
+						const s = status && Object.hasOwn(status.perKey, key) ? status.perKey[key] : undefined;
+						return !!s?.lastGood && !Number.isNaN(Date.parse(s.lastGood));
+					};
+					for (const mark of marks.values()) {
+						if (mark.source !== 's1' || !s1Shown(mark) || listed(mark.key) || s1Loads!(mark.key)) continue;
+						const lastGood = new Date(mark.last_good!).toISOString();
+						withhold.push({ source, key: mark.key, lastGood, targets: S1_WITHHELD, mark });
+					}
+				}
 				for (const [key, s] of Object.entries(status?.perKey ?? {})) {
 					if (!s.lastGood || Number.isNaN(Date.parse(s.lastGood))) continue;
 					// A Waterbodies file reaches the dams matched to its uid only: none, nothing to load.
