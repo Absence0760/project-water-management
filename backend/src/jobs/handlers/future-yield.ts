@@ -1,5 +1,5 @@
 // `future_yield`: § 8 of an application's evidence report (issue #621 slice
-// 4, 279_future_yield; docs/evidence-pack.md § Future yield). As the editor
+// 4, 280_future_yield; docs/evidence-pack.md § Future yield). As the editor
 // who queued it, under RLS: the pair checked again (futurePair), each climate
 // model's monthly aggregates read from the copy over the catchment's 0.25°
 // cells, the factor table worked out (engine buildFutureFactorTable, round

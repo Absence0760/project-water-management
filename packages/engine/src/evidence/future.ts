@@ -10,7 +10,7 @@
 // the historical value (the same inputs, no op) and, per SSP and horizon, the
 // median and the range across models: never one number.
 //
-// Pure: no I/O. The backend's `future_yield` job (279_future_yield) runs it
+// Pure: no I/O. The backend's `future_yield` job (280_future_yield) runs it
 // once and stores the result; the report freezes that result, factor table
 // included, so reproduce:pack runs every pair again from the frozen factors
 // (bundle.ts `climate:delta`, checkFutureYield) with nothing but the bundle.

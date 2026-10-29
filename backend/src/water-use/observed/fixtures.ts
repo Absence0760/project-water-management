@@ -49,15 +49,28 @@ export function waporFixtureDekads(spec: WaporFixtureSpec, today: string): strin
 	return out.reverse();
 }
 
+/** What the fixture's ETa needs of a dekad, worked out once for all its pixels: whether it is a cloudy one, and its season. */
+function waporFixtureDekad(spec: WaporFixtureSpec, dekad: string): { cloudy: boolean; season: number } {
+	const day = toEpochDay(dekad);
+	const index = Math.round(day / 10);
+	const { mean, amplitude, peakDayOfYear } = spec.eta;
+	const doy = day - toEpochDay(`${dekad.slice(0, 4)}-01-01`) + 5;
+	return {
+		cloudy: spec.cloud.everyNthDekad > 0 && index % spec.cloud.everyNthDekad === 0,
+		season: mean + amplitude * Math.cos((2 * Math.PI * (doy - peakDayOfYear)) / 365.25)
+	};
+}
+
+function waporFixturePixel(spec: WaporFixtureSpec, at: { cloudy: boolean; season: number }, lon: number, lat: number, col: number): number | null {
+	if (at.cloudy && col % (spec.cloud.bandPx * 4) < spec.cloud.bandPx) return null;
+	const { wavelengthDeg, spatial } = spec.eta;
+	const field = 1 + spatial * (0.5 * Math.sin((2 * Math.PI * lon) / wavelengthDeg[0]) + 0.5 * Math.cos((2 * Math.PI * lat) / wavelengthDeg[1]));
+	return Math.max(0, at.season * field);
+}
+
 /** The fixture's ETa (mm/day) at a pixel centre on a dekad, or null for cloud (nodata). */
 export function waporFixtureValue(spec: WaporFixtureSpec, dekad: string, lon: number, lat: number, col: number): number | null {
-	const index = Math.round(toEpochDay(dekad) / 10);
-	if (spec.cloud.everyNthDekad > 0 && index % spec.cloud.everyNthDekad === 0 && col % (spec.cloud.bandPx * 4) < spec.cloud.bandPx) return null;
-	const { mean, amplitude, peakDayOfYear, wavelengthDeg, spatial } = spec.eta;
-	const doy = toEpochDay(dekad) - toEpochDay(`${dekad.slice(0, 4)}-01-01`) + 5;
-	const season = mean + amplitude * Math.cos((2 * Math.PI * (doy - peakDayOfYear)) / 365.25);
-	const field = 1 + spatial * (0.5 * Math.sin((2 * Math.PI * lon) / wavelengthDeg[0]) + 0.5 * Math.cos((2 * Math.PI * lat) / wavelengthDeg[1]));
-	return Math.max(0, season * field);
+	return waporFixturePixel(spec, waporFixtureDekad(spec, dekad), lon, lat, col);
 }
 
 export function waporFixture(today: () => string, spec: WaporFixtureSpec = loadWaporFixture()) {
@@ -76,8 +89,9 @@ export function waporFixture(today: () => string, spec: WaporFixtureSpec = loadW
 	}
 	const cache = new Map<string, Uint8Array>();
 
-	const make = (dekad: string): Uint8Array =>
-		writeCog({
+	const make = (dekad: string): Uint8Array => {
+		const at = waporFixtureDekad(spec, dekad);
+		return writeCog({
 			width,
 			height,
 			sampleType: 'int16',
@@ -90,7 +104,7 @@ export function waporFixture(today: () => string, spec: WaporFixtureSpec = loadW
 					const lat = originLat - (tr * tile + r + 0.5) * px;
 					for (let c = 0; c < tile; c++) {
 						const col = tc * tile + c;
-						const v = waporFixtureValue(spec, dekad, originLon + (col + 0.5) * px, lat, col);
+						const v = waporFixturePixel(spec, at, originLon + (col + 0.5) * px, lat, col);
 						t[r * tile + c] = v === null ? NODATA : Math.min(32767, Math.round(v / WAPOR_SCALE));
 					}
 				}
@@ -108,6 +122,7 @@ export function waporFixture(today: () => string, spec: WaporFixtureSpec = loadW
 			tableGap: 0,
 			scaleOffset: { scale: WAPOR_SCALE, offset: 0 }
 		});
+	};
 
 	return {
 		/** The file at a WaPOR URL, or null (a 404) for any other URL or a dekad not served. */

@@ -1,4 +1,4 @@
--- 279_future_yield — the evidence pack's § 8, Future yield (issue #621 slice
+-- 280_future_yield — the evidence pack's § 8, Future yield (issue #621 slice
 -- 4; docs/evidence-pack.md § Future yield, docs/data-model.md § Future
 -- yield, docs/api.md § Future yield).
 --
@@ -61,7 +61,7 @@ CREATE TABLE future_yield (
 	CHECK (baseline_run_id <> application_run_id)
 );
 COMMENT ON TABLE future_yield IS
-	'The evidence pack''s § 8 Future yield of one application run and its baseline (279_future_yield, issue #621): an application''s two runs re-run under each climate model''s monthly change factors, written by a future_yield job as its acting user. Projections, not predictions.';
+	'The evidence pack''s § 8 Future yield of one application run and its baseline (280_future_yield, issue #621): an application''s two runs re-run under each climate model''s monthly change factors, written by a future_yield job as its acting user. Projections, not predictions.';
 
 -- Covering indexes for every foreign key (catalogue.db.test.ts); the first also serves the report's lookup (newest first per pair).
 CREATE INDEX future_yield_application_idx ON future_yield (application_run_id, baseline_run_id, created_at DESC);

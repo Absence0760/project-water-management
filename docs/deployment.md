@@ -2658,7 +2658,7 @@ One Terraform variable, off by default:
   default 21, at least 10, for two days, or missing). Its history goes back
   to 2019 at one request a second per host, so a dam's first backfill takes
   a few days of hourly runs. Turn it on with a backend release that has the
-  pass and migration 278 (the worker's list gives each dam's newest `s2`
+  pass and migration 279 (the worker's list gives each dam's newest `s2`
   row).
 - **`dam_s2_recency_alarm_days`** (default 21, at least 10).
 
@@ -2783,7 +2783,7 @@ fetches, while the heartbeat stays green.
    offset. The pass refuses a file without that scale (`format` in the
    log's `failedCodes`) rather than guess the units (docs/followups.md §
    Future climate, observed ET and Sentinel dam views).
-2. Deploy a backend release with migrations 276 and 280 and the
+2. Deploy a backend release with migrations 277 and 281 and the
    `et-dekadal` mode, then apply `et_observations_enabled = true` (a
    `terraform plan` first, and the operator's go-ahead for the apply), once
    at least one unit has farm parcels on a project's map: with none, the

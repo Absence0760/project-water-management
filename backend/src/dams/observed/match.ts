@@ -128,7 +128,7 @@ export interface DamOutlineRow {
 	matched_at: Date | null;
 	waterbodies_newest: string | null;
 	wofs_newest: string | null;
-	/** The newest Sentinel-2 and Sentinel-1 rows (278). */
+	/** The newest Sentinel-2 and Sentinel-1 rows (279). */
 	s2_newest: string | null;
 	s1_newest: string | null;
 }

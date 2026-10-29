@@ -1,6 +1,6 @@
 // Observed actual ET against a unit's modelled irrigation use (issue #623
 // step 5; water-use/observed/routes.ts), end to end against Postgres with the
-// observations loaded the way the worker loads them (276's
+// observations loaded the way the worker loads them (277's
 // app_et_observation_load):
 //  - a viewer reads a unit's dekads paired with the newest run's crop ET,
 //    effective rain and irrigation reaching the crop, summed over the same

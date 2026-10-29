@@ -1,4 +1,4 @@
-// § 8 Future yield end to end (issue #621 slice 4, 279_future_yield): the
+// § 8 Future yield end to end (issue #621 slice 4, 280_future_yield): the
 // switch (FUTURE_YIELD), the request's checks, the `future_yield` job reading
 // the committed synthetic NEX-GDDP-CMIP6 copy (invented models SYN-A..C,
 // backend/fixtures/mirror/cmip6/) over the catchment's 0.25° cells, the stored

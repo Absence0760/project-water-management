@@ -148,7 +148,7 @@ describe('the worker’s functions', () => {
 		});
 	});
 
-	it('loads Sentinel-2 and Sentinel-1 rows (277) as WOfS’s: into the dam named, unless it changed after the fetch, each source its own row', async () => {
+	it('loads Sentinel-2 and Sentinel-1 rows (278) as WOfS’s: into the dam named, unless it changed after the fetch, each source its own row', async () => {
 		const before = new Date(Date.now() - 60_000);
 		await withoutUser(async (db) => {
 			for (const source of ['s2', 's1']) {

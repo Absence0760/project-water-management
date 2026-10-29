@@ -1,4 +1,4 @@
--- 278_dam_outlines_sentinel — the dams tick's list of traced dams also gives
+-- 279_dam_outlines_sentinel — the dams tick's list of traced dams also gives
 -- each dam's newest Sentinel-2 (s2) and Sentinel-1 (s1) observation, so the
 -- wanted list can tell those passes where a dam's rows end, as it does WOfS
 -- (issue #624 step 4; docs/data-model.md § Dam observations,
@@ -51,6 +51,6 @@ CREATE FUNCTION app_dam_outlines()
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_outlines() IS
-	'Every traced dam polygon with its waterbody match and newest observation per source, waterbodies, wofs, s2 and s1 (261, 278), for the worker (no user) only.';
+	'Every traced dam polygon with its waterbody match and newest observation per source, waterbodies, wofs, s2 and s1 (261, 279), for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_outlines() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_outlines() TO water_app;

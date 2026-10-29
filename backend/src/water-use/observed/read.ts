@@ -1,7 +1,7 @@
 // Reading a unit's observed actual ET and the run to compare it with (issue
 // #623 step 5; docs/api.md § Observed actual ET). Every query runs in the
 // caller's withUser transaction, so RLS decides what is read: et_observation
-// (276) lets a project's viewers read it, and a farmer only their own units'.
+// (277) lets a project's viewers read it, and a farmer only their own units'.
 import type { Db } from '../../db/tx.js';
 import type { EtObservationIn, EtSource, ModelledIn } from './compare.js';
 import { SSEBOP_ATTRIBUTION, WAPOR_ATTRIBUTION } from './upstream.js';

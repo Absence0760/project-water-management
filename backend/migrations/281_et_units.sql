@@ -1,14 +1,14 @@
--- 280_et_units — what the observed ET tick reads to write the WaPOR pass's
+-- 281_et_units — what the observed ET tick reads to write the WaPOR pass's
 -- wanted list (issue #623 step 4; docs/architecture.md § Observed actual ET).
 --
--- 276 gave the worker its loader and load marks but no way to list the units
+-- 277 gave the worker its loader and load marks but no way to list the units
 -- to observe: the worker runs with no user (245 mirror_worker_context), and
 -- both map_feature (a project's) and cropland_cell_reference (173: any signed-in
 -- user) need one under RLS. So, two worker-only reads, like 261's
 -- app_dam_outlines and app_waterbody_candidates:
 --  * app_et_units(): every unit (a node of kind 'farm') in any project with
 --    at least one farm parcel, its parcels' polygons as one jsonb array, and
---    when its parcels last changed (276's load mark for the source asked), so
+--    when its parcels last changed (277's load mark for the source asked), so
 --    the wanted list changes whenever the parcels do, even back to the same
 --    shape (each change drops the unit's rows, so the pass must hand over a
 --    file made after it). At most 5000 units, by unit id.
@@ -48,7 +48,7 @@ CREATE FUNCTION app_et_units(p_source text)
 	END
 	$$;
 COMMENT ON FUNCTION app_et_units(text) IS
-	'Every unit with farm parcels, its parcels'' polygons and when they last changed (280, issue #623): the ET tick''s wanted list, for the worker (no user) only.';
+	'Every unit with farm parcels, its parcels'' polygons and when they last changed (281, issue #623): the ET tick''s wanted list, for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_et_units(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_et_units(text) TO water_app;
 
@@ -82,6 +82,6 @@ CREATE FUNCTION app_et_cropland(p_w double precision, p_s double precision, p_e 
 	END
 	$$;
 COMMENT ON FUNCTION app_et_cropland(double precision, double precision, double precision, double precision) IS
-	'The default land-cover dataset''s cropland cells in a box of at most 1° (280, issue #623): the WaPOR pass''s cropland mask, for the worker (no user) only.';
+	'The default land-cover dataset''s cropland cells in a box of at most 1° (281, issue #623): the WaPOR pass''s cropland mask, for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_et_cropland(double precision, double precision, double precision, double precision) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_et_cropland(double precision, double precision, double precision, double precision) TO water_app;

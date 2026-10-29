@@ -3569,7 +3569,7 @@ export interface RegisterDamProposal {
 
 /**
  * Where a dam observation comes from (backend dams/observed/compare.ts): 's2' and 's1' (Sentinel-2, Sentinel-1 radar)
- * since 277, issue #624. A day several saw clearly goes to the sharpest (SOURCE_PRECEDENCE: s2, wofs, waterbodies, s1),
+ * since 278, issue #624. A day several saw clearly goes to the sharpest (SOURCE_PRECEDENCE: s2, wofs, waterbodies, s1),
  * and radar is never alone the reason for a flag.
  */
 export type ObservedSource = 'waterbodies' | 'wofs' | 's2' | 's1';

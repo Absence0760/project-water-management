@@ -161,7 +161,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'mfa_reset.user_id': { section: 'twoStepSignInResets' },
 	'mfa_reset_quota.user_id': { excluded: 'when the person asked for a reset, counted for the daily cap only; gone after a day (the request itself is in twoStepSignInResets)' },
 	'yield_result.created_by': { excluded: 'the project’s yield result; its maker only' },
-	// § 8 of an evidence report (279): the project's result, as yield_result.
+	// § 8 of an evidence report (280): the project's result, as yield_result.
 	'future_yield.created_by': { excluded: 'the project’s future yield result; its maker only' }
 };
 

@@ -1,5 +1,5 @@
 // The worker's side of observed actual ET (issue #623 step 4; handover.ts
-// for the files, 276_et_observation.sql, 280_et_units.sql). Not a job:
+// for the files, 277_et_observation.sql, 281_et_units.sql). Not a job:
 // runTick (jobs/runner.ts) calls runEtTick once per tick, with no user,
 // beside the dams tick.
 //
@@ -24,7 +24,7 @@
 //      (et_observation_load_mark, per source and unit: the status's lastGood
 //      it was checked against, the file's fetchedAt), so a restarted or cold
 //      worker repeats nothing. A unit is due when its status lastGood is newer
-//      than its mark's (276's parcel trigger clears the mark, so a unit whose
+//      than its mark's (277's parcel trigger clears the mark, so a unit whose
 //      parcels changed is due at once). A due unit's file is read and loaded
 //      when its fetchedAt is newer than the mark's; the loader refuses a file
 //      made from parcels older than their last change (the file's parcelsAt),

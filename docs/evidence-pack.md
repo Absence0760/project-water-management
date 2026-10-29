@@ -75,7 +75,7 @@ prior when the baseline's parameters came from it (report format
 zones](#calibration-zones), [§ The regional prior in
 § 3](#the-regional-prior-in--3)); and § 8's future yield of an application
 under each climate model's monthly change factors (report format
-`evidence-23`, issue #621 slice 4, 2026-10-29, 279_future_yield;
+`evidence-23`, issue #621 slice 4, 2026-10-29, 280_future_yield;
 [§ Future yield](#future-yield)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
@@ -575,7 +575,7 @@ models (SYN-A..C), so every dev, CI and e2e report shows it. The dam is the
 application's only own unit with a dam above 0 m³, or the one the request
 names.
 
-**Where the numbers come from.** A `future_yield` job (279_future_yield,
+**Where the numbers come from.** A `future_yield` job (280_future_yield,
 `backend/src/jobs/handlers/future-yield.ts`), queued by an editor
 (`POST …/runs/:runId/future-yield`, [api.md § Future yield](./api.md#future-yield)),
 reads the copy's `cmip6/<model>/<scenario>` monthly aggregates
@@ -626,7 +626,7 @@ manifest has a § 8 result signs statement `pack-signoff-2`, which adds the
 `futureYield` confirmation (*"I have read § 8 Future yield, its caveat and
 its change factors…"*, `liability/signoff.ts`); a pack without § 8 keeps
 `pack-signoff-1` word for word. The specialist reads no pack row, so
-`app_specialist_pack` (279) says whether the manifest has § 8.
+`app_specialist_pack` (280) says whether the manifest has § 8.
 
 **Who reads it.** A viewer and above, and the applicant on their own
 application (`app_future_yield_own_run`); no farmer. A viewer kept from the

@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { writeCog } from '../../../raster/cogWrite.js';
 import { toUtm, utmEpsgFor } from '../../../raster/utm.js';
-import { fixtureWet, level, loadWofsFixture, type WofsFixtureSpec } from '../wofs/fixtures.js';
+import { level, loadWofsFixture, type WofsFixtureSpec } from '../wofs/fixtures.js';
 import { S2_C1_COLLECTION, S2_C1_S3_BASE, WOFS_STAC_SEARCH } from '../wofs/stac.js';
 
 const FIXTURE = fileURLToPath(new URL('../../../../fixtures/feeds/s2-sample.json', import.meta.url));
@@ -155,12 +155,17 @@ export function s2Fixture(today: () => string, spec: S2FixtureSpec = loadS2Fixtu
 				const lvl = level(water, day);
 				const values = band === 'SCL' ? new Uint8Array(n * n) : new Uint16Array(n * n);
 				const field = band === 'B03' ? 'green' : band === 'B08' ? 'nir' : 'swir';
+				// fixtureWet's field is a sine of x plus a cosine of y: each worked out once a column and once a row,
+				// in fixtureWet's own expression, so the scene is the same to the bit (a per-pixel call was most of a run's time).
+				const [l1, l2] = water.water.wavelengthM;
+				const sinX = Float64Array.from({ length: n }, (_, c) => Math.sin((2 * Math.PI * (originX + (c + 0.5) * px)) / l1));
 				for (let r = 0; r < n; r++) {
 					const y = originY - (r + 0.5) * px;
+					// WOfS's field reads the NORTH code's northing.
+					const cosY = Math.cos((2 * Math.PI * (y - FALSE_NORTHING)) / l2);
 					for (let c = 0; c < n; c++) {
 						const x = originX + (c + 0.5) * px;
-						// WOfS's field reads the NORTH code's northing.
-						const wet = fixtureWet(water, x, y - FALSE_NORTHING, lvl);
+						const wet = 0.5 + 0.25 * sinX[c]! + 0.25 * cosY < lvl;
 						values[r * n + c] = band === 'SCL' ? s2FixtureScl(spec, day, x, wet) : spec.reflectance[wet ? 'water' : 'land'][field];
 					}
 				}

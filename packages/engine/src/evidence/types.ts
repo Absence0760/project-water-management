@@ -456,7 +456,7 @@ export interface EvidenceInput {
 	/** The project's traced dams with their WOfS rows in the baseline's period (261 dam_observation, under the reader's RLS), for the observed wet days (evidence-21); absent or [] = none. */
 	damObservations?: EvidenceDamObservationInput[] | null;
 	/**
-	 * § 8's stored result for these two runs (279 future_yield, under the reader's RLS; evidence-23):
+	 * § 8's stored result for these two runs (280 future_yield, under the reader's RLS; evidence-23):
 	 * `{ notRun: true }` when FUTURE_YIELD is on and none matches; absent or null when it is off, or for baseline evidence.
 	 */
 	futureYield?: EvidenceFutureYieldInput | null;

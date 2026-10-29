@@ -401,7 +401,7 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 		effect: async (id) => (await asOwner('SELECT count(*)::int AS n FROM yield_result WHERE run_id = $1', [id]))[0].n
 	},
 	future_yield: {
-		// § 8 (279): an application on B's run (the farm's dam its own) over a boundary inside the synthetic copy, with FUTURE_YIELD on.
+		// § 8 (280): an application on B's run (the farm's dam its own) over a boundary inside the synthetic copy, with FUTURE_YIELD on.
 		async queue(owner, b) {
 			vi.stubEnv('FUTURE_YIELD', 'on');
 			const box = [[21.3, -33.7], [21.4, -33.7], [21.4, -33.6], [21.3, -33.6], [21.3, -33.7]];

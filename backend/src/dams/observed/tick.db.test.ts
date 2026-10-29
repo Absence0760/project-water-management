@@ -169,7 +169,7 @@ describe('the dams tick', () => {
 		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === none)!.since).toBe(after);
 	});
 
-	it('loads Sentinel-2 and Sentinel-1 files as their own sources, and tells each pass where its own rows end (issue #624, 278)', async () => {
+	it('loads Sentinel-2 and Sentinel-1 files as their own sources, and tells each pass where its own rows end (issue #624, 279)', async () => {
 		const id = dams.get('Klipdrift dam')!;
 		await runDamsTick({ env: env(), store: store() });
 		// Before any Sentinel row: no sinceBy (each pass starts from its own backfill).
@@ -206,7 +206,7 @@ describe('the dams tick', () => {
 		// Another dam with no Sentinel row lists none.
 		const other = [...dams.values()].find((d) => d !== id)!;
 		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === other)!.sinceBy).toBeUndefined();
-		// The worker's list itself (278): the newest row per source, the Sentinel ones included.
+		// The worker's list itself (279): the newest row per source, the Sentinel ones included.
 		const row = await withoutUser(async (db) =>
 			(await db.query<{ s2: string; s1: string }>(`SELECT to_char(s2_newest, 'YYYY-MM-DD') AS s2, to_char(s1_newest, 'YYYY-MM-DD') AS s1 FROM app_dam_outlines() WHERE feature_id = $1`, [id])).rows[0]
 		);

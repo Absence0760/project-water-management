@@ -2453,7 +2453,7 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   | `crop` | only the crops planted on their linked farms |
   | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
   | `farm_link` | their own links |
-  | `et_observation` | the observed actual ET of their linked units (276) |
+  | `et_observation` | the observed actual ET of their linked units (277) |
   | `run_publication` | every publication of the project (the notice, counts-only `catchment_view`; 022) |
   | `publication_farm` | the projections of their linked farms (022) |
   | `run_series` | their linked farms' farm-allowlist series (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`) of the **current** publication's run, nothing else (022) |
@@ -3835,7 +3835,7 @@ No job table of its own: `job` holds status, progress and errors.
   (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
   (`yield/contributor.db.test.ts`).
 
-### Future yield (279_future_yield.sql)
+### Future yield (280_future_yield.sql)
 
 § 8 of an application's evidence report (issue #621 slice 4,
 [evidence-pack.md § Future yield](./evidence-pack.md#future-yield)), written
@@ -3856,7 +3856,7 @@ Insert and delete only (no `UPDATE` grant); the job keeps the newest 3 per
 pair. RLS: viewers and above read; an applicant reads the rows of their own
 application's runs (`app_future_yield_own_run`, SECURITY DEFINER); editors
 insert and delete; farmers read none. Covering index on every foreign key.
-279 also redefines `app_specialist_pack` (latest 188) to say whether a pack's
+280 also redefines `app_specialist_pack` (latest 188) to say whether a pack's
 manifest has a § 8 result (its specialist's statement is then
 `pack-signoff-2`).
 
@@ -4935,7 +4935,7 @@ A gap row is a row like any other: DWS listing a day with no value (170
   the live path writes, waiting for days the store doesn't hold, the
   tick's handover); `ingest/dws.test.ts`; `scripts/import-dws.test.ts`.
 
-### Dam observations (261_dam_observation.sql, 277_dam_observation_sentinel.sql, 278_dam_outlines_sentinel.sql)
+### Dam observations (261_dam_observation.sql, 278_dam_observation_sentinel.sql, 279_dam_outlines_sentinel.sql)
 
 What satellites saw of each traced dam (issue #604 R5,
 [architecture.md § Dam observations](./architecture.md#dam-observations)):
@@ -4943,7 +4943,7 @@ the wet area on a date, per source, in our own store. Two sources, both
 Digital Earth Africa (CC BY 4.0): **`waterbodies`**, DE Africa Waterbodies'
 per-waterbody series, for a dam matched to one waterbody; and **`wofs`**,
 Water Observations from Space summed inside the dam's own outline, for
-every traced dam (R5-C). Since 277 (issue #624) two more are allowed,
+every traced dam (R5-C). Since 278 (issue #624) two more are allowed,
 Copernicus Sentinel data processed by Digital Earth Africa and classified by
 us inside the dam's own outline as WOfS is: **`s2`** (Sentinel-2 L2A
 Collection 1, 10 m optical) and **`s1`** (Sentinel-1 RTC radar, a secondary
@@ -4984,10 +4984,10 @@ fetcher's passes leave in the mirror bucket; no route writes them.
     oldest traced first, `created_at` then `id`, so past the cap the most
     recently traced wait; the tick logs `dams_outline_cap` at the cap),
     with its match, `match_stale`, `matched_at` and the newest observation
-    date per source (`waterbodies_newest`, `wofs_newest`, and since 278
+    date per source (`waterbodies_newest`, `wofs_newest`, and since 279
     `s2_newest` and `s1_newest`): the match's input and the wanted list's
     outlines (a dam's `since`, and its `sinceBy` for the Sentinel sources).
-    278 dropped and created it again from 261's definition with the two
+    279 dropped and created it again from 261's definition with the two
     columns added (a function's result columns can't change in place),
     its grant to `water_app` restated.
   - `app_waterbody_candidates(w, s, e, n)`: the waterbodies whose box meets
@@ -5033,7 +5033,7 @@ fetcher's passes leave in the mirror bucket; no route writes them.
   newer file);
   `catalogue.db.test.ts`.
 
-### Observed actual ET (276_et_observation.sql)
+### Observed actual ET (277_et_observation.sql)
 
 Satellite actual evapotranspiration (ETa) over each unit's farm parcels,
 per dekad, in our own store (issue #623): the independent check on a unit's
@@ -5093,16 +5093,16 @@ step 5). Nothing here feeds the engine.
     (or found already loaded) as of `last_good`, clearing a failure; or
     `failed`, which sets `failed_at` only. `parcels_changed_at` is left as it
     is; a unit that is gone records nothing (`applied = false`).
-  - `app_et_units(source)` (280): every unit with a `farm_parcel` polygon,
+  - `app_et_units(source)` (281): every unit with a `farm_parcel` polygon,
     in any project, with its polygons as one jsonb array and that source's
     `parcels_changed_at`, at most 5000, by unit id: the tick's wanted list.
-  - `app_et_cropland(w, s, e, n)` (280): the default land-cover dataset's
+  - `app_et_cropland(w, s, e, n)` (281): the default land-cover dataset's
     cropland cells (real before synthetic, then the newest load) in a box of
     at most 1° a side, at most 200 000, with the dataset's label and cell
     size on each row; none when no dataset is loaded. The worker can't read
     `cropland_cell_reference` itself (its policy needs a user).
 - **Tests**: `water-use/observed/tick.db.test.ts` (the tick end to end: the
-  wanted list from 280's functions, a load, a revision, a refused file
+  wanted list from 281's functions, a load, a revision, a refused file
   after a redraw, the marks, the cap); `water-use/observed/observations.security.db.test.ts` (RLS with
   positive controls: a viewer, each farmer's own unit, nothing across
   projects or with no user; refused writes; the worker-only functions and

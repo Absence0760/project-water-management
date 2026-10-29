@@ -4,7 +4,7 @@
 //   GET /projects/:id/dams/observations[?run=<runId>][&node=<nodeId>]   viewer
 //
 // Each unit's dam polygons, their observed wet area from Digital Earth Africa
-// (dam_observation, 261; Sentinel-2 and Sentinel-1 since 277, with
+// (dam_observation, 261; Sentinel-2 and Sentinel-1 since 278, with
 // Copernicus's credit for their years, `sentinelCredit`) and the run's modelled dam area on the same days,
 // flagged (./compare.ts). The run is `run` when given, else the project's
 // newest, the one the Dams tab shows. Read only, under the caller's RLS.

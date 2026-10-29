@@ -1,5 +1,5 @@
 // The handover between the worker and the fetcher Lambda for observed actual
-// ET (issue #623 step 4; 276_et_observation.sql, 280_et_units.sql,
+// ET (issue #623 step 4; 277_et_observation.sql, 281_et_units.sql,
 // docs/architecture.md § Observed actual ET). The dam observations' pattern
 // (dams/observed/handover.ts): the fetcher has internet but no database, the
 // worker has the database but no internet, and both reach the mirror bucket
@@ -28,7 +28,7 @@ export interface ParcelsGeometry {
 	coordinates: Position[][][];
 }
 
-/** The sources with a pass. SSEBop (276 allows it) is #623 step 6, only if FAO declines. */
+/** The sources with a pass. SSEBop (277 allows it) is #623 step 6, only if FAO declines. */
 export type EtSource = 'wapor';
 export const ET_SOURCES: readonly EtSource[] = ['wapor'];
 
@@ -44,7 +44,7 @@ export interface WantedUnit {
 	/** The unit's node id. */
 	unitKey: string;
 	parcels: ParcelsGeometry;
-	/** When the unit's parcels last changed (276's load mark), so a change back to the same shape still changes the list. */
+	/** When the unit's parcels last changed (277's load mark), so a change back to the same shape still changes the list. */
 	changedAt?: string;
 	/** Absent when no land cover is loaded there: the mean is then over the whole parcels ('parcel'). */
 	cropland?: WantedCropland;
@@ -72,7 +72,7 @@ export interface EtFile {
 	unitKey: string;
 	/** When this file was written: the worker reloads it when this is newer than what it loaded. */
 	fetchedAt: string;
-	/** The wanted list's generatedAt the parcels came from: the loader's p_fetched_at (276 refuses rows older than a parcel change). */
+	/** The wanted list's generatedAt the parcels came from: the loader's p_fetched_at (277 refuses rows older than a parcel change). */
 	parcelsAt: string;
 	/** The product version (WAPOR-3). */
 	version: string;
@@ -122,12 +122,12 @@ export const MAX_PARCEL_POLYGONS = 1000;
 const UNIT_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** A real calendar date (2023-02-31 is not one), ISO. */
 const isCalendarDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
-/** A dekad's first day, from 2012 (SSEBop's start; 276's bound) to today (UTC). */
+/** A dekad's first day, from 2012 (SSEBop's start; 277's bound) to today (UTC). */
 export const isDekadStart = (d: string) => isCalendarDate(d) && ['01', '11', '21'].includes(d.slice(8)) && d >= '2012-01-01';
 const Dekad = z.string().refine(isDekadStart, 'not a dekad’s first day').refine((d) => d <= new Date().toISOString().slice(0, 10), 'in the future');
 const IsoTime = z.string().datetime({ offset: true });
 const Printable = (max: number) => z.string().min(1).max(max).regex(/^[!-~]+$/);
-/** As fileTag keeps a tag and 276 bounds it: printable ASCII, no edge spaces, at most 200. */
+/** As fileTag keeps a tag and 277 bounds it: printable ASCII, no edge spaces, at most 200. */
 const Tag = z.string().min(1).max(200).regex(/^[!-~](?:[ -~]*[!-~])?$/);
 const Lon = z.number().finite().min(-180).max(180);
 const Lat = z.number().finite().min(-90).max(90);

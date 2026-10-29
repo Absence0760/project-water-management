@@ -1,7 +1,7 @@
 // The Sentinel-2 pass: DE Africa's Sentinel-2 L2A Collection 1 scenes
 // (s2_l2a_c1), classified and summed inside each traced dam's outline (s2.ts),
 // into the mirror bucket for the worker to load into dam_observation as
-// source 's2' (issue #624 step 4; 277_dam_observation_sentinel.sql,
+// source 's2' (issue #624 step 4; 278_dam_observation_sentinel.sql,
 // docs/architecture.md § Dam observations → Sentinel-2). The fetcher runs it
 // in its `dams-weekly` mode after the WOfS pass, only with
 // DAM_OBSERVATIONS_S2=on (handover.ts damSourceOn; infra/dam_observations.tf

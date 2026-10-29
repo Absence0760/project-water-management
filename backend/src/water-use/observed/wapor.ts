@@ -41,7 +41,7 @@ export const WAPOR_FIRST_DEKAD = '2018-01-01';
 export const WAPOR_SCALE = 0.1;
 /** What a WaPOR v3 dekad is (raster/cog.ts's header): one int16 band on EPSG:4326, with GDAL's band scale. */
 export const WAPOR_ACCEPT: CogAccept = { sampleTypes: ['int16'], crs: ['geographic'], scaleOffset: true };
-/** The highest plausible actual ET, mm/day (276's bound on a mean). */
+/** The highest plausible actual ET, mm/day (277's bound on a mean). */
 export const MAX_ETA_MM_DAY = 50;
 
 // --- Dekads ---------------------------------------------------------------------------

@@ -2936,8 +2936,8 @@ In short:
     is refused outside 0–30 mm a day (`feeds/fromMirrorEt0.ts`) before a feed
     writes it. The fetcher refuses an `agera5_et0` request: no per-feed path
     reaches either upstream.
-  - **Observed actual ET** (issue #623; `276_et_observation.sql`,
-    `280_et_units.sql`, architecture.md § Observed actual ET). `et_observation` holds a unit's satellite
+  - **Observed actual ET** (issue #623; `277_et_observation.sql`,
+    `281_et_units.sql`, architecture.md § Observed actual ET). `et_observation` holds a unit's satellite
     actual ET per dekad: a project's viewers read it, a farmer or contributor
     only their own linked units' (`et_observation_select_farmer`, through
     `app_farm_nodes`), and `water_app` holds SELECT only. Only the worker,

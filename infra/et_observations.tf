@@ -1,7 +1,7 @@
 # Observed actual ET (issue #623 step 4; docs/architecture.md § Observed
 # actual ET, docs/deployment.md § Observed actual ET): FAO WaPOR v3's dekadal
 # actual evapotranspiration averaged over each unit's farm parcels, into our
-# own store (et_observation, migration 276), the independent check on a
+# own store (et_observation, migration 277), the independent check on a
 # unit's modelled irrigation use.
 #
 # The dam observations' out-of-VPC handover (dam_observations.tf): the worker

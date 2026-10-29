@@ -1,6 +1,6 @@
 // The WaPOR pass: FAO's dekadal actual ET averaged over each unit's parcels,
 // into the mirror bucket for the worker to load into et_observation (issue
-// #623 step 4; 276_et_observation.sql, docs/architecture.md § Observed
+// #623 step 4; 277_et_observation.sql, docs/architecture.md § Observed
 // actual ET). The fetcher Lambda runs it in its `et-dekadal` mode
 // (lambda-fetcher.ts), outside the VPC; the handover is handover.ts's:
 //
@@ -42,7 +42,7 @@
 // read again until its parcels change.
 //
 // A unit whose parcels or cropland changed (its hash in the state file
-// differs) starts again: its file is rewritten from scratch, as 276's
+// differs) starts again: its file is rewritten from scratch, as 277's
 // trigger drops its rows. Otherwise the file keeps every row read, never cut
 // back, and is rewritten only when a row is new or changed, or the wanted
 // list it was made from changed (parcelsAt, which the loader checks against

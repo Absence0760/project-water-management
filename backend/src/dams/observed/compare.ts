@@ -6,7 +6,7 @@
 // stand for (m², start of day: the survey curve, `damCurve`, or the power law
 // from `damAreaFullM2`, as the engine worked it out), the observed side the
 // `dam_observation` rows (261, R5-A: Digital Earth Africa Waterbodies and WOfS;
-// 277, issue #624: Sentinel-2 and Sentinel-1 radar inside the dam's outline).
+// 278, issue #624: Sentinel-2 and Sentinel-1 radar inside the dam's outline).
 // Nothing here changes the engine or reads anything but its output.
 //
 // A unit's dam is its composite dam (all its farm dams, geo/damRoutes.ts), so
@@ -18,7 +18,7 @@ import { estimatedDamAreaForEngine, resolveDamCurve, toEpochDay, type DamCurvePo
 /**
  * Where an observation comes from (dam_observation.source): DE Africa Waterbodies (a polygon's area series), WOfS
  * (Landsat, 30 m), Sentinel-2 ('s2', 10 m) and Sentinel-1 radar ('s1'), the last three counted inside the dam's own
- * outline (277, issue #624).
+ * outline (278, issue #624).
  */
 export type ObservedSource = 'waterbodies' | 'wofs' | 's2' | 's1';
 

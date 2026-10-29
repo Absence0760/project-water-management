@@ -617,8 +617,8 @@ open:
 ## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
 
 Rounds 1 and 2 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
-op and the CMIP6 ingest; #623's register rows and `et_observation` (276);
-#624's register rows and the `s2`/`s1` sources (277); and the shared COG
+op and the CMIP6 ingest; #623's register rows and `et_observation` (277);
+#624's register rows and the `s2`/`s1` sources (278); and the shared COG
 reader (`backend/src/raster/`). The rest of each issue's plan stays on the
 issue. Found while building, and open:
 

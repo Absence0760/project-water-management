@@ -10877,7 +10877,7 @@ together.
   `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat and Sentinel-2
   about 10:30 local, Sentinel-1 about 06:00 or 18:00) is compared with that
   day's value; the day's own change is small beside the observation's error.
-- **Observed.** `dam_observation` (261, R5-A; 277, issue #624): per dam
+- **Observed.** `dam_observation` (261, R5-A; 278, issue #624): per dam
   polygon, source (`waterbodies`: DE Africa Waterbodies' area series for the
   polygon it matched; `wofs`: WOfS water pixels inside the app's own
   outline, R5-C; `s2`: Sentinel-2 pixels we classify inside the same
@@ -11235,7 +11235,7 @@ it §2.10m, which the regional GR4J prior had taken, so it is §2.10o. The
 thresholds are provisional and live in one place (`ET_OBSERVED`); change
 them there and here together.
 
-- **Observed.** `et_observation` (276): per unit, source and dekad, the
+- **Observed.** `et_observation` (277): per unit, source and dekad, the
   area-weighted mean actual evapotranspiration ETa (mm/day) over the unit's
   farm parcels (∩ WorldCover cropland where land cover is loaded, else the
   whole parcels: `mask`), the share of that area with a valid pixel, and the

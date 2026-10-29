@@ -601,7 +601,7 @@ export async function plantDamObservations(
 		const { rows: f } = await db.query<{ updated_at: Date }>('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]);
 		const uid = match.status === 'none' ? null : (match.uid ?? 'zzzze2e001');
 		await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, $7)', [featureId, match.status, uid, uid ? 0.9 : null, uid ? 0.5 : null, f[0]!.updated_at, null]);
-		// One pass file per source, as the worker loads them (WOfS by default; Sentinel-2 and Sentinel-1 since 277, issue #624).
+		// One pass file per source, as the worker loads them (WOfS by default; Sentinel-2 and Sentinel-1 since 278, issue #624).
 		for (const source of ['wofs', 's2', 's1'] as const) {
 			const mine = rows.filter((r) => (r.source ?? 'wofs') === source);
 			if (!mine.length) continue;
@@ -630,7 +630,7 @@ export async function dropRunDrought(runId: string): Promise<void> {
 }
 
 /**
- * A unit's observed actual ET (issue #623, 276_et_observation), as the
+ * A unit's observed actual ET (issue #623, 277_et_observation), as the
  * worker's ET pass loads it: app_et_observation_load as the schema owner with
  * no user, the way the worker runs it. The unit needs a farm parcel on the
  * map first (the loader refuses a unit without one). Invented values only.

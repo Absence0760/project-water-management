@@ -1,5 +1,5 @@
 // The worker's observed ET tick end to end (issue #623 step 4; tick.ts,
-// 276_et_observation.sql, 280_et_units.sql): two units with farm parcels in a
+// 277_et_observation.sql, 281_et_units.sql): two units with farm parcels in a
 // project, the committed synthetic land cover loaded (cropland under one of
 // them), the tick writing the wanted list with each unit's parcels and its
 // cropland, the WaPOR pass reading the synthetic dekads (no network), and the

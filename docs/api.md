@@ -3876,7 +3876,7 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
 ## Observed actual ET
 
 A unit's satellite actual evapotranspiration against the run's modelled
-irrigation use (issue #623 step 5; the observations are 276's
+irrigation use (issue #623 step 5; the observations are 277's
 `et_observation`, loaded by the worker's ET pass, off by default; the method
 and thresholds in
 [model.md § 2.10o](./model.md#210o-observed-actual-et-against-the-modelled-irrigation-use-app-issue-623);
@@ -4466,7 +4466,7 @@ scenario (its ops on its base run's inputs), never the live model.
 ## Future yield
 
 § 8 of an application's evidence report (issue #621 slice 4,
-279_future_yield, [evidence-pack.md § Future yield](./evidence-pack.md#future-yield)):
+280_future_yield, [evidence-pack.md § Future yield](./evidence-pack.md#future-yield)):
 the application run and its baseline re-run under each climate model's
 monthly change factors from the data copy's NEX-GDDP-CMIP6 aggregates, by a
 background `future_yield` job. Off unless `FUTURE_YIELD=on` (deployment.md).

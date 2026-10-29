@@ -1,4 +1,4 @@
-// Security regressions for observed actual ET (276_et_observation, issue
+// Security regressions for observed actual ET (277_et_observation, issue
 // #623): who reads et_observation (a project's members and its farmers, each
 // farmer only their own units; every "cannot see" with its positive
 // control), that only the worker's functions, with no user, write it, and

@@ -2380,7 +2380,7 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
   - **History** to 2019 (`S2_BACKFILL_FROM`, Collection 1 consistent from
     there), newest first. A dam's `since` is the wanted list's `sinceBy.s2`
     (the day after its newest `s2` row, `app_dam_outlines`' `s2_newest`,
-    278), never WOfS's.
+    279), never WOfS's.
   - **Politeness**: one request a second to each host (the explorer, and
     the bucket, `S2_SCENE_INTERVAL_MS`), one in flight. The fetcher hands
     the WOfS pass's STAC pacer on to the Sentinel-2 pass, so the explorer
@@ -2404,7 +2404,7 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
 
 ### Observed actual ET: the comparison
 
-Satellite actual ET per unit and dekad (`et_observation`, 276, issue #623)
+Satellite actual ET per unit and dekad (`et_observation`, 277, issue #623)
 is read back only as a check on the run, never as an input: the unit
 drawer asks `GET /projects/:id/nodes/:nodeId/et-observed`
 (`backend/src/water-use/observed/routes.ts`), which reads the unit's rows
@@ -2417,7 +2417,7 @@ request from what is stored, as the dam check is
 (`dams/observed/compare.ts`).
 
 ```
-worker (no user) ──► app_et_observation_load ──► et_observation (276)
+worker (no user) ──► app_et_observation_load ──► et_observation (277)
 unit drawer ──► GET …/nodes/:nodeId/et-observed ──► withUser:
    et_observation (RLS)  +  model_run / run_series (the newest run, the unit's columns)
    ──► compareEt (pure) ──► dekads, half water years, summary, credit
@@ -2427,7 +2427,7 @@ unit drawer ──► GET …/nodes/:nodeId/et-observed ──► withUser:
 
 FAO WaPOR v3's dekadal actual evapotranspiration (ETa) averaged over each
 unit's farm parcels (issue #623 step 4), in our own store, `et_observation`
-(276, [data-model.md § Observed actual ET](./data-model.md#observed-actual-et-276_et_observationsql)):
+(277, [data-model.md § Observed actual ET](./data-model.md#observed-actual-et-276_et_observationsql)):
 the independent check on a unit's modelled irrigation use (the comparison
 is #623 step 5). The dam observations' pattern, end to end. Off until
 `et_observations_enabled` (Terraform) and `ET_OBSERVATIONS=on` (the worker);
@@ -2437,8 +2437,8 @@ recorded on #618 (step 8a; [data-sources.md § wapor-aeti](./data-sources.md#wap
 
 ```
 worker tick (ET_OBSERVATIONS=on, no user; water-use/observed/tick.ts):
-   app_et_units('wapor')      every unit with farm parcels: its polygons, when they last changed (280)
-   app_et_cropland(box)       the default land cover's cropland cells under each unit (280; kept per unit an hour)
+   app_et_units('wapor')      every unit with farm parcels: its polygons, when they last changed (281)
+   app_et_cropland(box)       the default land cover's cropland cells under each unit (281; kept per unit an hour)
    put   et/wanted.json       { units: [{ unitKey (node id), parcels (one MultiPolygon), changedAt, cropland? }] }
 
 EventBridge, hourly at :50 ──► fetcher, {"mode":"et-dekadal"} (outside the VPC; water-use/observed/pass.ts)
@@ -2466,7 +2466,7 @@ worker tick: the status, then each unit due by its load mark (≤ 200 a tick, ol
   `[row, col, share]` cells (the default dataset's, real before synthetic,
   as the proposals choose; at most 40 000 cells and a 1° box, else none).
   No name, project or person crosses the bucket. The worker reads the
-  parcels and the cells through `SECURITY DEFINER` functions (280), since it
+  parcels and the cells through `SECURITY DEFINER` functions (281), since it
   runs with no user and both tables' policies need one. The list is written
   only once every unit's cells are known (at most 500 lookups a tick, kept an
   hour per unit), so a cold worker never hands over a partial list; a unit
@@ -2506,7 +2506,7 @@ worker tick: the status, then each unit due by its load mark (≤ 200 a tick, ol
     `generatedAt` (its parcels changed back to the same shape) has its file
     rewritten with the new `parcelsAt` and no request: the loader takes
     `parcelsAt` as the fetch time and refuses a file made from parcels older
-    than their last change (276's trigger dropped the unit's rows and
+    than their last change (277's trigger dropped the unit's rows and
     cleared its marks at that change).
   - **Politeness**: one request a second, one in flight, the live client's
     host and path allowlist; a 403 or throttling stops the pass (the status

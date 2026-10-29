@@ -193,7 +193,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	// Yield (WP-3.6, 096_contributor_yield): an applicant on a dam of their own application; RLS shows them only their own jobs and results.
 	['POST /projects/:id/yield', { min: 'contributor', why: "an applicant queues a yield of a dam of their own application (yieldInputFor); a viewer queues none" }],
 	['GET /projects/:id/yield', { min: 'contributor', why: 'stored results RLS lets the caller read (a contributor: their own)' }],
-	// § 8 Future yield (279): an applicant reads their own application's result under RLS (app_future_yield_own_run).
+	// § 8 Future yield (280): an applicant reads their own application's result under RLS (app_future_yield_own_run).
 	['GET /projects/:id/runs/:runId/future-yield', { min: 'contributor', why: 'the newest § 8 result RLS lets the caller read (a contributor: their own application’s)' }],
 	['GET /projects/:id/jobs', { min: 'contributor', why: 'the job status list RLS lets the caller read (a contributor: their own yield jobs, 096), so the Yield panel follows one' }],
 	['GET /projects/:id/yield/jobs', { min: 'contributor', why: 'pending yield jobs RLS lets the caller read (a contributor: their own)' }],

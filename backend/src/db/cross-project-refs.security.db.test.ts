@@ -371,11 +371,11 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		premise: 'no project_id'
 	},
 	'et_observation.node_id': {
-		reason: 'water_app writes none of it (SELECT only); app_et_observation_load, SECURITY DEFINER, copies the project from the unit itself (276), and et_observation_same_project checks it',
+		reason: 'water_app writes none of it (SELECT only); app_et_observation_load, SECURITY DEFINER, copies the project from the unit itself (277), and et_observation_same_project checks it',
 		premise: 'not writable'
 	},
 	'et_observation_load_mark.node_id': {
-		reason: 'no project_id of its own: the worker’s record of what it last loaded for that unit, owner-only, water_app has no grant; written only by app_et_load_mark_write and et_parcels_changed (276)',
+		reason: 'no project_id of its own: the worker’s record of what it last loaded for that unit, owner-only, water_app has no grant; written only by app_et_load_mark_write and et_parcels_changed (277)',
 		premise: 'no project_id'
 	}
 };
@@ -769,7 +769,7 @@ const CASES: Record<string, Case> = {
 		asUser: () => authority.id,
 		insert: (h, ref) => [`INSERT INTO decision_event (project_id, scenario_id, position, kind, forum, event_date) VALUES ($1, $2, 1, 'lodged', 'court', '2026-10-01')`, [h.projectId, ref]]
 	},
-	// § 8's future yield (279): future_yield_guard checks both runs and the job within the row's project.
+	// § 8's future yield (280): future_yield_guard checks both runs and the job within the row's project.
 	'future_yield.baseline_run_id': {
 		ref: (w) => w.runId,
 		insert: (h, ref) => [
@@ -1299,7 +1299,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'yield/store.ts:nodeId': ['POST /projects/:id/yield nodeId'],
 	'yield/store.ts:runId': ['POST /projects/:id/yield runId'],
 	'yield/store.ts:scenarioId': 'checked by yield_result_guard (the SQL case)',
-	// § 8 (279): the run is the route's :runId, looked up WHERE project_id = … AND id = … (futurePair), and the dam must be a node of
+	// § 8 (280): the run is the route's :runId, looked up WHERE project_id = … AND id = … (futurePair), and the dam must be a node of
 	// that run's own input (futureDamError), so another project's id is a 404 or a 400; the job's payload is re-checked the same way.
 	'future/store.ts:applicationRunId': 'a job payload, re-checked by futurePair within the job’s project, as the route checks :runId',
 	'future/store.ts:nodeId': 'a node of the run’s own stored input (futureDamError), never a row looked up by id'

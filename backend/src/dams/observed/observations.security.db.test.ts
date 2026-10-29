@@ -103,7 +103,7 @@ describe('dam observations: read by the project, written only by the worker', ()
 		expect(await rowsAs(stranger, 'SELECT feature_id FROM dam_waterbody_match WHERE project_id = $1', [projectId])).toEqual([]);
 	});
 
-	it('Sentinel rows (277) are read as the others are: the project’s viewer and the dam’s farmer (positive controls), never another project or a neighbour', async () => {
+	it('Sentinel rows (278) are read as the others are: the project’s viewer and the dam’s farmer (positive controls), never another project or a neighbour', async () => {
 		await withoutUser(async (db) => {
 			for (const f of [damA, damB, damOther]) for (const source of ['s2', 's1']) expect((await load(db, source, f, [['2020-01-07', 300, 100, `${source}_synthetic_1`]])).written).toBe(1);
 		});

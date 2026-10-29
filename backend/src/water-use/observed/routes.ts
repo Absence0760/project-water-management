@@ -3,7 +3,7 @@
 //
 //   GET /projects/:id/nodes/:nodeId/et-observed[?run=<runId>]   viewer
 //
-// The unit's dekads of satellite actual ET (et_observation, 276) and the run's
+// The unit's dekads of satellite actual ET (et_observation, 277) and the run's
 // crop ET, effective rain and irrigation reaching the crop over the same
 // dekads, compared (./compare.ts). The run is `run` when given, else the
 // project's newest. Read only, under the caller's RLS. No observations (the

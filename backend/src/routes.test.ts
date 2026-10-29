@@ -261,7 +261,7 @@ describe('route auth inventory', () => {
 		}
 	});
 
-	// § 8 Future yield (issue #621, 279_future_yield): auth-gated like every project route.
+	// § 8 Future yield (issue #621, 280_future_yield): auth-gated like every project route.
 	it('inventories the future yield routes as auth-gated', () => {
 		for (const r of ['POST /projects/:id/runs/:runId/future-yield', 'GET /projects/:id/runs/:runId/future-yield']) {
 			expect(routes).toContain(r);

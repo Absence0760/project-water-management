@@ -462,7 +462,7 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   21 by default) alarms, both breaching on missing data
   (`infra/dam_observations.tf`).
 - **Rows kept:** `dam_observation` source `s2` (migration
-  `277_dam_observation_sentinel.sql`): per dam and date, the wet pixels ×
+  `278_dam_observation_sentinel.sql`): per dam and date, the wet pixels ×
   the 10 m pixel's ground area and the share of the outline seen clearly
   (model.md §2.10l).
 - **Fallback:** WOfS (30 m) for the same dates; the S1 radar view through
@@ -504,7 +504,7 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   #624's acceptance criteria (≥ 85 % of days within 0.1 F).
 - **Freshness (planned):** its own heartbeat and recency alarm.
 - **Rows kept:** `dam_observation` source `s1` (migration
-  `277_dam_observation_sentinel.sql`); none written yet.
+  `278_dam_observation_sentinel.sql`); none written yet.
 - **Fallback:** Sentinel-2 and WOfS on clear days.
 - **Offline:** synthetic scenes only (#624 step 5).
 - **Owner:** the operator; code `backend/src/dams/observed/` (#624).
@@ -513,7 +513,7 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 
 Satellite actual ET (ETa) over each unit's farm parcels, an independent
 check on its modelled irrigation use (issue #623). Built for WaPOR: the store
-(`et_observation`, migration 276), the fetcher's `et-dekadal` mode, the
+(`et_observation`, migration 277), the fetcher's `et-dekadal` mode, the
 handover and the worker's tick (step 4, [architecture.md § Observed actual
 ET](./architecture.md#observed-actual-et)); the comparison is step 5. It follows the dam
 observations' pattern: out of the VPC, through the mirror bucket, loaded by

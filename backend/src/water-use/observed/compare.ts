@@ -3,7 +3,7 @@
 // § Observed actual ET).
 //
 // Pure: the route (./routes.ts) reads the rows and hands them here. The
-// observed side is et_observation (276): per unit, source and dekad, the
+// observed side is et_observation (277): per unit, source and dekad, the
 // area-weighted mean actual ET (ETa, mm/day) over the unit's parcels (∩
 // WorldCover cropland where loaded) and the share of that area with a valid
 // pixel. The modelled side is the run's own output for the unit, summed over

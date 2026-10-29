@@ -1,4 +1,4 @@
--- 276_et_observation — observed actual evapotranspiration (ETa) per unit and
+-- 277_et_observation — observed actual evapotranspiration (ETa) per unit and
 -- dekad, from satellites, the independent check on a unit's modelled
 -- irrigation use (issue #623; docs/data-model.md § Observed actual ET,
 -- docs/data-sources.md § Observed actual evapotranspiration).
@@ -68,7 +68,7 @@ CREATE TABLE et_observation (
 CREATE INDEX et_observation_project_idx ON et_observation (project_id);
 
 COMMENT ON TABLE et_observation IS
-	'Observed actual ET per unit, source and dekad (276, issue #623): the area-weighted mean over the unit''s parcels (∩ cropland where loaded), the valid share and the upstream file. Written only by app_et_observation_load (the worker); dropped when the unit''s parcels change.';
+	'Observed actual ET per unit, source and dekad (277, issue #623): the area-weighted mean over the unit''s parcels (∩ cropland where loaded), the valid share and the upstream file. Written only by app_et_observation_load (the worker); dropped when the unit''s parcels change.';
 COMMENT ON COLUMN et_observation.valid_share IS
 	'The share of the area with a valid pixel that dekad, 0–1. eta_mm_day is the mean over that part only.';
 
@@ -97,7 +97,7 @@ CREATE TABLE et_observation_load_mark (
 );
 CREATE INDEX et_observation_load_mark_node_idx ON et_observation_load_mark (node_id);
 COMMENT ON TABLE et_observation_load_mark IS
-	'Per source and unit, what the ET tick last loaded, a failure, and when the unit''s parcels last changed (276). Owner only; the worker reads and writes it through app_et_load_marks and app_et_load_mark_write.';
+	'Per source and unit, what the ET tick last loaded, a failure, and when the unit''s parcels last changed (277). Owner only; the worker reads and writes it through app_et_load_marks and app_et_load_mark_write.';
 ALTER TABLE et_observation_load_mark ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON et_observation_load_mark FROM water_app;
 
@@ -144,7 +144,7 @@ CREATE FUNCTION et_parcels_changed() RETURNS trigger
 	END
 	$$;
 COMMENT ON FUNCTION et_parcels_changed() IS
-	'A unit''s farm parcels changed (276): drop its observed ET and mark it to be read again.';
+	'A unit''s farm parcels changed (277): drop its observed ET and mark it to be read again.';
 REVOKE ALL ON FUNCTION et_parcels_changed() FROM PUBLIC;
 CREATE TRIGGER et_parcels_changed_insert AFTER INSERT ON map_feature
 	FOR EACH ROW WHEN (NEW.kind = 'farm_parcel' AND NEW.node_id IS NOT NULL) EXECUTE FUNCTION et_parcels_changed();
@@ -267,7 +267,7 @@ CREATE FUNCTION app_et_observation_load(
 	END
 	$$;
 COMMENT ON FUNCTION app_et_observation_load(text, uuid, date[], double precision[], double precision[], double precision[], text, text[], text[], text, timestamptz) IS
-	'Load one unit''s pass file of observed actual ET (276, issue #623), refused when the unit''s parcels changed since the fetch. For the worker (no user) only.';
+	'Load one unit''s pass file of observed actual ET (277, issue #623), refused when the unit''s parcels changed since the fetch. For the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_et_observation_load(text, uuid, date[], double precision[], double precision[], double precision[], text, text[], text[], text, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_et_observation_load(text, uuid, date[], double precision[], double precision[], double precision[], text, text[], text[], text, timestamptz) TO water_app;
 
@@ -285,7 +285,7 @@ CREATE FUNCTION app_et_load_marks()
 	END
 	$$;
 COMMENT ON FUNCTION app_et_load_marks() IS
-	'What the ET tick last loaded per source and unit (276), for the worker (no user) only.';
+	'What the ET tick last loaded per source and unit (277), for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_et_load_marks() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_et_load_marks() TO water_app;
 
@@ -329,6 +329,6 @@ CREATE FUNCTION app_et_load_mark_write(
 	END
 	$$;
 COMMENT ON FUNCTION app_et_load_mark_write(text, uuid, timestamptz, timestamptz, boolean) IS
-	'Record what the ET tick loaded, or that it failed, for one source and unit (276), for the worker (no user) only.';
+	'Record what the ET tick loaded, or that it failed, for one source and unit (277), for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_et_load_mark_write(text, uuid, timestamptz, timestamptz, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_et_load_mark_write(text, uuid, timestamptz, timestamptz, boolean) TO water_app;

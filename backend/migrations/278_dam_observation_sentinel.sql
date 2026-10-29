@@ -1,4 +1,4 @@
--- 277_dam_observation_sentinel — two more dam observation sources: Sentinel-2
+-- 278_dam_observation_sentinel — two more dam observation sources: Sentinel-2
 -- L2A Collection 1 and Sentinel-1 RTC from Digital Earth Africa, classified
 -- by us inside each traced dam's own outline (issue #624 step 3;
 -- docs/data-model.md § Dam observations, docs/data-sources.md
@@ -43,7 +43,7 @@ ALTER TABLE dam_observation_load_mark
 	ADD CONSTRAINT dam_observation_load_mark_check CHECK ((source IN ('wofs', 's2', 's1')) = (feature_id IS NOT NULL));
 
 COMMENT ON TABLE dam_observation IS
-	'The wet area satellites saw of a traced dam on a date, per source (261, issue #604 R5; 277, issue #624): DE Africa Waterbodies for a matched dam; WOfS, Sentinel-2 (s2) and Sentinel-1 radar (s1) over every dam''s outline. Written only by app_dam_observation_load (the worker), from the weekly pass''s files.';
+	'The wet area satellites saw of a traced dam on a date, per source (261, issue #604 R5; 278, issue #624): DE Africa Waterbodies for a matched dam; WOfS, Sentinel-2 (s2) and Sentinel-1 radar (s1) over every dam''s outline. Written only by app_dam_observation_load (the worker), from the weekly pass''s files.';
 
 -- Load one observation file the weekly pass wrote (261's rules, unchanged):
 --   p_source 'waterbodies':       p_key is a uid; the rows go to every dam matched to it.
@@ -140,7 +140,7 @@ CREATE OR REPLACE FUNCTION app_dam_observation_load(
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) IS
-	'Load one weekly pass file of dam observations (261, 277): a Waterbodies uid''s series into every dam matched to it, or a dam''s WOfS, Sentinel-2 (s2) or Sentinel-1 (s1) rows. For the worker (no user) only.';
+	'Load one weekly pass file of dam observations (261, 278): a Waterbodies uid''s series into every dam matched to it, or a dam''s WOfS, Sentinel-2 (s2) or Sentinel-1 (s1) rows. For the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_observation_load(text, text, date[], double precision[], double precision[], text[], timestamptz) TO water_app;
 
@@ -191,6 +191,6 @@ CREATE OR REPLACE FUNCTION app_dam_load_mark_write(
 	END
 	$$;
 COMMENT ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) IS
-	'Record what the dams tick loaded, or that it failed, for one pass file (261, 277), for the worker (no user) only.';
+	'Record what the dams tick loaded, or that it failed, for one pass file (261, 278), for the worker (no user) only.';
 REVOKE ALL ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_dam_load_mark_write(text, text, timestamptz, timestamptz, text, boolean) TO water_app;

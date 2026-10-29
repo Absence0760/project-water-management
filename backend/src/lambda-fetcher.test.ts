@@ -630,7 +630,8 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 	});
 
 	it('runs the Sentinel-2 pass after WOfS only with DAM_OBSERVATIONS_S2=on, with its own heartbeat and log (issue #624)', async () => {
-		await bucket(undefined, [dam()]);
+		// The same 60 days as WOfS's: without sinceBy.s2 the pass backfills to 2019, years of synthetic 10 m scenes.
+		await bucket(undefined, [{ ...dam(), sinceBy: { s2: dam().since } }]);
 		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 		vi.stubEnv('DAM_OBSERVATIONS_S2', 'on');
