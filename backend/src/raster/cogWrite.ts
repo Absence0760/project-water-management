@@ -6,7 +6,12 @@
 // the WaPOR (#623) and Sentinel (#624) passes meet: BigTIFF, LZW (the CHIRPS
 // writer's encoder), int16 / uint16 / float32 samples (the sample type is
 // the values' array type), the floating-point predictor, EPSG:4326 grids, a
-// GDAL scale and offset, and tile tables placed past the header read. The
+// GDAL scale and offset, and tile tables placed past the header read; and,
+// for the real files' tag layouts (cogLayouts.ts), GDAL's structural
+// metadata before the first IFD, a 4-byte trailer after each tile,
+// PlanarConfiguration 2 on one band, LONG dimensions, X/YResolution,
+// GDAL metadata items beside the scale and offset, GeoKeys whose values sit
+// in GeoAsciiParams or GeoDoubleParams, and overview IFDs after the first. The
 // fixture sources (dams/observed/wofs/fixtures.ts) serve scenes made here,
 // and cog.test.ts round-trips the reader through it, so the reader is
 // exercised on the layout it meets in production. A continental grid (the
@@ -50,6 +55,24 @@ export interface CogSpec {
 	scaleOffset?: { scale: number; offset: number };
 	/** Bytes of padding before the tile tables, so they lie past the reader's first read (as a continental grid's do). */
 	tableGap?: number;
+	/** GDAL metadata items written before the scale and offset (STATISTICS_*, OVR_RESAMPLING_ALG, …). */
+	metadata?: { name: string; value: string; sample?: number }[];
+	/** PlanarConfiguration (default 1); GDAL writes 2 on some one-band files, where it means the same bytes. */
+	planar?: 1 | 2;
+	/** Write ImageWidth and ImageLength as LONG even when they fit a SHORT. */
+	longDims?: boolean;
+	/** Write XResolution and YResolution (RATIONAL 1/1) and ResolutionUnit 1, as GDAL does for some files. */
+	resolution?: boolean;
+	/** Write GDAL's structural metadata (the COG "ghost area") between the header and the first IFD. */
+	ghost?: boolean;
+	/** Repeat each tile's last 4 bytes after it (GDAL's BLOCK_TRAILER=LAST_4_BYTES_REPEATED). */
+	blockTrailer?: boolean;
+	/** Overview IFDs after the first, each half the last's size, their tiles all empty: the reader must read only the first. */
+	overviews?: number;
+	/** GeoKeys whose values are text in GeoAsciiParams (34737), each ending in "|" (GTCitation 1026, GeogCitation 2049). */
+	geoAscii?: Record<number, string>;
+	/** GeoKeys whose values are doubles in GeoDoubleParams (34736) (GeogSemiMajorAxis 2057, GeogInvFlattening 2059). */
+	geoDoubles?: Record<number, number>;
 	/** Replace or add tags (tag → [type, values]), or drop one (null): for malformed files. */
 	override?: Record<number, [number, number[]] | null>;
 	/** Replace GeoKeys (key → value), or drop one (null). */
@@ -64,7 +87,8 @@ export type LazyCogSpec = Omit<CogSpec, 'values'> & {
 	sampleType: SampleType;
 };
 
-const TYPE_SIZE: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 12: 8, 16: 8 };
+/** Bytes per element of each type written; a RATIONAL (5) is given as two LONG elements, numerator and denominator. */
+const TYPE_SIZE: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 4, 12: 8, 16: 8 };
 
 export function sampleTypeOf(values: Samples): SampleType {
 	if (values instanceof Uint8Array) return 'uint8';
@@ -168,35 +192,65 @@ export function writeCog(spec: CogSpec | LazyCogSpec): Uint8Array {
 		if (v === null) delete keys[Number(k)];
 		else keys[Number(k)] = v;
 	}
-	const keyList = Object.entries(keys).sort(([a], [b]) => Number(a) - Number(b));
-	const geoKeyDir = [1, 1, 0, keyList.length, ...keyList.flatMap(([k, v]) => [Number(k), 0, 1, v])];
+	// [key, location, count, value]: location 0 an inline value, 34737 / 34736 a slice of GeoAsciiParams / GeoDoubleParams.
+	let geoAsciiText = '';
+	const geoDoubleValues: number[] = [];
+	const keyEntries = new Map<number, number[]>(Object.entries(keys).map(([k, v]) => [Number(k), [Number(k), 0, 1, v]]));
+	for (const [k, text] of Object.entries(spec.geoAscii ?? {})) {
+		keyEntries.set(Number(k), [Number(k), 34737, text.length, geoAsciiText.length]);
+		geoAsciiText += text;
+	}
+	for (const [k, v] of Object.entries(spec.geoDoubles ?? {})) {
+		keyEntries.set(Number(k), [Number(k), 34736, 1, geoDoubleValues.length]);
+		geoDoubleValues.push(v);
+	}
+	const keyList = [...keyEntries.values()].sort((a, b) => a[0]! - b[0]!);
+	const geoKeyDir = [1, 1, 0, keyList.length, ...keyList.flat()];
 	const half = spec.pixelIsPoint ? 0.5 : 0;
 	const tableType = big ? 16 : 4;
+	const dimType = (n: number) => (spec.longDims || n > 0xffff ? 4 : 3);
 
-	const tags: Record<number, [number, number[]]> = {
+	/** One image's tags; its tile tables are filled in once the tiles are placed. */
+	const imageTags = (width: number, height: number, tiles: number): Record<number, [number, number[]]> => ({
 		// SHORT, or LONG past 65 535 (a continental grid: WaPOR's is 368 640 wide).
-		256: [spec.width > 0xffff ? 4 : 3, [spec.width]],
-		257: [spec.height > 0xffff ? 4 : 3, [spec.height]],
+		256: [dimType(width), [width]],
+		257: [dimType(height), [height]],
 		258: [3, [FORM[type].bits]],
 		259: [3, [compression]],
 		262: [3, [1]],
 		277: [3, [1]],
-		284: [3, [1]],
+		284: [3, [spec.planar ?? 1]],
 		317: [3, [predictor]],
 		322: [3, [tile]],
 		323: [3, [tile]],
-		324: [tableType, stored.map(() => 0)], // filled in below
-		325: [tableType, stored.map((s) => s.length)],
-		339: [3, [FORM[type].format]],
+		324: [tableType, new Array<number>(tiles).fill(0)],
+		325: [tableType, new Array<number>(tiles).fill(0)],
+		339: [3, [FORM[type].format]]
+	});
+	const tags: Record<number, [number, number[]]> = {
+		...imageTags(spec.width, spec.height, stored.length),
 		33550: [12, [size, size, 0]],
 		33922: [12, [0, 0, 0, spec.originX + half * size, spec.originY - half * size, 0]],
 		34735: [3, geoKeyDir]
 	};
+	tags[325] = [tableType, stored.map((s) => s.length)];
+	if (geoDoubleValues.length) tags[34736] = [12, geoDoubleValues];
+	if (spec.resolution) {
+		tags[282] = [5, [1, 1]];
+		tags[283] = [5, [1, 1]];
+		tags[296] = [3, [1]];
+	}
 	const ascii: Record<number, string> = {};
+	if (geoAsciiText) ascii[34737] = `${geoAsciiText}\0`;
 	if (nodata !== null) ascii[42113] = `${nodata}\0`;
-	if (spec.scaleOffset) {
-		const { scale, offset } = spec.scaleOffset;
-		ascii[42112] = `<GDALMetadata>\n  <Item name="SCALE" sample="0" role="scale">${scale}</Item>\n  <Item name="OFFSET" sample="0" role="offset">${offset}</Item>\n</GDALMetadata>\0`;
+	if (spec.scaleOffset || spec.metadata) {
+		const items = (spec.metadata ?? []).map((m) => `  <Item name="${m.name}"${m.sample === undefined ? '' : ` sample="${m.sample}"`}>${m.value}</Item>\n`);
+		if (spec.scaleOffset) {
+			const { scale, offset } = spec.scaleOffset;
+			// GDAL writes the offset first.
+			items.push(`  <Item name="OFFSET" sample="0" role="offset">${offset}</Item>\n`, `  <Item name="SCALE" sample="0" role="scale">${scale}</Item>\n`);
+		}
+		ascii[42112] = `<GDALMetadata>\n${items.join('')}</GDALMetadata>\0`;
 	}
 	for (const [k, v] of Object.entries(spec.override ?? {})) {
 		if (v === null) {
@@ -209,30 +263,63 @@ export function writeCog(spec: CogSpec | LazyCogSpec): Uint8Array {
 		}
 	}
 
-	// Layout: header (8, or 16) | IFD | out-of-line values | [gap | tile tables] | tiles (each a 4-byte size, then its bytes).
+	// The overviews: each half the last's size, their tiles empty (offset and size 0), with NewSubfileType 1 and the no-data.
+	const overviews: { tags: Record<number, [number, number[]]>; ascii: Record<number, string> }[] = [];
+	for (let k = 1, w = spec.width, h = spec.height; k <= (spec.overviews ?? 0); k++) {
+		w = Math.ceil(w / 2);
+		h = Math.ceil(h / 2);
+		const t = imageTags(w, h, Math.ceil(w / tile) * Math.ceil(h / tile));
+		t[254] = [4, [1]];
+		overviews.push({ tags: t, ascii: nodata === null ? {} : { 42113: `${nodata}\0` } });
+	}
+
+	// Layout: header (8, or 16) | [ghost] | IFD | its out-of-line values | overview IFDs and theirs | [gap | tile tables] | tiles
+	// (each a 4-byte size, then its bytes, then [its last 4 bytes again]).
 	const headerSize = big ? 16 : 8;
 	const entrySize = big ? 20 : 12;
 	const inlineSize = big ? 8 : 4;
-	const all = [...Object.keys(tags), ...Object.keys(ascii)].map(Number).sort((a, b) => a - b);
-	const ifdOffset = headerSize;
-	const ifdSize = (big ? 8 : 2) + all.length * entrySize + (big ? 8 : 4);
-	let cursor = ifdOffset + ifdSize;
-	const outOfLine = new Map<number, number>();
-	const sizeOf = (tag: number) => (tag in ascii ? ascii[tag]!.length : TYPE_SIZE[tags[tag]![0]]! * tags[tag]![1].length);
-	const isTable = (tag: number) => spec.tableGap !== undefined && (tag === 324 || tag === 325);
-	const place = (tag: number) => {
-		const s = sizeOf(tag);
-		if (s > inlineSize) {
-			cursor += cursor % 2; // word-aligned values
-			outOfLine.set(tag, cursor);
-			cursor += s;
+	const ghost = spec.ghost ? ghostText(spec.blockTrailer ?? false) : '';
+	const countOf = (t: number, values: number[]) => (t === 5 ? values.length / 2 : values.length);
+	interface Ifd {
+		tags: Record<number, [number, number[]]>;
+		ascii: Record<number, string>;
+		all: number[];
+		at: number;
+		outOfLine: Map<number, number>;
+	}
+	let cursor = headerSize + ghost.length;
+	const placeIfd = (t: Record<number, [number, number[]]>, a: Record<number, string>, deferTables: boolean): Ifd => {
+		cursor += cursor % 2; // word-aligned
+		const all = [...Object.keys(t), ...Object.keys(a)].map(Number).sort((x, y) => x - y);
+		const at = cursor;
+		cursor += (big ? 8 : 2) + all.length * entrySize + (big ? 8 : 4);
+		const outOfLine = new Map<number, number>();
+		for (const tag of all) {
+			if (deferTables && (tag === 324 || tag === 325)) continue;
+			const s = tag in a ? a[tag]!.length : TYPE_SIZE[t[tag]![0]]! * t[tag]![1].length;
+			if (s > inlineSize) {
+				cursor += cursor % 2;
+				outOfLine.set(tag, cursor);
+				cursor += s;
+			}
 		}
+		return { tags: t, ascii: a, all, at, outOfLine };
 	};
-	for (const tag of all) if (!isTable(tag)) place(tag);
+	const first = placeIfd(tags, ascii, spec.tableGap !== undefined);
+	const rest = overviews.map((o) => placeIfd(o.tags, o.ascii, false));
 	if (spec.tableGap !== undefined) {
 		cursor += spec.tableGap;
-		for (const tag of all) if (isTable(tag)) place(tag);
+		for (const tag of [324, 325]) {
+			if (!tags[tag]) continue;
+			const s = TYPE_SIZE[tags[tag]![0]]! * tags[tag]![1].length;
+			if (s > inlineSize) {
+				cursor += cursor % 2;
+				first.outOfLine.set(tag, cursor);
+				cursor += s;
+			}
+		}
 	}
+	const trailer = spec.blockTrailer ? 4 : 0;
 	const offsets: number[] = [];
 	for (const s of stored) {
 		if (s.length === 0) {
@@ -241,7 +328,7 @@ export function writeCog(spec: CogSpec | LazyCogSpec): Uint8Array {
 		}
 		cursor += 4; // GDAL's BLOCK_LEADER: the tile's size as a uint32
 		offsets.push(cursor);
-		cursor += s.length;
+		cursor += s.length + trailer;
 	}
 	if (tags[324] && !(spec.override && 324 in spec.override)) tags[324] = [tableType, offsets];
 
@@ -252,44 +339,60 @@ export function writeCog(spec: CogSpec | LazyCogSpec): Uint8Array {
 		v.setUint16(2, 43, le);
 		v.setUint16(4, 8, le);
 		v.setUint16(6, 0, le);
-		v.setBigUint64(8, BigInt(ifdOffset), le);
-		v.setBigUint64(ifdOffset, BigInt(all.length), le);
+		v.setBigUint64(8, BigInt(first.at), le);
 	} else {
 		v.setUint16(2, 42, le);
-		v.setUint32(4, ifdOffset, le);
-		v.setUint16(ifdOffset, all.length, le);
+		v.setUint32(4, first.at, le);
 	}
+	for (let i = 0; i < ghost.length; i++) buf[headerSize + i] = ghost.charCodeAt(i);
 	const put = (at: number, type: number, values: number[]) => {
 		values.forEach((x, i) => {
 			const p = at + i * TYPE_SIZE[type]!;
 			if (type === 1) v.setUint8(p, x);
 			else if (type === 3) v.setUint16(p, x, le);
-			else if (type === 4) v.setUint32(p, x, le);
+			else if (type === 4 || type === 5) v.setUint32(p, x, le);
 			else if (type === 16) v.setBigUint64(p, BigInt(x), le);
 			else v.setFloat64(p, x, le);
 		});
 	};
-	all.forEach((tag, i) => {
-		const p = ifdOffset + (big ? 8 : 2) + i * entrySize;
-		const isAscii = tag in ascii;
-		const t = isAscii ? 2 : tags[tag]![0];
-		const values = isAscii ? [...ascii[tag]!].map((c) => c.charCodeAt(0)) : tags[tag]![1];
-		v.setUint16(p, tag, le);
-		v.setUint16(p + 2, t, le);
-		if (big) v.setBigUint64(p + 4, BigInt(values.length), le);
-		else v.setUint32(p + 4, values.length, le);
-		const valueAt = p + (big ? 12 : 8);
-		const at = outOfLine.get(tag);
-		if (at !== undefined) {
-			if (big) v.setBigUint64(valueAt, BigInt(at), le);
-			else v.setUint32(valueAt, at, le);
-		}
-		put(at ?? valueAt, isAscii ? 1 : t, values);
-	});
+	const writeIfd = (ifd: Ifd, next: number) => {
+		if (big) v.setBigUint64(ifd.at, BigInt(ifd.all.length), le);
+		else v.setUint16(ifd.at, ifd.all.length, le);
+		ifd.all.forEach((tag, i) => {
+			const p = ifd.at + (big ? 8 : 2) + i * entrySize;
+			const isAscii = tag in ifd.ascii;
+			const t = isAscii ? 2 : ifd.tags[tag]![0];
+			const values = isAscii ? [...ifd.ascii[tag]!].map((c) => c.charCodeAt(0)) : ifd.tags[tag]![1];
+			v.setUint16(p, tag, le);
+			v.setUint16(p + 2, t, le);
+			const count = countOf(t, values);
+			if (big) v.setBigUint64(p + 4, BigInt(count), le);
+			else v.setUint32(p + 4, count, le);
+			const valueAt = p + (big ? 12 : 8);
+			const at = ifd.outOfLine.get(tag);
+			if (at !== undefined) {
+				if (big) v.setBigUint64(valueAt, BigInt(at), le);
+				else v.setUint32(valueAt, at, le);
+			}
+			put(at ?? valueAt, isAscii ? 1 : t, values);
+		});
+		const nextAt = ifd.at + (big ? 8 : 2) + ifd.all.length * entrySize;
+		if (big) v.setBigUint64(nextAt, BigInt(next), le);
+		else v.setUint32(nextAt, next, le);
+	};
+	const chain = [first, ...rest];
+	chain.forEach((ifd, i) => writeIfd(ifd, chain[i + 1]?.at ?? 0));
 	stored.forEach((s, i) => {
 		if (s.length === 0) return;
 		v.setUint32(offsets[i]! - 4, s.length, le);
 		buf.set(s, offsets[i]!);
+		if (trailer) buf.set(s.subarray(Math.max(0, s.length - 4)), offsets[i]! + s.length + 4 - Math.min(4, s.length));
 	});
 	return buf;
+}
+
+/** GDAL's structural metadata, as a COG it writes carries it between the header and the first IFD (the size counts the lines after the first). */
+function ghostText(trailer: boolean): string {
+	const body = `LAYOUT=IFDS_BEFORE_DATA\nBLOCK_ORDER=ROW_MAJOR\nBLOCK_LEADER=SIZE_AS_UINT4\n${trailer ? 'BLOCK_TRAILER=LAST_4_BYTES_REPEATED\n' : ''}KNOWN_INCOMPATIBLE_EDITION=NO\n `;
+	return `GDAL_STRUCTURAL_METADATA_SIZE=${String(body.length).padStart(6, '0')} bytes\n${body}`;
 }

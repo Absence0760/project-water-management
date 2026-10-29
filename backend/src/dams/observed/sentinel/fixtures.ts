@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
+import { s2BandLayout, s2SclLayout } from '../../../raster/cogLayouts.js';
 import { writeCog } from '../../../raster/cogWrite.js';
 import { toUtm, utmEpsgFor } from '../../../raster/utm.js';
 import { level, loadWofsFixture, type WofsFixtureSpec } from '../wofs/fixtures.js';
@@ -169,7 +170,10 @@ export function s2Fixture(today: () => string, spec: S2FixtureSpec = loadS2Fixtu
 						values[r * n + c] = band === 'SCL' ? s2FixtureScl(spec, day, x, wet) : spec.reflectance[wet ? 'water' : 'land'][field];
 					}
 				}
-				bytes = writeCog({ width: n, height: n, values, epsg, originX, originY, pixelSize: px, tile: coarse ? tilePx / 2 : tilePx, nodata: '0' });
+				// The real bands' layout (raster/cogLayouts.ts): the reflectance bands carry GDAL's scale and offset
+				// (1e-4, −0.1: the item's −1000 DN offset), so the pass reads them as it reads DE Africa's.
+				const layout = band === 'SCL' ? s2SclLayout(epsg) : s2BandLayout(epsg);
+				bytes = writeCog({ ...layout, width: n, height: n, values, epsg, originX, originY, pixelSize: px, tile: coarse ? tilePx / 2 : tilePx });
 				if (cache.size >= 64) cache.clear();
 				cache.set(url, bytes);
 			}

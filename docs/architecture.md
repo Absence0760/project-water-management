@@ -2266,7 +2266,8 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
   - **The COG reader** (`backend/src/raster/cog.ts`, shared with the coming
     WaPOR actual ET pass, #623, and the Sentinel-1/2 passes, #624) reads
     classic TIFF and BigTIFF of either byte order; tiles; one band of
-    uint8, int16, uint16 or float32; no compression, DEFLATE or LZW (the
+    uint8, int16, uint16 or float32 (PlanarConfiguration 1, or 2, which is
+    the same bytes for one band and what WaPOR and Sentinel-1 write); no compression, DEFLATE or LZW (the
     CHIRPS reader's decoder, `feeds/sources/tiff.ts`); predictor 1, 2 on
     integers, or 3 (floating point) on float32; WGS 84 / UTM (EPSG
     326xx / 327xx, metres) or geographic WGS 84 (EPSG:4326, degrees);
@@ -2284,7 +2285,17 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     `bboxWindow` gives a geographic scene's pixels under a lon/lat box. No
     dependency (`geotiff` would bring a decoder zoo; the CHIRPS reader
     refuses tiles on purpose and stays so). `cog.test.ts` round-trips every
-    form through `cogWrite.ts`, which also writes the fixtures.
+    form through `cogWrite.ts`, which also writes the fixtures. Checked
+    against real headers on 2026-10-29 (one WaPOR dekad, one Sentinel-1 VV
+    and MASK, one Sentinel-2 B03, B11 and SCL; headers and IFDs by range
+    request, a small window of each decoded in memory, nothing kept):
+    `raster/cogLayouts.ts` records each one's tags, and the fixtures and
+    `cogLayouts.test.ts` write synthetic files in those layouts (GDAL's
+    structural metadata before the IFD, tile trailers, overview IFDs, the
+    citations in GeoAsciiParams) and read them through the production
+    `CogAccept`s. The check found the one refusal the round-trip tests
+    couldn't: PlanarConfiguration 2, which every WaPOR and Sentinel-1 file
+    has, was refused until then.
   - **Projection** (`raster/utm.ts`): WGS 84 → UTM by Krüger's series to n⁶
     (Karney 2011), checked against PROJ to a millimetre, with the point
     scale factor k. No dependency: proj4js would carry a CRS database for
@@ -2385,7 +2396,12 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     neither B11 nor B08 is refused), with each band's DN offset from its
     `raster:bands` (−1000 for Collection 1, checked 2026-10-29).
   - **The bands**: uint16 COGs in UTM (EPSG 327xx, the south codes, unlike
-    WOfS); B03 and B08 at 10 m, B11 and SCL at 20 m on the same origin. The
+    WOfS); B03 and B08 at 10 m (1024-pixel tiles), B11 and SCL at 20 m
+    (512) on the same origin, DEFLATE with the horizontal predictor, no
+    data 0. Each reflectance file carries its own GDAL scale and offset,
+    1e-4 and −0.1 (checked 2026-10-29), which is the item's −1000 DN
+    offset at 1e-4 a DN, and the pass uses the file's (the item's offset
+    only for a file without one); SCL carries none. The
     mask is made on B03's grid; B11 and SCL are read over the window of
     their own grids under it (`windowOn`) and each 10 m pixel takes the
     20 m pixel its centre falls in; B08 is read only when a clear inside
@@ -2430,7 +2446,11 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
   - **The bands**: VV, float32 gamma0 in linear power with NaN for no
     data, and the RTC `mask` (uint8: 0 no data, 1 valid, 2 shadow or
     layover), both on one 0.0002° geographic grid (EPSG:4326) in 1° tiles
-    (checked against a live item's metadata 2026-10-29). The outline's
+    (checked against a live item's metadata 2026-10-29, then against the
+    VV and MASK headers the same day: 5000 × 5000, 256-pixel tiles,
+    DEFLATE with the float predictor (MASK the horizontal one),
+    `GDAL_NODATA` `nan` and `0`, no scale; a decoded window's VV was 0.006
+    to 0.41, linear power, not dB). The outline's
     mask is made on that grid (`raster/mask.ts`, the ellipsoid's cell area,
     about 420 m² at 32° S), and a mask band on any other grid is refused.
     Two COG headers and two small windows a scene.
@@ -2532,7 +2552,10 @@ worker tick: the status, then each unit due by its load mark (≤ 200 a tick, ol
 
 - **Why the fetcher, in Node** (the compute decision, as for WOfS). A
   WaPOR dekad is one ~2.1 GB BigTIFF COG on EPSG:4326 at 1/1024°, int16 ×
-  0.1 mm/day (GDAL's band scale), nodata −9999, LZW, 512-pixel tiles: the
+  0.1 mm/day (GDAL's band scale), nodata −9999, LZW without a predictor,
+  512-pixel tiles, the global grid 180° W–180° E and 60° N–60° S
+  (368 640 × 122 880, ten overviews; FAO's 2025-09-D1 header, read
+  2026-10-29, `raster/cogLayouts.ts`): the
   shared reader (`backend/src/raster/cog.ts`, `WAPOR_ACCEPT` in
   `water-use/observed/wapor.ts`: int16, geographic, the scale read and
   required to be 0.1 with no offset) reads the header, then only the slice

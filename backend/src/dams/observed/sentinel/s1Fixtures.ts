@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
+import { S1_MASK_LAYOUT, S1_VV_LAYOUT } from '../../../raster/cogLayouts.js';
 import { writeCog } from '../../../raster/cogWrite.js';
 import { toUtm, utmEpsgFor } from '../../../raster/utm.js';
 import { level, loadWofsFixture, type WofsFixtureSpec } from '../wofs/fixtures.js';
@@ -170,7 +171,7 @@ export function s1Fixture(today: () => string, spec: S1FixtureSpec = loadS1Fixtu
 						const v = s1FixtureShadow(spec, originX + (c + 0.5) * pixelDeg) ? S1_FIXTURE_MASK.shadow : S1_FIXTURE_MASK.valid;
 						for (let r = 0; r < n; r++) values[r * n + c] = v;
 					}
-					bytes = writeCog({ width: n, height: n, values, epsg: 4326, originX, originY, pixelSize: pixelDeg, tile: tilePx, nodata: '0' });
+					bytes = writeCog({ ...S1_MASK_LAYOUT, width: n, height: n, values, epsg: 4326, originX, originY, pixelSize: pixelDeg, tile: tilePx });
 				} else {
 					const { xs, ys } = utmOf(tx, ty);
 					const lvl = level(water, day);
@@ -182,7 +183,7 @@ export function s1Fixture(today: () => string, spec: S1FixtureSpec = loadS1Fixtu
 						const isWet = 0.5 + 0.25 * Math.sin((2 * Math.PI * xs[i]!) / l1) + 0.25 * Math.cos((2 * Math.PI * ys[i]!) / l2) < lvl;
 						values[i] = isWet ? wet : spec.backscatter.land;
 					}
-					bytes = writeCog({ width: n, height: n, values, epsg: 4326, originX, originY, pixelSize: pixelDeg, tile: tilePx, nodata: 'nan' });
+					bytes = writeCog({ ...S1_VV_LAYOUT, width: n, height: n, values, epsg: 4326, originX, originY, pixelSize: pixelDeg, tile: tilePx });
 				}
 				if (cache.size >= 64) cache.clear();
 				cache.set(url, bytes);

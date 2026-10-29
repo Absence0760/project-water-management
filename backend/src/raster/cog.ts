@@ -16,12 +16,19 @@
 // the top-left corner. DE Africa writes the southern hemisphere in the
 // NORTHERN zone codes (EPSG:32634, northings negative), which utm.ts handles
 // as the EPSG code says. A WaPOR v3 dekad (#623) is a ~2.1 GB BigTIFF COG on
-// EPSG:4326 at 1/1024°, int16, LZW, 512-pixel tiles, nodata −9999, so its
-// tile tables alone are ~2.8 MB: readWindow reads only the slice of them for
-// the tile rows it needs. Sentinel-1 RTC (#624) is float32 on a 0.0002°
-// EPSG:4326 grid; Sentinel-2 L2A is uint16 in UTM.
+// EPSG:4326 at 1/1024°, int16, LZW without a predictor, 512-pixel tiles,
+// nodata −9999, GDAL scale 0.1, so its tile tables alone are ~2.8 MB:
+// readWindow reads only the slice of them for the tile rows it needs.
+// Sentinel-1 RTC (#624) is float32 (DEFLATE, the float predictor; MASK uint8)
+// on a 0.0002° EPSG:4326 grid in 256-pixel tiles; Sentinel-2 L2A C1 is uint16
+// in southern UTM codes, with a GDAL scale and offset (1e-4, −0.1). Those
+// three were checked against real headers on 2026-10-29; cogLayouts.ts
+// records what each held and cogLayouts.test.ts reads synthetic files laid
+// out the same way. WaPOR and Sentinel-1 write PlanarConfiguration 2 on their
+// one band, which is the same bytes as 1.
 //
-// Read: classic TIFF or BigTIFF, of either byte order; tiled; one sample of
+// Read: classic TIFF or BigTIFF, of either byte order; tiled; one sample
+// (PlanarConfiguration 1, or 2, which is the same bytes for one band) of
 // uint8, int16, uint16 or float32; no compression, DEFLATE (8, or the old
 // 32946) through node:zlib, or LZW (5, TIFF's MSB-first variant, the
 // CHIRPS reader's decoder), each bounded to the tile's size; predictor 1,
@@ -38,7 +45,8 @@
 //
 // No dependency: the `geotiff` package would pull in a decoder zoo, and
 // feeds/sources/tiff.ts (the CHIRPS strip reader) refuses tiles on purpose.
-// cog.test.ts round-trips this reader through cogWrite.ts.
+// cog.test.ts round-trips this reader through cogWrite.ts; cogLayouts.test.ts
+// through the real files' layouts.
 import { inflateSync } from 'node:zlib';
 import { FeedFormatError } from '../feeds/errors.js';
 import { gdalItems, lzwDecode, type RangeRead } from '../feeds/sources/tiff.js';
@@ -270,7 +278,10 @@ export async function openCog(read: RangeRead, accept: CogAccept = {}): Promise<
 	if (!sampleType) throw new FeedFormatError(`the scene’s samples (${bits}-bit, sample format ${format}) are not uint8, int16, uint16 or float32`);
 	const acceptTypes = accept.sampleTypes ?? (Object.keys(SAMPLE) as SampleType[]);
 	if (!acceptTypes.includes(sampleType)) throw new FeedFormatError(`the scene’s samples are ${sampleType}, not ${acceptTypes.join(' or ')}`);
-	if ((await scalar(TAG.planarConfig, 1)) !== 1) throw new FeedFormatError('the scene’s planar configuration is not supported');
+	// One band (checked above), so PlanarConfiguration 1 (chunky) and 2 (planar) store the same bytes (TIFF 6.0 § 8:
+	// irrelevant when SamplesPerPixel is 1). DE Africa's s1_rtc VV writes 2 on its full image and 1 on its overviews.
+	const planar = await scalar(TAG.planarConfig, 1);
+	if (planar !== 1 && planar !== 2) throw new FeedFormatError(`the scene’s planar configuration ${planar} is not valid`);
 	if ((await scalar(TAG.fillOrder, 1)) !== 1) throw new FeedFormatError('the scene uses a reversed bit fill order, which is not supported');
 	const compression = await scalar(TAG.compression, 1);
 	if (compression !== 1 && compression !== LZW && !DEFLATE.has(compression)) throw new FeedFormatError(`the scene uses TIFF compression ${compression}, which is not supported`);
