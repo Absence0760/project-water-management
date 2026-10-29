@@ -10942,12 +10942,13 @@ together.
   precedence, so it takes a day only when no optical source saw it clearly,
   and "never alone" is "never". Radar's errors do move the bias and the
   share within, which is why the summary counts its views (`radar`).
-  *Planned, #624 steps 4 and 5:* the passes that write `s2` and `s1` rows
-  (Sentinel-2 water as MNDWI > 0, Sentinel-1 water as VV under a fixed
-  −18 dB, not tuned per dam) and the gate before Sentinel-1 is enabled for a
-  dam: its agreement with Sentinel-2's clear views within a day must reach
-  85 % of days within 0.1 F (#624's acceptance criteria). Until then the
-  reader takes whatever `s2`/`s1` rows the store holds.
+  The Sentinel-2 pass that writes `s2` rows is built (its classification
+  is above). *Planned, #624 step 5:* the pass that writes `s1` rows
+  (Sentinel-1 water as VV under a fixed −18 dB, not tuned per dam) and the
+  gate before Sentinel-1 is enabled for a dam: its agreement with
+  Sentinel-2's clear views within a day must reach 85 % of days within
+  0.1 F (#624's acceptance criteria). Until then the reader takes whatever
+  `s1` rows the store holds.
 - **Full area F.** The run's own: the survey curve's top area when the curve
   is usable, else `damAreaFullM2`, else the estimate from the capacity that
   run's engine used (`estimatedDamAreaForEngine`). Sedimentation's loss of
