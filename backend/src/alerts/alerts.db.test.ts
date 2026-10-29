@@ -7,7 +7,7 @@
 // The tests queue alert checks and run ticks; each leaves no job queued, so
 // another file's tick never picks one up (jobs and feeds tests count them).
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { anon, app, asOwner, monthly, node, settlePendingNotices, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, monthly, node, settlePendingNotices, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import { hashToken } from '../auth/tokens.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
@@ -15,6 +15,9 @@ import { outbox, type Mail } from '../mail/transport.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { evaluateAlerts } from './evaluate.js';
 import { DIGEST_CLAIM_LINES, DIGEST_MAX_LINES, sendAlerts } from './send.js';
+
+// The feeds this file makes are switched off when it ends (db-setup.ts).
+disableFeedsAfterFile();
 
 type User = Awaited<ReturnType<typeof signUp>>;
 

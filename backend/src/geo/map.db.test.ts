@@ -17,10 +17,13 @@ import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SYNTHETIC_FILE } from '../../scripts/import-quaternaries.js';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { quaternaryRecords, replaceDataset } from './loadQuaternaries.js';
 import { SYNTHETIC_DATASET } from './quaternary.js';
+
+// The feeds this file makes are switched off when it ends (db-setup.ts).
+disableFeedsAfterFile();
 
 type User = Awaited<ReturnType<typeof signUp>>;
 

@@ -94,6 +94,8 @@ beforeAll(async () => {
 afterAll(async () => {
 	await asOwner('DELETE FROM data_feed WHERE project_id = $1', [pid]);
 	await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	// The cell cache its fetches fill is shared too (productCache.db.test.ts counts every row).
+	for (const t of ['chirps_cell_year', 'chirps_file', 'chirps_cell_stale']) await asOwner(`DELETE FROM ${t}`);
 });
 
 describe('rain for each unit, from the feeds to the run and the fit', () => {

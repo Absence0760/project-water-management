@@ -54,6 +54,22 @@ export function settlePendingNoticesSql(where = ''): string[] {
 	];
 }
 
+/**
+ * Enabled data feeds: the tick's scheduler (feeds/schedule.ts) queues every
+ * due one in the shared database, not only its own file's, and runs it. A
+ * CHIRPS feed one file left on was fetched by a later file's runTick and its
+ * cached cells landed in productCache.db.test.ts's counts (PR #655).
+ */
+export const ENABLED_FEEDS_SQL = `
+	SELECT f.source AS kind, 'enabled' AS status, p.name AS project, count(*)::int AS n
+	FROM data_feed f JOIN project p ON p.id = f.project_id
+	WHERE f.enabled
+	GROUP BY f.source, p.name
+	ORDER BY f.source, p.name`;
+
+/** Switch every data feed off: test cleanup, as RETIRE_PENDING_JOBS_SQL is for jobs. */
+export const DISABLE_FEEDS_SQL = `UPDATE data_feed SET enabled = false WHERE enabled`;
+
 /** Set by db-setup.ts's afterAll when it runs: db-setup.db.test.ts checks that the file's own afterAll ran first. */
 export const GUARD_RAN = Symbol.for('water-management.db-setup.guard-ran');
 
@@ -65,14 +81,16 @@ type Pending = { kind: string; status: string; project: string; n: number };
 const listOf = (rows: Pending[]) => rows.map((r) => `${r.n} × ${r.kind} (${r.status}) in project "${r.project}"`).join('; ');
 
 /**
- * The guard's check: throws (after retiring or settling them, so only the
- * file that left them fails) when any job or notice is pending, naming each
- * kind, status and project.
+ * The guard's check: throws (after retiring, settling or switching them off,
+ * so only the file that left them fails) when any job or notice is pending or
+ * any data feed is still enabled, naming each kind, status and project.
  */
 export async function assertNothingPending(db: Queryable): Promise<void> {
 	const { rows: jobs } = await db.query<Pending>(PENDING_JOBS_SQL);
 	const { rows: notices } = await db.query<Pending>(PENDING_NOTICES_SQL);
+	const { rows: feeds } = await db.query<Pending>(ENABLED_FEEDS_SQL);
 	if (jobs.length) await db.query(RETIRE_PENDING_JOBS_SQL);
+	if (feeds.length) await db.query(DISABLE_FEEDS_SQL);
 	if (notices.length) for (const sql of settlePendingNoticesSql()) await db.query(sql);
 	const problems: string[] = [];
 	if (jobs.length) {
@@ -85,6 +103,12 @@ export async function assertNothingPending(db: Queryable): Promise<void> {
 		problems.push(
 			`this test file left pending notices: ${listOf(notices)}. ` +
 				'Send them (runTick) or settle them (helpers.ts settlePendingNotices) before the file ends, or a later file’s tick mails them'
+		);
+	}
+	if (feeds.length) {
+		problems.push(
+			`this test file left data feeds enabled: ${listOf(feeds)}. ` +
+				'Switch them off before the file ends (helpers.ts disableFeedsAfterFile), or a later file’s tick schedules and fetches them'
 		);
 	}
 	if (problems.length) throw new Error(`${problems.join('. ')} (src/__tests__/db-setup.ts).`);

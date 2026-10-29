@@ -4,9 +4,12 @@
 // published farm view. Every "not" has a positive control.
 import { forecastSplit, runForecastChecked, runModelChecked, withoutForecastTail, type RunSummary } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, monthly, node, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { loadModelInput, loadRunInput, trimRuns } from './execute.js';
+
+// The feeds this file makes are switched off when it ends (db-setup.ts).
+disableFeedsAfterFile();
 
 type User = Awaited<ReturnType<typeof signUp>>;
 

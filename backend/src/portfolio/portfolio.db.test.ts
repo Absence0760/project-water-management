@@ -2,13 +2,16 @@
 // rows, and figures that say where they come from. Every "cannot see" check
 // has a positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { utcToday } from '../feeds/fetch.js';
 import { loadMyOutcomes, loadPortfolio, type PortfolioProject } from './portfolio.js';
 import { localDate } from '../projects/timeZone.js';
 import { ageDays, ewrStatus, irrigationStatus } from './status.js';
+
+// The feeds this file makes are switched off when it ends (db-setup.ts).
+disableFeedsAfterFile();
 
 type User = Awaited<ReturnType<typeof signUp>>;
 

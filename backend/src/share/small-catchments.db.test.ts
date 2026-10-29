@@ -13,8 +13,11 @@
 // Every "cannot" has its positive control (CLAUDE.md rule 5).
 import { DOMINANCE_TOP1, DOMINANCE_TOP2, FARMER_K, totalShown } from '@water-management/engine';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { anon, asOwner, monthly, node, retirePendingJobs, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+
+// The feeds this file makes are switched off when it ends (db-setup.ts).
+disableFeedsAfterFile();
 
 type User = Awaited<ReturnType<typeof signUp>>;
 let owner: User;

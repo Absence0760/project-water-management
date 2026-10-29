@@ -26,11 +26,14 @@ import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { actForAuthority, anon, app, asOwner, DECISION, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, DECISION, lastMailTo, monthly, node, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
 import { APP_USER_EXPORTED, USER_FK_COVERAGE } from './export.js';
 import { base32Decode, totp } from './totp.js';
+
+// The feeds this file makes are switched off when it ends (db-setup.ts).
+disableFeedsAfterFile();
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Doc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any

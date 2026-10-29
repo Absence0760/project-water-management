@@ -4,8 +4,11 @@
 // including a key whose series list names it but which hasn't pushed yet
 // (240_series_name_key_listed).
 import { describe, expect, it } from 'vitest';
-import { app, asOwner, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import { withApiKey, withUser } from '../db/tx.js';
+
+// The feeds this file makes are switched off when it ends (db-setup.ts).
+disableFeedsAfterFile();
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Meta = { id: string; kind: string; name: string; updatedAt: string; source: string | null };
