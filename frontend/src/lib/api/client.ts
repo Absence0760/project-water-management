@@ -175,6 +175,7 @@ import type {
 	MapSearchAnswer,
 	DamProposals,
 	DamObservations,
+	EtObserved,
 	FarmDamObserved,
 	DelineationProposal,
 	DelineationRequest,
@@ -1333,6 +1334,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 * space): the run named, else the project's newest.
 		 */
 		damObservations: (id: string, runId?: string | null) => request<DamObservations>('GET', `${p(id)}/dams/observations${runId ? `?${new URLSearchParams({ run: runId })}` : ''}`),
+		/** A unit's satellite actual ET against a run's modelled irrigation use (issue #623, docs/api.md § Observed actual ET): the run named, else the newest. */
+		etObserved: (id: string, nodeId: string, runId?: string | null) =>
+			request<EtObserved>('GET', `${p(id)}/nodes/${enc(nodeId)}/et-observed${runId ? `?${new URLSearchParams({ run: runId })}` : ''}`),
 		damProposals: {
 			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>

@@ -5269,6 +5269,45 @@ saves the catchment's model, and override mode there edits the scenario's
   "Vines, Top block: 1.29 ha"); a crop-type choice's confirmation says
   "from crop types" with the crop-type caution, and so does the notice.
   e2e: `crop-types-proposals.spec.ts`.
+- **Actual ET from satellite** (issue #623, `crops/EtObservedBox.svelte`,
+  rows in `crops/etObserved.ts`; the method in [model.md §
+  2.10o](./model.md#210o-observed-actual-et-against-the-modelled-irrigation-use-app-issue-623),
+  the API in [api.md § Observed actual ET](./api.md#observed-actual-et)):
+  under From land cover, for the same saved hydrological unit, one fold
+  (`Fold`, read-only, so its action reads "Show") whose line says how many
+  dekads of satellite actual ET were compared with the project's newest run
+  and which way the model leans ("5 dekads compared · crop ET +12% ·
+  irrigation −8%"; + means the model uses more, rounded before the sign).
+  Opened: the run it compares with ("Compared with the newest run,
+  “Baseline” (29 Oct 2026)."), a line when the drawer has unsaved changes
+  to the planted areas ("aren't in this run"), and with more than one
+  source which the tables show (WaPOR; the others' dekads are in the CSV);
+  the summary in words (each bias, and the share of dekads within ±25 %); the observed area
+  when it is more than 1.5× from the planted area either way, asking to
+  check the planted areas and the parcels; a note that modelled crop ET is
+  the model's effective rain plus the irrigation the run delivered to the
+  crop (at most planted area × crop factor × A-pan) and irrigation seen the
+  satellite's ET less that rain, and that a difference points at the inputs, never a correction (the model
+  never reads these values); a table per half water year (summer Oct–Mar,
+  winter Apr–Sep: dekads compared of seen, ET seen, crop ET modelled and
+  bias, irrigation the same; "ET seen", not "crop ET", since the satellite
+  sees soil and weeds too); the dekads newest first behind "The N WaPOR
+  dekads, newest first" (six, then "Show all N dekads"), each with ETa (mm/day), the four
+  volumes (m³) and why it wasn't compared, a dekad outside the band in the
+  danger colour; **Download the dekads (CSV)**, every source's dekads with
+  the credit on its first line (a `#` line, built in the browser); and the
+  credit, "Actual ET (WaPOR): FAO WaPOR v3, CC BY 4.0." With no
+  observations, the usual case (the fetch is off by default), the line reads
+  "no observations" and the open fold says it is read each dekad from
+  satellite over the unit's farm parcels once switched on, with **Open the
+  Map** to link parcels. The tables are app.css's `.table-stack`: the
+  drawer (480 px at most) is under its 50rem at every width, so each row is
+  a block with its figures under their own labels and nothing scrolls
+  sideways. An unsaved unit's line ("Save the model to see …") names this
+  panel too. The run's daily CSV
+  (`…/runs/:runId/export/daily.csv`) doesn't carry ETa: a dekadal value has
+  no day of its own, and the run's export is the run's alone, so the
+  comparison has its own file.
 - **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
   tab at once and the other way round. The sheet is modal, which makes the
   page's save bar unreachable, so it repeats the save row: status (unsaved,

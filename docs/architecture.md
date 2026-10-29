@@ -2334,6 +2334,27 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
   Sentinel views they show (`upstream.ts` `sentinelCredit`), beside DE
   Africa's.
 
+### Observed actual ET: the comparison
+
+Satellite actual ET per unit and dekad (`et_observation`, 276, issue #623)
+is read back only as a check on the run, never as an input: the unit
+drawer asks `GET /projects/:id/nodes/:nodeId/et-observed`
+(`backend/src/water-use/observed/routes.ts`), which reads the unit's rows
+and the newest run's columns for it (`gross_demand`, `effective_rain`,
+`crop_requirement`, `demand`, `supplied` and its demand objects') under the
+caller's RLS (`read.ts`) and hands both to a pure comparison (`compare.ts`,
+[model.md § 2.10o](./model.md#210o-observed-actual-et-against-the-modelled-irrigation-use-app-issue-623)).
+No engine change and no stored result: the comparison is worked out on each
+request from what is stored, as the dam check is
+(`dams/observed/compare.ts`).
+
+```
+worker (no user) ──► app_et_observation_load ──► et_observation (276)
+unit drawer ──► GET …/nodes/:nodeId/et-observed ──► withUser:
+   et_observation (RLS)  +  model_run / run_series (the newest run, the unit's columns)
+   ──► compareEt (pure) ──► dekads, half water years, summary, credit
+```
+
 ## Server-side reports
 
 The printable report ([ui.md § Report](./ui.md#report)) rendered to a PDF on

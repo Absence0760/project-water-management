@@ -139,6 +139,12 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Observed actual ET against a unit's modelled irrigation use (issue #623): the unit drawer's comparison, auth-gated.
+	it('inventories the observed ET route as auth-gated', () => {
+		expect(routes).toContain('GET /projects/:id/nodes/:nodeId/et-observed');
+		expect(PUBLIC.has('GET /projects/:id/nodes/:nodeId/et-observed')).toBe(false);
+	});
+
 	// Reproduction (WP-3.1): auth-gated like every project route.
 	it('inventories the reproduce route as auth-gated', () => {
 		for (const r of ['GET /projects/:id/runs/:runId/reproduce']) {
