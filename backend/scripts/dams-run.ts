@@ -9,7 +9,11 @@
 // scenes, dams/observed/wofs/fixtures.ts), then the tick again (load what the pass
 // wrote into dam_observation). With DAM_OBSERVATIONS_S2=on (off by default,
 // as in production) the Sentinel-2 pass runs after WOfS, on the synthetic
-// Sentinel-2 scenes (dams/observed/sentinel/fixtures.ts). The handover goes through MIRROR_URL when it
+// Sentinel-2 scenes (dams/observed/sentinel/fixtures.ts), and with
+// DAM_OBSERVATIONS_S1=on the Sentinel-1 radar pass after it (the synthetic
+// s1_rtc scenes, sentinel/s1Fixtures.ts), then the S1/S2 agreement report
+// (sentinel/agreement.ts: how many radar days agree with Sentinel-2's clear
+// views, against issue #624's 85 % bar). The handover goes through MIRROR_URL when it
 // names a bucket or directory of its own, else a scratch directory under the
 // system's temp directory (one per dev database), never the committed
 // synthetic copy. Needs the synthetic waterbodies (`pnpm import:waterbodies`,
@@ -30,7 +34,8 @@ import { openStore } from '../src/mirror/store.js';
 import { runDamsTick } from '../src/dams/observed/tick.js';
 import { REQUEST_INTERVAL_MS, runWaterbodiesPass, waterbodiesHttp } from '../src/dams/observed/waterbodies.js';
 import { runWofsPass, SCENE_INTERVAL_MS, STAC_INTERVAL_MS } from '../src/dams/observed/wofs/pass.js';
-import { runS2Pass, S2_SCENE_INTERVAL_MS } from '../src/dams/observed/sentinel/pass.js';
+import { runS1Pass, runS2Pass, S1_SCENE_INTERVAL_MS, S2_SCENE_INTERVAL_MS } from '../src/dams/observed/sentinel/pass.js';
+import { S1_AGREEMENT, updateAgreement } from '../src/dams/observed/sentinel/agreement.js';
 import { damSourceOn } from '../src/dams/observed/handover.js';
 import { feedHttp } from '../src/feeds/http.js';
 
@@ -68,18 +73,36 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			`WOfS pass (${mode}): ${wofs.written.length} written, ${wofs.failures.length} failed, ${wofs.fresh} fresh, ${wofs.scenesRead} scenes read; stopped: ${wofs.stopped}${wofs.pausedUntil ? ` until ${wofs.pausedUntil}` : ''}`
 		);
 		let s2Error: unknown = null;
+		let s1Error: unknown = null;
+		const sentinelWritten: string[] = [];
 		if (damSourceOn('s2')) {
 			const s2 = await runS2Pass({ store, http: await feedHttp(mode), today: utcToday(), stacIntervalMs: live ? STAC_INTERVAL_MS : 0, sceneIntervalMs: live ? S2_SCENE_INTERVAL_MS : 0 });
 			s2Error = s2.error;
+			sentinelWritten.push(...s2.written);
 			console.log(
 				`Sentinel-2 pass (${mode}): ${s2.written.length} written, ${s2.failures.length} failed, ${s2.fresh} fresh, ${s2.scenesRead} scenes read; stopped: ${s2.stopped}${s2.pausedUntil ? ` until ${s2.pausedUntil}` : ''}`
 			);
+		}
+		if (damSourceOn('s1')) {
+			const s1 = await runS1Pass({ store, http: await feedHttp(mode), today: utcToday(), stacIntervalMs: live ? STAC_INTERVAL_MS : 0, sceneIntervalMs: live ? S1_SCENE_INTERVAL_MS : 0 });
+			s1Error = s1.error;
+			sentinelWritten.push(...s1.written);
+			console.log(
+				`Sentinel-1 pass (${mode}): ${s1.written.length} written, ${s1.failures.length} failed, ${s1.fresh} fresh, ${s1.scenesRead} scenes read; stopped: ${s1.stopped}${s1.pausedUntil ? ` until ${s1.pausedUntil}` : ''}`
+			);
+			const a = await updateAgreement(store, sentinelWritten);
+			if (a) {
+				const pct = a.rate === null ? 'no pairs' : `${(a.rate * 100).toFixed(1)} % within ${S1_AGREEMENT.withinShare} F`;
+				console.log(
+					`S1/S2 agreement: ${a.pairs} paired day(s) over ${a.damsPaired} of ${a.dams} dam(s), ${pct} (bar ${S1_AGREEMENT.bar * 100} %: ${a.passes ? 'passes' : 'not met'}); ${a.damsPassing} of ${a.damsJudged} dam(s) with ${S1_AGREEMENT.minPairs}+ pairs pass`
+				);
+			}
 		}
 		const after = await runDamsTick({ env, store });
 		console.log(`tick: ${after?.loaded ?? 0} file(s) loaded, ${after?.rows ?? 0} row(s) written${after?.failed ? `, ${after.failed} failed` : ''}`);
 		console.log(`handover: ${url}`);
 		await closePool();
-		process.exit(pass.error || wofs.error || s2Error || after?.failed ? 1 : 0);
+		process.exit(pass.error || wofs.error || s2Error || s1Error || after?.failed ? 1 : 0);
 	})().catch(async (err) => {
 		console.error((err as Error).message);
 		await closePool();

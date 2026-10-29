@@ -2133,10 +2133,12 @@ EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside th
       writes dams/wofs/<featureId>.json, dams/wofs-status.json
    Sentinel-2 pass (#624, DAM_OBSERVATIONS_S2=on): the same, s2_l2a_c1 classified by us, back to 2019
       writes dams/s2/<featureId>.json, dams/s2-status.json
+   Sentinel-1 pass (#624 step 5, DAM_OBSERVATIONS_S1=on): the same, s1_rtc radar classified by us, back to 2019
+      writes dams/s1/<featureId>.json, dams/s1-status.json, then dams/s1-agreement.json (log: dams_s1_agreement)
    each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
 
 worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
-   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs | s2; s1 accepted for #624 step 5)
+   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs | s2 | s1)
    ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
 ```
 
@@ -2387,20 +2389,62 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     sees one a second across both. A 403 or throttling stops the pass and
     pauses `s2` alone.
   - **Budget**: with it on, a run gives Waterbodies up to 30 %, WOfS up to
-    65 % (`WOFS_BUDGET_SHARE_WITH_S2`) and Sentinel-2 the rest; a pass that
-    finishes early leaves its time to the next.
+    65 % (`WOFS_BUDGET_SHARE_WITH_S2`) and Sentinel-2 the rest (up to 85 %,
+    `S2_BUDGET_SHARE_WITH_S1`, when Sentinel-1 follows; `lambda-fetcher.ts`
+    `scenePassShares`); a pass that finishes early leaves its time to the next.
   - **Off by default**, behind `DAM_OBSERVATIONS_S2` on the fetcher as well
     as the dam observations themselves (Terraform `dam_s2_enabled`, only
     with `dam_observations_enabled`), with its own heartbeat and recency
     alarms (`Source = s2`, breaching on missing data). The worker loads
-    `s2` (and, from #624 step 5, `s1`) files by the same path as WOfS's;
-    the panel and the farm card show them (#624 step 6, above).
+    `s2` and `s1` files by the same path as WOfS's; the panel and the farm
+    card show them (#624 step 6, above).
   - **Locally** `sentinel/fixtures.ts` answers the search and the bands
     from `backend/fixtures/feeds/s2-sample.json`: WOfS's invented water
     field seen at 10 m, overlapping tiles, a band of cloud with its shadow
     every third day, overcast days, and days whose item lists no B11 (the
     NDWI fallback). `pnpm dev:dams:run` runs it with
     `DAM_OBSERVATIONS_S2=on`.
+
+- **Sentinel-1 radar, the secondary source** (issue #624 step 5,
+  `sentinel/s1.ts`, `sentinel/pass.ts` `S1_PASS`). The same scene pass
+  after Sentinel-2's, on DE Africa's radiometrically terrain-corrected
+  radar (`s1_rtc`), which sees through cloud. Its own parts:
+  - **The search**: `collections=s1_rtc`, items checked by `s1Item` (the
+    `vv` and `mask` assets, each only under `s1_rtc/` in
+    `deafrica-sentinel-1`; VH is never read).
+  - **The bands**: VV, float32 gamma0 in linear power with NaN for no
+    data, and the RTC `mask` (uint8: 0 no data, 1 valid, 2 shadow or
+    layover), both on one 0.0002° geographic grid (EPSG:4326) in 1° tiles
+    (checked against a live item's metadata 2026-10-29). The outline's
+    mask is made on that grid (`raster/mask.ts`, the ellipsoid's cell area,
+    about 420 m² at 32° S), and a mask band on any other grid is refused.
+    Two COG headers and two small windows a scene.
+  - **The classification** (VV < −18 dB, applied as VV < 10^−1.8 in linear
+    power; mask 2, or a valid pixel without backscatter, not clear; mask 0
+    not covered): [model.md §2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b).
+  - **History** to 2019 (`S1_BACKFILL_FROM`, Sentinel-2's start: older
+    radar can't be checked against it), from `sinceBy.s1`; one request a
+    second to each host (`S1_SCENE_INTERVAL_MS`), the explorer's pacer
+    shared with WOfS and Sentinel-2; its own pause.
+  - **The S1/S2 agreement** (`sentinel/agreement.ts`): after the pass, the
+    fetcher pairs each clear radar view (≥ 90 % of the outline) with the
+    clear Sentinel-2 view of the same dam on the same day, else a day
+    either side, and counts the pairs whose wet areas are within 0.1 of
+    the outline's own area. Per dam in `dams/s1-agreement.json`
+    (recomputed for the dams either Sentinel pass wrote, and up to 200
+    others a run that have no entry yet), summed into one log line,
+    `dams_s1_agreement` (dams, pairs, within, the pooled rate and whether
+    it passes issue #624's bar of 85 %; counts only). The bar decides
+    whether `dam_s1_enabled` stays on (deployment.md § Dam observations).
+  - **Off by default**, behind `DAM_OBSERVATIONS_S1` (Terraform
+    `dam_s1_enabled`, only with `dam_observations_enabled`), with its own
+    heartbeat and recency alarms (`Source = s1`).
+  - **Locally** `sentinel/s1Fixtures.ts` answers the search and both bands
+    from `backend/fixtures/feeds/s1-sample.json`: WOfS's invented water
+    field on the geographic grid, two passes every six days, a strip of
+    shadow every 0.1° of longitude, and a windy day every tenth whose open
+    water reads dry. `pnpm dev:dams:run` runs it with
+    `DAM_OBSERVATIONS_S1=on` and prints the agreement.
 
 ### Observed actual ET: the comparison
 

@@ -2,7 +2,9 @@
 // synthetic s2_l2a_c1 search and bands (fixtures.ts): what it writes, a
 // 0.3 ha dam WOfS has no pixel for, a winter day partly under cloud, the
 // NDWI fallback, its pacing (one request a second per host), and a 403
-// stopping it.
+// stopping it. Then the Sentinel-1 pass against the synthetic s1_rtc
+// (s1Fixtures.ts): the same, radar through Landsat's cloud, the RTC mask's
+// shadow, wind-roughened water, and its agreement with Sentinel-2.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,9 +19,13 @@ import { toUtm } from '../../../raster/utm.js';
 import { readObservationFile, readStatus, writeWanted, type WantedOutline } from '../handover.js';
 import { readState, runWofsPass, STAC_INTERVAL_MS } from '../wofs/pass.js';
 import { loadWofsFixture, wofsFixture } from '../wofs/fixtures.js';
-import { S2_C1_S3_BASE, WOFS_STAC_SEARCH } from '../wofs/stac.js';
+import { S1_S3_BASE, S2_C1_S3_BASE, WOFS_STAC_SEARCH } from '../wofs/stac.js';
+import { outlineMask } from '../../../raster/mask.js';
+import { s1Agreement, agreementPairs } from './agreement.js';
 import { loadS2Fixture, s2Fixture, s2FixtureHasSwir, type S2FixtureSpec } from './fixtures.js';
-import { runS2Pass, S2_BACKFILL_FROM, S2_SCENE_INTERVAL_MS, S2_STATE_KEY } from './pass.js';
+import { runS1Pass, runS2Pass, S1_BACKFILL_FROM, S1_SCENE_INTERVAL_MS, S1_STATE_KEY, S2_BACKFILL_FROM, S2_SCENE_INTERVAL_MS, S2_STATE_KEY } from './pass.js';
+import { loadS1Fixture, s1Fixture, s1FixtureShadow, s1FixtureWindy, type S1FixtureSpec } from './s1Fixtures.js';
+import { geometryAreaM2 } from '../../../geo/area.js';
 
 const tmp: string[] = [];
 afterAll(() => tmp.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -264,5 +270,175 @@ describe('runS2Pass', () => {
 		const r = await runS2Pass({ store, http: fixtureHttp(() => TODAY), today: TODAY, ...fast, backfillFrom: day(-30) });
 		expect(r).toMatchObject({ stopped: 'done', written: [DAM.featureId] });
 		expect((await readObservationFile(store, 's2', DAM.featureId))!.rows.length).toBeGreaterThan(0);
+	});
+});
+
+const S1_SPEC: S1FixtureSpec = (() => {
+	const s = loadS1Fixture();
+	return { ...s, schedule: { ...s.schedule, historyDays: HISTORY } };
+})();
+
+/** The synthetic Sentinel-1 as a FeedHttp, logging each URL (and when it was asked, by `at`); `fail` may throw for a URL. */
+function s1Http(opts: { fail?: (url: string) => Error | null; at?: () => number } = {}) {
+	const fx = s1Fixture(() => TODAY, S1_SPEC);
+	const log: { url: string; t: number }[] = [];
+	const ask = (url: string) => {
+		log.push({ url, t: opts.at?.() ?? 0 });
+		const e = opts.fail?.(url);
+		if (e) throw e;
+	};
+	const http: FeedHttp = {
+		range: async (url, s, e) => (ask(url), fx.scene(url)?.subarray(s, e + 1) ?? null),
+		rangeTagged: async (url, s, e) => {
+			ask(url);
+			const b = fx.scene(url);
+			return b ? { bytes: b.subarray(s, e + 1), tag: `"etag-${b.length}"` } : null;
+		},
+		text: async (url) => (ask(url), fx.search(url))
+	};
+	return { http, log };
+}
+
+/** A lon/lat box as an outline. */
+function box(featureId: string, w: number, s: number, e: number, n: number): WantedOutline {
+	return { featureId, geometry: { type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] }, since: '1984-01-01' };
+}
+/** A dam across a shadow strip's east edge (22.400–22.403° E): its west third in shadow. */
+const SHADOWED: WantedOutline = box('00000000-0000-4000-8000-0000000000a4', 22.4015, -32.12, 22.4060, -32.116);
+
+describe('runS1Pass', () => {
+	it('writes a row per date a radar scene saw the dam, to its own file, status and state, from Sentinel-1 hosts only', async () => {
+		const store = freshStore();
+		await listed(store, [DAM]);
+		const { http, log } = s1Http();
+		const r = await runS1Pass({ store, http, today: TODAY, ...fast });
+		expect(r).toMatchObject({ stopped: 'done', written: [DAM.featureId], failures: [], sceneFailures: [], error: null });
+		expect(log.every(({ url }) => url.startsWith(WOFS_STAC_SEARCH) || url.startsWith(`${S1_S3_BASE}/s1_rtc/`))).toBe(true);
+		expect(log.filter(({ url }) => url.startsWith(WOFS_STAC_SEARCH)).every(({ url }) => new URL(url).searchParams.get('collections') === 's1_rtc')).toBe(true);
+		// VV and the mask only: never VH.
+		expect(log.some(({ url }) => url.endsWith('_VH.tif'))).toBe(false);
+
+		const f = (await readObservationFile(store, 's1', DAM.featureId))!;
+		expect(f.source).toBe('s1');
+		// Two paths, each every 6 days, over the history less the lag.
+		expect(f.rows.length).toBeGreaterThan(45);
+		const cell = outlineMask(DAM.geometry, { epsg: 4326, originX: 22.3, originY: -32.1, pixelSizeX: S1_SPEC.scenes.pixelDeg, pixelSizeY: S1_SPEC.scenes.pixelDeg });
+		for (const row of f.rows) {
+			expect(f.upstream.find((u) => u.itemId === row.upstreamKey)!.url).toMatch(/_VV\.tif$/);
+			// Whole 0.0002° cells at the outline's latitude (the same tile grid's cell area within a hair).
+			const px = row.wetAreaM2 / cell.pixelAreaM2;
+			expect(Math.abs(px - Math.round(px))).toBeLessThan(0.01);
+		}
+		// Radar sees through cloud: every view is clear, and calm days see water.
+		expect(f.rows.every((x) => x.pctObserved === 100)).toBe(true);
+		expect(f.rows.filter((x) => !s1FixtureWindy(S1_SPEC, toEpochDay(x.date))).every((x) => x.wetAreaM2 > 0)).toBe(true);
+		expect((await readStatus(store, 's1'))!.perKey[DAM.featureId]!.newest).toBe(f.rows.at(-1)!.date);
+		expect((await readState(store, S1_STATE_KEY))!.dams[DAM.featureId]!.backfilledFrom).toBe(fast.backfillFrom);
+		expect(await readStatus(store, 's2')).toBeNull();
+	});
+
+	it('still sees a dam on a winter day Landsat is wholly clouded', async () => {
+		const store = freshStore();
+		await listed(store, [DAM]);
+		await runS1Pass({ store, http: s1Http().http, today: TODAY, ...fast });
+		const f = (await readObservationFile(store, 's1', DAM.featureId))!;
+		const wofsSpec = loadWofsFixture();
+		const clouded = f.rows.filter((x) => isWinter(x.date) && toEpochDay(x.date) % wofsSpec.cloud.overcastEveryNth === 0);
+		expect(clouded.length).toBeGreaterThan(0);
+		for (const x of clouded) expect(x.pctObserved).toBe(100);
+	});
+
+	it('reads wind-roughened water as dry: a windy day sees none of a dam a calm day sees wet', async () => {
+		const store = freshStore();
+		await listed(store, [DAM]);
+		await runS1Pass({ store, http: s1Http().http, today: TODAY, ...fast });
+		const f = (await readObservationFile(store, 's1', DAM.featureId))!;
+		const windy = f.rows.filter((x) => s1FixtureWindy(S1_SPEC, toEpochDay(x.date)));
+		expect(windy.length).toBeGreaterThan(0);
+		for (const x of windy) expect(x).toMatchObject({ pctObserved: 100, wetAreaM2: 0 });
+	});
+
+	it('counts the RTC mask’s shadow and layover as not seen clearly', async () => {
+		const store = freshStore();
+		await listed(store, [SHADOWED]);
+		await runS1Pass({ store, http: s1Http().http, today: TODAY, ...fast });
+		const f = (await readObservationFile(store, 's1', SHADOWED.featureId))!;
+		expect(s1FixtureShadow(S1_SPEC, 22.4016)).toBe(true);
+		expect(s1FixtureShadow(S1_SPEC, 22.4031)).toBe(false);
+		// 22.4015–22.4030 of 22.4015–22.4060 in shadow: a third.
+		expect(f.rows.length).toBeGreaterThan(20);
+		for (const x of f.rows) {
+			expect(x.pctObserved).toBeGreaterThan(60);
+			expect(x.pctObserved).toBeLessThan(72);
+		}
+	});
+
+	it('agrees with Sentinel-2’s clear views of the same dam on calm days, and not on windy ones', async () => {
+		const store = freshStore();
+		await listed(store, [DAM]);
+		await runS2Pass({ store, http: s2Http().http, today: TODAY, ...fast });
+		await runS1Pass({ store, http: s1Http().http, today: TODAY, ...fast });
+		const s1 = (await readObservationFile(store, 's1', DAM.featureId))!.rows;
+		const s2 = (await readObservationFile(store, 's2', DAM.featureId))!.rows;
+		const full = geometryAreaM2(DAM.geometry)!;
+		const pairs = agreementPairs(s1, s2, full);
+		expect(pairs.length).toBeGreaterThan(10);
+		for (const p of pairs) {
+			expect(Math.abs(toEpochDay(p.s1Date) - toEpochDay(p.s2Date))).toBeLessThanOrEqual(1);
+			// Calm: the same water field at 10 m and ~20 m. Windy: radar reads none of it, and the dam holds more than 0.1 F.
+			if (!s1FixtureWindy(S1_SPEC, toEpochDay(p.s1Date))) expect(p.within, p.s1Date).toBe(true);
+			else if (p.s2Share > 0.1) expect(p.within, p.s1Date).toBe(false);
+		}
+		const a = s1Agreement(s1, s2, full);
+		expect(a.pairs).toBe(pairs.length);
+		expect(a.within).toBe(pairs.filter((p) => p.within).length);
+	});
+
+	it('asks each host at most once a second', async () => {
+		const store = freshStore();
+		await listed(store, [DAM]);
+		const c = clock();
+		const { http, log } = s1Http({ at: c.at });
+		const r = await runS1Pass({ store, http, today: TODAY, backfillFrom: day(-40), now: c.now, sleep: c.sleep });
+		expect(r.sceneRequests).toBeGreaterThan(10);
+		for (const host of [WOFS_STAC_SEARCH, S1_S3_BASE]) {
+			const ts = log.filter(({ url }) => url.startsWith(host)).map(({ t }) => t);
+			for (let i = 1; i < ts.length; i++) expect(ts[i]! - ts[i - 1]!).toBeGreaterThanOrEqual(host === WOFS_STAC_SEARCH ? STAC_INTERVAL_MS : S1_SCENE_INTERVAL_MS);
+		}
+		expect(S1_SCENE_INTERVAL_MS).toBe(1000);
+	});
+
+	it('stops on a 403 or throttling from the bucket, keeping what it read, and pauses the source', async () => {
+		for (const err of [new FeedRefusedError(), new FeedThrottledError(429)]) {
+			const store = freshStore();
+			await listed(store, [DAM, SHADOWED]);
+			let reads = 0;
+			const { http } = s1Http({ fail: (url) => (url.startsWith(S1_S3_BASE) && ++reads > 40 ? err : null) });
+			const r = await runS1Pass({ store, http, today: TODAY, ...fast, now: () => T0 });
+			expect(r.stopped).toBe(err instanceof FeedRefusedError ? 'refused' : 'throttled');
+			expect(r.error).toBe(err);
+			expect(await readStatus(store, 's1')).toMatchObject({ source: 's1', stopped: true, reason: r.stopped });
+			const again = s1Http();
+			expect((await runS1Pass({ store, http: again.http, today: TODAY, ...fast, now: () => T0 + 3_600_000 })).stopped).toBe('paused');
+			expect(again.log).toEqual([]);
+		}
+	});
+
+	it('starts from the worker’s sinceBy.s1, never from WOfS’s since or Sentinel-2’s', async () => {
+		const store = freshStore();
+		await listed(store, [{ ...DAM, since: day(-2), sinceBy: { s2: day(-5), s1: day(-20) } }]);
+		const { http, log } = s1Http();
+		await runS1Pass({ store, http, today: TODAY, ...fast, lookbackDays: 45 });
+		const first = new URL(log.find(({ url }) => url.startsWith(WOFS_STAC_SEARCH))!.url).searchParams.get('datetime');
+		expect(first).toBe(`${day(-20)}T00:00:00Z/${TODAY}T23:59:59Z`);
+		expect(S1_BACKFILL_FROM).toBe(S2_BACKFILL_FROM);
+	});
+
+	it('runs through the feeds’ fixture client (FEED_SOURCE=fixtures)', async () => {
+		const store = freshStore();
+		await listed(store, [DAM]);
+		const r = await runS1Pass({ store, http: fixtureHttp(() => TODAY), today: TODAY, ...fast, backfillFrom: day(-30) });
+		expect(r).toMatchObject({ stopped: 'done', written: [DAM.featureId] });
+		expect((await readObservationFile(store, 's1', DAM.featureId))!.rows.length).toBeGreaterThan(0);
 	});
 });

@@ -31,7 +31,8 @@
 import type { AbsolutePath } from '@zarrita/storage';
 import type { FeedHttp } from '../../../feeds/http.js';
 import { runScenePass, type ScenePassSource, type WofsPassOptions, type WofsPassResult } from '../wofs/pass.js';
-import { S2_C1_COLLECTION, searchItems } from '../wofs/stac.js';
+import { S1_RTC_COLLECTION, S2_C1_COLLECTION, searchItems } from '../wofs/stac.js';
+import { s1Item, viewS1Scene, type S1Scene } from './s1.js';
 import { s2Item, viewS2Scene, type S2Scene } from './s2.js';
 
 /** The backfill's start: Collection 1 is consistent from 2019. */
@@ -52,3 +53,45 @@ export const S2_PASS: ScenePassSource<S2Scene> = {
 
 /** One Sentinel-2 pass (see the header and ../wofs/pass.ts). */
 export const runS2Pass = (opts: WofsPassOptions): Promise<WofsPassResult> => runScenePass(S2_PASS, opts);
+
+// --- Sentinel-1 (issue #624 step 5) -------------------------------------------------------
+//
+// The Sentinel-1 pass: DE Africa's radiometrically terrain-corrected radar
+// (s1_rtc), VV classified and summed inside each traced dam's outline
+// (s1.ts), into dams/s1/<featureId>.json for the worker to load as source
+// 's1'. The fetcher runs it after the Sentinel-2 pass, only with
+// DAM_OBSERVATIONS_S1=on (infra/dam_observations.tf sets it from
+// dam_s1_enabled):
+//
+//   fetcher ─get─► dams/wanted.json, dams/s1-status.json, dams/s1-state.json
+//           ─GET─► explorer.digitalearth.africa/stac/search  collections=s1_rtc, per dam, a year a search
+//           ─GET─► deafrica-sentinel-1…/s1_rtc/<tile>/…/{…_VV,…_MASK}.tif  (headers + the dam's tiles)
+//           ─put─► dams/s1/<featureId>.json, dams/s1-status.json, dams/s1-state.json
+//
+// As Sentinel-2's: its own backfill start (S1_BACKFILL_FROM), sinceBy.s1,
+// one bucket read a second, the better of two views of one date (an
+// ascending and a descending pass, or two 1° tiles a dam straddles), its own
+// pause, heartbeat and recency alarms (Source = s1). After it the fetcher
+// updates the S1/S2 agreement report (agreement.ts).
+
+/**
+ * The backfill's start: s1_rtc goes back to 2018, but the agreement with Sentinel-2 (agreement.ts) can only be
+ * measured from S2_BACKFILL_FROM, and older radar adds only days WOfS already covers, so the two start together.
+ */
+export const S1_BACKFILL_FROM = S2_BACKFILL_FROM;
+/** Minimum gap between two bucket reads' starts: at most one a second (issue #624). */
+export const S1_SCENE_INTERVAL_MS = 1000;
+export const S1_STATE_KEY = '/dams/s1-state.json' as AbsolutePath;
+
+export const S1_PASS: ScenePassSource<S1Scene> = {
+	source: 's1',
+	stateKey: S1_STATE_KEY,
+	backfillFrom: S1_BACKFILL_FROM,
+	sceneIntervalMs: S1_SCENE_INTERVAL_MS,
+	since: (o) => o.sinceBy?.s1 ?? S1_BACKFILL_FROM,
+	search: (http: FeedHttp, bbox, from, to) => searchItems(http, S1_RTC_COLLECTION, s1Item, bbox, from, to),
+	view: viewS1Scene
+};
+
+/** One Sentinel-1 pass (see above and ../wofs/pass.ts). */
+export const runS1Pass = (opts: WofsPassOptions): Promise<WofsPassResult> => runScenePass(S1_PASS, opts);

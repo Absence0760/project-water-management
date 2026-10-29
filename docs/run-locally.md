@@ -515,6 +515,13 @@ Sentinel-2 scenes (`backend/fixtures/feeds/s2-sample.json`,
 `backend/src/dams/observed/sentinel/fixtures.ts`): the same water field at
 10 m, a pass every 5 days, a band of cloud every third day, and some days
 without B11 (the NDWI fallback), into `dam_observation` as source `s2`.
+`DAM_OBSERVATIONS_S2=on DAM_OBSERVATIONS_S1=on pnpm dev:dams:run` adds the
+Sentinel-1 radar pass after it (`backend/fixtures/feeds/s1-sample.json`,
+`backend/src/dams/observed/sentinel/s1Fixtures.ts`: the same water field on
+radar's 0.0002° grid, two passes every 6 days, a shadow strip every 0.1° of
+longitude, and a windy day every tenth whose open water reads dry), as
+source `s1`, and prints the S1/S2 agreement: how many radar days agree with
+a clear Sentinel-2 view within a day, against issue #624's 85 % bar.
 
 The worker's tick does the same each time it runs only with
 `DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored
