@@ -134,7 +134,11 @@ async function ownerKeys(t: string, key: string, where: string) {
 }
 
 // The sweep, outlook, yield and alert jobs the write probes queued: no later file's tick should claim them (db-setup.ts).
-afterAll(() => retirePendingJobs(projectId));
+// The DWS feed is switched off first, or a later file's tick finds it due and queues its feed_fetch (as clearLadderJobs does).
+afterAll(async () => {
+	if (projectId) await asOwner('UPDATE data_feed SET enabled = false WHERE project_id = $1', [projectId]);
+	await retirePendingJobs(projectId);
+});
 
 beforeAll(async () => {
 	let editor: User;
