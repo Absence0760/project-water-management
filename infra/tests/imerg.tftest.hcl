@@ -782,7 +782,7 @@ run "earthdata_secret_without_a_value" {
     error_message = "The ingest role may read the Earthdata token secret and no other secret."
   }
   assert {
-    condition     = length(aws_cloudwatch_event_rule.imerg) == 0 && length(aws_cloudwatch_event_target.imerg) == 0 && length(aws_lambda_permission.imerg) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 0
+    condition     = length(aws_cloudwatch_event_rule.imerg) == 0 && length(aws_cloudwatch_event_target.imerg) == 0 && length(aws_lambda_permission.imerg) == 0 && length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 0 && length(aws_cloudwatch_metric_alarm.earthdata_token) == 0
     error_message = "IMERG is off by default: no schedule, target, permission or alarm (a breaching alarm would fire before the token exists)."
   }
 }
@@ -860,6 +860,21 @@ run "imerg_on" {
     )
     error_message = "The IMERG freshness alarm reads MirrorLagDays{Product=imerg_late}, pages through the alerts topic and treats missing data as breaching."
   }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.earthdata_token[0].alarm_name == "water-management-earthdata-token-expiring" &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].namespace == "water-management/Mirror" &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].metric_name == "EarthdataTokenDaysLeft" &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].dimensions["Product"] == "imerg_late" &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].comparison_operator == "LessThanThreshold" &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].statistic == "Minimum" &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].threshold == 10 &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].treat_missing_data == "notBreaching" &&
+      aws_cloudwatch_metric_alarm.earthdata_token[0].alarm_actions == toset([aws_sns_topic.alerts.arn]) &&
+      strcontains(aws_cloudwatch_metric_alarm.earthdata_token[0].alarm_description, "docs/deployment.md § IMERG Late")
+    )
+    error_message = "The token alarm fires when EarthdataTokenDaysLeft{Product=imerg_late} (the day's lowest) drops under 10 (a refused login publishes 0), pages through the alerts topic and names the runbook; missing data is the lag alarm's to catch."
+  }
 }
 
 run "essential_tier_keeps_the_imerg_alarm" {
@@ -872,8 +887,8 @@ run "essential_tier_keeps_the_imerg_alarm" {
   }
 
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 1
-    error_message = "alarm_tier = \"essential\" keeps IMERG's freshness alarm."
+    condition     = length(aws_cloudwatch_metric_alarm.mirror_lag_imerg) == 1 && length(aws_cloudwatch_metric_alarm.earthdata_token) == 1
+    error_message = "alarm_tier = \"essential\" keeps IMERG's freshness alarm and its token alarm."
   }
 }
 

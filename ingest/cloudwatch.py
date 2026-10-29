@@ -60,13 +60,27 @@ class CloudWatchSink:
         )
         log.info("published %s %s{Product=%s} = %s", self.namespace, METRIC, product, value)
 
+    def publish_metric(self, metric: str, product: str, value: int) -> None:
+        """Another per-product metric in the same namespace (EarthdataTokenDaysLeft, earthdata.py)."""
+        self.client.put_metric_data(
+            Namespace=self.namespace,
+            MetricData=[{"MetricName": metric, "Dimensions": [{"Name": "Product", "Value": product}], "Value": float(value), "Unit": "None"}],
+        )
+        log.info("published %s %s{Product=%s} = %s", self.namespace, metric, product, value)
+
 
 class LocalSink:
     """Fixtures mode: no CloudWatch; the values are kept and logged."""
 
     def __init__(self):
         self.published: list[tuple[str, int]] = []
+        #: Metrics other than MirrorLagDays: (metric, product, value).
+        self.other: list[tuple[str, str, int]] = []
 
     def publish(self, product: str, value: int) -> None:
         self.published.append((product, value))
         log.info("(local) %s{Product=%s} = %s", METRIC, product, value)
+
+    def publish_metric(self, metric: str, product: str, value: int) -> None:
+        self.other.append((metric, product, value))
+        log.info("(local) %s{Product=%s} = %s", metric, product, value)

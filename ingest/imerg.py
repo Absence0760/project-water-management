@@ -67,11 +67,15 @@ that it agrees with the granule's tag.
 and the copy reachable: today minus `prelimThrough`, or RECENT_DAYS + 1 when
 nothing is held. A healthy copy reads 1 or 2.
 
-**Credential.** Live mode only: an Earthdata Login user token, read at run
-time from Secrets Manager (`EARTHDATA_TOKEN_SECRET_ARN`), sent as `Authorization:
-Bearer` to the GES DISC hosts only and never on a redirect
-(`add_unredirected_header`), never logged. Fixtures mode needs none: the fake
-server (imerg_fixture.py) asks for nothing.
+**Credential.** Live mode only: the Secrets Manager secret
+(`EARTHDATA_TOKEN_SECRET_ARN`) holds a bare Earthdata Login user token or a
+login, `{"username", "password"}`, from which the job gets (and renews) a
+token through Earthdata Login's token API itself (earthdata.py). The token is
+sent as `Authorization: Bearer` to the GES DISC hosts only and never on a
+redirect (`add_unredirected_header`), never logged, never written back. Each
+live run that reads it publishes `EarthdataTokenDaysLeft{Product=imerg_late}`
+(0 when Earthdata Login refuses the login, which also marks the day refused).
+Fixtures mode needs none: the fake server (imerg_fixture.py) asks for nothing.
 """
 
 from __future__ import annotations
@@ -94,6 +98,7 @@ import numpy as np
 import chcnetcdf
 import chirps_final
 import cloudwatch
+import earthdata
 import grid
 import lease
 import manifest
@@ -464,7 +469,8 @@ class Refused(polite.StopRun):
 
 
 def fetch_token(secret_arn: str, client=None) -> str:
-    """The Earthdata token from Secrets Manager. Never logged or returned anywhere else."""
+    """The Earthdata secret's value from Secrets Manager: a bare token or a
+    login's JSON (earthdata.parse_secret). Never logged or returned anywhere else."""
     if client is None:
         import boto3
 
@@ -591,11 +597,30 @@ def _record(mirror, m: dict, g: Granule, values: np.ndarray, r: polite.Response,
     return {"day": g.day.isoformat(), "version": g.version, "tag": g.tag, "outcome": outcome}
 
 
+def _live_token(secret: str, clock, sleep, edl_opener, publish_days) -> str:
+    """The token this run sends (earthdata.resolve: the bare token, or one got
+    from the stored login), publishing its days left (0 on a refused login)."""
+    now = dt.datetime.fromtimestamp(clock(), dt.UTC) if clock else dt.datetime.now(dt.UTC)
+    try:
+        cred = earthdata.resolve(secret, os.environ.get("INGEST_CONTACT"), now, opener=edl_opener, sleep=sleep)
+    except earthdata.LoginRefused:
+        publish_days(0)
+        raise
+    left = earthdata.days_left(cred.expires, now)
+    if left is None:
+        log.warning("%s: the Earthdata token (%s mode) names no end; %s not published", PRODUCT, cred.mode, earthdata.METRIC)
+    else:
+        log.info("%s: Earthdata token (%s mode), %d days left", PRODUCT, cred.mode, left)
+        publish_days(left)
+    return cred.token
+
+
 # --- the Lambda entry (lambda_handler.py dispatches here) ------------------------------
 
 
-def handle(event, context=None, s3_client=None, opener=None, metrics=None, today=None, clock=None, sleep=None, secrets_client=None):
-    """Run one `imerg_late` event. The injectables are for tests."""
+def handle(event, context=None, s3_client=None, opener=None, metrics=None, today=None, clock=None, sleep=None, secrets_client=None, edl_opener=None):
+    """Run one `imerg_late` event. The injectables are for tests (`edl_opener`:
+    Earthdata Login's token API, earthdata.EdlClient's opener)."""
     ev = validate_event(event)
     source = os.environ.get("FEED_SOURCE", "fixtures")
     if source not in ("fixtures", "live"):
@@ -615,6 +640,12 @@ def handle(event, context=None, s3_client=None, opener=None, metrics=None, today
         metrics.publish(PRODUCT, value)
         return value
 
+    def publish_token_days(value: int) -> None:
+        try:
+            metrics.publish_metric(earthdata.METRIC, PRODUCT, value)
+        except Exception:
+            log.exception("%s: could not publish %s", PRODUCT, earthdata.METRIC)
+
     def result(out: dict) -> dict:
         m = read_manifest(mirror)
         return {"product": PRODUCT, "mode": ev["mode"], "source": source, "revision": m["revision"] if m else None, "prelimThrough": m["prelimThrough"] if m else None, "lagDays": lag, "requests": client.requests if client else 0, **out}
@@ -628,28 +659,33 @@ def handle(event, context=None, s3_client=None, opener=None, metrics=None, today
             log.info("%s: refused earlier today (%s); asking nothing until tomorrow (UTC)", PRODUCT, refused_at)
             lag = publish()
             return result({"copied": [], "dropped": [], "stopped": "refused_today", "refusedAt": refused_at})
-        if opener is None:
-            if live:
-                arn = os.environ.get("EARTHDATA_TOKEN_SECRET_ARN")
-                if not arn:
-                    raise RuntimeError("EARTHDATA_TOKEN_SECRET_ARN is not set (infra/imerg.tf)")
-                opener = EarthdataOpener(fetch_token(arn, secrets_client))
-            else:
-                import imerg_fixture
-
-                opener = imerg_fixture.FakeEarthdata(latest=day - dt.timedelta(days=1))
-        client = polite.PoliteClient(
-            contact=os.environ.get("INGEST_CONTACT"),
-            min_interval=1.0 if live else 0.0,
-            opener=opener,
-            **({"sleep": sleep} if sleep else {}),
-            **({"clock": clock} if clock else {}),
-        )
+        arn = None
+        if opener is None and live:
+            arn = os.environ.get("EARTHDATA_TOKEN_SECRET_ARN")
+            if not arn:
+                raise RuntimeError("EARTHDATA_TOKEN_SECRET_ARN is not set (infra/imerg.tf)")
         try:
+            if opener is None:
+                if live:
+                    opener = EarthdataOpener(_live_token(fetch_token(arn, secrets_client), clock, sleep, edl_opener, publish_token_days))
+                else:
+                    import imerg_fixture
+
+                    opener = imerg_fixture.FakeEarthdata(latest=day - dt.timedelta(days=1))
+            client = polite.PoliteClient(
+                contact=os.environ.get("INGEST_CONTACT"),
+                min_interval=1.0 if live else 0.0,
+                opener=opener,
+                **({"sleep": sleep} if sleep else {}),
+                **({"clock": clock} if clock else {}),
+            )
             out = run_recent(mirror, client, day, ev["days"], chirps_final.Budget(context, REQUEST_RESERVE_S), stamp)
-        except Refused as e:
+        except polite.StopRun as e:  # Refused (GES DISC), or earthdata.LoginRefused (Earthdata Login)
             write_refused(mirror, day, stamp(), e.status, e.url)
-            log.error("%s: %s answered HTTP %s; no more requests today (UTC)", PRODUCT, urllib.parse.urlparse(e.url).hostname, e.status)
+            if isinstance(e, earthdata.LoginRefused):
+                log.error("%s: %s", PRODUCT, e)
+            else:
+                log.error("%s: %s answered HTTP %s; no more requests today (UTC)", PRODUCT, urllib.parse.urlparse(e.url).hostname, e.status)
             raise
     except lease.MirrorBusy as e:
         log.info("%s: %s; the run holding it does this work", PRODUCT, e)

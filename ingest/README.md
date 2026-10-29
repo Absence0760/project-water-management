@@ -52,6 +52,7 @@ evaporation).
 | `fixtures/ecmwf/make_ecmwf_fixtures.py` | Writes the synthetic ECMWF step files (`fixtures/ecmwf/`: 15 GRIB2 files and their `.index`), and builds the tests' structured ones. |
 | `fixtures/chirps/make_chirps_fixtures.py` | Writes the synthetic `byMonth` directory (`fixtures/chirps/`): two months, their listing, and a rewritten and a changed variant. |
 | `imerg.py` | IMERG Late's recent days into `imerg_late` (§ IMERG Late): the CMR search, the OPeNDAP region subset, the reader that places cells by coordinate, the per-day version, the refusal marker and the Earthdata token. |
+| `earthdata.py` | The Earthdata secret as a bare token or a stored login; with a login, a token from Earthdata Login's user token API (list, create, revoke at the 2-token limit), its days left (`EarthdataTokenDaysLeft`). |
 | `imerg_fixture.py` | Fixtures mode's fake CMR and OPeNDAP: UMM-G search results and NetCDF-4 subsets cut from `fixtures/imerg/`'s synthetic field. Not in the image. |
 | `fixtures/imerg/make_imerg_fixture.py` | The synthetic IMERG Late daily field and file writer, in GPM_3IMERGDL V07's real layout (a global file from the command line). |
 | `tests/roundtrip.ts` | The Node half of the cross-language round trip (`test_roundtrip.py`). |
@@ -89,7 +90,7 @@ backfill one from 1979-01. A `power_et0` event takes an optional `days`
 | `FEED_SOURCE` | `fixtures` (the default: the synthetic `byMonth` directory, no network) or `live` (production: CHC). |
 | `INGEST_CONTACT` | The contact address in the User-Agent. Optional. |
 | `INGEST_FIXTURE_VARIANT` | Fixtures mode only: `rewritten` or `changed` serves that variant of the synthetic directory. |
-| `EARTHDATA_TOKEN_SECRET_ARN` | Live mode, `imerg_late` only: the Secrets Manager secret holding the Earthdata token (`infra/imerg.tf`). Read at run time, never logged; fixtures mode reads nothing. |
+| `EARTHDATA_TOKEN_SECRET_ARN` | Live mode, `imerg_late` only: the Secrets Manager secret holding the Earthdata token or login (`infra/imerg.tf`, § IMERG Late). Read at run time, never logged or written back; fixtures mode reads nothing. |
 | `CDS_KEY_SECRET_ARN` | Live `era5l` and `agera5_et0` runs only: the Secrets Manager secret holding the CDS API key (`infra/era5land.tf`; one Copernicus account, one key, for both), read at run time and never logged. Fixtures mode never reads it. `power_et0` needs no key. |
 | `MIRROR_METRIC_NAMESPACE` | Optional: the metric's namespace, default `water-management/Mirror`. |
 
@@ -219,11 +220,44 @@ it (R4-B). A held day whose granule changes (V08 arrives) is fetched again:
 the same values move only the URL and version, other values bump the
 revision with a one-day `changes` entry.
 
+**The credential** (`earthdata.py`, live mode only). The secret holds a
+bare Earthdata Login user token (used as it is, rotated by hand every 60
+days) or a login, JSON `{"username", "password"}` (nothing else; anything
+else starting `{` is refused with a clear `SecretFormatError`). With a login
+the run asks Earthdata Login's user token API
+([docs](https://urs.earthdata.nasa.gov/documentation/for_users/user_token)),
+HTTP Basic, at `urs.earthdata.nasa.gov`:
+
+- `GET /api/users/tokens` lists the account's tokens; the one that lasts
+  longest is used if it has more than 7 days left (`REFRESH_DAYS`);
+- otherwise `POST /api/users/token` creates one. An account holds at most 2:
+  on `403 max_token_limit` the run revokes the listed token that ends first
+  (`POST /api/users/revoke_token?token=…`; by then within 7 days of its end
+  or past it) and creates again.
+
+A token's end is its JWT `exp` (the payload only is decoded, no signature
+check: a date is all it reads), else EDL's `expiration_date`. The token
+stays in memory for the run: never logged, never written back to the
+secret (the role has `GetSecretValue` alone). These calls send the ingest
+User-Agent, a 30 s timeout and one request a second, and don't take CHC's
+request slot. Errors name the endpoint's path and EDL's error code, never
+the token, the password, the Authorization header (an unredirected header)
+or the revoke URL. Each live run publishes
+**`EarthdataTokenDaysLeft{Product=imerg_late}`**, the whole days left on
+the token in use (none for a token with no readable end), which
+`infra/imerg.tf`'s `earthdata-token-expiring` alarm watches (under 10).
+
 **Refusals.** A 403 from either host, or a 401 (a token that expired or was
 never approved for GES DISC), stops the run, never retried, writes
 `refused.json` (`{v, day, at, status, host}`) and re-raises, so the Lambda
 errors and the DLQ sees it. The marker keeps the day's later runs from
 asking; the next UTC day tries again. A marker that isn't one never blocks.
+Earthdata Login refusing the stored login (401, or a 403 other than the
+token limit) is the same (`earthdata.LoginRefused`, host
+`urs.earthdata.nasa.gov`), so a wrong password is tried once a day; the run
+publishes `EarthdataTokenDaysLeft` 0, and the message says whether the
+account's multi-factor sign-in is the cause when EDL says so (an MFA account
+may not take Basic auth; then store a bare token).
 
 **`MirrorLagDays{Product=imerg_late}`** on every exit once the event is
 valid and `MIRROR_URL` set: today minus `prelimThrough`, or 11 with nothing
