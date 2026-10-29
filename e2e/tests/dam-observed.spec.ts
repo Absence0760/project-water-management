@@ -10,12 +10,14 @@
 // shows its newest ten views. The farmer's dam page says when a satellite last
 // saw the dam clearly, its area against its area when full, or that there is
 // no clear view yet, and shows nothing for a dam with no outline. The chart's
-// figures are read from its labels and table, never its pixels. Invented
-// data only.
+// figures are read from its labels and table, never its pixels. Sentinel
+// views (issue #624): the sharpest clear source wins a day, radar is shown as
+// radar (its own doubled strip, never a flag), and Copernicus is credited for
+// their year, on the panel and the farm card. Invented data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { acceptInvites, addMember } from '../support/api.ts';
-import { manyViews, seedObservedDam } from '../support/damObserved.ts';
+import { manyViews, seedObservedDam, SENTINEL_VIEWS } from '../support/damObserved.ts';
 import { API_URL, WEB_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
@@ -46,7 +48,7 @@ test('the Dams tab compares the picked dam’s run area with what the satellite 
 	await expect(box1(page).getByTestId('dam-observed-line')).toHaveText('3 clear views compared · 2 disagree · 0% within ±10%');
 
 	await openBox(page);
-	await expect(box1(page).getByTestId('dam-observed-match')).toHaveText('“Upper dam” is merged with a neighbouring water body in DE Africa Waterbodies, so only WOfS views of its own outline are compared.');
+	await expect(box1(page).getByTestId('dam-observed-match')).toHaveText('“Upper dam” is merged with a neighbouring water body in DE Africa Waterbodies, so only views of its own outline (WOfS and Sentinel) are compared.');
 	await expect(box1(page).getByTestId('dam-observed-summary')).toContainText(/^Full area 5\.00 ha, as entered\. 3 clear views from 20 Oct 2021 to 10 Dec 2021: /);
 	await expect(box1(page).getByTestId('dam-observed-summary')).toContainText('Seen full 1 time, seen empty 1 time.');
 
@@ -95,6 +97,79 @@ test('the Dams tab compares the picked dam’s run area with what the satellite 
 	await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
 });
 
+
+test('Sentinel views: the sharpest clear source wins the day, radar is shown as radar and never flagged, and Copernicus is credited', async ({ page, owner }) => {
+	void owner;
+	const { project, upper, runId } = await seed(page, 'Dams seen from Sentinel', SENTINEL_VIEWS);
+	const api = (await (await page.request.get(`${API_URL}/projects/${project.id}/dams/observations?run=${runId}`)).json()) as {
+		sentinelCredit: string | null;
+		dams: { nodeId: string; summary: Record<string, unknown>; points: { date: string; source: string; skip: string | null; seenFull: boolean; mismatch: string | null }[] }[];
+	};
+	const d = api.dams.find((x) => x.nodeId === upper.id)!;
+	// Sentinel-2's full view wins 20 Oct over WOfS's; the two radar views are compared but flag nothing.
+	expect(d.summary).toMatchObject({ compared: 4, radar: 2, seenFull: 1, seenEmpty: 1, mismatches: 2 });
+	expect(d.points.map((p) => [p.date, p.source, p.skip])).toEqual([
+		['2021-10-20', 's2', null],
+		['2021-10-20', 'wofs', 'other-source'],
+		['2021-11-15', 'wofs', null],
+		['2021-12-10', 's1', null],
+		['2021-12-20', 's1', null],
+		['2021-12-20', 'wofs', 'partly-seen']
+	]);
+	expect(api.sentinelCredit).toBe('Contains modified Copernicus Sentinel data 2021, processed by Digital Earth Africa');
+
+	await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
+	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
+	await expect(box1(page).getByTestId('dam-observed-line')).toHaveText(/^4 clear views compared \(2 radar\) · 2 disagree · \d+% within ±10%$/);
+	await openBox(page);
+	await expect(box1(page).getByTestId('dam-observed-summary')).toContainText('2 of the 4 views are radar (Sentinel-1, through cloud), never called full or empty on their own.');
+	await expect(box1(page).getByTestId('dam-observed-sources')).toHaveText(
+		'Views by source: 1 Sentinel-2, 3 WOfS, 2 Sentinel-1 radar. A day more than one saw clearly is compared with the most trusted: Sentinel-2, then WOfS, then Waterbodies, then radar.'
+	);
+	// The radar days are a doubled strip of their own under the three flags, its look said in the key.
+	const chart = box1(page).locator('figure.chart');
+	await expect(chart).toHaveAttribute('data-ready', 'true');
+	await expect(chart).toHaveAttribute('data-lanes', '4');
+	const radarLane = chart.locator('.lane-key li').filter({ hasText: 'a radar view (Sentinel-1)' });
+	await expect(radarLane).toHaveAttribute('data-color', '--lane-radar');
+	await expect(radarLane).toHaveAttribute('data-doubled', 'true');
+	await expect(chart.locator('.lane-key')).toContainText('Flags and radar days');
+	await expect(chart.locator('.lane-key')).toContainText('solid: a flag; double line: a radar view');
+	await expect(chart).toContainText('rings: radar');
+
+	await box1(page).getByText('The 6 views, newest first').click();
+	const rows = box1(page).getByTestId('dam-observed-views').locator('tbody tr');
+	await expect(rows).toHaveCount(6);
+	// The cloudy Landsat winter view isn't compared; radar's view of the same day is, as radar.
+	await expect(rows.nth(0)).toContainText('Not compared: partly seen (cloud or shadow)');
+	await expect(rows.nth(1).locator('td[data-label="Source"]')).toHaveText('Sentinel-1 radar, inside the dam’s outline');
+	await expect(rows.nth(1)).toContainText('radar, never called full or empty on its own');
+	await expect(rows.nth(4)).toContainText('Not compared: Sentinel-2 saw it clearly the same day');
+	await expect(rows.nth(5).locator('td[data-label="Source"]')).toHaveText('Sentinel-2, inside the dam’s outline');
+	await expect(rows.nth(5)).toContainText('seen full');
+	await expect(box1(page).getByTestId('dam-observed-credit')).toHaveText(
+		'Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies and WOfS, from Landsat). Contains modified Copernicus Sentinel data 2021, processed by Digital Earth Africa.'
+	);
+	await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
+
+	// On a phone: the sources line, four strips and their long key fit the width.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
+	await expect(box1(page)).toHaveAttribute('data-ready', 'true');
+	await openBox(page);
+	await expect(box1(page).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	await box1(page).getByText('The 6 views, newest first').click();
+	await expect(box1(page).getByTestId('dam-observed-views')).toBeVisible();
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
+	await page.setViewportSize({ width: 1280, height: 800 });
+
+	// The credit's full wording, on the public Data sources page.
+	await page.goto('/data-sources');
+	await expect(page.locator('#copernicus-sentinel + p')).toBeVisible();
+	await expect(page.locator('blockquote.credit').filter({ hasText: 'Contains modified Copernicus Sentinel data [year], processed by Digital Earth Africa' })).toHaveCount(1);
+});
+
 test.describe('dark theme', () => {
 	test.use({ colorScheme: 'dark' });
 
@@ -107,6 +182,17 @@ test.describe('dark theme', () => {
 		await expect(box1(page).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 		await box1(page).getByText('The 4 views, newest first').click();
 		await expect(box1(page).getByTestId('dam-observed-views')).toBeVisible();
+		await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
+	});
+
+	test('the Sentinel views, the radar rings and strip, and the sources line pass axe in the dark theme', async ({ page, owner }) => {
+		void owner;
+		const { project, upper } = await seed(page, 'Dams seen from Sentinel dark', SENTINEL_VIEWS);
+		await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
+		await expect(box1(page)).toHaveAttribute('data-ready', 'true');
+		await openBox(page);
+		await expect(box1(page).locator('figure.chart')).toHaveAttribute('data-lanes', '4');
+		await expect(box1(page).getByTestId('dam-observed-sources')).toBeVisible();
 		await expectNoViolations(page, { include: '[data-testid="dam-observed"]' });
 	});
 });
@@ -208,6 +294,27 @@ test.describe('the farmer’s dam page', () => {
 		await expect(fp.getByRole('region', { name: 'Your dam, seen from space' })).toHaveCount(0);
 		await expect(fp.getByTestId('farm-dam-observed-failed')).toHaveCount(0);
 	});
+});
+
+test('the farmer’s dam page says a winter radar view is radar, gives its area “about” and credits Copernicus', async ({ page, owner, signIn }) => {
+	void owner;
+	const { project, upper, runId } = await seed(page, 'Farm dam radar', SENTINEL_VIEWS);
+	const req = page.context().request;
+	const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction: { level: 'none' } } });
+	expect(pub.status(), await pub.text()).toBe(201);
+	const farmer = await signIn('Radar farmer');
+	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } });
+	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
+	const fp = farmer.page;
+	await fp.setViewportSize({ width: 360, height: 740 });
+	await fp.goto(`/farm/${project.id}/dam`);
+	const card = fp.getByRole('region', { name: 'Your dam, seen from space' });
+	// 20 Dec: Landsat clouded (40 % seen), radar saw through. Radar's area is "about", and it is called radar.
+	await expect(card.getByTestId('farm-dam-observed-line')).toHaveText(/^On 20 Dec 2021 a radar satellite, which sees through cloud, saw water over about 0[.,]6\sha of the 5[.,]0\sha your dam covers when full\.$/);
+	await expect(card.getByTestId('farm-dam-observed-credit')).toHaveText('Satellite views: Digital Earth Africa, CC BY 4.0. Contains modified Copernicus Sentinel data 2021, processed by Digital Earth Africa.');
+	await expectNoSidewaysScroll(fp);
+	await expectNoViolations(fp);
 });
 
 const seed = (page: Page, name = 'Dams seen from space', views?: Parameters<typeof seedObservedDam>[2]) => seedObservedDam(page.context().request, name, views);

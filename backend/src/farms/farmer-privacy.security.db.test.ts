@@ -243,7 +243,7 @@ describe('the farm dam page’s satellite views (GET …/farm/:nodeId/dam-observ
 		const r = await farmer.call('GET', `/projects/${projectId}/farm/${home.id}/dam-observed`);
 		expect(r.status).toBe(200);
 		// Exactly these fields: the count of outlines, the newest view, the full area (estimated from the capacity) and the credit.
-		expect(r.body).toEqual({ outlines: 1, latest: { date: '2021-11-18', wetAreaM2: 12_000, source: 'wofs' }, fullAreaM2: expect.any(Number), attribution: 'Digital Earth Africa, CC BY 4.0' });
+		expect(r.body).toEqual({ outlines: 1, latest: { date: '2021-11-18', wetAreaM2: 12_000, source: 'wofs' }, fullAreaM2: expect.any(Number), attribution: 'Digital Earth Africa, CC BY 4.0', sentinelCredit: null });
 		const text = JSON.stringify(r.body);
 		for (const trace of [damFeature.get(home.id)!, damFeature.get(theirs.id)!, MARKER, 'homeuid001', 'ga_ls_wofs', String(NEIGHBOUR_WET_M2), 'match', 'uid', 'upstream', 'featureId', 'nodeId'])
 			expect(text, `the answer carries ${trace}`).not.toContain(trace);

@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
+import { DEAFRICA_STATEMENT, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
 import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION } from '@water-management/engine';
 import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
@@ -70,6 +70,11 @@ describe('the data credits', () => {
 		expect(backend('geo/credits.ts')).toContain(`JRC_WATER_STATEMENT = '${JRC_WATER_STATEMENT}'`);
 		// The Southwestern Cape MAP surface's credit line, which a production load stores as the grid's attribution (the layer's credit keys on it).
 		expect(backend('geo/rainMap.ts')).toContain(`WAAS_MAP_ATTRIBUTION = '${WAAS_MAP_STATEMENT}'`);
+		// The dam observations' credits (issue #604 R5, #624): DE Africa's, and Copernicus's for the Sentinel views.
+		expect(backend('dams/observed/upstream.ts')).toContain(`DEAFRICA_ATTRIBUTION = '${DEAFRICA_STATEMENT}'`);
+		expect(backend('dams/observed/upstream.ts')).toContain(`SENTINEL_ATTRIBUTION = '${SENTINEL_STATEMENT}'`);
+		expect(doc('maps.md')).toContain(`"${SENTINEL_STATEMENT}"`);
+		expect(doc('data-sources.md')).toContain(`"${SENTINEL_STATEMENT}"`);
 		// GeoNames' attribution, stored on every place a load takes without a source of its own (the Map's search shows it).
 		expect(backend('geo/gazetteer.ts')).toContain(`GEONAMES_SOURCE = '${GEONAMES_STATEMENT}'`);
 	});

@@ -14,7 +14,7 @@
 import type { Page } from '@playwright/test';
 import { createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, syntheticFlow, updateSettings } from '../support/api.ts';
 import { expectNonTextContrast, nonTextContrast } from '../support/contrast.ts';
-import { seedObservedDam } from '../support/damObserved.ts';
+import { seedObservedDam, SENTINEL_VIEWS } from '../support/damObserved.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, openMap, uploadThroughSheet } from '../support/map.ts';
 import { openNodeForm } from '../support/network.ts';
@@ -151,17 +151,18 @@ test.describe('canvas charts', () => {
 				await expectNonTextContrast(page, { within: 'main' });
 			});
 
-			test('Dams, Seen from space: the modelled area, the views, the full area and the flag strips are at 3:1', async ({ page, owner }) => {
+			test('Dams, Seen from space: the modelled area, the views, the radar rings, the full area and the strips are at 3:1', async ({ page, owner }) => {
 				void owner;
-				// Seen full, seen empty and (against this run) disagree: all three strips drawn (issue #604 R5-B).
-				const { project, upper } = await seedObservedDam(page.request, `Contrast dam observed ${colorScheme}`);
+				// Seen full, seen empty and (against this run) disagree, all three flag strips (issue #604 R5-B), and the
+				// radar views' rings and doubled strip (issue #624).
+				const { project, upper } = await seedObservedDam(page.request, `Contrast dam observed ${colorScheme}`, SENTINEL_VIEWS);
 				await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
 				const box = page.getByTestId('dam-observed');
 				await expect(box).toHaveAttribute('data-ready', 'true');
 				await box.locator('details.fold > summary').click();
 				await expect(box).toHaveAttribute('data-ready', 'true');
 				const chart = box.locator('figure.chart');
-				await expect(chart).toHaveAttribute('data-lanes', '3');
+				await expect(chart).toHaveAttribute('data-lanes', '4');
 				await drawCharts(page, 2);
 				await expectNonTextContrast(page, { within: '[data-testid="dam-observed"]' });
 			});

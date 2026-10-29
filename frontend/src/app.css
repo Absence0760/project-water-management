@@ -110,6 +110,9 @@
 	--lane-disagree: #bb2211;
 	--lane-seen-full: #005577;
 	--lane-seen-empty: #442200;
+	/* Its radar strip (issue #624), drawn doubled (a shape, not a flag): ≥ 3:1, ΔE00 ≥ 12 from the three and ≥ 13
+	   from every line for every reader, computed by the same test. */
+	--lane-radar: #110033;
 	--chart-grid: #e4e6e3;
 	--chart-axis: #6c706c;
 
@@ -182,6 +185,7 @@
 		--lane-disagree: #ff9977;
 		--lane-seen-full: #44ccee;
 		--lane-seen-empty: #ffcc33;
+		--lane-radar: #886688;
 		--chart-grid: #2c2f2c;
 		--chart-axis: #9a9e99;
 		--shadow: 0 1px 2px rgb(0 0 0 / 0.4);

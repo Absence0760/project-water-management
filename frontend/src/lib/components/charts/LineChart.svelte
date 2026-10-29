@@ -200,7 +200,12 @@
 			value: (_u: uPlot, v: number | null) => fmtReading(v)
 		};
 		if (s.style === 'points') {
-			return { ...base, width: 0, paths: () => null, points: { show: true, size: (s.pointSize ?? 3) * k, width: 0, fill: stroke, stroke } };
+			return {
+				...base,
+				width: 0,
+				paths: () => null,
+				points: { show: true, size: (s.pointSize ?? 3) * k, width: s.hollow ? 2 * k : 0, fill: s.hollow ? 'transparent' : stroke, stroke }
+			};
 		}
 		if (s.style === 'step' || s.style === 'dashed') {
 			return {
@@ -274,7 +279,7 @@
 				// doesn't rest on colour alone.
 				markers: {
 					stroke: (_u: uPlot, i: number) => strokes[i - 1] ?? '',
-					fill: (_u: uPlot, i: number) => (series[i - 1]?.style === 'points' ? (strokes[i - 1] ?? '') : ''),
+					fill: (_u: uPlot, i: number) => (series[i - 1]?.style === 'points' && !series[i - 1]?.hollow ? (strokes[i - 1] ?? '') : ''),
 					dash: (_u: uPlot, i: number) => (series[i - 1]?.style === 'dashed' || series[i - 1]?.style === 'step' ? 'dashed' : 'solid')
 				}
 			},

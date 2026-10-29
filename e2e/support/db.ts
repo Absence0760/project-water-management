@@ -595,21 +595,26 @@ export async function confirmAuthorityDelegate(projectId: string, userId: string
 export async function plantDamObservations(
 	featureId: string,
 	match: { status: 'matched' | 'merged' | 'none'; uid?: string },
-	rows: { date: string; wetAreaM2: number; pctObserved: number }[]
+	rows: { date: string; wetAreaM2: number; pctObserved: number; source?: 'wofs' | 's2' | 's1' }[]
 ): Promise<void> {
 	await withDb(async (db) => {
 		const { rows: f } = await db.query<{ updated_at: Date }>('SELECT updated_at FROM map_feature WHERE id = $1', [featureId]);
 		const uid = match.status === 'none' ? null : (match.uid ?? 'zzzze2e001');
 		await db.query('SELECT applied FROM app_dam_match_write($1, $2, $3, $4, $5, $6, $7)', [featureId, match.status, uid, uid ? 0.9 : null, uid ? 0.5 : null, f[0]!.updated_at, null]);
-		await db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
-			'wofs',
-			featureId,
-			rows.map((r) => r.date),
-			rows.map((r) => r.wetAreaM2),
-			rows.map((r) => r.pctObserved),
-			rows.map(() => 'ga_ls_wofs_e2e_synthetic'),
-			new Date()
-		]);
+		// One pass file per source, as the worker loads them (WOfS by default; Sentinel-2 and Sentinel-1 since 277, issue #624).
+		for (const source of ['wofs', 's2', 's1'] as const) {
+			const mine = rows.filter((r) => (r.source ?? 'wofs') === source);
+			if (!mine.length) continue;
+			await db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
+				source,
+				featureId,
+				mine.map((r) => r.date),
+				mine.map((r) => r.wetAreaM2),
+				mine.map((r) => r.pctObserved),
+				mine.map(() => (source === 'wofs' ? 'ga_ls_wofs_e2e_synthetic' : `${source}_e2e_synthetic`)),
+				new Date()
+			]);
+		}
 	});
 }
 

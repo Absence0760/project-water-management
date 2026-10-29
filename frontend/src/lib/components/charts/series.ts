@@ -16,6 +16,8 @@ export interface ChartSeries extends DailyInput {
 	width?: number;
 	/** A points series' dot size in CSS px (3 by default; sparse observations, such as a dam seen from space, read better larger). */
 	pointSize?: number;
+	/** A points series drawn as rings (a full-strength 2 px outline, no fill), and its key swatch the same: a shape apart from filled dots of the same colour (ui-playbook.md § 3, "add a shape"). */
+	hollow?: boolean;
 	/** Starts switched off; clicking its legend entry shows it. */
 	hidden?: boolean;
 }

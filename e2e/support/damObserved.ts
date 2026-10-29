@@ -15,6 +15,8 @@ export interface View {
 	date: string;
 	wetAreaM2: number;
 	pctObserved: number;
+	/** WOfS by default; Sentinel-2 ('s2') or Sentinel-1 radar ('s1'), issue #624. */
+	source?: 'wofs' | 's2' | 's1';
 }
 
 /** Inside the run (1 Oct 2021, 120 days): seen full, seen empty, a plain view, and one under 90 % clear. */
@@ -23,6 +25,19 @@ export const OBSERVED_VIEWS: View[] = [
 	{ date: '2021-11-15', wetAreaM2: 0, pctObserved: 100 },
 	{ date: '2021-12-10', wetAreaM2: 20_000, pctObserved: 97 },
 	{ date: '2021-12-20', wetAreaM2: 5_000, pctObserved: 40 }
+];
+
+/**
+ * Sentinel views beside WOfS (issue #624): Sentinel-2 and WOfS on one day (Sentinel-2 wins), WOfS alone seeing the dam
+ * empty, radar alone on a clear-sky day, and a winter day Landsat was clouded on that only radar saw through.
+ */
+export const SENTINEL_VIEWS: View[] = [
+	{ date: '2021-10-20', wetAreaM2: 50_000, pctObserved: 100 },
+	{ date: '2021-10-20', wetAreaM2: 48_000, pctObserved: 98, source: 's2' },
+	{ date: '2021-11-15', wetAreaM2: 0, pctObserved: 100 },
+	{ date: '2021-12-10', wetAreaM2: 20_000, pctObserved: 100, source: 's1' },
+	{ date: '2021-12-20', wetAreaM2: 5_000, pctObserved: 40 },
+	{ date: '2021-12-20', wetAreaM2: 6_000, pctObserved: 100, source: 's1' }
 ];
 
 /** `n` clear views (up to 60 inside the run), one every second day from the run's first, between a quarter and three quarters full. */

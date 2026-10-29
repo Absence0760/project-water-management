@@ -5,6 +5,9 @@
 //    dam_area on the same day, flagged, with the full area, the summary, the
 //    match and the credit; a polygon linked to no unit is listed, never
 //    compared; a Waterbodies polygon merged with a neighbour isn't compared;
+//    the sharpest clear source wins a day (Sentinel-2 over WOfS), radar
+//    (Sentinel-1) is compared but never flagged, and Copernicus's credit
+//    carries the Sentinel views' years (issue #624);
 //  - `run` picks another of the project's runs; another project's run, or a
 //    malformed id, is 404;
 //  - a stranger is 404 and a farmer 403 on the workspace route (positive
@@ -59,7 +62,7 @@ const load = (db: Db, source: string, key: string, rows: [string, number, number
 		rows.map((r) => r[0]),
 		rows.map((r) => r[1]),
 		rows.map((r) => r[2]),
-		rows.map(() => (source === 'wofs' ? 'ga_ls_wofs_synthetic_1' : key)),
+		rows.map(() => (source === 'waterbodies' ? key : `${source}_synthetic_1`)),
 		new Date()
 	]);
 
@@ -106,7 +109,12 @@ beforeAll(async () => {
 			['2020-01-12', 5_000, 40],
 			['2020-03-01', 20_000, 100]
 		]);
+		// Sentinel-2 saw Farm A clearly the day WOfS did, and radar on a day of its own (issue #624).
+		await load(db, 's2', damA, [['2020-01-10', 12_500, 99]]);
+		await load(db, 's1', damA, [['2020-01-20', 39_500, 100]]);
 		await load(db, 'wofs', damB, [['2020-01-10', 3_000, 100]]);
+		// Farm B's newest clear view is radar, from the next year.
+		await load(db, 's1', damB, [['2021-04-01', 2_500, 100]]);
 		await load(db, 'wofs', loose, [['2020-01-10', 1_000, 100]]);
 	});
 	// Farm B's Waterbodies polygon is merged: its row comes from a uid matched to it before the merge (the loader
@@ -125,7 +133,9 @@ describe('GET /projects/:id/dams/observations', () => {
 		const res = await observations(viewer);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.attribution).toBe('Digital Earth Africa, CC BY 4.0');
-		expect(res.body.thresholds).toMatchObject({ minPctObserved: 90, fullShare: 0.95, withinShare: 0.1 });
+		// Copernicus's credit for the Sentinel views listed: 2020's and 2021's.
+		expect(res.body.sentinelCredit).toBe('Contains modified Copernicus Sentinel data 2020–2021, processed by Digital Earth Africa');
+		expect(res.body.thresholds).toMatchObject({ minPctObserved: 90, fullShare: 0.95, withinShare: 0.1, pixelM2: { s2: 400, wofs: 900, waterbodies: 900 } });
 		expect(res.body.run).toMatchObject({ id: runId, label: 'Newest' });
 		const a = res.body.dams.find((d: { nodeId: string }) => d.nodeId === farmA.id);
 		expect(a.features).toEqual([{ id: damA, name: 'Dam A', nodeId: farmA.id, match: { status: 'matched', damShare: 0.95, waterbodyShare: 0.9 } }]);
@@ -133,14 +143,17 @@ describe('GET /projects/:id/dams/observations', () => {
 		expect(a.inRun).toBe(true);
 		expect(a.points.map((p: { date: string; source: string; compared: boolean; skip: string | null; modelledAreaM2: number | null }) => [p.date, p.source, p.compared, p.skip, p.modelledAreaM2])).toEqual([
 			['2020-01-05', 'waterbodies', true, null, damAreaA[4]],
-			['2020-01-10', 'wofs', true, null, damAreaA[9]],
+			['2020-01-10', 's2', true, null, damAreaA[9]],
+			['2020-01-10', 'wofs', false, 'other-source', damAreaA[9]],
 			['2020-01-12', 'wofs', false, 'partly-seen', damAreaA[11]],
+			['2020-01-20', 's1', true, null, damAreaA[19]],
 			['2020-03-01', 'wofs', false, 'outside-run', null]
 		]);
-		// 39 000 m² of 40 000: seen full.
+		// 39 000 m² of 40 000: seen full. Radar's 39 500 m² is compared, never called full.
 		expect(a.points[0]).toMatchObject({ seenFull: true, seenEmpty: false });
-		expect(a.summary).toMatchObject({ compared: 2, skipped: 2, latestClear: { date: '2020-03-01', source: 'wofs', wetAreaM2: 20_000 } });
-		const bias = (damAreaA[4]! - 39_000 + damAreaA[9]! - 12_000) / 2 / 40_000 * 100;
+		expect(a.points[4]).toMatchObject({ source: 's1', compared: true, seenFull: false, seenEmpty: false, mismatch: null });
+		expect(a.summary).toMatchObject({ compared: 3, skipped: 3, radar: 1, seenFull: 1, latestClear: { date: '2020-03-01', source: 'wofs', wetAreaM2: 20_000 } });
+		const bias = (damAreaA[4]! - 39_000 + damAreaA[9]! - 12_500 + damAreaA[19]! - 39_500) / 3 / 40_000 * 100;
 		expect(a.summary.biasPctOfFull).toBeCloseTo(bias, 9);
 	});
 
@@ -150,7 +163,8 @@ describe('GET /projects/:id/dams/observations', () => {
 		expect(b.features[0].match.status).toBe('merged');
 		expect(b.points.map((p: { source: string; skip: string | null }) => [p.source, p.skip])).toEqual([
 			['waterbodies', 'not-this-dam'],
-			['wofs', null]
+			['wofs', null],
+			['s1', 'outside-run']
 		]);
 		// Farm B has no area entered: the run's own estimate from its capacity.
 		expect(b.fullArea.from).toBe('estimated');
@@ -186,7 +200,8 @@ describe('GET /projects/:id/farm/:nodeId/dam-observed', () => {
 	it('gives the farmer their own dam’s newest clear view, its full area and the credit, and nothing else', async () => {
 		const res = await farmer.call('GET', `/projects/${projectId}/farm/${farmA.id}/dam-observed`);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body).toEqual({ outlines: 1, latest: { date: '2020-03-01', wetAreaM2: 20_000, source: 'wofs' }, fullAreaM2: 40_000, attribution: 'Digital Earth Africa, CC BY 4.0' });
+		// The newest clear view is WOfS's (Landsat): no Copernicus credit.
+		expect(res.body).toEqual({ outlines: 1, latest: { date: '2020-03-01', wetAreaM2: 20_000, source: 'wofs' }, fullAreaM2: 40_000, attribution: 'Digital Earth Africa, CC BY 4.0', sentinelCredit: null });
 	});
 
 	it('is 404 to the farmer for a neighbour’s farm (positive control: a viewer previews it)', async () => {
@@ -195,7 +210,12 @@ describe('GET /projects/:id/farm/:nodeId/dam-observed', () => {
 		expect(JSON.stringify(res.body)).not.toContain('Dam B');
 		const v = await viewer.call('GET', `/projects/${projectId}/farm/${farmB.id}/dam-observed`);
 		expect(v.status).toBe(200);
-		expect(v.body).toMatchObject({ outlines: 1, latest: { date: '2020-01-10', wetAreaM2: 3_000 } });
+		// Farm B's newest clear view is radar's, credited to Copernicus for its year.
+		expect(v.body).toMatchObject({
+			outlines: 1,
+			latest: { date: '2021-04-01', wetAreaM2: 2_500, source: 's1' },
+			sentinelCredit: 'Contains modified Copernicus Sentinel data 2021, processed by Digital Earth Africa'
+		});
 		expect((await stranger.call('GET', `/projects/${projectId}/farm/${farmA.id}/dam-observed`)).status).toBe(404);
 	});
 });

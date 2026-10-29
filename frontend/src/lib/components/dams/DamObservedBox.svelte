@@ -5,10 +5,12 @@
 	disagree. No heading of its own: the fold's line carries the name, so the closed box is one line and the
 	panel fits a 1280×800 window (it had an h3 over the fold until the R5-B review). Opened: the match
 	notes (an outline DE Africa Waterbodies merged with a neighbour, or doesn't have), the full area and a
-	summary in words, the chart of the run's modelled surface area (the `dam_area` column, ha) beside the
-	views, the flags as lanes along its foot (disagree, seen full, seen empty) with the axis making room for
-	them under 0 ha, the newest views in a table (VIEWS_SHOWN, "Show all N views" for the rest), and the
-	credit. A viewer (`readonly`) is told an editor draws the outline, not to draw it. The observations are one request for the run (GET …/dams/observations?run=), so picking another
+	summary in words, how many views each source gave (Sentinel-2, WOfS, Sentinel-1 radar, Waterbodies; a day
+	several saw goes to the sharpest, issue #624), the chart of the run's modelled surface area (the
+	`dam_area` column, ha) beside the views (radar's as rings), the flags as lanes along its
+	foot (disagree, seen full, seen empty, and a doubled strip for the radar days, never a flag) with the
+	axis making room for them under 0 ha, the newest views in a table (VIEWS_SHOWN, "Show all N views" for
+	the rest), and the credit (Copernicus's too when Sentinel views are listed). A viewer (`readonly`) is told an editor draws the outline, not to draw it. The observations are one request for the run (GET …/dams/observations?run=), so picking another
 	dam reads no more; the modelled series comes through the Runs cache when the fold opens.
 -->
 <script lang="ts">
@@ -21,7 +23,7 @@
 	import { cachedSeries } from '#lib/components/runs/cache.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
-	import { fullAreaWords, matchNotes, observedChartSeries, observedFor, observedLanes, observedLine, summaryWords, viewRows, VIEWS_SHOWN } from './observed';
+	import { creditLine, fullAreaWords, matchNotes, observedChartSeries, observedFor, observedLanes, observedLine, RADAR_LANES_NOTE, sourcesLine, summaryWords, viewRows, VIEWS_SHOWN } from './observed';
 	import { foldList } from '#lib/components/common/fold.js';
 
 	let {
@@ -104,6 +106,8 @@
 	const waiting = $derived(!!dam?.inRun && !modelled && !modelledError);
 	const series = $derived(dam && !waiting ? observedChartSeries(dam, modelled, data?.run?.forecastFrom) : []);
 	const lanes = $derived(dam ? observedLanes(dam) : []);
+	const lanesNote = $derived(lanes.some((l) => l.doubled) ? RADAR_LANES_NOTE : '');
+	const sources = $derived(dam ? sourcesLine(dam) : null);
 	const rows = $derived(dam ? viewRows(dam) : []);
 	// The newest views, the rest behind "Show all N views" (ui-playbook.md § 2, fold every long list); a new dam shuts it.
 	let allViews = $state(false);
@@ -149,6 +153,9 @@
 				{#if fullAreaWords(dam) || summary}
 					<p class="small" data-testid="dam-observed-summary">{fullAreaWords(dam) ?? ''} {summary ?? ''}</p>
 				{/if}
+				{#if sources}
+					<p class="small note" data-testid="dam-observed-sources">{sources}</p>
+				{/if}
 				{#if modelledError}
 					<p class="err small" role="alert">
 						The run’s surface area couldn’t be loaded: {modelledError}
@@ -164,11 +171,12 @@
 						{series}
 						windows={FLOW_WINDOWS}
 						{lanes}
-						lanesLabel="Flags"
+						lanesLabel={lanesNote ? 'Flags and radar days' : 'Flags'}
+						{lanesNote}
 						lanesRoom
 						pannable={false}
 						toolsLabel="Seen from space chart controls"
-						caption="Points: clear satellite views (at least {minClear}% of the dam seen). Line: the run’s surface area at the start of each day. Dashed: the area when full."
+						caption="Points: clear satellite views (at least {minClear}% of the dam seen{lanesNote ? '; rings: radar' : ''}). Line: the run’s surface area at the start of each day. Dashed: the area when full."
 					/>
 				{/if}
 				<details class="views">
@@ -207,7 +215,7 @@
 					{/if}
 				</details>
 			{/if}
-			<p class="fine muted" data-testid="dam-observed-credit">Satellite views: {data?.attribution} (Waterbodies and WOfS, from Landsat).</p>
+			{#if data}<p class="fine muted" data-testid="dam-observed-credit">{creditLine(data.attribution, dam)}</p>{/if}
 		{/if}
 	</Fold>
 </section>

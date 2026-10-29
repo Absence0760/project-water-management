@@ -10874,13 +10874,16 @@ together.
 - **Modelled.** The run's `dam_area` column for the unit the dam polygons
   stand for (`map_feature.node_id`): m², at the start of each day, from the
   survey curve (`damCurve`, linear between rows) or the power law
-  `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat, about 10:30 local)
-  is compared with that day's value; the day's own change is small beside
-  the observation's error.
-- **Observed.** `dam_observation` (261, R5-A): per dam polygon, source
-  (`waterbodies`: DE Africa Waterbodies' area series for the polygon it
-  matched; `wofs`: WOfS water pixels inside the app's own outline, R5-C),
-  date, wet area (m²) and the share of the outline seen clearly.
+  `A = A_full (S/C)^b` (§2.7a). A satellite pass (Landsat and Sentinel-2
+  about 10:30 local, Sentinel-1 about 06:00 or 18:00) is compared with that
+  day's value; the day's own change is small beside the observation's error.
+- **Observed.** `dam_observation` (261, R5-A; 277, issue #624): per dam
+  polygon, source (`waterbodies`: DE Africa Waterbodies' area series for the
+  polygon it matched; `wofs`: WOfS water pixels inside the app's own
+  outline, R5-C; `s2`: Sentinel-2 water pixels inside it; `s1`: Sentinel-1
+  radar water inside it, both classified by passes planned in #624 steps 4
+  and 5), date, wet area
+  (m²) and the share of the outline seen clearly.
 - **Clear views only.** A view is compared when at least **90 %** of the dam
   was seen clearly (`minPctObserved`): the wet area counts the part seen, so
   a partly clouded view understates the water. DE Africa's Waterbodies
@@ -10891,16 +10894,49 @@ together.
   that day (else `partial-unit`).
 - **Which source.** A Waterbodies view counts only for a polygon matched to
   that waterbody alone (`matched`); `merged` (the waterbody also holds other
-  water) or `none` leaves only WOfS (`not-this-dam`). When both saw the dam
-  on one day, WOfS inside the dam's own outline wins (`other-source`).
+  water) or `none` leaves only the views of its own outline
+  (`not-this-dam`). When several sources saw the whole unit clearly on one
+  day, the sharpest wins and the rest are left out (`other-source`;
+  `SOURCE_PRECEDENCE`, issue #624): **Sentinel-2** (10 m) > **WOfS** (30 m)
+  > **Waterbodies** (a polygon's series, from WOfS) > **Sentinel-1**
+  (radar). The issue put radar above Waterbodies; it is last here because
+  radar sets no flag (below), so a radar win over a clear Waterbodies view
+  would drop that day's seen full or seen empty. A source that saw the day only partly, or saw some of the unit's
+  polygons only, doesn't take the day from one that saw it all: the next
+  source down does. The rank alone decides, never the area, so a tie (or a
+  wetter view from a coarser source) can't change the pick between runs.
+  One view a day keeps the summary from counting a day twice.
+- **Radar is never alone a flag** (Sentinel-1, issue #624). Radar sees
+  through the winter cloud that hides Landsat and Sentinel-2, but wind
+  roughens open water so that it looks dry, and dry sand can look wet. A
+  radar view is compared (it is in the bias and the share within, and counted
+  as `radar`), but it sets no **seen full**, no **seen empty** and no
+  mismatch: each of those reads the satellite's side, which those errors
+  move. The model's own full and empty stand. Radar is last in the
+  precedence, so it takes a day only when no optical source saw it clearly,
+  and "never alone" is "never". Radar's errors do move the bias and the
+  share within, which is why the summary counts its views (`radar`).
+  *Planned, #624 steps 4 and 5:* the passes that write `s2` and `s1` rows
+  (Sentinel-2 water as MNDWI > 0, Sentinel-1 water as VV under a fixed
+  −18 dB, not tuned per dam) and the gate before Sentinel-1 is enabled for a
+  dam: its agreement with Sentinel-2's clear views within a day must reach
+  85 % of days within 0.1 F (#624's acceptance criteria). Until then the
+  reader takes whatever `s2`/`s1` rows the store holds.
 - **Full area F.** The run's own: the survey curve's top area when the curve
   is usable, else `damAreaFullM2`, else the estimate from the capacity that
   run's engine used (`estimatedDamAreaForEngine`). Sedimentation's loss of
   capacity (§2.7g) isn't applied to F.
 - **Flags** (on compared views; O observed, M modelled):
   - **seen full** (likely spilling): O ≥ 0.95 F; **model full**: M ≥ 0.95 F;
-  - **seen empty**: O ≤ max(0.05 F, 900 m²) (one 30 m pixel: less water than
-    that can't be told from none); **model empty**: M ≤ 0.05 F;
+  - **seen empty**: O ≤ max(0.05 F, one pixel of the source that saw it)
+    (less water than a pixel can't be told from none): `pixelM2` 400 m² for
+    Sentinel-2 (one 20 m cell: its water test reads B11 and its cloud mask
+    is SCL, both 20 m, so its 10 m pixels are finer than it can tell), 900 m² for WOfS and Waterbodies (a 30 m Landsat
+    pixel), and for Sentinel-1 RTC's 0.0002° cell about 430 m² at 30° S
+    (22.24 m × 22.24 m · cos φ: 405 to 460 m² over South Africa), shown but
+    never used, radar setting no flag. So on a 0.3 ha dam (5 % is 150 m²)
+    Sentinel-2 calls 500 m² of water water, where WOfS can't tell it from
+    none; **model empty**: M ≤ 0.05 F;
   - **mismatch**, the first that holds: the model full while O < 0.8 F
     (`model-full`); the model empty while O > 0.2 F (`model-empty`); seen
     full while M < 0.8 F (`seen-full`); seen empty while M > 0.2 F

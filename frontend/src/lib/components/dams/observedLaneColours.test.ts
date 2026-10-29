@@ -1,7 +1,8 @@
 // The Dams tab's Seen from space strips (./observed.ts observedLanes, issue
 // #604 R5-B), computed as the flow-quality strips are
 // (calibration/flowFlagColours.test.ts; ui-playbook.md § 3, "Compute
-// colour-blind separation"). Three strips (disagree, seen full, seen empty)
+// colour-blind separation"). Three strips (disagree, seen full, seen empty),
+// and a fourth, doubled, for the days a radar view was compared (issue #624),
 // along the foot of a chart that draws the modelled area (--series-1), the
 // views (--series-2 points), the views not compared (--text-muted points) and
 // the full area (--text-2, dashed). The review measured --danger and --warning
@@ -41,9 +42,16 @@ const point = (date: string, more: Partial<ObservedPoint> = {}): ObservedPoint =
 
 describe('the Seen from space strips’ colours (issue #604 R5-B)', () => {
 	it('draws every strip in its own token, and the chart only in the lines the test holds them apart from', () => {
-		const pts = [point('2022-01-02', { seenFull: true, mismatch: 'seen-full' }), point('2022-01-03', { seenEmpty: true }), point('2022-01-04', { compared: false, skip: 'partly-seen' })];
+		const pts = [
+			point('2022-01-02', { seenFull: true, mismatch: 'seen-full' }),
+			point('2022-01-03', { seenEmpty: true }),
+			point('2022-01-04', { compared: false, skip: 'partly-seen' }),
+			point('2022-01-05', { source: 's1' })
+		];
 		const dam = { nodeId: 'n', features: [], fullArea: { areaM2: 40_000, from: 'entered' }, inRun: true, points: pts, summary: {} } as unknown as ObservedDam;
 		expect(observedLanes(dam).map((l) => l.color)).toEqual(LANES);
+		// Only the radar strip is doubled: its look, not its colour alone, sets it apart from the flags.
+		expect(observedLanes(dam).map((l) => !!l.doubled)).toEqual([false, false, false, true]);
 		const lines = observedChartSeries(dam, { startDate: '2022-01-01', values: [1, 2, 3, 4] }).map((s) => s.color);
 		expect(lines.every((c) => (OBSERVED_LINE_COLORS as readonly (string | undefined)[]).includes(c)), lines.join()).toBe(true);
 		// The tokens as app.css has them (a move means these numbers need computing again).

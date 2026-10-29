@@ -1930,19 +1930,32 @@ for every workspace tab. Its own chunk.
   views yet", "none compared · latest clear view …"). **Show** opens, in order:
   a line per outline DE Africa Waterbodies merged with a neighbouring water
   body, has no polygon for, or hasn't been matched to yet (its Waterbodies
-  views aren't compared, only WOfS inside the outline); the full area and
+  views aren't compared, only the views of its own outline, WOfS and
+  Sentinel); the full area and
   where it comes from (survey curve's top, as entered, or estimated from the
   capacity) with a summary in words (the span, the mean difference as a share
-  of the full area, the share within ±10 %, how often seen full or empty); the
+  of the full area, the share within ±10 %, how often seen full or empty, and
+  how many of the views are radar, "never called full or empty on their
+  own"); with more than one source, a line of how many views each gave,
+  best first ("Views by source: 3 Sentinel-2, 2 WOfS, 1 Sentinel-1 radar. A
+  day more than one saw clearly is compared with the most trusted: Sentinel-2,
+  then WOfS, then Waterbodies, then radar.", issue
+  #624); the
   chart (`LineChart`, ha: the run's area as a line, ending before a forecast
   run's forecast, whose views aren't compared either, the compared views as
-  dots, the views not compared as fainter dots off until the legend shows
+  dots, compared radar views as rings of their own (**Seen by radar**, the
+  same `--series-2`, `ChartSeries.hollow`: a shape apart in the plot and the
+  key), the views not compared as fainter dots
+  off until the legend shows
   them, the full area dashed, 30 days / 1 year / All opening on All) with the
   flags as lanes along its foot (**Disagree** `--lane-disagree`, **Seen full**
   `--lane-seen-full`, **Seen empty** `--lane-seen-empty`, each named in the
   lanes key; their own tokens, computed apart for colour-blind readers from
   each other and from every line the chart draws,
-  `dams/observedLaneColours.test.ts`), the y axis starting under 0 ha by the
+  `dams/observedLaneColours.test.ts`) and, on the days a radar view was
+  compared, a **doubled** strip, **Radar** `--lane-radar` (a shape, not a
+  flag: the key's heading becomes "Flags and radar days … solid: a flag;
+  double line: a radar view", and the caption says "rings: radar"), the y axis starting under 0 ha by the
   strips' height (`LineChart` `lanesRoom`, `charts/series.ts` `laneRoom`) so a
   view of an empty dam sits above them, not under; **The N views, newest
   first**, a table of the newest ten (`VIEWS_SHOWN`) with **Show all N views**
@@ -1951,7 +1964,14 @@ for every workspace tab. Its own chunk.
   disagrees in `--danger` with the words "Disagree: …"), which stacks each
   view as a block in a narrow column (36rem) rather than scrolling sideways;
   and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0 (Waterbodies
-  and WOfS, from Landsat)". The run's area loads through the Runs cache only
+  and WOfS, from Landsat).", followed, when any Sentinel view is listed, by
+  "Contains modified Copernicus Sentinel data 2021, processed by Digital
+  Earth Africa." for the years of that dam's own Sentinel views
+  (`observed.ts` `sentinelCredit`; the API's top-level `sentinelCredit`
+  covers every dam listed). A view left out for another the same day names
+  the one compared ("Not compared: Sentinel-2 saw it clearly the same
+  day"); a radar row adds "radar, never called full
+  or empty on its own". The run's area loads through the Runs cache only
   once the fold opens. A dam with no outline says so, with **Open the Map**;
   to an editor it says to draw the water surface as a polygon and link it, to
   a viewer that an editor draws the outline.
@@ -13593,7 +13613,16 @@ published.
   full."; without one, the sentence stops at the area), or "No clear view of
   your dam from space yet. …"; then "A satellite sees the water’s surface, not
   how deep it is: a check on the model, not a measurement of the water in your
-  dam." and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0." A
+  dam." and the credit, "Satellite views: Digital Earth Africa, CC BY 4.0."
+  When the newest clear view is radar's (Sentinel-1, issue #624, often a
+  winter day Landsat and Sentinel-2 were clouded on) it says so and hedges
+  the area: "On 20 Dec 2021 a radar satellite, which sees through cloud, saw
+  water over about 0.6 ha of the 5.0 ha your dam covers when full.", and
+  never "more than" full (past it, or with no full area, "…over about 4.4 ha
+  of your dam."), since radar alone never calls a dam full. A Sentinel view
+  adds Copernicus's credit for its year: "Satellite views: Digital Earth
+  Africa, CC BY 4.0. Contains modified Copernicus Sentinel data 2021,
+  processed by Digital Earth Africa." A
   failed load is one line asking to check the connection and reload, as the
   map card's. Nothing of a neighbour's dam reaches it (the route names the
   farm, and 249's farmer policies are the second layer).

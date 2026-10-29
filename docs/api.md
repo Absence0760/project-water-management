@@ -3825,12 +3825,17 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
 | --- | --- | --- | --- |
 | GET | `/projects/:id/dams/observations?run=&node=` | `DamObservations` (below). `run`: the run to compare with, else the project's newest by `created_at` (the run the Dams tab shows, `overview/latestRun.ts` `pickRuns`); another project's run or a malformed id is `404`. `node`: only that unit's dam (a malformed id `404`, a unit with no outline an empty `dams`). `Cache-Control: no-store` | viewer |
 
-`DamObservations = { attribution, thresholds, run, dams }`:
+`DamObservations = { attribution, sentinelCredit, thresholds, run, dams }`:
 
 - `attribution`: `"Digital Earth Africa, CC BY 4.0"`, shown wherever the
   values are.
+- `sentinelCredit`: Copernicus's credit when any Sentinel-2 or Sentinel-1
+  view is listed, its year or first and last ("Contains modified Copernicus
+  Sentinel data 2021–2024, processed by Digital Earth Africa"); `null` with
+  none (issue #624).
 - `thresholds`: the comparison's constants (`compare.ts` `OBSERVED`):
-  `minPctObserved` 90, `fullShare` 0.95, `emptyShare` 0.05, `pixelM2` 900,
+  `minPctObserved` 90, `fullShare` 0.95, `emptyShare` 0.05, `pixelM2` per
+  source (`{ s2: 400, wofs: 900, waterbodies: 900, s1: 429 }`, m²),
   `clearlyNotFull` 0.8, `clearlyWet` 0.2, `withinShare` 0.1.
 - `run`: `{ id, label, createdAt, engineVersion, forecastFrom } | null` (no run yet).
 - `dams`: one per unit with a dam polygon (points have no outline), plus one
@@ -3843,15 +3848,18 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
   `damAreaFullM2`, else the estimate its engine version used); `inRun` is
   whether the run stored a `dam_area` for the unit.
 - `points`, oldest first, one per (date, source) the unit's polygons were
-  seen: `{ date, source: 'waterbodies' | 'wofs', wetAreaM2, pctObserved, modelledAreaM2, compared, skip, seenFull, seenEmpty, modelFull, modelEmpty, mismatch }`.
+  seen: `{ date, source: 'waterbodies' | 'wofs' | 's2' | 's1', wetAreaM2, pctObserved, modelledAreaM2, compared, skip, seenFull, seenEmpty, modelFull, modelEmpty, mismatch }`.
   Several polygons of one unit (its composite dam) are summed, and the least
   share seen clearly kept. `modelledAreaM2` is the run's `dam_area` that day
   (`null` outside the run). `skip` says why a point wasn't compared:
-  `partly-seen`, `not-this-dam`, `partial-unit`, `other-source`,
-  `outside-run` (or a forecast day), `no-run`. The flags are set on compared
-  points only; `mismatch` is `model-full`, `model-empty`, `seen-full` or
-  `seen-empty`.
-- `summary`: `{ compared, skipped, biasPctOfFull, withinShare, seenFull, seenEmpty, mismatches, latestClear }`;
+  `partly-seen`, `not-this-dam`, `partial-unit`, `other-source` (a sharper
+  source saw the whole unit clearly that day: Sentinel-2, then WOfS, then
+  Waterbodies, then Sentinel-1), `outside-run` (or a forecast day),
+  `no-run`. The flags are set on compared points only, and never on a
+  Sentinel-1 (radar) point, which keeps only `modelFull`/`modelEmpty`;
+  `mismatch` is `model-full`, `model-empty`, `seen-full` or `seen-empty`.
+- `summary`: `{ compared, skipped, biasPctOfFull, withinShare, seenFull, seenEmpty, mismatches, radar, latestClear }`
+  (`radar`: how many compared points are Sentinel-1's);
   `biasPctOfFull` is the mean of (modelled − observed) as % of the full area
   (+: the model holds more), `withinShare` the share of compared points
   within 10 % of the full area (0–1), `latestClear` the newest view at least
@@ -4239,7 +4247,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/map` | `FarmMap = { features: { id, kind, name, geometry, areaM2, center, credit? }[] }`: the farm's map (issue #326 A3): the parcels and dams linked to **this** farm, then the gauges, rivers and catchment boundary for orientation, never another farm's feature or an `other` one, and no node id, properties or author; `credit: 'hydrorivers'` (2026-10-02) on a river added from a HydroRIVERS reach and `credit: 'jrc-water'` (issue #523 C6) on an outline (a dam) traced from JRC Global Surface Water (its description names the source; the description itself never leaves), so the map shows that licence's credit (maps.md § Credits on the map), absent otherwise. The query names the farm, so a viewer previewing it gets what its farmer gets. `{ features: [] }` when the farm has no parcel or dam on the map (the page shows no map). No status: the page colours the land from the farm view's own band. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
-| GET | `/projects/:id/farm/:nodeId/dam-observed` | `FarmDamObserved = { outlines, latest: { date, wetAreaM2, source } \| null, fullAreaM2, attribution }`: the farm's dam seen from space (issue #604 R5-B, [Dams seen from space](#dams-seen-from-space)): how many of **this** farm's dams are drawn as an outline (`0`: the page shows nothing), the newest view at least 90 % clear of all of them together (summed for a composite dam; a Waterbodies polygon merged with a neighbour never counts; the comparison's own `latestClear`), `fullAreaM2` from the farm's own node (survey curve's top, `damAreaFullM2`, else the estimate from the capacity; `null` with no dam capacity) and the credit `"Digital Earth Africa, CC BY 4.0"`. No upstream id, match detail or feature id. Not tied to a publication. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/farm/:nodeId/dam-observed` | `FarmDamObserved = { outlines, latest: { date, wetAreaM2, source } \| null, fullAreaM2, attribution, sentinelCredit }`: the farm's dam seen from space (issue #604 R5-B, [Dams seen from space](#dams-seen-from-space)): how many of **this** farm's dams are drawn as an outline (`0`: the page shows nothing), the newest view at least 90 % clear of all of them together (summed for a composite dam; a Waterbodies polygon merged with a neighbour never counts; the comparison's own `latestClear`), `fullAreaM2` from the farm's own node (survey curve's top, `damAreaFullM2`, else the estimate from the capacity; `null` with no dam capacity) and the credit `"Digital Earth Africa, CC BY 4.0"`, with `sentinelCredit` Copernicus's for the latest view's year when it is Sentinel-2's or Sentinel-1's (else `null`, issue #624). No upstream id, match detail or feature id. Not tied to a publication. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/privacy-contact` | `{ wuaName, contact: { organisation, name, email, postal } \| null }`: "Who decides about your farm's information" (POPIA s18(1)(b), 168): the project's team's name and its privacy contact ([Teams](#teams)), for every member, farmers included, through `app_project_privacy_contact` (a farmer can't read the team row); nothing else about the team. `contact` is `null` for a project without a team or a team without a contact; `wuaName` as in `FarmIndex`. `404` for a non-member | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 

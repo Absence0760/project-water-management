@@ -2324,6 +2324,15 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     invented overlapping scenes in every UTM zone, two paths, a seasonal
     water field and cloud on some dates, written as real tiled DEFLATE
     COGs, so the production reader runs offline.
+- **Reading them back** (`dams/observed/compare.ts`, issue #624). The
+  store keeps every source's row for a day; the reader picks one. Of the
+  sources that saw the whole unit at least 90 % clear that day, the sharpest
+  wins (`SOURCE_PRECEDENCE`: Sentinel-2, then WOfS, then Waterbodies, then
+  Sentinel-1 radar) and the rest are `other-source`. Radar is compared but
+  never sets a flag ([model.md § 2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b)).
+  The panel and the farm card carry Copernicus's credit for the years of any
+  Sentinel views they show (`upstream.ts` `sentinelCredit`), beside DE
+  Africa's.
 
 ## Server-side reports
 

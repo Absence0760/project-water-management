@@ -3567,7 +3567,11 @@ export interface RegisterDamProposal {
 	loadedAt: string;
 }
 
-/** Where a dam observation comes from (backend dams/observed/compare.ts); 's2' and 's1' (Sentinel-2, Sentinel-1 radar) from 277, issue #624, no rows yet. */
+/**
+ * Where a dam observation comes from (backend dams/observed/compare.ts): 's2' and 's1' (Sentinel-2, Sentinel-1 radar)
+ * since 277, issue #624. A day several saw clearly goes to the sharpest (SOURCE_PRECEDENCE: s2, wofs, waterbodies, s1),
+ * and radar is never alone the reason for a flag.
+ */
 export type ObservedSource = 'waterbodies' | 'wofs' | 's2' | 's1';
 /** Why an observation wasn't compared with the model (backend dams/observed/compare.ts SkipReason). */
 export type ObservedSkip = 'partly-seen' | 'not-this-dam' | 'partial-unit' | 'other-source' | 'outside-run' | 'no-run';
@@ -3611,6 +3615,8 @@ export interface ObservedDam {
 		seenFull: number;
 		seenEmpty: number;
 		mismatches: number;
+		/** Of the compared views, how many are radar (Sentinel-1). */
+		radar: number;
 		latestClear: { date: string; source: ObservedSource; wetAreaM2: number; pctObserved: number } | null;
 	};
 }
@@ -3618,7 +3624,10 @@ export interface ObservedDam {
 /** GET …/dams/observations (issue #604 R5-B): each unit's dam seen from space against the run's modelled area. */
 export interface DamObservations {
 	attribution: string;
-	thresholds: { minPctObserved: number; fullShare: number; emptyShare: number; pixelM2: number; clearlyNotFull: number; clearlyWet: number; withinShare: number };
+	/** Copernicus's credit for the years of the Sentinel views listed (issue #624); null with none. */
+	sentinelCredit: string | null;
+	/** pixelM2: one pixel's ground area per source, the observed side's empty floor. */
+	thresholds: { minPctObserved: number; fullShare: number; emptyShare: number; pixelM2: Record<ObservedSource, number>; clearlyNotFull: number; clearlyWet: number; withinShare: number };
 	run: { id: string; label: string; createdAt: string; engineVersion: string; forecastFrom: string | null } | null;
 	dams: ObservedDam[];
 }
@@ -3630,6 +3639,8 @@ export interface FarmDamObserved {
 	latest: { date: string; wetAreaM2: number; source: ObservedSource } | null;
 	fullAreaM2: number | null;
 	attribution: string;
+	/** Copernicus's credit when the latest view is Sentinel's (issue #624); null otherwise. */
+	sentinelCredit: string | null;
 }
 
 /** GET …/nodes/:nodeId/dam-proposals: what the register and the map propose for a unit's dam. */
