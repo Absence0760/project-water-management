@@ -23,10 +23,10 @@ import re
 import urllib.error
 from pathlib import Path
 
-import ecmwf
+import ecmwf_forecast
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "ecmwf"
-_URL = re.compile(r"^" + re.escape(ecmwf.BASE_URL) + r"/(\d{8})/00z/ifs/0p1/enfo/(\d{8})000000-(\d+)h-enfo-ef-sfc\.(index|grib2)$")
+_URL = re.compile(r"^" + re.escape(ecmwf_forecast.BASE_URL) + r"/(\d{8})/00z/ifs/0p1/enfo/(\d{8})000000-(\d+)h-enfo-ef-sfc\.(index|grib2)$")
 
 
 class _Response(io.BytesIO):

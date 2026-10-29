@@ -1,6 +1,6 @@
 // The committed copy's ECMWF ENS issue (issue #604 R4-C): one invented issue
 // (fromMirrorEcmwf.ts ECMWF_FIXTURE) over a 4 × 4 block of 0.1° cells, in the
-// layout ingest/ecmwf.py writes, plus its manifest and `ecmwf/index.json`.
+// layout ingest/ecmwf_forecast.py writes, plus its manifest and `ecmwf/index.json`.
 // Called by gen-mirror-fixture.ts (pnpm gen:mirror-fixture), so
 // src/mirror/fixture.test.ts covers it too. No real place or measurement:
 // the mean is a repeating pattern, the quantiles fixed shares of it.

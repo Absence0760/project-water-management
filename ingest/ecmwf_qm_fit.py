@@ -2,7 +2,7 @@
 R4-C): "quantile-mapped to our corrected rain".
 
 Run by the operator, not on a schedule, once the copy has archived a few
-months of forecasts (ecmwf.py keeps every issue's ensemble mean). It pairs
+months of forecasts (ecmwf_forecast.py keeps every issue's ensemble mean). It pairs
 each archived forecast day with our rain for the same 0.1 deg cell and day,
 and writes the quantile pairs that map one distribution onto the other, per
 region and season, to `ecmwf/qm.json` in the copy. The feed applies them
@@ -54,7 +54,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import ecmwf  # noqa: E402
+import ecmwf_forecast  # noqa: E402
 import zarrstore  # noqa: E402
 
 SEASONS = {"DJF": (12, 1, 2), "MAM": (3, 4, 5), "JJA": (6, 7, 8), "SON": (9, 10, 11)}
@@ -100,7 +100,7 @@ def season_of(month: int) -> str:
 def _coarsen(day: np.ndarray) -> np.ndarray:
     """A 0.05 deg day (550, 620) as the 0.1 deg cells (275, 310): the mean of
     the four 0.05 deg cells each holds (NaN if any is)."""
-    return day.reshape(ecmwf.ROWS, 2, ecmwf.COLS, 2).mean(axis=(1, 3))
+    return day.reshape(ecmwf_forecast.ROWS, 2, ecmwf_forecast.COLS, 2).mean(axis=(1, 3))
 
 
 def _observed_day(root: Path, product: str, day: dt.date) -> np.ndarray | None:
@@ -120,8 +120,8 @@ def _observed_day(root: Path, product: str, day: dt.date) -> np.ndarray | None:
 
 def _mask(region: dict, stride: int) -> tuple[np.ndarray, np.ndarray]:
     """The (row, col) indices of the 0.1 deg cells whose centre lies in `region`, every `stride`th."""
-    lats = ecmwf.ORIGIN["lat"] + np.arange(ecmwf.ROWS) * ecmwf.STEP_DEG
-    lons = ecmwf.ORIGIN["lon"] + np.arange(ecmwf.COLS) * ecmwf.STEP_DEG
+    lats = ecmwf_forecast.ORIGIN["lat"] + np.arange(ecmwf_forecast.ROWS) * ecmwf_forecast.STEP_DEG
+    lons = ecmwf_forecast.ORIGIN["lon"] + np.arange(ecmwf_forecast.COLS) * ecmwf_forecast.STEP_DEG
     rows = np.nonzero((lats >= region["s"]) & (lats <= region["n"]))[0][::stride]
     cols = np.nonzero((lons >= region["w"]) & (lons <= region["e"]))[0][::stride]
     return rows, cols
@@ -129,17 +129,17 @@ def _mask(region: dict, stride: int) -> tuple[np.ndarray, np.ndarray]:
 
 def fit(root: Path, observed: str = "sat", regions: list[dict] | None = None, stride: int = 5, min_samples: int = 2000, scale: float = 1.0, fitted_at: str | None = None) -> dict:
     """qm.json's document from a local copy (see the module docstring)."""
-    regions = regions or [{"id": "D1", "region": dict(ecmwf.REGION)}]
-    doc = json.loads((root / ecmwf.INDEX_KEY).read_text()) if (root / ecmwf.INDEX_KEY).exists() else {"issues": [], "archived": []}
+    regions = regions or [{"id": "D1", "region": dict(ecmwf_forecast.REGION)}]
+    doc = json.loads((root / ecmwf_forecast.INDEX_KEY).read_text()) if (root / ecmwf_forecast.INDEX_KEY).exists() else {"issues": [], "archived": []}
     issues = sorted(set(doc.get("issues", [])) | set(doc.get("archived", [])))
     samples: dict[tuple[str, str], tuple[list, list]] = {}
     obs_cache: dict[dt.date, np.ndarray | None] = {}
     used: list[str] = []
     for iso in issues:
         issue = dt.date.fromisoformat(iso)
-        mean = ecmwf.read_issue(root, iso, "mean")
+        mean = ecmwf_forecast.read_issue(root, iso, "mean")
         any_day = False
-        for d in range(ecmwf.DAYS):
+        for d in range(ecmwf_forecast.DAYS):
             day = issue + dt.timedelta(days=d)
             if day not in obs_cache:
                 o = _observed_day(root, observed, day)
@@ -206,8 +206,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(doc, indent=2))
         return 0
     mirror = zarrstore.Mirror.from_url(a.mirror or a.copy.resolve().as_uri())
-    mirror.write_json(ecmwf.QM_KEY, doc)
-    print(f"wrote {ecmwf.QM_KEY}: {len(doc['groups'])} groups from {doc['forecasts']['issues']} issues", file=sys.stderr)
+    mirror.write_json(ecmwf_forecast.QM_KEY, doc)
+    print(f"wrote {ecmwf_forecast.QM_KEY}: {len(doc['groups'])} groups from {doc['forecasts']['issues']} issues", file=sys.stderr)
     return 0
 
 

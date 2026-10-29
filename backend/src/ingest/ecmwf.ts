@@ -1,6 +1,6 @@
 // The ECMWF ENS forecast in our copy, as the Node side reads (and, for the
 // committed fixture and the tests, writes) it (issue #604 D17, R4-C). The
-// copy is written by the Python ingest job, ingest/ecmwf.py, whose header
+// copy is written by the Python ingest job, ingest/ecmwf_forecast.py, whose header
 // is the spec; in short:
 //
 //   ecmwf/index.json         {"issues": [...7 newest], "archived": [...]}, newest first

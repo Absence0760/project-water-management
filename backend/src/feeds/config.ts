@@ -14,7 +14,7 @@ export type FeedSource = (typeof FEED_SOURCES)[number];
 
 /**
  * The forecast sources and how many days an issue holds: CHIRPS-GEFS 16, the
- * ECMWF ENS mean 15 (issue #604 R4-C, ingest/ecmwf.py). A forecast result is
+ * ECMWF ENS mean 15 (issue #604 R4-C, ingest/ecmwf_forecast.py). A forecast result is
  * one whole issue keyed by its issue date (feeds/ingest.ts).
  */
 export const FORECAST_DAYS = { chirps_gefs: 16, ecmwf_ens: 15 } as const satisfies Partial<Record<FeedSource, number>>;

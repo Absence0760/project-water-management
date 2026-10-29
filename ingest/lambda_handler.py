@@ -6,7 +6,7 @@ Event: {"product": "rnl" | "sat", "mode": "monthly"}
         "hold"?: {"execution": "<execution id>", "pauseSeconds": n}}
        {"mode": "release_hold", "hold": {"execution": "<execution id>"}}
        {"product": "imerg_late", "mode": "recent", "days": 1-30?}   (imerg.py)
-       {"product": "ecmwf", "mode": "daily"}   (ecmwf.py, its own run)
+       {"product": "ecmwf", "mode": "daily"}   (ecmwf_forecast.py, its own run)
        {"product": "agera5_et0", "mode": "monthly" | "backfill", "month"?}  (agera5.py)
        {"product": "power_et0", "mode": "recent", "days": 1-60?}  (nasapower.py)
        {"product": "c3s", "mode": "monthly" | "backfill", "month"?: "MM", "system"?}  (c3s_seasonal.py)
@@ -202,7 +202,7 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
     if isinstance(event, dict) and event.get("product") == c3s_seasonal.PRODUCT:
         return c3s_seasonal.handler(event, context, s3_client=s3_client, metrics=metrics, **({"clock": clock} if clock else {}), **({"today": today} if today else {}))
     # --- end C3S seasonal ---
-    # --- ECMWF ENS forecast (issue #604 R4-C): {"product": "ecmwf", "mode": "daily"}, ecmwf.py ---
+    # --- ECMWF ENS forecast (issue #604 R4-C): {"product": "ecmwf", "mode": "daily"}, ecmwf_forecast.py ---
     if isinstance(event, dict) and event.get("product") == "ecmwf":
         return _handle_ecmwf(event, context, s3_client, opener, metrics, clock, sleep, today)
     # --- end ECMWF ---
@@ -276,9 +276,9 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
 
 # --- ECMWF ENS forecast (issue #604 R4-C) ---
 def _handle_ecmwf(event, context, s3_client, opener, metrics, clock, sleep, today) -> dict:
-    import ecmwf
+    import ecmwf_forecast
 
-    ecmwf.validate_event(event)
+    ecmwf_forecast.validate_event(event)
     source = os.environ.get("FEED_SOURCE", "fixtures")
     if source not in ("fixtures", "live"):
         raise RuntimeError(f"FEED_SOURCE must be fixtures or live, got {source!r}")
@@ -292,7 +292,7 @@ def _handle_ecmwf(event, context, s3_client, opener, metrics, clock, sleep, toda
         import ecmwf_fixturehttp
 
         opener = ecmwf_fixturehttp.EcmwfFixtureOpener()
-    return ecmwf.handle(
+    return ecmwf_forecast.handle(
         event,
         context,
         mirror=zarrstore.Mirror.from_url(mirror_url, s3_client=s3_client),
