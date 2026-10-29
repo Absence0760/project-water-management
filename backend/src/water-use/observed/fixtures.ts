@@ -18,6 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { toEpochDay } from '@water-management/engine/calendar';
+import { WAPOR_LAYOUT } from '../../raster/cogLayouts.js';
 import { writeCog } from '../../raster/cogWrite.js';
 import { WAPOR_AETI_D_PATH, WAPOR_BASE } from './upstream.js';
 import { dekadEnd, dekadOf, dekadOfFileName, previousDekad, WAPOR_SCALE } from './wapor.js';
@@ -92,6 +93,9 @@ export function waporFixture(today: () => string, spec: WaporFixtureSpec = loadW
 	const make = (dekad: string): Uint8Array => {
 		const at = waporFixtureDekad(spec, dekad);
 		return writeCog({
+			// FAO's file's layout (raster/cogLayouts.ts): BigTIFF, LZW without a predictor, PlanarConfiguration 2,
+			// GDAL's band scale, the long tile tables past the header's first read.
+			...WAPOR_LAYOUT,
 			width,
 			height,
 			sampleType: 'int16',
@@ -115,11 +119,7 @@ export function waporFixture(today: () => string, spec: WaporFixtureSpec = loadW
 			originY: originLat,
 			pixelSize: px,
 			tile,
-			compression: 5,
 			nodata: String(NODATA),
-			bigTiff: true,
-			// GDAL's COG layout: the small values in the header's first read, the long tile tables after them.
-			tableGap: 0,
 			scaleOffset: { scale: WAPOR_SCALE, offset: 0 }
 		});
 	};

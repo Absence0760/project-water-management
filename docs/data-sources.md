@@ -417,6 +417,11 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   Sentinel water mask (its only water product is `wofs_ls`), so we classify
   the pixels ourselves: MNDWI from B03 and B11, NDWI from B08 where B11 is
   missing, SCL masking cloud, shadow and no data (issue #624 § Design).
+  The bands are uint16 COGs (DEFLATE, the horizontal predictor, no data 0;
+  1024-pixel tiles at 10 m, 512 at 20 m) in the south UTM codes, each
+  carrying GDAL's scale 1e-4 and offset −0.1 (the item's −1000 DN offset);
+  SCL is uint8 with none. Headers read 2026-10-29
+  (`backend/src/raster/cogLayouts.ts`).
 - **Hosts:** `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com` (the
   bucket, anonymous range reads, same region as the app; objects under
   `sentinel-2-c1-l2a/<utm zone>/<latitude band>/<grid square>/<year>/<month>/<scene id>/`,
@@ -483,7 +488,10 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   UTM), with a `mask` band flagging layover and shadow; from 2018, every 6–12
   days (Sentinel-1D items were present from 2026-09-05, so the 6-day
   revisit is back). Water is VV below −18 dB inside the outline, a fixed
-  threshold (issue #624 § Design).
+  threshold (issue #624 § Design). Each 1° tile is a 5000 × 5000 COG in
+  256-pixel tiles: VV float32 linear power (DEFLATE, the float predictor,
+  no data `nan`), `mask` uint8 (no data 0); headers read 2026-10-29
+  (`backend/src/raster/cogLayouts.ts`).
 - **Hosts:** `deafrica-sentinel-1.s3.af-south-1.amazonaws.com` (the bucket,
   anonymous, same region as the app; objects under
   `s1_rtc/<tile id>/<year>/<month>/<day>/<datatake id>/`, DE Africa's spec
@@ -538,7 +546,9 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
 - **Source:** FAO WaPOR v3, mapset `L2-AETI-D` (actual evapotranspiration
   and interception, level 2, dekadal): 100 m (1/1024°, EPSG:4326), Africa
   and the Near East, from January 2018. int16 × 0.1 mm/day, nodata −9999.
-  One BigTIFF COG per dekad, about 2.1 GB (512-pixel tiles, LZW).
+  One BigTIFF COG per dekad, about 2.1 GB (512-pixel tiles, LZW without a
+  predictor, GDAL's band scale 0.1, the grid 180° W–180° E, 60° N–60° S;
+  header read 2026-10-29, `backend/src/raster/cogLayouts.ts`).
 - **Host:** `storage.googleapis.com`, FAO's own public bucket
   `fao-gismgr-wapor-3-data`, anonymous HTTPS:
   `DATA/WAPOR-3/MAPSET/L2-AETI-D/WAPOR-3.L2-AETI-D.<YYYY-MM-Dn>.tif`

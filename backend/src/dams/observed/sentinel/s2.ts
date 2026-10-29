@@ -25,10 +25,11 @@
 //
 // Reflectance. DE Africa's s2_l2a_c1 items give each band's offset in
 // raster:bands (−1000 DN for Collection 1, checked 2026-10-29; scale 1e-4 is
-// common to all bands), applied per band: v = DN + offset. A GDAL scale and
-// offset in the file itself, if a band ever carries one, is used instead
-// (v = DN × scale + offset), and a scene whose two bands disagree on having
-// one is refused. With one offset shared by both bands the sign of B03 − B11
+// common to all bands), applied per band: v = DN + offset. The files carry
+// their own GDAL scale and offset, 1e-4 and −0.1 (the same thing, at 1e-4 a
+// DN; their headers read 2026-10-29, raster/cogLayouts.ts), and a file's own
+// is used where it has one (v = DN × scale + offset), so the item's offset is
+// the fallback; a scene whose two bands disagree on having one is refused. With one offset shared by both bands the sign of B03 − B11
 // is offset-free, so the 0 threshold is too; the offset matters only to the
 // "sum to 0 or less" rule, which guards division.
 //
