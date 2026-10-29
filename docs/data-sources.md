@@ -102,6 +102,7 @@ Every job that fetches from an upstream:
 | [penpan-apan](#penpan-apan) | A modelled Class-A pan grid: PenPan from NASA POWER's daily weather, monthly means at 0.1° (issue #646 item 7) | blocked (built against synthetic weather; production waits for the validation against DWS Class-A pans and the hydrologist's sign-off) | `power.larc.nasa.gov` (the operator's offline run) | – | `ingest/penpan.py`, `ingest/apan_grid.py`, `pnpm import:evaporation` (kind `apan`) |
 | [climate-indices](#climate-indices) | NOAA CPC's ONI (ENSO) and AAO (the SAM's proxy), monthly | built (#620); the fetcher's indices pass off in production until `climate_indices_enabled` | `www.cpc.ncep.noaa.gov` | – | `backend/src/feeds/sources/cpc.ts`, `backend/src/ingest/indices.ts`, `infra/climate_indices.tf` |
 | [c3s-seasonal](#c3s-seasonal) | C3S multi-system seasonal forecasts and hindcasts, daily precipitation (1°) | built (#620 step 5); the copy's job off in production until `c3s_enabled` (the CDS key is ERA5-Land's; both licences accepted first); nothing reads it yet (#620 step 6–7) | `cds.climate.copernicus.eu` | – | `ingest/c3s_seasonal.py`, `ingest/c3srequest.py`, `infra/c3s.tf` |
+| [nex-gddp-cmip6](#nex-gddp-cmip6) | NASA NEX-GDDP-CMIP6 daily downscaled projections (`pr`, `tasmax`, `tasmin`; 0.25°), for future yield (issue #621) | registered (slice 1); a one-off static load, monthly aggregates for region D1 only, still to be built (slice 2) and off in the app until the copy holds `cmip6` | `s3://nex-gddp-cmip6` (us-west-2, anonymous) | – | `ingest/cmip6_delta.py` (slice 2), the engine's `scenario/climate.ts` (the factors) |
 
 ## Live feeds
 
@@ -907,6 +908,110 @@ the copy; nothing in the app reads it yet.
   few members, any lead count, three hindcast years), served by
   `ingest/fakecds.py` `FakeC3sCds` under `FEED_SOURCE=fixtures`.
 
+## Future climate
+
+An evidence pack's Future yield section and the Scenarios tab's future
+climate (issue #621) rerun the record under monthly change factors from
+downscaled climate projections ([model.md §2.17](./model.md#217-future-climate-monthly-change-factors-engine-11070-issue-621)).
+The factors come from our own copy: monthly aggregates of one archive,
+loaded once.
+
+### nex-gddp-cmip6
+
+- **Source:** NASA Earth Exchange Global Daily Downscaled Projections,
+  CMIP6 (NEX-GDDP-CMIP6), NASA Ames Research Center's NEX: daily `pr`,
+  `tasmax` and `tasmin` from CMIP6 models, bias-corrected and spatially
+  disaggregated (BCSD) against the GMFD observations onto a 0.25° grid, for
+  the `historical` run (to 2014) and the four Tier-1 SSPs (to 2100). We
+  take `historical`, `ssp245` and `ssp585` only. The archive is static: no
+  further updates are planned, so this is a **one-off load**, nothing
+  scheduled (issue #621 § Design).
+- **Host:** `s3://nex-gddp-cmip6` (AWS Open Data, **us-west-2**, anonymous
+  read; the bucket's NetCDF files, one per model, scenario, variable and
+  year, with a version suffix on revised files). The load runs once, in
+  us-west-2 (CloudShell or a temporary Lambda, the operator's go-ahead
+  first; issue #621 open question 1), and writes only the region's monthly
+  aggregates to our copy in af-south-1.
+- **Licence:** **CC0** ("since September 2022 every output is under a
+  blanket CC0", the AWS Registry of Open Data entry for NEX-GDDP-CMIP6,
+  read 2026-10-27). The archive was first released under **CC BY-SA 4.0**,
+  and the Scientific Data paper and some mirrors still say so; share-alike
+  on our output would fail D-B, CC0 passes it. Because the files' own
+  metadata may predate the change, the ingest records each file's global
+  `license` attribute in the manifest, so a file still marked CC BY-SA is
+  visible (and is the operator's to decide on, not loaded silently).
+- **Attribution:** none is required under CC0; we credit anyway, wherever
+  the factors show (the scenario's source line, an evidence pack's § 8,
+  the Data sources and credits page): "Climate projections: NASA Earth
+  Exchange Global Daily Downscaled Projections (NEX-GDDP-CMIP6), NASA Ames
+  Research Center, from the CMIP6 models of the modelling groups listed,
+  downscaled by NASA NEX. We thank the climate modelling groups of the
+  World Climate Research Programme's CMIP6 for producing and making
+  available their model output." with the models used and their groups.
+  The engine's credit text lands with slice 4.
+- **The caveat (owed before slice 4):** NASA's technical note asks for
+  expert input before the projections are used for engineering (the #604
+  research read it in `NEX-GDDP-CMIP6-Tech_Note_4.pdf`). **That URL returns
+  404 today** (2026-10-27), so the caveat is **not yet quoted**. Before §
+  8 *Future yield* ships, the current tech note is found and its caveat
+  quoted here verbatim, with its URL and the date read; § 8 opens with
+  those words.
+- **The model list (frozen; provisional, pending the hydrologist):** ten
+  models, one per modelling centre so the range isn't one centre's model
+  counted twice, each needing `pr`, `tasmax` and `tasmin` for
+  `historical`, `ssp245` and `ssp585` (the load checks the bucket's listing
+  for every file before it starts, and stops on a gap rather than drop a
+  model):
+
+  | Model | Group | Variant |
+  | --- | --- | --- |
+  | ACCESS-CM2 | CSIRO-ARCCSS (Australia) | r1i1p1f1 |
+  | CNRM-CM6-1 | CNRM-CERFACS (France) | r1i1p1f2 |
+  | EC-Earth3 | EC-Earth consortium (Europe) | r1i1p1f1 |
+  | GFDL-ESM4 | NOAA GFDL (USA) | r1i1p1f1 |
+  | INM-CM5-0 | INM (Russia) | r1i1p1f1 |
+  | IPSL-CM6A-LR | IPSL (France) | r1i1p1f1 |
+  | MIROC6 | MIROC (Japan) | r1i1p1f1 |
+  | MPI-ESM1-2-HR | MPI-M and DWD (Germany) | r1i1p1f1 |
+  | MRI-ESM2-0 | MRI (Japan) | r1i1p1f1 |
+  | NorESM2-MM | NCC (Norway) | r1i1p1f1 |
+
+  Why these (issue #621 open question 2): the issue asks for about ten
+  models with all three variables for both SSPs and good skill for
+  southern Africa's winter rainfall (the frontal rain of the Western
+  Cape, which the client catchments get). Independence first: one model
+  per centre. The skill screen itself (how well each model's historical
+  run gives the winter rainfall's seasonal cycle and its interannual
+  variability over the region) is **the hydrologist's to confirm** against
+  the regional CMIP6 evaluations before the list is used for a pack; a
+  model may be swapped for another of the same centre or another centre
+  then, and this table changes with it (the factors' manifest names the
+  list in force). Each SSP, horizon and section shows the range across
+  the models, never one number (§ 8 needs at least 5).
+- **Contact:** NASA NEX (the registry entry's contact); the AWS Open Data
+  team for the bucket.
+- **Access pattern:** a one-off read, in us-west-2, of the three variables'
+  daily files for the ten models (1985–2014 historical; 2036–2065 and
+  2066–2095 for each SSP), each cut to region D1 by its chunking or ranges,
+  never whole global files downloaded to af-south-1. Kept: **monthly
+  aggregates only** (the month's `pr` total in mm, the means of `tasmax`
+  and `tasmin`; the factor code takes them in °C) per model, SSP and year, as Zarr
+  `cmip6/<model>/<ssp>`, with each source file's name, version suffix,
+  `license` attribute and our hash of the values kept in the manifest
+  (slice 2).
+- **Limits we keep to:** one pass; at most 2 requests in flight; no
+  daily values kept; the ranges of each file read once.
+- **Fallback:** none needed upstream (static); our copy is the record.
+  Without it the Future yield section and the picker stay off
+  (`FUTURE_YIELD=off`, the default).
+- **Owner:** the operator (the load's go-ahead); code `ingest/cmip6_delta.py`
+  (slice 2) and `packages/engine/src/scenario/climate.ts` (the factors,
+  from the aggregates: ratios of the area-weighted means over the 0.25°
+  cells, Hargreaves–Samani PET from the temperatures, clamped to 0.5–1.5).
+- **Fixtures:** synthetic monthly aggregates for invented models `SYN-A`
+  to `SYN-C` (`ingest/fixtures/cmip6/`, `backend/fixtures/mirror/cmip6/`,
+  slice 2); dev, CI and e2e never read the bucket.
+
 ## Planned sources
 
 From #604's Rounds 4 and 5. Each gets its full section here when its round
@@ -978,7 +1083,6 @@ its comments 4, 6, 7 and 8).
 
 | Source | Licence | Access | Use |
 | --- | --- | --- | --- |
-| NEX-GDDP-CMIP6 | CC0 (NASA's expert-use caveat) | S3 us-west-2 | future yield in evidence packs |
 | GloFAS v4 reanalysis | CEMS-FLOODS, free with attribution | EWDS API | modelled daily flow for ungauged catchments |
 | WaPOR v3 actual ET | **contested** (CC BY-SA, CC BY-NC-SA, FAO terms); ask FAO first | `s3://wapor-v3/` af-south-1 | observed vs modelled water use; SSEBop at 1 km if FAO says no |
 | Sentinel-1/2 water masks, SWOT lake heights | Copernicus free and open; SWOT terms unconfirmed | DE Africa STAC; PO.DAAC | small dams through cloud; area–volume curves (trial) |
