@@ -1,0 +1,35 @@
+{
+  "zarr_format": 3,
+  "node_type": "group",
+  "attributes": {
+    "model": "SYN-B",
+    "scenario": "historical",
+    "variant": "r1i1p1f2",
+    "gridLabel": "gr",
+    "calendar": "noleap",
+    "firstYear": 1950,
+    "variables": {
+      "pr": "pr_mm",
+      "tasmax": "tasmax_c",
+      "tasmin": "tasmin_c"
+    },
+    "source": "NASA Earth Exchange Global Daily Downscaled Projections, CMIP6 (NEX-GDDP-CMIP6), s3://nex-gddp-cmip6",
+    "licence": "CC0 1.0 (Registry of Open Data on AWS, NEX-GDDP-CMIP6, read 2026-10-27: every output under CC0 since September 2022; first released under CC BY-SA 4.0). Each file's own license attribute is in the manifest.",
+    "credit": "NEX-GDDP-CMIP6 was prepared by the Climate Analytics Group and NASA Ames Research Center using the NASA Earth Exchange, from the CMIP6 models of the modelling groups listed by model.",
+    "citation": "Thrasher, B., Wang, W., Michaelis, A. et al. NASA Global Daily Downscaled Projections, CMIP6. Scientific Data 9, 262 (2022). https://doi.org/10.1038/s41597-022-01393-4",
+    "method": "Monthly aggregates of NEX-GDDP-CMIP6's daily values on its 0.25 deg cells inside D1: pr the month's total (mm), tasmax and tasmin the month's mean (deg C); a cell with any day missing is NaN for the month.",
+    "region": {
+      "w": 10,
+      "s": -35.5,
+      "e": 41,
+      "n": -8
+    },
+    "grid": {
+      "origin": {
+        "lat": -35.375,
+        "lon": 10.125
+      },
+      "step": 0.25
+    }
+  }
+}

@@ -4,7 +4,7 @@
 //
 //   { product, revision, region {w,s,e,n}, grid {origin {lat,lon}, step},
 //     years {first,last} (both null while nothing is held), finalThrough, prelimThrough,
-//     files [{ url, etag, lastModified, size, valuesSha256, revision, fetchedAt, version? }],
+//     files [{ url, etag, lastModified, size, valuesSha256, revision, fetchedAt, version?, license? }],
 //     changes [{ revision, days [from,to], cellsChanged, maxAbsDiff }] }
 //
 // `revision` counts from 1 and moves only on a real change of values (D8).
@@ -50,6 +50,14 @@
 // holding exactly that month's days (agera5Coverage); `power_et0` (daily,
 // prelimThrough only) one file per day, `power://temporal/daily/regional/fao56-et0/YYYY-MM-DD`,
 // each held day on its own like imerg_late's (powerHeldDays).
+// NEX-GDDP-CMIP6's monthly aggregates (issue #621, ingest/cmip6_delta.py),
+// `cmip6/<model>/<scenario>` on the 0.25° grid, hold no final or preliminary
+// days (projections). Each file is one NEX yearly daily file, its URL the
+// object it was read from (cmip6FileKey), naming the product's model and
+// scenario, and every file carries `version` (its name's suffix, `v1.0` with
+// none) and `license` (the file's global attribute verbatim, or null); no
+// other product's file carries a `license`. Their `valuesSha256` hashes the
+// file's (month, lat, lon) aggregates.
 import { createHash } from 'node:crypto';
 import { endianness } from 'node:os';
 import type { AbsolutePath } from '@zarrita/storage';
@@ -57,7 +65,7 @@ import { z } from 'zod';
 import { fromEpochDay, isIsoDate, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError } from '../feeds/errors.js';
 import { PRODUCT_RE, type MirrorProduct } from './arrays.js';
-import { gridOf, productGrid } from './grid.js';
+import { CMIP6_PRODUCT, gridOf, productGrid } from './grid.js';
 import type { MirrorStore } from './store.js';
 
 const IsoDay = z.string().refine(isIsoDate, 'an ISO date (YYYY-MM-DD)');
@@ -78,6 +86,8 @@ const Grid = z.object({ origin: z.object({ lat: z.number().finite(), lon: z.numb
 
 /** An IMERG collection version: `V07`, `V08`, … (the granule's minor letter stays in its URL). */
 export const IMERG_VERSION = /^V\d{2}$/;
+/** A NEX-GDDP-CMIP6 file's release: `v1.0` (a name with no suffix), `v1.1`, `v2.0`, … */
+export const CMIP6_VERSION = /^v\d+\.\d+$/;
 
 const ManifestFile = z
 	.object({
@@ -88,8 +98,13 @@ const ManifestFile = z
 		valuesSha256: z.string().regex(/^[0-9a-f]{64}$/, 'a lowercase hex SHA-256'),
 		revision: Revision,
 		fetchedAt: IsoInstant,
-		/** imerg_late only: the IMERG version of the file's day. */
-		version: z.string().regex(IMERG_VERSION, 'an IMERG version (V07, V08, …)').optional()
+		/** imerg_late: the IMERG version of the file's day; cmip6: the NEX release of the file (checked per product). */
+		version: z
+			.string()
+			.refine((v) => IMERG_VERSION.test(v) || CMIP6_VERSION.test(v), 'an IMERG version (V07, V08, …) or a NEX-GDDP-CMIP6 release (v1.0, v1.1, …)')
+			.optional(),
+		/** cmip6 only: the file's global `license` attribute, verbatim, or null when it has none. */
+		license: z.string().max(4096).nullable().optional()
 	})
 	.strict();
 
@@ -101,6 +116,17 @@ const Change = z
 		maxAbsDiff: z.number().finite().nonnegative()
 	})
 	.strict();
+
+/** A NEX-GDDP-CMIP6 file's URL: the bucket's object, s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/<model>/<scenario>/<variant>/<var>/<var>_day_<model>_<scenario>_<variant>_<grid>_<YYYY>[_v<N.N>].nc. */
+const CMIP6_URL =
+	/^s3:\/\/nex-gddp-cmip6\/NEX-GDDP-CMIP6\/([A-Za-z0-9][A-Za-z0-9-]*)\/(historical|ssp245|ssp585)\/(r\d+i\d+p\d+f\d+)\/(pr|tasmax|tasmin)\/\4_day_\1_\2_\3_(g[a-z0-9]+)_(\d{4})(?:_(v\d+\.\d+))?\.nc$/;
+
+/** What a cmip6 file's URL names, or null (ingest/manifest.py cmip6_file_key). */
+export function cmip6FileKey(url: string): { model: string; scenario: string; variant: string; variable: 'pr' | 'tasmax' | 'tasmin'; gridLabel: string; year: number; version: string } | null {
+	const m = CMIP6_URL.exec(url);
+	if (!m) return null;
+	return { model: m[1]!, scenario: m[2]!, variant: m[3]!, variable: m[4] as 'pr' | 'tasmax' | 'tasmin', gridLabel: m[5]!, year: Number(m[6]), version: m[7] ?? 'v1.0' };
+}
 
 /** A CHC byMonth file's URL ends `.YYYY.MM.days_p05.nc`. */
 const FILE_MONTH = /\.(\d{4})\.(0[1-9]|1[0-2])\.days_p05\.nc$/;
@@ -257,7 +283,8 @@ export function finalsCoverage(files: readonly { url: string }[]): { from: strin
 
 export const Manifest = z
 	.object({
-		product: z.string().regex(PRODUCT_RE),
+		// The array products (arrays.ts) and NEX-GDDP-CMIP6's groups (grid.ts CMIP6_PRODUCT).
+		product: z.string().refine((p) => PRODUCT_RE.test(p) || CMIP6_PRODUCT.test(p), 'a product the copy holds'),
 		revision: Revision,
 		region: Region,
 		grid: Grid,
@@ -284,6 +311,7 @@ export const Manifest = z
 		if (new Set(m.files.map((f) => f.url)).size !== m.files.length) bad('a file is listed twice');
 		const chcFinals = m.product === 'rnl' || m.product === 'sat';
 		const imerg = m.product === 'imerg_late';
+		const cmip6 = CMIP6_PRODUCT.exec(m.product);
 		const finals = chcFinals || m.product === 'era5l' || m.product === 'agera5_et0';
 		if ((m.product === 'rnl' || m.product === 'era5l' || m.product === 'agera5_et0') && m.prelimThrough !== null) bad(`${m.product} has no preliminary days`);
 		for (const [k, d] of [['finalThrough', m.finalThrough], ['prelimThrough', m.prelimThrough]] as const) {
@@ -294,7 +322,19 @@ export const Manifest = z
 			if (m.files.some((f) => imergFileDay(f.url) === null)) bad('an imerg_late file whose url names no day (…3IMERG.YYYYMMDD-S000000-E235959.…)');
 			const held = imergCoverage(m.files);
 			if (m.prelimThrough !== null && (held === null || m.prelimThrough > held.through)) bad(`prelimThrough runs past the newest day the files hold (${held?.through ?? 'none'})`);
+			if (m.files.some((f) => f.version !== undefined && !IMERG_VERSION.test(f.version))) bad('an imerg_late file whose version is not an IMERG version (V07, V08, …)');
+		} else if (cmip6) {
+			const [, model, scenario] = cmip6;
+			for (const f of m.files) {
+				const k = cmip6FileKey(f.url);
+				if (!k) bad('a cmip6 file whose url is not a NEX-GDDP-CMIP6 file (s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/<model>/<scenario>/<variant>/<var>/<var>_day_…_<YYYY>[_vN.N].nc)');
+				else if (k.model !== model || k.scenario !== scenario) bad(`a cmip6 file naming another model or scenario than ${m.product}`);
+				else if (f.version !== k.version) bad(`a cmip6 file whose version is not its name's (${k.version})`);
+				if (f.license === undefined) bad('a cmip6 file without its license (the file’s attribute, or null)');
+			}
+			if (m.finalThrough !== null || m.prelimThrough !== null) bad(`${m.product} is a projection: it holds no final or preliminary days`);
 		} else if (m.files.some((f) => f.version !== undefined)) bad(`${m.product}'s files carry no version`);
+		if (!cmip6 && m.files.some((f) => f.license !== undefined)) bad(`${m.product}'s files carry no license: only cmip6's do`);
 		if (m.product === 'era5l') {
 			if (m.files.some((f) => era5lFileMonth(f.url) === null)) bad('an era5l file whose url is not a month request (cds://reanalysis-era5-land/total_precipitation/YYYY-MM)');
 			if (m.files.some((f) => f.etag !== null || f.lastModified !== null)) bad('an era5l file with an etag or lastModified: the CDS gives neither');

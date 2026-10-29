@@ -2335,6 +2335,77 @@ the dataset's citation and the contributing centres wherever its values show
 150 MB of forecasts a month and 20–25 GB of hindcasts, once), a few minutes
 of Lambda a month, one alarm metric.
 
+### NEX-GDDP-CMIP6 (one-off)
+
+NASA NEX's downscaled CMIP6 projections, as monthly aggregates over D1, for
+the evidence pack's future yield (issue #621; how it works: ingest/README.md
+§ NEX-GDDP-CMIP6, once). Unlike every product above, **this is a one-off
+copy the operator runs by hand**: the archive is static, so there is no
+schedule, no Lambda, no alarm and no `infra/` change. `ingest/cmip6_delta.py`
+reads the daily `pr`, `tasmax` and `tasmin` files of ten models (frozen in
+docs/data-sources.md § nex-gddp-cmip6) for historical 1985–2014 and SSP2-4.5
+and SSP5-8.5 2036–2095 from `s3://nex-gddp-cmip6` (us-west-2, anonymous) and
+writes only their monthly totals and means over D1 into
+`s3://<mirror bucket>/cmip6/<model>/<scenario>/`, with a manifest recording
+each file's name, version and `license` attribute.
+
+**Where to run it: in us-west-2, next to the bucket** (issue #621 open
+question 1). Each daily file is global; reading it from af-south-1 or a
+laptop pulls it across the world, while in us-west-2 the reads are in-region
+and only the aggregates (about 1–2 GB in all) cross to af-south-1. CloudShell
+in us-west-2 with the operator's own SSO session is enough: it can read the
+anonymous bucket and write to the mirror bucket, so nothing new is granted.
+A CloudShell session ends after about 20 minutes idle (and its `/tmp` with
+it); the copy resumes where it stopped, so run it a model at a time.
+
+What the app does with it: nothing yet. Slices 3–4 compute change factors
+from it; the future yield section stays off until the copy holds `cmip6`.
+
+The operator, once:
+
+1. **Plan, from anywhere** (a listing, no data read): with the prod SSO
+   session, `AWS_PROFILE=water-management AWS_REGION=af-south-1 MIRROR_URL=s3://<mirror bucket> ingest/dev.sh cmip6 plan --source s3`.
+   Each product line names its variant, grid label, versions and the files
+   still to read. A `missing` line (a model without `tasmax`, say) or a
+   `problem` line (two variants) stops the copy: record it in issue #621,
+   then replace the model or pin its variant in `ingest/cmip6_delta.py`
+   `MODELS` **and** in docs/data-sources.md § nex-gddp-cmip6, through a PR.
+2. **Open CloudShell in us-west-2** (the console's region picker, then the
+   CloudShell icon) and get the checkout and Python 3.14 (CloudShell's own
+   Python is older). uv's installer is a shell script from astral.sh that
+   puts `uv` in `~/.local/bin`; read it first if you prefer:
+   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/Absence0760/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.14 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
+   (in `/tmp`, since the home directory holds 1 GB).
+3. **Copy one model at a time:**
+   `cd /tmp/wm && AWS_REGION=af-south-1 AWS_DEFAULT_REGION=af-south-1 MIRROR_URL=s3://<mirror bucket> ingest/dev.sh cmip6 copy --source s3 --models ACCESS-CM2`
+   (the region is the copy's; the source bucket is always read in us-west-2)
+   It logs one line a year (`cmip6/ACCESS-CM2/ssp245 2036: added`) and ends
+   with a summary: per product what it added, skipped and changed, and every
+   distinct `license` attribute it met with its count. If the session ends,
+   open it again, redo step 2 if `/tmp/wm` is gone, and run the same
+   command: held years are skipped without a read. A run that stops on a
+   file (`Cmip6FormatError`, `ImplausibleValueError`) has written nothing for
+   that year; record the message in issue #621 before changing the reader.
+4. **Check the copy:** `aws s3 cp s3://<mirror bucket>/cmip6/index.json - --region af-south-1`
+   lists the years held per model and scenario (30 historical, 60 per SSP).
+   Record the summary's `license` values in issue #621: if any file says
+   something other than CC0 (the archive first shipped under CC BY-SA 4.0),
+   the register row must say so before slice 4 ships.
+
+**To redo a product** (a new release of the archive, a reader fix): run
+`copy` again; a newer version of a file replaces its entry, and
+`--recheck` re-reads files already held. Nothing else needs undoing.
+
+**Cost:** the reads are in-region, so no transfer charge on them; about 2 GB
+crossing to af-south-1 once (under $0.05) and its S3 storage (about $0.05 a
+month). CloudShell is free.
+
+**Unverified until the first run** (no session has listed the bucket): the
+key layout and version suffixes, each model's variant and grid label, the
+files' HDF5 chunking (if each day is one global chunk, a file is read whole,
+in-region; the run then takes hours rather than minutes) and the `license`
+attribute's presence and wording.
+
 ## DWS gauge records
 
 DWS feeds move onto a store of ours too (issue #604 R3-B, design D14; the

@@ -1846,6 +1846,19 @@ EventBridge, daily
   fails the job; no forecast or no hindcast in the copy leaves the outlook
   the ESP alone with the reason. Locally the committed copy holds invented
   members (`backend/fixtures/mirror/c3s/`, `backend/scripts/c3s-fixture.ts`).
+- **NEX-GDDP-CMIP6's monthly aggregates (issue #621 slice 2).** Not a
+  scheduled product: the operator copies them once, in us-west-2 next to
+  NASA's bucket (`ingest/cmip6_delta.py`,
+  [deployment.md § NEX-GDDP-CMIP6 (one-off)](./deployment.md#nex-gddp-cmip6-one-off)),
+  into `cmip6/<model>/<scenario>` groups (`pr_mm` monthly totals,
+  `tasmax_c` and `tasmin_c` monthly means; (year, month, lat, lon) on a
+  0.25° grid whose 110 × 124 cells tile D1) with `cmip6/index.json`. Each
+  manifest file is one NEX daily file, with its release `version` and its
+  global `license` attribute verbatim; both validators (`ingest/manifest.py`,
+  `backend/src/mirror/manifest.ts`) hold the same rules. Nothing reads it
+  yet (the future yield, slices 3–4). Locally the committed copy holds
+  invented models SYN-A..C (`backend/fixtures/mirror/cmip6/`,
+  `backend/scripts/cmip6-fixture.ts`).
 - **ERA5-Land (issue #604 R4-A).** The Python ingest Lambda copies
   Copernicus's ERA5-Land daily total precipitation, about 5 days behind,
   into `era5l/`, the finals layout on the 0.1° grid (275 × 310, from 1950).

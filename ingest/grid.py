@@ -14,7 +14,10 @@ columns, [0, 0] centred at lat -35.45, lon 10.05), with its daily chunk (25
 chunks a day at either step) and its finals' first year. The third grid,
 `C3S` (issue #620), is C3S's seasonal 1 deg grid: cell centres on whole
 degrees over D1 snapped outward (29 rows x 32 columns, [0, 0] centred at
-lat -36, lon 10), so its box (`SEASONAL_REGION`) is wider than D1. It mirrors
+lat -36, lon 10), so its box (`SEASONAL_REGION`) is wider than D1. The fourth,
+`CMIP6` (issue #621), is NEX-GDDP-CMIP6's 0.25 deg grid, whose cell centres
+(x.125, x.375, ...) tile D1 exactly: 110 rows x 124 columns, [0, 0] centred
+at lat -35.375, lon 10.125, monthly aggregates only. It mirrors
 backend/src/mirror/grid.ts PRODUCT_GRIDS, so the writers and the Node reader
 agree on one definition.
 """
@@ -126,6 +129,11 @@ def _seasonal_grid(step: float = 1.0) -> Grid:
 #: The third grid (issue #620): C3S's seasonal forecasts and hindcasts (`c3s/<init>`, `c3s-hc/<system>/<MM>`)
 #: on 1 deg cells centred on whole degrees over D1 snapped outward ([0, 0] centred at 36 S, 10 E).
 C3S = _seasonal_grid()
+#: The fourth grid (issue #621): NEX-GDDP-CMIP6's 0.25 deg cells tile D1 exactly (110 x 124, [0, 0] centred at
+#: 35.375 S, 10.125 E). `cmip6/<model>/<scenario>` groups hold monthly arrays (year, month, lat, lon);
+#: its chunks are cmip6_delta.CHUNKS, so daily_chunks/finals_chunks/first_year mean nothing here.
+CMIP6 = _grid(0.25, (1, 22, 31))
+CMIP6_PRODUCT = re.compile(r"^cmip6/[A-Za-z0-9][A-Za-z0-9-]*/(historical|ssp245|ssp585)$")
 _C3S_PRODUCT = re.compile(r"^(c3s/\d{4}-(0[1-9]|1[0-2])|c3s-hc/[a-z_]+-\d+/(0[1-9]|1[0-2]))$")
 
 #: Each product's grid; a forecast issue (`gefs/<issue>`, `ecmwf/<issue>`) by its prefix.
@@ -139,6 +147,8 @@ def for_product(product: str) -> Grid:
         return PRODUCT_GRIDS[product]
     if _C3S_PRODUCT.match(product):
         return C3S
+    if CMIP6_PRODUCT.match(product):
+        return CMIP6
     head, _, issue = product.partition("/")
     if head in _FORECAST_GRIDS and len(issue) == 10:
         dt.date.fromisoformat(issue)
