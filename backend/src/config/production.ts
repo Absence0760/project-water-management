@@ -400,6 +400,14 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'on: the worker runs the dams tick (dams/observed/tick.ts, issue #604 R5): matches traced dams, writes the passes’ wanted list and loads what they fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform is to set it from var.dam_observations_enabled (infra/jobs.tf; dam_observations.tf refuses the flag until it does). Unset is off (damObservationsOn), today’s production behaviour, so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
 		checks: { worker: optional(oneOf('on', 'off')) }
 	},
+	DAM_OBSERVATIONS_S2: {
+		why: 'on: the fetcher’s dams-weekly run adds the Sentinel-2 pass after WOfS (dams/observed/sentinel/pass.ts, issue #624; damSourceOn), still only while the dam observations are on. Terraform sets it from var.dam_s2_enabled, and only while dam_observations_enabled is (infra/feeds.tf, local.dam_s2_on). Unset is off, so a release can go out before that apply; a value set is checked.',
+		checks: { fetcher: optional(oneOf('on', 'off')) }
+	},
+	DAM_OBSERVATIONS_S1: {
+		why: 'Reserved for the Sentinel-1 pass (issue #624 step 5; handover.ts damSourceOn reads it): Terraform doesn’t set it yet, and unset is off. A value set is checked.',
+		checks: { fetcher: optional(oneOf('on', 'off')) }
+	},
 	ET_OBSERVATIONS: {
 		why: 'on: the worker runs the observed ET tick (water-use/observed/tick.ts, issue #623): writes the WaPOR pass’s wanted list (each unit’s parcels and their cropland) and loads what it fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.et_observations_enabled (infra/jobs.tf; et_observations.tf refuses the flag without it), off until FAO confirms the licence (#618 8a). Unset is off (etObservationsOn), so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
 		checks: { worker: optional(oneOf('on', 'off')) }

@@ -36,8 +36,9 @@ export type SentinelSource = 's2' | 's1';
  * infra/dam_observations.tf sets it on only with dam_observations_enabled and the source's own variable.
  */
 export function damSourceOn(source: SentinelSource, env: Record<string, string | undefined> = process.env): boolean {
-	const name = `DAM_OBSERVATIONS_${source.toUpperCase()}`;
-	const v = env[name]?.trim() ?? '';
+	// Each flag named in full, so the settings inventory (config/production.security.test.ts) sees it read.
+	const [name, raw] = source === 's2' ? ['DAM_OBSERVATIONS_S2', env.DAM_OBSERVATIONS_S2] : ['DAM_OBSERVATIONS_S1', env.DAM_OBSERVATIONS_S1];
+	const v = raw?.trim() ?? '';
 	if (v !== '' && v !== 'on' && v !== 'off') throw new Error(`unknown ${name} "${v}" (expected on or off)`);
 	return v === 'on';
 }
