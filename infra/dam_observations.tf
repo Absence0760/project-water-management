@@ -26,10 +26,13 @@ locals {
   # The Sentinel-2 pass (issue #624, dams/observed/sentinel/pass.ts) needs its own flag as well: the fetcher's
   # DAM_OBSERVATIONS_S2 (feeds.tf), and its heartbeat and recency alarms below, follow it.
   dam_s2_on = local.dams_enabled && var.dam_s2_enabled
-  # The Sentinel-1 radar pass (issue #624 step 5, sentinel/pass.ts S1_PASS) likewise: DAM_OBSERVATIONS_S1, the s1
-  # heartbeat and recency alarms. Turn it on only once the S1/S2 agreement (dams_s1_agreement in the fetcher's log)
-  # passes issue #624's bar (docs/deployment.md § Dam observations).
-  dam_s1_on   = local.dams_enabled && var.dam_s1_enabled
+  # Sentinel-1 radar's stage (issue #624 step 5 and open question 3; backend/src/dams/observed/handover.ts damS1Mode),
+  # the fetcher's and the worker's DAM_OBSERVATIONS_S1: "measure" runs the pass (sentinel/pass.ts S1_PASS) and the
+  # S1/S2 agreement report (dams_s1_agreement in the fetcher's log) while the worker loads no radar row; "on" also
+  # loads radar for the dams whose own agreement passes. Off unless the dam observations are on.
+  dam_s1_mode = local.dams_enabled ? var.dam_s1_mode : "off"
+  # The pass runs (its heartbeat and recency alarms) in measure and on alike.
+  dam_s1_on   = local.dam_s1_mode != "off"
   dam_sources = toset(concat(["waterbodies", "wofs"], local.dam_s2_on ? ["s2"] : [], local.dam_s1_on ? ["s1"] : []))
 }
 
@@ -182,7 +185,7 @@ resource "aws_cloudwatch_metric_alarm" "dam_pass_heartbeat" {
   }
 }
 
-# (b) Data recency, WOfS and (with dam_s2_enabled / dam_s1_enabled) Sentinel-2 and Sentinel-1: DamObservationAgeDays{Source=wofs}, the days
+# (b) Data recency, WOfS and (with dam_s2_enabled / dam_s1_mode) Sentinel-2 and Sentinel-1: DamObservationAgeDays{Source=wofs}, the days
 # from the run back to the newest WOfS observation any dam holds. Landsat
 # passes every 8 days with two satellites; past dam_wofs_recency_alarm_days
 # WOfS (or our pass over it) has stopped producing. Missing is breaching, as
@@ -241,7 +244,7 @@ resource "aws_cloudwatch_metric_alarm" "dam_recency_s2" {
   }
 }
 
-# Sentinel-1's recency, with dam_s1_enabled (issue #624 step 5):
+# Sentinel-1's recency, with dam_s1_mode measure or on (issue #624 step 5):
 # DamObservationAgeDays{Source=s1}, the days from the run back to the newest
 # radar observation any dam holds. Sentinel-1A, 1C and 1D revisit every 6–12
 # days and radar sees through cloud, so past dam_s1_recency_alarm_days the

@@ -1097,10 +1097,14 @@ variable "dam_s2_recency_alarm_days" {
   }
 }
 
-variable "dam_s1_enabled" {
-  description = "Run the Sentinel-1 radar pass of the dam observations (issue #624 step 5; dam_observations.tf, backend/src/dams/observed/sentinel/pass.ts S1_PASS): DE Africa's Sentinel-1 RTC scenes classified by us (VV under a fixed -18 dB, the RTC mask's shadow and layover left out) inside every traced dam's outline, after the Sentinel-2 pass in each hourly dams-weekly run, then the S1/S2 agreement report (the fetcher's dams_s1_agreement log line). Radar is a secondary source: shown, never alone a full or empty flag. Only with dam_observations_enabled: it sets the fetcher's DAM_OBSERVATIONS_S1 and adds the s1 heartbeat and recency alarms. Off (the default); keep it off unless the agreement with Sentinel-2's clear views passes issue #624's bar (85 % of paired days within 0.1 of the full area). Runbook: docs/deployment.md § Dam observations."
-  type        = bool
-  default     = false
+variable "dam_s1_mode" {
+  description = "Sentinel-1 radar's stage in the dam observations (issue #624 step 5 and open question 3; dam_observations.tf, backend/src/dams/observed/handover.ts damS1Mode), set as the fetcher's and the worker's DAM_OBSERVATIONS_S1. \"off\" (the default): no radar. \"measure\": each hourly dams-weekly run adds the radar pass after Sentinel-2's (DE Africa's Sentinel-1 RTC classified by us: VV under a fixed -18 dB, the RTC mask's shadow and layover left out, inside every traced dam's outline) and the S1/S2 agreement report (the fetcher's dams_s1_agreement log line), with the s1 heartbeat and recency alarms, but the worker loads no radar row, so nobody sees it. \"on\": the same, and the worker loads radar for the dams whose own agreement passes issue #624's bar (at least 10 paired days with a clear Sentinel-2 view, 85 % of them within 0.1 of the full area), withholding the rest. Only with dam_observations_enabled. Measure first; go to on once the pooled agreement passes the bar on real dams. Runbook: docs/deployment.md § Dam observations."
+  type        = string
+  default     = "off"
+  validation {
+    condition     = contains(["off", "measure", "on"], var.dam_s1_mode)
+    error_message = "dam_s1_mode is off, measure or on."
+  }
 }
 
 variable "dam_s1_recency_alarm_days" {

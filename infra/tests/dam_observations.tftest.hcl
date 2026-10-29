@@ -973,9 +973,11 @@ run "rejects_an_s2_recency_alarm_shorter_than_the_publication_lag" {
   expect_failures = [var.dam_s2_recency_alarm_days]
 }
 
-# Sentinel-1 radar (issue #624 step 5): the same pattern as Sentinel-2's,
-# independent of it, off until its own flag.
-run "dam_s1_off_until_its_own_flag" {
+# Sentinel-1 radar (issue #624 step 5 and open question 3): the same pattern as
+# Sentinel-2's, independent of it, off until its own stage (dam_s1_mode):
+# measure runs the pass with its alarms while the worker loads no radar; on also
+# loads it for the dams whose agreement passes. Both Lambdas get the same stage.
+run "dam_s1_off_until_its_own_stage" {
   command = plan
 
   variables {
@@ -984,8 +986,13 @@ run "dam_s1_off_until_its_own_flag" {
   }
 
   assert {
-    condition     = aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S1"] == "off" && !contains(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat), "s1") && length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0
-    error_message = "Without dam_s1_enabled the fetcher runs no Sentinel-1 pass and no s1 alarm exists, even with Sentinel-2 on."
+    condition = (
+      aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S1"] == "off" &&
+      aws_lambda_function.worker.environment[0].variables["DAM_OBSERVATIONS_S1"] == "off" &&
+      !contains(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat), "s1") &&
+      length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0
+    )
+    error_message = "Without dam_s1_mode the fetcher runs no Sentinel-1 pass, the worker loads no radar and no s1 alarm exists, even with Sentinel-2 on."
   }
 }
 
@@ -993,12 +1000,37 @@ run "dam_s1_needs_the_dam_observations_too" {
   command = plan
 
   variables {
-    dam_s1_enabled = true
+    dam_s1_mode = "on"
   }
 
   assert {
-    condition     = !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "DAM_OBSERVATIONS_S1") && length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0 && length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0
-    error_message = "dam_s1_enabled alone turns nothing on: the passes need dam_observations_enabled."
+    condition = (
+      !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "DAM_OBSERVATIONS_S1") &&
+      aws_lambda_function.worker.environment[0].variables["DAM_OBSERVATIONS_S1"] == "off" &&
+      length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0 &&
+      length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0
+    )
+    error_message = "dam_s1_mode alone turns nothing on: the passes need dam_observations_enabled, and the worker stays off."
+  }
+}
+
+run "dam_s1_measure" {
+  command = plan
+
+  variables {
+    dam_observations_enabled = true
+    dam_s1_mode              = "measure"
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S1"] == "measure" &&
+      aws_lambda_function.worker.environment[0].variables["DAM_OBSERVATIONS_S1"] == "measure" &&
+      aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S2"] == "off" &&
+      toset(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat)) == toset(["waterbodies", "wofs", "s1"]) &&
+      length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 1
+    )
+    error_message = "measure runs the Sentinel-1 pass with its heartbeat and recency alarms, and tells the worker (which then loads no radar row) the same stage."
   }
 }
 
@@ -1007,19 +1039,20 @@ run "dam_s1_on" {
 
   variables {
     dam_observations_enabled = true
-    dam_s1_enabled           = true
+    dam_s1_mode              = "on"
   }
 
   assert {
     condition = (
       aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S1"] == "on" &&
+      aws_lambda_function.worker.environment[0].variables["DAM_OBSERVATIONS_S1"] == "on" &&
       aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S2"] == "off" &&
       toset(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat)) == toset(["waterbodies", "wofs", "s1"]) &&
       aws_cloudwatch_metric_alarm.dam_pass_heartbeat["s1"].treat_missing_data == "breaching" &&
       aws_cloudwatch_metric_alarm.dam_pass_heartbeat["s1"].dimensions["Source"] == "s1" &&
       length(aws_cloudwatch_metric_alarm.dam_recency_s2) == 0
     )
-    error_message = "With dam_s1_enabled the fetcher runs the Sentinel-1 pass and its heartbeat alarm reads DamPassCompleted{Source=s1}, breaching on missing data; Sentinel-2 stays off on its own flag."
+    error_message = "on runs the Sentinel-1 pass and its heartbeat alarm reads DamPassCompleted{Source=s1}, breaching on missing data; the worker gets the same stage; Sentinel-2 stays off on its own flag."
   }
   assert {
     condition = (
@@ -1040,13 +1073,23 @@ run "dam_s1_and_s2_on_together" {
   variables {
     dam_observations_enabled = true
     dam_s2_enabled           = true
-    dam_s1_enabled           = true
+    dam_s1_mode              = "on"
   }
 
   assert {
     condition     = toset(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat)) == toset(["waterbodies", "wofs", "s2", "s1"]) && length(aws_cloudwatch_metric_alarm.dam_recency_s2) == 1 && length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 1
-    error_message = "With both Sentinel flags every source has its own heartbeat, and each Sentinel source its own recency alarm."
+    error_message = "With both Sentinel sources every source has its own heartbeat, and each Sentinel source its own recency alarm."
   }
+}
+
+run "rejects_a_dam_s1_mode_but_off_measure_or_on" {
+  command = plan
+
+  variables {
+    dam_s1_mode = "true"
+  }
+
+  expect_failures = [var.dam_s1_mode]
 }
 
 run "rejects_an_s1_recency_alarm_shorter_than_the_revisit" {

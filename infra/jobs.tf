@@ -205,6 +205,9 @@ resource "aws_lambda_function" "worker" {
         # The dams tick (issue #604 R5, dam_observations.tf): matches traced dams,
         # writes dams/wanted.json and loads what the passes fetched.
         DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"
+        # Which dams' Sentinel-1 radar the tick loads (dam_observations.tf local.dam_s1_mode, issue #624):
+        # none unless "on", then only those whose S1/S2 agreement passes.
+        DAM_OBSERVATIONS_S1 = local.dam_s1_mode
         # The observed ET tick (issue #623, et_observations.tf): writes
         # et/wanted.json and loads what the WaPOR pass fetched.
         ET_OBSERVATIONS = var.et_observations_enabled ? "on" : "off"
