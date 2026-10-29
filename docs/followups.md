@@ -616,7 +616,7 @@ open:
 
 ## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
 
-Rounds 1 to 3 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
+Rounds 1 to 4 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
 op, the CMIP6 ingest, § 8 Future yield and the Scenarios tab's future climate
 picker (282); #623's register rows, `et_observation` (277) and the WaPOR pass;
 #624's register rows, the `s2`/`s1` sources (278), the Sentinel-2 and
@@ -634,13 +634,14 @@ plan stays on the issue. Found while building:
       sensitivity to scale MAPs the same way if they differ, with an
       `ENGINE_VERSION` bump. Trigger: the next engine round.
       **Refuted (round 3, O):** sensitivity never scaled a station's record; the real defect was an under-count for catchment stations, fixed as ER-31 in engine 1.108.0 (the rain factor now moves every rain record and MAP, as `climate.delta` does).
-- [ ] **Check the COG reader against real headers.** `raster/cog.ts`'s
+- [x] **Check the COG reader against real headers.** `raster/cog.ts`'s
       BigTIFF, LZW, 16-bit predictor 2 and float predictor 3 paths are tested
       only against our own `cogWrite.ts`. Durable fix: read one real WaPOR
       `L2-AETI-D` header and one Sentinel-1 RTC VV and MASK header (a few range
       requests, no data kept; S1's format so far comes from STAC metadata and
       the spec page only), and commit a synthetic fixture with the same tag layout.
       Trigger: #623 step 4 or #624 step 4, before either source is enabled.
+      **Done (round 4, S):** the real WaPOR, S1 and S2 headers were read on 2026-10-29. The reader refused every WaPOR and S1 file (PlanarConfiguration 2), now fixed; `raster/cogLayouts.ts` holds each real layout.
 - [ ] **List the NEX-GDDP-CMIP6 bucket before the copy.** No session has
       listed `s3://nex-gddp-cmip6`, so the key layout, version suffixes, each
       model's variant, the HDF5 chunking and the `license` attributes are
@@ -665,11 +666,12 @@ plan stays on the issue. Found while building:
       only, not on a frozen pack), with an e2e. Trigger: #621 round 3, beside
       the Scenarios tab picker.
       **Done (round 3, M):** `FutureYieldRun.svelte`, with the job's state from `GET …/future-yield`.
-- [ ] **FUTURE_YIELD isn't in Terraform.** Production stays off by
+- [x] **FUTURE_YIELD isn't in Terraform.** Production stays off by
       default. Durable fix: a `future_yield_enabled` variable setting
       `FUTURE_YIELD` on the API and worker Lambdas (deployment.md
       § NEX-GDDP-CMIP6). Trigger: the copy holds every model's whole windows
       and the caveat is quoted.
+      **Done (round 4, Q):** `future_yield_enabled` (default false) on the API, worker and assistant Lambdas.
 - [ ] **The model list's skill screen.** The ten models (one per centre) are
       provisional. Durable fix: the hydrologist checks each model's historical
       winter rainfall cycle and its year-to-year variation over the Western
@@ -704,14 +706,16 @@ plan stays on the issue. Found while building:
       compared on its own, but the panel draws WaPOR only. Durable fix: a
       source switch in the panel. Trigger: #623 step 6.
       **Done (round 3, N):** a WaPOR / SSEBop switch in the panel.
-- [ ] **Radar moves the dam check's average difference.** S1 views count in
+- [x] **Radar moves the dam check's average difference.** S1 views count in
       the bias and the share within ±10 % (never in a flag), and wind makes
       radar read low. Durable fix: an optical-only figure beside the summary
-      (`compare.ts`). Trigger: before `dam_s1_enabled` (S1 rows exist since
+      (`compare.ts`). Trigger: before `dam_s1_mode = "on"` (S1 rows exist since
       round 3).
-- [ ] **The chart's hollow points have no unit test.** `hollow` (the radar
+      **Done (round 4, P):** an optical-only figure beside the summary; radar stays in the average, since it covers cloudy days.
+- [x] **The chart's hollow points have no unit test.** `hollow` (the radar
       rings) is covered only by `non-text-contrast.spec.ts`. Durable fix: a
       chart unit test for it. Trigger: the next change to the chart.
+      **Done (round 4, R):** `pointMarks` / `swatchFill` in `charts/series.ts`, unit-tested.
 - [x] **SSEBop isn't range-readable.** Each dekad is a ~93 MB zip, not a COG,
       and is far over the fetcher's 4 MB cap. Durable fix: #623 step 6 picks a
       bounded whole-file pass (one file a dekad, clipped at once) or an
@@ -727,18 +731,20 @@ plan stays on the issue. Found while building:
       Such a file can't be told from a rewrite, so the 30-day re-check reads
       it again in full. Durable fix: none while FAO's bucket sends ETags.
       Trigger: a new ET source.
-- [ ] **Measuring S1 agreement shows radar to users.** One flag both runs the
+- [x] **Measuring S1 agreement shows radar to users.** One flag both runs the
       S1 pass and loads `s1` rows, so radar shows on the panel and farm card
       while it is being measured. Durable fix: a measure-only stage (the
       fetcher runs the pass and logs `dams_s1_agreement`, the worker skips
       loading `s1`), then load `s1` only for dams that pass, from
       `dams/s1-agreement.json` (#624 open question 3). Trigger: before
-      `dam_s1_enabled` in production.
-- [ ] **A dam across a 1° tile edge never gets a clear radar view.** Each
+      `dam_s1_mode = "on"` in production.
+      **Done (round 4, P):** `dam_s1_mode` = off / measure / on; `on` loads `s1` only for dams that pass, withholding the rest (283).
+- [x] **A dam across a 1° tile edge never gets a clear radar view.** Each
       tile sees part of it and the pass keeps the better one, so the share
       seen stays under 90 %. Durable fix: merge same-date views from adjacent
       tiles before summing. Trigger: the first real dam on a whole-degree
       line, or a dam whose radar rows are always partial.
+      **Done (round 4, R):** one date's views are joined across tiles on the same grid (`wofs/merge.ts`), for WOfS, S2 and S1.
 - [ ] **Sentinel-2's § 7 rule and the "Either satellite" order are
       provisional.** Wet at 8 pixels of 100 m², dry at no water with ≥ 99 %
       clear; Sentinel-2 before WOfS. Durable fix: the hydrologist confirms or
@@ -748,19 +754,48 @@ plan stays on the issue. Found while building:
       report passes the ≥ 85 % bar on real dams, decide whether radar gets a
       context-only row (a new counting version, report version and
       `reproduce:pack` check). Trigger: S1 turned on in production.
-- [ ] **The Copernicus credit text is defined twice.** The engine's
+- [x] **The Copernicus credit text is defined twice.** The engine's
       `SENTINEL_CITATION` and the backend's `dams/observed/upstream.ts`
       `SENTINEL_ATTRIBUTION`. Durable fix: `upstream.ts` imports the
       engine's. Trigger: the next change to the credit wording.
-- [ ] **§ 8's Run board has no Cancel.** A real 10-model run is about 40
+      **Done (round 4, R):** `packages/engine/src/evidence/sentinelCredit.ts`, imported by the backend.
+- [x] **§ 8's Run board has no Cancel.** A real 10-model run is about 40
       runs. Durable fix: a cancel route for `future_yield` and
       `climate_factors` jobs through `app_cancel_job`, and a Cancel button on
       the board. Trigger: before `FUTURE_YIELD=on` in production.
+      **Done (round 4, Q):** cancel routes and buttons for `future_yield` and `climate_factors` (284); see the open item on cancelling mid-run.
 - [ ] **The future climate picker shows one model at a time.** A hydrologist
       can't pick a median across models as one scenario. Durable fix: decide
       with the hydrologist whether a median case belongs in the factor table
       (an engine method question). Trigger: the hydrologist's screen of the
       ten models.
+- [ ] **A cancel can't stop § 8's runs once they've started.** `runFutureYield`
+      and its `onCase` are synchronous, so the handler can't check for a
+      cancel between cases; a cancel during the ~40 runs takes effect after
+      them, before the write. Durable fix: an engine variant that yields
+      between cases, so the handler checks after each case and reports real
+      progress. Trigger: the next engine round, before `FUTURE_YIELD=on` with
+      ten models.
+- [ ] **A repeated cancel says `cancelled: true` for a job already dead.**
+      `cancelled` is `status === 'dead' || 'running'` on the yield, future
+      yield and climate factors routes. Durable fix: `app_cancel_job` reports
+      whether this call changed anything, and the three routes use it.
+      Trigger: the next change to `app_cancel_job`.
+- [ ] **A dam near the 85 % bar can flip radar on and off.** Its `s1` rows
+      are withheld and reloaded each time its agreement crosses the bar.
+      Durable fix: hysteresis (stop below 80 %, start at 85 %) if the
+      hydrologist sees flapping. Trigger: a real dam whose
+      `dams_s1_agreement` rate sits within a few points of the bar for weeks.
+- [ ] **Off-mode withholding relies on the status file.** With
+      `dam_s1_mode = "off"`, the worker withholds radar only for keys still in
+      `dams/s1-status.json`; if that file is gone, loaded rows stay. Durable
+      fix: also withhold for `s1` load marks with no status entry. Trigger:
+      deleting the s1 handover files after radar was on in production.
+- [ ] **Views from two UTM zones aren't joined.** A dam across a zone line
+      (S2 or WOfS) gets only the better view, since the grids don't share
+      pixels. Durable fix: resample one view onto the other's grid before
+      joining. Trigger: a traced dam near a zone line whose clear views stay
+      under 90 %.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
       **Decided (round 3, N):** a bounded whole-file pass (data-sources.md § ssebop-eta); the build is its own item below.
