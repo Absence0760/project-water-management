@@ -42,7 +42,7 @@ import { sceneWindow, type OutlineMask } from '../../../raster/mask.js';
 import type { WantedOutline } from '../handover.js';
 import { maskFor, taggedReader, type SceneView } from '../wofs/pass.js';
 import { assetUrl, S1_RTC_COLLECTION, type SceneItem } from '../wofs/stac.js';
-import { observation, type Tally } from '../wofs/sum.js';
+import { observation, pixelClasses, PX_COVERED, PX_DRY, PX_WET, viewPixels, type Tally } from '../wofs/sum.js';
 
 /** VV: float32 gamma0 on a geographic grid, no GDAL scale or offset (refused at open). */
 export const S1_VV_ACCEPT: CogAccept = { sampleTypes: ['float32'], crs: ['geographic'] };
@@ -92,9 +92,9 @@ export const isRadarWater = (v: number) => v < S1_WATER_LINEAR;
 
 /**
  * Classifies and counts the outline mask's pixels over `win` (see the header): `vv` and `mask` are the two bands'
- * samples over the same window of the same grid, row-major.
+ * samples over the same window of the same grid, row-major. `classes` (sum.ts pixelClasses) gets each pixel's class.
  */
-export function tallyS1(m: OutlineMask, win: PixelWindow | null, vv: ArrayLike<number> | null, vvGrid: Pick<CogInfo, 'nodata'>, mask: ArrayLike<number> | null): Tally {
+export function tallyS1(m: OutlineMask, win: PixelWindow | null, vv: ArrayLike<number> | null, vvGrid: Pick<CogInfo, 'nodata'>, mask: ArrayLike<number> | null, classes?: Uint8Array): Tally {
 	let covered = 0;
 	let clear = 0;
 	let wet = 0;
@@ -103,17 +103,21 @@ export function tallyS1(m: OutlineMask, win: PixelWindow | null, vv: ArrayLike<n
 		for (let r = win.row0; r <= win.row1; r++) {
 			const mr = r - m.row0;
 			for (let c = win.col0; c <= win.col1; c++) {
-				if (!m.mask[mr * m.width + (c - m.col0)]) continue;
+				const at = mr * m.width + (c - m.col0);
+				if (!m.mask[at]) continue;
 				const i = (r - win.row0) * w + (c - win.col0);
 				const flag = mask[i]!;
 				if (flag === S1_MASK_NO_DATA) continue;
 				covered++;
+				if (classes) classes[at] = PX_COVERED;
 				if (flag !== S1_MASK_VALID) continue;
 				const v = vv[i]!;
 				// No backscatter to read: not a clear view (and no water claimed).
 				if (isNodata(vvGrid, v) || !Number.isFinite(v) || v <= 0) continue;
 				clear++;
-				if (isRadarWater(v)) wet++;
+				const water = isRadarWater(v);
+				if (water) wet++;
+				if (classes) classes[at] = water ? PX_WET : PX_DRY;
 			}
 		}
 	}
@@ -139,6 +143,7 @@ export async function viewS1Scene(http: FeedHttp, scene: S1Scene, outline: Wante
 	if (!mcog) throw new FeedFormatError('the Sentinel-1 mask STAC lists is not in the bucket');
 	if (!sameGrid(vv, mcog)) throw new FeedFormatError('a Sentinel-1 scene’s mask is not on its VV grid');
 	const ms = await readWindow(readMask, mcog, win);
-	const o = observation(tallyS1(outlineMask, win, vs, vv, ms), outlineMask.pixelAreaM2);
-	return o && { scene, ...(tag.etag ? { etag: tag.etag } : {}), ...o };
+	const classes = pixelClasses(outlineMask);
+	const o = observation(tallyS1(outlineMask, win, vs, vv, ms, classes), outlineMask.pixelAreaM2);
+	return o && { scene, ...(tag.etag ? { etag: tag.etag } : {}), ...o, pixels: viewPixels(vv, outlineMask, classes) };
 }

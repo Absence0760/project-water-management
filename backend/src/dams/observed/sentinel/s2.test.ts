@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FeedFormatError } from '../../../feeds/errors.js';
 import type { OutlineMask } from '../../../raster/mask.js';
 import { S2_C1_S3_BASE } from '../wofs/stac.js';
+import { pixelClasses, PX_COVERED, PX_DRY, PX_WET } from '../wofs/sum.js';
 import { loadS2Fixture } from './fixtures.js';
 import { s2Item, SCL_NOT_CLEAR, tallyS2, windowOn, type BandRead } from './s2.js';
 
@@ -36,6 +37,15 @@ describe('tallyS2', () => {
 		// West: water reflectances; east: land.
 		const t = tallyS2(MASK, green(water.green, land.green), scl(6, 4), coarse(water.swir, land.swir), null);
 		expect(t).toEqual({ inside: 8, covered: 8, clear: 8, wet: 4, needNir: 0 });
+	});
+
+	it('gives each pixel its class for joining views (merge.ts): wet, dry, or covered but not clear', () => {
+		const classes = pixelClasses(MASK);
+		// West clear water; east cloud (SCL 9).
+		tallyS2(MASK, green(water.green, land.green), scl(6, 9), coarse(water.swir, land.swir), null, classes);
+		expect([...classes]).toEqual([PX_WET, PX_WET, PX_COVERED, PX_COVERED, PX_WET, PX_WET, PX_COVERED, PX_COVERED]);
+		tallyS2(MASK, green(land.green, land.green), scl(4, 4), coarse(land.swir, land.swir), null, classes);
+		expect([...classes]).toEqual(new Array(8).fill(PX_DRY));
 	});
 
 	it('counts green ≤ swir as dry, at the threshold too', () => {

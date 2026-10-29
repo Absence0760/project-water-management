@@ -38,8 +38,9 @@
 // outline (raster/cog.ts), summed inside it (raster/mask.ts, sum.ts). Two scenes on one date
 // (neighbouring Landsat rows overlap) give ONE row: the scene that saw the
 // most of the dam clearly, then the one covering most of it, then the lower
-// item id. They aren't combined pixel by pixel: the rows' grids needn't line
-// up, and the better view is what a reader would pick. After each date the
+// item id, with the pixels it has no data for filled from the others when
+// their grids line up (merge.ts: a dam across a footprint's or tile's edge
+// is seen whole). After each date the
 // cursor moves to it, so at the deadline a dam stops there and the next run
 // goes on from it: a first backfill (about 90 scenes a year over a dam, 2–3
 // requests each) runs over several runs.
@@ -112,8 +113,11 @@ import {
 } from '../handover.js';
 import { openCog, readWindow, type RangeRead } from '../../../raster/cog.js';
 import { outlineMask, sceneWindow, type OutlineMask } from '../../../raster/mask.js';
+import { better, mergeViews, type SceneView as View } from './merge.js';
 import { searchScenes, type SceneItem, type WofsScene } from './stac.js';
-import { observation, tally, WOFS_ACCEPT } from './sum.js';
+import { observation, pixelClasses, tally, viewPixels, WOFS_ACCEPT } from './sum.js';
+
+export { better, mergeViews };
 
 /** The first-backfill window's start: the Landsat 8 era (Landsat 7 beside it). Earlier history isn't fetched. */
 export const WOFS_BACKFILL_FROM = '2013-01-01';
@@ -266,15 +270,8 @@ class Deadline extends Error {}
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 const maxDay = (...ds: (string | undefined)[]) => ds.filter((d): d is string => !!d).reduce((a, b) => (a > b ? a : b));
 
-/** One scene's view of a dam, or null when it didn't see it (sum.ts observation). */
-export interface SceneView<S extends SceneItem = WofsScene> {
-	scene: S;
-	etag?: string;
-	wetAreaM2: number;
-	pctObserved: number;
-	clearPx: number;
-	coveredPx: number;
-}
+/** One scene's view of a dam, or null when it didn't see it (sum.ts observation; merge.ts joins a date's views). */
+export type SceneView<S extends SceneItem = WofsScene> = View<S>;
 
 /** A range reader for one URL that keeps the object's first ETag (not a Last-Modified stand-in) in `tag.etag`. */
 export function taggedReader(http: FeedHttp, url: string): { read: RangeRead; tag: { etag?: string } } {
@@ -311,15 +308,9 @@ async function viewScene(http: FeedHttp, scene: WofsScene, outline: WantedOutlin
 	const win = sceneWindow(mask, cog);
 	if (!win) return null;
 	const samples = await readWindow(read, cog, win);
-	const o = observation(tally(mask, win, samples), mask.pixelAreaM2);
-	return o && { scene, ...(tag.etag ? { etag: tag.etag } : {}), ...o };
-}
-
-/** The better of two views of one date: most seen clearly, then most covered, then the lower item id. */
-export function better<S extends SceneItem>(a: SceneView<S>, b: SceneView<S>): SceneView<S> {
-	if (a.clearPx !== b.clearPx) return a.clearPx > b.clearPx ? a : b;
-	if (a.coveredPx !== b.coveredPx) return a.coveredPx > b.coveredPx ? a : b;
-	return a.scene.itemId <= b.scene.itemId ? a : b;
+	const classes = pixelClasses(mask);
+	const o = observation(tally(mask, win, samples, classes), mask.pixelAreaM2);
+	return o && { scene, ...(tag.etag ? { etag: tag.etag } : {}), ...o, pixels: viewPixels(cog, mask, classes) };
 }
 
 /** A dam's turn: the newest scenes (forward, to today) or older history (backward, toward backfillFrom). */
@@ -438,6 +429,9 @@ export async function runScenePass<S extends SceneItem>(src: ScenePassSource<S>,
 		const upstream = new Map<string, ObservationFile['upstream'][number]>();
 		for (const r of existing?.rows ?? []) rows.set(r.date, r);
 		for (const u of existing?.upstream ?? []) if (u.itemId) upstream.set(u.itemId, u);
+		// The scenes that filled a row's gaps (merge.ts): the file's (upstream items no row is keyed by), until their date is read again, and this run's.
+		const keys = new Set(existing?.rows.map((r) => r.upstreamKey));
+		const fills = new Set([...upstream.keys()].filter((itemId) => !keys.has(itemId)));
 		// The scenes already read (see the header): the file's, and the tail's that left no row.
 		const tail = addDays(today, -lookbackDays);
 		const tailItems = new Map<string, string>((st.tailItems ?? []).filter(([d]) => d >= tail).map(([d, item]) => [item, d]));
@@ -452,14 +446,15 @@ export async function runScenePass<S extends SceneItem>(src: ScenePassSource<S>,
 		let failure: { code: string; error: unknown } | null = null;
 		let deadline = false;
 
-		/** Reads one date's scenes and keeps the best view as its row. */
+		/** Reads one date's scenes and keeps their joined view (merge.ts) as its row. */
 		const readDate = async (date: string, scenes: S[]) => {
 			// Nothing new on this date: its stored row stands, and no scene is asked for.
 			if (scenes.every((sc) => known(sc.itemId))) return;
-			// A new scene beside a stored row: the date's scenes are compared again, so the better view wins.
+			// A new scene beside a stored row: the date's scenes are read again, so the row is the best of all of them.
 			const toRead = rows.has(date) ? scenes : scenes.filter((sc) => !known(sc.itemId));
-			let best: SceneView<S> | null = null;
+			const views: SceneView<S>[] = [];
 			for (const scene of toRead) {
+				fills.delete(scene.itemId);
 				let view: SceneView<S> | null;
 				try {
 					view = await src.view(s3.http, scene, outline, masks);
@@ -473,8 +468,9 @@ export async function runScenePass<S extends SceneItem>(src: ScenePassSource<S>,
 					}
 					throw err;
 				}
-				if (view) best = best ? better(best, view) : view;
+				if (view) views.push(view);
 			}
+			const best = mergeViews(views);
 			if (!best) return;
 			const was = rows.get(date);
 			const row = { date, wetAreaM2: best.wetAreaM2, pctObserved: best.pctObserved, upstreamKey: best.scene.itemId };
@@ -482,6 +478,10 @@ export async function runScenePass<S extends SceneItem>(src: ScenePassSource<S>,
 			if (!was || was.wetAreaM2 !== row.wetAreaM2 || was.pctObserved !== row.pctObserved || was.upstreamKey !== row.upstreamKey) dirty = true;
 			rows.set(date, row);
 			upstream.set(best.scene.itemId, { url: best.scene.url, itemId: best.scene.itemId, ...(best.etag ? { etag: best.etag } : {}) });
+			for (const f of best.fills ?? []) {
+				upstream.set(f.scene.itemId, { url: f.scene.url, itemId: f.scene.itemId, ...(f.etag ? { etag: f.etag } : {}) });
+				fills.add(f.scene.itemId);
+			}
 		};
 		/** The scenes of [from, to], by date. */
 		const search = async (from: string, to: string) => {
@@ -544,7 +544,7 @@ export async function runScenePass<S extends SceneItem>(src: ScenePassSource<S>,
 		// What was read before a failure is kept: written, and the worker loads it.
 		if (dirty) {
 			const sorted = [...rows.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
-			const used = new Set(sorted.map((r) => r.upstreamKey));
+			const used = new Set([...sorted.map((r) => r.upstreamKey), ...fills]);
 			await writeObservationFile(store, {
 				source,
 				key: id,
