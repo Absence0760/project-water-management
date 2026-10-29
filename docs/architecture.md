@@ -2532,6 +2532,15 @@ worker tick: the status, then each unit due by its load mark (≤ 200 a tick, ol
     some dekads, written by `raster/cogWrite.ts` (`tileValues`, so the empty
     tiles cost nothing), so the production reader runs offline.
     `pnpm dev:et:run` runs it end to end ([run-locally.md § Observed actual ET](./run-locally.md#observed-actual-et)).
+- **SSEBop** (#623 step 6, planned): FEWS NET's SSEBop v6.1 is a ~93 MB
+  zip per dekad holding a deflated tiled GeoTIFF, so it can't be range-read
+  like WaPOR. When it is built (FAO declining, or a second opinion wanted)
+  it is a bounded whole-file pass in its own fetcher mode: one file a run,
+  streamed and inflated as it arrives, the header and tables through
+  `raster/cog.ts` and only the tiles under the wanted units kept, writing
+  `et/ssebop/<unitKey>.json` for the same tick and `et_observation`
+  (`source` `ssebop`). The decision, the file's layout and the cost:
+  [data-sources.md § ssebop-eta](./data-sources.md#ssebop-eta).
 - **The tick** loads a unit's file when its status `lastGood` is newer than
   its load mark's and its `fetchedAt` newer than the mark's: a restarted
   worker repeats nothing. A refused file (`refused`, its parcels changed
