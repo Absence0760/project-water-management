@@ -72,7 +72,7 @@ describe('§ 8 future yield', () => {
 		const res = await post(owner, appRun);
 		expect(res.status).toBe(409);
 		expect(res.body.details.code).toBe('future_yield_off');
-		expect((await get(viewer, appRun)).body).toEqual({ enabled: false, result: null });
+		expect((await get(viewer, appRun)).body).toEqual({ enabled: false, result: null, job: null });
 		const r = (await owner.call('GET', `/projects/${projectId}/runs/${appRun}/evidence-report`)).body.report as EvidenceReport;
 		expect(r.version).toBe('evidence-23');
 		expect(r.futureYield).toBeNull();
@@ -96,14 +96,16 @@ describe('§ 8 future yield', () => {
 		expect(b.status, JSON.stringify(b.body)).toBe(201);
 		const res = await post(owner, appRun);
 		expect(res.status, JSON.stringify(res.body)).toBe(202);
-		// The same request while it waits is that job.
+		// The same request while it waits is that job, and the GET names it (§ 8's Run button follows it after a reload).
 		expect((await post(owner, appRun)).body.jobId).toBe(res.body.jobId);
+		expect((await get(viewer, appRun)).body.job).toMatchObject({ id: res.body.jobId, kind: 'future_yield', status: 'queued' });
 		await tick();
 		expect(await job(res.body.jobId)).toEqual({ status: 'done', last_error: null });
 
 		const got = await get(viewer, appRun);
 		expect(got.status).toBe(200);
 		expect(got.body.enabled).toBe(true);
+		expect(got.body.job).toMatchObject({ id: res.body.jobId, status: 'done' });
 		const row = got.body.result;
 		expect(row).toMatchObject({ baselineRunId: baseRun, applicationRunId: appRun, nodeId: farmId, jobId: res.body.jobId, createdBy: expect.any(String) });
 		const r = row.result as FutureYieldResult;
@@ -123,7 +125,7 @@ describe('§ 8 future yield', () => {
 
 		// RLS: a stranger reads nothing; a contributor who doesn't own the application reads no row (the viewer above is the positive control).
 		expect((await get(stranger, appRun)).status).toBe(404);
-		expect((await get(contributor, appRun)).body.result).toBeNull();
+		expect((await get(contributor, appRun)).body).toMatchObject({ result: null, job: null });
 		expect(await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [appRun])).toEqual([{ n: 1 }]);
 
 		const report = (await viewer.call('GET', `/projects/${projectId}/runs/${appRun}/evidence-report`)).body.report as EvidenceReport;

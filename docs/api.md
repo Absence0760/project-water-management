@@ -4474,14 +4474,35 @@ background `future_yield` job. Off unless `FUTURE_YIELD=on` (deployment.md).
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/runs/:runId/future-yield` | `{ nodeId? }` (strict) | `202 { jobId, job, created: true }`; the same request while it is pending is `200` with that job. `409` with `details.code`: `future_yield_off` (FUTURE_YIELD isn't on), `not_application` (not a run of a scenario on a baseline), `no_boundary` (no catchment boundary on the map), `boundary_cells` (the boundary covers no 0.25° cell of the copy's region); `409` for a forecast run or an application whose ops already hold a `climate.delta`. `400` (`details.code: 'future_yield_dam'`) when `nodeId` isn't a unit of the application with a dam above 0 m³, or, without `nodeId`, the application has no own unit with a dam or more than one. `429` with one already queued or running for you | editor |
-| GET | `/projects/:id/runs/:runId/future-yield` | – | `{ enabled, result: FutureYieldRow \| null }`: the newest stored result for the run (`{ id, baselineRunId, applicationRunId, nodeId, jobId, result, engineVersion, createdBy, createdAt }`, `result` the engine's `FutureYieldResult`). `enabled: false, result: null` while it is off. A viewer kept from the registered volumes on runs that cap or scale use to them gets `result: null, withheld: ['result']` | contributor (RLS: viewers and above, an applicant their own application's) |
+| GET | `/projects/:id/runs/:runId/future-yield` | – | `{ enabled, result: FutureYieldRow \| null, job: JobMeta \| null }`: `job` is the newest `future_yield` job for the run that RLS lets the caller read (any status; how the draft report's Run button follows one after a reload); the newest stored result for the run (`{ id, baselineRunId, applicationRunId, nodeId, jobId, result, engineVersion, createdBy, createdAt }`, `result` the engine's `FutureYieldResult`). `enabled: false, result: null` while it is off. A viewer kept from the registered volumes on runs that cap or scale use to them gets `result: null, withheld: ['result']` | contributor (RLS: viewers and above, an applicant their own application's) |
 
 - The job reads the copy over the boundary's cells, works out the factor
   table (`buildFutureFactorTable`), runs every pair (`runFutureYield`) and
   stores one row, keeping the newest 3 per pair. It dies (no retry) when
   the copy holds no `cmip6` model (*… the operator loads it*), when a model
   holds no year of a window, or when the engine refuses the input. Its
-  status is `GET /projects/:id/jobs`.
+  status is `GET /projects/:id/jobs`, and the newest one for the run comes
+  with the GET above.
+
+## Future climate
+
+The Scenarios tab's future climate (issue #621 slice 5, 284_climate_factors,
+[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-284_climate_factors)):
+the catchment's monthly change factors per climate model, SSP and horizon,
+worked out by a background `climate_factors` job, which Add a change turns
+into a `climate.delta` op. Off unless `FUTURE_YIELD=on`, as § 8.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/climate-factors` | `{}` or none (strict) | `202 { jobId, job, created: true }`; while one is pending, `200` with that job. `409` with `details.code`: `future_yield_off`, `no_boundary` (no catchment boundary on the map), `boundary_cells` (it covers no 0.25° cell of the copy's region) | editor |
+| GET | `/projects/:id/climate-factors` | – | `{ enabled, factors, boundary, job }`: `factors` the newest table (`{ id, jobId, factors: FutureFactorTable, warnings, boundarySha256, createdBy, createdAt }`) or null; `boundary` `'same'`, `'changed'` (the boundary on the map now isn't the one it was read over) or `'none'` (no boundary); `job` the newest `climate_factors` job (`JobMeta`) or null. `{ enabled: false, factors: null, boundary: 'none', job: null }` while it is off | viewer |
+
+- The job reads the boundary as it is when it runs, reads the copy over its
+  cells (`future/copy.ts readFactorTable`, as the `future_yield` job does),
+  stores one `climate_factors` row and keeps the newest 3 per project. It
+  dies (no retry) when the boundary is gone or unreadable, or the copy holds
+  no `cmip6` model. Nothing reads the table but the form: the op it makes
+  carries its own factors.
 
 ## Sweeps
 

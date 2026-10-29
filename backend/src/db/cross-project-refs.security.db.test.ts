@@ -57,6 +57,7 @@ interface World {
 	outlookJobId: string;
 	yieldJobId: string;
 	futureJobId: string;
+	climateJobId: string;
 	/** A finished `auto_calibration` job, and a complete, unapplied run of the calibration rules with a kept fit (108). */
 	autoCalJobId: string;
 	calibrationId: string;
@@ -173,6 +174,7 @@ async function world(name: string): Promise<World> {
 			outlookJobId: await job('outlook'),
 			yieldJobId: await job('yield'),
 			futureJobId: await job('future_yield'),
+			climateJobId: await job('climate_factors'),
 			autoCalJobId: await job('auto_calibration'),
 			calibrationId: await one(
 				`INSERT INTO auto_calibration (project_id, "trigger", rules, rules_revision, input_sha256, plan, engine_version, created_by, status, report, chosen, completed_at)
@@ -790,6 +792,11 @@ const CASES: Record<string, Case> = {
 			`INSERT INTO future_yield (project_id, baseline_run_id, application_run_id, node_id, job_id, method, result, engine_version) VALUES ($1, $2, $3, $4, $5, 'delta-1', '{}', 'x')`,
 			[h.projectId, h.runId, h.scenarioRunId, h.farmId, ref]
 		]
+	},
+	// The Scenarios tab's climate factors (284): climate_factors_guard checks the job within the row's project.
+	'climate_factors.job_id': {
+		ref: (w) => w.climateJobId,
+		insert: (h, ref) => [`INSERT INTO climate_factors (project_id, job_id, method, boundary_sha256, factors) VALUES ($1, $2, 'delta-1', repeat('0', 64), '{}')`, [h.projectId, ref]]
 	},
 	'yield_result.scenario_id': {
 		ref: (w) => w.scenarioId,
