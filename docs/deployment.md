@@ -1747,7 +1747,7 @@ target and permission, and the alarm exist only then.
 ### ECMWF (the second forecast)
 
 Issue #604 D17 (R4-C): the ECMWF ENS forecast, copied by the same
-mirror-ingest Lambda (`ingest/ecmwf.py`) and read by `ecmwf_ens` feeds
+mirror-ingest Lambda (`ingest/ecmwf_forecast.py`) and read by `ecmwf_ens` feeds
 (`backend/src/feeds/fromMirrorEcmwf.ts`). The source, its licence and the
 limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens).
 
@@ -1778,7 +1778,7 @@ limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-
   fails the run with `RetryLater`, having written nothing and no refusal
   marker; the target doesn't retry it (the failed event goes to the
   mirror-ingest DLQ), and the next scheduled run, 20 minutes on, asks again
-  (`ingest/test_ecmwf.py` covers both).
+  (`ingest/test_ecmwf_forecast.py` covers both).
 - **A 403** stops the run at once, never retried, writes
   `ecmwf/refused.json` (the time), and the Lambda errors (the event goes to
   the mirror-ingest DLQ, which alarms). The day's later runs see the marker

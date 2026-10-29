@@ -16,7 +16,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-import ecmwf  # noqa: E402
+import ecmwf_forecast  # noqa: E402
 import ecmwf_qm_fit as qm  # noqa: E402
 import zarrstore  # noqa: E402
 
@@ -70,16 +70,16 @@ class Fit(unittest.TestCase):
         rng = np.random.default_rng(3)
         first = dt.date(2026, 1, 5)
         issues = [first + dt.timedelta(days=i) for i in range(3)]
-        days = (issues[-1] - first).days + ecmwf.DAYS
+        days = (issues[-1] - first).days + ecmwf_forecast.DAYS
         obs = gamma_rain(rng, days * 550 * 620).reshape(days, 550, 620).astype(np.float32)
         obs[:, 500:, 600:] = np.nan  # sea, as CHIRPS has it
         zarrstore.write_finals(self.root, "sat", first, obs)
         coarse = obs.reshape(days, 275, 2, 310, 2).mean(axis=(2, 4))
         for i, issue in enumerate(issues):
-            v = np.zeros((4, ecmwf.DAYS, ecmwf.ROWS, ecmwf.COLS), np.float32)
-            v[0] = 2.0 * coarse[i : i + ecmwf.DAYS]
-            ecmwf.write_issue(mirror, issue, np.nan_to_num(v), 50)
-        ecmwf.write_index(mirror, [issues[-1].isoformat()], [d.isoformat() for d in issues[:-1]])
+            v = np.zeros((4, ecmwf_forecast.DAYS, ecmwf_forecast.ROWS, ecmwf_forecast.COLS), np.float32)
+            v[0] = 2.0 * coarse[i : i + ecmwf_forecast.DAYS]
+            ecmwf_forecast.write_issue(mirror, issue, np.nan_to_num(v), 50)
+        ecmwf_forecast.write_index(mirror, [issues[-1].isoformat()], [d.isoformat() for d in issues[:-1]])
         self.issues = issues
 
     def tearDown(self):
@@ -100,9 +100,9 @@ class Fit(unittest.TestCase):
     def test_min_samples_leaves_a_thin_group_out_and_main_writes_the_file(self):
         self.assertEqual(qm.fit(self.root, stride=3, min_samples=10**9)["groups"], [])
         self.assertEqual(qm.main(["--copy", str(self.root), "--cell-stride", "3", "--min-samples", str(10**9)]), 1)
-        self.assertFalse((self.root / ecmwf.QM_KEY).exists())
+        self.assertFalse((self.root / ecmwf_forecast.QM_KEY).exists())
         self.assertEqual(qm.main(["--copy", str(self.root), "--cell-stride", "3", "--min-samples", "1000", "--scale", "1.1"]), 0)
-        doc = json.loads((self.root / ecmwf.QM_KEY).read_text())
+        doc = json.loads((self.root / ecmwf_forecast.QM_KEY).read_text())
         self.assertEqual(doc["observed"], {"product": "sat", "fallback": "prelim", "scale": 1.1})
         self.assertEqual(len(doc["groups"]), 1)
 
