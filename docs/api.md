@@ -3858,6 +3858,55 @@ RLS (`backend/src/dams/observed/routes.ts`, `read.ts`, `compare.ts`).
   90 % clear that wasn't left out for its source or a missing polygon
   (`{ date, source, wetAreaM2, pctObserved } | null`).
 
+## Observed actual ET
+
+A unit's satellite actual evapotranspiration against the run's modelled
+irrigation use (issue #623 step 5; the observations are 276's
+`et_observation`, loaded by the worker's ET pass, off by default; the method
+and thresholds in
+[model.md § 2.10o](./model.md#210o-observed-actual-et-against-the-modelled-irrigation-use-app-issue-623);
+the panel in [ui.md § Farm drawer](./ui.md#farm-drawer)). Read only, under
+the caller's RLS (`backend/src/water-use/observed/routes.ts`, `read.ts`,
+`compare.ts`): `et_observation` lets a project's viewers read it and a
+farmer only their own units' rows, but this route is the workspace's, so a
+farmer is `403`.
+
+| Method | Path | Response | Min role |
+| --- | --- | --- | --- |
+| GET | `/projects/:id/nodes/:nodeId/et-observed?run=` | `EtObserved` (below). `run`: the run to compare with, else the project's newest by `created_at`; another project's run or a malformed id is `404`. A node that isn't the project's (or a malformed id) is `404`, a gauge or other water user `400`. No observations, the usual case, is an empty `sources`. `Cache-Control: no-store` | viewer |
+
+`EtObserved = { nodeId, name, thresholds, run, plantedAreaM2, sources }`:
+
+- `thresholds`: the comparison's constants (`compare.ts` `ET_OBSERVED`):
+  `minValidShare` 0.8, `withinShare` 0.25, `floorMmDay` 0.5, `areaRatio` 1.5.
+- `run`: `{ id, label, createdAt, engineVersion, forecastFrom, inRun } | null`
+  (no run yet); `inRun` is whether the run stored the unit's demand series.
+- `plantedAreaM2`: Σ the unit's crop areas in the run's model snapshot (m²; rows naming a crop the model lacks are left out, as the engine leaves them),
+  the area observed ETa is put on; `null` with no run or the unit not in it.
+- `sources`: one per source with observations (WaPOR first, then SSEBop):
+  `{ source: 'wapor' | 'ssebop', attribution, area, points, seasons, summary }`.
+  `attribution` (`"FAO WaPOR v3, CC BY 4.0"`, `"USGS FEWS NET SSEBop v6, CC0"`)
+  is shown wherever the values are. `area`: the newest dekad's
+  `{ areaM2, mask: 'cropland' | 'parcel', ratioToPlanted, differs }`
+  (`differs`: outside `areaRatio` either way).
+- `points`, oldest first, one per dekad: `{ source, dekad, end, days, etaMmDay, validShare, areaM2, mask, observedEtM3, modelledEtM3, requirementM3, effectiveRainM3, observedIrrigationM3, modelledIrrigationM3, suppliedM3, compared, skip, etWithin, irrigationWithin }`.
+  Volumes are m³ over the dekad: `observedEtM3` = ETa × days × planted area;
+  `modelledEtM3` the crop's ET as the run supplied it, effective rain +
+  `modelledIrrigationM3`; `requirementM3` Σ `gross_demand` (each day at
+  least 0), the requirement at full supply; `effectiveRainM3` Σ `effective_rain`;
+  `observedIrrigationM3` = max(0, observed − effective rain);
+  `modelledIrrigationM3` Σ e·G, the irrigation reaching the crop;
+  `suppliedM3` Σ the irrigation supplied (abstraction). `skip` says why a
+  dekad wasn't compared: `partly-seen`, `partial-dekad`, `outside-run`,
+  `no-area`, `no-run`, `no-series` (the run has the unit but not the columns:
+  an older engine's run). `etWithin` and `irrigationWithin` are set on compared
+  dekads only.
+- `seasons`, oldest first, one per half water year with a dekad
+  (`{ waterYear, half: 'summer' | 'winter', label, …totals }`), and
+  `summary` over all of them: `{ compared, skipped, observedEtM3, modelledEtM3, observedIrrigationM3, modelledIrrigationM3, etBiasPct, irrigationBiasPct, etWithinShare, irrigationWithinShare }`.
+  A bias is (Σ modelled − Σ observed) ÷ Σ observed × 100 (+: the model uses
+  more), `null` with nothing compared or observed.
+
 ## Start from the map
 
 An empty model started from the map (issue #326 C3, `178_start_proposal.sql`,

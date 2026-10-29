@@ -11161,6 +11161,91 @@ calibration's rules, and per-unit x1 scaled by PAWC (step 6, which would
 change `runModel` and needs its own `ENGINE_VERSION`, the `verify/` mirror
 and an engine-audit.md entry).
 
+### 2.10o Observed actual ET against the modelled irrigation use (app, issue #623)
+
+A check of a run against satellites, not part of the engine: nothing here
+changes `runModel` or its output, and observed ET never feeds a run
+(`backend/src/water-use/observed/compare.ts`, pure, unit-tested; the unit
+drawer's panel in [ui.md § Farm drawer](./ui.md#farm-drawer); API in
+[api.md § Observed actual ET](./api.md#observed-actual-et)). Issue #623 named
+it §2.10m, which the regional GR4J prior had taken, so it is §2.10o. The
+thresholds are provisional and live in one place (`ET_OBSERVED`); change
+them there and here together.
+
+- **Observed.** `et_observation` (276): per unit, source and dekad, the
+  area-weighted mean actual evapotranspiration ETa (mm/day) over the unit's
+  farm parcels (∩ WorldCover cropland where land cover is loaded, else the
+  whole parcels: `mask`), the share of that area with a valid pixel, and the
+  area. FAO WaPOR v3 `L2-AETI-D` (100 m, from 2018), or USGS SSEBop v6 (1 km,
+  from 2012) as the fallback; each source is compared on its own. A dekad is
+  the 1st–10th, 11th–20th or 21st to the month's end (8–11 days), taken as
+  calendar days in UTC.
+- **Modelled**, summed over the dekad's days from the run's own columns for
+  the unit:
+  - **the requirement** = `gross_demand`, Σ planted area × crop factor ×
+    A-pan (§2.3 steps 1–2), each day at least 0 as the engine takes it: the
+    crop's water use at full supply, reported for reference;
+  - **effective rain** = `effective_rain`, the part of that the model's rain
+    and soil store covered (§2.3 steps 3–4; never more than the need);
+  - **irrigation reaching the crop** = e·G (§2.7: the crop gets e·G of the G
+    supplied). With D = F ÷ e it is F × G ÷ D each day, from
+    `crop_requirement` (F), `supplied` (G) and `demand` (D), each less the
+    unit's demand objects (`object_demand@…`, `object_supplied@…`), which
+    aren't irrigation. This reads e as the run applied it (the unit's blended
+    e*, §2.3 item 6) without recomputing it, and leaves out the application
+    losses, which a satellite over the field doesn't see as crop ET. `supplied`
+    itself (the abstraction) is reported beside it for reference;
+  - **crop ET as the run supplied it** = effective rain + the irrigation
+    reaching the crop. Not the requirement: a dry dam, the drought
+    restriction (§2.7), an allocation cap, the abstraction start date or a
+    demand factor gives the crop less than it needs, and the satellite sees
+    what the crop used. Compared with the requirement, a dry year would read
+    as a crop-factor error.
+- **The two comparisons**, as volumes over the same land, the run's planted
+  area A (Σ the unit's crop areas in the run's model snapshot, of crops the
+  model has: the engine skips a row naming a missing crop), since the
+  model multiplies its depths by it: observed crop ET = ETa × days × A ÷ 1000
+  (m³) against the crop ET as the run supplied it; observed irrigation = max(0, observed
+  crop ET − effective rain) against the irrigation reaching the crop. The
+  second subtracts the model's own effective rain (issue #623 Q2): until a
+  rain-fed reference from dryland pixels nearby is tried, it is the
+  satellite's ET the model's rain doesn't explain.
+- **Compared dekads only.** A dekad is compared when at least **80 %** of
+  the area had a valid pixel (`minValidShare`; the mean is over the valid
+  part, so a mostly clouded dekad is a few pixels' mean), when the run covers
+  all its days before any forecast (else `partial-dekad`, or `outside-run`
+  with no overlap) with no missing value, and when the unit plants something
+  (`no-area`). A run that has the unit but not these columns (an older
+  engine's) gives `no-series`: run it again. The rest are listed with the
+  reason.
+- **The band.** A pair agrees when |M − O| ≤ 25 % of the larger
+  (`withinShare`), or ≤ 0.5 mm/day over A for the dekad's days
+  (`floorMmDay`), so a dry winter dekad's few m³ aren't held to a share.
+  Both are provisional: satellite ETa products are generally reported within
+  about 15–30 % of flux-tower ET at dekadal steps, and the crop factors carry
+  an error of their own (§2.3); 0.5 mm/day is under the crop ET of a winter
+  dekad on the lowest ARC/SABI factors (about 0.4 × 2 mm/day of A-pan), so
+  the floor absorbs only the smallest dekads.
+- **Summary**, overall and per half water year (summer Oct–Mar, the
+  irrigation season; winter Apr–Sep): the sums, the bias (Σ M − Σ O) ÷ Σ O
+  × 100 (+: the model uses more water than the satellite sees), and the
+  share of dekads within the band, for each comparison.
+- **The area check.** The observed area (the newest dekad's) is reported
+  against A and flagged outside 1.5× either way (`areaRatio`): parcels
+  include veld, roads and buildings, and cropland includes dryland and
+  fallow, so it is a prompt to check the planted areas and the parcels, not
+  a figure to use.
+- **What it can't say.** ETa is a model of its own (WaPOR's ETLook), with
+  its errors; the dekad's mean is over a mask that may not be the irrigated
+  land; e·G assumes the losses never reach the crop, and with plantings on
+  different irrigation systems it is the unit's blended e* (§2.3 item 6),
+  not each planting's own; and over a dekad a soil
+  store can move water from one to the next, which neither side's dekadal
+  sum aligns exactly. A disagreement points at the inputs (the crops, their
+  areas, the crop factors, the A-pan row, §2.4a, the efficiency), never at a
+  correction: the hydrologist decides. Making observed ETa an engine input
+  would be an engine change with its own audit entry (issue #623 Q3).
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it
