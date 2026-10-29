@@ -117,10 +117,10 @@ test('an application on the nominated run gives the full evidence report, draft 
 	expect(svg).not.toContain('Lower');
 	await expect(locality.getByTestId('evidence-locality-figure')).toHaveAttribute('alt', /^Locality map of the application, north up/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Upper dam 300 000 m³' })).toBeVisible();
-	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', '6. The applicant’s demand objects', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
+	for (const h of ['1. The river', '2. Uncertainty', '3. Model and data', '4. Other users', '5. Registered water use', '6. The applicant’s demand objects', '8. Future yield', 'Appendix A. Inputs and assumptions', 'Appendix B. Limitations, sign-off and verification', 'Appendix C. Applicant’s statement'])
 		await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
-	// G12: the draft stamp on every section.
-	await expect(page.getByTestId('evidence-stamp')).toHaveCount(10);
+	// G12: the draft stamp on every section (§ 8 shows, Not assessed, while FUTURE_YIELD is on, as it is for e2e; evidence-23).
+	await expect(page.getByTestId('evidence-stamp')).toHaveCount(11);
 	for (const s of await page.getByTestId('evidence-stamp').all()) await expect(s).toHaveText('Draft · not issued');
 
 	// Page 1: the banner, the flags, and the fixed rows with paired bands and "worse in".
