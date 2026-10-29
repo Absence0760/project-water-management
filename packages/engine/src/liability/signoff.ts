@@ -27,8 +27,8 @@ import { METHODOLOGY } from './methodology.generated';
 export const SIGNOFF_STATEMENT_VERSION = 'signoff-4';
 
 export interface SignoffConfirmation {
-	/** `pack`: a pack sign-off's own confirmation (packSignoffStatement). */
-	id: 'identity' | 'competence' | 'conflict' | 'inputs' | 'calibration' | 'ewr' | 'works' | 'assurance' | 'plausibility' | 'limitations' | 'pack';
+	/** `pack`: a pack sign-off's own confirmation (packSignoffStatement); `futureYield`: § 8's, on a pack that has it (pack-signoff-2). */
+	id: 'identity' | 'competence' | 'conflict' | 'inputs' | 'calibration' | 'ewr' | 'works' | 'assurance' | 'plausibility' | 'limitations' | 'pack' | 'futureYield';
 	text: string;
 }
 
@@ -130,9 +130,20 @@ export const signoffStatementText = (s: SignoffStatement | PackSignoffStatement)
  * its manifest hash.
  */
 export const PACK_SIGNOFF_STATEMENT_VERSION = 'pack-signoff-1';
+/**
+ * The statement of a pack with § 8 *Future yield* (evidence-23, issue #621):
+ * pack-signoff-1's, plus the specialist's confirmation of § 8 (`futureYield`),
+ * so the applicant's hydrologist signs it off by name. A pack without § 8
+ * keeps pack-signoff-1, word for word.
+ */
+export const PACK_SIGNOFF_FUTURE_VERSION = 'pack-signoff-2';
+
+/** The confirmation § 8 adds to a pack's statement. */
+export const FUTURE_YIELD_CONFIRMATION =
+	'I have read § 8 Future yield, its caveat and its change factors. I judge the climate models, the method and the range across models fit for this application, and I present § 8 as projections, not predictions.';
 
 export interface PackSignoffStatement extends Omit<SignoffStatement, 'version' | 'runId' | 'engineVersion'> {
-	version: typeof PACK_SIGNOFF_STATEMENT_VERSION;
+	version: typeof PACK_SIGNOFF_STATEMENT_VERSION | typeof PACK_SIGNOFF_FUTURE_VERSION;
 	/** The pack signed: its id, version and the SHA-256 of its manifest (evidence/pack.ts). */
 	packId: string;
 	packVersion: number;
@@ -149,6 +160,8 @@ export interface SignoffPack {
 	baseline: SignoffRun;
 	/** The scenario run, for an application pack; null for baseline evidence. */
 	application: SignoffRun | null;
+	/** The pack's report has § 8 with a result (evidence-23): the statement adds its confirmation (pack-signoff-2). */
+	futureYield?: boolean;
 }
 
 /**
@@ -173,7 +186,7 @@ export function packSignoffStatement(
 		.filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)));
 	return {
 		...base,
-		version: PACK_SIGNOFF_STATEMENT_VERSION,
+		version: pack.futureYield ? PACK_SIGNOFF_FUTURE_VERSION : PACK_SIGNOFF_STATEMENT_VERSION,
 		packId: pack.id,
 		packVersion: pack.version,
 		manifestSha256: pack.manifestSha256,
@@ -184,7 +197,8 @@ export function packSignoffStatement(
 			{
 				id: 'pack',
 				text: `I have read this evidence pack (version ${pack.version}, manifest SHA-256 ${pack.manifestSha256}) as a whole: its flags, its change table and its appendices are those of the runs I judged, and nothing in it misrepresents them.`
-			}
+			},
+			...(pack.futureYield ? [{ id: 'futureYield' as const, text: FUTURE_YIELD_CONFIRMATION }] : [])
 		],
 		errata: allErrata,
 		notes: [

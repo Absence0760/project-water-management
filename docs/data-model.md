@@ -3835,6 +3835,31 @@ No job table of its own: `job` holds status, progress and errors.
   (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
   (`yield/contributor.db.test.ts`).
 
+### Future yield (279_future_yield.sql)
+
+§ 8 of an application's evidence report (issue #621 slice 4,
+[evidence-pack.md § Future yield](./evidence-pack.md#future-yield)), written
+by a `future_yield` job as its acting editor. `job.kind` accepts
+`future_yield`.
+
+| Column | What |
+| --- | --- |
+| `project_id` | the project |
+| `baseline_run_id`, `application_run_id` | the pair re-run (both `model_run`, cascade; never equal; both the row's project, `future_yield_guard`) |
+| `node_id` | the applicant's dam as the application run's input names it (no foreign key, as `yield_result.node_id`) |
+| `job_id` | the job (`SET NULL` on the 30-day purge; must be a `future_yield` job of the project) |
+| `method` | `delta-1` |
+| `result` | the engine's `FutureYieldResult` (factor table included), an object of at most 1 MB |
+| `engine_version`, `created_by`, `created_at` | the engine that ran the pairs; the session's user and time (stamped by the guard) |
+
+Insert and delete only (no `UPDATE` grant); the job keeps the newest 3 per
+pair. RLS: viewers and above read; an applicant reads the rows of their own
+application's runs (`app_future_yield_own_run`, SECURITY DEFINER); editors
+insert and delete; farmers read none. Covering index on every foreign key.
+279 also redefines `app_specialist_pack` (latest 188) to say whether a pack's
+manifest has a § 8 result (its specialist's statement is then
+`pack-signoff-2`).
+
 ### Automated calibrations (108_auto_calibration.sql)
 
 A run of the project's calibration rules, fitted by the server one case per

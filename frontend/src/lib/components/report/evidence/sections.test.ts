@@ -37,6 +37,16 @@ describe('evidenceSections', () => {
 		]);
 	});
 
+	it('adds § 8, Future yield, to an application from evidence-23 while it is on', () => {
+		const fy = { status: 'notRun' } as never;
+		const got = evidenceSections({ mode: 'application', demandObjects: none, damObservations: null, futureYield: fy });
+		expect(got.map((s) => s.id)).toEqual(['summary', 'river', 'uncertainty', 'credibility', 'users', 'allocations', 'demandObjects', 'futureYield', 'appendixInputs', 'appendixVerify', 'applicantStatement']);
+		expect(sectionHeading(got.find((s) => s.id === 'futureYield')!)).toBe('8. Future yield');
+		// Off (null), and for baseline evidence, none.
+		expect(evidenceSections({ mode: 'application', demandObjects: none, damObservations: null, futureYield: null }).some((s) => s.id === 'futureYield')).toBe(false);
+		expect(evidenceSections({ mode: 'baseline', demandObjects: none, damObservations: null, futureYield: fy }).some((s) => s.id === 'futureYield')).toBe(false);
+	});
+
 	it('adds § 7, the observed wet days, to an applicant’s application from evidence-21', () => {
 		const obs = { version: 'dam-obs-1' as const, source: 'wofs' as const, citation: 'Digital Earth Africa WOfS, CC BY 4.0' as const, startDate: '2001-10-01', endDate: '2020-09-30', wetMinPixels: 2, dryMinClearPct: 99, pixelAreaM2: 900, dams: [] };
 		const got = evidenceSections({ mode: 'application', demandObjects: none, damObservations: obs });

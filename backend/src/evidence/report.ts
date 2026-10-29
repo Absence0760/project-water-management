@@ -55,6 +55,14 @@ import type { RunScenarioSnapshot } from '../runs/execute.js';
 import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
 import { loadAuthorisedImpact } from './authorisedImpact.js';
 import { loadDamObservations } from './damObservations.js';
+import { futureYieldEnabled, latestFutureYield } from '../future/store.js';
+
+/** § 8's input: the stored result, `notRun` when none, null while FUTURE_YIELD is off. */
+async function loadFutureYield(db: Db, projectId: string, applicationRunId: string, baselineRunId: string): Promise<EvidenceInput['futureYield']> {
+	if (!futureYieldEnabled()) return null;
+	const row = await latestFutureYield(db, projectId, applicationRunId, baselineRunId);
+	return row ? { result: row.result, createdAt: row.createdAt, createdBy: row.createdBy } : { notRun: true };
+}
 import { listNominations } from '../runs/evidence.js';
 
 /** Most other application runs the ledger lists (newest first). */
@@ -677,7 +685,9 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 				: null,
 		mapFeatures: await loadMapFeatures(db, projectId),
 		// The applicant's own dams' WOfS rows over the baseline's period (evidence-21); none for a team scenario or baseline evidence.
-		damObservations: await loadDamObservations(db, projectId, ownUnitsForD3(ownOrigin, recorded?.ownedNodeIds), baseline.startDate, baseline.endDate)
+		damObservations: await loadDamObservations(db, projectId, ownUnitsForD3(ownOrigin, recorded?.ownedNodeIds), baseline.startDate, baseline.endDate),
+		// § 8 (evidence-23): the newest stored future yield of these two runs, under the reader's RLS; none while FUTURE_YIELD is off.
+		futureYield: application ? await loadFutureYield(db, projectId, application.id, baseline.id) : null
 	};
 }
 

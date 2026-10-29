@@ -13439,6 +13439,29 @@ single dam with no return flow, firm yield (§2.13) doesn't fall as the
 rain factors rise. `verify/` mirrors the op from this section (probes
 `climate-delta`, `climate-delta-unit-map`).
 
+**The evidence pack's § 8 (issue #621 slice 4,
+`packages/engine/src/evidence/future.ts`, builder `future-1`).**
+`buildFutureFactorTable` works out every model × SSP × horizon's 24
+factors from the copy's yearly monthly aggregates per 0.25° cell
+(`heldWindowClimate`: the window mean over the years the copy holds,
+counted, so the synthetic copy's one or two years a window are said, not
+hidden; `futureFactorsComplete` is false on them). `runFutureYield` then,
+for the historical record (no op) and each case (its `climate.delta` op
+applied to both inputs through `applyScenario`), runs the baseline and the
+application (`runModel`) and reads: the applicant's dam's firm yield and its
+yield at 98 % assurance on the application (§2.13, `prepareYield` once per
+case, a constant draft), the applicant's annual assurance (Σ water years met
+÷ Σ water years over their own units in `supplyAssurance.reliability`), and
+the application's change in days below the pragmatic EWR at the outlet.
+Per SSP and horizon it gives each measure's median and range across models
+(`futureRange`; nulls left out), and says when there are fewer than 5
+models. Nothing in a run changes: § 8 builds on runs, it isn't one, so
+**`ENGINE_VERSION` stays 1.107.0** (the result records the engine that ran
+the pairs, and `checkFutureYield` names it when a re-run differs). Tested by
+the invariants above at the case level (factors of 1 give the historical
+measures to the bit; the firm yield doesn't fall as the rain factor rises)
+in `evidence/future.test.ts`.
+
 ---
 
 ## 3. Workbook quirks and suspected bugs

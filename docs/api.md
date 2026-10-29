@@ -3047,6 +3047,13 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
   methodology, limitations and errata.
+- **§ 8 Future yield** (`futureYield`, `evidence-23`, issue #621): for an
+  application run while `FUTURE_YIELD=on`, the newest stored result for its
+  two runs ([§ Future yield](#future-yield)), frozen whole with its factor
+  table and the caveat (`status: 'ok'`), or `status: 'notRun'` when none;
+  `null` while it is off and for baseline evidence. Its `futureYield` check
+  stops issue while NASA's caveat is a placeholder or a factor rests on part
+  of its window ([evidence-pack.md § Future yield](./evidence-pack.md#future-yield)).
 - **Other applications on the baseline** (`cumulative`, § 4): every other scenario that is
   submitted, or decided `licence_issued` (`approved` / `approved_with_conditions` in a pack drafted before `evidence-13`), with its
   newest run of its current ops (`inputs.scenario.opsSha256` equal to the
@@ -4398,6 +4405,26 @@ scenario (its ops on its base run's inputs), never the live model.
   `cancelled`, or the queue's own messages ([§ Jobs](#jobs)). It keeps the
   newest 5 results per run or scenario and dam.
 - Every number is **historical** (it replays the one record); the UI says so.
+
+## Future yield
+
+§ 8 of an application's evidence report (issue #621 slice 4,
+279_future_yield, [evidence-pack.md § Future yield](./evidence-pack.md#future-yield)):
+the application run and its baseline re-run under each climate model's
+monthly change factors from the data copy's NEX-GDDP-CMIP6 aggregates, by a
+background `future_yield` job. Off unless `FUTURE_YIELD=on` (deployment.md).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/runs/:runId/future-yield` | `{ nodeId? }` (strict) | `202 { jobId, job, created: true }`; the same request while it is pending is `200` with that job. `409` with `details.code`: `future_yield_off` (FUTURE_YIELD isn't on), `not_application` (not a run of a scenario on a baseline), `no_boundary` (no catchment boundary on the map), `boundary_cells` (the boundary covers no 0.25° cell of the copy's region); `409` for a forecast run or an application whose ops already hold a `climate.delta`. `400` (`details.code: 'future_yield_dam'`) when `nodeId` isn't a unit of the application with a dam above 0 m³, or, without `nodeId`, the application has no own unit with a dam or more than one. `429` with one already queued or running for you | editor |
+| GET | `/projects/:id/runs/:runId/future-yield` | – | `{ enabled, result: FutureYieldRow \| null }`: the newest stored result for the run (`{ id, baselineRunId, applicationRunId, nodeId, jobId, result, engineVersion, createdBy, createdAt }`, `result` the engine's `FutureYieldResult`). `enabled: false, result: null` while it is off. A viewer kept from the registered volumes on runs that cap or scale use to them gets `result: null, withheld: ['result']` | contributor (RLS: viewers and above, an applicant their own application's) |
+
+- The job reads the copy over the boundary's cells, works out the factor
+  table (`buildFutureFactorTable`), runs every pair (`runFutureYield`) and
+  stores one row, keeping the newest 3 per pair. It dies (no retry) when
+  the copy holds no `cmip6` model (*… the operator loads it*), when a model
+  holds no year of a window, or when the engine refuses the input. Its
+  status is `GET /projects/:id/jobs`.
 
 ## Sweeps
 

@@ -128,6 +128,20 @@ describe('reproduce:pack', () => {
 		expect((await run([good, '--no-run'])).out).not.toContain('observations:wofs');
 	});
 
+	it('runs an evidence-23 pack’s § 8 again from its frozen climate factors (climate:delta): exit 0; a case its factors don’t give fails it, exit 1', async () => {
+		await writeFile(join(dir, 'future.zip'), (await buildPackBundle(packBundleFixture(hash, { future: true }), hash)).bytes);
+		const ok = await run(['future.zip']);
+		expect(ok.code, ok.out).toBe(0);
+		expect(ok.out).toMatch(/ok\s+climate:delta\s+every pair of 12 cases \(3 models × 2 SSPs × 2 horizons\), method delta-1 run again with engine /);
+		const tampered = packBundleFixture(hash, { future: (r) => ({ ...r, historical: { ...r.historical, firmYieldM3Year: 1 } }) });
+		await writeFile(join(dir, 'future-bad.zip'), (await buildPackBundle(tampered, hash)).bytes);
+		const bad = await run(['future-bad.zip']);
+		expect(bad.code).toBe(1);
+		expect(bad.out).toMatch(/FAIL\s+climate:delta\s+the historical pair gives other values/);
+		// A pack without § 8 has no such check.
+		expect((await run([good, '--no-run'])).out).not.toContain('climate:delta');
+	});
+
 	describe('the headline board’s full-allocation pair (bundle-2, issue #523 G2)', () => {
 		it('re-derives and re-runs the pair: exit 0, both checks ok, the verdict says so', async () => {
 			await writeFile(join(dir, 'headline.zip'), (await buildPackBundle(await headlinePackFixture(hash), hash)).bytes);

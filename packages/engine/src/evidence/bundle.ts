@@ -37,7 +37,8 @@
 // reproduces the run exactly. checkPackBundle does all of it, and draws § 1's
 // locality map again from the manifest (evidence-12) and compares its SHA-256,
 // and counts the observed wet days again from the clear dates the manifest
-// freezes (evidence-21).
+// freezes (evidence-21), and runs § 8's pairs again from its frozen climate
+// change factors (evidence-23, `climate:delta`).
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { diffInputs, type RunInputsSnapshot } from '../compare';
 import { canonicalJson, seriesDigest } from '../manifest';
@@ -48,6 +49,7 @@ import { ZipArchive, zip, type ZipEntry } from '../zip';
 import { forecastRainSourceOf, runRainCredits, type RainCredit } from '../liability/disclaimer';
 import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
 import { checkDamObservations } from './damObservations';
+import { checkFutureYield, futureFactorTableError } from './future';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
 import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
 import type { ScenarioOp } from '../scenario/ops';
@@ -302,6 +304,9 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		...(m.report.damObservations
 			? ["It also classifies the observed wet days again (wet, dry, inconclusive) from the dates the manifest freezes, over the baseline run's period it records (`observations:wofs`). Those dates are Digital Earth Africa WOfS (CC BY 4.0), summed inside each dam's outline; the scenes themselves aren't in the bundle."]
 			: []),
+		...(m.report.futureYield?.status === 'ok'
+			? ["It also runs § 8's future yield again: every pair, the baseline and the application under each climate model's monthly change factors, from the factor table the manifest freezes, and checks every case and range against the manifest (`climate:delta`). The NEX-GDDP-CMIP6 files the factors came from aren't in the bundle; the manifest names each with its SHA-256."]
+			: []),
 		'Add `--expect <manifest hash>` to also require the hash the verify lookup returned, and `--no-run` to check the files without re-running.',
 		'',
 		'## Files',
@@ -385,7 +390,7 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 // ---------------------------------------------------------------------------
 
 export interface BundleCheck {
-	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `headline`, `reproduce:<run>`, `reproduce:headline`. */
+	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `headline`, `reproduce:<run>`, `reproduce:headline`, `climate:delta` (§ 8, evidence-23). */
 	id: string;
 	ok: boolean;
 	detail: string;
@@ -735,6 +740,20 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 	// The headline board's full-allocation pair (bundle-2, #523 G2): recorded in the manifest, re-derived and re-run here.
 	if (index.runs.application) {
 		headline = await checkHeadline(index, manifest, inputs.baseline?.input ?? null, inputs.application?.snapshot.scenario ?? null, opts, add);
+	}
+
+	// § 8, Future yield (evidence-23): every pair run again from the factors the manifest freezes, on the bundle's own inputs.
+	const fy = manifest.report.futureYield;
+	if (fy && fy.status === 'ok') {
+		const tableError = futureFactorTableError(fy.factors);
+		const named = `${fy.cases.length} case${fy.cases.length === 1 ? '' : 's'} (${fy.models.length} model${fy.models.length === 1 ? '' : 's'} × ${new Set(fy.cases.map((c) => c.ssp)).size} SSPs × ${new Set(fy.cases.map((c) => c.horizon)).size} horizons), method ${fy.method}`;
+		if (tableError) add('climate:delta', false, `the frozen factor table can't be read: ${tableError}`);
+		else if (opts.rerun === false) add('climate:delta', true, `the manifest freezes the factors of ${named}; not re-run`);
+		else if (!inputs.baseline?.input || !inputs.application?.input) add('climate:delta', false, 'not re-run: the baseline or application inputs failed a check above');
+		else {
+			const problems = checkFutureYield(fy, { baseline: inputs.baseline.input, application: inputs.application.input }, manifest.report.builtBy);
+			add('climate:delta', problems.length === 0, problems.join('; ') || `every pair of ${named} run again with engine ${ENGINE_VERSION} from the frozen factors gives the manifest's § 8`);
+		}
 	}
 	return result(index.pack, runEngines);
 }

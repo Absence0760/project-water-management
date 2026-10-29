@@ -255,6 +255,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// § 8 Future yield (issue #621, 279_future_yield): auth-gated like every project route.
+	it('inventories the future yield routes as auth-gated', () => {
+		for (const r of ['POST /projects/:id/runs/:runId/future-yield', 'GET /projects/:id/runs/:runId/future-yield']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Scenario sweeps (issue #53 R2, 062_scenario_sweeps): auth-gated like every project route.
 	it('inventories the sweep routes as auth-gated', () => {
 		for (const r of ['POST /projects/:id/sweeps', 'GET /projects/:id/sweeps', 'GET /projects/:id/sweeps/:sweepId']) {

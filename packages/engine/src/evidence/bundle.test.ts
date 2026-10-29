@@ -243,6 +243,33 @@ describe('buildPackBundle + checkPackBundle', () => {
 		});
 	});
 
+	describe('§ 8 future yield (evidence-23)', () => {
+		it('runs every pair again from the frozen factors; the README says so', async () => {
+			const built = await buildPackBundle(packBundleFixture(hash, { future: true }), hash);
+			const r = await checkPackBundle(built.bytes, { hash });
+			expect(failing(r)).toEqual([]);
+			expect(r.checks.find((c) => c.id === 'climate:delta')!.detail).toBe(
+				`every pair of 12 cases (3 models × 2 SSPs × 2 horizons), method delta-1 run again with engine ${ENGINE_VERSION} from the frozen factors gives the manifest's § 8`
+			);
+			const archive = await ZipArchive.open(built.bytes);
+			expect(new TextDecoder().decode(await archive.read('README.md'))).toContain('`climate:delta`');
+			// Without re-running, only the table is read.
+			expect((await checkPackBundle(built.bytes, { hash, rerun: false })).checks.find((c) => c.id === 'climate:delta')!.detail).toMatch(/freezes the factors of 12 cases.*not re-run$/);
+		});
+
+		it('a case that doesn’t follow from its factors fails climate:delta alone', async () => {
+			const tampered = packBundleFixture(hash, { future: (r) => ({ ...r, cases: r.cases.map((c, i) => (i === 0 ? { ...c, ewrDaysChange: c.ewrDaysChange + 1 } : c)) }) });
+			const r = await checkPackBundle((await buildPackBundle(tampered, hash)).bytes, { hash });
+			expect(failing(r)).toEqual(['climate:delta']);
+			expect(r.checks.find((c) => c.id === 'climate:delta')!.detail).toBe('1 of 12 cases give other values (SYN-A SSP2-4.5 mid)');
+		});
+
+		it('a pack from before evidence-23 has no such check (positive control above)', async () => {
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash), hash)).bytes, { hash, rerun: false });
+			expect(r.checks.some((c) => c.id === 'climate:delta')).toBe(false);
+		});
+	});
+
 	describe('tampering', () => {
 		it('a file changed without bundle.json: files fails', async () => {
 			const bytes = (await buildPackBundle(input, hash)).bytes;

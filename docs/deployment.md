@@ -2358,8 +2358,23 @@ anonymous bucket and write to the mirror bucket, so nothing new is granted.
 A CloudShell session ends after about 20 minutes idle (and its `/tmp` with
 it); the copy resumes where it stopped, so run it a model at a time.
 
-What the app does with it: nothing yet. Slices 3–4 compute change factors
-from it; the future yield section stays off until the copy holds `cmip6`.
+What the app does with it: the evidence pack's § 8 Future yield
+(evidence-pack.md § Future yield), behind **`FUTURE_YIELD`** (`on` | `off`,
+default `off`; anything else refuses to start a request). Off, nothing reads
+the copy's `cmip6` and no report has § 8. Set `FUTURE_YIELD=on` on the API
+**and** the job worker only once the copy holds every model's whole windows
+(step 4 below shows 30 historical years and 60 per SSP); the worker reads the
+copy through its existing `MIRROR_URL` and read grant, and the API never
+reads it, so no `infra/` change beyond the variable. Until then leave it off:
+on with a partial copy, § 8 is computed on part of each window and the
+`futureYield` check holds every pack with it from issue. It is also held
+until NASA's caveat is quoted in `FUTURE_YIELD_CAVEAT`
+(`packages/engine/src/evidence/future.ts`), a code change. Not yet wired in
+Terraform: with no variable, production stays off. Locally it is off too
+(`backend/.env.development` doesn't set it); put `FUTURE_YIELD=on` in
+`backend/.env.development.local` to try it on the committed synthetic copy
+(3 invented models, partial windows), and run the job with `pnpm
+dev:jobs:tick` or `pnpm dev:full`. The e2e servers set it on.
 
 The operator, once:
 

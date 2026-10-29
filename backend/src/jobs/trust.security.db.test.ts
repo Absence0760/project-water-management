@@ -399,6 +399,22 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			return { jobId: res.body.jobId, ref: b.runId };
 		},
 		effect: async (id) => (await asOwner('SELECT count(*)::int AS n FROM yield_result WHERE run_id = $1', [id]))[0].n
+	},
+	future_yield: {
+		// § 8 (279): an application on B's run (the farm's dam its own) over a boundary inside the synthetic copy, with FUTURE_YIELD on.
+		async queue(owner, b) {
+			vi.stubEnv('FUTURE_YIELD', 'on');
+			const box = [[21.3, -33.7], [21.4, -33.7], [21.4, -33.6], [21.3, -33.6], [21.3, -33.7]];
+			expect((await owner.call('POST', `/projects/${b.projectId}/map/features`, { kind: 'catchment_boundary', name: 'b', geometry: { type: 'Polygon', coordinates: [box] } })).status).toBe(201);
+			const sc = await owner.call('POST', `/projects/${b.projectId}/scenarios`, { name: 'dam', baseRunId: b.runId, ops: [{ op: 'node.set', nodeId: b.farmId, field: 'damCapacityM3', value: 100_000 }], ownedNodeIds: [b.farmId] });
+			expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+			const ran = await owner.call('POST', `/projects/${b.projectId}/scenarios/${sc.body.scenario.id}/runs`, {});
+			expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+			const res = await owner.call('POST', `/projects/${b.projectId}/runs/${ran.body.run.id}/future-yield`, {});
+			expect(res.status, JSON.stringify(res.body)).toBe(202);
+			return { jobId: res.body.jobId, ref: ran.body.run.id };
+		},
+		effect: async (id) => (await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [id]))[0].n
 	}
 };
 

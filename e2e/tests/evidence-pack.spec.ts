@@ -9,7 +9,11 @@
 // public reason. The reproduction bundle downloads from the pack and checks
 // on the verify page. An application's packs in the Applications tab and panel,
 // and a new version superseding the first. Synthetic catchment and invented
-// rule table, as evidence-report.spec.ts.
+// rule table, as evidence-report.spec.ts. § 8 Future yield (evidence-23,
+// issue #621) on an application: run on the committed synthetic NEX-GDDP-CMIP6
+// copy (invented models SYN-A..C, FUTURE_YIELD=on in playwright.config.ts),
+// shown with its caveat and labelled as too few models on partial windows,
+// and no pack made of it while NASA's caveat is a placeholder.
 //
 // Needs MinIO (`pnpm dev:s3:up`; CI starts it): issuing a pack stores its
 // reproduction bundle there. Locally, without it the spec is skipped and says
@@ -25,6 +29,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { dayFirst } from '../support/format.ts';
 import { box } from '../support/map.ts';
+import { runJobsTick } from '../support/jobs.ts';
 
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 const RULE = { members: 30, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: -10, wr2012MaxLevel: 'unusable', maxLowFlowBiasPct: null } };
@@ -411,4 +416,67 @@ test('an application’s packs show in the Applications tab and its panel; a new
 	await expect(pub.getByTestId('verify-verdict').getByRole('link', { name: `Verify the newer version (${second.shortCode})` })).toHaveAttribute('href', `/verify/${second.shortCode}`);
 	await expectNoViolations(pub);
 	await anon.close();
+});
+
+test('§ 8 future yield: run on the synthetic projections, shown with its caveat and labels, held from any pack while its caveat is a placeholder', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Pack future yield');
+	const baseline = await createRun(page.request, project.id, 'Baseline');
+	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the future yield test');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	// The change factors are read over the boundary's 0.25° cells, inside the fixture's invented block.
+	const b = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.3, -33.7, 0.1)] } } });
+	expect(b.status(), await b.text()).toBe(201);
+	const created = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: {
+			name: 'Upper dam 300 000 m³',
+			baseRunId: baseline,
+			ops: [
+				{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 300_000 },
+				{ op: 'node.set', nodeId: upper, field: 'damInitialPct', value: 1 }
+			],
+			ownedNodeIds: [upper]
+		}
+	});
+	expect(created.status(), await created.text()).toBe(201);
+	const scenarioId = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
+	expect(ran.status(), await ran.text()).toBe(201);
+	const app = ((await ran.json()) as { run: { id: string } }).run.id;
+
+	// Before it is run, § 8 opens with its caveat and says it isn't assessed.
+	await page.goto(`/projects/${project.id}/report?run=${app}&evidence`);
+	await ready(page);
+	await expect(page.getByRole('heading', { level: 2, name: '8. Future yield' })).toBeVisible();
+	await expect(page.getByTestId('evidence-future-na')).toContainText('Not assessed: the future yield hasn’t been run');
+
+	// Run it (the job, here, deterministically), and read the report again.
+	const queued = await page.request.post(`${API_URL}/projects/${project.id}/runs/${app}/future-yield`, { data: {} });
+	expect(queued.status(), await queued.text()).toBe(202);
+	await runJobsTick({ projects: [project.id], schedule: false });
+	await page.reload();
+	await ready(page);
+	const caveat = page.getByTestId('evidence-future-caveat');
+	await expect(caveat).toContainText('These are projections, not predictions.');
+	await expect(caveat).toContainText('bias correction and spatial disaggregation (BCSD)');
+	// NASA's words aren't quoted yet (the tech note is 404): a marked placeholder, never invented words.
+	await expect(page.getByTestId('evidence-future-caveat-placeholder')).toContainText('[Placeholder: NASA’s caveat on engineering use of NEX-GDDP-CMIP6 is to be quoted here verbatim');
+	await expect(page.getByTestId('evidence-future-few')).toContainText('Only 3 climate models (SYN-A, SYN-B, SYN-C): fewer than the 5 a range across models needs');
+	await expect(page.getByTestId('evidence-future-partial')).toContainText('rest on part of their 30-year windows');
+	const table = page.getByTestId('evidence-future-table');
+	await expect(table.getByRole('rowheader')).toHaveText(['Historical record', 'SSP2-4.5, 2036–2065', 'SSP2-4.5, 2066–2095', 'SSP5-8.5, 2036–2065', 'SSP5-8.5, 2066–2095']);
+	await expect(table.getByRole('row').nth(2).getByRole('cell').first()).toHaveText('3');
+	await expect(page.getByTestId('evidence-future-factors').getByRole('row')).toHaveCount(13);
+	// The check that holds it from issue, on the report's board.
+	await expect(page.getByTestId('evidence-checks')).toContainText('§ 8 Future yield rests on the whole method and quotes its caveat (stops issue)');
+	await expectNoViolations(page);
+
+	// Held back: no pack is made of it while the caveat is a placeholder and the windows are partial, on the page or through the API.
+	const packs = page.getByTestId('evidence-packs');
+	await expect(packs).toContainText('A pack can be made once every check that stops issue passes.');
+	await expect(packs.getByRole('button', { name: 'Create evidence pack' })).toHaveCount(0);
+	const draft = await page.request.post(`${API_URL}/projects/${project.id}/packs`, { data: { runId: app } });
+	expect(draft.status()).toBe(409);
+	const refused = (await draft.json()) as { details: { checks: { id: string }[] } };
+	expect(refused.details.checks.map((c) => c.id)).toContain('futureYield');
 });

@@ -628,11 +628,26 @@ issue. Found while building, and open:
       on #621, and pins each model's variant in `MODELS` and the register's
       table. Trigger: before the first `copy`, with the operator's go-ahead.
 - [ ] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
-      cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returns 404. Durable fix: find
-      the current tech note and quote its engineering-use caveat word for
-      word, with the URL and the date read, in data-sources.md. Trigger:
-      #621 slice 4 (the evidence pack's Future yield section) can't ship
-      without it.
+      cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returns 404. Slice 4 built
+      § 8 with a marked placeholder (`FUTURE_YIELD_CAVEAT.nasa` in
+      `packages/engine/src/evidence/future.ts`), and its `futureYield` check
+      holds every pack with § 8 from issue (no pack can even be drafted)
+      until `text`, `url` and `readOn` are filled. Durable fix: find the
+      current tech note, quote its engineering-use caveat word for word in
+      that constant and in data-sources.md, with the URL and the date read.
+      Trigger: before `FUTURE_YIELD=on` in production.
+- [ ] **§ 8 has no Run button.** The future yield is queued by
+      `POST /projects/:id/runs/:runId/future-yield` (an editor); the
+      evidence report's § 8 says *Not assessed* until then but offers no
+      control, and shows no job progress. Durable fix: a Run button and the
+      job's state in § 8 of the draft report (EvidencePage.svelte, editors
+      only, not on a frozen pack), with an e2e. Trigger: #621 round 3, beside
+      the Scenarios tab picker.
+- [ ] **FUTURE_YIELD isn't in Terraform.** Production stays off by
+      default. Durable fix: a `future_yield_enabled` variable setting
+      `FUTURE_YIELD` on the API and worker Lambdas (deployment.md
+      § NEX-GDDP-CMIP6). Trigger: the copy holds every model's whole windows
+      and the caveat is quoted.
 - [ ] **The model list's skill screen.** The ten models (one per centre) are
       provisional. Durable fix: the hydrologist checks each model's historical
       winter rainfall cycle and its year-to-year variation over the Western

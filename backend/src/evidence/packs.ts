@@ -185,12 +185,18 @@ async function packStatementFor(
 	const baseline = await loadSignableRun(db, projectId, pack.baselineRunId);
 	const application = pack.scenarioRunId ? await loadSignableRun(db, projectId, pack.scenarioRunId) : null;
 	if (!baseline || (pack.scenarioRunId && !application)) throw new ApiError(404, 'the pack’s runs are gone, or you can’t see them');
+	// § 8 (evidence-23): a pack with a future yield result adds its confirmation (pack-signoff-2).
+	const { rows: fy } = await db.query<{ ok: boolean }>(
+		`SELECT coalesce(manifest->'report'->'futureYield'->>'status' = 'ok', false) AS ok FROM evidence_pack WHERE project_id = $1 AND id = $2`,
+		[projectId, pack.id]
+	);
 	const statement = packSignoffStatement({
 		id: pack.id,
 		version: pack.version,
 		manifestSha256: pack.manifestSha256,
 		baseline: baseline.run,
-		application: application?.run ?? null
+		application: application?.run ?? null,
+		futureYield: fy[0]?.ok === true
 	});
 	const runs = [baseline, ...(application ? [application] : [])];
 	const blocked = runs.some((r) => r.legacy) ? LEGACY : runs.some((r) => r.forecast) ? FORECAST_NOT_SIGNABLE : null;
@@ -306,7 +312,8 @@ async function specialistPack(db: Db, projectId: string, packId: string): Promis
 		version: Number(p.version),
 		manifestSha256: String(p.manifestSha256),
 		baseline: baseline.run,
-		application: application?.run ?? null
+		application: application?.run ?? null,
+		futureYield: p.futureYield === true
 	});
 	const all = [baseline, ...(application ? [application] : [])];
 	return {
