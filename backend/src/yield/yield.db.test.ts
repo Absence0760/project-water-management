@@ -208,6 +208,8 @@ describe('POST /projects/:id/yield/:jobId/cancel', () => {
 		expect(res.status).toBe(200);
 		expect(res.body).toEqual({ status: 'dead', cancelled: true });
 		expect(await job(jobId)).toMatchObject({ status: 'dead', last_error: 'cancelled' });
+		// Again: already dead, so this call changed nothing (285_cancel_job_outcome).
+		expect((await owner.call('POST', `/projects/${c.projectId}/yield/${jobId}/cancel`)).body).toEqual({ status: 'dead', cancelled: false });
 		await tick();
 		expect((await owner.call('GET', `/projects/${c.projectId}/yield?runId=${c.runId}`)).body.results).toEqual([]);
 		expect((await owner.call('POST', `/projects/${c.projectId}/yield/${crypto.randomUUID()}/cancel`)).status).toBe(404);
@@ -227,6 +229,8 @@ describe('POST /projects/:id/yield/:jobId/cancel', () => {
 		expect(await go()).toBe(true);
 		expect((await owner.call('POST', `/projects/${c.projectId}/yield/${jobId}/cancel`)).body).toEqual({ status: 'running', cancelled: true });
 		expect(await go()).toBe(false);
+		// Again: already flagged, so this call changed nothing.
+		expect((await owner.call('POST', `/projects/${c.projectId}/yield/${jobId}/cancel`)).body).toEqual({ status: 'running', cancelled: false });
 		await asOwner(`UPDATE job SET status = 'dead', finished_at = now(), locked_until = NULL, lease_token = NULL WHERE id = $1`, [jobId]);
 	});
 });

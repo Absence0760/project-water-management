@@ -14,11 +14,25 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
 
-// The engine as is, with runFutureYield watched: a job cancelled before its runs never starts them.
-const runs = vi.hoisted(() => ({ calls: 0 }));
+// The engine as is, with runFutureYieldAsync watched: a job cancelled before its runs never starts them,
+// and `beforeReport` runs before the handler's report after each case (a cancel there, deterministically, no sleeps).
+const runs = vi.hoisted(() => ({ calls: 0, dones: [] as number[], beforeReport: null as null | ((done: number) => Promise<void>) }));
 vi.mock('@water-management/engine', async (orig) => {
 	const real = await orig<typeof import('@water-management/engine')>();
-	return { ...real, runFutureYield: (...a: Parameters<typeof real.runFutureYield>) => (runs.calls++, real.runFutureYield(...a)) };
+	return {
+		...real,
+		runFutureYieldAsync: (args: Parameters<typeof real.runFutureYieldAsync>[0]) => (
+			runs.calls++,
+			real.runFutureYieldAsync({
+				...args,
+				onCase: async (done, total) => {
+					runs.dones.push(done);
+					await runs.beforeReport?.(done);
+					return args.onCase(done, total);
+				}
+			})
+		)
+	};
 });
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -39,7 +53,10 @@ const get = (u: User, runId: string) => u.call('GET', `/projects/${projectId}/ru
 const cancel = (u: User, runId: string, jobId: string, project = projectId) => u.call('POST', `/projects/${project}/runs/${runId}/future-yield/${jobId}/cancel`, {});
 const sq = (lon: number, lat: number, d: number) => [[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]];
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+	vi.unstubAllEnvs();
+	runs.beforeReport = null;
+});
 
 beforeAll(async () => {
 	[owner, viewer, stranger, contributor] = await Promise.all([signUp('FyOwner'), signUp('FyViewer'), signUp('FyStranger'), signUp('FyContributor')]);
@@ -168,6 +185,8 @@ describe('§ 8 future yield', () => {
 		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
 		expect(ok.body).toEqual({ status: 'dead', cancelled: true });
 		expect(await job(jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		// Again: already dead, so this call changed nothing (285_cancel_job_outcome).
+		expect((await cancel(owner, appRun, jobId)).body).toEqual({ status: 'dead', cancelled: false });
 		expect((await get(viewer, appRun)).body.job).toMatchObject({ id: jobId, status: 'dead', error: 'cancelled' });
 		// The next request is a new job.
 		const again = await post(owner, appRun);
@@ -194,8 +213,34 @@ describe('§ 8 future yield', () => {
 		);
 		expect((await cancel(owner, appRun, res.body.jobId)).body).toEqual({ status: 'running', cancelled: true });
 		expect(await asOwner('SELECT status, cancel_requested_at IS NOT NULL AS flagged FROM job WHERE id = $1', [res.body.jobId])).toEqual([{ status: 'running', flagged: true }]);
+		// Again: already flagged, so this call changed nothing.
+		expect((await cancel(owner, appRun, res.body.jobId)).body).toEqual({ status: 'running', cancelled: false });
 		// Leave nothing running for the next test's tick.
 		await asOwner(`UPDATE job SET status = 'dead', finished_at = now(), last_error = 'cancelled', locked_until = NULL, lease_token = NULL WHERE id = $1`, [res.body.jobId]);
+	});
+
+	it('stops between cases when cancelled mid-run: no further case runs, nothing is stored, and its progress was real', async () => {
+		vi.stubEnv('FUTURE_YIELD', 'on');
+		const res = await post(owner, appRun);
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const jobId = res.body.jobId as string;
+		const { n } = ((await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [appRun])) as { n: number }[])[0]!;
+		const seen: { done: number; progress: number }[] = [];
+		runs.dones = [];
+		runs.beforeReport = async (done) => {
+			// The progress the previous case reported, as the board reads it.
+			seen.push({ done, progress: ((await asOwner('SELECT progress FROM job WHERE id = $1', [jobId])) as { progress: number }[])[0]!.progress });
+			// After the second case (done 3 of 13), cancel as an editor would, through the route.
+			if (done === 3) expect((await cancel(owner, appRun, jobId)).body).toEqual({ status: 'running', cancelled: true });
+		};
+		await tick();
+		expect(await job(jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		// The historical pair and two cases ran; the third never started.
+		expect(runs.dones).toEqual([1, 2, 3]);
+		// Real progress: after the copy's read (10 %), then 10 % + 90 % × done / 13 after each.
+		expect(seen.map((x) => x.progress)).toEqual([10, Math.round(10 + (90 * 1) / 13), Math.round(10 + (90 * 2) / 13)]);
+		expect(await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [appRun])).toEqual([{ n }]);
+		expect(await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE job_id = $1', [jobId])).toEqual([{ n: 0 }]);
 	});
 
 	it('dies, saying why, when the data copy holds no projections yet', async () => {

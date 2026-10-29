@@ -769,18 +769,20 @@ plan stays on the issue. Found while building:
       with the hydrologist whether a median case belongs in the factor table
       (an engine method question). Trigger: the hydrologist's screen of the
       ten models.
-- [ ] **A cancel can't stop § 8's runs once they've started.** `runFutureYield`
+- [x] **A cancel can't stop § 8's runs once they've started.** `runFutureYield`
       and its `onCase` are synchronous, so the handler can't check for a
       cancel between cases; a cancel during the ~40 runs takes effect after
       them, before the write. Durable fix: an engine variant that yields
       between cases, so the handler checks after each case and reports real
       progress. Trigger: the next engine round, before `FUTURE_YIELD=on` with
       ten models.
-- [ ] **A repeated cancel says `cancelled: true` for a job already dead.**
+      **Done (follow-ups, T):** engine `futureYieldSteps` (generator) under `runFutureYield` and `runFutureYieldAsync`, same result; both jobs check after each model read and each case, with real progress.
+- [x] **A repeated cancel says `cancelled: true` for a job already dead.**
       `cancelled` is `status === 'dead' || 'running'` on the yield, future
       yield and climate factors routes. Durable fix: `app_cancel_job` reports
       whether this call changed anything, and the three routes use it.
       Trigger: the next change to `app_cancel_job`.
+      **Done (follow-ups, T):** `app_cancel_job_outcome` (285) says whether the call changed the job; `app_cancel_job` wraps it; the three routes answer `cancelled` from it.
 - [x] **A dam near the 85 % bar can flip radar on and off.** Its `s1` rows
       are withheld and reloaded each time its agreement crosses the bar.
       Durable fix: hysteresis (stop below 80 %, start at 85 %) if the

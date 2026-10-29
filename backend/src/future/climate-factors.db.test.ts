@@ -10,6 +10,22 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
 
+// The copy's read as is, with each model's report watched: `beforeReport` runs before the handler's report after
+// each model (a cancel there, deterministically, no sleeps).
+const reads = vi.hoisted(() => ({ dones: [] as number[], beforeReport: null as null | ((done: number) => Promise<void>) }));
+vi.mock('./copy.js', async (orig) => {
+	const real = await orig<typeof import('./copy.js')>();
+	return {
+		...real,
+		readFactorTable: (store: Parameters<typeof real.readFactorTable>[0], cells: Parameters<typeof real.readFactorTable>[1], onModel?: Parameters<typeof real.readFactorTable>[2]) =>
+			real.readFactorTable(store, cells, async (done, total) => {
+				reads.dones.push(done);
+				await reads.beforeReport?.(done);
+				await onModel?.(done, total);
+			})
+	};
+});
+
 type User = Awaited<ReturnType<typeof signUp>>;
 
 let owner: User;
@@ -26,7 +42,10 @@ const get = (u: User) => u.call('GET', `/projects/${projectId}/climate-factors`)
 const cancel = (u: User, jobId: string, project = projectId) => u.call('POST', `/projects/${project}/climate-factors/${jobId}/cancel`, {});
 const sq = (lon: number, lat: number, d: number) => [[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]];
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+	vi.unstubAllEnvs();
+	reads.beforeReport = null;
+});
 
 beforeAll(async () => {
 	[owner, viewer, stranger, contributor] = await Promise.all([signUp('CfOwner'), signUp('CfViewer'), signUp('CfStranger'), signUp('CfContributor')]);
@@ -122,6 +141,8 @@ describe('future climate factors', () => {
 		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
 		expect(ok.body).toEqual({ status: 'dead', cancelled: true });
 		expect(await job(jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		// Again: already dead, so this call changed nothing (285_cancel_job_outcome).
+		expect((await cancel(owner, jobId)).body).toEqual({ status: 'dead', cancelled: false });
 		expect((await get(viewer)).body.job).toMatchObject({ id: jobId, status: 'dead', error: 'cancelled' });
 		// Cancelled while it read the copy: it stores nothing.
 		const again = await post(owner);
@@ -130,6 +151,33 @@ describe('future climate factors', () => {
 		await tick();
 		expect(await job(again.body.jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
 		expect(await asOwner('SELECT count(*)::int AS n FROM climate_factors WHERE job_id = $1', [again.body.jobId])).toEqual([{ n: 0 }]);
+	});
+
+	it('stops between models when cancelled mid-read: the next model is never read, nothing is stored', async () => {
+		vi.stubEnv('FUTURE_YIELD', 'on');
+		const res = await post(owner);
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const jobId = res.body.jobId as string;
+		reads.dones = [];
+		// After the first of the copy's three models, cancel as an editor would, through the route; a second cancel changes nothing.
+		reads.beforeReport = async (done) => {
+			if (done !== 1) return;
+			expect((await cancel(owner, jobId)).body).toEqual({ status: 'running', cancelled: true });
+			expect((await cancel(owner, jobId)).body).toEqual({ status: 'running', cancelled: false });
+		};
+		await tick();
+		expect(await job(jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		expect(reads.dones).toEqual([1]);
+		expect(await asOwner('SELECT count(*)::int AS n FROM climate_factors WHERE job_id = $1', [jobId])).toEqual([{ n: 0 }]);
+		// Positive control: uncancelled, it reads all three and stores the table.
+		reads.beforeReport = null;
+		reads.dones = [];
+		const ok = await post(owner);
+		expect(ok.status, JSON.stringify(ok.body)).toBe(202);
+		await tick();
+		expect(await job(ok.body.jobId)).toEqual({ status: 'done', last_error: null });
+		expect(reads.dones).toEqual([1, 2, 3]);
+		expect(await asOwner('SELECT count(*)::int AS n FROM climate_factors WHERE job_id = $1', [ok.body.jobId])).toEqual([{ n: 1 }]);
 	});
 
 	it('dies, saying why, when the boundary is gone by the time it runs', async () => {
