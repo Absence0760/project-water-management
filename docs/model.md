@@ -9887,7 +9887,7 @@ the ensemble's members). Each change is a scenario op (`applyScenario`,
 
 | Factor | Low / high (default) | What changes | Skipped when |
 | --- | --- | --- | --- |
-| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; under per-unit rain, engine ≥ 1.78.0, the units' own records too, with the unit MAPs and the gauge MAP × the same factor, §2.4h; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; the units' own records, engine ≥ 1.78.0, §2.4h; through `series.scale`), and from engine 1.108.0 every other rain record (each rainfall station's record and the CHIRPS at it, §2.4i, the reference unit's CHIRPS cell) and **every MAP** × the same factor, in any rain mode: each unit's, the gauge MAP, the stations' catchment MAP and each station's (`scaleRainMaps`, the one climate.delta uses, §2.17). So CHIRPS's bias-correction factors and every MAP ratio (a unit levelled to the gauge, an area to its station) are unchanged, the rain on every area moves by the factor exactly once (rain × 1.1 runs as climate.delta at a flat 1.1, tested), and the whole forcing moves: runoff, effective rain on the crops, rain on the dams. Up to 1.107.0 only the units' MAPs and the gauge MAP moved, and only under per-unit rain, while the stations' records stayed: a unit read from its station still moved once (its MAP ratio did), but the catchment's station read at an entered catchment MAP didn't move under per-unit rain, nor any catchment station under Fragmentation ([ER-31](./engine-errata.md)) | there is no rain |
 | Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
 | Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
 | Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it. On a full-allocation run, 0.7 and 1.3 × the registered volume (engine ≥ 1.70.0, §2.12a; before, both ends were the central run) | no unit or user has demand over the reporting window |
@@ -11256,7 +11256,10 @@ them there and here together.
     unit's demand objects (`object_demand@…`, `object_supplied@…`), which
     aren't irrigation. This reads e as the run applied it (the unit's blended
     e*, §2.3 item 6) without recomputing it, and leaves out the application
-    losses, which a satellite over the field doesn't see as crop ET. `supplied`
+    losses, which a satellite over the field doesn't see as crop ET. The
+    identity holds because `demand` is F ÷ e* + Σ object demand every day,
+    unrestricted, under a drought restriction and a short dam alike
+    (`packages/engine/src/run.irrigationReachingCrop.test.ts`). `supplied`
     itself (the abstraction) is reported beside it for reference;
   - **crop ET as the run supplied it** = effective rain + the irrigation
     reaching the crop. Not the requirement: a dry dam, the drought

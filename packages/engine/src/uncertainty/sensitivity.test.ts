@@ -4,11 +4,13 @@
 // threshold. A synthetic catchment throughout.
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
-import type { CropArea, CropDef, ModelInput, NetworkNode } from '../project';
+import { stationSeriesKey, type CropArea, type CropDef, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
 import { blankEwrRuleTable } from '../reserve/rules';
 import { ENGINE_VERSION } from '../version';
-import { sensitivityRuns } from './sensitivity';
+import { runModelWithoutChecks } from '../run';
+import { applyScenario } from '../scenario/overrides';
+import { sensitivityPlan, sensitivityRuns } from './sensitivity';
 import { SENSITIVITY_RANGES, SENSITIVITY_THRESHOLDS, siteVerdict, type SensitivityResult, type SensitivitySite, type SiteValues } from './sensitivityVerdict';
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -170,6 +172,115 @@ describe('sensitivityRuns: each factor moves the EWR results the right way', () 
 		expect(v.min).toBe(Math.min(...all));
 		expect(v.max).toBe(Math.max(...all));
 		expect(v.central).toBe(c.daysMet);
+	});
+});
+
+/**
+ * One land unit A (MAP 800 mm, a crop) above the gauge, read from rainfall
+ * station S (MAP 600 mm; days 100–129 blank, patched from station T, MAP
+ * 500 mm, then CHIRPS): per-unit rain with S on A, optionally S as the
+ * catchment's station too at an entered catchment MAP (820 mm); or
+ * Fragmentation with S as the catchment's station.
+ */
+function stationed(mode: 'unit' | 'unitAndCatchment' | 'fragmentation'): ModelInput {
+	const start = '2015-01-01';
+	const days = toEpochDay('2021-01-01') - toEpochDay(start);
+	const rainOf = (k: number, phase = 0) => Array.from({ length: days }, (_, i) => ((i + phase) % 13 === 0 ? 30 * k : (i + phase) % 4 === 0 ? 2 * k : 0));
+	const s: (number | null)[] = rainOf(1.6, 1);
+	for (let t = 100; t < 130; t++) s[t] = null;
+	const assignment = { stationId: 'S', patch: [{ source: 'station', stationId: 'T' }, { source: 'chirps' }] };
+	const perUnit = mode !== 'fragmentation';
+	return {
+		settings: {
+			runoffModel: 'gr4j',
+			apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] as never,
+			gr4j: { x1: 420, x2: 0, x3: 85, x4: 2.1, warmupDays: 365 },
+			ewrPragmaticM3PerDay: new Array(12).fill(3000) as never,
+			...(perUnit ? { unitRain: { mode: 'perUnit', gaugeMapMm: 650, gaugeMapSource: 'invented' } } : {}),
+			rainStations: {
+				...(perUnit ? { units: { A: assignment } } : {}),
+				...(mode !== 'unit' ? { catchment: assignment, catchmentMapMm: 820, catchmentMapSource: 'invented' } : {}),
+				sites: { S: { unitId: 'A' }, T: { unitId: 'A' } }
+			} as never
+		},
+		model: {
+			nodes: [node({ id: 'G', name: 'Gauge', kind: 'gauge' }), node({ id: 'A', name: 'Unit A', downstreamNodeId: 'G', areaKm2: 10, mapMm: 800, mapSource: 'invented' } as Partial<NetworkNode>)],
+			crops: [crop],
+			cropAreas: [{ nodeId: 'A', cropId: 'c', areaM2: 2e5 }],
+			transfers: []
+		},
+		series: {
+			rain_catchment_mm: { startDate: start, values: rainOf(1) },
+			rain_chirps_mm: { startDate: start, values: rainOf(0.7, 2) },
+			'rain_chirps_mm@A': { startDate: start, values: rainOf(0.8, 1) },
+			[stationSeriesKey('S')]: { startDate: start, values: s },
+			[stationSeriesKey('T')]: { startDate: start, values: rainOf(1.3, 1) }
+		},
+		stations: {
+			S: { name: 'Station S', mapMm: 600, mapSource: 'invented', lat: null, lon: null },
+			T: { name: 'Station T', mapMm: 500, mapSource: 'invented', lat: null, lon: null }
+		}
+	};
+}
+
+describe('sensitivityRuns: the rain factor under rainfall stations (§2.4i) moves the rain once', () => {
+	// A unit levelled to its station reads station × (unit MAP ÷ station MAP). Scaling the station's record and
+	// the unit's MAP but not the station's MAP would count the factor twice; scaling only the record (or only
+	// the MAP) once. Rain × 1.1 must put 1.1 × the rain on every area, day by day, exactly as climate.delta's
+	// flat factor of 1.1 does (it scales every rain series and every MAP by one factor, §2.17).
+	const high = (input: ModelInput) => {
+		const central = runModelWithoutChecks(input);
+		const plan = sensitivityPlan(input, central, SENSITIVITY_RANGES).plans.find((p) => p.factor === 'rain')!;
+		const applied = applyScenario(input, plan.high.ops);
+		expect(applied.problems).toEqual([]);
+		return { central, plan, out: runModelWithoutChecks(plan.high.adjust ? plan.high.adjust(applied.input) : applied.input) };
+	};
+	const climate = (input: ModelInput) =>
+		runModelWithoutChecks(applyScenario(input, [{ op: 'climate.delta', rainFactorByMonth: new Array(12).fill(1.1), evapFactorByMonth: new Array(12).fill(1), label: 'flat', source: 'test' }]).input);
+	const col = (out: ReturnType<typeof runModelWithoutChecks>, key: string, nodeId: string | null = null) => out.series.find((s) => s.nodeId === nodeId && s.key === key)?.values;
+	const scaledBy = (a: readonly (number | null)[] | undefined, b: readonly (number | null)[] | undefined, k: number) => {
+		expect(a && b).toBeTruthy();
+		expect(b!.length).toBe(a!.length);
+		let moved = 0;
+		a!.forEach((v, t) => {
+			expect(b![t]! - k * (v ?? 0)).toBeCloseTo(0, 9);
+			if ((v ?? 0) > 0) moved++;
+		});
+		expect(moved).toBeGreaterThan(100);
+	};
+	const sameAs = (x: ReturnType<typeof runModelWithoutChecks>, y: ReturnType<typeof runModelWithoutChecks>) => {
+		expect(x.series.map((s) => `${s.nodeId}:${s.key}`)).toEqual(y.series.map((s) => `${s.nodeId}:${s.key}`));
+		x.series.forEach((s, i) => s.values.forEach((v, t) => expect(Math.abs((v ?? 0) - (y.series[i]!.values[t] ?? 0))).toBeLessThanOrEqual(1e-9 * Math.max(1, Math.abs(v ?? 0)))));
+	};
+
+	it("a unit read from its station: the unit's rain × 1.1 on station days and patched days alike, no double count", () => {
+		const input = stationed('unit');
+		const { central, plan, out } = high(input);
+		// The probe that settled it: S's record scaled with S's MAP, the unit's MAP scaled, the ratio 800/600 kept.
+		expect(plan.notes).toEqual(['5 rain series scaled', '4 MAPs scaled with them']);
+		scaledBy(col(central, 'rain_unit', 'A'), col(out, 'rain_unit', 'A'), 1.1);
+		expect(out.summary.unitRain?.units.find((u) => u.nodeId === 'A')).toBeTruthy();
+		sameAs(out, climate(input));
+	});
+
+	it("per-unit rain with the catchment's station at an entered catchment MAP: the catchment forcing (demand, dams) × 1.1 too", () => {
+		// Up to engine 1.107.0 the entered catchment MAP and S's record stayed, so rain_final didn't move (ER-31).
+		const input = stationed('unitAndCatchment');
+		const { central, out } = high(input);
+		scaledBy(col(central, 'rain_unit', 'A'), col(out, 'rain_unit', 'A'), 1.1);
+		scaledBy(col(central, 'rain_final'), col(out, 'rain_final'), 1.1);
+		sameAs(out, climate(input));
+	});
+
+	it("Fragmentation with the catchment's station: GR4J's rain × 1.1", () => {
+		// Up to engine 1.107.0 nothing the station path reads moved, so the rain factor changed nothing (ER-31).
+		const input = stationed('fragmentation');
+		const { central, out } = high(input);
+		scaledBy(col(central, 'rain_used'), col(out, 'rain_used'), 1.1);
+		scaledBy(col(central, 'rain_final'), col(out, 'rain_final'), 1.1);
+		const total = (o: typeof out) => (col(o, 'natural_flow') ?? []).reduce<number>((a, v) => a + (v ?? 0), 0);
+		expect(total(out)).toBeGreaterThan(total(central) * 1.1);
+		sameAs(out, climate(input));
 	});
 });
 

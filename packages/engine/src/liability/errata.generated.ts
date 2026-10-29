@@ -302,5 +302,15 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"appliesWhen": "Runoff from each unit's own rain (settings.unitRain perUnit) with an uncertainty ensemble that varies the rain source (its CHIRPS-only members), and a unit on the gauge MAP ratio (rule 2, or a unit gauge or CHIRPS whose gaps it fills) or one whose own CHIRPS the catchment's §2.4b factors level",
 		"summary": "The CHIRPS-only members re-derived each unit's rule without the gauges: a unit on the gauge MAP ratio ran on the catchment CHIRPS without the ratio, and a unit levelled by the §2.4b factors ran its CHIRPS raw, so those members' rain on such a unit was off by the ratio or the factors, and the ensemble's spread carried that",
 		"source": "model.md §2.4h, §2.10e"
+	},
+	{
+		"id": "ER-31",
+		"keyedOn": "run",
+		"firstAffected": "1.91.0",
+		"fixedIn": "1.108.0",
+		"severity": "Low",
+		"appliesWhen": "A sensitivity run (rain × 0.9 / × 1.1) on a project with a rainfall station on the catchment (settings.rainStations.catchment), under Fragmentation, or under per-unit rain with an entered catchment MAP",
+		"summary": "The rain range left the station's record and the MAPs its ratio reads unscaled, so the catchment rain didn't move: under Fragmentation GR4J's rain and the whole run stayed at the central case, and under per-unit rain the catchment forcing (effective rain on the crops, rain on the dams) did, so the range under-reported the effect of rain. A unit read from its own station was right",
+		"source": "model.md §2.10g"
 	}
 ];

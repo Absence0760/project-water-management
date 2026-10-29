@@ -570,7 +570,7 @@ describe('scenarios and sensitivity reach a unit’s own rain', () => {
 		expect(r.input.series['rain_catchment_mm@A']!.values[0]).toBe((input.series['rain_catchment_mm@A']!.values[0] as number) * 2);
 		expect(applyScenario(input, [{ op: 'series.scale', kind: 'rain_chirps_mm@nowhere' as never, factor: 2 }]).problems).toHaveLength(1);
 		const rain = sensitivityRuns(input).factors.find((f) => f.factor === 'rain')!;
-		expect(rain.notes).toEqual(['4 rain series scaled', '3 unit MAPs scaled with them']);
+		expect(rain.notes).toEqual(['4 rain series scaled', '4 MAPs scaled with them']); // the 3 units' and the gauge MAP (engine 1.108.0)
 	});
 
 	it('the rain sensitivity moves every unit’s rain by its factor, a MAP-levelled CHIRPS included', () => {

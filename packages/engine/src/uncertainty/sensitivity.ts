@@ -19,10 +19,11 @@
 //
 // Pure and deterministic (no sampling): the same input and options give the
 // same result. Nothing here is stored; it is a live diagnostic.
-import { parseUnitRainSeriesKey, referenceCellSeriesKey, type DailySeries, type ModelInput, type ModelOutput, type UnitRainSeriesKey } from '../project';
+import { parseUnitRainSeriesKey, type DailySeries, type ModelInput, type ModelOutput, type UnitRainSeriesKey } from '../project';
 import { prepareRun } from '../prepare';
 import { runModelWithoutChecks } from '../run';
 import { applyScenario } from '../scenario/overrides';
+import { isClimateRainKey, scaleRainMaps } from '../scenario/climate';
 import type { ScenarioOp, ScalableSeriesKind } from '../scenario/ops';
 import { ENGINE_VERSION } from '../version';
 import {
@@ -84,7 +85,7 @@ interface PlanCase {
 	setting: number;
 	label: string;
 	ops: ScenarioOp[];
-	/** A change no scenario op makes, applied after the ops (the units' MAPs under per-unit rain, engine ≥ 1.78.0). */
+	/** A change no scenario op makes, applied after the ops (the stations' rain and every MAP, engine ≥ 1.108.0; the units' MAPs under per-unit rain, 1.78.0–1.107.0). */
 	adjust?: (input: ModelInput) => ModelInput;
 }
 
@@ -117,37 +118,42 @@ export function sensitivityPlan(
 	});
 
 	// Rain: every rain series the project has, the same factor, so CHIRPS's bias-correction factors are unchanged.
-	// A land unit's own rain records too (engine ≥ 1.78.0, docs/model.md §2.4h), so a per-unit run's rain moves with the rest.
-	// A unit's CHIRPS levelled by its MAP would cancel the scaling (its mean annual rain scales with it), so under per-unit
-	// rain the units' MAPs and the gauge's MAP scale by the same factor: every rule's rain then moves by it, and the ratio
-	// unit MAP ÷ gauge MAP stays put.
-	const perUnit = s.unitRain?.mode === 'perUnit';
-	const unitKeys = perUnit
-		? (Object.keys(input.series ?? {})
-				.filter((k) => parseUnitRainSeriesKey(k) !== null)
-				.sort() as UnitRainSeriesKey[])
-		: [];
-	const rainKinds = [...RAIN_KINDS, ...unitKeys].filter((k) => (input.series as Record<string, DailySeries | undefined>)?.[k]?.values.some((v) => typeof v === 'number' && v > 0));
-	if (rainKinds.length) {
-		const maps = perUnit ? nodes.filter((n) => typeof n.mapMm === 'number').length : 0;
-		// The reference unit's CHIRPS cell (engine ≥ 1.80.0, §2.4h) scales with the gauge it is fitted against, so the reference factors stay put.
-		const cellKey = perUnit && s.unitRain?.reference ? referenceCellSeriesKey(s.unitRain.reference.unitId) : null;
-		const scaleCell = (k: number, series: ModelInput['series']): ModelInput['series'] => {
-			const c = cellKey ? (series as Record<string, DailySeries | undefined>)[cellKey] : undefined;
-			return c ? ({ ...series, [cellKey!]: { ...c, values: c.values.map((v) => (v === null || v === undefined ? v : v * k)) } } as ModelInput['series']) : series;
+	// The catchment's series and every land unit's own (§2.4h) go through series.scale ops; the rest of the rain
+	// (each rainfall station's record and the CHIRPS at it, §2.4i, the reference unit's CHIRPS cell, §2.4h) and
+	// every MAP (each unit's, the gauge's, the catchment's of the stations, each station's: scaleRainMaps, as
+	// climate.delta scales them, §2.17) move in `adjust`, in every rain mode. Every MAP ratio (a unit levelled to
+	// the gauge, an area to its station) then stays put and the rain on every area moves by the factor exactly
+	// once. Up to engine 1.107.0 only the units' and the gauge's MAPs moved, and only under per-unit rain, while
+	// the stations' records stayed: a catchment station read at an entered catchment MAP, or any catchment station
+	// under Fragmentation, didn’t move at all (engine-errata.md ER-31).
+	const unitKeys = (Object.keys(input.series ?? {}).filter((k) => parseUnitRainSeriesKey(k) !== null).sort() as UnitRainSeriesKey[]);
+	const hasRain = (k: string) => (input.series as Record<string, DailySeries | undefined>)?.[k]?.values.some((v) => typeof v === 'number' && v > 0) ?? false;
+	const rainKinds = [...RAIN_KINDS, ...unitKeys].filter(hasRain);
+	const opKeys = new Set<string>([...RAIN_KINDS, ...unitKeys]);
+	const otherKeys = Object.keys(input.series ?? {}).filter((k) => isClimateRainKey(k) && !opKeys.has(k)).sort();
+	const otherRain = otherKeys.filter(hasRain);
+	if (rainKinds.length || otherRain.length) {
+		const probe: ModelInput = { ...input, settings: { ...input.settings }, model: { ...input.model, nodes: input.model.nodes.map((n) => ({ ...n })) }, ...(input.stations ? { stations: { ...input.stations } } : {}) };
+		const maps = scaleRainMaps(probe, 2);
+		const scaleRest = (k: number) => (x: ModelInput): ModelInput => {
+			const series = { ...(x.series as Record<string, DailySeries>) };
+			for (const key of otherKeys) {
+				const s = series[key];
+				if (s && Array.isArray(s.values)) series[key] = { ...s, values: s.values.map((v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v * k : v)) };
+			}
+			const d: ModelInput = { ...x, series: series as ModelInput['series'], settings: { ...x.settings }, model: { ...x.model, nodes: x.model.nodes.map((n) => ({ ...n })) }, ...(x.stations ? { stations: { ...x.stations } } : {}) };
+			scaleRainMaps(d, k);
+			return d;
 		};
-		const scaleMaps = (k: number) => (x: ModelInput): ModelInput => ({
-			...x,
-			series: scaleCell(k, x.series),
-			settings: { ...x.settings, unitRain: { ...x.settings.unitRain!, ...(typeof x.settings.unitRain?.gaugeMapMm === 'number' ? { gaugeMapMm: x.settings.unitRain.gaugeMapMm * k } : {}) } },
-			model: { ...x.model, nodes: x.model.nodes.map((n) => (typeof n.mapMm === 'number' ? { ...n, mapMm: n.mapMm * k } : n)) }
-		});
 		plans.push(
 			scaled(
 				'rain',
 				(k) => rainKinds.map((kind) => ({ op: 'series.scale', kind, factor: k }) as ScenarioOp),
-				[`${rainKinds.length} rain series scaled`, ...(maps ? [`${maps} unit MAP${maps === 1 ? '' : 's'} scaled with them`] : [])],
-				perUnit ? scaleMaps : undefined
+				[
+					`${rainKinds.length + otherRain.length} rain series scaled`,
+					...(maps ? [`${maps} MAP${maps === 1 ? '' : 's'} scaled with them`] : [])
+				],
+				scaleRest
 			)
 		);
 	} else skipped.push({ factor: 'rain', reason: 'the project has no rain' });

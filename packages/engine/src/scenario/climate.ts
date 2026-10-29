@@ -116,6 +116,47 @@ export function annualRainFactor(series: ModelInput['series'], f: readonly numbe
 const scaleMap = (v: unknown, k: number): unknown => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(MAP_MM_MAX, v * k) : v);
 
 /**
+ * Every MAP of `d` × `k`, in place (its settings, model nodes and stations
+ * must be the caller's own copies; the setting objects and stations are
+ * replaced, a node's mapMm is written): each land unit's, the gauge MAP of
+ * per-unit rain, the catchment MAP of the rainfall stations and each
+ * station's, each capped at MAP_MM_MAX. climate.delta (by its annual rain
+ * factor) and the sensitivity runs' rain factor (engine 1.108.0, §2.10g)
+ * both scale them so, with every rain series, so every MAP ratio (a unit's
+ * levelling to the gauge, a station's to its area, §2.4h, §2.4i) stays as it
+ * was and the rain moves by the factor once. Returns how many it scaled.
+ */
+export function scaleRainMaps(d: ModelInput, k: number): number {
+	let maps = 0;
+	for (const n of d.model.nodes) {
+		if (typeof n.mapMm === 'number' && n.mapMm > 0) {
+			n.mapMm = scaleMap(n.mapMm, k) as number;
+			maps++;
+		}
+	}
+	const st = d.settings as Record<string, unknown>;
+	const ur = st.unitRain as Record<string, unknown> | null | undefined;
+	if (ur && typeof ur === 'object' && typeof ur.gaugeMapMm === 'number') {
+		st.unitRain = { ...ur, gaugeMapMm: scaleMap(ur.gaugeMapMm, k) };
+		maps++;
+	}
+	const rs = st.rainStations as Record<string, unknown> | null | undefined;
+	if (rs && typeof rs === 'object' && typeof rs.catchmentMapMm === 'number') {
+		st.rainStations = { ...rs, catchmentMapMm: scaleMap(rs.catchmentMapMm, k) };
+		maps++;
+	}
+	if (d.stations) {
+		d.stations = Object.fromEntries(
+			Object.entries(d.stations).map(([id, s]) => {
+				if (s && typeof s.mapMm === 'number') maps++;
+				return [id, s && typeof s.mapMm === 'number' ? { ...s, mapMm: scaleMap(s.mapMm, k) as number } : s];
+			})
+		);
+	}
+	return maps;
+}
+
+/**
  * Apply a climate.delta op to `d` in place (its settings, model and stations
  * are the caller's own copies; its series map is replaced, never a series
  * mutated). Every rain series and the daily A-pan and reference ET are
@@ -154,33 +195,7 @@ export function applyClimateDelta(d: ModelInput, op: Pick<ClimateDeltaOp, 'rainF
 		rows.push('the monthly PE row');
 	}
 	// The MAPs, by one factor so every ratio of two of them is unchanged.
-	let maps = 0;
-	if (k !== 1) {
-		for (const n of d.model.nodes) {
-			if (typeof n.mapMm === 'number' && n.mapMm > 0) {
-				n.mapMm = scaleMap(n.mapMm, k) as number;
-				maps++;
-			}
-		}
-		const ur = st.unitRain as Record<string, unknown> | null | undefined;
-		if (ur && typeof ur === 'object' && typeof ur.gaugeMapMm === 'number') {
-			st.unitRain = { ...ur, gaugeMapMm: scaleMap(ur.gaugeMapMm, k) };
-			maps++;
-		}
-		const rs = st.rainStations as Record<string, unknown> | null | undefined;
-		if (rs && typeof rs === 'object' && typeof rs.catchmentMapMm === 'number') {
-			st.rainStations = { ...rs, catchmentMapMm: scaleMap(rs.catchmentMapMm, k) };
-			maps++;
-		}
-		if (d.stations) {
-			d.stations = Object.fromEntries(
-				Object.entries(d.stations).map(([id, s]) => {
-					if (s && typeof s.mapMm === 'number') maps++;
-					return [id, s && typeof s.mapMm === 'number' ? { ...s, mapMm: scaleMap(s.mapMm, k) as number } : s];
-				})
-			);
-		}
-	}
+	const maps = k !== 1 ? scaleRainMaps(d, k) : 0;
 	const notes = [`${rainSeries} rain series scaled`];
 	if (evapSeries || rows.length) notes.push(`${[...(evapSeries ? [`${evapSeries} daily evaporation series`] : []), ...rows].join(', ')} scaled`);
 	if (maps) notes.push(`${maps} MAP${maps === 1 ? '' : 's'} × ${Number(k.toPrecision(4))} (the annual rain factor)`);
