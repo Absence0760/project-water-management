@@ -262,9 +262,9 @@ describe('route auth inventory', () => {
 	});
 
 	// § 8 Future yield (issue #621, 280_future_yield): auth-gated like every project route.
-	// The Scenarios tab's future climate (issue #621 slice 5, 282_climate_factors) too.
+	// The Scenarios tab's future climate (issue #621 slice 5, 282_climate_factors) too, and cancelling either's job (284).
 	it('inventories the future yield routes as auth-gated', () => {
-		for (const r of ['POST /projects/:id/runs/:runId/future-yield', 'GET /projects/:id/runs/:runId/future-yield', 'POST /projects/:id/climate-factors', 'GET /projects/:id/climate-factors']) {
+		for (const r of ['POST /projects/:id/runs/:runId/future-yield', 'GET /projects/:id/runs/:runId/future-yield', 'POST /projects/:id/runs/:runId/future-yield/:jobId/cancel', 'POST /projects/:id/climate-factors', 'GET /projects/:id/climate-factors', 'POST /projects/:id/climate-factors/:jobId/cancel']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}

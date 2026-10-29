@@ -51,6 +51,12 @@ test('an editor works out the change factors, picks a model, pathway and window,
 	// Work them out: the form follows the job, queued, and (the job run here, deterministically) shows the pickers once it is done.
 	await climate.getByRole('button', { name: 'Work out the change factors' }).click();
 	await expect(climate.getByTestId('op-climate-job')).toContainText('Working out the change factors. Queued: waiting for the background worker.');
+	// Cancel ends the waiting job at once (284_cancel_future_jobs): no failure shown, and it can be queued again.
+	await climate.getByRole('button', { name: 'Cancel' }).click();
+	await expect(climate.getByTestId('op-climate-job')).toHaveCount(0);
+	await expect(climate.getByTestId('op-climate-failed')).toHaveCount(0);
+	await climate.getByRole('button', { name: 'Work out the change factors' }).click();
+	await expect(climate.getByTestId('op-climate-job')).toContainText('Working out the change factors. Queued: waiting for the background worker.');
 	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(climate.getByLabel('Climate model')).toBeVisible();
 	await expect(climate.getByLabel('Climate model').getByRole('option')).toHaveText(['Pick one', 'SYN-A', 'SYN-B', 'SYN-C']);

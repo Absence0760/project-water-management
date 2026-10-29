@@ -1412,12 +1412,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 */
 		climateFactors: {
 			get: (id: string) => request<ClimateFactorsState>('GET', `${p(id)}/climate-factors`),
-			start: (id: string) => request<QueuedJob>('POST', `${p(id)}/climate-factors`, {})
+			start: (id: string) => request<QueuedJob>('POST', `${p(id)}/climate-factors`, {}),
+			/** A waiting job is dead at once; a running one stops before it stores a table (284_cancel_future_jobs). */
+			cancel: (id: string, jobId: string) => request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/climate-factors/${enc(jobId)}/cancel`)
 		},
 		/** § 8 Future yield of an application run (docs/api.md § Future yield): the newest result and job; queue it (editor). */
 		futureYield: {
 			get: (id: string, runId: string) => request<FutureYieldState>('GET', `${p(id)}/runs/${enc(runId)}/future-yield`),
-			start: (id: string, runId: string) => request<QueuedJob>('POST', `${p(id)}/runs/${enc(runId)}/future-yield`, {})
+			start: (id: string, runId: string) => request<QueuedJob>('POST', `${p(id)}/runs/${enc(runId)}/future-yield`, {}),
+			/** A waiting job is dead at once; a running one stops before its runs or its write (284_cancel_future_jobs). */
+			cancel: (id: string, runId: string, jobId: string) =>
+				request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/runs/${enc(runId)}/future-yield/${enc(jobId)}/cancel`)
 		},
 		/**
 		 * Firm yield and storage–yield curves (docs/api.md § Yield, WP-3.6): queue

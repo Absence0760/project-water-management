@@ -855,6 +855,12 @@ variable "dam_observations_enabled" {
   default     = false
 }
 
+variable "future_yield_enabled" {
+  description = "Turn on the future climate (issue #621): the evidence report's § 8 Future yield (a future_yield job re-runs an application and its baseline under each NEX-GDDP-CMIP6 model's change factors) and the Scenarios tab's change factors (a climate_factors job). Sets FUTURE_YIELD on the API (which queues the jobs and puts § 8 in a report), the worker (which runs them, reading cmip6/ in the mirror bucket through MIRROR_URL) and the assistant (which builds the same reports), so all three agree. Off (the default) until the copy holds every model's whole windows and NASA's caveat is quoted (docs/deployment.md § NEX-GDDP-CMIP6); with it on and no cmip6 in the copy, each job dies saying the operator loads it."
+  type        = bool
+  default     = false
+}
+
 variable "et_observations_enabled" {
   description = "Turn on the observed actual ET (et_observations.tf, issue #623): the hourly EventBridge rule that invokes the fetcher with {\"mode\":\"et-dekadal\"} (FAO WaPOR v3's dekadal actual ET averaged over each unit's farm parcels, newest dekads first, then the history to 2018), the fetcher's reads and writes under et/ in the mirror bucket, the worker's write of et/wanted.json, and the pass's heartbeat and recency alarms. It also sets the worker's ET_OBSERVATIONS (jobs.tf), which turns its ET tick on; the plan refuses the flag if the worker's environment ever loses it (et_observations.tf terraform_data.et_observations_gate). Off (the default) until FAO's reply on WaPOR's licence is recorded on issue #618 (step 8a), a backend release with the mode is deployed and a unit has farm parcels, or the alarms fire for a pass that has nothing to read. Runbook: docs/deployment.md § Observed actual ET."
   type        = bool

@@ -1572,3 +1572,37 @@ run "rejects_an_unknown_dws_source" {
 
   expect_failures = [var.dws_source]
 }
+
+# --- The future climate (issue #621, FUTURE_YIELD) ---------------------------
+
+run "future_yield_off_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["FUTURE_YIELD"] == "off" &&
+      aws_lambda_function.worker.environment[0].variables["FUTURE_YIELD"] == "off"
+    )
+    error_message = "Until future_yield_enabled is set the API queues no future_yield or climate_factors job and puts no § 8 in a report, and the worker runs none (FUTURE_YIELD=off on both)."
+  }
+}
+
+run "future_yield_on" {
+  command = plan
+
+  variables {
+    future_yield_enabled = true
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["FUTURE_YIELD"] == "on" &&
+      aws_lambda_function.worker.environment[0].variables["FUTURE_YIELD"] == "on"
+    )
+    error_message = "With future_yield_enabled the API and the worker agree: FUTURE_YIELD=on on both, so a job the API queues is one the worker runs."
+  }
+  assert {
+    condition     = startswith(aws_lambda_function.worker.environment[0].variables["MIRROR_URL"], "s3://")
+    error_message = "The future climate's jobs read cmip6/ from the copy: the worker's MIRROR_URL names the mirror bucket (the production check requires it with FUTURE_YIELD=on)."
+  }
+}

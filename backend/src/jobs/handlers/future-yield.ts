@@ -5,8 +5,9 @@
 // cells, the factor table worked out (future/copy.ts readFactorTable: engine
 // buildFutureFactorTable, round 1's climateDeltaFactors), and every pair run
 // (engine runFutureYield: about 40 runs and twice as many yield searches; the
-// engine is synchronous, so progress is reported once, at the end, before the
-// write). Writes one
+// engine is synchronous, so progress is reported after the copy's read, before
+// the runs, and at the end, before the write; a cancel, 284_cancel_future_jobs,
+// stops it at either). Writes one
 // future_yield row and keeps the newest FUTURE_YIELD_RESULTS_KEPT per pair.
 import { ENGINE_VERSION, runFutureYield, type FutureYieldResult } from '@water-management/engine';
 import { ApiError } from '../../http/errors.js';
@@ -16,6 +17,8 @@ import { Cmip6NotInCopyError, readFactorTable } from '../../future/copy.js';
 import { FUTURE_YIELD_RESULTS_KEPT, futurePair, FutureYieldPayload } from '../../future/store.js';
 import { JobError } from '../errors.js';
 import { defineHandler } from '../registry.js';
+
+const CANCELLED = () => new JobError('cancelled', { retry: false });
 
 export const futureYieldHandler = defineHandler({
 	role: 'editor',
@@ -33,6 +36,8 @@ export const futureYieldHandler = defineHandler({
 			if (err instanceof Cmip6NotInCopyError) throw new JobError(`${err.message}: the operator loads it (deployment.md § NEX-GDDP-CMIP6)`, { retry: false });
 			throw err;
 		}
+		// The runs are the long part: a cancel while the copy was read stops it before them.
+		if (!(await progress(10))) throw CANCELLED();
 		let result: FutureYieldResult;
 		try {
 			result = runFutureYield({
@@ -47,7 +52,7 @@ export const futureYieldHandler = defineHandler({
 			// The engine's own words (an op that doesn't apply, a dam gone): plain text, never DB text.
 			throw new JobError(`the future yield failed: ${(err as Error).message}`, { retry: false });
 		}
-		if (!(await progress(100))) throw new JobError('cancelled', { retry: false });
+		if (!(await progress(100))) throw CANCELLED();
 		result.warnings.push(...warnings);
 		await db.query(
 			`INSERT INTO future_yield (project_id, baseline_run_id, application_run_id, node_id, job_id, method, result, engine_version)

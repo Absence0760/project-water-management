@@ -941,6 +941,15 @@ describe('jobs and yield client', () => {
 		expect(await createApi('', cancel).yield.cancel('p', 'j/1')).toEqual({ status: 'dead', cancelled: true });
 		expect(call(cancel)).toEqual({ url: '/projects/p/yield/j%2F1/cancel', method: 'POST', body: undefined });
 	});
+
+	it('cancels a future yield job and a change factors job (284_cancel_future_jobs)', async () => {
+		const fy = mockFetch(200, { status: 'dead', cancelled: true });
+		expect(await createApi('', fy).futureYield.cancel('p', 'r/1', 'j/1')).toEqual({ status: 'dead', cancelled: true });
+		expect(call(fy)).toEqual({ url: '/projects/p/runs/r%2F1/future-yield/j%2F1/cancel', method: 'POST', body: undefined });
+		const cf = mockFetch(200, { status: 'running', cancelled: true });
+		expect(await createApi('', cf).climateFactors.cancel('p', 'j/1')).toEqual({ status: 'running', cancelled: true });
+		expect(call(cf)).toEqual({ url: '/projects/p/climate-factors/j%2F1/cancel', method: 'POST', body: undefined });
+	});
 });
 
 // The assistant's POST streams its answer (issue #610): fetch, not EventSource, so it goes out like every POST.

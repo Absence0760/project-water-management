@@ -660,7 +660,9 @@ names.
 draft report's **Run the future yield** button (a board above the report,
 `FutureYieldRun.svelte`: editors only, never on a pack, following the job
 queued, running or failed and reading the report again once it is done;
-**Run it again** once § 8 has a result), or through the API
+**Run it again** once § 8 has a result; **Cancel** while it waits or runs,
+284_cancel_future_jobs: a running job stops before its runs or before its
+write, storing nothing), or through the API
 (`POST …/runs/:runId/future-yield`, [api.md § Future yield](./api.md#future-yield)),
 reads the copy's `cmip6/<model>/<scenario>` monthly aggregates
 (`backend/src/future/copy.ts`; the committed synthetic copy in dev, CI and

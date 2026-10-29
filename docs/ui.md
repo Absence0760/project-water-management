@@ -11357,7 +11357,9 @@ them scenarios).
   projections aren't loaded; with no catchment boundary on the Map tab, to
   draw one; with no table yet, **Work out the change factors** queues the
   `climate_factors` job and the form follows it (*Working out the change
-  factors. Queued…*), then shows the three pickers, which models and
+  factors. Queued…*, with **Cancel**: a waiting job ends at once, a running
+  one says *Cancelling…* and stops before it stores a table; a cancelled
+  job is no failure, and the button comes back), then shows the three pickers, which models and
   baseline the table rests on, an amber note when the copy holds only part
   of each 30-year window, and the picked case's 24 factors in a table
   (`op-climate-factors`, rain and evaporation by calendar month). When the
@@ -12973,7 +12975,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     (`POST …/future-yield`); the board then follows it (*Queued: waiting
     for the background worker.*, *Running…* with a progress bar, a
     failure with the job's reason) and reads the report again once it is
-    done. A reload or another tab picks the job up (the GET returns the
+    done. **Cancel** beside the job's line (`POST …/future-yield/:jobId/cancel`,
+    284_cancel_future_jobs) ends a waiting job at once; a running one says
+    *Cancelling: it stops at its next step.* and stops after reading the
+    copy (before its runs) or after its runs (before the write), storing
+    nothing. A cancelled job is said plainly (*The last run was
+    cancelled.*, `evidence-future-cancelled`), never as a failure, and the
+    Run button comes back. A reload or another tab picks the job up (the GET returns the
     newest one). Viewers get no board, and a pack never has one: a pack
     freezes § 8 as it was drafted.
   - **Appendix A** (A.1 settings, with the declared rule; A.2 the ops with

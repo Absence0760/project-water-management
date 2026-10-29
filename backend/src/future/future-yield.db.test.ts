@@ -14,6 +14,13 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
 
+// The engine as is, with runFutureYield watched: a job cancelled before its runs never starts them.
+const runs = vi.hoisted(() => ({ calls: 0 }));
+vi.mock('@water-management/engine', async (orig) => {
+	const real = await orig<typeof import('@water-management/engine')>();
+	return { ...real, runFutureYield: (...a: Parameters<typeof real.runFutureYield>) => (runs.calls++, real.runFutureYield(...a)) };
+});
+
 type User = Awaited<ReturnType<typeof signUp>>;
 
 let owner: User;
@@ -29,6 +36,7 @@ const tick = () => runTick({ feeds: false, reports: false });
 const job = async (id: string) => (await asOwner('SELECT status, last_error FROM job WHERE id = $1', [id]))[0] as { status: string; last_error: string | null };
 const post = (u: User, runId: string, body: Record<string, unknown> = {}) => u.call('POST', `/projects/${projectId}/runs/${runId}/future-yield`, body);
 const get = (u: User, runId: string) => u.call('GET', `/projects/${projectId}/runs/${runId}/future-yield`);
+const cancel = (u: User, runId: string, jobId: string, project = projectId) => u.call('POST', `/projects/${project}/runs/${runId}/future-yield/${jobId}/cancel`, {});
 const sq = (lon: number, lat: number, d: number) => [[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]];
 
 afterEach(() => vi.unstubAllEnvs());
@@ -137,6 +145,57 @@ describe('§ 8 future yield', () => {
 		expect(check.detail).toContain('part of their 30-year windows');
 		if (futureCaveatPending()) expect(check.detail).toContain('NASA’s own caveat');
 		expect(report.issuable).toBe(false);
+	});
+
+	it('cancels a job: an editor may, a viewer, a stranger and another project may not', async () => {
+		vi.stubEnv('FUTURE_YIELD', 'on');
+		// The boundary the test above drew is still there.
+		const res = await post(owner, appRun);
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const jobId = res.body.jobId as string;
+		expect((await cancel(viewer, appRun, jobId)).status).toBe(403);
+		expect((await cancel(contributor, appRun, jobId)).status).toBe(403);
+		expect((await cancel(stranger, appRun, jobId)).status).toBe(404);
+		// The stranger's own project, as its owner (an editor there): the job isn't of that project.
+		const other = (await stranger.call('POST', '/projects', { name: 'Not that one' })).body.project.id as string;
+		expect((await cancel(stranger, appRun, jobId, other)).status).toBe(404);
+		// Under another run's path: not that run's job.
+		expect((await cancel(owner, baseRun, jobId)).status).toBe(404);
+		expect((await cancel(owner, appRun, 'not-a-uuid')).status).toBe(404);
+		expect(await job(jobId)).toEqual({ status: 'queued', last_error: null });
+		// Positive control: the editor cancels it, and a waiting job is dead at once.
+		const ok = await cancel(owner, appRun, jobId);
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		expect(ok.body).toEqual({ status: 'dead', cancelled: true });
+		expect(await job(jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		expect((await get(viewer, appRun)).body.job).toMatchObject({ id: jobId, status: 'dead', error: 'cancelled' });
+		// The next request is a new job.
+		const again = await post(owner, appRun);
+		expect(again.status).toBe(202);
+		expect(again.body.jobId).not.toBe(jobId);
+
+		// One cancelled while it reads the copy (flagged as app_cancel_job flags a running job) stops before its runs and writes nothing.
+		await asOwner('UPDATE job SET cancel_requested_at = now() WHERE id = $1', [again.body.jobId]);
+		const before = runs.calls;
+		const { n } = ((await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [appRun])) as { n: number }[])[0]!;
+		await tick();
+		expect(await job(again.body.jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		expect(runs.calls).toBe(before);
+		expect(await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [appRun])).toEqual([{ n }]);
+	});
+
+	it('flags a running job for its handler rather than killing it', async () => {
+		vi.stubEnv('FUTURE_YIELD', 'on');
+		const res = await post(owner, appRun);
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		await asOwner(
+			`UPDATE job SET status = 'running', attempts = 1, locked_until = now() + interval '1 minute', lease_token = gen_random_uuid(), started_at = now() WHERE id = $1`,
+			[res.body.jobId]
+		);
+		expect((await cancel(owner, appRun, res.body.jobId)).body).toEqual({ status: 'running', cancelled: true });
+		expect(await asOwner('SELECT status, cancel_requested_at IS NOT NULL AS flagged FROM job WHERE id = $1', [res.body.jobId])).toEqual([{ status: 'running', flagged: true }]);
+		// Leave nothing running for the next test's tick.
+		await asOwner(`UPDATE job SET status = 'dead', finished_at = now(), last_error = 'cancelled', locked_until = NULL, lease_token = NULL WHERE id = $1`, [res.body.jobId]);
 	});
 
 	it('dies, saying why, when the data copy holds no projections yet', async () => {

@@ -728,7 +728,8 @@ data copy's NEX-GDDP-CMIP6 aggregates over the catchment boundary's 0.25°
 cells as § 8's `future_yield` job (`future/copy.ts readFactorTable`), stored
 in `climate_factors` with the SHA-256 of the boundary it was read over. The
 form says when there is no boundary on the Map tab, follows the job (queued,
-running, failed), and, when the boundary has changed since, says so and
+running, failed; **Cancel** ends it, `POST …/climate-factors/:jobId/cancel`,
+284_cancel_future_jobs), and, when the boundary has changed since, says so and
 offers to work the factors out again. Like § 8 it is off unless
 `FUTURE_YIELD=on` (deployment.md § NEX-GDDP-CMIP6), and the form says so.
 
