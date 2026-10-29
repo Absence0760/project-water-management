@@ -3759,8 +3759,9 @@ The background job queue's source of truth ([architecture.md § Background work]
   - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
     job, only with the current lease; returns false for anyone else, or once
     the job was cancelled, which tells the handler to stop.
-  - `app_cancel_job(id)` (040): as the session's user, the one who queued
-    it or an editor of its project, and for `yield` jobs only: a `queued` or
+  - `app_cancel_job(id)` (040, latest 284): as the session's user, the one who queued
+    it or an editor of its project, and for `yield`, `delineate` (191),
+    `future_yield` and `climate_factors` (284) jobs only: a `queued` or
     `failed` job becomes `dead` with `last_error = 'cancelled'`; a `running`
     one gets `cancel_requested_at`. NULL for a job that isn't the caller's to
     cancel.
@@ -3882,6 +3883,11 @@ insert and delete; farmers read none. Covering index on every foreign key.
 280 also redefines `app_specialist_pack` (latest 188) to say whether a pack's
 manifest has a § 8 result (its specialist's statement is then
 `pack-signoff-2`).
+Migration 284 (`284_cancel_future_jobs.sql`) lets `app_cancel_job` cancel
+`future_yield` and `climate_factors` jobs (an editor, through the cancel
+routes of [api.md § Future yield](./api.md#future-yield) and § Future
+climate); a running `future_yield` job checks for a cancel after reading the
+copy, before its runs.
 
 ### Automated calibrations (108_auto_calibration.sql)
 

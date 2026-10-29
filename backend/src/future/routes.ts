@@ -4,13 +4,16 @@
 //
 //   POST /projects/:id/runs/:runId/future-yield   editor   queue the job (202 { jobId }; 200 when the same one is pending)
 //   GET  /projects/:id/runs/:runId/future-yield   viewer (an applicant: their own application's)   whether it is on, the newest result and the newest job
+//   POST /projects/:id/runs/:runId/future-yield/:jobId/cancel   editor   cancel that run's job (284_cancel_future_jobs)
 //   POST /projects/:id/climate-factors            editor   queue the factor table's job (202; 200 when one is pending)
 //   GET  /projects/:id/climate-factors            viewer   whether it is on, the newest table, whether the boundary changed since, the newest job
+//   POST /projects/:id/climate-factors/:jobId/cancel   editor   cancel that job
 //
 // Off (409 `future_yield_off`; GET answers enabled: false) unless
 // FUTURE_YIELD=on. The API never reads the data copy: the job does (the
 // worker has MIRROR_URL), and dies saying so when the copy holds no cmip6.
-// Status and progress of the job: GET /projects/:id/jobs.
+// Status and progress of the job: GET /projects/:id/jobs. A cancel works with
+// FUTURE_YIELD off too, so a job queued before it was switched off can go.
 import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -28,6 +31,27 @@ import { CLIMATE_FACTORS_DEDUPE_KEY, ClimateFactorsPayload, climateFactorsState,
 async function onCapOrFull(db: Db, projectId: string, runIds: string[]): Promise<boolean> {
 	const { rows } = await db.query<{ a: unknown }>(`SELECT summary->'allocations' AS a FROM model_run WHERE project_id = $1 AND id = ANY($2::uuid[])`, [projectId, runIds]);
 	return rows.some((r) => verdictsOnly(r.a as Parameters<typeof verdictsOnly>[0]));
+}
+
+/**
+ * Cancel one job of `kind` in this project, as an editor, through
+ * app_cancel_job: a waiting one is dead at once, a running one stops at its
+ * handler's next progress report, before it writes; a finished one answers
+ * its status with cancelled: false. `match` narrows it to one run's job. 404
+ * for a job of another project, kind or run.
+ */
+async function cancelJob(userId: string, projectId: string, jobId: string, kind: 'future_yield' | 'climate_factors', match: Record<string, string> = {}) {
+	if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
+	const status = await withUser(userId, async (db) => {
+		await requireRole(db, projectId, 'editor');
+		const { rows } = await db.query<{ status: string | null }>(
+			`SELECT app_cancel_job(j.id) AS status FROM job j WHERE j.id = $1 AND j.project_id = $2 AND j.kind = $3 AND j.payload @> $4::jsonb`,
+			[jobId, projectId, kind, JSON.stringify(match)]
+		);
+		return rows[0]?.status ?? null;
+	});
+	if (!status) throw new ApiError(404, 'not found');
+	return { status, cancelled: status === 'dead' || status === 'running' };
 }
 
 export const futureYieldRoutes = new Hono<AuthEnv>()
@@ -48,6 +72,11 @@ export const futureYieldRoutes = new Hono<AuthEnv>()
 		});
 		if (result.created) await wakeWorker(result.job.id);
 		return c.json({ jobId: result.job.id, job: result.job, created: result.created }, result.created ? 202 : 200);
+	})
+	.post('/:id/runs/:runId/future-yield/:jobId/cancel', async (c) => {
+		const { id, runId, jobId } = c.req.param();
+		if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+		return c.json(await cancelJob(c.get('userId'), id, jobId, 'future_yield', { applicationRunId: runId }));
 	})
 	.get('/:id/runs/:runId/future-yield', async (c) => {
 		const { id, runId } = c.req.param();
@@ -84,6 +113,10 @@ export const futureYieldRoutes = new Hono<AuthEnv>()
 		});
 		if (result.created) await wakeWorker(result.job.id);
 		return c.json({ jobId: result.job.id, job: result.job, created: result.created }, result.created ? 202 : 200);
+	})
+	.post('/:id/climate-factors/:jobId/cancel', async (c) => {
+		const { id, jobId } = c.req.param();
+		return c.json(await cancelJob(c.get('userId'), id, jobId, 'climate_factors'));
 	})
 	.get('/:id/climate-factors', async (c) => {
 		const id = c.req.param('id');

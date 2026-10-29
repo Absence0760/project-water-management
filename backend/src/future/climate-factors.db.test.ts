@@ -23,6 +23,7 @@ const tick = () => runTick({ feeds: false, reports: false });
 const job = async (id: string) => (await asOwner('SELECT status, last_error FROM job WHERE id = $1', [id]))[0] as { status: string; last_error: string | null };
 const post = (u: User) => u.call('POST', `/projects/${projectId}/climate-factors`, {});
 const get = (u: User) => u.call('GET', `/projects/${projectId}/climate-factors`);
+const cancel = (u: User, jobId: string, project = projectId) => u.call('POST', `/projects/${project}/climate-factors/${jobId}/cancel`, {});
 const sq = (lon: number, lat: number, d: number) => [[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]];
 
 afterEach(() => vi.unstubAllEnvs());
@@ -103,6 +104,32 @@ describe('future climate factors', () => {
 		const moved = await owner.call('PATCH', `/projects/${projectId}/map/features/${boundary.id}`, { geometry: { type: 'Polygon', coordinates: [sq(21.35, -33.7, 0.1)] } });
 		expect(moved.status, JSON.stringify(moved.body)).toBe(200);
 		expect((await get(viewer)).body.boundary).toBe('changed');
+	});
+
+	it('cancels a job: an editor may, a viewer, a stranger and another project may not', async () => {
+		vi.stubEnv('FUTURE_YIELD', 'on');
+		const res = await post(owner);
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const jobId = res.body.jobId as string;
+		expect((await cancel(viewer, jobId)).status).toBe(403);
+		expect((await cancel(contributor, jobId)).status).toBe(403);
+		expect((await cancel(stranger, jobId)).status).toBe(404);
+		const other = (await stranger.call('POST', '/projects', { name: 'Not that one' })).body.project.id as string;
+		expect((await cancel(stranger, jobId, other)).status).toBe(404);
+		expect(await job(jobId)).toEqual({ status: 'queued', last_error: null });
+		// Positive control: the editor cancels it; it stops waiting, and the GET says so.
+		const ok = await cancel(owner, jobId);
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		expect(ok.body).toEqual({ status: 'dead', cancelled: true });
+		expect(await job(jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		expect((await get(viewer)).body.job).toMatchObject({ id: jobId, status: 'dead', error: 'cancelled' });
+		// Cancelled while it read the copy: it stores nothing.
+		const again = await post(owner);
+		expect(again.status).toBe(202);
+		await asOwner('UPDATE job SET cancel_requested_at = now() WHERE id = $1', [again.body.jobId]);
+		await tick();
+		expect(await job(again.body.jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
+		expect(await asOwner('SELECT count(*)::int AS n FROM climate_factors WHERE job_id = $1', [again.body.jobId])).toEqual([{ n: 0 }]);
 	});
 
 	it('dies, saying why, when the boundary is gone by the time it runs', async () => {
