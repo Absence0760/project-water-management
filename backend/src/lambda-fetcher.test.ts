@@ -627,6 +627,27 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		expect(lines.join('\n')).not.toContain(dam().featureId);
 	});
 
+	it('runs the Sentinel-2 pass after WOfS only with DAM_OBSERVATIONS_S2=on, with its own heartbeat and log (issue #624)', async () => {
+		await bucket(undefined, [dam()]);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'on');
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
+		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
+		out.mockRestore();
+		expect(res.s2).toEqual({ fetched: 1, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' });
+		expect(metrics.map((l) => JSON.parse(l).Source)).toEqual(['waterbodies', 'wofs', 's2']);
+		const lines = info.mock.calls.map(([l]) => l as string);
+		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'dams_pass' && l.source === 's2')).toMatchObject({ fetched: 1, stopped: 'done', sceneFailed: 0 });
+		expect(lines.join('\n')).not.toContain(dam().featureId);
+		// Off (or unset): no Sentinel-2 pass, no heartbeat for it.
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'off');
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		expect(((await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer).s2).toBeUndefined();
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'yes');
+		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/unknown DAM_OBSERVATIONS_S2/);
+	});
+
 	it('an hourly run with nothing due asks nothing, and still publishes both heartbeats and recencies', async () => {
 		await bucket(undefined, [dam()]);
 		vi.spyOn(console, 'info').mockImplementation(() => {});

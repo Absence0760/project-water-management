@@ -509,6 +509,13 @@ today, as production's hourly runs do once a day): nothing is asked. With
 no time limit here, the first run already read each dam's history back to
 2013 (the fixture holds none that old, so those searches come back empty).
 
+The Sentinel-2 pass (issue #624) is off by default, as in production.
+`DAM_OBSERVATIONS_S2=on pnpm dev:dams:run` runs it after WOfS on invented
+Sentinel-2 scenes (`backend/fixtures/feeds/s2-sample.json`,
+`backend/src/dams/observed/sentinel/fixtures.ts`): the same water field at
+10 m, a pass every 5 days, a band of cloud every third day, and some days
+without B11 (the NDWI fallback), into `dam_observation` as source `s2`.
+
 The worker's tick does the same each time it runs only with
 `DAM_OBSERVATIONS=on` and a `MIRROR_URL` of its own, in a gitignored
 `backend/.env.development.local`; it is off by default. Your own clip of

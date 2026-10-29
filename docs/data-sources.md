@@ -76,7 +76,7 @@ Every job that fetches from an upstream:
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until the stations' records are loaded (`load-reference.yml` kind `dws`) | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
 | [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
 | [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `sum.ts`), `backend/src/raster/` (`cog.ts`, `mask.ts`, `utm.ts`) |
-| [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | planned (#624; registered, the hosts allowed, `dam_observation` source `s2`; no pass reads it yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`); #624 `sentinel/s2.ts` |
+| [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | built, off by default (#624 step 4: the pass, behind `DAM_OBSERVATIONS_S2` / `dam_s2_enabled`; not shown on a screen yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s2.ts`, `pass.ts`); `wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`) |
 | [deafrica-sentinel-1](#deafrica-sentinel-1) | DE Africa Sentinel-1 RTC (`s1_rtc`), radar water as a secondary dam observation (issue #624) | planned (#624; registered, the hosts allowed, `dam_observation` source `s1`; no pass reads it yet) | `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/wofs/stac.ts` (`assetUrl`, `s1_rtc`); #624 `sentinel/s1.ts` |
 | [wapor-aeti](#wapor-aeti) | FAO WaPOR v3 `L2-AETI-D`, dekadal actual ET and interception at 100 m (a unit's observed water use, issue #623) | planned (#623); blocked in production until FAO's reply is recorded on #618 (step 8a) | `storage.googleapis.com` (bucket `fao-gismgr-wapor-3-data` only) | – | `backend/src/water-use/observed/` (`upstream.ts`; the pass is #623 step 4) |
 | [ssebop-eta](#ssebop-eta) | USGS FEWS NET SSEBop v6.1 global dekadal actual ET at 1 km (WaPOR's fallback, issue #623) | planned (#623 step 6, only if FAO declines or as a second opinion) | `edcintl.cr.usgs.gov` (the `…/global/dekadal/etav61/` tree only) | – | `backend/src/water-use/observed/upstream.ts` |
@@ -399,8 +399,8 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 - **Fallback:** none current: Waterbodies' public series are frozen
   ([deafrica-waterbodies-series](#deafrica-waterbodies-series)), and
   Sentinel-2 and Sentinel-1 ([deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1),
-  [deafrica-sentinel-1](#deafrica-sentinel-1)) are registered for #624 but
-  not read yet. The values already
+  [deafrica-sentinel-1](#deafrica-sentinel-1)): Sentinel-2's pass is built
+  (#624 step 4) but off by default, Sentinel-1's not yet. The values already
   loaded stay in `dam_observation`.
 - **Offline:** `FEED_SOURCE=fixtures` answers STAC and the scenes from
   invented ones (`backend/fixtures/feeds/wofs-sample.json`,
@@ -438,26 +438,38 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 - **Contact:** Digital Earth Africa's help desk and community forum
   (digitalearthafrica.org; docs.digitalearthafrica.org); the Copernicus
   Data Space Ecosystem for the data itself.
-- **Access pattern (planned, #624 step 4):** a pass in the fetcher's
-  `dams-weekly` mode after WOfS, with its per-dam state, deadline and pacing:
-  one STAC search per window over the outline's snapped box, then about
-  three windowed reads a scene (B03, B11, SCL), never a whole scene; the
-  history backfills newest first to 2019 (Collection 1 is consistent from
-  there).
-- **Limits we keep to:** WOfS's: at most one request a second per host, one
-  in flight, feeds/http.ts's User-Agent, host allowlist, 20 s timeout and
-  4 MB cap; a 403 or 429/503 stops the pass, never retried.
+- **Access pattern:** a pass in the fetcher's `dams-weekly` mode after
+  WOfS (`sentinel/pass.ts`, WOfS's `runScenePass`), with its per-dam state
+  (`dams/s2-state.json`), deadline and pacing: one STAC search per year
+  window over the outline's snapped box, then three COG headers and three
+  windowed reads a scene (B03, B11, SCL; B08 too only where B11 is
+  missing), never a whole scene; the history backfills newest first to
+  2019 (Collection 1 is consistent from there). Off until
+  `DAM_OBSERVATIONS_S2=on` on the fetcher (Terraform `dam_s2_enabled`, with
+  `dam_observations_enabled`). Asset keys and offsets checked against a
+  live item 2026-10-29: `green` B03, `nir` B08, `swir16` B11, `scl` SCL,
+  each band `raster:bands` nodata 0 and offset −1000 (SCL none), EPSG
+  327xx.
+- **Limits we keep to:** at most one request a second per host (the
+  explorer, shared with the WOfS pass, and the bucket), one in flight,
+  feeds/http.ts's User-Agent, host allowlist, 20 s timeout and 4 MB cap; a
+  403 or 429/503 stops the pass and pauses it a day, never retried.
 - **Limits of the data:** 10 m (B11 and SCL 20 m), about a 5-day revisit
   from 2019 (the backfill's start); optical, so cloud still hides a dam on a
   winter day, which is what Sentinel-1 is for.
-- **Freshness (planned):** a heartbeat and recency alarm per source, as
-  WOfS's (`infra/dam_observations.tf`).
+- **Freshness:** its own heartbeat (`DamPassCompleted{Source=s2}`, 18 h)
+  and recency (`DamObservationAgeDays{Source=s2}`, `dam_s2_recency_alarm_days`,
+  21 by default) alarms, both breaching on missing data
+  (`infra/dam_observations.tf`).
 - **Rows kept:** `dam_observation` source `s2` (migration
-  `277_dam_observation_sentinel.sql`); none written yet.
+  `277_dam_observation_sentinel.sql`): per dam and date, the wet pixels ×
+  the 10 m pixel's ground area and the share of the outline seen clearly
+  (model.md §2.10l).
 - **Fallback:** WOfS (30 m) for the same dates; the S1 radar view through
   cloud.
-- **Offline:** synthetic scenes only (#624 step 4); dev, CI and e2e never
-  reach the bucket.
+- **Offline:** synthetic scenes only (`sentinel/fixtures.ts`,
+  `backend/fixtures/feeds/s2-sample.json`); dev, CI and e2e never reach the
+  bucket.
 - **Owner:** the operator; code `backend/src/dams/observed/` (#624).
 
 ### deafrica-sentinel-1

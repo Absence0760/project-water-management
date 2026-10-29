@@ -1,0 +1,51 @@
+{
+	"_comment": "Synthetic Sentinel-2 L2A Collection 1 for FEED_SOURCE=fixtures (backend/src/dams/observed/sentinel/fixtures.ts): the STAC item every fixture scene is shaped like, and how the invented scenes are laid out, dated, wetted and clouded. The water field and season are WOfS's (wofs-sample.json), so the two agree on clear days. No real scene, place or measurement.",
+	"item": {
+		"type": "Feature",
+		"stac_version": "1.1.0",
+		"stac_extensions": ["https://stac-extensions.github.io/projection/v2.0.0/schema.json", "https://stac-extensions.github.io/raster/v1.1.0/schema.json"],
+		"id": "00000000-0000-5000-8000-000000000000",
+		"collection": "s2_l2a_c1",
+		"bbox": [0, 0, 0, 0],
+		"properties": {
+			"title": "s2_l2a_c1_fixture",
+			"gsd": 10,
+			"datetime": "2000-01-01T08:40:00.000000Z",
+			"proj:epsg": 32734,
+			"platform": "sentinel-2a",
+			"s2:processing_baseline": "05.00",
+			"odc:file_format": "GeoTIFF"
+		},
+		"links": [],
+		"assets": {
+			"green": { "href": "s3://deafrica-sentinel-2-l2a-c1/sentinel-2-c1-l2a/fixture/B03.tif", "type": "image/tiff; application=geotiff; profile=cloud-optimized", "raster:bands": [{ "nodata": 0, "data_type": "uint16", "unit": "1", "offset": -1000 }], "roles": ["data"] },
+			"nir": { "href": "s3://deafrica-sentinel-2-l2a-c1/sentinel-2-c1-l2a/fixture/B08.tif", "type": "image/tiff; application=geotiff; profile=cloud-optimized", "raster:bands": [{ "nodata": 0, "data_type": "uint16", "unit": "1", "offset": -1000 }], "roles": ["data"] },
+			"swir16": { "href": "s3://deafrica-sentinel-2-l2a-c1/sentinel-2-c1-l2a/fixture/B11.tif", "type": "image/tiff; application=geotiff; profile=cloud-optimized", "raster:bands": [{ "nodata": 0, "data_type": "uint16", "unit": "1", "offset": -1000 }], "roles": ["data"] },
+			"scl": { "href": "s3://deafrica-sentinel-2-l2a-c1/sentinel-2-c1-l2a/fixture/SCL.tif", "type": "image/tiff; application=geotiff; profile=cloud-optimized", "raster:bands": [{ "nodata": 0, "data_type": "uint8", "unit": "1" }], "roles": ["data"] }
+		}
+	},
+	"scenes": {
+		"sizePx": 768,
+		"stepPx": 704,
+		"tilePx": 256,
+		"pixelM": 10
+	},
+	"schedule": {
+		"historyDays": 400,
+		"lagDays": 3,
+		"revisitDays": 5,
+		"pathOffsetsDays": [2],
+		"pathMinutes": [520]
+	},
+	"reflectance": {
+		"water": { "green": 1600, "nir": 1250, "swir": 1150 },
+		"land": { "green": 1800, "nir": 3800, "swir": 3200 }
+	},
+	"cloud": {
+		"everyNth": 3,
+		"bandM": 3000,
+		"shadowM": 200,
+		"overcastEveryNth": 13
+	},
+	"noSwirEveryNth": 7
+}

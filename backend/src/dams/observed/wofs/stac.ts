@@ -24,6 +24,9 @@
 // DE Africa's spec pages 2026-10-29). Each collection's hrefs are read only
 // against its own bucket and key prefix: a WOfS item can't point at a
 // Sentinel object, nor a Sentinel item at another key of its bucket.
+// searchItems runs the same search for any of them, each item through the
+// collection's own parser (wofsItem here; sentinel/s2.ts s2Item for
+// `s2_l2a_c1`), on the same endpoint and paging rules.
 import { z } from 'zod';
 import { FeedFormatError } from '../../../feeds/errors.js';
 import type { FeedHttp } from '../../../feeds/http.js';
@@ -72,7 +75,7 @@ const Page = z.object({
 	links: z.array(z.object({ rel: z.string(), href: z.string().max(4000) }).passthrough()).optional()
 });
 
-export interface WofsScene {
+export interface WofsScene extends SceneItem {
 	/** The STAC item id (dam_observation.upstream_key). */
 	itemId: string;
 	/** The acquisition date (UTC), ISO. */
@@ -119,18 +122,40 @@ export function snapSearchBox([w, s, e, n]: readonly [number, number, number, nu
 	];
 }
 
-/** The search URL for one window's first page, over the outline's box snapped out (snapSearchBox). */
-export function searchUrl(bbox: readonly [number, number, number, number], from: string, to: string, limit = PAGE_LIMIT): string {
+/** The search URL for one window's first page, over the outline's box snapped out (snapSearchBox), in `collection` (default wofs_ls). */
+export function searchUrl(bbox: readonly [number, number, number, number], from: string, to: string, limit = PAGE_LIMIT, collection: AssetCollection = WOFS_COLLECTION): string {
 	const u = new URL(WOFS_STAC_SEARCH);
-	u.searchParams.set('collections', WOFS_COLLECTION);
+	u.searchParams.set('collections', collection);
 	u.searchParams.set('bbox', snapSearchBox(bbox).join(','));
 	u.searchParams.set('datetime', `${from}T00:00:00Z/${to}T23:59:59Z`);
 	u.searchParams.set('limit', String(limit));
 	return u.href;
 }
 
-/** Parses one page: its scenes and the next page's URL (checked to be the same search), or null. */
-export function parsePage(text: string): { scenes: WofsScene[]; next: string | null } {
+/** One search item as a scene: the item's id, acquisition date and time, and what the collection's reader needs. */
+export type ItemParser<S extends SceneItem> = (raw: unknown) => S;
+/** What every collection's scene carries (the pass's bookkeeping): the STAC item id, the date and time, and the URL its ETag is kept for. */
+export interface SceneItem {
+	itemId: string;
+	date: string;
+	datetime: string;
+	url: string;
+}
+
+/** A wofs_ls item as a scene (FeedFormatError for any other shape, or a water asset outside the WOfS bucket). */
+export function wofsItem(raw: unknown): WofsScene {
+	const item = Item.safeParse(raw);
+	if (!item.success) throw new FeedFormatError('a STAC item is not in the expected shape');
+	const url = assetUrl(item.data.assets.water.href);
+	if (!url) throw new FeedFormatError('a STAC item’s water asset is not in the WOfS bucket');
+	const datetime = new Date(item.data.properties.datetime).toISOString();
+	return { itemId: item.data.id, date: datetime.slice(0, 10), datetime, url };
+}
+
+/** Parses one page: its scenes (each item through `parseItem`, wofs_ls's by default) and the next page's URL (checked to be the same search), or null. */
+export function parsePage(text: string): { scenes: WofsScene[]; next: string | null };
+export function parsePage<S extends SceneItem>(text: string, parseItem: ItemParser<S>): { scenes: S[]; next: string | null };
+export function parsePage<S extends SceneItem>(text: string, parseItem: ItemParser<S> = wofsItem as unknown as ItemParser<S>): { scenes: S[]; next: string | null } {
 	let raw: unknown;
 	try {
 		raw = JSON.parse(text);
@@ -139,15 +164,7 @@ export function parsePage(text: string): { scenes: WofsScene[]; next: string | n
 	}
 	const page = Page.safeParse(raw);
 	if (!page.success) throw new FeedFormatError('the STAC search did not answer a feature collection');
-	const scenes: WofsScene[] = [];
-	for (const f of page.data.features) {
-		const item = Item.safeParse(f);
-		if (!item.success) throw new FeedFormatError('a STAC item is not in the expected shape');
-		const url = assetUrl(item.data.assets.water.href);
-		if (!url) throw new FeedFormatError('a STAC item’s water asset is not in the WOfS bucket');
-		const datetime = new Date(item.data.properties.datetime).toISOString();
-		scenes.push({ itemId: item.data.id, date: datetime.slice(0, 10), datetime, url });
-	}
+	const scenes = page.data.features.map((f) => parseItem(f));
 	const nextHref = page.data.links?.find((l) => l.rel === 'next')?.href ?? null;
 	let next: string | null = null;
 	if (nextHref !== null) {
@@ -167,14 +184,26 @@ export function parsePage(text: string): { scenes: WofsScene[]; next: string | n
  * each item once. Throws FeedFormatError for a page it can't read, and the
  * client's errors (FeedRefusedError for a 403, …) as they come.
  */
-export async function searchScenes(http: FeedHttp, bbox: readonly [number, number, number, number], from: string, to: string): Promise<WofsScene[]> {
-	const seen = new Map<string, WofsScene>();
-	let url: string | null = searchUrl(bbox, from, to);
+export function searchScenes(http: FeedHttp, bbox: readonly [number, number, number, number], from: string, to: string): Promise<WofsScene[]> {
+	return searchItems(http, WOFS_COLLECTION, wofsItem, bbox, from, to);
+}
+
+/** searchScenes for any collection assetUrl knows: its items through `parseItem` (sentinel/s2.ts's for s2_l2a_c1). */
+export async function searchItems<S extends SceneItem>(
+	http: FeedHttp,
+	collection: AssetCollection,
+	parseItem: ItemParser<S>,
+	bbox: readonly [number, number, number, number],
+	from: string,
+	to: string
+): Promise<S[]> {
+	const seen = new Map<string, S>();
+	let url: string | null = searchUrl(bbox, from, to, PAGE_LIMIT, collection);
 	for (let page = 0; url !== null; page++) {
 		if (page === MAX_PAGES) throw new FeedFormatError(`the STAC search ran past ${MAX_PAGES} pages`);
 		const text = await http.text(url);
 		if (text === null) throw new FeedFormatError('the STAC search answered not found');
-		const got = parsePage(text);
+		const got = parsePage(text, parseItem);
 		for (const s of got.scenes) seen.set(s.itemId, s);
 		// An empty page ends it, whatever its links say.
 		url = got.scenes.length ? got.next : null;

@@ -169,6 +169,50 @@ describe('the dams tick', () => {
 		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === none)!.since).toBe(after);
 	});
 
+	it('loads Sentinel-2 and Sentinel-1 files as their own sources, and tells each pass where its own rows end (issue #624, 278)', async () => {
+		const id = dams.get('Klipdrift dam')!;
+		await runDamsTick({ env: env(), store: store() });
+		// Before any Sentinel row: no sinceBy (each pass starts from its own backfill).
+		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === id)!.sinceBy).toBeUndefined();
+		const fetchedAt = new Date().toISOString();
+		for (const [source, newest] of [
+			['s2', '2026-09-20'],
+			['s1', '2026-09-12']
+		] as const) {
+			await writeObservationFile(store(), {
+				source,
+				key: id,
+				fetchedAt,
+				upstream: [{ url: `https://example.invalid/stac/${source}-item-1`, itemId: `${source}-item-1` }],
+				rows: [
+					{ date: '2026-09-02', wetAreaM2: 1100, pctObserved: 100, upstreamKey: `${source}-item-1` },
+					{ date: newest, wetAreaM2: 950, pctObserved: 95, upstreamKey: `${source}-item-1` }
+				]
+			});
+			await writeStatus(store(), { source, ranAt: fetchedAt, stopped: false, perKey: { [id]: { lastGood: fetchedAt, newest } } });
+		}
+		const wofsBefore = (await observed('wofs')).get(id);
+		const r = await runDamsTick({ env: env(), store: store() });
+		expect(r).toMatchObject({ loaded: 2, failed: 0 });
+		expect((await observed('s2')).get(id)).toEqual({ feature_id: id, n: 2, newest: '2026-09-20' });
+		expect((await observed('s1')).get(id)).toEqual({ feature_id: id, n: 2, newest: '2026-09-12' });
+		// Positive control: the dam's WOfS rows are what they were, and so is its WOfS since.
+		expect((await observed('wofs')).get(id)).toEqual(wofsBefore);
+		resetDamsTick();
+		await runDamsTick({ env: env(), store: store() });
+		const listed = (await readWanted(store()))!.outlines.find((o) => o.featureId === id)!;
+		expect(listed.sinceBy).toEqual({ s2: '2026-09-21', s1: '2026-09-13' });
+		expect(listed.since).toBe(wofsBefore ? new Date(Date.parse(`${wofsBefore.newest}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10) : '1984-01-01');
+		// Another dam with no Sentinel row lists none.
+		const other = [...dams.values()].find((d) => d !== id)!;
+		expect((await readWanted(store()))!.outlines.find((o) => o.featureId === other)!.sinceBy).toBeUndefined();
+		// The worker's list itself (278): the newest row per source, the Sentinel ones included.
+		const row = await withoutUser(async (db) =>
+			(await db.query<{ s2: string; s1: string }>(`SELECT to_char(s2_newest, 'YYYY-MM-DD') AS s2, to_char(s1_newest, 'YYYY-MM-DD') AS s1 FROM app_dam_outlines() WHERE feature_id = $1`, [id])).rows[0]
+		);
+		expect(row).toEqual({ s2: '2026-09-20', s1: '2026-09-12' });
+	});
+
 	it('matches every dam again after the reference set is reloaded', async () => {
 		await runDamsTick({ env: env(), store: store() });
 		expect((await runDamsTick({ env: env(), store: store() }))!.matched).toBe(0);

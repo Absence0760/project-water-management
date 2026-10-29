@@ -10880,10 +10880,36 @@ together.
 - **Observed.** `dam_observation` (261, R5-A; 277, issue #624): per dam
   polygon, source (`waterbodies`: DE Africa Waterbodies' area series for the
   polygon it matched; `wofs`: WOfS water pixels inside the app's own
-  outline, R5-C; `s2`: Sentinel-2 water pixels inside it; `s1`: Sentinel-1
-  radar water inside it, both classified by passes planned in #624 steps 4
-  and 5), date, wet area
-  (m²) and the share of the outline seen clearly.
+  outline, R5-C; `s2`: Sentinel-2 pixels we classify inside the same
+  outline, below; `s1`: Sentinel-1 radar water inside it, planned in #624
+  step 5), date, wet area (m²) and the share of the outline seen clearly.
+- **Sentinel-2's classification** (`backend/src/dams/observed/sentinel/s2.ts`;
+  fixed thresholds, never tuned per dam). DE Africa publishes no Sentinel
+  water mask, so each 10 m pixel whose centre is inside the outline is
+  classified from the L2A Collection 1 bands:
+  - **water** where MNDWI = (B03 − B11) / (B03 + B11) > 0, B11 (20 m) taken
+    from the 20 m pixel the 10 m centre falls in (Xu 2006's modified NDWI:
+    the short-wave infrared copes better with turbid farm dams than the
+    near infrared); where B11 is missing (its no-data, or no B11 asset),
+    NDWI = (B03 − B08) / (B03 + B08) > 0 (McFeeters 1996) instead;
+  - each band is reflectance-proportional after the item's offset (DN −
+    1000 for Collection 1; a band's own GDAL scale and offset when its file
+    gives one). With one offset in both bands the sign of the difference,
+    and so the 0 threshold, doesn't depend on it; two that sum to 0 or less
+    are no view;
+  - **not clear** where the scene classification (SCL, 20 m) is 0 (no data),
+    1 (saturated or defective), 3 (cloud shadow), 8 or 9 (cloud, medium or
+    high probability) or 10 (thin cirrus); every other class (2 dark area,
+    4 to 7, 11 snow) is a clear view;
+  - **off the scene** where B03 is no-data or SCL is 0: not counted as
+    covered, as WOfS's no-data bit isn't;
+  - wet area = wet pixels × the pixel's ground area (100 m² ÷ k², k the UTM
+    scale factor, raster/mask.ts), the share observed = clear ÷ inside ×
+    100, and the same 90 % clear-view rule below. A 0.3 ha dam is ~30 such
+    pixels, where WOfS's 30 m pixels give it three or, for a narrow one,
+    none.
+  The share observed is per scene: two overlapping tiles on a date give the
+  one that saw more of the dam clearly, as two Landsat rows do.
 - **Clear views only.** A view is compared when at least **90 %** of the dam
   was seen clearly (`minPctObserved`): the wet area counts the part seen, so
   a partly clouded view understates the water. DE Africa's Waterbodies

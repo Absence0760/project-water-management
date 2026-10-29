@@ -28,7 +28,8 @@
 // the invented 8 × 6 grid repeated around it, so a feed over a seeded
 // example's synthetic catchment (backend/scripts/examples/map.ts) reads rain
 // offline. DE Africa's STAC search and its WOfS scenes are answered by
-// dams/observed/wofs/fixtures.ts (wofs-sample.json), and NOAA CPC's ONI and
+// dams/observed/wofs/fixtures.ts (wofs-sample.json), its Sentinel-2 scenes from
+// dams/observed/sentinel/fixtures.ts (s2-sample.json), and NOAA CPC's ONI and
 // AAO files by sources/cpc.ts (invented values). Any other URL is a 404. Invented grid and station: no real
 // place, catchment or measurement.
 import { createHash } from 'node:crypto';
@@ -42,7 +43,8 @@ import { AAO_URL, aaoFixtureText, ONI_URL, oniFixtureText } from './sources/cpc.
 import { DWS_BASE, parseDwsDaily } from './sources/dws.js';
 import { writeGrid } from './sources/tiff-write.js';
 import { wofsFixture } from '../dams/observed/wofs/fixtures.js';
-import { WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { S2_C1_COLLECTION, S2_C1_S3_BASE, WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { s2Fixture } from '../dams/observed/sentinel/fixtures.js';
 
 export const FIXTURE_DIR = fileURLToPath(new URL('../../fixtures/feeds/', import.meta.url));
 
@@ -170,9 +172,13 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 	// DE Africa's STAC search and WOfS scenes (dams/observed/wofs/fixtures.ts), made when first asked.
 	let wofs: ReturnType<typeof wofsFixture> | null = null;
 	const wofsOf = () => (wofs ??= wofsFixture(today));
+	// And its Sentinel-2 search and bands (dams/observed/sentinel/fixtures.ts).
+	let s2: ReturnType<typeof s2Fixture> | null = null;
+	const s2Of = () => (s2 ??= s2Fixture(today));
 
 	const file = (url: string): Uint8Array | null => {
 		if (url.startsWith(`${WOFS_S3_BASE}/`)) return wofsOf().scene(url);
+		if (url.startsWith(`${S2_C1_S3_BASE}/`)) return s2Of().scene(url);
 		const t = toEpochDay(today());
 		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
 		if (m && url.startsWith(CHC_BASE)) {
@@ -220,7 +226,7 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 			return bytes ? { tag: tagOf(bytes) } : null;
 		},
 		async text(url) {
-			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) return wofsOf().search(url);
+			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) return new URL(url).searchParams.get('collections') === S2_C1_COLLECTION ? s2Of().search(url) : wofsOf().search(url);
 			// NOAA CPC's climate indices (sources/cpc.ts): invented values, re-dated to today.
 			if (url === ONI_URL) return oniFixtureText(today());
 			if (url === AAO_URL) return aaoFixtureText(today());

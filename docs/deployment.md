@@ -2627,6 +2627,18 @@ One Terraform variable, off by default:
     frozen upstream since 2024-02 (data-sources.md), so it would fire from
     the first day.
 - **`dam_wofs_recency_alarm_days`** (default 60, at least 21).
+- **`dam_s2_enabled`** (default `false`; issue #624): only with
+  `dam_observations_enabled`, sets the fetcher's `DAM_OBSERVATIONS_S2 = "on"`,
+  so each run's Sentinel-2 pass follows WOfS (WOfS then up to 65 % of the
+  run, Sentinel-2 the rest), and adds `…-dam-pass-s2` (the heartbeat, as
+  above) and `water-management-dam-recency-s2`
+  (`DamObservationAgeDays{Source=s2}` above `dam_s2_recency_alarm_days`,
+  default 21, at least 10, for two days, or missing). Its history goes back
+  to 2019 at one request a second per host, so a dam's first backfill takes
+  a few days of hourly runs. Turn it on with a backend release that has the
+  pass and migration 278 (the worker's list gives each dam's newest `s2`
+  row).
+- **`dam_s2_recency_alarm_days`** (default 21, at least 10).
 
 The flag also turns on the worker's side (`DAM_OBSERVATIONS`, `infra/jobs.tf`).
 The plan refuses the flag (a precondition on
