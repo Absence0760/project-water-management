@@ -760,6 +760,27 @@ describe('CHC’s request slot, shared with the mirror-ingest Lambda (feeds/host
 		expect(JSON.parse(readFileSync(join(d, KEY), 'utf8')).owner).toBe('py');
 	});
 
+	it('a backfill execution’s hold, or its reservation of the next turn, defers the fetch and names who and why in the log', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		// Held for the whole run (ingest/lease.py hold_host_for_backfill): the same deferral as any holder, by name.
+		mirror('ingest:backfill:run-1');
+		const asked = counting();
+		expect(await handler({ Records: [record('m1', gefs)] } as never)).toEqual({ batchItemFailures: [] });
+		const deferred = () => info.mock.calls.map(([l]) => JSON.parse(l as string)).filter((l) => l.event === 'feed_fetch_deferred');
+		expect(deferred().at(-1)).toMatchObject({ heldBy: 'ingest:backfill:run-1', reserved: false });
+		// Free, but a waiting backfill month reserved the next turn: the fetch gives the slot back and defers.
+		const d = mirror();
+		mkdirSync(join(d, 'ingest-state/hosts/chc'), { recursive: true });
+		writeFileSync(join(d, 'ingest-state/hosts/chc/reserved.json'), JSON.stringify({ owner: 'backfill:x', expires: Date.now() / 1000 + 300, holder: 'ingest:backfill:run-2' }));
+		await handler({ Records: [record('m2', gefs)] } as never);
+		expect(deferred().at(-1)).toMatchObject({ heldBy: 'ingest:backfill:run-2', reserved: true });
+		expect(existsSync(join(d, KEY))).toBe(false);
+		expect(asked.n).toBe(0);
+		expect(sent.map((s) => (s.message as { result: unknown }).result)).toEqual([{ ok: false, deferred: 'host_busy' }, { ok: false, deferred: 'host_busy' }]);
+	});
+
 	it('a DWS fetch takes no slot: DWS is not CHC', async () => {
 		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
 		vi.spyOn(console, 'info').mockImplementation(() => {});

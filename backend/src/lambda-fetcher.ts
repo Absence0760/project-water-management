@@ -219,7 +219,7 @@ async function fetchHoldingSlot(
 		return { ok: false, error: SLOT_FAILED };
 	}
 	if ('busy' in take) {
-		logEvent('info', { event: 'feed_fetch_deferred', feedId: ids.feedId, fetchJobId: ids.fetchJobId, source: req.source, heldBy: take.busy.holder, heldUntil: take.busy.until });
+		logEvent('info', { event: 'feed_fetch_deferred', feedId: ids.feedId, fetchJobId: ids.fetchJobId, source: req.source, heldBy: take.busy.holder, heldUntil: take.busy.until, reserved: take.busy.reserved === true });
 		return HOST_BUSY_ANSWER;
 	}
 	try {
@@ -251,7 +251,7 @@ async function holdingPassSlot<T>(
 	const deadline = started + (context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS);
 	const take = await takeHostSlotWaiting(slots, 'chc', { holder: `fetcher:${product}`, deadline });
 	if ('busy' in take) {
-		logEvent('warn', { event: 'mirror_daily_ingest', product, stopped: 'host_busy', heldBy: take.busy.holder, heldUntil: take.busy.until, requests: 0, ms: Date.now() - started });
+		logEvent('warn', { event: 'mirror_daily_ingest', product, stopped: 'host_busy', heldBy: take.busy.holder, heldUntil: take.busy.until, reserved: take.busy.reserved === true, requests: 0, ms: Date.now() - started });
 		return skipped;
 	}
 	try {

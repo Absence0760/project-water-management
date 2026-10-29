@@ -36,6 +36,9 @@ import zarrstore  # noqa: E402
 from fakes3 import FakeS3  # noqa: E402
 
 FIXTURE = HERE / "fixtures" / "chc" / fx.NAME
+# A backfill execution as the state machine names it ($$.Execution.Id).
+EXECUTION = "arn:aws:states:af-south-1:000000000000:execution:water-management-mirror-backfill:run-1"
+OTHER_EXECUTION = "arn:aws:states:af-south-1:000000000000:execution:water-management-mirror-backfill:run-2"
 
 
 def month_slice(first_day: dt.date, days: int = 3, bump: float = 0.0) -> chcnetcdf.RegionSlice:
@@ -47,9 +50,13 @@ def month_slice(first_day: dt.date, days: int = 3, bump: float = 0.0) -> chcnetc
 
 class Event(unittest.TestCase):
     def test_valid_events(self):
-        self.assertEqual(lambda_handler.validate_event({"product": "rnl", "mode": "monthly"}), {"product": "rnl", "mode": "monthly", "month": None})
+        self.assertEqual(lambda_handler.validate_event({"product": "rnl", "mode": "monthly"}), {"product": "rnl", "mode": "monthly", "month": None, "hold": None})
         self.assertEqual(lambda_handler.validate_event({"product": "sat", "mode": "backfill", "month": "2000-06"})["month"], "2000-06")
         self.assertEqual(lambda_handler.validate_event({"product": "rnl", "mode": "backfill", "month": "1981-01"})["month"], "1981-01")
+        # The state machine's month: its execution's hold rides along (infra/ingest_backfill.tf).
+        hold = {"execution": EXECUTION, "pauseSeconds": 60}
+        self.assertEqual(lambda_handler.validate_event({"product": "rnl", "mode": "backfill", "month": "1981-01", "hold": hold})["hold"], hold)
+        self.assertEqual(lambda_handler.validate_release({"mode": "release_hold", "hold": {"execution": EXECUTION}}), {"execution": EXECUTION})
 
     def test_invalid_events(self):
         for ev in [
@@ -67,9 +74,31 @@ class Event(unittest.TestCase):
             {"product": "rnl", "mode": "monthly", "month": "2024-02"},  # a monthly run takes none
             {"product": "sat", "mode": "backfill", "month": "2000-05"},  # before sat's first file
             {"product": "rnl", "mode": "backfill", "month": "1980-12"},
+            # A hold: only on a backfill, exactly an execution id and whole seconds of pause.
+            {"product": "rnl", "mode": "monthly", "hold": {"execution": EXECUTION, "pauseSeconds": 60}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": EXECUTION}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": EXECUTION, "pauseSeconds": 60, "x": 1}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": "a b", "pauseSeconds": 60}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": "", "pauseSeconds": 60}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": "x:", "pauseSeconds": 60}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": EXECUTION, "pauseSeconds": 60.5}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": EXECUTION, "pauseSeconds": True}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": {"execution": EXECUTION, "pauseSeconds": 3601}},
+            {"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": EXECUTION},
         ]:
             with self.assertRaises(lambda_handler.BadEvent, msg=repr(ev)):
                 lambda_handler.validate_event(ev)
+
+    def test_invalid_releases(self):
+        for ev in [
+            {"mode": "release_hold"},
+            {"mode": "release_hold", "hold": {}},
+            {"mode": "release_hold", "hold": {"execution": EXECUTION, "pauseSeconds": 60}},
+            {"mode": "release_hold", "hold": {"execution": "a b"}},
+            {"mode": "release_hold", "hold": {"execution": EXECUTION}, "product": "rnl"},
+        ]:
+            with self.assertRaises(lambda_handler.BadEvent, msg=repr(ev)):
+                lambda_handler.validate_release(ev)
 
 
 class Fixture(unittest.TestCase):
@@ -319,6 +348,153 @@ class FixturesRun(unittest.TestCase):
         self.assertNotIn(slot, s3.keys("mirror"))
         with self.assertRaises(ValueError):
             lease.host_slot_key("dws")
+
+    # --- A backfill execution's hold (issue #618 step 4) -------------------------------
+
+    def _month(self, s3, month, execution=EXECUTION, pause=60, **kw):
+        ev = {"product": "rnl", "mode": "backfill", "month": month, "hold": {"execution": execution, "pauseSeconds": pause}}
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
+            return lambda_handler.handler(ev, None, s3_client=s3, **kw)
+
+    def _release(self, s3, execution=EXECUTION):
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
+            return lambda_handler.handler({"mode": "release_hold", "hold": {"execution": execution}}, None, s3_client=s3)
+
+    def _slot(self, s3):
+        raw = s3.objects.get(("mirror", lease.host_slot_key("chc")))
+        return json.loads(raw) if raw is not None else None
+
+    def test_a_backfill_keeps_the_slot_across_its_months_and_releases_it_at_the_end(self):
+        s3 = FakeS3()
+        slot = lease.host_slot_key("chc")
+        out = self._month(s3, "2024-01")
+        self.assertEqual(out["revision"], 1)
+        # Kept through the pause, not released: the execution's owner, its name, and an expiry of the pause plus the margin.
+        held = self._slot(s3)
+        self.assertEqual(held["owner"], lease.backfill_owner(EXECUTION))
+        self.assertEqual(held["holder"], "ingest:backfill:run-1")
+        self.assertAlmostEqual(held["expires"], time.time() + 60 + lease.BACKFILL_HOLD_MARGIN_S, delta=30)
+        self.assertNotIn(("delete", slot), s3.calls)
+        # Anyone else (the fetcher's per-feed fetch, a daily run) meets it held, by name.
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        with self.assertRaisesRegex(lease.HostBusy, "ingest:backfill:run-1"):
+            with lease.hold_host(mirror, "chc", 300.0, holder="fetcher:chirps"):
+                pass
+        with unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror"}):
+            daily = lambda_handler.handler({"product": "sat", "mode": "monthly"}, None, s3_client=s3)
+        self.assertRegex(daily["busy"], "ingest:backfill:run-1")
+        self.assertFalse(any(k.startswith("sat/") for k in s3.keys("mirror")))
+        # The next month of the same execution recognises the hold as its own and copies.
+        out = self._month(s3, "2024-02")
+        self.assertEqual(out["finalThrough"], "2024-02-29")
+        self.assertEqual(self._slot(s3)["owner"], lease.backfill_owner(EXECUTION))
+        self.assertNotIn(("delete", slot), s3.calls)
+        # Another execution's month waits (HostBusy, retried by the state machine) and asks CHC nothing.
+        with self.assertRaisesRegex(lease.HostBusy, "ingest:backfill:run-1"):
+            self._month(s3, "2024-01", execution=OTHER_EXECUTION, opener=lambda *a, **k: self.fail("asked CHC"))
+        self.assertEqual(self._slot(s3)["owner"], lease.backfill_owner(EXECUTION))
+        # The execution's last step releases it: the slot is free for the fetcher again.
+        self.assertEqual(self._release(s3), {"mode": "release_hold", "holder": "ingest:backfill:run-1", "released": True})
+        self.assertIsNone(self._slot(s3))
+        self.assertEqual(self._release(s3)["released"], False)  # a second release (a retried step) is harmless
+
+    def test_the_hold_is_kept_through_a_failed_month(self):
+        # A month that fails keeps the hold (a retried Lambda error must find it its own); the release step ends it.
+        s3 = FakeS3()
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        with self.assertRaises(RuntimeError):
+            with lease.hold_host_for_backfill(mirror, "chc", 900.0, EXECUTION, 60, now=lambda: 1000.0):
+                self.assertEqual(self._slot(s3)["expires"], 1000.0 + 900.0 + 60 + lease.BACKFILL_HOLD_MARGIN_S)
+                raise RuntimeError("the month failed")
+        held = self._slot(s3)
+        self.assertEqual(held["owner"], lease.backfill_owner(EXECUTION))
+        self.assertGreater(held["expires"], time.time())
+
+    def test_a_hold_taken_over_meanwhile_is_left_alone_on_the_way_out(self):
+        s3 = FakeS3()
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        with lease.hold_host_for_backfill(mirror, "chc", 900.0, EXECUTION, 60, now=lambda: 1000.0):
+            # Expired under us and taken over (it can't, in a Lambda; the code mustn't assume so).
+            s3.objects[("mirror", lease.host_slot_key("chc"))] = json.dumps({"owner": "fetcher-run", "expires": 5000.0, "holder": "fetcher:chirps"}).encode()
+        self.assertEqual(self._slot(s3)["owner"], "fetcher-run")
+        self.assertFalse(lease.release_backfill_hold(mirror, "chc", EXECUTION))  # release removes only our own hold
+        self.assertEqual(self._slot(s3)["owner"], "fetcher-run")
+
+    def test_an_expired_hold_is_taken_over(self):
+        s3 = FakeS3()
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        slot = ("mirror", lease.host_slot_key("chc"))
+        # An execution stopped by hand (no release step): its hold expires, and the fetcher takes the slot.
+        s3.objects[slot] = json.dumps({"owner": lease.backfill_owner(OTHER_EXECUTION), "expires": 999.0, "holder": "ingest:backfill:run-2"}).encode()
+        with lease.hold_host(mirror, "chc", 300.0, holder="fetcher:chirps", now=lambda: 1000.0) as owner:
+            self.assertEqual(self._slot(s3)["owner"], owner)
+        self.assertIsNone(self._slot(s3))
+        # Another execution's expired hold: a new execution's month takes it over.
+        s3.objects[slot] = json.dumps({"owner": lease.backfill_owner(OTHER_EXECUTION), "expires": 999.0}).encode()
+        with lease.hold_host_for_backfill(mirror, "chc", 900.0, EXECUTION, 60, now=lambda: 1000.0):
+            self.assertEqual(self._slot(s3)["owner"], lease.backfill_owner(EXECUTION))
+        # Control: still live, it is busy.
+        with self.assertRaises(lease.HostBusy):
+            with lease.hold_host_for_backfill(mirror, "chc", 900.0, OTHER_EXECUTION, 60, now=lambda: 1001.0):
+                pass
+
+    def test_a_waiting_backfill_reserves_the_next_turn(self):
+        s3 = FakeS3()
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        slot, reserved = ("mirror", lease.host_slot_key("chc")), ("mirror", lease.host_reservation_key("chc"))
+        self.assertEqual(reserved[1], "ingest-state/hosts/chc/reserved.json")
+        s3.objects[slot] = json.dumps({"owner": "fetcher-run", "expires": 1600.0, "holder": "fetcher:chirps"}).encode()
+        # The fetcher holds it: the backfill month is busy, and reserves the next turn.
+        with self.assertRaisesRegex(lease.HostBusy, "reserved the next turn"):
+            with lease.hold_host_for_backfill(mirror, "chc", 900.0, EXECUTION, 60, now=lambda: 1000.0):
+                pass
+        r = json.loads(s3.objects[reserved])
+        self.assertEqual((r["owner"], r["holder"], r["expires"]), (lease.backfill_owner(EXECUTION), "ingest:backfill:run-1", 1000.0 + lease.RESERVATION_S))
+        # Another execution waiting meanwhile doesn't steal the reservation.
+        with self.assertRaisesRegex(lease.HostBusy, "fetcher:chirps"):
+            with lease.hold_host_for_backfill(mirror, "chc", 900.0, OTHER_EXECUTION, 60, now=lambda: 1010.0):
+                pass
+        self.assertEqual(json.loads(s3.objects[reserved])["owner"], lease.backfill_owner(EXECUTION))
+        # The fetcher lets go; a daily run (any other taker) gets the free slot but gives it back to the reservation.
+        del s3.objects[slot]
+        with self.assertRaisesRegex(lease.HostBusy, "ingest:backfill:run-1 reserved"):
+            with lease.hold_host(mirror, "chc", 300.0, holder="ingest:sat:monthly", now=lambda: 1100.0):
+                self.fail("ran past a live reservation")
+        self.assertNotIn(slot, s3.objects)
+        # The backfill's retry takes it and clears its reservation.
+        with lease.hold_host_for_backfill(mirror, "chc", 900.0, EXECUTION, 60, now=lambda: 1120.0):
+            self.assertEqual(self._slot(s3)["owner"], lease.backfill_owner(EXECUTION))
+            self.assertNotIn(reserved, s3.objects)
+
+    def test_an_expired_reservation_is_ignored(self):
+        s3 = FakeS3()
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        s3.objects[("mirror", lease.host_reservation_key("chc"))] = json.dumps({"owner": lease.backfill_owner(EXECUTION), "expires": 999.0}).encode()
+        with lease.hold_host(mirror, "chc", 300.0, holder="ingest:rnl:monthly", now=lambda: 1000.0) as owner:
+            self.assertEqual(self._slot(s3)["owner"], owner)
+
+    def test_the_release_also_drops_its_own_reservation_only(self):
+        s3 = FakeS3()
+        mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=s3)
+        reserved = ("mirror", lease.host_reservation_key("chc"))
+        s3.objects[reserved] = json.dumps({"owner": lease.backfill_owner(OTHER_EXECUTION), "expires": time.time() + 300}).encode()
+        self.assertFalse(lease.release_backfill_hold(mirror, "chc", EXECUTION))
+        self.assertIn(reserved, s3.objects)  # another execution's: left alone
+        s3.objects[reserved] = json.dumps({"owner": lease.backfill_owner(EXECUTION), "expires": time.time() + 300}).encode()
+        lease.release_backfill_hold(mirror, "chc", EXECUTION)
+        self.assertNotIn(reserved, s3.objects)
+
+    def test_a_backfill_hold_on_a_local_copy(self):
+        # The same through a file:// copy (dev): kept across two months, then released.
+        hold = {"execution": "local-run", "pauseSeconds": 60}
+        lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-01", "hold": hold})
+        p = self.root / lease.host_slot_key("chc")
+        self.assertEqual(json.loads(p.read_text())["holder"], "ingest:backfill:local-run")
+        self.assertEqual(p.stat().st_mode & 0o077, 0)
+        out = lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02", "hold": hold})
+        self.assertEqual(out["finalThrough"], "2024-02-29")
+        self.assertTrue(lambda_handler.handler({"mode": "release_hold", "hold": {"execution": "local-run"}})["released"])
+        self.assertFalse(p.exists())
 
     def test_unknown_source_and_missing_mirror_refuse(self):
         with unittest.mock.patch.dict(os.environ, {"FEED_SOURCE": "nope"}):

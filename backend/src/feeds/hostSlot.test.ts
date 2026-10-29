@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
-import { HOST_BUSY_ANSWER, HOST_SLOT_DEFAULT_MS, HOST_SLOT_MARGIN_MS, HostBusyAnswer, hostSlotKey, hostSlots, type SlotS3, slotHostFor, takeHostSlotWaiting } from './hostSlot.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HOST_BUSY_ANSWER, HOST_SLOT_DEFAULT_MS, HOST_SLOT_MARGIN_MS, HostBusyAnswer, hostReservationKey, hostSlotKey, hostSlots, type SlotS3, slotHostFor, takeHostSlotWaiting } from './hostSlot.js';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -51,6 +51,7 @@ class FakeS3 implements SlotS3 {
 }
 
 const KEY = 'ingest-state/hosts/chc/lease.json';
+const RESERVED = 'ingest-state/hosts/chc/reserved.json';
 
 describe('CHC request slot (feeds/hostSlot.ts)', () => {
 	it('is the key the Python side takes, for CHIRPS and CHIRPS-GEFS only', () => {
@@ -99,8 +100,50 @@ describe('CHC request slot (feeds/hostSlot.ts)', () => {
 		s3.objects.set(`mirror/${KEY}`, dead);
 		const t = await slots.take('chc', { holder: 'fetcher:chirps', remainingMs: 1000 });
 		if (!('held' in t)) throw new Error('expected the slot');
-		expect(s3.calls.at(-1)).toEqual(['PutObjectCommand', KEY, { IfNoneMatch: undefined, IfMatch: FakeS3.etag(dead) }]);
+		expect(s3.calls.filter(([c]) => c === 'PutObjectCommand').at(-1)).toEqual(['PutObjectCommand', KEY, { IfNoneMatch: undefined, IfMatch: FakeS3.etag(dead) }]);
 		expect(JSON.parse(s3.objects.get(`mirror/${KEY}`)!).owner).toBe(t.held.owner);
+	});
+
+	it('S3: a backfill execution’s hold is busy by its name, like any holder (ingest/lease.py hold_host_for_backfill)', async () => {
+		const s3 = new FakeS3();
+		const now = 2_000_000_000_000;
+		const slots = hostSlots('s3://mirror', { s3, now: () => now })!;
+		const hold = `${JSON.stringify({ owner: 'backfill:arn:aws:states:x:1:execution:sm:run-1', expires: now / 1000 + 420, holder: 'ingest:backfill:run-1' })}\n`;
+		s3.objects.set(`mirror/${KEY}`, hold);
+		expect(await slots.take('chc', { holder: 'fetcher:chirps', remainingMs: 1000 })).toEqual({ busy: { holder: 'ingest:backfill:run-1', until: new Date(now + 420_000).toISOString() } });
+		expect(s3.objects.get(`mirror/${KEY}`)).toBe(hold);
+	});
+
+	it('S3: a free slot with a live reservation is given back at once and answers busy (reserved); an expired one is ignored', async () => {
+		const s3 = new FakeS3();
+		const now = 2_000_000_000_000;
+		const slots = hostSlots('s3://mirror/pre', { s3, now: () => now })!;
+		expect(hostReservationKey('chc')).toBe(RESERVED);
+		const reservation = JSON.stringify({ owner: 'backfill:run-1', expires: now / 1000 + 300, holder: 'ingest:backfill:run-1' });
+		s3.objects.set(`mirror/pre/${RESERVED}`, reservation);
+		expect(await slots.take('chc', { holder: 'fetcher:chirps', remainingMs: 1000 })).toEqual({
+			busy: { holder: 'ingest:backfill:run-1', until: new Date(now + 300_000).toISOString(), reserved: true }
+		});
+		expect(s3.objects.has(`mirror/pre/${KEY}`)).toBe(false); // given back
+		expect(s3.objects.get(`mirror/pre/${RESERVED}`)).toBe(reservation); // only ever read here
+		// Expired (the backfill gave up or took its turn and died): ignored.
+		s3.objects.set(`mirror/pre/${RESERVED}`, JSON.stringify({ owner: 'backfill:run-1', expires: now / 1000 - 1 }));
+		const t = await slots.take('chc', { holder: 'fetcher:chirps', remainingMs: 1000 });
+		expect('held' in t).toBe(true);
+	});
+
+	it('S3: a reservation that can’t be read is ignored and logged: it is advisory, the slot is what counts', async () => {
+		const s3 = new FakeS3();
+		const send = s3.send.bind(s3);
+		s3.send = async (command: unknown) => {
+			if ((command as { input: { Key: string } }).input.Key === RESERVED) throw Object.assign(new Error('Access Denied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } });
+			return send(command);
+		};
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const t = await hostSlots('s3://mirror', { s3 })!.take('chc', { holder: 'fetcher:chirps', remainingMs: 1000 });
+		expect('held' in t).toBe(true);
+		expect(warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'host_slot_reservation_unreadable')).toMatchObject({ host: 'chc', error: 'AccessDenied' });
+		warn.mockRestore();
 	});
 
 	it('S3: release leaves a slot someone else holds now', async () => {
@@ -143,6 +186,11 @@ describe('CHC request slot (feeds/hostSlot.ts)', () => {
 		const b = await slots.take('chc', { holder: 'fetcher:gefs', remainingMs: 10_000 });
 		if (!('held' in b)) throw new Error('expected the slot');
 		expect(JSON.parse(readFileSync(path, 'utf8')).owner).toBe(b.held.owner);
+		await b.held.release();
+		// A live reservation beside it: the free slot is given back.
+		writeFileSync(join(d, RESERVED), JSON.stringify({ owner: 'backfill:local', expires: now / 1000 + 300, holder: 'ingest:backfill:local' }));
+		expect(await slots.take('chc', { holder: 'fetcher:gefs', remainingMs: 10_000 })).toMatchObject({ busy: { holder: 'ingest:backfill:local', reserved: true } });
+		expect(existsSync(path)).toBe(false);
 	});
 });
 

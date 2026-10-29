@@ -2,7 +2,9 @@
 
 Event: {"product": "rnl" | "sat", "mode": "monthly"}
        {"product": "era5l", "mode": "monthly" | "backfill", "month"?}  (era5land.py)
-       {"product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM"}
+       {"product": "rnl" | "sat", "mode": "backfill", "month": "YYYY-MM",
+        "hold"?: {"execution": "<execution id>", "pauseSeconds": n}}
+       {"mode": "release_hold", "hold": {"execution": "<execution id>"}}
        {"product": "imerg_late", "mode": "recent", "days": 1-30?}   (imerg.py)
        {"product": "ecmwf", "mode": "daily"}   (ecmwf.py, its own run)
        {"product": "agera5_et0", "mode": "monthly" | "backfill", "month"?}  (agera5.py)
@@ -39,6 +41,14 @@ job shares with the fetcher Lambda before they ask CHC anything, so at most
 one of our processes asks CHC at a time. Held by the other side, a backfill
 month raises lease.HostBusy (the state machine retries it) and a daily run
 ends quietly with `busy` in its answer, as for a held product lease.
+
+**A backfill execution's hold** (lease.hold_host_for_backfill, issue #618
+step 4): the state machine names its execution in each month's `hold`, and
+every month of that execution takes the slot as the same owner, keeps it
+through the pause after (`pauseSeconds`) and never releases it; the
+execution's last step sends `{"mode": "release_hold"}`, which does. A
+backfill event without `hold` (sent by hand) takes the slot for its own
+invocation only, as before.
 
 Run locally: `pnpm dev:ingest:run` (ingest/README.md).
 """
@@ -93,7 +103,7 @@ def validate_event(event) -> dict:
     """The event, checked: product and mode required; month required for a backfill and refused otherwise; nothing else."""
     if not isinstance(event, dict):
         raise BadEvent("the event must be a JSON object")
-    extra = set(event) - {"product", "mode", "month"}
+    extra = set(event) - {"product", "mode", "month", "hold"}
     if extra:
         raise BadEvent(f"unknown event keys: {sorted(extra)}")
     if event.get("product") not in PRODUCTS:
@@ -107,11 +117,51 @@ def validate_event(event) -> dict:
         raise BadEvent('a backfill names its month ("month": "YYYY-MM")')
     if event["mode"] == "monthly" and month is not None:
         raise BadEvent("a monthly run takes no month: it copies whatever the listing has that the copy doesn't")
+    hold = event.get("hold")
+    if hold is not None:
+        if event["mode"] != "backfill":
+            raise BadEvent('only a backfill month keeps the CHC slot for its execution ("hold")')
+        hold = _validate_hold(hold, pause=True)
     if month is not None:
         first = chirps_final.FIRST_MONTH[event["product"]]
         if (int(month[:4]), int(month[5:])) < first:
             raise BadEvent(f"CHC's {event['product']} byMonth files start at {first[0]:04d}-{first[1]:02d}, not {month}")
-    return {"product": event["product"], "mode": event["mode"], "month": month}
+    return {"product": event["product"], "mode": event["mode"], "month": month, "hold": hold}
+
+
+MAX_PAUSE_S = 3600
+
+
+def _validate_hold(hold, pause: bool) -> dict:
+    """A backfill execution's hold: {"execution": its id, "pauseSeconds": the wait after each month}; the release names only the execution."""
+    keys = {"execution", "pauseSeconds"} if pause else {"execution"}
+    if not isinstance(hold, dict) or set(hold) != keys:
+        raise BadEvent(f"hold must be an object with exactly {sorted(keys)}")
+    if not lease.valid_execution(hold["execution"]):
+        raise BadEvent(f"hold.execution must be an execution id, got {hold['execution']!r}")
+    if pause:
+        p = hold["pauseSeconds"]
+        if isinstance(p, bool) or not isinstance(p, int) or not 0 <= p <= MAX_PAUSE_S:
+            raise BadEvent(f"hold.pauseSeconds must be whole seconds from 0 to {MAX_PAUSE_S}, got {p!r}")
+    return dict(hold)
+
+
+def validate_release(event) -> dict:
+    """The backfill's last step: exactly {"mode": "release_hold", "hold": {"execution"}}."""
+    if not isinstance(event, dict) or set(event) != {"mode", "hold"} or event["mode"] != "release_hold":
+        raise BadEvent('a release is exactly {"mode": "release_hold", "hold": {"execution": ...}}')
+    return _validate_hold(event["hold"], pause=False)
+
+
+def _release_hold(event, s3_client=None) -> dict:
+    """End a backfill execution's hold on CHC's slot (and its reservation), only ever its own. It names no product, so it publishes no lag."""
+    hold = validate_release(event)
+    mirror_url = os.environ.get("MIRROR_URL")
+    if not mirror_url:
+        raise RuntimeError("MIRROR_URL is not set (file:///abs/path or s3://bucket)")
+    mirror = zarrstore.Mirror.from_url(mirror_url, s3_client=s3_client)
+    released = lease.release_backfill_hold(mirror, "chc", hold["execution"])
+    return {"mode": "release_hold", "holder": lease.backfill_holder(hold["execution"]), "released": released}
 
 
 def _publish_lag(mirror, product: str, metrics, today: dt.date) -> int:
@@ -124,6 +174,9 @@ def _publish_lag(mirror, product: str, metrics, today: dt.date) -> int:
 def handler(event, context=None, s3_client=None, opener=None, metrics=None, clock=None, sleep=None, today=None):
     """Run one event. `s3_client`, `opener` (polite's), `metrics` (a cloudwatch
     sink), `clock`/`sleep` (pacing) and `today` (the lag's date) are for tests."""
+    # The backfill's last step: release its execution's hold on CHC's slot.
+    if isinstance(event, dict) and event.get("mode") == "release_hold":
+        return _release_hold(event, s3_client)
     # --- IMERG Late (issue #604 R4-D): {"product": "imerg_late", "mode": "recent"}, imerg.py ---
     if isinstance(event, dict) and event.get("product") == imerg.PRODUCT:
         return imerg.handle(event, context, s3_client=s3_client, opener=opener, metrics=metrics, today=today, clock=clock, sleep=sleep)
@@ -180,8 +233,13 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
     # no datapoint as breaching), a failure before re-raising it.
     try:
         # CHC's one request slot, shared with the fetcher Lambda (lease.hold_host),
-        # taken before the product's own lease and before anything is asked.
-        with lease.hold_host(mirror, "chc", run.budget.remaining_s(), holder=f"ingest:{product}:{ev['mode']}"):
+        # taken before the product's own lease and before anything is asked; a
+        # backfill execution's month keeps it through the pause after.
+        if ev["hold"]:
+            slot = lease.hold_host_for_backfill(mirror, "chc", run.budget.remaining_s(), ev["hold"]["execution"], ev["hold"]["pauseSeconds"])
+        else:
+            slot = lease.hold_host(mirror, "chc", run.budget.remaining_s(), holder=f"ingest:{product}:{ev['mode']}")
+        with slot:
             if ev["mode"] == "monthly":
                 out = chirps_final.run_monthly(mirror, product, run)
             else:

@@ -1133,15 +1133,16 @@ run "daily_ingest_off_by_default" {
   assert {
     condition = (
       aws_iam_role_policy.fetcher_chc_slot.role == aws_iam_role.fetcher_lambda.id &&
-      length(data.aws_iam_policy_document.fetcher_chc_slot.statement) == 2 &&
+      length(data.aws_iam_policy_document.fetcher_chc_slot.statement) == 3 &&
       alltrue([for s in data.aws_iam_policy_document.fetcher_chc_slot.statement :
         s.effect != "Deny" && (
           (toset(s.actions) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]) && toset(s.resources) == toset(["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/lease.json"])) ||
+          (toset(s.actions) == toset(["s3:GetObject"]) && toset(s.resources) == toset(["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/reserved.json"])) ||
           (toset(s.actions) == toset(["s3:ListBucket"]) && toset(s.resources) == toset([aws_s3_bucket.mirror.arn]))
         )
       ])
     )
-    error_message = "The fetcher may read, create, take over and delete CHC's request slot (ingest-state/hosts/chc/lease.json) and nothing else in the mirror bucket, daily ingest on or off."
+    error_message = "The fetcher may read, create, take over and delete CHC's request slot (ingest-state/hosts/chc/lease.json), only read its reservation (reserved.json), and nothing else in the mirror bucket, daily ingest on or off."
   }
 }
 
@@ -1406,6 +1407,42 @@ run "backfill_one_month_at_a_time_paced_and_never_retrying_a_refusal" {
     )
     error_message = "The backfill role may invoke the ingest function and nothing else."
   }
+  # The execution's hold on CHC's request slot (issue #618 step 4; ingest/lease.py hold_host_for_backfill).
+  assert {
+    condition = (
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Parameters.Payload == {
+        "product.$" = "$.product"
+        "mode.$"    = "$.mode"
+        "month.$"   = "$.month"
+        hold        = { "execution.$" = "$$.Execution.Id", pauseSeconds = 60 }
+      }
+    )
+    error_message = "Each month names its execution and the pause after it (the Pace's seconds), so every month of one execution holds CHC's slot as one owner through the pauses."
+  }
+  assert {
+    condition = (
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.Next == "ReleaseHold" &&
+      one(jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.Catch).ErrorEquals == ["States.ALL"] &&
+      one(jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.Catch).ResultPath == "$.error" &&
+      one(jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.Catch).Next == "ReleaseHold" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.ReleaseHold.Parameters.FunctionName == "arn:aws:lambda:af-south-1:000000000000:function:water-management-mirror-ingest" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.ReleaseHold.Parameters.Payload == { mode = "release_hold", hold = { "execution.$" = "$$.Execution.Id" } } &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.ReleaseHold.Next == "Outcome" &&
+      one(jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.ReleaseHold.Catch).Next == "Outcome"
+    )
+    error_message = "The execution's hold is released after the months, on success and (through the Map's Catch) on failure, and a failed release doesn't change the outcome."
+  }
+  assert {
+    condition = (
+      one(jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Outcome.Choices).Variable == "$.error" &&
+      one(jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Outcome.Choices).Next == "MonthFailed" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.MonthFailed.Type == "Fail" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.MonthFailed.ErrorPath == "$.error.Error" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Outcome.Default == "Done" &&
+      jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Done.Type == "Succeed"
+    )
+    error_message = "A month that failed (a 403 above all) still fails the execution, with its own error, after the release."
+  }
 }
 
 run "rejects_a_backfill_faster_than_a_file_a_minute" {
@@ -1413,6 +1450,16 @@ run "rejects_a_backfill_faster_than_a_file_a_minute" {
 
   variables {
     ingest_backfill_wait_seconds = 30
+  }
+
+  expect_failures = [var.ingest_backfill_wait_seconds]
+}
+
+run "rejects_a_backfill_pause_longer_than_the_hold_accepts" {
+  command = plan
+
+  variables {
+    ingest_backfill_wait_seconds = 3601
   }
 
   expect_failures = [var.ingest_backfill_wait_seconds]
