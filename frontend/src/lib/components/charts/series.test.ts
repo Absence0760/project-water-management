@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import uPlot from 'uplot';
-import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, focusWindow, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS } from './series';
+import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, focusWindow, isolatedIndices, laneRoom, logFloor, panWindow, pointMarks, printScale, swatchFill, TIME_TICKS } from './series';
 
 describe('printScale', () => {
 	it('lays a chart out twice as large on a 1× screen, so its canvas has 2 device pixels per CSS pixel', () => {
@@ -233,5 +233,30 @@ describe('laneRoom (the y axis makes room for the lanes, issue #604 R5-B)', () =
 		expect(above(0, flat, 100)).toBeCloseTo(10, 9);
 		expect(laneRoom(0, 6, 10, 20)).toEqual([0, 6]);
 		expect(laneRoom(0, 6, 180, 0)).toEqual([0, 6]);
+	});
+});
+
+describe('pointMarks and swatchFill (hollow points: the dam chart’s radar rings, issue #624)', () => {
+	const RED = '#c0392b';
+
+	it('draws a points series as filled dots, 3 px by default', () => {
+		expect(pointMarks({}, RED)).toEqual({ show: true, size: 3, width: 0, fill: RED, stroke: RED });
+		expect(pointMarks({ pointSize: 8 }, RED)).toEqual({ show: true, size: 8, width: 0, fill: RED, stroke: RED });
+	});
+
+	it('draws a hollow one as rings: a full-strength 2 px outline in the series colour, nothing inside', () => {
+		expect(pointMarks({ pointSize: 8, hollow: true }, RED)).toEqual({ show: true, size: 8, width: 2, fill: 'transparent', stroke: RED });
+	});
+
+	it('scales the dot and the ring’s outline with the print scale', () => {
+		expect(pointMarks({ pointSize: 8, hollow: true }, RED, 2)).toMatchObject({ size: 16, width: 4 });
+		expect(pointMarks({ pointSize: 8 }, RED, 2)).toMatchObject({ size: 16, width: 0 });
+	});
+
+	it('keys a hollow series with an outline swatch, a filled one with a filled swatch, and a line with none', () => {
+		expect(swatchFill({ style: 'points' }, RED)).toBe(RED);
+		expect(swatchFill({ style: 'points', hollow: true }, RED)).toBe('');
+		expect(swatchFill({ style: 'line' }, RED)).toBe('');
+		expect(swatchFill(undefined, RED)).toBe('');
 	});
 });

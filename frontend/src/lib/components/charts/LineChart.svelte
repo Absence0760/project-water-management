@@ -10,7 +10,7 @@
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
-	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, focusWindow, isolatedIndices, laneRoom, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
+	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, focusWindow, isolatedIndices, laneRoom, logFloor, panWindow, pointMarks, printScale, swatchFill, TIME_TICKS, type ChartSeries } from './series';
 	import { zoomHint } from './zoomHint';
 
 	let {
@@ -204,7 +204,7 @@
 				...base,
 				width: 0,
 				paths: () => null,
-				points: { show: true, size: (s.pointSize ?? 3) * k, width: s.hollow ? 2 * k : 0, fill: s.hollow ? 'transparent' : stroke, stroke }
+				points: pointMarks(s, stroke, k)
 			};
 		}
 		if (s.style === 'step' || s.style === 'dashed') {
@@ -279,7 +279,7 @@
 				// doesn't rest on colour alone.
 				markers: {
 					stroke: (_u: uPlot, i: number) => strokes[i - 1] ?? '',
-					fill: (_u: uPlot, i: number) => (series[i - 1]?.style === 'points' && !series[i - 1]?.hollow ? (strokes[i - 1] ?? '') : ''),
+					fill: (_u: uPlot, i: number) => swatchFill(series[i - 1], strokes[i - 1] ?? ''),
 					dash: (_u: uPlot, i: number) => (series[i - 1]?.style === 'dashed' || series[i - 1]?.style === 'step' ? 'dashed' : 'solid')
 				}
 			},

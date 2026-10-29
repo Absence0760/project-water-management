@@ -1129,7 +1129,8 @@ section it belongs to, with the example that taught it.
   from every line for every reader in both themes, so the radar days are a
   **doubled** strip in its own `--lane-radar`, and the radar points are the
   same `--series-2` drawn as rings (`ChartSeries.hollow`, a 2 px outline and
-  no fill, its key swatch the same) under their own legend name. Size alone
+  no fill, its key swatch the same; `series.ts` `pointMarks` and
+  `swatchFill`, unit-tested in `series.test.ts`) under their own legend name. Size alone
   isn't a shape: dots overlap. **A strip
   must not hide a reading of 0:** where 0 is a value worth seeing (a dam seen
   empty), pass `lanesRoom` to `LineChart`, which starts the y axis under 0
