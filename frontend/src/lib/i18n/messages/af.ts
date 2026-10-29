@@ -1569,6 +1569,8 @@ export const af: Catalogue = {
 	'8c9825dc': '’n Instelling van die opvanggebied verander: {path}',
 	// The {kind} record scaled by {factor}
 	'7bf8e335': 'Die {kind}-rekord met {factor} vermenigvuldig',
+	// A future climate assumed: {label}
+	'98f6e7f4': '’n Aangenome toekomstige klimaat: {label}',
 	// Demand of {part} scaled by {factor}
 	'6f11e6e2': 'Waterbehoefte van {part} met {factor} vermenigvuldig',
 	// Demand scaled by {factor}
