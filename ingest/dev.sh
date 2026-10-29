@@ -16,6 +16,11 @@
 #   ingest/dev.sh verify [args]     verify_copy.py: check a backfilled copy at
 #                                   MIRROR_URL against CHC and dynamical.org
 #                                   (the operator, before the cutover)
+#   ingest/dev.sh cmip6 plan|copy [cmip6_delta.py args]
+#                                   the one-off NEX-GDDP-CMIP6 copy (issue #621): with no
+#                                   --mirror, the synthetic tree (--source fixtures) into
+#                                   MIRROR_URL, default file://<repo>/ingest/.mirror; the
+#                                   operator's live run is docs/deployment.md § NEX-GDDP-CMIP6
 #
 # run and test use ingest/.venv (gitignored), created on first use from the
 # hash-pinned requirements.txt and refreshed whenever that file changes;
@@ -79,8 +84,23 @@ verify)
 	ensure_venv "$here/.venv-verify" "$here/requirements-verify.txt"
 	exec "$here/.venv-verify/bin/python" "$here/verify_copy.py" "$@"
 	;;
+cmip6)
+	shift
+	ensure_venv
+	args=("$@")
+	case " $* " in
+	*" --mirror "* | *" --mirror="*) ;;
+	*) args+=(--mirror "${MIRROR_URL:-file://$here/.mirror}") ;;
+	esac
+	case " $* " in
+	*" --source "* | *" --source="*) ;;
+	*) args+=(--source fixtures) ;;
+	esac
+	cd "$here"
+	exec "$venv/bin/python" "$here/cmip6_delta.py" "${args[@]}"
+	;;
 *)
-	echo "usage: ingest/dev.sh run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0|c3s] | test | verify [verify_copy.py args]" >&2
+	echo "usage: ingest/dev.sh run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0|c3s] | test | verify [verify_copy.py args] | cmip6 plan|copy [cmip6_delta.py args]" >&2
 	exit 2
 	;;
 esac

@@ -1,0 +1,92 @@
+{
+  "product": "cmip6/SYN-C/ssp245",
+  "revision": 1,
+  "region": {
+    "w": 10,
+    "s": -35.5,
+    "e": 41,
+    "n": -8
+  },
+  "grid": {
+    "origin": {
+      "lat": -35.375,
+      "lon": 10.125
+    },
+    "step": 0.25
+  },
+  "years": {
+    "first": 2036,
+    "last": 2066
+  },
+  "finalThrough": null,
+  "prelimThrough": null,
+  "files": [
+    {
+      "url": "s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/SYN-C/ssp245/r1i1p1f1/pr/pr_day_SYN-C_ssp245_r1i1p1f1_gn_2036.nc",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "c3475ebd8c83891a83e840095f7435481c6b2aefbb279f47502b58fce70242b3",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "v1.0",
+      "license": "CC0 1.0 Universal (synthetic fixture: invented values)"
+    },
+    {
+      "url": "s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/SYN-C/ssp245/r1i1p1f1/pr/pr_day_SYN-C_ssp245_r1i1p1f1_gn_2066.nc",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "320146c2b613db1f4d50bb8bb43b1464bad9073b0aba072b2d43c376eaddc3ab",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "v1.0",
+      "license": "CC0 1.0 Universal (synthetic fixture: invented values)"
+    },
+    {
+      "url": "s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/SYN-C/ssp245/r1i1p1f1/tasmax/tasmax_day_SYN-C_ssp245_r1i1p1f1_gn_2036.nc",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "71c900b2b277147b519875759bb3baea06a57fd96f456ac32c7a0903e3721784",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "v1.0",
+      "license": "CC0 1.0 Universal (synthetic fixture: invented values)"
+    },
+    {
+      "url": "s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/SYN-C/ssp245/r1i1p1f1/tasmax/tasmax_day_SYN-C_ssp245_r1i1p1f1_gn_2066.nc",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "71c900b2b277147b519875759bb3baea06a57fd96f456ac32c7a0903e3721784",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "v1.0",
+      "license": "CC0 1.0 Universal (synthetic fixture: invented values)"
+    },
+    {
+      "url": "s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/SYN-C/ssp245/r1i1p1f1/tasmin/tasmin_day_SYN-C_ssp245_r1i1p1f1_gn_2036.nc",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1fc0a9087d2f60e95bfac48b2514ffe562e4141e3773a15dda0508d1d0a298d8",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "v1.0",
+      "license": "CC0 1.0 Universal (synthetic fixture: invented values)"
+    },
+    {
+      "url": "s3://nex-gddp-cmip6/NEX-GDDP-CMIP6/SYN-C/ssp245/r1i1p1f1/tasmin/tasmin_day_SYN-C_ssp245_r1i1p1f1_gn_2066.nc",
+      "etag": null,
+      "lastModified": null,
+      "size": null,
+      "valuesSha256": "1fc0a9087d2f60e95bfac48b2514ffe562e4141e3773a15dda0508d1d0a298d8",
+      "revision": 1,
+      "fetchedAt": "2026-02-09T00:00:00Z",
+      "version": "v1.0",
+      "license": "CC0 1.0 Universal (synthetic fixture: invented values)"
+    }
+  ],
+  "changes": []
+}

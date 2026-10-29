@@ -15,7 +15,10 @@
 // (⌊r/2⌋, ⌊c/2⌋) (feeds/cellCache.ts productCell). A third grid (issue #620)
 // holds C3S's seasonal forecasts at 1°, cell centres on whole degrees over D1
 // snapped outward (SEASONAL_REGION: 29 rows × 32 columns, [0, 0] at 36° S,
-// 10° E); the cell cache never reads it.
+// 10° E); the cell cache never reads it. A fourth (issue #621) holds
+// NEX-GDDP-CMIP6's monthly aggregates at 0.25°, whose cells tile D1 exactly
+// (110 rows × 124 columns, [0, 0] centred at 35.375° S, 10.125° E); nothing in
+// the backend reads it yet (#621 slice 4).
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError } from '../feeds/errors.js';
 import type { GridCell } from '../feeds/cellCache.js';
@@ -26,9 +29,10 @@ export const MIRROR_STEP = 0.05;
 /**
  * The array layouts: finals (year, doy, lat, lon) or daily (day, lat, lon), both read by arrays.ts;
  * and seasonal, C3S's (system | year, member, lead_day, lat, lon) group arrays (issue #620), which
- * nothing in the backend reads yet (#620 step 6–7).
+ * nothing in the backend reads yet (#620 step 6–7); and monthly, NEX-GDDP-CMIP6's (year, month, lat, lon)
+ * aggregates in `cmip6/<model>/<scenario>` groups (issue #621, ingest/cmip6_delta.py).
  */
-export type GridKind = 'finals' | 'daily' | 'seasonal';
+export type GridKind = 'finals' | 'daily' | 'seasonal' | 'monthly';
 
 /** What the copy holds a product on: its grid's step, its layout, and its first day. */
 export interface ProductGrid {
@@ -75,10 +79,17 @@ const FORECAST_GRIDS: Record<string, ProductGrid> = {
 /** C3S's seasonal forecasts (`c3s/<YYYY-MM>`) and hindcasts (`c3s-hc/<centre>-<system>/<MM>`), issue #620. */
 const SEASONAL_PRODUCT = /^(c3s\/\d{4}-(0[1-9]|1[0-2])|c3s-hc\/[a-z_]+-\d+\/(0[1-9]|1[0-2]))$/;
 
+/** NEX-GDDP-CMIP6's monthly aggregates, `cmip6/<model>/<scenario>` (issue #621; ingest/grid.py CMIP6_PRODUCT). */
+export const CMIP6_PRODUCT = /^cmip6\/([A-Za-z0-9][A-Za-z0-9-]*)\/(historical|ssp245|ssp585)$/;
+
+/** The fourth grid: NEX-GDDP-CMIP6's 0.25° cells, which tile D1 exactly. */
+const CMIP6_GRID: ProductGrid = { step: 0.25, kind: 'monthly' };
+
 /** The grid of `product` (a store path: `sat`, `era5l`, `gefs/2026-02-09`, `c3s/2026-10`, …), or null for one the copy doesn't hold. */
 export function productGrid(product: string): ProductGrid | null {
 	if (Object.hasOwn(PRODUCT_GRIDS, product)) return PRODUCT_GRIDS[product as GridProduct];
 	if (SEASONAL_PRODUCT.test(product)) return SEASONAL_GRID;
+	if (CMIP6_PRODUCT.test(product)) return CMIP6_GRID;
 	const m = /^(gefs|ecmwf)\/\d{4}-\d{2}-\d{2}$/.exec(product);
 	return m ? FORECAST_GRIDS[m[1]!]! : null;
 }
