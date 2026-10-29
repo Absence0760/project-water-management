@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RunInputsSnapshot } from '../compare';
 import { canonicalJson } from '../manifest';
-import { fixtureObservations, headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
+import { fixtureObservations, fixtureObservationsV1, headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
 import { ENGINE_VERSION } from '../version';
 import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
@@ -205,41 +205,103 @@ describe('buildPackBundle + checkPackBundle', () => {
 		});
 	});
 
-	describe('observed wet days (evidence-21)', () => {
-		it('classifies them again from the manifest’s dates over the baseline’s period; the README says so', async () => {
+	describe('observed wet days (evidence-24: each source, and the dates together)', () => {
+		const OBS = ['observations:days', 'observations:s2', 'observations:wofs'];
+		const detail = (r: Awaited<ReturnType<typeof checkPackBundle>>, id: string) => r.checks.find((c) => c.id === id)!.detail;
+
+		it('classifies each source’s dates again under its rule, and the dates together; the README says so', async () => {
 			const built = await buildPackBundle(packBundleFixture(hash, { observations: true }), hash);
 			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
 			expect(failing(r)).toEqual([]);
+			expect(r.checks.map((c) => c.id).filter((id) => id.startsWith('observations:')).sort()).toEqual(OBS);
+			expect(detail(r, 'observations:s2')).toBe("the Sentinel-2 dates of 1 dam over the baseline run's period (2001-10-01 to 2030-01-01) classify again from the manifest's 4 observed dates");
+			expect(detail(r, 'observations:wofs')).toBe("the WOfS dates of 1 dam over the baseline run's period (2001-10-01 to 2030-01-01) classify again from the manifest's 5 observed dates");
+			expect(detail(r, 'observations:days')).toBe(
+				"the 8 dates either source saw over the baseline run's period (2001-10-01 to 2030-01-01) count again from the manifest's dates, each read by the sharper source that calls it"
+			);
+			const readme = new TextDecoder().decode(await (await ZipArchive.open(built.bytes)).read('README.md'));
+			for (const id of OBS) expect(readme).toContain(`\`${id}\``);
+			expect(readme).toContain('Copernicus Sentinel data');
+		});
+
+		it('a Sentinel-2 count its dates don’t give fails observations:s2 alone', async () => {
+			const obs = fixtureObservations();
+			obs.dams[0]!.sources.s2.wetDates = 2;
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['observations:s2']);
+			expect(detail(r, 'observations:s2')).toContain('(Sentinel-2): 2 wet dates named, 1 counted');
+		});
+
+		it('a WOfS count its dates don’t give fails observations:wofs alone', async () => {
+			const obs = fixtureObservations();
+			obs.dams[0]!.sources.wofs.wetDates = 3;
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['observations:wofs']);
+			expect(detail(r, 'observations:wofs')).toContain('(WOfS): 3 wet dates named, 2 counted');
+		});
+
+		it('a together count the two sources’ dates don’t give fails observations:days alone', async () => {
+			const obs = fixtureObservations();
+			obs.dams[0]!.dryDates = 2;
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['observations:days']);
+			expect(detail(r, 'observations:days')).toContain('2 dry dates named, 3 counted');
+		});
+
+		it('a Sentinel-2 credit for other years than its dates fails observations:s2', async () => {
+			const obs = fixtureObservations();
+			expect(obs.sources[0]!.citation).toBe('Contains modified Copernicus Sentinel data 2020–2021, processed by Digital Earth Africa');
+			obs.sources[0]!.citation = 'Contains modified Copernicus Sentinel data 2020, processed by Digital Earth Africa';
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['observations:s2']);
+		});
+
+		it('a period other than the baseline run’s the manifest records fails every observation check, though the manifest hashes', async () => {
+			// Counted over a shorter span than the baseline: consistent with itself, and the manifest's hash covers it, but not the report's period.
+			const obs = { ...fixtureObservations(), endDate: '2021-12-31' };
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r).sort()).toEqual(OBS);
+			for (const id of OBS) expect(detail(r, id)).toContain("not the baseline run's period 2001-10-01–2030-01-01 the manifest records");
+		});
+
+		it('another counting version names the engine that built the report', async () => {
+			const obs = { ...fixtureObservations(), version: 'dam-obs-9' } as unknown as ReturnType<typeof fixtureObservations>;
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual(['observations:wofs']);
+			expect(detail(r, 'observations:wofs')).toMatch(/counted by dam-obs-9; this code counts dam-obs-1 and dam-obs-2: check out the engine that built the report \(\d+\.\d+\.\d+/);
+		});
+
+		it('a pack from before evidence-21 has no such check (positive control above)', async () => {
+			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash), hash)).bytes, { hash, rerun: false });
+			expect(r.checks.some((c) => c.id.startsWith('observations:'))).toBe(false);
+		});
+	});
+
+	describe('observed wet days of a pack drafted from evidence-21 to evidence-23 (dam-obs-1, WOfS alone)', () => {
+		it('still classifies them again, as observations:wofs alone; the README says WOfS only', async () => {
+			const built = await buildPackBundle(packBundleFixture(hash, { observations: fixtureObservationsV1() }), hash);
+			const r = await checkPackBundle(built.bytes, { hash, rerun: false });
+			expect(failing(r)).toEqual([]);
+			expect(r.checks.filter((c) => c.id.startsWith('observations:')).map((c) => c.id)).toEqual(['observations:wofs']);
 			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toBe("the observed wet days of 1 dam over the baseline run's period (2001-10-01 to 2030-01-01) classify again from the manifest's 5 observed dates");
-			const archive = await ZipArchive.open(built.bytes);
-			expect(new TextDecoder().decode(await archive.read('README.md'))).toContain('`observations:wofs`');
+			const readme = new TextDecoder().decode(await (await ZipArchive.open(built.bytes)).read('README.md'));
+			expect(readme).toContain('`observations:wofs`');
+			expect(readme).not.toContain('`observations:s2`');
 		});
 
 		it('a count the dates don’t give fails observations:wofs alone', async () => {
-			const obs = fixtureObservations();
+			const obs = fixtureObservationsV1();
 			obs.dams[0]!.wetDates = 3;
 			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
 			expect(failing(r)).toEqual(['observations:wofs']);
 			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toContain('3 wet dates named, 2 counted');
 		});
 
-		it('a period other than the baseline run’s the manifest records fails observations:wofs alone, though the manifest hashes', async () => {
-			// Counted over a shorter span than the baseline: consistent with itself, and the manifest's hash covers it, but not the report's period.
-			const obs = { ...fixtureObservations(), endDate: '2020-12-31' };
+		it('a period other than the baseline run’s fails observations:wofs alone', async () => {
+			const obs = { ...fixtureObservationsV1(), endDate: '2020-12-31' };
 			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
 			expect(failing(r)).toEqual(['observations:wofs']);
 			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toContain("not the baseline run's period 2001-10-01–2030-01-01 the manifest records");
-		});
-
-		it('another counting version names the engine that built the report', async () => {
-			const obs = { ...fixtureObservations(), version: 'dam-obs-0' } as unknown as ReturnType<typeof fixtureObservations>;
-			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash, { observations: obs }), hash)).bytes, { hash, rerun: false });
-			expect(r.checks.find((c) => c.id === 'observations:wofs')!.detail).toMatch(/counted by dam-obs-0; this code counts dam-obs-1: check out the engine that built the report \(\d+\.\d+\.\d+/);
-		});
-
-		it('a pack from before evidence-21 has no such check (positive control above)', async () => {
-			const r = await checkPackBundle((await buildPackBundle(packBundleFixture(hash), hash)).bytes, { hash, rerun: false });
-			expect(r.checks.some((c) => c.id === 'observations:wofs')).toBe(false);
 		});
 	});
 

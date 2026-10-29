@@ -37,7 +37,7 @@
 // reproduces the run exactly. checkPackBundle does all of it, and draws § 1's
 // locality map again from the manifest (evidence-12) and compares its SHA-256,
 // and counts the observed wet days again from the clear dates the manifest
-// freezes (evidence-21), and runs § 8's pairs again from its frozen climate
+// freezes (evidence-21; per source and together from evidence-24), and runs § 8's pairs again from its frozen climate
 // change factors (evidence-23, `climate:delta`).
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { diffInputs, type RunInputsSnapshot } from '../compare';
@@ -48,7 +48,7 @@ import { ENGINE_VERSION } from '../version';
 import { ZipArchive, zip, type ZipEntry } from '../zip';
 import { forecastRainSourceOf, runRainCredits, type RainCredit } from '../liability/disclaimer';
 import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
-import { checkDamObservations } from './damObservations';
+import { checkDamObservations, checkDamObservationsBySource, EVIDENCE_OBSERVED_SOURCES, EVIDENCE_OBSERVED_SOURCE_LABEL, isDamObservationsV1, DAM_OBSERVATIONS_VERSION } from './damObservations';
 import { checkFutureYield, futureFactorTableError } from './future';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
 import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
@@ -302,7 +302,11 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 			? ["It also draws § 1's locality map again from the map features in manifest.json and checks the SVG against the SHA-256 the manifest names (`figure:locality`)."]
 			: []),
 		...(m.report.damObservations
-			? ["It also classifies the observed wet days again (wet, dry, inconclusive) from the dates the manifest freezes, over the baseline run's period it records (`observations:wofs`). Those dates are Digital Earth Africa WOfS (CC BY 4.0), summed inside each dam's outline; the scenes themselves aren't in the bundle."]
+			? [
+					isDamObservationsV1(m.report.damObservations)
+						? "It also classifies the observed wet days again (wet, dry, inconclusive) from the dates the manifest freezes, over the baseline run's period it records (`observations:wofs`). Those dates are Digital Earth Africa WOfS (CC BY 4.0), summed inside each dam's outline; the scenes themselves aren't in the bundle."
+						: "It also classifies the observed wet days again (wet, dry, inconclusive) from the dates the manifest freezes, over the baseline run's period it records: each source under its own rule (`observations:s2`, `observations:wofs`) and the dates either saw together (`observations:days`). Those dates are Sentinel-2 (contains modified Copernicus Sentinel data, processed by Digital Earth Africa) and Digital Earth Africa WOfS (CC BY 4.0), summed inside each dam's outline; the scenes themselves aren't in the bundle."
+				]
 			: []),
 		...(m.report.futureYield?.status === 'ok'
 			? ["It also runs § 8's future yield again: every pair, the baseline and the application under each climate model's monthly change factors, from the factor table the manifest freezes, and checks every case and range against the manifest (`climate:delta`). The NEX-GDDP-CMIP6 files the factors came from aren't in the bundle; the manifest names each with its SHA-256."]
@@ -390,7 +394,7 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 // ---------------------------------------------------------------------------
 
 export interface BundleCheck {
-	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `headline`, `reproduce:<run>`, `reproduce:headline`, `climate:delta` (§ 8, evidence-23). */
+	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `headline`, `reproduce:<run>`, `reproduce:headline`, `figure:locality`, `observations:wofs` (§ 7, evidence-21), `observations:s2` and `observations:days` (§ 7, evidence-24), `climate:delta` (§ 8, evidence-23). */
 	id: string;
 	ok: boolean;
 	detail: string;
@@ -571,20 +575,46 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 	}
 
 	// The observed wet days (evidence-21): classified again from the dates the manifest freezes, over the baseline run's period as the manifest records it.
+	// dam-obs-2 (evidence-24) is checked per source and for the dates together; dam-obs-1 (evidence-21 to -23, WOfS alone) as it was.
 	const obs = manifest.report.damObservations;
 	if (obs) {
-		try {
-			const b = manifest.report.identity?.baseline;
-			const problems = checkDamObservations(obs, { period: { startDate: String(b?.startDate), endDate: String(b?.endDate) }, builtBy: manifest.report.builtBy });
-			const observed = obs.dams.reduce((n, d) => n + d.observedDates, 0);
-			add(
-				'observations:wofs',
-				problems.length === 0,
-				problems.join('; ') ||
-					`the observed wet days of ${obs.dams.length} dam${obs.dams.length === 1 ? '' : 's'} over the baseline run's period (${obs.startDate} to ${obs.endDate}) classify again from the manifest's ${observed} observed date${observed === 1 ? '' : 's'}`
-			);
-		} catch (e) {
-			add('observations:wofs', false, `the observed wet days can't be counted from the manifest: ${message(e)}`);
+		const b = manifest.report.identity?.baseline;
+		const ctx = { period: { startDate: String(b?.startDate), endDate: String(b?.endDate) }, builtBy: manifest.report.builtBy };
+		const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+		if (obs.version === DAM_OBSERVATIONS_VERSION) {
+			let by: ReturnType<typeof checkDamObservationsBySource> | null = null;
+			let failure = '';
+			try {
+				by = checkDamObservationsBySource(obs, ctx);
+			} catch (e) {
+				failure = `the observed wet days can't be counted from the manifest: ${message(e)}`;
+			}
+			const period = `over the baseline run's period (${obs.startDate} to ${obs.endDate})`;
+			for (const source of EVIDENCE_OBSERVED_SOURCES) {
+				const problems = by?.[source] ?? [failure];
+				const n = problems.length ? 0 : obs.dams.reduce((k, d) => k + d.sources[source].observedDates, 0);
+				add(
+					`observations:${source}`,
+					problems.length === 0,
+					problems.join('; ') || `the ${EVIDENCE_OBSERVED_SOURCE_LABEL[source]} dates of ${plural(obs.dams.length, 'dam')} ${period} classify again from the manifest's ${plural(n, 'observed date')}`
+				);
+			}
+			const problems = by?.days ?? [failure];
+			const n = problems.length ? 0 : obs.dams.reduce((k, d) => k + d.observedDates, 0);
+			add('observations:days', problems.length === 0, problems.join('; ') || `the ${plural(n, 'date')} either source saw ${period} count again from the manifest's dates, each read by the sharper source that calls it`);
+		} else {
+			try {
+				const problems = checkDamObservations(obs, ctx);
+				const observed = isDamObservationsV1(obs) && Array.isArray(obs.dams) ? obs.dams.reduce((n, d) => n + d.observedDates, 0) : 0;
+				add(
+					'observations:wofs',
+					problems.length === 0,
+					problems.join('; ') ||
+						`the observed wet days of ${plural(obs.dams.length, 'dam')} over the baseline run's period (${obs.startDate} to ${obs.endDate}) classify again from the manifest's ${plural(observed, 'observed date')}`
+				);
+			} catch (e) {
+				add('observations:wofs', false, `the observed wet days can't be counted from the manifest: ${message(e)}`);
+			}
 		}
 	}
 

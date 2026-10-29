@@ -25,7 +25,7 @@ import { applyScenario } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import { localityMapSvg } from '../geo/localityMap';
 import type { EvidenceReport } from '../evidence/types';
-import { damObservationsSection, type EvidenceDamObservations } from '../evidence/damObservations';
+import { damObservationsSection, damObservationsSectionV1, type EvidenceDamObservations, type EvidenceDamObservationsAny, type EvidenceDamObservationsV1 } from '../evidence/damObservations';
 import { canonicalJson, seriesDigest } from '../manifest';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { Rng } from '../random';
@@ -188,7 +188,8 @@ export function packBundleFixture(
 		application?: boolean;
 		locality?: boolean | { svgSha256: string };
 		seriesChoice?: boolean;
-		observations?: boolean | EvidenceDamObservations;
+		/** § 7: true for evidence-24's (fixtureObservations), or this section (a tampered one, or an older pack's dam-obs-1). */
+		observations?: boolean | EvidenceDamObservationsAny;
 		/** § 8 (evidence-23): Farm one gets a dam, and the report the future yield of the fixture's factors (or this result, a tampered one). */
 		future?: boolean | ((r: FutureYieldResult) => FutureYieldResult);
 	} = {}
@@ -244,25 +245,37 @@ export function packBundleFixture(
 	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
 }
 
-/** Observed wet days (evidence-21) of one invented dam on Farm one, as the report freezes them: 5 dates, 2 wet, 1 dry, 2 inconclusive. */
+/** The invented dam on Farm one and its rows: WOfS (5 dates: 2 wet, 1 dry, 2 inconclusive) and Sentinel-2 (4 dates, 1 shared with WOfS). */
+const OBSERVATION_FIXTURE_DAMS = [
+	{
+		featureId: '00000000-0000-4000-8000-0000000000d1',
+		name: 'Farm one dam',
+		nodeId: 'F1',
+		rows: [
+			{ source: 'wofs' as const, date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 }, // wet
+			{ source: 'wofs' as const, date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 }, // one wet pixel: inconclusive
+			{ source: 'wofs' as const, date: '2020-01-21', wetAreaM2: 0, pctObserved: 99.5 }, // dry
+			{ source: 'wofs' as const, date: '2020-01-29', wetAreaM2: 2700, pctObserved: 30 }, // wet at any clear share
+			{ source: 'wofs' as const, date: '2020-02-06', wetAreaM2: 0, pctObserved: 95 }, // no water on a 95 % view: inconclusive
+			{ source: 's2' as const, date: '2020-01-10', wetAreaM2: 900, pctObserved: 100 }, // 9 pixels: wet
+			{ source: 's2' as const, date: '2020-01-13', wetAreaM2: 0, pctObserved: 100 }, // dry, and takes the date WOfS couldn't call
+			{ source: 's2' as const, date: '2020-01-20', wetAreaM2: 500, pctObserved: 20 }, // 5 pixels: inconclusive
+			{ source: 's2' as const, date: '2021-02-01', wetAreaM2: 0, pctObserved: 99 } // dry
+		]
+	}
+];
+
+/**
+ * Observed wet days (evidence-24, dam-obs-2) of one invented dam on Farm one, as the report freezes them:
+ * Sentinel-2 4 dates (1 wet, 2 dry, 1 inconclusive), WOfS 5 (2, 1, 2), together 8 (3 wet, 3 dry, 2 inconclusive).
+ */
 export function fixtureObservations(): EvidenceDamObservations {
-	return damObservationsSection(
-		[
-			{
-				featureId: '00000000-0000-4000-8000-0000000000d1',
-				name: 'Farm one dam',
-				nodeId: 'F1',
-				rows: [
-					{ date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 }, // wet
-					{ date: '2020-01-13', wetAreaM2: 900, pctObserved: 40 }, // one wet pixel: inconclusive
-					{ date: '2020-01-21', wetAreaM2: 0, pctObserved: 99.5 }, // dry
-					{ date: '2020-01-29', wetAreaM2: 2700, pctObserved: 30 }, // wet at any clear share
-					{ date: '2020-02-06', wetAreaM2: 0, pctObserved: 95 } // no water on a 95 % view: inconclusive
-				]
-			}
-		],
-		{ applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] }
-	)!;
+	return damObservationsSection(OBSERVATION_FIXTURE_DAMS, { applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] })!;
+}
+
+/** The same dam as a pack drafted from evidence-21 to evidence-23 froze it (dam-obs-1, WOfS alone): 5 dates, 2 wet, 1 dry, 2 inconclusive. */
+export function fixtureObservationsV1(): EvidenceDamObservationsV1 {
+	return damObservationsSectionV1(OBSERVATION_FIXTURE_DAMS, { applicant: true, ownNodeIds: ['F1'], startDate: START, endDate: END, models: [] })!;
 }
 
 /** The headline fixture's registered volumes (synthetic): two takes on Farm one, one storage-only row (s21b, not a take). */

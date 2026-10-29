@@ -544,7 +544,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			models: [a?.inputs.model, b.inputs.model]
 		}),
 		calibrationZones,
-		// The applicant's own dams' observed wet days over the baseline's period (evidence-21); null unless an applicant's application.
+		// The applicant's own dams' observed wet days over the baseline's period (evidence-21; Sentinel-2 beside WOfS from evidence-24); null unless an applicant's application.
 		damObservations: damObservationsSection(input.damObservations, {
 			applicant: !!a && a.scenario.origin === 'applicant',
 			ownNodeIds: a?.scenario.ownedNodeIds ?? [],

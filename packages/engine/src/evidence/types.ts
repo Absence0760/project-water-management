@@ -24,7 +24,7 @@ import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } f
 import type { PairedSummary } from '../uncertainty/paired';
 import type { ApplicantPrompts } from './prompts';
 import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
-import type { EvidenceDamObservationInput, EvidenceDamObservations } from './damObservations';
+import type { EvidenceDamObservationInput, EvidenceDamObservationsAny } from './damObservations';
 import type { FutureYieldCaveat, FutureYieldResult } from './future';
 import type { EvidenceCalibrationZone } from './calibrationZones';
 import type { EvidenceAuthorisedImpact } from './authorised';
@@ -185,8 +185,17 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * the two runs. The `futureYield` check stops issue while NASA's caveat
  * isn't quoted or a factor rests on part of a window. A pack drafted before
  * keeps its document, without it.
+ * evidence-24 (issue #624 step 7): § 7's observed wet days count Sentinel-2
+ * (10 m, our own MNDWI classification) beside WOfS (`damObservations`,
+ * counting `dam-obs-2`): each source's dates frozen and counted under its own
+ * rule (Sentinel-2 wet at 8 pixels of 100 m², two 20 m cells), and the dates
+ * either saw counted together, each read by the sharper source that calls it.
+ * Sentinel-2's Copernicus credit is frozen with the years of its dates.
+ * reproduce:pack checks each source (`observations:s2`, `observations:wofs`)
+ * and the dates together (`observations:days`). A pack drafted before keeps
+ * its document and its `dam-obs-1` section, still checked as it was.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-23';
+export const EVIDENCE_REPORT_VERSION = 'evidence-24';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -453,7 +462,7 @@ export interface EvidenceInput {
 	authorisedImpact?: EvidenceAuthorisedImpact | null;
 	/** The project's map features as they are now (152 map_feature, under the reader's RLS), for § 1's locality map (evidence-12); absent or [] = none. */
 	mapFeatures?: EvidenceMapFeatureInput[] | null;
-	/** The project's traced dams with their WOfS rows in the baseline's period (261 dam_observation, under the reader's RLS), for the observed wet days (evidence-21); absent or [] = none. */
+	/** The project's traced dams with their WOfS and Sentinel-2 rows in the baseline's period (dam_observation, under the reader's RLS), for the observed wet days (evidence-21; Sentinel-2 from evidence-24); absent or [] = none. */
 	damObservations?: EvidenceDamObservationInput[] | null;
 	/**
 	 * § 8's stored result for these two runs (280 future_yield, under the reader's RLS; evidence-23):
@@ -1202,10 +1211,11 @@ export interface EvidenceReport {
 	localityMap?: LocalityMapData | null;
 	/**
 	 * The applicant's own dams' observed wet days (evidence-21, evidence/damObservations.ts): every
-	 * WOfS date in the baseline's period, and how many were wet, dry and inconclusive. Null for baseline evidence and a
-	 * team scenario; absent from a pack drafted before evidence-21.
+	 * date in the baseline's period, and how many were wet, dry and inconclusive. `dam-obs-2` from evidence-24
+	 * (Sentinel-2 and WOfS, each source and the dates together), `dam-obs-1` in a pack drafted from evidence-21 to
+	 * evidence-23 (WOfS alone). Null for baseline evidence and a team scenario; absent from a pack drafted before evidence-21.
 	 */
-	damObservations?: EvidenceDamObservations | null;
+	damObservations?: EvidenceDamObservationsAny | null;
 	/** § 8, Future yield (evidence-23): null for baseline evidence and while FUTURE_YIELD is off; absent from a pack drafted before evidence-23. */
 	futureYield?: EvidenceFutureYield | null;
 	/**

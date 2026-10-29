@@ -57,6 +57,7 @@ import { ENSEMBLE_MEASURES_SINCE } from '../version';
 import type { ScenarioOp } from '../scenario/ops';
 import { cumulativeImpact } from '../scenario/cumulative';
 import type { EvidenceAssessmentInput, EvidenceCombinedInput, EvidenceEnsembleInput, EvidenceInput, EvidenceMapFeatureInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
+import type { EvidenceDamObservations } from './damObservations';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -333,7 +334,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -1038,7 +1039,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-23');
+		expect(got.version).toBe('evidence-24');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1697,7 +1698,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1753,7 +1754,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1889,8 +1890,8 @@ describe('§ 1’s locality map (evidence-12)', () => {
 	});
 });
 
-describe('observed wet days (evidence-21, issue #604 R5-C)', () => {
-	// Invented WOfS rows on Farm two's dam (the applicant's) and Farm one's (a neighbour's), inside the baseline's period.
+describe('observed wet days (evidence-21; Sentinel-2 beside WOfS from evidence-24)', () => {
+	// Invented WOfS and Sentinel-2 rows on Farm two's dam (the applicant's) and Farm one's (a neighbour's), inside the baseline's period.
 	const day = (n: number) => new Date(Date.parse(`${input().baseline.startDate}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 	const dams = [
 		{
@@ -1898,33 +1899,57 @@ describe('observed wet days (evidence-21, issue #604 R5-C)', () => {
 			name: '',
 			nodeId: 'F2',
 			rows: [
-				{ date: day(3), wetAreaM2: 1800, pctObserved: 100 },
-				{ date: day(11), wetAreaM2: 0, pctObserved: 99.5 },
-				{ date: day(19), wetAreaM2: 0, pctObserved: 97 }
+				{ source: 'wofs' as const, date: day(3), wetAreaM2: 1800, pctObserved: 100 },
+				{ source: 'wofs' as const, date: day(11), wetAreaM2: 0, pctObserved: 99.5 },
+				{ source: 'wofs' as const, date: day(19), wetAreaM2: 0, pctObserved: 97 },
+				{ source: 's2' as const, date: day(19), wetAreaM2: 1200, pctObserved: 60 },
+				{ source: 's2' as const, date: day(24), wetAreaM2: 0, pctObserved: 100 }
 			]
 		},
-		{ featureId: 'd1', name: 'Neighbour dam', nodeId: 'F1', rows: [{ date: day(3), wetAreaM2: 1, pctObserved: 100 }] }
+		{ featureId: 'd1', name: 'Neighbour dam', nodeId: 'F1', rows: [{ source: 's2' as const, date: day(3), wetAreaM2: 1, pctObserved: 100 }] }
 	];
 
-	it('counts the applicant’s own dams over the baseline’s period, named from the run’s model, and never a neighbour’s', () => {
+	it('counts the applicant’s own dams over the baseline’s period, each source and together, named from the run’s model, and never a neighbour’s', () => {
 		const r = evidenceReport(input({ damObservations: dams }));
-		const s = r.damObservations!;
-		expect(s).toMatchObject({ source: 'wofs', citation: 'Digital Earth Africa WOfS, CC BY 4.0', startDate: r.identity.baseline.startDate, endDate: r.identity.baseline.endDate });
-		expect(s).toMatchObject({ wetMinPixels: 2, dryMinClearPct: 99, pixelAreaM2: 900 });
+		const s = r.damObservations as EvidenceDamObservations;
+		expect(s).toMatchObject({ version: 'dam-obs-2', startDate: r.identity.baseline.startDate, endDate: r.identity.baseline.endDate });
+		expect(s.sources.map((x) => [x.source, x.citation])).toEqual([
+			['s2', `Contains modified Copernicus Sentinel data ${day(19).slice(0, 4)}${day(19).slice(0, 4) === day(24).slice(0, 4) ? '' : `–${day(24).slice(0, 4)}`}, processed by Digital Earth Africa`],
+			['wofs', 'Digital Earth Africa WOfS, CC BY 4.0']
+		]);
 		expect(s.dams).toEqual([
 			{
 				featureId: 'd2',
 				name: 'Farm two',
 				nodeId: 'F2',
-				observedDates: 3,
-				wetDates: 1,
-				dryDates: 1,
-				inconclusiveDates: 1,
-				dates: [
-					[day(3), 1800, 100],
-					[day(11), 0, 99.5],
-					[day(19), 0, 97]
-				]
+				// day 3 wet, day 11 dry, day 19 wet (Sentinel-2's 12 pixels over WOfS's clouded view), day 24 dry.
+				observedDates: 4,
+				wetDates: 2,
+				dryDates: 2,
+				inconclusiveDates: 0,
+				sources: {
+					s2: {
+						observedDates: 2,
+						wetDates: 1,
+						dryDates: 1,
+						inconclusiveDates: 0,
+						dates: [
+							[day(19), 1200, 60],
+							[day(24), 0, 100]
+						]
+					},
+					wofs: {
+						observedDates: 3,
+						wetDates: 1,
+						dryDates: 1,
+						inconclusiveDates: 1,
+						dates: [
+							[day(3), 1800, 100],
+							[day(11), 0, 99.5],
+							[day(19), 0, 97]
+						]
+					}
+				}
 			}
 		]);
 	});
@@ -1952,7 +1977,7 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 
 	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		expect(r.calibrationZones).toEqual([
 			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
 			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
@@ -1980,7 +2005,7 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 
 	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
 		const r = evidenceReport(input({ futureYield: found }));
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		const s = r.futureYield!;
 		expect(s).toMatchObject({ status: 'ok', createdAt: found.createdAt, createdBy: 'Analyst', complete: true, fewModels: true, models: ['SYN-A', 'SYN-B', 'SYN-C'] });
 		if (s.status !== 'ok') throw new Error('unreachable');

@@ -434,7 +434,10 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 - **Attribution:** "Contains modified Copernicus Sentinel data [year],
   processed by Digital Earth Africa" ([year] the years of the values shown)
   wherever Sentinel values show: the *Seen from space* panel, the farm dam
-  card, evidence packs and `/data-sources`.
+  card, evidence packs' § 7 (from report format `evidence-24`, frozen with
+  the years of the dates it counts and checked by `reproduce:pack`,
+  [evidence-pack.md § Observed wet days](./evidence-pack.md#observed-wet-days))
+  and `/data-sources`.
 - **Contact:** Digital Earth Africa's help desk and community forum
   (digitalearthafrica.org; docs.digitalearthafrica.org); the Copernicus
   Data Space Ecosystem for the data itself.
