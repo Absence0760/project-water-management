@@ -177,7 +177,7 @@ describe('§ 8 future yield', () => {
 		// One cancelled while it reads the copy (flagged as app_cancel_job flags a running job) stops before its runs and writes nothing.
 		await asOwner('UPDATE job SET cancel_requested_at = now() WHERE id = $1', [again.body.jobId]);
 		const before = runs.calls;
-		const [{ n }] = (await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [appRun])) as { n: number }[];
+		const { n } = ((await asOwner('SELECT count(*)::int AS n FROM future_yield WHERE application_run_id = $1', [appRun])) as { n: number }[])[0]!;
 		await tick();
 		expect(await job(again.body.jobId)).toEqual({ status: 'dead', last_error: 'cancelled' });
 		expect(runs.calls).toBe(before);
