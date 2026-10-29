@@ -23,6 +23,8 @@ import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
 import { band as bandOf } from '../uncertainty/bands';
 import { licenceImpactByYearClass } from '../views/licenceImpact';
 import { APPLICANT_PROMPTS } from './prompts';
+import { FUTURE_YIELD_CAVEAT, futureCaveatPending, runFutureYield } from './future';
+import { FUTURE_FIXTURE_DAM, fixtureFactorTable, packFixtureInput } from '../testing/packBundle';
 import {
 	ALLOCATIONS_NOT_ASSESSED,
 	BASIS_NO_FLOW,
@@ -331,7 +333,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-22');
+		expect(r.version).toBe('evidence-23');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -1036,7 +1038,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-22');
+		expect(got.version).toBe('evidence-23');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1695,7 +1697,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-22');
+		expect(r.version).toBe('evidence-23');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1751,7 +1753,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-22');
+		expect(r.version).toBe('evidence-23');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1950,7 +1952,7 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 
 	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
-		expect(r.version).toBe('evidence-22');
+		expect(r.version).toBe('evidence-23');
 		expect(r.calibrationZones).toEqual([
 			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
 			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
@@ -1965,5 +1967,51 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 		const r = evidenceReport(input());
 		expect(r.calibrationZones).toBeNull();
 		expect(r.flags.some((f) => f.id === 'zoneNoFit')).toBe(false);
+	});
+});
+
+describe('§ 8 future yield (evidence-23, issue #621)', () => {
+	// A stored result of the pack fixture's two runs (testing/packBundle.ts), as the backend found it.
+	const fyBase = packFixtureInput();
+	fyBase.model.nodes = fyBase.model.nodes.map((n) => (n.id === 'F1' ? { ...n, ...FUTURE_FIXTURE_DAM } : n));
+	const fyApp: ModelInput = { ...fyBase, model: { ...fyBase.model, cropAreas: fyBase.model.cropAreas.map((a) => ({ ...a, areaM2: 600_000 })) } };
+	const result = runFutureYield({ baseline: fyBase, application: fyApp, nodeId: 'F1', ownedNodeIds: ['F1'], factors: fixtureFactorTable() });
+	const found = { result, createdAt: '2026-10-29T08:00:00.000Z', createdBy: 'Analyst' };
+
+	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
+		const r = evidenceReport(input({ futureYield: found }));
+		expect(r.version).toBe('evidence-23');
+		const s = r.futureYield!;
+		expect(s).toMatchObject({ status: 'ok', createdAt: found.createdAt, createdBy: 'Analyst', complete: true, fewModels: true, models: ['SYN-A', 'SYN-B', 'SYN-C'] });
+		if (s.status !== 'ok') throw new Error('unreachable');
+		expect(s.cases).toEqual(result.cases);
+		expect(s.factors).toEqual(result.factors);
+		expect(s.caveat).toEqual(FUTURE_YIELD_CAVEAT);
+		const check = r.checks.find((c) => c.id === 'futureYield')!;
+		expect(check).toMatchObject({ passed: !futureCaveatPending(), refuses: false, blocksIssue: true });
+		if (futureCaveatPending()) {
+			expect(check.detail).toMatch(/^NASA’s own caveat on engineering use of the projections isn’t quoted yet/);
+			expect(r.issuable).toBe(false);
+		}
+		// Positive control: the same report without § 8 has no such check.
+		expect(evidenceReport(input()).checks.some((c) => c.id === 'futureYield')).toBe(false);
+	});
+
+	it('holds it from issue on factors from part of a window, saying so', () => {
+		const partial = runFutureYield({ baseline: fyBase, application: fyApp, nodeId: 'F1', ownedNodeIds: ['F1'], factors: fixtureFactorTable(3, { partial: true }) });
+		const r = evidenceReport(input({ futureYield: { ...found, result: partial } }));
+		expect(r.futureYield).toMatchObject({ status: 'ok', complete: false });
+		const check = r.checks.find((c) => c.id === 'futureYield')!;
+		expect(check.passed).toBe(false);
+		expect(check.detail).toContain('the change factors rest on part of their 30-year windows');
+		expect(check.fix).toContain('Load every year of the windows into the copy');
+	});
+
+	it('says Not assessed when none was run, and is null for baseline evidence or while it is off', () => {
+		const r = evidenceReport(input({ futureYield: { notRun: true } }));
+		expect(r.futureYield).toMatchObject({ status: 'notRun', note: expect.stringMatching(/^Not assessed: the future yield hasn’t been run/) });
+		expect(r.checks.some((c) => c.id === 'futureYield')).toBe(false);
+		expect(evidenceReport(input({ application: null, futureYield: found })).futureYield).toBeNull();
+		expect(evidenceReport(input()).futureYield).toBeNull();
 	});
 });

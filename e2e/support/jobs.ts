@@ -56,7 +56,9 @@ export async function runJobsTick({ projects, schedule = true }: { projects: [st
 			STORAGE: 'local',
 			MAIL_TRANSPORT: 'smtp',
 			// A `delineate` job reads the same committed synthetic DEM as the e2e API (playwright.config.ts).
-			DEM_URL: DEM_FIXTURE
+			DEM_URL: DEM_FIXTURE,
+			// A `future_yield` job reads the committed synthetic NEX-GDDP-CMIP6 copy, with § 8 on as the e2e API has it.
+			FUTURE_YIELD: 'on'
 		},
 		timeout: 60_000
 	});

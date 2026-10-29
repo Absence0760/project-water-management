@@ -296,6 +296,15 @@ beforeAll(async () => {
 			[projectId, runId, farm.id]
 		)
 	);
+	// § 8's future yield they ran (279): created_by, SET NULL. Its pair needs a second run.
+	const secondRun = (await call(owner, 'POST', `/projects/${projectId}/runs`, { label: 'r2' })).run.id as string;
+	await withUser(subject.id, (tx) =>
+		tx.query(
+			`INSERT INTO future_yield (project_id, baseline_run_id, application_run_id, node_id, method, result, engine_version)
+			 VALUES ($1, $2, $3, $4, 'delta-1', '{}', '1.0.0')`,
+			[projectId, runId, secondRun, farm.id]
+		)
+	);
 	// A turn they asked the assistant (262, 264), counted as its route counts one, without a provider: their
 	// hourly count (assistant_rate, CASCADE) and their month's tokens on the project (assistant_usage, SET NULL);
 	// and one still running, its reservation unsettled (assistant_reservation, SET NULL).

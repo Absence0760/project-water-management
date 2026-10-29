@@ -718,7 +718,10 @@ dam yield's `yield`, the scenario sweep's `sweep`, the seasonal
 outlook's `outlook`, automated calibration's `auto_calibration` and
 `uncertainty` (below), and the Map's `delineate`, a catchment too large for
 the delineation request (`jobs/handlers/delineate.ts`,
-[design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)); step 2's
+[design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)), and the
+evidence pack's § 8 `future_yield` (`jobs/handlers/future-yield.ts`, reading
+the data copy's NEX-GDDP-CMIP6 aggregates, [evidence-pack.md § Future
+yield](./evidence-pack.md#future-yield)); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,

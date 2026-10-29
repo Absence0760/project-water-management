@@ -76,6 +76,7 @@ import { outlookRoutes } from './outlooks/routes.js';
 import { teamRoutes } from './teams/routes.js';
 import { teamMfaResetRoutes } from './teams/mfa-reset-routes.js';
 import { yieldRoutes } from './yield/routes.js';
+import { futureYieldRoutes } from './future/routes.js';
 
 /**
  * The production entry point (lambda.ts) refuses to start without the
@@ -198,6 +199,7 @@ export function createApp() {
 	projects.route('/', projectInviteRoutes);
 	projects.route('/', jobRoutes);
 	projects.route('/', yieldRoutes);
+	projects.route('/', futureYieldRoutes);
 	projects.route('/', sweepRoutes);
 	projects.route('/', assessmentRoutes);
 	projects.route('/', autoCalibrationRoutes);

@@ -13,4 +13,5 @@ export * from './regionalPrior';
 export * from './locality';
 export * from './damObservations';
 export * from './calibrationZones';
+export * from './future';
 export * from '../geo/localityMap';

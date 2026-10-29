@@ -165,7 +165,8 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  * security event never changes (150_mfa.sql).
  */
 // Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
+// § 8's future yield is written once by its job, and the newest few kept per pair (279).
+const NO_UPDATE = new Set(['yield_result', 'future_yield', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -283,7 +284,8 @@ const READ_ONLY = new Set([
  * so a new per-farm table can't ship without a decision about farmers.
  */
 // et_observation_load_mark (276) is the ET tick's own bookkeeping per unit: owner only, read by no app role (OWNER_ONLY).
-const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'crop_area_land_cover', 'et_observation_load_mark']);
+// future_yield (279) is § 8 of an evidence report on whole-catchment runs, viewers and an application's applicant.
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'future_yield', 'crop_area_land_cover', 'et_observation_load_mark']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
@@ -410,7 +412,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'user_email_otp.user_id': 'cascade',
 	'mfa_email_code.user_id': 'cascade',
 	'mfa_email_send.user_id': 'cascade',
-	'yield_result.created_by': 'set null'
+	'yield_result.created_by': 'set null',
+	// § 8's future yield keeps its result when its author's account goes (279), as yield_result.
+	'future_yield.created_by': 'set null'
 };
 
 /**
@@ -428,7 +432,8 @@ const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger:
 	'report.job_id': { updateTrigger: false },
 	'scenario_sweep.job_id': { updateTrigger: true, purgeTest: 'src/sweeps/sweeps.db.test.ts' },
 	'seasonal_outlook.job_id': { updateTrigger: true, purgeTest: 'src/outlooks/outlooks.db.test.ts' },
-	'yield_result.job_id': { updateTrigger: false }
+	'yield_result.job_id': { updateTrigger: false },
+	'future_yield.job_id': { updateTrigger: false }
 };
 
 /**

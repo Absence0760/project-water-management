@@ -36,6 +36,7 @@ import { authorisedUnavailable } from './authorised';
 import { localitySection } from './locality';
 import { damObservationsSection } from './damObservations';
 import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection } from './calibrationZones';
+import { FUTURE_YIELD_CAVEAT, futureCaveatPending, futureFactorsComplete, type FutureYieldCaveat } from './future';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
 	EVIDENCE_REPORT_VERSION,
@@ -57,6 +58,7 @@ import {
 	type EvidenceEnsembleInput,
 	type EvidenceEnsembleRef,
 	type EvidenceFlag,
+	type EvidenceFutureYield,
 	type EvidenceInput,
 	type EvidenceMonthChange,
 	type EvidenceOtherApplicationInput,
@@ -356,7 +358,38 @@ export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
 			fix: 'Read every band as a lower bound on the uncertainty; the assessor weighs it.'
 		});
 	}
+	// § 8 (evidence-23): held back from issue while NASA's caveat isn't quoted, or a factor rests on part of a window.
+	const fy = a ? futureYieldSection(input.futureYield) : null;
+	if (fy?.status === 'ok') {
+		const pending = futureCaveatPending(fy.caveat);
+		const problems = [
+			...(pending ? ['NASA’s own caveat on engineering use of the projections isn’t quoted yet (the technical note it is to be quoted from could not be found)'] : []),
+			...(fy.complete ? [] : ['the change factors rest on part of their 30-year windows (the copy holds only some of the years), which isn’t the method'])
+		];
+		add({
+			id: 'futureYield',
+			label: '§ 8 Future yield rests on the whole method and quotes its caveat',
+			passed: problems.length === 0,
+			detail: problems.length ? `${problems.join('; ')}.` : `${fy.models.length} climate model${fy.models.length === 1 ? '' : 's'}, whole windows, NASA’s caveat quoted from ${fy.caveat.nasa.source} (read ${fy.caveat.nasa.readOn}).`,
+			refuses: false,
+			blocksIssue: true,
+			fix: [
+				...(pending ? ['Quote NASA’s caveat verbatim from the current NEX-GDDP-CMIP6 technical note (evidence/future.ts FUTURE_YIELD_CAVEAT, with its address and the date read) and deploy'] : []),
+				...(fy.complete ? [] : ['Load every year of the windows into the copy (deployment.md § NEX-GDDP-CMIP6), then run the future yield again'])
+			].join('; then ') + '.'
+		});
+	}
 	return out;
+}
+
+/** § 8 as the report freezes it (evidence-23), from what the backend found; null when it is off or for baseline evidence. */
+export function futureYieldSection(found: EvidenceInput['futureYield']): EvidenceFutureYield | null {
+	if (!found) return null;
+	const caveat = structuredClone(FUTURE_YIELD_CAVEAT) as FutureYieldCaveat;
+	if ('notRun' in found)
+		return { status: 'notRun', note: 'Not assessed: the future yield hasn’t been run on these two runs. An editor runs it from the evidence report (Future yield › Run), then the report is built again.', caveat };
+	const r = structuredClone(found.result);
+	return { status: 'ok', createdAt: found.createdAt, createdBy: found.createdBy, complete: futureFactorsComplete(r.factors), caveat, ...r };
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +456,9 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
 		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : []),
 		// Each zone's own fit (evidence-22): an erratum keyed on the fit's engine reaches the units it fitted.
-		...calibrationZoneFitVersions(calibrationZones).flatMap((v) => errataFor(b.engineVersion, input.liability.errata, v))
+		...calibrationZoneFitVersions(calibrationZones).flatMap((v) => errataFor(b.engineVersion, input.liability.errata, v)),
+		// § 8's pairs (evidence-23) ran on the engine of the day the job ran.
+		...(a && input.futureYield && 'result' in input.futureYield ? errataFor(input.futureYield.result.engineVersion, input.liability.errata, null) : [])
 	]);
 	const coverage = baseSum?.coverage[0]?.fraction ?? null;
 	const coverageWarning = !!baseSum?.coverageWarning;
@@ -517,6 +552,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 			endDate: b.endDate,
 			models: [a?.inputs.model, b.inputs.model]
 		}),
+		// § 8 (evidence-23): the stored future yield of these two runs, frozen whole; null for baseline evidence or while it is off.
+		futureYield: a ? futureYieldSection(input.futureYield) : null,
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],

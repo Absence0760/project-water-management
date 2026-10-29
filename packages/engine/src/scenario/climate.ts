@@ -296,6 +296,28 @@ export function windowClimate(years: readonly ClimateYear[], from: number, to: n
 }
 
 /**
+ * windowClimate over the years of `from`–`to` that `years` holds, with how
+ * many it held (issue #621 slice 4): the copy's synthetic fixture holds one
+ * or two years of each window, and an evidence pack's § 8 says how many each
+ * factor rests on rather than refusing them. A factor from part of a window
+ * isn't the method's, so § 8 can't be issued on one (evidence/future.ts
+ * futureFactorsComplete). Refused (throws) when it holds none, or a held
+ * year has a value that isn't a number.
+ */
+export function heldWindowClimate(years: readonly ClimateYear[], from: number, to: number): { climate: MonthlyClimate; years: number } {
+	const held = years.filter((y) => y.year >= from && y.year <= to);
+	if (new Set(held.map((y) => y.year)).size !== held.length) throw new Error(`the climate record holds a year of the window ${from}–${to} twice`);
+	if (!held.length) throw new Error(`the climate record holds no year of the window ${from}–${to}`);
+	const lo = Math.min(...held.map((y) => y.year));
+	const hi = Math.max(...held.map((y) => y.year));
+	if (hi - lo + 1 === held.length) return { climate: windowClimate(held, lo, hi), years: held.length };
+	// Not contiguous: the mean of the held years, through windowClimate one year at a time.
+	const each = held.map((y) => windowClimate([y], y.year, y.year));
+	const mean = (k: keyof MonthlyClimate) => MONTHS.map((_, m) => each.reduce((s, c) => s + c[k][m]!, 0) / each.length);
+	return { climate: { prMm: mean('prMm'), tasmaxC: mean('tasmaxC'), tasminC: mean('tasminC') }, years: held.length };
+}
+
+/**
  * The 24 change factors of one model × SSP × horizon for a catchment (issue
  * #621, docs/model.md §2.17): per calendar month, rain = the cells'
  * area-weighted mean rain in the future window ÷ the same in the baseline

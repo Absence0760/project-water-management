@@ -6,10 +6,11 @@
 // demand objects and own words, depend on the mode: a baseline-evidence
 // report has no applicant. § 6 came with report format evidence-9: a pack
 // drafted before it has no `demandObjects` and prints as it always did. § 7,
-// the applicant's dams' observed wet days, came with evidence-21 the same way.
+// the applicant's dams' observed wet days, came with evidence-21 the same way,
+// and § 8, Future yield, with evidence-23.
 import type { EvidenceReport } from '@water-management/engine';
 
-export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'allocations' | 'demandObjects' | 'damObservations' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
+export type EvidenceSectionId = 'summary' | 'river' | 'uncertainty' | 'credibility' | 'users' | 'allocations' | 'demandObjects' | 'damObservations' | 'futureYield' | 'appendixInputs' | 'appendixVerify' | 'applicantStatement';
 
 export interface EvidenceSection {
 	id: EvidenceSectionId;
@@ -20,7 +21,7 @@ export interface EvidenceSection {
 	title: string;
 }
 
-export function evidenceSections(r: Pick<EvidenceReport, 'mode' | 'demandObjects' | 'damObservations'>): EvidenceSection[] {
+export function evidenceSections(r: Pick<EvidenceReport, 'mode' | 'demandObjects' | 'damObservations'> & Partial<Pick<EvidenceReport, 'futureYield'>>): EvidenceSection[] {
 	const app = r.mode === 'application';
 	const out: EvidenceSection[] = [
 		{ id: 'summary', number: '', kind: '', title: 'Summary' },
@@ -34,6 +35,8 @@ export function evidenceSections(r: Pick<EvidenceReport, 'mode' | 'demandObjects
 		...(app && r.demandObjects ? [{ id: 'demandObjects' as const, number: '6', kind: 'Section', title: 'The applicant’s demand objects' }] : []),
 		// evidence-21: the applicant's own dams as Digital Earth Africa's WOfS saw them; an applicant's application only.
 		...(app && r.damObservations ? [{ id: 'damObservations' as const, number: '7', kind: 'Section', title: 'Observed wet days' }] : []),
+		// evidence-23: the applicant's dam, their supply and the EWR under projected climates; an application while FUTURE_YIELD is on.
+		...(app && r.futureYield ? [{ id: 'futureYield' as const, number: '8', kind: 'Section', title: 'Future yield' }] : []),
 		{ id: 'appendixInputs', number: 'A', kind: 'Appendix', title: 'Inputs and assumptions' },
 		{ id: 'appendixVerify', number: 'B', kind: 'Appendix', title: 'Limitations, sign-off and verification' }
 	];

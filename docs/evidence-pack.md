@@ -73,7 +73,10 @@ every zone's parameters, fit record and statistics, and the regional GR4J
 prior when the baseline's parameters came from it (report format
 `evidence-22`, issue #555 and #622, 2026-10-28; [§ Calibration
 zones](#calibration-zones), [§ The regional prior in
-§ 3](#the-regional-prior-in--3)). What is left is
+§ 3](#the-regional-prior-in--3)); and § 8's future yield of an application
+under each climate model's monthly change factors (report format
+`evidence-23`, issue #621 slice 4, 2026-10-29, 279_future_yield;
+[§ Future yield](#future-yield)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -537,6 +540,126 @@ never reads another applicant's dam rows), `frontend/…/report/evidence/section
 (§ 7 listed only for an applicant's application), and
 `e2e/tests/evidence-report.spec.ts` (§ 7's table on an applicant's report,
 none on a team application's or the baseline's).
+
+## Future yield
+
+A dam licence lasts decades; every other number in a pack replays the
+historical record. § 8 of an application's report (report format
+`evidence-23`, issue #621 slice 4) reruns the pack's baseline and
+application under downscaled climate change factors and shows, as a range
+across climate models, the applicant dam's yield, the applicant's
+assurance of supply and the change in EWR compliance.
+
+**What a case is.** One climate model × SSP (SSP2-4.5, SSP5-8.5) × horizon
+(2036–2065, 2066–2095): its 24 monthly change factors (rain as a ratio of
+means, evaporation as a ratio of Hargreaves–Samani PET, against 1985–2014,
+area-weighted over the catchment boundary's 0.25° cells; round 1's
+`climateDeltaFactors`, [model.md §2.17](./model.md)), applied to both runs'
+stored inputs as a `climate.delta` op. Per case the engine
+(`packages/engine/src/evidence/future.ts`, `runFutureYield`, builder
+`future-1`, method `delta-1`) runs the baseline and the application and
+reads:
+
+| Column | What |
+| --- | --- |
+| Firm yield | the applicant's dam's firm yield on the application (§2.13, constant draft, no failure day), m³/a |
+| Yield at 98 % | its yield at 98 % assurance (failed water years at most 2 %), m³/a |
+| Applicant's assurance | water years met ÷ water years over the applicant's own units on the application (`supplyAssurance.reliability`, pooled; the project's annual threshold) |
+| Change in days below the EWR | the application's days below the pragmatic EWR at the outlet less the baseline's, each under the same factors |
+
+The section prints the historical value (the same inputs, no op), then per
+SSP and horizon the median across models with the smallest and largest,
+never one number. **Fewer than 5 models** (`FUTURE_MIN_MODELS`) and it says
+so in a banner (`fewModels`): the committed synthetic copy has 3 invented
+models (SYN-A..C), so every dev, CI and e2e report shows it. The dam is the
+application's only own unit with a dam above 0 m³, or the one the request
+names.
+
+**Where the numbers come from.** A `future_yield` job (279_future_yield,
+`backend/src/jobs/handlers/future-yield.ts`), queued by an editor
+(`POST …/runs/:runId/future-yield`, [api.md § Future yield](./api.md#future-yield)),
+reads the copy's `cmip6/<model>/<scenario>` monthly aggregates
+(`backend/src/future/copy.ts`; the committed synthetic copy in dev, CI and
+e2e) over the project's `catchment_boundary` (`future/cells.ts`, the 0.25°
+cells weighted by share inside × cos latitude), works the factor table out
+(`buildFutureFactorTable`) and runs every pair (about 40 runs and twice as
+many yield searches for 10 models) as the editor, under RLS, then stores
+one `future_yield` row (the newest 3 per pair are kept). The evidence report
+reads the newest row for its two runs and freezes it whole. An application
+whose own ops already assume a climate (`climate.delta`) is refused. It is
+**off** unless `FUTURE_YIELD=on` ([deployment.md § NEX-GDDP-CMIP6
+(one-off)](./deployment.md#nex-gddp-cmip6-one-off)): off, no report has § 8
+(`futureYield: null`); on with no result for the pair, § 8 prints *Not
+assessed*. Baseline evidence never has § 8.
+
+**What the manifest freezes.** `report.futureYield`: the result whole,
+including the factor table (`factors`: method `delta-1`, the three windows,
+each case's 24 factors and the years of each window the copy held, and per
+product `cmip6/<model>/<scenario>` its manifest revision, the count and
+SHA-256 of its files in the windows (canonical JSON of `{ url, valuesSha256 }`
+sorted by URL), their versions and their `license` attributes verbatim), the
+engine that ran the pairs, who ran it and when, and the caveat as it stood.
+One digest a product rather than a row a file: ten models' windows are some
+4,500 files. No manifest version changed, as for `evidence-8`; a pack drafted
+before has no § 8.
+
+**The caveat.** § 8 opens with ours (projections, not predictions; what BCSD
+does and doesn't correct; delta change keeps the historical sequence, GR4J
+keeps its parameters, evaporation moves by a temperature-only ratio) and
+NASA's own caveat on engineering use, **quoted verbatim** from the
+product's technical note with its address and the date read
+(`FUTURE_YIELD_CAVEAT` in `evidence/future.ts`). The note the research
+cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returned 404 when this was built,
+so NASA's words are **a marked placeholder** for now.
+
+**What stops issue.** The `futureYield` check (`blocksIssue`, never
+`refuses`) fails while NASA's caveat isn't quoted (`futureCaveatPending`:
+text, address and date all needed) or while any factor rests on part of its
+30-year window (`futureFactorsComplete`: the synthetic copy holds 2 baseline
+years and 1 of each future window). Since a pack is drafted only from an
+issuable report, **no pack with § 8 can be made** until both are fixed; the
+section still previews on the report. Filling the caveat is a code change
+(the constant, with its test), deployed.
+
+**Sign-off.** The applicant's specialist signs § 8 by name: a pack whose
+manifest has a § 8 result signs statement `pack-signoff-2`, which adds the
+`futureYield` confirmation (*"I have read § 8 Future yield, its caveat and
+its change factors…"*, `liability/signoff.ts`); a pack without § 8 keeps
+`pack-signoff-1` word for word. The specialist reads no pack row, so
+`app_specialist_pack` (279) says whether the manifest has § 8.
+
+**Who reads it.** A viewer and above, and the applicant on their own
+application (`app_future_yield_own_run`); no farmer. A viewer kept from the
+registered volumes on runs that cap or scale use to them reads neither the
+section (`verdictsOnly.ts` lists it nowhere) nor the result's numbers on
+`GET …/future-yield`. Like § 7 it isn't on the allowlists of an applicant's
+copy or a share link.
+
+**Reproduction.** `climate:delta` ([§ Reproduction](#reproduction)): every
+pair run again from the frozen factor table on the bundle's own inputs
+(`checkFutureYield`), and the historical pair, every case and every range
+compared with the manifest. The NEX-GDDP-CMIP6 files aren't in the bundle;
+the manifest names each product's file digest. The bundle gains no file and
+its layout no version.
+
+Tests: `packages/engine/src/evidence/future.test.ts` (the ranges; each case
+against its op run by hand; factors of 1 give the historical values to the
+bit; the firm yield never falls as the rain factor rises; refusals; the
+re-check passing and failing; the factor table from cells, whole and
+partial windows; the caveat's guard), `evidence/report.test.ts` (frozen
+whole, the check on a pending caveat and on partial windows, *Not assessed*,
+null for baseline evidence), `evidence/bundle.test.ts` and
+`scripts/reproduce-pack/reproduce-pack.test.ts` (`climate:delta` passes,
+fails on a tampered case, absent before `evidence-23`),
+`liability/validation.test.ts` (`pack-signoff-2`), `backend/src/future/cells.test.ts`,
+`backend/src/future/future-yield.db.test.ts` (off by default; the request's
+refusals; the job over the synthetic copy; RLS with a viewer as positive
+control, a stranger and another contributor reading nothing; the report
+freezing it and held from issue; a copy with no projections), the catalogue
+guards, `frontend/…/report/evidence/future.test.ts` and `sections.test.ts`,
+and `e2e/tests/evidence-pack.spec.ts` (run on the synthetic copy, the
+caveat's placeholder, the few-models and partial-window banners, the table,
+and no pack made of it).
 
 ## Calibration zones
 
@@ -1220,6 +1343,7 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | `manifest` | `manifest.json` is canonical and hashes to the pack's hash (and to `--expect`, the hash verify returned) |
 | `figure:locality` | § 1's locality map drawn again from the manifest's features (this checkout's `localityMapSvg`) hashes to the `svgSha256` the manifest names; only for a pack with a locality map (`evidence-12`); drawn with other drawing rules, it names the engine to check out |
 | `observations:wofs` | § 7's observed wet days classify again from the dates the manifest freezes (`checkDamObservations`): each dam's wet, dry and inconclusive counts under the rule, the dates ISO, in order and inside the period, the period the baseline run's as `identity.baseline` records it, the counting version (naming `builtBy` when it differs) and the rule's numbers; only for a pack with § 7 (`evidence-21`) |
+| `climate:delta` | § 8's future yield (`evidence-23`): every pair run again from the manifest's frozen factor table on the bundle's baseline and application inputs (`checkFutureYield`) gives the historical pair, every case and every range the manifest carries; another builder version names `builtBy`, another engine the runs' one. With `--no-run`, only the factor table is read. Only for a pack with a § 8 result ([§ Future yield](#future-yield)) |
 | `runs` | the runs are the ones the manifest names, with its engine versions |
 | `inputs:<run>` | each series file parses, matches its hash and the manifest's list; the baseline's settings and model are the manifest's |
 | `changes`, `scenario` | the application's inputs differ from the baseline's by exactly the changes the manifest lists, and the scenario's ops hash to the hash it names (application packs) |

@@ -536,6 +536,10 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'The water occurrence raster tracing a dam reads (delineation/damTrace.ts, issue #326 C2): empty turns it off. The same forms and checks as DEM_URL; only the API traces.',
 		checks: { api: demUrl }
 	},
+	FUTURE_YIELD: {
+		why: 'The evidence pack’s § 8 Future yield (future/store.ts, issue #621): on or off, unset is off. The API reads it to queue the job and to put § 8 in a report; the worker (the job, a report it renders) and the assistant (which builds reports) reach it too. Unset in Terraform, so production stays off; set on only once the copy holds every model’s whole windows (deployment.md § NEX-GDDP-CMIP6).',
+		checks: { api: optional(oneOf('on', 'off')), worker: optional(oneOf('on', 'off')), assistant: optional(oneOf('on', 'off')) }
+	},
 	WATER_LABEL: { why: 'The water occurrence dataset’s name on each traced outline; empty takes the archive’s own. A label, never a credential or a switch.' },
 	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },
 	PACKS_BUCKET: {
