@@ -2,7 +2,7 @@
 // D17, R4-C; docs/architecture.md § Our copy of the rain data).
 //
 // There is no per-feed path to ECMWF: the Python ingest job copies each 00
-// UTC run's total precipitation for the region (ingest/ecmwf.py: ensemble
+// UTC run's total precipitation for the region (ingest/ecmwf_forecast.py: ensemble
 // mean and p10/p50/p90 per 0.1° cell and day, `ecmwf/<issue>`, listed in
 // `ecmwf/index.json` once whole), and every `ecmwf_ens` feed_fetch reads that
 // copy in this job, whatever CHIRPS_SOURCE or FEED_FETCHER say. The rule is

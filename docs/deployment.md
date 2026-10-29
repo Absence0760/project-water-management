@@ -1429,7 +1429,14 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
     `filter message.event = "feed_answer_dropped" | stats count() by message.reason`.
     `feed_changed`: the feed was saved while its fetch was out (expected
     once). `not_awaited` for every answer: a newer fetch keeps superseding
-    it (Run now pressed repeatedly) or the answers are redeliveries; match
+    it (Run now pressed repeatedly) or the answers are redeliveries (before
+    276 also the scheduler re-queuing a failing feed every 15 minutes while
+    its answer waited behind other CHC fetches; architecture.md § Data feeds
+    → Schedule). A backlog of superseded requests in the fetch-requests
+    queue (`ApproximateNumberOfMessages` far above the number of CHIRPS
+    feeds) still costs CHC one full fetch each until it drains: purge the
+    queue (`aws sqs purge-queue`); a feed whose request was purged is due
+    again within a day, or at once with Run now. Match
     `fetchJobId` against the fetcher's `feed_fetch_failed` lines, and look for
     `job_failed` / `job_lease_lost` on `feed_fetch` jobs, which re-send the
     same job.
@@ -1747,7 +1754,7 @@ target and permission, and the alarm exist only then.
 ### ECMWF (the second forecast)
 
 Issue #604 D17 (R4-C): the ECMWF ENS forecast, copied by the same
-mirror-ingest Lambda (`ingest/ecmwf.py`) and read by `ecmwf_ens` feeds
+mirror-ingest Lambda (`ingest/ecmwf_forecast.py`) and read by `ecmwf_ens` feeds
 (`backend/src/feeds/fromMirrorEcmwf.ts`). The source, its licence and the
 limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens).
 
@@ -1778,7 +1785,7 @@ limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-
   fails the run with `RetryLater`, having written nothing and no refusal
   marker; the target doesn't retry it (the failed event goes to the
   mirror-ingest DLQ), and the next scheduled run, 20 minutes on, asks again
-  (`ingest/test_ecmwf.py` covers both).
+  (`ingest/test_ecmwf_forecast.py` covers both).
 - **A 403** stops the run at once, never retried, writes
   `ecmwf/refused.json` (the time), and the Lambda errors (the event goes to
   the mirror-ingest DLQ, which alarms). The day's later runs see the marker

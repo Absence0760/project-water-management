@@ -4433,6 +4433,16 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     backoff arithmetic lives in one place; NULL when never scheduled. The
     feed list (`feeds/store.ts`) returns it as `nextAttemptAt` for an enabled
     feed with an acting user, null otherwise.
+  - Held while a fetch is out (`app_feed_fetch_out(fetch_job_id, now)`, 276,
+    plain, pinned `search_path`, revoked from `PUBLIC`): `app_due_feeds` and
+    `app_claim_feed` skip a due feed whose `fetch_job_id` names a
+    `feed_fetch` job that last started (`job.started_at`) within a day, so a
+    feed waits for its own answer instead of sending another request that
+    supersedes it; `all` ignores the hold. After a day (an answer lost for
+    good), or once the job is purged, the feed is due as before.
+    `app_feed_is_due` and `nextAttemptAt` don't see the hold: the feed list's
+    time is the earliest one ([architecture.md § Data feeds →
+    Schedule](./architecture.md#data-feeds)).
   - `app_record_feed_checked(feed)` (027): a fetch whose forecast issue was
     older than the one merged, dropped by the ingest: stamps
     `last_attempt_at` only, as an editor.

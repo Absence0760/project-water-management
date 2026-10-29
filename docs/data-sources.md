@@ -98,7 +98,7 @@ Every job that fetches from an upstream:
 | [gauge-stations](#gauge-stations) | DWS hydrological station catalogue | blocked | `www.dws.gov.za` | – | `pnpm import:gauge-stations` |
 | [dws-evaporation](#dws-evaporation) | DWS evaporation station records (Class-A and Symons pans, verified daily) | built (#646 item 6); blocked in production until DWS's permission covers them (synthetic stations in dev, CI and e2e) | `www.dws.gov.za` (the operator's request; never fetched) | – | `backend/src/geo/dwsEvaporation.ts`, `backend/src/geo/evaporationStations.ts`, `pnpm import:evaporation-stations` |
 | [era5-land](#era5-land) | ERA5-Land daily precipitation | built R4-A; off until `era5l_enabled` (the operator's CDS key first) | `cds.climate.copernicus.eu` (backfill too) | – | `ingest/era5land.py`, `infra/era5land.tf` |
-| [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
+| [ecmwf-ens](#ecmwf-ens) | ECMWF open data ENS 15-day precipitation (0.1°) | built (R4-C); the copy's job off in production until `ecmwf_enabled` | `ecmwf-forecasts.s3.eu-central-1.amazonaws.com` | `ecmwf_ens` | `ingest/ecmwf_forecast.py` (the copy), `ingest/ecmwf_qm_fit.py` (the fit), `backend/src/feeds/fromMirrorEcmwf.ts` (feeds read it) |
 | [imerg](#imerg) | IMERG Late V07 daily (GSMaP Gauge-NRT second) | the copy built (R4-D), off until `imerg_enabled` (needs the operator's Earthdata login or token) | `cmr.earthdata.nasa.gov`, `opendap.earthdata.nasa.gov`, `urs.earthdata.nasa.gov` (token API, stored login only) | – | `ingest/imerg.py`, `infra/imerg.tf` |
 | [sanlc](#sanlc) | SANLC orchard and vine classes | built R5-D; blocked in production until its terms are recorded (synthetic grid in dev, CI and e2e) | `egis.environment.gov.za` | `crop_type_dataset` | `pnpm import:crop-types` |
 | [agera5](#agera5) | AgERA5 v2.0 daily FAO-56 reference ET | built R5-E; the copy's job off in production until `agera5_enabled` (the CDS key is ERA5-Land's) | `cds.climate.copernicus.eu` | `agera5_et0` | `ingest/agera5.py` (the copy), `backend/src/feeds/fromMirrorEt0.ts` (feeds read it), `infra/agera5.tf` |
@@ -699,7 +699,7 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
   its report, summary CSV, daily CSV, workbook and pack credit it: as
   ERA5-Land's, [below](#era5-land-r4-a).
 - **Contact:** ECMWF support (Support Portal); no account needed.
-- **Access pattern:** the copy only (`ingest/ecmwf.py`, the Python ingest
+- **Access pattern:** the copy only (`ingest/ecmwf_forecast.py`, the Python ingest
   Lambda, `infra/ecmwf.tf`): each step's `.index` (JSON lines with each
   field's byte offset and length), then one range request per member for its
   `tp` field, never the 3–4 GB step file. Decoded with eccodes, the region
@@ -725,7 +725,7 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
   drizzle under-corrected. The durable fix is to fit on area means for the
   feed's region, tracked in [followups.md § The rain data copy](./followups.md#the-rain-data-copy-issue-604),
   to be done when the first fit is run, once the archive holds a season.
-- **Owner:** the operator; code `ingest/ecmwf.py`, `ingest/ecmwf_qm_fit.py`,
+- **Owner:** the operator; code `ingest/ecmwf_forecast.py`, `ingest/ecmwf_qm_fit.py`,
   `backend/src/ingest/ecmwf.ts`, `backend/src/feeds/fromMirrorEcmwf.ts`.
 
 ## Planned: the copy's cross-check

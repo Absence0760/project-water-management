@@ -1055,7 +1055,7 @@ row names a source, where to read it and the series it merges into:
 | --- | --- | --- | --- |
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default for a catchment feed, from 1998) or `rnl` (from 1981; the feeds a project sets up for its hydrological units read `rnl`, so each unit's record covers the whole 1991–2020 MAP period its rain level is computed over, issue #500 item 3, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit), [model.md §2.4h](./model.md#24h-runoff-from-each-units-own-rain-engine--1780-issue-482)) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old (on 2026-10-09 `daily/final/rnl/` ended at 2026-08-31 and `daily/prelim/sat/` at 2026-10-05). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
-| `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf.py`, below); no feed ever asks ECMWF |
+| `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf_forecast.py`, below); no feed ever asks ECMWF |
 | `agera5_et0` | Daily FAO-56 reference evapotranspiration from **our copy only** (issue #604 R5-E): AgERA5 v2.0 (`agera5_et0`, 0.1°) on the days its copy holds, else the ET₀ the ingest computes from NASA POWER's daily weather (`power_et0`, 0.1°) on the newest days; each feed cell's centre falls in a 0.1° cell, weighted as listed, cells with no value left out (same cells or box as CHIRPS) | `evap_et0_mm`, mm/day, read by GR4J only under a monthly PE row (model.md §2.4a *Daily reference ET*) | Zarr written by the Python ingest job (`ingest/agera5.py`, `ingest/nasapower.py`); the feed re-reads the last 75 days, so a day POWER filled becomes AgERA5's once its month lands |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
@@ -1525,7 +1525,21 @@ row names a source, where to read it and the series it merges into:
   Throttling below). When that is (`app_feed_next_attempt`,
   243_feed_next_attempt.sql, the same rule `app_feed_is_due` now reads) is
   the feed list's `nextAttemptAt`, and a failing feed's card says it ("It
-  tries again after 10:13."; ui.md § Data feeds). If the acting user is no longer an editor, the enqueue is
+  tries again after 10:13."; ui.md § Data feeds). **A feed whose fetch is
+  still out is not due** (276, `app_feed_fetch_out`): in production a fetch
+  sent to the fetcher (`fetch_job_id`, below) holds the feed until its
+  answer is applied, or for a day at most (an answer lost for good), so the
+  scheduler never sends a second request that would supersede the first.
+  CHC's fetches go one at a time and a 120-day CHIRPS window takes 8–10
+  minutes, so with a dozen CHIRPS feeds an answer takes about two hours to
+  come back; before 276 a failing feed was due again every 15 minutes
+  meanwhile, every answer was dropped as `not_awaited` (so the cell cache
+  never took its days, each request re-read all 120 days from CHC, and the
+  failure and its 15-minute backoff never cleared), and the fetch-requests
+  queue grew without end (production, 2026-10-28 to 29: 98 requests, CHC's
+  slot held around the clock). "Run now" still sends a newer request (its
+  token bucket bounds it), and the feed list's `nextAttemptAt` is the
+  earliest time, which a fetch still out pushes back to its answer. If the acting user is no longer an editor, the enqueue is
   refused, the feed records it (`app_feed_schedule_failed`, keeping the
   claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Data → Data feeds: `ok`,
@@ -1946,7 +1960,7 @@ EventBridge, daily
   re-dated to today as the CHIRPS products are.
 
 - **The second forecast** (issue #604 D17, R4-C). The mirror-ingest
-  Lambda's ECMWF runs (`ingest/ecmwf.py`, `{"product":"ecmwf","mode":"daily"}`,
+  Lambda's ECMWF runs (`ingest/ecmwf_forecast.py`, `{"product":"ecmwf","mode":"daily"}`,
   every 20 minutes 10:00–13:40 UTC, `infra/ecmwf.tf`) copy each 00 UTC ENS
   run's total precipitation from ECMWF's open data bucket
   (`ecmwf-forecasts`, eu-central-1): per step (24 … 360 h) the `.index`,

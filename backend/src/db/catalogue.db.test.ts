@@ -859,6 +859,7 @@ describe('schema catalogue', () => {
 			{ proname: 'app_dws_feed_stations', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_job', pinned: true, secdef: true },
 			{ proname: 'app_feed_fetch_now', pinned: true, secdef: true },
+			{ proname: 'app_feed_fetch_out', pinned: true, secdef: false },
 			{ proname: 'app_feed_is_due', pinned: true, secdef: false },
 			{ proname: 'app_feed_next_attempt', pinned: true, secdef: false },
 			{ proname: 'app_feed_replace_done', pinned: true, secdef: true },

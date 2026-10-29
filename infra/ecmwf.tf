@@ -4,7 +4,7 @@
 # ecmwf-ens)
 #
 #   EventBridge (every 20 min, 10:00–13:40 UTC) --async--> mirror-ingest Lambda
-#       {"product": "ecmwf", "mode": "daily"}            (ingest/ecmwf.py)
+#       {"product": "ecmwf", "mode": "daily"}            (ingest/ecmwf_forecast.py)
 #   mirror-ingest --GET index + Range, 1/s--> ecmwf-forecasts (S3, eu-central-1)
 #   mirror-ingest --Put/Get/List/Delete--> the mirror bucket's ecmwf/ and
 #                                          ingest-state/ecmwf/
@@ -60,7 +60,7 @@ locals {
 
 resource "aws_cloudwatch_event_rule" "ecmwf_ingest" {
   name                = "${local.project}-mirror-ingest-ecmwf"
-  description         = "ECMWF ENS forecast into the data mirror (ingest/ecmwf.py): every 20 minutes 10:00-13:40 UTC, each run resuming the last; a no-op once the day's issue is held. Disabled until ecmwf_enabled and ingest_image_tag are set."
+  description         = "ECMWF ENS forecast into the data mirror (ingest/ecmwf_forecast.py): every 20 minutes 10:00-13:40 UTC, each run resuming the last; a no-op once the day's issue is held. Disabled until ecmwf_enabled and ingest_image_tag are set."
   schedule_expression = local.ecmwf_schedule
   state               = local.ecmwf_enabled ? "ENABLED" : "DISABLED"
 }
