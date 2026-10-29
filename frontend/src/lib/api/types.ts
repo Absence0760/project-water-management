@@ -3695,10 +3695,14 @@ export interface EtSourceResult {
 export interface EtObserved {
 	nodeId: string;
 	name: string;
+	/** Whether this site runs the satellite ET check (the backend's ET_OBSERVATIONS); off by default. */
+	enabled: boolean;
+	/** Farm parcels (polygons) linked to the unit on the Map: what the check reads. */
+	parcels: number;
 	thresholds: { minValidShare: number; withinShare: number; floorMmDay: number; areaRatio: number };
 	run: { id: string; label: string; createdAt: string; engineVersion: string; forecastFrom: string | null; inRun: boolean } | null;
 	plantedAreaM2: number | null;
-	/** Empty with no observations: the fetch is off by default. */
+	/** Empty with no observations: the fetch is off by default, the unit has no parcels, or none is read yet. */
 	sources: EtSourceResult[];
 }
 

@@ -5281,7 +5281,9 @@ saves the catchment's model, and override mode there edits the scenario's
   Opened: the run it compares with ("Compared with the newest run,
   “Baseline” (29 Oct 2026)."), a line when the drawer has unsaved changes
   to the planted areas ("aren't in this run"), and with more than one
-  source which the tables show (WaPOR; the others' dekads are in the CSV);
+  source a **Source** switch, "WaPOR (7 dekads) | SSEBop (3 dekads)" (`.seg`
+  buttons with `aria-pressed`; WaPOR first, the choice reset per unit), each
+  source compared on its own, the line, summary and tables following it;
   the summary in words (each bias, and the share of dekads within ±25 %); the observed area
   when it is more than 1.5× from the planted area either way, asking to
   check the planted areas and the parcels; a note that modelled crop ET is
@@ -5296,11 +5298,14 @@ saves the catchment's model, and override mode there edits the scenario's
   volumes (m³) and why it wasn't compared, a dekad outside the band in the
   danger colour; **Download the dekads (CSV)**, every source's dekads with
   the credit on its first line (a `#` line, built in the browser); and the
-  credit, "Actual ET (WaPOR): FAO WaPOR v3, CC BY 4.0." With no
-  observations, the usual case (the fetch is off by default), the line reads
-  "no observations" and the open fold says it is read each dekad from
-  satellite over the unit's farm parcels once switched on, with **Open the
-  Map** to link parcels. The tables are app.css's `.table-stack`: the
+  credit per source, "Actual ET (WaPOR): FAO WaPOR v3, CC BY 4.0." With no
+  observations, the usual case, it says why, from the API's `enabled` and
+  `parcels` (`etObserved.ts` `emptyWords`): the check off on this site (line
+  "off on this site"; the open fold names the parcels linked, or that none
+  is), no farm parcels linked to the unit ("no farm parcels linked": draw or
+  link them on the Map), or parcels linked but no dekad read yet ("none read
+  yet": a dekad is published about three days after it ends), each with
+  **Open the Map**. The tables are app.css's `.table-stack`: the
   drawer (480 px at most) is under its 50rem at every width, so each row is
   a block with its figures under their own labels and nothing scrolls
   sideways. An unsaved unit's line ("Save the model to see …") names this

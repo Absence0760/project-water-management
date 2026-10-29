@@ -409,8 +409,8 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { fetcher: optional(oneOf('on', 'off')) }
 	},
 	ET_OBSERVATIONS: {
-		why: 'on: the worker runs the observed ET tick (water-use/observed/tick.ts, issue #623): writes the WaPOR pass’s wanted list (each unit’s parcels and their cropland) and loads what it fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.et_observations_enabled (infra/jobs.tf; et_observations.tf refuses the flag without it), off until FAO confirms the licence (#618 8a). Unset is off (etObservationsOn), so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
-		checks: { worker: optional(oneOf('on', 'off')) }
+		why: 'on: the worker runs the observed ET tick (water-use/observed/tick.ts, issue #623): writes the WaPOR pass’s wanted list (each unit’s parcels and their cropland) and loads what it fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.et_observations_enabled (infra/jobs.tf; et_observations.tf refuses the flag without it), off until FAO confirms the licence (#618 8a). Unset is off (etObservationsOn), so a release can go out before that apply; a value set is checked. The API runs no tick: Terraform sets the same value there (infra/lambda.tf) so GET …/et-observed can say `enabled` (water-use/observed/routes.ts), and unset reads as off.',
+		checks: { worker: optional(oneOf('on', 'off')), api: optional(oneOf('on', 'off')) }
 	},
 	FEED_FIXTURE_REWRITE: {
 		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'

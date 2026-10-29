@@ -1,12 +1,14 @@
 <!--
 	A unit's drawer → "Actual ET from satellite:" (issue #623; docs/ui.md § Farm drawer, docs/model.md §2.10o).
-	Under the planted areas, folded to one line (etLine): how many dekads of FAO WaPOR actual ET over the unit's
-	parcels were compared with the newest run, and which way the model's crop ET and irrigation lean. Opened: the
-	summary in words, the observed area when it is far from the planted area, a note that a difference points at the
-	inputs (never a correction: the model doesn't read these values), a table per half water year, the dekads
-	newest first (DEKADS_SHOWN, "Show all N dekads" for the rest), Download (CSV) with the credit on its first line,
-	and the credit. With no observations, the usual case (the fetch is off by default), it says so and nothing else.
-	One request per unit (GET …/nodes/:nodeId/et-observed), the run being the project's newest.
+	Under the planted areas, folded to one line (etLine): how many dekads of satellite actual ET over the unit's
+	parcels were compared with the newest run, and which way the model's crop ET and irrigation lean. Opened: a
+	WaPOR | SSEBop switch when the unit has both (each compared on its own; WaPOR first), the summary in words, the
+	observed area when it is far from the planted area, a note that a difference points at the inputs (never a
+	correction: the model doesn't read these values), a table per half water year, the dekads newest first
+	(DEKADS_SHOWN, "Show all N dekads" for the rest), Download (CSV, every source) with the credit on its first line,
+	and the credits. With no observations, the usual case, it says why (emptyWords): the check off on this site, no
+	farm parcels linked to the unit, or none read yet. One request per unit (GET …/nodes/:nodeId/et-observed), the run
+	being the project's newest.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
@@ -16,7 +18,8 @@
 	import { saveBlob } from '#lib/export/download.js';
 	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { mapNodeHref } from '#lib/workspace/mapLinks.js';
-	import { areaWords, DEKADS_SHOWN, otherSourcesWords, dekadRows, ET_ATTRIBUTION, etCsv, etCsvName, etLine, leadSource, seasonRows, SOURCE_WORDS, summaryWords } from './etObserved';
+	import type { EtSource } from '#lib/api/types.js';
+	import { areaWords, DEKADS_SHOWN, dekadRows, emptyWords, etCsv, etCsvName, etLine, seasonRows, shownSource, SOURCE_WORDS, sourceLabel, summaryWords } from './etObserved';
 
 	let {
 		projectId,
@@ -63,8 +66,10 @@
 		});
 	});
 
-	const lead = $derived(leadSource(data));
-	const line = $derived(etLine(data, loading, error));
+	/** The source picked in the switch; null is the lead (WaPOR when the unit has it). */
+	let picked = $state<EtSource | null>(null);
+	const lead = $derived(shownSource(data, picked));
+	const line = $derived(etLine(data, loading, error, picked));
 	const withinShare = $derived(data?.thresholds.withinShare ?? 0.25);
 	const summary = $derived(lead ? summaryWords(lead.summary, withinShare) : null);
 	const area = $derived(lead && data ? areaWords(lead, data.plantedAreaM2) : null);
@@ -74,9 +79,9 @@
 	$effect(() => {
 		void nodeId;
 		allDekads = false;
+		picked = null;
 	});
 	const folded = $derived(foldList(rows, (r) => r.key, null, allDekads, DEKADS_SHOWN));
-	const otherSources = $derived(otherSourcesWords(data, lead));
 	const minValid = $derived(fmtNum((data?.thresholds.minValidShare ?? 0.8) * 100, 0));
 
 	function download() {
@@ -96,12 +101,21 @@
 			<p class="muted small" role="status">Loading the satellite actual ET…</p>
 		{:else if !lead}
 			<p class="muted small" data-testid="et-observed-empty">
-				No satellite actual ET for {name} yet. When it is switched on for this site (it is off by default), it is read each
-				dekad from satellite ({ET_ATTRIBUTION.wapor}) over the farm parcels linked to {name} on the Map, and compared
-				here with the model’s crop water use.
+				{data ? emptyWords(data) : ''}
 				<a href={mapNodeHref(nodeId)}>Open the Map</a>
 			</p>
 		{:else}
+			{#if data && data.sources.length > 1}
+				<!-- Each source is compared on its own (model.md §2.10o); the CSV holds every source's dekads. -->
+				<div class="sources">
+					<span class="small" id="{uid}-source">Source</span>
+					<span class="seg" role="group" aria-labelledby="{uid}-source" data-testid="et-observed-source">
+						{#each data.sources as s (s.source)}
+							<button type="button" class="btn btn-sm" aria-pressed={lead.source === s.source} onclick={() => (picked = s.source)}>{sourceLabel(s)}</button>
+						{/each}
+					</span>
+				</div>
+			{/if}
 			{#if !data?.run}
 				<p class="muted small" data-testid="et-observed-run">No run yet, so the dekads are shown without the model’s figures.</p>
 			{:else if !data.run.inRun}
@@ -112,7 +126,6 @@
 			{#if dirty && data?.run}
 				<p class="small note" data-testid="et-observed-dirty">Your unsaved changes to the planted areas aren’t in this run.</p>
 			{/if}
-			{#if otherSources}<p class="small note" data-testid="et-observed-other">{otherSources}</p>{/if}
 			{#if summary}<p class="small" data-testid="et-observed-summary">{summary}</p>{/if}
 			{#if area}<p class="small note" data-testid="et-observed-area">{area}</p>{/if}
 			<p class="small note">
@@ -209,6 +222,12 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
 		gap: 0.6rem;
+	}
+	.sources {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.6rem;
 	}
 	.small,
 	.fine {

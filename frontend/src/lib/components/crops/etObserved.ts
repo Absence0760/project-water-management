@@ -2,8 +2,9 @@
 // drawer, docs/model.md §2.10o). The unit's dekads of satellite actual ET
 // (FAO WaPOR v3) beside the run's crop ET and the irrigation it delivered to
 // the crop, as the API compared them (backend water-use/observed/compare.ts).
-// Pure: the fold's line, the summary sentence, the season and dekad rows, and
-// the CSV with the credit on its first line.
+// Pure: the fold's line, why there is nothing (the check off, no parcels, none
+// read yet), which source is shown, the summary sentence, the season and dekad
+// rows, and the CSV with the credit on its first line.
 import type { EtObserved, EtPoint, EtSkip, EtSource, EtSourceResult, EtTotals } from '#lib/api/types.js';
 import { fmtDay, fmtNum } from '#lib/format/number.js';
 import { toCsv } from '#lib/spreadsheet/paste/grid.js';
@@ -41,20 +42,53 @@ const dekads = (n: number) => `${fmtNum(n)} dekad${n === 1 ? '' : 's'}`;
 /** The source the panel leads with: WaPOR when it has any, else the first. */
 export const leadSource = (data: EtObserved | null): EtSourceResult | null => data?.sources.find((s) => s.source === 'wapor') ?? data?.sources[0] ?? null;
 
-/** With more than one source, which the tables show and where the others' dekads are (the CSV has every source). */
-export function otherSourcesWords(data: EtObserved | null, lead: EtSourceResult | null): string | null {
-	const others = data && lead ? data.sources.filter((s) => s.source !== lead.source) : [];
-	if (!lead || !others.length) return null;
-	const rest = others.map((s) => `${SOURCE_WORDS[s.source]}’s ${dekads(s.points.length)}`).join(' and ');
-	return `Shown: ${SOURCE_WORDS[lead.source]}. ${rest} ${others.length === 1 && others[0]!.points.length === 1 ? 'is' : 'are'} in the CSV.`;
+/** The source shown: the one picked in the switch while the unit has it, else the lead. */
+export const shownSource = (data: EtObserved | null, picked: EtSource | null): EtSourceResult | null =>
+	(picked && data?.sources.find((s) => s.source === picked)) || leadSource(data);
+
+/** The switch's label for a source: its name and how many dekads it has. */
+export const sourceLabel = (s: EtSourceResult) => `${SOURCE_WORDS[s.source]} (${dekads(s.points.length)})`;
+
+/** Why a unit has no observations: the check off on this site (with or without parcels), no parcels linked, or none read yet. */
+export type EtEmpty = 'off' | 'off-no-parcels' | 'no-parcels' | 'waiting';
+
+export function emptyCase(data: Pick<EtObserved, 'enabled' | 'parcels'>): EtEmpty {
+	if (!data.enabled) return data.parcels > 0 ? 'off' : 'off-no-parcels';
+	return data.parcels > 0 ? 'waiting' : 'no-parcels';
 }
 
-/** The fold's one line. */
-export function etLine(data: EtObserved | null, loading: boolean, error: string | null): string {
+const parcelsWords = (n: number) => `${fmtNum(n)} farm parcel${n === 1 ? '' : 's'}`;
+
+/** What the empty panel says, for each reason. */
+export function emptyWords(data: Pick<EtObserved, 'enabled' | 'parcels' | 'name'>): string {
+	const { name } = data;
+	const how = `read each dekad from satellite (${ET_ATTRIBUTION.wapor}) and compared here with the model’s crop water use`;
+	switch (emptyCase(data)) {
+		case 'off':
+			return `The satellite check of actual ET is off on this site (it is off by default). Once it is switched on, the ${parcelsWords(data.parcels)} linked to ${name} on the Map ${data.parcels === 1 ? 'is' : 'are'} ${how}.`;
+		case 'off-no-parcels':
+			return `The satellite check of actual ET is off on this site (it is off by default), and no farm parcels are linked to ${name} on the Map. Once it is on, the parcels linked to a unit are ${how}.`;
+		case 'no-parcels':
+			return `No farm parcels are linked to ${name} on the Map, so there is nothing for the satellite to read. Draw ${name}’s parcels on the Map, or link them to it; their actual ET is then ${how}.`;
+		case 'waiting':
+			return `${parcelsWords(data.parcels)} ${data.parcels === 1 ? 'is' : 'are'} linked to ${name}, but no dekad has been read for ${data.parcels === 1 ? 'it' : 'them'} yet. Each dekad is published about three days after it ends and read newest first, so the first should show within a day.`;
+	}
+}
+
+/** The fold's line with no observations. */
+const EMPTY_LINE: Record<EtEmpty, string> = {
+	off: 'off on this site',
+	'off-no-parcels': 'off on this site',
+	'no-parcels': 'no farm parcels linked',
+	waiting: 'none read yet'
+};
+
+/** The fold's one line, for the source shown. */
+export function etLine(data: EtObserved | null, loading: boolean, error: string | null, picked: EtSource | null = null): string {
 	if (error) return 'couldn’t be loaded';
 	if (loading) return 'loading…';
-	const s = leadSource(data);
-	if (!s) return 'no observations';
+	const s = shownSource(data, picked);
+	if (!s) return data ? EMPTY_LINE[emptyCase(data)] : 'no observations';
 	const t = s.summary;
 	if (!t.compared) return `${dekads(s.points.length)} observed, none compared`;
 	return `${dekads(t.compared)} compared · crop ET ${fmtBias(t.etBiasPct)} · irrigation ${fmtBias(t.irrigationBiasPct)}`;

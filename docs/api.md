@@ -3888,9 +3888,17 @@ farmer is `403`.
 
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
-| GET | `/projects/:id/nodes/:nodeId/et-observed?run=` | `EtObserved` (below). `run`: the run to compare with, else the project's newest by `created_at`; another project's run or a malformed id is `404`. A node that isn't the project's (or a malformed id) is `404`, a gauge or other water user `400`. No observations, the usual case, is an empty `sources`. `Cache-Control: no-store` | viewer |
+| GET | `/projects/:id/nodes/:nodeId/et-observed?run=` | `EtObserved` (below). `run`: the run to compare with, else the project's newest by `created_at`; another project's run or a malformed id is `404`. A node that isn't the project's (or a malformed id) is `404`, a gauge or other water user `400`. No observations, the usual case, is an empty `sources`; `enabled` and `parcels` say why. `Cache-Control: no-store` | viewer |
 
-`EtObserved = { nodeId, name, thresholds, run, plantedAreaM2, sources }`:
+`EtObserved = { nodeId, name, enabled, parcels, thresholds, run, plantedAreaM2, sources }`:
+
+- `enabled`: whether this deployment runs the check (`ET_OBSERVATIONS=on`;
+  Terraform sets the API's from `et_observations_enabled`, as the
+  worker's). Off by default.
+- `parcels`: the farm parcels (polygons) linked to the unit on the Map,
+  under the caller's RLS: what the pass reads (281's `app_et_units`). With
+  `sources` empty: `enabled: false` is the check off, `parcels: 0` nothing
+  to read, otherwise no dekad read yet.
 
 - `thresholds`: the comparison's constants (`compare.ts` `ET_OBSERVED`):
   `minValidShare` 0.8, `withinShare` 0.25, `floorMmDay` 0.5, `areaRatio` 1.5.
