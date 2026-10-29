@@ -709,8 +709,35 @@ writes every series, `apanMm` and `pe`. What the delta method doesn't do
 historical parameters, evaporation moves by Hargreaves ratios) is in the
 known limitations ([engine-audit.md](./engine-audit.md) C1).
 
-No form makes one yet: the Scenarios tab's future-climate picker and the
-evidence pack's Future yield section are issue #621's later slices.
+## Future climate (issue #621 slice 5, 284_climate_factors)
+
+Add a change → **Future climate (monthly change factors)** makes the op
+from a pick, never from typed factors: a climate model, a pathway (SSP2-4.5
+or SSP5-8.5) and a window (2036–2065 or 2066–2095) of the project's
+**change factor table** (`FutureClimateFields.svelte`, ops.ts `buildOp` →
+the engine's `futureCaseOp`, so the label, `"SYN-B SSP5-8.5 2066–2095"`, and
+the source are § 8's own). The picked case's 24 factors show in a table
+before it is added. It is an editor's: an applicant's form doesn't offer it
+(the climate is a baseline assumption, and they read no factor table), nor
+does a licence's terms form.
+
+The table is worked out once per catchment by a background
+`climate_factors` job (`POST /projects/:id/climate-factors`,
+[api.md § Future climate](./api.md#future-climate)): the same reading of the
+data copy's NEX-GDDP-CMIP6 aggregates over the catchment boundary's 0.25°
+cells as § 8's `future_yield` job (`future/copy.ts readFactorTable`), stored
+in `climate_factors` with the SHA-256 of the boundary it was read over. The
+form says when there is no boundary on the Map tab, follows the job (queued,
+running, failed), and, when the boundary has changed since, says so and
+offers to work the factors out again. Like § 8 it is off unless
+`FUTURE_YIELD=on` (deployment.md § NEX-GDDP-CMIP6), and the form says so.
+
+The op carries its factors, so a scenario never reads the table again: a
+newer table, or one deleted (the job keeps the newest 3 per project),
+changes no scenario or run. One future climate per scenario: a second one,
+or a `series.scale` beside it, is refused when the list is saved (above).
+To see the spread across models, make one scenario per model, or run § 8
+Future yield on an application, which runs every case.
 
 ## Classification: proposal or baseline assumption
 
