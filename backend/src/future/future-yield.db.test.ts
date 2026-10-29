@@ -74,7 +74,7 @@ describe('§ 8 future yield', () => {
 		expect(res.body.details.code).toBe('future_yield_off');
 		expect((await get(viewer, appRun)).body).toEqual({ enabled: false, result: null });
 		const r = (await owner.call('GET', `/projects/${projectId}/runs/${appRun}/evidence-report`)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		expect(r.futureYield).toBeNull();
 	});
 

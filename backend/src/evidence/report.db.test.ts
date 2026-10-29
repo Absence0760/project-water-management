@@ -16,6 +16,7 @@ import {
 	runEnsemble,
 	runPairedEnsemble,
 	type DeclaredUncertaintyRule,
+	type EvidenceDamObservations,
 	type EvidenceReport,
 	type ModelInput
 } from '@water-management/engine';
@@ -234,7 +235,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		expect(r.allocations.notAssessed).toBeNull();
 		// Baseline evidence has no applicant: Upper isn't the applicant's, and one unit is too few for a total, so § 5 names no unit.
 		expect(r.allocations.units).toEqual([]);
@@ -445,7 +446,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-23');
+		expect(r.version).toBe('evidence-24');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([
@@ -521,8 +522,8 @@ describe('§ 1’s locality map (evidence-12, issue #326 A5)', () => {
 	});
 });
 
-describe('§ 7 observed wet days (evidence-21, issue #604 R5-C)', () => {
-	// An applicant (a contributor linked to Upper) with a traced dam on Upper and invented WOfS rows in the baseline's period.
+describe('§ 7 observed wet days (evidence-21; Sentinel-2 from evidence-24)', () => {
+	// An applicant (a contributor linked to Upper) with a traced dam on Upper and invented WOfS and Sentinel-2 rows in the baseline's period.
 	let applicant: User;
 	let damId: string;
 	let applicantRun: string;
@@ -544,24 +545,31 @@ describe('§ 7 observed wet days (evidence-21, issue #604 R5-C)', () => {
 		const made = await owner.call('POST', `/projects/${projectId}/map/features`, { kind: 'dam', name: 'Upper dam', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [box] } });
 		expect(made.status, JSON.stringify(made.body)).toBe(201);
 		damId = made.body.feature.id as string;
-		const rows: [string, number, number][] = [
+		// Loaded as the worker does (app_dam_observation_load, 261/278).
+		const load = (source: 'wofs' | 's2' | 's1', rows: [string, number, number][]) =>
+			withoutUser((db) =>
+				db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
+					source,
+					damId,
+					rows.map((r) => r[0]),
+					rows.map((r) => r[1]),
+					rows.map((r) => r[2]),
+					rows.map(() => `synthetic-${source}-item`),
+					new Date()
+				])
+			);
+		await load('wofs', [
 			['2017-01-05', 9000, 100], // before the baseline's period
 			['2019-01-05', 1800, 100], // wet
 			['2019-01-13', 0, 99.5], // dry
 			['2019-01-21', 900, 100] // one pixel: inconclusive
-		];
-		// Loaded as the worker does (app_dam_observation_load, 261).
-		await withoutUser((db) =>
-			db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
-				'wofs',
-				damId,
-				rows.map((r) => r[0]),
-				rows.map((r) => r[1]),
-				rows.map((r) => r[2]),
-				rows.map(() => 'synthetic-wofs-item'),
-				new Date()
-			])
-		);
+		]);
+		await load('s2', [
+			['2019-01-21', 0, 100], // dry: takes the date WOfS couldn't call
+			['2019-01-26', 600, 100] // 6 pixels: inconclusive
+		]);
+		// Radar: not counted in § 7.
+		await load('s1', [['2019-01-28', 5000, 100]]);
 		const created = await applicant.call('POST', `/projects/${projectId}/scenarios`, {
 			name: 'Wet days dam',
 			baseRunId: baseRun,
@@ -579,26 +587,48 @@ describe('§ 7 observed wet days (evidence-21, issue #604 R5-C)', () => {
 		expect((await owner.call('DELETE', `/projects/${projectId}/map/features/${damId}`)).status).toBe(204);
 	});
 
-	it('an applicant’s application report classifies their dam’s WOfS dates over the baseline’s period', async () => {
+	it('an applicant’s application report classifies their dam’s Sentinel-2 and WOfS dates over the baseline’s period, never its radar ones', async () => {
 		const res = await report(owner, applicantRun);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		const s = r.damObservations!;
-		expect(s).toMatchObject({ source: 'wofs', startDate: r.identity.baseline.startDate, endDate: r.identity.baseline.endDate, wetMinPixels: 2, dryMinClearPct: 99 });
+		const s = r.damObservations as EvidenceDamObservations;
+		expect(s).toMatchObject({ version: 'dam-obs-2', startDate: r.identity.baseline.startDate, endDate: r.identity.baseline.endDate });
+		expect(s.sources.map((x) => [x.source, x.wetMinPixels, x.pixelAreaM2, x.dryMinClearPct, x.citation])).toEqual([
+			['s2', 8, 100, 99, 'Contains modified Copernicus Sentinel data 2019, processed by Digital Earth Africa'],
+			['wofs', 2, 900, 99, 'Digital Earth Africa WOfS, CC BY 4.0']
+		]);
 		expect(s.dams).toEqual([
 			{
 				featureId: damId,
 				name: 'Upper dam',
 				nodeId: farmId,
-				observedDates: 3,
+				observedDates: 4,
 				wetDates: 1,
-				dryDates: 1,
+				dryDates: 2,
 				inconclusiveDates: 1,
-				dates: [
-					['2019-01-05', 1800, 100],
-					['2019-01-13', 0, 99.5],
-					['2019-01-21', 900, 100]
-				]
+				sources: {
+					s2: {
+						observedDates: 2,
+						wetDates: 0,
+						dryDates: 1,
+						inconclusiveDates: 1,
+						dates: [
+							['2019-01-21', 0, 100],
+							['2019-01-26', 600, 100]
+						]
+					},
+					wofs: {
+						observedDates: 3,
+						wetDates: 1,
+						dryDates: 1,
+						inconclusiveDates: 1,
+						dates: [
+							['2019-01-05', 1800, 100],
+							['2019-01-13', 0, 99.5],
+							['2019-01-21', 900, 100]
+						]
+					}
+				}
 			}
 		]);
 	});
@@ -610,7 +640,7 @@ describe('§ 7 observed wet days (evidence-21, issue #604 R5-C)', () => {
 
 	it('reads under the reader’s RLS: the dam’s farmer (the applicant) sees its rows, a stranger sees none and can’t read the report', async () => {
 		const read = (uid: string) => withUser(uid, (db) => loadDamObservations(db, projectId, [farmId], '2018-10-01', '2021-09-30'));
-		expect((await read(applicant.id)).map((d) => [d.featureId, d.rows.length])).toEqual([[damId, 3]]);
+		expect((await read(applicant.id)).map((d) => [d.featureId, d.rows.length])).toEqual([[damId, 5]]);
 		expect(await read(stranger.id)).toEqual([]);
 		expect((await report(stranger, applicantRun)).status).toBe(404);
 	});

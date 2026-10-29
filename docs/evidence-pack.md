@@ -76,7 +76,10 @@ zones](#calibration-zones), [§ The regional prior in
 § 3](#the-regional-prior-in--3)); and § 8's future yield of an application
 under each climate model's monthly change factors (report format
 `evidence-23`, issue #621 slice 4, 2026-10-29, 280_future_yield;
-[§ Future yield](#future-yield)). What is left is
+[§ Future yield](#future-yield)); and § 7 counting Sentinel-2 beside WOfS,
+each source and the dates either saw together (report format
+`evidence-24`, issue #624 step 7, 2026-10-29; [§ Observed wet
+days](#observed-wet-days)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -151,7 +154,10 @@ manifest freezes them and its hash covers them, and `reproduce:pack`
 classifies them again ([§ Observed wet days](#observed-wet-days)). No manifest
 version changed, as for `evidence-8`. A pack drafted before has no
 `damObservations`: its stored manifest still hashes to its recorded hash,
-and its report prints without § 7.
+and its report prints without § 7. From `evidence-24` (issue #624 step 7)
+§ 7 counts Sentinel-2 beside WOfS (counting `dam-obs-2`); a pack drafted
+from `evidence-21` to `evidence-23` keeps its WOfS-only `dam-obs-1` section,
+hash and table, and `reproduce:pack` still checks it as it was.
 
 ### The regional prior in § 3
 
@@ -430,67 +436,107 @@ PDF of a pack with a map).
 
 An application to build or raise a dam, or to take more from one, is
 stronger with what the dam has actually held. § 7 of an applicant's report
-(report format `evidence-21`, issue #604 R5-C) gives, for each of the
-applicant's own traced dams, on how many dates the satellite water layer
-saw it wet, on how many dry, and on how many it couldn't say, over the
-baseline run's period. It is evidence
+(report format `evidence-21`, issue #604 R5-C; Sentinel-2 from
+`evidence-24`, issue #624 step 7) gives, for each of the applicant's own
+traced dams, on how many dates a satellite saw it wet, on how many dry, and
+on how many it couldn't say, over the baseline run's period. It is evidence
 beside the model, never an input to it.
 
-**Where the numbers come from.** Digital Earth Africa's Water Observations
-from Space (WOfS, CC BY 4.0), one Landsat scene at a time, summed inside the
-dam's own outline on the Map by the fetcher's WOfS pass and loaded into
-`dam_observation` (migration 261, source `wofs`; [architecture.md § Dam
+**Where the numbers come from.** Two optical sources, each summed inside the
+dam's own outline on the Map by the fetcher and loaded into
+`dam_observation` ([architecture.md § Dam
 observations](./architecture.md#dam-observations),
-[data-sources.md](./data-sources.md)). One row per dam and date: the wet
-area seen and the share of the outline seen clearly (`pct_observed`).
-History starts in 2013 (the pass's first backfill), so a baseline period
-before that has no observations, and a dam is seen every 8 to 16 days.
+[data-sources.md](./data-sources.md)), one row per dam, source and date: the
+wet area seen and the share of the outline seen clearly (`pct_observed`).
+
+- **Sentinel-2** (source `s2`, migration 278; [data-sources.md
+  § deafrica-sentinel-2-c1](./data-sources.md#deafrica-sentinel-2-c1)):
+  Copernicus Sentinel-2 L2A Collection 1 as Digital Earth Africa publishes
+  it, classified by us (MNDWI > 0 from B03 and B11, NDWI where B11 is
+  missing, the SCL band masking cloud and shadow; model.md §2.10l). 10 m
+  pixels, a dam seen every few days, history from 2019 (the pass's
+  backfill). A 0.3 ha farm dam is about 30 of its pixels, where Landsat's
+  30 m grid gives it three or none.
+- **WOfS** (source `wofs`, migration 261): Digital Earth Africa's Water
+  Observations from Space (CC BY 4.0), one Landsat scene at a time, 30 m,
+  a dam seen every 8 to 16 days, history from 2013.
+
+Not counted: **Sentinel-1 radar** (`s1`) sees through cloud, but wind
+roughens open water and wet sand reads as water, so it is never alone the
+reason a dam is called full or empty (model.md §2.10l), and a wet or dry
+date is exactly such a call. **Waterbodies** (`waterbodies`) is DE Africa's
+own polygon, not the dam's traced outline, and its public series stops in
+2024-02. Neither is read for § 7 (`loadDamObservations`).
 
 **What is counted** (engine `packages/engine/src/evidence/damObservations.ts`,
-`damObservationsSection`, counting `dam-obs-1`, read by
+`damObservationsSection`, counting `dam-obs-2`, read by
 `loadDamObservations` in `backend/src/evidence/damObservations.ts` as the
-reader, under RLS, when the report is built). Each observed date is read
-by one rule (`classifyDamDate`), **provisional** (the lead's method
-decision of 2026-10-27, issue #604 R5; open to the client hydrologist's
-review):
+reader, under RLS, when the report is built). Each observed date of a
+source is read by that source's rule (`classifyDamDate`,
+`DAM_OBSERVATION_RULES`), **provisional** (the lead's method decisions of
+2026-10-27 for WOfS and 2026-10-29 for Sentinel-2; open to the client
+hydrologist's review):
 
-| Column | What |
-| --- | --- |
-| Dates observed | dates in the period with a WOfS row for the dam |
-| Wet | at least 2 wet pixels of the outline (`WET_MIN_PIXELS`, about 1,800 m² at 30 m), at **any** clear share |
-| Dry | no wet pixel, with at least 99 % of the outline seen clearly (`DRY_MIN_CLEAR_PCT`) |
-| Inconclusive | anything else: a single wet pixel, or no water seen on a view under 99 % clear |
+| Column | WOfS | Sentinel-2 |
+| --- | --- | --- |
+| Dates observed | dates in the period with a WOfS row for the dam | dates with a Sentinel-2 row |
+| Wet | at least 2 wet pixels of 900 m² (about 1,800 m²), at **any** clear share | at least 8 wet pixels of 100 m² (about 800 m²), at **any** clear share |
+| Dry | no wet pixel, with at least 99 % of the outline seen clearly | the same |
+| Inconclusive | anything else | anything else |
+
+And for each dam, **Either satellite**: every date either source saw,
+counted once (`combinedDamDates`). A date is read by the first source, best
+first, whose call is wet or dry: Sentinel-2 (the sharper outline), then
+WOfS, the order of the *Seen from space* panel's source precedence
+(`dams/observed/compare.ts` `SOURCE_PRECEDENCE`). A date neither can call is
+inconclusive.
 
 Why this rule:
 
 - **Wet needs no full view.** Water seen is water there, so a date counts as
-  wet whatever share of the outline cloud or shadow hid. Two pixels, not
-  one, screen out single-pixel noise at the edge of a dam: a mixed
-  shoreline pixel, terrain or cloud shadow WOfS's masks missed, wet soil.
+  wet whatever share of the outline cloud or shadow hid. A minimum of two
+  pixels, not one, screens out single-pixel noise at the edge of a dam: a
+  mixed shoreline pixel, terrain or cloud shadow the masks missed, wet soil.
+- **Sentinel-2's two pixels are 20 m ones.** Its water test reads B11 at
+  20 m, and its cloud mask (SCL) is 20 m too: each 20 m cell is assigned to
+  the four 10 m pixels whose centres fall in it, so one noisy 20 m cell is
+  up to four wet 10 m pixels. Eight 10 m pixels are at least two 20 m cells,
+  the same two-pixel screen as WOfS's at the resolution the water test is
+  really made at (the *Seen from space* panel's seen-empty floor is one
+  20 m cell, 400 m², for the same reason).
 - **Dry needs nearly the whole view.** A dry claim says there was no water
   anywhere in the outline, and the last water in a drawn-down dam is a pool
   at the wall, often a few pixels. A 90 %-clear view (the share DE Africa
   Waterbodies takes as a valid observation) can miss exactly that, and the
   low-storage case is the one a licence assessor cares about. So dry asks
-  for 99 % seen and not one wet pixel.
+  for 99 % seen and not one wet pixel, from either source.
+- **The sharper source decides a shared date.** Both pass at about 10:00
+  local time, so a date both saw is one state of the dam. Sentinel-2's
+  10 m view of a small dam is the better one; but a clouded Sentinel-2 view
+  doesn't throw away a clear Landsat call the same day.
 - **Inconclusive is counted, not dropped**, so the reader sees how many
   dates the rule couldn't call, and the wet and dry counts never look like
   more of the record than they are.
 
 The pixel count comes from the stored wet area: `dam_observation` holds
-the wet area (wet pixels × the pixel's ground area, R5-C's WOfS pass), not
-the count, so the count is the wet area over a 30 m pixel's nominal
-900 m² (`WOFS_PIXEL_AREA_M2`), rounded. The UTM scale moves a pixel's
-ground area by under 0.2 % across a zone (898 to 901 m²), so the rounding
-gives back the pass's own count; two pixels near a zone's edge (about
-1,798 m²) are still two. Every observed date is frozen in the report
-(`dates`: each date, its wet area in m² and the share seen), with the
-rule's three numbers (`wetMinPixels`, `dryMinClearPct`, `pixelAreaM2`), so
-the counts can be checked, and an assessor can look up the scene for a date
-(the dam's outline and the date are enough in DE Africa's STAC search;
+the wet area (wet pixels × the pixel's ground area), not the count, so the
+count is the wet area over the source's nominal pixel area (900 m² for
+WOfS's 30 m, 100 m² for Sentinel-2's 10 m), rounded. The UTM scale moves a
+pixel's ground area by under 0.2 % across a zone, so the rounding gives
+back the pass's own count. Every observed date of each source is frozen in
+the report (`dams[].sources.<source>.dates`: each date, its wet area in m²
+and the share seen), with each source's rule (`sources[]`:
+`wetMinPixels`, `dryMinClearPct`, `pixelAreaM2`) and credit, so the counts
+can be checked, and an assessor can look up the scene for a date (the
+dam's outline and the date are enough in DE Africa's STAC search;
 `dam_observation.upstream_key` holds the item id the app used). One row a
-dam and date (261's unique key): the section refuses a date given twice
-rather than keep either.
+dam, source and date (the table's unique key): the section refuses a date
+given twice for one source rather than keep either.
+
+**The table.** Per dam, three rows: *Either satellite* (the dates
+together, the dam's headline), then *Sentinel-2 (10 m)* and *WOfS (Landsat,
+30 m)*, each with its dates observed, wet, dry and inconclusive, and the
+span of its dates. A dam traced but never seen shows zeros.
 
 **Whose dams.** Only the applicant's own units' dams in an applicant's
 application, by the same rule as § 5 (decision D3): a team scenario's units
@@ -505,41 +551,74 @@ It rests on nothing registered, so a viewer kept from each registered
 volume reads it whole (`backend/src/allocations/verdictsOnly.ts`).
 
 **Attribution.** § 7 prints *Source: Digital Earth Africa WOfS, CC BY 4.0,
-summed inside the dams' traced outlines by this app* (`WOFS_CITATION`).
+summed inside the dams' traced outlines by this app* (`WOFS_CITATION`), and
+with any Sentinel-2 date in the table *Sources: Digital Earth Africa WOfS,
+CC BY 4.0, and Sentinel-2, each summed inside the dams' traced outlines by
+this app. Contains modified Copernicus Sentinel data [year], processed by
+Digital Earth Africa.* (`SENTINEL_CITATION`; [year] the first and last year
+of the Sentinel-2 dates counted, `sentinelCitation`, as the panel's
+`sentinelCredit`), the credit the EU's legal notice asks for
+([data-sources.md § deafrica-sentinel-2-c1](./data-sources.md#deafrica-sentinel-2-c1)).
+The credit is frozen in `sources[]` and checked against the dates.
 
 **Reproduction.** The observations aren't re-fetched: what is checked is
-that the counts follow from the frozen dates (`checkDamObservations`): each
-date classified again under the rule, the dates ISO, in order and inside
-the period, the counts whole numbers, the rule and counting version the
-report names, and the period the baseline run's as the manifest records it
-(`identity.baseline`; `observations:wofs`, [§ Reproduction](#reproduction)).
-The manifest hash covers § 7 whole, but a report counted over another span
-would hash just as well, so the period is checked against the baseline's
-too. Another counting version names the engine that built the report
-(`builtBy`), as `figure:locality` does. The bundle gains no file and its
-layout no version.
+that the counts follow from the frozen dates (`checkDamObservationsBySource`),
+one check a source and one for the dates together:
 
-Tests: `packages/engine/src/evidence/damObservations.test.ts` (the rule
-at its edges: 2 pixels at a 12 % view, 1 pixel, exactly 99 % and just
-under, the UTM scale's spread; the period; only the applicant's dams; a
-repeated date; the check's refusals, the counts and dates malformed),
-`evidence/report.test.ts` (`evidence-21`, null for baseline evidence and a
-team scenario), `evidence/bundle.test.ts` (`observations:wofs` passes,
-fails on a count the dates don't give, on another period than the
-baseline's, names `builtBy` on another version, absent for an older pack),
-`scripts/reproduce-pack/reproduce-pack.test.ts` (the same through the CLI),
-`backend/src/evidence/damObservations.db.test.ts` (the query, WOfS only,
-RLS with positive controls: a member and the dam's farmer read them, a
-stranger and a neighbour's farmer don't), `evidence/report.db.test.ts` (an
-applicant's report has § 7 from the stored rows, a team or baseline report
-none, the applicant reads the rows and a stranger neither them nor the
-report), `evidence/packs.db.test.ts` (an issued applicant pack's manifest
-hash covers § 7 and its stored bundle passes `observations:wofs`),
+- `observations:s2` and `observations:wofs`: that source's dates
+  classified again under its rule, the dates ISO, in order and inside the
+  period, the counts whole numbers, the rule's numbers the code's, and its
+  credit (Sentinel-2's naming the years of its dates);
+- `observations:days`: the dates either saw counted again from both
+  sources' frozen dates, best first.
+
+A problem with the period (it must be the baseline run's as the manifest
+records it, `identity.baseline`), the sources' list or the counting version
+fails all three, since every count rests on it. The manifest hash covers
+§ 7 whole, but a report counted over another span would hash just as well,
+so the period is checked against the baseline's too. Another counting
+version names the engine that built the report (`builtBy`), as
+`figure:locality` does. The bundle gains no file and its layout no version
+([§ Reproduction](#reproduction)).
+
+**Older packs.** A pack drafted from `evidence-21` to `evidence-23` froze
+§ 7 as `dam-obs-1`: WOfS alone, one row a dam (`dams[].dates` and its
+counts on the dam), one rule (`wetMinPixels`, `dryMinClearPct`,
+`pixelAreaM2` on the section) and `citation`. Nothing rebuilds it: its
+hash, its table (no *Satellite* column) and its credit stay as they were,
+and `reproduce:pack` checks it with the one `observations:wofs` check it
+had (`checkDamObservations`, which reads either counting).
+
+Tests: `packages/engine/src/evidence/damObservations.test.ts` (each rule at
+its edges: WOfS's 2 pixels at a 12 % view, 1 pixel, exactly 99 % and just
+under, the UTM scale's spread; Sentinel-2's 8 pixels at a 15 % view and 7;
+the dates together, a clouded Sentinel-2 view leaving a date to WOfS and a
+clear one taking it; the credit's years; the period; only the applicant's
+dams; a repeated date per source; each check's refusals on its own check;
+and the `dam-obs-1` builder and check as before), `evidence/report.test.ts`
+(`evidence-24`, null for baseline evidence and a team scenario),
+`evidence/bundle.test.ts` (the three checks pass, each fails alone on its
+own tampering, a wrong period fails all three, `builtBy` on another
+version, an older pack's `observations:wofs` alone, absent before
+`evidence-21`), `scripts/reproduce-pack/reproduce-pack.test.ts` (the same
+through the CLI, both countings),
+`backend/src/evidence/damObservations.db.test.ts` (the query: WOfS and
+Sentinel-2, never Sentinel-1 or Waterbodies, with positive controls; RLS: a
+member and the dam's farmer read them, a stranger and a neighbour's farmer
+don't), `evidence/report.db.test.ts` (an applicant's report has § 7 from
+the stored rows of both sources and not the radar's, a team or baseline
+report none, the applicant reads the rows and a stranger neither them nor
+the report), `evidence/packs.db.test.ts` (an issued applicant pack's
+manifest hash covers § 7 and its stored bundle passes the three checks; an
+`evidence-23` pack's `dam-obs-1` § 7 still matches its hash and checks),
 `backend/src/dams/observed/observations.security.db.test.ts` (an applicant
-never reads another applicant's dam rows), `frontend/…/report/evidence/sections.test.ts`
+never reads another applicant's dam rows),
+`frontend/…/report/evidence/damObservations.test.ts` (the rows, both
+countings, and the credit line), `frontend/…/report/evidence/sections.test.ts`
 (§ 7 listed only for an applicant's application), and
-`e2e/tests/evidence-report.spec.ts` (§ 7's table on an applicant's report,
-none on a team application's or the baseline's).
+`e2e/tests/evidence-report.spec.ts` (§ 7's table with both satellites and
+the Copernicus credit on an applicant's report, none on a team
+application's or the baseline's).
 
 ## Future yield
 
@@ -1342,7 +1421,8 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | `structure` | fails only for a malformed bundle: a file that matches its hash but isn't what its name says (JSON that doesn't parse, a manifest or results file missing a part). `checkPackBundle` never throws for a bad bundle; this is the check that says so |
 | `manifest` | `manifest.json` is canonical and hashes to the pack's hash (and to `--expect`, the hash verify returned) |
 | `figure:locality` | § 1's locality map drawn again from the manifest's features (this checkout's `localityMapSvg`) hashes to the `svgSha256` the manifest names; only for a pack with a locality map (`evidence-12`); drawn with other drawing rules, it names the engine to check out |
-| `observations:wofs` | § 7's observed wet days classify again from the dates the manifest freezes (`checkDamObservations`): each dam's wet, dry and inconclusive counts under the rule, the dates ISO, in order and inside the period, the period the baseline run's as `identity.baseline` records it, the counting version (naming `builtBy` when it differs) and the rule's numbers; only for a pack with § 7 (`evidence-21`) |
+| `observations:s2`, `observations:wofs` | § 7's observed wet days of that source classify again from the dates the manifest freezes (`checkDamObservationsBySource`): each dam's wet, dry and inconclusive counts under the source's rule, the dates ISO, in order and inside the period, the period the baseline run's as `identity.baseline` records it, the counting version (naming `builtBy` when it differs), the rule's numbers and the source's credit (Sentinel-2's with the years of its dates); only for a pack with § 7 from `evidence-24`. A pack with § 7 from `evidence-21` to `evidence-23` has `observations:wofs` alone, WOfS's counts under its one rule (`checkDamObservations`), as before ([§ Observed wet days](#observed-wet-days)) |
+| `observations:days` | § 7's dates either source saw count again from both sources' frozen dates, each read by the first source (Sentinel-2, then WOfS) that calls it wet or dry; only for a pack with § 7 from `evidence-24` |
 | `climate:delta` | § 8's future yield (`evidence-23`): every pair run again from the manifest's frozen factor table on the bundle's baseline and application inputs (`checkFutureYield`) gives the historical pair, every case and every range the manifest carries; another builder version names `builtBy`, another engine the runs' one. With `--no-run`, only the factor table is read. Only for a pack with a § 8 result ([§ Future yield](#future-yield)) |
 | `runs` | the runs are the ones the manifest names, with its engine versions |
 | `inputs:<run>` | each series file parses, matches its hash and the manifest's list; the baseline's settings and model are the manifest's |

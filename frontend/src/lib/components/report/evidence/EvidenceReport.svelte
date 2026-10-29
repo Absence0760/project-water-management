@@ -46,6 +46,7 @@
 	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, registeredText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import LocalityMap from './LocalityMap.svelte';
+	import DamObservations from './DamObservations.svelte';
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
@@ -817,46 +818,8 @@
 					</div>
 				{/if}
 			{:else if s.id === 'damObservations' && report.damObservations}
-				<!-- evidence-21: the applicant's own dams as DE Africa's WOfS saw them (satellite evidence beside the model, not an input to it). -->
-				{@const dov = report.damObservations}
-				<p class="small muted">
-					For each of the applicant’s dams, the dates from {fmtDate(dov.startDate)} to {fmtDate(dov.endDate)} (the baseline’s period) on which the satellite water layer saw
-					it, read by one rule (provisional). <strong>Wet:</strong> at least {dov.wetMinPixels} pixels of its traced outline were water (about {fmtNum(dov.wetMinPixels * dov.pixelAreaM2)} m²),
-					however much of it was seen: proof of water needs no full view. <strong>Dry:</strong> no water at all, with at least {dov.dryMinClearPct} % of the outline seen
-					free of cloud and shadow, so the last pool at the wall can’t hide. <strong>Inconclusive:</strong> anything else. Landsat sees a dam every 8 to 16 days, so these are
-					counts of dates seen, not of days.
-				</p>
-				{#if dov.dams.length}
-					<div class="table-wrap">
-						<table class="data compact" data-testid="evidence-dam-observations">
-							<thead>
-								<tr>
-									<th scope="col">Dam</th>
-									<th scope="col" class="num">Dates observed</th>
-									<th scope="col" class="num">Wet</th>
-									<th scope="col" class="num">Dry</th>
-									<th scope="col" class="num">Inconclusive</th>
-									<th scope="col">Dates span</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each dov.dams as d (d.featureId)}
-									<tr>
-										<th scope="row">{d.name || 'Unnamed dam'}</th>
-										<td class="num">{fmtNum(d.observedDates)}</td>
-										<td class="num">{fmtNum(d.wetDates)}</td>
-										<td class="num">{fmtNum(d.dryDates)}</td>
-										<td class="num">{fmtNum(d.inconclusiveDates)}</td>
-										<td>{d.dates.length ? `${fmtDate(d.dates[0]![0])} to ${fmtDate(d.dates.at(-1)![0])}` : '–'}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{:else}
-					<p class="na" data-testid="evidence-dam-observations-na">No dam on the applicant’s units is traced on the map, so none was observed.</p>
-				{/if}
-				<p class="small muted" data-testid="evidence-dam-observations-credit">Source: {dov.citation}, summed inside the dams’ traced outlines by this app.</p>
+				<!-- evidence-21: the applicant's own dams as the satellites saw them (Sentinel-2 beside WOfS from evidence-24; satellite evidence beside the model, not an input to it). -->
+				<DamObservations dov={report.damObservations} />
 			{:else if s.id === 'futureYield' && report.futureYield}
 				<!-- evidence-23 (issue #621): the applicant's dam, their supply and the EWR, the record re-run under each climate model's monthly change factors. -->
 				{@const fy = report.futureYield}

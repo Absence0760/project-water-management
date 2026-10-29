@@ -1,7 +1,7 @@
 // The observed wet days' query (evidence/damObservations.ts, report format
-// evidence-21, issue #604 R5-C): a project's dams on the given units with
-// their WOfS rows in the period, under the reader's RLS. Invented dams and
-// values.
+// evidence-21, issue #604 R5-C; Sentinel-2 from evidence-24, issue #624 step
+// 7): a project's dams on the given units with their WOfS and Sentinel-2 rows
+// in the period, under the reader's RLS. Invented dams and values.
 //
 // DB test files run one at a time; this one removes its observation rows after each test.
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -37,8 +37,8 @@ async function dam(u: User, pid: string, name: string, x: number, nodeId: string
 	expect(res.status, JSON.stringify(res.body)).toBe(201);
 	return res.body.feature.id as string;
 }
-/** Loads rows for a dam as the worker does (app_dam_observation_load, 261). */
-const load = (source: 'wofs' | 'waterbodies', key: string, rows: [string, number, number][]) =>
+/** Loads rows for a dam as the worker does (app_dam_observation_load, 261; Sentinel sources since 278). */
+const load = (source: 'wofs' | 's2' | 's1' | 'waterbodies', key: string, rows: [string, number, number][]) =>
 	withoutUser((db) =>
 		db.query('SELECT written FROM app_dam_observation_load($1, $2, $3::date[], $4::float8[], $5::float8[], $6::text[], $7)', [
 			source,
@@ -46,7 +46,7 @@ const load = (source: 'wofs' | 'waterbodies', key: string, rows: [string, number
 			rows.map((r) => r[0]),
 			rows.map((r) => r[1]),
 			rows.map((r) => r[2]),
-			rows.map(() => (source === 'wofs' ? 'synthetic-wofs-item' : key)),
+			rows.map(() => (source === 'waterbodies' ? key : `synthetic-${source}-item`)),
 			new Date()
 		])
 	);
@@ -93,25 +93,47 @@ describe('loadDamObservations', () => {
 			name: 'Upper',
 			nodeId: farmA.id,
 			rows: [
-				{ date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 },
-				{ date: '2020-01-13', wetAreaM2: 0, pctObserved: 95 }
+				{ source: 'wofs', date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 },
+				{ source: 'wofs', date: '2020-01-13', wetAreaM2: 0, pctObserved: 95 }
 			]
 		});
 		// A dam with no rows is still listed, with none.
 		expect(got.find((d) => d.featureId === damA2)!.rows).toEqual([]);
 	});
 
-	it('reads WOfS rows only, never Waterbodies’', async () => {
+	it('reads WOfS and Sentinel-2 rows, never Waterbodies’ or Sentinel-1 radar’s', async () => {
 		await seed();
+		await load('s2', damA, [
+			['2019-12-30', 800, 100], // before the period
+			['2020-01-05', 2500, 100], // the same date as a WOfS row: both kept
+			['2020-01-10', 0, 99]
+		]);
+		// Radar: never alone a wet or dry call, so § 7 doesn't count it.
+		await load('s1', damA, [['2020-01-07', 3000, 100]]);
 		// A Waterbodies row for the same dam (written as the schema owner: its loader goes through a waterbody match).
 		await asOwner(
 			`INSERT INTO dam_observation (project_id, feature_id, source, obs_date, wet_area_m2, pct_observed, upstream_key)
 			 VALUES ($1, $2, 'waterbodies', '2020-02-01', 5000, 100, 'zzzzza0001')`,
 			[projectId, damA]
 		);
-		expect(await asOwner(`SELECT 1 FROM dam_observation WHERE feature_id = $1 AND source = 'waterbodies'`, [damA])).toHaveLength(1);
+		// Positive controls: the radar and Waterbodies rows are there to be left out.
+		expect(await asOwner(`SELECT source FROM dam_observation WHERE feature_id = $1 AND source IN ('waterbodies', 's1') ORDER BY source`, [damA])).toEqual([{ source: 's1' }, { source: 'waterbodies' }]);
 		const rows = (await read(owner, projectId, [farmA.id])).find((d) => d.featureId === damA)!.rows;
-		expect(rows.map((r) => r.date)).toEqual(['2020-01-05', '2020-01-13']);
+		expect(rows).toEqual([
+			{ source: 's2', date: '2020-01-05', wetAreaM2: 2500, pctObserved: 100 },
+			{ source: 's2', date: '2020-01-10', wetAreaM2: 0, pctObserved: 99 },
+			{ source: 'wofs', date: '2020-01-05', wetAreaM2: 1800, pctObserved: 100 },
+			{ source: 'wofs', date: '2020-01-13', wetAreaM2: 0, pctObserved: 95 }
+		]);
+	});
+
+	it('a farmer reads their own dam’s Sentinel-2 rows (positive control), never a neighbour’s', async () => {
+		await load('s2', damA, [['2020-01-05', 2500, 100]]);
+		await load('s2', damB, [['2020-01-05', 2500, 100]]);
+		const got = await read(farmer, projectId, [farmA.id, farmB.id]);
+		expect(got.find((d) => d.featureId === damA)!.rows).toHaveLength(1);
+		expect(got.some((d) => d.featureId === damB)).toBe(false);
+		expect(await read(stranger, projectId, [farmA.id, farmB.id])).toEqual([]);
 	});
 
 	it('gives nothing for no units, or ids that aren’t a node’s', async () => {

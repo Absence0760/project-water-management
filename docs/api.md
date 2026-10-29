@@ -3047,6 +3047,17 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
   methodology, limitations and errata.
+- **§ 7 Observed wet days** (`damObservations`, `evidence-21`; counting
+  `dam-obs-2` from `evidence-24`, issue #624 step 7): for an applicant's
+  application, each of their own traced dams with its Sentinel-2 and WOfS
+  dates in the baseline's period, read as the reader under RLS:
+  `{ version: 'dam-obs-2', startDate, endDate, sources: [{ source: 's2' | 'wofs', citation, wetMinPixels, dryMinClearPct, pixelAreaM2 }], dams: [{ featureId, name, nodeId, observedDates, wetDates, dryDates, inconclusiveDates, sources: { s2, wofs } }] }`,
+  each `sources.<source>` that source's counts and `dates`
+  (`[date, wetAreaM2, pctObserved][]`), the dam's own counts the dates
+  together. A pack drafted from `evidence-21` to `evidence-23` keeps its
+  `dam-obs-1` section (WOfS alone, its counts and `dates` on each dam);
+  `null` for baseline evidence and a team scenario
+  ([evidence-pack.md § Observed wet days](./evidence-pack.md#observed-wet-days)).
 - **§ 8 Future yield** (`futureYield`, `evidence-23`, issue #621): for an
   application run while `FUTURE_YIELD=on`, the newest stored result for its
   two runs ([§ Future yield](#future-yield)), frozen whole with its factor
