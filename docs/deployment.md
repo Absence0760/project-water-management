@@ -2370,16 +2370,21 @@ What the app does with it: the evidence pack's § 8 Future yield
 (scenarios.md § Future climate, the `climate_factors` job), both behind
 **`FUTURE_YIELD`** (`on` | `off`, default `off`; anything else refuses to
 start a request). Off, nothing reads the copy's `cmip6`, no report has § 8
-and Add a change says the projections aren't loaded. Set `FUTURE_YIELD=on` on the API
-**and** the job worker only once the copy holds every model's whole windows
-(step 4 below shows 30 historical years and 60 per SSP); the worker reads the
-copy through its existing `MIRROR_URL` and read grant, and the API never
-reads it, so no `infra/` change beyond the variable. Until then leave it off:
+and Add a change says the projections aren't loaded. Terraform sets it from
+**`future_yield_enabled`** (default `false`) on the API (`infra/lambda.tf`),
+the job worker (`infra/jobs.tf`) and the assistant (`infra/assistant.tf`,
+which builds the same reports), so all three agree; set it `true` only once
+the copy holds every model's whole windows (step 4 below shows 30
+historical years and 60 per SSP). The worker reads the copy through its
+existing `MIRROR_URL` and read grant (the production check refuses
+`FUTURE_YIELD=on` on a worker without an `s3://` `MIRROR_URL`), and the API
+never reads it, so no other `infra/` change. Until then leave it off:
 on with a partial copy, § 8 is computed on part of each window and the
 `futureYield` check holds every pack with it from issue. It is also held
 until NASA's caveat is quoted in `FUTURE_YIELD_CAVEAT`
-(`packages/engine/src/evidence/future.ts`), a code change. Not yet wired in
-Terraform: with no variable, production stays off. Locally it is off too
+(`packages/engine/src/evidence/future.ts`), a code change. An editor can
+cancel a job that is waiting or running (§ 8's board, the Scenarios tab's
+form; 284_cancel_future_jobs). Locally it is off too
 (`backend/.env.development` doesn't set it); put `FUTURE_YIELD=on` in
 `backend/.env.development.local` to try it on the committed synthetic copy
 (3 invented models, partial windows), and run the job with `pnpm

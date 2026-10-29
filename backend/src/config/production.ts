@@ -116,10 +116,15 @@ const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-
 /**
  * MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror), hands the weekly DWS pass its stations
  * (DWS_WEEKLY=on), runs the dams tick (DAM_OBSERVATIONS=on, which reads the passes' files from the bucket) or the observed ET tick
- * (ET_OBSERVATIONS=on, the same), else checked only when set.
+ * (ET_OBSERVATIONS=on, the same) or the future climate's jobs (FUTURE_YIELD=on, which read cmip6/ from the copy), else checked
+ * only when set.
  */
 const mirrorUrlFor: Check = (v, env) =>
-	env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' || env?.DAM_OBSERVATIONS?.trim() === 'on' || env?.ET_OBSERVATIONS?.trim() === 'on'
+	env?.CHIRPS_SOURCE?.trim() === 'mirror' ||
+	env?.DWS_WEEKLY?.trim() === 'on' ||
+	env?.DAM_OBSERVATIONS?.trim() === 'on' ||
+	env?.ET_OBSERVATIONS?.trim() === 'on' ||
+	env?.FUTURE_YIELD?.trim() === 'on'
 		? s3Url(v)
 		: optional(s3Url)(v);
 
@@ -537,7 +542,7 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: demUrl }
 	},
 	FUTURE_YIELD: {
-		why: 'The evidence pack’s § 8 Future yield (future/store.ts, issue #621): on or off, unset is off. The API reads it to queue the job and to put § 8 in a report; the worker (the job, a report it renders) and the assistant (which builds reports) reach it too. Unset in Terraform, so production stays off; set on only once the copy holds every model’s whole windows (deployment.md § NEX-GDDP-CMIP6).',
+		why: 'The evidence pack’s § 8 Future yield (future/store.ts, issue #621): on or off, unset is off. The API reads it to queue the job and to put § 8 in a report; the worker (the job, a report it renders) and the assistant (which builds reports) reach it too. Terraform sets the same value on all three from var.future_yield_enabled (infra/lambda.tf, jobs.tf, assistant.tf), off by default; set on only once the copy holds every model’s whole windows (deployment.md § NEX-GDDP-CMIP6). On, the worker must name the copy (MIRROR_URL).',
 		checks: { api: optional(oneOf('on', 'off')), worker: optional(oneOf('on', 'off')), assistant: optional(oneOf('on', 'off')) }
 	},
 	WATER_LABEL: { why: 'The water occurrence dataset’s name on each traced outline; empty takes the archive’s own. A label, never a credential or a switch.' },

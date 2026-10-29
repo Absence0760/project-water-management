@@ -86,6 +86,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		FEED_SOURCE: 'live',
 		CHIRPS_SOURCE: 'chc',
 		ET_OBSERVATIONS: 'off',
+		FUTURE_YIELD: 'off',
 		STORAGE: 's3',
 		REPORTS_BUCKET: 'water-management-reports-000000000000',
 		PACKS_BUCKET: 'water-management-packs-000000000000',
@@ -114,6 +115,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		DWS_WEEKLY: 'off',
 		DAM_OBSERVATIONS: 'off',
 		ET_OBSERVATIONS: 'off',
+		FUTURE_YIELD: 'off',
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		REPORT_RENDERER: 'sqs',
 		RENDER_REQUESTS_QUEUE_URL: SQS('render-requests'),
@@ -165,6 +167,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		NODE_EXTRA_CA_CERTS: CA,
 		DB_POOL_MAX: '1',
 		FEED_SOURCE: 'live',
+		FUTURE_YIELD: 'off',
 		ASSISTANT_PROVIDER: 'bedrock',
 		ASSISTANT_MODEL: MODEL,
 		ASSISTANT_BEDROCK_REGION: 'af-south-1',
@@ -609,6 +612,21 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		expect(problemNames('worker', prod('worker', { CHIRPS_SOURCE: 'chc', MIRROR_URL: 'file:///tmp/mirror/' }))).toContain('MIRROR_URL');	// The fetcher writes the copy (its daily ingest): Terraform always sets the bucket, and nothing else will do.
 		for (const v of [undefined, 'file:///var/task/fixtures/mirror/', 's3://']) expect(problemNames('fetcher', prod('fetcher', { MIRROR_URL: v })), `fetcher MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
 		expect(problemNames('fetcher', prod('fetcher', {}))).toEqual([]);
+	});
+
+	it('FUTURE_YIELD is on or off on the API, the worker and the assistant, and on, the worker reads the copy from its bucket', () => {
+		for (const role of ['api', 'worker', 'assistant'] as const) {
+			for (const v of ['yes', 'true', 'ON']) expect(problemNames(role, prod(role, { FUTURE_YIELD: v })), `${role} FUTURE_YIELD=${v}`).toContain('FUTURE_YIELD');
+			// Positive controls: on, off and unset (off), as Terraform sets it (infra/lambda.tf, jobs.tf, assistant.tf).
+			for (const v of ['on', 'off', undefined]) expect(problemNames(role, prod(role, { FUTURE_YIELD: v })), `${role} FUTURE_YIELD=${String(v)}`).not.toContain('FUTURE_YIELD');
+		}
+		// On, the future_yield and climate_factors jobs read cmip6/ from the copy: the worker must name its bucket, even with CHIRPS from CHC.
+		for (const v of [undefined, 'file:///var/task/fixtures/mirror/', 's3://'])
+			expect(problemNames('worker', prod('worker', { FUTURE_YIELD: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: v })), `MIRROR_URL=${String(v)}`).toContain('MIRROR_URL');
+		expect(problemNames('worker', prod('worker', { FUTURE_YIELD: 'on', CHIRPS_SOURCE: 'chc', MIRROR_URL: 's3://water-management-mirror-000000000000' }))).toEqual([]);
+		expect(problemNames('worker', prod('worker', { FUTURE_YIELD: 'off', CHIRPS_SOURCE: 'chc', MIRROR_URL: undefined }))).toEqual([]);
+		// The API never reads the copy: on needs no MIRROR_URL there.
+		expect(problemNames('api', prod('api', { FUTURE_YIELD: 'on' }))).toEqual([]);
 	});
 
 	it('the worker says where DWS feeds read (store or live) and whether it runs the weekly pass, which needs the mirror bucket', () => {
