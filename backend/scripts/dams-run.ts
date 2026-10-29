@@ -7,7 +7,9 @@
 // fetcher's Waterbodies pass (FEED_SOURCE=fixtures by default: the committed
 // synthetic series, no network) and its WOfS pass (the synthetic STAC and
 // scenes, dams/observed/wofs/fixtures.ts), then the tick again (load what the pass
-// wrote into dam_observation). The handover goes through MIRROR_URL when it
+// wrote into dam_observation). With DAM_OBSERVATIONS_S2=on (off by default,
+// as in production) the Sentinel-2 pass runs after WOfS, on the synthetic
+// Sentinel-2 scenes (dams/observed/sentinel/fixtures.ts). The handover goes through MIRROR_URL when it
 // names a bucket or directory of its own, else a scratch directory under the
 // system's temp directory (one per dev database), never the committed
 // synthetic copy. Needs the synthetic waterbodies (`pnpm import:waterbodies`,
@@ -28,6 +30,8 @@ import { openStore } from '../src/mirror/store.js';
 import { runDamsTick } from '../src/dams/observed/tick.js';
 import { REQUEST_INTERVAL_MS, runWaterbodiesPass, waterbodiesHttp } from '../src/dams/observed/waterbodies.js';
 import { runWofsPass, SCENE_INTERVAL_MS, STAC_INTERVAL_MS } from '../src/dams/observed/wofs/pass.js';
+import { runS2Pass, S2_SCENE_INTERVAL_MS } from '../src/dams/observed/sentinel/pass.js';
+import { damSourceOn } from '../src/dams/observed/handover.js';
 import { feedHttp } from '../src/feeds/http.js';
 
 /** MIRROR_URL when it is one of its own, else a scratch directory named after the dev database. */
@@ -63,11 +67,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		console.log(
 			`WOfS pass (${mode}): ${wofs.written.length} written, ${wofs.failures.length} failed, ${wofs.fresh} fresh, ${wofs.scenesRead} scenes read; stopped: ${wofs.stopped}${wofs.pausedUntil ? ` until ${wofs.pausedUntil}` : ''}`
 		);
+		let s2Error: unknown = null;
+		if (damSourceOn('s2')) {
+			const s2 = await runS2Pass({ store, http: await feedHttp(mode), today: utcToday(), stacIntervalMs: live ? STAC_INTERVAL_MS : 0, sceneIntervalMs: live ? S2_SCENE_INTERVAL_MS : 0 });
+			s2Error = s2.error;
+			console.log(
+				`Sentinel-2 pass (${mode}): ${s2.written.length} written, ${s2.failures.length} failed, ${s2.fresh} fresh, ${s2.scenesRead} scenes read; stopped: ${s2.stopped}${s2.pausedUntil ? ` until ${s2.pausedUntil}` : ''}`
+			);
+		}
 		const after = await runDamsTick({ env, store });
 		console.log(`tick: ${after?.loaded ?? 0} file(s) loaded, ${after?.rows ?? 0} row(s) written${after?.failed ? `, ${after.failed} failed` : ''}`);
 		console.log(`handover: ${url}`);
 		await closePool();
-		process.exit(pass.error || wofs.error || after?.failed ? 1 : 0);
+		process.exit(pass.error || wofs.error || s2Error || after?.failed ? 1 : 0);
 	})().catch(async (err) => {
 		console.error((err as Error).message);
 		await closePool();

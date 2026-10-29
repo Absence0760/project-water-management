@@ -504,6 +504,11 @@ export function isDamsWeeklyEvent(event: unknown): event is DamsWeeklyEvent {
  * WOfS pass's, which reads scenes.
  */
 export const WATERBODIES_BUDGET_SHARE = 0.3;
+/**
+ * With the Sentinel-2 pass on (DAM_OBSERVATIONS_S2), where the WOfS pass's time ends, as a share of the whole run's
+ * budget: Waterbodies to 0.3, WOfS to 0.65, Sentinel-2 the rest. A pass that finishes early leaves its time to the next.
+ */
+export const WOFS_BUDGET_SHARE_WITH_S2 = 0.65;
 
 /** What one source's pass answers (counts only, never a dam or uid). */
 export interface DamPassAnswer {
@@ -515,7 +520,7 @@ export interface DamPassAnswer {
 	stopped: string;
 }
 /** What a dams-weekly invocation answers: each source's pass that ran. */
-export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs', DamPassAnswer>>;
+export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs' | 's2', DamPassAnswer>>;
 
 /**
  * A source paused after its pass stopped on a 403 or throttling (handover.ts
@@ -523,7 +528,7 @@ export type DamsWeeklyAnswer = Partial<Record<'waterbodies' | 'wofs', DamPassAns
  * (that is the alert, issue #604's rule: a refusal stops and alerts, never a
  * retry). Logged, and not an error: the stopping run already failed.
  */
-function pausedAnswer(source: 'waterbodies' | 'wofs', pausedUntil: string | undefined, ms: number): { answer: DamPassAnswer; error: null } {
+function pausedAnswer(source: 'waterbodies' | 'wofs' | 's2', pausedUntil: string | undefined, ms: number): { answer: DamPassAnswer; error: null } {
 	logEvent('warn', { event: 'dams_pass', source, stopped: 'paused', pausedUntil: pausedUntil ?? null, ms });
 	return { answer: { fetched: 0, unchanged: 0, failed: 0, fresh: 0, recencyDays: null, stopped: 'paused' }, error: null };
 }
@@ -562,34 +567,41 @@ async function waterbodiesPass(deadline: number): Promise<{ answer: DamPassAnswe
 	return { answer: { fetched: r.fetched.length, unchanged: r.unchanged.length, failed: r.failed.length, fresh: r.fresh, recencyDays: r.recencyDays, stopped: r.stopped }, error: r.error };
 }
 
+/** The explorer's pacer, shared by the WOfS and Sentinel-2 passes of one run (one STAC request a second across both). */
+type StacPacer = NonNullable<import('./dams/observed/wofs/pass.js').WofsPassOptions['stac']>;
+
 /**
- * The WOfS pass (dams/observed/wofs/pass.ts): DE Africa's per-scene water
- * layer summed inside every traced dam's outline. Its metrics whatever
+ * A per-scene pass (dams/observed/wofs/pass.ts runScenePass): the WOfS
+ * pass, DE Africa's per-scene water layer, or the Sentinel-2 pass
+ * (dams/observed/sentinel/pass.ts), our own classification of its bands,
+ * each summed inside every traced dam's outline. Its metrics whatever
  * happened, then its stop (an HTTP 403, 429/503) as the error. A scene it
  * couldn't read is counted (`sceneFailed`), never named.
  */
-async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; error: unknown }> {
-	const { runWofsPass, STAC_INTERVAL_MS, SCENE_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+async function scenePass(source: 'wofs' | 's2', deadline: number, stac: StacPacer): Promise<{ answer: DamPassAnswer; error: unknown }> {
+	const { runWofsPass, SCENE_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+	const { runS2Pass, S2_SCENE_INTERVAL_MS } = await import('./dams/observed/sentinel/pass.js');
 	const { damPassMetricLine, damsStore } = await import('./dams/observed/handover.js');
 	const started = Date.now();
 	const mode = feedSourceMode();
 	const live = mode === 'live';
-	const r = await runWofsPass({
+	const run = source === 'wofs' ? runWofsPass : runS2Pass;
+	const r = await run({
 		store: damsStore(),
 		http: await feedHttp(mode),
 		today: utcToday(),
 		deadline,
-		stacIntervalMs: live ? STAC_INTERVAL_MS : 0,
-		sceneIntervalMs: live ? SCENE_INTERVAL_MS : 0
+		stac,
+		sceneIntervalMs: live ? (source === 'wofs' ? SCENE_INTERVAL_MS : S2_SCENE_INTERVAL_MS) : 0
 	});
-	if (r.stopped === 'paused') return pausedAnswer('wofs', r.pausedUntil, Date.now() - started);
-	emitMetricLine(damPassMetricLine('wofs', r.recencyDays));
+	if (r.stopped === 'paused') return pausedAnswer(source, r.pausedUntil, Date.now() - started);
+	emitMetricLine(damPassMetricLine(source, r.recencyDays));
 	const message = r.error !== null ? feedErrorMessage(r.error) : null;
 	const unchanged = Math.max(0, r.turns - r.written.length - r.failures.length);
 	// Counts and reason codes, never a dam, an item or an upstream body.
 	logEvent(message !== null ? 'error' : r.failures.length || r.sceneFailures.length ? 'warn' : 'info', {
 		event: 'dams_pass',
-		source: 'wofs',
+		source,
 		fetched: r.written.length,
 		unchanged,
 		failed: r.failures.length,
@@ -609,7 +621,9 @@ async function wofsPass(deadline: number): Promise<{ answer: DamPassAnswer; erro
 
 /**
  * One run of the dam observation passes: Waterbodies first (at most
- * WATERBODIES_BUDGET_SHARE of the time), then WOfS. A pass stopped by its
+ * WATERBODIES_BUDGET_SHARE of the time), then WOfS, then, with
+ * DAM_OBSERVATIONS_S2=on, Sentinel-2 (WOfS up to WOFS_BUDGET_SHARE_WITH_S2,
+ * Sentinel-2 the rest; the two share the explorer's pacer). A pass stopped by its
  * upstream doesn't keep the other from running; the invocation fails at the
  * end if either was stopped, and is not retried (dam_observations.tf: the
  * next hour's run tries again). Hourly for the WOfS backfill's sake; each
@@ -627,10 +641,21 @@ async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): 
 	const wb = await waterbodiesPass(started + budget * WATERBODIES_BUDGET_SHARE);
 	answer.waterbodies = wb.answer;
 	if (wb.error !== null) errors.push(wb.error);
-	// WOfS with the rest of the budget.
-	const wofs = await wofsPass(started + budget);
+	const { damSourceOn } = await import('./dams/observed/handover.js');
+	const s2On = damSourceOn('s2');
+	const { pacedHttp } = await import('./ingest/daily.js');
+	const { STAC_INTERVAL_MS } = await import('./dams/observed/wofs/pass.js');
+	const mode = feedSourceMode();
+	const stac = pacedHttp(await feedHttp(mode), mode === 'live' ? STAC_INTERVAL_MS : 0, Date.now, (ms) => new Promise<void>((r) => setTimeout(r, ms)));
+	// WOfS with the rest of the budget, or its share of it when Sentinel-2 follows.
+	const wofs = await scenePass('wofs', started + budget * (s2On ? WOFS_BUDGET_SHARE_WITH_S2 : 1), stac);
 	answer.wofs = wofs.answer;
 	if (wofs.error !== null) errors.push(wofs.error);
+	if (s2On) {
+		const s2 = await scenePass('s2', started + budget, stac);
+		answer.s2 = s2.answer;
+		if (s2.error !== null) errors.push(s2.error);
+	}
 	if (errors.length) throw errors[0];
 	return answer;
 }

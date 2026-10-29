@@ -1065,6 +1065,22 @@ variable "bedrock_endpoint_az_count" {
   }
 }
 
+variable "dam_s2_enabled" {
+  description = "Run the Sentinel-2 pass of the dam observations (issue #624; dam_observations.tf, backend/src/dams/observed/sentinel/pass.ts): DE Africa's Sentinel-2 L2A Collection 1 scenes classified by us (MNDWI, SCL cloud masking) inside every traced dam's outline, after the WOfS pass in each hourly dams-weekly run. Only with dam_observations_enabled: it sets the fetcher's DAM_OBSERVATIONS_S2 and adds the s2 heartbeat and recency alarms. Off (the default) until a backend release with the pass is deployed. Runbook: docs/deployment.md § Dam observations."
+  type        = bool
+  default     = false
+}
+
+variable "dam_s2_recency_alarm_days" {
+  description = "Alarm when the newest Sentinel-2 observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=s2}). Three Sentinel-2 satellites pass every few days and a clouded view still writes a row, so 21 days with nothing means the collection or our pass has stopped."
+  type        = number
+  default     = 21
+  validation {
+    condition     = var.dam_s2_recency_alarm_days >= 10 && floor(var.dam_s2_recency_alarm_days) == var.dam_s2_recency_alarm_days
+    error_message = "A whole number of days, at least 10: DE Africa publishes a scene days after it is taken."
+  }
+}
+
 variable "dam_wofs_recency_alarm_days" {
   description = "Alarm when the newest WOfS observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=wofs}). Landsat 8 and 9 pass every 8 days together, cloud hides some passes, DE Africa publishes a scene within days, and each dam is re-read weekly: 60 days is two months with no clear pass anywhere, which means WOfS or our pass has stopped."
   type        = number

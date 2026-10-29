@@ -2114,10 +2114,12 @@ EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside th
       writes dams/waterbodies/<uid>.json, dams/waterbodies-status.json
    WOfS pass (R5-C): each dam's newest scenes once a UTC day, the rest of the run its history backward
       writes dams/wofs/<featureId>.json, dams/wofs-status.json
+   Sentinel-2 pass (#624, DAM_OBSERVATIONS_S2=on): the same, s2_l2a_c1 classified by us, back to 2019
+      writes dams/s2/<featureId>.json, dams/s2-status.json
    each pass: DamPassCompleted{Source} + DamObservationAgeDays{Source} (EMF)
 
 worker tick: each status, then each key due by its load mark (≤ 200 a tick, oldest lastGood first)
-   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs)
+   ──► app_dam_observation_load ──► dam_observation (source waterbodies | wofs | s2; s1 accepted for #624 step 5)
    ──► app_dam_load_mark_write ──► dam_observation_load_mark (what was loaded, kept across restarts)
 ```
 
@@ -2324,6 +2326,54 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
     invented overlapping scenes in every UTM zone, two paths, a seasonal
     water field and cloud on some dates, written as real tiled DEFLATE
     COGs, so the production reader runs offline.
+- **Sentinel-2, classified inside our own outlines** (issue #624 step 4,
+  `backend/src/dams/observed/sentinel/`). DE Africa publishes no Sentinel
+  water mask, so its Sentinel-2 L2A Collection 1 scenes (`s2_l2a_c1`, 10 m,
+  every few days) are classified here. It is the WOfS pass with its own
+  parts (`wofs/pass.ts` `runScenePass` takes a `ScenePassSource`:
+  `sentinel/pass.ts` `S2_PASS`), so everything above about the turns, the
+  state (`dams/s2-state.json`), the re-scanned tail, a redrawn outline, a
+  refusal's pause and the file holds for it as written. Its own parts:
+  - **The search**: `collections=s2_l2a_c1` on the same explorer, items
+    checked by `sentinel/s2.ts` `s2Item` (the `green` B03, `swir16` B11,
+    `nir` B08 and `scl` assets, each only under `sentinel-2-c1-l2a/` in
+    `deafrica-sentinel-2-l2a-c1`, `stac.ts` `assetUrl`; an item with
+    neither B11 nor B08 is refused), with each band's DN offset from its
+    `raster:bands` (−1000 for Collection 1, checked 2026-10-29).
+  - **The bands**: uint16 COGs in UTM (EPSG 327xx, the south codes, unlike
+    WOfS); B03 and B08 at 10 m, B11 and SCL at 20 m on the same origin. The
+    mask is made on B03's grid; B11 and SCL are read over the window of
+    their own grids under it (`windowOn`) and each 10 m pixel takes the
+    20 m pixel its centre falls in; B08 is read only when a clear inside
+    pixel has no B11. So a scene is three COG headers and three small
+    windows (four with B08).
+  - **The classification** (MNDWI > 0, NDWI > 0 where B11 is missing, SCL 0,
+    1, 3, 8, 9, 10 not clear): [model.md §2.10l](./model.md#210l-modelled-vs-observed-dam-area-app-issue-604-r5-b).
+    `wet_area_m2` = wet pixels × 100 m² ÷ k², `pct_observed` as WOfS's.
+  - **History** to 2019 (`S2_BACKFILL_FROM`, Collection 1 consistent from
+    there), newest first. A dam's `since` is the wanted list's `sinceBy.s2`
+    (the day after its newest `s2` row, `app_dam_outlines`' `s2_newest`,
+    278), never WOfS's.
+  - **Politeness**: one request a second to each host (the explorer, and
+    the bucket, `S2_SCENE_INTERVAL_MS`), one in flight. The fetcher hands
+    the WOfS pass's STAC pacer on to the Sentinel-2 pass, so the explorer
+    sees one a second across both. A 403 or throttling stops the pass and
+    pauses `s2` alone.
+  - **Budget**: with it on, a run gives Waterbodies up to 30 %, WOfS up to
+    65 % (`WOFS_BUDGET_SHARE_WITH_S2`) and Sentinel-2 the rest; a pass that
+    finishes early leaves its time to the next.
+  - **Off by default**, behind `DAM_OBSERVATIONS_S2` on the fetcher as well
+    as the dam observations themselves (Terraform `dam_s2_enabled`, only
+    with `dam_observations_enabled`), with its own heartbeat and recency
+    alarms (`Source = s2`, breaching on missing data). The worker loads
+    `s2` (and, from #624 step 5, `s1`) files by the same path as WOfS's;
+    no screen shows them yet (#624 step 6).
+  - **Locally** `sentinel/fixtures.ts` answers the search and the bands
+    from `backend/fixtures/feeds/s2-sample.json`: WOfS's invented water
+    field seen at 10 m, overlapping tiles, a band of cloud with its shadow
+    every third day, overcast days, and days whose item lists no B11 (the
+    NDWI fallback). `pnpm dev:dams:run` runs it with
+    `DAM_OBSERVATIONS_S2=on`.
 
 ## Server-side reports
 

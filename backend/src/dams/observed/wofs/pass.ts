@@ -83,6 +83,11 @@
 //
 // Locally (FEED_SOURCE=fixtures) the client is the synthetic one
 // (wofs/fixtures.ts) and pacing is off.
+//
+// The same pass runs Sentinel-2 (issue #624 step 4, ../sentinel/pass.ts):
+// runScenePass takes the source's own collection search, scene reader, state
+// file and backfill start (a ScenePassSource), and everything above holds
+// for it as written, with `dams/s2-…` for `dams/wofs-…`.
 import { createHash } from 'node:crypto';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { AbsolutePath } from '@zarrita/storage';
@@ -101,12 +106,13 @@ import {
 	pausedUntil,
 	stopRetryAfter,
 	type ObservationFile,
+	type ObservationSource,
 	type PassStatus,
 	type WantedOutline
 } from '../handover.js';
 import { openCog, readWindow, type RangeRead } from '../../../raster/cog.js';
 import { outlineMask, sceneWindow, type OutlineMask } from '../../../raster/mask.js';
-import { searchScenes, type WofsScene } from './stac.js';
+import { searchScenes, type SceneItem, type WofsScene } from './stac.js';
 import { observation, tally, WOFS_ACCEPT } from './sum.js';
 
 /** The first-backfill window's start: the Landsat 8 era (Landsat 7 beside it). Earlier history isn't fetched. */
@@ -133,7 +139,7 @@ const IsoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const IsoTime = z.string().datetime({ offset: true });
 const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** dams/wofs-state.json: the pass's own bookkeeping, per dam. Never read by the worker. */
+/** dams/wofs-state.json (dams/s2-state.json for Sentinel-2): the pass's own bookkeeping, per dam. Never read by the worker. */
 export const WofsState = z
 	.object({
 		v: z.literal(1),
@@ -163,8 +169,8 @@ export const WofsState = z
 	.strict();
 export type WofsState = z.output<typeof WofsState>;
 
-export async function readState(store: MirrorStore): Promise<WofsState | null> {
-	const bytes = await store.get(STATE_KEY);
+export async function readState(store: MirrorStore, key: AbsolutePath = STATE_KEY): Promise<WofsState | null> {
+	const bytes = await store.get(key);
 	if (bytes === undefined) return null;
 	try {
 		const r = WofsState.safeParse(JSON.parse(new TextDecoder().decode(bytes)));
@@ -174,7 +180,7 @@ export async function readState(store: MirrorStore): Promise<WofsState | null> {
 		return null;
 	}
 }
-const writeState = (store: MirrorStore, s: WofsState) => store.set(STATE_KEY, new TextEncoder().encode(JSON.stringify(s)));
+const writeState = (store: MirrorStore, key: AbsolutePath, s: WofsState) => store.set(key, new TextEncoder().encode(JSON.stringify(s)));
 
 /** The outline's fingerprint: SHA-256 of its GeoJSON as the wanted list gives it. */
 export const outlineHash = (o: Pick<WantedOutline, 'geometry'>) => createHash('sha256').update(JSON.stringify(o.geometry)).digest('hex');
@@ -216,6 +222,11 @@ export interface WofsPassOptions {
 	backfillFrom?: string;
 	now?: () => number;
 	sleep?: (ms: number) => Promise<void>;
+	/**
+	 * The STAC pacer to use instead of a new one (stacIntervalMs then unused): the fetcher hands the WOfS pass's to the
+	 * Sentinel-2 pass after it, so the explorer sees one request a second across both. Its count is read as a delta.
+	 */
+	stac?: ReturnType<typeof pacedHttp>;
 }
 
 export interface WofsPassResult {
@@ -256,8 +267,8 @@ const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 const maxDay = (...ds: (string | undefined)[]) => ds.filter((d): d is string => !!d).reduce((a, b) => (a > b ? a : b));
 
 /** One scene's view of a dam, or null when it didn't see it (sum.ts observation). */
-interface SceneView {
-	scene: WofsScene;
+export interface SceneView<S extends SceneItem = WofsScene> {
+	scene: S;
 	etag?: string;
 	wetAreaM2: number;
 	pctObserved: number;
@@ -265,36 +276,47 @@ interface SceneView {
 	coveredPx: number;
 }
 
-/** Reads one scene's header and the tiles under the outline, and sums them. */
-async function viewScene(http: FeedHttp, scene: WofsScene, outline: WantedOutline, masks: Map<string, OutlineMask>): Promise<SceneView | null> {
-	let etag: string | undefined;
+/** A range reader for one URL that keeps the object's first ETag (not a Last-Modified stand-in) in `tag.etag`. */
+export function taggedReader(http: FeedHttp, url: string): { read: RangeRead; tag: { etag?: string } } {
+	const tag: { etag?: string } = {};
 	const read: RangeRead = async (start, end) => {
 		if (http.rangeTagged) {
-			const got = await http.rangeTagged(scene.url, start, end);
-			if (got?.tag && !got.tag.startsWith('lm:') && etag === undefined) etag = got.tag;
+			const got = await http.rangeTagged(url, start, end);
+			if (got?.tag && !got.tag.startsWith('lm:') && tag.etag === undefined) tag.etag = got.tag;
 			return got?.bytes ?? null;
 		}
-		return http.range(scene.url, start, end);
+		return http.range(url, start, end);
 	};
-	const cog = await openCog(read, WOFS_ACCEPT);
-	if (!cog) throw new FeedFormatError('the scene STAC lists is not in the bucket');
-	// Scenes of one path/row share a grid: the mask is made once for it.
-	const gridKey = `${cog.epsg}/${cog.originX}/${cog.originY}/${cog.pixelSizeX}/${cog.pixelSizeY}`;
+	return { read, tag };
+}
+
+/** The outline's mask on a scene's grid, made once per grid (scenes of one path/row, or one MGRS tile, share it). */
+export function maskFor(masks: Map<string, OutlineMask>, outline: WantedOutline, grid: Parameters<typeof outlineMask>[1]): OutlineMask {
+	const gridKey = `${grid.epsg}/${grid.originX}/${grid.originY}/${grid.pixelSizeX}/${grid.pixelSizeY}`;
 	let mask = masks.get(gridKey);
 	if (!mask) {
-		mask = outlineMask(outline.geometry, cog);
+		mask = outlineMask(outline.geometry, grid);
 		masks.set(gridKey, mask);
 	}
+	return mask;
+}
+
+/** Reads one scene's header and the tiles under the outline, and sums them. */
+async function viewScene(http: FeedHttp, scene: WofsScene, outline: WantedOutline, masks: Map<string, OutlineMask>): Promise<SceneView | null> {
+	const { read, tag } = taggedReader(http, scene.url);
+	const cog = await openCog(read, WOFS_ACCEPT);
+	if (!cog) throw new FeedFormatError('the scene STAC lists is not in the bucket');
+	const mask = maskFor(masks, outline, cog);
 	if (mask.inside === 0) return null;
 	const win = sceneWindow(mask, cog);
 	if (!win) return null;
 	const samples = await readWindow(read, cog, win);
 	const o = observation(tally(mask, win, samples), mask.pixelAreaM2);
-	return o && { scene, ...(etag ? { etag } : {}), ...o };
+	return o && { scene, ...(tag.etag ? { etag: tag.etag } : {}), ...o };
 }
 
 /** The better of two views of one date: most seen clearly, then most covered, then the lower item id. */
-export function better(a: SceneView, b: SceneView): SceneView {
+export function better<S extends SceneItem>(a: SceneView<S>, b: SceneView<S>): SceneView<S> {
 	if (a.clearPx !== b.clearPx) return a.clearPx > b.clearPx ? a : b;
 	if (a.coveredPx !== b.coveredPx) return a.coveredPx > b.coveredPx ? a : b;
 	return a.scene.itemId <= b.scene.itemId ? a : b;
@@ -303,16 +325,49 @@ export function better(a: SceneView, b: SceneView): SceneView {
 /** A dam's turn: the newest scenes (forward, to today) or older history (backward, toward backfillFrom). */
 type Direction = 'forward' | 'backward';
 
-/** One pass (see the header). Throws only for the mirror itself or a bug; the upstreams' failures are reported. */
-export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult> {
+/** What a per-scene source brings to the pass (see the header): WOfS's is WOFS_PASS, Sentinel-2's is in ../sentinel/pass.ts. */
+export interface ScenePassSource<S extends SceneItem> {
+	source: Exclude<ObservationSource, 'waterbodies'>;
+	/** The pass's own state file (STATE_KEY for WOfS). */
+	stateKey: AbsolutePath;
+	/** The default backfill start (opts.backfillFrom overrides it). */
+	backfillFrom: string;
+	/** The default pause between two bucket reads' starts (opts.sceneIntervalMs overrides it). */
+	sceneIntervalMs: number;
+	/** The first date the worker says the pass needs for a dam (the day after the newest row it holds). */
+	since(o: WantedOutline): string;
+	/** The scenes over a box, [from, to] inclusive (stac.ts searchItems with the collection's item parser). */
+	search(http: FeedHttp, bbox: readonly [number, number, number, number], from: string, to: string): Promise<S[]>;
+	/** One scene's view of the dam, or null when it didn't see it; FeedFormatError for a scene that can't be read (skipped). */
+	view(http: FeedHttp, scene: S, outline: WantedOutline, masks: Map<string, OutlineMask>): Promise<SceneView<S> | null>;
+}
+
+/** WOfS's source: wofs_ls through searchScenes, one water layer a scene (viewScene), from 2013. */
+export const WOFS_PASS: ScenePassSource<WofsScene> = {
+	source: 'wofs',
+	stateKey: STATE_KEY,
+	backfillFrom: WOFS_BACKFILL_FROM,
+	sceneIntervalMs: SCENE_INTERVAL_MS,
+	since: (o) => o.since,
+	search: searchScenes,
+	view: viewScene
+};
+
+/** One WOfS pass (see the header). Throws only for the mirror itself or a bug; the upstreams' failures are reported. */
+export const runWofsPass = (opts: WofsPassOptions): Promise<WofsPassResult> => runScenePass(WOFS_PASS, opts);
+
+/** One pass of a per-scene source (see the header). Throws only for the mirror itself or a bug; the upstreams' failures are reported. */
+export async function runScenePass<S extends SceneItem>(src: ScenePassSource<S>, opts: WofsPassOptions): Promise<WofsPassResult> {
 	const now = opts.now ?? Date.now;
 	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-	const stac = pacedHttp(opts.http, opts.stacIntervalMs ?? STAC_INTERVAL_MS, now, sleep);
-	const s3 = pacedHttp(opts.http, opts.sceneIntervalMs ?? SCENE_INTERVAL_MS, now, sleep);
+	const stac = opts.stac ?? pacedHttp(opts.http, opts.stacIntervalMs ?? STAC_INTERVAL_MS, now, sleep);
+	const stacBefore = stac.counter.requests;
+	const s3 = pacedHttp(opts.http, opts.sceneIntervalMs ?? src.sceneIntervalMs, now, sleep);
 	const { store, today } = opts;
+	const source = src.source;
 	const refreshDays = opts.refreshDays ?? REFRESH_DAYS;
 	const lookbackDays = opts.lookbackDays ?? LOOKBACK_DAYS;
-	const backfillFrom = opts.backfillFrom ?? WOFS_BACKFILL_FROM;
+	const backfillFrom = opts.backfillFrom ?? src.backfillFrom;
 	const isoNow = () => new Date(now()).toISOString();
 	const pastDeadline = () => opts.deadline !== undefined && now() >= opts.deadline;
 
@@ -329,13 +384,13 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		recencyDays: null,
 		error: null
 	};
-	const previous = await readStatus(store, 'wofs');
+	const previous = await readStatus(store, source);
 	// Paused after a refusal or throttling: ask nothing, write nothing (the status, and so the pause, stand).
 	const until = pausedUntil(previous);
 	if (until !== null && now() < until) return { ...result, stopped: 'paused', pausedUntil: new Date(until).toISOString(), recencyDays: recencyDays(previous!, today) };
 	const wanted = await readWanted(store);
 	if (!wanted) return { ...result, stopped: 'no_list' };
-	const prevState = await readState(store);
+	const prevState = await readState(store, src.stateKey);
 
 	// Only the listed dams are kept: a dam deleted drops out of the status and the state too.
 	const perKey: PassStatus['perKey'] = {};
@@ -367,13 +422,13 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		const st = state.dams[id]!;
 		touched.add(id);
 		if (direction === 'forward') st.triedAt = isoNow();
-		const since = maxDay(backfillFrom, outline.since);
+		const since = maxDay(backfillFrom, src.since(outline));
 
 		// The rows the worker may not hold yet, by date; a changed outline's are dropped.
 		let existing: ObservationFile | null = null;
 		if (!changed.has(id)) {
 			try {
-				existing = await readObservationFile(store, 'wofs', id);
+				existing = await readObservationFile(store, source, id);
 			} catch (err) {
 				// Our own file unreadable: rebuilt from the scan.
 				if (!(err instanceof FeedFormatError)) throw err;
@@ -398,16 +453,16 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		let deadline = false;
 
 		/** Reads one date's scenes and keeps the best view as its row. */
-		const readDate = async (date: string, scenes: WofsScene[]) => {
+		const readDate = async (date: string, scenes: S[]) => {
 			// Nothing new on this date: its stored row stands, and no scene is asked for.
 			if (scenes.every((sc) => known(sc.itemId))) return;
 			// A new scene beside a stored row: the date's scenes are compared again, so the better view wins.
 			const toRead = rows.has(date) ? scenes : scenes.filter((sc) => !known(sc.itemId));
-			let best: SceneView | null = null;
+			let best: SceneView<S> | null = null;
 			for (const scene of toRead) {
-				let view: SceneView | null;
+				let view: SceneView<S> | null;
 				try {
-					view = await viewScene(s3.http, scene, outline, masks);
+					view = await src.view(s3.http, scene, outline, masks);
 					result.scenesRead++;
 					if (date >= tail) tailItems.set(scene.itemId, date);
 				} catch (err) {
@@ -430,8 +485,8 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		};
 		/** The scenes of [from, to], by date. */
 		const search = async (from: string, to: string) => {
-			const scenes = await searchScenes(stac.http, bbox, from, to);
-			const byDate = new Map<string, WofsScene[]>();
+			const scenes = await src.search(stac.http, bbox, from, to);
+			const byDate = new Map<string, S[]>();
 			for (const s of scenes) byDate.set(s.date, [...(byDate.get(s.date) ?? []), s]);
 			return byDate;
 		};
@@ -491,7 +546,7 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 			const sorted = [...rows.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 			const used = new Set(sorted.map((r) => r.upstreamKey));
 			await writeObservationFile(store, {
-				source: 'wofs',
+				source,
 				key: id,
 				fetchedAt: isoNow(),
 				upstream: [...upstream.values()].filter((u) => used.has(u.itemId!)),
@@ -556,12 +611,12 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		throw err;
 	} finally {
 		result.turns = touched.size;
-		result.stacRequests = stac.counter.requests;
+		result.stacRequests = stac.counter.requests - stacBefore;
 		result.sceneRequests = s3.counter.requests;
 		const stopped = result.stopped === 'refused' || result.stopped === 'throttled';
 		const retryAfterSeconds = stopped ? stopRetryAfter(result.error) : undefined;
 		const status: PassStatus = {
-			source: 'wofs',
+			source,
 			ranAt: isoNow(),
 			stopped,
 			...(stopped ? { reason: result.stopped } : {}),
@@ -571,7 +626,7 @@ export async function runWofsPass(opts: WofsPassOptions): Promise<WofsPassResult
 		result.recencyDays = recencyDays(status, today);
 		try {
 			// The status last: the worker reads it to find the files written.
-			await writeState(store, state);
+			await writeState(store, src.stateKey, state);
 			await writeStatus(store, status);
 		} catch (err) {
 			if (!threw) throw err;

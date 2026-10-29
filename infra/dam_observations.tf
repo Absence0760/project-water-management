@@ -23,7 +23,10 @@ locals {
   dam_metric_namespace = "water-management/DamObservations"
   dam_pass_metric      = "DamPassCompleted"
   dam_recency_metric   = "DamObservationAgeDays"
-  dam_sources          = toset(["waterbodies", "wofs"])
+  # The Sentinel-2 pass (issue #624, dams/observed/sentinel/pass.ts) needs its own flag as well: the fetcher's
+  # DAM_OBSERVATIONS_S2 (feeds.tf), and its heartbeat and recency alarms below, follow it.
+  dam_s2_on   = local.dams_enabled && var.dam_s2_enabled
+  dam_sources = toset(concat(["waterbodies", "wofs"], local.dam_s2_on ? ["s2"] : []))
 }
 
 # --- IAM: the dams/ prefix only ---------------------------------------------------
@@ -175,7 +178,7 @@ resource "aws_cloudwatch_metric_alarm" "dam_pass_heartbeat" {
   }
 }
 
-# (b) Data recency, WOfS only: DamObservationAgeDays{Source=wofs}, the days
+# (b) Data recency, WOfS and (with dam_s2_enabled) Sentinel-2: DamObservationAgeDays{Source=wofs}, the days
 # from the run back to the newest WOfS observation any dam holds. Landsat
 # passes every 8 days with two satellites; past dam_wofs_recency_alarm_days
 # WOfS (or our pass over it) has stopped producing. Missing is breaching, as
@@ -204,5 +207,32 @@ resource "aws_cloudwatch_metric_alarm" "dam_recency_wofs" {
 
   dimensions = {
     Source = "wofs"
+  }
+}
+
+# Sentinel-2's recency, with dam_s2_enabled (issue #624 step 4):
+# DamObservationAgeDays{Source=s2}, the days from the run back to the newest
+# Sentinel-2 observation any dam holds. Sentinel-2A, 2B and 2C pass every few
+# days, and a view under cloud still writes a (0 % observed) row, so past
+# dam_s2_recency_alarm_days the collection (or our pass over it) has stopped.
+# Missing is breaching, as for WOfS's.
+resource "aws_cloudwatch_metric_alarm" "dam_recency_s2" {
+  count = local.dam_s2_on && local.alarms_essential ? 1 : 0
+
+  alarm_name          = "${local.project}-dam-recency-s2"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  metric_name         = local.dam_recency_metric
+  namespace           = local.dam_metric_namespace
+  period              = 86400
+  statistic           = "Minimum"
+  threshold           = var.dam_s2_recency_alarm_days
+  alarm_description   = "The newest Sentinel-2 observation any traced dam holds is more than ${var.dam_s2_recency_alarm_days} days old, or the Sentinel-2 pass published no recency for two days. Check DE Africa's STAC search for new s2_l2a_c1 items over the region before suspecting our pass; logs: filter message.event = \"dams_pass\" and message.source = \"s2\" on the fetcher log group (docs/deployment.md § Dam observations)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    Source = "s2"
   }
 }
