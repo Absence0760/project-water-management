@@ -855,6 +855,22 @@ variable "dam_observations_enabled" {
   default     = false
 }
 
+variable "et_observations_enabled" {
+  description = "Turn on the observed actual ET (et_observations.tf, issue #623): the hourly EventBridge rule that invokes the fetcher with {\"mode\":\"et-dekadal\"} (FAO WaPOR v3's dekadal actual ET averaged over each unit's farm parcels, newest dekads first, then the history to 2018), the fetcher's reads and writes under et/ in the mirror bucket, the worker's write of et/wanted.json, and the pass's heartbeat and recency alarms. It also sets the worker's ET_OBSERVATIONS (jobs.tf), which turns its ET tick on; the plan refuses the flag if the worker's environment ever loses it (et_observations.tf terraform_data.et_observations_gate). Off (the default) until FAO's reply on WaPOR's licence is recorded on issue #618 (step 8a), a backend release with the mode is deployed and a unit has farm parcels, or the alarms fire for a pass that has nothing to read. Runbook: docs/deployment.md § Observed actual ET."
+  type        = bool
+  default     = false
+}
+
+variable "et_recency_alarm_days" {
+  description = "Alarm when the newest WaPOR dekad any unit holds began more than this many days ago (EtObservationAgeDays{Source=wapor}). A dekad lasts up to 11 days and FAO publishes it about 3 days after it ends, so a healthy copy runs up to ~14 days behind; 30 is two dekads missed."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.et_recency_alarm_days >= 20 && floor(var.et_recency_alarm_days) == var.et_recency_alarm_days
+    error_message = "A whole number of days, at least 20: a healthy WaPOR copy runs up to ~14 days behind (the dekad's length plus FAO's ~3-day lag)."
+  }
+}
+
 variable "climate_indices_enabled" {
   description = "Turn on the climate indices copy (climate_indices.tf, issue #620): the daily EventBridge rule that invokes the fetcher with {\"mode\":\"daily-ingest\",\"pass\":\"indices\"} (NOAA CPC's ONI and AAO, two requests a day), the fetcher's reads and writes under indices/ in the mirror bucket, and the copy's freshness alarm (MirrorLagDays{Product=indices}, breaching on missing data). Until it is on, an outlook asking for the climate-state analogues says the indices aren't held and shows the ESP alone. Off (the default) until a backend release with the pass is deployed, or the alarm fires for a pass that doesn't exist yet. Runbook: docs/deployment.md § Climate indices."
   type        = bool

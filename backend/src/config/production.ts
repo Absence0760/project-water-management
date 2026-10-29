@@ -115,10 +115,13 @@ const s3Url: Check = (v) => (!set(v) ? 'is not set' : /^s3:\/\/[a-z0-9][a-z0-9.-
 
 /**
  * MIRROR_URL on the worker: required when it reads the copy (CHIRPS_SOURCE=mirror), hands the weekly DWS pass its stations
- * (DWS_WEEKLY=on) or runs the dams tick (DAM_OBSERVATIONS=on, which reads the passes' files from the bucket), else checked only when set.
+ * (DWS_WEEKLY=on), runs the dams tick (DAM_OBSERVATIONS=on, which reads the passes' files from the bucket) or the observed ET tick
+ * (ET_OBSERVATIONS=on, the same), else checked only when set.
  */
 const mirrorUrlFor: Check = (v, env) =>
-	env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' || env?.DAM_OBSERVATIONS?.trim() === 'on' ? s3Url(v) : optional(s3Url)(v);
+	env?.CHIRPS_SOURCE?.trim() === 'mirror' || env?.DWS_WEEKLY?.trim() === 'on' || env?.DAM_OBSERVATIONS?.trim() === 'on' || env?.ET_OBSERVATIONS?.trim() === 'on'
+		? s3Url(v)
+		: optional(s3Url)(v);
 
 /**
  * Whether the worker's feeds all read our copy and store (CHIRPS_SOURCE=mirror
@@ -395,6 +398,10 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	DAM_OBSERVATIONS: {
 		why: 'on: the worker runs the dams tick (dams/observed/tick.ts, issue #604 R5): matches traced dams, writes the passes’ wanted list and loads what they fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform is to set it from var.dam_observations_enabled (infra/jobs.tf; dam_observations.tf refuses the flag until it does). Unset is off (damObservationsOn), today’s production behaviour, so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
+		checks: { worker: optional(oneOf('on', 'off')) }
+	},
+	ET_OBSERVATIONS: {
+		why: 'on: the worker runs the observed ET tick (water-use/observed/tick.ts, issue #623): writes the WaPOR pass’s wanted list (each unit’s parcels and their cropland) and loads what it fetched, through the mirror bucket, so MIRROR_URL must name it. Terraform sets it from var.et_observations_enabled (infra/jobs.tf; et_observations.tf refuses the flag without it), off until FAO confirms the licence (#618 8a). Unset is off (etObservationsOn), so a release can go out before that apply; a value set is checked. The API reaches it through jobs/runner.ts but runs no tick.',
 		checks: { worker: optional(oneOf('on', 'off')) }
 	},
 	FEED_FIXTURE_REWRITE: {

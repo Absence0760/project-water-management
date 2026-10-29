@@ -198,6 +198,20 @@ describe('liveHttp', () => {
 		await expect(liveHttp(respond(403), new Map()).textConditional!(WB, '"e1"')).rejects.toBeInstanceOf(FeedRefusedError);
 	});
 
+	it('asks for a range only if the file’s ETag changed (the observed ET pass’s re-check of a WaPOR dekad)', async () => {
+		const W = 'https://storage.googleapis.com/fao-gismgr-wapor-3-data/DATA/WAPOR-3/MAPSET/L2-AETI-D/WAPOR-3.L2-AETI-D.2024-01-D1.tif';
+		const same = vi.fn(async () => new Response(null, { status: 304 }));
+		expect(await liveHttp(same).rangeConditional!(W, 0, 15, '"e1"')).toEqual({ status: 'not-modified' });
+		expect((same.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toMatchObject({ range: 'bytes=0-15', 'if-none-match': '"e1"' });
+		const changed = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { status: 206, headers: { etag: '"e2"' } }));
+		expect(await liveHttp(changed).rangeConditional!(W, 0, 2, '"e1"')).toEqual({ status: 'ok', bytes: new Uint8Array([1, 2, 3]), tag: '"e2"' });
+		// A server that ignores Range: the range cut out of the whole.
+		const whole = vi.fn(async () => new Response(new Uint8Array([9, 8, 7, 6]), { status: 200, headers: { etag: '"e3"' } }));
+		expect(await liveHttp(whole).rangeConditional!(W, 1, 2, '"e1"')).toEqual({ status: 'ok', bytes: new Uint8Array([8, 7]), tag: '"e3"' });
+		expect(await liveHttp(respond(404)).rangeConditional!(W, 0, 1, '"e1"')).toBeNull();
+		await expect(liveHttp(respond(403), new Map()).rangeConditional!(W, 0, 1, '"e1"')).rejects.toBeInstanceOf(FeedRefusedError);
+	});
+
 	it('refuses a response over 4 MB, declared or streamed', async () => {
 		await expect(liveHttp(respond(200, 'x', { 'content-length': String(5 * 1024 * 1024) })).text('https://data.chc.ucsb.edu/p')).rejects.toThrow(/larger than expected/);
 		const big = new Uint8Array(4 * 1024 * 1024 + 1);

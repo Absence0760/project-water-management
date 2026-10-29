@@ -1,8 +1,9 @@
 // The two actual evapotranspiration (ETa) sources a unit's observed water use
 // is checked against (issue #623; docs/data-sources.md, wapor-aeti and
-// ssebop-eta). Nothing fetches from them yet: the fetcher's `et-dekadal`
-// mode is a later slice. feeds/http.ts FEED_HOSTS lets a live fetch reach
-// their hosts, and FEED_HOST_PATHS keeps it to these two prefixes there.
+// ssebop-eta). The fetcher's `et-dekadal` mode reads WaPOR (pass.ts);
+// SSEBop has no pass yet (#623 step 6, only if FAO declines). feeds/http.ts
+// FEED_HOSTS lets a live fetch reach their hosts, and FEED_HOST_PATHS keeps
+// it to these two prefixes there.
 
 /**
  * FAO's own public bucket of WaPOR v3, over HTTPS: the dekadal actual ET and

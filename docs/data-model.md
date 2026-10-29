@@ -5002,9 +5002,10 @@ modelled irrigation use. Two sources: **`wapor`** (FAO WaPOR v3
 `L2-AETI-D`, 100 m, from 2018) and **`ssebop`** (USGS FEWS NET SSEBop v6,
 1 km, from 2012, the fallback;
 [data-sources.md § Observed actual evapotranspiration](./data-sources.md#observed-actual-evapotranspiration)).
-The worker writes them; no route writes them, and nothing reads them yet
-(the fetcher's pass, the handover and the comparison are #623's later
-steps). Nothing here feeds the engine.
+The worker writes them, from what the fetcher's WaPOR pass handed over
+([architecture.md § Observed actual ET](./architecture.md#observed-actual-et));
+no route writes them, and nothing reads them yet (the comparison is #623
+step 5). Nothing here feeds the engine.
 
 | Table | Holds |
 | --- | --- |
@@ -5053,7 +5054,17 @@ steps). Nothing here feeds the engine.
     (or found already loaded) as of `last_good`, clearing a failure; or
     `failed`, which sets `failed_at` only. `parcels_changed_at` is left as it
     is; a unit that is gone records nothing (`applied = false`).
-- **Tests**: `water-use/observed/observations.security.db.test.ts` (RLS with
+  - `app_et_units(source)` (280): every unit with a `farm_parcel` polygon,
+    in any project, with its polygons as one jsonb array and that source's
+    `parcels_changed_at`, at most 5000, by unit id: the tick's wanted list.
+  - `app_et_cropland(w, s, e, n)` (280): the default land-cover dataset's
+    cropland cells (real before synthetic, then the newest load) in a box of
+    at most 1° a side, at most 200 000, with the dataset's label and cell
+    size on each row; none when no dataset is loaded. The worker can't read
+    `cropland_cell_reference` itself (its policy needs a user).
+- **Tests**: `water-use/observed/tick.db.test.ts` (the tick end to end: the
+  wanted list from 280's functions, a load, a revision, a refused file
+  after a redraw, the marks, the cap); `water-use/observed/observations.security.db.test.ts` (RLS with
   positive controls: a viewer, each farmer's own unit, nothing across
   projects or with no user; refused writes; the worker-only functions and
   the owner-only marks); `water-use/observed/observations.db.test.ts` (the
