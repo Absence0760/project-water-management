@@ -11360,7 +11360,7 @@ them scenarios).
   of each 30-year window, and the picked case's 24 factors in a table
   (`op-climate-factors`, rain and evaporation by calendar month). When the
   boundary has changed since, an amber note and **Work them out again**
-  ([scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-284_climate_factors))
+  ([scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors))
   ([scenarios.md § UI](./scenarios.md#ui) has each one's wording). A setting's value is typed as
   Model settings or Calibration takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with

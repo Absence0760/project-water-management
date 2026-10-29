@@ -1,4 +1,4 @@
-// The Scenarios tab's future climate (issue #621 slice 5, 284_climate_factors;
+// The Scenarios tab's future climate (issue #621 slice 5, 282_climate_factors;
 // docs/api.md § Future climate, docs/scenarios.md § Future climate): the
 // monthly change factors over a project's catchment, worked out by a
 // `climate_factors` job from the copy, stored, and read back by the picker,

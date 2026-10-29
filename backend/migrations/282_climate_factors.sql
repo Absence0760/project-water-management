@@ -1,4 +1,4 @@
--- 284_climate_factors — the Scenarios tab's future climate (issue #621
+-- 282_climate_factors — the Scenarios tab's future climate (issue #621
 -- slice 5; docs/scenarios.md § Future climate, docs/data-model.md § Future
 -- yield, docs/api.md § Future climate).
 --
@@ -54,7 +54,7 @@ CREATE TABLE climate_factors (
 	created_at       timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE climate_factors IS
-	'Monthly climate change factors over a project''s catchment (284_climate_factors, issue #621): per NEX-GDDP-CMIP6 model, SSP and horizon, written by a climate_factors job as its acting user. The Scenarios tab adds one case to a scenario as a climate.delta op, which carries its own factors.';
+	'Monthly climate change factors over a project''s catchment (282_climate_factors, issue #621): per NEX-GDDP-CMIP6 model, SSP and horizon, written by a climate_factors job as its acting user. The Scenarios tab adds one case to a scenario as a climate.delta op, which carries its own factors.';
 
 -- Covering indexes for every foreign key (catalogue.db.test.ts); the first also serves the picker's lookup (newest first).
 CREATE INDEX climate_factors_project_idx ON climate_factors (project_id, created_at DESC);

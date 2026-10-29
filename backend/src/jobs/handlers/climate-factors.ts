@@ -1,5 +1,5 @@
 // `climate_factors`: the Scenarios tab's future climate (issue #621 slice 5,
-// 284_climate_factors; docs/scenarios.md § Future climate). As the editor who
+// 282_climate_factors; docs/scenarios.md § Future climate). As the editor who
 // queued it, under RLS: FUTURE_YIELD on, the catchment boundary's 0.25° cells,
 // each climate model's monthly aggregates read from the copy and the factor
 // table worked out (future/copy.ts readFactorTable, as § 8's future_yield job

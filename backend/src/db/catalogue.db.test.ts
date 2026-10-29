@@ -165,7 +165,7 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  * security event never changes (150_mfa.sql).
  */
 // Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
-// § 8's future yield is written once by its job, and the newest few kept per pair (280); so is a climate factor table, per project (284).
+// § 8's future yield is written once by its job, and the newest few kept per pair (280); so is a climate factor table, per project (282).
 const NO_UPDATE = new Set(['yield_result', 'future_yield', 'climate_factors', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
@@ -285,7 +285,7 @@ const READ_ONLY = new Set([
  */
 // et_observation_load_mark (277) is the ET tick's own bookkeeping per unit: owner only, read by no app role (OWNER_ONLY).
 // future_yield (280) is § 8 of an evidence report on whole-catchment runs, viewers and an application's applicant.
-// climate_factors (284) is the catchment's climate change factors for the Scenarios tab: viewers only.
+// climate_factors (282) is the catchment's climate change factors for the Scenarios tab: viewers only.
 const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'future_yield', 'climate_factors', 'crop_area_land_cover', 'et_observation_load_mark']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
@@ -416,7 +416,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'yield_result.created_by': 'set null',
 	// § 8's future yield keeps its result when its author's account goes (280), as yield_result.
 	'future_yield.created_by': 'set null',
-	// A climate factor table stays when its author's account goes (284), as future_yield.
+	// A climate factor table stays when its author's account goes (282), as future_yield.
 	'climate_factors.created_by': 'set null'
 };
 

@@ -709,7 +709,7 @@ writes every series, `apanMm` and `pe`. What the delta method doesn't do
 historical parameters, evaporation moves by Hargreaves ratios) is in the
 known limitations ([engine-audit.md](./engine-audit.md) C1).
 
-## Future climate (issue #621 slice 5, 284_climate_factors)
+## Future climate (issue #621 slice 5, 282_climate_factors)
 
 Add a change → **Future climate (monthly change factors)** makes the op
 from a pick, never from typed factors: a climate model, a pathway (SSP2-4.5

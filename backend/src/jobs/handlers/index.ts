@@ -1,6 +1,6 @@
 // Every job kind the worker can run. A kind without an entry here is dead on
 // its first attempt ("no handler"), so enqueue a kind only once it's listed.
-// WP-2.13 added alert_eval; WP-3.6 added yield; issue #53 R2 added sweep, R5 outlook; issue #153 auto_calibration and uncertainty; issue #71 pack_render and pack_reproduce; WP-3.11 assessment; the licensing positions applicant_pack_render (165); delineate (191), a catchment too large for the request; future_yield (280), the evidence pack's § 8; climate_factors (284), the Scenarios tab's future climate. Every kind now has one.
+// WP-2.13 added alert_eval; WP-3.6 added yield; issue #53 R2 added sweep, R5 outlook; issue #153 auto_calibration and uncertainty; issue #71 pack_render and pack_reproduce; WP-3.11 assessment; the licensing positions applicant_pack_render (165); delineate (191), a catchment too large for the request; future_yield (280), the evidence pack's § 8; climate_factors (282), the Scenarios tab's future climate. Every kind now has one.
 import type { HandlerRegistry } from '../registry.js';
 import { alertEvalHandler } from './alert-eval.js';
 import { applicantPackRenderHandler } from './applicant-pack-render.js';

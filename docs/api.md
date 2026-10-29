@@ -4505,8 +4505,8 @@ background `future_yield` job. Off unless `FUTURE_YIELD=on` (deployment.md).
 
 ## Future climate
 
-The Scenarios tab's future climate (issue #621 slice 5, 284_climate_factors,
-[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-284_climate_factors)):
+The Scenarios tab's future climate (issue #621 slice 5, 282_climate_factors,
+[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)):
 the catchment's monthly change factors per climate model, SSP and horizon,
 worked out by a background `climate_factors` job, which Add a change turns
 into a `climate.delta` op. Off unless `FUTURE_YIELD=on`, as § 8.

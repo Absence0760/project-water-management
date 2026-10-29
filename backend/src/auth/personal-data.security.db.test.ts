@@ -305,7 +305,7 @@ beforeAll(async () => {
 			[projectId, runId, secondRun, farm.id]
 		)
 	);
-	// A climate factor table they had worked out (284): created_by, SET NULL.
+	// A climate factor table they had worked out (282): created_by, SET NULL.
 	await withUser(subject.id, (tx) =>
 		tx.query(`INSERT INTO climate_factors (project_id, method, boundary_sha256, factors) VALUES ($1, 'delta-1', repeat('0', 64), '{}')`, [projectId])
 	);

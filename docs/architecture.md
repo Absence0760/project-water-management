@@ -724,7 +724,7 @@ the data copy's NEX-GDDP-CMIP6 aggregates, [evidence-pack.md § Future
 yield](./evidence-pack.md#future-yield)), and the Scenarios tab's
 `climate_factors` (`jobs/handlers/climate-factors.ts`, the same reading of
 the copy, stored as the catchment's change factor table, [scenarios.md §
-Future climate](./scenarios.md#future-climate-issue-621-slice-5-284_climate_factors)); step 2's
+Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,

@@ -793,7 +793,7 @@ const CASES: Record<string, Case> = {
 			[h.projectId, h.runId, h.scenarioRunId, h.farmId, ref]
 		]
 	},
-	// The Scenarios tab's climate factors (284): climate_factors_guard checks the job within the row's project.
+	// The Scenarios tab's climate factors (282): climate_factors_guard checks the job within the row's project.
 	'climate_factors.job_id': {
 		ref: (w) => w.climateJobId,
 		insert: (h, ref) => [`INSERT INTO climate_factors (project_id, job_id, method, boundary_sha256, factors) VALUES ($1, $2, 'delta-1', repeat('0', 64), '{}')`, [h.projectId, ref]]

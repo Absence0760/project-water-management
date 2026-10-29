@@ -1,6 +1,6 @@
 // § 8 Future yield of an application run (issue #621 slice 4; docs/api.md
 // § Future yield), and the Scenarios tab's future climate (slice 5,
-// 284_climate_factors; docs/api.md § Future climate):
+// 282_climate_factors; docs/api.md § Future climate):
 //
 //   POST /projects/:id/runs/:runId/future-yield   editor   queue the job (202 { jobId }; 200 when the same one is pending)
 //   GET  /projects/:id/runs/:runId/future-yield   viewer (an applicant: their own application's)   whether it is on, the newest result and the newest job

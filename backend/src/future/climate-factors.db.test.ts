@@ -1,5 +1,5 @@
 // The Scenarios tab's future climate end to end (issue #621 slice 5,
-// 284_climate_factors): the switch (FUTURE_YIELD), the request's checks, the
+// 282_climate_factors): the switch (FUTURE_YIELD), the request's checks, the
 // `climate_factors` job reading the committed synthetic NEX-GDDP-CMIP6 copy
 // (invented models SYN-A..C, backend/fixtures/mirror/cmip6/) over the
 // catchment's 0.25° cells, the stored table under RLS (a viewer reads it,

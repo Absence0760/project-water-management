@@ -523,7 +523,7 @@
 					<span class="hint explain">The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.</span>
 					<HelpTip key="override-mode" label="About override mode" />
 				</div>
-				<!-- An applicant reads no climate factor table (viewer and above, 284): the climate is the authority's baseline, not theirs. -->
+				<!-- An applicant reads no climate factor table (viewer and above, 282): the climate is the authority's baseline, not theirs. -->
 				<OpForm input={effective} onadd={add} disabled={saving} {projectId} futureClimate={!applicant} />
 			{/if}
 		{/if}

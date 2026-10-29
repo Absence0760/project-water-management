@@ -3835,10 +3835,10 @@ No job table of its own: `job` holds status, progress and errors.
   (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
   (`yield/contributor.db.test.ts`).
 
-### Climate factors (284_climate_factors.sql)
+### Climate factors (282_climate_factors.sql)
 
 The Scenarios tab's future climate (issue #621 slice 5,
-[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-284_climate_factors)):
+[scenarios.md § Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)):
 the catchment's monthly change factors per NEX-GDDP-CMIP6 model, SSP and
 horizon, written by a `climate_factors` job as its acting editor. `job.kind`
 accepts `climate_factors`.
