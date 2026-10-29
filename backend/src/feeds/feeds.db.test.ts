@@ -897,6 +897,38 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		expect((await asOwner('SELECT fetch_job_id IS NOT NULL AS waiting FROM data_feed WHERE id = $1', [feedId]))[0]).toEqual({ waiting: true });
 	});
 
+	it('the scheduler leaves a feed alone while its fetch is out, so a failing feed waits for its answer instead of superseding it (276)', async () => {
+		// Production, 2026-10-28: a CHIRPS answer took ~2 h to come back through CHC's one-at-a-time queue, a failing
+		// feed was due every 15 min, and each new request superseded the one before, so every answer was dropped.
+		const o = await fetchJob();
+		const mine = async () => (await claimDue(50)).filter((f) => f.id === o.feedId);
+		const claimAsOwner = () => withUser(o.owner.id, (db) => claimFeed(db, o.feedId));
+		// Failing once, its 15-minute backoff long past, and a day since its schedule: due on both counts, but its fetch is out.
+		await asOwner(`UPDATE data_feed SET consecutive_failures = 1, last_scheduled_at = now() - interval '2 days' WHERE id = $1`, [o.feedId]);
+		expect(await mine()).toEqual([]);
+		expect(await claimAsOwner()).toBe(false);
+		// dev:feeds:run (every feed) still takes it.
+		expect((await claimDue(50, true)).map((f) => f.id)).toContain(o.feedId);
+
+		// The answer comes back and is applied (it was the newest fetch): a second failure, recorded.
+		expect(await acceptIngestResult(msg(o, { ok: false, error: 'the source is unreachable: the request timed out, so the feed tries again later' }))).toBe('queued');
+		expect((await tick()).done).toBe(1);
+		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 2 });
+		expect((await asOwner('SELECT fetch_job_id FROM data_feed WHERE id = $1', [o.feedId]))[0]).toEqual({ fetch_job_id: null });
+		// Positive control: with nothing out, the backoff (30 min after two failures) decides again.
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '31 minutes' WHERE id = $1`, [o.feedId]);
+		expect((await mine()).map((f) => f.id)).toEqual([o.feedId]);
+
+		// An answer lost for good holds the feed a day at most: a fetch whose job last started a day ago is no longer out.
+		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+		const lost = await runFetchJob();
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '2 days' WHERE id = $1`, [o.feedId]);
+		await asOwner(`UPDATE job SET started_at = now() - interval '23 hours' WHERE id = $1`, [lost.fetchJobId]);
+		expect(await mine()).toEqual([]);
+		await asOwner(`UPDATE job SET started_at = now() - interval '1 day 1 minute' WHERE id = $1`, [lost.fetchJobId]);
+		expect(await claimAsOwner()).toBe(true);
+	});
+
 	it('logs an answer it drops, with the reason, and never its values', async () => {
 		const o = await fetchJob();
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
