@@ -3623,6 +3623,76 @@ export interface DamObservations {
 	dams: ObservedDam[];
 }
 
+/** et_observation.source (issue #623): FAO WaPOR v3, or USGS SSEBop v6 (the fallback). */
+export type EtSource = 'wapor' | 'ssebop';
+/** Why a dekad wasn't compared (backend water-use/observed/compare.ts EtSkipReason). */
+export type EtSkip = 'partly-seen' | 'partial-dekad' | 'outside-run' | 'no-area' | 'no-run' | 'no-series';
+
+/** One dekad of observed actual ET beside the run (volumes in m³ over the dekad, on the run's planted area). */
+export interface EtPoint {
+	source: EtSource;
+	dekad: string;
+	end: string;
+	days: number;
+	etaMmDay: number;
+	validShare: number;
+	areaM2: number;
+	mask: 'cropland' | 'parcel';
+	observedEtM3: number | null;
+	/** Effective rain + the irrigation reaching the crop: the crop's ET as the run supplied it. */
+	modelledEtM3: number | null;
+	/** Σ gross_demand: the requirement at full supply. */
+	requirementM3: number | null;
+	effectiveRainM3: number | null;
+	observedIrrigationM3: number | null;
+	modelledIrrigationM3: number | null;
+	suppliedM3: number | null;
+	compared: boolean;
+	skip: EtSkip | null;
+	etWithin: boolean | null;
+	irrigationWithin: boolean | null;
+}
+
+/** Sums and agreement over compared dekads; a bias is (modelled − observed) ÷ observed × 100. */
+export interface EtTotals {
+	compared: number;
+	skipped: number;
+	observedEtM3: number;
+	modelledEtM3: number;
+	observedIrrigationM3: number;
+	modelledIrrigationM3: number;
+	etBiasPct: number | null;
+	irrigationBiasPct: number | null;
+	etWithinShare: number | null;
+	irrigationWithinShare: number | null;
+}
+
+export interface EtSeason extends EtTotals {
+	waterYear: number;
+	half: 'summer' | 'winter';
+	label: string;
+}
+
+export interface EtSourceResult {
+	source: EtSource;
+	attribution: string;
+	area: { areaM2: number; mask: 'cropland' | 'parcel'; ratioToPlanted: number | null; differs: boolean } | null;
+	points: EtPoint[];
+	seasons: EtSeason[];
+	summary: EtTotals;
+}
+
+/** GET …/nodes/:nodeId/et-observed (issue #623): a unit's satellite actual ET against the run's modelled irrigation use. */
+export interface EtObserved {
+	nodeId: string;
+	name: string;
+	thresholds: { minValidShare: number; withinShare: number; floorMmDay: number; areaRatio: number };
+	run: { id: string; label: string; createdAt: string; engineVersion: string; forecastFrom: string | null; inRun: boolean } | null;
+	plantedAreaM2: number | null;
+	/** Empty with no observations: the fetch is off by default. */
+	sources: EtSourceResult[];
+}
+
 /** GET …/farm/:nodeId/dam-observed (issue #604 R5-B): the farm's dam seen from space. */
 export interface FarmDamObserved {
 	/** The farm's dams drawn on the map as an outline; 0 and the page says nothing. */

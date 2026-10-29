@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "The unit drawer's Actual ET from satellite panel (#623 step 5: EtObservedBox, etObserved.ts, the api method); measured 2264 KB against 2260 KB at the branch's base"
+}
