@@ -1,0 +1,47 @@
+{
+	"_comment": "Synthetic Sentinel-1 RTC for FEED_SOURCE=fixtures (backend/src/dams/observed/sentinel/s1Fixtures.ts): the STAC item every fixture scene is shaped like, and how the invented scenes are laid out, dated and wetted. VV is linear gamma0 (not dB) as s1_rtc's is; the water field and season are WOfS's (wofs-sample.json), so radar and the optical sources agree on a calm day. No real scene, place or measurement.",
+	"item": {
+		"type": "Feature",
+		"stac_version": "1.1.0",
+		"stac_extensions": ["https://stac-extensions.github.io/projection/v2.0.0/schema.json", "https://stac-extensions.github.io/raster/v1.1.0/schema.json", "https://stac-extensions.github.io/sar/v1.0.0/schema.json"],
+		"id": "00000000-0000-5000-8000-000000000000",
+		"collection": "s1_rtc",
+		"bbox": [0, 0, 0, 0],
+		"properties": {
+			"datetime": "2000-01-01T17:33:11Z",
+			"platform": "sentinel-1d",
+			"constellation": "sentinel-1",
+			"odc:product": "s1_rtc",
+			"odc:file_format": "GeoTIFF",
+			"sar:product_type": "RTC",
+			"sar:instrument_mode": "IW",
+			"sar:polarizations": ["VV", "VH"],
+			"proj:code": "EPSG:4326"
+		},
+		"links": [],
+		"assets": {
+			"vv": { "href": "s3://deafrica-sentinel-1/s1_rtc/fixture/s1_rtc_fixture_VV.tif", "type": "image/tiff; application=geotiff; profile=cloud-optimized", "raster:bands": [{ "nodata": "nan", "data_type": "float32", "unit": "1" }] },
+			"vh": { "href": "s3://deafrica-sentinel-1/s1_rtc/fixture/s1_rtc_fixture_VH.tif", "type": "image/tiff; application=geotiff; profile=cloud-optimized", "raster:bands": [{ "nodata": "nan", "data_type": "float32", "unit": "1" }] },
+			"mask": { "href": "s3://deafrica-sentinel-1/s1_rtc/fixture/s1_rtc_fixture_MASK.tif", "type": "image/tiff; application=geotiff; profile=cloud-optimized", "raster:bands": [{ "nodata": 0, "data_type": "uint8", "unit": "1" }] }
+		}
+	},
+	"scenes": {
+		"sizePx": 250,
+		"tilePx": 128,
+		"pixelDeg": 0.0002
+	},
+	"schedule": {
+		"historyDays": 400,
+		"lagDays": 2,
+		"revisitDays": 6,
+		"pathOffsetsDays": [1, 4],
+		"pathMinutes": [1053, 230]
+	},
+	"backscatter": {
+		"water": 0.004,
+		"land": 0.06,
+		"windWater": 0.03
+	},
+	"wind": { "everyNth": 10 },
+	"shadow": { "periodDeg": 0.1, "widthDeg": 0.003 }
+}

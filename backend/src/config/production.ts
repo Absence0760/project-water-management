@@ -405,7 +405,7 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { fetcher: optional(oneOf('on', 'off')) }
 	},
 	DAM_OBSERVATIONS_S1: {
-		why: 'Reserved for the Sentinel-1 pass (issue #624 step 5; handover.ts damSourceOn reads it): Terraform doesn’t set it yet, and unset is off. A value set is checked.',
+		why: 'on: the fetcher’s dams-weekly run adds the Sentinel-1 radar pass after Sentinel-2’s, and the S1/S2 agreement report (dams/observed/sentinel/pass.ts and agreement.ts, issue #624 step 5; damSourceOn), still only while the dam observations are on. Terraform sets it from var.dam_s1_enabled, and only while dam_observations_enabled is (infra/feeds.tf, local.dam_s1_on). Unset is off, so a release can go out before that apply; a value set is checked.',
 		checks: { fetcher: optional(oneOf('on', 'off')) }
 	},
 	ET_OBSERVATIONS: {

@@ -46,7 +46,11 @@ const {
 	isDamsWeeklyEvent,
 	isDwsWeeklyEvent,
 	isEtDekadalEvent,
-	withDeadline
+	S2_BUDGET_SHARE_WITH_S1,
+	scenePassShares,
+	WATERBODIES_BUDGET_SHARE,
+	withDeadline,
+	WOFS_BUDGET_SHARE_WITH_S2
 } =
 	await import('./lambda-fetcher.js');
 type DamsWeeklyAnswer = import('./lambda-fetcher.js').DamsWeeklyAnswer;
@@ -649,6 +653,42 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		expect(((await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer).s2).toBeUndefined();
 		vi.stubEnv('DAM_OBSERVATIONS_S2', 'yes');
 		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/unknown DAM_OBSERVATIONS_S2/);
+	});
+
+	it('runs the Sentinel-1 pass after Sentinel-2 only with DAM_OBSERVATIONS_S1=on, with its heartbeat and the S1/S2 agreement log (issue #624 step 5)', async () => {
+		await bucket(undefined, [{ ...dam(), sinceBy: { s2: dam().since, s1: dam().since } }]);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		vi.stubEnv('DAM_OBSERVATIONS_S2', 'on');
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'on');
+		const res = (await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer;
+		const metrics = out.mock.calls.map(([l]) => String(l)).filter((l) => l.includes('DamPassCompleted'));
+		out.mockRestore();
+		expect(res.s1).toEqual({ fetched: 1, unchanged: 0, failed: 0, fresh: 0, recencyDays: expect.any(Number), stopped: 'done' });
+		expect(metrics.map((l) => JSON.parse(l).Source)).toEqual(['waterbodies', 'wofs', 's2', 's1']);
+		const lines = info.mock.calls.map(([l]) => l as string);
+		const parsed = lines.map((l) => JSON.parse(l));
+		expect(parsed.find((l) => l.event === 'dams_pass' && l.source === 's1')).toMatchObject({ fetched: 1, stopped: 'done', sceneFailed: 0 });
+		// The agreement report: counts over the one dam, never the dam itself.
+		expect(parsed.find((l) => l.event === 'dams_s1_agreement')).toMatchObject({ dams: 1, damsPaired: expect.any(Number), pairs: expect.any(Number), within: expect.any(Number), passes: expect.any(Boolean) });
+		expect(lines.join('\n')).not.toContain(dam().featureId);
+		// Off (or unset): no Sentinel-1 pass, no heartbeat and no report.
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'off');
+		info.mockClear();
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		expect(((await handler({ mode: 'dams-weekly' } as never)) as DamsWeeklyAnswer).s1).toBeUndefined();
+		expect(info.mock.calls.some(([l]) => JSON.parse(l as string).event === 'dams_s1_agreement')).toBe(false);
+		vi.stubEnv('DAM_OBSERVATIONS_S1', 'yes');
+		await expect(handler({ mode: 'dams-weekly' } as never)).rejects.toThrow(/unknown DAM_OBSERVATIONS_S1/);
+	});
+
+	it('gives each scene pass its share of the run: WOfS to 65 % with a Sentinel pass after it, Sentinel-2 to 85 % with radar after it', () => {
+		expect(scenePassShares(false, false)).toEqual({ wofs: 1, s2: 1, s1: 1 });
+		expect(scenePassShares(true, false)).toEqual({ wofs: WOFS_BUDGET_SHARE_WITH_S2, s2: 1, s1: 1 });
+		expect(scenePassShares(true, true)).toEqual({ wofs: WOFS_BUDGET_SHARE_WITH_S2, s2: S2_BUDGET_SHARE_WITH_S1, s1: 1 });
+		expect(scenePassShares(false, true)).toEqual({ wofs: WOFS_BUDGET_SHARE_WITH_S2, s2: S2_BUDGET_SHARE_WITH_S1, s1: 1 });
+		expect(WATERBODIES_BUDGET_SHARE).toBeLessThan(WOFS_BUDGET_SHARE_WITH_S2);
+		expect(WOFS_BUDGET_SHARE_WITH_S2).toBeLessThan(S2_BUDGET_SHARE_WITH_S1);
 	});
 
 	it('an hourly run with nothing due asks nothing, and still publishes both heartbeats and recencies', async () => {

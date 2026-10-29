@@ -9,7 +9,8 @@
 //     Waterbodies pass ──► dams/waterbodies/<uid>.json, dams/waterbodies-status.json   (waterbodies.ts)
 //     WOfS pass        ──► dams/wofs/<featureId>.json,  dams/wofs-status.json          (R5-C)
 //     Sentinel-2 pass  ──► dams/s2/<featureId>.json,    dams/s2-status.json            (#624 step 4)
-//     (Sentinel-1, #624 step 5, will write dams/s1/…; its files are accepted already.)
+//     Sentinel-1 pass  ──► dams/s1/<featureId>.json,    dams/s1-status.json,
+//                          dams/s1-agreement.json (sentinel/agreement.ts)                (#624 step 5)
 //   worker tick ──get──► each status, then every file whose last good fetch is newer than what it loaded
 //                ──────► app_dam_observation_load (load.ts)
 //
@@ -115,7 +116,7 @@ export const MAX_ROWS = 20_000;
 export const WOFS_FIRST_DATE = '1984-01-01';
 /** A Waterbodies uid (a geohash; 261's waterbody_reference.uid). */
 export const WATERBODY_UID = /^[0-9a-z]{6,12}$/;
-const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const FEATURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** A real calendar date (2023-02-31 is not one), ISO. */
 export const isCalendarDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
 const IsoDay = z.string().refine(isCalendarDate, 'not a calendar date');
@@ -191,7 +192,8 @@ export const PassStatusSchema = z
 	.strict();
 
 // --- Read and write -------------------------------------------------------------------
-async function readJson<T>(store: MirrorStore, key: AbsolutePath, schema: z.ZodType<T>, what: string): Promise<T | null> {
+/** One of the handover's JSON files, checked against `schema`; null when it isn't there. */
+export async function readJson<T>(store: MirrorStore, key: AbsolutePath, schema: z.ZodType<T>, what: string): Promise<T | null> {
 	const bytes = await store.get(key);
 	if (bytes === undefined) return null;
 	let raw: unknown;
@@ -204,7 +206,8 @@ async function readJson<T>(store: MirrorStore, key: AbsolutePath, schema: z.ZodT
 	if (!r.success) throw new FeedFormatError(`the mirror's ${what} is not valid`);
 	return r.data;
 }
-const writeJson = (store: MirrorStore, key: AbsolutePath, value: unknown) => store.set(key, new TextEncoder().encode(JSON.stringify(value)));
+/** Writes one of the handover's JSON files. */
+export const writeJson = (store: MirrorStore, key: AbsolutePath, value: unknown) => store.set(key, new TextEncoder().encode(JSON.stringify(value)));
 
 export const readWanted = (store: MirrorStore): Promise<WantedList | null> => readJson(store, WANTED_KEY, WantedListSchema, 'wanted dams list') as Promise<WantedList | null>;
 export const writeWanted = (store: MirrorStore, w: WantedList) => writeJson(store, WANTED_KEY, WantedListSchema.parse(w));

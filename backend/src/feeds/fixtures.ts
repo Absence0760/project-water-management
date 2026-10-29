@@ -44,8 +44,9 @@ import { AAO_URL, aaoFixtureText, ONI_URL, oniFixtureText } from './sources/cpc.
 import { DWS_BASE, parseDwsDaily } from './sources/dws.js';
 import { writeGrid } from './sources/tiff-write.js';
 import { wofsFixture } from '../dams/observed/wofs/fixtures.js';
-import { S2_C1_COLLECTION, S2_C1_S3_BASE, WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
+import { S1_RTC_COLLECTION, S1_S3_BASE, S2_C1_COLLECTION, S2_C1_S3_BASE, WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
 import { s2Fixture } from '../dams/observed/sentinel/fixtures.js';
+import { s1Fixture } from '../dams/observed/sentinel/s1Fixtures.js';
 import { waporFixture } from '../water-use/observed/fixtures.js';
 import { WAPOR_BASE } from '../water-use/observed/upstream.js';
 
@@ -178,6 +179,9 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 	// And its Sentinel-2 search and bands (dams/observed/sentinel/fixtures.ts).
 	let s2: ReturnType<typeof s2Fixture> | null = null;
 	const s2Of = () => (s2 ??= s2Fixture(today));
+	// And its Sentinel-1 radar search and bands (dams/observed/sentinel/s1Fixtures.ts).
+	let s1: ReturnType<typeof s1Fixture> | null = null;
+	const s1Of = () => (s1 ??= s1Fixture(today));
 
 	// FAO's WaPOR v3 dekads (water-use/observed/fixtures.ts), made when first asked.
 	let wapor: ReturnType<typeof waporFixture> | null = null;
@@ -186,6 +190,7 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 	const file = (url: string): Uint8Array | null => {
 		if (url.startsWith(`${WOFS_S3_BASE}/`)) return wofsOf().scene(url);
 		if (url.startsWith(`${S2_C1_S3_BASE}/`)) return s2Of().scene(url);
+		if (url.startsWith(`${S1_S3_BASE}/`)) return s1Of().scene(url);
 		if (url.startsWith(WAPOR_BASE)) return waporOf().file(url);
 		const t = toEpochDay(today());
 		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
@@ -240,7 +245,10 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 			return tag === etag ? { status: 'not-modified' } : { status: 'ok', bytes: bytes.subarray(start, end + 1), tag };
 		},
 		async text(url) {
-			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) return new URL(url).searchParams.get('collections') === S2_C1_COLLECTION ? s2Of().search(url) : wofsOf().search(url);
+			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) {
+				const collection = new URL(url).searchParams.get('collections');
+				return collection === S2_C1_COLLECTION ? s2Of().search(url) : collection === S1_RTC_COLLECTION ? s1Of().search(url) : wofsOf().search(url);
+			}
 			// NOAA CPC's climate indices (sources/cpc.ts): invented values, re-dated to today.
 			if (url === ONI_URL) return oniFixtureText(today());
 			if (url === AAO_URL) return aaoFixtureText(today());

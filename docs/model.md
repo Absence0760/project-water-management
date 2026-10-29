@@ -10881,8 +10881,8 @@ together.
   polygon, source (`waterbodies`: DE Africa Waterbodies' area series for the
   polygon it matched; `wofs`: WOfS water pixels inside the app's own
   outline, R5-C; `s2`: Sentinel-2 pixels we classify inside the same
-  outline, below; `s1`: Sentinel-1 radar water inside it, planned in #624
-  step 5), date, wet area (m²) and the share of the outline seen clearly.
+  outline, below; `s1`: Sentinel-1 radar water inside it, below), date,
+  wet area (m²) and the share of the outline seen clearly.
 - **Sentinel-2's classification** (`backend/src/dams/observed/sentinel/s2.ts`;
   fixed thresholds, never tuned per dam). DE Africa publishes no Sentinel
   water mask, so each 10 m pixel whose centre is inside the outline is
@@ -10910,6 +10910,28 @@ together.
     none.
   The share observed is per scene: two overlapping tiles on a date give the
   one that saw more of the dam clearly, as two Landsat rows do.
+- **Sentinel-1's classification** (`backend/src/dams/observed/sentinel/s1.ts`,
+  issue #624 step 5; one fixed threshold, never tuned per dam). DE Africa's
+  radiometrically terrain-corrected radar (`s1_rtc`) gives VV backscatter
+  (gamma0, linear power) on a 0.0002° geographic grid, with a data mask.
+  Each cell whose centre is inside the outline is:
+  - **water** where VV < **−18 dB** (VV < 10^−1.8 ≈ 0.0158 in linear power):
+    calm open water mirrors the radar away from the satellite, so it is
+    dark, while land and vegetation scatter some of it back (−18 dB is the
+    usual fixed threshold for C-band VV open-water mapping, below land's
+    typical −15 to −5 dB);
+  - **not clear** where the mask is anything but 1 (valid): 2 is radar
+    shadow or layover, where the terrain hides the ground or folds slopes
+    onto each other, so hilly dams lose cells; and a valid cell with no
+    backscatter (no-data, or 0 or less);
+  - **off the scene** where the mask is 0 (no data);
+  - wet area = wet cells × the cell's ground area on the ellipsoid at the
+    outline (raster/mask.ts; about 420 m² at 32° S), the share observed as
+    Sentinel-2's.
+  Radar's known errors are why it is secondary (below): wind roughens open
+  water so it reads dry (the wet area falls short), and dry sand or smooth
+  bare soil can read wet. How often it agrees with Sentinel-2 is measured
+  (*The S1/S2 agreement*, below), never assumed.
 - **Clear views only.** A view is compared when at least **90 %** of the dam
   was seen clearly (`minPctObserved`): the wet area counts the part seen, so
   a partly clouded view understates the water. DE Africa's Waterbodies
@@ -10942,13 +10964,23 @@ together.
   precedence, so it takes a day only when no optical source saw it clearly,
   and "never alone" is "never". Radar's errors do move the bias and the
   share within, which is why the summary counts its views (`radar`).
-  The Sentinel-2 pass that writes `s2` rows is built (its classification
-  is above). *Planned, #624 step 5:* the pass that writes `s1` rows
-  (Sentinel-1 water as VV under a fixed −18 dB, not tuned per dam) and the
-  gate before Sentinel-1 is enabled for a dam: its agreement with
-  Sentinel-2's clear views within a day must reach 85 % of days within
-  0.1 F (#624's acceptance criteria). Until then the reader takes whatever
-  `s1` rows the store holds.
+  Both Sentinel passes are built (their classifications are above), each
+  off until its own flag. The reader takes whatever `s1` rows the store
+  holds; what keeps radar out of production until it is trusted is its own
+  flag, `dam_s1_enabled`, and the agreement below.
+- **The S1/S2 agreement** (`sentinel/agreement.ts`, issue #624's acceptance
+  criteria). For each clear radar view of a dam (at least 90 % seen), the
+  clear Sentinel-2 view of the same dam on the same day, else the day
+  before, else the day after; the pair **agrees** when the two wet areas
+  differ by at most **0.1 F**, F here the traced outline's own area (the
+  dam polygon is drawn round the full water surface, and both sources sum
+  inside it; the run's F is a model-side quantity the fetcher never sees).
+  Radar passes the bar when at least **85 %** of the paired days agree,
+  pooled over the dams; a dam's own rate is judged from 10 pairs. The
+  fetcher logs the counts after every Sentinel-1 pass (`dams_s1_agreement`)
+  and `pnpm dev:dams:run` prints them. A day a day apart compares two
+  different days' water, which on a farm dam moves far less than 0.1 F in
+  a day outside a flood.
 - **Full area F.** The run's own: the survey curve's top area when the curve
   is usable, else `damAreaFullM2`, else the estimate from the capacity that
   run's engine used (`estimatedDamAreaForEngine`). Sedimentation's loss of
