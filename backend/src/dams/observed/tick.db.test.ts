@@ -52,14 +52,15 @@ beforeAll(async () => {
 	process.env.TZ = 'Pacific/Kiritimati';
 	owner = await signUp('Dtick');
 	projectId = (await owner.call('POST', '/projects', { name: 'Observed Sandspruit' })).body.project.id;
-	const sandspruit = buildExamples().find((e) => e.name.includes('Sandspruit'))!;
+	// Only its dams' outlines: no GR4J fit, which took ~15 s of this hook (and four times that on a slow runner).
+	const sandspruit = buildExamples({ fit: false }).find((e) => e.name.includes('Sandspruit'))!;
 	for (const f of sandspruitMap(sandspruit.model).filter((x) => x.kind === 'dam')) {
 		const res = await owner.call('POST', `/projects/${projectId}/map/features`, { kind: 'dam', name: f.name, geometry: f.geometry });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		dams.set(f.name, res.body.feature.id);
 	}
 	expect((await importWaterbodies(OWNER_URL(), parseArgs([]) as Exclude<ReturnType<typeof parseArgs>, string>)).written).toBeGreaterThan(0);
-}, 60_000);
+});
 beforeEach(() => {
 	resetDamsTick();
 	dir = mkdtempSync(join(tmpdir(), 'wm-dams-tick-'));
@@ -67,8 +68,9 @@ beforeEach(() => {
 });
 afterAll(async () => {
 	process.env.TZ = zone;
-	rmSync(dir, { recursive: true, force: true });
-	await asOwner('DELETE FROM project WHERE id = $1', [projectId]);
+	// Each guarded: a failed beforeAll leaves some unset, and its own error is the one to read.
+	if (dir) rmSync(dir, { recursive: true, force: true });
+	if (projectId) await asOwner('DELETE FROM project WHERE id = $1', [projectId]);
 	await asOwner('DELETE FROM waterbody_reference');
 });
 

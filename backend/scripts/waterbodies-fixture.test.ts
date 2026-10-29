@@ -16,7 +16,7 @@ describe('the synthetic Waterbodies fixture', () => {
 	});
 
 	it('gives the Sandspruit example’s dams each case: matched, merged (Grootdraai) and none (Klipdrift)', () => {
-		const sandspruit = buildExamples().find((e) => e.name.includes('Sandspruit'))!;
+		const sandspruit = buildExamples({ fit: false }).find((e) => e.name.includes('Sandspruit'))!;
 		const { records, problems } = waterbodyRecords(JSON.parse(readFileSync(POLYGONS_FILE, 'utf8')));
 		expect(problems).toEqual([]);
 		const dams = sandspruitMap(sandspruit.model).filter((f) => f.kind === 'dam');

@@ -83,7 +83,7 @@ export interface FixtureWaterbody {
 
 /** The fixture's waterbodies, from the Sandspruit example's dams. */
 export function fixtureWaterbodies(): FixtureWaterbody[] {
-	const ex = buildExamples().find((e) => e.name.includes('Sandspruit'));
+	const ex = buildExamples({ fit: false }).find((e) => e.name.includes('Sandspruit'));
 	if (!ex) throw new Error('no Sandspruit example');
 	const out: FixtureWaterbody[] = [];
 	for (const f of sandspruitMap(ex.model)) {
