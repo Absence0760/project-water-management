@@ -2453,6 +2453,7 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   | `crop` | only the crops planted on their linked farms |
   | `transfer` | rules with either end on a linked farm (the other end is an id they can't resolve) |
   | `farm_link` | their own links |
+  | `et_observation` | the observed actual ET of their linked units (276) |
   | `run_publication` | every publication of the project (the notice, counts-only `catchment_view`; 022) |
   | `publication_farm` | the projections of their linked farms (022) |
   | `run_series` | their linked farms' farm-allowlist series (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`) of the **current** publication's run, nothing else (022) |
@@ -4991,6 +4992,76 @@ fetcher's passes leave in the mirror bucket; no route writes them.
   while another project's dam is matched the same tick; the loads' cap,
   oldest first; a fresh process GETting nothing it loaded, and loading a
   newer file);
+  `catalogue.db.test.ts`.
+
+### Observed actual ET (276_et_observation.sql)
+
+Satellite actual evapotranspiration (ETa) over each unit's farm parcels,
+per dekad, in our own store (issue #623): the independent check on a unit's
+modelled irrigation use. Two sources: **`wapor`** (FAO WaPOR v3
+`L2-AETI-D`, 100 m, from 2018) and **`ssebop`** (USGS FEWS NET SSEBop v6,
+1 km, from 2012, the fallback;
+[data-sources.md § Observed actual evapotranspiration](./data-sources.md#observed-actual-evapotranspiration)).
+The worker writes them; no route writes them, and nothing reads them yet
+(the fetcher's pass, the handover and the comparison are #623's later
+steps). Nothing here feeds the engine.
+
+| Table | Holds |
+| --- | --- |
+| `et_observation` | One row per unit (`node_id`, a node of kind `farm`), `source` and `dekad` (unique; the dekad's first day, the 1st, 11th or 21st, from 2012): `eta_mm_day` (the area-weighted mean over the valid part of the area, 0–50), `valid_share` (0–1, the share of the area with a valid pixel), `area_m2` and `mask` (`cropland`: the parcels ∩ WorldCover cropland; `parcel`: the whole parcels, where no land cover is loaded), the provenance `upstream_file`, `upstream_etag` (null when the file had none) and `upstream_version` (`WAPOR-3`, `v6.1`), `revision` (1 when first loaded, +1 each time a load changes the row: FAO rewrites files in place), `loaded_at` |
+| `et_observation_load_mark` | Worker only, not project data. Per `source` and unit (`node_id` → `node` `ON DELETE CASCADE`; primary key): `last_good` (the status file's `lastGood` the unit was last checked against), `fetched_at` (the file's `fetchedAt` last loaded), `failed_at` (the last attempt failed; cleared by the next success), `parcels_changed_at` (when the unit's parcels last changed), `updated_at` |
+
+- **Same project**: `et_observation.node_id` → `node ON DELETE CASCADE`,
+  held to the row's project by `assert_same_project('node_id')`
+  (`et_observation_same_project`); covering indexes on every foreign key.
+- **RLS**: a project's viewers and above read its rows; a farmer or
+  contributor reads their linked units' only (`et_observation_select_farmer`,
+  `node_id IN app_farm_nodes(project_id)`); `water_app` holds SELECT and
+  nothing else (`catalogue.db.test.ts` `READ_ONLY`).
+  `et_observation_load_mark`: owner only (RLS on, no policy, no privilege for
+  `water_app`; `OWNER_ONLY`, and `FARMERS_NEVER_READ` for its node column).
+- **A unit whose parcels change** (a `farm_parcel` feature inserted, deleted,
+  redrawn, turned into or out of a parcel, or moved to another node) loses
+  its rows, each a mean over the old parcels (`et_parcels_changed`, AFTER
+  triggers on `map_feature`, `SECURITY DEFINER` since the editor holds no
+  DELETE on them); a rename doesn't. Both sources' marks get
+  `parcels_changed_at = now()` with `last_good` and `fetched_at` cleared, so
+  the next pass reads the unit again from the start and a file fetched
+  before the change is refused. Both the trigger and the loader lock the
+  unit's `node` row first, so neither slips between the other's check and
+  write. A unit being deleted takes its rows and marks with it.
+- **The worker's functions** (`SECURITY DEFINER`, `water_app` EXECUTE,
+  worker only: no user and no API key, 245's `mirror_worker_context`, else
+  42501):
+  - `app_et_observation_load(source, node_id, dekads[], eta[], valid[],
+    area[], mask, files[], etags[], version, fetched_at)`: one unit's pass
+    file. Refused (`applied = false`, nothing written) when the node is gone,
+    isn't a `farm`, has no `farm_parcel`, or its parcels changed after
+    `fetched_at`. Rows are upserted by (unit, source, dekad); a row whose
+    values and provenance are unchanged isn't rewritten, a changed one is and
+    its `revision` goes up; nothing is deleted (a pass may send only the
+    dekads since the newest held). Returns `written` (inserted or changed)
+    and `revised` (changed). Bounds (else 23514): a known source and mask;
+    arrays of one length, at most 2000 rows; each a dekad's first day from
+    2012 to today (UTC), listed once; mean 0–50 mm/day, share 0–1, area over
+    0 and under 10¹¹ m², never NaN; each file 1–300 printable characters,
+    each ETag null or 1–200 printable characters with no edge spaces (as
+    `fileTag` keeps one); the version 1–50 printable characters;
+    `fetched_at` not in the future.
+  - `app_et_load_marks()` and `app_et_load_mark_write(source, node_id,
+    last_good, fetched_at, failed)`: read every mark, and record one: loaded
+    (or found already loaded) as of `last_good`, clearing a failure; or
+    `failed`, which sets `failed_at` only. `parcels_changed_at` is left as it
+    is; a unit that is gone records nothing (`applied = false`).
+- **Tests**: `water-use/observed/observations.security.db.test.ts` (RLS with
+  positive controls: a viewer, each farmer's own unit, nothing across
+  projects or with no user; refused writes; the worker-only functions and
+  the owner-only marks); `water-use/observed/observations.db.test.ts` (the
+  upsert and its revision, the refused units, a file older than a parcel
+  change, every bound under a skewed TZ, the same-project trigger; a rename
+  against a redraw, an added, moved and deleted parcel, a deleted unit; the
+  marks); `farms/farmer-privacy.security.db.test.ts` (the sweep seeds each
+  unit's rows); `db/cross-project-refs.security.db.test.ts`;
   `catalogue.db.test.ts`.
 
 ### Feed days (031_feed_days.sql)

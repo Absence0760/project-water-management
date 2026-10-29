@@ -23,8 +23,10 @@ const NO_RLS = new Set(['schema_migrations']);
 // The allocation holder keys' salt and each run's frozen keys (219_allocation_holder_keys, #523 N/P): only its definer functions and trigger.
 // dam_observation_load_mark (261): what the dams tick last loaded per pass file, read and written only through
 // app_dam_load_marks and app_dam_load_mark_write from the worker's session with no user.
+// et_observation_load_mark (276): what the ET tick last loaded per source and unit, and when its parcels changed, read and
+// written only through app_et_load_marks, app_et_load_mark_write and the et_parcels_changed trigger.
 // assistant_reservation (264): a turn's reserved budget, read and written only by the assistant's definer functions.
-const OWNER_ONLY = new Set(['assistant_reservation', 'erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark']);
+const OWNER_ONLY = new Set(['assistant_reservation', 'erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder', 'dam_observation_load_mark', 'et_observation_load_mark']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -257,6 +259,9 @@ const READ_ONLY = new Set([
 	'waterbody_reference',
 	'dam_waterbody_match',
 	'dam_observation',
+	// Observed actual ET per unit and dekad (276_et_observation, issue #623): written only by app_et_observation_load
+	// (the worker, with no user) and dropped by et_parcels_changed when a unit's parcels change.
+	'et_observation',
 	// The regional GR4J prior's reference data (268_soil_grid, 269_gr4j_donors), loaded by the operator as the schema
 	// owner (`pnpm import:soils`, `pnpm import:gr4j-donors`, or a production reference load).
 	'soil_dataset',
@@ -277,7 +282,8 @@ const READ_ONLY = new Set([
  * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
  * so a new per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'crop_area_land_cover']);
+// et_observation_load_mark (276) is the ET tick's own bookkeeping per unit: owner only, read by no app role (OWNER_ONLY).
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'crop_area_land_cover', 'et_observation_load_mark']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
