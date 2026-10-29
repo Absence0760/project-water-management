@@ -2640,8 +2640,9 @@ summary over the text).
 `goal` and a list of changes, each with its own reason, and checks them as the
 app would without saving anything. The goal decides what may change, as data
 in `settingKinds.ts`: each setting is `calibrated` (fitted to the observed
-flow, or forcing that trades off against the fit: GR4J's X1–X4, the pan
-coefficients and PE, the CHIRPS bias settings), `input` (the rest of the
+flow, or forcing that trades off against the fit: GR4J's X1–X4, the
+calibration zones' own X1–X4, the pan coefficients and PE, the CHIRPS bias
+settings), `input` (the rest of the
 catchment and its data), `assessment` (what results are judged against: the
 EWR, the Reserve's tables, the assurance threshold, the reporting window) or
 `management` (the drought restriction, the allocation mode).

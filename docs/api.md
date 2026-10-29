@@ -4056,7 +4056,7 @@ each setting's kind (`backend/src/assistant/settingKinds.ts`, which
 `get_settings` sends as `kinds`): an outcome only management settings and the
 network's operating levers, a recalibration the calibrated and input
 settings, a correction the input and assessment settings; a calibrated
-parameter (GR4J X1–X4, the pan coefficients, PE, the CHIRPS bias settings) is
+parameter (GR4J X1–X4, the calibration zones, the pan coefficients, PE, the CHIRPS bias settings) is
 refused for any goal but a recalibration ([architecture.md § Assistant
 tools](./architecture.md#assistant-tools) lists the levers). There is no
 title argument, and a `summary` is refused: the server builds the title.

@@ -157,8 +157,8 @@ describe('propose_settings: what each goal may change (issue #640)', () => {
 		const err = errorOf(await run(outcome([{ key: 'gr4j.x1', value: 1200, reason: 'A smaller store lets more rain run off in dry years.' }])));
 		expect(err).toMatch(/^gr4j\.x1: a calibrated parameter \(fitted to the observed flow\) is never changed to improve an outcome/);
 		expect(err).toContain('management lever');
-		// The whole group, a pan coefficient and the CHIRPS bias settings are calibrated too.
-		for (const key of ['gr4j', 'panCoefficient', 'pe', 'chirpsBiasCorrection', 'chirpsQuantileMap'])
+		// The whole group, a pan coefficient, the CHIRPS bias settings and the calibration zones' own X1–X4 are calibrated too.
+		for (const key of ['gr4j', 'panCoefficient', 'pe', 'chirpsBiasCorrection', 'chirpsQuantileMap', 'calibrationZones'])
 			expect(errorOf(await run(outcome([{ key, value: null, reason: 'r' }])))).toContain('a calibrated parameter');
 	});
 

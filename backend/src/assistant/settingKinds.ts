@@ -5,8 +5,9 @@
 // kind the proposal's goal doesn't allow (tools/proposeSettings.ts).
 //
 // - calibrated: fitted to the observed flow, or forcing that trades off
-//   against the fit (GR4J's X1–X4, the pan coefficients and PE, the CHIRPS
-//   bias factors and their fit). The model of nature: changed only to improve
+//   against the fit (GR4J's X1–X4, the calibration zones' own X1–X4 with
+//   their windows and records, the pan coefficients and PE, the CHIRPS bias
+//   factors and their fit). The model of nature: changed only to improve
 //   the fit, as a recalibration.
 // - input: the rest of the description of the catchment and its data (the
 //   evaporation and rain inputs, the windows, the calibration site and
@@ -35,6 +36,8 @@ export const SETTING_KINDS: Readonly<Record<string, SettingKind>> = {
 	chirpsBiasCorrection: 'calibrated',
 	chirpsFitPeriod: 'calibrated',
 	chirpsQuantileMap: 'calibrated',
+	// Each zone's X1–X4, fitted on its own gauge (§2.10n); its window and record ride in the same row, replaced whole.
+	calibrationZones: 'calibrated',
 	// Input: the catchment, its data and the windows.
 	februaryDays: 'input',
 	effectiveRainFraction: 'input',
