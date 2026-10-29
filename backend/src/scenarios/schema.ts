@@ -89,6 +89,7 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 			return [['allocationId', op.allocationId]];
 		case 'settings.set':
 		case 'series.scale':
+		case 'climate.delta':
 			return [];
 	}
 }

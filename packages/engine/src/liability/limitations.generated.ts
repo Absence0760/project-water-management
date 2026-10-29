@@ -158,6 +158,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Warned"
 	},
 	{
+		"id": "CD1",
+		"source": "finding",
+		"severity": "Medium (future-climate scenarios and an evidence pack's Future yield; off until a scenario holds a climate.delta op)",
+		"title": "A future climate is the historical record scaled by monthly change factors (the delta method), not a new sequence of weather",
+		"status": "Built, pending the hydrologist"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

@@ -104,6 +104,10 @@ describe('describeOp', () => {
 		);
 		expect(d({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('Rainfall — catchment: × 0.9 (−10 %)');
 		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 1 Jan 2022 to end');
+		// Future climate (engine 1.107.0, issue #621): the case's label, the range of each row and the source.
+		expect(
+			d({ op: 'climate.delta', rainFactorByMonth: [0.8, ...new Array(10).fill(1), 1.1], evapFactorByMonth: new Array(12).fill(1.05), label: 'SYN-A SSP2-4.5 2036–2065', source: 'synthetic' })
+		).toBe('Future climate, SYN-A SSP2-4.5 2036–2065: rain × 0.8 to × 1.1 by month, evaporation × 1.05 to × 1.05 by month (synthetic)');
 		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every hydrological unit: 85 % of what they'd take (× 0.85)");
 		expect(d({ op: 'demand.scale', factor: 0.7, nodeIds: [UP, LO], months: [12, 1, 2] })).toBe("Irrigation demand of Upper farm, Lower farm: 70 % of what they'd take (× 0.7), in Jan, Feb, Dec");
 		expect(d({ op: 'demand.scale', factor: 1.1, category: 'user' })).toBe("Demand of every other water user: 110 % of what they'd take (× 1.1)");

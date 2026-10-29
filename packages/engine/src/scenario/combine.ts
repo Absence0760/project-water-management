@@ -228,6 +228,13 @@ function touches(model: ProjectModel, ops: readonly ScenarioOp[], index: number)
 			// Two scalings of one series stack; whose assumption the climate is, is not for either to settle.
 			w(`series:${op.kind}`);
 			break;
+		case 'climate.delta':
+			// Every rain and evaporation series (`series:*` meets any one), the monthly A-pan and PE rows it scales, and
+			// the MAPs (no other op writes one): two climates, or a climate and a scaling, would stack.
+			w('series:*');
+			w('settings:apanMm');
+			w('settings:pe');
+			break;
 		case 'demand.scale':
 			// Factors stack, but two scenarios cutting one unit's demand would each count the other's cut.
 			for (const id of demandNodes(model, op)) {
@@ -295,7 +302,7 @@ function label(model: ProjectModel, scenarios: readonly CombineScenario[], entit
 		case 'settings':
 			return 'settings';
 		case 'series':
-			return `series ${id}`;
+			return id === '*' ? 'every rain and evaporation series' : `series ${id}`;
 		case 'ewrRule':
 			return id === 'outlet' ? 'Reserve rule table at the outlet' : `Reserve rule table at "${nodeName(id)}"`;
 		case 'landCover':
@@ -316,6 +323,8 @@ function label(model: ProjectModel, scenarios: readonly CombineScenario[], entit
  */
 function sameEntity(a: string, b: string): boolean {
 	if (a === b) return true;
+	// climate.delta's every series (engine 1.107.0) meets any one series.
+	if ((a === 'series:*' && b.startsWith('series:')) || (b === 'series:*' && a.startsWith('series:'))) return true;
 	const p = 'cropArea:';
 	if (!a.startsWith(p) || !b.startsWith(p)) return false;
 	const [an, ac] = a.slice(p.length).split('|');

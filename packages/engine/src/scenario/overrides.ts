@@ -2,7 +2,8 @@
 // overrides to a base run's input, and classify each override as the
 // applicant's proposal or a change to the baseline assumptions. Pure: the
 // backend loads the base input, this transforms plain data, and runModel is
-// unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
+// unchanged. Future climate is ./climate.ts (climate.delta, engine 1.107.0);
+// stochastic transforms (WP-4.11) will sit beside them.
 import { toEpochDay } from '../calendar';
 import { withMonthlyRates } from '../network/transferRates';
 import { DAM_AREA_EXPONENT, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_PARTS, estimatedDamAreaM2, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type DemandFactorWindow, type IrrigationSystemDef, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
@@ -36,6 +37,7 @@ import {
 	type ScenarioOp
 } from './ops';
 import { structureIssues } from './structure';
+import { applyClimateDelta, climateFactorRowError } from './climate';
 import { modelFarmEfficiency } from '../demand';
 import { resolveDamCurve } from '../network/dam';
 import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
@@ -826,6 +828,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			notes.push(`${n} day(s) scaled`);
 			break;
 		}
+		case 'climate.delta': {
+			for (const k of ['rainFactorByMonth', 'evapFactorByMonth'] as const) {
+				const e = climateFactorRowError(op[k]);
+				if (e) fail(`${k} ${e}`);
+			}
+			notes.push(...applyClimateDelta(d, op));
+			break;
+		}
 		case 'demand.scale': {
 			const e = demandScaleError(op);
 			if (e) fail(e);
@@ -966,7 +976,8 @@ interface Stepped extends Omit<ScenarioResult, 'renamed' | 'reIds'> {
  */
 function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | null): Stepped {
 	const see: Visibility = masked ? { node: (id) => !masked.nodes.has(id), item: (id) => !masked.tokens.has(id) } : SEE_ALL;
-	let cur: ModelInput = { settings: cloneData(base.settings), model: masked?.model ?? cloneData(base.model), series: { ...base.series } };
+	// The stations travel with the draft (engine 1.107.0): climate.delta scales their MAPs.
+	let cur: ModelInput = { settings: cloneData(base.settings), model: masked?.model ?? cloneData(base.model), series: { ...base.series }, ...(base.stations !== undefined ? { stations: base.stations } : {}) };
 	let issues = structureIssues(cur);
 	const applied: AppliedOp[] = [];
 	const problems: string[] = [];
@@ -981,7 +992,7 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
 	ops.forEach((op, index) => {
 		const kind = typeof op?.op === 'string' ? op.op : 'unknown';
 		before.push(draft);
-		const next: ModelInput = { settings: cloneData(draft.settings), model: cloneData(draft.model), series: draft.series };
+		const next: ModelInput = { settings: cloneData(draft.settings), model: cloneData(draft.model), series: draft.series, ...(draft.stations !== undefined ? { stations: draft.stations } : {}) };
 		try {
 			group.push({ index, op, notes: applyOne(next, op, see) });
 			draft = next;
@@ -1094,6 +1105,8 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 	switch (op.op) {
 		case 'settings.set':
 		case 'series.scale':
+		// The climate (engine 1.107.0): never the applicant's to propose.
+		case 'climate.delta':
 		// The Reserve's rule table: never the applicant's to propose, whoever's node the site is.
 		case 'ewrRule.set':
 		case 'ewrRule.remove':

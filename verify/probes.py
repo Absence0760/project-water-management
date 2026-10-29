@@ -1744,6 +1744,47 @@ def forecast_member_rescaled() -> dict:
     return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": series}
 
 
+def _climate(doc: dict, rain: list[float], evap: list[float]) -> dict:
+    """`doc` under a future climate (issue #621, §2.17): verify/'s scenarioOps
+    field, which run_engine.ts applies with applyScenario and model.py itself."""
+    op = {"op": "climate.delta", "rainFactorByMonth": rain, "evapFactorByMonth": evap, "label": "SYN-A ssp245 2036-2065", "source": "invented factors"}
+    return {**doc, "scenarioOps": [op]}
+
+
+# Invented factor rows, a different one each calendar month, both sides of 1, the clamp's ends included.
+CLIMATE_RAIN = [0.8, 0.5, 1.1, 0.95, 1.5, 0.7, 1.25, 0.9, 1.05, 0.6, 1.2, 1.0]
+CLIMATE_EVAP = [1.1, 1.2, 1.05, 1.0, 1.15, 1.3, 0.9, 1.08, 1.12, 1.5, 1.02, 0.95]
+
+
+def climate_delta() -> dict:
+    """A future climate on a dam, a crop and an EWR (§2.17): fourteen months
+    of catchment rain with a gap CHIRPS fills and a no-data code, the monthly
+    A-pan row under pan coefficient x A-pan, each calendar month at its own
+    factor. Demand, dam evaporation, rain on the dam and GR4J all read the
+    scaled inputs; the gap's CHIRPS keeps its bias factors (both series move
+    by the same factor)."""
+    start = dt.date(2019, 11, 1)
+    n = (dt.date(2020, 12, 31) - start).days + 1
+    catch: list = _wave(start, n, 0)
+    for j in range(40, 55):
+        catch[j] = None
+    catch[200] = -9999.0
+    series = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": catch},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": [round(v * 0.8, 2) for v in _wave(start, n, 0)]},
+    }
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=6, damCapacityM3=120000, damInitialPct=0.5, damMinPct=0.05,
+              pctUpstreamToDam=1, pctRunoffToDam=0.4, damAreaFullM2=30000, returnFlowFraction=0.1, irrigationEfficiency=0.8),
+    ]
+    crops, areas = _crop("f", 300000)
+    s = _settings(apanMm=[150, 190, 230, 240, 200, 170, 110, 80, 55, 55, 75, 105], lakeEvapFactor=0.75,
+                  ewrPragmaticM3PerDay=[300] * 12, effectiveRainFraction=0.5)
+    doc = {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": series}
+    return _climate(doc, CLIMATE_RAIN, CLIMATE_EVAP)
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -1810,6 +1851,12 @@ PROBES = {
     "daily-et0-zero-row": daily_et0_monthly_pe(zero_row=True),
     # The forecast-conditioned outlook's member (issue #620 step 6).
     "forecast-member-rescaled": forecast_member_rescaled(),
+    # Future climate (issue #621, §2.17): the op on a dam, then on the per-unit rules (the MAPs by the annual
+    # factor: rule 3's level moves, rule 2's ratio doesn't), the stations' MAPs and a monthly PE row with daily ET.
+    "climate-delta": climate_delta(),
+    "climate-delta-unit-map": _climate(unit_rain_rules(), CLIMATE_RAIN, CLIMATE_EVAP),
+    "climate-delta-stations": _climate(station_units(), CLIMATE_RAIN, CLIMATE_EVAP),
+    "climate-delta-monthly-pe": _climate(daily_et0_monthly_pe(), CLIMATE_RAIN, CLIMATE_EVAP),
     # Calibration zones (issue #555).
     "calibration-zones-nested": calibration_zones_nested(),
     "calibration-zones-no-exchange": calibration_zones_nested(0.0),

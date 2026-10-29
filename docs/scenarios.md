@@ -129,6 +129,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `demandObject.remove` | `demandObjectId` | Removes a demand object (engine ≥ 1.45.0). `node.remove` drops the node's objects too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series (a land unit's own rain record too, `rain_catchment_mm@<unit id>` or `rain_chirps_mm@<unit id>`, engine ≥ 1.78.0) or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
+| `climate.delta` | `rainFactorByMonth, evapFactorByMonth, label, source` | Future climate (engine 1.107.0, issue #621, [model.md §2.17](./model.md#217-future-climate-monthly-change-factors-engine-11070-issue-621)): 12 calendar-month factors each (index 0 = January), 0.5–1.5, a label (1–200 characters) and a source (1–600). Multiplies every rain series (§ climate.delta below), the daily A-pan and reference ET, the A-pan row and a monthly PE row, and every MAP by the annual rain factor. At most one per scenario, and never beside a `series.scale`. Always a baseline assumption. |
 | `ewrRule.set` | `table` | Sets or replaces the Reserve rule table of one EWR site (engine ≥ 1.6.0, WP-3.7): `table.siteNodeId` is the site. Always a baseline assumption. § Reserve rule tables. |
 | `ewrRule.remove` | `siteNodeId` | Removes the Reserve rule table of one EWR site (engine ≥ 1.35.0): null (or the outlet node's id) is the outlet. Always a baseline assumption. § Reserve rule tables. |
 | `allocation.set` | `allocation` | Sets or replaces one registered volume by id (engine ≥ 1.35.0, [allocations.md](./allocations.md)): a new id adds one. § Registered volumes. |
@@ -669,6 +670,48 @@ Like any op without `nodeIds`, the demand ops classify the scenario as a
 baseline assumption (§ Classification below), which is what a stress test
 is: it changes how everyone behaves, not one applicant's proposal.
 
+## climate.delta: future climate (engine 1.107.0, issue #621)
+
+One op holds a future climate as 24 monthly change factors, worked out
+from downscaled climate projections (NEX-GDDP-CMIP6,
+[data-sources.md](./data-sources.md)) by `climateDeltaFactors`
+(`packages/engine/src/scenario/climate.ts`; the method is model.md §2.17) and
+frozen in the op, so the scenario or an evidence pack re-runs from the op
+alone. Each day's reading is multiplied by the factor of its calendar month:
+
+- **Rain**: every series whose key starts with `rain_`: the catchment gauge,
+  CHIRPS, the forecast, a rain-source period's series, the reanalysis and
+  the other gap-filling products, a land unit's own records (§2.4h), each
+  rainfall station's record and its CHIRPS (§2.4i), and the reference
+  unit's CHIRPS cell.
+- **Evaporation**: the daily A-pan `evap_apan_mm` and reference ET
+  `evap_et0_mm`; the A-pan row `apanMm` and a monthly PE row `pe.mm` month
+  by month (their water-year months matched to the calendar months).
+  The pan coefficient is not changed: PE moves with the A-pan.
+- **MAPs**: each land unit's `mapMm`, `unitRain.gaugeMapMm`,
+  `rainStations.catchmentMapMm` and each station's MAP, all by one annual
+  factor: the rain factors weighted by each month's share of the catchment
+  rain record's year (`rain_catchment_mm`, else `rain_chirps_mm`; the
+  month's mean daily reading × its days). One factor keeps every ratio of
+  two MAPs (a station's area MAP ÷ its MAP, a unit's MAP ÷ the gauge's)
+  as it was, while a unit's CHIRPS levelled to its MAP (§2.4h rule 3)
+  moves with the climate instead of being pulled back to the historical
+  level. Exactly 1 when every rain factor is 1.
+
+A blank day and a no-data code (a negative reading) stay as they were;
+flow records are measurements and are never scaled. Every factor 1 gives
+the base input value for value, so the run is the base run to the bit
+(`climate.invariants.test.ts`). Two clashes are refused by
+`validateScenarioOps` (a second `climate.delta`, a `series.scale` beside
+it, in either order) and across scenarios by `scenarioConflicts`: the op
+writes every series, `apanMm` and `pe`. What the delta method doesn't do
+(the record's sequence of wet and dry years is kept, GR4J keeps its
+historical parameters, evaporation moves by Hargreaves ratios) is in the
+known limitations ([engine-audit.md](./engine-audit.md) C1).
+
+No form makes one yet: the Scenarios tab's future-climate picker and the
+evidence pack's Future yield section are issue #621's later slices.
+
 ## Classification: proposal or baseline assumption
 
 `classifyOp(op, ownedNodeIds, input?, addedCropIds?)` returns `'proposal'` or `'baseline'`;
@@ -680,7 +723,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
-| `settings.set`, `series.scale`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, climate) |
+| `settings.set`, `series.scale`, `climate.delta`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, climate) |
 | `node.set` | the node is owned and the field is not land (`areaKm2`; it sets the unit's natural MAR share), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
 | `node.add` | not a gauge, and no land of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land, and no EWR rule table sited at it (needs `input`) | baseline |
@@ -728,6 +771,15 @@ window's eight known fields.
 ## Tests
 
 `packages/engine/src/scenario/`, all in `pnpm test`:
+- `climate.test.ts` (engine 1.107.0): `climateDeltaFactors` (ratio of
+  area-weighted means, the Hargreaves ratio, FAO-56's worked Ra, the clamp
+  and the dry month), `windowClimate`, and the op: what it scales and by
+  which month, the MAPs by the annual factor, every factor 1 the base value
+  for value, its validation and clashes, classification and conflicts.
+  `climate.invariants.test.ts`: every factor 1 reproduces the run to the bit
+  and random factors keep every engine invariant (40 random networks each,
+  `CLIMATE_FUZZ_CASES`); on a single dam with no return flow, firm yield
+  doesn't fall as the rain factors rise.
 - `overrides.test.ts`: each op applies and rejects bad targets; `node.remove`
   keeps a valid tree (`buildTopology`); a deep-frozen base is never mutated;
   a 20 % dam raise changes that dam and never the farm upstream or beside it,
@@ -808,8 +860,10 @@ moving a node or inserting one mid-river, `crop.set` and removing a crop,
   `demandObject.set` changes one object's own numbers (engine ≥ 1.45.0).
 - **Changing a node's kind**: remove it and add a new node.
 - **Scaling observed flow** (see above: deliberately not a scenario).
-- **Climate and stochastic transforms** (WP-4.11) will sit beside
-  `overrides.ts` in `scenario/`.
+- **Stochastic transforms** (WP-4.11) will sit beside `overrides.ts` in
+  `scenario/`. Climate's monthly change factors are `climate.delta`
+  (engine 1.107.0, § climate.delta); quantile delta mapping (daily) is a
+  follow-up (engine-audit.md C1).
 
 ## Backend
 
@@ -1044,7 +1098,8 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   object or registered volume uses its node(s); a `demand.scale` without
   `nodeIds` writes every farm's (or user's) demand; a `series.scale` writes
   the series (two scalings stack, and whose climate assumption it is isn't
-  for either to settle); a unit's `irrigationEfficiency` writes every
+  for either to settle); a `climate.delta` writes every series, `apanMm`
+  and `pe` (engine 1.107.0); a unit's `irrigationEfficiency` writes every
   planting on the unit, and a crop's `irrigationEfficiency` or
   `irrigationSystemId` every planting of the crop (engine ≥ 1.72.0 puts
   those plantings on a system; a planting another scenario adds would get it
