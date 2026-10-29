@@ -599,7 +599,7 @@ open:
 
 ## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
 
-Round 1 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
+Rounds 1 and 2 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
 op and the CMIP6 ingest; #623's register rows and `et_observation` (276);
 #624's register rows and the `s2`/`s1` sources (277); and the shared COG
 reader (`backend/src/raster/`). The rest of each issue's plan stays on the
@@ -660,6 +660,31 @@ issue. Found while building, and open:
       how they read the "promotion of a commercial enterprise" clause; the
       answer goes on #618 and the register row. Trigger: before
       `et_observations_enabled = true` with WaPOR.
+- [ ] **A refused WaPOR file is asked for again every hour.** `water-use/observed/pass.ts`
+      re-requests a dekad file the reader refuses on each run (a few requests,
+      never stopping). Durable fix: a refused marker with the file's ETag in
+      `et/wapor-state.json`, cleared when the ETag changes. Trigger: before
+      `et_observations_enabled = true`.
+- [ ] **The ET panel's empty state can't say why.** The route doesn't say
+      whether the feature is off or the unit has no parcels linked, so the
+      panel shows one message for both. Durable fix: `enabled` and a parcel
+      count in `GET …/nodes/:nodeId/et-observed`, and a message for each.
+      Trigger: the next change to the panel.
+- [ ] **No engine test pins the irrigation the ET check reads.** The check takes
+      the irrigation reaching the crop as F·G/D (model.md §2.10o), which
+      equals e·G only while `demand` = F/e + Σ object demand. Durable fix: a
+      `runModel` test with demand objects, a drought restriction and a short
+      dam that asserts it. Trigger: the next engine round.
+- [ ] **SSEBop's dekads show only in the ET panel's CSV.** Each source is
+      compared on its own, but the panel draws WaPOR only. Durable fix: a
+      source switch in the panel. Trigger: #623 step 6.
+- [ ] **Radar moves the dam check's average difference.** S1 views count in
+      the bias and the share within ±10 % (never in a flag), and wind makes
+      radar read low. Durable fix: an optical-only figure beside the summary
+      (`compare.ts`). Trigger: #624 step 5, when S1 rows exist.
+- [ ] **The chart's hollow points have no unit test.** `hollow` (the radar
+      rings) is covered only by `non-text-contrast.spec.ts`. Durable fix: a
+      chart unit test for it. Trigger: the next change to the chart.
 - [ ] **SSEBop isn't range-readable.** Each dekad is a ~93 MB zip, not a COG,
       and is far over the fetcher's 4 MB cap. Durable fix: #623 step 6 picks a
       bounded whole-file pass (one file a dekad, clipped at once) or an
