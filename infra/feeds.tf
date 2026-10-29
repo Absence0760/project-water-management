@@ -280,10 +280,11 @@ resource "aws_lambda_function" "fetcher" {
         # The contact in the user agent CHC asked for (backend/src/feeds/http.ts userAgent).
         FEEDS_CONTACT = var.feeds_contact
       },
-      # The dams-weekly run's Sentinel-2 pass (dam_observations.tf local.dam_s2_on, issue #624), only while the
-      # dam observations are on.
+      # The dams-weekly run's Sentinel-2 and Sentinel-1 passes (dam_observations.tf local.dam_s2_on, local.dam_s1_on,
+      # issue #624), only while the dam observations are on.
       local.dams_enabled ? {
         DAM_OBSERVATIONS_S2 = local.dam_s2_on ? "on" : "off"
+        DAM_OBSERVATIONS_S1 = local.dam_s1_on ? "on" : "off"
       } : {},
       # Where it answers a fetch request, only while there are any (local.per_feed_fetching).
       local.per_feed_fetching ? {

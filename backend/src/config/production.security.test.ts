@@ -135,7 +135,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		INGEST_RESULTS_QUEUE_URL: SQS('ingest-results'),
 		MIRROR_URL: 's3://water-management-mirror-000000000000',
 		FEEDS_CONTACT: 'ops@icwbt.jaredhoward.com',
-		DAM_OBSERVATIONS_S2: 'off'
+		DAM_OBSERVATIONS_S2: 'off',
+		DAM_OBSERVATIONS_S1: 'off'
 	},
 	renderer: {
 		RENDER_SITE_URL: SITE,

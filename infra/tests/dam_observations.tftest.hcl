@@ -770,7 +770,9 @@ run "dam_observations_off_by_default" {
       length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0 &&
       length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0 &&
       length(aws_cloudwatch_metric_alarm.dam_recency_s2) == 0 &&
+      length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0 &&
       !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "DAM_OBSERVATIONS_S2") &&
+      !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "DAM_OBSERVATIONS_S1") &&
       length(terraform_data.dam_observations_gate) == 0
     )
     error_message = "Until dam_observations_enabled is set the dams rule is disabled, targets nothing, may invoke nothing, neither Lambda may write dams/, and no alarm fires for passes that don't exist."
@@ -969,4 +971,90 @@ run "rejects_an_s2_recency_alarm_shorter_than_the_publication_lag" {
   }
 
   expect_failures = [var.dam_s2_recency_alarm_days]
+}
+
+# Sentinel-1 radar (issue #624 step 5): the same pattern as Sentinel-2's,
+# independent of it, off until its own flag.
+run "dam_s1_off_until_its_own_flag" {
+  command = plan
+
+  variables {
+    dam_observations_enabled = true
+    dam_s2_enabled           = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S1"] == "off" && !contains(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat), "s1") && length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0
+    error_message = "Without dam_s1_enabled the fetcher runs no Sentinel-1 pass and no s1 alarm exists, even with Sentinel-2 on."
+  }
+}
+
+run "dam_s1_needs_the_dam_observations_too" {
+  command = plan
+
+  variables {
+    dam_s1_enabled = true
+  }
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "DAM_OBSERVATIONS_S1") && length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0 && length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0
+    error_message = "dam_s1_enabled alone turns nothing on: the passes need dam_observations_enabled."
+  }
+}
+
+run "dam_s1_on" {
+  command = plan
+
+  variables {
+    dam_observations_enabled = true
+    dam_s1_enabled           = true
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S1"] == "on" &&
+      aws_lambda_function.fetcher.environment[0].variables["DAM_OBSERVATIONS_S2"] == "off" &&
+      toset(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat)) == toset(["waterbodies", "wofs", "s1"]) &&
+      aws_cloudwatch_metric_alarm.dam_pass_heartbeat["s1"].treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.dam_pass_heartbeat["s1"].dimensions["Source"] == "s1" &&
+      length(aws_cloudwatch_metric_alarm.dam_recency_s2) == 0
+    )
+    error_message = "With dam_s1_enabled the fetcher runs the Sentinel-1 pass and its heartbeat alarm reads DamPassCompleted{Source=s1}, breaching on missing data; Sentinel-2 stays off on its own flag."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.dam_recency_s1[0].treat_missing_data == "breaching" &&
+      aws_cloudwatch_metric_alarm.dam_recency_s1[0].metric_name == "DamObservationAgeDays" &&
+      aws_cloudwatch_metric_alarm.dam_recency_s1[0].namespace == "water-management/DamObservations" &&
+      aws_cloudwatch_metric_alarm.dam_recency_s1[0].dimensions["Source"] == "s1" &&
+      aws_cloudwatch_metric_alarm.dam_recency_s1[0].threshold == 30 &&
+      aws_cloudwatch_metric_alarm.dam_recency_s1[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The Sentinel-1 recency alarm reads DamObservationAgeDays{Source=s1} against dam_s1_recency_alarm_days (30) and treats missing data as breaching."
+  }
+}
+
+run "dam_s1_and_s2_on_together" {
+  command = plan
+
+  variables {
+    dam_observations_enabled = true
+    dam_s2_enabled           = true
+    dam_s1_enabled           = true
+  }
+
+  assert {
+    condition     = toset(keys(aws_cloudwatch_metric_alarm.dam_pass_heartbeat)) == toset(["waterbodies", "wofs", "s2", "s1"]) && length(aws_cloudwatch_metric_alarm.dam_recency_s2) == 1 && length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 1
+    error_message = "With both Sentinel flags every source has its own heartbeat, and each Sentinel source its own recency alarm."
+  }
+}
+
+run "rejects_an_s1_recency_alarm_shorter_than_the_revisit" {
+  command = plan
+
+  variables {
+    dam_s1_recency_alarm_days = 10
+  }
+
+  expect_failures = [var.dam_s1_recency_alarm_days]
 }

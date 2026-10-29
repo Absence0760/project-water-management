@@ -1097,6 +1097,22 @@ variable "dam_s2_recency_alarm_days" {
   }
 }
 
+variable "dam_s1_enabled" {
+  description = "Run the Sentinel-1 radar pass of the dam observations (issue #624 step 5; dam_observations.tf, backend/src/dams/observed/sentinel/pass.ts S1_PASS): DE Africa's Sentinel-1 RTC scenes classified by us (VV under a fixed -18 dB, the RTC mask's shadow and layover left out) inside every traced dam's outline, after the Sentinel-2 pass in each hourly dams-weekly run, then the S1/S2 agreement report (the fetcher's dams_s1_agreement log line). Radar is a secondary source: shown, never alone a full or empty flag. Only with dam_observations_enabled: it sets the fetcher's DAM_OBSERVATIONS_S1 and adds the s1 heartbeat and recency alarms. Off (the default); keep it off unless the agreement with Sentinel-2's clear views passes issue #624's bar (85 % of paired days within 0.1 of the full area). Runbook: docs/deployment.md § Dam observations."
+  type        = bool
+  default     = false
+}
+
+variable "dam_s1_recency_alarm_days" {
+  description = "Alarm when the newest Sentinel-1 radar observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=s1}). Sentinel-1 revisits every 6-12 days and sees through cloud, so 30 days with nothing means the collection or our pass has stopped."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.dam_s1_recency_alarm_days >= 14 && floor(var.dam_s1_recency_alarm_days) == var.dam_s1_recency_alarm_days
+    error_message = "A whole number of days, at least 14: a 12-day revisit plus DE Africa's processing lag."
+  }
+}
+
 variable "dam_wofs_recency_alarm_days" {
   description = "Alarm when the newest WOfS observation any traced dam holds is more than this many days old (DamObservationAgeDays{Source=wofs}). Landsat 8 and 9 pass every 8 days together, cloud hides some passes, DE Africa publishes a scene within days, and each dam is re-read weekly: 60 days is two months with no clear pass anywhere, which means WOfS or our pass has stopped."
   type        = number
