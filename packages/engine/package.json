@@ -16,6 +16,7 @@
 		"./limitations": "./src/liability/limitations.generated.ts",
 		"./methodology": "./src/liability/methodology-text.generated.ts",
 		"./provenance": "./src/seriesProvenance.ts",
+		"./sentinel-credit": "./src/evidence/sentinelCredit.ts",
 		"./testing": "./src/testing/index.ts",
 		"./version": "./src/version.ts",
 		"./warnings": "./src/warningCodes.ts",

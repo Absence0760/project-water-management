@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
 	checkDamObservations,
@@ -226,6 +228,11 @@ describe('sentinelCitation', () => {
 		expect(sentinelCitation(['2020-06-02'])).toBe('Contains modified Copernicus Sentinel data 2020, processed by Digital Earth Africa');
 		expect(sentinelCitation(['2021-01-01', '2019-03-01', '2020-01-01'])).toBe('Contains modified Copernicus Sentinel data 2019–2021, processed by Digital Earth Africa');
 		expect(sentinelCitation([])).toBeNull();
+	});
+
+	it('lives in a leaf module with no imports, so the fetcher Lambda can read it without the engine', () => {
+		const src = readFileSync(fileURLToPath(new URL('./sentinelCredit.ts', import.meta.url)), 'utf8');
+		expect(src).not.toMatch(/^\s*(import|export\s.*\sfrom)\s/m);
 	});
 });
 
