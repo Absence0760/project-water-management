@@ -35,6 +35,7 @@ const {
 	DAILY_INGEST_EVENT,
 	DAMS_WEEKLY_EVENT,
 	DWS_WEEKLY_EVENT,
+	ET_DEKADAL_EVENT,
 	FETCH_SEND_MARGIN_MS,
 	GEFS_INGEST_EVENT,
 	INDICES_INGEST_EVENT,
@@ -44,6 +45,7 @@ const {
 	isDailyIngestEvent,
 	isDamsWeeklyEvent,
 	isDwsWeeklyEvent,
+	isEtDekadalEvent,
 	withDeadline
 } =
 	await import('./lambda-fetcher.js');
@@ -926,5 +928,71 @@ describe('the fetcher bundle', () => {
 		// the row parser it shares with the manual import; imports only calendar.ts).
 		const allowed = ['packages/engine/src/calendar.ts', 'packages/engine/src/seriesProvenance.ts', 'packages/engine/src/dws.ts'];
 		expect(inputs.filter((f) => f.includes('packages/engine/') && !allowed.some((a) => f.endsWith(a)))).toEqual([]);
+	});
+});
+
+describe('the fetcher’s et-dekadal mode (issue #623)', () => {
+	const dirs: string[] = [];
+	afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
+	const UNIT = '00000000-0000-4000-8000-0000000000e1';
+	/** A bucket of its own holding the worker's wanted list: one invented unit inside the synthetic WaPOR's cover. */
+	const bucket = async () => {
+		const d = mkdtempSync(join(tmpdir(), 'wm-fetcher-et-'));
+		dirs.push(d);
+		const { openStore } = await import('./mirror/store.js');
+		const { writeWanted } = await import('./water-use/observed/handover.js');
+		const ring: [number, number][] = [
+			[21.31, -33.69],
+			[21.32, -33.69],
+			[21.32, -33.68],
+			[21.31, -33.68],
+			[21.31, -33.69]
+		];
+		await writeWanted(openStore(pathToFileURL(`${d}/`).href), { generatedAt: new Date().toISOString(), units: [{ unitKey: UNIT, parcels: { type: 'MultiPolygon', coordinates: [[ring]] } }] });
+		vi.stubEnv('MIRROR_URL', pathToFileURL(`${d}/`).href);
+	};
+
+	it('routes the scheduled event to the ET pass, and nothing else', () => {
+		expect(isEtDekadalEvent(ET_DEKADAL_EVENT)).toBe(true);
+		expect(isEtDekadalEvent({ mode: 'et-dekadal', 'detail-type': 'Scheduled Event' })).toBe(true);
+		expect(isEtDekadalEvent({ Records: [], mode: 'et-dekadal' })).toBe(false);
+		expect(isEtDekadalEvent(DAMS_WEEKLY_EVENT)).toBe(false);
+		expect(isDamsWeeklyEvent(ET_DEKADAL_EVENT)).toBe(false);
+		expect(isDailyIngestEvent(ET_DEKADAL_EVENT)).toBe(false);
+	});
+
+	it('runs the WaPOR pass (fixtures here), publishes its heartbeat and recency, and logs counts, never a unit', async () => {
+		await bucket();
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const res = await handler({ mode: 'et-dekadal' } as never);
+		const metric = out.mock.calls.map(([l]) => String(l)).find((l) => l.includes('EtPassCompleted'));
+		out.mockRestore();
+		expect(res).toMatchObject({ written: 1, failed: 0, stopped: 'done', recencyDays: expect.any(Number) });
+		expect(JSON.parse(metric!)).toMatchObject({ Source: 'wapor', EtPassCompleted: 1, EtObservationAgeDays: expect.any(Number) });
+		const lines = info.mock.calls.map(([l]) => l as string);
+		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'et_pass')).toMatchObject({ source: 'wapor', written: 1, stopped: 'done' });
+		expect(lines.join('\n')).not.toContain(UNIT);
+		expect(sent).toHaveLength(0);
+	}, 60_000);
+
+	it('fails the invocation on an HTTP 403, after its heartbeat and a log line saying refused, then pauses with no heartbeat', async () => {
+		await bucket();
+		vi.stubEnv('FEED_SOURCE', 'live');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const refuse = async () => {
+			throw new FeedRefusedError();
+		};
+		httpOverride.next = { range: refuse, text: refuse, rangeTagged: refuse, rangeConditional: refuse };
+		await expect(handler({ mode: 'et-dekadal' } as never)).rejects.toBeInstanceOf(FeedRefusedError);
+		expect(out.mock.calls.some(([l]) => String(l).includes('EtPassCompleted'))).toBe(true);
+		const logged = error.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'et_pass');
+		expect(logged).toMatchObject({ source: 'wapor', stopped: 'refused', reason: 'refused', detail: 'HTTP 403', requests: 1 });
+		out.mockClear();
+		expect(await handler({ mode: 'et-dekadal' } as never)).toMatchObject({ stopped: 'paused' });
+		expect(out.mock.calls.some(([l]) => String(l).includes('EtPassCompleted'))).toBe(false);
+		expect(warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'et_pass')).toMatchObject({ stopped: 'paused' });
 	});
 });

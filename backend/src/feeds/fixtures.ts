@@ -29,7 +29,8 @@
 // example's synthetic catchment (backend/scripts/examples/map.ts) reads rain
 // offline. DE Africa's STAC search and its WOfS scenes are answered by
 // dams/observed/wofs/fixtures.ts (wofs-sample.json), its Sentinel-2 scenes from
-// dams/observed/sentinel/fixtures.ts (s2-sample.json), and NOAA CPC's ONI and
+// dams/observed/sentinel/fixtures.ts (s2-sample.json), FAO's WaPOR v3 dekads by
+// water-use/observed/fixtures.ts (wapor-sample.json), and NOAA CPC's ONI and
 // AAO files by sources/cpc.ts (invented values). Any other URL is a 404. Invented grid and station: no real
 // place, catchment or measurement.
 import { createHash } from 'node:crypto';
@@ -45,6 +46,8 @@ import { writeGrid } from './sources/tiff-write.js';
 import { wofsFixture } from '../dams/observed/wofs/fixtures.js';
 import { S2_C1_COLLECTION, S2_C1_S3_BASE, WOFS_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
 import { s2Fixture } from '../dams/observed/sentinel/fixtures.js';
+import { waporFixture } from '../water-use/observed/fixtures.js';
+import { WAPOR_BASE } from '../water-use/observed/upstream.js';
 
 export const FIXTURE_DIR = fileURLToPath(new URL('../../fixtures/feeds/', import.meta.url));
 
@@ -176,9 +179,14 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 	let s2: ReturnType<typeof s2Fixture> | null = null;
 	const s2Of = () => (s2 ??= s2Fixture(today));
 
+	// FAO's WaPOR v3 dekads (water-use/observed/fixtures.ts), made when first asked.
+	let wapor: ReturnType<typeof waporFixture> | null = null;
+	const waporOf = () => (wapor ??= waporFixture(today));
+
 	const file = (url: string): Uint8Array | null => {
 		if (url.startsWith(`${WOFS_S3_BASE}/`)) return wofsOf().scene(url);
 		if (url.startsWith(`${S2_C1_S3_BASE}/`)) return s2Of().scene(url);
+		if (url.startsWith(WAPOR_BASE)) return waporOf().file(url);
 		const t = toEpochDay(today());
 		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
 		if (m && url.startsWith(CHC_BASE)) {
@@ -224,6 +232,12 @@ export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewr
 		async head(url) {
 			const bytes = file(url);
 			return bytes ? { tag: tagOf(bytes) } : null;
+		},
+		async rangeConditional(url, start, end, etag) {
+			const bytes = file(url);
+			if (!bytes) return null;
+			const tag = tagOf(bytes);
+			return tag === etag ? { status: 'not-modified' } : { status: 'ok', bytes: bytes.subarray(start, end + 1), tag };
 		},
 		async text(url) {
 			if (url.startsWith(`${WOFS_STAC_SEARCH}?`)) return new URL(url).searchParams.get('collections') === S2_C1_COLLECTION ? s2Of().search(url) : wofsOf().search(url);

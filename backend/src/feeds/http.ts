@@ -50,7 +50,17 @@ export interface FeedHttp {
 	 * null. Optional: the dam observations' Waterbodies pass uses it.
 	 */
 	textConditional?(url: string, etag: string | null): Promise<ConditionalText | null>;
+	/**
+	 * Bytes [start, end] of `url` asked for only if its ETag is no longer
+	 * `etag` (a Range GET with If-None-Match): `not-modified` for HTTP 304,
+	 * null for HTTP 404, else the bytes and the file's tag (fileTag).
+	 * Optional: the observed ET pass re-checks the WaPOR dekads it has read
+	 * with it (water-use/observed/pass.ts).
+	 */
+	rangeConditional?(url: string, start: number, end: number, etag: string): Promise<ConditionalRange | null>;
 }
+
+export type ConditionalRange = { status: 'not-modified' } | { status: 'ok'; bytes: Uint8Array; tag: string | null };
 
 export type ConditionalText = { status: 'not-modified' } | { status: 'ok'; text: string; etag: string | null; lastModified: string | null };
 
@@ -469,6 +479,12 @@ export function liveHttp(
 			if (got === null) return null;
 			if (got === 'not-modified') return { status: 'not-modified' };
 			return { status: 'ok', text: new TextDecoder().decode(got.bytes), etag: kept(got.headers.get('etag')), lastModified: kept(got.headers.get('last-modified')) };
+		},
+		rangeConditional: async (url, start, end, etag) => {
+			const got = await get(url, { range: `bytes=${start}-${end}`, 'if-none-match': etag });
+			if (got === null) return null;
+			if (got === 'not-modified') return { status: 'not-modified' };
+			return { status: 'ok', bytes: got.whole ? got.bytes.subarray(start, end + 1) : got.bytes, tag: got.tag };
 		}
 	};
 }

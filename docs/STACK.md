@@ -41,6 +41,12 @@ sides share.
   with `FEED_SOURCE=fixtures`, the synthetic series under `fixtures/waterbodies/`
   and the synthetic WOfS scenes of `fixtures/feeds/wofs-sample.json`); off unless
   `DAM_OBSERVATIONS=on`; architecture.md § Dam observations).
+  Observed actual ET (`src/water-use/observed/`): the tick hands each unit's
+  farm parcels (and their cropland) to the fetcher's hourly `et-dekadal`
+  WaPOR pass through the mirror bucket and loads the dekadal means it wrote
+  into `et_observation` (with `FEED_SOURCE=fixtures`, the synthetic dekads of
+  `fixtures/feeds/wapor-sample.json`); off unless `ET_OBSERVATIONS=on`;
+  architecture.md § Observed actual ET).
   Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
   by the tick, each built as its recipient under RLS (Mailpit locally;
   `ALERTS_ENABLED=false` is the kill switch).
@@ -160,6 +166,7 @@ pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LIST
 pnpm dev:jobs:tick          # run every due job once and exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default, no network) and exit
 pnpm dev:dams:run           # dam observations once: match traced dams, both passes, Waterbodies and WOfS (fixtures by default, no network), load (run-locally.md § Dam observations)
+pnpm dev:et:run             # observed actual ET once: each unit's parcels, the WaPOR pass (fixtures by default, no network), load (run-locally.md § Observed actual ET)
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
 pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0|c3s]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
 

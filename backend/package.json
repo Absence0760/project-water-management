@@ -49,7 +49,8 @@
 		"import:soils": "tsx scripts/import-soils.ts",
 		"import:gr4j-donors": "tsx scripts/import-gr4j-donors.ts",
 		"fit-donors": "tsx scripts/fit-donors.ts",
-		"dams:run": "tsx scripts/dams-run.ts"
+		"dams:run": "tsx scripts/dams-run.ts",
+		"et:run": "tsx scripts/et-run.ts"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "0.135.0",

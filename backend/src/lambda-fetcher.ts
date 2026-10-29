@@ -42,6 +42,14 @@
 // into the mirror bucket, for the worker to load into dam_observation, and
 // publishes its heartbeat and recency metrics (DamObservations namespace).
 //
+// A fifth (issue #623): a schedule invokes it with `{"mode":"et-dekadal"}`
+// (ET_DEKADAL_EVENT, infra/et_observations.tf), and it runs the WaPOR pass
+// (water-use/observed/pass.ts): it reads the wanted list the worker wrote
+// (et/wanted.json), averages FAO's dekadal actual ET over each unit's
+// parcels, writes et/wapor/<unitKey>.json and the status into the mirror
+// bucket for the worker to load into et_observation, and publishes its
+// heartbeat and recency (EtObservations namespace).
+//
 // CHC's request slot (feeds/hostSlot.ts): every path here that asks CHC
 // (a CHIRPS or CHIRPS-GEFS fetch request, the daily preliminary pass, the
 // GEFS pass) first takes the one slot it shares with the Python mirror-ingest
@@ -660,14 +668,90 @@ async function damsWeekly(context?: Pick<Context, 'getRemainingTimeInMillis'>): 
 	return answer;
 }
 
+// --- Observed actual ET (issue #623) --------------------------------------------------------
+
+/** The scheduled event that runs the WaPOR pass (infra/et_observations.tf, the et-dekadal rule's input). */
+export const ET_DEKADAL_EVENT = { mode: 'et-dekadal' } as const;
+export type EtDekadalEvent = typeof ET_DEKADAL_EVENT;
+
+/** Whether `event` is the ET pass's scheduled event. */
+export function isEtDekadalEvent(event: unknown): event is EtDekadalEvent {
+	return typeof event === 'object' && event !== null && !Array.isArray(event) && !('Records' in event) && (event as { mode?: unknown }).mode === ET_DEKADAL_EVENT.mode;
+}
+
+/** What an et-dekadal invocation answers (counts only, never a unit). */
+export interface EtDekadalAnswer {
+	written: number;
+	failed: number;
+	unobservable: number;
+	filesRead: number;
+	filesChanged: number;
+	notModified: number;
+	recencyDays: number | null;
+	stopped: string;
+}
+
+/**
+ * One run of the WaPOR pass: its heartbeat and recency whatever it read,
+ * then its stop (an HTTP 403, 429/503) as the error, not retried
+ * (et_observations.tf: the next run tries again, and a stopped source is
+ * paused for a day or its Retry-After, with no heartbeat, so the heartbeat
+ * alarm fires).
+ */
+async function etDekadal(context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<EtDekadalAnswer> {
+	const { runWaporPass, REQUEST_INTERVAL_MS } = await import('./water-use/observed/pass.js');
+	const { etPassMetricLine, etStore } = await import('./water-use/observed/handover.js');
+	const started = Date.now();
+	const budget = context ? context.getRemainingTimeInMillis() - DAILY_SAVE_MARGIN_MS : DEFAULT_BUDGET_MS;
+	const mode = feedSourceMode();
+	const r = await runWaporPass({
+		store: etStore(),
+		http: await feedHttp(mode),
+		today: utcToday(),
+		deadline: started + budget,
+		intervalMs: mode === 'live' ? REQUEST_INTERVAL_MS : 0
+	});
+	const answer: EtDekadalAnswer = {
+		written: r.written.length,
+		failed: r.failures.length,
+		unobservable: r.unobservable,
+		filesRead: r.filesRead,
+		filesChanged: r.filesChanged,
+		notModified: r.notModified,
+		recencyDays: r.recencyDays,
+		stopped: r.stopped
+	};
+	if (r.stopped === 'paused') {
+		// Nothing asked and no heartbeat: the alarm is the alert (handover.ts pausedUntil).
+		logEvent('warn', { event: 'et_pass', source: 'wapor', stopped: 'paused', pausedUntil: r.pausedUntil ?? null, ms: Date.now() - started });
+		return answer;
+	}
+	emitMetricLine(etPassMetricLine('wapor', r.recencyDays));
+	const message = r.error !== null ? feedErrorMessage(r.error) : null;
+	// Counts and reason codes, never a unit or an upstream body.
+	logEvent(message !== null ? 'error' : r.failures.length ? 'warn' : 'info', {
+		event: 'et_pass',
+		source: 'wapor',
+		...answer,
+		failedCodes: [...new Set(r.failures.map((f) => f.code))],
+		changedMidRead: r.changedMidRead,
+		requests: r.requests,
+		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
+		ms: Date.now() - started
+	});
+	if (r.error !== null) throw r.error;
+	return answer;
+}
+
 export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse>;
 export async function handler(event: DailyIngestEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer>;
 export async function handler(event: DwsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DwsWeeklyAnswer>;
 export async function handler(event: DamsWeeklyEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<DamsWeeklyAnswer>;
+export async function handler(event: EtDekadalEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<EtDekadalAnswer>;
 export async function handler(
-	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent | DamsWeeklyEvent,
+	event: SQSEvent | DailyIngestEvent | DwsWeeklyEvent | DamsWeeklyEvent | EtDekadalEvent,
 	context?: Pick<Context, 'getRemainingTimeInMillis'>
-): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer> {
+): Promise<SQSBatchResponse | DailyIngestAnswer | GefsIngestAnswer | IndicesIngestAnswer | DwsWeeklyAnswer | DamsWeeklyAnswer | EtDekadalAnswer> {
 	if (isDailyIngestEvent(event)) {
 		// The indices pass reads CPC (NOAA), not CHC, so it takes no CHC slot.
 		if (isIndicesPass(event)) return indicesIngest();
@@ -677,10 +761,11 @@ export async function handler(
 	}
 	if (isDwsWeeklyEvent(event)) return dwsWeekly(context);
 	if (isDamsWeeklyEvent(event)) return damsWeekly(context);
+	if (isEtDekadalEvent(event)) return etDekadal(context);
 	if (!Array.isArray((event as SQSEvent | undefined)?.Records)) {
 		// No mode: nothing to answer, and a retry can't help. Fail loudly (the Errors alarm), naming no payload.
 		logEvent('error', { event: 'fetcher_event_unknown' });
-		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch, {"mode":"daily-ingest"}, {"mode":"dws-weekly"} or {"mode":"dams-weekly"})');
+		throw new Error('the fetcher was invoked with an event it does not know (expected an SQS batch, {"mode":"daily-ingest"}, {"mode":"dws-weekly"}, {"mode":"dams-weekly"} or {"mode":"et-dekadal"})');
 	}
 	return fetchBatch(event as SQSEvent, context);
 }

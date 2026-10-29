@@ -1284,7 +1284,7 @@ run "climate_indices_on" {
   }
   assert {
     condition = alltrue([
-      for r in [aws_cloudwatch_event_rule.daily_ingest, aws_cloudwatch_event_rule.gefs_ingest, aws_cloudwatch_event_rule.dws_weekly, aws_cloudwatch_event_rule.dams_weekly] :
+      for r in [aws_cloudwatch_event_rule.daily_ingest, aws_cloudwatch_event_rule.gefs_ingest, aws_cloudwatch_event_rule.dws_weekly, aws_cloudwatch_event_rule.dams_weekly, aws_cloudwatch_event_rule.et_dekadal] :
       r.schedule_expression != aws_cloudwatch_event_rule.indices_ingest.schedule_expression
     ])
     error_message = "The indices pass runs at its own time, not on another fetcher pass's schedule."

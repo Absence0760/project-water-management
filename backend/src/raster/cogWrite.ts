@@ -9,7 +9,11 @@
 // GDAL scale and offset, and tile tables placed past the header read. The
 // fixture sources (dams/observed/wofs/fixtures.ts) serve scenes made here,
 // and cog.test.ts round-trips the reader through it, so the reader is
-// exercised on the layout it meets in production. Also writes the legal
+// exercised on the layout it meets in production. A continental grid (the
+// WaPOR fixture's, water-use/observed/fixtures.ts) is written from
+// `tileValues` instead of `values`: each tile made when written, a null one
+// empty (GDAL's SPARSE_OK), so a grid of tens of thousands of tiles costs
+// only the few that hold data. Also writes the legal
 // variants the reader must still read (big-endian, no compression, no
 // predictor, an empty tile, PixelIsPoint) and, through `override`, the ones
 // it must refuse.
@@ -51,6 +55,14 @@ export interface CogSpec {
 	/** Replace GeoKeys (key → value), or drop one (null). */
 	geoKeys?: Record<number, number | null>;
 }
+
+/** A grid written from its tiles instead of its samples (see the header): for a large grid that is mostly empty. */
+export type LazyCogSpec = Omit<CogSpec, 'values'> & {
+	values?: undefined;
+	/** Tile `i`'s samples (row-major tile indices, each `tile × tile`, edge tiles padded), or null for an empty tile. */
+	tileValues: (i: number) => Samples | null;
+	sampleType: SampleType;
+};
 
 const TYPE_SIZE: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 12: 8, 16: 8 };
 
@@ -101,11 +113,20 @@ function tileBytes(t: Samples, type: SampleType, tile: number, predictor: 1 | 2 
 }
 
 /** The scene's tiles, each `tile × tile` (edge tiles padded with no-data), as stored before compression. */
-function tilesOf(spec: CogSpec, type: SampleType, tile: number, pad: number, predictor: 1 | 2 | 3, le: boolean): Uint8Array[] {
+function tilesOf(spec: CogSpec | LazyCogSpec, type: SampleType, tile: number, pad: number, predictor: 1 | 2 | 3, le: boolean): (Uint8Array | null)[] {
 	const across = Math.ceil(spec.width / tile);
 	const down = Math.ceil(spec.height / tile);
-	const Ctor = spec.values.constructor as new (n: number) => Samples;
-	const out: Uint8Array[] = [];
+	const out: (Uint8Array | null)[] = [];
+	if ('tileValues' in spec && spec.tileValues) {
+		for (let i = 0; i < across * down; i++) {
+			const t = spec.tileValues(i);
+			if (t !== null && (t.length !== tile * tile || sampleTypeOf(t) !== type)) throw new RangeError(`tile ${i} is not ${tile} × ${tile} ${type} samples`);
+			out.push(t === null ? null : tileBytes(t, type, tile, predictor, le));
+		}
+		return out;
+	}
+	const values = spec.values!;
+	const Ctor = values.constructor as new (n: number) => Samples;
 	for (let tr = 0; tr < down; tr++) {
 		for (let tc = 0; tc < across; tc++) {
 			const t = new Ctor(tile * tile).fill(pad);
@@ -114,7 +135,7 @@ function tilesOf(spec: CogSpec, type: SampleType, tile: number, pad: number, pre
 				if (y >= spec.height) break;
 				const x0 = tc * tile;
 				const n = Math.min(tile, spec.width - x0);
-				(t as Uint8Array).set((spec.values as Uint8Array).subarray(y * spec.width + x0, y * spec.width + x0 + n), r * tile);
+				(t as Uint8Array).set((values as Uint8Array).subarray(y * spec.width + x0, y * spec.width + x0 + n), r * tile);
 			}
 			out.push(tileBytes(t, type, tile, predictor, le));
 		}
@@ -122,9 +143,10 @@ function tilesOf(spec: CogSpec, type: SampleType, tile: number, pad: number, pre
 	return out;
 }
 
-export function writeCog(spec: CogSpec): Uint8Array {
-	if (spec.values.length !== spec.width * spec.height) throw new RangeError('values must hold width × height samples');
-	const type = sampleTypeOf(spec.values);
+export function writeCog(spec: CogSpec | LazyCogSpec): Uint8Array {
+	if (spec.values ? 'tileValues' in spec : !('tileValues' in spec)) throw new RangeError('give values, or tileValues with a sampleType');
+	if (spec.values && spec.values.length !== spec.width * spec.height) throw new RangeError('values must hold width × height samples');
+	const type = spec.values ? sampleTypeOf(spec.values) : (spec as LazyCogSpec).sampleType;
 	const tile = spec.tile ?? 512;
 	const size = spec.pixelSize ?? 30;
 	const compression = spec.compression ?? 8;
@@ -136,7 +158,7 @@ export function writeCog(spec: CogSpec): Uint8Array {
 	const pad = nodata === null || /nan/i.test(nodata) ? (type === 'float32' && nodata !== null ? Number.NaN : 0) : Number(nodata);
 	const raw = tilesOf(spec, type, tile, pad, predictor, le);
 	const compress = (t: Uint8Array) => (compression === 8 ? new Uint8Array(deflateSync(t)) : compression === 5 ? lzwEncode(t) : t);
-	const stored = raw.map((t, i) => (sparse.has(i) ? new Uint8Array(0) : compress(t)));
+	const stored = raw.map((t, i) => (t === null || sparse.has(i) ? new Uint8Array(0) : compress(t)));
 
 	const geographic = spec.epsg === 4326;
 	const keys: Record<number, number> = geographic
@@ -152,8 +174,9 @@ export function writeCog(spec: CogSpec): Uint8Array {
 	const tableType = big ? 16 : 4;
 
 	const tags: Record<number, [number, number[]]> = {
-		256: [3, [spec.width]],
-		257: [3, [spec.height]],
+		// SHORT, or LONG past 65 535 (a continental grid: WaPOR's is 368 640 wide).
+		256: [spec.width > 0xffff ? 4 : 3, [spec.width]],
+		257: [spec.height > 0xffff ? 4 : 3, [spec.height]],
 		258: [3, [FORM[type].bits]],
 		259: [3, [compression]],
 		262: [3, [1]],

@@ -205,6 +205,9 @@ resource "aws_lambda_function" "worker" {
         # The dams tick (issue #604 R5, dam_observations.tf): matches traced dams,
         # writes dams/wanted.json and loads what the passes fetched.
         DAM_OBSERVATIONS = var.dam_observations_enabled ? "on" : "off"
+        # The observed ET tick (issue #623, et_observations.tf): writes
+        # et/wanted.json and loads what the WaPOR pass fetched.
+        ET_OBSERVATIONS = var.et_observations_enabled ? "on" : "off"
         # Server-side reports (reports.tf): no Chromium here, so renders go to
         # the renderer; the worker records them and emails the link (SES).
         REPORT_RENDERER           = "sqs"

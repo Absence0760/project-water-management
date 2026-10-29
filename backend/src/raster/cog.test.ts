@@ -372,3 +372,25 @@ describe('isUtmEpsg', () => {
 		expect([32600, 32661, 32700, 32761, 4326, 3857, 2048].some(isUtmEpsg)).toBe(false);
 	});
 });
+
+describe('writeCog from tiles (a continental grid that is mostly empty)', () => {
+	it('writes only the tiles given, every other one empty, and reads back as the same grid', async () => {
+		// 8 × 4 tiles of 16; only tile 9 (row 1, column 1) holds data.
+		const tileValues = (i: number) => (i === 9 ? Int16Array.from({ length: 256 }, (_, k) => k - 100) : null);
+		const bytes = writeCog({ width: 128, height: 64, sampleType: 'int16', tileValues, epsg: 4326, originX: 20, originY: -30, pixelSize: 1 / 1024, tile: 16, compression: 5, nodata: '-9999', bigTiff: true });
+		const { read } = reader(bytes);
+		const cog = (await openCog(read, { sampleTypes: ['int16'], crs: ['geographic'] }))!;
+		expect(cog).toMatchObject({ bigTiff: true, compression: 5, tilesAcross: 8, tilesDown: 4, nodata: -9999 });
+		expect(await cog.tile(0)).toEqual({ offset: 0, bytes: 0 });
+		const got = await readWindow(read, cog, { col0: 15, row0: 15, col1: 17, row1: 16 });
+		// Row 15 is the first tile row's (empty); on row 16, column 15 is tile 8's (empty) and 16–17 tile 9's first samples.
+		expect(Array.from(got)).toEqual([-9999, -9999, -9999, -9999, -100, -99]);
+		expect(() => writeCog({ width: 16, height: 16, sampleType: 'int16', tileValues: () => new Int16Array(4), epsg: 4326, originX: 0, originY: 0, tile: 16 })).toThrow(RangeError);
+	});
+
+	it('writes a width past 65 535 as a LONG, which reads back', async () => {
+		const bytes = writeCog({ width: 70_000, height: 16, sampleType: 'int16', tileValues: () => null, epsg: 4326, originX: -30, originY: 40, pixelSize: 1 / 1024, tile: 512, nodata: '-9999', bigTiff: true });
+		const cog = (await openCog(reader(bytes).read, { sampleTypes: ['int16'], crs: ['geographic'] }))!;
+		expect(cog).toMatchObject({ width: 70_000, height: 16, tilesAcross: 137 });
+	});
+});

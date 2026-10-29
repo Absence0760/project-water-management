@@ -78,7 +78,7 @@ Every job that fetches from an upstream:
 | [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `sum.ts`), `backend/src/raster/` (`cog.ts`, `mask.ts`, `utm.ts`) |
 | [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | built, off by default (#624 step 4: the pass, behind `DAM_OBSERVATIONS_S2` / `dam_s2_enabled`; not shown on a screen yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s2.ts`, `pass.ts`); `wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`) |
 | [deafrica-sentinel-1](#deafrica-sentinel-1) | DE Africa Sentinel-1 RTC (`s1_rtc`), radar water as a secondary dam observation (issue #624) | planned (#624; registered, the hosts allowed, `dam_observation` source `s1`; no pass reads it yet) | `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/wofs/stac.ts` (`assetUrl`, `s1_rtc`); #624 `sentinel/s1.ts` |
-| [wapor-aeti](#wapor-aeti) | FAO WaPOR v3 `L2-AETI-D`, dekadal actual ET and interception at 100 m (a unit's observed water use, issue #623) | planned (#623); blocked in production until FAO's reply is recorded on #618 (step 8a) | `storage.googleapis.com` (bucket `fao-gismgr-wapor-3-data` only) | – | `backend/src/water-use/observed/` (`upstream.ts`; the pass is #623 step 4) |
+| [wapor-aeti](#wapor-aeti) | FAO WaPOR v3 `L2-AETI-D`, dekadal actual ET and interception at 100 m (a unit's observed water use, issue #623) | built, off (`et_observations_enabled`); blocked in production until FAO's reply is recorded on #618 (step 8a) | `storage.googleapis.com` (bucket `fao-gismgr-wapor-3-data` only) | – | `backend/src/water-use/observed/` (`wapor.ts`, `pass.ts`; the comparison is #623 step 5) |
 | [ssebop-eta](#ssebop-eta) | USGS FEWS NET SSEBop v6.1 global dekadal actual ET at 1 km (WaPOR's fallback, issue #623) | planned (#623 step 6, only if FAO declines or as a second opinion) | `edcintl.cr.usgs.gov` (the `…/global/dekadal/etav61/` tree only) | – | `backend/src/water-use/observed/upstream.ts` |
 | [dynamical](#dynamical) | dynamical.org's copy of CHIRPS v3 | planned R3-E (verification only) | `s3://dynamical-ucsb-chc-chirps` (us-west-2) | – | R3 `ingest/verify_copy.py` |
 | [dpet](#dpet) | dPET daily potential evapotranspiration | reference load | `data.bris.ac.uk` | – | `bin/evaporation-fetch.sh`, `pnpm import:evaporation` |
@@ -512,9 +512,10 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 ## Observed actual evapotranspiration
 
 Satellite actual ET (ETa) over each unit's farm parcels, an independent
-check on its modelled irrigation use (issue #623). Planned: the store
-(`et_observation`, migration 276) is built; the fetcher's `et-dekadal` mode,
-the handover and the comparison are #623's later steps. It follows the dam
+check on its modelled irrigation use (issue #623). Built for WaPOR: the store
+(`et_observation`, migration 276), the fetcher's `et-dekadal` mode, the
+handover and the worker's tick (step 4, [architecture.md § Observed actual
+ET](./architecture.md#observed-actual-et)); the comparison is step 5. It follows the dam
 observations' pattern: out of the VPC, through the mirror bucket, loaded by
 the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
 `et_observations_enabled`), and dev, CI and e2e read a synthetic file only.
@@ -557,28 +558,33 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
   value shows: the unit drawer's panel, reports, CSVs, and `/data-sources`.
 - **Contact:** FAO's WaPOR team, through the WaPOR portal's contact (the
   address #618 step 8a writes to).
-- **Access pattern** (#623 step 4): never a whole file. Per unit with
+- **Access pattern** (`water-use/observed/pass.ts`): never a whole file. Per unit with
   parcels and per dekad, the BigTIFF header, the slice of the TileOffsets
   and TileByteCounts arrays for the tile rows under the parcels' bounding
-  box (not the whole ~2.8 MB array), then those tiles: about 3–6 range
-  requests. Conditional on the ETag; a changed ETag on a dekad already read
-  (FAO rewrites files: `updated` 2026-05 on 2025 files) means a re-read and
-  a new revision of that dekad's rows. Only units with parcels are read.
+  box (not the whole ~2.8 MB array), then those tiles: the header once a
+  dekad, then about 3 range requests a unit. Each file's ETag is checked
+  again 30 days after it was read, by a conditional GET of the header (a 304
+  costs one request); a changed ETag on a dekad already read (FAO rewrites
+  files: `updated` 2026-05 on 2025 files) means a re-read and a new revision
+  of that dekad's rows. Only units with parcels are read. The band scale
+  must read 0.1 with no offset, or the file is refused.
 - **Limits we keep to:** one request a second, one connection;
   feeds/http.ts's User-Agent, host and path allowlist, 20 s timeout and
   4 MB cap per response; a 403 stops the pass, never retried, and a
   429/503 pauses the host for its `Retry-After`.
 - **Freshness:** a dekad appears about 3 days after it ends (2026-10-D2 was
-  written 2026-10-23, checked 2026-10-29). The pass's heartbeat and recency
-  alarms come with #623 step 4.
+  written 2026-10-23, checked 2026-10-29). The pass's heartbeat
+  (`EtPassCompleted`, 18 h) and recency (`EtObservationAgeDays`, 30 days)
+  alarms treat missing data as breaching (`infra/et_observations.tf`).
 - **Rows kept:** per unit and dekad, the area-weighted mean ETa (mm/day)
   over the unit's parcels (∩ WorldCover cropland where loaded, else the
   whole parcel, labelled), and the share of the area with a valid pixel
   ([data-model.md § Observed actual ET](./data-model.md#observed-actual-et)).
 - **Fallback:** [ssebop-eta](#ssebop-eta). The values already loaded stay.
 - **Offline:** `FEED_SOURCE=fixtures` serves a synthetic BigTIFF over the
-  seeded examples' parcels (#623 step 4), so dev, CI and e2e never reach
-  the host.
+  seeded examples' parcels (`water-use/observed/fixtures.ts`,
+  `fixtures/feeds/wapor-sample.json`), so dev, CI and e2e never reach the
+  host.
 - **Owner:** the operator; code `backend/src/water-use/observed/`.
 
 ### ssebop-eta

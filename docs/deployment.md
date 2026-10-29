@@ -2713,6 +2713,77 @@ v0.0.3, historical extent (CC BY 4.0)"). The file is capped at 64 MB
 replaces the dataset and makes the worker match every dam again on its
 next ticks (200 a tick).
 
+## Observed actual ET
+
+FAO WaPOR v3's dekadal actual ET over each unit's farm parcels, into
+`et_observation` (issue #623 step 4; the flow:
+[architecture.md § Observed actual ET](./architecture.md#observed-actual-et);
+the tables: [data-model.md § Observed actual ET](./data-model.md#observed-actual-et-276_et_observationsql);
+the source: [data-sources.md § wapor-aeti](./data-sources.md#wapor-aeti)).
+Off by default, and **not to be enabled until FAO's reply on WaPOR's licence
+is recorded on issue #618 (step 8a)**: the terms read 2026-10-27 point to
+CC BY 4.0, but other labels exist and the terms bar use "in conjunction with
+the promotion of a commercial enterprise", so the reply is the operator's
+go/no-go.
+
+- **`et_observations_enabled`** (default `false`, `infra/et_observations.tf`)
+  turns on the `water-management-et-dekadal` EventBridge rule (hourly at
+  :50, `{"mode":"et-dekadal"}` to the fetcher, never retried: the newest
+  dekads first, then the history back to 2018, each file's ETag re-checked
+  30 days after it was read; a run with nothing due asks FAO nothing and
+  still publishes the heartbeat and recency), the fetcher's get and put on
+  `et/` in the mirror bucket (`et-handover`), the worker's put of
+  `et/wanted.json` (`et-wanted-list`, and `WorkerWritesEtWantedList` on the
+  S3 interface endpoint, `infra/packs.tf`), the worker's `ET_OBSERVATIONS`
+  (`infra/jobs.tf`), and the alarms (essential tier):
+  - `water-management-et-pass-wapor`: `EtPassCompleted{Source=wapor}`
+    (namespace `water-management/EtObservations`) under 1 for 18 hours
+    (three 6-hour periods), or missing (breaching): the pass stopped
+    running, fails before it ends, or is paused after a refusal (below).
+  - `water-management-et-recency-wapor`: `EtObservationAgeDays{Source=wapor}`
+    above `et_recency_alarm_days` for two days, or missing: no unit holds a
+    dekad that recent.
+- **`et_recency_alarm_days`** (default 30, at least 20: a healthy copy runs
+  up to ~14 days behind, the dekad's length plus FAO's ~3-day lag).
+
+The plan refuses the flag (`terraform_data.et_observations_gate`) if the
+worker Lambda's environment ever lacks `ET_OBSERVATIONS = "on"`, since
+without it the worker never writes the wanted list nor loads what the pass
+fetches, while the heartbeat stays green.
+
+### Turning it on
+
+1. Record FAO's reply on #618 (step 8a), and re-read `L2-AETI-D`'s metadata
+   in FAO's GISMGR catalogue for a licence of its own (data-sources.md).
+   Before the first run, read one real dekad's header (a few range requests,
+   no data kept) and confirm what the reader expects: BigTIFF, LZW, int16,
+   EPSG:4326 at 1/1024°, nodata −9999 and GDAL's band scale 0.1 with no
+   offset. The pass refuses a file without that scale (`format` in the
+   log's `failedCodes`) rather than guess the units (docs/followups.md §
+   Future climate, observed ET and Sentinel dam views).
+2. Deploy a backend release with migrations 276 and 280 and the
+   `et-dekadal` mode, then apply `et_observations_enabled = true` (a
+   `terraform plan` first, and the operator's go-ahead for the apply), once
+   at least one unit has farm parcels on a project's map: with none, the
+   pass holds no dekad and its recency alarm fires. The first worker tick
+   writes `et/wanted.json`; the next hourly run (at :50) reads the newest
+   dekads for every unit, the runs after it the history (a few hours of
+   runs at one request a second), and each tick after loads what came in.
+   Check: Logs Insights on the fetcher log group, `filter message.event =
+   "et_pass"`, then `filter message.event = "et_tick"` on the worker's.
+
+**When the ET heartbeat alarm fires.** Logs Insights on the fetcher log
+group: `filter message.event = "et_pass"`, newest first. `message.stopped`
+`paused` (with `message.pausedUntil`) means an earlier run met HTTP 403
+(`refused`) or throttling (`throttled`) from FAO's bucket and stopped on
+purpose; the pass asks nothing and publishes no heartbeat for 24 hours from
+the stop, or a longer `Retry-After`, then asks again by itself. A 403 from
+`storage.googleapis.com` is a block or a policy change on FAO's bucket: ask
+FAO (data-sources.md has the contact) and, until they answer, set
+`et_observations_enabled = false`. No `et_pass` line at all: the runs
+stopped or fail before the pass completes. The app keeps the observations
+it holds throughout.
+
 ## Climate indices
 
 NOAA CPC's ONI and AAO in the data mirror's `indices/`, which an outlook

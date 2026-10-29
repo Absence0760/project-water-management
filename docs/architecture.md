@@ -2406,6 +2406,111 @@ unit drawer ──► GET …/nodes/:nodeId/et-observed ──► withUser:
    ──► compareEt (pure) ──► dekads, half water years, summary, credit
 ```
 
+### Observed actual ET
+
+FAO WaPOR v3's dekadal actual evapotranspiration (ETa) averaged over each
+unit's farm parcels (issue #623 step 4), in our own store, `et_observation`
+(276, [data-model.md § Observed actual ET](./data-model.md#observed-actual-et-276_et_observationsql)):
+the independent check on a unit's modelled irrigation use (the comparison
+is #623 step 5). The dam observations' pattern, end to end. Off until
+`et_observations_enabled` (Terraform) and `ET_OBSERVATIONS=on` (the worker);
+the plan refuses the first without the second (`infra/et_observations.tf`'s
+gate), and WaPOR stays off in production until FAO's reply on its licence is
+recorded on #618 (step 8a; [data-sources.md § wapor-aeti](./data-sources.md#wapor-aeti)).
+
+```
+worker tick (ET_OBSERVATIONS=on, no user; water-use/observed/tick.ts):
+   app_et_units('wapor')      every unit with farm parcels: its polygons, when they last changed (280)
+   app_et_cropland(box)       the default land cover's cropland cells under each unit (280; kept per unit an hour)
+   put   et/wanted.json       { units: [{ unitKey (node id), parcels (one MultiPolygon), changedAt, cropland? }] }
+
+EventBridge, hourly at :50 ──► fetcher, {"mode":"et-dekadal"} (outside the VPC; water-use/observed/pass.ts)
+   per dekad, newest first back to 2018: the file's header once, then per unit due
+      the slice of its tile tables and the tiles under the unit's parcels' box (raster/cog.ts), 1 request a second
+   writes et/wapor/<unitKey>.json, et/wapor-state.json, et/wapor-status.json
+   EtPassCompleted{Source=wapor} + EtObservationAgeDays{Source=wapor} (EMF)
+
+worker tick: the status, then each unit due by its load mark (≤ 200 a tick, oldest lastGood first)
+   ──► app_et_observation_load ──► et_observation (source wapor)
+   ──► app_et_load_mark_write  ──► et_observation_load_mark
+```
+
+- **Why the fetcher, in Node** (the compute decision, as for WOfS). A
+  WaPOR dekad is one ~2.1 GB BigTIFF COG on EPSG:4326 at 1/1024°, int16 ×
+  0.1 mm/day (GDAL's band scale), nodata −9999, LZW, 512-pixel tiles: the
+  shared reader (`backend/src/raster/cog.ts`, `WAPOR_ACCEPT` in
+  `water-use/observed/wapor.ts`: int16, geographic, the scale read and
+  required to be 0.1 with no offset) reads the header, then only the slice
+  of the ~2.8 MB tile tables for a unit's tile rows, then its tiles. No
+  Python, no GDAL. The worker never reaches FAO's bucket; the fetcher has no
+  database.
+- **What the worker hands over.** Ids and geometry only: a unit's key is its
+  node id, its parcels one MultiPolygon, its land cover a list of
+  `[row, col, share]` cells (the default dataset's, real before synthetic,
+  as the proposals choose; at most 40 000 cells and a 1° box, else none).
+  No name, project or person crosses the bucket. The worker reads the
+  parcels and the cells through `SECURITY DEFINER` functions (280), since it
+  runs with no user and both tables' policies need one. The list is written
+  only once every unit's cells are known (at most 500 lookups a tick, kept an
+  hour per unit), so a cold worker never hands over a partial list; a unit
+  whose parcels pass 200 000 vertices or 1000 polygons is left out
+  (`tooLarge`, logged as a count).
+- **A unit's mean** (`wapor.ts`): the pixels whose centres fall inside the
+  parcels (`raster/mask.ts`, a pixel two parcels share counted once), each
+  weighted by the cropland share of the land-cover cell its centre is in
+  (`mask: 'cropland'`, the parcels ∩ cropland, assuming the cropland spread
+  evenly in each cell, as the planted-area proposals assume), or by 1 where
+  no land cover is loaded or it maps no cropland under the parcels
+  (`mask: 'parcel'`, the whole parcels, labelled). `area_m2` is the summed
+  weights × the pixel's ground area on the ellipsoid; `valid_share` the
+  weight of pixels that aren't nodata and read 0–50 mm/day, over all;
+  `eta_mm_day` the weighted mean over those (0, meaning nothing, when the
+  valid share is 0). A unit no pixel centre falls in, or too large for one
+  window, is noted unobservable (`no_pixels`, `too_large`) and not read
+  again until its parcels change.
+- **The pass** (`pass.ts`). The dekads go newest first, from the last one
+  that has ended back to 2018, so every unit is current before time goes on
+  history; a first backfill (~300 dekads, about four requests a unit a
+  dekad) runs over a few hours of hourly runs, each going on below where the
+  last stopped, since a dekad every unit holds costs nothing. A unit is read
+  for a dekad when its file has no row for it, or its row came from another
+  version of the file. A 404 for a dekad that ended in the last 30 days isn't
+  published yet (asked next run); an older one is noted missing.
+  - **Rewrites** (FAO rewrote 2025's files in 2026-05): each file's ETag is
+    kept in `et/wapor-state.json` and checked again 30 days after it was
+    read (`RECHECK_DAYS`), by a conditional GET of the header (Range with
+    If-None-Match; feeds/http.ts `rangeConditional`): a 304 costs one
+    request; a new ETag re-reads every unit's row of that dekad, and the
+    loader revises them (`revision` + 1). Every read of one file must carry
+    the header's ETag: a response with another (rewritten mid-read) abandons
+    that dekad for the run, nothing kept from it.
+  - **A unit whose parcels or cropland changed** (its hash in the state
+    differs) starts again from scratch. One whose list changed only in
+    `generatedAt` (its parcels changed back to the same shape) has its file
+    rewritten with the new `parcelsAt` and no request: the loader takes
+    `parcelsAt` as the fetch time and refuses a file made from parcels older
+    than their last change (276's trigger dropped the unit's rows and
+    cleared its marks at that change).
+  - **Politeness**: one request a second, one in flight, the live client's
+    host and path allowlist; a 403 or throttling stops the pass (the status
+    says stopped and why, the invocation fails), and the pass then asks
+    nothing for 24 hours or a longer `Retry-After`, publishing no heartbeat,
+    so the heartbeat alarm is the alert (the dams' `pausedUntil`). A file the
+    reader refuses, or a timeout, ends that unit's read of that dekad
+    (counted with a code, `failedCodes` in the log); the next run tries again.
+  - **Locally** (`FEED_SOURCE=fixtures`) the files come from
+    `water-use/observed/fixtures.ts` and `backend/fixtures/feeds/wapor-sample.json`:
+    a grid laid out like FAO's (its tile tables as long as a continental
+    grid's) with data only in the tiles under the seeded examples' synthetic
+    catchments, half a year of dekads, a seasonal ETa field and cloud on
+    some dekads, written by `raster/cogWrite.ts` (`tileValues`, so the empty
+    tiles cost nothing), so the production reader runs offline.
+    `pnpm dev:et:run` runs it end to end ([run-locally.md § Observed actual ET](./run-locally.md#observed-actual-et)).
+- **The tick** loads a unit's file when its status `lastGood` is newer than
+  its load mark's and its `fetchedAt` newer than the mark's: a restarted
+  worker repeats nothing. A refused file (`refused`, its parcels changed
+  since) is marked and waits for the pass's rewrite.
+
 ## Server-side reports
 
 The printable report ([ui.md § Report](./ui.md#report)) rendered to a PDF on
