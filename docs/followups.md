@@ -616,13 +616,15 @@ open:
 
 ## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
 
-Rounds 1 and 2 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
-op and the CMIP6 ingest; #623's register rows and `et_observation` (277);
-#624's register rows and the `s2`/`s1` sources (278); and the shared COG
-reader (`backend/src/raster/`). The rest of each issue's plan stays on the
-issue. Found while building, and open:
+Rounds 1 to 3 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
+op, the CMIP6 ingest, § 8 Future yield and the Scenarios tab's future climate
+picker (282); #623's register rows, `et_observation` (277) and the WaPOR pass;
+#624's register rows, the `s2`/`s1` sources (278), the Sentinel-2 and
+Sentinel-1 passes and Sentinel-2 wet days in evidence packs (`evidence-24`);
+and the shared COG reader (`backend/src/raster/`). The rest of each issue's
+plan stays on the issue. Found while building:
 
-- [ ] **Sensitivity may double-count rain under per-unit station rain
+- [x] **Sensitivity may double-count rain under per-unit station rain
       (unconfirmed).** `packages/engine/src/uncertainty/sensitivity.ts`
       scales a station's record and the unit's MAP but not the station's own
       MAP, so a unit levelled to its station by MAP ratio (§2.4i) may see the
@@ -631,11 +633,13 @@ issue. Found while building, and open:
       with `climate.delta` (which scales every MAP by one factor, §2.17); fix
       sensitivity to scale MAPs the same way if they differ, with an
       `ENGINE_VERSION` bump. Trigger: the next engine round.
+      **Refuted (round 3, O):** sensitivity never scaled a station's record; the real defect was an under-count for catchment stations, fixed as ER-31 in engine 1.108.0 (the rain factor now moves every rain record and MAP, as `climate.delta` does).
 - [ ] **Check the COG reader against real headers.** `raster/cog.ts`'s
       BigTIFF, LZW, 16-bit predictor 2 and float predictor 3 paths are tested
       only against our own `cogWrite.ts`. Durable fix: read one real WaPOR
-      `L2-AETI-D` header and one Sentinel-1 RTC header (a few range requests,
-      no data kept), and commit a synthetic fixture with the same tag layout.
+      `L2-AETI-D` header and one Sentinel-1 RTC VV and MASK header (a few range
+      requests, no data kept; S1's format so far comes from STAC metadata and
+      the spec page only), and commit a synthetic fixture with the same tag layout.
       Trigger: #623 step 4 or #624 step 4, before either source is enabled.
 - [ ] **List the NEX-GDDP-CMIP6 bucket before the copy.** No session has
       listed `s3://nex-gddp-cmip6`, so the key layout, version suffixes, each
@@ -653,13 +657,14 @@ issue. Found while building, and open:
       current tech note, quote its engineering-use caveat word for word in
       that constant and in data-sources.md, with the URL and the date read.
       Trigger: before `FUTURE_YIELD=on` in production.
-- [ ] **§ 8 has no Run button.** The future yield is queued by
+- [x] **§ 8 has no Run button.** The future yield is queued by
       `POST /projects/:id/runs/:runId/future-yield` (an editor); the
       evidence report's § 8 says *Not assessed* until then but offers no
       control, and shows no job progress. Durable fix: a Run button and the
       job's state in § 8 of the draft report (EvidencePage.svelte, editors
       only, not on a frozen pack), with an e2e. Trigger: #621 round 3, beside
       the Scenarios tab picker.
+      **Done (round 3, M):** `FutureYieldRun.svelte`, with the job's state from `GET …/future-yield`.
 - [ ] **FUTURE_YIELD isn't in Terraform.** Production stays off by
       default. Durable fix: a `future_yield_enabled` variable setting
       `FUTURE_YIELD` on the API and worker Lambdas (deployment.md
@@ -677,39 +682,88 @@ issue. Found while building, and open:
       how they read the "promotion of a commercial enterprise" clause; the
       answer goes on #618 and the register row. Trigger: before
       `et_observations_enabled = true` with WaPOR.
-- [ ] **A refused WaPOR file is asked for again every hour.** `water-use/observed/pass.ts`
+- [x] **A refused WaPOR file is asked for again every hour.** `water-use/observed/pass.ts`
       re-requests a dekad file the reader refuses on each run (a few requests,
       never stopping). Durable fix: a refused marker with the file's ETag in
       `et/wapor-state.json`, cleared when the ETag changes. Trigger: before
       `et_observations_enabled = true`.
-- [ ] **The ET panel's empty state can't say why.** The route doesn't say
+      **Done (round 3, N):** `refused` / `refusedUnits` marks with the ETag in `et/wapor-state.json`.
+- [x] **The ET panel's empty state can't say why.** The route doesn't say
       whether the feature is off or the unit has no parcels linked, so the
       panel shows one message for both. Durable fix: `enabled` and a parcel
       count in `GET …/nodes/:nodeId/et-observed`, and a message for each.
       Trigger: the next change to the panel.
-- [ ] **No engine test pins the irrigation the ET check reads.** The check takes
+      **Done (round 3, N):** `enabled` and `parcels` in the route, one message per case.
+- [x] **No engine test pins the irrigation the ET check reads.** The check takes
       the irrigation reaching the crop as F·G/D (model.md §2.10o), which
       equals e·G only while `demand` = F/e + Σ object demand. Durable fix: a
       `runModel` test with demand objects, a drought restriction and a short
       dam that asserts it. Trigger: the next engine round.
-- [ ] **SSEBop's dekads show only in the ET panel's CSV.** Each source is
+      **Done (round 3, O):** `run.irrigationReachingCrop.test.ts`; the identity holds.
+- [x] **SSEBop's dekads show only in the ET panel's CSV.** Each source is
       compared on its own, but the panel draws WaPOR only. Durable fix: a
       source switch in the panel. Trigger: #623 step 6.
+      **Done (round 3, N):** a WaPOR / SSEBop switch in the panel.
 - [ ] **Radar moves the dam check's average difference.** S1 views count in
       the bias and the share within ±10 % (never in a flag), and wind makes
       radar read low. Durable fix: an optical-only figure beside the summary
-      (`compare.ts`). Trigger: #624 step 5, when S1 rows exist.
+      (`compare.ts`). Trigger: before `dam_s1_enabled` (S1 rows exist since
+      round 3).
 - [ ] **The chart's hollow points have no unit test.** `hollow` (the radar
       rings) is covered only by `non-text-contrast.spec.ts`. Durable fix: a
       chart unit test for it. Trigger: the next change to the chart.
-- [ ] **SSEBop isn't range-readable.** Each dekad is a ~93 MB zip, not a COG,
+- [x] **SSEBop isn't range-readable.** Each dekad is a ~93 MB zip, not a COG,
       and is far over the fetcher's 4 MB cap. Durable fix: #623 step 6 picks a
       bounded whole-file pass (one file a dekad, clipped at once) or an
       operator reference load. Trigger: FAO declining WaPOR, or the second
       opinion being wanted.
+- [ ] **SSEBop's pass isn't built.** The decision and design are in
+      data-sources.md § ssebop-eta. Durable fix: the bounded whole-file pass
+      as described there (a streamed read capped to SSEBop's prefix, a
+      zip/inflate reader, pass and state, the tick loading `ssebop`, Terraform
+      mode and alarms, a synthetic zip fixture). Trigger: FAO declining WaPOR
+      (#618 8a), or the hydrologist asking for a second opinion.
+- [ ] **A refusal mark on a file with no ETag lasts only until the re-check.**
+      Such a file can't be told from a rewrite, so the 30-day re-check reads
+      it again in full. Durable fix: none while FAO's bucket sends ETags.
+      Trigger: a new ET source.
+- [ ] **Measuring S1 agreement shows radar to users.** One flag both runs the
+      S1 pass and loads `s1` rows, so radar shows on the panel and farm card
+      while it is being measured. Durable fix: a measure-only stage (the
+      fetcher runs the pass and logs `dams_s1_agreement`, the worker skips
+      loading `s1`), then load `s1` only for dams that pass, from
+      `dams/s1-agreement.json` (#624 open question 3). Trigger: before
+      `dam_s1_enabled` in production.
+- [ ] **A dam across a 1° tile edge never gets a clear radar view.** Each
+      tile sees part of it and the pass keeps the better one, so the share
+      seen stays under 90 %. Durable fix: merge same-date views from adjacent
+      tiles before summing. Trigger: the first real dam on a whole-degree
+      line, or a dam whose radar rows are always partial.
+- [ ] **Sentinel-2's § 7 rule and the "Either satellite" order are
+      provisional.** Wet at 8 pixels of 100 m², dry at no water with ≥ 99 %
+      clear; Sentinel-2 before WOfS. Durable fix: the hydrologist confirms or
+      changes them; a change ships as `dam-obs-3` with a new report version.
+      Trigger: before the first issued pack with Sentinel-2 dates.
+- [ ] **Sentinel-1 radar isn't in § 7.** Durable fix: once the agreement
+      report passes the ≥ 85 % bar on real dams, decide whether radar gets a
+      context-only row (a new counting version, report version and
+      `reproduce:pack` check). Trigger: S1 turned on in production.
+- [ ] **The Copernicus credit text is defined twice.** The engine's
+      `SENTINEL_CITATION` and the backend's `dams/observed/upstream.ts`
+      `SENTINEL_ATTRIBUTION`. Durable fix: `upstream.ts` imports the
+      engine's. Trigger: the next change to the credit wording.
+- [ ] **§ 8's Run board has no Cancel.** A real 10-model run is about 40
+      runs. Durable fix: a cancel route for `future_yield` and
+      `climate_factors` jobs through `app_cancel_job`, and a Cancel button on
+      the board. Trigger: before `FUTURE_YIELD=on` in production.
+- [ ] **The future climate picker shows one model at a time.** A hydrologist
+      can't pick a median across models as one scenario. Durable fix: decide
+      with the hydrologist whether a median case belongs in the factor table
+      (an engine method question). Trigger: the hydrologist's screen of the
+      ten models.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
-
+      **Decided (round 3, N):** a bounded whole-file pass (data-sources.md § ssebop-eta); the build is its own item below.
 - [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
       tick sends every pending `pack_notice` (133), `erratum_notice` (153)
       and `alert_delivery` (051) in the shared test database, so a notice
