@@ -32,6 +32,21 @@
 // passes, which have no retry but tomorrow's, wait a little instead
 // (takeHostSlotWaiting). The Python side raises HostBusy.
 //
+// A backfill execution holds the slot for its whole run (ingest/lease.py
+// hold_host_for_backfill, issue #618 step 4): every month of it takes the slot
+// as one owner, keeps it through the pause between months, and the state
+// machine's last step releases it (infra/ingest_backfill.tf). Nothing here
+// changes for that: the fetcher sees the slot held by
+// `ingest:backfill:<execution name>` and defers, every 2 minutes, until it ends.
+//
+// The reservation (`ingest-state/hosts/chc/reserved.json`, hostReservationKey):
+// a backfill month that finds the slot held reserves the next turn, so it
+// isn't outrun by a per-feed crawl's back-to-back fetches. A taker here that
+// gets a free slot while a live reservation exists lets it go again at once
+// and answers busy (`reserved: true`). It is advisory, so one that can't be
+// read (a missing grant, an S3 error) is ignored and logged: the slot itself
+// is what keeps CHC to one process.
+//
 // Locally the same file under a `file://` MIRROR_URL, created with O_EXCL (the
 // Python side's local lease). With no MIRROR_URL, or the committed synthetic
 // copy, there is no slot and every caller goes on as before.
@@ -40,6 +55,8 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { type MirrorLocation, parseMirrorUrl } from '../mirror/url.js';
+import { logEvent } from '../logging/logEvent.js';
+import { safeError } from '../logging/safeError.js';
 import type { FeedSource } from './config.js';
 
 /** The hosts with a shared slot: CHC only (DWS asked for nothing across processes, and only the fetcher asks it). */
@@ -50,6 +67,8 @@ export const slotHostFor = (source: FeedSource): SlotHost | null => (source === 
 
 /** The slot's key in the mirror (under its prefix). The Python side's lease.host_slot_key names the same one. */
 export const hostSlotKey = (host: SlotHost): string => `ingest-state/hosts/${host}/lease.json`;
+/** The next turn at the slot, reserved by a waiting backfill month (ingest/lease.py host_reservation_key). Only read here. */
+export const hostReservationKey = (host: SlotHost): string => `ingest-state/hosts/${host}/reserved.json`;
 
 /** How long past its holder's deadline a slot lasts (ingest/lease.py HOST_SLOT_MARGIN_S). */
 export const HOST_SLOT_MARGIN_MS = 60_000;
@@ -64,7 +83,12 @@ export const HOST_SLOT_DEFAULT_MS = 15 * 60_000;
 export const HostBusyAnswer = z.object({ ok: z.literal(false), deferred: z.literal('host_busy') }).strict();
 export type HostBusyAnswer = z.output<typeof HostBusyAnswer>;
 export const HOST_BUSY_ANSWER: HostBusyAnswer = { ok: false, deferred: 'host_busy' };
-/** How long a deferred feed fetch waits before it is queued again: about one backfill month and its pause (infra/ingest_backfill.tf). */
+/**
+ * How long a deferred feed fetch waits before it is queued again. A daily
+ * rnl/sat run holds the slot minutes; a backfill execution holds it for its
+ * whole run (hours), and its fetches keep deferring at this pace until the
+ * release, then resume within one interval.
+ */
 export const HOST_BUSY_RETRY_SECONDS = 120;
 
 /** A slot this process holds. */
@@ -74,8 +98,13 @@ export interface HeldSlot {
 	release(): Promise<void>;
 }
 
-/** The outcome of a take: held, or busy with who holds it (the holder's name, e.g. `ingest:rnl:backfill`) and until when. */
-export type SlotTake = { held: HeldSlot } | { busy: { holder: string | null; until: string | null } };
+/**
+ * The outcome of a take: held, or busy with who holds it (the holder's name,
+ * e.g. `ingest:rnl:monthly`, `ingest:backfill:<execution name>`) and until
+ * when; `reserved` when the slot was free but a waiting backfill had
+ * reserved the turn (then holder and until are the reservation's).
+ */
+export type SlotTake = { held: HeldSlot } | { busy: { holder: string | null; until: string | null; reserved?: true } };
 
 /** The subset of S3Client the slot sends through (an injected client in tests). */
 export interface SlotS3 {
@@ -112,6 +141,24 @@ const busyOf = (b: SlotBody) => ({
 	until: expiresAt(b) > 0 ? new Date(expiresAt(b)).toISOString() : null
 });
 
+/**
+ * Once a slot is taken: a live reservation (a backfill month waiting for this
+ * turn) means letting it go again and answering busy. Read failures are
+ * ignored and logged: the reservation is advisory (module header).
+ */
+async function yieldToReservation(host: SlotHost, readReservation: () => Promise<SlotBody | null>, held: HeldSlot, now: number): Promise<SlotTake> {
+	let r: SlotBody | null;
+	try {
+		r = await readReservation();
+	} catch (err) {
+		logEvent('warn', { event: 'host_slot_reservation_unreadable', host, ...safeError(err) });
+		return { held };
+	}
+	if (!r || expiresAt(r) <= now) return { held };
+	await held.release();
+	return { busy: { ...busyOf(r), reserved: true } };
+}
+
 /** S3's answers to a conditional write that lost: 412 Precondition Failed, or 409 when two land at once. */
 function isConflict(err: unknown): boolean {
 	const e = err as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
@@ -134,8 +181,8 @@ class S3Slots implements HostSlots {
 		this.#client = import('@aws-sdk/client-s3').then((sdk) => ({ s3: client ?? new sdk.S3Client({}), sdk }));
 	}
 
-	key(host: SlotHost): string {
-		return this.prefix ? `${this.prefix}/${hostSlotKey(host)}` : hostSlotKey(host);
+	key(host: SlotHost, of: (host: SlotHost) => string = hostSlotKey): string {
+		return this.prefix ? `${this.prefix}/${of(host)}` : of(host);
 	}
 
 	async #read(Key: string): Promise<{ body: SlotBody; etag: string } | null> {
@@ -165,7 +212,8 @@ class S3Slots implements HostSlots {
 		const owner = randomUUID();
 		const now = this.now();
 		const mine = body(owner, o.holder, now, o.remainingMs);
-		const held = (): SlotTake => ({ held: { owner, release: () => this.#release(Key, owner) } });
+		const reservation = async () => (await this.#read(this.key(host, hostReservationKey)))?.body ?? null;
+		const held = (): Promise<SlotTake> => yieldToReservation(host, reservation, { owner, release: () => this.#release(Key, owner) }, now);
 		if (await this.#put(Key, mine, { IfNoneMatch: '*' })) return held();
 		const got = await this.#read(Key);
 		// Released between our put and this read: once more from the start.
@@ -223,7 +271,15 @@ class FileSlots implements HostSlots {
 			} finally {
 				await fh.close();
 			}
-			return { held: { owner, release: () => this.#release(path, owner) } };
+			const reservation = async () => {
+				try {
+					return parseBody(await readFile(join(this.dir, hostReservationKey(host)), 'utf8'));
+				} catch (err) {
+					if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+					throw err;
+				}
+			};
+			return yieldToReservation(host, reservation, { owner, release: () => this.#release(path, owner) }, now);
 		}
 		return { busy: { holder: null, until: null } };
 	}

@@ -24,6 +24,22 @@
 #     (the daily run holds the product's lease) and HostBusy (the fetcher
 #     Lambda holds CHC's one request slot, feeds.tf header): a month that
 #     meets either asked CHC nothing.
+#   - The execution holds CHC's request slot for its whole run (issue #618
+#     step 4; ingest/lease.py hold_host_for_backfill). Each month's payload
+#     names the execution ($$.Execution.Id) and the pause, so every month
+#     takes the slot as one owner and keeps it through the Pace after; the
+#     fetcher's per-feed fetches defer (and re-queue every 2 minutes) and the
+#     daily rnl/sat runs end quietly until it ends, with no manual switching.
+#     ReleaseHold, reached after the Map on success and through its Catch on
+#     failure, releases it; then Outcome fails the execution with the month's
+#     own error, or succeeds. Released here rather than by an EventBridge
+#     rule on the execution's status: the step reuses this role's one grant
+#     (invoke the ingest function) and needs no rule, target or extra
+#     permission. The case it misses, an execution stopped by hand (Catch
+#     doesn't run on StopExecution), is covered by the hold's expiry: at most
+#     the pause plus 5 minutes after the month that was running ends (the
+#     running month's own deadline plus that, if stopped mid-month), or delete
+#     ingest-state/hosts/chc/lease.json by hand (docs/deployment.md § Backfill).
 #   - A plain (inline) Map over the list: ~900 months at ~10 history events
 #     each stays well under a Standard execution's 25,000-event history, and
 #     needs no S3 item reader or child executions.
@@ -34,6 +50,8 @@
 
 locals {
   ingest_backfill_name = "${local.project}-mirror-backfill"
+  # Lambda's own service errors (throttling, a transient API failure): retried; the function's errors aren't.
+  ingest_backfill_lambda_errors = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
 }
 
 data "aws_iam_policy_document" "ingest_backfill_assume_role" {
@@ -89,7 +107,7 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
   type     = "STANDARD"
 
   definition = jsonencode({
-    Comment = "Mirror backfill (issue #604 D4): one CHC byMonth file a month, in order, one at a time, a wait after each. Input: {\"items\": [{\"product\", \"mode\": \"backfill\", \"month\"}, …]} from ingest/backfill_plan.py."
+    Comment = "Mirror backfill (issue #604 D4): one CHC byMonth file a month, in order, one at a time, a wait after each, holding CHC's request slot for the whole run (released at the end, success or failure). Input: {\"items\": [{\"product\", \"mode\": \"backfill\", \"month\"}, …]} from ingest/backfill_plan.py."
     StartAt = "Months"
     States = {
       Months = {
@@ -106,9 +124,20 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
             Ingest = {
               Type     = "Task"
               Resource = "arn:aws:states:::lambda:invoke"
+              # The month, plus this execution's hold on CHC's request slot
+              # (see the header): every month of the execution takes the slot
+              # as the same owner and keeps it through the Pace after.
               Parameters = {
                 FunctionName = local.ingest_function_arn
-                "Payload.$"  = "$"
+                Payload = {
+                  "product.$" = "$.product"
+                  "mode.$"    = "$.mode"
+                  "month.$"   = "$.month"
+                  hold = {
+                    "execution.$" = "$$.Execution.Id"
+                    pauseSeconds  = var.ingest_backfill_wait_seconds
+                  }
+                }
               }
               # A little over the function's own 900 s.
               TimeoutSeconds = local.ingest_timeout_s + 60
@@ -120,7 +149,7 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
               # function's other errors, StopRun on a 403 above all, are not
               # retried: they fail the execution.
               Retry = [{
-                ErrorEquals     = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+                ErrorEquals     = local.ingest_backfill_lambda_errors
                 IntervalSeconds = 60
                 MaxAttempts     = 3
                 BackoffRate     = 2
@@ -130,11 +159,14 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
                 MaxAttempts     = 5
                 BackoffRate     = 1
                 }, {
-                # HostBusy: the fetcher Lambda holds CHC's one request slot
-                # (ingest/lease.py hold_host, backend/src/feeds/hostSlot.ts).
-                # A fetch holds it at most its 900 s, usually seconds; retry
-                # every 2 minutes for an hour before the execution fails
-                # (re-running the plan skips the months already held).
+                # HostBusy: the fetcher Lambda (or a daily run, or another
+                # execution) holds CHC's one request slot (ingest/lease.py,
+                # backend/src/feeds/hostSlot.ts). Only the first month of an
+                # execution meets it in practice (later ones find their own
+                # hold), and it reserves the next turn, so the fetch running
+                # now (at most its 900 s) is the wait; retry every 2 minutes
+                # for an hour before the execution fails (re-running the plan
+                # skips the months already held).
                 ErrorEquals     = ["HostBusy"]
                 IntervalSeconds = 120
                 MaxAttempts     = 30
@@ -149,7 +181,59 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
             }
           }
         }
-        End = true
+        # Done or failed, the execution's hold on CHC's slot is released next.
+        Catch = [{
+          ErrorEquals = ["States.ALL"]
+          ResultPath  = "$.error"
+          Next        = "ReleaseHold"
+        }]
+        Next = "ReleaseHold"
+      }
+      # Release this execution's hold (ingest/lease.py release_backfill_hold:
+      # only ever its own). Its own failure doesn't change the outcome: the
+      # hold then expires within BACKFILL_HOLD_MARGIN_S past the pause.
+      ReleaseHold = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = local.ingest_function_arn
+          Payload = {
+            mode = "release_hold"
+            hold = { "execution.$" = "$$.Execution.Id" }
+          }
+        }
+        TimeoutSeconds = 120
+        ResultPath     = null
+        Retry = [{
+          ErrorEquals     = local.ingest_backfill_lambda_errors
+          IntervalSeconds = 30
+          MaxAttempts     = 3
+          BackoffRate     = 2
+        }]
+        Catch = [{
+          ErrorEquals = ["States.ALL"]
+          ResultPath  = "$.releaseError"
+          Next        = "Outcome"
+        }]
+        Next = "Outcome"
+      }
+      # The months' outcome stands: a month's error fails the execution with that error.
+      Outcome = {
+        Type = "Choice"
+        Choices = [{
+          Variable  = "$.error"
+          IsPresent = true
+          Next      = "MonthFailed"
+        }]
+        Default = "Done"
+      }
+      MonthFailed = {
+        Type      = "Fail"
+        ErrorPath = "$.error.Error"
+        CausePath = "$.error.Cause"
+      }
+      Done = {
+        Type = "Succeed"
       }
     }
   })

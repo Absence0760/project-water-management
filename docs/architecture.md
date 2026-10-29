@@ -1660,7 +1660,12 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     and otherwise skip the run (`stopped: "host_busy"`, logged, no lag
     datapoint that run). A backfill month raises `HostBusy`, which the state
     machine retries every 2 minutes for an hour; a daily `rnl`/`sat` run
-    ends quietly. A slot that can't be read or written fails the fetch
+    ends quietly. A backfill execution keeps the slot for its whole run
+    (every month the same owner, kept through the pauses, released by the
+    state machine's last step; `lease.hold_host_for_backfill`), so the
+    fetches defer for hours and resume after it; a backfill month waiting
+    for the slot reserves the next turn (`reserved.json`), which every
+    other taker yields to (deployment.md § Backfill). A slot that can't be read or written fails the fetch
     closed ("the request slot could not be taken"); CHC is never asked
     without it. With no `MIRROR_URL` (a local run, the tests) there is no
     slot and nothing changes; with a `file://` one it is the same file,

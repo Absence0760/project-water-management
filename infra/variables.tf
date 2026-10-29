@@ -721,8 +721,8 @@ variable "ingest_backfill_wait_seconds" {
   type        = number
   default     = 60
   validation {
-    condition     = var.ingest_backfill_wait_seconds >= 60 && floor(var.ingest_backfill_wait_seconds) == var.ingest_backfill_wait_seconds
-    error_message = "At least 60 whole seconds: CHC is asked for at most one bulk file a minute (issue #604 D4)."
+    condition     = var.ingest_backfill_wait_seconds >= 60 && var.ingest_backfill_wait_seconds <= 3600 && floor(var.ingest_backfill_wait_seconds) == var.ingest_backfill_wait_seconds
+    error_message = "60 to 3600 whole seconds: CHC is asked for at most one bulk file a minute (issue #604 D4), and the ingest's hold on CHC's slot accepts a pause of at most an hour (ingest/lambda_handler.py MAX_PAUSE_S)."
   }
 }
 

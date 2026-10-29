@@ -47,6 +47,11 @@
 #     (stopped "host_busy"; the next run catches up);
 #   - a backfill month raises HostBusy, which the state machine retries
 #     (ingest_backfill.tf); a daily rnl/sat run ends quietly.
+# A backfill execution keeps the slot for its whole run (hours), released by
+# its last step, so the per-feed fetches keep deferring until it ends; a
+# backfill month waiting for the slot reserves the next turn
+# (ingest-state/hosts/chc/reserved.json, read-only to the fetcher), and a
+# fetch that takes a free slot with a live reservation gives it back.
 # A 403 still stops whichever run met it, as before. The fetcher's grant on
 # that one key is fetcher_chc_slot below; the ingest's role has the bucket.
 #
@@ -324,6 +329,13 @@ data "aws_iam_policy_document" "fetcher_chc_slot" {
     sid       = "ChcRequestSlot"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/lease.json"]
+  }
+  # A waiting backfill's reservation of the next turn (ingest/lease.py): read
+  # only, so the fetcher can yield to it but never make or clear one.
+  statement {
+    sid       = "ChcSlotReservation"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/reserved.json"]
   }
   statement {
     sid       = "ListMirror"

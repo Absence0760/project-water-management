@@ -1831,11 +1831,48 @@ fetcher Lambda holds CHC's one request slot, which the two share so CHC sees
 one of our processes at a time; architecture.md § Data feeds, Throttling).
 A month that meets `HostBusy` asked CHC nothing and is retried every 2
 minutes for an hour; an execution that still fails on it means the fetcher
-held CHC that long (a long per-feed backfill): let the feeds' fetches settle
-and resume as in step 3. While a backfill runs, the fetcher's daily
-preliminary and GEFS passes may log `stopped: "host_busy"` on a run whose
-three-minute wait found the slot held; their next run catches up. Nothing
-schedules it: the operator starts it.
+held CHC that long: let the feeds' fetches settle and resume as in step 3.
+Nothing schedules it: the operator starts it.
+
+**The backfill holds CHC's slot for its whole run** (issue #618 step 4).
+Nothing to switch by hand: each month's payload names the execution, so
+every month takes the slot as one owner (holder
+`ingest:backfill:<execution name>`), keeps it through the pause after, and
+the execution's last step (`ReleaseHold`, reached on success and on failure)
+releases it. Only the first month has to win the slot; if the fetcher holds
+it then, that month reserves the next turn
+(`ingest-state/hosts/chc/reserved.json`), so the running fetch is the only
+wait. While it runs:
+
+- the CHIRPS and CHIRPS-GEFS feeds' fetches defer (`feed_fetch_deferred`,
+  `heldBy: "ingest:backfill:<name>"`, `reserved` when it was the
+  reservation) and are queued again every 2 minutes, with no failure, no
+  SQS receive spent and their health untouched; they resume within 2
+  minutes of the release. A feed may show Stale if the backfill outlasts
+  its stale threshold;
+- the daily `rnl`/`sat` runs end quietly (`busy`, lag still published),
+  and the fetcher's preliminary and GEFS passes skip with
+  `stopped: "host_busy"`; their next run after the backfill catches up;
+- a second execution started meanwhile fails after an hour of `HostBusy`:
+  run one at a time, or give one execution both products' months
+  (`jq -s '{items: (.[0].items + .[1].items)}' /tmp/rnl-plan.json /tmp/sat-plan.json`).
+
+**"Why aren't the feeds fetching?"** Search the fetcher's log group for
+`feed_fetch_deferred` (its `heldBy`) and the `mirror-ingest` group for
+`ingest:backfill:` (the hold's take, keep and release lines). A **stuck
+hold** can't outlive its expiry: an execution stopped by hand (no
+`ReleaseHold`) leaves one that expires the pause plus 5 minutes after its
+last month ended (the running month's 15-minute deadline plus that, if
+stopped mid-month). To free it at once, check no execution is running, then
+delete it: `aws s3 rm s3://<mirror bucket>/ingest-state/hosts/chc/lease.json`
+(and `reserved.json` beside it, if present).
+
+**Rolling out the whole-run hold:** the state machine sends the new `hold`
+key, which an older ingest image refuses, so move `ingest_image_tag` to an
+image built from this change in the same apply as (or before) the state
+machine's change. The fetcher's read grant on `reserved.json` comes with the
+same apply; the fetcher ignores a reservation it can't read, so the backend
+release can go in either order.
 
 **Rolling out the shared slot:** apply Terraform (the fetcher's
 `fetcher_chc_slot` grant on that one key, the state machine's `HostBusy`
@@ -1855,7 +1892,8 @@ only the fetcher does, so start a backfill only once both carry it.
    year's chunks.
 2. Start it: `aws stepfunctions start-execution --state-machine-arn <arn> --input file:///tmp/rnl-plan.json`.
    About 550 `rnl` months take ~1.5 days (a ~40 s download and the wait per
-   month); `sat` about 1 day. One product at a time.
+   month); `sat` about 1 day. One execution at a time (or one with both
+   products' months, above): the feeds wait for its whole run.
 3. If an execution fails, read the failed month's error in the execution's
    history and the `mirror-ingest` log group. After a 403, wait (and write to
    CHC, the source register's contact) before resuming. To resume, repeat
