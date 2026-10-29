@@ -567,7 +567,9 @@ the worker. Off by default (`ET_OBSERVATIONS=off`, Terraform
   costs one request); a changed ETag on a dekad already read (FAO rewrites
   files: `updated` 2026-05 on 2025 files) means a re-read and a new revision
   of that dekad's rows. Only units with parcels are read. The band scale
-  must read 0.1 with no offset, or the file is refused.
+  must read 0.1 with no offset, or the file is refused; a refused file (or
+  a unit's refused read of it) is marked with its ETag and not asked for
+  again until the 30-day re-check finds a new one.
 - **Limits we keep to:** one request a second, one connection;
   feeds/http.ts's User-Agent, host and path allowlist, 20 s timeout and
   4 MB cap per response; a 403 stops the pass, never retried, and a

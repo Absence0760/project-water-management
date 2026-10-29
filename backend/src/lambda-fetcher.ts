@@ -735,6 +735,7 @@ async function etDekadal(context?: Pick<Context, 'getRemainingTimeInMillis'>): P
 		...answer,
 		failedCodes: [...new Set(r.failures.map((f) => f.code))],
 		changedMidRead: r.changedMidRead,
+		refusedHeld: r.refusedHeld,
 		requests: r.requests,
 		...(message !== null ? { reason: fetchFailureReason(message), detail: failureDetail(message) } : {}),
 		ms: Date.now() - started

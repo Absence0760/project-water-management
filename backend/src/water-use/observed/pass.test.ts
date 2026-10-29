@@ -1,7 +1,8 @@
 // The WaPOR pass (pass.ts, issue #623 step 4) against the synthetic WaPOR
 // (fixtures.ts) through a recording client: what it reads (only the tiles
 // under a unit's parcels), its pacing, the ETag re-check and re-read, a 403's
-// stop and the pause after it, the deadline, and a unit whose parcels change.
+// stop and the pause after it, the deadline, a unit whose parcels change, and
+// a refused file or unit read, marked until the file's ETag changes.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -285,6 +286,114 @@ describe('the WaPOR pass', () => {
 		// About half of a 0.0025° cell (~232 × 278 m at 33° S).
 		expect(f.rows[0]!.areaM2).toBeGreaterThan(10_000);
 		expect(f.rows[0]!.areaM2).toBeLessThan(60_000);
+	});
+
+	/** A client whose `dekad` file is served as `swap` makes it (garbage, a truncated tile), with the tag of what it serves. */
+	function serving(c: ReturnType<typeof client>, dekad: string, swap: (file: Uint8Array, start: number, end: number) => { bytes: Uint8Array; tag: string }) {
+		const url = waporUrl(dekad);
+		const on = { swapped: true };
+		const http: FeedHttp = {
+			...c.http,
+			rangeTagged: async (u, start, end) => {
+				const b = c.holder.fx.file(u);
+				if (u !== url || !b || !on.swapped) return c.http.rangeTagged!(u, start, end);
+				c.calls.push({ url: u, start, end, conditional: false });
+				return swap(b, start, end);
+			},
+			rangeConditional: async (u, start, end, etag) => {
+				const b = c.holder.fx.file(u);
+				if (u !== url || !b || !on.swapped) return c.http.rangeConditional!(u, start, end, etag);
+				c.calls.push({ url: u, start, end, conditional: true });
+				const got = swap(b, start, end);
+				return got.tag === etag ? { status: 'not-modified' } : { status: 'ok', ...got };
+			}
+		};
+		return { http, on };
+	}
+	const DEKAD = '2026-10-01';
+
+	it('marks a file the reader refuses with its ETag, asks nothing for it until the re-check, and reads it once the file changes', async () => {
+		const s = store();
+		await writeWanted(s, wanted([unitA]));
+		const c = client();
+		// FAO serves something that isn't a TIFF for one dekad (zeros, the length of the real file).
+		const garbage = new Uint8Array(c.holder.fx.file(waporUrl(DEKAD))!.length);
+		const tag = fixtureTag(garbage);
+		const { http, on } = serving(c, DEKAD, (_b, start, end) => ({ bytes: garbage.subarray(start, end + 1), tag }));
+		const first = await run(s, http);
+		expect(first.failures.map((f) => `${f.dekad} ${f.code}`)).toEqual([`${DEKAD} format`]);
+		expect((await readState(s))!.files[DEKAD]).toEqual({ etag: tag, refused: true, checkedOn: TODAY });
+		expect((await readEtFile(s, 'wapor', A))!.rows.map((x) => x.dekad)).not.toContain(DEKAD);
+		expect((await readStatus(s, 'wapor'))!.perKey[A]).toMatchObject({ error: 'format' });
+
+		// The next run (the hourly schedule) asks nothing, for that file or any other, and the error stands.
+		c.calls.length = 0;
+		expect(await run(s, http)).toMatchObject({ requests: 0, failures: [], refusedHeld: 1 });
+		expect((await readStatus(s, 'wapor'))!.perKey[A]).toMatchObject({ error: 'format' });
+
+		// At the re-check: one conditional request for it, a 304, and the mark stands.
+		const recheck = '2026-11-28';
+		c.calls.length = 0;
+		expect(await run(s, http, { today: recheck })).toMatchObject({ failures: [], refusedHeld: 1 });
+		expect(c.calls.filter((x) => x.url === waporUrl(DEKAD))).toEqual([expect.objectContaining({ conditional: true, start: 0 })]);
+		expect((await readState(s))!.files[DEKAD]).toEqual({ etag: tag, refused: true, checkedOn: recheck });
+
+		// FAO replaces the file (a new ETag): the mark is cleared and the unit read.
+		on.swapped = false;
+		const fixed = await run(s, http, { today: '2026-12-28' });
+		expect(fixed.failures).toEqual([]);
+		expect((await readEtFile(s, 'wapor', A))!.rows.map((x) => x.dekad)).toContain(DEKAD);
+		const f = (await readState(s))!.files[DEKAD]!;
+		expect(f.refused).toBeUndefined();
+		expect(f.etag).not.toBe(tag);
+		expect((await readStatus(s, 'wapor'))!.perKey[A]!.error).toBeUndefined();
+	});
+
+	it('marks one unit’s refused read with the file’s ETag, reads the others, and reads it again when the file changes or the unit is redrawn', async () => {
+		const s = store();
+		// C is one tile east of A (tile column 33), so a bad tile under A leaves C readable.
+		const C = '00000000-0000-4000-8000-00000000000c';
+		const unitC: WantedUnit = { unitKey: C, parcels: { type: 'MultiPolygon', coordinates: [[box(21.6, -33.3)]] } };
+		await writeWanted(s, wanted([unitA, unitC]));
+		const c = client();
+		const full = c.holder.fx.file(waporUrl(DEKAD))!;
+		const cog = (await openCog(async (s0, e0) => full.subarray(s0, e0 + 1), WAPOR_ACCEPT))!;
+		const tileA = await cog.tile(36 * cog.tilesAcross + 32);
+		// A's tile comes back one byte long: the reader refuses it ("ends inside a tile"); everything else is served whole.
+		const { http, on } = serving(c, DEKAD, (b, start, end) => ({
+			bytes: start >= tileA.offset && start < tileA.offset + tileA.bytes ? b.subarray(start, start + 1) : b.subarray(start, end + 1),
+			tag: fixtureTag(b)
+		}));
+		const first = await run(s, http);
+		expect(first.failures.map((f) => `${f.unitKey} ${f.dekad} ${f.code}`)).toEqual([`${A} ${DEKAD} format`]);
+		const state = (await readState(s))!.files[DEKAD]!;
+		expect(state).toEqual({ etag: fixtureTag(full), refusedUnits: [A], checkedOn: TODAY });
+		expect((await readEtFile(s, 'wapor', C))!.rows.map((x) => x.dekad)).toContain(DEKAD);
+		expect((await readEtFile(s, 'wapor', A))!.rows.map((x) => x.dekad)).not.toContain(DEKAD);
+
+		// Next run: nothing asked; A keeps its error, C has none.
+		expect(await run(s, http)).toMatchObject({ requests: 0, refusedHeld: 1 });
+		const status = (await readStatus(s, 'wapor'))!;
+		expect(status.perKey[A]).toMatchObject({ error: 'format' });
+		expect(status.perKey[C]!.error).toBeUndefined();
+
+		// A redrawn (its parcels changed): its mark goes and it is read again from scratch; the file still refuses it.
+		const movedA: WantedUnit = { ...unitA, parcels: { type: 'MultiPolygon', coordinates: [[box(21.21, -33.31)]] } };
+		await writeWanted(s, wanted([movedA, unitC], '2026-10-29T07:00:00.000Z'));
+		c.calls.length = 0;
+		const redrawn = await run(s, http);
+		expect(redrawn.failures.map((f) => `${f.unitKey} ${f.dekad}`)).toEqual([`${A} ${DEKAD}`]);
+		expect(c.calls.some((x) => x.url === waporUrl(DEKAD))).toBe(true);
+		expect((await readState(s))!.files[DEKAD]).toMatchObject({ refusedUnits: [A] });
+
+		// FAO rewrites the files (a new ETag on each): A is read for the dekad, and the mark is gone.
+		on.swapped = false;
+		c.holder.fx = waporFixture(() => TODAY, { ...SPEC, eta: { ...SPEC.eta, mean: 4.0 } });
+		const rewritten = await run(s, http, { today: '2026-11-28' });
+		expect(rewritten.failures).toEqual([]);
+		expect((await readEtFile(s, 'wapor', A))!.rows.map((x) => x.dekad)).toContain(DEKAD);
+		expect((await readState(s))!.files[DEKAD]!.refusedUnits).toBeUndefined();
+		expect((await readStatus(s, 'wapor'))!.perKey[A]!.error).toBeUndefined();
 	});
 
 	it('does nothing without a wanted list, and keeps no state for a file it couldn’t read', async () => {

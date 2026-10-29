@@ -2512,9 +2512,18 @@ worker tick: the status, then each unit due by its load mark (≤ 200 a tick, ol
     host and path allowlist; a 403 or throttling stops the pass (the status
     says stopped and why, the invocation fails), and the pass then asks
     nothing for 24 hours or a longer `Retry-After`, publishing no heartbeat,
-    so the heartbeat alarm is the alert (the dams' `pausedUntil`). A file the
-    reader refuses, or a timeout, ends that unit's read of that dekad
-    (counted with a code, `failedCodes` in the log); the next run tries again.
+    so the heartbeat alarm is the alert (the dams' `pausedUntil`). A timeout
+    ends that unit's read of that dekad (counted with a code, `failedCodes`
+    in the log); the next run tries again.
+  - **A refused file** (the reader's `FeedFormatError`: a header it can't
+    read, a band scale other than 0.1, a tile under a unit it can't decode)
+    is counted the same way and marked in `et/wapor-state.json` with the
+    file's ETag: the whole file (`refused`) or the units refused
+    (`refusedUnits`). It isn't asked for again until the 30-day re-check,
+    whose conditional GET keeps the mark on a 304; a new ETag clears it and
+    reads the units again. A unit whose parcels change leaves the mark. While
+    a mark stands the unit's status keeps `error: 'format'`, and the log
+    counts the reads held back (`refusedHeld`).
   - **Locally** (`FEED_SOURCE=fixtures`) the files come from
     `water-use/observed/fixtures.ts` and `backend/fixtures/feeds/wapor-sample.json`:
     a grid laid out like FAO's (its tile tables as long as a continental
