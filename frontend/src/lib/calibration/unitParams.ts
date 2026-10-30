@@ -22,8 +22,8 @@ import {
 } from '@water-management/engine';
 import { REST_WORDS } from './zoneGroups';
 
-export type UnitParamsSettings = Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'gr4j'> &
-	Partial<Pick<ProjectSettings, 'calibrateAtOutlet' | 'calibrationRest' | 'unitParamsFrom'>>;
+/** The settings it reads; partial, as the page's form holds them (a missing key reads as the engine's default). */
+export type UnitParamsSettings = Partial<Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'gr4j' | 'calibrateAtOutlet' | 'calibrationRest' | 'unitParamsFrom'>>;
 
 /** A ticked location a unit can take its parameters from. */
 export interface LocationChoice {
