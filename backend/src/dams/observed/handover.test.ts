@@ -71,8 +71,17 @@ describe('the dams handover files', () => {
 			stopped: false,
 			perKey: { zzzzza0001: { lastGood: '2026-10-27T04:00:00.000Z', newest: '2023-09-17', triedAt: '2026-10-27T04:00:00.000Z' } }
 		};
+		// A status written before the Waterbodies API (no wbId, no fullAt) still reads.
 		await writeStatus(s, status);
 		expect(await readStatus(s, 'waterbodies')).toEqual(status);
+		// The API pass's own fields: the uid's wb_id and its last whole fetch.
+		const withId = { ...status, perKey: { zzzzza0001: { ...status.perKey.zzzzza0001, wbId: 89768, fullAt: '2026-10-27T04:00:00.000Z' } } };
+		await writeStatus(s, withId);
+		expect(await readStatus(s, 'waterbodies')).toEqual(withId);
+		for (const wbId of [0, -1, 1.5, '89768', Number.MAX_SAFE_INTEGER + 2]) {
+			expect(() => writeStatus(s, { ...status, perKey: { zzzzza0001: { wbId: wbId as number } } }), String(wbId)).toThrow();
+		}
+		expect(() => writeStatus(s, { ...status, perKey: { zzzzza0001: { fullAt: 'yesterday' } } })).toThrow();
 		await writeObservationFile(s, file());
 		expect(await readObservationFile(s, 'waterbodies', 'zzzzza0001')).toEqual(file());
 		await writeObservationFile(s, file({ source: 'wofs', key: FID, rows: [{ date: '2026-10-20', wetAreaM2: 5, pctObserved: 100, upstreamKey: 'item-1' }] }));

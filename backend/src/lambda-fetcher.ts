@@ -507,9 +507,9 @@ export function isDamsWeeklyEvent(event: unknown): event is DamsWeeklyEvent {
 }
 
 /**
- * The share of the run's budget the Waterbodies pass may use: its files are
- * few and frozen upstream (a 304 each, once a week), and the rest is the
- * WOfS pass's, which reads scenes.
+ * The share of the run's budget the Waterbodies pass may use: its requests
+ * are few (each matched uid's recent series once a week, a WFS lookup once),
+ * and the rest is the WOfS pass's, which reads scenes.
  */
 export const WATERBODIES_BUDGET_SHARE = 0.3;
 /**

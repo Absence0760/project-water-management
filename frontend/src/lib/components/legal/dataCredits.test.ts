@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEAFRICA_STATEMENT, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
+import { DEAFRICA_STATEMENT, WATERBODIES_CITATION, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
 import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION } from '@water-management/engine';
 import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
@@ -72,6 +72,9 @@ describe('the data credits', () => {
 		expect(backend('geo/rainMap.ts')).toContain(`WAAS_MAP_ATTRIBUTION = '${WAAS_MAP_STATEMENT}'`);
 		// The dam observations' credits (issue #604 R5, #624): DE Africa's, and Copernicus's for the Sentinel views.
 		expect(backend('dams/observed/upstream.ts')).toContain(`DEAFRICA_ATTRIBUTION = '${DEAFRICA_STATEMENT}'`);
+		// The paper DE Africa ask formal documents to cite for Waterbodies, as the source register quotes it.
+		expect(DATA_CREDITS.find((c) => c.id === 'deafrica')!.citation).toBe(WATERBODIES_CITATION);
+		expect(doc('data-sources.md')).toContain(WATERBODIES_CITATION);
 		// Copernicus's is defined once, in the engine's leaf module, and the backend re-exports it.
 		expect(readFileSync(new URL('../../../../../packages/engine/src/evidence/sentinelCredit.ts', import.meta.url), 'utf8')).toContain(`SENTINEL_CITATION = '${SENTINEL_STATEMENT}'`);
 		expect(backend('dams/observed/upstream.ts')).toContain(`export { SENTINEL_CITATION as SENTINEL_ATTRIBUTION, sentinelCitation as sentinelCredit } from '@water-management/engine/sentinel-credit'`);

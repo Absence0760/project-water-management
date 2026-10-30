@@ -183,7 +183,7 @@ describe('liveHttp', () => {
 	});
 
 	it('asks conditionally with the ETag held: 304 is not-modified, 200 the text with its ETag and Last-Modified (checked), 404 null', async () => {
-		const WB = 'https://deafrica-services.s3.af-south-1.amazonaws.com/waterbodies/v0.0.2/surface_area_change/zzzz/zzzzza0001.csv';
+		const WB = 'https://api.digitalearth.africa/waterbodies/waterbody/1/observations/csv?start_date=1984-01-01&end_date=2026-10-30';
 		const notModified = () => vi.fn(async () => new Response(null, { status: 304 }));
 		const same = notModified();
 		expect(await liveHttp(same).textConditional!(WB, '"e1"')).toEqual({ status: 'not-modified' });
@@ -255,7 +255,9 @@ describe('liveHttp: where it may go', () => {
 		expect(FEED_HOSTS).toEqual(expect.arrayContaining(['storage.googleapis.com', 'edcintl.cr.usgs.gov']));
 		expect(FEED_HOST_PATHS).toEqual({
 			'storage.googleapis.com': ['/fao-gismgr-wapor-3-data/'],
-			'edcintl.cr.usgs.gov': ['/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/']
+			'edcintl.cr.usgs.gov': ['/downloads/sciweb1/shared/fews/web/global/dekadal/etav61/'],
+			'api.digitalearth.africa': ['/waterbodies/'],
+			'geoserver.digitalearth.africa': ['/geoserver/wfs']
 		});
 		const f = vi.fn(async () => new Response('ok', { status: 200 }));
 		const http = liveHttp(f);
@@ -278,6 +280,22 @@ describe('liveHttp: where it may go', () => {
 		// A redirect out of the bucket is refused like one off the hosts.
 		const hop = vi.fn<F>().mockResolvedValueOnce(redirect('/isric-share-soilgrids/a.tif'));
 		await expect(liveHttp(hop as never).text(WAPOR)).rejects.toThrow(/redirected somewhere it may not/);
+	});
+
+	it('asks DE Africa\'s Waterbodies API and GeoServer only on their own paths', async () => {
+		const f = vi.fn(async () => new Response('ok', { status: 200 }));
+		const http = liveHttp(f);
+		for (const url of [
+			'https://api.digitalearth.africa/stac/search',
+			'https://api.digitalearth.africa/waterbodies/../admin',
+			'https://geoserver.digitalearth.africa/geoserver/ows?service=WFS',
+			'https://geoserver.digitalearth.africa/geoserver/web/'
+		]) {
+			await expect(http.text(url), url).rejects.toThrow(/not a known source host/);
+		}
+		expect(f).not.toHaveBeenCalled();
+		expect(await http.text('https://api.digitalearth.africa/waterbodies/waterbody/89768/observations/csv?start_date=1984-01-01&end_date=2026-10-30')).toBe('ok');
+		expect(await http.text('https://geoserver.digitalearth.africa/geoserver/wfs?service=WFS&request=GetFeature')).toBe('ok');
 	});
 
 	it('gives every hop the one 20 s deadline: a single abort signal, set before the first request and shared by the redirect after it', async () => {

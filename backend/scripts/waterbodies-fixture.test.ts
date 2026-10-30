@@ -11,8 +11,8 @@ describe('the synthetic Waterbodies fixture', () => {
 	it('is what the generator writes (pnpm gen:waterbodies-fixture after changing it)', () => {
 		const wbs = fixtureWaterbodies();
 		expect(readFileSync(POLYGONS_FILE, 'utf8')).toBe(polygonsFile(wbs));
-		expect(readdirSync(SERIES_DIR).sort()).toEqual(wbs.map((w) => `${w.uid}.csv`).sort());
-		wbs.forEach((w, i) => expect(readFileSync(`${SERIES_DIR}${w.uid}.csv`, 'utf8'), w.uid).toBe(seriesCsv(w, i)));
+		expect(readdirSync(SERIES_DIR).sort()).toEqual(wbs.map((w) => `${w.wbId}.csv`).sort());
+		wbs.forEach((w, i) => expect(readFileSync(`${SERIES_DIR}${w.wbId}.csv`, 'utf8'), w.uid).toBe(seriesCsv(w, i)));
 	});
 
 	it('gives the Sandspruit example’s dams each case: matched, merged (Grootdraai) and none (Klipdrift)', () => {

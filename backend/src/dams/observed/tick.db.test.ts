@@ -22,7 +22,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { buildExamples } from '../../../scripts/examples/catchments.js';
 import { sandspruitMap } from '../../../scripts/examples/map.js';
 import { importWaterbodies, parseArgs } from '../../../scripts/import-waterbodies.js';
-import { caseOf } from '../../../scripts/waterbodies-fixture.js';
+import { caseOf, SERIES_END } from '../../../scripts/waterbodies-fixture.js';
 import { asOwner, signUp } from '../../__tests__/helpers.js';
 import { withoutUser, withUser } from '../../db/tx.js';
 import { runTick } from '../../jobs/runner.js';
@@ -123,7 +123,7 @@ describe('the dams tick', () => {
 		expect(second!.rows).toBeGreaterThan(0);
 		const obs = await observed('waterbodies');
 		for (const [name, id] of dams) {
-			if (caseOf(name) === 'matched') expect(obs.get(id), name).toMatchObject({ newest: '2023-09-17' });
+			if (caseOf(name) === 'matched') expect(obs.get(id), name).toMatchObject({ newest: SERIES_END });
 			else expect(obs.get(id), name).toBeUndefined();
 		}
 
