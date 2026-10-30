@@ -1104,7 +1104,11 @@ runs and accumulations are real) can't be decided without the client.
       fingerprint the share runs ran on; null with no land unit, absent
       under Per unit), the run summary the same (`summary.shareRain`), and
       `fitRecordStatus` sets `shareRainChanged` (and with it
-      `forcingChanged`) when it moves.
+      `forcingChanged`) when it moves. **Superseded in engine 1.109.0 (issue #658,
+      engine-audit.md FM2):** Fragmentation is retired, so a Fragmentation
+      fit reads "Parameters not fitted for this method" and
+      `shareRainChanged` is gone; `forcing.shareRain` stays readable on
+      older fit records.
 - [ ] **The client regression suite's deviation list after FM1 (issue
       #615, engine-audit.md FM1).** The suite feeds the workbook's own
       natural flow, without the units' runoff, so its shares fall back to

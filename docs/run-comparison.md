@@ -262,7 +262,11 @@ bottom:
    engine ≥ 1.78.0, [model.md §2.4h](./model.md)) is a settings line
    labelled **Runoff from each unit's own rain**: "off → on (gauge MAP 600
    mm (source); MAP period 1991-01-01 to 2020-12-31)" (a run saved before
-   1.78.0 is off), with "; reference gauge rain_catchment_mm at the unit …"
+   1.78.0 is off, and so is a run whose stored setting was Fragmentation:
+   absent, null or `catchment`, which engines before 1.109.0 ran on the
+   catchment rain; from 1.109.0, issue #658, every run's stored inputs hold
+   `perUnit`, so comparing an older Fragmentation run with a newer run reads
+   "off → on …"; engine `compare.ts` `storedPerUnit`), with "; reference gauge rain_catchment_mm at the unit …"
    inside the brackets when it has a reference gauge (engine ≥ 1.80.0), and
    only that line: from 1.80.0 a change of the setting no longer also adds
    a bare `Setting "unitRain" changed`. A unit's MAP and its source are node lines ("MAP none →

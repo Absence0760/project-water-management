@@ -840,11 +840,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   Anything else is a `400` (the engine's `chirpsQuantileMapError`, which a
   table test holds to the schema); settings stored before it read back as
   `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23).
-  `unitRain` (issue #482) is `null` or absent (the default: every unit runs
-  on the catchment's rain) or `{ mode: "catchment" | "perUnit", gaugeMapMm?,
-  gaugeMapSource?, mapPeriod?, reference? }`, replaced whole by a `PATCH`. `perUnit` runs
-  each land unit on its own rain (its rain series, below; [model.md
-  §2.4h](./model.md)). `gaugeMapMm` (1–12 000 mm or `null`) is the catchment
+  `unitRain` (issue #482) is `null` or absent (Per unit's defaults) or
+  `{ mode: "perUnit" | "catchment", gaugeMapMm?, gaugeMapSource?, mapPeriod?,
+  reference? }`, replaced whole by a `PATCH`. Every land unit runs on its own
+  rain (its rain series, below; [model.md §2.4h](./model.md)): Per unit is
+  the only flow generation method from engine 1.109.0 (issue #658). The
+  retired `"catchment"` (Fragmentation) is still accepted, for an older
+  client or export, and stored as `"perUnit"` with the rest kept. `gaugeMapMm` (1–12 000 mm or `null`) is the catchment
   rain gauge's own MAP and needs `gaugeMapSource` (1–600 characters);
   `mapPeriod` (`{ start, end }`, calendar dates at least a year apart, or
   `null` = 1991-01-01 … 2020-12-31) is the period a unit's CHIRPS MAP factor
@@ -1966,8 +1968,8 @@ node carries `mapMm` (1–12 000 mm, or `null` = none) and `mapSource` (where
 it came from, at most 600 characters, or `null`). A MAP needs its source
 (`400 … a MAP needs its source`, the engine's `mapMmError`); a source sent
 with no MAP is not kept (`null`). A body without them gets `null` (no MAP, no
-change to any run). Only land units read it, under `settings.unitRain`
-`perUnit`; the project document, a copy and an import carry it with the node.
+change to any run). Only land units read it (each runs on its own rain,
+Per unit); the project document, a copy and an import carry it with the node.
 `POST /projects/:id/map/unit-map` also writes it, from a MAP grid, with a
 source line of the form `<grid> <version>, area-weighted mean over the
 unit’s parcel, <n> cells`, which that route reads back to keep one grid per
@@ -2582,8 +2584,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `storageStartMm`. GR4J runs also
   carry the catchment series `pet`, `aet`, `production_store`, `routing_store`,
   `uh_store` (mm), and `exchange` when X2 ≠ 0.
-- `summary.unitRain` (engine ≥ 1.78.0, only under `settings.unitRain`
-  `{ mode: 'perUnit' }`, [model.md §2.4h](./model.md)) is each land unit's
+- `summary.unitRain` (engine ≥ 1.78.0, under `settings.unitRain`
+  `{ mode: 'perUnit' }`, and from 1.109.0 every run with a land unit,
+  [model.md §2.4h](./model.md)) is each land unit's
   forcing and GR4J balance: `{ mode, gaugeMapMm, gaugeMapSource, mapPeriod,
   units }`, one entry per land unit in node-id order with its `rule`
   (`unitGauge` | `gaugeMap` | `unitChirps` | `catchment`), `rainKey`,
