@@ -7,6 +7,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { anySaveBar, saveSettings, openFold } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { projectDay } from '../support/dates.ts';
+import { API_URL } from '../support/env.ts';
 
 test('the saved rules pick the fit on the server: a rule change needs saving first, and the kept fit is applied with its rules', async ({ page, owner }) => {
 	void owner;
@@ -140,7 +141,15 @@ test('a running run of the rules stays with its project: another project never s
 	void owner;
 	const a = await seedRunnableProject(page.request, 'Rules run here');
 	const b = await seedRunnableProject(page.request, 'Rules not run here');
-	for (const p of [a, b]) await updateSettings(page.request, p.id, { runoffModel: 'gr4j' });
+	// A small search, as the first test saves: the server refuses rules whose fit it estimates past a job's
+	// 4 minutes, timing the model on its own machine, and the default 10 500 runs a fit come within reach of
+	// that on a loaded CI runner (a run refused there showed its reason and no run at all).
+	for (const p of [a, b]) {
+		const res = await page.request.get(`${API_URL}/projects/${p.id}`);
+		expect(res.status()).toBe(200);
+		const { calibrationRules } = ((await res.json()) as { project: { settings: { calibrationRules: Record<string, unknown> } } }).project.settings;
+		await updateSettings(page.request, p.id, { runoffModel: 'gr4j', calibrationRules: { ...calibrationRules, run: { seed: 1, starts: 1, budget: 50 } } });
+	}
 	// Every poll of one run (A's, under any project's address), to show they stop once another project is open.
 	const polls: string[] = [];
 	page.on('request', (r) => {
@@ -152,7 +161,11 @@ test('a running run of the rules stays with its project: another project never s
 	const auto = page.getByRole('region', { name: /^Automated calibration/ });
 	const sections = page.getByRole('navigation', { name: 'Project sections' });
 	const fitting = auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ });
+	const started = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/projects/${a.id}/auto-calibrations`));
 	await page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' }).click();
+	// Queued, not refused: a refusal fails here with its reason rather than as a missing status.
+	const start = await started;
+	expect(start.status(), await start.text()).toBe(202);
 	await expect(fitting).toBeVisible();
 	await page.clock.runFor(1_600);
 	await expect.poll(() => polls.length).toBeGreaterThan(0);
