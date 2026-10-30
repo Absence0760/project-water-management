@@ -679,7 +679,8 @@ keeps that record.
   below `settings.calibration.rainThresholdMm` counts as 0 (§2.3).
 - **`settings.calibration`** keeps only `rainThresholdMm` and
   `catchmentAreaKm2` (the area rain falls on, null = the sum of the farm
-  areas). The legacy model's keys (`RETIRED_CALIBRATION_KEYS`: `a`, `b`, the
+  areas; from engine 1.109.0 used only by a model with no land unit: with
+  one, the area is the land units' sum and the run warns, §2.4h). The legacy model's keys (`RETIRED_CALIBRATION_KEYS`: `a`, `b`, the
   season factors, summer months and winter thresholds, the initial base flow,
   the reset ratio, the shift-peak indices, the amplitude, `DaysMax` and the
   recession tables) are dropped when settings are read, and migration 064
@@ -1035,7 +1036,8 @@ setting, so run comparison reads it as legacy.
   beside the model picker, and a fit is refused the same way.
 - **No catchment area, no run.** GR4J's flow is millimetres over the
   catchment, turned into m³ with the catchment area
-  (`calibration.catchmentAreaKm2`, else the sum of the farms' areas). When
+  (the land units' areas summed; with no land unit,
+  `calibration.catchmentAreaKm2`, else the sum of the farms' areas). When
   that is 0 (every farm without an area and no override) there is nothing to
   turn it into, so `runModel` refuses the run with *catchment area is 0 —
   give the farms an area (km²) or set calibration.catchmentAreaKm2*. (Found
@@ -1066,7 +1068,8 @@ setting, so run comparison reads it as legacy.
 8. **Direct flow:** Qd = max(0, Q1 + F).
 9. **Flow:** Q = Qr + Qd, in mm over the catchment. Natural flow (m³/day) =
    Q × area (km²) × 1000, over the catchment area
-   (`calibration.catchmentAreaKm2`, else the sum of the farm areas).
+   (each land unit's own run over its own area, summed, §2.4h; with no land
+   unit, `calibration.catchmentAreaKm2`, else the sum of the farm areas).
 
 **Fluxes recorded:**
 
@@ -8075,9 +8078,10 @@ multiplied by s, the user's choice:
   run's historical days × 365.25 ÷ 10⁶. Historical days: a forecast tail
   never moves it (as the Reserve's curves, K1); without a tail, every day.
 - `'area'`: s = the modelled area ÷ `tableAreaKm2`, where the modelled area
-  (km²) is the area the natural flow is made on: `calibration.catchmentAreaKm2`
-  when set, else the units' areas summed (in node-id order), so the table and
-  the flow it is read against are on one area.
+  (km²) is the area the natural flow is made on: the land units' areas
+  summed (in node-id order; from engine 1.109.0 whatever
+  `calibration.catchmentAreaKm2` says, which only a model with no land unit
+  reads), so the table and the flow it is read against are on one area.
 
 **The default scaling is the area ratio** (the client's hydrologist,
 2026-10-10, issue #90 B2; the MAR ratio before): a new source

@@ -922,7 +922,9 @@ function forcingDiff(
 		// Engine ≥ 1.20.0. A forcing without it ran the defaults, so a limit changed since is a change.
 		rainChecks: !sameJson(rainChecksOf(settings.dataQuality), rainChecksOf(record.forcing.rainChecks)),
 		// Engine ≥ 1.78.0. A forcing without it ran on the catchment rain: before 1.109.0 under Fragmentation, a change
-		// now that Per unit is the only method; from 1.109.0 a model with no land unit, which runs so still.
+		// now that Per unit is the only method; from 1.109.0 a model with no land unit, which runs so still. The settings
+		// alone can't tell such a fit from one whose units were given land since (the nodes aren't here): a run's own
+		// fingerprint does (FitForcingNow.unitRain, unitRainChanged below), so the fit reads changed once a run has one.
 		unitRain: (record.forcing.unitRain || fitFlowMethod(record) === 'fragmentation') && unitRainSettingChanged(settings.unitRain, record.forcing.unitRain ?? null, settings.rainStations)
 	};
 }

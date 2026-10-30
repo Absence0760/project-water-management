@@ -28,7 +28,7 @@ import { prepareCalibration } from '../calibrate/calibrate';
 import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
 import { fitScores } from '../calibrate/objective';
-import { calibrationRecordsAt, parseUnitRainSeriesKey, unitRainSeriesKey, type CalibrationFlowKind, type DailySeries, type ModelInput, type ModelOutput } from '../project';
+import { calibrationRecordsAt, parseUnitRainSeriesKey, resolveUnitRain, unitRainSeriesKey, type CalibrationFlowKind, type DailySeries, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
 import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
@@ -216,14 +216,13 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	// and its CHIRPS level. Its own gauge is gone, so its days fall to the next link of its rule. A unit the base run levels by
 	// the catchment's §2.4b factors (level 'bias') reads them here too: the member turns the correction off, as its catchment
 	// CHIRPS already carries it, so the unit's CHIRPS carries the base run's factors the same way, day by day.
-	const recipes =
-		run.settings.unitRain?.mode === 'perUnit'
-			? unitRainRecipes(
-					{ settings: run.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: run.chirpsCorrection, stations: run.stations?.context ?? null, stationInputs: input.stations ?? null },
-					[],
-					run.settings.unitRain.pinned ?? undefined
-				)
-			: null;
+	// Per unit is the only method (engine ≥ 1.109.0): prepareRun's settings always hold it (resolveUnitRain).
+	const ur = run.settings.unitRain ?? resolveUnitRain(null, []);
+	const recipes = unitRainRecipes(
+		{ settings: run.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: run.chirpsCorrection, stations: run.stations?.context ?? null, stationInputs: input.stations ?? null },
+		[],
+		ur.pinned ?? undefined
+	);
 	for (const r of recipes ?? []) {
 		if (r.chirps?.source !== 'bias') continue;
 		const key = unitRainSeriesKey('rain_chirps_mm', r.nodeId);
@@ -248,18 +247,15 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	}
 	// The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h): the member has no gauge to fit them on, so it pins the
 	// base input's, as its catchment CHIRPS carries the base's §2.4b factors.
-	const refGauge = run.settings.unitRain?.mode === 'perUnit' ? run.settings.unitRain.reference?.gauge : undefined;
-	const ref = referenceFit(run.settings.unitRain, input.series, input.model.nodes, [], refGauge ? referenceGaugeRecord(run.settings, input.series, refGauge, run.stations?.plan ? run.stations.context : null) : undefined);
-	const unitRain =
-		run.settings.unitRain?.mode === 'perUnit'
-			? {
-					...run.settings.unitRain,
-					...(ref && run.settings.unitRain.reference ? { reference: { ...run.settings.unitRain.reference, pinnedFactors: ref.months.map((m) => m.factor) } } : {}),
-					...(recipes ? { pinned: recipes } : {})
-				}
-			: null;
+	const refGauge = ur.reference?.gauge;
+	const ref = referenceFit(ur, input.series, input.model.nodes, [], refGauge ? referenceGaugeRecord(run.settings, input.series, refGauge, run.stations?.plan ? run.stations.context : null) : undefined);
+	const unitRain = {
+		...ur,
+		...(ref && ur.reference ? { reference: { ...ur.reference, pinnedFactors: ref.months.map((m) => m.factor) } } : {}),
+		...(recipes ? { pinned: recipes } : {})
+	};
 	return {
-		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, gapRain: null, ...(unitRain ? { unitRain } : {}), ...(rainStations ? { rainStations } : {}) }, series },
+		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, gapRain: null, unitRain, ...(rainStations ? { rainStations } : {}) }, series },
 		reason: null
 	};
 }

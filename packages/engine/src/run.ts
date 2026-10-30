@@ -1955,8 +1955,8 @@ export function buildNetworkPlan(
 	let outletEwr: OutletEwrPlan | undefined;
 	if (ewrSource) {
 		for (const note of ewrDailySourceNotes(ewrSource)) warnings.push(`daily EWR at the outlet: ${note}`);
-		// The area the natural flow was made on (the calibration override, else the units' areas), so the tables and
-		// the flow they're read against are on one area.
+		// The area the natural flow was made on (the land units' areas; the calibration override only with no land unit,
+		// engine ≥ 1.109.0), so the tables and the flow they're read against are on one area.
 		const areaKm2 = resolveCatchmentAreaKm2(settings.calibration, { ...input, model });
 		outletEwr = { source: ewrSource, info: fillPlanOutletEwr(plan, topo.outflow, natural, ewrSource, areaKm2, historyDays, days, warm.outletEwr) };
 	}

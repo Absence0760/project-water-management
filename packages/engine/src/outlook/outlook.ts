@@ -235,19 +235,30 @@ export function outlookMemberInput(
 	const settings = memberSettings(input, s, baseRun.startDate, start);
 	// Per unit (engine ≥ 1.78.0, §2.4h; the only method since 1.109.0): the base input's unit rules and factors, so the history
 	// cut at the decision date runs at the levels its season (the base run's rain_unit) was made at, as a member from the snapshot does.
-	const prep = prepareRun(input);
-	const pinned = baseUnitRecipes(input, prep);
-	if (pinned) settings.unitRain = { ...resolveUnitRain(settings.unitRain, []), pinned };
 	// Rainfall stations (engine ≥ 1.91.0, §2.4i): the base input's pairing factors, the catchment's and the units', so the
 	// history cut at the decision date isn't corrected by a refit on a shorter record (or refused for one).
-	if (prep.stations) fitEveryPairing(prep.stations.context);
-	const factors = prep.stations ? pairingFactors(prep.stations.context) : null;
+	const { pinned, factors } = basePins(input);
+	if (pinned) settings.unitRain = { ...resolveUnitRain(settings.unitRain, []), pinned };
 	if (factors && Object.keys(factors).length && settings.rainStations)
 		settings.rainStations = { ...settings.rainStations, pinnedFactors: { ...(settings.rainStations.pinnedFactors ?? {}), ...factors } };
 	// The EWR split (engine ≥ 1.105.0, §2.5b): the base run's shares, as a member from the snapshot takes the capture run's,
 	// not shares worked out on the history cut at the decision date.
 	const split = baseEwrSplit(input);
 	return withLevel({ settings, model: input.model, series, ...(input.stations ? { stations: input.stations } : {}), ...(split ? { ewrSplitPinned: split } : {}) }, ops);
+}
+
+/** The base input's unit recipes and pairing factors, once per base input (prepareRun is the costly part, and every member reads them). */
+const pinCache = new WeakMap<ModelInput, { pinned: UnitRainRecipe[] | null; factors: Record<string, number[]> | null }>();
+function basePins(input: ModelInput): { pinned: UnitRainRecipe[] | null; factors: Record<string, number[]> | null } {
+	let got = pinCache.get(input);
+	if (!got) {
+		const prep = prepareRun(input);
+		const pinned = baseUnitRecipes(input, prep);
+		if (prep.stations) fitEveryPairing(prep.stations.context);
+		got = { pinned, factors: prep.stations ? pairingFactors(prep.stations.context) : null };
+		pinCache.set(input, got);
+	}
+	return { pinned: got.pinned ? structuredClone(got.pinned) : null, factors: got.factors ? { ...got.factors } : null };
 }
 
 /** The base input's EWR split, once per base input (an outlook builds a member per analogue and level from one). */
