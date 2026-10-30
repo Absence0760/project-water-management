@@ -1,7 +1,7 @@
 // What a fit records of the per-unit rain (engine ≥ 1.78.0, docs/model.md
 // §2.4h, §2.10b), apart from ./unitRain.ts so the fit-provenance code the
 // Settings forms load doesn't pull in the runoff model (issue #9).
-import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, stationSeriesKey, unitRainSeriesKey, type RainStationSummary, type UnitRainRule, type UnitRainSettings, type UnitRainSummary, type UnitChirpsLevel, type UnitRainUnit } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, resolveUnitRain, stationSeriesKey, unitRainSeriesKey, type RainStationSummary, type UnitRainRule, type UnitRainSettings, type UnitRainSummary, type UnitChirpsLevel, type UnitRainUnit } from '../project';
 import type { UnitRainRecipe } from './unitRain';
 import { patchChainOfForcing } from './stationFingerprint';
 
@@ -82,9 +82,11 @@ export function recipeLevel(r: UnitRainRecipe): Pick<UnitRainUnit, 'rainKey' | '
 	}
 }
 
-/** The fingerprint of the per-unit forcing a run or a fit used (settings.unitRain and each unit's recipe); null for catchment rain. */
-export function unitRainFingerprint(u: UnitRainSettings | null | undefined, recipes: readonly UnitRainRecipe[] | null | undefined): UnitRainFingerprint | null {
-	if (u?.mode !== 'perUnit' || !recipes) return null;
+/** The fingerprint of the per-unit forcing a run or a fit used (settings.unitRain and each unit's recipe); null without recipes (no land unit: catchment rain). */
+export function unitRainFingerprint(raw: UnitRainSettings | null | undefined, recipes: readonly UnitRainRecipe[] | null | undefined): UnitRainFingerprint | null {
+	if (!recipes) return null;
+	// Per unit is the only method (engine ≥ 1.109.0): a setting not resolved yet reads as resolveUnitRain runs it.
+	const u = raw?.mode === 'perUnit' ? raw : resolveUnitRain(raw, []);
 	return {
 		mode: 'perUnit',
 		gaugeMapMm: usableMap(u.gaugeMapMm),

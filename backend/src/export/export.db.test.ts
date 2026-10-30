@@ -591,16 +591,14 @@ describe('input series export', () => {
 		expect((await owner.call('PATCH', `/projects/${pid}/series/${own}`, { siteNodeId: unit.id })).status).toBe(200);
 		const made = await owner.call('POST', `/projects/${pid}/runs`, { label: 'Unit run' });
 		expect(made.status, JSON.stringify(made.body)).toBe(201);
-		// The run read it under the unit's key; on the catchment's rain it made no rain for the unit, so no run columns,
-		// and never the unit's outflow as if the unit were a gauge.
+		// The run read it under the unit's key and made the unit's rain from it (Per unit, the only method since engine
+		// 1.109.0, issue #658: the engine's `rain_unit`): that column, named, and never the unit's outflow as if the unit
+		// were a gauge.
 		const [input] = await asOwner(`SELECT kind FROM run_input_series WHERE run_id = $1 AND series_id = $2`, [made.body.run.id, own]);
 		expect(input.kind).toBe(`rain_catchment_mm@${unit.id}`);
-		expect(table((await download(owner, `/projects/${pid}/series/${own}/export.csv`)).text)[0]).toBe('date,rain_catchment_mm – Unit A gauge (mm),Flags');
-		// A run that made the unit's rain (settings.unitRain perUnit, the engine's `rain_unit`): that column, named.
-		await asOwner(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ($1, $2, $3, 'rain_unit', '{"label":"Rain on the unit","unit":"mm"}', '{7.5,1,4}')`, [made.body.run.id, pid, unit.id]);
 		const rows = table((await download(owner, `/projects/${pid}/series/${own}/export.csv`)).text);
 		expect(rows[0]).toBe('date,rain_catchment_mm – Unit A gauge (mm),Flags,Rain used at Unit A [run Unit run] (mm)');
-		expect(rows[1]).toBe('2024-01-01,7,,7.5');
+		expect(rows[1]).toBe('2024-01-01,7,,7');
 	});
 
 	it('takes its run columns from the latest run of the live model, never a newer scenario run', async () => {

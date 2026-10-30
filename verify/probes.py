@@ -1329,18 +1329,30 @@ def ewr_split_station_units() -> dict:
 
 
 def ewr_split_fragmentation() -> dict:
-    """The same network under Fragmentation (engine >= 1.105.0, issues #615,
-    #616): the unit shares come from GR4J once per land unit on the Per unit
-    forcing (the stations, the gauge MAP), the same shares as under Per unit,
-    and they split both the catchment's one GR4J run's flow and the EWR."""
+    """The same network on the retired Fragmentation setting (unitRain
+    `catchment`): from engine 1.109.0 (issue #658) it runs Per unit, keeping
+    the gauge MAP, so every unit makes its own runoff on the stations and the
+    shares split the EWR as ewr-split-station-units' do. (Engines 1.105.0 –
+    1.108.x ran the catchment's one GR4J run and split its flow by them.)"""
     doc = ewr_split_station_units()
     doc["settings"]["unitRain"] = {**doc["settings"]["unitRain"], "mode": "catchment"}
     return doc
 
 
+def fragmentation_retired_unset() -> dict:
+    """A project that never set unitRain (Fragmentation's default before
+    engine 1.109.0, issue #658) with unit records: it runs Per unit with no
+    gauge MAP, the default MAP period and no reference, so each unit takes
+    its station, else its own gauge, else its own CHIRPS levelled to its MAP,
+    else the catchment rain (rule 4), and its runoff is its own."""
+    doc = unit_rain_rules()
+    del doc["settings"]["unitRain"]
+    return doc
+
+
 def unit_shares_senior_user() -> dict:
     """The senior users' claims on the unit shares (§2.7c, engine >= 1.105.0,
-    issue #616): ewr-split-fragmentation's network with a senior user s
+    issue #616): ewr-split-fragmentation's network (Per unit since engine 1.109.0) with a senior user s
     between u1 and the outlet, so u1 and u2 (one station, MAPs 720 and 420,
     areas 3 and 2) carry its demand by their natural MAR shares, not their
     areas."""
@@ -1446,7 +1458,9 @@ def station_pairing_as_recorded() -> dict:
 
 
 def station_catchment() -> dict:
-    """The catchment's station (§2.4i) under Fragmentation: station S (MAP
+    """The catchment's station (§2.4i) with no unitRain set (Fragmentation's
+    default before engine 1.109.0; Per unit since, the units on rule 4 reading
+    the station's catchment rain): station S (MAP
     560) with gaps and an unreliable fortnight, its pairing on its CHIRPS
     cell; no catchmentMapMm, so the catchment MAP is the farms' area-weighted
     mean (3 × 800 + 1 × 400 + 2 × 650) / 6 = 683.3 and the ratio 1.22. Gap
@@ -1844,6 +1858,8 @@ PROBES = {
     "ewr-split-station-units": ewr_split_station_units(),
     "ewr-split-short-run": ewr_split_short_run(),
     "ewr-split-fragmentation": ewr_split_fragmentation(),
+    # Fragmentation retired (issue #658): a project that never set unitRain runs Per unit.
+    "fragmentation-retired-unset": fragmentation_retired_unset(),
     "unit-shares-senior-user": unit_shares_senior_user(),
     # Daily reference ET (issue #604 R5-E).
     "daily-et0-monthly-pe": daily_et0_monthly_pe(),

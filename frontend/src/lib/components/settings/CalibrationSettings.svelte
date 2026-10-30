@@ -296,10 +296,16 @@
 					bind:value={s.calibration.catchmentAreaKm2}
 					aria-describedby="cal-area-h"
 				/>
-				<span class="hint" id="cal-area-h">
+				<!-- Per unit (the only method, issue #658): each unit makes its runoff over its own area, so with a unit with land the
+				     override isn't used (the engine's resolveCatchmentAreaKm2; the run warns). A state line, not an explanation. -->
+				<span class="hint" id="cal-area-h" data-testid="cal-area-hint">
 					Area the rain falls on. Leave blank to use the sum of the hydrological unit areas —
 					<strong>{fmtNum(farmAreaKm2, 2)} km²</strong> now.{#if cal.catchmentAreaKm2 != null && Math.abs(cal.catchmentAreaKm2 - farmAreaKm2) > 0.005}
-						Overridden: {fmtNum(cal.catchmentAreaKm2, 2)} km² is used.{/if}
+						{#if farmAreaKm2 > 0}
+							Not used: each unit makes its runoff over its own area, so the units’ {fmtNum(farmAreaKm2, 2)} km² is used, not {fmtNum(cal.catchmentAreaKm2, 2)} km², and the run warns.
+						{:else}
+							Overridden: {fmtNum(cal.catchmentAreaKm2, 2)} km² is used.
+						{/if}{/if}
 				</span>
 				<FieldHistoryLine field="settings:calibration.catchmentAreaKm2" />
 			</div>
@@ -348,10 +354,8 @@
 				For a rain record that misses the catchment’s rain, such as a valley gauge or CHIRPS under a mountain range. A fixed input with its
 				source, never a calibrated parameter. Demand and the dams keep the recorded rain.
 			</span>
-			{#if s.unitRain?.mode === 'perUnit'}
-				<!-- A state line, not an explanation: it stays when the explanations are off. -->
-				<span class="hint" role="note" data-testid="areal-rain-unit-note">When <a href="?tab=settings#set-share">Model selection for flow generation</a> on Model settings runs each unit on its own rain (Per unit), it applies only to the units that fall back to the catchment rain.</span>
-			{/if}
+			<!-- A state line, not an explanation: it stays when the explanations are off. Per unit is the only method (issue #658). -->
+			<span class="hint" role="note" data-testid="areal-rain-unit-note">Each unit runs on its own rain (<a href="?tab=settings#set-share">Flow generation</a> on Model settings), so it applies only to the units that fall back to the catchment rain.</span>
 			{#if areal}
 				<!-- Its own chunk (issue #521): most projects leave the correction off. -->
 				<Lazy load={loadArealRain}>
@@ -590,7 +594,6 @@
 					siteNodeId={s.calibrationSiteNodeId}
 					siteName={siteRowName}
 					siteKind={s.calibrationFlowKind}
-					perUnit={s.unitRain?.mode === 'perUnit'}
 					{readonly}
 				/>
 			{/snippet}
@@ -715,7 +718,7 @@
 		bind:lastBand={draft.kept.wr2012Band}
 		{readonly}
 		projectId={project.id}
-		modelAreaKm2={cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : farmAreaKm2}
+		modelAreaKm2={farmAreaKm2 > 0 || cal.catchmentAreaKm2 == null || cal.catchmentAreaKm2 <= 0 ? farmAreaKm2 : cal.catchmentAreaKm2}
 	/>
 </div>
 

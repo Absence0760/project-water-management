@@ -103,7 +103,7 @@ export function prepareYield(input: ModelInput, naturalFlow?: (ctx: RunContext) 
 		natural,
 		warnings,
 		start,
-		nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {},
+		nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {},
 		historyDays
 	);
 	const yearOfDay = new Int32Array(days);

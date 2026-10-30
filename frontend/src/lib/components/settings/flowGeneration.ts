@@ -1,26 +1,20 @@
-// Settings → Model selection for flow generation (issue #553 round 3, docs/ui.md § Settings &
-// calibration, docs/model.md §2.4h, §2.4i, §2.5): the one choice of how
-// natural flow is made. Fragmentation is settings.unitRain off (absent, null
-// or `catchment`): GR4J once on the catchment rain, its flow split to the
-// units by the flow share. Per unit is `perUnit`: GR4J on each land unit's
-// own rain, from the rainfall station settings.rainStations.units assigns it
-// (§2.4i), or, for a unit without one, the §2.4h chain as before. Nothing is
-// migrated: the radio writes the same settings.unitRain the checkbox did, and
-// a unit's station is the rainStations assignment round 2 runs, so every
-// stored project runs as it did. Pure: the components call these.
+// Settings → Flow generation (issue #553 round 3, docs/ui.md § Settings &
+// calibration, docs/model.md §2.4h, §2.4i, §2.5): how natural flow is made. Per unit is the only
+// method since issue #658 (engine 1.109.0; Fragmentation, GR4J once on the catchment rain split to
+// the units, is retired, and migration 286 moved every project to Per unit): GR4J on each land
+// unit's own rain, from the rainfall station settings.rainStations.units assigns it (§2.4i), or,
+// for a unit without one, the §2.4h chain. Pure: the components call these.
 import {
 	AREAL_RAIN_FACTOR_MAX,
 	AREAL_RAIN_FACTOR_MIN,
 	AREAL_RAIN_FACTOR_WARN_MAX,
 	AREAL_RAIN_FACTOR_WARN_MIN,
 	catchmentMapOf,
-	flowMethodOf,
 	MAP_MM_MAX,
 	MAP_MM_MIN,
 	mapMmError,
 	PE_SOURCE_MAX,
 	RAIN_PATCH_MAX,
-	type FlowGenerationMethod,
 	type NetworkNode,
 	type RainPatchSource,
 	type RainStationAssignment,
@@ -28,28 +22,15 @@ import {
 	type SeriesMeta
 } from '@water-management/engine';
 
-export type { FlowGenerationMethod };
-export { flowMethodOf };
-
 /**
- * The two methods: `label` is the name the engine's messages and the fit record use ("fitted under Fragmentation"),
- * `short` the plain words shown beside it, always (issue #586 E14: "Fragmentation" alone said nothing to a reader,
- * and the panel's name read like Calibration's Flow calibration), `help` the longer explanation behind the switch.
+ * The one method, Per unit: `short` the plain words shown beside its name, always (issue #586 E14), `help` the
+ * longer explanation.
  */
-export const FLOW_METHODS: readonly { value: FlowGenerationMethod; label: string; short: string; help: string }[] = [
-	{
-		value: 'fragmentation',
-		label: 'Fragmentation',
-		short: 'one runoff run on the catchment rain, split between the units',
-		help: 'GR4J runs once on the catchment rain, and the flow share splits its flow between the units. The EWR is split by each unit’s natural MAR, from GR4J runs on each unit’s own rain (the Per unit setup below), made for that only.'
-	},
-	{
-		value: 'perUnit',
-		label: 'Per unit',
-		short: 'a runoff run for each unit with land, on its own rain',
-		help: 'GR4J runs on each unit with land, on the rain of the rainfall station it is assigned. Demand and the dams keep the catchment rain.'
-	}
-];
+export const FLOW_METHOD = {
+	label: 'Per unit',
+	short: 'a runoff run for each unit with land, on its own rain',
+	help: 'GR4J runs on each unit with land, on the rain of the rainfall station it is assigned, else on its own gauge, the catchment gauge scaled to its MAP, or its own CHIRPS (below). A unit with none of these runs on the catchment rain, and Run readiness lists it. Demand and the dams keep the catchment rain.'
+} as const;
 
 /** A rainfall station as the form lists it: a catchment rain series with no site (SeriesMeta with its station details). */
 export type StationOption = Pick<SeriesMeta, 'id' | 'name' | 'station'>;
@@ -67,7 +48,7 @@ export function stationOptions<S extends StationOption & Pick<SeriesMeta, 'kind'
 /**
  * The land units that run on the catchment rain (rule 4 of docs/model.md §2.4h), in the model's order: no rainfall
  * station, no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by (or no gauge MAP).
- * Their share (the flow under Fragmentation, the EWR) follows their area under both methods (issue #615, §2.5b), so Run readiness and the Flow generation
+ * Their share of the EWR follows their area (issue #615, §2.5b), so Run readiness and the Flow generation
  * panel name them. Read from the setup, as the editor sees it: the run decides from the records themselves, so a
  * series with no reading, or a CHIRPS that totals 0 mm, still falls to the catchment rain there and the run says so.
  */
@@ -341,7 +322,6 @@ export function assignmentLine(rows: readonly UnitStationRow[]): string {
 	return `${assigned} of ${of} with land ${assigned === 1 ? 'has' : 'have'} a rainfall station.`;
 }
 
-export const methodLabel = (m: FlowGenerationMethod) => FLOW_METHODS.find((x) => x.value === m)!.label;
 
 // ---------------------------------------------------------------------------
 // The catchment's MAP (settings.rainStations.catchmentMapMm / catchmentMapSource, issue #612 follow-up, model.md §2.4i)

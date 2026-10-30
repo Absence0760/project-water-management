@@ -920,8 +920,9 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	s.pe = resolvePe(raw?.pe, warnings);
 	// The areal rainfall correction (engine ≥ 1.13.0, docs/model.md §2.4g).
 	s.arealRain = resolveArealRain(raw?.arealRain, warnings);
-	// Per-unit rain (engine ≥ 1.78.0, §2.4h): only when stored, so settings without it normalise as before.
-	if (raw?.unitRain !== undefined) s.unitRain = resolveUnitRain(raw.unitRain, warnings);
+	// Per-unit rain (engine ≥ 1.78.0, §2.4h), the only flow generation method since 1.109.0 (issue #658): always set,
+	// so absent, null and the retired `catchment` (Fragmentation) run Per unit.
+	s.unitRain = resolveUnitRain(raw?.unitRain, warnings);
 	// Rainfall stations (engine ≥ 1.91.0, §2.4i): only when stored, likewise.
 	if (raw?.rainStations !== undefined) s.rainStations = resolveRainStations(raw.rainStations, warnings);
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);

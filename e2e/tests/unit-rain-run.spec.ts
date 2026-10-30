@@ -22,7 +22,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { box } from '../support/map.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
-import { openSettings, saveSettings } from '../support/settings.ts';
+import { openSettings } from '../support/settings.ts';
 
 const GAUGE_MAP = 640;
 /** Unit MAPs: 800 ÷ 640 = 1.25, 480 ÷ 640 = 0.75, 3000 ÷ 640 ≈ 4.7, held at 4. Invented. */
@@ -106,9 +106,8 @@ test('unit feeds fetched offline, unit MAPs and a gauge MAP give a run on each u
 	// Settings: rain for each unit; the gauge's MAP is the catchment rain station's (issue #553), set in Series details.
 	await openSettings(page, id);
 	const group = page.getByTestId('unit-rain-settings');
-	await page.locator('#set-share').getByRole('radio', { name: 'Per unit' }).check();
+	// Per unit is the only method (issue #658): nothing to switch on first.
 	await expect(group.getByTestId('unit-rain-coverage')).toContainText('3 of 3 units with land have a MAP.');
-	await saveSettings(page);
 	await group.getByRole('link', { name: 'Set it in Series details' }).click();
 	const station = page.getByRole('group', { name: 'Rainfall station' });
 	await station.getByLabel(/^MAP/).fill(String(GAUGE_MAP));

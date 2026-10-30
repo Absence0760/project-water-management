@@ -742,9 +742,8 @@
 		return memo.areas;
 	}
 	async function computeAreas(): Promise<ExportArea[]> {
-		// The catchment and each unit on its station, and (issue #613 slice 2) each unit without one under per-unit rain: its §2.4h chain.
-		const perUnit = settings?.unitRain?.mode === 'perUnit';
-		const items = groups.flatMap((g) => g.items).filter((it): it is AreaItem => it.type !== 'series' && (areaOf(it) !== null || (perUnit && it.type === 'unit')));
+		// The catchment and each unit on its station, and (issue #613 slice 2) each unit without one: its §2.4h chain.
+		const items = groups.flatMap((g) => g.items).filter((it): it is AreaItem => it.type !== 'series' && (areaOf(it) !== null || it.type === 'unit'));
 		let read: ((nodeId: string | null) => AreaRainLines | null) | null = null;
 		let readChain: ((nodeId: string) => UnitChainLines | null) | null = null;
 		let inputError: string | null = null;
@@ -868,7 +867,7 @@
 	{@const end = endDate(s)}
 	{@const span = dataSpan(s, st)}
 	{@const age = daysBetween(span.to, today)}
-	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite, units: unitNames, unitRainOn: settings?.unitRain?.mode === 'perUnit', stationUses: stationUseMap, catchmentStationId: settings?.rainStations?.catchment?.stationId ?? null })}
+	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite, units: unitNames, stationUses: stationUseMap, catchmentStationId: settings?.rainStations?.catchment?.stationId ?? null })}
 	{@const behind = behindAge.get(s.id)}
 	{@const fed = feedMark(s.feed, st?.present)}
 	<!-- Pointer shortcut only; the View button is the accessible control. -->

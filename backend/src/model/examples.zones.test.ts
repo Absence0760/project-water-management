@@ -32,7 +32,7 @@ function innerGauges(input: ModelInput): string[] {
 
 describe('calibration zones on the example catchments', () => {
 	for (const ex of examples) {
-		it(`${ex.name}: only the outlet ticked runs and fits bit-identically, under Fragmentation and Per unit`, () => {
+		it(`${ex.name}: only the outlet ticked runs and fits bit-identically, with no unitRain stored and with a gauge MAP`, () => {
 			for (const base of [inputOf(ex), perUnit(inputOf(ex))]) {
 				const gauges = innerGauges(base);
 				const unticked: CalibrationZone[] = gauges.map((id) => ({ ...newCalibrationZone(id), gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 } }));

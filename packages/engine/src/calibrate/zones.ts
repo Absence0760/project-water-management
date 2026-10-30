@@ -9,9 +9,9 @@
 // draining to that gauge that aren't in a ticked zone further upstream, with
 // their own GR4J X1–X4 and their own record settings. The primary zone is the
 // rest. Unticking a gauge (enabled false) keeps its row and merges its units into
-// the next ticked gauge downstream. Only under Per unit flow generation (§2.4h):
-// under Fragmentation one GR4J runs for the whole catchment, so the zones are
-// ignored with a warning. No ticked zone (absent, [] or every row unticked) is
+// the next ticked gauge downstream. Per unit flow generation (§2.4h), the only
+// method since engine 1.109.0 (issue #658; before it, zones ticked under
+// Fragmentation were ignored with a warning). No ticked zone (absent, [] or every row unticked) is
 // every engine before: one parameter set, to the bit.
 //
 // Pure: the nodes and settings are all it reads.
@@ -191,32 +191,18 @@ export interface ZoneAssignment {
 	unitZone: ReadonlyMap<string, string | null>;
 }
 
-/** Whether the run generates flow per unit (§2.4h), the only method zones apply under. */
-const perUnit = (s: Pick<ProjectSettings, 'unitRain'>): boolean => s.unitRain?.mode === 'perUnit';
-
-/** The ticked rows (whatever the method). */
+/** The ticked rows. */
 export const tickedZones = (s: Pick<ProjectSettings, 'calibrationZones'>): CalibrationZone[] => (s.calibrationZones ?? []).filter((z) => z.enabled);
 
 /**
  * The zones a run or fit applies, or null when it applies none (no ticked row,
- * or every ticked row unusable): then the run is every engine before's. Under
- * Fragmentation ticked rows warn and give null. An unusable ticked row warns
+ * or every ticked row unusable): then the run is every engine before's. An unusable ticked row warns
  * and is left out (its units fall to the next zone down). `base` is the
  * catchment's parameters (settings.gr4j, resolved).
  */
-export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'unitRain'>, base: Gr4jParams, warnings: string[]): ZoneAssignment | null {
+export function resolveZones(nodes: readonly ZoneNode[], settings: Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId'>, base: Gr4jParams, warnings: string[]): ZoneAssignment | null {
 	const ticked = tickedZones(settings);
 	if (!ticked.length) return null;
-	if (!perUnit(settings)) {
-		warnings.push(
-			warn(
-				'calibration.zone.needsPerUnit',
-				{ gauges: ticked.length },
-				`Calibration zones: ${ticked.length} gauge${ticked.length === 1 ? ' is' : 's are'} ticked to calibrate here, but calibration zones need Per unit flow generation (Model settings → Model selection for flow generation): under Fragmentation one GR4J runs for the whole catchment, on the catchment's parameters`
-			)
-		);
-		return null;
-	}
 	const byId = new Map(nodes.map((n) => [n.id, n]));
 	const site = settings.calibrationSiteNodeId ?? null;
 	const usable = ticked.filter((z) => {

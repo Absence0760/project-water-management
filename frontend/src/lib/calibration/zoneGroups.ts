@@ -27,13 +27,12 @@ export interface ZoneGroup {
 	token: string;
 }
 
-type ZoneSettings = Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'unitRain' | 'gr4j'>;
+type ZoneSettings = Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'gr4j'>;
 
 /**
  * The zones a run would apply now, upstream first and the site's own zone
- * last, each with its colour; null when none applies (no ticked gauge, every
- * ticked gauge unusable, or Fragmentation, where one GR4J runs for the whole
- * catchment). The engine's warnings are dropped here: the run gives them.
+ * last, each with its colour; null when none applies (no ticked gauge, or every
+ * ticked gauge unusable). The engine's warnings are dropped here: the run gives them.
  */
 export function zoneGroups(nodes: readonly NetworkNode[], settings: ZoneSettings | null | undefined): ZoneGroup[] | null {
 	if (!settings?.calibrationZones?.some((z) => z.enabled)) return null;

@@ -9,7 +9,6 @@
 // warns when one of them spans more of the run than the series it read.
 import { dayText, fromEpochDay, isIsoDate, toEpochDay } from './calendar';
 import { type DailySeries, type ModelInput, type SeriesPick, type SeriesSpan, unitRainSeriesKey, type UnitRainSettings } from './project';
-import { unitRainOn } from './runoff/unitRain';
 import { compareSeriesNames } from './seriesNames';
 import { warn } from './warningCodes';
 
@@ -63,8 +62,7 @@ function shadowed(pick: unknown, read: DailySeries | undefined, start: number, d
 /**
  * The warnings when another CHIRPS series spans more of the run's days than
  * the one the run read (ties go to the one read), naming both: the outlet's
- * CHIRPS first, then each land unit's own under per-unit rain (the only
- * time the run reads it), for the units the model has, in its node order. None when none does or the input names no others. The run is
+ * CHIRPS first, then each land unit's own, for the units the model has, in its node order. None when none does or the input names no others. The run is
  * `days` days from epoch day `start`.
  */
 export function chirpsChoiceWarnings(
@@ -87,8 +85,8 @@ export function chirpsChoiceWarnings(
 		);
 	}
 	const units = choice.unitChirps;
-	// A unit's own CHIRPS is read only under per-unit rain (§2.4h): otherwise the run reads none of them, so nothing to say.
-	if (!units || typeof units !== 'object' || !unitRainOn(input.settings)) return out;
+	// A unit's own CHIRPS is read under Per unit (§2.4h), the only method since engine 1.109.0.
+	if (!units || typeof units !== 'object') return out;
 	const nodes = input.model?.nodes ?? [];
 	// Only units the run models, in the model's order: a pick for a node a scenario removed is about nothing the run read.
 	const ids = nodes.map((n) => n.id).filter((id) => Object.hasOwn(units, id));

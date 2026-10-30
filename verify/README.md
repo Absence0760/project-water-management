@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 191 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 189 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
@@ -57,7 +57,7 @@ no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
 case is `model.py`'s run plus `diff.compare` over every column and day
 (about half each; 0.1–2 s a case), while the engine runs all ~90 default
 cases in one tsx process in about 5 s. The mutation self-test is the bulk:
-191 mutants, each running the cases in order until its first disagreement
+189 mutants, each running the cases in order until its first disagreement
 (about a third of them on average), about 35 min on one core, against about
 3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
 the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
@@ -66,7 +66,7 @@ the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
 mutants. Every case is a fixed seed and the results are merged in case
 order, so the worker count changes no result (`test_workers_do_not_change_the_result`
 checks one against two). Progress is a flushed line per batch of 25 cases
-or mutants (`agreement: random 50/200 ok, 1m12s`, `mutants: 75/191 run, 75
+or mutants (`agreement: random 50/200 ok, 1m12s`, `mutants: 75/189 run, 75
 caught, 3m29s`), so a long run shows it is alive and where it is.
 `VERIFY_SHARD=k/K` (default `1/1`) splits the mutants K ways: shard k runs
 every K-th mutant from the k-th on the same cases, and only shard 1 runs the
@@ -112,10 +112,12 @@ The core daily chain, with every setting of it the generator varies:
   rain on the dam, evaporation (single or monthly lake factor, the b > 1
   limiter), seepage and its return share, the minimum operating level, spill,
   sub-m³ dams, farms without a dam.
-- **Routing** (§2.5, §2.7): under Fragmentation the natural flow split by
-  each unit's natural MAR share (engine 1.105.0, issue #616; the area, hi/lo
-  and manual flow shares are retired, and the generator no longer sets them),
-  the farm balance K … V in network order, gauges.
+- **Routing** (§2.5, §2.7): each unit's own runoff (Per unit, the only
+  flow generation method from engine 1.109.0, issue #658: `model.py` runs
+  absent, null and the retired `catchment` settings as `perUnit`, keeping the
+  rest; the area, hi/lo and manual flow shares are retired too, and the
+  generator no longer sets them), the farm balance K … V in network order,
+  gauges.
 - **Transfers** (§2.6): priorities, one rate or monthly rates, daily caps,
   the receiver's room (its dam's own gains and losses, its demand) shared pro
   rata, and the source's water in bands at each rule's reserve; a dam rule
@@ -335,9 +337,8 @@ about 30 % of the random networks and 65 % of the dense ones (`generate.py`
 network is unchanged; station records reach up to six years before the
 network so some pairings have their five years):
 
-- **The rule** for the catchment (`settings.rainStations.catchment`, under
-  Fragmentation and under per-unit rain alike) and for each land unit
-  (`units`, per-unit rain only): the station's checked reading × r, r =
+- **The rule** for the catchment (`settings.rainStations.catchment`) and
+  for each land unit (`units`): the station's checked reading × r, r =
   clamp(area MAP ÷ station MAP, 0.25–4), × 1 with `scaleToMap` false or
   either MAP missing; on its gaps the patching priority (`patch`, engine
   1.105.0, issue #612; default [CHIRPS]), the first source with a value: a
@@ -402,7 +403,7 @@ station's own ratio then CHIRPS, one with CHIRPS first, a station without a
 MAP skipped under scaling and read × 1 without it, an empty priority),
 `station-pairing-as-recorded` (the same
 with accumulations run as recorded: the window's blank days make its year
-incomplete, so that pairing is refused), `station-catchment` (Fragmentation on a station that is
+incomplete, so that pairing is refused), `station-catchment` (no `unitRain` set, so Per unit from 1.109.0, on a station that is
 the catchment gauge: the units' mean MAP, its missing list, its zero run
 checked against the catchment's CHIRPS, a refused pairing falling to the
 forecast), `station-catchment-map` (an entered catchment MAP, clamped; the
@@ -418,25 +419,24 @@ and the forecast; no rule 2 without the station's MAP).
 
 The unit shares (model.md §2.5, §2.5b; one way only from engine 1.105.0,
 issues #615 and #616): each unit's one share, which splits the EWR, the
-senior users' claims (§2.7c) and under Fragmentation the flow, is its own
+senior users' claims (§2.7c) (and, under Fragmentation until 1.109.0, the flow), is its own
 natural runoff (days above 0) summed over the complete water years of the historical days, else every historical day,
 ÷ the units' total in node-id order, every farm without runoff at 0; with no
 runoff over the period, each land unit's area ÷ the land units' total; with
-no land unit, every share 0. Under Per unit the runoff is the units'
-`runoff_natural`; under Fragmentation the model runs GR4J once per land unit
-on the Per unit forcing (`settings.unitRain` with its mode set to
-`perUnit`), with the run's parameters, PE and warm-up, for the shares only,
-while the catchment's one run makes the flow they split. The retired
+no land unit, every share 0. The runoff is the units' `runoff_natural`
+(Fragmentation's share runs, 1.105.0 – 1.108.x, are gone with it). The retired
 `settings.ewrSplit` (1.94.0 – 1.104.x), `settings.flowShareMethod` and
 `settings.hiLoSplit` are ignored, and the generator no longer sets them. Compared: every unit's `ewr` and everything downstream
 (`ewr_cumulative`, `ewr_shortfall`), on every network. Probes:
 `ewr-split-station-units` (station-units' network: two units on one station,
 one draining into the other, twelve calendar years whose complete water years
 leave out the first nine months), `ewr-split-short-run` (eight months, no
-complete water year: the whole run) and `ewr-split-fragmentation` (the first
-under Fragmentation: the same shares, splitting the catchment's flow) and
+complete water year: the whole run), `ewr-split-fragmentation` (the first on
+the retired `catchment` setting, which runs Per unit from 1.109.0),
+`fragmentation-retired-unset` (unit-rain-rules' network with no `unitRain`
+at all: Per unit's defaults, issue #658) and
 `unit-shares-senior-user` (that network with a senior user below u1 and u2,
-whose claims the shares split, §2.7c). Mutants: the shares ignored, Fragmentation's share runs ignored, the MAR
+whose claims the shares split, §2.7c). Mutants: the shares ignored, the retired Fragmentation still running when `unitRain` is absent, null or `catchment` (replacing 1.105.0's two share-run mutants), the MAR
 taken over every day instead of the complete water years, and the flow, the
 EWR or the senior claims split by area instead of the shares.
 

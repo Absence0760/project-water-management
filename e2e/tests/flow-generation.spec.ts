@@ -1,13 +1,12 @@
-// Model settings → Model selection for flow generation (issue #553 round 3; docs/ui.md § Model settings; docs/model.md §2.4h, §2.4i,
-// §2.5). On the sample model with two invented rainfall stations beside its catchment rain series:
-// - The panel leads Runoff & calibration with the Fragmentation / Per unit radio. Fragmentation (the default) shows
-//   the units’ one share; Per unit shows a row per land unit: its station (stations only, no satellite option), Scale to
-//   unit MAP with the ratio it gives, and the station correcting its CHIRPS; and each station in use once, with its
-//   MAP. Ticking units gives them one station at once. Saved, the settings hold the radio as settings.unitRain and
-//   the rows as settings.rainStations.units, and a reload shows them again; Fragmentation keeps them (its share runs read them, issue #615).
-// - A fit made under one method (on Calibration, issue #586 round 3), with the other chosen on Model settings, reads
+// Model settings → Flow generation (issue #553 round 3, issue #658; docs/ui.md § Model settings; docs/model.md §2.4h,
+// §2.4i, §2.5). On the sample model with two invented rainfall stations beside its catchment rain series:
+// - The panel leads Model settings with Per unit, the only method (issue #658: the Fragmentation / Per unit radio is
+//   gone): a row per land unit, its station (stations only, no satellite option), Scale to unit MAP with the ratio it
+//   gives, and the station correcting its CHIRPS; and each station in use once, with its MAP. Ticking units gives them
+//   one station at once. Saved, the settings hold the rows as settings.rainStations.units, and a reload shows them again.
+// - A fit made under Fragmentation (an engine before 1.109.0, its forcing recording no per-unit rain) reads
 //   "Parameters not fitted for this method" in the panel, linking to Fit the parameters on Calibration, and in the
-//   fit record there, until the method the fit ran under is chosen again.
+//   fit record there, until it is refitted.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { putModel, seedRunnableProject, updateSettings } from '../support/api.ts';
@@ -46,29 +45,24 @@ const row = (page: Page, unit: string) => panel(page).getByTestId('flowgen-row')
 const storedSettings = async (request: APIRequestContext, id: string) =>
 	((await (await request.get(`${API_URL}/projects/${id}`)).json()) as { project: { settings: { unitRain?: unknown; rainStations?: unknown } } }).project.settings;
 
-test('Model selection for flow generation switches between Fragmentation and Per unit, and assigns each unit a rainfall station', async ({ page, owner }) => {
+test('Flow generation is Per unit, with no choice, and assigns each unit a rainfall station', async ({ page, owner }) => {
 	void owner;
 	const { id, upper, lower, ridge, vlei } = await seed(page.request, 'Flow generation');
 	await openSettings(page, id);
-	await expect(panel(page).getByRole('heading', { level: 2 })).toHaveText('Model selection for flow generation');
-	const method = panel(page).getByRole('group', { name: /^How natural flow is made/ });
-	const fragmentation = method.getByRole('radio', { name: 'Fragmentation' });
-	const perUnit = method.getByRole('radio', { name: 'Per unit' });
-	await expect(fragmentation).toBeChecked();
-	await expect(page.getByTestId('summary-share')).toHaveText('Fragmentation · flow and EWR by each unit’s natural MAR');
-	await expect(panel(page).getByTestId('share-hint')).toHaveAttribute('data-unit-rain', 'off');
+	await expect(panel(page).getByRole('heading', { level: 2 })).toHaveText('Flow generation');
+	// No method to pick (issue #658): Per unit, said in words.
+	await expect(panel(page).getByRole('radio')).toHaveCount(0);
+	await expect(panel(page).getByText('Fragmentation')).toHaveCount(0);
+	await expect(panel(page).getByTestId('flowgen-method')).toContainText('Per unit');
+	await expect(panel(page).getByTestId('flowgen-what')).toHaveText('a runoff run for each unit with land, on its own rain');
+	await expect(page.getByTestId('summary-share')).toHaveText('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
+	await expect(panel(page).getByTestId('share-hint')).toHaveAttribute('data-unit-rain', 'on');
 	// One share per unit, its natural MAR share: no method to pick (engine 1.105.0, issue #616).
 	await expect(panel(page).getByLabel('Flow share method')).toHaveCount(0);
 	await expect(panel(page).getByTestId('hilo-split')).toHaveCount(0);
-	// The Per unit setup shows under Fragmentation too: it makes each unit's natural MAR share of the EWR (issue #615).
-	await expect(panel(page).getByTestId('flowgen-units')).toBeVisible();
-	await expect(panel(page).getByTestId('flowgen-share-setup')).toBeVisible();
-
-	await perUnit.check();
-	await expect(panel(page).getByTestId('share-hint')).toHaveAttribute('data-unit-rain', 'on');
+	await expect(panel(page).getByTestId('flowgen-share-setup')).toHaveCount(0);
 	// The share stays: it splits the EWR, the land cover's low-flow threshold and the priority users' demand.
 	await expect(panel(page).getByRole('heading', { name: 'Flow share and the EWR split' })).toBeVisible();
-	await expect(panel(page).getByTestId('flowgen-share-setup')).toHaveCount(0);
 	await expect(panel(page).getByTestId('flowgen-row')).toHaveCount(2);
 	await expect(panel(page).getByTestId('flowgen-assigned')).toHaveText('0 of 2 units with land have a rainfall station.');
 	const upperStation = row(page, 'Upper farm').getByLabel('Station for Upper farm');
@@ -113,12 +107,11 @@ test('Model selection for flow generation switches between Fragmentation and Per
 	await saveSettings(page);
 	await expect(page.getByTestId('summary-share')).toHaveText('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
 	expect(await storedSettings(page.request, id)).toMatchObject({
-		unitRain: { mode: 'perUnit' },
 		rainStations: { units: { [upper.id]: { stationId: ridge, correctAgainst: vlei }, [lower.id]: { stationId: vlei, scaleToMap: false } }, sites: { [ridge]: { unitId: upper.id } } }
 	});
 });
 
-test('saved stations come back after a reload, stay stored under Fragmentation, and stack on a phone', async ({ page, owner }) => {
+test('saved stations come back after a reload, and stack on a phone', async ({ page, owner }) => {
 	void owner;
 	const { id, upper, lower, ridge, vlei } = await seed(page.request, 'Flow generation saved');
 	await updateSettings(page.request, id, {
@@ -126,21 +119,10 @@ test('saved stations come back after a reload, stay stored under Fragmentation, 
 		rainStations: { units: { [upper.id]: { stationId: ridge, correctAgainst: vlei }, [lower.id]: { stationId: vlei, scaleToMap: false } } }
 	});
 	await openSettings(page, id);
-	const fragmentation = panel(page).getByRole('radio', { name: 'Fragmentation' });
-	const perUnit = panel(page).getByRole('radio', { name: 'Per unit' });
 	const upperStation = row(page, 'Upper farm').getByLabel('Station for Upper farm');
-	await expect(perUnit).toBeChecked();
 	await expect(upperStation).toHaveValue(ridge);
 	await expect(row(page, 'Upper farm').getByLabel('Station correcting Upper farm’s CHIRPS')).toHaveValue(vlei);
 	await expect(row(page, 'Lower farm').getByRole('checkbox', { name: 'Scale to unit MAP: Lower farm' })).not.toBeChecked();
-
-	// Fragmentation keeps the stations and the Per unit setup (they make each unit's EWR share, issue #615), so Per unit brings them back.
-	await fragmentation.check();
-	await expect(upperStation).toHaveValue(ridge);
-	await saveSettings(page);
-	expect(await storedSettings(page.request, id)).toMatchObject({ unitRain: { mode: 'catchment' }, rainStations: { units: { [upper.id]: { stationId: ridge } } } });
-	await perUnit.check();
-	await expect(upperStation).toHaveValue(ridge);
 
 	// On a phone the rows stack: nothing scrolls sideways.
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -160,35 +142,39 @@ async function fitAndApply(page: Page) {
 	await fit.getByRole('button', { name: 'Apply to form' }).click();
 }
 
-test('switching method marks the fit as not fitted for this method, until its own method is chosen again', async ({ page, owner }) => {
+test('a fit made under Fragmentation reads as not fitted for this method, until it is refitted', async ({ page, owner }) => {
 	void owner;
 	const { id } = await seed(page.request, 'Flow generation fit');
 	await updateSettings(page.request, id, { runoffModel: 'gr4j' });
-	// The fit is on Calibration (issue #586 round 3); the model selection for flow generation stays on Model settings.
+	// The fit is on Calibration (issue #586 round 3); Flow generation stays on Model settings.
 	await openCalibration(page, id);
 	await fitAndApply(page);
 	await saveSettings(page);
 	const sidebar = page.getByRole('navigation', { name: 'Project sections' });
 	await sidebar.getByRole('link', { name: 'Model settings', exact: true }).click();
 	const refit = panel(page).getByTestId('flowgen-refit');
-	await expect(panel(page).getByRole('radio', { name: 'Per unit' })).toBeVisible();
+	await expect(panel(page).getByTestId('flowgen-method')).toBeVisible();
+	// Positive control: a fit made under Per unit is this method's.
 	await expect(refit).toHaveCount(0);
 
-	await panel(page).getByRole('radio', { name: 'Per unit' }).check();
-	await expect(refit).toHaveText('Parameters not fitted for this method: the GR4J parameters were fitted under Fragmentation. Fit the parameters again on Calibration before relying on the results.');
+	// The same fit as an engine before 1.109.0 recorded it under Fragmentation: no per-unit rain in its forcing.
+	const fitRecord = structuredClone((await storedSettings(page.request, id)) as unknown as { fitRecord: { engineVersion: string; forcing: Record<string, unknown> } }).fitRecord;
+	fitRecord.engineVersion = '1.108.0';
+	delete fitRecord.forcing.unitRain;
+	await updateSettings(page.request, id, { fitRecord });
+	await openSettings(page, id);
+	await expect(refit).toHaveText('Parameters not fitted for this method: the GR4J parameters were fitted under Fragmentation, which is retired. Fit the parameters again on Calibration before relying on the results.');
 	await expect(refit.getByRole('link', { name: 'Fit the parameters' })).toHaveAttribute('href', '?tab=calibration#set-fit');
-	// The unsaved switch goes along to Calibration: its fit record says so too.
 	await sidebar.getByRole('link', { name: 'Calibration', exact: true }).click();
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
-	await expect(record).toContainText('Parameters not fitted for this method: the fit ran under the other flow generation method');
-	// Saved, it still says so.
-	await saveSettings(page);
-	await openSettings(page, id);
-	await expect(refit).toBeVisible();
+	await expect(record).toContainText('Parameters not fitted for this method: the fit ran under Fragmentation');
 
-	await panel(page).getByRole('radio', { name: 'Fragmentation' }).check();
-	await expect(refit).toHaveCount(0);
-	await sidebar.getByRole('link', { name: 'Calibration', exact: true }).click();
+	// Refitted, it is Per unit's again.
+	await fitAndApply(page);
+	await saveSettings(page);
 	await expect(record).toBeVisible();
 	await expect(record).not.toContainText('Parameters not fitted for this method');
+	await sidebar.getByRole('link', { name: 'Model settings', exact: true }).click();
+	await expect(panel(page).getByTestId('flowgen-method')).toBeVisible();
+	await expect(refit).toHaveCount(0);
 });

@@ -2366,17 +2366,21 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 });
 
 describe('catchment area', () => {
-	it('defaults to the sum of farm areas and honours an explicit override', async () => {
+	it('is the sum of the land units’ areas, whatever the override (Per unit, engine ≥ 1.109.0); the override only without one', async () => {
 		const { resolveCatchmentAreaKm2 } = await import('./run');
 		const nodes = [
-			{ kind: 'gauge', areaKm2: 99 },
-			{ kind: 'farm', areaKm2: 30 },
-			{ kind: 'farm', areaKm2: 20.5 }
+			{ id: 'g', kind: 'gauge', areaKm2: 99 },
+			{ id: 'a', kind: 'farm', areaKm2: 30 },
+			{ id: 'b', kind: 'farm', areaKm2: 20.5 }
 		];
 		const input = { model: { nodes } } as unknown as Parameters<typeof resolveCatchmentAreaKm2>[1];
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: null }, input)).toBe(50.5);
 		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 0 }, input)).toBe(50.5);
-		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 150 }, input)).toBe(150);
+		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 150 }, input)).toBe(50.5);
+		// No land unit (a farm without an area): the override, else the farms' sum (0).
+		const bare = { model: { nodes: [nodes[0], { id: 'c', kind: 'farm', areaKm2: 0 }] } } as unknown as Parameters<typeof resolveCatchmentAreaKm2>[1];
+		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: 150 }, bare)).toBe(150);
+		expect(resolveCatchmentAreaKm2({ catchmentAreaKm2: null }, bare)).toBe(0);
 	});
 });
 

@@ -1073,8 +1073,8 @@ row names a source, where to read it and the series it merges into:
   Each writes the unit's own `rain_chirps_mm` series (`site_node_id` = the
   unit, 209_unit_rain_series; [data-model.md § Unit rain
   series](./data-model.md#unit-rain-series-209_unit_rain_seriessql)), which a
-  run reads under `rain_chirps_mm@<unit id>` and only `settings.unitRain`
-  `perUnit` uses. The fetch, the ingest and the health are those of any CHIRPS
+  run reads under `rain_chirps_mm@<unit id>` (every run with land units:
+  Per unit, the only method from engine 1.109.0). The fetch, the ingest and the health are those of any CHIRPS
   feed; the series is created sited before the first fetch, and a trigger
   sites it again if the feed ever recreates it. The feeds count against the
   60-feed cap like any other.

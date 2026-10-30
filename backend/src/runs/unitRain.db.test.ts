@@ -126,11 +126,13 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 		expect(input.series?.rain_chirps_mm).toBeUndefined();
 	});
 
-	it('with unitRain off, a run forces the catchment as before (the positive control for what follows)', async () => {
-		const runId = (await call('POST', `/projects/${pid}/runs`, { label: 'catchment rain' }, 201)).run.id as string;
+	it('with no unitRain stored, a run is Per unit all the same (issue #658: Fragmentation is retired) and says so in its inputs', async () => {
+		const runId = (await call('POST', `/projects/${pid}/runs`, { label: 'no setting' }, 201)).run.id as string;
 		const { run, series } = await call('GET', `/projects/${pid}/runs/${runId}`);
-		expect(run.summary.unitRain).toBeUndefined();
-		expect((series as { key: string }[]).filter((s) => s.key === 'rain_unit')).toEqual([]);
+		expect(run.summary.unitRain.units.map((u: { nodeId: string }) => u.nodeId).sort()).toEqual(units.map((u) => u.id).sort());
+		expect((series as { key: string }[]).filter((s) => s.key === 'rain_unit').length).toBe(units.length);
+		const input = (await call('GET', `/projects/${pid}/model-input`)).input as ModelInput;
+		expect(input.settings.unitRain).toMatchObject({ mode: 'perUnit' });
 	});
 
 	it('with unitRain perUnit, the run reports each unit on gaugeMap with factor clamp(unit MAP ÷ gauge MAP), its gap from its own CHIRPS, and stores its rain', async () => {
@@ -266,7 +268,7 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 		}
 	});
 
-	it('under Fragmentation the input still carries the reference cell: the EWR shares run on the Per unit forcing (issue #615)', async () => {
+	it('the retired catchment mode is stored as Per unit, its reference kept, and the input carries the reference cell (issue #658)', async () => {
 		const [north] = units;
 		const key = `rain_chirps_cell_mm@${north!.id}`;
 		const reference = { gauge: 'rain_catchment_mm', unitId: north!.id };
@@ -278,8 +280,8 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 			await call('PATCH', `/projects/${pid}`, { settings: { unitRain: { ...unitRain, mode: 'catchment', reference } } });
 			const input = (await call('GET', `/projects/${pid}/model-input`)).input as ModelInput;
 			expect((input.series as Record<string, unknown>)[key]).toEqual(perUnit);
-			// And the run builder keeps the setting whole under Fragmentation.
-			expect(input.settings.unitRain).toMatchObject({ mode: 'catchment', reference });
+			// The API stores the retired mode as Per unit, and the run builder keeps the rest of the setting whole.
+			expect(input.settings.unitRain).toMatchObject({ mode: 'perUnit', reference });
 		} finally {
 			await call('PATCH', `/projects/${pid}`, { settings: { unitRain } });
 		}

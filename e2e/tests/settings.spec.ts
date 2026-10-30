@@ -117,7 +117,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 
 	const menu = page.getByRole('navigation', { name: 'Settings sections' });
 	await expect(menu.getByRole('link')).toHaveText([
-		'Model selection for flow generation',
+		'Flow generation',
 		'EWR the results are judged by',
 		'Simulation period',
 		'Rain gaps',
@@ -133,7 +133,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Automatic runs'
 	]);
 	// The page's first panel, the model selection (issue #614), is the one being read at the top.
-	await expect(menu.getByRole('link', { name: 'Model selection for flow generation' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Flow generation' })).toHaveAttribute('aria-current', 'location');
 
 	await menu.getByRole('link', { name: 'EWR', exact: true }).click();
 	await expect(page).toHaveURL(/#set-ewr$/);

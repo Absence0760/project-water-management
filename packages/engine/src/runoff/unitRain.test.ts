@@ -75,48 +75,28 @@ function everyRule(): ModelInput {
 	return x;
 }
 
-describe('settings.unitRain off', () => {
-	it('absent, null and catchment mode give the same output to the bit; unit records move only the unit shares (issues #615, #616)', () => {
-		const plain = runModel(catchment('absent'));
-		for (const u of [null, { mode: 'catchment' as const }, { mode: 'catchment' as const, gaugeMapMm: 500, gaugeMapSource: 'x' }]) {
-			const o = runModel(catchment(u));
-			const diff = o.series.find((s, i) => JSON.stringify(s) !== JSON.stringify(plain.series[i]));
-			expect(diff?.key ?? null, JSON.stringify(u)).toBeNull();
-			expect(JSON.stringify(o.summary.warnings)).toBe(JSON.stringify(plain.summary.warnings));
-			// The share runs' forcing fingerprint (engine ≥ 1.105.0, issue #616) records the Per unit setup they read, a
-			// gauge MAP included even when no unit uses it, as Per unit's own fingerprint does: everything else is the same.
-			const noShareRain = (x: Out) => ({ ...x, summary: { ...x.summary, shareRain: null } });
-			expect(o.summary.shareRain?.gaugeMapMm ?? null, JSON.stringify(u)).toBe(u && 'gaugeMapMm' in u ? u.gaugeMapMm : null);
-			expect(JSON.stringify(noShareRain(o).summary), JSON.stringify(u)).toBe(JSON.stringify(noShareRain(plain).summary));
-			expect(JSON.stringify(noShareRain(o)), JSON.stringify(u)).toBe(JSON.stringify(noShareRain(plain)));
-		}
-		// Fragmentation reads the Per unit setup for the unit shares only (engine ≥ 1.105.0, §2.5, §2.5b): the catchment's
-		// rain and natural flow are the same to the bit, and each unit's share is the Per unit run's. The shares split the
-		// flow between the units (issue #616), so the outflow (no abstraction here) is the same natural flow summed in
-		// other parts: equal to float rounding, not to the bit.
-		const withRecords = everyRule();
-		withRecords.settings.unitRain = { ...withRecords.settings.unitRain!, mode: 'catchment' };
-		const frag = runModel(withRecords);
-		for (const key of ['natural_flow', 'rain_used']) expect(col(frag, key), key).toEqual(col(plain, key));
-		const outFrag = col(frag, 'simulated_outflow')!;
-		const outPlain = col(plain, 'simulated_outflow')!;
-		expect(outFrag).toHaveLength(outPlain.length);
-		for (let t = 0; t < outPlain.length; t++) expect(Math.abs(outFrag[t]! - outPlain[t]!), `day ${t}`).toBeLessThanOrEqual(1e-12 * Math.max(1, Math.abs(outPlain[t]!)));
-		// The split itself moved: unit A's part of the flow follows its own rain, not its area.
-		expect(col(frag, 'runoff', 'A')).not.toEqual(col(plain, 'runoff', 'A'));
-		expect(frag.summary.unitRain).toBeUndefined();
-		const per = runModel(everyRule());
-		for (const f of per.summary.farms) expect(frag.summary.farms.find((g) => g.nodeId === f.nodeId)!.ewrShare, f.nodeId).toBe(f.ewrShare);
-		expect(frag.summary.farms.find((f) => f.nodeId === 'A')!.ewrShare).not.toBe(plain.summary.farms.find((f) => f.nodeId === 'A')!.ewrShare);
-		expect(plain.summary.unitRain).toBeUndefined();
-		expect(plain.series.some((s) => s.key === 'rain_unit' || s.key === 'runoff_natural')).toBe(false);
+describe('the retired Fragmentation runs Per unit (engine ≥ 1.109.0, issue #658)', () => {
+	it('absent, null and catchment mode run exactly as perUnit with the same gauge MAP, MAP period and reference, to the bit', () => {
+		const per = runModel(catchment({ mode: 'perUnit' }));
+		expect(per.summary.unitRain).toBeDefined();
+		for (const u of ['absent' as const, null, { mode: 'catchment' as const }]) expect(JSON.stringify(runModel(catchment(u))), JSON.stringify(u)).toBe(JSON.stringify(per));
+		const gauge = { gaugeMapMm: 500, gaugeMapSource: 'x', mapPeriod: { start: '1995-01-01', end: '2014-12-31' } };
+		expect(JSON.stringify(runModel(catchment({ mode: 'catchment', ...gauge })))).toBe(JSON.stringify(runModel(catchment({ mode: 'perUnit', ...gauge }))));
+		// A project on Fragmentation with every unit's records (its own gauge, a MAP under a gauge MAP, its own CHIRPS,
+		// nothing) runs each unit on its own rain, as Per unit does: the forward path of migration 286.
+		const frag = everyRule();
+		frag.settings.unitRain = { ...frag.settings.unitRain!, mode: 'catchment' };
+		expect(JSON.stringify(runModel(frag))).toBe(JSON.stringify(runModel(everyRule())));
+		expect(runModel(frag).summary.unitRain!.units.map((u) => u.rule)).toEqual(['unitGauge', 'gaugeMap', 'gaugeMap', 'gaugeMap']);
+		expect(runModel(frag).summary.shareRain).toBeUndefined();
 	});
 
-	it('an unusable setting runs the catchment rain, with a warning', () => {
+	it('an unusable setting runs Per unit’s defaults, with a warning', () => {
 		const out = runModel(catchment({ mode: 'everywhere' } as never));
-		expect(out.summary.unitRain).toBeUndefined();
+		expect(out.summary.unitRain).toBeDefined();
 		expect(out.summary.warnings.some((w) => /per-unit rain setting is ignored/.test(w))).toBe(true);
-		expect(sameOutput({ ...out, summary: { ...out.summary, warnings: [] } }, { ...runModel(catchment('absent')), summary: { ...runModel(catchment('absent')).summary, warnings: [] } })).toBe(true);
+		const plain = runModel(catchment('absent'));
+		expect(sameOutput({ ...out, summary: { ...out.summary, warnings: [] } }, { ...plain, summary: { ...plain.summary, warnings: [] } })).toBe(true);
 	});
 
 	it('perUnit with no land unit warns and runs the catchment rain', () => {
@@ -508,7 +488,7 @@ describe('fit provenance and run comparison', () => {
 	const ctx = { settings: prepareRun(input).settings, validate: false, validationRecord: null, engineVersion: 'test', fittedAt: '2026-10-09T00:00:00Z' };
 	const record = fitRecordFromReport(report, ctx);
 
-	it('records each unit’s rule, record and factors; a fit under catchment rain records none', () => {
+	it('records each unit’s rule, record and factors; so does a fit of settings without unitRain (Per unit is the only method)', () => {
 		expect(record.forcing!.unitRain!.units.map((u) => [u.nodeId, u.rule, u.factor])).toEqual([
 			['A', 'unitGauge', 1],
 			['B', 'gaugeMap', 1.4],
@@ -517,7 +497,7 @@ describe('fit provenance and run comparison', () => {
 		]);
 		expect(unitRainFingerprintError(record.forcing!.unitRain)).toBeNull();
 		const plain = catchment('absent');
-		expect(fitRecordFromReport(calibrate(plain, { budget: 10, seed: 1 }), { ...ctx, settings: prepareRun(plain).settings }).forcing!.unitRain).toBeUndefined();
+		expect(fitRecordFromReport(calibrate(plain, { budget: 10, seed: 1 }), { ...ctx, settings: prepareRun(plain).settings }).forcing!.unitRain!.units.map((u) => u.rule)).toEqual(['catchment', 'catchment', 'catchment', 'catchment']);
 	});
 
 	it('marks a gauge unit’s checked gauge (engine ≥ 1.85.0), so a fit from before the checks reads "forcing changed"', () => {
@@ -696,27 +676,21 @@ describe('more of the per-unit run', () => {
 		expect(unitRainFingerprintChanged(fa, structuredClone(fa))).toBe(false);
 	});
 
-	it('off runs the same flow to the bit on random networks, unit records and MAPs in the input or not (they move only the unit shares, issues #615, #616)', () => {
+	it('absent, null and catchment run as perUnit to the bit on random networks with unit records and MAPs (issue #658)', () => {
 		for (let seed = 1; seed <= 25; seed++) {
-			const plain = randomInput(seed);
-			let before: string;
+			const per = withUnitRainRecords(randomInput(seed), seed);
+			per.settings.unitRain = { mode: 'perUnit' };
+			let want: string;
 			try {
-				before = JSON.stringify(runModel(plain));
+				want = JSON.stringify(runModel(per));
 			} catch {
 				continue;
 			}
-			const flow = (o: Out) => JSON.stringify(o.series.filter((s) => s.key === 'natural_flow' || s.key === 'rain_used'));
-			const plainFlow = flow(JSON.parse(before) as Out);
-			let last: string | null = null;
-			for (const unitRain of [null, { mode: 'catchment' as const }]) {
-				const off = withUnitRainRecords(randomInput(seed), seed);
-				off.settings.unitRain = unitRain;
-				const out = runModel(off);
-				expect(flow(out), `seed ${seed}`).toBe(plainFlow);
-				// Null and `catchment` are the same setting: the same run to the bit, the unit shares too.
-				const all = JSON.stringify(out);
-				if (last !== null) expect(all, `seed ${seed}`).toBe(last);
-				last = all;
+			for (const unitRain of [undefined, null, { mode: 'catchment' as const }]) {
+				const x = withUnitRainRecords(randomInput(seed), seed);
+				if (unitRain === undefined) delete x.settings.unitRain;
+				else x.settings.unitRain = unitRain;
+				expect(JSON.stringify(runModel(x)), `seed ${seed} ${JSON.stringify(unitRain)}`).toBe(want);
 			}
 		}
 	}, 120_000);

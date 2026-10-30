@@ -428,6 +428,10 @@ describe('SettingsPatch.unitRain (issue #482)', () => {
 			expect(unitRainError(bad), name).not.toBeNull();
 		}
 		expect(ok({ ...full, extra: 1 })).toBe(false);
+		// The retired catchment mode (Fragmentation, issue #658) is read, and stored as Per unit, the only method, keeping the rest.
+		expect(SettingsPatch.parse({ unitRain: { mode: 'catchment' } }).unitRain).toEqual({ mode: 'perUnit' });
+		expect(SettingsPatch.parse({ unitRain: { ...full, mode: 'catchment' } }).unitRain).toEqual(full);
+		expect(SettingsPatch.parse({ unitRain: null }).unitRain).toBeNull();
 		// The engine-only `pinned` rules (an outlook member's, docs/model.md §2.4h) never come from a client: a stored one would override every unit's fitted level.
 		expect(ok({ ...full, pinned: [{ nodeId: 'u1', rule: 'gaugeMap', gaugeMapFactor: 4 }] })).toBe(false);
 	});

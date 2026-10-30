@@ -731,25 +731,14 @@ export interface FitRecordStatus {
 	 */
 	catchmentStationChanged?: true;
 	/**
-	 * The flow generation method (Model settings → Model selection for flow generation, issue #553,
-	 * docs/model.md §2.4h, §2.5) differs from the one the fit ran under:
-	 * Fragmentation (one GR4J run on the catchment rain, split by flow share;
-	 * settings.unitRain absent, null or `catchment`) or Per unit (GR4J per land
-	 * unit, `perUnit`). The parameters were not fitted for this method. Its own
-	 * caveat; also sets `forcingChanged`. Absent when not, and on a record made
-	 * before `forcing` was recorded.
+	 * The fit ran under Fragmentation (one GR4J run on the catchment rain,
+	 * split between the units), retired in engine 1.109.0 (issue #658,
+	 * docs/model.md §2.4h, §2.5): every run is Per unit now (GR4J per land
+	 * unit on its own rain), so the parameters were not fitted for this method.
+	 * Its own caveat; also sets `forcingChanged`. Absent when not, and on a
+	 * record made before `forcing` was recorded.
 	 */
 	methodChanged?: true;
-	/**
-	 * Under Fragmentation, the forcing the share runs read (engine ≥ 1.105.0,
-	 * issue #616, FitRecord.forcing.shareRain) differs from the fit's: the Per
-	 * unit setup's gauge MAP, MAP period, reference gauge or a unit's station,
-	 * or (when a run says what it is now) a unit's rule, record or factors, so
-	 * each unit's natural MAR share, and the flow it splits, moved. Also sets
-	 * `forcingChanged`. Absent when not, under Per unit, and on a record made
-	 * before it.
-	 */
-	shareRainChanged?: true;
 	/**
 	 * The fitted record now comes from another source, or was given in
 	 * another unit, than when it was fitted (107_series_source.sql, engine ≥
@@ -932,8 +921,11 @@ function forcingDiff(
 		rainSource: !sameJson(settings.rainSource ?? [], record.forcing.rainSource ?? []),
 		// Engine ≥ 1.20.0. A forcing without it ran the defaults, so a limit changed since is a change.
 		rainChecks: !sameJson(rainChecksOf(settings.dataQuality), rainChecksOf(record.forcing.rainChecks)),
-		// Engine ≥ 1.78.0. A forcing without it ran on the catchment rain, so per-unit rain turned on since is a change.
-		unitRain: unitRainSettingChanged(settings.unitRain, record.forcing.unitRain ?? null, settings.rainStations)
+		// Engine ≥ 1.78.0. A forcing without it ran on the catchment rain: before 1.109.0 under Fragmentation, a change
+		// now that Per unit is the only method; from 1.109.0 a model with no land unit, which runs so still. The settings
+		// alone can't tell such a fit from one whose units were given land since (the nodes aren't here): a run's own
+		// fingerprint does (FitForcingNow.unitRain, unitRainChanged below), so the fit reads changed once a run has one.
+		unitRain: (record.forcing.unitRain || fitFlowMethod(record) === 'fragmentation') && unitRainSettingChanged(settings.unitRain, record.forcing.unitRain ?? null, settings.rainStations)
 	};
 }
 
@@ -946,9 +938,9 @@ function forcingDiff(
  * the fit's fingerprint lists.
  */
 function unitRainSettingChanged(now: unknown, then: UnitRainFingerprint | null, stations?: unknown): boolean {
+	// Per unit is the only method since engine 1.109.0 (issue #658): a fit without a fingerprint ran Fragmentation.
 	const u = resolveUnitRain(now, []);
-	const on = u?.mode === 'perUnit';
-	if (!on || !then) return on !== !!then;
+	if (!then) return true;
 	const gauge = u.gaugeMapMm ?? null;
 	const period = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	// The reference gauge and unit (engine ≥ 1.80.0): another one, or one on a side only.
@@ -981,24 +973,25 @@ function unitStationsChanged(stations: unknown, then: UnitRainFingerprint): bool
 }
 const STATION_KEY_PREFIX = stationSeriesKey('');
 
+/** The engine from which Per unit is the only flow generation method (issue #658): Fragmentation is retired. */
+const PER_UNIT_ONLY_SINCE = [1, 109, 0];
+
 /**
  * The flow generation method a fit ran under (issue #553): its forcing records
- * per-unit rain only under Per unit; null when it predates `forcing`. A Per
- * unit fit on a model with no land unit records none (it ran on the catchment
- * rain, as Fragmentation does), so it reads as Fragmentation: the settings'
- * Per unit then says "not fitted for this method", which is what
- * unitRainSettingChanged already said of such a fit.
+ * per-unit rain only under Per unit; null when it predates `forcing`. Before
+ * engine 1.109.0 a fit without it ran under Fragmentation (or under Per unit
+ * on a model with no land unit, which ran on the catchment rain as
+ * Fragmentation does, and reads as it: "not fitted for this method", which is
+ * what unitRainSettingChanged already said of such a fit). From 1.109.0 every
+ * fit is Per unit (issue #658), a model with no land unit included. A
+ * Fragmentation fit's parameters were made on other rain: methodChanged.
  */
-export function fitFlowMethod(record: Pick<FitRecord, 'forcing'>): FlowGenerationMethod | null {
+export function fitFlowMethod(record: Pick<FitRecord, 'forcing' | 'engineVersion'>): FlowGenerationMethod | null {
 	if (!record.forcing) return null;
-	return record.forcing.unitRain ? 'perUnit' : 'fragmentation';
+	return record.forcing.unitRain || !engineBefore(record.engineVersion, PER_UNIT_ONLY_SINCE) ? 'perUnit' : 'fragmentation';
 }
 
-/** The flow generation method settings.unitRain chooses (Model settings → Model selection for flow generation, issue #553): Per unit for `perUnit`, else Fragmentation. */
-export function flowMethodOf(unitRain: unknown): FlowGenerationMethod {
-	return resolveUnitRain(unitRain, [])?.mode === 'perUnit' ? 'perUnit' : 'fragmentation';
-}
-
+/** The two methods a fit may have run under: Per unit, and Fragmentation (retired in engine 1.109.0, issue #658; older fits only). */
 export type FlowGenerationMethod = 'fragmentation' | 'perUnit';
 
 /** What the settings don't hold but a fit's forcing depends on: the CHIRPS series' product and version now (omit when not known). */
@@ -1032,11 +1025,6 @@ export interface FitForcingNow {
 	 * Settings form, which has no run: then only settings.unitRain itself is compared).
 	 */
 	unitRain?: UnitRainFingerprint | null;
-	/**
-	 * Under Fragmentation, the forcing a run's share runs read (its summary.shareRain, engine ≥ 1.105.0; null = no
-	 * land unit); omit when not known (the Settings form, a run under Per unit, a resumed run or an older one).
-	 */
-	shareRain?: UnitRainFingerprint | null;
 }
 
 /**
@@ -1047,13 +1035,11 @@ export interface FitForcingNow {
  * summary from before engine 1.91.0 has no stations: no catchment station,
  * as it ran. Nothing without a summary (the Settings form).
  */
-export function runForcingOfSummary(summary: Pick<RunSummary, 'unitRain' | 'stations' | 'shareRain'> | null | undefined): Pick<FitForcingNow, 'unitRain' | 'catchmentStation' | 'shareRain'> {
+export function runForcingOfSummary(summary: Pick<RunSummary, 'unitRain' | 'stations'> | null | undefined): Pick<FitForcingNow, 'unitRain' | 'catchmentStation'> {
 	if (!summary) return {};
 	return {
 		unitRain: unitRainFingerprintOfSummary(summary.unitRain, summary.stations),
-		catchmentStation: catchmentStationFingerprint(summary.stations),
-		// Fragmentation's share runs (engine ≥ 1.105.0, issue #616); a run without them says nothing of them.
-		...(summary.shareRain !== undefined ? { shareRain: summary.shareRain } : {})
+		catchmentStation: catchmentStationFingerprint(summary.stations)
 	};
 }
 
@@ -1136,19 +1122,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		chirpsFactorsDrifted(factorsThen, now.chirpsFactors);
 	// The units' rules, records and factors, when a run says what they are now (engine ≥ 1.78.0).
 	const unitRainChanged = !forcing?.unitRain && now.unitRain !== undefined && record.forcing !== undefined && unitRainFingerprintChanged(record.forcing.unitRain ?? null, now.unitRain);
-	// The flow generation method (issue #553): Fragmentation or Per unit, now and at the fit.
-	const fitMethod = fitFlowMethod(record);
-	const methodChanged = fitMethod !== null && fitMethod !== flowMethodOf(settings.unitRain);
-	// Fragmentation's share forcing (engine ≥ 1.105.0, issue #616): the Per unit setup the shares are made on, compared
-	// as Per unit's own is: its settings (gauge MAP, period, reference, units' stations) when the fit recorded units, and
-	// a run's fingerprint when one says what it is now. Only between two Fragmentation setups: a method change says it.
-	const shareThen = record.forcing?.shareRain;
-	const shareRainChanged =
-		!methodChanged &&
-		fitMethod === 'fragmentation' &&
-		shareThen !== undefined &&
-		((!!shareThen && unitRainSettingChanged({ ...((settings.unitRain as object | null | undefined) ?? {}), mode: 'perUnit' }, shareThen, settings.rainStations)) ||
-			(now.shareRain !== undefined && unitRainFingerprintChanged(shareThen, now.shareRain)));
+	// The flow generation method (issue #553): Per unit is the only one since engine 1.109.0 (issue #658), so a fit made
+	// under Fragmentation, now retired, was made on other rain.
+	const methodChanged = fitFlowMethod(record) === 'fragmentation';
 	return {
 		editedParams: editedParams(settings, record),
 		otherModel: (record.model as string) !== 'gr4j',
@@ -1168,10 +1144,8 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		siteChanged: (settings.calibrationSiteNodeId ?? null) !== (record.siteNodeId ?? null),
 		...(catchmentStationChanged ? { catchmentStationChanged: true as const } : {}),
 		...(methodChanged ? { methodChanged: true as const } : {}),
-		...(shareRainChanged ? { shareRainChanged: true as const } : {}),
 		forcingChanged:
 			methodChanged ||
-			shareRainChanged ||
 			catchmentStationChanged ||
 			chirpsSourceChanged ||
 			apanDailyChanged ||
@@ -1281,7 +1255,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.methodChanged) {
 		out.push(
-			'Parameters not fitted for this method: the fit ran under the other flow generation method (Model settings → Model selection for flow generation: Fragmentation, one GR4J run on the catchment rain, or Per unit, GR4J on each unit’s own rain). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
+			'Parameters not fitted for this method: the fit ran under Fragmentation (one GR4J run on the catchment rain, split between the units), which is retired. Every run now makes runoff per unit, GR4J on each unit’s own rain (Model settings → Flow generation). GR4J’s parameters depend on the rain they were fitted on: refit before relying on them.'
 		);
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.et0DailyChanged && !status.chirpsFactorsChanged && !status.catchmentStationChanged && !status.methodChanged) {

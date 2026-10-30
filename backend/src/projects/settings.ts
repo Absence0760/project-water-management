@@ -708,9 +708,11 @@ const ArealRain = z
 	.strict();
 
 /**
- * settings.unitRain (issue #482, docs/model.md §2.4h): whether each land unit
- * runs GR4J on its own rain (`perUnit`) or the catchment's (`catchment`,
- * like absent or null), the catchment gauge's own MAP with its source, the
+ * settings.unitRain (issue #482, docs/model.md §2.4h): each land unit runs
+ * GR4J on its own rain (`perUnit`, the only flow generation method since
+ * engine 1.109.0, issue #658: the retired `catchment`, Fragmentation, is
+ * still read, as an older export or client may send it, and stored as
+ * `perUnit`, as the engine runs it), the catchment gauge's own MAP with its source, the
  * period a unit's CHIRPS MAP factor is computed over (null/absent = 1991–2020),
  * and the reference gauge and unit whose monthly factors level every unit's
  * CHIRPS (engine ≥ 1.80.0, issue #500; null/absent = none).
@@ -731,7 +733,8 @@ export const UnitRain = z
 	.superRefine((v, ctx) => {
 		const err = unitRainError(v);
 		if (err) ctx.addIssue({ code: 'custom', message: `unit rain: ${err}` });
-	});
+	})
+	.transform((v) => ({ ...v, mode: 'perUnit' as const }));
 
 /**
  * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23, docs/model.md §2.4b
@@ -1155,7 +1158,8 @@ export const FitRecord = z
 					.optional(),
 				// Engine ≥ 1.20.0 (issue #66): the data-quality rain-check limits the fit ran under. Optional, as above; absent = the defaults.
 				rainChecks: RainChecks.strict().optional(),
-				// Engine ≥ 1.78.0 (issue #482): runoff from each unit's own rain, recorded only when on. Optional, as above; absent = catchment rain.
+				// Engine ≥ 1.78.0 (issue #482): runoff from each unit's own rain. Optional, as above; absent = a Fragmentation fit
+				// (before engine 1.109.0) or, from 1.109.0, a model with no land unit (catchment rain).
 				unitRain: z
 					.unknown()
 					.superRefine((v, ctx) => {
@@ -1163,8 +1167,8 @@ export const FitRecord = z
 						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
 					})
 					.optional(),
-				// Engine ≥ 1.105.0 (issue #616): under Fragmentation, the Per unit forcing the unit shares ran on (null with no
-				// land unit). Optional, as above; absent = a Per unit fit (`unitRain` is it) or one made before.
+				// Engines 1.105.0 – 1.108.x (issue #616): under Fragmentation, retired in 1.109.0 (issue #658), the Per unit forcing
+				// the unit shares ran on (null with no land unit). Kept so an older fit record still saves; no engine since writes it.
 				shareRain: z
 					.unknown()
 					.superRefine((v, ctx) => {

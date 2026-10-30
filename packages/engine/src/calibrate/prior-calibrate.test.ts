@@ -130,6 +130,8 @@ function expectBeforePrior(name: string, params: unknown, report: unknown) {
 	expect(reportDiff(got.golden, BEFORE_PRIOR[name]!.golden), name).toEqual([]);
 }
 
+// The lumped and typical pins' shapes were re-pinned at engine 1.109.0 (issue #658): their reports now record the
+// per-unit forcing (Per unit is the only method); the parameters and every number are unchanged.
 describe('with the prior off', () => {
 	it('a calibration is as engine 1.106.0 made it before the prior was wired', () => {
 		const r = calibrate(lumped(), { budget: 120, seed: 7, starts: 2 });
@@ -283,8 +285,9 @@ describe('the prior under calibration zones', () => {
 		expect(priorTargetOf(z, null)).toMatchObject({ zoneNodeId: null, units: ['B'], areaKm2: 60 });
 		expect(() => priorTargetOf(z, 'G')).toThrow(/no calibration zone/);
 		const l = priorTargetOf(lumped(), null);
-		// Five whole water years (2010/11 … 2014/15): the MAP is their mean total, on the catchment's rain.
-		expect(l).toMatchObject({ zoneNodeId: null, units: null, areaKm2: 40, years: 5, rainFrom: 'catchment' });
+		// Five whole water years (2010/11 … 2014/15): the MAP is their mean total, on the units' rain (Per unit, the only
+		// method since engine 1.109.0), which for the one unit with no rain of its own is the catchment's (rule 4).
+		expect(l).toMatchObject({ zoneNodeId: null, units: null, areaKm2: 40, years: 5, rainFrom: 'units' });
 		const rain = lumped().series.rain_catchment_mm!.values as number[];
 		expect(l.mapMm!).toBeCloseTo(rain.reduce((a, b) => a + b, 0) / 5, 9);
 		expect(l.aridity!).toBeGreaterThan(0);

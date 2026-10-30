@@ -104,9 +104,16 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 	{
 		"id": "U1",
 		"source": "finding",
-		"severity": "Medium (projects with runoff from each unit's own rain, settings.unitRain perUnit)",
+		"severity": "Medium (every project with a land unit: runoff from each unit's own rain, Per unit, the only flow generation method from engine 1.109.0, FM2; before it, projects with settings.unitRain perUnit)",
 		"title": "Each unit's rain level rested on provisional calls",
 		"status": "Pending the hydrologist on the MAP period, the reference cell and rain-source days in the fit; the decided rules are built in engine 1.85.0 (issue #500). From engine 1.105.0 the EWR is split by each unit's natural MAR under both methods (FM1; its MAR period provisional, ES1)"
+	},
+	{
+		"id": "FM3",
+		"source": "finding",
+		"severity": "Low (land units with no rainfall station, own gauge, MAP or CHIRPS of their own)",
+		"title": "A unit with no rain of its own runs on the catchment rain",
+		"status": "Pending the hydrologist's confirmation (issue #658)"
 	},
 	{
 		"id": "L1",
@@ -153,7 +160,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 	{
 		"id": "CZ1",
 		"source": "finding",
-		"severity": "Low (projects that tick a gauge in Calibrate at several gauges, under Per unit)",
+		"severity": "Low (projects that tick a gauge in Calibrate at several gauges; every project runs Per unit from engine 1.109.0, FM2)",
 		"title": "Two outputs still vary only the calibration site's zone",
 		"status": "Warned"
 	},

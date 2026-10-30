@@ -27,11 +27,12 @@ describe('zoneGroups', () => {
 		]);
 	});
 
-	it('is null with no ticked gauge, under Fragmentation, or when the only ticked gauge is unusable', () => {
+	it('is null with no ticked gauge, or when the only ticked gauge is unusable', () => {
 		expect(zoneGroups(zoneNodes, null)).toBeNull();
 		expect(zoneGroups(zoneNodes, settings({ calibrationZones: [] }))).toBeNull();
 		expect(zoneGroups(zoneNodes, settings({ calibrationZones: [{ ...newCalibrationZone('H'), enabled: false }] }))).toBeNull();
-		expect(zoneGroups(zoneNodes, settings({ unitRain: { mode: 'catchment' } }))).toBeNull();
+		// A project still holding Fragmentation's retired `catchment` runs Per unit (issue #658): its zones apply.
+		expect(zoneGroups(zoneNodes, settings({ unitRain: { mode: 'catchment' } }))).not.toBeNull();
 		// The calibration site itself can't be a zone's gauge.
 		expect(zoneGroups(zoneNodes, settings({ calibrationSiteNodeId: 'H' }))).toBeNull();
 	});

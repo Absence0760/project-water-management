@@ -136,7 +136,7 @@ describe('GR4J through runModel matches an independent implementation of model.m
 		const n = 2 * 365 + 1; // 2023-10-01 … 2025-09-30, through 29 Feb 2024
 		const rain = rainRecord(n, 7);
 		const p = { x1: 220, x2: 0, x3: 70, x4: 2.3 };
-		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2023-10-01', values: rain } }, { gr4j: { ...p, warmupDays: 400 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: 37.5 } }));
+		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2023-10-01', values: rain } }, { gr4j: { ...p, warmupDays: 400 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: null } }, [37.5]));
 		expect(out.days).toBe(n);
 		const pet = refPet('2023-10-01', n);
 		const ref = refGr4j(p, rain, pet, 400);
@@ -158,7 +158,7 @@ describe('GR4J through runModel matches an independent implementation of model.m
 		const rain = rainRecord(n, 11);
 		for (const x2 of [-2.5, 1.5]) {
 			const p = { x1: 150, x2, x3: 40, x4: 1.2 };
-			const out = runModel(catchment({ rain_catchment_mm: { startDate: '2021-10-01', values: rain } }, { gr4j: { ...p, warmupDays: 30 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: 10 } }));
+			const out = runModel(catchment({ rain_catchment_mm: { startDate: '2021-10-01', values: rain } }, { gr4j: { ...p, warmupDays: 30 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: null } }, [10]));
 			const ref = refGr4j(p, rain, refPet('2021-10-01', n), 30);
 			const nat = col(out, 'natural_flow')!;
 			for (let t = 0; t < n; t++) expect(Math.abs(nat[t]! / 10_000 - ref.q[t]!)).toBeLessThan(1e-9);
@@ -185,7 +185,7 @@ describe('GR4J through runModel matches an independent implementation of model.m
 		}
 	});
 
-	it('the catchment area is the sum of the units when no override is set, and the override wins', () => {
+	it('the catchment area is the sum of the units; an override is ignored with land units, with a warning (Per unit, engine ≥ 1.109.0)', () => {
 		const rain = rainRecord(120, 5);
 		const series = { rain_catchment_mm: { startDate: '2022-10-01', values: rain } };
 		const a = runModel(catchment(series, { gr4j: { warmupDays: 0 } }, [3, 4.5]));
@@ -196,10 +196,11 @@ describe('GR4J through runModel matches an independent implementation of model.m
 		const nc = col(c, 'natural_flow')!;
 		for (let t = 0; t < 120; t++) {
 			expect(na[t]).toBeCloseTo(nb[t]!, 9);
-			expect(nc[t]).toBeCloseTo(2 * na[t]!, 9);
+			expect(nc[t]).toBe(na[t]);
 		}
 		expect(a.summary.runoff!.areaKm2).toBe(7.5);
-		expect(c.summary.runoff!.areaKm2).toBe(15);
+		expect(c.summary.runoff!.areaKm2).toBe(7.5);
+		expect(c.summary.warnings.some((w) => /runs on the units' areas \(7\.5 km²\), not the catchment area set/.test(w))).toBe(true);
 	});
 
 	it('a zero catchment area is refused', () => {
@@ -215,7 +216,7 @@ describe('GR4J water balance on a whole run', () => {
 	it('rain − AET − flow + exchange = Δstorage, daily from the store series, and the runoff coefficient is flow ÷ rain volume', () => {
 		const n = 3 * 365;
 		const rain = rainRecord(n, 21);
-		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2019-10-01', values: rain } }, { gr4j: { x1: 180, x2: 0, x3: 50, x4: 1.9, warmupDays: 365 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: 20 } }));
+		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2019-10-01', values: rain } }, { gr4j: { x1: 180, x2: 0, x3: 50, x4: 1.9, warmupDays: 365 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: null } }, [20]));
 		const P = col(out, 'rain_used')!;
 		const aet = col(out, 'aet')!;
 		const nat = col(out, 'natural_flow')!;
@@ -243,7 +244,7 @@ describe('GR4J water balance on a whole run', () => {
 		const n = 730;
 		const rain = new Array(n).fill(0);
 		rain[400] = 120;
-		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2020-10-01', values: rain } }, { gr4j: { x1: 100, x2: 0, x3: 30, x4: 1.5, warmupDays: 3650 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: 1 } }));
+		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2020-10-01', values: rain } }, { gr4j: { x1: 100, x2: 0, x3: 30, x4: 1.5, warmupDays: 3650 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: null } }, [1]));
 		const nat = col(out, 'natural_flow')!;
 		// The storm's own flow: the flow after day 400 minus the recession that was already running.
 		const before = nat[399]!;
@@ -323,7 +324,8 @@ describe('GR4J across a forecast tail (§2.4f, engine-audit K1)', () => {
 		const p = { x1: 260, x2: 0, x3: 80, x4: 1.7 };
 		const input = catchment(
 			{ rain_catchment_mm: { startDate: '2020-10-01', values: hist }, rain_forecast_mm: { startDate: '2021-03-11', values: tail } },
-			{ gr4j: { ...p, warmupDays: 400 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: 5 } }
+			{ gr4j: { ...p, warmupDays: 400 }, calibration: { rainThresholdMm: 2, catchmentAreaKm2: null } },
+			[5]
 		);
 		const out = runForecastChecked(input);
 		expect(out.forecastFrom).toBe('2021-03-11');

@@ -473,9 +473,9 @@ describe('a run with each source', () => {
 		expect(col(out, null, 'ewr')![100]).toBeCloseTo(TAB[wy(100)]! * 0.25 * DAY, 6);
 	});
 
-	it('TAB scaled by area, with a catchment area set: the area the natural flow is made on, not the units’ sum', () => {
+	it('TAB scaled by area, with a catchment area set: the area the natural flow is made on, the units’ sum (Per unit ignores the override)', () => {
 		const out = run(network({ ewrDailySource: tabSource({ scaling: 'area' }), calibration: { rainThresholdMm: 2, catchmentAreaKm2: 8 } }));
-		expect(out.summary.catchment.outletEwr).toEqual({ method: 'tab', scaling: 'area', scale: 0.5, modelAreaKm2: 8, tableAreaKm2: 16 });
+		expect(out.summary.catchment.outletEwr).toEqual({ method: 'tab', scaling: 'area', scale: 0.25, modelAreaKm2: 4, tableAreaKm2: 16 });
 	});
 
 	it('percentile tables: each day read at that day’s natural flow (m³/s), on the rows × s', () => {

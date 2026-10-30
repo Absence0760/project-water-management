@@ -32,6 +32,9 @@ const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 		/^Flagged zero runs kept as recorded \(dry\) on 29 days where CHIRPS reads 2 mm or less/,
 		// Engine ≥ 1.99.0 (issue #586): a data check writes its dates day first.
 		/^Rainfall \(catchment\): 1 run of zero rain .*1 Jun 2019 to 15 Aug 2019/,
+		// Engine ≥ 1.109.0 (issue #658, Per unit only): each unit runs on the gauge × its MAP ratio, so the gauge's blank days
+		// (with no CHIRPS of the unit's own) fall to the catchment's rain × the ratio, which each unit says.
+		/^unit rain: "[^"]+" ran \d+ of its \d+ days on the catchment's rain × its MAP ratio [\d.]+, where its own records had no value$/,
 		// A week read in one go (B4): 6 blank days and the reading day.
 		/^Catchment rain accumulations spread over the days they cover: 1 window, 7 run days: 20 Jun 2017 to 26 Jun 2017 /,
 		// The drowned weir's flat top in the excluded water year.

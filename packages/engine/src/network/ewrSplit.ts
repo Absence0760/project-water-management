@@ -16,15 +16,11 @@
 // and everything above it (§2.7), then follows the cumulative natural MAR
 // there.
 //
-// - Per unit (settings.unitRain `perUnit`): the units' own GR4J runs, the
-//   runoff they feed the network.
-// - Fragmentation: the run also runs GR4J once per land unit on the Per unit
-//   forcing (./../runoff/unitRain.ts, the same chain, stations and
-//   parameters), for the shares only (engine-audit.md FM1). The catchment's
-//   one GR4J run makes the flow, split by these shares (§2.5), so Σ the
-//   units' runoff is the natural flow every day. A unit with no rain of its
-//   own runs on the catchment rain (rule 4), so its share is in proportion
-//   to its area; the run names those units in one note.
+// The units' own GR4J runs (Per unit, the only flow generation method since
+// engine 1.109.0, issue #658), the runoff they feed the network. A unit with
+// no rain of its own runs on the catchment rain (rule 4), so its share is in
+// proportion to its area. (Engines 1.105.0 – 1.108.x also ran Fragmentation,
+// whose per-unit runs were made for the shares only, engine-audit.md FM1.)
 //
 // Fallbacks, each to the area shares (areaKm2 ÷ Σ the land units'): no
 // runoff over the period (why 'noRunoff'); natural flow supplied without the
@@ -79,8 +75,9 @@ export interface EwrSplitUnit {
  *
  * `runoffFrom` (≥ 1.105.0): where the units' natural runoff came from,
  * 'unitRain' (Per unit's own runs) or 'shareRuns' (Fragmentation's per-unit
- * runs made for the shares only). `catchmentRain`: under Fragmentation, the
- * land units on rule 4, whose share is their area's.
+ * runs made for the shares only, engines 1.105.0 – 1.108.x: Fragmentation is
+ * retired from 1.109.0, issue #658). `catchmentRain`: under Fragmentation, the
+ * land units on rule 4, whose share is their area's (those engines only).
  *
  * `method` (1.94.0 – 1.104.x only): the retired setting the run asked for;
  * `why` 'catchmentRain' was one of those runs' (the natural MAR asked for
@@ -202,8 +199,9 @@ const names = (units: readonly EwrSplitUnit[]): string => {
 
 /**
  * The run's note on its EWR split (pushed with the warnings), only when there is something to say: a fallback, or
- * the land units a Fragmentation run's shares put on the catchment rain (one note, naming them). A split by natural
- * MAR with every unit on its own rain gives none; RunSummary.ewrSplit records it.
+ * (a resumed run pinned by an engine 1.105.0 – 1.108.x Fragmentation run) the land units its shares put on the
+ * catchment rain. A split by natural MAR gives none; RunSummary.ewrSplit records it. Under Per unit a unit on the
+ * catchment rain is named by its own forcing warning (runoff/unitRain.ts).
  */
 export function ewrSplitNote(info: EwrSplitInfo): string | null {
 	// Only runModelWith supplies natural flow without the units' runoff (a test harness, not a project's run): no note.
@@ -223,7 +221,7 @@ export function ewrSplitNote(info: EwrSplitInfo): string | null {
 			? ': under Fragmentation GR4J also runs once on each unit’s own rain (the Per unit setup) for these shares only, and the catchment’s one run makes the flow they split'
 			: '';
 	const fell = info.catchmentRain?.length
-		? `. ${names(info.catchmentRain)} ${info.catchmentRain.length === 1 ? 'has' : 'have'} no rain of ${info.catchmentRain.length === 1 ? 'its' : 'their'} own (no station, gauge, MAP or CHIRPS), so ${info.catchmentRain.length === 1 ? 'it runs' : 'they run'} on the catchment rain and ${info.catchmentRain.length === 1 ? 'its share follows its' : 'their shares follow their'} area: set up Per unit for ${info.catchmentRain.length === 1 ? 'it' : 'them'} (Model settings → Model selection for flow generation)`
+		? `. ${names(info.catchmentRain)} ${info.catchmentRain.length === 1 ? 'has' : 'have'} no rain of ${info.catchmentRain.length === 1 ? 'its' : 'their'} own (no station, gauge, MAP or CHIRPS), so ${info.catchmentRain.length === 1 ? 'it runs' : 'they run'} on the catchment rain and ${info.catchmentRain.length === 1 ? 'its share follows its' : 'their shares follow their'} area: set up Per unit for ${info.catchmentRain.length === 1 ? 'it' : 'them'} (Model settings → Flow generation)`
 		: '';
 	return `the flow and the EWR are split between the units by each unit’s natural MAR over ${over}${pinned}${how}; the period is provisional (engine-audit.md ES1)${fell}`;
 }

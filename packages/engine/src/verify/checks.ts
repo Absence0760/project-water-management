@@ -2292,17 +2292,8 @@ export function checkEwrSplit(input: ModelInput, out: ModelOutput): string | nul
 		return null;
 	}
 	if (split.pinned) return null;
-	if (split.runoffFrom === 'shareRuns') {
-		const rule4 = split.catchmentRain ?? [];
-		const first = rule4.find((u) => area.get(u.nodeId)! > 0);
-		for (const u of rule4) {
-			const f = out.summary.farms.find((x) => x.nodeId === u.nodeId);
-			if (!f || !(area.get(u.nodeId)! > 0)) return `${u.name}: named as on the catchment rain, but it isn't a unit with land`;
-			const ratio = (f.ewrShare! / area.get(u.nodeId)!) / (out.summary.farms.find((x) => x.nodeId === first!.nodeId)!.ewrShare! / area.get(first!.nodeId)!);
-			if (Number.isFinite(ratio) && Math.abs(ratio - 1) > 1e-9) return `${u.name}: on the catchment rain, its EWR share per km² differs from ${first!.name}'s`;
-		}
-		return null;
-	}
+	// Fragmentation's share runs (engines 1.105.0 – 1.108.x) are retired: every run splits by its units' own runoff (issue #658).
+	if (split.runoffFrom === 'shareRuns') return 'an EWR split from Fragmentation’s share runs, which this engine no longer makes (Per unit is the only method)';
 	if (!out.summary.unitRain) return 'an EWR split by natural MAR from each unit’s own runoff without runoff from each unit’s own rain';
 	const d0 = toEpochDay(out.startDate);
 	const days = ewrSplitDays(d0, out.summary.historyDays ?? out.days);

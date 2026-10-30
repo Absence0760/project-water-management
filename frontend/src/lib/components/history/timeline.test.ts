@@ -159,6 +159,11 @@ describe('what an item says', () => {
 		expect(eventLine(ev('settings.flow_share_reset', { method: null, hiLoSplit: null, units: [{ id: 'a' }] }))).toBe(
 			'The flow split “By area” was replaced by each unit’s natural-MAR share (1 unit had High-MAP, Low-MAP or manual values): the area, Hi/Lo MAP and specific shares were removed'
 		);
+		// 286 (issue #658): no actor; the same line whatever the stored setting was.
+		for (const unitRain of [null, { mode: 'catchment', gaugeMapMm: 600, gaugeMapSource: 'gauge' }])
+			expect(eventLine(ev('settings.flow_method_reset', { unitRain }))).toBe(
+				'Flow generation moved to Per unit: Fragmentation (one GR4J run on the catchment rain, split between the units) is retired. A fit made under it needs refitting'
+			);
 		// 220 (issue #523 B4): no actor either; each rule switched off is named.
 		expect(
 			eventLine(
