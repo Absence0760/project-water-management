@@ -1,6 +1,6 @@
 // Automated calibration under pre-declared rules, run by the server (issue
-// #153): the rules are saved before any fit is seen, the server fits them one
-// background job per fit (run here by the job tick), and applying the kept
+// #153): the rules are saved before any fit is seen, the server fits them in
+// background jobs (run here by the job tick), and applying the kept
 // fit is the server's too, saved with a record of how the rules chose it.
 import { addMember, createProject, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';

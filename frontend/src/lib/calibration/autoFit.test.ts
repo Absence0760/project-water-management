@@ -37,6 +37,7 @@ const run = (over: Partial<AutoCalibration> = {}): AutoCalibration => ({
 	chosen: 1,
 	error: null,
 	engineVersion: '1.25.0',
+	work: null,
 	job: null,
 	createdBy: 'A. User',
 	createdAt: '2026-09-29T10:00:00.000Z',
@@ -75,6 +76,9 @@ describe('a server run of the calibration rules, in the page', () => {
 
 	it('says where a run stands: fitting i of n, stopped with its job, failed, or complete', () => {
 		expect(autoState(run({ status: 'running', cases: [kase()] }))).toEqual({ kind: 'running', text: 'Fitting 2 of 3 on the server…', progress: 33 });
+		// A fit runs over several jobs: the share of its model runs made so far moves the bar within it, never the count.
+		expect(autoState(run({ status: 'running', cases: [kase()], work: { done: 4_500, total: 9_000 } }))).toEqual({ kind: 'running', text: 'Fitting 2 of 3 on the server…', progress: 50 });
+		expect(autoState(run({ status: 'running', cases: [], work: { done: 9_000, total: 9_000 } }))).toEqual({ kind: 'running', text: 'Fitting 1 of 3 on the server…', progress: 33 });
 		expect(autoState(run({ status: 'running', cases: [], job: { id: 'j', status: 'dead', error: 'the model can’t run', progress: null } }))).toEqual({
 			kind: 'stopped',
 			text: 'The run stopped: the model can’t run'

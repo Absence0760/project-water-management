@@ -1,8 +1,9 @@
 // Automated calibration in the page (issue #153): how a server run of the
 // calibration rules (api.autoCalibrations, docs/api.md § Automated
 // calibration) is shown. Pure, so it is unit-tested; the panel
-// (AutoFitPanel.svelte) is thin. The server fits every case, one job each,
-// from the saved rules only, and applies the kept fit itself.
+// (AutoFitPanel.svelte) is thin. The server fits every case, over as many
+// background jobs as each needs, from the saved rules only, and applies the
+// kept fit itself.
 import { canonicalJson, FILTER_LABEL, ruleCaseCount, SELECTION_TEST_LABEL, type CalibrationRules } from '@water-management/engine';
 import type { AutoCalibration, AutoCalibrationCase } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
@@ -55,16 +56,17 @@ export type AutoState =
 	| { kind: 'complete' };
 
 /**
- * Where a run of the rules stands: running (fit i of n, the job's progress),
- * stopped (its job died, so it will never finish), failed (the run's own
- * reason) or complete.
+ * Where a run of the rules stands: running (fit i of n; the share of the
+ * run's model runs made, the fit under way's own included), stopped (its job
+ * died, so it will never finish), failed (the run's own reason) or complete.
  */
-export function autoState(a: Pick<AutoCalibration, 'status' | 'cases' | 'plan' | 'job' | 'error'>): AutoState {
+export function autoState(a: Pick<AutoCalibration, 'status' | 'cases' | 'plan' | 'job' | 'error' | 'work'>): AutoState {
 	if (a.status === 'complete') return { kind: 'complete' };
 	if (a.status === 'failed') return { kind: 'failed', text: a.error ?? 'the run of the rules failed' };
 	const n = a.plan.cases.length;
 	if (a.job && a.job.status === 'dead') return { kind: 'stopped', text: a.job.error ? `The run stopped: ${a.job.error}` : 'The run stopped.' };
-	return { kind: 'running', text: `Fitting ${Math.min(a.cases.length + 1, n)} of ${n} on the server…`, progress: n ? Math.round((100 * a.cases.length) / n) : null };
+	const under = a.work && a.work.total > 0 ? Math.min(1, a.work.done / a.work.total) : 0;
+	return { kind: 'running', text: `Fitting ${Math.min(a.cases.length + 1, n)} of ${n} on the server…`, progress: n ? Math.min(100, Math.round((100 * (a.cases.length + under)) / n)) : null };
 }
 
 /** Why "Run the calibration rules" can't run now, or null. `record` is the one a link to Data settles. */
