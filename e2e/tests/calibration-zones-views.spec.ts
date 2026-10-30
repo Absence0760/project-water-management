@@ -1,7 +1,8 @@
-// Calibration zones on the screens that show them (issue #555 round 4; docs/ui.md § Network, § Map, § Runs &
-// results, § Report; docs/maps.md § Calibration zones on the map): the Network colours each unit by its zone with a
-// legend, the Map colours each unit's parcel by its zone with a legend, the card and Every feature naming it, and a
-// run scores each zone's gauge, in or out of sample by that zone's own fit, on Calibration and in the report.
+// Calibration zones on the screens that show them (issue #555 round 4; locations, issue #659; docs/ui.md § Network,
+// § Map, § Runs & results, § Report; docs/maps.md § Calibration zones on the map): the Network colours each unit by
+// its location's group with a legend, the Map colours each unit's parcel by it with a legend, the card and Every
+// feature naming it, and a run scores each location, the headline first, in or out of sample by its own fit, on
+// Calibration and in the report.
 // Names, places and numbers are invented.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -29,7 +30,9 @@ async function seedZoned(request: APIRequestContext, name: string) {
 	const list = (await (await request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; name: string }[];
 	expect((await request.patch(`${API_URL}/projects/${project.id}/series/${list.find((s) => s.name === 'Weir record')!.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
 	const zone = { nodeId: weir.id, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: { x1: 420, x2: 0, x3: 95, x4: 1.8 }, fitRecord: null };
-	await updateSettings(request, project.id, { calibrationZones: [zone] });
+	// The outlet a calibration location too (issue #659), its units "the rest" as before: written out, so the spec
+	// doesn't rest on what a new project is created with.
+	await updateSettings(request, project.id, { calibrationZones: [zone], calibrateAtOutlet: true, calibrationRest: 'headline' });
 	// Each farm's parcel, linked to its unit by name.
 	const poly = (nm: string, ring: [number, number][]) => ({ type: 'Feature', properties: { name: nm }, geometry: { type: 'Polygon', coordinates: [ring] } });
 	const imp = await request.post(`${API_URL}/projects/${project.id}/map/import`, {
@@ -40,11 +43,11 @@ async function seedZoned(request: APIRequestContext, name: string) {
 }
 
 const WEIR_ZONE = 'Middle weir zone';
-const SITE_ZONE = 'Outflow gauge zone (calibration site)';
+const SITE_ZONE = 'Outflow gauge zone (outlet, headline)';
 
 async function zoneRows(page: Page) {
 	const table = page.getByTestId('zone-calibration');
-	await expect(table.getByRole('heading', { name: 'Calibration zones' })).toBeVisible();
+	await expect(table.getByRole('heading', { name: 'Calibration locations' })).toBeVisible();
 	return table.locator('tbody tr');
 }
 
@@ -91,27 +94,29 @@ test('the Network and the Map colour each unit by its calibration zone, with a l
 	await page.goto(`/projects/${p.id}?tab=calibration&run=${runId}#res-calibration`);
 	let rows = await zoneRows(page);
 	await expect(rows).toHaveCount(2);
-	await expect(rows.nth(0).getByRole('rowheader')).toHaveText('Middle weirUpstream zone');
-	await expect(rows.nth(0).getByTestId('zone-sample')).toHaveText('parameters not from an automatic fit');
-	await expect(rows.nth(0)).toContainText('X1 420');
-	await expect(rows.nth(1).getByRole('rowheader')).toHaveText('Outflow gaugeCalibration site');
+	// The headline location first (issue #659), then the weir.
+	await expect(rows.nth(0).getByRole('rowheader')).toHaveText('Outflow gaugeHeadline · outlet');
+	await expect(rows.nth(1).getByRole('rowheader')).toHaveText('Middle weirGauge');
+	await expect(rows.nth(1).getByTestId('zone-sample')).toHaveText('parameters not from an automatic fit');
+	await expect(rows.nth(1)).toContainText('X1 420');
 	await expectNoViolations(page);
 
 	// The report lists the same zones.
 	await page.goto(`/projects/${p.id}/report?run=${runId}`);
 	rows = await zoneRows(page);
 	await expect(rows).toHaveCount(2);
-	await expect(rows.nth(0)).toContainText('Middle weir');
-	await expect(rows.nth(0).getByTestId('zone-sample')).toHaveText('parameters not from an automatic fit');
+	await expect(rows.nth(1)).toContainText('Middle weir');
+	await expect(rows.nth(1).getByTestId('zone-sample')).toHaveText('parameters not from an automatic fit');
 
 	// Compare runs: the zone's parameters changed, so the input diff words that zone, and each zone's gauge has its table.
 	const zone = (x1: number) => ({ nodeId: p.weir, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: { x1, x2: 0, x3: 95, x4: 1.8 }, fitRecord: null });
 	await updateSettings(page.request, p.id, { calibrationZones: [zone(510)] });
 	const after = await createRun(page.request, p.id, 'Zoned again');
 	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${runId}&b=${p.id}:${after}`);
-	await expect(whatChanged(page).getByRole('listitem').filter({ hasText: 'Calibration zone at Middle weir: X1 420 → 510' })).toBeVisible();
+	await expect(whatChanged(page).getByRole('listitem').filter({ hasText: 'Calibration location at Middle weir: X1 420 → 510' })).toBeVisible();
 	const zoneTable = page.getByTestId('compare-zone');
-	await expect(zoneTable).toHaveText('Calibration zone at Middle weir');
-	await expect(page.getByRole('table', { name: 'Calibration statistics at Middle weir, the calibration zone’s gauge, for both runs' })).toBeVisible();
+	await expect(zoneTable).toHaveText('Calibration location at Middle weir');
+	await expect(page.getByTestId('compare-headline-site')).toHaveText('At the headline location, the outlet.');
+	await expect(page.getByRole('table', { name: 'Calibration statistics at Middle weir, a calibration location, for both runs' })).toBeVisible();
 	await expectNoViolations(page);
 });

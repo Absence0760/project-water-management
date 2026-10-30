@@ -68,7 +68,8 @@ export async function showExplanations(page: Page) {
  * flags (`record-flags`), a Reserve rule table's settings (`rule-settings`), the drought restriction rule's wording
  * (`restriction-rule-fold`), or a group that starts closed while it is at its defaults (`atDefaults`): Rain gaps'
  * two cards (`rain-defaults`), Data quality's limits (`quality-limits`) and the WR2012 check's judging
- * (`wr2012-judging`). Every one is `common/Fold.svelte`. Does nothing when it is already open.
+ * (`wr2012-judging`), and Parameters from's units (`unit-params-fold`, issue #659). Every one is `common/Fold.svelte`.
+ * Does nothing when it is already open.
  */
 export type FoldId =
 	| 'fit-search'
@@ -86,7 +87,8 @@ export type FoldId =
 	| 'pan-coefficient-helper'
 	| 'fit-record-fold'
 	| 'ewr-tab-file'
-	| 'rule-grids-repeat';
+	| 'rule-grids-repeat'
+	| 'unit-params-fold';
 export async function openFold(scope: Page | Locator, testId: FoldId) {
 	const fold = scope.getByTestId(testId);
 	// Its own summary: a fold can hold another <details> (the pan row's tools hold the FAO-56 helper).

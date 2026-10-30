@@ -99,31 +99,37 @@ describe('the fills and a feature’s figure', () => {
 	});
 });
 
-describe('calibration zones on the map (issue #555)', () => {
-	const weir: ZoneGroup = { nodeId: 'H', name: 'Weir', units: ['A'], fitted: false, token: '--series-1' };
-	const site: ZoneGroup = { nodeId: null, name: 'Outlet', units: ['B', 'C'], fitted: true, token: '--series-2' };
+describe('calibration zones on the map (issue #555; locations, issue #659)', () => {
+	const group = (over: Partial<ZoneGroup>): ZoneGroup => ({ key: 'H', nodeId: 'H', name: 'Weir', kind: 'gauge', headline: false, units: [], borrowed: [], rest: [], restRule: 'nearest', fitted: true, token: '--series-1', ...over });
+	// The weir H: its own unit A and D, which borrows its parameters; the outlet G, the headline: B, and C placed by the rest rule.
+	const weir = group({ units: ['A', 'D'], borrowed: ['D'], fitted: false });
+	const site = group({ key: 'G', nodeId: 'G', name: 'Outlet', kind: 'outlet', headline: true, units: ['B', 'C'], rest: ['C'], token: '--series-2' });
 	const byUnit = new Map([
 		['A', weir],
 		['B', site],
-		['C', site]
+		['C', site],
+		['D', weir]
 	]);
 
-	it('lists each zone in the legend, upstream first, with its units and colour token', () => {
+	it('lists each group in the legend, upstream first, then its borrowed units, with their units and colour token', () => {
 		expect(zoneLegendRows([weir, site])).toEqual([
-			{ key: 'H', text: 'Weir zone, not fitted yet', count: 1, token: '--series-1' },
-			{ key: 'site', text: 'Outlet zone (calibration site)', count: 2, token: '--series-2' }
+			{ key: 'H', text: 'Weir zone, not fitted yet', count: 1, note: '', token: '--series-1', marker: false },
+			{ key: 'H:borrowed', text: 'Borrowed from Weir, not fitted yet', count: 1, note: '', token: '--series-1', marker: true },
+			{ key: 'G', text: 'Outlet zone (outlet, headline)', count: 2, note: '1 nearest upstream', token: '--series-2', marker: false }
 		]);
 	});
 
-	it('fills each unit’s area in its zone’s colour and every other area in the no-figure colour', () => {
-		const features = [f('a', 'farm_parcel', 'A'), f('b', 'farm_parcel', 'B'), f('u', 'farm_parcel', null), f('d', 'farm_parcel', 'D'), f('bd', 'catchment_boundary', null), f('p', 'farm_parcel', 'C', point)];
+	it('fills each unit’s area in its group’s colour (a borrowed unit its donor’s) and every other area in the no-figure colour', () => {
+		const features = [f('a', 'farm_parcel', 'A'), f('b', 'farm_parcel', 'B'), f('u', 'farm_parcel', null), f('x', 'farm_parcel', 'X'), f('d', 'farm_parcel', 'D'), f('bd', 'catchment_boundary', null), f('p', 'farm_parcel', 'C', point)];
 		const colour = (t: string) => (t === '--series-1' ? '#111' : '#222');
-		expect(zoneFills(features, byUnit, colour, '#999')).toEqual({ a: '#111', b: '#222', u: '#999', d: '#999' });
+		expect(zoneFills(features, byUnit, colour, '#999')).toEqual({ a: '#111', b: '#222', u: '#999', x: '#999', d: '#111' });
 	});
 
-	it('names a feature’s zone for its card and table row', () => {
+	it('names a feature’s group for its card and table row: its own zone, borrowed, or the rest rule’s', () => {
 		expect(featureZone(f('a', 'farm_parcel', 'A'), byUnit)).toBe('Weir zone, not fitted yet');
-		expect(featureZone(f('b', 'farm_parcel', 'B'), byUnit)).toBe('Outlet zone (calibration site)');
+		expect(featureZone(f('d', 'farm_parcel', 'D'), byUnit)).toBe('Borrowed from Weir, not fitted yet');
+		expect(featureZone(f('b', 'farm_parcel', 'B'), byUnit)).toBe('Outlet zone (outlet, headline)');
+		expect(featureZone(f('c', 'farm_parcel', 'C'), byUnit)).toBe('Nearest upstream: Outlet');
 		expect(featureZone(f('u', 'farm_parcel', null), byUnit)).toBe('Not linked to a unit');
 		expect(featureZone(f('g', 'gauge', 'H', point), byUnit)).toBe('In no zone (not a land unit)');
 		expect(featureZone(f('r', 'river', null, line), byUnit)).toBeNull();

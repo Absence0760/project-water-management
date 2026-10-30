@@ -250,6 +250,17 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 
 Ranges are the backend's (`backend/src/model/validate.ts`).
 
+`calibrationStart`, `calibrationEnd`, `calibrationFlowKind` and
+`gr4j.x1`–`gr4j.x4` are the headline calibration location's (issue #659,
+engine 1.110.0, `scenario/overrides.ts` `writeHeadlineRow`): when the base's
+settings are in the locations' shape and the headline is a gauge inside the
+network, they are written into that gauge's row of `calibrationZones` (X1–X4
+over the row's own, or the top level's it ran on while not fitted yet), the
+statistics and the parameters the run reads for it; with the outlet as the
+headline, and for settings from before 1.110.0 (whose top level was the
+site's and is moved into its row when the run reads them), the top level, as
+before. `gr4j.warmupDays` is always the project's own.
+
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
 `effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,
 `ewrPragmaticM3PerDay`,

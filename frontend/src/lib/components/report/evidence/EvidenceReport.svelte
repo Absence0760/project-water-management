@@ -12,6 +12,7 @@
 		declaredRuleText,
 		describeFitRecord,
 		ENSEMBLE_MEASURES_SINCE,
+		headlineSnapshotSettings,
 		SSP_LABEL,
 		type Band,
 		type EvidenceReport,
@@ -170,7 +171,10 @@
 	/** Page 1's row says why nothing is judged when every year is a part year. */
 	const useJudged = $derived(report.rows.find((r) => r.id === 'registeredUse')?.notAssessed ?? null);
 	const modeText = (m: keyof typeof ALLOCATION_MODE_LABEL | null) => (m === null ? 'not recorded (a run before engine 1.18.0)' : ALLOCATION_MODE_LABEL[m]);
-	const fit = $derived((base.settings as { fitRecord?: Parameters<typeof describeFitRecord>[0] | null }).fitRecord ?? null);
+	// The headline calibration location's settings (issue #659): its window and fit record are the calibration record
+	// and validation below (a gauge's row, or the outlet's top level; a legacy site's as it ran).
+	const headline = $derived(headlineSnapshotSettings(base) as { calibrationStart?: string | null; calibrationEnd?: string | null; fitRecord?: Parameters<typeof describeFitRecord>[0] | null });
+	const fit = $derived(headline.fitRecord ?? null);
 </script>
 
 <article class="evidence" data-testid="evidence-report" data-evidence-mode={report.mode}>
@@ -386,19 +390,19 @@
 				</div>
 			{:else if s.id === 'credibility'}
 				<h3>Calibration record</h3>
-				<CalibrationPanel calibration={sum.calibration} requestedStart={settings.calibrationStart ?? null} requestedEnd={settings.calibrationEnd ?? null} />
+				<CalibrationPanel calibration={sum.calibration} requestedStart={headline.calibrationStart ?? null} requestedEnd={headline.calibrationEnd ?? null} />
 				<!-- evidence-22 (issue #622): where the regional GR4J prior had a part in the baseline's parameters. -->
 				{#if report.credibility.regionalPrior}
 					<p class="small" data-testid="evidence-regional-prior">{report.credibility.regionalPrior.text}</p>
 				{/if}
-				<!-- evidence-22 (issue #555): every calibration zone's parameters, fit record and scores at its gauge. -->
+				<!-- evidence-22 (issue #555): every calibration location's parameters, fit record and scores; evidence-25 (issue #659) its period and each unit's parameter source. -->
 				<ZoneCalibrationTable rows={evidenceZoneRows(report.calibrationZones)} headingLevel={4} />
 				<h3>Validation</h3>
 				{#if fit}
 					<p class="small">Parameters from the {describeFitRecord(fit)}.</p>
 					<FitProvenance
-						record={base.settings.fitRecord as never}
-						settings={base.settings as never}
+						record={fit as never}
+						settings={headline as never}
 						chirpsSource={chirpsSourceOfInput(base.series)}
 						apanDaily={apanDailyOfInput(base.series)}
 						chirpsFactors={runChirpsFactors(sum)}
