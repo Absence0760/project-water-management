@@ -4447,7 +4447,8 @@ map" card) stays the schematic; this is the geography.
   its piece, and a piece under the pointer lights itself. Under the lines:
   the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
   piece against the map before you save."). **Enter coordinates** (folded,
-  open when the map can't be drawn; folded again after an outlet is added)
+  open when the map can't be drawn, though not while it is still loading;
+  folded again after an outlet is added)
   adds one by latitude and longitude. While a click is being routed a pill
   over the map says "Working out the sub-catchments…". Every click redraws
   all the pieces (tinted apart from their neighbours, every click's outlet
