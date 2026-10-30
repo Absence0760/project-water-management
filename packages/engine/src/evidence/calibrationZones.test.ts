@@ -1,7 +1,8 @@
 // The report's calibration zones (evidence-22, issue #555): the fit record's
-// scores and the errata versions, read from what a run froze.
+// scores and the errata versions, read from what a run froze; each location's
+// period and each unit's parameter source (evidence-25, issue #659).
 import { describe, expect, it } from 'vitest';
-import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection } from './calibrationZones';
+import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection, headlineFitRecord, headlineSnapshotSettings } from './calibrationZones';
 
 const params = { x1: 500, x2: 0, x3: 100, x4: 2 };
 const fit = (engineVersion: string) => ({
@@ -60,6 +61,77 @@ describe('calibrationZonesSection', () => {
 		expect(z![0]!.fit).toBeNull();
 		expect(calibrationZoneFlags(z).map((f) => f.key)).toEqual(['zoneNoFit']);
 		expect(calibrationZoneFitVersions(z)).toEqual([]);
+	});
+
+	it('gives each location its period and each unit where its parameters come from (evidence-25, issue #659)', () => {
+		// Engine 1.110.0: the weir H (own unit A, C borrowed from the outlet's side), the outlet G the headline, D on the catchment parameters.
+		const r = {
+			summary: {
+				unitRain: {
+					zones: [
+						{ nodeId: 'H', name: 'Weir', units: ['A', 'C'], params, fitted: true, kind: 'gauge', borrowed: ['C'], rest: [] },
+						{ nodeId: null, name: 'Outlet', units: ['B'], params, fitted: true, kind: 'outlet', headline: true, borrowed: [], rest: [] },
+						{ nodeId: null, name: 'Catchment parameters', units: ['D'], params, fitted: true, kind: 'default' }
+					],
+					paramSource: { A: { from: 'H', how: 'zone' }, C: { from: 'H', how: 'assigned' }, B: { from: null, how: 'zone' }, D: { from: null, how: 'default' } }
+				},
+				calibration: { days: 100, nse: 0.5, kge: 0.6, pbias: -3, fitStatus: 'fitted' }
+			},
+			inputs: {
+				settings: {
+					calibrateAtOutlet: true,
+					calibrationRest: 'default',
+					calibrationStart: '2001-10-01',
+					calibrationEnd: null,
+					unitParamsFrom: { C: 'H' },
+					calibrationZones: [{ nodeId: 'H', enabled: true, calibrationStart: '2010-10-01', calibrationEnd: '2015-09-30', fitRecord: null }]
+				},
+				model: {
+					nodes: [
+						{ id: 'G', name: 'Outlet', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
+						{ id: 'H', name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0 },
+						{ id: 'A', name: 'Upper', kind: 'farm', downstreamNodeId: 'H', areaKm2: 10 },
+						{ id: 'B', name: 'Lower', kind: 'farm', downstreamNodeId: 'G', areaKm2: 30 },
+						{ id: 'C', name: 'Across', kind: 'farm', downstreamNodeId: 'G', areaKm2: 2.5 },
+						{ id: 'D', name: 'Dry', kind: 'farm', downstreamNodeId: 'G', areaKm2: 1 }
+					]
+				}
+			}
+		} as never;
+		const z = calibrationZonesSection(r)!;
+		expect(z.map((x) => [x.name, x.window ?? null, x.members])).toEqual([
+			[
+				'Weir',
+				{ start: '2010-10-01', end: '2015-09-30' },
+				[
+					{ nodeId: 'C', name: 'Across', how: 'assigned' },
+					{ nodeId: 'A', name: 'Upper', how: 'zone' }
+				]
+			],
+			['Outlet', { start: '2001-10-01', end: null }, [{ nodeId: 'B', name: 'Lower', how: 'zone' }]],
+			['Catchment parameters', null, [{ nodeId: 'D', name: 'Dry', how: 'default' }]]
+		]);
+		// A run from before engine 1.110.0 has no paramSource: every unit is its own zone's.
+		expect(calibrationZonesSection(run(null, null))!.map((x) => x.members!.map((m) => m.how))).toEqual([['zone', 'zone'], ['zone']]);
+	});
+
+	it('reads the headline location’s window and fit record, a legacy inner site’s included (issue #659)', () => {
+		const nodes = [
+			{ id: 'G', name: 'Outlet', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
+			{ id: 'H', name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0 },
+			{ id: 'A', name: 'Upper', kind: 'farm', downstreamNodeId: 'H', areaKm2: 10 }
+		];
+		const record = fit('1.104.0');
+		// Before engine 1.110.0: the site at the weir, its window and fit record at the top level.
+		const legacy = { settings: { calibrationSiteNodeId: 'H', calibrationStart: '2004-10-01', calibrationEnd: '2012-09-30', fitRecord: record }, model: { nodes } } as never;
+		expect(headlineSnapshotSettings(legacy)).toMatchObject({ calibrationSiteNodeId: 'H', calibrationStart: '2004-10-01', calibrationEnd: '2012-09-30', fitRecord: record });
+		expect(headlineFitRecord(legacy)).toEqual(record);
+		// Engine 1.110.0: the weir's row is the headline, the outlet's top level is the outlet record's.
+		const row = { nodeId: 'H', enabled: true, calibrationStart: '2010-10-01', calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: params, fitRecord: record };
+		const now = { settings: { calibrateAtOutlet: false, calibrationSiteNodeId: 'H', calibrationStart: '2001-10-01', fitRecord: null, calibrationZones: [row] }, model: { nodes } } as never;
+		expect(headlineSnapshotSettings(now)).toMatchObject({ calibrationStart: '2010-10-01', calibrationEnd: null, fitRecord: record });
+		// No network to read it by: as stored.
+		expect(headlineSnapshotSettings({ settings: { calibrationStart: '2001-10-01' } } as never)).toEqual({ calibrationStart: '2001-10-01' });
 	});
 
 	it('is null when the run applied no zone', () => {
