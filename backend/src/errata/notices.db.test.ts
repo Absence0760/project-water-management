@@ -31,6 +31,7 @@ let otherOwner: User;
 let affected: string;
 let fitOnly: string;
 let untouched: string;
+let rowFit: string;
 
 const erratum = (id: string, over: Partial<Erratum> = {}): Erratum => ({
 	id,
@@ -80,6 +81,7 @@ beforeAll(async () => {
 	affected = (await owner.call('POST', '/projects', { name: 'Erratum <i>catchment</i>' })).body.project.id as string;
 	fitOnly = (await otherOwner.call('POST', '/projects', { name: 'Fit catchment' })).body.project.id as string;
 	untouched = (await otherOwner.call('POST', '/projects', { name: 'Untouched catchment' })).body.project.id as string;
+	rowFit = (await otherOwner.call('POST', '/projects', { name: 'Headline gauge catchment' })).body.project.id as string;
 	for (const [u, role] of [
 		[editor, 'editor'],
 		[viewer, 'viewer']
@@ -106,6 +108,22 @@ beforeAll(async () => {
 		// Made by a fixed engine, with parameters from an affected fit: only a `fit` erratum reaches it.
 		await run(fitOnly, '91.0.0', '90.2.0');
 		await run(untouched, '91.0.0');
+		// Engine 1.110.0 (issue #659): a headline gauge's fit lives in its row, and the run's summary says which location is the
+		// headline (run_fit_engine_version, 289). Made by an engine before every range here, so only a `fit` erratum can reach them.
+		const G = crypto.randomUUID();
+		const rowRun = (headline: 'gauge' | 'outlet') =>
+			q(
+				`INSERT INTO model_run (project_id, created_by, engine_version, start_date, end_date, inputs, summary) VALUES ($1, $2, '89.0.0', '2020-01-01', '2020-01-02', $3, $4)`,
+				[
+					rowFit,
+					otherOwner.id,
+					JSON.stringify({ settings: { fitRecord: null, calibrationZones: [{ nodeId: G, fitRecord: { engineVersion: '90.2.0' } }] } }),
+					JSON.stringify({ unitRain: { zones: [{ nodeId: G, kind: 'gauge', ...(headline === 'gauge' ? { headline: true } : {}) }, { nodeId: null, kind: 'outlet', ...(headline === 'outlet' ? { headline: true } : {}) }] } })
+				]
+			);
+		// The affected fit is the headline's in one run, and only another location's in the other.
+		await rowRun('gauge');
+		await rowRun('outlet');
 	});
 });
 
@@ -120,9 +138,9 @@ describe('the sweep', () => {
 		expect(await queued('ER-9001')).toEqual([row(affected, owner, 2), row(affected, teamAdmin, 2)].sort());
 	});
 
-	it('keys a `fit` erratum on the fit’s engine, not the run’s', async () => {
+	it('keys a `fit` erratum on the fit’s engine, not the run’s: the headline location’s, a gauge’s row included (issue #659)', async () => {
 		await sweepErrata([erratum('ER-9002', { keyedOn: 'fit', firstAffected: '90.2.0', fixedIn: null })]);
-		expect(await queued('ER-9002')).toEqual([row(fitOnly, otherOwner, 1)]);
+		expect(await queued('ER-9002')).toEqual([row(fitOnly, otherOwner, 1), row(rowFit, otherOwner, 1)].sort());
 	});
 
 	it('an open erratum (no fix yet) reaches every later engine', async () => {

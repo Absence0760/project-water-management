@@ -374,7 +374,14 @@ describe('the rules at a calibration site (engine ≥ 1.41.0, settings.calibrati
 		expect((await owner.call('PATCH', `/projects/${projectId}/series/${weirRec.body.id}`, { siteNodeId: weir.id })).status).toBe(200);
 		const current = (await owner.call('GET', `/projects/${projectId}`)).body.project.settings;
 		const patched = await owner.call('PATCH', `/projects/${projectId}`, {
-			settings: { calibrationSiteNodeId: weir.id, gr4j: { ...TRUTH, x1: 350, x3: 90, x4: 1.7 }, calibrationRules: { ...quickRules(), revision: current.calibrationRules.revision } }
+			settings: {
+				// The weir's location, ticked and the headline (engine 1.110.0, issue #659; a migrated inner calibration site is this).
+				calibrationZones: [{ nodeId: weir.id, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null }],
+				calibrateAtOutlet: false,
+				calibrationSiteNodeId: weir.id,
+				gr4j: { ...TRUTH, x1: 350, x3: 90, x4: 1.7 },
+				calibrationRules: { ...quickRules(), revision: current.calibrationRules.revision }
+			}
 		});
 		expect(patched.status, JSON.stringify(patched.body)).toBe(200);
 
@@ -387,9 +394,17 @@ describe('the rules at a calibration site (engine ≥ 1.41.0, settings.calibrati
 		expect(done.chosen).not.toBeNull();
 		const applied = await owner.call('POST', `/projects/${projectId}/auto-calibrations/${done.id}/apply`, {});
 		expect(applied.status, JSON.stringify(applied.body)).toBe(200);
-		const record = (await owner.call('GET', `/projects/${projectId}`)).body.project.settings.fitRecord;
+		// The fit is the headline location's: it goes into the weir's row, its parameters and its record; the top level keeps its own.
+		const after = (await owner.call('GET', `/projects/${projectId}`)).body.project.settings;
+		expect(after.fitRecord).toBeNull();
+		expect(after.gr4j).toMatchObject({ x1: 350, x3: 90, x4: 1.7 });
+		const record = after.calibrationZones[0].fitRecord;
 		expect(record.siteNodeId).toBe(weir.id);
+		expect(record.auto).toBeDefined();
+		expect(after.calibrationZones[0].gr4j).toMatchObject(Object.fromEntries(record.free.map((k: string) => [k, record.params[k]])));
 		expect(record.observedOrigin).toEqual({ source: 'Drift logger (synthetic)', unit: 'm3/s', factor: 1 });
+		// A later save carries the stored automated fit back in its row, as the Calibration page saves the whole list.
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { calibrationZones: after.calibrationZones } })).status).toBe(200);
 		// The run it made scores the same site, so its statistics are the fit's own days.
 		const run = (await owner.call('GET', `/projects/${projectId}/runs/${applied.body.runId}`)).body.run;
 		expect(run.summary.calibration).toMatchObject({ siteNodeId: weir.id, siteName: 'Weir', fitStatus: 'fitted' });

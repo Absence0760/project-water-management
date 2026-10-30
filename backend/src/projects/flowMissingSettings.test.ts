@@ -123,6 +123,16 @@ describe('the series ids settings name, and a copy’s or import’s fresh ones'
 		expect(FitRecord.shape.flowSeriesId.safeParse(OBS).success).toBe(true);
 		expect(FitRecord.shape.flowSeriesId.safeParse('not a series').success).toBe(false);
 	});
+
+	it('so do each calibration location row’s fit record’s (issues #555, #659): a moved site record lives in a row', () => {
+		const N = 'f1000000-0000-4000-8000-0000000000ff';
+		const withRow = { calibrationZones: [{ nodeId: 'g1', fitRecord: { flowSeriesId: OBS, checksKept: [`outlier:${OBS}:2001-01-05:2001-01-05`] } }, { nodeId: 'g2', fitRecord: null }] };
+		expect([...settingSeriesIds(withRow)]).toEqual([OBS]);
+		expect(remapSettingSeriesIds(withRow, new Map([[OBS, N]])).calibrationZones).toEqual([
+			{ nodeId: 'g1', fitRecord: { flowSeriesId: N, checksKept: [`outlier:${N}:2001-01-05:2001-01-05`] } },
+			{ nodeId: 'g2', fitRecord: null }
+		]);
+	});
 });
 
 describe('SettingsPatch.warningsKept (issue #611)', () => {

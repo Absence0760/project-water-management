@@ -122,8 +122,11 @@ export function seriesExportColumns(s: ExportSeries, settings: ProjectSettings, 
 
 	if (s.kind.startsWith('flow_')) {
 		cols.push({ header: seriesHeader(s.label, 'm³/day'), values: s.values.map((v) => (finite(v) ? v * SEC_PER_DAY : null)) });
-		if ((CALIBRATION_FLOW_KINDS as readonly string[]).includes(s.kind) && s.siteNodeId === null) {
-			const ranges = exclusionRanges(settings.calibrationExclusions ?? []).map((r) => ({ from: toEpochDay(r.start), to: toEpochDay(r.end), reason: r.reason }));
+		// The calibration exclusions of the location the record is (engine 1.110.0, issue #659): the outlet's (the top level) for
+		// the outlet's record, a gauge's row's for its record. A gauge with no row is no location: no column.
+		const row = s.siteNodeId === null ? null : (settings.calibrationZones ?? []).find((z) => z.nodeId === s.siteNodeId);
+		if ((CALIBRATION_FLOW_KINDS as readonly string[]).includes(s.kind) && (s.siteNodeId === null || row)) {
+			const ranges = exclusionRanges((row ? row.calibrationExclusions : settings.calibrationExclusions) ?? []).map((r) => ({ from: toEpochDay(r.start), to: toEpochDay(r.end), reason: r.reason }));
 			const d0 = toEpochDay(s.startDate);
 			cols.push({
 				header: 'Excluded from calibration (reason)',
