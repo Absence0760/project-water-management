@@ -1472,7 +1472,8 @@ per pack, 3 attempts). The worker runs it as that editor, under RLS:
    the stored results or a re-run), `other_engine` (only the re-runs
    differ, and a run was made with another engine version than the one the
    server runs: expected, not a fault; check out that engine to reproduce
-   it), or `no_bundle` (a pack issued without one). With it go the engine
+   it; the re-runs are `reproduce:<run>`, `reproduce:headline` and § 8's
+   `climate:delta`, `isRerunCheck`), or `no_bundle` (a pack issued without one). With it go the engine
    that re-ran the runs, the runs' own engines, the bundle's hash and every
    check (`pack_reproduction`,
    [data-model.md](./data-model.md#evidence-packs-112_evidence_packsql)). Once per engine version:
