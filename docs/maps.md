@@ -596,10 +596,19 @@ did, and refuses the whole file on any problem, listing them per feature:
   GeometryCollection, MultiPoint and null geometries are refused. Each kind
   takes the types that fit it (a boundary or parcel is polygons, a gauge a
   point, a river lines; a dam a point or polygon).
-- **Rings**: closed, at least 4 positions, with an area, not crossing or
-  touching themselves or each other (a hole can't cross its outer ring or
-  another hole), each hole starting inside its outer ring, not across the
-  antimeridian. The crossing check is one sweep over a polygon's rings with
+- **Rings**: closed, at least 4 positions, with an area, and valid as OGC
+  Simple Features and GEOS's `IsValid` have it (`checkRings`): no ring
+  crosses or touches itself; no two rings cross, at an edge or at a vertex,
+  or run along each other; each hole lies inside its outer ring; and the
+  holes don't cut the polygon into pieces (a hole touching the outer ring
+  at two points, or holes touching in a loop: "has holes that cut it into
+  pieces"). Rings **may touch at a point**: a hole at a vertex of its outer
+  ring or of another hole, as raster-traced outlines have it at a pixel
+  corner. Refusing every touch skipped 218 of 15,442 Waterbodies polygons
+  in the Western Cape that GEOS calls valid (2026-10-30, § Waterbodies). A
+  hole's test point is a vertex off the ring it is tested against, since
+  its first vertex may be where they touch. Not across the antimeridian.
+  The crossing check is one sweep over a polygon's rings with
   a budget of 5 million segment comparisons, every comparison counted, past
   which the polygon is refused as too complex, so a hostile file can't cost
   quadratic time ([security.md § Input handling](./security.md#input-handling),
@@ -1418,9 +1427,14 @@ as the schema owner, and only the worker reads it (no route, no map layer).
   loader reads the id from `uid` or `UID`.) D1 holds tens of thousands of
   waterbodies, so `--bbox` the client's area for a smaller table; a dam
   outside it simply matches nothing. The loader checks each polygon as an
-  upload is checked (geo/geojson.ts), skips and lists what it can't take,
+  upload is checked (geo/geojson.ts, § Uploads), skips and lists what it can't take,
   and replaces its dataset in one transaction; a reload makes the worker
-  match every dam again. In production the same file goes through
+  match every dam again. The polygons are traced from 30 m pixels, so an
+  island often touches the shore, or another island, at a pixel's corner:
+  valid (OGC, GEOS), and taken. Until 2026-10-30 the check refused any
+  touch, which skipped 218 of 15,442 polygons in a Western Cape clip, so
+  reload a clip loaded before then. What is still skipped should be
+  invalid to GEOS too (`ogr2ogr -makevalid` can repair it first). In production the same file goes through
   `load-reference.yml` (kind `waterbodies`,
   [deployment.md § Dam observations](./deployment.md#dam-observations)).
 - **The series are read per uid**, not loaded here: the fetcher's

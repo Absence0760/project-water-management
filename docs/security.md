@@ -3474,8 +3474,10 @@ placed points. The server never trusts the browser with geometry:
 - Every geometry is parsed and checked in `backend/src/geo/geojson.ts`
   before it is stored, whatever the client sent: WGS84 ranges (a projected
   file is refused, never reprojected by guess), 2D, the five supported
-  types, closed rings with an area that don't cross themselves, holes
-  inside, not across the antimeridian. Limits: 5 MB of text, 500 features,
+  types, closed rings with an area that are valid as OGC Simple Features
+  and GEOS have it (no ring crosses or touches itself, no two cross or run
+  along each other, holes inside and not cutting the polygon into pieces;
+  rings may touch at a point), not across the antimeridian. Limits: 5 MB of text, 500 features,
   50 000 positions per feature; the self-crossing sweep stops at 5 million
   comparisons and refuses the ring, so a crafted file can't cost quadratic
   time. Summing a polygon over a grid (land cover, evaporation, the CHIRPS
@@ -3650,6 +3652,12 @@ placed points. The server never trusts the browser with geometry:
   sawtooth whose edges all overlap in longitude took ~9 s of blocked event
   loop before; now refused in under 0.1 s) and checks a polygon's rings
   against each other, so a hole can't cross its outer ring or another hole.
+  The touch points it finds (where rings meet at a point, which OGC allows)
+  are at most the comparisons made, and the checks on them are linear in
+  the rings meeting at each (no crossing there: their directions sorted once
+  and read as brackets; a union-find for a cut interior; each ring's touch
+  points indexed once for a hole's test point), never pairwise: hundreds of
+  holes meeting at one point cost no quadratic time or memory.
   The overlap check (`polygonsOverlap`: MultiPolygon parts, a boundary
   file's polygons, a split's two parts) counts every
   vertex it clips and every edge it visits per latitude slab against
