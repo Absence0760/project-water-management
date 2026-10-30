@@ -8,7 +8,8 @@
 // and pretty-printed) and a one-byte change refused; then withdrawn, with its
 // public reason. The reproduction bundle downloads from the pack and checks
 // on the verify page. An application's packs in the Applications tab and panel,
-// and a new version superseding the first. Synthetic catchment and invented
+// and a new version superseding the first; a draft withdrawn before issue
+// prints no verify line or link. Synthetic catchment and invented
 // rule table, as evidence-report.spec.ts. § 8 Future yield (evidence-23,
 // issue #621) on an application: run on the committed synthetic NEX-GDDP-CMIP6
 // copy (invented models SYN-A..C, FUTURE_YIELD=on in playwright.config.ts),
@@ -415,6 +416,21 @@ test('an application’s packs show in the Applications tab and its panel; a new
 	await expect(pub.getByTestId('verify-result')).toHaveAttribute('data-status', 'superseded');
 	await expect(pub.getByTestId('verify-verdict').getByRole('link', { name: `Verify the newer version (${second.shortCode})` })).toHaveAttribute('href', `/verify/${second.shortCode}`);
 	await expectNoViolations(pub);
+
+	// A draft of version 3, withdrawn before it was issued: verify answers it 404, as a draft, so its page prints no verify
+	// line or Verify page link, and says the reason stays with the members.
+	const drafted = await page.request.post(`${API_URL}/projects/${project.id}/packs`, { data: { runId: app, supersedesId: v2 } });
+	expect(drafted.status(), await drafted.text()).toBe(201);
+	const v3 = ((await drafted.json()) as { pack: ApiPack }).pack;
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/packs/${v3.id}/withdraw`, { data: { reason: 'Drafted in error.' } })).status()).toBe(200);
+	await page.goto(`/projects/${project.id}/packs/${v3.id}`);
+	await ready(page);
+	await expect(page.getByTestId('pack-banner')).toContainText('Withdrawn. It was never issued, so no verify page answers for it. Reason: Drafted in error.');
+	await expect(page.getByTestId('evidence-stamp').first()).toHaveText('Withdrawn · version 3');
+	await expect(page.getByTestId('evidence-verify-line')).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Verify page' })).toHaveCount(0);
+	await pub.goto(`/verify/${v3.shortCode}`);
+	await expect(pub.getByTestId('verify-not-found')).toBeVisible();
 	await anon.close();
 });
 

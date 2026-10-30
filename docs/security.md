@@ -4648,7 +4648,8 @@ nothing else.
   sign-off whose statement (`pack-signoff-1`) names the pack's manifest hash;
   the route requires a sign-off of the *current* statement, and the trigger
   refuses an issue with no sign-off at all. A sign-off of a pack is made only
-  on a draft (`signoff_pack_draft`). The statement kinds can't be mixed: a
+  on a draft (`signoff_pack_draft`, which locks the pack row `FOR SHARE`, so
+  one sent during an issue waits for it and is refused, 288). The statement kinds can't be mixed: a
   `pack-` version signs a pack and any other a run (`signoff_statement_target`).
 - **The hash survives storage.** The server hashes the manifest's RFC 8785
   text when it drafts, re-reads it from `jsonb` and hashes it again (a
