@@ -7137,8 +7137,8 @@ at). Only the actionable warnings are coded so far:
 | Rain gaps elsewhere | `rain.sourcePeriod` (§2.4e), `rain.missingDays` (W2), `rain.none`, `rain.chirpsShadowed` | dates, `days` | `set-rain`; the last two the Data page |
 | Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
 | A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
-| Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
-| Calibration zones (§2.10n) | `calibration.zone.notList`, `.noGauge`, `.duplicate`, `.badParams`, `.unusable`, `.unfitted`; `.siteOnlyElsewhere` (a note) | `node`, `reason`, `name`, `gauges`; `units`, `zones` | `set-record` (not fitted: `set-fit`) |
+| Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord`, `.site.notTicked` (engine 1.110.0: the headline pointer isn't a ticked location) | `kind`, `site`, `name`, … | `set-record` (no values in the period: `set-period`) |
+| Calibration locations (§2.10n) | `calibration.zone.notList`, `.noGauge`, `.duplicate`, `.badParams`, `.unusable`, `.unfitted`, `.assignStale`, `.noneTicked`; `.siteOnlyElsewhere`, `.restNearest` (notes) | `node`, `reason`, `name`, `gauges`; `units`, `zones`; `unit`, `target`; `records` | `set-record` (not fitted: `set-fit`) |
 | The map (issue #646 F6, `mapAreas.ts`) | `map.areaFromEarlierOutline`: a unit's area is from an earlier outline of its polygon on the map (`ModelInput.mapAreas`, set by the backend's `runs/execute.ts` `staleMapAreas`; only this warning reads it, and the run's stored input keeps it for a reproduction). Not for a unit whose area in the run isn't the model's (a scenario set it) | `unit`, `modelKm2`, `mapKm2` | none: the Map's Checks (the Warnings page links there) |
 
 Not coded on purpose: the EWR-split note and the retired flow-share method's
@@ -10655,6 +10655,17 @@ can calibrate there instead: `settings.calibrationSiteNodeId` names the gauge
 node, and null (the default, every engine before) is the outlet, so a project
 that never sets it fits exactly as before.
 
+**Since engine 1.110.0 (issue #659, §2.10n) there is no special site.** Every
+gauge with a record, and the outlet, is a *calibration location*, each with
+its own window, record, exclusions and parameters, and none is required.
+`calibrationSiteNodeId` is now the optional **headline** pointer: the
+location whose statistics are `summary.calibration` and which the uncertainty
+ensemble and automated calibration act on (null = auto, §2.10n). What this
+section says of "the site" holds for the headline location; everything a
+gauge location reads is as below. Settings from before are read so that the
+old site becomes the headline, and run and fit to the bit
+(`normalizeCalibrationLocations`, §2.10n).
+
 **What changes at a gauge** (`calibrate/calibrate.ts` `prepareCalibration`,
 `calibrate/site.ts`):
 
@@ -10700,7 +10711,12 @@ API checks a new site when it is saved (api.md § Projects); a stored site
 that later loses its node or record blocks no save. Every run then warns
 (`Calibration site: …`, `runCalibrationSite` in `run.ts`) and scores its
 statistics at the outlet until the site is changed, and Settings says the same
-under *Scored at*.
+under *Scored at*. From engine 1.110.0 a stale site in settings from before
+calibration locations is read as the outlet (`normalizeCalibrationLocations`,
+with the same warning), so a fit scores there too, where engines before
+refused it; a headline gauge without a record still warns
+(`calibration.site.noRecord`) and the run's statistics fall back to the
+outlet's record on the outlet's (top-level) settings.
 
 **The run's statistics follow the site.** `runModel` scores
 `RunSummary.calibration` (§2.10) where calibration does: at a usable site,
@@ -10771,138 +10787,218 @@ table's monthly requirement is not used here, as at the outlet. A project
 without such a site has no key. The summary CSV writes each site's table
 after the outlet's.
 
-### 2.10n Calibration zones: calibrating at several gauges (engine 1.106.0, issue #555)
+### 2.10n Calibration locations: calibrating at every gauge (engine 1.106.0, issue #555; engine 1.110.0, issue #659)
 
-Not in the workbook. §2.10k fits the catchment's one GR4J parameter set at
-one site. Under Per unit flow generation (§2.4h) each land unit runs its own
-GR4J, so a gauge inside the network with a long enough record can calibrate
-**the units upstream of it on its own record**, and the outlet the rest.
+Not in the workbook, which has one parameter set. Each land unit runs its own
+GR4J (Per unit, §2.4h), so every gauge with a record, and the outlet, can
+calibrate the units it stands for on its own record. These are the
+**calibration locations**: equals, each with its own *Calibrate here* tick,
+window, record, exclusions, quality flags, GR4J X1–X4 and fit record, and
+none of them is required (engine 1.110.0; from 1.106.0 to 1.109.x the
+"calibration zones" were an add-on above one special calibration site).
+Code: `packages/engine/src/calibrate/locations.ts`; the row type and its
+sanitiser stay in `calibrate/zones.ts`. The rules marked *provisional* below
+are recorded in engine-audit.md **CZ2**, pending the client's hydrologist.
 
-**The setting.** `settings.calibrationZones` (`CalibrationZone` in
-`packages/engine/src/calibrate/zones.ts`): one row per gauge, `{ nodeId,
-enabled, calibrationStart, calibrationEnd, calibrationFlowKind,
-calibrationExclusions, qualityFlags, gr4j, fitRecord }`. `enabled` is the
-row's *Calibrate here* tick; `qualityFlags` is `{ suspect, zeroFlowMonths? }`
-or null for the catchment's (a gauge's record has no gauged range or gap fill,
-§2.10k, so those flags don't apply); `gr4j` is the zone's X1–X4 (each inside
-the bounds calibration searches) or null, not fitted yet. The **calibration
-site's own zone** (the outlet's, or *Scored at*'s gauge, §2.10k) keeps the
-settings it always had: `calibrationSiteNodeId`, the calibration window,
-`calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j` and
-`fitRecord`. Absent, `[]` (what migration 270 stored in every project) or no
-ticked row is exactly every engine before: one parameter set, to the bit (an
-invariant test runs and fits every example catchment both ways under both
-methods, `backend/src/model/examples.zones.test.ts`).
+**The settings.**
+- **A gauge's location** is its row of `settings.calibrationZones`
+  (`CalibrationZone`): `{ nodeId, enabled, calibrationStart, calibrationEnd,
+  calibrationFlowKind, calibrationExclusions, qualityFlags, gr4j, fitRecord }`.
+  `enabled` is *Calibrate here*; `qualityFlags` is `{ suspect,
+  zeroFlowMonths? }` or null for the catchment's (a gauge's record has no
+  gauged range or gap fill, §2.10k); `gr4j` is its X1–X4 (inside the bounds
+  calibration searches) or null, not fitted yet. A row may be any gauge
+  inside the network (not the outlet node); the "at or below the site" rule
+  of 1.106.0 is gone.
+- **The outlet's location** is the top-level keys (`calibrationStart/End`,
+  `calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j`,
+  `fitRecord`), ticked by **`calibrateAtOutlet`**. They stay on the catchment
+  because the outlet's record is the one with gauged ranges, gap filling,
+  missing periods and low-flow periods, which the outlet EWR test, recession
+  and plausibility read from the top level. The asymmetry is storage only.
+- **`gr4j`** is the catchment parameters: the outlet location's when it is
+  ticked, and otherwise what a ticked gauge not fitted yet, and any unit in
+  no location's group, runs on.
+- **`calibrationSiteNodeId`** is the optional **headline** pointer: a ticked
+  gauge whose statistics are `summary.calibration` and which the uncertainty
+  ensemble, automated calibration and the evidence pack's regional-prior line
+  act on. null = **auto** (*provisional*): the outlet when it is ticked, else
+  the ticked gauge with the largest land-unit area above it, then name, then
+  id. A pointer that isn't a ticked location warns
+  (`calibration.site.notTicked`) and auto is used. Every reader of "the site"
+  goes through one function, `headlineCalibrationSettings` (the headline's
+  settings: its node as `calibrationSiteNodeId`, its window, record,
+  exclusions, flags, parameters and fit record); readers of the outlet
+  *record* (ratings, gap fill, low-flow periods, the outlet EWR test) keep
+  reading the top level.
+- **`unitParamsFrom`** (`{ unitId: locationNodeId }`, the issue's option 2,
+  "similar units"): a land unit runs on the named location's parameters even
+  when it isn't upstream of it. The target is a gauge's node id or the
+  outlet node's id.
+- **`calibrationRest`**: what a unit with no ticked location downstream takes
+  (below the lowest ticked gauge, or on an ungauged branch, when the outlet
+  isn't ticked). `'nearest'` (*provisional*, what a new project is written
+  with): the nearest ticked location upstream on its river: walking the
+  unit's path down, at the first node with a ticked location upstream of it,
+  the one with the fewest hops from that node, then name, then id
+  (spatial-proximity regionalisation along the river, the best-performing
+  donor method in large comparisons: Oudin et al. 2008, *Water Resources
+  Research* 44, W03413; Parajka et al. 2013, *HESS* 17, 1783–1795).
+  `'headline'`: the headline's parameters (what "the rest" took before
+  1.110.0). `'default'`: `gr4j`. **Absent = `'headline'`**, so legacy
+  settings and old runs are read as before; neither key is in
+  `defaultProjectSettings()`, so a merge never turns a legacy snapshot into
+  `'nearest'`.
 
-**The zones.** A ticked row is usable when its node is a gauge inside the
-network (not the outlet), is not the calibration site and is not below it
-(on the site's path to the outlet); an unusable ticked row warns
-(`Calibration zone: …`) and is left out. Each land unit (a farm with an area,
-§2.4h) belongs to the **first usable ticked gauge on its path downstream**
-(the unit itself excluded); a unit that reaches none is in the site's zone.
-So a ticked gauge's zone is the land units draining to it that aren't in a
-ticked zone further upstream, unticking a gauge merges its units into the
-next ticked gauge downstream, and the site's zone is the rest. Each unit runs
-GR4J with its zone's X1–X4 (the row's `gr4j`, else, with a warning that the
-zone has no parameters of its own yet, the catchment's `gr4j`); the warm-up
-(`gr4j.warmupDays`), PE and forcing are the catchment's, as under §2.4h. The
+**Each unit's group** (`resolveLocations`), in order:
+1. `unitParamsFrom[unit]` when it names a usable ticked location
+   (**borrowed**); a target that is gone or unticked warns
+   (`calibration.zone.assignStale`) and falls through;
+2. else its **own zone**: the first usable ticked location on its path
+   downstream from the unit itself (the outlet counts when ticked, so a land
+   unit that is the outlet node belongs to the outlet's location);
+3. else the **rest** rule. With no ticked location at all every unit runs on
+   `gr4j`: allowed, the run goes on, and a run with flow records says no
+   location is ticked (`calibration.zone.noneTicked`).
+
+A location's group is its own-zone units not borrowed away, the units
+borrowed to it and the rest units sent to it; each unit runs GR4J with its
+group's X1–X4 (the row's `gr4j`, else, with a warning that the location has
+no parameters of its own yet, the catchment's `gr4j`); the warm-up
+(`gr4j.warmupDays`), PE and forcing are the catchment's, as under §2.4h.
+`'nearest'` sending units to a location notes it
+(`calibration.zone.restNearest`). An unusable ticked row (gone, not a gauge,
+the outlet node) warns (`calibration.zone.unusable`) and is left out. The
 groundwater exchange series is written when the catchment's X2, or that of
-any zone with land units, is not 0. `summary.runoff.params` stays the
-calibration site's zone's parameters (the catchment's stores are the units'
-area-weighted means, so the run's runoff self-check caps the production store
-at the units' area-weighted X1); each zone's are in `summary.unitRain.zones`.
-While the uncertainty ensemble and automated calibration don't yet read the
-zones, every run that applies one warns that they vary only the site's
-parameters (`Calibration zones: N land units ran on …`).
+any location with land units, is not 0. `summary.runoff.params` stays
+`gr4j` (the catchment's stores are the units' area-weighted means, so the
+run's runoff self-check caps the production store at the units'
+area-weighted X1). While the uncertainty ensemble and automated calibration
+act on the headline's group only, every run with another location's group
+warns so (`Calibration zones: N land units ran on …`).
 
-**Per unit.** Zones need each unit's own GR4J run, which every run with a
-land unit has since engine 1.109.0 (§2.4h, issue #658), so ticked rows apply
-whatever the stored `unitRain` mode. Engines 1.106.0 – 1.108.x ran one GR4J
-for the whole catchment under Fragmentation: ticked rows warned
-(`calibration.zone.needsPerUnit`, gone in 1.109.0) and applied nothing.
+**Settings from before 1.110.0** (no boolean `calibrateAtOutlet`) are read
+by `normalizeCalibrationLocations` (in `mergeSettings` whenever the nodes are
+known, so every run, fit, old run, revision, scenario base and imported
+`project.json` reads them alike):
+- a site at an inner gauge `G`: the top-level window, flow kind, exclusions,
+  `{ suspect, zeroFlowMonths }` and X1–X4 become `G`'s ticked row (replacing
+  a row `G` had), the fit record moves into it (top-level `fitRecord` null),
+  every ticked row at or below `G` is unticked (engines before left them out
+  as unusable), `calibrateAtOutlet` false, `calibrationRest` `'headline'`,
+  and `G` stays the headline pointer. The top level keeps its values (the
+  outlet record's settings);
+- otherwise (the outlet, or a stale site, which engines before scored at the
+  outlet): the pointer null, `calibrateAtOutlet` true and `calibrationRest`
+  `'headline'`. The SQL migration (backend, slice B of issue #659, pending) passes whether an outlet
+  record exists, and without one writes `calibrateAtOutlet` false and
+  `'default'`, which runs the same (the leftover units took `gr4j` either
+  way) but lets the fit fit the gauges instead of refusing at an outlet with
+  no record.
 
-**The run summary.** `summary.unitRain.zones` (only when zones applied):
-each usable zone upstream first, then the site's own zone (`nodeId` null),
-each `{ nodeId, name, units, params, fitted }`.
+A legacy project runs and fits exactly as engine 1.109.0 did, to the bit
+(`calibrate/locations.legacy.test.ts` pins 1.109.0's digests for an outlet
+site, an inner site, zones under each, rows at and below the site, and a
+stale site). The one intended difference: a stale site, which 1.109.0's fit
+refused, is fitted at the outlet as the run always scored it.
 
-**Statistics at each zone's gauge** (`summary.calibrationZones`, issue #555
-round 4, `run.ts` `zoneCalibrationStats`): for each zone above the site, in
-the same order, the run's calibration statistics (§2.10k's
-`CalibrationStats`) of its gauge's record (the row's record, else the
-gauge's first) against the gauge's simulated outflow, on the row's window
-and exclusions, with `siteNodeId`, `siteName` and `fitStatus` computed on the
-zone's own settings (`zoneCalibrationSettings`: its parameters, fit record,
-window, exclusions and record), so each site is in sample only when its own
-zone's parameters were fitted on those days. The site's own zone is
-`summary.calibration`, as before. A zone whose gauge has no record is left
-out; absent when no zone applied. Statistics only: no other output changes,
-so a run without zones is unchanged to the bit. A gauge's own low-flow
-periods and quality flags are not applied here, as at a gauge site (§2.10k).
+**The run summary.** `summary.unitRain.zones` (when a gauge location
+applied): each location's group, upstream first and the headline last, then
+the units on `gr4j` (`kind` `'default'`) when any, each `{ nodeId, name,
+units, params, fitted, kind, headline?, borrowed, rest }`; `nodeId` null is
+the top-level parameters (the outlet's location, or `'default'`).
+`summary.unitRain.paramSource` gives each unit `{ from, how }` (`how`:
+`zone`, `assigned`, `rest` or `default`). `summary.calibration` is the
+headline's statistics; **`summary.calibrationZones`** every other ticked
+location's (`run.ts` `zoneCalibrationStats`): a gauge's record (the row's,
+else its first) against its simulated outflow on its own window and
+exclusions, or for the outlet location the outlet record (its low-flow
+periods applied, as `summary.calibration` at the outlet) on the top-level
+settings, with the outlet node's id as `siteNodeId`; each with `fitStatus`
+by its own fit record (`locationCalibrationSettings`). A location without a
+record is left out. The scored record's quality column, the plausibility
+signatures' recession segments and its exclusions follow the headline.
 
-**Comparison, report and evidence pack.** The run comparison words each zone
-(`calibrationZoneChanges`: added, removed, or what changed among its
-parameters, window, record, exclusions, quality flags and fit record) and sets each zone
-gauge's statistics side by side (`comparison.calibrationZones`;
-run-comparison.md). The report's and the Calibration page's **Calibration
-zones** table lists each zone's units, parameters and scores (ui.md § Runs
-& results), and the evidence report (`evidence-22`) every zone's
+**Comparison, report and evidence pack.** The run comparison words each row
+(`calibrationZoneChanges`) and sets each location's statistics side by side
+(`comparison.calibrationZones`; run-comparison.md). The report's and the
+Calibration page's tables list each location's units, parameters and scores
+(ui.md § Runs & results), and the evidence report every location's
 parameters, fit record and scores (evidence-pack.md § Calibration zones).
-The Network and the Map colour each unit by its zone (ui.md § Network,
+The Network and the Map colour each unit by its group (ui.md § Network,
 maps.md § Calibration zones on the map).
 
-**The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`). Zones are
-fitted in network order, **upstream first**: a zone with more ticked gauges
-below it comes first (so one whose gauge drains through another ticked gauge
-is always before it), then by name, then id, and the site's own zone is
-last. Each step is a whole
-`calibrate()` (§2.10b) with the same objective, bounds, budget, starts, seed
-and validation:
-
-1. A zone step (`CalibrateOptions.zone`) fits **only that zone's units'**
-   parameters: every other unit keeps its zone's. It scores the zone's gauge
-   (its record against the gauge's simulated outflow, as §2.10k scores a
-   gauge site), on the row's window, exclusions, record and quality flags
-   (`zoneCalibrationSettings`). Only the units above the gauge and the dams,
-   abstractions, transfers and losses above it reach the score; units below
-   or beside it can't move it. The WR2012 MAR penalty is off for a zone step
-   (it targets the whole catchment's natural MAR).
-2. Its fitted parameters are then fixed for every step below it, so its
-   simulated outflow is routed down with them.
-3. The site's own zone is fitted last, on the site's settings, with every
-   zone above it at its fitted parameters.
+**The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`,
+`locations.ts` `locationFitPlan`). The steps are the usable ticked
+locations, fitted in **dependency order**: `deps(L)` is the group of every
+land unit draining to `L`'s node (every unit for the outlet), but `L`'s own
+and the `gr4j` units'. That covers "upstream first" (a location's upstream
+zones drain to it) and the issue's rule that a location is fitted after
+every location whose parameters a unit above it borrows. Kahn's sort; among
+the ready steps the headline goes last, then the one with more ticked
+locations (but the headline) below it first, then name, then id, so a
+legacy project's order is engine 1.109.0's, and a ticked outlet, which every
+group drains to, is always last. Each step is a whole `calibrate()` (§2.10b)
+with the same objective, bounds, budget, starts, seed and validation:
+1. A step (`CalibrateOptions.zone`: a gauge's node id, null for the outlet's
+   location, absent for the headline) moves **every unit in the location's
+   group** with the candidate parameters, borrowed and rest units included
+   (*provisional*): it is one parameter set, so the borrowed units move with
+   it, which reproduces the old site zone's fit to the bit. Every other unit
+   keeps its group's. It scores the location's record against its simulated
+   outflow (§2.10k) on its own window, exclusions, record and quality flags
+   (`locationCalibrationSettings`). Borrowed units beside the gauge can't
+   reach its score by routing, only through the whole-catchment couplings
+   below; with none of those, a gauge's fit is the same to the bit with or
+   without units borrowing from it (`locations.test.ts`).
+2. **The WR2012 MAR penalty applies at the headline step only**
+   (*provisional*): the headline's group is the one meant to stand for the
+   catchment, and another location's group moves only its own share of the
+   natural MAR.
+3. Its fitted parameters are then fixed for every later step.
 
 Each step has its own scores, split-sample and dry → wet tests, notes and fit
-record (`FitRecord.zone`: `{ nodeId, units }`, `nodeId` null for the site's
-zone). The steps are applied as one result (`applyStepwise`): the site's
-zone's parameters and fit record into `gr4j` and `fitRecord`, each zone's into
-its row. A cancelled step stops the fit and nothing is applied. With no
-ticked zone the stepwise fit is one step, `calibrate()` itself.
+record (`FitRecord.zone`: `{ nodeId, units, borrowed? }`, `nodeId` null for
+the outlet's location; a record the conversion moved into a row, with no
+`zone` or a `zone` naming null, is that row's: `fitRecordZone`;
+`fitGroupChanged` says a fit is stale once its group's units or borrowing
+changed). The steps are applied as one result (`applyStepwise`): the outlet
+location's parameters and fit record into `gr4j` and `fitRecord`, each
+gauge's into its row. A cancelled step stops the fit and nothing is applied.
 
-While a zone above the site is being fitted, the units below it run on their
-current parameters (not yet refitted), and the units' natural MAR shares
-(§2.5b) follow every unit's runoff, so a zone's step score can differ from
+While a location is being fitted, the units of the locations after it run on
+their current parameters (not yet refitted), and the units' natural MAR
+shares (§2.5b) follow every unit's runoff, so a step's score can differ from
 a run made after every step is applied wherever something above the gauge
-reads the units' shares or the whole catchment's natural flow (an EWR charge,
-curtailment, a hands-off flow, the senior users' claims, land cover's
-low-flow threshold).
+reads the units' shares or the whole catchment's natural flow (an EWR
+charge, curtailment, a hands-off flow, the senior users' claims, land
+cover's low-flow threshold). These are also the only ways a borrowed unit
+beside a gauge reaches that gauge's score.
 
-**Refusals and warnings.** The fit refuses when a ticked zone has no land
-unit above its gauge, when every land unit is in a zone above the site, or
-when the site is a gauge inside the network and none of its own zone's units
-drains through it (they all join the river beside it, so its step's score
-couldn't move with the parameters it fits) (`zoneFitError`). Each step under zones notes when its record has fewer than
-2 complete water years (95 % of a water year's days observed, outside the
-exclusions) or no dry → wet test (no dry year to fit on), the representativeness
-and dry → wet notes beside it (`zoneCoverageNotes`). The API refuses a new
-row whose gauge isn't a gauge inside the network with a flow record, a
-gauge listed twice, and a ticked row that is the site or below it (api.md §
-Projects). Each zone warning a run gives has a stable code
-(`calibration.zone.*`, § Run warning codes in §2.8), so the Warnings page
-links it to the table (`?field=fld-cal-zones`) or to Fit the parameters.
+**Refusals and notes.** The plan refuses, before any step runs: no ticked
+location ("no calibration location is ticked"); a location whose group has
+no land unit, or none draining through it (all borrowed, or beside it), so
+its fit could not move its own score (this covers the issue's "own zone has
+no units left"); and a **cycle** of borrowing ("the units above *G* borrow
+*H*'s parameters and the units above *H* borrow *G*'s, so neither can be
+fitted first: change one unit's Parameters from"). A cycle is not refused on
+save, since a run doesn't care. Each step notes when its record has fewer
+than 2 complete water years (95 % of a water year's days observed, outside
+the exclusions) or no dry → wet test (`zoneCoverageNotes`), and what it
+fitted (its group's units, how many borrowed). The API checks the rows, the
+headline pointer and `unitParamsFrom` on save (`calibrationLocationsError`,
+`unitParamsFromError`; api.md § Projects). Each warning a run gives has a
+stable code (`calibration.zone.*`, `calibration.site.*`, § Run warning codes
+in §2.8).
+
+The uncertainty ensemble and automated calibration vary the headline's
+parameters (`withHeadlineParams`); for settings from before 1.110.0 the
+top-level `gr4j` moves with them too, since there the site's parameters were
+`gr4j`, which every ticked row not fitted yet ran on as well.
 
 **Not yet** (docs/followups.md § Calibration zones): automated calibration
-and the uncertainty ensemble per zone (both still fit or perturb the site's
-zone's parameters alone).
+and the uncertainty ensemble per location (both act on the headline's group
+alone), and suggesting similar units (manual only).
 
 ### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
 

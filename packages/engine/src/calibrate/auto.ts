@@ -21,6 +21,8 @@ import { exclusionRanges, type CalibrationExclusion } from './provenance';
 import { selectCase, typicalParamsFilter, wr2012MarFilter, type FilterResult } from './rules';
 import { resolveCalibrationRules, rulePanLabel, rulePanValues, SELECTION_TEST_LABEL, type CalibrationRules, type RulePan } from './rulesSettings';
 import type { CalibrationBounds } from './params';
+import { withHeadlineParams } from './locations';
+import type { Gr4jParams } from '../runoff/params';
 
 /** The seed, starts and model runs come from the rules (rules.run), never the caller: they can't be chosen after a result is seen. */
 export interface AutoCalibrateOptions {
@@ -199,7 +201,8 @@ export function runAutoCase(input: ModelInput, plan: AutoCalibrationPlan, i: num
 	if (report && !error) {
 		// A run that fails with the fitted parameters fails this case only, never the fits already made.
 		try {
-			const out = runModel({ ...caseInput, settings: { ...caseInput.settings, gr4j: { ...settings.gr4j, ...report.params } } });
+			// The fit is the headline location's (engine 1.110.0, issue #659): its parameters go where that location's are.
+			const out = runModel(withHeadlineParams(caseInput, report.zoneNodeId ?? null, report.params as unknown as Gr4jParams));
 			naturalMarMm3 = naturalMar(out);
 			if (rules.filters.wr2012Mar) filters.push(wr2012MarFilter(out.summary.wr2012, settings.wr2012.calibrationPenalty));
 			if (rules.filters.typicalParams) filters.push(typicalParamsFilter(report.params, report.free));

@@ -197,11 +197,15 @@ export interface FitRecord {
 	 */
 	siteNodeId?: string | null;
 	/**
-	 * The calibration zone the fit was one step of (engine 1.106.0, issue #555,
-	 * ./zones.ts): its gauge (null = the calibration site's own zone) and the
-	 * land units its parameters are for. Absent on a fit made without zones.
+	 * The calibration location the fit was one step of (engine 1.106.0, issue
+	 * #555; 1.110.0, issue #659, ./locations.ts): its gauge (null = the
+	 * outlet's location; before 1.110.0 the calibration site's own zone), the
+	 * land units its parameters are for, and those of them borrowed from
+	 * elsewhere (Parameters from; absent when none). Absent on a fit made
+	 * without a gauge location. Read it through fitRecordZone, which reads a
+	 * record the 1.110.0 conversion moved into a gauge's row as that row's.
 	 */
-	zone?: { nodeId: string | null; units: string[] };
+	zone?: { nodeId: string | null; units: string[]; borrowed?: string[] };
 	simulatedKey: 'simulated_outflow';
 	/** The calibration window and exclusions the fit used (the form's, at the time). */
 	calibrationStart: string | null;
@@ -560,7 +564,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		startParams: { ...r.startParams },
 		flowKind: r.flowKind,
 		siteNodeId: r.siteNodeId ?? null,
-		...(r.zoneUnits ? { zone: { nodeId: r.zoneNodeId ?? null, units: [...r.zoneUnits] } } : {}),
+		...(r.zoneUnits ? { zone: { nodeId: r.zoneNodeId ?? null, units: [...r.zoneUnits], ...(r.zoneBorrowed?.length ? { borrowed: [...r.zoneBorrowed] } : {}) } } : {}),
 		simulatedKey: r.simulatedKey,
 		calibrationStart: ctx.settings.calibrationStart ?? null,
 		calibrationEnd: ctx.settings.calibrationEnd ?? null,
@@ -1174,6 +1178,36 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		rulesChanged: !!record.auto && !sameRules(resolveCalibrationRules(settings.calibrationRules, []), resolveCalibrationRules(record.auto.rules, [])),
 		draftRules: !!record.auto && !record.auto.rules?.signedOff
 	};
+}
+
+/**
+ * The location a stored fit record is for (engine 1.110.0, issue #659), read
+ * where it is stored: `key` is the row's gauge (null for the top level, the
+ * outlet's location). A record in a row with no `zone`, or a zone naming null,
+ * was fitted as the calibration site before 1.110.0 and moved there by the
+ * conversion (normalizeCalibrationLocations): it is that row's. `units` is
+ * null when the record doesn't say (a fit made without a gauge location: every
+ * unit then).
+ */
+export function fitRecordZone(record: Pick<FitRecord, 'zone'> | null | undefined, key: string | null): { nodeId: string | null; units: string[] | null; borrowed: string[] } {
+	const z = record?.zone;
+	return { nodeId: z?.nodeId ?? key, units: z ? [...z.units] : null, borrowed: [...(z?.borrowed ?? [])] };
+}
+
+/**
+ * Whether a location's group changed since its fit (engine 1.110.0, issue
+ * #659): a unit added or removed (a gauge ticked or unticked, a unit's
+ * Parameters from changed), or one now borrowed that wasn't (or the
+ * reverse). The fitted parameters were found with the old group taking the
+ * candidates, so the fit is stale. False when the record doesn't say what its
+ * group was (a fit made without a gauge location) and the group is every land
+ * unit now.
+ */
+export function fitGroupChanged(record: Pick<FitRecord, 'zone'> | null | undefined, key: string | null, now: { units: readonly string[]; borrowed?: readonly string[]; allUnits?: readonly string[] }): boolean {
+	const then = fitRecordZone(record, key);
+	const sorted = (a: readonly string[]) => [...a].sort();
+	if (then.units === null) return now.allUnits !== undefined && !sameJson(sorted(now.units), sorted(now.allUnits));
+	return !sameJson(sorted(then.units), sorted(now.units)) || !sameJson(sorted(then.borrowed), sorted(now.borrowed ?? []));
 }
 
 /**

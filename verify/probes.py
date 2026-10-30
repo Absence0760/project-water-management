@@ -1734,6 +1734,79 @@ def calibration_zones_nested(zone_x2: float = -1.0) -> dict:
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def calibration_locations_nearest() -> dict:
+    """Calibration locations (§2.10n, engine 1.110.0, issue #659) on a
+    Y-shaped network with the outlet not ticked and the rest rule 'nearest':
+    the Alpha (ga) and Beta (gb) weirs join the outlet o one hop up each, so
+    u3, which joins the outlet itself, takes Alpha's parameters (a tie of
+    hops, by name); u5 joins the outlet below the Gamma weir gc (gc drains
+    into u5), so u5 takes Gamma's, the nearest upstream on its own river,
+    not Alpha's; u2 drains to Beta but takes Alpha's by Parameters from
+    (borrowed). Every location has its own X1–X4, so each rule shows in the
+    units' runoff. Two years of invented rain on the catchment's own gauge."""
+    start = dt.date(2019, 1, 1)
+    n = (dt.date(2020, 12, 31) - start).days + 1
+    nodes = [
+        _node("o", "gauge", None, name="Outlet"),
+        _node("ga", "gauge", "o", name="Alpha weir"),
+        _node("gb", "gauge", "o", name="Beta weir"),
+        _node("u5", "farm", "o", name="Unit 5", areaKm2=2),
+        _node("gc", "gauge", "u5", name="Gamma weir"),
+        _node("u1", "farm", "ga", name="Unit 1", areaKm2=3),
+        _node("u2", "farm", "gb", name="Unit 2", areaKm2=2),
+        _node("u4", "farm", "gb", name="Unit 4", areaKm2=1.5),
+        _node("u3", "farm", "o", name="Unit 3", areaKm2=4),
+        _node("u6", "farm", "gc", name="Unit 6", areaKm2=1),
+    ]
+    s = _settings(
+        gr4j={"x1": 350, "x2": 0, "x3": 90, "x4": 1.7, "warmupDays": 200},
+        unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"},
+        calibrateAtOutlet=False,
+        calibrationRest="nearest",
+        unitParamsFrom={"u2": "ga"},
+        calibrationZones=[
+            _zone("ga", {"x1": 120, "x2": 0, "x3": 40, "x4": 1.2}),
+            _zone("gb", {"x1": 900, "x2": 0, "x3": 250, "x4": 3.1}),
+            _zone("gc", {"x1": 60, "x2": 0, "x3": 20, "x4": 0.8}),
+        ],
+    )
+    series = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": _wave(start, n, 0)}}
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def calibration_locations_legacy_site() -> dict:
+    """Settings from before calibration locations (no calibrateAtOutlet,
+    §2.10n, engine 1.110.0): the site is the inner weir w1, with ticked rows
+    at w2 (below w1) and w3 (above w1). The row at w2 is read as unticked,
+    as older engines ignored it, so the unit draining to w2 takes w1's
+    parameters (the catchment's gr4j); the unit above w3 takes w3's, and the
+    unit at w1 and the one draining to the outlet take w1's. Two years of
+    invented rain on the catchment's own gauge."""
+    start = dt.date(2019, 1, 1)
+    n = (dt.date(2020, 12, 31) - start).days + 1
+    nodes = [
+        _node("o", "gauge", None),
+        _node("w2", "gauge", "o"),
+        _node("w1", "gauge", "w2"),
+        _node("w3", "gauge", "w1"),
+        _node("u1", "farm", "w1", areaKm2=3),
+        _node("u2", "farm", "w2", areaKm2=2),
+        _node("u3", "farm", "w3", areaKm2=1.5),
+        _node("u4", "farm", "o", areaKm2=4),
+    ]
+    s = _settings(
+        gr4j={"x1": 350, "x2": 0, "x3": 90, "x4": 1.7, "warmupDays": 200},
+        unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"},
+        calibrationSiteNodeId="w1",
+        calibrationZones=[
+            _zone("w2", {"x1": 900, "x2": 0, "x3": 250, "x4": 3.1}),
+            _zone("w3", {"x1": 120, "x2": 0, "x3": 40, "x4": 1.2}),
+        ],
+    )
+    series = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": _wave(start, n, 0)}}
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
 def forecast_member_rescaled() -> dict:
     """A member of the forecast-conditioned outlook (issue #620, §2.15d) is an
     ordinary run: 91 days of recorded rain (January–March 2020), then a
@@ -1876,4 +1949,7 @@ PROBES = {
     # Calibration zones (issue #555).
     "calibration-zones-nested": calibration_zones_nested(),
     "calibration-zones-no-exchange": calibration_zones_nested(0.0),
+    # Calibration locations (issue #659): the nearest rule on a Y, a borrowed unit.
+    "calibration-locations-nearest": calibration_locations_nearest(),
+    "calibration-locations-legacy-site": calibration_locations_legacy_site(),
 }

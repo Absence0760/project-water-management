@@ -468,6 +468,10 @@ const ELSEWHERE: Partial<Record<WarningCode, string>> = {
 	'calibration.zone.unusable': 'calibrate/zones.test.ts',
 	'calibration.zone.unfitted': 'calibrate/zones.test.ts',
 	'calibration.zone.siteOnlyElsewhere': 'calibrate/zones.test.ts',
+	'calibration.zone.assignStale': 'calibrate/locations.test.ts',
+	'calibration.zone.restNearest': 'calibrate/locations.test.ts',
+	'calibration.zone.noneTicked': 'calibrate/locations.test.ts',
+	'calibration.site.notTicked': 'calibrate/locations.test.ts',
 	'map.areaFromEarlierOutline': 'mapAreas.test.ts'
 };
 

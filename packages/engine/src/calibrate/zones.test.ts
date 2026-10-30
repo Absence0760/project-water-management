@@ -132,14 +132,15 @@ describe('calibration zone settings', () => {
 		expect(quiet).toEqual([]);
 	});
 
-	it('refuses a row that is gone, not a gauge, the outlet, the site, or below the site, and a repeat', () => {
+	it('refuses a row that is gone, not a gauge or the outlet, and a repeat; the site and below it are allowed (engine 1.110.0)', () => {
 		const { nodes } = network().model;
 		expect(calibrationZoneError(nodes, null, 'gone')).toMatch(/no longer in the model/);
 		expect(calibrationZoneError(nodes, null, 'A')).toMatch(/not a gauge/);
 		expect(calibrationZoneError(nodes, null, 'G')).toMatch(/is the outlet/);
-		expect(calibrationZoneError(nodes, 'H', 'H')).toMatch(/is the calibration site/);
+		// Calibration locations are equals (issue #659): a row may be the headline's own gauge, or lie below it.
+		expect(calibrationZoneError(nodes, 'H', 'H')).toBeNull();
 		const below = [...nodes, node({ id: 'L', name: 'Low weir', kind: 'gauge', downstreamNodeId: 'G' })].map((n) => (n.id === 'H' ? { ...n, downstreamNodeId: 'L' } : n));
-		expect(calibrationZoneError(below, 'H', 'L')).toMatch(/below the calibration site/);
+		expect(calibrationZoneError(below, 'H', 'L')).toBeNull();
 		expect(calibrationZoneError(nodes, null, 'H')).toBeNull();
 		expect(calibrationZonesError(nodes, null, [zone('H'), zone('H', { enabled: false })])).toMatch(/two rows/);
 		expect(calibrationZonesError(nodes, null, [{ nodeId: 'A', enabled: false }])).toBeNull();
@@ -186,7 +187,7 @@ describe('calibration zone settings', () => {
 		const v = zoneCalibrationSettings(s, 'H');
 		expect([v.calibrationSiteNodeId, v.calibrationStart, v.calibrationEnd, v.calibrationExclusions.length, v.qualityFlags.suspect, v.gr4j.x1, v.gr4j.warmupDays]).toEqual(['H', '1991-10-01', '1994-09-30', 1, 'include', 900, 365]);
 		expect(zoneCalibrationSettings(s, null)).toBe(s);
-		expect(() => zoneCalibrationSettings(s, 'K')).toThrow(/no calibration zone/);
+		expect(() => zoneCalibrationSettings(s, 'K')).toThrow(/no calibration location/);
 	});
 
 	it('coverage: complete water years scored, the span of a record, and the notes', () => {
@@ -221,9 +222,11 @@ describe('runs under calibration zones', () => {
 		const all = runModel({ ...input, settings: { ...input.settings, gr4j: { ...TRUTH_H, warmupDays: 365 } } });
 		expect(unitRunoff(zoned, 'A')).toEqual(unitRunoff(all, 'A'));
 		expect(zoned.summary.unitRain?.zones).toEqual([
-			{ nodeId: 'H', name: 'Weir', units: ['A'], params: TRUTH_H, fitted: true },
-			{ nodeId: null, name: 'Outlet', units: ['B', 'C'], params: { x1: 350, x2: 0, x3: 90, x4: 1.7 }, fitted: true }
+			{ nodeId: 'H', name: 'Weir', units: ['A'], params: TRUTH_H, fitted: true, kind: 'gauge', borrowed: [], rest: [] },
+			{ nodeId: null, name: 'Outlet', units: ['B', 'C'], params: { x1: 350, x2: 0, x3: 90, x4: 1.7 }, fitted: true, kind: 'outlet', headline: true, borrowed: [], rest: [] }
 		]);
+		// Each unit's parameter source (engine 1.110.0, issue #659).
+		expect(zoned.summary.unitRain?.paramSource).toEqual({ A: { from: 'H', how: 'zone' }, B: { from: null, how: 'zone' }, C: { from: null, how: 'zone' } });
 	});
 
 	it('the run’s self-checks pass with a zone’s X1 far above the site’s (the store cap is each unit’s zone’s X1)', () => {
@@ -275,15 +278,16 @@ describe('the stepwise fit', () => {
 		const empty = { ...input, model: { ...input.model, nodes: input.model.nodes.map((n) => (n.id === 'A' ? { ...n, downstreamNodeId: 'G' } : n)) } };
 		expect(() => zoneFitPlan(withZones(empty, [zone('H')]))).toThrow(/"Weir" has no land unit/);
 		const allUp = { ...input, model: { ...input.model, nodes: input.model.nodes.map((n) => (n.id === 'B' || n.id === 'C' ? { ...n, downstreamNodeId: 'H' } : n)) } };
-		expect(() => zoneFitPlan(withZones(allUp, [zone('H')]))).toThrow(/nothing of its own to fit/);
+		expect(() => zoneFitPlan(withZones(allUp, [zone('H')]))).toThrow(/"Outlet" has no land unit in its group/);
 		// An inner site whose own zone's units all drain beside it: its step's score couldn't move.
 		const inner = { ...input, model: { ...input.model, nodes: [...input.model.nodes.map((n) => (n.id === 'H' ? { ...n, downstreamNodeId: 'S' } : n)), node({ id: 'S', name: 'Site weir', kind: 'gauge', downstreamNodeId: 'G', sortOrder: 6 })] } };
 		expect(() => zoneFitPlan(withZones(inner, [zone('H')], { calibrationSiteNodeId: 'S' }))).toThrow(/drains through it/);
 		// With a unit of its own above it, it fits.
 		const own = { ...inner, model: { ...inner.model, nodes: inner.model.nodes.map((n) => (n.id === 'C' ? { ...n, downstreamNodeId: 'S' } : n)) } };
+		// The site is its own location since engine 1.110.0 (normalizeCalibrationLocations): the same units, by its gauge.
 		expect(zoneFitPlan(withZones(own, [zone('H')], { calibrationSiteNodeId: 'S' }))!.map((s) => [s.zoneNodeId, s.units])).toEqual([
 			['H', ['A']],
-			[null, ['B', 'C']]
+			['S', ['B', 'C']]
 		]);
 	});
 
@@ -297,7 +301,7 @@ describe('the stepwise fit', () => {
 		const a = pb.simulate({ ...TRUTH_H });
 		const b = prepareCalibration(withZones(network(), [zone('H')], { gr4j: { x1: 1500, x2: 0, x3: 400, x4: 6, warmupDays: 365 } }), [], undefined, 'H').simulate({ ...TRUTH_H });
 		expect(Array.from(b)).toEqual(Array.from(a));
-		expect(() => prepareCalibration(input, [], undefined, 'K')).toThrow(/no ticked calibration zone/);
+		expect(() => prepareCalibration(input, [], undefined, 'K')).toThrow(/no ticked calibration location/);
 		// The truth reproduces the weir's record on every scored day.
 		for (const t of pb.scoredDays) expect(a[t]).toBeCloseTo(pb.observed[t]!, 6);
 	});

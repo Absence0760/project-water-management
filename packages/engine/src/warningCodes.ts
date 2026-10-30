@@ -124,7 +124,15 @@ export const WARNING_CODES = {
 	'calibration.zone.badParams': { setting: 'set-record', group: 'check' },
 	'calibration.zone.unusable': { setting: 'set-record', group: 'check' },
 	'calibration.zone.unfitted': { setting: 'set-fit', group: 'check' },
-	'calibration.zone.siteOnlyElsewhere': { setting: 'set-record', group: 'note' }
+	'calibration.zone.siteOnlyElsewhere': { setting: 'set-record', group: 'note' },
+	// Calibration locations (calibrate/locations.ts, engine 1.110.0, issue #659): a unit's Parameters from naming no
+	// ticked location ({ unit, target }), units outside every location given the nearest one upstream ({ units, node,
+	// name }), none ticked though gauges have records ({ records }), and a headline pointer that isn't ticked
+	// ({ site, name? }).
+	'calibration.zone.assignStale': { setting: 'set-record', group: 'check' },
+	'calibration.zone.restNearest': { setting: 'set-record', group: 'note' },
+	'calibration.zone.noneTicked': { setting: 'set-record', group: 'check' },
+	'calibration.site.notTicked': { setting: 'set-record', group: 'check' }
 } as const satisfies Record<string, WarningCodeInfo>;
 
 export type WarningCode = keyof typeof WARNING_CODES;

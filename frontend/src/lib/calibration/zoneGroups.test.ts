@@ -33,8 +33,8 @@ describe('zoneGroups', () => {
 		expect(zoneGroups(zoneNodes, settings({ calibrationZones: [{ ...newCalibrationZone('H'), enabled: false }] }))).toBeNull();
 		// A project still holding Fragmentation's retired `catchment` runs Per unit (issue #658): its zones apply.
 		expect(zoneGroups(zoneNodes, settings({ unitRain: { mode: 'catchment' } }))).not.toBeNull();
-		// The calibration site itself can't be a zone's gauge.
-		expect(zoneGroups(zoneNodes, settings({ calibrationSiteNodeId: 'H' }))).toBeNull();
+		// Since engine 1.110.0 (issue #659) the site's own gauge is a calibration location, the headline: its units are a group.
+		expect(zoneGroups(zoneNodes, settings({ calibrationSiteNodeId: 'H' }))).not.toBeNull();
 	});
 
 	it('names a zone, the site’s and one not fitted yet', () => {

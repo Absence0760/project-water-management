@@ -50,6 +50,7 @@ import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
 import { sanitizeCalibrationZones } from './calibrate/zones';
+import { CALIBRATION_RESTS, locationPatch } from './calibrate/locations';
 import { resolveChecksKept, resolveFlowMissing, withRecordPeriods } from './recordPeriods';
 import { resolveWarningsKept } from './checkItems';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
@@ -227,7 +228,7 @@ export interface PreparedRun {
 export function prepareRun(input: ModelInput, options: PrepareOptions = {}): PreparedRun {
 	const warnings: string[] = [];
 	// A resumed run's pairing factors (engine ≥ 1.91.0) stand in for a fit, as its CHIRPS factors do.
-	let settings = withPinnedStationFactors(mergeSettings(input.settings, warnings), options.pinned?.stationFactors);
+	let settings = withPinnedStationFactors(mergeSettings(input.settings, warnings, input.model.nodes), options.pinned?.stationFactors);
 	// A record's own periods (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts): settings.flowMissing on a flow record and
 	// settings.rainStations.unreliable on the alternative gauge are gaps from here on, for every reader of the run.
 	const series = withRecordPeriods(settings, input.series ?? {}, warnings);
@@ -759,7 +760,14 @@ export function monthly(v: unknown, name: string, warnings: string[]): Monthly {
 	}) as unknown as Monthly;
 }
 
-export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): ProjectSettings {
+/**
+ * The stored settings over the defaults, each checked (a bad value warns and
+ * falls back). With the network's `nodes`, settings from before engine
+ * 1.110.0 (no `calibrateAtOutlet`) are also read as calibration locations
+ * (./calibrate/locations.ts normalizeCalibrationLocations, issue #659), as
+ * every run and fit reads them.
+ */
+export function mergeSettings(raw: ModelInput['settings'], warnings: string[], nodes?: ModelInput['model']['nodes']): ProjectSettings {
 	const d = defaultProjectSettings();
 	const s = { ...d, ...(raw ?? {}) } as ProjectSettings;
 	// Only the keys that outlived the legacy runoff model (engine 1.0.0): a stored project may still carry its others.
@@ -850,6 +858,23 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		else delete s.calibrationZones;
 	}
 	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
+	// Calibration locations (engine 1.110.0, issue #659): only when stored, never defaulted, so settings without them
+	// are read as before (normalizeCalibrationLocations, below, when the nodes are known).
+	if (raw?.calibrateAtOutlet !== undefined && typeof raw.calibrateAtOutlet !== 'boolean') {
+		warnings.push(`calibrate at the outlet "${String(raw.calibrateAtOutlet)}" is not true or false; reading the calibration settings as before calibration locations`);
+		delete s.calibrateAtOutlet;
+	}
+	if (raw?.calibrationRest != null && !(CALIBRATION_RESTS as readonly unknown[]).includes(raw.calibrationRest)) {
+		warnings.push(`unknown rule for the units outside every calibration location "${String(raw.calibrationRest)}"; using the headline location's parameters`);
+		delete s.calibrationRest;
+	}
+	if (raw?.unitParamsFrom != null) {
+		const m = raw.unitParamsFrom as unknown;
+		if (typeof m !== 'object' || Array.isArray(m) || !Object.values(m as object).every((v) => typeof v === 'string')) {
+			warnings.push('the units’ parameter sources (Parameters from) are not a map of land unit → location; every unit takes its own zone’s');
+			s.unitParamsFrom = null;
+		}
+	}
 	// One flow record's missing periods and the kept data checks (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts):
 	// only when stored, so settings without them normalise as before.
 	if (raw?.flowMissing != null) {
@@ -979,5 +1004,6 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	if (method === 'hiLo' || method === 'manual') warnings.push(flowShareMethodRetiredWarning(method));
 	// Retired settings (engine ≥ 1.105.0, RETIRED_SETTINGS_KEYS): ignored, as the legacy model's calibration keys are.
 	for (const k of RETIRED_SETTINGS_KEYS) delete (s as unknown as Record<string, unknown>)[k];
+	if (nodes && typeof s.calibrateAtOutlet !== 'boolean') Object.assign(s, locationPatch(s, nodes, true, warnings));
 	return s;
 }

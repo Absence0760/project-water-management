@@ -161,6 +161,7 @@ export const CODE_FIXES: Record<WarningCode, Fix> = {
 	'calibration.defaultGaugePick': { how: 'No record was chosen, so the run picked one. Choose the record to compare with.', action: CAL_WINDOW },
 	'calibration.site.unusable': { how: 'The gauge calibration is scored at can’t be used. Choose another site or the outlet.', action: CAL_WINDOW },
 	'calibration.site.noRecord': { how: 'The gauge calibration is scored at has no flow record. Attach one on Data, or choose the outlet.', action: CAL_WINDOW },
+	'calibration.site.notTicked': { how: 'The headline location isn’t ticked, so the headline was picked automatically. Tick it, or leave the headline on auto.', action: CAL_ZONES },
 
 	'calibration.zone.notList': { how: 'The stored calibration zones couldn’t be read, so the run calibrated at one site. Tick the gauges to calibrate at again.', action: CAL_ZONES },
 	'calibration.zone.noGauge': { how: 'A stored calibration zone names no gauge and was ignored. Tick the gauges to calibrate at again.', action: CAL_ZONES },
@@ -168,6 +169,9 @@ export const CODE_FIXES: Record<WarningCode, Fix> = {
 	'calibration.zone.badParams': { how: 'A zone’s GR4J parameters are outside the bounds, so its units ran on the catchment’s. Fit the zone again.', action: FIT },
 	'calibration.zone.unusable': { how: 'A ticked gauge can’t hold a zone (gone, not a gauge, or at or below the site), so its units joined the zone below. Untick it.', action: CAL_ZONES },
 	'calibration.zone.unfitted': { how: 'A calibration zone has no parameters of its own yet, so its units ran on the catchment’s. Fit the parameters.', action: FIT },
+	'calibration.zone.assignStale': { how: 'A unit takes its parameters from a location that isn’t ticked, so it took its own zone’s. Tick that location, or change the unit’s Parameters from.', action: CAL_ZONES },
+	'calibration.zone.restNearest': { how: 'Units outside every calibration location took the nearest ticked location’s parameters upstream on their river. Keep it in mind, or change the rule for them.', action: CAL_ZONES },
+	'calibration.zone.noneTicked': { how: 'No calibration location is ticked, so every unit ran on the catchment parameters. Tick Calibrate here at a gauge or the outlet to calibrate.', action: CAL_ZONES },
 	'calibration.zone.siteOnlyElsewhere': { how: 'Some units ran on their zone’s parameters, but the uncertainty ensemble and automated calibration vary only the site’s. Keep it in mind.', action: CAL_ZONES },
 	'map.areaFromEarlierOutline': {
 		how: 'The unit’s polygon on the map was redrawn after its area was taken from it. Use the new area from the Map’s Checks, or keep the old one if the redraw was a mistake.',

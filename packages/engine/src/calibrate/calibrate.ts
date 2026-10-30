@@ -28,7 +28,8 @@ import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
 import { calibrationSiteIndex } from './site';
-import { zoneCompleteWaterYears, resolveZones, zoneCalibrationSettings, zoneCoverageNotes, zoneParamsOf, zoneSiteName } from './zones';
+import { zoneCompleteWaterYears, zoneCoverageNotes } from './zones';
+import { headlineLocation, locationCalibrationSettings, locationName, locationParamsOf, resolveLocations, type LocationKey } from './locations';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
@@ -130,13 +131,16 @@ export interface CalibrateOptions {
 	/** Progress after every model run; return true to cancel (the best so far is returned). */
 	onProgress?: (p: CalibrationProgress) => boolean | void;
 	/**
-	 * The calibration zone to fit (engine 1.106.0, issue #555, ./zones.ts,
-	 * docs/model.md §2.10n): a ticked row of settings.calibrationZones, by its
-	 * gauge. Only that zone's land units take the candidate parameters; every
-	 * other unit keeps its zone's (the site's zone: settings.gr4j), and the fit
-	 * reads the zone's site, window, exclusions, record and quality flags
-	 * (zoneCalibrationSettings). Absent or null = the calibration site's own
-	 * zone (with no ticked zone, every unit: every engine before).
+	 * The calibration location to fit (engine 1.106.0, issue #555; engine
+	 * 1.110.0, issue #659; ./locations.ts, docs/model.md §2.10n): a ticked
+	 * gauge's row of settings.calibrationZones by its node id, or null for the
+	 * outlet's location (the top-level settings). Only that location's group
+	 * (its own, borrowed and rest units) takes the candidate parameters; every
+	 * other unit keeps its group's, and the fit reads the location's site,
+	 * window, exclusions, record and quality flags
+	 * (locationCalibrationSettings). Absent = the headline location
+	 * (headlineLocation; with no gauge location, every unit takes the
+	 * candidate: every engine before).
 	 */
 	zone?: string | null;
 	/**
@@ -261,10 +265,12 @@ export interface CalibrationReport {
 	siteNodeId?: string | null;
 	/** The stored series fitted to (engine ≥ 1.102.0, CalibrationProblem.flowSeriesId); absent when the input didn't say. */
 	flowSeriesId?: string;
-	/** The calibration zone fitted (engine 1.106.0, issue #555): its gauge, null = the site's own zone; absent without zones. */
+	/** The calibration location fitted (engine 1.106.0, issue #555): its gauge, null = the outlet's location (before 1.110.0: the site's own zone); absent without a gauge location. */
 	zoneNodeId?: string | null;
-	/** The land units the fitted parameters are for (engine 1.106.0); absent without zones (every unit). */
+	/** The land units the fitted parameters are for (engine 1.106.0); absent without a gauge location (every unit). */
 	zoneUnits?: string[];
+	/** The units among `zoneUnits` borrowed from elsewhere (settings.unitParamsFrom, engine 1.110.0); absent when none. */
+	zoneBorrowed?: string[];
 	simulatedKey: 'simulated_outflow';
 	fit: ScoredPeriod;
 	/** The project's current parameters scored on the same days. */
@@ -355,10 +361,14 @@ export interface CalibrationProblem {
 	flowKind: string;
 	/** Where the record is and the simulated flow is taken (engine ≥ 1.41.0): null = the outlet, else the gauge's node id. */
 	siteNodeId: string | null;
-	/** The calibration zone fitted (engine 1.106.0, CalibrateOptions.zone): its gauge, null = the site's own zone; absent without zones. */
+	/** The calibration location fitted (engine 1.106.0, CalibrateOptions.zone): its gauge, null = the outlet's location; absent without a gauge location. */
 	zoneNodeId?: string | null;
-	/** The land units whose parameters the candidates move (engine 1.106.0); absent without zones (every unit). */
+	/** The land units whose parameters the candidates move (engine 1.106.0); absent without a gauge location (every unit). */
 	zoneUnits?: string[];
+	/** The units among `zoneUnits` borrowed from elsewhere (engine 1.110.0); absent when none. */
+	zoneBorrowed?: string[];
+	/** The location fitted is the headline (engine 1.110.0): the WR2012 MAR penalty applies at it only. */
+	headline?: boolean;
 	/** The stored series the fitted record is (DailySeries.seriesId, engine ≥ 1.102.0): whose kept checks change the scored days. Null when the input doesn't say. */
 	flowSeriesId: string | null;
 	/** The calibration records at the site, in CALIBRATION_FLOW_KINDS order: the fitted one and any for independent validation. */
@@ -438,26 +448,27 @@ export interface RecordProblem {
 }
 
 /** Build the calibration problem for a project. Throws when there is nothing to calibrate against. */
-export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId, zoneNodeId: string | null = null): CalibrationProblem {
+export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId, zone?: LocationKey): CalibrationProblem {
 	const run = prepareRun(input);
 	// The fit reads a record's own missing periods as gaps, as the run does (engine ≥ 1.102.0, ../recordPeriods.ts).
 	if (run.series !== input.series) input = { ...input, series: run.series };
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
-	// Calibration zones (engine 1.106.0, issue #555, ./zones.ts): the zones the run applies, and the settings this fit
-	// reads its site, window, exclusions, record, quality flags and start from (the zone's, or the project's for the
-	// site's own zone). No ticked zone: `zones` is null and every unit takes the candidate, as before.
+	// Calibration locations (engine 1.110.0, issue #659, ./locations.ts): the groups the run applies, and the settings
+	// this fit reads its site, window, exclusions, record, quality flags and start from (the location's: a gauge's row,
+	// or the top level for the outlet). No gauge location: `locs` is null and every unit takes the candidate, as before.
 	const baseParams = resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings);
-	const zones = resolveZones(input.model.nodes, settings, baseParams, warnings);
-	if (zoneNodeId !== null) {
-		if (!zones) throw new Error('calibration zones need a ticked, usable gauge: there is no zone to fit');
-		if (!zones.zones.some((z) => z.nodeId === zoneNodeId)) throw new Error(`no ticked calibration zone at gauge node ${zoneNodeId}`);
-	}
-	const cs = zoneCalibrationSettings(settings, zoneNodeId);
+	const locs = resolveLocations(input.model.nodes, settings, baseParams, warnings);
+	const headline = headlineLocation(input.model.nodes, settings);
+	const zoneNodeId: LocationKey = zone === undefined ? headline : zone;
+	const loc = locs?.locations.find((l) => l.key === zoneNodeId);
+	if (zoneNodeId !== null && !loc) throw new Error(`no ticked calibration location at gauge node ${zoneNodeId}`);
+	if (zoneNodeId === null && locs && !loc) throw new Error('the outlet is not a ticked calibration location: tick Calibrate here at the outlet, or fit a gauge');
+	const cs = locationCalibrationSettings(settings, zoneNodeId);
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
 	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')), hasDailyEt0Value(aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
-	// A zone's start: its row's parameters (in bounds, sanitizeCalibrationZones) over the catchment's, already warned of.
+	// A gauge location's start: its row's parameters (in bounds, sanitizeCalibrationZones) over the catchment's, already warned of.
 	const startParams: ParamSet = zoneNodeId === null ? { ...baseParams } : { ...resolveParams<Gr4jParams>(GR4J_PARAMS, cs.gr4j, 'GR4J', []) };
 	const natural = new Float64Array(days);
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
@@ -545,8 +556,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		if (perUnit) {
 			// The same products and the same node-id order as the run's (runoff/simulate.ts unitNaturalFlow), so a scored
 			// day's flow is runModel's to the bit.
-			// Under calibration zones only the fitted zone's units take the candidate; the rest keep their zone's.
-			const paramsOf = zoneParamsOf(zones, baseParams, { zone: zoneNodeId, free: p as unknown as Gr4jParams });
+			// Under calibration locations only the fitted location's group takes the candidate; the rest keep their group's.
+			const paramsOf = locationParamsOf(locs, baseParams, { key: zoneNodeId, free: p as unknown as Gr4jParams });
 			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays, ...(paramsOf ? { paramsOf } : {}) });
 			natural.fill(0, 0, n);
 			perUnit.units.forEach((u, k) => {
@@ -600,7 +611,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		startParams,
 		flowKind: kind,
 		siteNodeId,
-		...(zones ? { zoneNodeId, zoneUnits: zoneNodeId === null ? [...zones.primaryUnits] : [...zones.zones.find((z) => z.nodeId === zoneNodeId)!.units] } : {}),
+		...(loc ? { zoneNodeId, zoneUnits: [...loc.units], ...(loc.borrowed.length ? { zoneBorrowed: [...loc.borrowed] } : {}) } : {}),
+		headline: zoneNodeId === headline,
 		flowSeriesId: siteSeries[kind]?.seriesId ?? null,
 		records: CALIBRATION_FLOW_KINDS.filter((k) => !!siteSeries[k]),
 		observed,
@@ -623,8 +635,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		natural,
 		// On natural flow, never the outflow: WR2012 flows are naturalised. They are net of WRSM's Bedloss
 		// too, so with bed losses on (engine ≥ 1.76.0) on the natural flow at the outlet net of them.
-		// A zone above the site moves only its own units' flow, so the catchment's WR2012 MAR is no target for it.
-		marPenalty: zoneNodeId !== null ? null : netOfReachLosses(
+		// Only the headline's group stands for the catchment (engine 1.110.0, engine-audit.md CZ2): another location moves
+		// only its own group's flow, so the catchment's WR2012 MAR is no target for it.
+		marPenalty: zoneNodeId !== headline ? null : netOfReachLosses(
 			wr2012Penalty(
 				settings.wr2012,
 				startDate,
@@ -668,13 +681,19 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 export const siteNote = (name: string): string =>
 	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Calibration → Calibration record are the outlet records', so none applies to this record. A run scores its calibration statistics here too; the outlet's EWR test stays the outlet's.`;
 
-/** A fit of a calibration zone above the site (engine 1.106.0, issue #555): what it moves and what it leaves. */
-export const zoneNote = (name: string, units: number): string =>
-	`Fitted the calibration zone at the gauge "${name}": the parameters of its ${units} land unit${units === 1 ? '' : 's'} only, on that gauge's record against the simulated flow there, with every zone above it at its own parameters. The gauged ranges, gap filling and WR2012 MAR penalty are the outlet's, so none applies to this record; the run's calibration statistics stay at the calibration site.`;
+const unitsText = (units: number, borrowed = 0) => `${units} land unit${units === 1 ? '' : 's'}${borrowed ? ` (${borrowed} of them borrowed from elsewhere, Parameters from)` : ''}`;
 
-/** A fit of the site's own zone when zones above it apply (engine 1.106.0). */
-export const siteZoneNote = (units: number): string =>
-	`Fitted the calibration site's own zone: the parameters of its ${units} land unit${units === 1 ? '' : 's'}, with the units in the calibration zones above it at their zones' parameters.`;
+/** A fit of a gauge location that isn't the headline (engine 1.106.0, issue #555; 1.110.0, issue #659): what it moves and what it leaves. */
+export const zoneNote = (name: string, units: number, borrowed = 0): string =>
+	`Fitted the calibration location at the gauge "${name}": the parameters of its group's ${unitsText(units, borrowed)} only, on that gauge's record against the simulated flow there, with every location fitted before it at its own parameters. The gauged ranges, gap filling and WR2012 MAR penalty are the outlet's, so none applies to this record; the run's headline statistics stay at the headline location.`;
+
+/** A fit of the outlet's location when it isn't the headline (engine 1.110.0, issue #659). */
+export const outletLocationNote = (units: number, borrowed = 0): string =>
+	`Fitted the outlet's location: the parameters of its group's ${unitsText(units, borrowed)}, with every location fitted before it at its own parameters. The WR2012 MAR penalty applies at the headline location only, so not here.`;
+
+/** A fit of the headline's group when other locations apply (engine 1.106.0; 1.110.0: any location can be the headline). */
+export const siteZoneNote = (units: number, borrowed = 0): string =>
+	`Fitted the headline location's group: the parameters of its ${unitsText(units, borrowed)}, with the units of every other calibration location at their own parameters.`;
 
 /** Observed and simulated values on the given days. */
 function pair(obs: Float64Array, sim: Float64Array, idx: Int32Array): [Float64Array, Float64Array] {
@@ -1029,7 +1048,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	const budget = Math.max(10, Math.floor(opts.budget ?? 1500));
 	const seed = opts.seed ?? 1;
 	const starts = Math.min(MAX_STARTS, Math.max(1, Math.floor(opts.starts ?? 1)));
-	const pb = prepareCalibration(input, opts.exclusions, opts.model, opts.zone ?? null);
+	const pb = prepareCalibration(input, opts.exclusions, opts.model, opts.zone);
 	const specs = CALIBRATION_PARAMS[pb.model];
 	const free = opts.free ?? specs.filter((s) => !s.fixedByDefault).map((s) => s.key);
 	if (free.length === 0) throw new Error('no parameters to calibrate');
@@ -1202,12 +1221,17 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			!!prior && prior.weight > 0
 		)
 	);
-	if (pb.zoneNodeId != null) notes.push(zoneNote(input.model.nodes.find((n) => n.id === pb.zoneNodeId)?.name ?? pb.zoneNodeId, pb.zoneUnits?.length ?? 0));
-	else if (pb.siteNodeId !== null) notes.push(siteNote(input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId));
-	if (pb.zoneNodeId === null && pb.zoneUnits) notes.push(siteZoneNote(pb.zoneUnits.length));
-	// Under calibration zones each step warns of a short record or no dry year at its gauge (issue #555).
+	const borrowed = pb.zoneBorrowed?.length ?? 0;
+	if (pb.zoneUnits && pb.headline === false) {
+		if (pb.zoneNodeId != null) notes.push(zoneNote(locationName(input.model.nodes, pb.zoneNodeId), pb.zoneUnits.length, borrowed));
+		else notes.push(outletLocationNote(pb.zoneUnits.length, borrowed));
+	} else {
+		if (pb.siteNodeId !== null) notes.push(siteNote(locationName(input.model.nodes, pb.siteNodeId)));
+		if (pb.zoneUnits) notes.push(siteZoneNote(pb.zoneUnits.length, borrowed));
+	}
+	// Under calibration locations each step warns of a short record or no dry year at its gauge (issue #555).
 	if (pb.zoneUnits) {
-		const at = pb.siteNodeId === null ? zoneSiteName(input.model.nodes, null) : (input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId);
+		const at = locationName(input.model.nodes, pb.siteNodeId);
 		notes.push(...zoneCoverageNotes(at, zoneCompleteWaterYears(pb.startDate, pb.allDays ?? all).length, differential !== null));
 	}
 	if (opts.prior) notes.push(...priorNotes(opts.prior, bounds === 'prior', free));
@@ -1231,7 +1255,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
 		siteNodeId: pb.siteNodeId,
-		...(pb.zoneUnits ? { zoneNodeId: pb.zoneNodeId ?? null, zoneUnits: [...pb.zoneUnits] } : {}),
+		...(pb.zoneUnits ? { zoneNodeId: pb.zoneNodeId ?? null, zoneUnits: [...pb.zoneUnits], ...(pb.zoneBorrowed?.length ? { zoneBorrowed: [...pb.zoneBorrowed] } : {}) } : {}),
 		...(pb.flowSeriesId ? { flowSeriesId: pb.flowSeriesId } : {}),
 		simulatedKey: 'simulated_outflow',
 		fit: fitClean,

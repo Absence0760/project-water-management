@@ -455,14 +455,17 @@ MUTANTS = [
     ("the EWR is split by area, the flow by the natural MAR share", 'ewr_share = {x["id"]: shares.get(x["id"], 0.0) for x in farms}', 'ewr_share = dict(area_share)'),
     ("the senior users' claims are split by area, not the natural MAR share", ("            tot += shares.get(fid, 0.0)\n", "            tot += area_share.get(fid, 0.0)\n"), ('v = Dn[u["id"]][i] * shares.get(fid, 0.0) / tot', 'v = Dn[u["id"]][i] * area_share.get(fid, 0.0) / tot')),
     ("the natural MAR is taken over every day, not the complete water years", "period = full if full else list(range(hist))", "period = list(range(hist))"),
-    # Calibration zones (§2.10n, engine 1.106.0, issue #555).
+    # Calibration zones (§2.10n, engine 1.106.0, issue #555); calibration locations (engine 1.110.0, issue #659).
     ("a unit in a calibration zone runs on the site's parameters, not its zone's", 'zp = zone_p.get(u["id"], g)', "zp = g"),
-    ("an unticked zone row still gives its units their own parameters", 'if z.get("enabled") is not True or not n or', "if not n or"),
-    ("a zone's parameters outside the bounds are used as they are", 'if ok else settings["gr4j"]', 'if ok else ({k: p[k] for k in GR4J_BOUNDS} if isinstance(p, dict) else settings["gr4j"])'),
-    ("a unit's zone is the ticked gauge nearest the outlet, not the first on its way down", 'for i in down(u["id"])[1:]:\n            if i in usable:', 'for i in reversed(down(u["id"])[1:]):\n            if i in usable:'),
+    ("an unticked zone row still gives its units their own parameters", 'if z.get("enabled") is not True or not inner_gauge(z["nodeId"]):', 'if not inner_gauge(z["nodeId"]):'),
+    ("a zone's parameters outside the bounds are used as they are", 'if ok else g\n', 'if ok else ({k: p[k] for k in GR4J_BOUNDS} if isinstance(p, dict) else g)\n'),
+    ("a unit's zone is the ticked gauge nearest the outlet, not the first on its way down", "        for i in down(u):\n            if i in params:", "        for i in reversed(down(u)):\n            if i in params:"),
+    ("a borrowed unit is ignored and takes its own zone", "        if isinstance(t, str) and t in params:\n            group = t", "        if False:\n            group = t"),
+    ("the nearest rule takes the location nearest the outlet, not the fewest hops up", "key = (path.index(x), name_of(k), node_of(k))", "key = (-path.index(x), name_of(k), node_of(k))"),
+    ("a legacy inner site's rows below it are still used", '({**z, "enabled": False} if z.get("enabled") is True and z["nodeId"] in below else z) for z', 'z for z'),
     # diff.py notes a series only the engine writes rather than failing, so the exchange series' zone rule is
     # proven the other way: python writing it under Per unit whatever the zones' X2 is caught.
-    ("the exchange series is written under Per unit whatever the zones' X2", 'if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in zone_params(', 'if g["x2"] != 0 or (per_unit or any(p["x2"] != 0 for p in zone_params('),
+    ("the exchange series is written under Per unit whatever the zones' X2", 'if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in location_params(', 'if g["x2"] != 0 or (per_unit or any(p["x2"] != 0 for p in location_params('),
     # Future climate (§2.17, engine 1.107.0, issue #621).
     ("climate.delta leaves the MAPs as they were", "    if k != 1:\n        for n in doc", "    if False:\n        for n in doc"),
     ("climate.delta reads rain factors by water-year month", "vals = [v * f[cal_month(o0 + t) - 1] if", "vals = [v * f[wy_month(o0 + t)] if"),

@@ -589,13 +589,16 @@ correct; rule 2 dividing by `gaugeMapMm`, or by the station MAP without r,
 or applying without the station's MAP; the reference fit keeping the
 station's windows. The EWR split's 2 (engine 1.94.0): the natural MAR
 split ignored, and its MAR taken over every day rather than the complete
-water years. Calibration zones' 5 (§2.10n, engine 1.106.0, issue #555;
-`model.py` `zone_params`, cases from `generate.py`
-`add_calibration_zones`, coverage `zone_units`): a zoned unit run on the
-site's parameters, an unticked row still applied, a zone's out-of-bounds
-parameters used as they are, a unit's zone taken nearest the outlet rather
-than the first ticked gauge on its way down, and the exchange series
-written on the catchment's X2 alone. Each mutant must disagree with the engine somewhere on the examples,
+water years. Calibration locations' 8 (§2.10n, engine 1.106.0, issue #555;
+locations from 1.110.0, issue #659; `model.py` `location_params`, cases
+from `generate.py` `add_calibration_zones` and `add_calibration_locations`,
+coverage `zone_units`): a zoned unit run on the catchment's parameters, an
+unticked row still applied, a zone's out-of-bounds parameters used as they
+are, a unit's zone taken nearest the outlet rather than the first ticked
+location on its way down, a borrowed unit (Parameters from) ignored, the
+nearest rule taking the location nearest the outlet rather than the fewest
+hops up, a legacy inner site's rows at or below it still used, and the
+exchange series written on the catchment's X2 alone. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
@@ -717,6 +720,8 @@ the clamp and the MAP ratio) and `unit-rain-reference-not-land` (a reference
 farm without area: each unit's CHIRPS levelled as without a reference).
 
 `forecast-member-rescaled` (issue #620 step 6, model.md §2.15d): a member of the forecast-conditioned outlook is an ordinary run, its `rain_forecast_mm` the record's own days rescaled month by month (× 1.5, × 0.4, × 0); nothing else of that outlook is mirrored here.
+
+`calibration-locations-nearest` and `calibration-locations-legacy-site` (issue #659, model.md §2.10n): on a Y with the outlet unticked and the rest rule `nearest`, a unit joining the outlet takes the nearer of two weirs one hop up by name, a unit joining below a third weir takes that one (the nearest on its own river), and a unit borrows a weir's parameters it doesn't drain to; and settings from before 1.110.0 with the site at an inner gauge, whose ticked row below the site is left out as engines before left it out. Written from §2.10n; the engine agreed on first run.
 
 `calibration-zones-nested` and `calibration-zones-no-exchange` (issue #555, model.md §2.10n): ticked gauges one inside the other under Per unit, so a unit takes the first ticked gauge on its way down, not the one nearest the outlet; an unticked row that changes nothing; and the exchange series written for a zone's X2 though the catchment's is 0, and not written when every applied zone's X2 is 0 too. diff.py only notes a series the engine alone writes, so the mutant for that rule has python write it whatever the zones' X2.
 

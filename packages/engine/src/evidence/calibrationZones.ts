@@ -15,6 +15,9 @@ import type { CalibrationFitStatus, CalibrationStats, RunSummary } from '../proj
 import type { RunInputsSnapshot } from '../compare';
 import { describeFitRecord } from '../compare';
 import { editedParams, type FitRecord } from '../calibrate/provenance';
+import { headlineCalibrationSettings, outletNode } from '../calibrate/locations';
+import { mergeSettings } from '../prepare';
+import type { ModelInput } from '../project';
 import type { Gr4jParams } from '../runoff/params';
 
 /** One calibration zone in the report (EvidenceReport.calibrationZones). */
@@ -34,6 +37,32 @@ export interface EvidenceCalibrationZone {
 	fit: EvidenceZoneFit | null;
 	/** The run's statistics at the zone's gauge (the site's: the run's calibration statistics); null = none scored. */
 	stats: EvidenceZoneStats | null;
+	/** A gauge's location, the outlet's, or the units on the catchment's parameters (engine 1.110.0; absent before). */
+	kind?: 'gauge' | 'outlet' | 'default';
+	/** The headline location (engine 1.110.0): its statistics are the run's calibration statistics. */
+	headline?: boolean;
+}
+
+/**
+ * A run's settings snapshot in the calibration locations' shape (engine 1.110.0,
+ * normalizeCalibrationLocations), or null when the snapshot has no network to
+ * read it by (then the stored top level is the site's, as before).
+ */
+function locatedSettings(inputs: RunInputsSnapshot | null | undefined) {
+	const nodes = (inputs?.model as { nodes?: ModelInput['model']['nodes'] } | undefined)?.nodes;
+	if (!Array.isArray(nodes)) return null;
+	return { settings: mergeSettings((inputs?.settings ?? {}) as ModelInput['settings'], [], nodes), nodes };
+}
+
+/**
+ * The fit record the run's headline parameters came from (engine 1.110.0,
+ * issue #659): the headline location's (a gauge's row, or the top level for
+ * the outlet). For a snapshot from before, the top level's, as stored.
+ */
+export function headlineFitRecord(inputs: RunInputsSnapshot | null | undefined): unknown {
+	const l = locatedSettings(inputs);
+	if (!l) return (inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord ?? null;
+	return headlineCalibrationSettings(l.settings, l.nodes).fitRecord ?? null;
 }
 
 export interface EvidenceZoneFit {
@@ -100,12 +129,24 @@ function statsOf(s: CalibrationStats | null | undefined): EvidenceZoneStats | nu
 export function calibrationZonesSection(run: { summary: RunSummary; inputs: RunInputsSnapshot }): EvidenceCalibrationZone[] | null {
 	const zones = run.summary.unitRain?.zones;
 	if (!zones?.length) return null;
-	const settings = (run.inputs?.settings ?? {}) as { calibrationZones?: unknown; fitRecord?: unknown };
+	// One location and nothing else (a site at a gauge with no zone, engine 1.110.0): one parameter set, as before.
+	if (zones.length === 1 && zones[0]!.headline) return null;
+	const raw = (run.inputs?.settings ?? {}) as { calibrationZones?: unknown; fitRecord?: unknown };
+	// Since engine 1.110.0 the rows are read in the locations' shape, so a site's moved fit record is its row's.
+	const located = locatedSettings(run.inputs);
+	const settings = (located?.settings ?? raw) as { calibrationZones?: unknown; fitRecord?: unknown };
 	const rows = (Array.isArray(settings.calibrationZones) ? settings.calibrationZones : []) as ZoneRow[];
+	const headlineFit = headlineFitRecord(run.inputs);
+	const outletId = located ? (outletNode(located.nodes)?.id ?? null) : null;
 	const area = new Map(((run.inputs?.model?.nodes ?? []) as { id: string; areaKm2?: unknown }[]).map((n) => [n.id, finite(n.areaKm2) ?? 0]));
 	const stats = new Map((run.summary.calibrationZones ?? []).map((s) => [s.siteNodeId, s]));
 	return zones.map((z) => {
-		const record = z.nodeId === null ? settings.fitRecord : rows.find((r) => r.nodeId === z.nodeId && r.enabled === true)?.fitRecord;
+		// Before engine 1.110.0 (no `kind`) the null entry was the site's own zone: the top level and the run's statistics.
+		const legacySite = z.nodeId === null && z.kind === undefined;
+		const record =
+			z.kind === 'default' ? null : z.headline ? headlineFit : legacySite || z.kind === 'outlet' ? settings.fitRecord : rows.find((r) => r.nodeId === z.nodeId && r.enabled === true)?.fitRecord;
+		const stat =
+			z.kind === 'default' ? null : z.headline || legacySite ? run.summary.calibration : z.kind === 'outlet' ? (outletId ? stats.get(outletId) : undefined) : stats.get(z.nodeId!);
 		return {
 			nodeId: z.nodeId,
 			name: z.name,
@@ -114,7 +155,9 @@ export function calibrationZonesSection(run: { summary: RunSummary; inputs: RunI
 			params: { x1: z.params.x1, x2: z.params.x2, x3: z.params.x3, x4: z.params.x4 },
 			fitted: z.fitted,
 			fit: fitOf(record, z.params),
-			stats: statsOf(z.nodeId === null ? run.summary.calibration : stats.get(z.nodeId))
+			stats: statsOf(stat),
+			...(z.kind ? { kind: z.kind } : {}),
+			...(z.headline ? { headline: true } : {})
 		};
 	});
 }
@@ -129,7 +172,8 @@ export function calibrationZoneFitVersions(zones: readonly EvidenceCalibrationZo
  * site whose parameters don't come from a stored fit, so it has no validation.
  */
 export function calibrationZoneFlags(zones: readonly EvidenceCalibrationZone[] | null): { key: string; text: string; why: string }[] {
-	const unvalidated = (zones ?? []).filter((z) => z.nodeId !== null && !z.fit);
+	// Every location but the headline (whose fit the report's own noFit flag judges) and the catchment-parameter units.
+	const unvalidated = (zones ?? []).filter((z) => !z.headline && z.kind !== 'default' && !(z.nodeId === null && z.kind === undefined) && !z.fit);
 	if (!unvalidated.length) return [];
 	const names = unvalidated.map((z) => z.name).join(', ');
 	return [

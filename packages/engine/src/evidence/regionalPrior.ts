@@ -14,6 +14,8 @@
 // Its own module so a merge with other § 3 changes stays easy.
 import { currentPriorStart, type PriorFitResult, type PriorProvenance, type PriorStartRecord, type PriorTargetRef } from '../calibrate/prior';
 import { zoneFitPlan } from '../calibrate/stepwise';
+import { headlineCalibrationSettings } from '../calibrate/locations';
+import { mergeSettings } from '../prepare';
 import type { ModelInput } from '../project';
 import { editedParams, type FitRecord } from '../calibrate/provenance';
 import type { Gr4jParams } from '../runoff/params';
@@ -69,16 +71,29 @@ function line(kind: 'fit' | 'start', p: PriorProvenance, fit: Pick<PriorFitResul
 	};
 }
 
-/** The catchment's own target now (the site's zone and its units under calibration zones, else every unit); null when the zones can't be read. */
+/**
+ * The headline location's target now (engine 1.110.0, issue #659: its key and group under calibration locations,
+ * else the catchment, every unit); null when the locations can't be read.
+ */
 function siteTarget(inputs: { settings?: unknown; model?: unknown }): PriorTargetRef | null {
 	if (!inputs.model) return { zoneNodeId: null, units: null };
 	try {
 		const plan = zoneFitPlan({ settings: inputs.settings, model: inputs.model, series: {} } as unknown as ModelInput);
-		const site = plan?.find((p) => p.zoneNodeId === null);
-		return { zoneNodeId: null, units: site ? [...site.units].sort() : null };
+		const site = plan?.find((p) => p.headline);
+		return { zoneNodeId: site ? site.zoneNodeId : null, units: site ? [...site.units].sort() : null };
 	} catch {
 		return null;
 	}
+}
+
+/** The snapshot's headline location's settings (fit record, parameters), the top level's for a snapshot without a network. */
+function headlineOf(inputs: { settings?: unknown; model?: unknown }): Record<string, unknown> {
+	const raw = (inputs.settings ?? {}) as Record<string, unknown>;
+	const nodes = (inputs.model as { nodes?: ModelInput['model']['nodes'] } | undefined)?.nodes;
+	if (!Array.isArray(nodes)) return raw;
+	const hs = headlineCalibrationSettings(mergeSettings(raw as ModelInput['settings'], [], nodes), nodes);
+	// At the outlet the top level is the headline's, as stored.
+	return hs.calibrationSiteNodeId == null ? raw : { ...raw, fitRecord: hs.fitRecord, gr4j: hs.gr4j };
 }
 
 /**
@@ -86,7 +101,8 @@ function siteTarget(inputs: { settings?: unknown; model?: unknown }): PriorTarge
  * network), or null when the prior had no part in its parameters.
  */
 export function evidenceRegionalPrior(inputs: { settings?: unknown; model?: unknown } | null | undefined): EvidenceRegionalPrior | null {
-	const s = (inputs?.settings ?? {}) as {
+	// The headline location's fit record and parameters (engine 1.110.0, issue #659): a gauge's row, or the top level.
+	const s = headlineOf(inputs ?? {}) as {
 		fitRecord?: (Partial<FitRecord> & { prior?: PriorFitResult }) | null;
 		gr4jPrior?: PriorStartRecord[] | null;
 		gr4j?: Partial<Gr4jParams> | null;

@@ -160,9 +160,16 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 	{
 		"id": "CZ1",
 		"source": "finding",
-		"severity": "Low (projects that tick a gauge in Calibrate at several gauges; every project runs Per unit from engine 1.109.0, FM2)",
-		"title": "Two outputs still vary only the calibration site's zone",
+		"severity": "Low (projects with more than one ticked calibration location; every project runs Per unit from engine 1.109.0, FM2)",
+		"title": "Two outputs still vary only the headline location's group",
 		"status": "Warned"
+	},
+	{
+		"id": "CZ2",
+		"source": "finding",
+		"severity": "Low (projects that tick a gauge but not the outlet, borrow a gauge's parameters for a unit (Parameters from), or tick the outlet beside a gauge; engine 1.110.0)",
+		"title": "Four choices about calibration locations the hydrologist hasn't confirmed",
+		"status": "Pending the hydrologist's confirmation (issue #659 questions 1 and 2)"
 	},
 	{
 		"id": "CD1",
