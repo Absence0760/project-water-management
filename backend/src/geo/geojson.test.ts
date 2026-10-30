@@ -18,8 +18,10 @@ import {
 	OVERLAP_SHARE,
 	polygonsOverlap,
 	proposeKinds,
+	checkRings,
+	freePoint,
 	ringSelfIntersects,
-	ringsIntersect,
+	touchesOn,
 	type Geometry,
 	type Position
 } from './geojson.js';
@@ -289,10 +291,10 @@ describe('the self-intersection sweep is bounded (round-4 hardening)', () => {
 
 	it('refuses a hole that crosses its outer ring or another hole, and takes holes that stay apart', () => {
 		const outer = box(0, 0, 4, 4);
-		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 5, 2)] })).toEqual({ problem: expect.stringMatching(/cross themselves or each other/) });
+		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 5, 2)] })).toEqual({ problem: expect.stringMatching(/cross each other/) });
 		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 2, 2), box(1.5, 1.5, 3, 3)] })).toEqual({ problem: expect.stringMatching(/cross/) });
 		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 2, 2), box(2.5, 2.5, 3, 3)] })).toHaveProperty('geometry');
-		expect(ringsIntersect([box(0, 0, 1, 1), box(2, 2, 3, 3)])).toBe(false);
+		expect(checkRings([box(0, 0, 1, 1), box(2, 2, 3, 3)])).toEqual({ problem: null, touches: [], disconnected: false });
 	});
 });
 
@@ -405,6 +407,130 @@ describe('nested holes, checked without comparing every pair (round-4 hardening)
 	});
 });
 
+describe('rings that touch at a point, as OGC and GEOS allow (Waterbodies v0.0.3: 218 of 15 442 refused)', () => {
+	const outer = box(0, 0, 4, 4);
+	const ok = (...rings: Position[][]) => expect(problemOf(poly(...rings))).toBeNull();
+	const refused = (re: RegExp, ...rings: Position[][]) => expect(problemOf(poly(...rings))).toMatch(re);
+
+	it('takes a hole touching its outer ring at a vertex, starting there, with the hole’s area taken away once', () => {
+		// The hole's first vertex lies on the outer ring's west edge: pointInRing's answer there is arbitrary, so another vertex is tested.
+		const hole: Position[] = [[0, 2], [1, 3], [1, 1], [0, 2]];
+		ok(outer, hole);
+		const whole = checkGeometry(poly(outer)) as { areaM2: number };
+		expect((checkGeometry(poly(outer, hole)) as { areaM2: number }).areaM2 / whole.areaM2).toBeCloseTo(15 / 16, 3);
+		// At a vertex of the outer ring too: a notch's inner corner (4, 3), the hole diagonally below it, as a raster outline has it.
+		const notched: Position[] = [[0, 0], [5, 0], [5, 4], [4, 4], [4, 3], [3, 3], [3, 4], [0, 4], [0, 0]];
+		ok(notched, [[4, 3], [4, 2], [5 - 0.5, 2], [5 - 0.5, 3], [4, 3]]);
+	});
+
+	it('takes two holes touching at a vertex, and three rings meeting at one point (no loop)', () => {
+		ok(outer, box(1, 1, 2, 2), box(2, 2, 3, 3));
+		// Two holes touching each other and the outer ring at (0, 2): one point, so the interior stays one piece.
+		ok(outer, [[0, 2], [1, 3], [1, 2.5], [0, 2]], [[0, 2], [1, 1.5], [1, 1], [0, 2]]);
+	});
+
+	it('refuses rings that run along each other, at the outer ring or between holes', () => {
+		refused(/run along each other/, outer, box(0, 1, 1, 2));
+		refused(/run along each other/, outer, box(1, 1, 2, 2), box(2, 1, 3, 2));
+		// Along part of an edge only.
+		refused(/run along each other/, outer, box(1, 1, 2, 2), box(2, 1.5, 3, 3));
+	});
+
+	it('refuses rings that cross, through edges or only at vertices', () => {
+		refused(/cross each other/, outer, box(1, 1, 5, 2));
+		// Hole B passes into hole A at A's bottom edge (1, 1) and out at its top (1, 3), both at a vertex of B.
+		const a = box(0.5, 1, 2, 3);
+		const b: Position[] = [[1, 1], [1.5, 0.5], [3.5, 0.5], [3.5, 3.5], [1, 3.5], [1, 3], [0.75, 2], [1, 1]];
+		refused(/cross each other/, outer, a, b);
+		expect(checkRings([outer, a, b]).problem).toBe('cross');
+		// A hole's vertex inside the outer ring's edge, passing through it there (and back in through the edge's inside), either way round.
+		const through: Position[] = [[0, 2], [-1, 3], [1, 3], [0, 2]];
+		refused(/cross each other/, outer, through);
+		refused(/cross each other/, outer, [...through].reverse());
+	});
+
+	it('takes hundreds of holes meeting at one point (a star, no loop), checking the point once rather than every pair', () => {
+		// Thin triangles fanned round (2, 2), the outer ring's middle: valid for GEOS. Pairwise checks at the point cost ~1 s at 1 200.
+		const n = 600;
+		const fan = Array.from({ length: n }, (_, k): Position[] => {
+			const ray = (t: number): Position => {
+				const a = (2 * Math.PI * t) / n;
+				return [Math.round((2 + 1.5 * Math.cos(a)) * 1e7) / 1e7, Math.round((2 + 1.5 * Math.sin(a)) * 1e7) / 1e7];
+			};
+			return [[2, 2], ray(k + 0.1), ray(k + 0.6), [2, 2]];
+		});
+		expect(problemOf(poly(outer, ...fan))).toBeNull();
+		// Positive control: one more triangle overlapping a neighbour's wedge at the point crosses it.
+		const extra: Position[] = [[2, 2], [2 + 1.4, 2 + 0.002], [2 + 1.4, 2 + 0.01], [2, 2]];
+		expect(problemOf(poly(outer, ...fan, extra))).toMatch(/cross each other/);
+	});
+
+	it('refuses a ring touching or doubling back on itself, as GEOS does (“Ring Self-intersection”)', () => {
+		// Comes back to (1, 0) halfway round: a self-touch, which GEOS refuses (its self-touching-ring option is off by default).
+		refused(/crosses itself/, [[0, 0], [1, 0], [2, 0], [2, 1], [1, 0], [1, 1], [0, 1], [0, 0]]);
+		// The same as a hole: the message names the ring.
+		refused(/ring that crosses or touches itself/, box(-1, -1, 3, 3), [[0, 0], [1, 0], [2, 0], [2, 1], [1, 0], [1, 1], [0, 1], [0, 0]]);
+		// A spike: an edge returning along the one before (its end lies on that edge).
+		refused(/crosses itself/, [[0, 0], [2, 0], [2, 2], [2, 3], [2, 2.5], [0, 2], [0, 0]]);
+	});
+
+	it('refuses holes that cut the interior into pieces: a hole touching the outer ring twice, or holes touching in a loop', () => {
+		refused(/cut it into pieces/, outer, [[0, 2], [2, 1], [4, 2], [2, 3], [0, 2]]);
+		refused(/cut it into pieces/, outer, [[2, 0], [4, 2], [2, 4], [0, 2], [2, 0]]);
+		// Three holes touching pairwise at three different points: the triangle between them is cut off.
+		refused(/cut it into pieces/, outer, [[1, 1], [2, 1], [1.5, 0.5], [1, 1]], [[2, 1], [1.5, 2], [2.5, 2], [2, 1]], [[1.5, 2], [1, 1], [0.5, 2], [1.5, 2]]);
+		expect(checkRings([outer, [[0, 2], [2, 1], [4, 2], [2, 3], [0, 2]]])).toMatchObject({ problem: null, disconnected: true });
+	});
+
+	it('says a hole outside touching the ring is outside, and a hole inside another touching it there is nested', () => {
+		refused(/hole outside/, outer, [[4, 4], [5, 4.5], [5, 5], [4.5, 5], [4, 4]]);
+		// Touching twice from outside: GEOS says outside before disconnected, and so does this.
+		refused(/hole outside/, outer, [[4, 1], [5, 2], [4, 3], [4.5, 2], [4, 1]]);
+		// The inner hole starts at the outer hole's corner it touches.
+		refused(/hole inside another hole/, outer, box(1, 1, 3, 3), [[1, 1], [2, 1.5], [2, 2], [1.5, 2], [1, 1]]);
+	});
+
+	it('takes a pixel-traced waterbody whose holes touch its outline and each other at pixel corners, and refuses the loop that cuts a pixel off', () => {
+		// 30 m pixels near the Western Cape: islands of land in a dam, traced along pixel edges (as DE Africa's Waterbodies are).
+		const px = 0.0003;
+		const at = (i: number, j: number): Position => [Math.round((19.5 + i * px) * 1e7) / 1e7, Math.round((-33.9 + j * px) * 1e7) / 1e7];
+		const pixel = (i: number, j: number, from: 0 | 1 | 2 | 3 = 0): Position[] => {
+			const corners = [at(i, j), at(i, j + 1), at(i + 1, j + 1), at(i + 1, j)];
+			const r = [...corners.slice(from), ...corners.slice(0, from)];
+			return [...r, r[0]!];
+		};
+		// An 8 × 8 outline with a notch of land at the top (pixel 3, 7) and at the bottom (pixel 6, 0).
+		const shell = [[0, 0], [6, 0], [6, 1], [7, 1], [7, 0], [8, 0], [8, 8], [4, 8], [4, 7], [3, 7], [3, 8], [0, 8], [0, 0]].map(([i, j]) => at(i!, j!));
+		const islands = [
+			pixel(4, 6, 1), // its corner (4, 7) is the top notch's: the ring starts there
+			pixel(5, 5), // touches the first at (5, 6)
+			pixel(1, 1), // alone
+			pixel(5, 1), // touches the bottom notch at (6, 1)
+			pixel(2, 6) // touches the top notch at (3, 7)
+		];
+		const r = checkGeometry(poly(shell, ...islands));
+		expect(r).toHaveProperty('geometry');
+		expect((r as { areaM2: number }).areaM2 / (checkGeometry(poly(shell)) as { areaM2: number }).areaM2).toBeCloseTo((64 - 2 - 5) / (64 - 2), 3);
+		const verdict = checkRings([shell, ...islands]);
+		expect(verdict.problem === null && verdict.touches.length).toBe(4);
+		// Positive control: one more island at (3, 5)-(4, 6) touches the islands either side, closing a loop round the land pixel (3, 6).
+		expect(problemOf(poly(shell, ...islands, pixel(3, 5)))).toMatch(/cut it into pieces/);
+	});
+
+	it('finds a point of a ring off the ring it touches', () => {
+		const hole: Position[] = [[0, 2], [1, 3], [1, 1], [0, 2]];
+		const v = checkRings([outer, hole]);
+		if (v.problem !== null) throw new Error('refused');
+		const on = touchesOn(v.touches);
+		expect([...on(1)]).toEqual(['0,2']);
+		expect([...on(0)]).toEqual(['0,2']);
+		expect(freePoint(hole, on(1), on(0))).toEqual([1, 3]);
+		expect(freePoint(outer, new Set(), on(1))).toEqual([0, 0]);
+		// A vertex where the ring touches a third ring, not this one, still serves.
+		expect(freePoint(hole, on(1), new Set())).toEqual([0, 2]);
+	});
+});
+
 describe('the Map upload’s example file (issue #456)', () => {
 	// The file the upload sheet's "Expected format" offers (frontend/src/lib/components/map/example-features.geojson):
 	// it must pass these same checks, with the kind each feature names.
@@ -450,6 +576,14 @@ describe('intersectionArea', () => {
 		expect(intersectionArea(holed, [rect(1, 0, 1, 2)])).toBeCloseTo(1.5, 9);
 		// Wholly inside the hole: nothing.
 		expect(intersectionArea(holed, [rect(0.6, 0.6, 0.5)])).toBeCloseTo(0, 9);
+	});
+
+	it('leaves out holes that touch the outer ring and each other at a vertex (a Waterbodies outline), once each', () => {
+		// A triangle touching the west edge at (0, 0.5) and a square at (0.5, 1); that square touching another at (1, 1).
+		const holed = [rect(0, 0, 2), [[0, 0.5], [0.5, 0.5], [0.5, 1], [0, 0.5]] as [number, number][], rect(0.5, 1, 0.5), rect(1, 0.5, 0.5)];
+		expect(checkRings(holed)).toMatchObject({ problem: null, disconnected: false });
+		expect(intersectionArea(holed, [rect(0, 0, 2)])).toBeCloseTo(4 - 0.125 - 0.25 - 0.25, 9);
+		expect(intersectionArea([rect(0, 0, 2)], holed)).toBeCloseTo(4 - 0.125 - 0.25 - 0.25, 9);
 	});
 
 	it('adds up every part of a MultiPolygon', () => {

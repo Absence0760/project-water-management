@@ -8,7 +8,13 @@
 //  - Point, LineString, MultiLineString, Polygon, MultiPolygon; anything
 //    else (GeometryCollection, MultiPoint, null) is refused;
 //  - a polygon's rings are closed, have at least 4 positions and an area,
-//    don't cross themselves, and each hole starts inside its outer ring;
+//    and are valid as OGC Simple Features and GEOS's IsValidOp have it
+//    (checkRings): no ring crosses or touches itself, no two rings cross or
+//    run along each other, each hole lies inside its outer ring and outside
+//    the other holes, and the holes don't cut the polygon into pieces. Rings
+//    may touch at isolated points (a hole at a vertex of its outer ring or
+//    of another hole, as raster-traced outlines such as DE Africa's
+//    Waterbodies do at a pixel corner);
 //  - at most GEO_MAX_VERTICES positions per feature and GEO_MAX_FEATURES
 //    features; the file at most GEO_MAX_BYTES (the route's body limit too).
 // A file's problems are listed per feature, so the person can fix them all
@@ -220,22 +226,110 @@ function segmentsCross(p1: Position, p2: Position, p3: Position, p4: Position): 
 	return (d1 === 0 && onSegment(p3, p4, p1)) || (d2 === 0 && onSegment(p3, p4, p2)) || (d3 === 0 && onSegment(p1, p2, p3)) || (d4 === 0 && onSegment(p1, p2, p4));
 }
 
+/** Where a touch point lies on a ring: at its vertex `v`, or inside its edge `e` (from vertex e to e + 1). */
+type Spot = { v: number } | { e: number };
+
+/** A point where two or more of a polygon's rings meet (each only there: rings that meet along an edge are refused). */
+export interface RingTouch {
+	at: Position;
+	/** The rings meeting there (indices into the polygon's rings), each with where on it. */
+	rings: Map<number, Spot>;
+}
+
+/** What is wrong with a polygon's rings (OGC Simple Features, GEOS's IsValidOp), or where they touch and whether that cuts the interior. */
+export type RingsVerdict = { problem: 'self' | 'cross' } | { problem: null; touches: RingTouch[]; disconnected: boolean };
+
+const keyOf = (p: Position) => `${p[0]},${p[1]}`;
+const same = (p: Position, q: Position) => p[0] === q[0] && p[1] === q[1];
+/** Cross product of the vectors o→a and o→b (its sign: orient). */
+const cross = (o: Position, a: Position, b: Position) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+
 /**
- * Whether closed rings cross or touch themselves or each other (other than
- * a ring's neighbouring edges sharing their vertex). A sweep over the edges
- * sorted by their least longitude, comparing only edges whose extents
- * overlap. Every comparison counts against GEO_MAX_PAIR_CHECKS, the ones
- * skipped by latitude too, so past it the shape is refused as too complex:
- * a hostile ring (a zigzag whose edges all overlap in longitude) can't cost
- * quadratic time.
+ * Whether directions o→a and o→b leave o in that order counter-clockwise from
+ * east (negative), the other way (positive) or the same way (0): the half-plane
+ * first (latitude above o, or due east, is the first half), then the cross
+ * product, so no angle is computed.
  */
-export function ringsIntersect(rings: readonly (readonly Position[])[]): boolean {
+function angleOrder(o: Position, a: Position, b: Position): number {
+	const half = (p: Position) => (p[1] < o[1] || (p[1] === o[1] && p[0] < o[0]) ? 1 : 0);
+	return half(a) - half(b) || -Math.sign(cross(o, a, b));
+}
+
+/** The ring's two neighbours of a point on it: the vertices either side of vertex v, or the ends of edge e. */
+function neighbours(ring: readonly Position[], spot: Spot): [Position, Position] {
+	const n = ring.length - 1; // vertices; the ring is closed
+	if ('v' in spot) return [ring[(spot.v + n - 1) % n]!, ring[spot.v + 1]!];
+	return [ring[spot.e]!, ring[spot.e + 1]!];
+}
+
+/**
+ * Whether rings meeting only at `at` cross there rather than touch: round the
+ * point, two rings cross when their directions alternate (A B A B). All the
+ * rings' directions are sorted once by angle and read as brackets (a ring's
+ * first direction opens, its second must close the innermost open one), so
+ * no pair alternates exactly when they nest: linear after the sort, however
+ * many rings meet there. The cut point doesn't matter, since an alternating
+ * pair alternates read from anywhere. No two directions coincide (that would
+ * be edges running together, refused before).
+ */
+function crossAt(at: Position, meeting: readonly [Position, Position][]): boolean {
+	const dirs = meeting.flatMap(([p, q], r) => [{ p, r }, { p: q, r }]).sort((x, y) => angleOrder(at, x.p, y.p));
+	const open = new Set<number>();
+	const stack: number[] = [];
+	for (const { r } of dirs) {
+		if (!open.has(r)) {
+			open.add(r);
+			stack.push(r);
+		} else if (stack.pop() !== r) return true;
+	}
+	return false;
+}
+
+/**
+ * Check a polygon's closed rings (the outer ring first, then the holes) as
+ * OGC Simple Features and GEOS's IsValidOp do (issue #604 R5's Waterbodies
+ * load; docs/maps.md § Uploads):
+ *  - a ring must not cross or touch itself (GEOS's "Ring Self-intersection";
+ *    it refuses a self-touch too, so this does), which includes doubling
+ *    back on itself (a spike's return edge ends on the edge before it):
+ *    'self';
+ *  - two rings must not cross, at an edge or at a vertex, nor run together
+ *    along an edge: 'cross';
+ *  - two rings may touch at isolated points (a hole touching its outer ring
+ *    or another hole at a vertex, as raster-traced outlines do at a pixel
+ *    corner), but the touches must not cut the interior into pieces: a hole
+ *    touching the outer ring twice, or holes touching in a loop
+ *    (`disconnected`, GEOS's "Interior is disconnected"; a flag, not a
+ *    problem, so the caller can first say a hole lies outside, as GEOS
+ *    does, rather than call it a cut). With rings that
+ *    are simple and meet only at points, the interior's pieces are one more
+ *    than the cycles in the graph of rings and touch points (each ring
+ *    joined to each point it passes through), so a union-find over that
+ *    graph finds them: rings meeting at one shared point make no cycle.
+ * Otherwise the touch points, so later checks can test a point of a ring
+ * that isn't on another (freePoint).
+ *
+ * The crossing test is a sweep over the edges sorted by their least
+ * longitude, comparing only edges whose extents overlap. Every comparison
+ * counts against GEO_MAX_PAIR_CHECKS, the ones skipped by latitude too, so
+ * past it the shape is refused as too complex: a hostile ring (a zigzag whose
+ * edges all overlap in longitude) can't cost quadratic time. The touch
+ * points it finds are at most the comparisons made, and the rest is linear in
+ * them.
+ */
+export function checkRings(rings: readonly (readonly Position[])[]): RingsVerdict {
 	const edges: { r: number; i: number; n: number; minX: number }[] = [];
 	rings.forEach((ring, r) => {
 		const n = ring.length - 1; // edges; the ring is closed
 		for (let i = 0; i < n; i++) edges.push({ r, i, n, minX: Math.min(ring[i]![0], ring[i + 1]![0]) });
 	});
 	edges.sort((a, b) => a.minX - b.minX);
+	const touches = new Map<string, RingTouch>();
+	/** Where point p lies on edge i of ring r (p one of its ends, or inside it). */
+	const spotOn = (r: number, i: number, n: number, p: Position): Spot => {
+		const ring = rings[r]!;
+		return same(p, ring[i]!) ? { v: i } : same(p, ring[i + 1]!) ? { v: (i + 1) % n } : { e: i };
+	};
 	const active: (typeof edges)[number][] = [];
 	let checks = 0;
 	for (const e of edges) {
@@ -253,16 +347,95 @@ export function ringsIntersect(rings: readonly (readonly Position[])[]): boolean
 			if (++checks > GEO_MAX_PAIR_CHECKS) throw new Refused('has a ring too complex to check; simplify it');
 			if (o.r === e.r && (Math.abs(e.i - o.i) === 1 || Math.abs(e.i - o.i) === e.n - 1)) continue;
 			if (Math.max(a[1], b[1]) < Math.min(c[1], d[1]) || Math.max(c[1], d[1]) < Math.min(a[1], b[1])) continue;
-			if (segmentsCross(a, b, c, d)) return true;
+			if (!segmentsCross(a, b, c, d)) continue;
+			// They meet. One ring meeting itself anywhere but at a neighbouring edge's shared vertex: GEOS refuses a self-touch too.
+			if (o.r === e.r) return { problem: 'self' };
+			const [d1, d2, d3, d4] = [orient(c, d, a), orient(c, d, b), orient(a, b, c), orient(a, b, d)];
+			if (d1 !== 0 && d2 !== 0 && d3 !== 0 && d4 !== 0) return { problem: 'cross' }; // through each other's insides
+			let at: Position;
+			if ((d1 === 0 && d2 === 0) || (d3 === 0 && d4 === 0)) {
+				// On one line: along the longer axis, they share a stretch (run together: refused) or only an end.
+				const ax = a[0] !== b[0] || c[0] !== d[0] ? 0 : 1;
+				const lo = Math.max(Math.min(a[ax], b[ax]), Math.min(c[ax], d[ax]));
+				const hi = Math.min(Math.max(a[ax], b[ax]), Math.max(c[ax], d[ax]));
+				if (hi > lo) return { problem: 'cross' };
+				at = a[ax] === lo ? a : b; // an end of each (edges have length, so the axis tells a from b)
+			} else at = d1 === 0 && onSegment(c, d, a) ? a : d2 === 0 && onSegment(c, d, b) ? b : d3 === 0 && onSegment(a, b, c) ? c : d;
+			const key = keyOf(at);
+			let t = touches.get(key);
+			if (!t) touches.set(key, (t = { at, rings: new Map() }));
+			if (!t.rings.has(e.r)) t.rings.set(e.r, spotOn(e.r, e.i, e.n, at));
+			if (!t.rings.has(o.r)) t.rings.set(o.r, spotOn(o.r, o.i, o.n, at));
 		}
 		active.length = kept;
 		active.push(e);
 	}
-	return false;
+	const list = [...touches.values()];
+	// Touching, not crossing: at each touch point, each pair of rings keeps to its own side of the other.
+	for (const t of list) {
+		if (crossAt(t.at, [...t.rings].map(([r, spot]) => neighbours(rings[r]!, spot)))) return { problem: 'cross' };
+	}
+	// The interior stays one piece: no cycle in the graph of rings (0 … rings − 1) and touch points (after them).
+	const parent = Array.from({ length: rings.length + list.length }, (_, i) => i);
+	const find = (x: number): number => {
+		while (parent[x] !== x) x = parent[x] = parent[parent[x]!]!;
+		return x;
+	};
+	for (const [k, t] of list.entries()) {
+		for (const r of t.rings.keys()) {
+			const [x, y] = [find(r), find(rings.length + k)];
+			if (x === y) return { problem: null, touches: list, disconnected: true };
+			parent[x] = y;
+		}
+	}
+	return { problem: null, touches: list, disconnected: false };
 }
 
-/** Whether one closed ring crosses or touches itself (ringsIntersect of the ring alone). */
-export const ringSelfIntersects = (ring: readonly Position[]): boolean => ringsIntersect([ring]);
+/** Whether one closed ring crosses or touches itself (checkRings of the ring alone; GEOS refuses both). */
+export const ringSelfIntersects = (ring: readonly Position[]): boolean => checkRings([ring]).problem !== null;
+
+/**
+ * The touch points on each ring, by `touchesOn(i)`: built once, each touch
+ * listed once per ring meeting there (no pairs), so its size is the
+ * incidences checkRings found, however many rings meet at a point.
+ */
+export function touchesOn(touches: readonly RingTouch[]): (i: number) => ReadonlySet<string> {
+	const on = new Map<number, Set<string>>();
+	for (const t of touches) {
+		const k = keyOf(t.at);
+		for (const r of t.rings.keys()) {
+			const set = on.get(r);
+			if (set) set.add(k);
+			else on.set(r, new Set([k]));
+		}
+	}
+	const none: ReadonlySet<string> = new Set();
+	return (i) => on.get(i) ?? none;
+}
+
+/**
+ * A point of `ring` that isn't on `other`, of rings that passed checkRings,
+ * given the touch points on each (`onRing`, `onOther`: touchesOn): its first
+ * vertex that isn't a touch point of both, else an edge's middle that isn't.
+ * Two rings touching more than once cut the interior (checkRings'
+ * `disconnected`) and a ring has at least three vertices, so in a valid
+ * polygon the first or second vertex serves; the middles are for a hole
+ * outside its ring touching it at every vertex, refused either way. With
+ * the rings not crossing, the point is inside `other` exactly when `ring`
+ * lies inside it. (A ring's first vertex may be a touch point, where
+ * pointInRing's answer is arbitrary: a hole touching its outer ring there was
+ * called outside.)
+ */
+export function freePoint(ring: readonly Position[], onRing: ReadonlySet<string>, onOther: ReadonlySet<string>): Position {
+	const on = (p: Position) => onRing.has(keyOf(p)) && onOther.has(keyOf(p));
+	if (onRing.size === 0 || onOther.size === 0) return ring[0]!;
+	for (const p of ring) if (!on(p)) return p;
+	for (let k = 0; k + 1 < ring.length; k++) {
+		const mid: Position = [(ring[k]![0] + ring[k + 1]![0]) / 2, (ring[k]![1] + ring[k + 1]![1]) / 2];
+		if (!on(mid)) return mid;
+	}
+	return ring[0]!;
+}
 
 /** Whether point `p` lies inside ring `r` (ray casting; on the edge counts as outside). */
 export function pointInRing(p: Position, r: readonly Position[]): boolean {
@@ -277,9 +450,12 @@ export function pointInRing(p: Position, r: readonly Position[]): boolean {
 
 /**
  * Whether a hole lies inside another hole (its area would be taken away
- * twice). The holes have passed ringsIntersect, so no two cross or touch:
- * each pair is either apart or one wholly inside the other, and one is
- * inside another exactly when its first vertex is. This is GEOS's
+ * twice). The holes have passed checkRings, so no two cross, and two meet at
+ * most at a point: each pair is either apart or one wholly inside the other
+ * (a touch point aside), and one is inside another exactly when a point of
+ * it off the other is (`testPoint(i, o)`, a point of hole i not on hole o,
+ * as freePoint finds; its first vertex by default, right for holes that
+ * don't touch). This is GEOS's
  * IndexedNestedHoleTester (IsValidOp, once it knows no rings cross): an
  * index of the holes' boxes, then a point-in-ring test only for a box that
  * holds another, against the ring indexed by its edges' latitudes
@@ -294,10 +470,10 @@ export function pointInRing(p: Position, r: readonly Position[]): boolean {
  * once plus a strip per candidate, not its edges per candidate. Every box
  * compared, edge indexed and edge tested counts against GEO_MAX_SWEEP_STEPS;
  * past it the polygon is refused as too complex (the box comparisons are
- * already bounded by ringsIntersect's own sweep: boxes open together at a
+ * already bounded by checkRings' own sweep: boxes open together at a
  * longitude have edges open together there).
  */
-export function holesNested(holes: readonly (readonly Position[])[]): boolean {
+export function holesNested(holes: readonly (readonly Position[])[], testPoint: (i: number, o: number) => Position = (i) => holes[i]![0]!): boolean {
 	if (holes.length < 2) return false;
 	let steps = 0;
 	const spend = (n: number) => {
@@ -354,7 +530,7 @@ export function holesNested(holes: readonly (readonly Position[])[]): boolean {
 		}
 		for (const i of list) {
 			// pointInRing's ray, over the edges of the point's strip only (an edge crosses latitude y only if it spans it).
-			const [px, py] = holes[i]![0]!;
+			const [px, py] = testPoint(i, o);
 			const edges = index[strip(py)]!;
 			spend(edges.length);
 			let odd = false;
@@ -512,13 +688,21 @@ function ring(a: unknown, count: { n: number }): Position[] {
 function polygon(a: unknown, count: { n: number }): Position[][] {
 	if (!Array.isArray(a) || a.length === 0) throw new Refused('a polygon has no rings');
 	const rings = a.map((r) => ring(r, count));
-	// One sweep over every ring: a ring that crosses itself, or a hole that crosses its outer ring or another hole.
-	if (ringsIntersect(rings)) throw new Refused(rings.length === 1 ? 'has a polygon ring that crosses itself' : 'has polygon rings that cross themselves or each other');
-	for (const hole of rings.slice(1)) {
-		if (!pointInRing(hole[0]!, rings[0]!)) throw new Refused('has a hole outside its polygon');
+	// One sweep over every ring: a ring that crosses or touches itself, or a hole that crosses its outer ring or another hole, or runs along one.
+	// Rings may touch at a point (a hole at its outer ring's vertex, as raster-traced outlines do at a pixel corner); OGC and GEOS allow it.
+	const verdict = checkRings(rings);
+	if (verdict.problem !== null) {
+		if (verdict.problem === 'cross') throw new Refused('has polygon rings that cross each other or run along each other');
+		throw new Refused(rings.length === 1 ? 'has a polygon ring that crosses itself' : 'has a polygon ring that crosses or touches itself');
+	}
+	// A point of each hole off the ring it's tested against: a hole's first vertex may be where it touches that ring.
+	const on = touchesOn(verdict.touches);
+	for (let h = 1; h < rings.length; h++) {
+		if (!pointInRing(freePoint(rings[h]!, on(h), on(0)), rings[0]!)) throw new Refused('has a hole outside its polygon');
 	}
 	// The rings don't cross, so a hole can still lie inside another: its area would be taken away twice.
-	if (rings.length > 2 && holesNested(rings.slice(1))) throw new Refused('has a hole inside another hole');
+	if (rings.length > 2 && holesNested(rings.slice(1), (i, o) => freePoint(rings[i + 1]!, on(i + 1), on(o + 1)))) throw new Refused('has a hole inside another hole');
+	if (verdict.disconnected) throw new Refused('has holes that cut it into pieces (touching its outer ring or each other at more than one point); make each piece its own polygon');
 	const xs = rings[0]!.map((p) => p[0]);
 	if (Math.max(...xs) - Math.min(...xs) > 180) throw new Refused('crosses the antimeridian, which isn’t supported');
 	return rings;
