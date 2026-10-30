@@ -226,7 +226,8 @@ export function roleBadge(
 		inUse: ReadonlySet<string>;
 		gaugeInUse: ReadonlySet<string>;
 		gaugeIds: ReadonlySet<string>;
-		calibrationSite: string | null;
+		/** The gauges that are ticked calibration locations (issue #659): a fit is made on their records. */
+		calibrationGauges: ReadonlySet<string>;
 		/** The land units a rain series can be measured at (209_unit_rain_series): node id → name (issue #553). */
 		units?: ReadonlyMap<string, string>;
 		/**
@@ -264,9 +265,9 @@ export function roleBadge(
 			return ctx.gaugeIds.has(s.siteNodeId)
 				? { label: 'Not used (another record of this kind is at this gauge)', unused, why: null }
 				: { label: 'Not used: its gauge is no longer in the model', unused, why: null };
-		return s.siteNodeId === ctx.calibrationSite
-			? { label: 'Gauge record (calibration site)', unused, why: 'Checked against the simulated flow at its gauge, and calibration scores it there; the EWR test uses the outlet’s records.' }
-			: { label: 'Gauge record (checks only)', unused, why: 'Checked against the simulated flow at its gauge; calibration scores it only if Calibration → Calibration record picks this gauge.' };
+		return ctx.calibrationGauges.has(s.siteNodeId)
+			? { label: 'Gauge record (calibration location)', unused, why: 'Checked against the simulated flow at its gauge, and its gauge’s parameters are fitted on it; the EWR test uses the outlet’s records.' }
+			: { label: 'Gauge record (checks only)', unused, why: 'Checked against the simulated flow at its gauge; a fit uses it only once Calibrate here is ticked for this gauge in Calibration → Calibration record.' };
 	}
 	if (ctx.inUse.has(s.id) || s.kind === 'flow_reference_m3s') return { label: role.role, unused, why: null };
 	if (s.kind === 'flow_logger_m3s' && !kindRead(s.kind)) return { label: 'Calibration if chosen in settings', unused, why: null };

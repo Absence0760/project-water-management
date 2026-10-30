@@ -58,6 +58,7 @@
 	import NetworkSchematic from '#lib/components/network/NetworkSchematic.svelte';
 	import { ranAgo } from '#lib/components/network/supplyColour.js';
 	import { supplyColouring } from '#lib/components/network/farmColour.js';
+	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, PAIRING_NUMS, reportRainCredits, settingsRows, STATION_HEAD, STATION_NUMS, stationPairingRows, stationRows, transferRows } from '#lib/components/report/inputs.js';
 	import { reportPageRule } from '#lib/components/report/printPage.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
@@ -230,6 +231,9 @@
 	const model = $derived((run?.model ?? {}) as Partial<ProjectModel>);
 	const nodes = $derived((model.nodes ?? []) as NetworkNode[]);
 	const settings = $derived(effectiveSettings(run?.settings));
+	// The run's headline location (issue #659): its window, record and fit record are its calibration statistics'.
+	const hs = $derived(run ? runHeadlineSettings(run) : null);
+	const headline = $derived(effectiveSettings(hs ?? run?.settings));
 	const conv = (d: { values: readonly (number | null)[] }) => toDisplayUnit(d.values, 'm³/day', 'm³/s').values;
 	// The printed report has no legend to click, so natural flow shows from the start.
 	const hydro = $derived(hydrographSeries(flows, conv, false, sources));
@@ -445,7 +449,7 @@
 						<p class="muted small">As this run used them: its own copy of the settings and the model, not today’s.</p>
 						<h3>Settings</h3>
 						<dl class="kv">
-							{#each settingsRows(settings, run) as [k, v] (k)}<div><dt>{k}</dt><dd>{v}</dd></div>{/each}
+							{#each settingsRows(settings, run, headline) as [k, v] (k)}<div><dt>{k}</dt><dd>{v}</dd></div>{/each}
 						</dl>
 						<div class="table-wrap">
 							<table class="data compact">
@@ -479,12 +483,12 @@
 					{:else if s.id === 'calibration'}
 						<CalibrationPanel
 							calibration={summary.calibration}
-							requestedStart={settings.calibrationStart ?? null}
-							requestedEnd={settings.calibrationEnd ?? null}
+							requestedStart={headline.calibrationStart ?? null}
+							requestedEnd={headline.calibrationEnd ?? null}
 						/>
 						<!-- Calibration zones (issue #555): every zone's parameters and scores at its own gauge. -->
 						<ZoneCalibrationTable rows={runZoneRows(summary)} />
-						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, run.settings.fitRecord)} />{/if}
+						{#if hs}<FitProvenance record={hs.fitRecord} settings={hs} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, hs.fitRecord)} />{/if}
 						<LineChart
 							print
 							bind:ready={hydroDrawn}
@@ -564,7 +568,7 @@
 						{#if prev.attribution}<p class="muted small">{attributionSummary(prev.attribution)}</p>{/if}
 						<ChangesList changes={prev.changes} authors={lineAuthors(prev.changes, prev.attribution)} />
 					{:else if s.id === 'validation'}
-						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} fitEngineVersion={run.settings?.fitRecord?.engineVersion ?? null} />
+						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} fitEngineVersion={hs?.fitRecord?.engineVersion ?? null} />
 					{:else if s.id === 'signoff' && signoffs}
 						<SignoffSection {projectId} target={{ kind: 'run', id: run.id }} list={signoffs} onchange={signoffsChanged} />
 					{:else if s.id === 'disclaimer'}

@@ -32,6 +32,7 @@
 	import {
 		agreementOptions,
 		checkSeries,
+		locationCalibrationSettings,
 		doubleMass,
 		doubleMassCheck,
 		fromEpochDay,
@@ -100,6 +101,8 @@
 	import { gapRainApi, gapRainChoiceText, gapRainInputSeries } from './gapRain';
 	import EditDay from './EditDay.svelte';
 	import { handDayCount, handPoints, handRangesText } from '#lib/series/editDay.js';
+	import { normalizedLocations } from '#lib/calibration/zones.js';
+	import { unplacedAdvice, unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
@@ -291,8 +294,12 @@
 	const endDate = (s: { startDate: string; length: number }) => fromEpochDay(toEpochDay(s.startDate) + s.length - 1);
 	const inUse = $derived(seriesInUse(list, rainSourceKinds(settings?.rainSource)));
 	const gaugeInUse = $derived(gaugeRecordsInUse(list, gauges));
-	// The gauge calibration scores at (settings.calibrationSiteNodeId, engine ≥ 1.41.0); null = the outlet.
-	const calibrationSite = $derived(settings?.calibrationSiteNodeId ?? null);
+	// The calibration locations (issue #659, engine 1.110.0): the gauges ticked as one, each record's settings its own
+	// row's; settings from before 1.110.0 read as locations (an inner calibration site is its ticked row).
+	const locSettings = $derived(settings ? normalizedLocations(settings, nodes, list.some((x) => !x.siteNodeId && SITED_KINDS.has(x.kind))) : null);
+	const calibrationGauges = $derived(new Set((locSettings?.calibrationZones ?? []).filter((z) => z.enabled).map((z) => z.nodeId)));
+	// Flow records no location can be fitted on (issue #659): Series details says so beside their Measured at.
+	const unplaced = $derived(new Map(unplacedRecords(list, nodes).map((u) => [u.id, u])));
 	/** "version not recorded" as a value of its own. */
 	const sentence = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 	const gaugeIds = $derived(new Set(gauges.map((g) => g.id)));
@@ -396,10 +403,12 @@
 		if (!viewing || !SITED_KINDS.has(viewing.kind)) return [];
 		const kind = viewing.kind as CalibrationFlowKind;
 		const sited = viewing.siteNodeId ?? null;
-		if (sited ? sited !== calibrationSite || !gaugeInUse.has(viewing.id) : viewing.id !== first(kind)?.id) return [];
+		if (sited ? !calibrationGauges.has(sited) || !gaugeInUse.has(viewing.id) : viewing.id !== first(kind)?.id) return [];
 		const v = values[viewing.id];
 		if (!v) return [];
-		const qualityFlags = resolveQualityFlags(settings?.qualityFlags);
+		// A gauge location's own suspect-day rule and river-stop months (its row), over the outlet's other flags.
+		const here = sited && locSettings ? locationCalibrationSettings(locSettings, sited) : settings;
+		const qualityFlags = resolveQualityFlags(here?.qualityFlags);
 		const flags = recordFlowFlags({
 			kind,
 			series: v,
@@ -867,7 +876,7 @@
 	{@const end = endDate(s)}
 	{@const span = dataSpan(s, st)}
 	{@const age = daysBetween(span.to, today)}
-	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite, units: unitNames, stationUses: stationUseMap, catchmentStationId: settings?.rainStations?.catchment?.stationId ?? null })}
+	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationGauges, units: unitNames, stationUses: stationUseMap, catchmentStationId: settings?.rainStations?.catchment?.stationId ?? null })}
 	{@const behind = behindAge.get(s.id)}
 	{@const fed = feedMark(s.feed, st?.present)}
 	<!-- Pointer shortcut only; the View button is the accessible control. -->
@@ -1250,6 +1259,17 @@
 							{/if}
 						</div>
 					{/if}
+					{#if unplaced.get(viewing.id)}
+						{@const u = unplaced.get(viewing.id)!}
+						{@const advice = unplacedAdvice([u], { innerGauges: gauges.length > 0, readonly })}
+						<!-- Issue #659: the Calibration page flags it too, with a link here. -->
+						<div class="detail detail-unplaced">
+							<dt>Calibration</dt>
+							<dd data-testid="series-unplaced">
+								Not placed in the network, so no calibration location can be fitted on it: {unplacedWhy(u)}.{#if advice}{' '}{advice}{/if}
+							</dd>
+						</div>
+					{/if}
 					<div class="detail detail-source">
 						{#if readonly}
 							<dt>Source</dt>
@@ -1447,14 +1467,20 @@
 		margin: 0;
 		font-size: 0.85rem;
 	}
-	/* The name and the source take two columns: both hold up to 100–200 characters (issue #556). */
+	/* The name and the source take two columns: both hold up to 100–200 characters (issue #556); a record not placed
+	   in the network says so across two too (issue #659). */
 	.detail-source,
-	.detail-name {
+	.detail-name,
+	.detail-unplaced {
 		grid-column: span 2;
+	}
+	.detail-unplaced dd {
+		color: var(--warning);
 	}
 	@container data-page (max-width: 640px) {
 		.detail-source,
-		.detail-name {
+		.detail-name,
+		.detail-unplaced {
 			grid-column: auto;
 		}
 	}

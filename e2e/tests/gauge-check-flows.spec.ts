@@ -5,7 +5,7 @@
 // to its Series details. Names and numbers are invented.
 import type { APIRequestContext } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
+import { calibratedAtGauge, createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { plantPreCheckGaugeRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -37,7 +37,7 @@ async function seedTwoGauges(request: APIRequestContext, name: string, site: 'up
 	for (const [n, at] of [['Upper weir record', upper.id], ['Side weir record', side.id]] as const) {
 		expect((await request.patch(`${API_URL}/projects/${project.id}/series/${idOf(n)}`, { data: { siteNodeId: at } })).status()).toBe(200);
 	}
-	if (site === 'upper') await updateSettings(request, project.id, { calibrationSiteNodeId: upper.id });
+	if (site === 'upper') await updateSettings(request, project.id, calibratedAtGauge(upper.id));
 	return { project, sideRecordId: idOf('Side weir record'), runId: await createRun(request, project.id, 'Checked') };
 }
 

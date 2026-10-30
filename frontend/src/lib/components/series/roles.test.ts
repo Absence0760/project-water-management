@@ -116,7 +116,7 @@ describe('roleBadge', () => {
 		inUse: seriesInUse(list),
 		gaugeInUse: gaugeRecordsInUse(list, [{ id: 'n1' }]),
 		gaugeIds: new Set(['n1']),
-		calibrationSite: null,
+		calibrationGauges: new Set<string>(),
 		...extra
 	});
 
@@ -132,7 +132,7 @@ describe('roleBadge', () => {
 		const checks = roleBadge(g, ctx([g]));
 		expect(checks?.label).toBe('Gauge record (checks only)');
 		expect(checks?.why).toMatch(/Calibration → Calibration record/);
-		expect(roleBadge(g, ctx([g], { calibrationSite: 'n1' }))?.label).toBe('Gauge record (calibration site)');
+		expect(roleBadge(g, ctx([g], { calibrationGauges: new Set(['n1']) }))?.label).toBe('Gauge record (calibration location)');
 		const gone = { ...g, siteNodeId: 'n9' };
 		expect(roleBadge(gone, ctx([gone]))?.label).toBe('Not used: its gauge is no longer in the model');
 	});

@@ -6,7 +6,7 @@
 // numbers are invented.
 import type { APIRequestContext } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
+import { calibratedAtGauge, createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -41,7 +41,7 @@ async function seedCheck(request: APIRequestContext, name: string, upperExtra: R
 	await putSeries(request, project.id, { kind: 'flow_observed_m3s', name: 'Weir record', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(DAYS) });
 	const list = (await (await request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; name: string }[];
 	expect((await request.patch(`${API_URL}/projects/${project.id}/series/${list.find((s) => s.name === 'Weir record')!.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
-	await updateSettings(request, project.id, { calibrationSiteNodeId: weir.id });
+	await updateSettings(request, project.id, calibratedAtGauge(weir.id));
 	return { project, runId: await createRun(request, project.id, 'Checked') };
 }
 

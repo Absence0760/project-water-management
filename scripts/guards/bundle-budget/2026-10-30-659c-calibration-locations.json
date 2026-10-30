@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #659 slice C: the calibration locations table (headline, rest rule, none-ticked state), flow records not placed in the network and the fit plan; measured 2279 KB vs 2278 KB after merging slice B"
+}

@@ -52,6 +52,7 @@
 	import { runYears } from '#lib/components/runs/runList.js';
 	import { fmtDate, fmtWhen } from '#lib/format/number.js';
 	import { runForcingOfSummary } from '@water-management/engine';
+	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 
 	// Every comparison renders the paired uncertainty band (issue #4 phase 9), the daily series
 	// overlay (issue #8) and the days below the reserve each year (issue #17 A4), so they are static
@@ -300,6 +301,9 @@
 	let fullSide = $state<WhatIf>('b');
 	const shownSide = $derived<WhatIf>(fullSide === 'c' && refC ? 'c' : 'b');
 	const data = $derived(cmp[shownSide].data);
+	// Each run's fit record and the settings it is checked against are its headline location's (issue #659).
+	const headA = $derived(data ? runHeadlineSettings({ settings: data.a.run.inputs.settings, model: data.a.run.inputs.model }) : null);
+	const headB = $derived(data ? runHeadlineSettings({ settings: data.b.run.inputs.settings, model: data.b.run.inputs.model }) : null);
 	const loading = $derived(cmp[shownSide].loading);
 	const error = $derived(cmp[shownSide].error);
 	const refX = $derived(shownSide === 'c' ? refC : refB);
@@ -714,10 +718,10 @@
 					<!-- The water balance rows are What the change does' (issue #175): here only the calibration and WR2012 checks. -->
 					<HeadlineDeltas comparison={data.comparison} water={false} />
 					<FitValidationCompare
-						a={asFitRecord(data.a.run.inputs.settings?.fitRecord)}
-						b={asFitRecord(data.b.run.inputs.settings?.fitRecord)}
-						settingsA={data.a.run.inputs.settings}
-						settingsB={data.b.run.inputs.settings}
+						a={asFitRecord(headA?.fitRecord)}
+						b={asFitRecord(headB?.fitRecord)}
+						settingsA={headA}
+						settingsB={headB}
 						chirpsA={chirpsSourceOfInput(data.a.run.inputs.series)}
 						chirpsB={chirpsSourceOfInput(data.b.run.inputs.series)}
 						apanA={apanDailyOfInput(data.a.run.inputs.series)}

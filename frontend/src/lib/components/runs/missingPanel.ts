@@ -26,7 +26,7 @@ const NEEDS: Record<string, MissingPanel> = {
 		link: { href: '?tab=series#data-feeds', label: 'Data feeds' }
 	},
 	'res-gauges': {
-		text: 'This run checks no gauge inside the network. It needs a flow record at a gauge that is not the calibration site.',
+		text: 'This run checks no gauge inside the network. It needs a flow record at a gauge that is not a ticked calibration location.',
 		link: { href: '?tab=series', label: 'Data' }
 	},
 	'res-runoff': {
