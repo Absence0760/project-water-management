@@ -41,6 +41,7 @@
 	import { gr4jChanges, statusLine, type CalState } from './status';
 	import { hasRole } from '#lib/api/index.js';
 	import { flowRecordOptions } from '#lib/components/settings/recordPeriods.js';
+	import { headlineView } from '#lib/calibration/zones.js';
 
 	let {
 		runs,
@@ -119,8 +120,10 @@
 	// tracked one, so "forcing changed since fit" can say whether it was replaced; once per version of the series
 	// (apanFingerprint.ts), for the header and the fit record alike.
 	const s = $derived(draft.s);
+	// Where the parameters came from is the headline location's fit (issue #659): the outlet's at the top level, a gauge's in its row.
+	const hs = $derived(headlineView(s as unknown as ProjectSettings, editor?.model.nodes));
 	let apanNow = $state<ApanDailyFingerprint | null | undefined>(undefined);
-	const apanTracked = $derived(s.fitRecord?.forcing?.apanDaily !== undefined);
+	const apanTracked = $derived(hs.fitRecord?.forcing?.apanDaily !== undefined);
 	$effect(() => {
 		const meta = apanSeries;
 		const tracked = apanTracked;
@@ -144,7 +147,7 @@
 	let et0Now = $state<ApanDailyFingerprint | null | undefined>(undefined);
 	// Through the fit's last scored day (the record's `through`): a feed's later days never reached the fit.
 	// A fit recorded with no series: any series now is one added since, so the whole of it stands for it.
-	const et0Then = $derived(s.fitRecord?.forcing?.et0Daily);
+	const et0Then = $derived(hs.fitRecord?.forcing?.et0Daily);
 	$effect(() => {
 		const meta = et0Series;
 		const then = et0Then;
@@ -164,8 +167,8 @@
 		};
 	});
 	// The header (issue #17): where the parameters came from, and the way to the fit (Settings' until round 3).
-	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow, ...(et0Now !== undefined ? { et0Daily: et0Now } : {}) }) : null);
-	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
+	const fitStatus = $derived(hs.fitRecord ? fitRecordStatus(hs, hs.fitRecord, { chirpsSource, apanDaily: apanNow, ...(et0Now !== undefined ? { et0Daily: et0Now } : {}) }) : null);
+	const summary = $derived(fitSummary(hs.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 
 	// A link to one of the parts (`#cal-fit`) or of the settings panels (`#set-fit`, `#set-evaporation`), on load or
@@ -187,7 +190,7 @@
 
 {#snippet headerContext()}<span data-testid="fit-summary">{summary}</span>{/snippet}
 {#snippet headerActions()}
-	{#if !readonly}<a class="btn" href="#set-fit">Fit the parameters</a>{:else if s.fitRecord}<a class="btn" href="#set-fit">Fit record</a>{/if}
+	{#if !readonly}<a class="btn" href="#set-fit">Fit the parameters</a>{:else if hs.fitRecord}<a class="btn" href="#set-fit">Fit record</a>{/if}
 {/snippet}
 
 <!-- The side index from 80rem of page (a 1440 px window), as Project and Data; the bar below that. -->
@@ -223,6 +226,7 @@
 						et0Daily={et0Now}
 						{flowRecordId}
 						{flowRecords}
+						{series}
 						{readonly}
 						{onProjectChange}
 					/>

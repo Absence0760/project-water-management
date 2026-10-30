@@ -224,6 +224,21 @@ export class SettingsDraft {
 		this.#openX2();
 	}
 
+	/**
+	 * Read the saved settings and the form in another shape that means the same, so it isn't an edit: the
+	 * Calibration page reads settings from before engine 1.110.0 as calibration locations (issue #659,
+	 * calibration/zones.ts normalizedLocations), on both, so the form is never dirty for it. `f` must return its
+	 * argument (the same object) when there is nothing to change.
+	 */
+	adopt(f: (s: EditableSettings) => EditableSettings): void {
+		const saved = JSON.parse(this.#saved) as EditableSettings;
+		const next = f(saved);
+		if (next !== saved) this.#saved = JSON.stringify(next);
+		const form = $state.snapshot(this.s) as EditableSettings;
+		const nextForm = f(form);
+		if (nextForm !== form) this.s = nextForm;
+	}
+
 	get dirty(): boolean {
 		return JSON.stringify(this.s) !== this.#saved;
 	}

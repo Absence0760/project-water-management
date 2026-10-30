@@ -57,6 +57,7 @@
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '#lib/components/history/RunInputsPanel.svelte';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
+	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -918,7 +919,7 @@
 							{summary}
 							engineVersion={shownRun.engineVersion}
 							legacy={shownRun.legacy}
-							fitEngineVersion={shownRun.settings?.fitRecord?.engineVersion ?? null}
+							fitEngineVersion={runHeadlineSettings(shownRun)?.fitRecord?.engineVersion ?? null}
 							bind:open={validationOpen}
 						/>
 					</div>

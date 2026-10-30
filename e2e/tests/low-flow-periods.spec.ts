@@ -86,7 +86,7 @@ test('a viewer reads the low-flow periods but can’t add, change or remove one'
 	await expectNoViolations(viewer.page, { include: '[data-testid="low-flow-periods"]' });
 });
 
-test('scored at a gauge inside the network, Calibration says the low-flow periods are not used there', async ({ page, owner }) => {
+test('with the outlet not a calibration location, Calibration says no fit uses the low-flow periods', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Low flows at a weir');
 	const outlet = node('Outflow gauge', 'gauge', null, 1, { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
@@ -95,22 +95,25 @@ test('scored at a gauge inside the network, Calibration says the low-flow period
 	const model: Model = { nodes: [outlet, weir, upper], crops: [], cropAreas: [], transfers: [] };
 	await putModel(page.request, project.id, model);
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(120) });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Outlet record', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Weir record', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; name: string }[];
 	const rec = list.find((s) => s.name === 'Weir record')!;
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
+	// Settings from before engine 1.110.0, scored at the weir: read as the weir's location, the outlet unticked (issue #659).
 	await updateSettings(page.request, project.id, { calibrationSiteNodeId: weir.id, qualityFlags: { lowFlowPeriods: [PERIOD] } });
 
 	await page.goto(`/projects/${project.id}?tab=calibration`);
-	await expect(page.getByLabel('Scored at')).toHaveValue(weir.id);
+	const outletTick = page.getByTestId('calibration-locations').getByRole('checkbox', { name: 'Calibrate here: Outflow gauge' });
+	await expect(outletTick).not.toBeChecked();
 	const group = page.getByRole('group', { name: /^Low flows only/ });
 	await expect(group.getByTestId('low-flow-period')).toHaveCount(1);
 	await expect(group.getByTestId('low-flow-site-note')).toHaveText(
-		'These periods apply to the outlet’s records. Calibration is scored at Middle weir, so they are not used until it is scored at the outlet again.'
+		'These periods apply to the outlet’s records. The outlet isn’t a calibration location (Calibrate here is unticked), so no fit uses them; the run’s checks of the outlet’s record still do.'
 	);
 
-	// Back to the outlet (unsaved): the note goes, since the periods apply there.
-	await page.getByLabel('Scored at').selectOption({ label: 'The outlet' });
+	// The outlet ticked (unsaved): the note goes, since a fit uses them there.
+	await outletTick.check();
 	await expect(group.getByTestId('low-flow-site-note')).toHaveCount(0);
 	await expectNoViolations(page, { include: '[data-testid="low-flow-periods"]' });
 });

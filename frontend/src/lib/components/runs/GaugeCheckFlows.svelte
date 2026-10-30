@@ -94,8 +94,8 @@
 	<h3 id="gauges-h">Flow at gauges in the network (checks only)</h3>
 	<p class="small muted">
 		Each gauge with its own flow record that the run doesn't score, against the simulated flow there, on the record's days. Each one's NSE, KGE and PBIAS are a check
-		out of sample (the calibration doesn't score its record, and its excluded periods are left out), never the calibration score. To score a gauge instead, make it the
-		calibration site (Calibration → Calibration record → Scored at). The calibration check under Calibration covers the outlet and the calibration site only.
+		out of sample (the calibration doesn't score its record, and its excluded periods are left out), never the calibration score. To calibrate at a gauge instead, tick
+		its Calibrate here (Calibration → Calibration record); a ticked gauge's record is scored as a calibration location, not listed here.
 	</p>
 	{#if before.length}
 		<p class="small muted" data-testid="check-gauges-before">

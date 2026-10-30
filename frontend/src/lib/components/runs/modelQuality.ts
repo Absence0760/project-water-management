@@ -16,6 +16,8 @@ import { isModelQualityAnchor } from '#lib/components/calibration/links.js';
 
 type SectionInput = Pick<RunSummary, 'runoff' | 'wr2012' | 'plausibility' | 'unitRain' | 'stations' | 'gapRain'> & {
 	calibration?: Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'> | null;
+	/** The other ticked locations' statistics (issue #659): their gauges are scored, not checks only. */
+	calibrationZones?: readonly Pick<NonNullable<RunSummary['calibration']>, 'siteNodeId'>[] | null;
 };
 
 // The anchors live with the Calibration page's links (calibration/links.ts), so the forwarding table, which every
@@ -32,8 +34,21 @@ export const isLowerAnchor = (id: string): boolean =>
 	id === 'res-calibration-check' ||
 	id === 'res-fit-provenance';
 
+/**
+ * The gauges a run scores as calibration locations (issue #659): the headline's (`calibration.siteNodeId`) and every
+ * other ticked location's (`calibrationZones`, engine ≥ 1.106.0). Their records are calibration scores, so they are
+ * never "checks only".
+ */
+export function scoredGaugeIds(summary: { calibration?: { siteNodeId?: string | null } | null; calibrationZones?: readonly { siteNodeId?: string | null }[] | null }): Set<string> {
+	const ids = [summary.calibration?.siteNodeId, ...(summary.calibrationZones ?? []).map((z) => z.siteNodeId)];
+	return new Set(ids.filter((x): x is string => typeof x === 'string'));
+}
+
 /** The run checks a gauge inside the network that it doesn't score: GaugeCheckFlows draws it under the flow-duration curve (checkGauges.ts checksOnlyGauges, from the same summary fields). */
-const hasCheckGauges = (summary: SectionInput) => (summary.plausibility?.gauges ?? []).some((g) => g.nodeId !== (summary.calibration?.siteNodeId ?? null));
+const hasCheckGauges = (summary: SectionInput) => {
+	const scored = scoredGaugeIds(summary);
+	return (summary.plausibility?.gauges ?? []).some((g) => !scored.has(g.nodeId));
+};
 
 /** The WR2012 panel's heading (Wr2012Panel): the check and the quaternary it compares with. */
 export function wr2012Heading(report: NonNullable<RunSummary['wr2012']>): string {

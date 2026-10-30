@@ -29,6 +29,22 @@ describe('SettingsDraft', () => {
 		expect(d.kept).toEqual({});
 	});
 
+	it('adopts another shape of the same settings on the saved copy and the form alike, so it isn’t an edit (issue #659)', () => {
+		const d = new SettingsDraft();
+		d.load(saved());
+		const shape = (s: Parameters<Parameters<SettingsDraft['adopt']>[0]>[0]) => (s.calibrateAtOutlet === undefined ? { ...s, calibrateAtOutlet: true } : s);
+		d.adopt(shape);
+		expect(d.s.calibrateAtOutlet).toBe(true);
+		expect(d.saved.calibrateAtOutlet).toBe(true);
+		expect(d.dirty).toBe(false);
+		// An edit made before stays an edit.
+		d.s.apanMm[0] = 123;
+		d.adopt(shape);
+		expect(d.dirty).toBe(true);
+		d.revert();
+		expect(d.s.calibrateAtOutlet).toBe(true);
+	});
+
 	it('works out what blocks Save itself, for the panels on both pages, whichever page is shown (issue #586 round 3)', () => {
 		const d = new SettingsDraft();
 		// Nothing is checked before the settings load.
