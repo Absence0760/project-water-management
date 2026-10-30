@@ -10588,9 +10588,19 @@ revision and a SHA-256 of the model input. Each case is then one
 next, so no job runs longer than one fit; the last picks the fit to keep. A
 case job that finds the input changed since the plan fails the run, saying
 so, since fits on other data wouldn't compare. Before anything is queued, one
-case's time is estimated from a model run × the model runs a case makes, and
-rules estimated past 4 minutes a fit (the job worker's limit, with room) are
-refused, asking for a smaller search. The page won't start while the form
+case's time on the job worker is estimated from the model's size (the run's
+days, its nodes, the units with an area and the GR4J warm-up) × the model
+runs a case makes, and rules estimated past 4 minutes a fit (the job
+worker's limit, with room) are refused, asking for a smaller search. The
+estimate reads no clock (`calibration/estimate.ts`): it used to time model
+runs in the request, so a busy server refused rules it had accepted a moment
+before; now the same project and rules always get the same answer. Its
+constants are an upper envelope of fit evaluations measured on 92 networks
+(the largest 0.75 of it), carried to an arm64 Lambda at 1 024 MB by a factor
+of 4, so it errs long. A fit that runs past 4 minutes anyway is stopped by
+its job and the run failed, saying so, rather than cut off by the worker's
+timeout; each case job logs its estimate beside its time
+(`auto_calibration_case`), which is what to re-derive the factor from. The page won't start while the form
 has unsaved rule edits. Every score is the server's own.
 
 **Applied by the server.** *Apply and save the kept fit* (`POST
