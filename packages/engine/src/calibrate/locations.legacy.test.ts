@@ -154,20 +154,24 @@ function fitDigest(input: ModelInput): string {
 	}
 }
 
-/** What engine 1.109.0 gave (LEGACY_PRINT=1 against it, at 3aa2338af). */
+/**
+ * What engine 1.109.0 gave: this file's digests run with LEGACY_PRINT=1 at commit 3aa2338af (engine 1.109.0; 1.108.0 at
+ * eccb44252 gives the same). The pins first committed here matched no engine; these were re-made from 3aa2338af and
+ * today's engine reproduces them to the bit. staleSite's fit is the one exception: 1.110.0's documented change (CZ2).
+ */
 const PINNED: Record<string, { run: string; fit: string }> = {
-	outlet: { run: 'c6b1ff9ae18a9f7e', fit: 'dcec525901856318' },
-	innerSite: { run: '2847848e44e0f177', fit: '35b0666ce71c3b99' },
-	outletAndZones: { run: '727edf5132d95e6c', fit: 'c9ffb4127f6de950' },
-	innerSiteAndZoneWithOrphans: { run: '9174bd5f8079ea97', fit: '287b278c7ade2ee1' },
-	innerSiteWithRowsAtAndBelow: { run: '088ab5eae665ed7a', fit: '3d60d1ce80092331' },
+	outlet: { run: '04f377abba1b9802', fit: 'a563008fdf790900' },
+	innerSite: { run: '7e83ac890b89a3f7', fit: '67590ca366c29e01' },
+	outletAndZones: { run: 'bb7bffc9a8bbde55', fit: '4f181804a51880aa' },
+	innerSiteAndZoneWithOrphans: { run: '6ea6ed2942ffa9db', fit: 'ec134f3cd8a7fef4' },
+	innerSiteWithRowsAtAndBelow: { run: '137edd394da639c6', fit: '973af68bbfee1ce1' },
 	// The one intended change: engine 1.109.0 refused the fit at a stale site ("the calibration site is no longer in
 	// the model"); since 1.110.0 the stale site is read as the outlet, so the fit scores there as the run always did
 	// (docs/model.md §2.10n, engine-audit.md CZ2). The run is 1.109.0's, as outletAndZones without S.
-	staleSite: { run: '671d5684c3fe0a47', fit: '75efed66f226a731' },
-	innerSiteFitted: { run: '395530258594b414', fit: '83619c2c655ff3a4' },
+	staleSite: { run: 'c4c07da39ef9d4d0', fit: 'ebfa1aea7f61fb85' },
+	innerSiteFitted: { run: '17644a2c2070b99a', fit: '6bfcaecea2def897' },
 	siteWithoutRecord: {
-		run: '981707c712fbb3fd',
+		run: 'b013d4cbcbe7da3a',
 		fit: 'refused: no observed flow record at the calibration site "Bare gauge": attach one to it on the Data page, or calibrate at the outlet'
 	}
 };
