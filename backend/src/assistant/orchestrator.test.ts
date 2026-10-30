@@ -15,6 +15,7 @@ import {
 	MIN_HOP_OUTPUT_TOKENS,
 	parseArguments,
 	runTurn,
+	textJoin,
 	toolCallLimitError,
 	turnFloor,
 	TURN_ERRORS,
@@ -75,6 +76,38 @@ describe('runTurn', () => {
 		]);
 		expect(p.requests[0]!.system).toBe('SYSTEM');
 		expect(p.requests[0]!.maxOutputTokens).toBe(cfg().maxOutputTokens);
+	});
+
+	it('keeps the text before a tool call and the answer after it apart, as two paragraphs (the 2026-10-30 production test)', async () => {
+		const p = scripted((hop) =>
+			hop === 0
+				? [{ type: 'text', delta: 'Let me read the network and settings at the same time.' }, call('t'), usage()]
+				: [{ type: 'text', delta: 'The project is ' }, { type: 'text', delta: 'a blank slate.' }, usage()]
+		);
+		const { d, events } = deps(p, [tool('t', () => ({ ok: true, data: {} }))]);
+		await runTurn(d, ask);
+		const text = events.flatMap((e) => (e.type === 'text' ? [e.delta] : [])).join('');
+		expect(text).toBe('Let me read the network and settings at the same time.\n\nThe project is a blank slate.');
+		// What each hop sent back to the model is its own text, without the page's break.
+		expect(p.requests[1]!.messages.find((m) => m.role === 'assistant')!.content).toBe('Let me read the network and settings at the same time.');
+	});
+
+	it('adds no break when the first hop said nothing before its tool call', async () => {
+		const p = scripted((hop) => (hop === 0 ? [call('t'), usage()] : [{ type: 'text', delta: 'Answer.' }, usage()]));
+		const { d, events } = deps(p, [tool('t', () => ({ ok: true, data: {} }))]);
+		await runTurn(d, ask);
+		expect(events.flatMap((e) => (e.type === 'text' ? [e.delta] : [])).join('')).toBe('Answer.');
+	});
+
+	it('textJoin: a blank line between hops, counting the line breaks already there on either side', () => {
+		expect(textJoin('', 'Next')).toBe('');
+		expect(textJoin('same time.', 'The')).toBe('\n\n');
+		expect(textJoin('same time.\n', 'The')).toBe('\n');
+		expect(textJoin('same time.\n\n', 'The')).toBe('');
+		expect(textJoin('same time. \n \n ', 'The')).toBe('');
+		expect(textJoin('same time.', '\nThe')).toBe('\n');
+		expect(textJoin('same time.', '\n\nThe')).toBe('');
+		expect(textJoin('- a list item', '- next')).toBe('\n\n');
 	});
 
 	it('runs a tool and sends its result back on the next hop, with the panel’s start and done events', async () => {

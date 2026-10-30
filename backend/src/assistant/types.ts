@@ -154,5 +154,6 @@ export const TOOL_NAMES = {
 	series: 'get_series',
 	gaugeFit: 'get_gauge_fit',
 	searchHelp: 'search_help',
+	runReadiness: 'get_run_readiness',
 	proposeSettings: 'propose_settings'
 } as const;

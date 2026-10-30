@@ -88,7 +88,8 @@ describe('the read-only tools', () => {
 					[TOOL_NAMES.network, {}],
 					[TOOL_NAMES.series, { node: 'Middle weir', key: 'outflow' }],
 					[TOOL_NAMES.gaugeFit, { node: weir.id }],
-					[TOOL_NAMES.searchHelp, { query: 'dam' }]
+					[TOOL_NAMES.searchHelp, { query: 'dam' }],
+					[TOOL_NAMES.runReadiness, {}]
 				];
 				const out: ToolResult[] = [];
 				for (const [name, args] of calls) out.push(await tool(name).run(ctx, args));
@@ -131,6 +132,24 @@ describe('the read-only tools', () => {
 		expect(await as(viewer, TOOL_NAMES.runSummary, {}, crypto.randomUUID())).toEqual({ ok: false, error: 'not found' });
 		const r = await as(viewer, TOOL_NAMES.series, { node: 'Nowhere', key: 'outflow' });
 		expect(r.ok === false && r.error).toMatch(/no node "Nowhere"/);
+	});
+});
+
+describe('get_run_readiness (the 2026-10-30 production test)', () => {
+	it('gives an empty project its blockers, and none to a runnable one, with who may start it', async () => {
+		const empty = (await owner.call('POST', '/projects', { name: 'Assistant empty' })).body.project.id as string;
+		const r = await withUser(owner.id, (db) => tool(TOOL_NAMES.runReadiness).run({ db, userId: owner.id, projectId: empty, runId: null }, {}), { readOnly: true });
+		expect(data(r)).toMatchObject({ canStart: false, blockers: ['A run needs a network.', 'A run needs a rainfall series.'], hasRun: false });
+		// Positive control: the tools' project runs (it has run), for the viewer and the owner alike; only the owner may start one.
+		const viewed = data(await as(viewer, TOOL_NAMES.runReadiness, {}));
+		expect(viewed).toMatchObject({ canStart: true, blockers: [], hasRun: true });
+		expect(viewed.youCanStartIt).toMatch(/^no: /);
+		expect(data(await as(owner, TOOL_NAMES.runReadiness, {})).youCanStartIt).toMatch(/^yes: /);
+	});
+
+	it('respects project access: a stranger and a farmer are refused, in words', async () => {
+		expect(await as(stranger, TOOL_NAMES.runReadiness, {})).toEqual({ ok: false, error: 'not found' });
+		expect(await as(farmer, TOOL_NAMES.runReadiness, {})).toEqual({ ok: false, error: 'requires viewer role' });
 	});
 });
 

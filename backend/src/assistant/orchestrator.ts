@@ -189,6 +189,19 @@ export function parseArguments(raw: unknown): { ok: true; args: unknown } | { ok
 }
 
 
+/**
+ * What goes between the text streamed so far this turn (`before`, its last characters are enough) and a later hop's
+ * first delta: a blank line, so the text before a tool call and the answer after it are two paragraphs ("…at the
+ * same time.The project is…" in the 2026-10-30 production test). Nothing at the turn's start or where the break
+ * is already there.
+ */
+export function textJoin(before: string, next: string): string {
+	if (!before || /^\s*\n\s*\n/.test(next)) return '';
+	const lead = /^[ \t]*\n/.test(next) ? 1 : 0;
+	const tail = /\n[ \t]*\n[ \t]*$/.test(before) ? 2 : /\n[ \t]*$/.test(before) ? 1 : 0;
+	return '\n'.repeat(Math.max(0, 2 - tail - lead));
+}
+
 /** The words a tool call past cfg.maxToolCallsPerHop gets instead of running. */
 export const toolCallLimitError = (max: number) =>
 	`Not run: one step may run at most ${max} tool calls, and the first ${max} ran. Ask for this one again in the next step if you still need it.`;
@@ -225,6 +238,10 @@ export async function runTurn(deps: TurnDeps, conversation: readonly ChatMessage
 	// The previous call's input tokens (as the provider counted them, else as estimated), and how many messages it was sent.
 	let lastInput = 0;
 	let lastSent = 0;
+	// The end of the text streamed so far this turn, every hop together: a hop's text after a tool call starts a
+	// new paragraph (textJoin), so the page never runs two hops' sentences together.
+	let streamed = '';
+	let said = false;
 	try {
 		for (let hop = 0; hop < cfg.maxHops; hop++) {
 			const early = stopped();
@@ -250,7 +267,14 @@ export async function runTurn(deps: TurnDeps, conversation: readonly ChatMessage
 			try {
 				for await (const ev of provider.complete({ system, messages: transcript, tools: specs, maxOutputTokens: hopOutput, signal })) {
 					if (ev.type === 'text') {
+						if (!ev.delta) continue;
+						if (!text) {
+							const sep = said ? textJoin(streamed, ev.delta) : '';
+							if (sep) emit({ type: 'text', delta: sep });
+						}
 						text += ev.delta;
+						streamed = (streamed + ev.delta).slice(-16);
+						said ||= ev.delta.trim() !== '';
 						emit({ type: 'text', delta: ev.delta });
 						if (text.length > hopOutput * OUTPUT_CHARS_PER_TOKEN) {
 							cut = true;

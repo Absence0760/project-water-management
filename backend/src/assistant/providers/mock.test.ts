@@ -6,7 +6,7 @@ import { SettingsPatch } from '../../projects/settings.js';
 import { assistantConfig } from '../config.js';
 import { runTurn } from '../orchestrator.js';
 import { TOOL_NAMES, type AssistantProposal, type AssistantStreamEvent, type AssistantTool, type ChatMessage, type ToolResult } from '../types.js';
-import { gaugeAnswer, MOCK_EWR_X1, MOCK_IDLE_ANSWER, MOCK_PROPOSAL, mockEwrProposal, mockProvider } from './mock.js';
+import { gaugeAnswer, MOCK_EWR_X1, MOCK_IDLE_ANSWER, MOCK_PROPOSAL, MOCK_READINESS_INTRO, mockEwrProposal, mockProvider, readinessAnswer } from './mock.js';
 import type { ModelInput, ProjectModel } from '@water-management/engine';
 import { node } from '../../__tests__/helpers.js';
 import { mergeSettings } from '../../projects/settings.js';
@@ -125,6 +125,16 @@ describe('the mock provider', () => {
 	it('says why when propose_settings refuses its patch', async () => {
 		const { text } = await turn('What do you recommend?', { [TOOL_NAMES.proposeSettings]: { ok: false, error: 'gr4j.x4: too big' } });
 		expect(text).toBe('I could not make a proposal the settings would accept: gr4j.x4: too big');
+	});
+
+	it('checks what a run needs: says so before its tool call, then answers from it in the sheet’s formatting, the two apart', async () => {
+		const readiness = { canStart: false, blockers: ['A run needs a network.', 'A run needs a rainfall series.'], notes: [], notRequired: 'Nothing else stops a run.' };
+		const { calls, text, events } = await turn('What do I need before I can run the model?', { [TOOL_NAMES.runReadiness]: { ok: true, data: readiness } });
+		expect(calls).toEqual([{ name: TOOL_NAMES.runReadiness, args: {} }]);
+		// The text before the call, the tool's line, then the answer as a new paragraph.
+		expect(events.findIndex((e) => e.type === 'tool')).toBeGreaterThan(events.findIndex((e) => e.type === 'text'));
+		expect(text).toBe(`${MOCK_READINESS_INTRO}\n\n**Before a run**\n- A run needs a network.\n- A run needs a rainfall series.\n\n**Not needed to start a run:** Nothing else stops a run.`);
+		expect(readinessAnswer({ blockers: [], notes: ['A note.'], notRequired: 'x' })).toBe('**Before a run**\n- Nothing: the model can run now.\n\nA note.\n\n**Not needed to start a run:** x');
 	});
 
 	it('gives the canned answer to anything else, with no tool call', async () => {
