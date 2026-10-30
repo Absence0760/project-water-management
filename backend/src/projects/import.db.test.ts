@@ -326,9 +326,9 @@ describe('POST /projects/import', () => {
 	it('imports a file from before calibration locations in their shape: an inner site into its ticked row with its fit, the outlet ticked only with a record (issue #659)', async () => {
 		const u = await signUp('Locfile');
 		const doc = syntheticDoc('Located import');
-		const [outlet, farm] = doc.model.nodes as { id: string }[];
+		const [outlet, farm] = doc.model.nodes as { id: string; downstreamNodeId: string | null }[];
 		const weir = node('Weir', outlet!.id, { kind: 'gauge', areaKm2: 0 });
-		(farm as { downstreamNodeId: string }).downstreamNodeId = weir.id;
+		farm!.downstreamNodeId = weir.id;
 		doc.model.nodes.push(weir as never);
 		const rain = doc.series[0]!.values as number[];
 		(doc.series as unknown[]).push({ kind: 'flow_observed_m3s', name: 'Weir', unit: 'm3/s', startDate: '2022-01-01', values: rain.map(() => 0.01), siteNodeId: weir.id });

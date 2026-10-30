@@ -29,7 +29,7 @@ const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')
 // BAD: at UP with an X1 out of range. OUTLET / NOREC: the outlet, with and without an outlet record.
 // FARM / GONE / AT_OUTLET: a site that is a land unit, no node, or the outlet itself. ODD / LIST: not an object.
 // DONE: already in the new shape. NOT_BOOL: calibrateAtOutlet that isn't true or false (read as before).
-const [INNER, MESSY, BAD, OUTLET, NOREC, FARM, GONE, AT_OUTLET, ODD, LIST, DONE, NOT_BOOL] = Array.from({ length: 12 }, (_, i) => id(i + 1));
+const [INNER, MESSY, BAD, OUTLET, NOREC, FARM, GONE, AT_OUTLET, ODD, LIST, DONE, NOT_BOOL] = [id(1), id(2), id(3), id(4), id(5), id(6), id(7), id(8), id(9), id(10), id(11), id(12)];
 const PROJECTS = [INNER, MESSY, BAD, OUTLET, NOREC, FARM, GONE, AT_OUTLET, ODD, LIST, DONE, NOT_BOOL];
 /** Projects stored without an outlet record. */
 const NO_RECORD = new Set([MESSY, NOREC]);
