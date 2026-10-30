@@ -27,12 +27,18 @@
 // so about 3.5×, taken as 4. Production's worker has 2 048 MB (a full vCPU)
 // when delineation is on, so there the estimate errs further on the long side.
 //
-// An estimate that is still too short is caught while the work runs: the job
-// stops a fit (or an ensemble) once it passes the same limit, and fails,
-// saying so (store.ts fitNextCase, jobs/handlers/uncertainty.ts), rather than
-// the Lambda timing out on it. Each case job logs its estimate beside its
-// time (`auto_calibration_case`), which is what to re-derive WORKER_SLOWDOWN
-// from on the deployed worker.
+// A run of the calibration rules is spread over as many jobs as it needs
+// (store.ts fitNextCase): each job runs a fit's model runs until its time is
+// spent, by the clock, and pauses there, the next job going on from the same
+// place, so a too-short estimate costs another job, never a different result.
+// What can't be cut is one model run and a fit's last step (scoring every
+// start, the validation tests and the run with the fitted parameters):
+// planCalibration refuses a model on which either would pass a job's limit,
+// and a run whose whole estimate passes AUTO_RUN_SECONDS_MAX. An ensemble is
+// one job, stopped and failed if it runs past the limit anyway
+// (jobs/handlers/uncertainty.ts). Each calibration job logs its estimate
+// beside its time (`auto_calibration_piece`), which is what to re-derive
+// WORKER_SLOWDOWN from on the deployed worker.
 import { prepareRun, type AutoCalibrationPlan, type ModelInput } from '@water-management/engine';
 
 /** What the cost grows with: the run's days, its nodes, the nodes with a catchment area (a GR4J unit each) and the GR4J warm-up. */
@@ -63,12 +69,21 @@ export const RUN_US: Envelope = { perDay: 10, perNodeDay: 4, perUnitWarmupDay: 0
 /** The job worker's time over the measuring machine's (see the header). */
 export const WORKER_SLOWDOWN = 4;
 /**
- * Model runs a case makes besides its fit's evaluations: preparing the fit
- * and each validation record, and the run with the fitted parameters
- * (calibrate/auto.ts runAutoCase). Generous: they are a rounding error
- * beside the evaluations except on the smallest searches.
+ * Model runs a case's last step makes besides its evaluations: preparing the
+ * fit and each validation record, and the run with the fitted parameters
+ * (calibrate/auto.ts prepareAutoCase's finish). Generous: they are a rounding
+ * error beside the evaluations except on the smallest searches.
  */
 export const CASE_EXTRA_RUNS = 5;
+/**
+ * Evaluations a case's last step makes besides one per start: scoring the
+ * kept fit and the project's parameters, both halves of the split-sample and
+ * dry → wet tests, the other record, every observed day, and the WR2012 MAR
+ * with and without the penalty (calibrate.ts calibrationReport). Rounded up.
+ */
+export const FINISH_EVALUATIONS = 12;
+/** Model runs' worth of work every calibration job does before its first evaluation: loading and hashing the input, setting up the fit. */
+export const PIECE_EXTRA_RUNS = 2;
 
 /** The GR4J warm-up a run uses (runoff/simulate.ts resolveWarmupDays): a whole number of days 0–3 650, else 365. */
 function warmupDaysOf(input: ModelInput): number {
@@ -95,13 +110,26 @@ export const evaluationSeconds = (s: ModelSize): number => (WORKER_SLOWDOWN * mi
 /** Seconds one model run takes on the job worker, at most. */
 export const runSeconds = (s: ModelSize): number => (WORKER_SLOWDOWN * micros(RUN_US, s)) / 1e6;
 
-/** Seconds one case of a run of the rules (a fit with validation, then a run) takes on the job worker, at most. */
-export const caseSeconds = (plan: Pick<AutoCalibrationPlan, 'caseEvaluations'>, s: ModelSize): number =>
-	plan.caseEvaluations * evaluationSeconds(s) + CASE_EXTRA_RUNS * runSeconds(s);
+type CasePlan = Pick<AutoCalibrationPlan, 'caseEvaluations'> & { rules: { run: { starts: number } } };
+
+/** Seconds every calibration job spends before its first evaluation, at most. */
+export const pieceOverheadSeconds = (s: ModelSize): number => PIECE_EXTRA_RUNS * runSeconds(s);
+/** Seconds a case's last step (the report from its fits, then a run with the fit) takes on the job worker, at most: it can't be cut. */
+export const finishSeconds = (plan: CasePlan, s: ModelSize): number => (plan.rules.run.starts + FINISH_EVALUATIONS) * evaluationSeconds(s) + CASE_EXTRA_RUNS * runSeconds(s);
+/** Seconds one case of a run of the rules (a fit with validation, then a run) takes on the job worker, at most, over however many jobs. */
+export const caseSeconds = (plan: CasePlan, s: ModelSize): number => plan.caseEvaluations * evaluationSeconds(s) + finishSeconds(plan, s);
+/** Jobs one case takes at most when each runs for `maxSeconds` (one more for its last step when the fits don't leave room for it). */
+export const caseJobs = (plan: CasePlan, s: ModelSize, maxSeconds: number): number => {
+	const room = maxSeconds - pieceOverheadSeconds(s);
+	return room > 0 ? Math.ceil((plan.caseEvaluations * evaluationSeconds(s)) / room) + 1 : Infinity;
+};
+/** Seconds a whole run of the rules takes on the job worker, at most: every case, each job's set-up included. */
+export const calibrationSeconds = (plan: CasePlan & { cases: readonly unknown[] }, s: ModelSize, maxSeconds: number): number =>
+	plan.cases.length * (caseSeconds(plan, s) + caseJobs(plan, s, maxSeconds) * pieceOverheadSeconds(s));
 
 /** Seconds an ensemble of `members` sampled members (and member 0) takes on the job worker, at most. */
 export const ensembleSeconds = (members: number, s: ModelSize): number => (members + 1) * runSeconds(s);
 
-/** A clock for the deadline the job keeps while the work runs (store.ts fitNextCase); tests pass their own. */
+/** A clock for the time a job keeps while the work runs (store.ts fitNextCase); tests pass their own. */
 export type Clock = () => number;
 export const wallClock: Clock = () => performance.now();

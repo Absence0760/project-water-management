@@ -89,8 +89,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	alert_event: ['cleared_at', 'detail', 'state', 'value'],
 	// A sweep's base run, job, name and members' ops are fixed at insert; each gets its outcome once (062_scenario_sweeps.sql).
 	scenario_sweep: ['completed_at', 'engine_version', 'status'],
-	// A run of the calibration rules: its rules, plan and input hash are fixed at insert; its cases, outcome and application change once each (108_auto_calibration.sql).
-	auto_calibration: ['applied_at', 'applied_run_id', 'cases', 'chosen', 'error', 'job_id', 'report', 'status', 'uncertainty_id'],
+	// A run of the calibration rules: its rules, plan and input hash are fixed at insert; its cases, outcome and application change once each (108_auto_calibration.sql), its work under way as it goes (290).
+	auto_calibration: ['applied_at', 'applied_run_id', 'cases', 'chosen', 'error', 'job_id', 'report', 'status', 'uncertainty_id', 'work'],
 	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary'],
 	// An assessment's base run, job and name, and its members' copied ops, are fixed at insert; each gets its outcome once (145_assessment.sql).
 	assessment: ['combined_summary', 'completed_at', 'end_date', 'engine_version', 'problems', 'report', 'start_date', 'status'],

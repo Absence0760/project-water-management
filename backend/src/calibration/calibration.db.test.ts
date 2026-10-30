@@ -5,13 +5,17 @@
 // and the server's ensemble around it; a client can't write an automated fit
 // or a sign-off of its own; new data queues the rules when they ask for it,
 // and applies the fit only while they are signed off; RLS with a positive
-// control; a run whose input changed fails, saying so.
-import { defaultCalibrationRules, runModel, type CalibrationRules, type ModelInput } from '@water-management/engine';
-import { describe, expect, it } from 'vitest';
+// control; a run whose input changed fails, saying so; a fit cut into several
+// jobs gives the unbroken fit's cases, and a killed piece stops the run.
+import { defaultCalibrationRules, runAutoCase, runModel, type AutoCalibrationPlan, type CalibrationRules, type ModelInput } from '@water-management/engine';
+import pg from 'pg';
+import { afterEach, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { localDate } from '../projects/timeZone.js';
 import { AUTO_CALIBRATION_JOBS_PER_USER } from './schema.js';
+import { calibrationInput, calibrationPieces } from './store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -408,5 +412,110 @@ describe('the rules at a calibration site (engine ≥ 1.41.0, settings.calibrati
 		// The run it made scores the same site, so its statistics are the fit's own days.
 		const run = (await owner.call('GET', `/projects/${projectId}/runs/${applied.body.runId}`)).body.run;
 		expect(run.summary.calibration).toMatchObject({ siteNodeId: weir.id, siteName: 'Weir', fitStatus: 'fitted' });
+	});
+});
+
+describe('a fit over several jobs (290_auto_calibration_work)', () => {
+	afterEach(() => {
+		calibrationPieces.maxEvaluations = Infinity;
+	});
+	/** One due job of this project only, as the e2e tick does (another file's leftover job can't come first). */
+	const tickOne = (projectId: string) => runTick({ feeds: false, reports: false, alerts: false, maxJobs: 1, projectIds: [projectId] });
+	const get = async (owner: User, projectId: string, id: string) => (await owner.call('GET', `/projects/${projectId}/auto-calibrations/${id}`)).body.calibration;
+	const twoStarts = () => quickRules({ run: { seed: 3, starts: 2, budget: 60 }, cases: { bounds: ['wide', 'typical'], objectives: ['kgePrime'] } });
+
+	it('cuts each fit into jobs, shows how far the fit under way is, and stores the cases an unbroken fit gives', async () => {
+		const owner = await signUp('AutocalPieces');
+		const viewer = await signUp('AutocalPiecesViewer');
+		const c = await calibratable(owner, twoStarts());
+		await member(owner, c.projectId, viewer, 'viewer');
+		// 40 model runs a job: each case's fit (2 starts + the split and dry → wet fits, 60 runs each) takes 6 jobs.
+		calibrationPieces.maxEvaluations = 40;
+		const res = await owner.call('POST', `/projects/${c.projectId}/auto-calibrations`, {});
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const id = res.body.calibration.id as string;
+		expect(res.body.calibration.work).toBeNull();
+		await tickOne(c.projectId);
+		const first = await get(owner, c.projectId, id);
+		expect(first).toMatchObject({ status: 'running', cases: [], work: { done: 40, total: 240 }, job: { status: 'queued' } });
+		// Positive control: a viewer follows it too.
+		expect((await viewer.call('GET', `/projects/${c.projectId}/auto-calibrations/${id}`)).body.calibration.work).toEqual({ done: 40, total: 240 });
+		await tickOne(c.projectId);
+		expect((await get(owner, c.projectId, id)).work).toEqual({ done: 80, total: 240 });
+		let done = await get(owner, c.projectId, id);
+		for (let i = 0; i < 20 && done.status === 'running'; i++) {
+			await tickOne(c.projectId);
+			done = await get(owner, c.projectId, id);
+		}
+		expect(done).toMatchObject({ status: 'complete', work: null });
+		expect(done.cases).toHaveLength(2);
+		const jobs = await asOwner(`SELECT status FROM job WHERE project_id = $1 AND kind = 'auto_calibration'`, [c.projectId]);
+		expect(jobs.map((j) => j.status)).toEqual(Array(12).fill('done'));
+		// Every case as the in-process fit gives it, to the bit: the pieces change where the work is done, never the result.
+		const input = await withUser(owner.id, (db) => calibrationInput(db, c.projectId));
+		const [row] = await asOwner('SELECT plan, cases FROM auto_calibration WHERE id = $1', [id]);
+		const plan = row!.plan as AutoCalibrationPlan;
+		expect(row!.cases).toEqual(JSON.parse(JSON.stringify(plan.cases.map((_, i) => runAutoCase(input, plan, i)))));
+		// A complete run's work never changes again.
+		await expect(asOwner(`UPDATE auto_calibration SET work = '{}' WHERE id = $1`, [id])).rejects.toThrow(/never changed, only applied/);
+	});
+
+	it('stops when a piece is killed: nothing more runs, it reads as stopped, and the person can start another', async () => {
+		const owner = await signUp('AutocalPieceKilled');
+		const c = await calibratable(owner, twoStarts());
+		calibrationPieces.maxEvaluations = 40;
+		const id = (await owner.call('POST', `/projects/${c.projectId}/auto-calibrations`, {})).body.calibration.id as string;
+		await tickOne(c.projectId);
+		const before = await get(owner, c.projectId, id);
+		expect(before.work).toEqual({ done: 40, total: 240 });
+		// The waiting piece killed, as cancelling a waiting job does (app_cancel_job_outcome).
+		await asOwner(`UPDATE job SET status = 'dead', last_error = 'cancelled', finished_at = now() WHERE id = $1 AND status = 'queued'`, [before.job.id]);
+		for (let i = 0; i < 3; i++) expect((await tickOne(c.projectId)).claimed).toBe(0);
+		const after = await get(owner, c.projectId, id);
+		expect(after).toMatchObject({ status: 'running', cases: [], work: { done: 40, total: 240 }, job: { id: before.job.id, status: 'dead', error: 'cancelled' } });
+		expect(await asOwner(`SELECT id FROM job WHERE project_id = $1 AND kind = 'auto_calibration' AND status IN ('queued', 'running', 'failed')`, [c.projectId])).toEqual([]);
+		// It holds no slot: the person's next run starts.
+		calibrationPieces.maxEvaluations = Infinity;
+		expect((await owner.call('POST', `/projects/${c.projectId}/auto-calibrations`, {})).status).toBe(202);
+		await drain();
+	});
+
+	it('fails the run when the input changes between two pieces of one fit, clearing its work', async () => {
+		const owner = await signUp('AutocalPieceMoved');
+		const c = await calibratable(owner, twoStarts());
+		calibrationPieces.maxEvaluations = 40;
+		const id = (await owner.call('POST', `/projects/${c.projectId}/auto-calibrations`, {})).body.calibration.id as string;
+		await tickOne(c.projectId);
+		expect((await get(owner, c.projectId, id)).work).toEqual({ done: 40, total: 240 });
+		expect((await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { apanMm: monthly(160) } })).status).toBe(200);
+		await tickOne(c.projectId);
+		expect(await get(owner, c.projectId, id)).toMatchObject({ status: 'failed', error: expect.stringContaining('changed while the rules ran'), cases: [], work: null });
+	});
+
+	it('fails the run when a release changes the engine between two pieces, rather than finish one engine’s fit with another', async () => {
+		const owner = await signUp('AutocalPieceEngine');
+		const c = await calibratable(owner, twoStarts());
+		calibrationPieces.maxEvaluations = 40;
+		const id = (await owner.call('POST', `/projects/${c.projectId}/auto-calibrations`, {})).body.calibration.id as string;
+		await tickOne(c.projectId);
+		expect((await get(owner, c.projectId, id)).work).toEqual({ done: 40, total: 240 });
+		// The run as an older backend wrote it (only the schema owner can, as the user it runs as).
+		const db = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await db.connect();
+		try {
+			await db.query('BEGIN');
+			await db.query(`SELECT set_config('app.current_user_id', $1, true)`, [owner.id]);
+			await db.query(`UPDATE auto_calibration SET engine_version = '0.0.1' WHERE id = $1`, [id]);
+			await db.query('COMMIT');
+		} finally {
+			await db.end();
+		}
+		await tickOne(c.projectId);
+		expect(await get(owner, c.projectId, id)).toMatchObject({
+			status: 'failed',
+			error: expect.stringMatching(/^the server’s model engine changed while the rules ran \(0\.0\.1 to [\d.]+\), so the fits would not compare: run them again$/),
+			cases: [],
+			work: null
+		});
 	});
 });

@@ -1,13 +1,14 @@
-// The time limit on a run of the calibration rules, end to end: the request
-// refuses a search estimated past it from the model's size (./estimate.ts),
-// whatever the server's clock does, and a fit that runs past it anyway is
-// stopped by its job and the run failed, saying so, rather than cut off by
-// the worker's timeout (store.ts fitNextCase). Invented values.
+// The time limits on a run of the calibration rules, end to end: the request
+// refuses a search estimated past them from the model's size (./estimate.ts),
+// whatever the server's clock does; a job pauses its fit by the clock before
+// its own limit, so a worker slower than the estimate costs more jobs, never
+// another result, and one far slower stops the run, saying so (store.ts
+// fitNextCase). Invented values.
 import { defaultCalibrationRules, runModel, type CalibrationRules, type ModelInput } from '@water-management/engine';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
-import { AUTO_CASE_SECONDS_MAX } from './schema.js';
+import { JobRelease } from '../jobs/errors.js';
 import { fitNextCase } from './store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -48,15 +49,15 @@ async function calibratable(owner: User, rules: CalibrationRules, years: number)
 
 const count = async (projectId: string) => Number((await asOwner('SELECT count(*) FROM auto_calibration WHERE project_id = $1', [projectId]))[0]!.count);
 
-describe('the time limit on a run of the calibration rules', () => {
-	it('refuses a search estimated past 4 minutes a fit, the same however slow the server’s clock, and queues nothing', async () => {
+describe('the time limits on a run of the calibration rules', () => {
+	it('refuses a search estimated past its whole limit, the same however slow the server’s clock, and queues nothing', async () => {
 		const owner = await signUp('FitTimeRefused');
 		// Thirty years at the largest search the rules allow: far past the limit.
 		const big = await calibratable(owner, rulesWith(10, 10_000), 30);
 		const first = await owner.call('POST', `/projects/${big}/auto-calibrations`, {});
 		expect(first.status).toBe(400);
 		expect(first.body.error).toMatch(
-			/^the calibration rules can't run: each fit would take up to about \d+ minutes on the server \(120000 model runs\), more than a background job may run \(4 minutes\): lower the model runs per fit or the starts in the calibration rules$/
+			/^the calibration rules can't run: the rules would take up to about \d+ hours on the server \(1 fit of 120000 model runs each\), more than a run of the rules may take \(6 hours\): lower the model runs per fit, the starts or the fits in the calibration rules$/
 		);
 		// A clock that leaps a minute a reading: the same refusal, word for word.
 		let t = 0;
@@ -69,34 +70,47 @@ describe('the time limit on a run of the calibration rules', () => {
 		expect(await count(small)).toBe(1);
 	});
 
-	it('stops a fit that runs past the limit anyway and fails the run, saying so; one inside it is fitted', async () => {
-		const owner = await signUp('FitTimeOverran');
+	it('pauses a fit by the clock and goes on in the next job; a worker far slower than estimated stops the run, saying so', async () => {
+		const owner = await signUp('FitTimeSlow');
 		const projectId = await calibratable(owner, rulesWith(1, 60), 4);
 		const res = await owner.call('POST', `/projects/${projectId}/auto-calibrations`, {});
 		expect(res.status).toBe(202);
 		const id = res.body.calibration.id as string;
 		const progress = async () => true;
-		// The worker's clock as the estimate's miss would read it: a minute passes every model run.
+		// The worker's clock as a far-too-short estimate would read it: a minute passes every reading.
 		let t = 0;
 		const slow = () => (t += 60_000);
-		expect(await withUser(owner.id, (db) => fitNextCase(db, projectId, id, progress, { now: slow }))).toBe('failed');
+		// Each job stops before its 4 minutes would pass, with its work stored for the next.
+		expect(await withUser(owner.id, (db) => fitNextCase(db, projectId, id, progress, { now: slow }))).toBe('next');
+		const [first] = await asOwner('SELECT work, cases, status FROM auto_calibration WHERE id = $1', [id]);
+		expect(first).toMatchObject({ status: 'running', cases: [], work: { case: 0, jobs: 1, fits: [], total: 180 } });
+		expect(first!.work.done).toBeGreaterThan(0);
+		expect(first!.work.done).toBeLessThan(5);
+		expect(first!.work.search.evaluations).toBe(first!.work.done);
+		// At that pace a fit takes far more jobs than estimated: the run stops, saying why, its work cleared.
+		let last: string | false = 'next';
+		for (let i = 0; i < 20 && last === 'next'; i++) last = await withUser(owner.id, (db) => fitNextCase(db, projectId, id, progress, { now: slow }));
+		expect(last).toBe('failed');
 		const failed = (await owner.call('GET', `/projects/${projectId}/auto-calibrations/${id}`)).body.calibration;
 		expect(failed).toMatchObject({
 			status: 'failed',
-			error: `a fit ran past the ${AUTO_CASE_SECONDS_MAX / 60} minutes a background job may run, longer than it was estimated to take: lower the model runs per fit or the starts in the calibration rules, and run them again`,
-			cases: []
+			error: expect.stringMatching(/^a fit took more background jobs than estimated \(\d+\), so the server is far slower than the estimate: lower the model runs per fit or the starts in the calibration rules, and run them again$/),
+			cases: [],
+			work: null
 		});
+		expect((await asOwner('SELECT work FROM auto_calibration WHERE id = $1', [id]))[0]!.work).toBeNull();
+	});
 
-		// Positive control: the same rules on a clock that keeps time fit the case (the failed run's job retired first,
-		// since one person has one run at a time).
-		await retirePendingJobs(projectId);
-		const again = await calibratable(owner, rulesWith(1, 60), 4);
-		const res2 = await owner.call('POST', `/projects/${again}/auto-calibrations`, {});
-		expect(res2.status).toBe(202);
-		const id2 = res2.body.calibration.id as string;
-		expect(['next', 'complete']).toContain(await withUser(owner.id, (db) => fitNextCase(db, again, id2, progress)));
-		const fitted = (await owner.call('GET', `/projects/${again}/auto-calibrations/${id2}`)).body.calibration;
-		expect(fitted).toMatchObject({ status: expect.stringMatching(/^(running|complete)$/), error: null });
+	it('hands back a job claimed too late in the worker’s tick, writing nothing; with time enough it fits', async () => {
+		const owner = await signUp('FitTimeLate');
+		const projectId = await calibratable(owner, rulesWith(1, 60), 4);
+		const id = (await owner.call('POST', `/projects/${projectId}/auto-calibrations`, {})).body.calibration.id as string;
+		const progress = async () => true;
+		await expect(withUser(owner.id, (db) => fitNextCase(db, projectId, id, progress, { deadline: Date.now() + 20_000 }))).rejects.toBeInstanceOf(JobRelease);
+		expect((await asOwner('SELECT work, cases FROM auto_calibration WHERE id = $1', [id]))[0]).toEqual({ work: null, cases: [] });
+		// Positive control: a minute and a half left is time enough for this small fit.
+		expect(['next', 'complete']).toContain(await withUser(owner.id, (db) => fitNextCase(db, projectId, id, progress, { deadline: Date.now() + 90_000 })));
+		const fitted = (await owner.call('GET', `/projects/${projectId}/auto-calibrations/${id}`)).body.calibration;
 		expect(fitted.cases).toHaveLength(1);
 		expect(fitted.cases[0].error).toBeNull();
 	});
