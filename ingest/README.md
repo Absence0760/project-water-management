@@ -696,6 +696,7 @@ written as `0x7FC00000`. When a file is copied again:
 - **Range requests:** `byte_range=(first, last)` sends `Range` for a few pixels of a TIFF (`verify_copy.py`), paced like any request.
 - **429 and 503:** it waits as long as `Retry-After` asks, given in seconds or as an HTTP date. It retries at most `max_retries` times and gives up (`RetryLater`) rather than wait longer than `max_wait`.
 - **403:** it raises `StopRun` at once, with no retry. The run stops and the alarm fires, because CHC bans by volume.
+- **A body that ends early:** when the response has a `Content-Length` (and no `Content-Encoding`), the bytes received must match it, for a 200 and for a 206's part. A short body, or a connection that breaks mid-body (`IncompleteRead`, a reset, a timeout, a TLS EOF), is a failed request, never a file: it is retried, paced and counted like any request, backing off `truncated_backoff` (default `default_backoff`, 30 s) doubling, at most `max_retries` times and only while `may_retry(wait)` allows, then raises `TruncatedDownload` (a `RetryLater`). http.client's `read(amt)` returns a short body without raising when the server closes early, so before this a dropped connection reached the NetCDF reader as a truncated file (the 1986-08 backfill month, 2026-10-30). The CHIRPS finals runs (`lambda_handler.py`) wait D4's 60 s before asking again and retry only while a whole download still fits the Lambda's time (`Budget.allows`); past that the invocation fails with `TruncatedDownload`, which the backfill state machine retries (docs/deployment.md § Backfill). No `Content-Length` (a chunked body) is accepted as before. `cdsjob.py` still checks the size against the CDS's own `content_length` too: a different source of truth, not a second retry.
 
 ## Verify the copy
 
@@ -790,7 +791,7 @@ ingest/.venv/bin/python -m unittest discover -s ingest
 
 They cover:
 
-- **The polite client:** pacing, the 304 skip, the 403 stop, and `Retry-After` given in seconds or as a date. They run against a fake opener and clock, so nothing touches the network or sleeps.
+- **The polite client:** pacing, the 304 skip, the 403 stop, `Retry-After` given in seconds or as a date, and a body that ends early (short of its `Content-Length`, or broken mid-read) retried then refused with `TruncatedDownload`, in memory, to a file and for a 206 part; no `Content-Length` accepted as before. They run against a fake opener and clock, so nothing touches the network or sleeps.
 - **The writer:** the exact D2 metadata, and where a known cell-day lands, for leap and non-leap years and across New Year. Chunks that are all NaN aren't written, and S3 staging is checked against an in-memory fake.
 - **The manifest:** the round-trip, refusing manifests that don't follow the spec, and a hash that stays stable across NaN payloads, memory layout and byte order.
 - **CHC's request slot** (`test_lambda_handler.py`): taken and released by a run; HostBusy for a backfill month and a quiet end for a daily run while held; an expired slot taken over; a backfill execution's hold kept across its months, kept through a failed month, busy for others and another execution, released at the end (only its own, its reservation too), taken over once expired; the reservation of the next turn; the same on a `file://` copy; the `hold` and `release_hold` events.

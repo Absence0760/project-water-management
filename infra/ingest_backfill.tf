@@ -20,6 +20,10 @@
 #     is what gets an address banned. Only Lambda's service errors (throttled
 #     by the ingest's reserved concurrency, a transient API error) are retried,
 #     after a minute. Re-running the plan skips the months the manifest holds.
+#     A download that kept ending early (TruncatedDownload, after the
+#     client's own retries) is a dropped connection, not a refusal, and is
+#     retried 3 times, 5 minutes apart and doubling (2026-10-30: one dropped
+#     connection on 1986-08 ended a ~30 h run).
 #     Two "busy" errors are waits, not failures, and are retried: MirrorBusy
 #     (the daily run holds the product's lease) and HostBusy (the fetcher
 #     Lambda holds CHC's one request slot, feeds.tf header): a month that
@@ -46,6 +50,10 @@
 #
 # Created only once the ingest function exists (ingest_image_tag). Its role
 # may invoke that one function and nothing else.
+#
+# A failed execution alarms (backfill_failed, essential tier): the mirror-lag
+# alarms are in ALARM for the whole backfill anyway, so they can't say it
+# stopped (2026-10-30: a failed execution sat unnoticed for 20 h).
 # ----------------------------------------------------------------------------
 
 locals {
@@ -171,6 +179,18 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
                 IntervalSeconds = 120
                 MaxAttempts     = 30
                 BackoffRate     = 1
+                }, {
+                # TruncatedDownload (ingest/polite.py): CHC's file kept
+                # ending before its Content-Length, after the client's own
+                # retries in that invocation. A dropped connection, not a
+                # refusal: ask again in a fresh invocation (a whole Lambda
+                # budget), 5, 10 then 20 minutes on, before failing the
+                # execution. Each retry is one more request for one file,
+                # well inside D4's one a minute.
+                ErrorEquals     = ["TruncatedDownload"]
+                IntervalSeconds = 300
+                MaxAttempts     = 3
+                BackoffRate     = 2
               }]
               Next = "Pace"
             }
@@ -239,4 +259,32 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
   })
 
   depends_on = [aws_iam_role_policy.ingest_backfill]
+}
+
+# A failed execution: a month that failed (a 403, a file that kept ending
+# early, any other error of the function) fails the execution after its hold
+# is released (MonthFailed). Essential tier: the mirror-lag alarms are already
+# in ALARM throughout a backfill, so this is the only signal that it stopped.
+# Only ExecutionsFailed: an execution has no timeout of its own (a Standard
+# execution's year), so ExecutionsTimedOut can't happen, and ExecutionsAborted
+# is the operator stopping it by hand. One alarm metric, not three, against
+# the organization's 10-metric free tier.
+resource "aws_cloudwatch_metric_alarm" "backfill_failed" {
+  count = local.ingest_enabled && local.alarms_essential ? 1 : 0
+
+  alarm_name          = "${local.project}-mirror-backfill-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ExecutionsFailed"
+  namespace           = "AWS/States"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "A ${local.ingest_backfill_name} execution failed: a month's error ended the run (its hold on CHC's slot was released). Open the execution in Step Functions: the failed month's error is the execution's error (StopRun = CHC answered HTTP 403, never re-run straight away; TruncatedDownload = the file kept ending early after every retry). Then resume: re-run the plan, which skips the months the manifest holds (docs/deployment.md § Backfill)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    StateMachineArn = aws_sfn_state_machine.ingest_backfill[0].arn
+  }
 }

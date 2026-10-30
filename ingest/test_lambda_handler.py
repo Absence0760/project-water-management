@@ -507,6 +507,53 @@ class FixturesRun(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 lambda_handler.handler({"product": "rnl", "mode": "monthly"})
 
+    def _truncating(self, times: int):
+        """The fixture server, but its first `times` file bodies end early (a dropped connection)."""
+        import fixturehttp
+
+        base = fixturehttp.FixtureOpener()
+        state = {"short": 0, "files": 0}
+
+        def opener(req, timeout=None):
+            res = base(req, timeout=timeout)
+            if not req.full_url.endswith(".nc"):
+                return res
+            state["files"] += 1
+            if state["short"] >= times:
+                return res
+            state["short"] += 1
+            body = res.read()
+            return fixturehttp._Response(body[: len(body) // 3], 200, res.headers)
+
+        return opener, state
+
+    def test_a_file_that_ends_early_is_asked_for_again(self):
+        opener, state = self._truncating(1)
+        out = lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, None, opener=opener)
+        self.assertEqual([f["outcome"] for f in out["files"]], ["added"])
+        self.assertEqual(state, {"short": 1, "files": 2})
+
+    def test_a_file_that_keeps_ending_early_fails_the_month_by_name(self):
+        opener, state = self._truncating(99)
+        with self.assertRaises(polite.TruncatedDownload) as caught:
+            lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, None, opener=opener)
+        # The backfill state machine retries it by this name (infra/ingest_backfill.tf).
+        self.assertEqual(type(caught.exception).__name__, "TruncatedDownload")
+        self.assertEqual(state["files"], 4)  # the first try and polite's 3 retries
+        self.assertFalse((self.root / "rnl" / "manifest.json").exists())  # never reached the reader
+
+    def test_no_retry_once_a_whole_download_no_longer_fits(self):
+        opener, state = self._truncating(99)
+
+        class Context:
+            def get_remaining_time_in_millis(self):
+                # Plenty to start; under DOWNLOAD_RESERVE_S once the first body ended early.
+                return 900_000 if state["short"] == 0 else 300_000
+
+        with self.assertRaises(polite.TruncatedDownload):
+            lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, Context(), opener=opener)
+        self.assertEqual(state["files"], 1)
+
     def test_a_month_chc_does_not_list_is_a_404(self):
         with self.assertRaises(polite.HttpError) as caught:
             lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "1999-01"})

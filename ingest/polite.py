@@ -11,6 +11,17 @@
   sleeping past the Lambda's budget.
 - **A 403 raises `StopRun` at once and is never retried**: CHC bans by
   volume (2026-10-25), and the run must stop and alert, not keep knocking.
+- **A body that ends early is a failed request, not a file.** When the
+  response has a `Content-Length` (and no `Content-Encoding`), the bytes
+  received must match it, for a 200 and for a 206's part alike; a short body,
+  or a connection that breaks mid-body (`IncompleteRead`, a reset, a timeout,
+  a TLS EOF), is retried like a 503 without `Retry-After`: paced, counted,
+  backing off `truncated_backoff` (default `default_backoff`) doubling, up to
+  `max_retries` times and only while `may_retry(wait)` allows (the Lambda's
+  time budget), then `TruncatedDownload`. http.client's `read(amt)` returns a
+  short body without raising when the server closes early, so without this a
+  dropped connection reached the NetCDF reader as a truncated file (the
+  1986-08 backfill, 2026-10-30).
 
 Stdlib `urllib` only. The clock, the sleep and the opener are injectable so
 the tests never touch the network or wait.
@@ -19,7 +30,8 @@ the tests never touch the network or wait.
 from __future__ import annotations
 
 import email.utils
-import shutil
+import http.client
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -40,6 +52,27 @@ class StopRun(Exception):
 
 class RetryLater(Exception):
     """The upstream asked us to wait longer than this run can, or kept asking."""
+
+
+class TruncatedDownload(RetryLater):
+    """The body kept ending before its Content-Length (or the connection broke
+    mid-body) after every retry. Its class name is the error the backfill
+    state machine retries (infra/ingest_backfill.tf)."""
+
+
+#: A connection that breaks while the body is read: retried as a truncation.
+#: Not OSError at large, which would also retry a full disk.
+_BODY_ERRORS = (http.client.IncompleteRead, ConnectionError, TimeoutError, ssl.SSLError)
+
+
+def expected_length(headers) -> int | None:
+    """The body's length from Content-Length, or None when it can't be checked
+    (absent, unreadable, or a Content-Encoding an opener might decode)."""
+    enc = (headers.get("Content-Encoding") or "").strip().lower()
+    if enc not in ("", "identity"):
+        return None
+    value = (headers.get("Content-Length") or "").strip()
+    return int(value) if value.isdigit() else None
 
 
 class HttpError(Exception):
@@ -89,6 +122,8 @@ class PoliteClient:
         max_retries: int = 3,
         max_wait: float = 300.0,
         default_backoff: float = 30.0,
+        truncated_backoff: float | None = None,
+        may_retry: Callable[[float], bool] | None = None,
         timeout: float = 120.0,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
@@ -100,6 +135,8 @@ class PoliteClient:
         self.max_retries = max_retries
         self.max_wait = max_wait
         self.default_backoff = default_backoff
+        self.truncated_backoff = default_backoff if truncated_backoff is None else truncated_backoff
+        self.may_retry = may_retry
         self.timeout = timeout
         self.clock = clock
         self.sleep = sleep
@@ -114,6 +151,16 @@ class PoliteClient:
             if wait > 0:
                 self.sleep(wait)
         self._last = self.clock()
+
+    @staticmethod
+    def _stream(res, dest: str) -> int:
+        """Copy the body to `dest` (truncating whatever an earlier attempt left) and return its size."""
+        size = 0
+        with open(dest, "wb") as out:
+            while chunk := res.read(1 << 20):
+                out.write(chunk)
+                size += len(chunk)
+        return size
 
     def get(
         self,
@@ -150,15 +197,26 @@ class PoliteClient:
                     h = res.headers
                     if status == 304:
                         return Response(url, 304, True, h.get("ETag"), h.get("Last-Modified"), None, None)
-                    if dest is not None:
-                        with open(dest, "wb") as out:
-                            shutil.copyfileobj(res, out, 1 << 20)
-                            size = out.tell()
-                        body = None
-                    else:
-                        body = res.read()
-                        size = len(body)
-                    return Response(url, status, False, h.get("ETag"), h.get("Last-Modified"), size, body)
+                    expected = expected_length(h)
+                    try:
+                        if dest is not None:
+                            size = self._stream(res, dest)
+                            body = None
+                        else:
+                            body = res.read()
+                            size = len(body)
+                        short = expected is not None and size != expected
+                        why = f"{size} of {expected} bytes" if short else None
+                    except _BODY_ERRORS as e:
+                        short, why = True, f"{type(e).__name__} mid-body"
+                    if not short:
+                        return Response(url, status, False, h.get("ETag"), h.get("Last-Modified"), size, body)
+                attempt += 1
+                wait = self.truncated_backoff * 2 ** (attempt - 1)
+                if attempt > self.max_retries or wait > self.max_wait or (self.may_retry is not None and not self.may_retry(wait)):
+                    raise TruncatedDownload(f"{url} ended early ({why}) after {attempt - 1} retries")
+                self.sleep(wait)
+                continue
             except urllib.error.HTTPError as e:
                 e.close()  # release the connection; the error body is never read
                 status = e.code
