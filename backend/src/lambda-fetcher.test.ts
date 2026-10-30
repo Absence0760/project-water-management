@@ -549,9 +549,9 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		dirs.push(d);
 		const { openStore } = await import('./mirror/store.js');
 		const { writeWanted } = await import('./dams/observed/handover.js');
-		const { readdirSync } = await import('node:fs');
-		const { WATERBODIES_FIXTURE_DIR } = await import('./dams/observed/waterbodies.js');
-		const all = readdirSync(WATERBODIES_FIXTURE_DIR).map((f) => f.slice(0, -4)).sort();
+		const { WATERBODIES_FIXTURE_POLYGONS, WATERBODIES_FIXTURE_ROOT } = await import('./dams/observed/waterbodies.js');
+		const polygons = JSON.parse(readFileSync(`${WATERBODIES_FIXTURE_ROOT}${WATERBODIES_FIXTURE_POLYGONS}`, 'utf8')) as { features: { properties: { uid: string } }[] };
+		const all = polygons.features.map((f) => f.properties.uid).sort();
 		await writeWanted(openStore(pathToFileURL(`${d}/`).href), { generatedAt: new Date().toISOString(), waterbodies: uids ?? all.slice(0, 2), outlines });
 		vi.stubEnv('MIRROR_URL', pathToFileURL(`${d}/`).href);
 		return all;
@@ -580,7 +580,7 @@ describe('the fetcher’s dams-weekly mode (issue #604 R5)', () => {
 		});
 		expect(JSON.parse(metric!)).toMatchObject({ Source: 'waterbodies', DamPassCompleted: 1, DamObservationAgeDays: expect.any(Number) });
 		const lines = info.mock.calls.map(([l]) => l as string);
-		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'dams_pass')).toMatchObject({ source: 'waterbodies', fetched: 2, stopped: 'done', requests: 2 });
+		expect(lines.map((l) => JSON.parse(l)).find((l) => l.event === 'dams_pass')).toMatchObject({ source: 'waterbodies', fetched: 2, stopped: 'done', requests: 3 });
 		for (const uid of uids) expect(lines.join('\n')).not.toContain(uid);
 		expect(sent).toHaveLength(0);
 	});

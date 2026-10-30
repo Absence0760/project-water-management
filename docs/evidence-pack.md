@@ -465,8 +465,7 @@ Not counted: **Sentinel-1 radar** (`s1`) sees through cloud, but wind
 roughens open water and wet sand reads as water, so it is never alone the
 reason a dam is called full or empty (model.md §2.10l), and a wet or dry
 date is exactly such a call. **Waterbodies** (`waterbodies`) is DE Africa's
-own polygon, not the dam's traced outline, and its public series stops in
-2024-02. Neither is read for § 7 (`loadDamObservations`).
+own polygon, not the dam's traced outline. Neither is read for § 7 (`loadDamObservations`).
 
 **What is counted** (engine `packages/engine/src/evidence/damObservations.ts`,
 `damObservationsSection`, counting `dam-obs-2`, read by

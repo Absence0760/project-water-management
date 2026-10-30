@@ -5,8 +5,8 @@
 # rule sends {"mode":"dams-weekly"} to the fetcher, never retried; the fetcher reaches
 # only dams/ in the mirror bucket and the worker only dams/wanted.json; each
 # source's heartbeat alarm and the WOfS recency alarm treat missing data as
-# breaching, and waterbodies has no recency alarm (its public series are
-# frozen upstream, docs/data-sources.md).
+# breaching, and the Waterbodies recency alarm doesn't (a region with no
+# matched dam publishes no Waterbodies recency; docs/data-sources.md).
 #
 # The mocks, overrides and variables below are copied from
 # ingest.tftest.hcl (a test file can't share them); keep them in step.
@@ -769,6 +769,7 @@ run "dam_observations_off_by_default" {
       length(aws_iam_role_policy.worker_dams) == 0 &&
       length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0 &&
       length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0 &&
+      length(aws_cloudwatch_metric_alarm.dam_recency_waterbodies) == 0 &&
       length(aws_cloudwatch_metric_alarm.dam_recency_s2) == 0 &&
       length(aws_cloudwatch_metric_alarm.dam_recency_s1) == 0 &&
       !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "DAM_OBSERVATIONS_S2") &&
@@ -875,8 +876,15 @@ run "dam_observations_on" {
     error_message = "The WOfS recency alarm reads DamObservationAgeDays{Source=wofs} against dam_wofs_recency_alarm_days (60) and treats missing data as breaching."
   }
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 1 && !can(regex("metric_name\\s*=\\s*local\\.dam_recency_metric[^}]*Source\\s*=\\s*\"waterbodies\"", file("dam_observations.tf")))
-    error_message = "No recency alarm for waterbodies: its public series are frozen upstream (docs/data-sources.md)."
+    condition = (
+      aws_cloudwatch_metric_alarm.dam_recency_waterbodies[0].treat_missing_data == "notBreaching" &&
+      aws_cloudwatch_metric_alarm.dam_recency_waterbodies[0].namespace == "water-management/DamObservations" &&
+      aws_cloudwatch_metric_alarm.dam_recency_waterbodies[0].metric_name == "DamObservationAgeDays" &&
+      aws_cloudwatch_metric_alarm.dam_recency_waterbodies[0].dimensions["Source"] == "waterbodies" &&
+      aws_cloudwatch_metric_alarm.dam_recency_waterbodies[0].threshold == 60 &&
+      aws_cloudwatch_metric_alarm.dam_recency_waterbodies[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "The Waterbodies recency alarm reads DamObservationAgeDays{Source=waterbodies} against dam_waterbodies_recency_alarm_days (60), and missing data (no matched dam holds a date) doesn't breach it."
   }
 }
 
@@ -889,7 +897,7 @@ run "dam_alarms_follow_the_alarm_tier" {
   }
 
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0 && length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0 && aws_cloudwatch_event_rule.dams_weekly.state == "ENABLED"
+    condition     = length(aws_cloudwatch_metric_alarm.dam_pass_heartbeat) == 0 && length(aws_cloudwatch_metric_alarm.dam_recency_wofs) == 0 && length(aws_cloudwatch_metric_alarm.dam_recency_waterbodies) == 0 && aws_cloudwatch_event_rule.dams_weekly.state == "ENABLED"
     error_message = "alarm_tier none drops the dams alarms, not the passes."
   }
 }
@@ -902,6 +910,16 @@ run "rejects_a_wofs_recency_alarm_that_fires_on_a_cloudy_month" {
   }
 
   expect_failures = [var.dam_wofs_recency_alarm_days]
+}
+
+run "rejects_a_waterbodies_recency_alarm_that_fires_on_a_cloudy_month" {
+  command = plan
+
+  variables {
+    dam_waterbodies_recency_alarm_days = 14
+  }
+
+  expect_failures = [var.dam_waterbodies_recency_alarm_days]
 }
 
 # Sentinel-2 (issue #624): off with the dam observations on, until its own

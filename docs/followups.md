@@ -470,29 +470,18 @@ open:
       first day's `dams_pass` and `dams_tick` log lines and both heartbeat
       alarms. Trigger: a client project with traced dams that wants the
       modelled-vs-observed dam area.
-- [ ] **The frozen Waterbodies series.** Broken: DE Africa's public
-      per-waterbody CSVs (`waterbodies/v0.0.2/surface_area_change/`) were
-      last written 2024-02-26 and end 2023-09-17 (checked 2026-10-27), though
-      the product says weekly, so Waterbodies adds history only and has no
-      recency alarm. Durable fix: ask DE Africa (help desk or forum) whether
-      the public series will be updated again, or where the current ones
-      live; if they will, add a `dam-recency-waterbodies` alarm like WOfS's;
-      if they won't, keep the pass for the history (it costs a 304 a uid a
-      week) and say so in data-sources.md, or retire it if its uid matching
-      adds nothing WOfS doesn't. Trigger: DE Africa's reply (operator step),
-      or the series' `newest` moving past 2023-09-17 in the pass's status.
-- [ ] **v0.0.3 polygons against v0.0.2 series: the uids.** Broken (maybe):
-      the match reads uids from the v0.0.3 historical extent, and the pass
-      asks the v0.0.2 series by that uid. Both are DE Africa's latest of
-      each, but nothing has checked on real data that a v0.0.3 uid names
-      the same waterbody in v0.0.2 (a geohash of a changed polygon may
-      differ, or have no series: a 404, recorded as failed). Durable fix: on
-      the operator's real clip, take a sample of matched uids and check
-      each series exists and its `px_total` × 900 m² is near the v0.0.3
-      polygon's area; if they disagree, load the v0.0.2 polygons for
-      matching instead (or map v0.0.3 uids to v0.0.2 by overlap at load).
-      Trigger: the first production load of the polygons, before turning
-      the flag on.
+- [x] **The frozen Waterbodies series (2026-10-30).** DE Africa's v0.0.2
+      per-waterbody CSVs on S3 ended 2023-09-17. DE Africa (Michael
+      Wellington, to the operator) named the v0.0.3 Waterbodies API the
+      supported way to the series, current within about a week; the pass
+      now reads it (an id per uid from their WFS, then the series,
+      incremental weekly), and `dam-recency-waterbodies` alarms on it
+      (data-sources.md § deafrica-waterbodies-series).
+- [x] **v0.0.3 polygons against v0.0.2 series: the uids (2026-10-30).**
+      Settled by the same change: polygons and series are both v0.0.3, the
+      WFS maps each v0.0.3 uid to its API id, and a uid it doesn't know is
+      recorded `no_waterbody` in the pass's status rather than read against
+      another version's series.
 
 ## Regional GR4J prior (issue #622)
 

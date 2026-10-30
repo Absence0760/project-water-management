@@ -168,9 +168,12 @@ describe('the real tree', () => {
 		for (const host of [
 			'data.chc.ucsb.edu',
 			'www.dws.gov.za',
-			// Digital Earth Africa's bucket (Waterbodies, WOfS scenes) and its STAC search (WOfS, issue #604 R5).
+			// Digital Earth Africa's bucket (WOfS scenes) and its STAC search (WOfS, issue #604 R5).
 			'deafrica-services.s3.af-south-1.amazonaws.com',
 			'explorer.digitalearth.africa',
+			// Its Waterbodies API and GeoServer WFS (the Waterbodies series and a uid's wb_id).
+			'api.digitalearth.africa',
+			'geoserver.digitalearth.africa',
 			// Its Sentinel-2 L2A Collection 1 and Sentinel-1 RTC buckets (issue #624).
 			'deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com',
 			'deafrica-sentinel-1.s3.af-south-1.amazonaws.com'

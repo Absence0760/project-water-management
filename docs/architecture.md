@@ -2133,7 +2133,8 @@ worker tick (DAM_OBSERVATIONS=on, no user):
    put   dams/wanted.json   { waterbodies: uids of matched dams, outlines: EVERY dam + since }
 
 EventBridge, hourly at :20 ──► fetcher, {"mode":"dams-weekly"} (outside the VPC)
-   Waterbodies pass (waterbodies.ts, ≤ 30% of the run): each wanted uid due (7 days; a failed one 1 day), conditional GET, 1 a second
+   Waterbodies pass (waterbodies.ts, ≤ 30% of the run): each wanted uid due (7 days; a failed one 1 day), 1 a second:
+      its wb_id from DE Africa's WFS once (≤ 50 uids a request), then the API's series since 60 days before the newest held
       writes dams/waterbodies/<uid>.json, dams/waterbodies-status.json
    WOfS pass (R5-C): each dam's newest scenes once a UTC day, the rest of the run its history backward
       writes dams/wofs/<featureId>.json, dams/wofs-status.json
@@ -2166,7 +2167,8 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
   DWS pass already uses fits both: the worker never reaches the public
   bucket or DE Africa's STAC (so the S3 interface endpoint's policy and the
   VPC's lack of internet stay as they are), and the fetcher, the one Lambda
-  with internet, has no database. Waterbodies is a small CSV per waterbody.
+  with internet, has no database. Waterbodies is a small CSV per waterbody
+  from DE Africa's API, plus a WFS lookup of its id.
   WOfS is a GeoTIFF/COG per Landsat scene in UTM, 30 m, read through STAC
   search: a tiled DEFLATE TIFF the Node fetcher decodes with `node:zlib`
   (the CHIRPS reader's own TIFF code), reading only the tiles over a dam.
@@ -2220,18 +2222,37 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
   ~10 000 keys) takes about 50 ticks (four hours at one tick every 5
   minutes) instead of one invocation that times out.
 - **Rows kept from a Waterbodies series**: the wet area (`area_wet_m2`) and
-  the share seen clearly (100 − `pc_invalid`), per date; a date nothing was
-  seen on is dropped (stored as 0 m² it would read as an empty dam), and a
-  partly seen one keeps its share so the reader picks the threshold. The
-  wet area counts only the part seen.
-- **Frozen upstream.** The public Waterbodies series were last written
-  2024-02-26 and end 2023-09-17 (checked 2026-10-27), so WOfS is the
-  current source. The Waterbodies pass still reads them weekly (a 304 each),
-  publishes a heartbeat (alarmed) and its recency (not alarmed).
+  the share seen clearly (`percent_observed` − `percent_invalid`: the API's
+  observed is the part of the waterbody the scene covered, invalid the part
+  of it under cloud, both shares of the historical extent; so this is
+  `percent_wet` + `percent_dry`, and with a whole scene 100 −
+  `percent_invalid`, as v0.0.2's 100 − `pc_invalid` was), per date; a date
+  nothing was seen on is dropped (stored as 0 m² it would read as an empty
+  dam), and a partly seen one keeps its share so the reader picks the
+  threshold. The wet area counts only the part seen.
+- **The Waterbodies source** is DE Africa's Waterbodies API (v0.0.3),
+  which they named the supported way to the series (2026-10-30; the
+  v0.0.2 CSVs on S3 the pass read before end in 2023-09) and keep current
+  within about a week. The API is keyed by an integer `wb_id`; the pass
+  asks DE Africa's GeoServer WFS for a uid's `wb_id` once and keeps it in
+  `dams/waterbodies-status.json` (`perKey.wbId`), rather than storing it in
+  `waterbody_reference` at load: only the fetcher, which has the internet,
+  needs it, and so no migration, no reload of the polygons and no change
+  to the wanted list. A uid without one is due at once (so every uid a
+  v0.0.2 CSV gave a file is re-read on the first run); a 404 from the API
+  drops the id, so a changed one is looked up again. The API sends no
+  `ETag`, so instead of a conditional GET each weekly ask is incremental:
+  from 60 days before the newest date held (`OVERLAP_DAYS`), merged into
+  the file (adding and revising dates, never dropping one, so an empty
+  answer can't erase history); the whole series is asked on the first fetch, when the file is
+  another id's, and every 91 days (`FULL_REFRESH_DAYS`, `perKey.fullAt`).
+  A week with nothing new writes no file, so the worker loads nothing.
+  Heartbeat and recency are both alarmed (the recency's missing data not
+  breaching: no matched dam, no metric).
 - **Politeness**: the feeds' User-Agent and host allowlist
-  (`FEED_HOSTS`, feeds/http.ts), one request a second, a conditional GET on
-  the ETag kept, `Retry-After` honoured, and a 403 or throttling stops the
-  pass (the other source's pass still runs; the invocation fails at the end,
+  (`FEED_HOSTS`, feeds/http.ts), one request a second, Waterbodies'
+  incremental asks (above), `Retry-After` honoured, and a 403 or
+  throttling stops the pass (the other source's pass still runs; the invocation fails at the end,
   never retried) and **pauses that source** (below).
 - **A refusal pauses the source** (issue #604's rule: a 403 stops the run
   and alerts, never a retry). Once a pass stopped `refused` (403) or
@@ -2247,11 +2268,12 @@ worker tick: each status, then each key due by its load mark (≤ 200 a tick, ol
   UTC day it spans has heartbeats before or after it. The first run after
   the pause asks again; a source that refuses again pauses again.
 - **Locally** (`FEED_SOURCE=fixtures`) the pass reads the committed
-  synthetic series (`backend/fixtures/waterbodies/series/`), so dev, CI and
+  synthetic fixture (the polygons' `wb_id` for the WFS,
+  `backend/fixtures/waterbodies/series/<wb_id>.csv` for the API), so dev, CI and
   e2e need no network. `pnpm dev:dams:run` runs tick → pass → tick once
   through a scratch directory ([run-locally.md § Dam observations](./run-locally.md#dam-observations)).
 - **WOfS, summed inside our own outlines** (R5-C,
-  `backend/src/dams/observed/wofs/`). The current source: DE Africa's
+  `backend/src/dams/observed/wofs/`). The source for every traced dam: DE Africa's
   `wofs_ls` collection, one item per Landsat path/row scene, each a COG of
   WOfS's per-pixel bit flags. The pass (`pass.ts`) takes the dams in turn
   (never tried first, then the oldest turn) and, per dam, searches STAC

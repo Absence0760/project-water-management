@@ -28,8 +28,8 @@
 //      matched_at, so a dam matched or redrawn after the file was fetched gets
 //      its series. A key that isn't due costs no GET. A due key's file is
 //      read; it is loaded only when its fetchedAt is newer than the mark's or
-//      its dams changed (a 304 week moves lastGood but not the file, so it
-//      costs one GET a week and no load). At most LOADS_PER_TICK files are
+//      its dams changed (a week with nothing new upstream moves lastGood but
+//      not the file, so it costs one GET a week and no load). At most LOADS_PER_TICK files are
 //      read a tick, the oldest lastGood first and keys whose last attempt
 //      failed after the others; the rest wait for the next tick.
 //   4. Radar (s1) only as DAM_OBSERVATIONS_S1 allows (handover.ts damS1Mode;
@@ -131,7 +131,7 @@ export interface DamsTickResult {
 	loaded: number;
 	unreached: number;
 	failed: number;
-	/** Files read whose fetch was already loaded (a 304 week): the mark moved, nothing was loaded. */
+	/** Files read whose fetch was already loaded (a week with nothing new upstream): the mark moved, nothing was loaded. */
 	unchanged: number;
 	/** Due files left for the next tick (past LOADS_PER_TICK). */
 	deferred: number;

@@ -67,6 +67,9 @@ export const WORLDCOVER_STATEMENT = '© ESA WorldCover project 2021 / Contains m
 
 /** Digital Earth Africa's credit (CC BY 4.0) for the dam observations: the backend's `DEAFRICA_ATTRIBUTION` (dams/observed/upstream.ts), word for word. */
 export const DEAFRICA_STATEMENT = 'Digital Earth Africa, CC BY 4.0';
+/** The paper DE Africa ask formal documents to cite for Waterbodies (DE Africa to the operator, 2026-10-30; docs/data-sources.md deafrica-waterbodies-series). */
+export const WATERBODIES_CITATION =
+	'Halabisky, M., Yuan, F., Adimou, G., et al. (2024). A dynamic surface water extent service for Africa developed through continental-scale collaboration. Frontiers in Environmental Science 12, 1251315. https://doi.org/10.3389/fenvs.2024.1251315';
 
 /**
  * Copernicus's credit for Sentinel-2 and Sentinel-1 values (issue #624): the backend's `SENTINEL_ATTRIBUTION`
@@ -298,7 +301,8 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licence: 'Creative Commons Attribution 4.0 (CC BY 4.0), commercial use allowed with attribution',
 		licenceUrl: 'https://creativecommons.org/licenses/by/4.0/',
 		read: '2026-10-27',
-		statements: [DEAFRICA_STATEMENT]
+		statements: [DEAFRICA_STATEMENT],
+		citation: WATERBODIES_CITATION
 	},
 	{
 		id: 'copernicus-sentinel',

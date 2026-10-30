@@ -5,7 +5,7 @@
 //
 // The worker's tick (match the traced dams, write dams/wanted.json), the
 // fetcher's Waterbodies pass (FEED_SOURCE=fixtures by default: the committed
-// synthetic series, no network) and its WOfS pass (the synthetic STAC and
+// synthetic polygons' wb_id and series, no network) and its WOfS pass (the synthetic STAC and
 // scenes, dams/observed/wofs/fixtures.ts), then the tick again (load what the pass
 // wrote into dam_observation). With DAM_OBSERVATIONS_S2=on (off by default,
 // as in production) the Sentinel-2 pass runs after WOfS, on the synthetic

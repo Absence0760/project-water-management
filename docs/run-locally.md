@@ -493,12 +493,15 @@ pnpm dev:dams:run         # tick (match, wanted list) → Waterbodies pass → W
 
 It prints what each step did; Sandspruit's dams match all but Grootdraai
 (merged: its waterbody runs downstream) and Klipdrift (none), and the
-matched ones get a series ending 2023-09-17, as the public series do. The
+matched ones get a series to 2026-10-11 (the fixture answers DE Africa's
+WFS lookup of each uid's id, then their API's series, from
+`backend/fixtures/waterbodies/`). The
 handover goes through `MIRROR_URL` when it names a directory of its own,
 else a scratch directory under the system's temp directory, never the
 committed `backend/fixtures/mirror/`. Run it again within the week and
 every uid is fresh (asked within 7 days; a failed one waits a day): nothing
-is asked. A week on, the pass asks with each file's ETag and gets 304s.
+is asked. A week on, the pass asks each series from 60 days before its
+newest date, finds nothing new, and writes no file.
 
 The WOfS pass reads invented scenes (`backend/fixtures/feeds/wofs-sample.json`,
 `backend/src/dams/observed/wofs/fixtures.ts`) for every traced dam: about

@@ -25,7 +25,7 @@ import { FeedRefusedError, FeedThrottledError, FeedUnavailableError } from './er
 import { CHC_BASE } from './sources/chirps.js';
 import { CPC_BASE } from './sources/cpc.js';
 import { DWS_BASE } from './sources/dws.js';
-import { DEAFRICA_SERVICES_BASE } from '../dams/observed/upstream.js';
+import { DEAFRICA_GEOSERVER_WFS, DEAFRICA_SERVICES_BASE, DEAFRICA_WATERBODIES_API } from '../dams/observed/upstream.js';
 import { S1_S3_BASE, S2_C1_S3_BASE, WOFS_STAC_SEARCH } from '../dams/observed/wofs/stac.js';
 import { SSEBOP_BASE, WAPOR_BASE } from '../water-use/observed/upstream.js';
 
@@ -132,8 +132,11 @@ export function userAgent(contact: string | undefined = process.env.FEEDS_CONTAC
 export const FEED_HOSTS: readonly string[] = [
 	new URL(CHC_BASE).host,
 	new URL(DWS_BASE).host,
-	// Digital Earth Africa's public bucket: the Waterbodies series and the WOfS scenes (dams/observed, issue #604 R5).
+	// Digital Earth Africa's public bucket: the WOfS scenes (dams/observed, issue #604 R5).
 	new URL(DEAFRICA_SERVICES_BASE).host,
+	// Digital Earth Africa's Waterbodies API and GeoServer WFS: the Waterbodies series and a uid's wb_id (dams/observed/waterbodies.ts). FEED_HOST_PATHS keeps each to its path.
+	new URL(DEAFRICA_WATERBODIES_API).host,
+	new URL(DEAFRICA_GEOSERVER_WFS).host,
 	// Digital Earth Africa's STAC search: the WOfS scenes over a dam (dams/observed/wofs, issue #604 R5-C).
 	new URL(WOFS_STAC_SEARCH).host,
 	// Digital Earth Africa's Sentinel-2 L2A Collection 1 and Sentinel-1 RTC buckets (dams/observed, issue #624).
@@ -148,8 +151,9 @@ export const FEED_HOSTS: readonly string[] = [
 ];
 
 /**
- * Hosts shared with things that aren't our sources, and the only path
- * prefixes a live fetch may ask on them (each ends in `/`). Google Cloud
+ * Hosts shared with things that aren't our sources (or serving far more
+ * than we read), and the only path prefixes a live fetch may ask on them
+ * (each ends in `/`, but the WFS endpoint's, which is its path). Google Cloud
  * Storage serves every bucket from one host, so allowing the host alone
  * would let a redirect, or a later code path, read any public bucket. The
  * path is the URL's parsed one, dot segments (`..`, `%2e%2e`) already
@@ -157,7 +161,10 @@ export const FEED_HOSTS: readonly string[] = [
  */
 export const FEED_HOST_PATHS: Readonly<Record<string, readonly string[]>> = {
 	[new URL(WAPOR_BASE).hostname]: [new URL(WAPOR_BASE).pathname],
-	[new URL(SSEBOP_BASE).hostname]: [new URL(SSEBOP_BASE).pathname]
+	[new URL(SSEBOP_BASE).hostname]: [new URL(SSEBOP_BASE).pathname],
+	// Not shared hosts, but services with far more than we read: the Waterbodies API's tree, and the one WFS endpoint.
+	[new URL(DEAFRICA_WATERBODIES_API).hostname]: [new URL(DEAFRICA_WATERBODIES_API).pathname],
+	[new URL(DEAFRICA_GEOSERVER_WFS).hostname]: [new URL(DEAFRICA_GEOSERVER_WFS).pathname]
 };
 
 /** Redirects followed per request, each checked against FEED_HOSTS. */

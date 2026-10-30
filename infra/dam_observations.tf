@@ -190,12 +190,6 @@ resource "aws_cloudwatch_metric_alarm" "dam_pass_heartbeat" {
 # passes every 8 days with two satellites; past dam_wofs_recency_alarm_days
 # WOfS (or our pass over it) has stopped producing. Missing is breaching, as
 # for the heartbeat.
-#
-# No recency alarm for waterbodies, on purpose: DE Africa's public
-# per-waterbody CSVs (waterbodies/v0.0.2/surface_area_change/) were last
-# written 2024-02-26 and end 2023-09-17 (checked 2026-10-27, docs/data-sources.md),
-# so it would fire from the first day. The pass still publishes the metric,
-# and the heartbeat above still alarms if the pass stops.
 resource "aws_cloudwatch_metric_alarm" "dam_recency_wofs" {
   count = local.dams_enabled && local.alarms_essential ? 1 : 0
 
@@ -214,6 +208,37 @@ resource "aws_cloudwatch_metric_alarm" "dam_recency_wofs" {
 
   dimensions = {
     Source = "wofs"
+  }
+}
+
+# Waterbodies' recency: DamObservationAgeDays{Source=waterbodies}, the days
+# from the run back to the newest date any matched dam's series holds. DE
+# Africa's Waterbodies API (v0.0.3) keeps the series current within about a
+# week (DE Africa, 2026-10-30; docs/data-sources.md), and a date enters it
+# only when 90 % of the waterbody was seen clearly, so a cloudy spell leaves
+# gaps: past dam_waterbodies_recency_alarm_days the service (or our pass over
+# it) has stopped. Missing is NOT breaching here, unlike WOfS: the metric is
+# published only while some matched dam holds a date, and a region whose
+# traced dams all merge with neighbours or fall under Waterbodies' minimum
+# has none; a pass that stops is the heartbeat's alarm above.
+resource "aws_cloudwatch_metric_alarm" "dam_recency_waterbodies" {
+  count = local.dams_enabled && local.alarms_essential ? 1 : 0
+
+  alarm_name          = "${local.project}-dam-recency-waterbodies"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  metric_name         = local.dam_recency_metric
+  namespace           = local.dam_metric_namespace
+  period              = 86400
+  statistic           = "Minimum"
+  threshold           = var.dam_waterbodies_recency_alarm_days
+  alarm_description   = "The newest DE Africa Waterbodies observation any matched dam holds is more than ${var.dam_waterbodies_recency_alarm_days} days old. Check a matched waterbody's series on api.digitalearth.africa (or DE Africa's Waterbodies map) for recent dates before suspecting our pass; logs: filter message.event = \"dams_pass\" and message.source = \"waterbodies\" on the fetcher log group, and dams/waterbodies-status.json in the mirror bucket for per-uid errors (docs/deployment.md § Dam observations)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    Source = "waterbodies"
   }
 }
 

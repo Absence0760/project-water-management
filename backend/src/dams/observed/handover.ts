@@ -108,8 +108,10 @@ export interface PassStatus {
 	/**
 	 * Per key: the last good fetch (ISO time), the newest observation date held, the last error (a fixed code), and
 	 * the last time it was asked for at all (Waterbodies only: a key that keeps failing is asked again a day later, not every run).
+	 * Waterbodies only, too: the uid's integer id in DE Africa's API (wbId, from their WFS once, waterbodies.ts) and when
+	 * its whole series was last fetched (fullAt; the weekly fetches between ask only the recent part).
 	 */
-	perKey: Record<string, { lastGood?: string; newest?: string; error?: string; triedAt?: string }>;
+	perKey: Record<string, { lastGood?: string; newest?: string; error?: string; triedAt?: string; wbId?: number; fullAt?: string }>;
 }
 
 type Env = Record<string, string | undefined>;
@@ -207,7 +209,16 @@ export const PassStatusSchema = z
 		retryAfterSeconds: z.number().int().min(0).max(31_536_000).optional(),
 		perKey: z.record(
 			z.string().max(64),
-			z.object({ lastGood: IsoTime.optional(), newest: IsoDay.optional(), error: z.string().max(100).optional(), triedAt: IsoTime.optional() }).strict()
+			z
+				.object({
+					lastGood: IsoTime.optional(),
+					newest: IsoDay.optional(),
+					error: z.string().max(100).optional(),
+					triedAt: IsoTime.optional(),
+					wbId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+					fullAt: IsoTime.optional()
+				})
+				.strict()
 		)
 	})
 	.strict();
@@ -276,7 +287,7 @@ export const stopRetryAfter = (err: unknown): number | undefined => {
 export const DAM_METRIC_NAMESPACE = 'water-management/DamObservations';
 /** Heartbeat: 1 per completed pass, dimension Source. Alarmed when missing for two days (each source). */
 export const DAM_PASS_METRIC = 'DamPassCompleted';
-/** Data recency: days from today back to the newest observation date any key holds, dimension Source. Alarmed for wofs and s2 (not the frozen waterbodies). */
+/** Data recency: days from today back to the newest observation date any key holds, dimension Source. Alarmed per source (infra/dam_observations.tf). */
 export const DAM_RECENCY_METRIC = 'DamObservationAgeDays';
 /** The dimension's name. */
 export const DAM_METRIC_DIMENSION = 'Source';

@@ -2671,10 +2671,20 @@ One Terraform variable, off by default:
   - `water-management-dam-recency-wofs`: `DamObservationAgeDays{Source=wofs}`
     above `dam_wofs_recency_alarm_days` (default 60) for two days, or
     missing: no traced dam has a WOfS observation that recent.
-  - **No recency alarm for Waterbodies**: its public series have been
-    frozen upstream since 2024-02 (data-sources.md), so it would fire from
-    the first day.
+  - `water-management-dam-recency-waterbodies`:
+    `DamObservationAgeDays{Source=waterbodies}` above
+    `dam_waterbodies_recency_alarm_days` (default 60) for two days: no
+    matched dam's DE Africa Waterbodies series has a date that recent
+    (their API keeps it current within about a week, data-sources.md).
+    Missing data does **not** breach this one: the metric is published only
+    while some matched dam holds a date, and a region whose traced dams
+    all merge or fall under Waterbodies' minimum has none (the heartbeat
+    still covers a stopped pass). When it fires, check a matched
+    waterbody's series on DE Africa's side first, then the pass's per-uid
+    errors in `dams/waterbodies-status.json` (`no_waterbody`: the polygons
+    loaded aren't v0.0.3's; `HTTP 404`: the API doesn't know the id).
 - **`dam_wofs_recency_alarm_days`** (default 60, at least 21).
+- **`dam_waterbodies_recency_alarm_days`** (default 60, at least 21).
 - **`dam_s2_enabled`** (default `false`; issue #624): only with
   `dam_observations_enabled`, sets the fetcher's `DAM_OBSERVATIONS_S2 = "on"`,
   so each run's Sentinel-2 pass follows WOfS (WOfS then up to 65 % of the
@@ -2721,6 +2731,19 @@ ever lacks `DAM_OBSERVATIONS = "on"`, since without it the worker never
 writes the wanted list nor loads what the passes fetch, while the
 heartbeats stay green.
 
+**Waterbodies from DE Africa's API (2026-10-30).** The pass reads the
+series from DE Africa's Waterbodies API instead of the v0.0.2 CSVs on S3,
+which ended in 2023-09 (data-sources.md). It needs a backend release (the
+fetcher's code: the API and WFS hosts in `FEED_HOSTS`) and a Terraform
+apply only for the new `dam-recency-waterbodies` alarm; the fetcher runs
+outside the VPC with open egress, so no network change. Nothing to reload:
+the v0.0.3 polygons already loaded carry the uids the WFS maps to ids. On
+a stack where the dam observations were already on, the first run after
+the release re-reads every matched uid's whole series (a uid with no id
+in the status is due at once); the rows the v0.0.2 CSVs gave on dates the
+API's series doesn't hold (it keeps only dates under 10 % cloud) stay in
+`dam_observation`, flagged by their own `pct_observed`.
+
 ### Turning it on
 
 1. Nothing to change in the worker: `infra/jobs.tf` sets its
@@ -2737,7 +2760,8 @@ heartbeats stay green.
    traced on a project's map: with none, the WOfS pass has nothing to hold
    and its recency alarm fires. The first worker tick matches the traced
    dams and writes `dams/wanted.json`; the next hourly run (at :20) fetches
-   the matched dams' series (a few, at 1 a second) and each dam's newest
+   the matched dams' series (one WFS lookup of their DE Africa ids, then
+   a series each, at 1 a second) and each dam's newest
    WOfS scenes, the runs after it the WOfS history, and each tick after
    loads what came in. Check: Logs Insights on the fetcher log group,
    `filter message.event = "dams_pass"`, then `filter message.event =
@@ -2757,8 +2781,9 @@ log group: `filter message.event = "dams_pass" and message.source =
   nothing and publishes no heartbeat for 24 hours from the stop, or for a
   longer `Retry-After` it gave, then asks again by itself. Nothing to
   restart. Find out why before the pause ends: a 403 from DE Africa's
-  bucket or STAC is a block on the fetcher's address or a policy change,
-  so ask DE Africa (data-sources.md has the contact) and, until they
+  bucket, STAC, Waterbodies API or GeoServer is a block on the fetcher's
+  address or a policy change, so ask DE Africa (data-sources.md has the
+  contact) and, until they
   answer, set `dam_observations_enabled = false` so the next run doesn't
   meet it again; throttling that recurs means our pace is too fast for
   them (`REQUEST_INTERVAL_MS`, `STAC_INTERVAL_MS`, `SCENE_INTERVAL_MS`).

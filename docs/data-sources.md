@@ -74,7 +74,7 @@ Every job that fetches from an upstream:
 | [chirps](#chirps) | CHIRPS v3 daily rainfall (`rnl`, `sat` final and preliminary) | live (feeds paused since 2026-10-25, CHC's 403s); the copy in R1–R3 | `data.chc.ucsb.edu` | `chirps` | `backend/src/feeds/sources/chirps.ts`; R2 `ingest/chirps_final.py`, `backend/src/ingest/daily.ts` |
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until the stations' records are loaded (`load-reference.yml` kind `dws`) | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
-| [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies: v0.0.2 per-waterbody wet-area series and v0.0.3 polygons (built R5-A) | built; off in production until `dam_observations_enabled`; the public series frozen upstream since 2024-02 | `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
+| [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies v0.0.3: per-waterbody wet-area series from their Waterbodies API (by `wb_id`, from their WFS) and the polygons (built R5-A) | built; off in production until `dam_observations_enabled` | `api.digitalearth.africa`, `geoserver.digitalearth.africa` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
 | [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `sum.ts`), `backend/src/raster/` (`cog.ts`, `mask.ts`, `utm.ts`) |
 | [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | built, off by default (#624 step 4: the pass, behind `DAM_OBSERVATIONS_S2` / `dam_s2_enabled`; not shown on a screen yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s2.ts`, `pass.ts`); `wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`) |
 | [deafrica-sentinel-1](#deafrica-sentinel-1) | DE Africa Sentinel-1 RTC (`s1_rtc`), radar water as a secondary dam observation (issue #624) | built, off by default (#624 step 5: the pass and the S1/S2 agreement report, behind `DAM_OBSERVATIONS_S1` / `dam_s1_mode`: `measure` runs it with no radar shown, `on` also loads radar for the dams whose own agreement passes) | `deafrica-sentinel-1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s1.ts`, `pass.ts`, `agreement.ts`); `wofs/stac.ts` (`assetUrl`, `s1_rtc`) |
@@ -277,59 +277,109 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
 
 ### deafrica-waterbodies-series
 
-- **Source:** Digital Earth Africa Waterbodies. The per-waterbody surface
-  area series, `waterbodies/v0.0.2/surface_area_change/<uid[0..4]>/<uid>.csv`
-  (header `date,px_total,px_wet,area_wet_m2,px_dry,area_dry_m2,px_invalid,area_invalid_m2,pc_wet,pc_dry,pc_invalid`),
-  for each dam matched to a waterbody; and the waterbody polygons,
-  `waterbodies/v0.0.3/historical_extent/waterbodies.gpkg` (about 900 MB, the
-  continent), which the operator clips and loads as a reference dataset
-  ([maps.md § Waterbodies](./maps.md#waterbodies)).
-- **Host:** `deafrica-services.s3.af-south-1.amazonaws.com` (the
-  `deafrica-services` bucket over HTTPS, anonymous; the same region as the
-  app). `FEED_HOSTS` holds it for the fetcher's live client.
+- **Source:** Digital Earth Africa Waterbodies v0.0.3. The per-waterbody
+  surface area series from their **Waterbodies API**,
+  `https://api.digitalearth.africa/waterbodies/waterbody/<wb_id>/observations/csv?start_date=…&end_date=…`
+  (header `date,area_wet_m2,percent_wet,area_dry_m2,percent_dry,area_invalid_m2,percent_invalid,area_observed_m2,percent_observed`),
+  for each dam matched to a waterbody. The API is keyed by an integer
+  `wb_id`, not the `uid` (geohash) the polygons carry, so each uid's
+  `wb_id` comes from their GeoServer WFS once,
+  `https://geoserver.digitalearth.africa/geoserver/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=waterbodies:DEAfrica_Waterbodies_v0_0_3&outputFormat=application/json&propertyName=uid,wb_id&cql_filter=uid IN ('…','…')`
+  (up to 50 uids a request; the answer has no geometry). And the waterbody
+  polygons, `waterbodies/v0.0.3/historical_extent/waterbodies.gpkg` on
+  their public bucket (about 900 MB, the continent; it carries `wb_id` too),
+  which the operator clips and loads as a reference dataset
+  ([maps.md § Waterbodies](./maps.md#waterbodies)). DE Africa (Michael
+  Wellington, Earth Observation Scientist, to the operator, 2026-10-30)
+  named the API the supported way to the series: the v0.0.2 CSVs on S3
+  (`waterbodies/v0.0.2/surface_area_change/`, which this pass read until
+  then) end in 2023-09, and v0.0.3 publishes none. They keep the API
+  current within about a week (checked 2026-10-30: a Western Cape
+  waterbody's series ran to 2026-10-11), and note uids may change between
+  versions.
+- **Hosts:** `api.digitalearth.africa` (the Waterbodies API, uvicorn; no
+  `ETag` or `Last-Modified`) and `geoserver.digitalearth.africa`
+  (GeoServer), both HTTPS and anonymous. `FEED_HOSTS` holds both for the
+  fetcher's live client, and `FEED_HOST_PATHS` keeps them to
+  `/waterbodies/` and `/geoserver/wfs`. The polygons' bucket,
+  `deafrica-services.s3.af-south-1.amazonaws.com`, is the operator's
+  download only (the fetcher reads WOfS from it).
 - **Licence:** CC BY 4.0 (Digital Earth Africa, read by the lead
-  2026-10-27; [maps.md § Sources](./maps.md#sources)).
+  2026-10-27, confirmed by DE Africa 2026-10-30;
+  [maps.md § Sources](./maps.md#sources)).
 - **Attribution:** "Digital Earth Africa, CC BY 4.0"
   (`dams/observed/upstream.ts` `DEAFRICA_ATTRIBUTION`) wherever an observed
-  value shows (R5-B's chart and farmer view), and on `/data-sources`.
+  value shows (R5-B's chart and farmer view), and on `/data-sources`. In
+  formal documents DE Africa ask for the paper:
+  Halabisky, M., Yuan, F., Adimou, G., et al. (2024). A dynamic surface water extent service for Africa developed through continental-scale collaboration. Frontiers in Environmental Science 12, 1251315. https://doi.org/10.3389/fenvs.2024.1251315
+  (the Data sources and credits page shows it as the entry's citation,
+  `frontend/src/lib/components/legal/dataCredits.ts`; the evidence pack
+  doesn't count Waterbodies, [evidence-pack.md](./evidence-pack.md), so
+  it cites nothing of it).
 - **Contact:** Digital Earth Africa's help desk and community forum
-  (digitalearthafrica.org; docs.digitalearthafrica.org).
+  (digitalearthafrica.org; docs.digitalearthafrica.org); Michael
+  Wellington answered the operator's question about the series
+  (2026-10-30).
 - **Access pattern:** the fetcher's `dams-weekly` mode (run hourly at
-  :20, `infra/dam_observations.tf`) reads `dams/wanted.json` and asks
-  for each matched dam's uid whose last good fetch is 7 days old or more
-  (and that wasn't asked within the last day, so a failing uid is asked
-  once a day, not hourly), oldest first, with `If-None-Match` on the ETag the last fetch kept: an
-  unchanged file costs a 304 and no body. It writes `dams/waterbodies/<uid>.json`
+  :20, `infra/dam_observations.tf`) reads `dams/wanted.json` and, for each
+  matched dam's uid whose last good fetch is 7 days old or more (and that
+  wasn't asked within the last day, so a failing uid is asked once a day,
+  not hourly), oldest first: first the `wb_id` of the due uids that have
+  none, in one WFS request per 50, kept in `dams/waterbodies-status.json`
+  (`perKey.wbId`; a uid without one is due at once, so the first run after
+  this change re-reads every uid the v0.0.2 CSVs gave a file); then the
+  series. No conditional GET (the API sends no validator), so the weekly
+  ask is incremental instead: from 60 days before the newest date held to
+  today, merged into the file held (new and revised dates; a date held is
+  never dropped by a weekly answer, so an empty or short one can't erase
+  history). The whole series (from 1984-01-01) is
+  asked on the first fetch, when the file held is another `wb_id`'s or
+  v0.0.2's, and every 91 days (`perKey.fullAt`), so a reprocessed history
+  shows within a quarter. A weekly ask that brings nothing new writes no
+  file (the worker then loads nothing). It writes `dams/waterbodies/<uid>.json`
   and `dams/waterbodies-status.json`; the worker loads them into
   `dam_observation` for every dam matched to that uid
   (`backend/src/dams/observed/`). Only uids our dams overlap are ever asked,
   and the polygons are a reference load, never fetched by the app.
-- **Limits we keep to:** one request a second; at most 30 % of the run's
-  time (the rest is WOfS's); feeds/http.ts's User-Agent, host allowlist,
-  20 s timeout and 4 MB cap; a 429/503 pauses the host for its
+- **Limits we keep to:** one request a second, the WFS lookups included;
+  at most 30 % of the run's time (the rest is WOfS's); feeds/http.ts's
+  User-Agent, host allowlist and path prefixes, 20 s timeout and 4 MB cap
+  (a whole series is about 40 KB); a 429/503 pauses the host for its
   `Retry-After` and stops the run, as does a 403, never retried: the status
   says `stopped` and why, the invocation fails (the fetcher's Errors alarm),
   and the heartbeat still goes out. Then the source is **paused** for 24
   hours from that run (or the `Retry-After`, if longer): the hourly runs ask
   it nothing and publish no heartbeat for it, so its heartbeat alarm fires
-  ([architecture.md § Dam observations](./architecture.md#dam-observations)). A 404 (a uid with no
-  series) or a changed layout is recorded for that uid, which waits a day,
-  and the run goes on.
+  ([architecture.md § Dam observations](./architecture.md#dam-observations)).
+  A uid the WFS doesn't know (`no_waterbody`: the polygons loaded aren't
+  v0.0.3's, or DE Africa dropped it), a 404 from the API (its `wb_id` is
+  then forgotten and looked up again next time, in case it changed) or a
+  changed layout is recorded for that uid, which waits a day, and the run
+  goes on.
 - **Rows kept:** `wet_area_m2` = `area_wet_m2`, `pct_observed` =
-  100 − `pc_invalid`; a date with nothing seen clearly (`pc_invalid` 100 or
-  an empty `pc_wet`) is dropped, since 0 m² wet on a date nobody saw reads
-  as an empty dam ([architecture.md § Dam observations](./architecture.md#dam-observations)).
+  `percent_observed` − `percent_invalid`. In the API's rows wet + dry +
+  invalid = observed (areas and percents alike), each a share of the
+  waterbody's historical extent: `percent_observed` is how much of the
+  waterbody the scene covered at all (under 100 where the scene's edge cuts
+  it), `percent_invalid` the part under cloud or shadow, so the difference
+  (= `percent_wet` + `percent_dry`) is the share seen clearly, what
+  `pct_observed` has always meant (v0.0.2 gave it as 100 − `pc_invalid`).
+  DE Africa's series holds only dates under 10 % invalid, so most rows are
+  90–100. A date with nothing seen clearly is dropped, since 0 m² wet on a
+  date nobody saw reads as an empty dam
+  ([architecture.md § Dam observations](./architecture.md#dam-observations)).
 - **Freshness:** the pass's heartbeat (`DamPassCompleted{Source=waterbodies}`)
-  alarms when missing for 18 hours (a refusal's pause included). **No recency alarm, on purpose.**
-  Checked 2026-10-27: the public series objects were last written
-  2024-02-26 and a sampled series ends 2023-09-17, though the product says
-  it updates weekly. A recency alarm would fire from day one; the metric
-  (`DamObservationAgeDays{Source=waterbodies}`) is still published, so a
-  restart upstream shows. Ask DE Africa whether the public series will be
-  updated again (operator step).
+  alarms when missing for 18 hours (a refusal's pause included), and its
+  recency (`DamObservationAgeDays{Source=waterbodies}`, the newest date any
+  matched dam holds) alarms above `dam_waterbodies_recency_alarm_days`
+  (default 60) for two days. Missing recency doesn't alarm: it is
+  published only while some matched dam holds a date.
 - **Fallback:** [deafrica-wofs-scenes](#deafrica-wofs-scenes) (R5-C): WOfS summed inside
-  the dam's own outline, current (the newest Western Cape scene 2026-10-20
-  when checked), and the only source for a dam Waterbodies merges or misses.
+  the dam's own outline, current, and the only source for a dam Waterbodies
+  merges or misses.
+- **Offline:** `FEED_SOURCE=fixtures` answers the WFS from the synthetic
+  polygons' `wb_id` and the API from `backend/fixtures/waterbodies/series/<wb_id>.csv`
+  (`fixtureWaterbodiesHttp`), so dev, CI and e2e never reach either host.
 - **Owner:** the operator; code `backend/src/dams/observed/` (`match.ts`,
   `waterbodies.ts`, `tick.ts`, `handover.ts`), `backend/scripts/import-waterbodies.ts`,
   `infra/dam_observations.tf`.
@@ -398,7 +448,7 @@ for the WOfS backfill's pace only: each key keeps its own cadence below.
   the other where their grids line up (architecture.md § Dam observations).
   No row for a date the dam's outline
   holds no pixel centre or the scene's footprint missed it.
-- **Fallback:** none current: Waterbodies' public series are frozen
+- **Fallback:** Waterbodies' series for a dam matched to one waterbody
   ([deafrica-waterbodies-series](#deafrica-waterbodies-series)), and
   Sentinel-2 and Sentinel-1 ([deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1),
   [deafrica-sentinel-1](#deafrica-sentinel-1)): Sentinel-2's pass is built

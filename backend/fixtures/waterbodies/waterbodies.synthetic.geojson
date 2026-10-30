@@ -5,6 +5,7 @@
    "type": "Feature",
    "properties": {
     "uid": "k3zpusf05v",
+    "wb_id": 900001,
     "area_m2": 47922
    },
    "geometry": {
@@ -39,6 +40,7 @@
    "type": "Feature",
    "properties": {
     "uid": "k6p051kvwp",
+    "wb_id": 900002,
     "area_m2": 63918
    },
    "geometry": {
@@ -73,6 +75,7 @@
    "type": "Feature",
    "properties": {
     "uid": "k6p070ufn0",
+    "wb_id": 900003,
     "area_m2": 55962
    },
    "geometry": {
@@ -107,6 +110,7 @@
    "type": "Feature",
    "properties": {
     "uid": "k6p0he40eu",
+    "wb_id": 900004,
     "area_m2": 63924
    },
    "geometry": {
@@ -141,6 +145,7 @@
    "type": "Feature",
    "properties": {
     "uid": "k6p0j8r6wp",
+    "wb_id": 900005,
     "area_m2": 21917
    },
    "geometry": {
@@ -175,6 +180,7 @@
    "type": "Feature",
    "properties": {
     "uid": "k6p0kdkzrd",
+    "wb_id": 900006,
     "area_m2": 399745
    },
    "geometry": {
@@ -209,6 +215,7 @@
    "type": "Feature",
    "properties": {
     "uid": "k6p0s964gu",
+    "wb_id": 900007,
     "area_m2": 27429
    },
    "geometry": {
