@@ -16,6 +16,7 @@ import {
 	et0FitWindow,
 	fitScoredThrough,
 	finishAutoCalibration,
+	locationCalibrationSettings,
 	calibrationSeriesKey,
 	fitRecordFromReport,
 	planAutoCalibration,
@@ -329,7 +330,13 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
 	const current = mergeSettings(p[0]!.settings);
 	const pan = kept.pan.values ? { panCoefficient: [...kept.pan.values], panCoefficientSource: `${kept.pan.label} preset (automated calibration)` } : {};
-	const fitSettings = { ...current, ...pan } as ProjectSettings;
+	// The fit is the headline location's (engine 1.110.0, issue #659): a gauge's goes into its row, the outlet's (or, with no
+	// gauge location, the catchment's) into the top level, as the rules varied them (calibrate/auto.ts withHeadlineParams).
+	// Its record reads that location's window, exclusions and quality flags.
+	const at = kept.report.zoneUnits ? (kept.report.zoneNodeId ?? null) : null;
+	if (at !== null && !(current.calibrationZones ?? []).some((z) => z.nodeId === at))
+		throw new ApiError(409, 'the calibration location the rules fitted is no longer in the settings: run them again');
+	const fitSettings = locationCalibrationSettings({ ...current, ...pan } as ProjectSettings, at);
 	const report: AutoCalibrationReport = finishAutoCalibration(a.plan, a.cases);
 	const flowKind = kept.report.flowKind as CalibrationFlowKind;
 	// The fitted record: the outlet's, or the calibration site's gauge record (engine ≥ 1.41.0).
@@ -349,8 +356,14 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 		...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin ?? null } : {}),
 		auto: autoFitRecordOf({ ...report, chosen: a.chosen })
 	});
-	const gr4j = { ...current.gr4j, ...Object.fromEntries(kept.report.free.map((k) => [k, kept.report!.params[k]!])) };
-	const next = patchSettings(p[0]!.settings, { gr4j, ...pan, fitRecord: record } as Record<string, unknown>);
+	const fitted4 = Object.fromEntries(kept.report.free.map((k) => [k, kept.report!.params[k]!]));
+	let patch: Record<string, unknown>;
+	if (at === null) patch = { gr4j: { ...current.gr4j, ...fitted4 }, ...pan, fitRecord: record };
+	else {
+		const rows = current.calibrationZones ?? [];
+		patch = { calibrationZones: rows.map((z) => (z.nodeId === at ? { ...z, gr4j: { ...(z.gr4j ?? pick4(current.gr4j)), ...fitted4 }, fitRecord: record } : z)), ...pan };
+	}
+	const next = patchSettings(p[0]!.settings, patch);
 	await db.query('UPDATE project SET settings = $2, updated_at = now() WHERE id = $1', [projectId, JSON.stringify(next)]);
 	await recordModelRevision(db, projectId, {
 		source: 'settings_patch',
@@ -360,6 +373,9 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 	await db.query('UPDATE auto_calibration SET applied_at = now() WHERE id = $1', [id]);
 	return next;
 }
+
+/** GR4J's X1–X4 of a parameter set (a row holds those four only). */
+const pick4 = (g: ProjectSettings['gr4j']) => ({ x1: g.x1, x2: g.x2, x3: g.x3, x4: g.x4 });
 
 /**
  * Start the uncertainty ensemble around the applied fit on its run, for the

@@ -72,7 +72,11 @@ export const MODEL_INPUT = [
 	'unitRain',
 	'rainStations',
 	'flowMissing',
-	'calibrationZones'
+	'calibrationZones',
+	// The calibration locations' keys (engine 1.110.0, issue #659): stated on every project since, never defaulted.
+	'calibrateAtOutlet',
+	'calibrationRest',
+	'unitParamsFrom'
 ] as const;
 
 /** Stored settings that are no model input (projects/routes.ts withoutRunPolicy): never sent. */
@@ -121,7 +125,7 @@ export function settingsView(
 export const settingsTool: AssistantTool = {
 	spec: specOf(
 		TOOL_NAMES.settings,
-		"The model settings: the runoff model and its parameters (gr4j), the simulation, report and calibration windows, the calibration site and record, the calibration zones (gauges inside the network fitted on their own records, each with its own X1–X4), rain gap filling, evaporation, the EWR and the drought restriction. The run's own by default (as it ran), or the project's as saved now (merged over the engine's defaults). `kinds` says what each setting is: 'calibrated' (fitted to observed flow, or forcing that trades off against the fit: changed only to improve the fit, never an outcome), 'input' (the catchment and its data), 'assessment' (what results are judged against) or 'management' (how water is managed). The network's operating rules (get_network) are management too.",
+		"The model settings: the runoff model and its parameters (gr4j), the simulation, report and calibration windows, the calibration locations (the outlet's, the top-level calibration settings ticked by calibrateAtOutlet, and the gauges' rows of calibrationZones, each fitted on its own record with its own window and X1–X4; calibrationSiteNodeId the headline location, null = auto; calibrationRest what the units with no ticked location downstream take; unitParamsFrom a unit given another location's parameters), rain gap filling, evaporation, the EWR and the drought restriction. The run's own by default (as it ran), or the project's as saved now (merged over the engine's defaults). `kinds` says what each setting is: 'calibrated' (fitted to observed flow, or forcing that trades off against the fit: changed only to improve the fit, never an outcome), 'input' (the catchment and its data), 'assessment' (what results are judged against) or 'management' (how water is managed). The network's operating rules (get_network) are management too.",
 		Args
 	),
 	label: 'Reading the settings',
