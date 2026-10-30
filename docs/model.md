@@ -10583,25 +10583,59 @@ If no fit passes, **none is kept**, and each fit lists why (`selectCase` in
 /projects/:id/auto-calibrations`) plans a run from the **saved** settings
 only: the water years the rules leave out and the cases in order, stored in
 an `auto_calibration` row (108_auto_calibration.sql) with the rules, their
-revision and a SHA-256 of the model input. Each case is then one
-`auto_calibration` background job, which fits it, stores it and queues the
-next, so no job runs longer than one fit; the last picks the fit to keep. A
-case job that finds the input changed since the plan fails the run, saying
-so, since fits on other data wouldn't compare. Before anything is queued, one
-case's time on the job worker is estimated from the model's size (the run's
-days, its nodes, the units with an area and the GR4J warm-up) × the model
-runs a case makes, and rules estimated past 4 minutes a fit (the job
-worker's limit, with room) are refused, asking for a smaller search. The
-estimate reads no clock (`calibration/estimate.ts`): it used to time model
-runs in the request, so a busy server refused rules it had accepted a moment
-before; now the same project and rules always get the same answer. Its
-constants are an upper envelope of fit evaluations measured on 92 networks
-(the largest 0.75 of it), carried to an arm64 Lambda at 1 024 MB by a factor
-of 4, so it errs long. A fit that runs past 4 minutes anyway is stopped by
-its job and the run failed, saying so, rather than cut off by the worker's
-timeout; each case job logs its estimate beside its time
-(`auto_calibration_case`), which is what to re-derive the factor from. The page won't start while the form
-has unsaved rule edits. Every score is the server's own.
+revision and a SHA-256 of the model input. The cases are then fitted by a
+chain of `auto_calibration` background jobs, each queueing the next as the
+same user, so one runs at a time; the last picks the fit to keep. A job that
+finds the input changed since the plan, or the server's engine version
+changed (a release between two jobs), fails the run, saying so, since fits on
+other data or by another engine wouldn't compare. The page won't start while the form has unsaved
+rule edits. Every score is the server's own.
+
+*A fit over several jobs* (290_auto_calibration_work.sql). One fit of the
+default rules (5 starts and the two validation fits, 1 500 model runs each)
+on a fifteen-year catchment is far longer than a job may run (4 minutes on
+the worker, under its 5-minute timeout), so each case's fit is cut into
+pieces. A fit is a list of separate optimisations (each start, the
+split-sample fit, the dry → wet fit, and the fit without the WR2012 penalty
+when it is on), each a DDS search from its own seed. A job runs them in
+order until one more model run would pass its time (or the worker's own
+deadline, when sooner), by the clock, and pauses the search under way there.
+DDS is resumable: its whole state between two model runs is the best point,
+its loss, the runs spent and the generator's 32-bit state (`DdsState`,
+`calibrate/dds.ts`), so the job stores that and the finished optimisations'
+outcomes in the row's `work`, and the next job goes on from them as if the
+search had never stopped. Once every optimisation has run, a job builds the
+case from their outcomes (the report: every start scored, the validation
+tests, the notes; then the run with the fit, the filters and the held-out
+score), the same code the browser's calibration runs (`prepareCalibrationFits`,
+`prepareAutoCase`). So the stored case is, to the bit, what an unbroken fit
+with the same seed gives: the clock decides where the work is cut, never the
+result (`calibrate.test.ts`, `auto.test.ts`, and end to end
+`calibration.db.test.ts`). Each job makes at least one model run or builds a
+case, so a run ends; a job claimed with under 30 seconds left in the worker's
+tick is handed back for the next tick, its attempt given back.
+
+*What is refused.* Before anything is queued, the work is estimated from the
+model's size (the run's days, its nodes, the units with an area and the GR4J
+warm-up) × the model runs it makes, reading no clock
+(`calibration/estimate.ts`), so the same project and rules always get the
+same answer. Its constants are an upper envelope of fit evaluations measured
+on 92 networks (the largest 0.75 of it), carried to an arm64 Lambda at
+1 024 MB by a factor of 4, so it errs long. Only what can't be cut is refused
+by a job's 4 minutes: a fit's last step (scoring it, starts + 12 model runs,
+then a run with it), which on any catchment the app models is seconds. A
+whole run estimated past **6 hours** of worker time is refused too, asking
+for a smaller search: it holds the person's one run and a worker for that
+long. The default rules on the fifteen-year Kleinberg example are estimated
+at about 51 minutes a fit (14 jobs at the estimate's pace, under 2 hours for
+both fits); the worker is likely about 2.5× faster than the estimate (about
+85 ms a model run against its 290 ms), so about 8 jobs and 30 minutes of
+compute for the run; at one job per 5-minute tick of the worker, about 40
+minutes from start to report. A worker far
+slower than estimated (a fit taking more than 3 × its estimated jobs + 4)
+stops the run, saying so, rather than run on. Each job logs its estimate
+beside its time (`auto_calibration_piece`), which is what to re-derive the
+factor from.
 
 **Applied by the server.** *Apply and save the kept fit* (`POST
 …/auto-calibrations/:cid/apply`) writes the kept case's parameters (and, for

@@ -2746,6 +2746,8 @@ export interface AutoCalibration {
 	chosen: number | null;
 	error: string | null;
 	engineVersion: string;
+	/** The case under way once its fit has started: the model runs it has made and makes in all, over its jobs (a fit runs over several). */
+	work: { done: number; total: number } | null;
 	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
 	createdBy: string | null;
 	createdAt: string;

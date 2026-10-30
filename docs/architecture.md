@@ -836,12 +836,19 @@ alerts plug in as a further kind.
   run; no cancel. At most 2 pending per user.
 - **`auto_calibration`** (issue #153, `jobs/handlers/auto-calibration.ts`,
   [api.md § Automated calibration](./api.md#automated-calibration),
-  [model.md §2.10j](./model.md)): one case (a full GR4J fit with validation)
-  of a run of the calibration rules, as the editor it runs as; the job fits
-  it, appends it and queues the next case's job, so no job runs longer than
-  one fit (the request refuses rules estimated past 4 minutes a fit, from
-  the model's size rather than a clock, `calibration/estimate.ts`, and the
-  job stops a fit that runs past them anyway, failing the run). The
+  [model.md §2.10j](./model.md)): the next piece of a run of the
+  calibration rules, as the editor it runs as. A case's fit (each start and
+  validation fit a separate DDS search) runs over as many jobs as it needs:
+  a job runs the searches in order until one more model run would pass its
+  4 minutes (or the worker's deadline), pauses the one under way, stores its
+  state and the finished searches' outcomes in the row's `work` (290) and
+  queues the next piece; the job that has every search builds the case and
+  appends it. A paused search resumes exactly, so the case is an unbroken
+  fit's. One job at a time per run, 2 attempts each; a job claimed with under
+  30 s left in the tick is handed back (`JobRelease`); a fit taking far more
+  jobs than estimated fails the run. The request refuses rules whose last
+  step of a fit can't fit one job, or whose whole run is estimated past 6
+  hours, from the model's size rather than a clock (`calibration/estimate.ts`). The
   last case picks the kept fit. Queued by new data (`start: 'new_data'`,
   `app_enqueue_auto_calibration`), the first job plans the run instead, and
   the last applies the kept fit when the rules say so and are signed off. At
