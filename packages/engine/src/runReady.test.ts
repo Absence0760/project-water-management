@@ -1,4 +1,4 @@
-import type { NetworkNode } from '@water-management/engine';
+import type { NetworkNode } from './project';
 import { describe, expect, it } from 'vitest';
 import { hasForecastRain, runBlockers } from './runReady';
 

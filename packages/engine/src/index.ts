@@ -11,6 +11,7 @@ export * from './seriesNames';
 export { chirpsChoiceWarnings } from './seriesChoice';
 export * from './manifest';
 export * from './run';
+export * from './runReady';
 export * from './warmstart/snapshot';
 // mergeSettings is the settings resolver every run goes through: the assistant's propose_settings dry run (issue #610) checks a patch against its warnings.
 export { prepareRun, mergeSettings as resolveRunSettings, type PreparedRun } from './prepare';

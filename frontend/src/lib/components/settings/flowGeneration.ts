@@ -15,6 +15,9 @@ import {
 	AREAL_RAIN_FACTOR_WARN_MIN,
 	catchmentMapOf,
 	flowMethodOf,
+	landUnits,
+	unitsOnCatchmentRain,
+	type LandUnitNode,
 	MAP_MM_MAX,
 	MAP_MM_MIN,
 	mapMmError,
@@ -53,8 +56,14 @@ export const FLOW_METHODS: readonly { value: FlowGenerationMethod; label: string
 
 /** A rainfall station as the form lists it: a catchment rain series with no site (SeriesMeta with its station details). */
 export type StationOption = Pick<SeriesMeta, 'id' | 'name' | 'station'>;
-/** A land unit as the table needs it. */
-export type UnitNode = Pick<NetworkNode, 'id' | 'name' | 'kind' | 'areaKm2' | 'mapMm' | 'mapSource'>;
+/** A land unit as the table needs it (the engine's, shared with run readiness). */
+export type UnitNode = LandUnitNode;
+
+/**
+ * The land units that run on the catchment rain, and the land units the table lists: the engine's
+ * (packages/engine/src/runReady.ts), shared with Run readiness and the assistant's get_run_readiness.
+ */
+export { landUnits, unitsOnCatchmentRain };
 
 /** The project's rainfall stations from its series list: every catchment rain series without a site, by name. */
 export function stationOptions<S extends StationOption & Pick<SeriesMeta, 'kind'> & { siteNodeId?: string | null }>(series: readonly S[]): StationOption[] {
@@ -63,28 +72,6 @@ export function stationOptions<S extends StationOption & Pick<SeriesMeta, 'kind'
 		.map((s) => ({ id: s.id, name: s.name, station: s.station ?? null }))
 		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
-
-/**
- * The land units that run on the catchment rain (rule 4 of docs/model.md §2.4h), in the model's order: no rainfall
- * station, no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by (or no gauge MAP).
- * Their share (the flow under Fragmentation, the EWR) follows their area under both methods (issue #615, §2.5b), so Run readiness and the Flow generation
- * panel name them. Read from the setup, as the editor sees it: the run decides from the records themselves, so a
- * series with no reading, or a CHIRPS that totals 0 mm, still falls to the catchment rain there and the run says so.
- */
-export function unitsOnCatchmentRain<N extends UnitNode & { mapMm?: number | null }>(
-	nodes: readonly N[],
-	settings: { unitRain?: { gaugeMapMm?: number | null } | null; rainStations?: Pick<RainStationSettings, 'units'> | null } | null | undefined,
-	series: readonly (Pick<SeriesMeta, 'kind'> & { siteNodeId?: string | null; station?: { mapMm?: number | null } | null })[]
-): N[] {
-	const own = new Set(series.filter((s) => s.siteNodeId && (s.kind === 'rain_catchment_mm' || s.kind === 'rain_chirps_mm')).map((s) => s.siteNodeId!));
-	const gauge = series.find((s) => s.kind === 'rain_catchment_mm' && !s.siteNodeId);
-	const gaugeMap = !!gauge && ((settings?.unitRain?.gaugeMapMm ?? null) !== null || (gauge.station?.mapMm ?? null) !== null);
-	const stations = settings?.rainStations?.units ?? {};
-	return landUnits(nodes).filter((n) => !stations[n.id] && !own.has(n.id) && !(gaugeMap && (n.mapMm ?? 0) > 0));
-}
-
-/** The land units the table lists (a farm with an area), in the model's order. */
-export const landUnits = <N extends UnitNode>(nodes: readonly N[]): N[] => nodes.filter((n) => n.kind === 'farm' && n.areaKm2 > 0);
 
 const isEmpty = (o: object | null | undefined) => !o || Object.keys(o).length === 0;
 
