@@ -3912,10 +3912,11 @@ calling it while the migration lands keeps working). The yield, future yield
 and climate factors cancel routes answer `cancelled: false` for a job already
 dead or already flagged.
 
-### Automated calibrations (108_auto_calibration.sql)
+### Automated calibrations (108_auto_calibration.sql, 290_auto_calibration_work.sql)
 
-A run of the project's calibration rules, fitted by the server one case per
-`auto_calibration` job (issue #153, [model.md §2.10j](./model.md),
+A run of the project's calibration rules, fitted by the server through a
+chain of `auto_calibration` jobs, a case's fit over as many as it needs
+(issue #153, [model.md §2.10j](./model.md),
 [api.md § Automated calibration](./api.md#automated-calibration)). Written
 `running` with everything its result depends on, fitted and completed once by
 whoever it runs as, and applied at most once by an editor; the API keeps the
@@ -3925,20 +3926,22 @@ newest 20 per project (never an applied one).
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `job_id` | The project; the job fitting the next case (SET NULL when purged) |
+| `project_id`, `job_id` | The project; the job fitting the next piece (SET NULL when purged) |
 | `trigger` | `manual` (an editor asked) or `new_data` (queued by new data, `after.onNewData`) |
-| `status` | `running`, `complete` or `failed` (`error` says why: the data or settings changed between cases) |
+| `status` | `running`, `complete` or `failed` (`error` says why: the data or settings, or the server's engine, changed between two jobs, or a fit took far more jobs than estimated) |
 | `rules`, `rules_revision` | settings.calibrationRules as they stood, and their revision (fixed at insert) |
-| `input_sha256` | SHA-256 of the model input the plan was made on; every case job refuses another |
+| `input_sha256` | SHA-256 of the model input the plan was made on; every job of the run refuses another |
 | `plan` | The engine's `AutoCalibrationPlan`: the water years left out by rule and the cases in order (fixed at insert) |
-| `cases` | The fitted cases (`AutoCase`, with their fit reports), appended one per job, at most 8, never rewritten |
+| `cases` | The fitted cases (`AutoCase`, with their fit reports), appended as each is built, at most 8, never rewritten |
+| `work` | Where the case under way stands between two of its jobs (290): its finished optimisations' outcomes (parameters, loss, model runs), the paused search's state (the engine's `DdsState`), its model runs done and in all, and the jobs it has taken; NULL between cases and once finished. Numbers only |
 | `report`, `chosen` | On completion: the notes, each case's verdict (`eligible`, `reasons`) and the kept case's index (or null) |
 | `created_by`, `created_at`, `completed_at`, `engine_version` | Stamped by the guard trigger |
 | `applied_by`, `applied_at`, `applied_run_id`, `uncertainty_id` | Applying the kept fit: who, when, the run it made and the ensemble started on it; set once |
 
 RLS: a viewer reads, an editor writes. The guard (`auto_calibration_update`)
-lets only the user it runs as fit it, keeps the cases append-only, fixes a
-complete run but for its one application, and lets a foreign key clear a link
+lets only the user it runs as fit it (its `work` rewritten as it goes),
+keeps the cases append-only, fixes a complete run (its `work` included) but
+for its one application, and lets a foreign key clear a link
 (an account going, the job purge, a run trimmed) and nothing else. water_app
 may update only the outcome and application columns; `created_by`,
 `applied_by` and `completed_at` are the trigger's.

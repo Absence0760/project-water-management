@@ -4679,7 +4679,8 @@ and "Start from the prior".
 
 A server run of the project's saved calibration rules (issue #153,
 [model.md §2.10j](./model.md)): the water years they leave out, every fit
-they ask for (one background `auto_calibration` job each) and the fit kept by
+they ask for (fitted by a chain of background `auto_calibration` jobs, a fit
+over as many as it needs) and the fit kept by
 its held-out score among those that pass the filters, or none. Applying the
 kept fit is the server's too.
 
@@ -4694,28 +4695,38 @@ kept fit is the server's too.
   decide everything, the search included.
 - `POST …/auto-calibrations`: `400` when the rules can't run on the project
   (no observed record, a pan preset under a monthly PE row, selecting by
-  the other record with only one, or a fit estimated past 4 minutes on the
-  server: "each fit would take up to about *N* minutes on the server (*M* model
-  runs) … lower the model runs per fit or the starts"). The estimate is from
+  the other record with only one; a model so large that a fit's last step,
+  which can't be cut, is estimated past one job's 4 minutes: "the model is
+  too large to calibrate on the server: the last step of each fit … lower
+  the starts in the calibration rules or shorten the simulation period"; or
+  a whole run estimated past 6 hours on the server: "the rules would take up
+  to about *N* hours on the server (*K* fits of *M* model runs each) … lower
+  the model runs per fit, the starts or the fits"). The estimate is from
   the model's size, never a clock, so the same project and rules always get
   the same answer ([model.md §2.10j](./model.md), `calibration/estimate.ts`). **At most 1 queued or running per
   user**, across all their projects (`429`). Its `error` says where the
   running one is: "…in this project" when it's this project's, else "…in the
   project “*name*”, and only one at a time is allowed" (`pendingCalibrationMessage`,
   `calibration/store.ts`), so a run elsewhere doesn't read as running here. A project keeps its newest **20** runs of the rules (an
-  applied one is never deleted). Each case job gets 2 attempts.
+  applied one is never deleted). Each job gets 2 attempts.
 - `AutoCalibration = { id, trigger ('manual' | 'new_data'), status
   ('running' | 'complete' | 'failed'), rulesRevision, rules, plan: {
   flowKind, siteNodeId, validationRecord, years, ruleExclusions, notes, cases }
   (`siteNodeId` the calibration site the rules ran at, engine ≥ 1.41.0, `null`
   = the outlet, absent on older runs), cases:
   AutoCalibrationCase[], report: { chosen, notes, eligible, reasons } |
-  null, chosen, error, engineVersion, job, createdBy, createdAt, completedAt,
-  appliedBy, appliedAt, appliedRunId, uncertaintyId }`. `cases` grows by one
-  per job; `job` is the job fitting the next (`{ id, status, error, progress
-  }`, or `null` once purged); a `failed` run says why in `error` (the
-  project's data or settings changed between its cases, or a fit ran past
-  the 4 minutes a job may run although estimated inside them).
+  null, chosen, error, engineVersion, work, job, createdBy, createdAt,
+  completedAt, appliedBy, appliedAt, appliedRunId, uncertaintyId }`.
+  `cases` grows by one as each fit is finished; a fit runs over as many jobs
+  as it needs, and `work` is the fit under way once it has started (`{ done,
+  total }`: its model runs made so far and in all; `null` between fits and
+  once the run ends; 290_auto_calibration_work). `job` is the job fitting
+  the next piece (`{ id, status, error, progress }`, `progress` the run's
+  share done when that job ended, or `null` once purged); a `dead` job means
+  the run stopped. A `failed` run says why in `error` (the project's data
+  or settings changed between two of its jobs, a release changed the
+  server's model engine between them, or a fit took far more jobs than
+  estimated, the server being far slower than the estimate).
   `AutoCalibrationCase = { label, pan, bounds, objective, score,
   naturalMarMm3, eligible, reasons, filters, error, params }`.
 - `…/apply`: `409` when the run is still running or failed, nothing was
