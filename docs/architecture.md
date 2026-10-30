@@ -3050,6 +3050,24 @@ argument, a missing run or node, or a withheld series:
 | `search_help` | `helpIndex.json`, no database | 8 hits, 700-character snippets |
 | `get_run_readiness` | whether the model can run now, from the same check as the Run model button (the engine's `runReady.ts`: `runBlockers`, `unitsOnCatchmentRain`, `hasForecastRain`) on the project's saved model, settings and series kinds (never their values): the blockers in the button's words, the notes that only warn (units on the catchment rain), whether a forecast run is available, whether the caller may start one (editor), and a fixed line on what a run does not need (calibration site, observed flow, the EWR, A-pan, dams); the system prompt points every "can I run / what's missing" question at it | 20 units named in a note, the rest counted |
 
+**Ids are named before the model reads them** (`tools/names.ts`
+`withIdNames`, wrapping every tool, `propose_settings` included). Settings,
+warnings and network rows refer to nodes, transfers and series by id
+(`calibrationSiteNodeId`, a zone's `nodeId`, `rainStations.units` keyed by
+node id, "gauge node <id>" in a warning), and the model used to quote them.
+Each result is walked once: a known id becomes what it is in the app's
+words ("the gauge 'Outlet weir'", "the hydrological unit 'Upper'", "the
+transfer 'Upper → Outlet'", "the series 'Weir record'"), as a value, an
+object key or inside a sentence; an id in a node field that matches no node
+reads "a node that no longer exists". A field named `id` stays, beside its
+own name, as what a tool takes for an argument (the tools take names too),
+and the system prompt says never to quote ids. The names come from what the
+tool's transaction already reads as the caller, under RLS: the project's
+nodes, transfers and series, and the nodes of the conversation's run (a node
+since deleted keeps its name there); names only, never values. The input
+diff names the calibration site by its gauge too (engine `compare.ts`), so
+a proposal card no longer shows "gauge node <id>".
+
 The run reads the tools share with the run routes live in `runs/read.ts`
 (`readRun`, `readSeries`, `readSeriesBulk`, `readDay`, `readModelInput`),
 with the withholding inside them ([security.md](./security.md), #523 I), so

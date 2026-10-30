@@ -1243,7 +1243,9 @@ function diffSettings(
 		if (k === 'ewrSplit' || k === 'flowShareMethod') continue;
 		// The zones, one line per zone (calibrationZoneChanges, below).
 		if (k === 'calibrationZones') continue;
-		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
+		// The calibration site by its gauge's name, as the rule tables' sites (the outlet when null).
+		const fmt: Fmt = k === 'calibrationSiteNodeId' ? (v) => (v ? `the gauge ${siteName(String(v))}` : 'the outlet') : f.fmt;
+		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${fmt(a[k])} → ${fmt(b[k])}`);
 	}
 	for (const c of calibrationZoneChanges(a.calibrationZones, b.calibrationZones, (id) => siteName(id))) out.push({ area: 'settings', kind: c.kind, subject: SETTINGS_FIELDS.calibrationZones!.label, text: c.text });
 	const split = ewrSplitChange(ra, rb);

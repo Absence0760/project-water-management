@@ -1052,6 +1052,17 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('names the calibration site by its gauge, never its node id (issue #610)', () => {
+		const a = legacySnapshot();
+		const gauge = a.model.nodes[0]!;
+		gauge.id = '11111111-1111-4111-8111-111111111111';
+		const b = structuredClone(a);
+		(b.settings as Record<string, unknown>).calibrationSiteNodeId = gauge.id;
+		const line = texts(a, b).find((x) => x.startsWith('Calibration site'));
+		expect(line).toBe(`Calibration site: the outlet → the gauge ${gauge.name}`);
+		expect(line).not.toContain(gauge.id);
+	});
+
 	it('describes settings: scalars, calibration, monthly tables and unknown keys', () => {
 		// Two legacy runs, so the legacy model's own calibration settings count too.
 		const a = legacySnapshot();

@@ -62,6 +62,7 @@
 // Usage is reported as characters ÷ 4, rounded up: input over the system
 // prompt and every message, output over the text and the tool calls.
 import type { AssistantConfig } from '../config.js';
+import { nodeWords } from '../tools/names.js';
 import { TOOL_NAMES, type AssistantProvider, type ProviderEvent, type ProviderRequest, type ToolCall, type TurnMessage } from '../types.js';
 
 /** What propose_settings is called with: GR4J's X4 (days, bounds 0.5–10), a change a save accepts. */
@@ -146,7 +147,7 @@ const gaugeOf = (network: unknown) => nodesOf(network).find((n) => n.kind === 'g
 function unitAbove(network: unknown, gauge: NetNode): NetNode | undefined {
 	const nodes = nodesOf(network);
 	const dam = gauge.above?.dams?.[0];
-	return (typeof dam?.id === 'string' ? nodes.find((n) => n.id === dam.id) : undefined) ?? nodes.find((n) => n.kind === 'farm' && n.drainsInto === gauge.id);
+	return (typeof dam?.id === 'string' ? nodes.find((n) => n.id === dam.id) : undefined) ?? nodes.find((n) => n.kind === 'farm' && (n.drainsInto === gauge.id || n.drainsInto === nodeWords(gauge)));
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);

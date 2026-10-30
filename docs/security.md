@@ -4473,6 +4473,9 @@ sends project data to a model. What goes, and what keeps it bounded:
   `ASSISTANT_MAX_TOOL_RESULT_CHARS`. A tool's or provider's error text never
   reaches the model, the client or the log: fixed words go back, and the log
   gets only the error's name and frames (`safeError`).
+  Ids in a result are replaced by the names they stand for before the model
+  reads it (`tools/names.ts`), from the names the caller's own transaction
+  can read; no value is read for it.
 - **Prompt injection.** Text in the project (a node name, a note) can reach
   the model through a tool result. It can't widen what the assistant does:
   every tool reads, as the caller, under RLS, and `propose_settings` only
