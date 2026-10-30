@@ -104,6 +104,30 @@ describe('AssistantPanel', () => {
 		expect(out).not.toContain('For example');
 	});
 
+	it('shows an answer’s paragraphs, lists and bold as elements, the markup’s characters gone (the 2026-10-30 production test)', () => {
+		const text = '### What a run needs\n\nThe model needs **two** things:\n- a network\n- a rainfall series\n\n---\n\n1. Draw it\n2. Upload rain';
+		// Svelte's hydration comments sit between the elements: left out to read the markup.
+		const out = html(chat({ turns: [{ role: 'user', text: 'Q' }, answer({ text })] })).replace(/<!--.*?-->/g, '');
+		expect(out).toContain('<p class="heading');
+		expect(out).toMatch(/<strong[^>]*>What a run needs<\/strong>/);
+		expect(out).toMatch(/The model needs <strong[^>]*>two<\/strong> things:/);
+		expect(out).toMatch(/<ul[^>]*><li[^>]*>a network<\/li><li[^>]*>a rainfall series<\/li><\/ul>/);
+		expect(out).toMatch(/<ol start="1"[^>]*><li[^>]*>Draw it<\/li><li[^>]*>Upload rain<\/li><\/ol>/);
+		const shown = out.slice(out.indexOf('data-testid="assistant-text"'));
+		for (const mark of ['###', '**', '---', '- a network']) expect(shown).not.toContain(mark);
+	});
+
+	it('shows hostile text in an answer as text: no element, attribute or entity from it reaches the page', () => {
+		const text = '<script>alert(1)</script> **<img src=x onerror=alert(1)>** &amp; [x](javascript:alert(1))\n- <a href="javascript:alert(2)">y</a>';
+		const out = html(chat({ turns: [{ role: 'user', text: 'Q' }, answer({ text })] })).replace(/<!--.*?-->/g, '');
+		// No element from the text: the tags show escaped, as text (an href only inside that text).
+		expect(out).not.toMatch(/<script|<img|<a[\s>]/);
+		expect(out).toContain(esc('<script>alert(1)</script>'));
+		expect(out).toContain(`<strong>${esc('<img src=x onerror=alert(1)>')}</strong>`);
+		expect(out).toContain('&amp;amp;');
+		expect(out).toContain(esc('<a href="javascript:alert(2)">y</a>'));
+	});
+
 	it('shows a proposal’s server-built title, each change’s lines with its own reason, and Apply for an editor', () => {
 		const out = html(chat({ turns: [{ role: 'user', text: 'Recommend' }, answer({ proposals: [{ proposal: PROPOSAL, applied: false }] })] }));
 		expect(out).toContain('Recommended change');
