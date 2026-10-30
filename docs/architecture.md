@@ -839,7 +839,9 @@ alerts plug in as a further kind.
   [model.md §2.10j](./model.md)): one case (a full GR4J fit with validation)
   of a run of the calibration rules, as the editor it runs as; the job fits
   it, appends it and queues the next case's job, so no job runs longer than
-  one fit (the request refuses rules estimated past 4 minutes a fit). The
+  one fit (the request refuses rules estimated past 4 minutes a fit, from
+  the model's size rather than a clock, `calibration/estimate.ts`, and the
+  job stops a fit that runs past them anyway, failing the run). The
   last case picks the kept fit. Queued by new data (`start: 'new_data'`,
   `app_enqueue_auto_calibration`), the first job plans the run instead, and
   the last applies the kept fit when the rules say so and are signed off. At
@@ -848,7 +850,8 @@ alerts plug in as a further kind.
   server's own run of an uncertainty ensemble started on the run an applied
   automated fit made; it computes every member and stores the row once
   (nothing to verify: the server ran it). Refused when a run × the members
-  would take more than 4 minutes; the browser path (Runs tab) still works.
+  is estimated, from the model's size, to take more than 4 minutes, and
+  stopped if it runs past them; the browser path (Runs tab) still works.
 - **`outlook`** (issue #53 R5, `jobs/handlers/outlook.ts`, [api.md § Seasonal outlooks](./api.md#seasonal-outlooks),
   [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)):
   a base run × a season × up to 6 demand levels over the record's analogue

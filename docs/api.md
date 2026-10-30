@@ -4694,8 +4694,11 @@ kept fit is the server's too.
   decide everything, the search included.
 - `POST …/auto-calibrations`: `400` when the rules can't run on the project
   (no observed record, a pan preset under a monthly PE row, selecting by
-  the other record with only one, or a fit estimated past 4 minutes: "lower
-  the model runs per fit or the starts"). **At most 1 queued or running per
+  the other record with only one, or a fit estimated past 4 minutes on the
+  server: "each fit would take up to about *N* minutes on the server (*M* model
+  runs) … lower the model runs per fit or the starts"). The estimate is from
+  the model's size, never a clock, so the same project and rules always get
+  the same answer ([model.md §2.10j](./model.md), `calibration/estimate.ts`). **At most 1 queued or running per
   user**, across all their projects (`429`). Its `error` says where the
   running one is: "…in this project" when it's this project's, else "…in the
   project “*name*”, and only one at a time is allowed" (`pendingCalibrationMessage`,
@@ -4711,7 +4714,8 @@ kept fit is the server's too.
   appliedBy, appliedAt, appliedRunId, uncertaintyId }`. `cases` grows by one
   per job; `job` is the job fitting the next (`{ id, status, error, progress
   }`, or `null` once purged); a `failed` run says why in `error` (the
-  project's data or settings changed between its cases).
+  project's data or settings changed between its cases, or a fit ran past
+  the 4 minutes a job may run although estimated inside them).
   `AutoCalibrationCase = { label, pan, bounds, objective, score,
   naturalMarMm3, eligible, reasons, filters, error, params }`.
 - `…/apply`: `409` when the run is still running or failed, nothing was
@@ -4727,7 +4731,8 @@ kept fit is the server's too.
   the fit applied and says why in `runError`. With `after.ensemble` the
   ensemble around the fit is started on that run and computed by an
   `uncertainty` job (`uncertaintyId`, [§ Uncertainty bands](#uncertainty-bands)),
-  or refused by that job when it would take more than 4 minutes.
+  or refused by that job when it is estimated (from the model's size × the
+  members) to take more than 4 minutes, or stopped when it runs past them.
 - New data: with `settings.calibrationRules.after.onNewData` `report` or
   `apply`, new days of any series but the forecast queue a run of the rules
   (`trigger: 'new_data'`, one pending per project, debounced like the

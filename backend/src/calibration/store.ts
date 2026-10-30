@@ -23,7 +23,6 @@ import {
 	resolveCalibrationRules,
 	resolveEnsembleOptions,
 	runAutoCase,
-	runModel,
 	sameRules,
 	sameSignOff,
 	withoutForecastTail,
@@ -42,6 +41,7 @@ import { ApiError } from '../http/errors.js';
 import { beginSettingsChange, recordModelRevision } from '../history/record.js';
 import { enqueueJob, type JobMeta, type JobStatus } from '../jobs/queue.js';
 import { LeaseLostError } from '../jobs/errors.js';
+import { logEvent } from '../logging/logEvent.js';
 import { mergeSettings, patchSettings } from '../projects/settings.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
 
@@ -50,6 +50,7 @@ function et0Fingerprint(series: DailySeries | undefined, through: string): Et0Da
 	const w = series ? et0FitWindow(series, through) : null;
 	return w ? { startDate: w.startDate, length: w.values.length, valuesSha256: seriesHash(w.values), through } : null;
 }
+import { caseSeconds, modelSize, wallClock, type Clock } from './estimate.js';
 import { AUTO_CALIBRATIONS_KEPT, AUTO_CASE_SECONDS_MAX } from './schema.js';
 
 export type AutoCalibrationStatus = 'running' | 'complete' | 'failed';
@@ -144,29 +145,24 @@ export const inputSha256 = (input: ModelInput): string => createHash('sha256').u
 export class CalibrationRefused extends Error {}
 
 /**
- * The plan for a run of the rules on this input, with nothing held open
- * while it computes. One case's time is estimated from a full model run
- * (the shortest of three: a fit's evaluations stop at the last scored day, so
- * this errs long) × the model runs one case makes; above
- * AUTO_CASE_SECONDS_MAX the rules are refused before anything is queued.
+ * The plan for a run of the rules on this input. One case's time on the job
+ * worker is estimated from the model's size × the model runs one case makes
+ * (./estimate.ts: no clock, so the same project and rules always get the same
+ * answer however busy the server is); above `maxSeconds`
+ * (AUTO_CASE_SECONDS_MAX) the rules are refused before anything is queued.
  */
 export function planCalibration(input: ModelInput, maxSeconds = AUTO_CASE_SECONDS_MAX): AutoCalibrationPlan {
 	let plan: AutoCalibrationPlan;
+	let seconds: number;
 	try {
 		plan = planAutoCalibration(input);
+		seconds = caseSeconds(plan, modelSize(input));
 	} catch (err) {
 		throw new CalibrationRefused((err as Error).message);
 	}
-	let fastest = Infinity;
-	for (let i = 0; i < 3; i++) {
-		const t0 = performance.now();
-		runModel(input);
-		fastest = Math.min(fastest, performance.now() - t0);
-	}
-	const seconds = (plan.caseEvaluations * fastest) / 1000;
 	if (seconds > maxSeconds) {
 		throw new CalibrationRefused(
-			`each fit would take about ${Math.ceil(seconds / 60)} minutes (${plan.caseEvaluations} model runs), more than a background job may run (${maxSeconds / 60} minutes): lower the model runs per fit or the starts in the calibration rules`
+			`each fit would take up to about ${Math.ceil(seconds / 60)} minutes on the server (${plan.caseEvaluations} model runs), more than a background job may run (${maxSeconds / 60} minutes): lower the model runs per fit or the starts in the calibration rules`
 		);
 	}
 	return plan;
@@ -251,10 +247,21 @@ interface Working {
  * or the run fails, saying so (the next new data or a new request runs them
  * again). After the case, the next case's job is queued; after the last, the
  * kept fit is picked and the run completed, and applied at once when new data
- * queued it and the rules say `apply` and are signed off. Returns what
+ * queued it and the rules say `apply` and are signed off. A fit still
+ * running at `maxSeconds` (AUTO_CASE_SECONDS_MAX, by `now`) is stopped and the
+ * run failed, saying so: the estimate that let it through was short, and the
+ * worker's timeout would otherwise cut it off unexplained. Returns what
  * happened; false when there was nothing to do.
  */
-export async function fitNextCase(db: Db, projectId: string, id: string, progress: (pct: number) => Promise<boolean>): Promise<'next' | 'complete' | 'failed' | false> {
+export async function fitNextCase(
+	db: Db,
+	projectId: string,
+	id: string,
+	progress: (pct: number) => Promise<boolean>,
+	o: { now?: Clock; maxSeconds?: number } = {}
+): Promise<'next' | 'complete' | 'failed' | false> {
+	const now = o.now ?? wallClock;
+	const maxSeconds = o.maxSeconds ?? AUTO_CASE_SECONDS_MAX;
 	const { rows } = await db.query<Working>(
 		`SELECT id, status, "trigger", rules, plan, cases, input_sha256 AS "inputSha256" FROM auto_calibration WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 		[projectId, id]
@@ -270,7 +277,19 @@ export async function fitNextCase(db: Db, projectId: string, id: string, progres
 		return 'failed';
 	}
 	const i = w.cases.length;
-	const fitted = runAutoCase(input, w.plan, i);
+	const estimated = caseSeconds(w.plan, modelSize(input));
+	const t0 = now();
+	let overran = false;
+	const fitted = runAutoCase(input, w.plan, i, () => (overran ||= now() - t0 > maxSeconds * 1000));
+	const seconds = (now() - t0) / 1000;
+	logEvent('info', { event: 'auto_calibration_case', calibrationId: id, case: i, evaluations: w.plan.caseEvaluations, estimatedSeconds: Math.round(estimated), seconds: Math.round(seconds), overran });
+	if (overran) {
+		await db.query(`UPDATE auto_calibration SET status = 'failed', error = $2 WHERE id = $1`, [
+			id,
+			`a fit ran past the ${maxSeconds / 60} minutes a background job may run, longer than it was estimated to take: lower the model runs per fit or the starts in the calibration rules, and run them again`
+		]);
+		return 'failed';
+	}
 	await db.query(`UPDATE auto_calibration SET cases = cases || jsonb_build_array($2::jsonb) WHERE id = $1`, [id, JSON.stringify(fitted)]);
 	if (!(await progress((100 * (i + 1)) / w.plan.cases.length))) throw new LeaseLostError();
 	if (i + 1 < w.plan.cases.length) {
