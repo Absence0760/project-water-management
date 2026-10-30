@@ -7,7 +7,10 @@
 	// of its own, and MapLibre after it). The source (surface by default) and
 	// the period (the mean of the whole water years, or one) are picked here;
 	// the legend names every band in words, and every unit with no polygon is
-	// listed under the map with its band, so none is silently missing. A
+	// listed under the map with its band, so none is silently missing. The
+	// source and the year are in the URL (`mapSource=groundwater|both`,
+	// `mapYear=<first year>`; the defaults leave them out), so a reload or a
+	// shared link keeps them, and each choice is a step Back returns from. A
 	// click on a unit opens its comparison above (`onpick`). It reads only
 	// what the comparison already gives this reader: AllocationsTab doesn't
 	// offer it to a viewer who sees totals only (D3), and no holder's name
@@ -62,9 +65,24 @@
 		if (open && features === null && !loading && !error) void loadFeatures();
 	});
 
-	let source = $state<UseSource>('surface');
+	// The source and the year, from the URL (ui-playbook § "A pick is a step in history": every filter is in the URL,
+	// so a reload keeps it); anything unknown reads as the default.
+	const sourceParam = $derived(url.searchParams.get('mapSource'));
+	const source = $derived<UseSource>(USE_SOURCES.find((s) => s.id === sourceParam)?.id ?? 'surface');
+	const yearParam = $derived(url.searchParams.get('mapYear'));
 	/** null: the mean of the whole water years. */
-	let year = $state<number | null>(null);
+	const year = $derived(yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : null);
+	/** The page with one of the map's choices set (null or the default: left out). A choice pushes, so Back returns to the one before. */
+	function choose(name: 'mapSource' | 'mapYear', value: string | null) {
+		void goto(value === null ? withoutParam(url, name) : withParam(url, name, value), { reset: false });
+	}
+	/** Hide the map: its choices go with it. */
+	function hide() {
+		const q = new URLSearchParams(url.search);
+		for (const k of ['map', 'mapSource', 'mapYear']) q.delete(k);
+		const s = q.toString();
+		void goto(`${url.pathname}${s ? `?${s}` : ''}${url.hash}`, { reset: false });
+	}
 	const years = $derived(wholeWaterYears(comparison));
 	// A year the newly compared run doesn't cover falls back to the mean.
 	const shownYear = $derived(year !== null && years.includes(year) ? year : null);
@@ -90,7 +108,7 @@
 	<div class="panel-head">
 		<h2 id="alloc-map-h">On the map</h2>
 		{#if open}
-			<button type="button" class="btn btn-sm" aria-expanded="true" aria-controls="alloc-map-body" onclick={() => goto(withoutParam(url, 'map'), { reset: false })}>Hide the map</button>
+			<button type="button" class="btn btn-sm" aria-expanded="true" aria-controls="alloc-map-body" onclick={hide}>Hide the map</button>
 		{:else}
 			<a class="btn btn-sm" href={withParam(url, 'map', '1')} data-sveltekit-noscroll data-sveltekit-keepfocus aria-expanded="false" aria-controls="alloc-map-body">Show the map</a>
 		{/if}
@@ -107,7 +125,7 @@
 					<div class="seg">
 						{#each USE_SOURCES as s (s.id)}
 							<label class:on={source === s.id}>
-								<input type="radio" name="alloc-map-source" value={s.id} checked={source === s.id} onchange={() => (source = s.id)} />
+								<input type="radio" name="alloc-map-source" value={s.id} checked={source === s.id} onchange={() => choose('mapSource', s.id === 'surface' ? null : s.id)} />
 								{s.label}
 							</label>
 						{/each}
@@ -115,7 +133,7 @@
 				</fieldset>
 				<label class="year">
 					<span class="small">Water year</span>
-					<select value={shownYear === null ? '' : String(shownYear)} onchange={(e) => (year = e.currentTarget.value ? Number(e.currentTarget.value) : null)} disabled={!years.length}>
+					<select value={shownYear === null ? '' : String(shownYear)} onchange={(e) => choose('mapYear', e.currentTarget.value || null)} disabled={!years.length}>
 						<option value="">Mean of the whole water years</option>
 						{#each years as y (y)}<option value={String(y)}>{waterYearLabel(y)}</option>{/each}
 					</select>

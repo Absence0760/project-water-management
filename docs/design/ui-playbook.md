@@ -1777,7 +1777,8 @@ Interaction details that bit:
   (`lib/a11y/focusAfterRemove.ts`) focuses the same control on the row now
   at that index (else the last row), or the fallback (the list's heading,
   its add field) once it is empty. Runs, Data, the project list, the team's
-  and the project's members, the pending invitations and the farmers use it;
+  and the project's members, the pending invitations, the farmers and
+  Allocations' volumes and imports use it;
   Crops' `removed()` and the Network's `remove()` did the same by hand, and
   Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
   A row that stays but loses its control does the same: revoking an API key

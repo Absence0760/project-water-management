@@ -1,7 +1,8 @@
 // The Allocations tab's map (issue #510, docs/allocations.md § The map, docs/ui.md § Allocations): "On the map"
 // folds until Show the map (`map=1`), then shades each unit's area on the Map tab by its band of modelled use ÷
 // registered volume, each unit carrying its % as a button, a key naming every band in words, and every unit with
-// no area listed under the map with its band. A click on a unit opens its comparison (`unit=`). A viewer who sees
+// no area listed under the map with its band. The water source and year are in the URL (`mapSource=`, `mapYear=`), so a
+// reload keeps them. A click on a unit opens its comparison (`unit=`). A viewer who sees
 // totals only (162, D3) isn't offered it; with What viewers see on, they are. Synthetic data only.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -165,11 +166,25 @@ test('the map shades each unit by its band, labels its %, keys every band in wor
 	await expect(year.locator('option')).toHaveText(['Mean of the whole water years', '2019/20', '2020/21', '2021/22']);
 	await year.selectOption('2020/21');
 	await expect(key.getByRole('heading')).toHaveText('Key: modelled use ÷ registered volume, water year 2020/21');
+	await expect(page).toHaveURL(/[?&]mapYear=2020(&|$)/);
+
+	// The source and the year are in the URL: a reload keeps them, and each choice is a step Back returns from.
+	await section(page).getByRole('radio', { name: 'Groundwater' }).check();
+	await expect(page).toHaveURL(/[?&]mapSource=groundwater(&|$)/);
+	await page.reload();
+	await expect(page.getByTestId('allocations-page')).toHaveAttribute('aria-busy', 'false');
+	await expect(section(page).getByRole('radio', { name: 'Groundwater' })).toBeChecked();
+	await expect(year).toHaveValue('2020');
+	await expect(key.getByRole('heading')).toHaveText('Key: modelled use ÷ registered volume, water year 2020/21');
+	await page.goBack();
+	await expect(section(page).getByRole('radio', { name: 'Surface water' })).toBeChecked();
+	await expect(year).toHaveValue('2020');
 
 	await expectNoViolations(page);
-	// Hide the map folds it in place.
+	// Hide the map folds it in place, and its choices go with it.
 	await section(page).getByRole('button', { name: 'Hide the map' }).click();
 	await expect(page).not.toHaveURL(/[?&]map=1/);
+	await expect(page).not.toHaveURL(/[?&]mapYear=/);
 	await expect(page.getByTestId('allocation-map')).toHaveCount(0);
 
 	// On a phone it fits the width.

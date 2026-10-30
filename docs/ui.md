@@ -11554,7 +11554,18 @@ by someone who hid it, it shows in the sidebar in its place, as any hidden
 section does. The page is `aria-busy` while the volumes or the run's
 comparison are loading (the comparison lands above the rest of the page and
 moves it); `e2e/support/allocations.ts` `openAllocations` waits for it to
-clear.
+clear. Picking another run drops the last run's figures at once and shows
+*Loading…* until the picked run's land, so no figure sits under another
+run's name; a volume or band change reloads the same run's comparison with
+its figures still shown. A comparison that fails says so with **Try again**,
+on the viewer's totals card too (`AllocationTotals`'s error state). A
+delete, an import's removal or the viewers' switch that fails shows its
+error in red (`role="alert"`), and the switch goes back to what is saved.
+Deleting a volume puts the focus on the Delete of the row now in its place
+in the same list (the Registered volumes table or the picked unit's
+volumes), else that list's heading; removing an import, on the next
+import's **Remove this import**, else the Registered volumes heading
+(`focusAfterRemove`; `e2e/tests/allocations-states.spec.ts`).
 
 **What a viewer sees** (decision D3, 162). Until an owner switches viewers
 on, a viewer gets one card instead of the page below, *Registered water use
@@ -11713,7 +11724,10 @@ registered* / *No use*), named with its figures for a screen reader; a click
 opens its comparison above (`unit=`) and scrolls to it. Above the map a
 **Water source** choice (Surface water, the default; Groundwater; Both
 together, total use ÷ total registered) and a **Water year** picker (the
-mean of the whole water years, or one; part years are never offered). Under
+mean of the whole water years, or one; part years are never offered). Both
+are in the URL (`mapSource=groundwater|both`, `mapYear=<first year>`, the
+defaults left out), so a reload or a shared link keeps them; each choice is
+a step Back returns from, and **Hide the map** drops them with `map`. Under
 it the **Key** names every band in words with a swatch and how many units
 are in it, and says the bands are fixed for the map, apart from the
 comparison's ±10 % band; then **Hydrological units with no area on the

@@ -494,7 +494,8 @@ volumes; no engine behaviour changes.
   never offered, as in the comparison's summary.
 - **Water source**: surface water (the default: licences are per source),
   groundwater, or both together (the unit's total use ÷ its total
-  registered volume).
+  registered volume). The source and the period are in the page's URL
+  (`mapSource=`, `mapYear=`), so a reload keeps them.
 - **Bands**, r = modelled use ÷ registered volume (engine
   `allocations/useBand.ts`, shared with the example seed so both hold the
   same edges; r is rounded to 10⁻⁶ first, so a volume equal to the use reads
