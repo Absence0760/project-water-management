@@ -53,6 +53,14 @@ server and no tile CDN: the file is served from the app's own storage.
 - The style (`frontend/src/lib/components/map/mapStyle.ts`) draws land,
   water, land use, roads and boundaries, and place and water names only when
   glyphs are configured ([§ Labels](#labels)); it uses no sprites.
+  Protomaps mixes geometries in a source layer (`water` holds lakes and dams
+  as polygons, rivers and streams as lines, and label points), so every
+  basemap fill is filtered to polygons and the rivers, streams and canals
+  draw as a thin `bm-waterway` line from z9. MapLibre fills whatever reaches
+  a fill layer: without that filter it closes each river line into a polygon
+  and draws straight-edged spikes and wedges over the land (seen in
+  production round Wemmershoek Dam at z13 and closer, where the tiles carry
+  the streams).
   Attribution ("© Protomaps © OpenStreetMap contributors") stays visible
   whenever the basemap is drawn.
 - **Locally**: `pnpm dev:tiles:up` (`bin/tiles-dev.sh up`) does it all and
