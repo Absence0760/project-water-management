@@ -260,6 +260,10 @@ describe('compareRuns', () => {
 		expect(c.catchment.ewrFractionDaysNotMet.delta).toBeCloseTo(0.05);
 		expect(c.calibration!.nse.delta).toBeCloseTo(0.15);
 		expect(c.calibration!.pbias.delta).toBe(-4);
+		// Where each run scored its headline statistics (issue #659): null at the outlet, else the gauge's name.
+		expect(c.calibration!.site).toEqual({ a: null, b: null });
+		const atWeir = compareRuns(a, run(summary([], { calibration: { ...cal, siteNodeId: 'H', siteName: 'Weir' } as never })));
+		expect(atWeir.calibration!.site).toEqual({ a: null, b: 'Weir' });
 		expect(c.samePeriod).toBe(false);
 		expect(c.engineVersionChanged).toBe(true);
 	});
@@ -1285,25 +1289,65 @@ describe('diffInputs', () => {
 		expect(diffInputs(a, zones([]))).toEqual([]);
 		expect(diffInputs(a, zones([{ ...row, enabled: false }]))).toEqual([]);
 		expect(diffInputs(zones([{ ...row, enabled: false }]), zones([{ ...row, enabled: false, gr4j: null }]))).toEqual([]);
-		expect(texts(withGauge(a), withGauge(zones([row])))).toEqual(['Calibration zone at Weir: added (X1 900, X2 0, X3 220, X4 3.1)']);
+		expect(texts(withGauge(a), withGauge(zones([row])))).toEqual(['Calibration location at Weir: added (X1 900, X2 0, X3 220, X4 3.1)']);
 		expect(texts(withGauge(zones([row])), withGauge(zones([{ ...row, enabled: false }])))).toEqual([
-			'Calibration zone at Weir: removed (was X1 900, X2 0, X3 220, X4 3.1); its units joined the next zone downstream'
+			'Calibration location at Weir: removed (was X1 900, X2 0, X3 220, X4 3.1); its units take their next location'
 		]);
-		expect(texts(zones([row]), zones([{ ...row, gr4j: null }]))).toEqual(['Calibration zone at H: X1 900, X2 0, X3 220, X4 3.1 → the catchment’s parameters']);
-		expect(texts(zones([row]), zones([{ ...row, gr4j: { ...row.gr4j, x1: 950, x4: 2 } }]))).toEqual(['Calibration zone at H: X1 900 → 950; X4 3.1 → 2']);
-		expect(texts(zones([row]), zones([{ ...row, calibrationStart: '2000-10-01' }]))).toEqual(['Calibration zone at H: window start of record to end of record → 2000-10-01 to end of record']);
-		expect(texts(zones([row]), zones([{ ...row, calibrationFlowKind: 'flow_logger_m3s' }]))).toEqual([expect.stringMatching(/^Calibration zone at H: flow series its gauge record → /)]);
+		expect(texts(zones([row]), zones([{ ...row, gr4j: null }]))).toEqual(['Calibration location at H: X1 900, X2 0, X3 220, X4 3.1 → the catchment’s parameters']);
+		expect(texts(zones([row]), zones([{ ...row, gr4j: { ...row.gr4j, x1: 950, x4: 2 } }]))).toEqual(['Calibration location at H: X1 900 → 950; X4 3.1 → 2']);
+		expect(texts(zones([row]), zones([{ ...row, calibrationStart: '2000-10-01' }]))).toEqual(['Calibration location at H: window start of record to end of record → 2000-10-01 to end of record']);
+		expect(texts(zones([row]), zones([{ ...row, calibrationFlowKind: 'flow_logger_m3s' }]))).toEqual([expect.stringMatching(/^Calibration location at H: flow series its gauge record → /)]);
 		const ex = { waterYear: 2015, reason: 'weir rebuilt' };
-		expect(texts(zones([row]), zones([{ ...row, calibrationExclusions: [ex] }]))).toEqual([expect.stringMatching(/^Calibration zone at H: exclusion WY 2015\/16 added: “weir rebuilt”$/)]);
+		expect(texts(zones([row]), zones([{ ...row, calibrationExclusions: [ex] }]))).toEqual([expect.stringMatching(/^Calibration location at H: exclusion WY 2015\/16 added: “weir rebuilt”$/)]);
 		expect(texts(zones([{ ...row, calibrationExclusions: [ex] }]), zones([{ ...row, calibrationExclusions: [{ ...ex, reason: 'gauge moved' }] }]))).toEqual([
-			expect.stringMatching(/^Calibration zone at H: exclusion WY 2015\/16: reason “weir rebuilt” → “gauge moved”$/)
+			expect.stringMatching(/^Calibration location at H: exclusion WY 2015\/16: reason “weir rebuilt” → “gauge moved”$/)
 		]);
 		expect(texts(zones([row]), zones([{ ...row, qualityFlags: { suspect: 'exclude', zeroFlowMonths: [7, 8] } }]))).toEqual([
-			'Calibration zone at H: quality flags the catchment’s → suspect days exclude, zero flow in months 7, 8'
+			'Calibration location at H: quality flags the catchment’s → suspect days exclude, zero flow in months 7, 8'
 		]);
 		const fit = { model: 'gr4j', fittedAt: '2026-10-28T10:05:00.000Z', objective: 'kgePrime', seed: 3 };
-		expect(texts(zones([row]), zones([{ ...row, fitRecord: fit }]))).toEqual(['Calibration zone at H: parameters now from a GR4J fit of 2026-10-28 10:05 UTC (KGE′, seed 3)']);
-		expect(diffInputs(a, zones([row])).map((c) => [c.subject, c.kind])).toEqual([['Calibration zones', 'added']]);
+		expect(texts(zones([row]), zones([{ ...row, fitRecord: fit }]))).toEqual(['Calibration location at H: parameters now from a GR4J fit of 2026-10-28 10:05 UTC (KGE′, seed 3)']);
+		expect(diffInputs(a, zones([row])).map((c) => [c.subject, c.kind])).toEqual([['Calibration locations', 'added']]);
+	});
+
+	it('words the calibration locations: the outlet’s tick, the headline, the rest rule and each unit’s Parameters from (issue #659)', () => {
+		// f1 drains to the weir H, f2 to the outlet g.
+		const nodes = [
+			node('g', 'Outlet', { kind: 'gauge', downstreamNodeId: null, damCapacityM3: 0 }),
+			node('H', 'Weir', { kind: 'gauge', downstreamNodeId: 'g', damCapacityM3: 0, areaKm2: 0 }),
+			node('f1', 'Rooikloof', { downstreamNodeId: 'H' }),
+			node('f2', 'Bergwater')
+		];
+		const row = { nodeId: 'H', enabled: true, calibrationStart: '2005-10-01', calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: { x1: 900, x2: 0, x3: 220, x4: 3.1 }, fitRecord: null };
+		const at = (over: Record<string, unknown>) => snapshot({ model: { ...snapshot().model, nodes }, settings: { ...defaultProjectSettings(), calibrateAtOutlet: true, calibrationRest: 'headline', calibrationZones: [row], ...over } as never });
+		const base = at({});
+		expect(diffInputs(base, at({}))).toEqual([]);
+		expect(texts(base, at({ calibrateAtOutlet: false }))).toEqual(['Calibrate at the outlet: yes → no']);
+		expect(texts(base, at({ calibrationSiteNodeId: 'H' }))).toEqual(['Headline calibration location: automatic → Weir']);
+		expect(texts(base, at({ calibrationRest: 'nearest' }))).toEqual(['Units outside every calibration location take: the headline location’s parameters → the nearest location upstream']);
+		// One line per unit whose Parameters from changed, by name; absent and null are every unit its own zone.
+		expect(diffInputs(base, at({ unitParamsFrom: null }))).toEqual([]);
+		expect(diffInputs(base, at({ unitParamsFrom: { f2: 'H' } })).map((c) => [c.subject, c.kind, c.text])).toEqual([['Parameters from', 'added', 'Parameters from, Bergwater: its own zone → Weir']]);
+		expect(texts(at({ unitParamsFrom: { f2: 'H' } }), at({ unitParamsFrom: { f2: 'g' } }))).toEqual(['Parameters from, Bergwater: Weir → Outlet']);
+		expect(texts(at({ unitParamsFrom: { f2: 'H' } }), base)).toEqual(['Parameters from, Bergwater: Weir → its own zone']);
+		// A run from before engine 1.110.0 whose calibration site was the weir compares as what it ran: the weir's ticked
+		// row with the site's window and parameters, so against the same settings stored in the locations' shape, nothing.
+		const legacy = snapshot({
+			model: { ...snapshot().model, nodes },
+			settings: { ...defaultProjectSettings(), calibrationSiteNodeId: 'H', calibrationStart: '2005-10-01', gr4j: { ...defaultProjectSettings().gr4j, x1: 900, x2: 0, x3: 220, x4: 3.1 } } as never
+		});
+		const migrated = at({ calibrateAtOutlet: false, calibrationSiteNodeId: 'H', calibrationStart: '2005-10-01', gr4j: { ...defaultProjectSettings().gr4j, x1: 900, x2: 0, x3: 220, x4: 3.1 }, calibrationZones: [{ ...row, qualityFlags: { suspect: defaultProjectSettings().qualityFlags.suspect } }] });
+		expect(diffInputs(legacy, migrated)).toEqual([]);
+		// Two such runs: a change at the site is said once, as the weir's row, not again as the outlet's top level.
+		const later = { ...legacy, settings: { ...legacy.settings, calibrationStart: '2008-10-01', gr4j: { ...(legacy.settings.gr4j as object), x1: 999 } } as never };
+		expect(texts(legacy, later)).toEqual(['Calibration location at Weir: X1 900 → 999; window 2005-10-01 to end of record → 2008-10-01 to end of record']);
+		// A legacy run with no outlet record against the same settings migrated (outlet unticked, rest on the catchment
+		// parameters): the migration's own reading, so nothing changed. With an outlet record, the outlet stays ticked.
+		expect(diffInputs(snapshot(), snapshot({ settings: { ...defaultProjectSettings(), calibrateAtOutlet: false, calibrationRest: 'default' } as never }))).toEqual([]);
+		const withRecord = (over: Record<string, unknown>) => snapshot({ series: { ...snapshot().series, flow_observed_m3s: { startDate: '2000-01-01', length: 366 } }, settings: { ...defaultProjectSettings(), ...over } as never });
+		expect(diffInputs(withRecord({}), withRecord({ calibrateAtOutlet: true, calibrationRest: 'headline' }))).toEqual([]);
+		// Revisions saved before keep the old labels: they still name their setting.
+		expect(settingsChangePaths()).toEqual(expect.arrayContaining([['Calibration site', 'calibrationSiteNodeId'], ['Calibration zones', 'calibrationZones']]));
 	});
 
 	it('describes a change of the CHIRPS bias correction', () => {

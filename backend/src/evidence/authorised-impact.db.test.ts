@@ -99,7 +99,7 @@ beforeAll(async () => {
 describe('the board against full authorised use', () => {
 	it('is a fixed row until an editor runs the pair, and none for baseline evidence', async () => {
 		const r = await report(viewer, appRun);
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.licenceImpactAuthorised).toEqual({ status: 'notBuilt', detail: null, board: null, mix: null, builtAt: null, engineVersion: null });
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect((await report(viewer, base)).licenceImpactAuthorised).toBeNull();

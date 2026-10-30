@@ -62,7 +62,7 @@ test('each gauge with its own record gets a hydrograph, an FDC and an out-of-sam
 	}
 	// The outlet keeps its own hydrograph; the run scores the outlet, so no calibration site chart.
 	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge: natural, simulated and observed/ })).toBeVisible();
-	await expect(page.getByRole('img', { name: /the calibration site/ })).toHaveCount(0);
+	await expect(page.getByRole('img', { name: /the headline calibration location/ })).toHaveCount(0);
 	// The statistics are a check, out of sample, never the calibration score. The 30× record shows it in PBIAS.
 	const side = gauges.filter({ has: hydrograph(page, 'Side weir') });
 	const stats = side.getByTestId('check-gauge-stats');
@@ -79,7 +79,7 @@ test('the calibration site keeps its own chart and leaves the checks; a run made
 	void owner;
 	const { project, runId } = await seedTwoGauges(page.request, 'Gauge checks, site', 'upper');
 	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#res-gauges`);
-	await expect(page.getByRole('img', { name: /^Flow at Upper weir, the calibration site: simulated and observed/ })).toBeVisible();
+	await expect(page.getByRole('img', { name: /^Flow at Upper weir, the headline calibration location: simulated and observed/ })).toBeVisible();
 	const gauges = page.locator('#res-gauges').getByTestId('check-gauge');
 	await expect(gauges).toHaveCount(1);
 	await expect(hydrograph(page, 'Side weir').locator('canvas')).toBeVisible();

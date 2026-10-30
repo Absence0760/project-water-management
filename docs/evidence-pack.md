@@ -79,7 +79,10 @@ under each climate model's monthly change factors (report format
 [§ Future yield](#future-yield)); and § 7 counting Sentinel-2 beside WOfS,
 each source and the dates either saw together (report format
 `evidence-24`, issue #624 step 7, 2026-10-29; [§ Observed wet
-days](#observed-wet-days)). What is left is
+days](#observed-wet-days)); and § 3's calibration locations, each with its
+period and every land unit with where its parameters come from (report
+format `evidence-25`, issue #659, 2026-10-30; [§ Calibration
+zones](#calibration-zones)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -749,16 +752,31 @@ and no pack made of it).
 
 ## Calibration zones
 
-A baseline calibrated at several gauges (model.md §2.10n) runs each ticked
-gauge's land units on that zone's own GR4J parameters, so the site's
-parameters and fit no longer describe every unit's runoff. From report
-format `evidence-22` (issue #555, `evidence/calibrationZones.ts`
-`calibrationZonesSection`) the document carries `calibrationZones`: one
-entry per zone the baseline applied, upstream first, the calibration site's
-own zone last (`nodeId` null), each with
+A baseline calibrated at several locations (model.md §2.10n) runs each
+ticked location's group of land units on that location's own GR4J
+parameters, so the headline location's parameters and fit no longer
+describe every unit's runoff. From report format `evidence-22` (issue #555,
+`evidence/calibrationZones.ts` `calibrationZonesSection`) the document
+carries `calibrationZones`: one entry per group the baseline applied, in the
+run's order (upstream first, the headline location last, `headline`; then
+the units on the catchment parameters, `kind` 'default'; a run from before
+engine 1.110.0 has the calibration site's own zone last, `nodeId` null and
+no `kind`), each with
 
-- its gauge's name, its land units' count and area (km², the run's model;
-  no unit names, as elsewhere in a baseline report),
+- its location's name and `kind` (a gauge's, the outlet's), its land units'
+  count and area (km², the run's model),
+- from `evidence-25` (issue #659): its period (`window`, the gauge row's or
+  the outlet's top-level window, null ends the record's own; none for the
+  catchment-parameter units) and every unit in its group by name with where
+  its parameters come from (`members`, from `summary.unitRain.paramSource`:
+  `zone` its own zone, `assigned` borrowed by Parameters from, `rest` the
+  rule for units outside every location, `default` the catchment
+  parameters; a run from before engine 1.110.0 recorded none, so they are
+  read from its network: a gauge's units and those draining through its
+  calibration site are `zone`, the site zone's units beside or below the
+  site `rest`). The
+  pack already names every unit (§ 4); an applicant's copy is an allowlisted
+  projection that holds no calibration section ([§ Applicants](#applicants)),
 - the X1–X4 its units ran on (`summary.unitRain.zones`), and whether they
   were the zone's own or the catchment's (`fitted`),
 - its fit (`fit`): the fit record's description, its engine version, its
@@ -767,9 +785,14 @@ own zone last (`nodeId` null), each with
   edited since (judged against the parameters the units ran on, as the run's
   `fitStatus` is, not the record's stored list); null when the zone's
   parameters don't come from a stored fit,
-- the run's statistics at its gauge (`stats`: days, NSE, KGE, PBIAS and
-  `fitStatus`, the zone's own in or out of sample; the site's are the run's
-  calibration statistics), null with no scored day.
+- the run's statistics at its location (`stats`: days, NSE, KGE, PBIAS and
+  `fitStatus`, the location's own in or out of sample; the headline's are the
+  run's calibration statistics), null with no scored day.
+
+§ 3's calibration record and validation read the headline location's window
+and fit record (the frontend's `zones.ts` `runHeadlineSettings`, the engine's
+`headlineCalibrationSettings`, issue #659: a gauge's row when the
+headline is a gauge, the top level for the outlet, a legacy site's as it ran).
 
 Everything is read from what the run froze (its summary, settings snapshot
 and model), so the manifest's hash covers each zone's parameters and fit
@@ -788,9 +811,11 @@ which keeps its document. § 3 prints the section as a table
 site's parameters (followups.md § Calibration zones).
 
 Tests: `evidence/calibrationZones.test.ts` (the fit's scores, the errata
-versions, the flag), `evidence/report.test.ts` (a zoned baseline's section,
+versions, the flag, each location's period and each unit's source, the
+headline's settings), `evidence/report.test.ts` (a zoned baseline's section,
 upstream first, its gauge scored on its own record, and null with one
-parameter set), the evidence DB tests (`evidence-22`).
+parameter set), `frontend/src/lib/calibration/zoneStats.test.ts` (the table's
+rows, the headline first), the evidence DB tests.
 
 ## The responsible authority
 

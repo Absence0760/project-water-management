@@ -36,10 +36,15 @@ export const CATCHMENT_FLOW_KEYS: [keyof CatchmentFlows, string][] = [
 ];
 
 /**
- * The calibration site's node (engine ≥ 1.41.0, settings.calibrationSiteNodeId):
- * a run that scores a gauge inside the network stores that gauge's record as
- * the node's `observed_flow`, beside its `outflow`. null when the run scores
- * the outlet (or predates it).
+ * The node the run's headline calibration statistics were scored at (engine ≥
+ * 1.41.0 the calibration site; from 1.110.0, issue #659, the headline
+ * location, which may be any ticked gauge): a run that scores a gauge inside
+ * the network stores that gauge's record as the node's `observed_flow`,
+ * beside its `outflow`, and no other node's (the other locations' scores are
+ * summary.calibrationZones, with no stored record). Read from the run's
+ * series, never its settings, so a run's stored top-level window or site
+ * (the outlet record's since 1.110.0) can't mislead it. null when the run
+ * scores the outlet (or predates it).
  */
 export function calibrationSiteOf(refs: readonly { key: string; nodeId: string | null }[]): string | null {
 	return refs.find((r) => r.key === 'observed_flow' && r.nodeId !== null)?.nodeId ?? null;

@@ -194,8 +194,15 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * reproduce:pack checks each source (`observations:s2`, `observations:wofs`)
  * and the dates together (`observations:days`). A pack drafted before keeps
  * its document and its `dam-obs-1` section, still checked as it was.
+ * evidence-25 (issue #659, calibration locations): each calibration location in
+ * `calibrationZones` carries its period (`window`, a gauge row's or the
+ * outlet's top-level window) and its land units with where each one's GR4J
+ * parameters come from (`members`: its own zone, borrowed by Parameters from,
+ * the rule for units outside every location, or the catchment parameters,
+ * from summary.unitRain.paramSource). A pack drafted before keeps its
+ * document, without them.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-24';
+export const EVIDENCE_REPORT_VERSION = 'evidence-25';
 
 // ---------------------------------------------------------------------------
 // What the backend reads

@@ -53,7 +53,13 @@
 		samples.a.short === samples.b.short ? samples.a.short : `calibration period (run A ${samples.a.qualifier ?? 'not recorded'}, run B ${samples.b.qualifier ?? 'not recorded'})`
 	);
 
-	// Each calibration zone's gauge (issue #555), A against B, each side in or out of sample by its own zone's fit.
+	// Where each run scored its headline statistics (issue #659): "the outlet" or the gauge's name. A run whose
+	// statistics predate the field (no `site`) scored the outlet or recorded it on the statistics alike.
+	const where = (v: string | null | undefined) => v ?? 'the outlet';
+	const sites = $derived(comparison.calibration?.site ?? { a: null, b: null });
+	const sameSite = $derived(where(sites.a) === where(sites.b));
+
+	// Every other calibration location (issue #555; #659), A against B, each side in or out of sample by its own fit.
 	const zoneTables = $derived(
 		(comparison.calibrationZones ?? []).map((z) => {
 			const a = calibrationSample({ fitStatus: z.fitStatus.a ?? undefined });
@@ -122,6 +128,14 @@
 		<div>
 			<h3>Calibration against observed flow</h3>
 			{#if calibration.length}
+				<p class="small" data-testid="compare-headline-site">
+					{#if sameSite}
+						At the headline location, {where(sites.a)}.
+					{:else}
+						<strong>The runs score different headline locations</strong> (run A at {where(sites.a)}, run B at {where(sites.b)}), so these differences are
+						not like for like: compare each location’s own table below.
+					{/if}
+				</p>
 				<p class="muted small in-sample">
 					{sampleCaption[0]!.toUpperCase() + sampleCaption.slice(1)}: in-sample means scored on the days the parameters were fitted
 					on. The validation scores of the fit behind each run's parameters are under Fit and validation; <a href="#ewr-agreement-h">the
@@ -132,9 +146,9 @@
 				<p class="muted">Neither run has observed flow overlapping its simulation period.</p>
 			{/if}
 			{#each zoneTables as z (z.id)}
-				<h4 data-testid="compare-zone">Calibration zone at {z.name}</h4>
-				<p class="muted small">{z.sample[0]!.toUpperCase() + z.sample.slice(1)}, each run by its own zone’s fit.</p>
-				{@render table(z.rows, `Calibration statistics at ${z.name}, the calibration zone’s gauge, for both runs`)}
+				<h4 data-testid="compare-zone">Calibration location at {z.name}</h4>
+				<p class="muted small">{z.sample[0]!.toUpperCase() + z.sample.slice(1)}, each run by its own location’s fit.</p>
+				{@render table(z.rows, `Calibration statistics at ${z.name}, a calibration location, for both runs`)}
 			{/each}
 			{#if wr2012.length}
 				<h3>WR2012 check <span class="u">· simulated natural ÷ scaled WR2012</span></h3>
