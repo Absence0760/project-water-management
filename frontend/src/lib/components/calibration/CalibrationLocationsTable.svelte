@@ -34,8 +34,10 @@
 		withLocationTicked,
 		withRest,
 		withZoneFields,
+		zoneAtDefaults,
 		zoneParamsText,
-		zonesError
+		zonesError,
+		zoneWindowLine
 	} from '#lib/calibration/zones.js';
 	import { fmtNum } from '#lib/format/number.js';
 
@@ -93,8 +95,6 @@
 
 	const tick = (key: string | null, on: boolean) => onedit(withLocationTicked(s, nodes, key, on));
 	const set = (nodeId: string, patch: Partial<Omit<CalibrationZone, 'nodeId'>>) => onedit({ ...s, calibrationZones: withZoneFields(s.calibrationZones, nodeId, patch) });
-	const windowLine = (z: CalibrationZone) =>
-		`${z.calibrationStart ?? 'start of record'} – ${z.calibrationEnd ?? 'end of record'}${z.calibrationExclusions.length ? ` · ${z.calibrationExclusions.length} exclusion${z.calibrationExclusions.length === 1 ? '' : 's'}` : ''}${z.qualityFlags ? ` · suspect days ${z.qualityFlags.suspect === 'include' ? 'scored' : 'left out'}` : ''}`;
 	const units = (n: number) => `${fmtNum(n)} land unit${n === 1 ? '' : 's'}`;
 	// What the rest rule reaches now: under 'default' the units on the catchment parameters, else those it sends to a location.
 	const restReach = $derived(st.rest === 'default' ? st.defaultUnits : st.restUnits);
@@ -116,7 +116,8 @@
 
 <!-- id: the Warnings page lands on the table (`?field=fld-cal-zones`, issue #611). -->
 <fieldset class="plain zones" id="fld-cal-zones" data-testid="calibration-locations" aria-describedby="{uid}-h">
-	<legend class="label">Calibration locations <HelpTip key="calibration-zones" label="About calibration locations" /></legend>
+	<!-- A heading in its legend, so heading navigation reaches the table (the panel's h3, a part's h4). -->
+	<legend><h4 class="sub">Calibration locations <HelpTip key="calibration-zones" label="About calibration locations" /></h4></legend>
 	<p class="hint explain" id="{uid}-h">
 		A ticked location fits GR4J X1–X4 for the land units draining to it, on its own record and window, after the locations those units depend
 		on. None is required: unticked, a record stays a check. The headline is the location whose statistics a run reports.
@@ -147,7 +148,8 @@
 									aria-label="Calibrate here: {r.name}"
 									aria-describedby={r.problem ? `${uid}-${r.nodeId}-p` : undefined}
 								/>
-								Calibrate here
+								<!-- The column says it; the box's own name says it to a screen reader. -->
+								<span class="visually-hidden">Calibrate here</span>
 							</label>
 							{#if r.problem}<span class="warn small" id="{uid}-{r.nodeId}-p">Can’t be fitted: {r.problem}.</span>{/if}
 						</td>
@@ -160,8 +162,9 @@
 									disabled={readonly || !r.ticked || r.unusable}
 									onchange={() => onedit(withHeadline(s, r.nodeId))}
 									aria-label="Headline: {r.name}"
+									aria-describedby={r.ticked && !r.unusable ? (st.auto && st.headline === r.key ? `${uid}-${r.nodeId}-auto` : undefined) : `${uid}-untick`}
 								/>
-								{#if r.ticked && !r.unusable && st.auto && st.headline === r.key}<span class="muted small" data-testid="calibration-headline-auto">Auto</span>{/if}
+								{#if r.ticked && !r.unusable && st.auto && st.headline === r.key}<span class="muted small" id="{uid}-{r.nodeId}-auto" data-testid="calibration-headline-auto">Auto</span>{/if}
 							</label>
 						</td>
 						<td class="num">{coverageText(locationCoverage(series, r.key, r.records, r.kind === 'outlet' ? (s.calibrationFlowKind ?? null) : (r.zone?.calibrationFlowKind ?? null)))}</td>
@@ -171,6 +174,8 @@
 			</tbody>
 		</table>
 	</div>
+	<!-- Why an unticked row's Headline is off, for a screen reader (the radio says nothing else). -->
+	<span class="visually-hidden" id="{uid}-untick">Tick Calibrate here first.</span>
 	{#if st.ticked.length}
 		<label class="check auto">
 			<input type="radio" name="{uid}-headline" checked={st.auto} disabled={readonly} onchange={() => onedit(withHeadline(s, null))} aria-describedby="{uid}-auto-h" />
@@ -178,8 +183,8 @@
 		</label>
 		<p class="hint" id="{uid}-auto-h" data-testid="calibration-locations-ticked">
 			Fit automatically fits {st.ticked.length === 1 ? '1 location' : `${fmtNum(st.ticked.length)} locations`}. Headline: <strong>{st.headlineName}</strong>{st.auto
-				? ' (picked automatically: the outlet when it is ticked, else the ticked gauge with the largest area above it)'
-				: ''}.
+				? ' (picked automatically)'
+				: ''}.<span class="explain"> Automatically, the headline is the outlet when it is ticked, else the ticked gauge with the largest area above it.</span>
 		</p>
 	{:else}
 		<p class="alert alert-warning" role="status" data-testid="calibration-none">
@@ -187,39 +192,11 @@
 			it.
 		</p>
 	{/if}
-	<div class="field rest">
-		<label for="{uid}-rest">Units with no ticked location downstream take</label>
-		<select
-			id="{uid}-rest"
-			disabled={readonly}
-			value={st.rest}
-			onchange={(e) => onedit(withRest(s, e.currentTarget.value as CalibrationRest))}
-			aria-describedby="{uid}-rest-h"
-		>
-			{#each CALIBRATION_RESTS as r (r)}<option value={r}>{REST_LABEL[r]}</option>{/each}
-		</select>
-		<span class="hint" id="{uid}-rest-h" data-testid="calibration-rest-reach">
-			{#if !st.ticked.length}
-				No location is ticked, so every unit runs on the catchment parameters.
-			{:else if restReach}
-				{units(restReach)} now.
-			{:else}
-				None now: every land unit has a ticked location downstream.
-			{/if}
-		</span>
-	</div>
-	{#if UnitParams}
-		<UnitParams
-			bind:assignments={() => s.unitParamsFrom ?? null, (v: Record<string, string> | null) => onedit({ ...s, unitParamsFrom: v })}
-			{nodes}
-			settings={s}
-			{readonly}
-		/>
-	{/if}
+	<!-- Each gauge's own window, record, exclusions and suspect-day rule, right under the table it is ticked in. -->
 	{#each rows as r (r.nodeId)}
 		{#if r.zone}
 			{@const z = r.zone}
-			<Fold name="{r.name}:" line={windowLine(z)} atDefaults={!z.enabled} {readonly} problem={!!zonesError([z], nameOf)} testid="calibration-zone-fold">
+			<Fold name="Window at {r.name}:" line={zoneWindowLine(z)} atDefaults={zoneAtDefaults(z)} {readonly} problem={!!zonesError([z], nameOf)} testid="calibration-zone-fold">
 				<div class="field">
 					<label for="{uid}-{z.nodeId}-from">From</label>
 					<DayInput id="{uid}-{z.nodeId}-from" {readonly} value={z.calibrationStart ?? ''} onchange={(v) => set(z.nodeId, { calibrationStart: v || null })} />
@@ -262,6 +239,35 @@
 			</Fold>
 		{/if}
 	{/each}
+	<div class="field rest">
+		<label for="{uid}-rest">Units with no ticked location downstream take</label>
+		<select
+			id="{uid}-rest"
+			disabled={readonly}
+			value={st.rest}
+			onchange={(e) => onedit(withRest(s, e.currentTarget.value as CalibrationRest))}
+			aria-describedby="{uid}-rest-h"
+		>
+			{#each CALIBRATION_RESTS as r (r)}<option value={r}>{REST_LABEL[r]}</option>{/each}
+		</select>
+		<span class="hint" id="{uid}-rest-h" data-testid="calibration-rest-reach">
+			{#if !st.ticked.length}
+				Applies once a location is ticked.
+			{:else if restReach}
+				Applies to {units(restReach)} now.
+			{:else}
+				None now: every land unit has a ticked location downstream.
+			{/if}
+		</span>
+	</div>
+	{#if UnitParams}
+		<UnitParams
+			bind:assignments={() => s.unitParamsFrom ?? null, (v: Record<string, string> | null) => onedit({ ...s, unitParamsFrom: v })}
+			{nodes}
+			settings={s}
+			{readonly}
+		/>
+	{/if}
 </fieldset>
 
 <style>
@@ -274,12 +280,16 @@
 	}
 	.check {
 		display: inline-flex;
-		gap: 0.375rem;
-		align-items: center;
 	}
 	.check.auto {
-		min-height: 36px;
 		margin-top: 0.25rem;
+	}
+	legend {
+		padding: 0;
+	}
+	legend .sub {
+		margin: 0 0 0.35rem;
+		font-size: 0.95rem;
 	}
 	.rest {
 		max-width: 40rem;

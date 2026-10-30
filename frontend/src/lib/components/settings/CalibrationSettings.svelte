@@ -59,7 +59,7 @@
 	import { applyReport, marPenaltyOn } from '#lib/calibration/fit.js';
 	import { headlineLocation, locationName } from '@water-management/engine';
 	import { headlineView, isLegacyLocations, normalizedLocations, withZoneFields } from '#lib/calibration/zones.js';
-	import { measuredAtHref, unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
+	import { measuredAtHref, unplacedAdvice, unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import type { RunBlocker } from '#lib/calibration/autoFit.js';
 	import CalibrationExclusions from '#lib/components/calibration/CalibrationExclusions.svelte';
@@ -107,7 +107,7 @@
 		onProjectChange
 	}: {
 		project: Project;
-		/** The model being edited: its land units' areas (the catchment area's default), its gauges (the calibration site) and unsaved edits (a fit runs on them). */
+		/** The model being edited: its land units' areas (the catchment area's default), its outlet and gauges (the calibration locations) and unsaved edits (a fit runs on them). */
 		editor?: ModelEditor;
 		/** The unsaved settings, held by the workspace page (settingsDraft.svelte.ts): its save bar saves them. */
 		draft: SettingsDraft;
@@ -217,7 +217,9 @@
 	 * a gauge's in its row.
 	 */
 	function applyFit(steps: { key: LocationKey; report: CalibrationReport; params: Gr4jParams; record: FitRecord }[]) {
-		let next = { ...s };
+		// In the locations shape first (a fit applied before the page adopted it): a gauge's row of a legacy inner site
+		// would otherwise be rebuilt from the top level when read, losing what the fit wrote into it.
+		let next = isLegacyLocations(s) ? normalizedLocations({ ...s }, nodes, outletRecords.length > 0) : { ...s };
 		for (const st of steps) {
 			if (st.key === null) next = { ...applyReport(next, st.report), fitRecord: st.record };
 			else next = { ...next, calibrationZones: withZoneFields(next.calibrationZones, st.key, { gr4j: st.params, fitRecord: st.record }) };
@@ -251,6 +253,7 @@
 	const outletName = $derived(editor?.model.nodes.find((n) => n.downstreamNodeId === null)?.name ?? 'the outlet');
 	// Flow records no location can be fitted on (issue #659): flagged here with a link to their Measured at.
 	const unplaced = $derived(unplacedRecords((series ?? []).map((x) => ({ ...x, name: x.name ?? '' })), nodes));
+	let showAllUnplaced = $state(false);
 	/** The table's edits: its location keys, written into the form as given. */
 	function editLocations(next: Partial<ProjectSettings>) {
 		const n = next as unknown as Record<string, unknown>;
@@ -259,12 +262,12 @@
 			if (JSON.stringify(n[k]) !== JSON.stringify(f[k])) f[k] = n[k] === undefined ? undefined : JSON.parse(JSON.stringify(n[k]));
 	}
 	/** The Calibration record panel's line: the ticked locations, and the headline when there are several. */
-	function locationsLine(): { names: string[]; headline: string | null } {
+	function locationsLine(): { names: string[]; headline: string | null; outlet: boolean } {
 		const names = [
 			...(s.calibrateAtOutlet === true ? [outletName] : []),
 			...(s.calibrationZones ?? []).filter((z) => z.enabled).map((z) => nodeName(z.nodeId) ?? 'a gauge no longer in the model')
 		];
-		return { names, headline: names.length > 1 ? locationName(nodes, headline) : null };
+		return { names, headline: names.length > 1 ? locationName(nodes, headline) : null, outlet: s.calibrateAtOutlet === true };
 	}
 	// The window above and the locations' rows each report an error; the save bar reads one (the window's first).
 	let mainWindowError = $state<string | null>(null);
@@ -573,7 +576,9 @@
 	<p class="hint explain">The observed flow the parameters are scored against, and what is left out.</p>
 	<!-- The calibration locations (issue #659, model.md §2.10n): the outlet and every gauge with a record, each ticked or
 	     not, the headline, and what the units with no location downstream take. -->
-	{#if editor && (calSites.length || outletRecords.length || s.calibrateAtOutlet === true || (s.calibrationZones ?? []).some((z) => z.enabled))}
+	<!-- Only once the form is in the locations shape (the $effect above adopts settings from before engine 1.110.0 when the
+	     records are known): an edit to a legacy form would set calibrateAtOutlet and skip moving an inner site into its row. -->
+	{#if editor && !isLegacyLocations(s) && (calSites.length || outletRecords.length || s.calibrateAtOutlet === true || (s.calibrationZones ?? []).some((z) => z.enabled))}
 		<Lazy load={loadLocations}>
 			{#snippet children(CalibrationLocationsTable)}
 				<CalibrationLocationsTable
@@ -591,18 +596,33 @@
 	{/if}
 	{#if unplaced.length}
 		<!-- A flow record no location can be fitted on (issue #659): where it says it was measured is on Data. -->
+		{@const advice = unplacedAdvice(unplaced, { innerGauges: nodes.some((n) => n.kind === 'gauge' && n.downstreamNodeId !== null), readonly })}
 		<div class="alert alert-warning unplaced" role="status" data-testid="calibration-unplaced">
-			<p>{unplaced.length === 1 ? 'A flow record is' : `${unplaced.length} flow records are`} not placed in the network, so no location can be calibrated on {unplaced.length === 1 ? 'it' : 'them'}:</p>
+			<p>
+				{unplaced.length === 1 ? 'A flow record is' : `${unplaced.length} flow records are`} not placed in the network, so no location can be calibrated on
+				{unplaced.length === 1 ? 'it' : 'them'}.{#if advice}{' '}{advice}{/if}
+			</p>
+			<!-- The first three, the rest behind Show all (ui-playbook.md § 2, a long warning list on a first screen). -->
 			<ul>
-				{#each unplaced as u (u.id)}
-					<li data-testid="calibration-unplaced-record"><a href={measuredAtHref(u.id)}>{u.name || 'A flow record'}</a>: {unplacedWhy(u)}. Set its Measured at to a gauge inside the network.</li>
+				{#each showAllUnplaced ? unplaced : unplaced.slice(0, 3) as u (u.id)}
+					<li data-testid="calibration-unplaced-record"><a href={measuredAtHref(u.id)}>{u.name || 'A flow record'}</a>: {unplacedWhy(u)}.</li>
 				{/each}
 			</ul>
+			{#if unplaced.length > 3 && !showAllUnplaced}
+				<button type="button" class="btn btn-sm" onclick={() => (showAllUnplaced = true)}>Show all {unplaced.length}</button>
+			{/if}
 		</div>
 	{/if}
 	<!-- The outlet location's own settings (the top level, issue #659 D1): its window and record, the exclusions, the
 	     records' missing periods, the low-flow periods and the quality flags, which are the outlet records'. -->
 	<h4 class="sub" data-testid="outlet-record-h">At the outlet: {outletName}</h4>
+	{#if s.calibrateAtOutlet === false}
+		<!-- A state line, not an explanation: these fields read as live otherwise (issue #659). -->
+		<p class="hint" data-testid="outlet-not-location">
+			The outlet isn’t a calibration location (its Calibrate here is unticked), so no fit uses this window; its quality flags still apply to the run’s
+			checks of the outlet’s record.
+		</p>
+	{/if}
 	<CalibrationWindowFields
 		bind:start={s.calibrationStart}
 		bind:end={s.calibrationEnd}

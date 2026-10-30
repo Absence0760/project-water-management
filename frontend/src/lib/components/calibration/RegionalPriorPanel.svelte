@@ -81,7 +81,7 @@
 	const rows = $derived(ok ? rangeRows(ok.ranges!, currentParams(zone)) : []);
 	const skill = $derived(ok?.prior?.ok ? skillText(ok.prior.leaveOneOut?.skill, ok.prior.leaveOneOut?.n) : null);
 	const soil = $derived(ok?.prior?.ok ? ok.prior.soil : null);
-	const targetName = $derived(zone === null ? (zones.length ? 'the calibration site’s own zone' : 'the catchment') : `the zone at ${zones.find((z) => z.nodeId === zone)?.name ?? 'its gauge'}`);
+	const targetName = $derived(zone === null ? (zones.length ? 'the outlet’s own zone' : 'the catchment') : `the zone at ${zones.find((z) => z.nodeId === zone)?.name ?? 'its gauge'}`);
 	const km = (v: number) => fmtNum(v, v >= 10 ? 0 : 1);
 	const pct = (w: number) => `${fmtNum(Math.round(w * 100))} %`;
 
@@ -141,7 +141,7 @@
 			<div class="field">
 				<label for="{uid}-zone">For</label>
 				<select id="{uid}-zone" bind:value={zone} data-testid="prior-zone">
-					<option value={null}>The calibration site’s own zone</option>
+					<option value={null}>The outlet’s own zone</option>
 					{#each zones as z (z.nodeId)}<option value={z.nodeId}>The zone at {z.name}</option>{/each}
 				</select>
 			</div>

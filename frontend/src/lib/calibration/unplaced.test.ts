@@ -1,7 +1,7 @@
 // Flow records not placed in the network (issue #659, docs/ui.md § Settings & calibration).
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode } from '@water-management/engine';
-import { measuredAtHref, unplacedRecords, unplacedWhy } from './unplaced';
+import { measuredAtHref, unplacedAdvice, unplacedRecords, unplacedWhy } from './unplaced';
 
 const node = (id: string, name: string, kind: NetworkNode['kind'], down: string | null) => ({ id, name, kind, downstreamNodeId: down });
 const NODES = [node('O', 'Outlet', 'gauge', null), node('G', 'Weir', 'gauge', 'O'), node('F', 'Farm', 'farm', 'O')];
@@ -35,5 +35,13 @@ describe('unplaced flow records', () => {
 		expect(unplacedWhy({ why: 'notInner', at: 'Farm' })).toBe('its Measured at is “Farm”, not a gauge inside the network');
 		expect(unplacedWhy({ why: 'second', at: null })).toMatch(/second outlet record of its kind/);
 		expect(measuredAtHref('a b')).toBe('?tab=series&series=a%20b#data-chart');
+		// Advice only an editor can act on, and only where there is somewhere to move the record to.
+		const second = [{ why: 'second' as const }];
+		const gone = [{ why: 'gone' as const }];
+		expect(unplacedAdvice(second, { innerGauges: true, readonly: false })).toBe('Set its Measured at, on Data, to a gauge inside the network.');
+		expect(unplacedAdvice(second, { innerGauges: false, readonly: false })).toBeNull();
+		expect(unplacedAdvice(gone, { innerGauges: false, readonly: false })).toMatch(/^Add its gauge to the network first/);
+		expect(unplacedAdvice(gone, { innerGauges: true, readonly: true })).toBeNull();
+		expect(unplacedAdvice([], { innerGauges: true, readonly: false })).toBeNull();
 	});
 });

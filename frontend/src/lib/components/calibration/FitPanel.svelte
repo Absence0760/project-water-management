@@ -147,7 +147,7 @@
 	// before any worker starts.
 	const planned = $derived(nodes.length ? fitPlanOf(settings(), nodes) : null);
 	const planError = $derived(planned?.error ?? null);
-	const noneTicked = $derived(!!planned?.error && /^No calibration location is ticked/.test(planned.error));
+	const noneTicked = $derived(!!planned?.none);
 	const canStart = $derived(hasObserved && !planError && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && !priorProblem && startsOk && !session.busy);
 	const columns = $derived(report ? scoreColumns(report) : []);
 	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.19.0, CR-5); none on an older report.
@@ -372,15 +372,21 @@
 			{:else}
 				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart} aria-describedby={planError ? `${uid}-plan ${uid}-runs` : `${uid}-runs`}>Fit automatically</button>
 			{/if}
-			<span class="muted small" id="{uid}-runs" data-testid="fit-runs">{fmtNum(runs)} runs in all{planned?.plan && planned.plan.length > 1 ? `, ${fmtNum(runs * planned.plan.length)} over ${planned.plan.length} locations` : ''}.</span>
+			<span class="muted small" id="{uid}-runs" data-testid="fit-runs"
+				>{planned?.plan && planned.plan.length > 1
+					? `${fmtNum(runs)} runs a location, ${fmtNum(runs * planned.plan.length)} in all over ${planned.plan.length} locations.`
+					: `${fmtNum(runs)} runs in all.`}</span
+			>
 		</div>
 		<!-- The plan (issue #659): why nothing can be fitted, before any worker starts, or the locations in the order they're fitted. -->
 		{#if planError}
 			<p class={noneTicked ? 'muted small' : 'alert alert-error small'} id="{uid}-plan" data-testid="fit-plan-error">
-				{noneTicked ? 'No location is calibrated: tick Calibrate here at a location under Calibration record to fit it. Until then every unit runs on the catchment parameters.' : planError}
+				{#if noneTicked}No location is calibrated: tick Calibrate here at a location under <a href="#fld-cal-zones">Calibration locations</a> to fit it.
+					Until then every unit runs on the catchment parameters.{:else}{planError}{/if}
 			</p>
 		{:else if planned?.plan && planned.plan.length > 1}
-			<ol class="plan small muted" data-testid="fit-plan" aria-label="The fit’s order">
+			<p class="small muted plan-h" id="{uid}-plan-h">Fits in this order:</p>
+			<ol class="plan small muted" data-testid="fit-plan" aria-labelledby="{uid}-plan-h">
 				{#each planned.plan as st (st.zoneNodeId ?? 'outlet')}
 					{@const after = afterText(st, nodes)}
 					<li data-testid="fit-plan-step">{st.name}{st.headline ? ' (headline)' : ''}{after ? `, ${after}` : ''}</li>
@@ -639,8 +645,11 @@
 
 <style>
 	/* The fit's order (issue #659): a short numbered list under the button. */
-	.plan {
+	.plan-h {
 		margin: 0.25rem 0 0;
+	}
+	.plan {
+		margin: 0;
 		padding-left: 1.25rem;
 	}
 	/* Its card (Settings' .sub-card) draws the frame. */

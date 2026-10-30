@@ -50,5 +50,16 @@ export function unplacedWhy(r: Pick<UnplacedRecord, 'why' | 'at'>): string {
 	return 'it is a second outlet record of its kind, and a run reads only the first by name';
 }
 
+/**
+ * What to do about unplaced records, or null when there is nothing the reader can do there: setting a record's
+ * Measured at needs an editor, and a gauge inside the network to point it at (with none, a second outlet record has
+ * nowhere to go, and a gone or wrong site needs its gauge added first).
+ */
+export function unplacedAdvice(records: readonly Pick<UnplacedRecord, 'why'>[], o: { innerGauges: boolean; readonly: boolean }): string | null {
+	if (o.readonly || !records.length) return null;
+	if (o.innerGauges) return 'Set its Measured at, on Data, to a gauge inside the network.';
+	return records.every((r) => r.why === 'second') ? null : 'Add its gauge to the network first, then set its Measured at on Data.';
+}
+
 /** The Data page's Series details of a record, where its Measured at is set. */
 export const measuredAtHref = (id: string): string => `?tab=series&series=${encodeURIComponent(id)}#data-chart`;

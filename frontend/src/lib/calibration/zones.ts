@@ -12,7 +12,10 @@
 // settings, ticked by settings.calibrateAtOutlet. calibrationSiteNodeId is the
 // optional headline pointer (null = auto). Settings from before engine 1.110.0
 // (no calibrateAtOutlet) are read through the engine's
-// normalizeCalibrationLocations, which every edit here applies first.
+// normalizeCalibrationLocations: the readers here (headlineView) do it
+// themselves, and the edits (withLocationTicked, withHeadline, withRest) take
+// settings already in that shape (the Calibration page adopts them first,
+// settingsDraft adopt, and shows the table only then).
 import {
 	CALIBRATION_PARAMS,
 	calibrationRestOf,
@@ -231,6 +234,22 @@ export function locationsState(nodes: readonly LocNode[], rows: readonly Locatio
 	};
 }
 
+/** A gauge row at its defaults (no window, record, exclusions or suspect-day rule of its own): its fold starts closed. */
+export const zoneAtDefaults = (z: CalibrationZone): boolean =>
+	z.calibrationStart === null && z.calibrationEnd === null && z.calibrationFlowKind === null && !z.calibrationExclusions.length && !z.qualityFlags;
+
+/** A gauge row's fold line: "2001-10-01 – end of record · 2 exclusions · suspect days left out". */
+export function zoneWindowLine(z: CalibrationZone): string {
+	const n = z.calibrationExclusions.length;
+	return [
+		`${z.calibrationStart ?? 'start of record'} – ${z.calibrationEnd ?? 'end of record'}`,
+		n ? `${fmtNum(n)} exclusion${n === 1 ? '' : 's'}` : null,
+		z.qualityFlags ? `suspect days ${z.qualityFlags.suspect === 'include' ? 'scored' : 'left out'}` : null
+	]
+		.filter(Boolean)
+		.join(' · ');
+}
+
 /** The first location whose window or exclusions can't be saved, as the save bar names it; null when every row is fine. */
 export function zonesError(zones: readonly CalibrationZone[] | null | undefined, name: (nodeId: string) => string): string | null {
 	for (const z of zones ?? []) {
@@ -279,12 +298,19 @@ export function zoneParamsText(p: Gr4jParams | null | undefined): string {
  * no location is ticked, a group with no unit draining through its location, or a borrowing cycle. Read from the
  * form and the network as they stand, before any worker starts.
  */
-export function fitPlanOf(s: LocSettings, nodes: readonly NetworkNode[]): { plan: ZoneFitPlanStep[]; error: null } | { plan: null; error: string } {
+export function fitPlanOf(
+	s: LocSettings,
+	nodes: readonly NetworkNode[]
+): { plan: ZoneFitPlanStep[]; error: null; none: false } | { plan: null; error: string; /** No location is ticked (the page's own state, not a fault). */ none: boolean } {
+	// None ticked, read as the engine does (a ticked row that can't be a location doesn't count), so the card can say
+	// so as a state rather than as the engine's refusal.
+	const n = normalizedLocations(s, nodes, true);
+	const none = !(n.calibrateAtOutlet === true && outletNode(nodes)) && !resolveLocations(nodes, n, gr4jOf(n.gr4j ?? {}), []);
 	try {
 		const input = { settings: s as ModelInput['settings'], model: { nodes: [...nodes], crops: [], cropAreas: [], transfers: [] }, series: {} } as unknown as ModelInput;
-		return { plan: locationFitPlan(input), error: null };
+		return { plan: locationFitPlan(input), error: null, none: false };
 	} catch (e) {
-		return { plan: null, error: planErrorText(e instanceof Error ? e.message : String(e)) };
+		return { plan: null, error: planErrorText(e instanceof Error ? e.message : String(e)), none };
 	}
 }
 

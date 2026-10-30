@@ -44,6 +44,7 @@
 		QM_WET_DAY_MM_MIN,
 		type SeriesMeta,
 		type ModelInput,
+		type ProjectSettings,
 		defaultProjectSettings,
 		resolveCatchmentAreaKm2
 	} from '@water-management/engine';
@@ -55,6 +56,7 @@
 	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { headlineView } from '#lib/calibration/zones.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { dataQualityError } from './dataQuality';
 	import DataQualitySection from './DataQualitySection.svelte';
@@ -223,7 +225,9 @@
 	 * The parameters were fitted under Fragmentation, retired in engine 1.109.0 (issue #658): "parameters not fitted for
 	 * this method" (the engine's fitRecordStatus methodChanged).
 	 */
-	const fitMismatch = $derived(!!s.fitRecord && fitFlowMethod(s.fitRecord) === 'fragmentation');
+	// The headline location's fit (issue #659): a legacy inner site's record is in its row once the Calibration page reads it.
+	const headFit = $derived(headlineView(s as unknown as ProjectSettings, editor?.model.nodes).fitRecord);
+	const fitMismatch = $derived(!!headFit && fitFlowMethod(headFit) === 'fragmentation');
 	// Rain gaps at its defaults: one line that opens its three cards (rain.ts).
 	const rainAtDefaults = $derived(rainGapsAtDefaults(s));
 	// Each panel's line of what it is set to now (summaries.ts).

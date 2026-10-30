@@ -20,8 +20,10 @@ import {
 	withRest,
 	withZoneFields,
 	withZoneTicked,
+	zoneAtDefaults,
 	zoneParamsText,
-	zonesError
+	zonesError,
+	zoneWindowLine
 } from './zones';
 
 const node = (id: string, name: string, kind: NetworkNode['kind'], down: string | null, areaKm2 = 0) => ({ id, name, kind, downstreamNodeId: down, areaKm2 }) as NetworkNode;
@@ -110,6 +112,15 @@ describe('the locations table', () => {
 		expect([coverageText(1), coverageText(2), coverageText(null)]).toEqual(['1 water year (too short)', '2 water years', '–']);
 	});
 
+	it('folds a gauge row to its window line, closed while it is at its defaults', () => {
+		const z = newCalibrationZone('H');
+		expect(zoneAtDefaults(z)).toBe(true);
+		expect(zoneWindowLine(z)).toBe('start of record – end of record');
+		const set = { ...z, calibrationStart: '2001-10-01', calibrationExclusions: [{ waterYear: 2004, reason: 'r' }], qualityFlags: { suspect: 'exclude' as const } };
+		expect(zoneAtDefaults(set)).toBe(false);
+		expect(zoneWindowLine(set)).toBe('2001-10-01 – end of record · 1 exclusion · suspect days left out');
+	});
+
 	it('shows a location’s parameters, or that it has none yet', () => {
 		expect(zoneParamsText({ x1: 900, x2: 0, x3: 220.4, x4: 3.14 })).toBe('X1 900 · X2 0.00 · X3 220 · X4 3.14');
 		expect(zoneParamsText(null)).toMatch(/Not fitted yet/);
@@ -191,10 +202,13 @@ describe('the fit plan', () => {
 	});
 
 	it('refuses, before any worker starts, when none is ticked, a group has no unit draining through it, or units borrow in a cycle', () => {
-		expect(fitPlanOf(fresh({ calibrateAtOutlet: false }), NODES).error).toMatch(/^No calibration location is ticked/);
+		const none = fitPlanOf(fresh({ calibrateAtOutlet: false }), NODES);
+		expect(none.error).toMatch(/^No calibration location is ticked/);
+		expect(none.none).toBe(true);
 		// Every unit above the weir borrows the low weir's parameters: the weir's group drains through nothing of its own.
 		const empty = fitPlanOf(fresh({ calibrationZones: [ticked('H'), ticked('L')], unitParamsFrom: { U: 'L' } }), NODES);
 		expect(empty.error).toMatch(/Weir/);
+		expect(empty.none).toBe(false);
 		const ok = fitPlanOf(
 			fresh({ calibrateAtOutlet: false, calibrationRest: 'default', calibrationZones: [ticked('H'), ticked('L')], unitParamsFrom: {} }),
 			[...NODES, node('U2', 'Upper farm 2', 'farm', 'H', 3), node('S2', 'Side farm 2', 'farm', 'L', 3)]

@@ -12,10 +12,11 @@
 // headline pointer: they need the API to accept them (slice B of issue #659).
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
+import { addMember, createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openFold, saveSettings } from '../support/settings.ts';
+import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 const DAYS = 120;
 const APAN = [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110];
@@ -171,6 +172,33 @@ test('a flow record not placed in the network is flagged, and its link opens it 
 	await flag.getByRole('link', { name: 'Second outlet record' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=series&series=${id}#data-chart$`));
 	await expect(page.getByTestId('series-unplaced')).toContainText('Not placed in the network, so no calibration location can be fitted on it');
+	await expect(page.getByTestId('series-unplaced')).toContainText('Set its Measured at, on Data, to a gauge inside the network.');
+});
+
+test('a viewer reads the locations and the unplaced record, with nothing to tick and no advice to act on', async ({ page, owner, signIn }) => {
+	void owner;
+	const { project } = await seed(page.request, 'Locations viewer', { outletRecord: true });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Second outlet record', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(DAYS) });
+	const viewer = await signIn('Locations viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(`/projects/${project.id}?tab=calibration`);
+	await expect(locations(viewer.page).getByRole('checkbox', { name: 'Calibrate here: Middle weir' })).toBeDisabled();
+	await expect(locations(viewer.page).getByRole('radio', { name: 'Pick the headline automatically' })).toBeDisabled();
+	await expect(locations(viewer.page).getByLabel('Units with no ticked location downstream take')).toBeDisabled();
+	await expect(viewer.page.getByTestId('calibration-unplaced')).toBeVisible();
+	await expect(viewer.page.getByTestId('calibration-unplaced')).not.toContainText('Set its Measured at');
+	await expectNoViolations(viewer.page, { include: '#set-record' });
+});
+
+test('on a phone the locations table scrolls in its box, never the page', async ({ page, owner }) => {
+	void owner;
+	const { project } = await seed(page.request, 'Locations phone', { outletRecord: true });
+	await resizeTo(page, { width: 390, height: 844 });
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	await locations(page).getByRole('checkbox', { name: 'Calibrate here: Middle weir' }).check();
+	await expect(page.getByTestId('calibration-locations-ticked')).toContainText('2 locations');
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page, { include: '#set-record' });
 });
 
 test('a legacy project scored at an inner gauge reads as that gauge’s ticked location and headline, unedited', async ({ page, owner }) => {

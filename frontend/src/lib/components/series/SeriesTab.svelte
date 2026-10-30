@@ -102,7 +102,7 @@
 	import EditDay from './EditDay.svelte';
 	import { handDayCount, handPoints, handRangesText } from '#lib/series/editDay.js';
 	import { normalizedLocations } from '#lib/calibration/zones.js';
-	import { unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
+	import { unplacedAdvice, unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
@@ -1261,12 +1261,12 @@
 					{/if}
 					{#if unplaced.get(viewing.id)}
 						{@const u = unplaced.get(viewing.id)!}
+						{@const advice = unplacedAdvice([u], { innerGauges: gauges.length > 0, readonly })}
 						<!-- Issue #659: the Calibration page flags it too, with a link here. -->
 						<div class="detail detail-unplaced">
 							<dt>Calibration</dt>
 							<dd data-testid="series-unplaced">
-								Not placed in the network, so no calibration location can be fitted on it: {unplacedWhy(u)}.{#if u.why !== 'second' || gauges.length}{' '}Set
-									its Measured at to a gauge inside the network.{/if}
+								Not placed in the network, so no calibration location can be fitted on it: {unplacedWhy(u)}.{#if advice}{' '}{advice}{/if}
 							</dd>
 						</div>
 					{/if}

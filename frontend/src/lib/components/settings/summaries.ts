@@ -52,18 +52,19 @@ export interface CalibrationSummaryInput {
 	 * The ticked calibration locations by name (issue #659), and the headline's name when there are several; null
 	 * while the network isn't known.
 	 */
-	locations?: { names: string[]; headline: string | null } | null;
+	locations?: { names: string[]; headline: string | null; /** The outlet is one of them (settings.calibrateAtOutlet). */ outlet: boolean } | null;
 }
 
 /**
  * The lines of the four panels on the Calibration page, Flow calibration, Calibration record, Fit the parameters and
  * the WR2012 check (CalibrationSettings.svelte, issue #586 round 3).
  */
-/** "Calibrated at Weir, Outlet · headline Weir", or that none is; null while not known. */
+/** "Calibrated at Weir, Outlet · headline Weir" (past three, "Calibrated at 4 locations"), or that none is; null while not known. */
 function locationsText(l: CalibrationSummaryInput['locations']): string | null {
 	if (!l) return null;
 	if (!l.names.length) return 'No location calibrated';
-	return `Calibrated at ${l.names.join(', ')}${l.headline ? ` · headline ${l.headline}` : ''}`;
+	const where = l.names.length > 3 ? `${fmtNum(l.names.length)} locations` : l.names.join(', ');
+	return `Calibrated at ${where}${l.headline ? ` · headline ${l.headline}` : ''}`;
 }
 
 export function calibrationSummaries(i: CalibrationSummaryInput): Partial<Record<SettingsSectionId, string>> {
@@ -83,13 +84,18 @@ export function calibrationSummaries(i: CalibrationSummaryInput): Partial<Record
 			.join(' · '),
 		'set-record': [
 			locationsText(i.locations),
-			// The outlet location's window (the top level's), and what it leaves out.
-			span ?? (i.locations ? 'the whole flow record' : 'The whole flow record'),
-			exclusions ? `${plural(exclusions, 'period')} left out` : null,
-			// Engine ≥ 1.90.0 (issue #557): named only when set.
-			s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
-			// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
-			s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
+			// The outlet location's window (the top level's) and what it leaves out, said as the outlet's (issue #659); not
+			// named when the outlet isn't a location, as no fit uses them.
+			...(!i.locations || i.locations.outlet
+				? [
+						i.locations ? `outlet: ${span ?? 'the whole flow record'}` : (span ?? 'The whole flow record'),
+						exclusions ? `${plural(exclusions, 'period')} left out` : null,
+						// Engine ≥ 1.90.0 (issue #557): named only when set.
+						s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
+						// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
+						s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
+					]
+				: [])
 		]
 			.filter(Boolean)
 			.join(' · '),
