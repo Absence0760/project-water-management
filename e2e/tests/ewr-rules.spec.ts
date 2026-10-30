@@ -168,7 +168,11 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	await expectNoViolations(page);
 	// The run's warnings, back on Runs & results, say the same about the short record.
 	await page.goBack();
-	await expect(page.getByRole('status').filter({ hasText: /to check before relying on this run/ })).toContainText('EWR rule table at the outlet (Outflow gauge)');
+	// The things to check show their first 3 (issue #521); each unit on the catchment rain is one of them since Per unit is
+	// the only method (engine 1.109.0, FM3), so this one is further down the list.
+	const checks = page.getByRole('status').filter({ hasText: /to check before relying on this run/ });
+	await checks.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
+	await expect(checks).toContainText('EWR rule table at the outlet (Outflow gauge)');
 });
 
 test('low flows and a freshet are entered by paste, saved and reloaded (engine 0.33.0)', async ({ page, owner }) => {
