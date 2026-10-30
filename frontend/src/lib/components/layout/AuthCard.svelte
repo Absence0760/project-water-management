@@ -16,8 +16,9 @@
 </script>
 
 <script lang="ts">
-	// Split sign-in / register layout: a navy brand panel with the catchment
-	// illustration on the left (a short band on phones), the form on the right.
+	// Split sign-in / register layout: a brand panel with the catchment
+	// illustration on the left (pale cyan in light mode, navy in dark; it
+	// follows the app's theme like every other surface) (a short band on phones), the form on the right.
 	// The language switch (WP-2.5) sits above the form: the sign-in pages are
 	// the first thing an invited farmer sees.
 	import type { Snippet } from 'svelte';
@@ -104,11 +105,30 @@
 		min-height: 100vh;
 		min-height: 100dvh;
 	}
+	/* The panel's colours, all app tokens: a pale cyan ground in light mode
+	   (the selected row's wash, the landing hero's kicker and text colours),
+	   today's navy in dark. The scene (CatchmentScene) reads the --scene-*
+	   ones. Contrast on the light ground: heading 15.4:1, bullets 6.9:1,
+	   kicker 5.0:1; the rivers, dam outlines and outlet (--accent) 5.0:1 and
+	   the farms 12.6:1 (marks ≥ 3:1, WCAG 1.4.11; auth-layout.spec.ts
+	   measures them). */
 	.panel-brand {
+		--panel-bg: var(--accent-soft);
+		--panel-heading: var(--text);
+		--panel-text: var(--text-2);
+		--panel-accent: var(--accent);
+		--scene-ground: var(--panel-bg);
+		--scene-line: var(--brand-node);
+		--scene-water: var(--accent);
+		--scene-bed: var(--accent);
+		--scene-bed-opacity: 1;
+		--scene-glint: var(--surface);
+		--scene-contour-opacity: 0.16;
+		--scene-ring-opacity: 1;
 		order: -1;
 		overflow: hidden;
-		background: #102a43;
-		color: #d9e6f2;
+		background: var(--panel-bg);
+		color: var(--panel-text);
 		/* Keep the panel from pushing the form below the fold. */
 		max-height: 100dvh;
 		position: sticky;
@@ -124,6 +144,20 @@
 		position: relative;
 		max-width: 30rem;
 		padding: clamp(1.25rem, 3vh, 4rem) clamp(1.5rem, 5vw, 4rem);
+		isolation: isolate;
+	}
+	/* A soft patch of the panel's ground behind the copy: on a short window
+	   (1280 × 800, Afrikaans) the bullets reach down onto the scene's top-left
+	   farm and river, and text over a navy node failed contrast. */
+	.copy::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		background: var(--panel-bg);
+		/* Fades out inside the copy's own padding, so the scene beyond it is untouched. */
+		mask-image: linear-gradient(to bottom, black calc(100% - 1.25rem), transparent), linear-gradient(to right, black calc(100% - 1.5rem), transparent);
+		mask-composite: intersect;
 	}
 	.kicker {
 		margin: 0 0 0.75rem;
@@ -132,14 +166,14 @@
 		font-size: 1rem;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: #36c6e0;
+		color: var(--panel-accent);
 	}
 	.copy h2 {
 		font-family: var(--font-display);
 		font-size: clamp(1.6rem, 2.6vw, 2.25rem);
 		line-height: 1.15;
 		letter-spacing: -0.015em;
-		color: #ffffff;
+		color: var(--panel-heading);
 		margin: 0 0 1.25rem;
 	}
 	.copy ul {
@@ -149,7 +183,7 @@
 		display: grid;
 		gap: 0.6rem;
 		font-size: 1rem;
-		color: #c5d3e1;
+		color: var(--panel-text);
 	}
 	.copy li {
 		position: relative;
@@ -163,7 +197,7 @@
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
-		background: #36c6e0;
+		background: var(--panel-accent);
 	}
 	/* The form starts on the brand copy's top line rather than centred, so the
 	   title sits in the same place on every sign-in page and doesn't jump when
@@ -324,10 +358,23 @@
 		}
 	}
 	@media (prefers-color-scheme: dark) {
-		.panel-brand {
-			background: #0c2135;
+		/* Dark: the navy panel as before (--brand-panel), its text on navy
+		   (heading 16.1:1, bullets 12.7:1, kicker 7.9:1) and the scene in
+		   --brand-node and --brand-outlet. The river beds at 0.4 (was 0.28)
+		   reach 3.2:1. data-theme="light" keeps the light one. */
+		:global(:root:not([data-theme='light'])) .panel-brand {
+			--panel-bg: var(--brand-panel);
+			--panel-heading: var(--brand-panel-text);
+			--panel-text: var(--brand-node);
+			--panel-accent: var(--brand-outlet);
+			--scene-water: var(--brand-outlet);
+			--scene-bed: var(--brand-node);
+			--scene-bed-opacity: 0.4;
+			--scene-glint: var(--brand-outlet);
+			--scene-contour-opacity: 0.09;
+			--scene-ring-opacity: 0.6;
 		}
-		.lockup {
+		:global(:root:not([data-theme='light'])) .lockup {
 			color: var(--text);
 		}
 	}

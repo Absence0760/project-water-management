@@ -667,7 +667,7 @@ English only: its readers are licensing assessors, like the methods page's.
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
 `/verify-email`, `/alerts/unsubscribe` and `/alerts/feedback` share one frame,
-`lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
+`lib/components/layout/AuthCard.svelte` (translated, § Language): the
 brand panel with the catchment drawing on the left (55 %), the form on the
 right, 440 px wide. They are forms, not dashboards: each fits a 1280 × 800
 window with no page scroll, in every state (the longest is the sign-up form
@@ -779,6 +779,19 @@ under a dead-invitation warning).
   *Forgot password?* and legal links (issue #51; `layout/authTextFloor.test.ts`
   scans the styles, `auth-pages.spec.ts` measures every visible text in
   English and Afrikaans).
+- **Theme.** The brand panel follows the app's theme like every other
+  surface (the OS preference, and `data-theme="light"` on `<html>` over a
+  dark OS): light mode is a pale cyan ground (`--accent-soft`) with the
+  heading in `--text`, the bullets in `--text-2` and the kicker and bullet
+  dots in `--accent`, the landing hero's colours; the drawing's farms and
+  gauges in `--brand-node` and its rivers, dams and outlet in `--accent`.
+  Dark mode keeps the navy panel (`--brand-panel`, white heading, the
+  drawing in `--brand-node` and `--brand-outlet`). Every colour is an
+  app.css token: AuthCard sets the `--scene-*` properties the drawing
+  reads. Text passes 4.5:1 and the drawing's rivers, farms and outlet 3:1
+  against the panel in both themes (`auth-layout.spec.ts` measures them).
+  A soft patch of the panel's ground sits behind the copy, so on a short
+  window (1280 × 800, Afrikaans) the bullets never sit on a river or farm.
 - **Motion.** The panel's drawing (`CatchmentScene.svelte`) moves for under
   5 s after the page opens, then holds still (WCAG 2.2.2), and not at all
   under reduced motion.
