@@ -2555,6 +2555,14 @@ Still open:
   Network rings it. Durable fix: a dashed line layer in `mapStyle.ts` keyed on
   a `marker` property `overlayData` passes from `zoneFills`. Trigger: a
   hydrologist reading the map alone (the key closed) misses a borrowed unit.
+- **The fit's refusal doesn't point at a row.** Parameters from shows
+  `locationFitPlan`'s refusal (a borrowing cycle, a location left with no
+  unit draining through it) above the table, naming the locations but not
+  which units' choices to change. Durable fix: the engine's plan returns the
+  units involved (the borrowed units of the locations on the cycle, or of the
+  emptied group) beside the message, and the table marks those rows
+  `aria-invalid`. Trigger: a catchment with more than a handful of borrowed
+  units, where finding the culprits by hand is slow.
 
 ## Verification
 
