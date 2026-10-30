@@ -46,6 +46,14 @@ describe('settingsView', () => {
 		expect(unkinded.sort()).toEqual(Object.keys(NOT_PROPOSED).filter((k) => (MODEL_INPUT as readonly string[]).includes(k)).sort());
 	});
 
+	it('sends the calibration locations’ keys (issue #659): the outlet’s tick and the rest rule as their kinds, the units’ sources as no one’s to propose', () => {
+		const { settings, kinds } = settingsView({ calibrateAtOutlet: false, calibrationRest: 'nearest', unitParamsFrom: { u1: 'g1' } }, undefined, true);
+		expect(settings).toMatchObject({ calibrateAtOutlet: false, calibrationRest: 'nearest', unitParamsFrom: { u1: 'g1' } });
+		expect(kinds).toMatchObject({ calibrateAtOutlet: 'input', calibrationRest: 'calibrated' });
+		expect(kinds.unitParamsFrom).toBeUndefined();
+		expect(NOT_PROPOSED.unitParamsFrom).toMatch(/judgement/);
+	});
+
 	it('lists every key of the engine’s settings as a model input or not one', () => {
 		const listed = new Set<string>([...MODEL_INPUT, ...NOT_MODEL_INPUT]);
 		expect(Object.keys(mergeSettings({}) as object).filter((k) => !listed.has(k))).toEqual([]);

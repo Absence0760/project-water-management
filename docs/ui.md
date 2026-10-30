@@ -6210,10 +6210,13 @@ gauge is badged *Gauge record (checks only)*: the run checks it against the
 simulated flow there (Runs & results → Plausibility checks), and it is never
 the outlet's record, whatever its name (the outlet's EWR test, the *What the
 model uses* badges and the setup checklist read only the outlet's; a gauge EWR
-site's own EWR test reads its record, engine ≥ 1.41.0). When Calibration → Calibration record → *Scored at* picks its
-gauge (engine ≥ 1.41.0), it is badged *Gauge record (calibration site)*
-instead: Fit automatically and a run's calibration statistics score it ([model.md
-§2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)). A record whose gauge has left the model says
+site's own EWR test reads its record, engine ≥ 1.41.0). When its gauge is
+a ticked calibration location (Calibration → Calibration record → *Calibrate
+here*, issue #659), it is badged *Gauge record (calibration location)*
+instead: Fit automatically fits its gauge's parameters on it and a run scores it ([model.md
+§2.10n](./model.md)). A flow record not placed in the network (its gauge
+gone, a node that isn't a gauge inside the network, or a second outlet record
+of a kind) says so in Series details under **Calibration**. A record whose gauge has left the model says
 so, until it is moved. **Source and unit** (issue #66, 107,
 [data-model.md](./data-model.md#series-source-and-unit-107_series_sourcesql)):
 Series details' **Source** (editors edit it, *Source*, saved on change,
@@ -8469,8 +8472,10 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     the Map; a boundary the grid can't stand for (no value inside, under
     half covered) says why. Synthetic data carries the "Synthetic test data"
     warning. With more than one grid loaded, a **Grid** picker.
-- **Calibration record** (`#set-record`). **Layout (issue #521):** the
-  window's From and To, *Scored at* and *Compare with* on one row, then the
+- **Calibration record** (`#set-record`). **Layout (issue #659; #521):**
+  first the **Calibration locations** table (below), then any flow record
+  not placed in the network, then **At the outlet: <outlet name>** (an h4):
+  the outlet location's window's From and To and *Compare with* on one row, then the
   exclusions with **Exclude a water year** / **Exclude a date range** in the
   list's header row (`common/PeriodList.svelte`; an excluded water year's
   hint gives its days day first, "WY 2021/22: 1 Oct 2021 – 30 Sep 2022",
@@ -8484,33 +8489,25 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   ranges are a table, one row per record (Record, Highest gauging, Lowest
   gauging, Source); the day rules sit two to a row with the first column
   wider, so "Censor: only ask the model to reach the highest gauging
-  (default)" shows whole. The window's, the site's, the quality flags', the
+  (default)" shows whole. The window's, the quality flags', the
   river-stop months' and the gap-filling scoring paragraphs are `.explain`.
-  The fields: the calibration window and flow
-  series (`calibration/CalibrationWindowFields.svelte`), with, when the
-  model has a gauge above the outlet with a flow record attached (or a site
-  is already set), **Scored at** (engine ≥ 1.41.0, `settings.calibrationSiteNodeId`,
-  model.md §2.10k): *The outlet* or each such gauge by name (engine
-  `calibrationSites`; a gauge without a record is not offered, and a stored
-  site that has lost its gauge or record shows as *A gauge no longer in the
-  model, or with no record*). Its hint says the fit then scores the simulated
-  flow at that gauge against its record, that the gauged ranges and gap
-  filling are the outlet records', and that a run's statistics are scored
-  there too while the outlet's EWR test stays the outlet's, and links to the
-  project's first flow record on the Data tab
-  (`?tab=series&series=<id>#data-chart`), whose Series details' **Measured
-  at** places it (issue #464). With no gauge record yet (and a flow record to
-  place), an editor sees that line in its stead: "Scored at the outlet. To
-  score at a gauge inside the network, set its flow record's Measured at in
-  Series details on the Data tab (the gauge has to be in the network, above
-  the outlet)", so the choice is findable before it exists. A stored site
-  whose gauge has left the model or has no record attached any more gets a
-  warning under the select (runs score the outlet's record and warn, and Fit
-  automatically refuses the site). The site's records decide *Compare with*'s choices, Fit
-  automatically's validation record and whether a fit can start (a project
-  whose only record is at the site can fit); the fit record's *Fitted to*
-  names the gauge ("Gauge record at the gauge “Middle weir”") and says when
-  the site has changed since the fit. And the
+  The panel's line starts with the ticked locations ("Calibrated at
+  Outflow gauge, Middle weir · headline Middle weir", or "No location
+  calibrated", `settings/summaries.ts`).
+  The outlet's fields: the calibration window and flow series
+  (`calibration/CalibrationWindowFields.svelte`; there is no *Scored at*
+  any more, issue #659: where calibration fits is the locations table's).
+  With no gauge record yet (and a flow record to place), an editor sees
+  "To calibrate at a gauge inside the network too, set its flow record's
+  Measured at in Series details on the Data tab (the gauge has to be in the
+  network, above the outlet)", linking to the project's first flow record
+  (`?tab=series&series=<id>#data-chart`), so the gauge locations are
+  findable before they exist. These are the outlet records' settings (the
+  top level, model.md §2.10n): the gauged ranges, gap filling, missing and
+  low-flow periods are theirs alone. The headline location's records decide
+  Fit automatically's validation record and whether a fit can start; the
+  fit record's *Fitted to* names a gauge ("Gauge record at the gauge
+  “Middle weir”"). And the
   **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):
   "Exclude a water year" and "Exclude a date range" add a row, each with a
   required **Reason**. A water year shows the dates it covers ("WY 2015/16:
@@ -8539,7 +8536,9 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   at or below it are scored. A blank reason or source, a reversed
   range, a threshold not above 0 or the same record and range twice shows
   an alert and blocks Save (the save bar links here); the section's summary
-  line adds "low flows only in N periods". Under them, **Quality flags for Fit
+  line adds "low flows only in N periods". With the outlet unticked as a
+  calibration location, a note says no fit uses them, though the run's
+  checks of the outlet's record still do. Under them, **Quality flags for Fit
   automatically** (`settings/QualityFlagsFields.svelte`, helpers in
   `settings/qualityFlags.ts`; engine ≥ 1.22.0, CR-18/19, model.md §2.10h): for
   each calibration record the project has (both when not known), its
@@ -8575,34 +8574,60 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   the run's statistics). Each number is held inside its
   bounds by its field, so the section never blocks Save. The fit record
   below lists the fitted record's source and its gap filling.
-    Last, when the model has a gauge above the outlet with a flow record,
-  **Calibrate at several gauges** (engine 1.106.0, issue #555,
-  `calibration/CalibrationZonesTable.svelte`, its own chunk,
-  `lib/calibration/zones.ts`, `settings.calibrationZones`, [model.md
-  §2.10n](./model.md)): a table of the calibration site (the outlet, or
-  *Scored at*'s gauge, its **Calibrate here** always ticked and disabled:
-  its window is the fields above) and every other such gauge, each with
-  **Calibrate here: <gauge>**, its **Record** coverage in complete water
-  years spanned (gaps not counted; "(too short)" under 2, from the series
-  list) and its zone's **Parameters** ("Not fitted yet: its units run on the
-  parameters above" until a fit applies some). A first tick adds the gauge's
-  row; an untick keeps it (its window and parameters stay for the next
-  tick). Under each gauge with a row, a fold (`<gauge>:` and its window,
-  exclusions and suspect-day rule) with its own **From** / **To**,
-  **Record**, **Suspect days** (*As the calibration site's quality flags*,
-  *Left out of the fit* or *Scored*), exclusions and fit record line. A
-  reversed window or a bad exclusion blocks Save, named by its gauge
-  ("Calibration zone at Middle weir: …"), through the window's own blocker.
-  The ticks are always live (engine 1.109.0, issue #658: Per unit is the
-  only method; before, under Fragmentation, they were disabled with a note
-  asking for Per unit). With a gauge ticked, "Fit
-  automatically fits N zones, upstream first." The legend and the fit's
-  *Steps, upstream first* carry the *Calibration zones* help tip (help
-  article `calibration-zones`); the fieldset is `#fld-cal-zones`, where the
-  Warnings page's fix for a `calibration.zone.*` warning lands. Not yet
-  (issue #555's next round): the zones on the Network tab and the Map.
+  **Calibration locations** (engine 1.110.0, issue #659; several gauges
+  since #555; `calibration/CalibrationLocationsTable.svelte`, its own chunk,
+  `lib/calibration/zones.ts`, [model.md §2.10n](./model.md)), first in the
+  panel whenever the outlet has a flow record or a gauge inside the
+  network has one: a table of every place calibration can fit on, none
+  special and none required. The outlet's row first (*<name> (outlet)*,
+  `settings.calibrateAtOutlet`), then each gauge with a record by name
+  (`settings.calibrationZones`), then any ticked row whose gauge has left
+  the model or lost its record (*Can’t be fitted: …*, so it can be
+  unticked). A new project is created with the outlet ticked before it has
+  a record: its row shows *Can’t be fitted: no flow record at the outlet
+  yet. Add one on Data, or untick it.*, and the fit card refuses its step
+  before starting ("The outlet has no flow record yet, so its step can’t be
+  fitted: …"). The regional prior asks for the outlet's own zone as
+  `zone=outlet` and for the headline with no zone. Each row has **Calibrate here: <location>**, a **Headline**
+  radio, its **Record** coverage in complete water years spanned (gaps not
+  counted; "(too short)" under 2, from the series list) and its
+  **Parameters** (the outlet's are the catchment parameters, GR4J
+  parameters above; a gauge's "Not fitted yet: its units run on the
+  catchment parameters" until a fit applies some). A first tick adds a
+  gauge's row; an untick keeps it (its window and parameters stay for the
+  next tick). Under the table, **Pick the headline automatically** (the
+  same radio group; the auto row's radio reads *Auto*): the headline
+  (`settings.calibrationSiteNodeId`, null = auto) is the location whose
+  statistics a run reports and that the uncertainty ensemble and the
+  automated calibration vary; auto is the outlet when it is ticked, else
+  the ticked gauge with the largest area above it. Unticking the picked
+  headline puts it back to auto. A line says "Fit automatically fits N
+  locations. Headline: <name> (picked automatically: …)". With none ticked,
+  a warning (`data-testid="calibration-none"`): "No location is calibrated:
+  every unit runs on the catchment parameters (GR4J parameters, above).
+  Tick Calibrate here at a location to fit it." Then **Units with no
+  ticked location downstream take** (`settings.calibrationRest`): *The
+  nearest ticked location upstream on their river* (new projects), *The
+  headline location's parameters* (what a project from before 1.110.0
+  reads), or *The catchment parameters*, with how many land units it
+  reaches now. Then the per-unit **Parameters from** table (below). Under each
+  gauge with a row, a fold (`<gauge>:` and its window, exclusions and
+  suspect-day rule) with its own **From** / **To**, **Record**, **Suspect
+  days** (*As the outlet's quality flags*, *Left out of the fit* or
+  *Scored*), exclusions and fit record line. A reversed window or a bad
+  exclusion blocks Save, named by its gauge ("Calibration location at
+  Middle weir: …"), through the window's own blocker. The legend and the
+  fit's *Steps, in dependency order* carry the help tip (help article
+  `calibration-zones`, *Calibration locations*); the fieldset is
+  `#fld-cal-zones`, where the Warnings page's fix for a `calibration.zone.*`
+  warning lands. Settings saved before engine 1.110.0 are read on this page
+  in the locations shape (`zones.ts` `normalizedLocations`, the engine's
+  `normalizeCalibrationLocations`; settingsDraft `adopt`, on the saved copy
+  and the form alike, so it isn't an edit): an inner calibration site is its
+  ticked row and the picked headline, the outlet unticked.
     Inside the locations, once a location is ticked, **Parameters from**
-  (issue #659 option 2, `calibration/UnitParamsTable.svelte`, rows from
+  (issue #659 option 2, `calibration/UnitParamsTable.svelte`, its own chunk
+  lazily imported by the locations table, rows from
   `lib/calibration/unitParams.ts`, `settings.unitParamsFrom`; model.md
   §2.10n): a fold ("Parameters from: every unit takes its own zone’s", or
   "2 units borrow another location’s parameters"; open while any unit
@@ -8621,6 +8646,14 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   gauges, or a location left with no unit draining through it), e.g. "Fit
   automatically can’t run: the units above "Upper weir" borrow …". Save
   isn't blocked by it (a run needs no fit); Fit automatically is.
+    **Flow records not placed in the network** (`lib/calibration/unplaced.ts`):
+  a flow record whose Measured at names a gauge no longer in the model or a
+  node that isn't a gauge inside the network, or a second outlet record of
+  a kind (a run reads only the first by name), can't be calibrated on. A
+  warning lists each by name, linking to its Series details on Data
+  (`?tab=series&series=<id>#data-chart`) with why and "Set its Measured at
+  to a gauge inside the network"; Series details says the same under
+  **Calibration** (`data-testid="series-unplaced"`).
 - **Regional prior** (`#set-prior`, `calibration/RegionalPriorPanel.svelte`,
   its own chunk, the first card under Fit the parameters; issue #622,
   model.md §2.10m) shows GR4J's parameter ranges from donor basins for the
@@ -8783,25 +8816,31 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     stored until Save. The result stays shown, its button then reading
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
-  - **The stepwise fit** (engine 1.106.0, issue #555, model.md §2.10n):
-    with a gauge ticked under *Calibrate at several gauges* (Per unit only),
-    **Fit automatically** fits one step per zone, upstream first, then the
-    calibration site, each in its own worker run with the choices above
-    (`lib/calibration/runner.ts` `startStepwiseFit`, the plan from the engine's
-    `zoneFitPlan`, which refuses a zone, or a site, with no land unit, shown
-    as the fit's error). The progress line starts "Step 1 of 2 (an upstream
-    zone)", and the bar spans every step. The result opens with **Steps,
-    upstream first** (`data-testid="fit-steps"`): one row per step (*1.
-    Upstream zone* / *2. Calibration site*, where it was scored, its land
-    units, its fitted parameters, and the objective's fit, split-sample and
-    dry → wet validation scores), each earlier step's notes in a closed
-    *Notes on step N* (the short-record and no-dry-year warnings among them),
-    then the calibration site's step in full under **Step N: the
-    calibration site**. **Apply to form** writes every step: the site's
-    parameters and fit record as before, and each zone's parameters and fit
-    record (`FitRecord.zone`) into its row. Not yet: automated calibration
-    and the uncertainty ensemble per zone (they fit or perturb the site's
-    zone alone).
+  - **The fit's plan and steps** (engine 1.110.0, issue #659; #555,
+    model.md §2.10n): the card reads the plan from the form and the network
+    as they stand (`zones.ts` `fitPlanOf`, the engine's `locationFitPlan`).
+    With no location ticked it says so and Fit automatically is disabled;
+    a location whose group has no unit draining through it, or units
+    borrowing each other's parameters in a circle, shows the engine's
+    refusal (`data-testid="fit-plan-error"`) before any worker starts. With
+    two or more locations an ordered list gives the order ("Middle weir",
+    "Outflow gauge (headline), after Middle weir"). **Fit automatically**
+    fits one step per ticked location in dependency order, each in its own
+    worker run with the choices above (`lib/calibration/runner.ts`
+    `startStepwiseFit`, every step's parameters written where the engine
+    reads them, `withLocationParams`). The progress line starts "Step 1 of
+    2 (<location>)", and the bar spans every step. The result opens with
+    **Steps, in dependency order** (`data-testid="fit-steps"`): one row per
+    step (*1. Location* / *2. Headline*, the location, **After** (the
+    locations it waited for), its land units with how many are borrowed,
+    its fitted parameters, and the objective's fit, split-sample and dry →
+    wet validation scores), each other step's notes in a closed *Notes on
+    step N*, then the headline's step in full under **Step N: <name>, the
+    headline** (the report the card shows is the headline's, whichever step
+    it was). **Apply to form** writes every step: the outlet's parameters
+    and fit record into the top-level settings, each gauge's into its row
+    (`FitRecord.zone`). The card's fit record fold below is the headline's
+    (*Fit record at <gauge>, the headline* when it is a gauge).
     At the card's foot (issue #521), **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`), in a fold whose line is the
     record's first ("Fit record: GR4J fit of 24 Sep 2026 10:05 UTC",
@@ -9715,7 +9754,7 @@ read it before.
      `#res-gauges`, `runs/GaugeCheckFlows.svelte`, pure parts in
      `runs/checkGauges.ts`), under the flow-duration curve: for every gauge
      inside the network with its own flow record that the run doesn't score
-     (the plausibility checks' gauges less the calibration site), "Flow at
+     (the plausibility checks' gauges less the ones the run scores as calibration locations), "Flow at
      &lt;gauge&gt; (checks only): simulated and observed", its record against
      the simulated `outflow` there (the run's `observed_flow_check` at the
      node, engine ≥ 1.90.0, model.md §2.10k), in the page's flow unit with a
@@ -9733,9 +9772,10 @@ read it before.
      gauges**, and only the gauges shown load their series; a failed load
      says so with **Try again**.
      A record 30× the simulated flow (a unit error at upload) reads at a
-     glance as a gap between the lines and a PBIAS near 97 %. A gauge
-     scored instead, made the calibration site in Calibration → Calibration
-     record → Scored at, moves to the calibration site's chart above. A run
+     glance as a gap between the lines and a PBIAS near 97 %. A gauge the
+     run scores as a calibration location (ticked in Calibration →
+     Calibration record, the headline's or another's, issue #659) isn't
+     listed: its record is a calibration score, not a check. A run
      made before engine 1.90.0 says once, naming the gauges, that it was
      made before gauge records were charted and to run the model again. The side index
      has a line for it; on the bar the **Flow duration** link stands for it.

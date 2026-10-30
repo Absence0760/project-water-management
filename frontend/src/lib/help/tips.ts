@@ -470,16 +470,16 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'calibration-window',
 		term: 'Calibration window',
-		short: 'The period, observed flow record and site (the outlet or an inner gauge) that score the fit. Empty = every day with an observation.',
+		short: 'The period and observed flow record the outlet’s fit is scored on (a gauge location has its own). Empty = every day with an observation.',
 		category: 'fit',
-		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind', 'settings.calibrationSiteNodeId']
+		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind']
 	},
 	{
 		id: 'calibration-zones',
-		term: 'Calibration zones',
-		short: 'A ticked gauge gives the land units draining to it their own GR4J parameters, fitted on its record, upstream first.',
+		term: 'Calibration locations',
+		short: 'The outlet and each gauge with a record; a ticked one fits GR4J for the units draining to it, in dependency order. None is required.',
 		category: 'fit',
-		fields: ['settings.calibrationZones']
+		fields: ['settings.calibrationZones', 'settings.calibrationSiteNodeId']
 	},
 	{
 		id: 'gauge-logger-agreement',

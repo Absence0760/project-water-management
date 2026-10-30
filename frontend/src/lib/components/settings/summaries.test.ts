@@ -7,11 +7,11 @@ const base = (patch: Partial<SummaryInput['s']> = {}): SummaryInput => ({
 	ewrAnnualMm3: 12.598,
 	ewrSource: 'Pragmatic EWR at the outflow gauge'
 });
-const cal = (patch: Partial<SummaryInput['s']> = {}, siteName?: string): CalibrationSummaryInput => ({
+const cal = (patch: Partial<SummaryInput['s']> = {}, locations?: CalibrationSummaryInput['locations']): CalibrationSummaryInput => ({
 	s: { ...defaultProjectSettings(), ...patch } as SummaryInput['s'],
 	unitAreaKm2: 70,
 	peAnnualMm: 1200,
-	siteName
+	locations
 });
 
 describe('dateSpan', () => {
@@ -61,14 +61,14 @@ describe('settingsSummaries', () => {
 			autoRun: { enabled: true, debounceMinutes: 30, publish: 'never' }
 		} as Partial<SummaryInput['s']>;
 		const s = settingsSummaries(base(set));
-		const c = calibrationSummaries(cal(set, 'Melkhout Gauge'));
+		const c = calibrationSummaries(cal(set, { names: ['Outlet', 'Melkhout Gauge'], headline: 'Melkhout Gauge', outlet: true }));
 		expect(s['set-period']).toBe('1 Oct 2015 – 30 Sep 2020');
 		expect(s['set-rain']).toBe('Raw CHIRPS fills gaps · zero runs treated as missing');
 		expect(s['set-demand']).toMatch(/^A-pan 1\s?230 mm a year · effective rain/);
 		// The rain threshold for demand lives in Demand (issue #521), so its line names it.
 		expect(s['set-demand']).toMatch(/ · rain threshold \d+(\.\d)? mm · /);
 		expect(s['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
-		expect(c['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · low flows only in 1 period · river stops Feb, Mar, Apr');
+		expect(c['set-record']).toBe('Calibrated at Outlet, Melkhout Gauge · headline Melkhout Gauge · outlet: from 1 Oct 2001 · 1 period left out · low flows only in 1 period · river stops Feb, Mar, Apr');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 
@@ -104,7 +104,13 @@ describe('calibrationSummaries', () => {
 	it('gives the four panels on Calibration their lines, and Model settings none of them', () => {
 		const own = calibrationSummaries(cal());
 		expect(Object.keys(own).sort()).toEqual([...CAL].sort());
-		expect(own['set-record']).toBe('The whole flow record · at the outlet');
+		expect(own['set-record']).toBe('The whole flow record');
+		// The calibration locations first (issue #659): one by name, or none.
+		expect(calibrationSummaries(cal({}, { names: ['Outflow gauge'], headline: null, outlet: true }))['set-record']).toBe('Calibrated at Outflow gauge · outlet: the whole flow record');
+		// The outlet's window isn't named when the outlet isn't a location: no fit uses it.
+		expect(calibrationSummaries(cal({ calibrationStart: '2001-10-01' }, { names: ['Weir'], headline: null, outlet: false }))['set-record']).toBe('Calibrated at Weir');
+		expect(calibrationSummaries(cal({}, { names: [], headline: null, outlet: false }))['set-record']).toBe('No location calibrated');
+		expect(calibrationSummaries(cal({}, { names: ['A', 'B', 'C', 'D'], headline: 'B', outlet: false }))['set-record']).toBe('Calibrated at 4 locations · headline B');
 		// The rules' state, not the header's fit line again (issue #586, C19).
 		expect(own['set-fit']).toBe('Calibration rules revision 1 · draft, not signed off');
 		expect(calibrationSummaries(cal({ calibrationRules: { ...defaultProjectSettings().calibrationRules!, revision: 3, signedOff: { by: 'A. Hydrologist', on: '2026-09-29' } } }))['set-fit']).toBe(

@@ -89,8 +89,14 @@ describe('propose_settings', () => {
 		await refused({ goal: 'recalibration', changes: [{ key: 'lakeEvapFactor', value: 5, reason: 'r' }] }, 'lakeEvapFactor');
 		// The allocation mode is management: an outcome's, as a scenario; the baseline save refuses it too.
 		await refused({ goal: 'correction', changes: [{ key: 'allocationMode', value: 'cap', reason: 'r' }] }, 'a management setting');
-		// A gauge with no flow record can't be the calibration site (projects/calibrationSite.ts reads the records).
-		await refused({ goal: 'recalibration', changes: [{ key: 'calibrationSiteNodeId', value: p.gauge.id, reason: 'r' }] }, 'no observed flow record');
+		// A gauge that is no ticked calibration location can't be the headline (projects/calibrationSite.ts reads the network).
+		await refused({ goal: 'recalibration', changes: [{ key: 'calibrationSiteNodeId', value: p.gauge.id, reason: 'r' }] }, 'is not a ticked calibration location');
+		// Nor can a row be given to a gauge with no flow record (it reads the records).
+		const row = { nodeId: p.gauge.id, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null };
+		await refused({ goal: 'recalibration', changes: [{ key: 'calibrationZones', value: [row], reason: 'r' }] }, 'no observed flow record');
+		// And which units take a gauge's parameters is never proposed: the hydrologist's judgement.
+		const r = await propose(owner, p.id, { goal: 'recalibration', changes: [{ key: 'unitParamsFrom', value: null, reason: 'r' }] });
+		expect(r.ok).toBe(false);
 		expect(await stored(p.id)).toEqual(before);
 	});
 

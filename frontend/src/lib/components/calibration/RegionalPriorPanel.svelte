@@ -59,7 +59,8 @@
 		loading = true;
 		error = null;
 		try {
-			const d = await api.gr4jPrior.get(projectId, { zone });
+			// With gauge locations, the null choice is the outlet's own zone (`zone=outlet`, issue #659); alone, the headline's.
+			const d = await api.gr4jPrior.get(projectId, { zone: zone ?? (zones.length ? 'outlet' : null) });
 			if (mine === seq) data = d;
 		} catch (e) {
 			if (mine === seq) error = msg(e);
@@ -81,7 +82,7 @@
 	const rows = $derived(ok ? rangeRows(ok.ranges!, currentParams(zone)) : []);
 	const skill = $derived(ok?.prior?.ok ? skillText(ok.prior.leaveOneOut?.skill, ok.prior.leaveOneOut?.n) : null);
 	const soil = $derived(ok?.prior?.ok ? ok.prior.soil : null);
-	const targetName = $derived(zone === null ? (zones.length ? 'the calibration site’s own zone' : 'the catchment') : `the zone at ${zones.find((z) => z.nodeId === zone)?.name ?? 'its gauge'}`);
+	const targetName = $derived(zone === null ? (zones.length ? 'the outlet’s own zone' : 'the catchment') : `the zone at ${zones.find((z) => z.nodeId === zone)?.name ?? 'its gauge'}`);
 	const km = (v: number) => fmtNum(v, v >= 10 ? 0 : 1);
 	const pct = (w: number) => `${fmtNum(Math.round(w * 100))} %`;
 
@@ -96,7 +97,7 @@
 		busy = true;
 		startError = null;
 		try {
-			await api.gr4jPrior.start(projectId, { zone, ...(ok.dataset ? { dataset: ok.dataset.dataset } : {}) });
+			await api.gr4jPrior.start(projectId, { zone: zone ?? (zones.length ? 'outlet' : null), ...(ok.dataset ? { dataset: ok.dataset.dataset } : {}) });
 			notice = `GR4J’s parameters for ${targetName} now start from the regional prior’s medians, saved as a settings revision.`;
 			await Promise.all([load(), onApplied()]);
 			await frame?.focusNotice();
@@ -141,7 +142,7 @@
 			<div class="field">
 				<label for="{uid}-zone">For</label>
 				<select id="{uid}-zone" bind:value={zone} data-testid="prior-zone">
-					<option value={null}>The calibration site’s own zone</option>
+					<option value={null}>The outlet’s own zone</option>
 					{#each zones as z (z.nodeId)}<option value={z.nodeId}>The zone at {z.name}</option>{/each}
 				</select>
 			</div>

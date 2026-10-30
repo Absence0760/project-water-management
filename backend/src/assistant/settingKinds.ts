@@ -10,8 +10,9 @@
 //   factors and their fit). The model of nature: changed only to improve
 //   the fit, as a recalibration.
 // - input: the rest of the description of the catchment and its data (the
-//   evaporation and rain inputs, the windows, the calibration site and
-//   record, data checks and gap filling). Changed to improve the fit or to
+//   evaporation and rain inputs, the windows, the headline calibration
+//   location, whether the outlet is one, and its record, data checks and gap
+//   filling). Changed to improve the fit or to
 //   correct a setup error, never to reach an outcome.
 // - assessment: what the results are judged against (the EWR and the
 //   Reserve's tables, the assurance threshold, the reporting window).
@@ -38,6 +39,8 @@ export const SETTING_KINDS: Readonly<Record<string, SettingKind>> = {
 	chirpsQuantileMap: 'calibrated',
 	// Each zone's X1–X4, fitted on its own gauge (§2.10n); its window and record ride in the same row, replaced whole.
 	calibrationZones: 'calibrated',
+	// Which parameters the units outside every calibration location run on (issue #659): part of the parameter set, so a fit's.
+	calibrationRest: 'calibrated',
 	// Input: the catchment, its data and the windows.
 	februaryDays: 'input',
 	effectiveRainFraction: 'input',
@@ -62,6 +65,8 @@ export const SETTING_KINDS: Readonly<Record<string, SettingKind>> = {
 	calibrationEnd: 'input',
 	calibrationFlowKind: 'input',
 	calibrationSiteNodeId: 'input',
+	// Calibrate here at the outlet (issue #659): which record the outlet's location fits on, like the gauges' rows.
+	calibrateAtOutlet: 'input',
 	calibrationExclusions: 'input',
 	flowMissing: 'input',
 	flowGapFill: 'input',

@@ -199,3 +199,21 @@ describe('the sign-off', () => {
 		expect(JSON.stringify((await owner.call('GET', at)).body.project.settings.calibrationRules)).toContain(signer);
 	});
 });
+
+// Last too: it ticks a gauge and adds a run.
+describe('a gauge’s fit at every calibration location (engine 1.110.0, issue #659)', () => {
+	it('answers a ticked gauge’s from the run’s statistics at it, and the headline outlet’s from the run’s calibration statistics', async () => {
+		const at = `/projects/${projectId}`;
+		const row = { nodeId: weir.id, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null };
+		const set = await owner.call('PATCH', at, { settings: { calibrationZones: [row] } });
+		expect(set.status, JSON.stringify(set.body)).toBe(200);
+		const zonedRun = (await owner.call('POST', `${at}/runs`, { label: 'Zoned' })).body.run.id as string;
+		const [stored] = await asOwner(`SELECT summary->'calibrationZones' AS zones FROM model_run WHERE id = $1`, [zonedRun]);
+		const atWeir = (stored.zones as { siteNodeId: string; nse: number }[]).find((z) => z.siteNodeId === weir.id)!;
+		const fit = data(await as(viewer, TOOL_NAMES.gaugeFit, { node: 'Middle weir' }, zonedRun));
+		expect(fit.source).toBe('the run’s statistics at this calibration location');
+		// The tools round to four significant digits.
+		expect((fit.stats as { nse: number }).nse).toBeCloseTo(atWeir.nse, 2);
+		expect(data(await as(viewer, TOOL_NAMES.gaugeFit, { node: 'Outlet' }, zonedRun)).source).toBe('the run’s calibration statistics (the headline location)');
+	});
+});

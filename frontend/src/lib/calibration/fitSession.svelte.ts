@@ -62,8 +62,8 @@ export class FitSession {
 	progress = $state<CalibrationProgress | null>(null);
 	report = $state.raw<CalibrationReport | null>(null);
 	/**
-	 * A stepwise fit's steps, upstream first (calibration zones, issue #555, docs/model.md §2.10n): `report` is the
-	 * last, the calibration site's own zone. null for one fit.
+	 * A stepwise fit's steps, in dependency order (calibration locations, issue #659, docs/model.md §2.10n): `report`
+	 * is the headline location's step's. null before a fit.
 	 */
 	steps = $state.raw<ZoneFitStep[] | null>(null);
 	/** Which step is running, for the progress line; null for one fit. */

@@ -1,7 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { chirpsQuantileMapError, dayQuality, gapRainError, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays, unitRainError } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { autoFitRecordError, baselineAllocationModeError, dataQualityPatchError, ewrOutletTableError, importedAutoFitError, mergeSettings, nextCalibrationRules, normaliseBaselineAllocationMode, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
+import {
+	autoFitRecordError,
+	baselineAllocationModeError,
+	dataQualityPatchError,
+	ewrOutletTableError,
+	importedAutoFitError,
+	mergeSettings,
+	nextCalibrationRules,
+	normaliseBaselineAllocationMode,
+	patchSettings,
+	remapSettingNodeIds,
+	SettingsPatch,
+	FitRecord,
+	UNIT_PARAMS_FROM_MAX
+} from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -1818,10 +1832,9 @@ describe('settings.calibrationZones (engine 1.106.0, issue #555)', () => {
 		expect(ok([row, { ...row, nodeId: K, enabled: false, qualityFlags: null, gr4j: null, fitRecord: null }])).toBe(true);
 	});
 
-	it('refuses a repeated gauge, a parameter out of bounds, an automated fit, a bad field or an unknown key', () => {
+	it('refuses a repeated gauge, a parameter out of bounds, a bad field or an unknown key', () => {
 		expect(ok([row, { ...row, enabled: false }])).toBe(false);
 		expect(ok([{ ...row, gr4j: { ...row.gr4j, x1: 5 } }])).toBe(false);
-		expect(ok([{ ...row, fitRecord: { ...fit, auto: {} } }])).toBe(false);
 		expect(ok([{ ...row, nodeId: 'H' }])).toBe(false);
 		expect(ok([{ ...row, calibrationStart: '2001-02-30' }])).toBe(false);
 		expect(ok([{ ...row, qualityFlags: { suspect: 'maybe' } }])).toBe(false);
@@ -1858,5 +1871,77 @@ describe('settings.calibrationZones (engine 1.106.0, issue #555)', () => {
 		expect(zones[0]!.fitRecord!.siteNodeId).toBe('new-g');
 		expect(zones[0]!.fitRecord!.zone).toEqual({ nodeId: 'new-g', units: ['new-f1'] });
 		expect((out.fitRecord as { zone: unknown }).zone).toEqual({ nodeId: null, units: ['new-f1', 'f9'] });
+	});
+});
+
+describe('calibration locations (engine 1.110.0, issue #659)', () => {
+	const G = '00000000-0000-4000-8000-000000000011';
+	const U = '00000000-0000-4000-8000-000000000021';
+	const O = '00000000-0000-4000-8000-000000000001';
+	const parse = (patch: unknown) => SettingsPatch.safeParse(patch);
+
+	it('accepts the outlet’s tick, each rest rule and units’ parameter sources, and null for none', () => {
+		for (const calibrationRest of ['nearest', 'headline', 'default']) expect(parse({ calibrationRest }).success, calibrationRest).toBe(true);
+		expect(parse({ calibrateAtOutlet: true }).success).toBe(true);
+		expect(parse({ calibrateAtOutlet: false }).success).toBe(true);
+		expect(parse({ unitParamsFrom: { [U]: G } }).success).toBe(true);
+		expect(parse({ unitParamsFrom: { [U]: O } }).success).toBe(true);
+		expect(parse({ unitParamsFrom: null }).success).toBe(true);
+	});
+
+	it('refuses an unknown rest rule, a tick that isn’t true or false, and a parameter source that isn’t unit id → node id', () => {
+		expect(parse({ calibrationRest: 'upstream' }).success).toBe(false);
+		expect(parse({ calibrateAtOutlet: 'yes' }).success).toBe(false);
+		expect(parse({ unitParamsFrom: { [U]: 'Upper weir' } }).success).toBe(false);
+		expect(parse({ unitParamsFrom: { 'Unit U': G } }).success).toBe(false);
+		expect(parse({ unitParamsFrom: [G] }).success).toBe(false);
+		const many = Object.fromEntries(Array.from({ length: UNIT_PARAMS_FROM_MAX + 1 }, (_, i) => [`00000000-0000-4000-8000-${String(1000 + i).padStart(12, '0')}`, G]));
+		expect(parse({ unitParamsFrom: many }).success).toBe(false);
+	});
+
+	it('a save replaces the units’ parameter sources whole: a unit left out takes its own zone’s', () => {
+		const V = '00000000-0000-4000-8000-000000000022';
+		const out = patchSettings({ unitParamsFrom: { [U]: G, [V]: G } }, { unitParamsFrom: { [U]: O } });
+		expect(out.unitParamsFrom).toEqual({ [U]: O });
+	});
+
+	it('a fit record keeps the units borrowed into its group, and a copy moves them with the rest', () => {
+		const zone = { nodeId: G, units: [U, 'f1'], borrowed: [U] };
+		expect(FitRecord.shape.zone.safeParse(zone).success).toBe(true);
+		const ids = new Map([
+			[G, 'new-g'],
+			[U, 'new-u'],
+			[O, 'new-o']
+		]);
+		const out = remapSettingNodeIds(
+			{
+				calibrationZones: [{ nodeId: G, fitRecord: { siteNodeId: G, zone } }],
+				unitParamsFrom: { [U]: G, gone: O, f2: 'gone' },
+				gr4jPrior: [{ provenance: { target: { zoneNodeId: G, units: [U, 'f1'] } } }, { provenance: { target: { zoneNodeId: null, units: null } } }, 'odd']
+			},
+			ids
+		);
+		expect((out.calibrationZones as { fitRecord: { zone: unknown } }[])[0]!.fitRecord.zone).toEqual({ nodeId: 'new-g', units: ['new-u', 'f1'], borrowed: ['new-u'] });
+		// Both sides follow their nodes; one already dangling stays as it was.
+		expect(out.unitParamsFrom).toEqual({ 'new-u': 'new-g', gone: 'new-o', f2: 'gone' });
+		expect(out.gr4jPrior).toEqual([{ provenance: { target: { zoneNodeId: 'new-g', units: ['new-u', 'f1'] } } }, { provenance: { target: { zoneNodeId: null, units: null } } }, 'odd']);
+	});
+
+	it('a headline gauge’s automated fit lives in its row: a save may carry it back as stored, never add or alter one', () => {
+		const base = defaultProjectSettings();
+		const auto = { rules: { revision: 1 }, ruleExclusions: [], chosen: 0, cases: [] };
+		const rec = { fittedAt: '2026-10-29T10:00:00.000Z', seed: 3, auto } as unknown as typeof base.fitRecord;
+		const rowOf = (fitRecord: typeof rec) => ({ nodeId: G, enabled: true, fitRecord }) as unknown as NonNullable<typeof base.calibrationZones>[number];
+		const stored = { ...base, calibrationZones: [rowOf(rec)] };
+		// Zod no longer refuses it on a row: the stored one must round-trip through a save.
+		expect(SettingsPatch.safeParse({ calibrationZones: [{ nodeId: G, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null }] }).success).toBe(true);
+		expect(autoFitRecordError(stored, { ...stored })).toBeNull();
+		const refused = 'an automated fit is applied by the server from its own run of the calibration rules (POST /projects/:id/auto-calibrations/:calibrationId/apply), never written directly';
+		expect(autoFitRecordError({ ...base, calibrationZones: [rowOf(null)] }, stored)).toBe(refused);
+		expect(autoFitRecordError(stored, { ...stored, calibrationZones: [rowOf({ ...rec!, seed: 4 })] })).toBe(refused);
+		// Moved to another gauge's row is a new one there.
+		expect(autoFitRecordError(stored, { ...stored, calibrationZones: [{ ...rowOf(rec), nodeId: U }] })).toBe(refused);
+		// An imported file's row is checked against the file's rules, as its top level is.
+		expect(importedAutoFitError({ calibrationRules: { revision: 2 }, calibrationZones: [{ nodeId: G, fitRecord: rec }] })).toContain('revision 1');
 	});
 });

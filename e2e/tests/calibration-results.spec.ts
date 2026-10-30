@@ -63,7 +63,7 @@ test('a link to a Model quality panel this run doesn’t have says what the pane
 	const runId = await createRun(page.request, project.id, 'Plain');
 	for (const [anchor, needs, href] of [
 		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=calibration#set-wr2012'],
-		['res-gauges', 'It needs a flow record at a gauge that is not the calibration site', '?tab=series'],
+		['res-gauges', 'It needs a flow record at a gauge that is not a ticked calibration location', '?tab=series'],
 		['res-unit-rain', 'It needs Per unit flow generation', '?tab=settings#set-share']
 	] as const) {
 		await page.goto(`/projects/${project.id}?tab=overview`);
