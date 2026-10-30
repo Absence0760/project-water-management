@@ -14,7 +14,7 @@ import { runTick } from '../jobs/runner.js';
 import { outbox, type Mail } from '../mail/transport.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { evaluateAlerts } from './evaluate.js';
-import { DIGEST_CLAIM_LINES, DIGEST_MAX_LINES, sendAlerts } from './send.js';
+import { DIGEST_CLAIM_LINES, DIGEST_MAX_LINES, RULE_OFF, sendAlerts } from './send.js';
 
 // The feeds this file makes are switched off when it ends (db-setup.ts).
 disableFeedsAfterFile();
@@ -1091,5 +1091,87 @@ describe('a failed send is logged without personal data', () => {
 		// Positive control: with the secret back, the same delivery goes.
 		expect((await sendAlerts()).sent).toBe(1);
 		await reset();
+	});
+});
+
+describe('a firing event follows its figure, and stops with its rule', () => {
+	/** A bare catchment the owner alone runs, with data feeds failing `failures` times in a row. */
+	async function failing(name: string, failures: number[]) {
+		const pid = (await owner.call('POST', '/projects', { name })).body.project.id as string;
+		const feeds: string[] = [];
+		for (const [i, n] of failures.entries())
+			feeds.push(
+				(
+					await asOwner(
+						`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date, consecutive_failures)
+						 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', $2, $3, $3, now(), now(), $4::date, $5) RETURNING id`,
+						[pid, `gauge ${i + 1}`, owner.id, localToday(), n]
+					)
+				)[0].id as string
+			);
+		return { pid, feeds };
+	}
+	const failingRule = (pid: string, enabled: boolean) => rules(owner, [{ kind: 'feed_failing', threshold: 3, enabled }], pid);
+	const firing = (pid: string) => asOwner(`SELECT id, value, detail FROM alert_event WHERE project_id = $1 AND state = 'firing'`, [pid]);
+	const mailsAbout = (name: string) => mailsTo(owner).filter((m) => m.subject.endsWith(`— ${name}`));
+
+	it('keeps a firing event’s detail current when the figure stays the same: a second feed failing below the worst one is listed', async () => {
+		const { pid, feeds } = await failing('Follow detail', [5, 0]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		const [first] = await firing(pid);
+		expect(first.detail.feeds.map((f: { label: string }) => f.label)).toEqual(['DWS gauge flow (gauge 1)']);
+		// The worst stays at 5, so the value doesn't move; the list does.
+		await asOwner('UPDATE data_feed SET consecutive_failures = 2 WHERE id = $1', [feeds[1]]);
+		expect(await withUser(owner.id, (db) => evaluateAlerts(db, pid))).toMatchObject({ opened: 0, cleared: 0 });
+		const [now] = await firing(pid);
+		expect(now.id).toBe(first.id);
+		expect(now.value).toBe(5);
+		expect(now.detail.feeds).toEqual([
+			{ label: 'DWS gauge flow (gauge 1)', failures: 5 },
+			{ label: 'DWS gauge flow (gauge 2)', failures: 2 }
+		]);
+		await settlePendingNotices(pid);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+
+	it('switching every rule off clears what was firing at once, though no check is queued (positive control: on, it fires)', async () => {
+		const { pid } = await failing('Off clears', [5]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		expect(await firing(pid)).toHaveLength(1);
+		expect((await owner.call('GET', `/projects/${pid}/alert-events`)).body.events).toHaveLength(1);
+		await asOwner(`DELETE FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid]);
+		expect((await failingRule(pid, false)).status).toBe(200);
+		// Alerts are opt-in: with every rule off no check is queued, so the save itself clears.
+		expect(await asOwner(`SELECT 1 FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid])).toEqual([]);
+		expect(await firing(pid)).toEqual([]);
+		expect((await owner.call('GET', `/projects/${pid}/alert-events`)).body.events).toEqual([]);
+		const listed = (await owner.call('GET', `/projects/${pid}/alert-rules`)).body.rules.find((r: { kind: string }) => r.kind === 'feed_failing');
+		expect(listed).toMatchObject({ enabled: false, firing: false });
+		await settlePendingNotices(pid);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+
+	it('a mail still waiting when its rule is switched off is not sent (positive control: switched back on, the next crossing is)', async () => {
+		const name = 'Off mutes';
+		const { pid, feeds } = await failing(name, [5]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		const [e] = await firing(pid);
+		expect(await asOwner(`SELECT status FROM alert_delivery WHERE event_id = $1 AND user_id = $2`, [e.id, owner.id])).toEqual([{ status: 'pending' }]);
+		expect((await failingRule(pid, false)).status).toBe(200);
+		await sendAlerts();
+		expect(mailsAbout(name)).toEqual([]);
+		expect(await asOwner(`SELECT status, reason FROM alert_delivery WHERE event_id = $1 AND user_id = $2`, [e.id, owner.id])).toEqual([
+			{ status: 'skipped', reason: RULE_OFF }
+		]);
+		// Back on: the figure is still past the line, so a new event opens and its mail goes.
+		await asOwner(`UPDATE data_feed SET consecutive_failures = 6 WHERE id = $1`, [feeds[0]]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		await sendAlerts();
+		expect(mailsAbout(name).map((m) => m.subject)).toEqual([`Data feed failing — ${name}`]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 });
