@@ -1771,7 +1771,12 @@ against hostile names).
 - `water_app` may `UPDATE` only the lifecycle columns (column grants), and
   RLS lets it delete only a draft.
 - `project_pack_guard` refuses deleting a project with a pack past draft.
-- `signoff_pack_draft` refuses a sign-off of a pack that isn't a draft.
+- `signoff_pack_draft` refuses a sign-off of a pack that isn't a draft. It
+  reads the pack row `FOR SHARE` (288_signoff_pack_lock): the applicant's
+  specialist signs without locking the pack (they read no pack row), so
+  without the lock a sign-off sent during an issue went in after it, a
+  signer issue never checked. Now it waits for the issue, then is refused
+  (`evidence/signoff-issue-race.db.test.ts`, with its control).
 - `app_record_pack_pdf` records a PDF only from its pack's running render
   job, under the key it derives, once ([§ The PDF](#the-pdf)).
 - Tests: `backend/src/evidence/packs.db.test.ts` (each refusal with its

@@ -1472,7 +1472,9 @@ results for plausibility; and that they read its known limitations
   `signoff_one_target` holds exactly one of them set.
   `signoff_statement_target`: a `pack-` statement version (`pack-signoff-1`)
   goes with a pack and any other with a run. `signoff_pack_draft` refuses a
-  sign-off of a pack that isn't a draft. `signoff_same_project` checks both
+  sign-off of a pack that isn't a draft, reading the pack row `FOR SHARE`
+  (288), so a sign-off sent while the pack is being issued waits for the
+  issue and is then refused. `signoff_same_project` checks both
   targets. `signoff_select` (from 045) shows a pack's sign-off to whoever
   reads the pack. [§ Evidence packs](#evidence-packs-112_evidence_packsql).
 - Two-step sign-in on signing: a pack's sign-off always needs it with a
