@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { UNIT_RAIN_KINDS } from '@water-management/engine';
+import { NEW_PROJECT_CALIBRATION_REST, UNIT_RAIN_KINDS } from '@water-management/engine';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError, mustChange } from '../http/errors.js';
@@ -130,6 +130,17 @@ const SELECT_PROJECT = `
 /** Cleaned and refused as a display name is (http/visibleName.ts): create, rename and copy. */
 const name = projectName;
 const CreateBody = z.object({ name, description: z.string().max(5000).optional(), teamId: z.string().uuid().nullable().optional() });
+
+/**
+ * A new project's settings: everything else is the engine's defaults. Its
+ * calibration locations (engine 1.110.0, issue #659) are stated, never left
+ * to the read-time conversion of older settings: the outlet ticked (Calibrate
+ * here, the location a first fit is made at once an outlet record is added)
+ * and the units with no ticked location downstream taking the nearest one
+ * upstream on their river (NEW_PROJECT_CALIBRATION_REST, provisional,
+ * engine-audit.md CZ2).
+ */
+export const newProjectSettings = (): Record<string, unknown> => ({ calibrateAtOutlet: true, calibrationRest: NEW_PROJECT_CALIBRATION_REST });
 const PatchBody = z.object({
 	name: name.optional(),
 	/** Move the project into a team you belong to (null = personal). Owner only. */
@@ -279,8 +290,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const id = crypto.randomUUID();
 			if (body.teamId) await requireTeamContributor(db, body.teamId);
 			await db.query(
-				`INSERT INTO project (id, name, description, created_by, team_id) VALUES ($1, $2, $3, app_current_user_id(), $4)`,
-				[id, body.name, body.description ?? '', body.teamId ?? null]
+				`INSERT INTO project (id, name, description, settings, created_by, team_id) VALUES ($1, $2, $3, $4, app_current_user_id(), $5)`,
+				[id, body.name, body.description ?? '', JSON.stringify(newProjectSettings()), body.teamId ?? null]
 			);
 			return c.json({ project: full(await getProject(db, id)) }, 201);
 		});

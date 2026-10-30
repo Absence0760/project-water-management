@@ -40,7 +40,8 @@ import { CITED_BY_SQL, loadModelInput } from './execute.js';
 // `trigger`: what made it, 'manual', 'auto' or 'forecast' (042_auto_rerun,
 // WP-2.11, WP-2.12); `forecastFrom`: a forecast run's first forecast day
 // (summary.forecast.from), else null; `fitEngineVersion`: the engine of the
-// automatic fit its parameters came from (settings.fitRecord), else null, so
+// fit its headline parameters came from (run_fit_engine_version, 289: the
+// headline gauge's row's fit record, else settings.fitRecord), else null, so
 // the run list can flag the errata a `fit` erratum keys on (issue #103).
 export const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
@@ -54,7 +55,7 @@ export const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.s
 	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
 		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible,
 	r.trigger, r.summary->'forecast'->>'from' AS "forecastFrom",
-	r.inputs->'settings'->'fitRecord'->>'engineVersion' AS "fitEngineVersion"`;
+	run_fit_engine_version(r.inputs, r.summary) AS "fitEngineVersion"`;
 export const FROM_RUN = `FROM model_run r LEFT JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;
 

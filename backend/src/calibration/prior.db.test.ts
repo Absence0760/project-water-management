@@ -9,7 +9,10 @@
 //    shows it started; a viewer can't start it, a non-member sees nothing,
 //    and a settings save can't write a start record;
 //  - under calibration zones, a zone's prior is built for its own land units
-//    at its gauge on the map, and its start writes the zone's row.
+//    at its gauge on the map, and its start writes the zone's row;
+//  - under calibration locations (issue #659), a location's prior is built
+//    for its whole group, borrowed units included; no location named is the
+//    headline, ?zone=outlet the outlet's.
 // Synthetic values only.
 import { calibrate, fitRecordFromReport, type CalibrationPrior } from '@water-management/engine';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -199,5 +202,45 @@ describe('a calibration zone’s prior', () => {
 		expect(settings.gr4jPrior.map((r: { provenance: { target: unknown } }) => r.provenance.target)).toEqual([{ zoneNodeId: weir.id, units: [a.id] }]);
 		expect((await owner.call('GET', `/projects/${id}/gr4j-prior?zone=${weir.id}`)).body.started).not.toBeNull();
 		expect((await owner.call('GET', `/projects/${id}/gr4j-prior`)).body.started).toBeNull();
+	});
+
+	it('is built for a location’s whole group, borrowed units included; absent names the headline, ?zone=outlet the outlet’s (issue #659)', async () => {
+		const id = (await owner.call('POST', '/projects', { name: 'Prior locations' })).body.project.id as string;
+		const outlet = node('Outlet', null);
+		const weir = node('Weir', outlet.id, { kind: 'gauge', areaKm2: 0 });
+		const a = node('Farm A', weir.id, { areaKm2: 40 });
+		const b = node('Farm B', outlet.id, { areaKm2: 60 });
+		const c = node('Farm C', outlet.id, { areaKm2: 25 });
+		expect((await owner.call('PUT', `/projects/${id}/model`, { nodes: [outlet, weir, a, b, c], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const put = (body: Record<string, unknown>) => owner.call('PUT', `/projects/${id}/series`, { unit: 'm3/s', startDate: START, ...body });
+		expect((await put({ kind: 'rain_catchment_mm', unit: 'mm', values: rain })).status).toBe(200);
+		expect((await put({ kind: 'flow_observed_m3s', name: '', values: rain.map(() => 2) })).status).toBe(200);
+		const record = (await put({ kind: 'flow_observed_m3s', name: 'Weir', values: rain.map(() => 1) })).body.id as string;
+		expect((await owner.call('PATCH', `/projects/${id}/series/${record}`, { siteNodeId: weir.id })).status).toBe(200);
+		const zone = { nodeId: weir.id, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null };
+		// Farm B, beside the weir, takes the weir's parameters; the outlet is ticked (a new project's default), so it is the headline.
+		const set = await owner.call('PATCH', `/projects/${id}`, { settings: { apanMm: monthly(150), calibrationZones: [zone], unitParamsFrom: { [b.id]: weir.id } } });
+		expect(set.status, JSON.stringify(set.body)).toBe(200);
+		expect((await owner.call('POST', `/projects/${id}/map/features`, { kind: 'catchment_boundary', name: 'Catchment', geometry: { type: 'Polygon', coordinates: BOUNDARY } })).status).toBe(201);
+
+		const w = (await owner.call('GET', `/projects/${id}/gr4j-prior?zone=${weir.id}`)).body;
+		expect(w.target).toMatchObject({ zoneNodeId: weir.id, units: [a.id, b.id].sort() });
+		expect(w.target.attributes.areaKm2).toBe(100);
+		for (const q of ['', '?zone=outlet']) {
+			const o = (await owner.call('GET', `/projects/${id}/gr4j-prior${q}`)).body;
+			expect(o.target, q).toMatchObject({ zoneNodeId: null, units: [c.id], positionFrom: 'boundary' });
+		}
+		// Start with no location named: the headline's (the outlet's), into GR4J's own parameters.
+		const s = await owner.call('POST', `/projects/${id}/gr4j-prior/start`, {});
+		expect(s.status, JSON.stringify(s.body)).toBe(200);
+		const settings = (await owner.call('GET', `/projects/${id}`)).body.project.settings;
+		expect(settings.gr4j).toMatchObject(s.body.params);
+		expect(settings.calibrationZones[0].gr4j).toBeNull();
+		expect(settings.gr4jPrior.map((r: { provenance: { target: unknown } }) => r.provenance.target)).toEqual([{ zoneNodeId: null, units: [c.id] }]);
+
+		// The weir as the headline, the outlet unticked: absent names the weir now, and the outlet is no location.
+		expect((await owner.call('PATCH', `/projects/${id}`, { settings: { calibrateAtOutlet: false, calibrationSiteNodeId: weir.id } })).status).toBe(200);
+		expect((await owner.call('GET', `/projects/${id}/gr4j-prior`)).body.target).toMatchObject({ zoneNodeId: weir.id });
+		expect((await owner.call('GET', `/projects/${id}/gr4j-prior?zone=outlet`)).status).toBe(400);
 	});
 });
