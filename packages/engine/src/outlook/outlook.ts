@@ -37,7 +37,7 @@
 import { RESTRICTION_SERIES } from '../network/restriction';
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { damCapacityOn } from '../network/development';
-import { unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind, type UnitForecastSeriesKey } from '../project';
+import { resolveUnitRain, unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind, type UnitForecastSeriesKey } from '../project';
 import { prepareRun } from '../prepare';
 import { unitRainRecipes, type UnitRainRecipe } from '../runoff/unitRain';
 import { fitEveryPairing, pairingFactors } from '../runoff/stationForcing';
@@ -233,15 +233,15 @@ export function outlookMemberInput(
 	if (input.series.evap_et0_mm) series.evap_et0_mm = historyThen(input.series.evap_et0_mm, s.from, valuesOn(input.series.evap_et0_mm, a, s.days));
 
 	const settings = memberSettings(input, s, baseRun.startDate, start);
-	// Under per-unit rain (engine ≥ 1.78.0, §2.4h): the base input's unit rules and factors, so the history cut at the decision
-	// date runs at the levels its season (the base run's rain_unit) was made at, as a member from the snapshot does.
-	const prep = input.settings.unitRain?.mode === 'perUnit' || input.settings.rainStations ? prepareRun(input) : null;
-	const pinned = prep ? baseUnitRecipes(input, prep) : null;
-	if (pinned) settings.unitRain = { ...settings.unitRain!, pinned };
+	// Per unit (engine ≥ 1.78.0, §2.4h; the only method since 1.109.0): the base input's unit rules and factors, so the history
+	// cut at the decision date runs at the levels its season (the base run's rain_unit) was made at, as a member from the snapshot does.
+	const prep = prepareRun(input);
+	const pinned = baseUnitRecipes(input, prep);
+	if (pinned) settings.unitRain = { ...resolveUnitRain(settings.unitRain, []), pinned };
 	// Rainfall stations (engine ≥ 1.91.0, §2.4i): the base input's pairing factors, the catchment's and the units', so the
 	// history cut at the decision date isn't corrected by a refit on a shorter record (or refused for one).
-	if (prep?.stations) fitEveryPairing(prep.stations.context);
-	const factors = prep?.stations ? pairingFactors(prep.stations.context) : null;
+	if (prep.stations) fitEveryPairing(prep.stations.context);
+	const factors = prep.stations ? pairingFactors(prep.stations.context) : null;
 	if (factors && Object.keys(factors).length && settings.rainStations)
 		settings.rainStations = { ...settings.rainStations, pinnedFactors: { ...(settings.rainStations.pinnedFactors ?? {}), ...factors } };
 	// The EWR split (engine ≥ 1.105.0, §2.5b): the base run's shares, as a member from the snapshot takes the capture run's,
@@ -258,9 +258,8 @@ function baseEwrSplit(input: ModelInput): PinnedEwrSplit | null {
 	return splitCache.get(input)!;
 }
 
-/** The base input's unit rain recipes (prepareRun's CHIRPS correction for the bias sub-rule); null without per-unit rain. */
+/** The base input's unit rain recipes (prepareRun's CHIRPS correction for the bias sub-rule); null without a land unit. */
 function baseUnitRecipes(input: ModelInput, prep: ReturnType<typeof prepareRun>): UnitRainRecipe[] | null {
-	if (input.settings.unitRain?.mode !== 'perUnit') return null;
 	return unitRainRecipes({ settings: prep.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: prep.chirpsCorrection, stations: prep.stations?.context ?? null, stationInputs: input.stations ?? null }, []);
 }
 

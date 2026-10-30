@@ -167,12 +167,15 @@ describe('calibration zone settings', () => {
 		expect(resolveZones(chain, off, START_P, [])!.zones.map((z) => [z.nodeId, z.units])).toEqual([['H', ['A', 'C']]]);
 	});
 
-	it('under Fragmentation ticked rows warn and apply nothing', () => {
+	it('settings without unitRain (the retired Fragmentation) apply the ticked rows as Per unit does (engine ≥ 1.109.0)', () => {
 		const input = network();
 		const warnings: string[] = [];
+		const perWarnings: string[] = [];
 		const s = mergeSettings(withZones(input, [zone('H', { gr4j: TRUTH_H })], { unitRain: null }).settings, []);
-		expect(resolveZones(input.model.nodes, s, START_P, warnings)).toBeNull();
-		expect(warnings[0]).toMatch(/need Per unit flow generation/);
+		const per = mergeSettings(withZones(input, [zone('H', { gr4j: TRUTH_H })]).settings, []);
+		expect(resolveZones(input.model.nodes, s, START_P, warnings)).toEqual(resolveZones(input.model.nodes, per, START_P, perWarnings));
+		expect(warnings).toEqual(perWarnings);
+		expect(warnings.some((w) => /need Per unit/.test(w))).toBe(false);
 	});
 
 	it('a zone fit reads the zone’s own window, exclusions, record and start parameters', () => {
@@ -240,17 +243,16 @@ describe('runs under calibration zones', () => {
 		expect(has([zone('K', { gr4j: { ...TRUTH_H, x2: -0.5 } })])).toBe(false);
 	});
 
-	it('a zone with no parameters yet runs on the catchment’s, with a warning; Fragmentation ignores zones with one', () => {
+	it('a zone with no parameters yet runs on the catchment’s, with a warning; settings without unitRain run the zones too', () => {
 		const input = network();
 		const bare = runModel(input);
 		const unfitted = runModel(withZones(input, [zone('H')]));
 		expect(unitRunoff(unfitted, 'A')).toEqual(unitRunoff(bare, 'A'));
 		expect(unfitted.summary.warnings.some((w) => /"Weir" has no parameters of its own yet/.test(w))).toBe(true);
+		// No unitRain stored (a project once on Fragmentation): the zones apply, as under Per unit (engine ≥ 1.109.0).
 		const frag = withZones(input, null, { unitRain: null });
 		const fragZoned = runModel(withZones(frag, [zone('H', { gr4j: TRUTH_H })]));
-		const fragBare = runModel(frag);
-		expect(fragZoned.series.find((s) => s.key === 'simulated_outflow')!.values).toEqual(fragBare.series.find((s) => s.key === 'simulated_outflow')!.values);
-		expect(fragZoned.summary.warnings.some((w) => /need Per unit flow generation/.test(w))).toBe(true);
+		expect(JSON.stringify(fragZoned)).toBe(JSON.stringify(runModel(withZones(input, [zone('H', { gr4j: TRUTH_H })]))));
 	});
 });
 
@@ -373,8 +375,7 @@ describe('the zone warnings’ codes (Warnings page, issue #611)', () => {
 		]);
 	});
 
-	it('codes zones that are not a list, and ticked zones under Fragmentation', () => {
+	it('codes zones that are not a list', () => {
 		expect(zoneCodes(withZones(network(), 'H' as never))).toEqual([['calibration.zone.notList', {}]]);
-		expect(zoneCodes(withZones(network(), [zone('H', { gr4j: TRUTH_H }), zone('K')], { unitRain: null }))).toEqual([['calibration.zone.needsPerUnit', { gauges: 2 }]]);
 	});
 });

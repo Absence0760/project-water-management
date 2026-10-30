@@ -59,8 +59,12 @@ const setMap = (x: ModelInput, id: string, mapMm: number) => Object.assign(x.mod
 
 /** Today's forcing paths, one case each. */
 const CASES: Record<string, () => ModelInput> = {
-	/** Fragmentation: unitRain off, GR4J once on the catchment gauge with corrected CHIRPS on its gaps. */
-	fragmentation: () => catchment('absent'),
+	/**
+	 * No unitRain (Fragmentation's, retired in engine 1.109.0, issue #658): Per unit, every land unit on the catchment
+	 * gauge with corrected CHIRPS on its gaps (rule 4, no record or MAP of its own). Re-pinned at 1.109.0; the three
+	 * Per unit cases below are unchanged by it (the guard that Per unit runs as before).
+	 */
+	noSetting: () => catchment('absent'),
 	/** perUnit, rule 2: the catchment gauge (with gaps) × unit MAP ÷ gauge MAP; D has no MAP (rule 4). */
 	gaugeMap: () => {
 		const x = catchment({ mode: 'perUnit', gaugeMapMm: 650, gaugeMapSource: 'invented gauge MAP' });
@@ -114,14 +118,76 @@ function fingerprint(out: ModelOutput) {
  * sums unchanged), and unitGauge's and reference's at 1.100.0, whose warnings write their days day first (#586 R4-O:
  * text only, every series' and the summary's sums unchanged), and fragmentation's at 1.105.0, whose run notes the
  * units its EWR shares put on the catchment rain (issue #615: a note's text only; the forcing, every series' and the
- * summary's sums unchanged). Print them with
+ * summary's sums unchanged), and noSetting's (fragmentation's until then) at 1.109.0, when the retired Fragmentation
+ * started running Per unit (issue #658: every unit on the catchment rain, rule 4). Print them with
  * `GOLDEN_PRINT=1 pnpm -C packages/engine exec vitest run src/runoff/unitRain.golden.test.ts`.
  */
 const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
-	fragmentation: {
-		units: null,
+	noSetting: {
+		units: [
+			{
+				nodeId: "A",
+				rule: "catchment",
+				rainKey: null,
+				factor: null,
+				chirps: null,
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 0,
+					catchment: 2192,
+					forecast: 0,
+					none: 0
+				}
+			},
+			{
+				nodeId: "B",
+				rule: "catchment",
+				rainKey: null,
+				factor: null,
+				chirps: null,
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 0,
+					catchment: 2192,
+					forecast: 0,
+					none: 0
+				}
+			},
+			{
+				nodeId: "C",
+				rule: "catchment",
+				rainKey: null,
+				factor: null,
+				chirps: null,
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 0,
+					catchment: 2192,
+					forecast: 0,
+					none: 0
+				}
+			},
+			{
+				nodeId: "D",
+				rule: "catchment",
+				rainKey: null,
+				factor: null,
+				chirps: null,
+				days: {
+					unitGauge: 0,
+					gaugeMap: 0,
+					unitChirps: 0,
+					catchment: 2192,
+					forecast: 0,
+					none: 0
+				}
+			}
+		],
 		golden: {
-			shape: "2576a5878b5d8952",
+			shape: "0bef48f963c18fb4",
 			series: {
 				"natural_flow@": {
 					sum: 31197362.536312077,
@@ -133,40 +199,80 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 					sumSq: 154196.7429588687,
 					weighted: 9091.751153247114
 				},
-				"rain_final@": {
+				"rain_unit@A": {
 					sum: 6075.606086317099,
 					sumSq: 154196.7429588687,
 					weighted: 9116.611604221993
 				},
+				"runoff_natural@A": {
+					sum: 15218225.627469296,
+					sumSq: 162376958082.52243,
+					weighted: 22794249.95692897
+				},
+				"rain_unit@B": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9075.407763748082
+				},
+				"runoff_natural@B": {
+					sum: 9130935.376481565,
+					sumSq: 58455704909.70805,
+					weighted: 13693924.033295931
+				},
+				"rain_unit@C": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9128.487423472137
+				},
+				"runoff_natural@C": {
+					sum: 4565467.688240782,
+					sumSq: 14613926227.427013,
+					weighted: 6847289.965134346
+				},
+				"rain_unit@D": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9147.28358299822
+				},
+				"runoff_natural@D": {
+					sum: 2282733.844120391,
+					sumSq: 3653481556.8567533,
+					weighted: 3417865.6573240925
+				},
+				"rain_final@": {
+					sum: 6075.606086317099,
+					sumSq: 154196.7429588687,
+					weighted: 9104.409059793381
+				},
 				"rain_chirps_corrected@": {
 					sum: 6075.6060863170915,
 					sumSq: 154584.25088477324,
-					weighted: 9099.594332462266
+					weighted: 9134.328027182208
 				},
 				"rain_source@": {
 					sum: 54,
 					sumSq: 108,
-					weighted: 80.98116947472747
+					weighted: 82.35480673934588
 				},
 				"runoff@A": {
-					sum: 15218225.62746929,
+					sum: 15218225.627469296,
 					sumSq: 162376958082.52243,
-					weighted: 22867938.671876054
+					weighted: 22783037.54059102
 				},
 				"runoff@B": {
-					sum: 9130935.376481563,
+					sum: 9130935.376481565,
 					sumSq: 58455704909.70805,
-					weighted: 13668958.874868605
+					weighted: 13693957.754828973
 				},
 				"runoff@C": {
-					sum: 4565467.688240781,
+					sum: 4565467.688240782,
 					sumSq: 14613926227.427013,
-					weighted: 6853819.218362335
+					weighted: 6847720.523606693
 				},
 				"runoff@D": {
-					sum: 2282733.8441203907,
+					sum: 2282733.844120391,
 					sumSq: 3653481556.8567533,
-					weighted: 3418921.1872040555
+					weighted: 3419597.3679210213
 				},
 				"runoff@E": {
 					sum: 0,
@@ -176,8 +282,8 @@ const EXPECTED: Record<string, ReturnType<typeof fingerprint>> = {
 			},
 			rest: {
 				sum: 229643351.51594248,
-				sumSq: 3695731270526.909,
-				weighted: 344271323.2373167
+				sumSq: 3695731270526.911,
+				weighted: 344426222.31505954
 			},
 			summary: {
 				sum: 811622845.1103017,

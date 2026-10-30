@@ -35,8 +35,8 @@ describe('placesIn', () => {
 		expect(named('history; the Plausibility checks panel has the table.')).toEqual([['the Plausibility checks panel', 'plausibility']]);
 	});
 
-	it('finds a panel by its former heading, as runs before its rename named it (issue #614, engine 1.103.0)', () => {
-		expect(placeName('share')).toBe('Model settings → Model selection for flow generation');
+	it('finds a panel by its former heading, as runs before its rename named it (issue #614, engine 1.103.0; #658, 1.109.0)', () => {
+		expect(placeName('share')).toBe('Model settings → Flow generation');
 		// 1.98.0 to 1.102.0, and before 1.98.0.
 		expect(named('the other method (Model settings → Flow generation: Fragmentation)')).toEqual([['Model settings → Flow generation', 'share']]);
 		expect(named('or the high/low MAP split (Settings → Flow generation) so')).toEqual([['Settings → Flow generation', 'share']]);
@@ -101,8 +101,9 @@ describe('warningInCurrentWords', () => {
 		expect(warningInCurrentWords('An editor declares the rule under Settings › Evidence.')).toBe('An editor declares the rule under Model settings → Evidence.');
 	});
 
-	it('reads a warning from before engine 1.103.0 by the flow generation panel’s heading now (issue #614)', () => {
-		const now = 'Model settings → Model selection for flow generation';
+	it('reads a warning from before engine 1.103.0, or from 1.103.0 to 1.108.x, by the flow generation panel’s heading now (issues #614, #658)', () => {
+		const now = 'Model settings → Flow generation';
+		expect(warningInCurrentWords('need Per unit (Model settings → Model selection for flow generation): under')).toBe(`need Per unit (${now}): under`);
 		expect(warningInCurrentWords('the other flow generation method (Model settings → Flow generation: Fragmentation, one GR4J run)')).toBe(`the other flow generation method (${now}: Fragmentation, one GR4J run)`);
 		expect(warningInCurrentWords('Correct the high/low MAP split (Settings → Flow generation) so they add up to 100%')).toBe(`Correct the high/low MAP split (${now}) so they add up to 100%`);
 		expect(warningInCurrentWords('Correct the high/low MAP split (Settings) so')).toBe(`Correct the high/low MAP split (${now}) so`);

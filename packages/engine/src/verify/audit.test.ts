@@ -203,6 +203,9 @@ describe('farmAuditPlan + evaluateAudit', () => {
 	const BESIDE: Record<string, string> = {
 		soil_water: 'the store behind effective rain, an input',
 		landcover_reduction: 'already taken off runoff I, an input',
+		// Per unit (every run with a land unit since engine 1.109.0): the unit's own rain and the runoff GR4J made of it.
+		rain_unit: 'the rain behind runoff I, an input',
+		runoff_natural: 'runoff I before land cover, an input',
 		ewr: 'the EWR rule at this site; Z is the input',
 		ewr_binding_site: 'which EWR site binds',
 		ewr_charge: 'attribution of a shortfall downstream',

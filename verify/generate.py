@@ -277,8 +277,9 @@ def add_calibration_zones(rng: random.Random, doc: dict, dense: bool = False) ->
     drains to (a dense one without such a gauge gets one, put on a land unit's
     way down), a row for most gauges inside the network, most ticked, each
     with its own X1–X4 inside the bounds, now and then none (not fitted yet)
-    or one outside them. Under Fragmentation, in 30 % of networks with a gauge
-    inside, rows that are in the input but unused."""
+    or one outside them. Under the retired catchment mode (Fragmentation, which
+    runs Per unit since engine 1.109.0), in 30 % of networks with a gauge
+    inside, rows too."""
     s = doc["settings"]
     nodes = doc["model"]["nodes"]
     per_unit = (s.get("unitRain") or {}).get("mode") == "perUnit"
@@ -359,13 +360,13 @@ def add_unit_rain(rng: random.Random, doc: dict, start: dt.date, days: int, dens
     own gauge, its own CHIRPS, both or neither, and a MAP or none, a few far
     enough from the gauge MAP or the CHIRPS mean to be clamped; now and then
     a forecast tail the units reach through the catchment's rain. In 15 % of
-    those networks the setting is `catchment` instead, the units' records
-    and MAPs in the input but unused."""
+    those networks the setting is the retired `catchment` instead, which runs
+    Per unit all the same (engine >= 1.109.0, issue #658)."""
     if rng.random() >= (0.75 if dense else 0.35):
         return
     s = doc["settings"]
     series = doc["series"]
-    # Now and then the records and MAPs with the setting off: they change nothing (§2.4h).
+    # Now and then the retired catchment mode (Fragmentation): it runs Per unit (§2.4h, engine >= 1.109.0).
     ur: dict = {"mode": "perUnit" if rng.random() < 0.85 else "catchment"}
     if rng.random() < 0.65:
         ur["gaugeMapMm"] = round(rng.uniform(300, 1200))
@@ -565,7 +566,7 @@ def add_rain_stations(rng: random.Random, doc: dict, start: dt.date, days: int, 
         if rng.random() < 0.3:
             rs["catchmentMapMm"] = rng.choice([round(rng.uniform(300, 1500)), round(rng.uniform(300, 1500)), 20000])
             rs["catchmentMapSource"] = "synthetic"
-        # Fragmentation's catchment MAP is the farms' mean: give them MAPs, now and then not all of them.
+        # The catchment MAP is the farms' mean: give them MAPs, now and then not all of them.
         if not per_unit:
             every = rng.random() < 0.8
             for f in farms:

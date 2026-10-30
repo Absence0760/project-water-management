@@ -1552,9 +1552,11 @@ def run(doc: dict) -> dict:
     if no_pet:
         raise Refused("GR4J_NO_PET")
     farms = [x for x in model["nodes"] if x["kind"] == "farm"]
-    ur = settings.get("unitRain")
-    per_unit = isinstance(ur, dict) and ur.get("mode") == "perUnit"
-    # §2.4h: under per-unit rain each land unit (a farm with an area above 0) runs GR4J on its own rain.
+    # §2.4h: Per unit is the only flow generation method (engine >= 1.109.0, issue #658). An absent or null setting,
+    # and the retired {mode: "catchment"} (Fragmentation), run Per unit, keeping the rest of the stored setting.
+    ur = dict(settings.get("unitRain") or {}) if isinstance(settings.get("unitRain") or {}, dict) else {}
+    ur["mode"] = "perUnit"
+    per_unit = True
     units = sorted((f for f in farms if (f.get("areaKm2") or 0) > 0), key=lambda x: x["id"]) if per_unit else []
     if not units:
         # No land unit: GR4J runs on the catchment rain, as without the setting (probe unit-rain-no-land-unit).
@@ -1568,7 +1570,6 @@ def run(doc: dict) -> dict:
     if not area_km2 > 0:
         raise Refused("catchment area is 0")
     local: dict[str, list[float]] | None = None
-    share_local: dict[str, list[float]] | None = None
     if not per_unit:
         model_g = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
         for k in range(int(g.get("warmupDays", 365))):
@@ -1584,24 +1585,6 @@ def run(doc: dict) -> dict:
             uhs.append(model_g.uh_store())
             exch.append(r["exchange"])
         rain_gr4j = p_used
-        # §2.5, §2.5b (engine >= 1.105.0, issues #615, #616): Fragmentation's unit shares come from GR4J once per land
-        # unit on the Per unit forcing (settings.unitRain with its mode set to perUnit), with the same parameters, PE and
-        # warm-up, for the shares only; the catchment's one run above makes the flow they split. Its diagnostics stay out
-        # (Per unit's).
-        land = sorted((f for f in farms if (f.get("areaKm2") or 0) > 0), key=lambda x: x["id"])
-        if land:
-            sur = dict(ur) if isinstance(ur, dict) else {}
-            sur["mode"] = "perUnit"
-            sforcing = unit_rain_forcing(sur, settings, series, rain, days, finals, sources, p_used, land, doc.get("forecastRainSource"), copy.deepcopy(diag), st)
-            share_local = {}
-            for u in land:
-                a = float(u["areaKm2"])
-                pu = sforcing[u["id"]]
-                gu = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
-                for k in range(int(g.get("warmupDays", 365))):
-                    i = k % hist if hist > 0 else 0
-                    gu.step(pu[i], pet[i])
-                share_local[u["id"]] = [gu.step(pu[i], pet[i])["q"] * a * 1000 for i in range(n)]
     else:
         forcing = unit_rain_forcing(ur, settings, series, rain, days, finals, sources, p_used, units, doc.get("forecastRainSource"), diag, st)
         local = {}
@@ -1658,7 +1641,8 @@ def run(doc: dict) -> dict:
     # §2.5, §2.5b (engine >= 1.105.0, issues #615, #616): each unit's one share, its natural MAR share: its own runoff
     # (Per unit's, or Fragmentation's share runs) over the complete water years of the historical days (else all of
     # them) / the units' total, a negative day counting 0. No runoff over the period: the area shares. No land unit:
-    # every share 0. It splits the flow under Fragmentation, the EWR and the senior users' claims (§2.7c). The area,
+    # every share 0. It splits the EWR and the senior users' claims (§2.7c); Fragmentation, whose flow it split too, is
+    # retired (engine >= 1.109.0). The area,
     # Hi/Lo MAP and specific flow shares (settings.flowShareMethod) are retired and ignored, as settings.ewrSplit is.
     shares = {x["id"]: 0.0 for x in farms}
     # The area shares: each land unit's area / the land units' total (the fallback with no runoff over the period).
@@ -1667,7 +1651,7 @@ def run(doc: dict) -> dict:
     for fid in sorted(area_share):
         atot += area_share[fid]
     area_share = {fid: (a / atot if atot > 0 else 0.0) for fid, a in area_share.items()}
-    split_src = local if local is not None else share_local
+    split_src = local
     if split_src is not None:
         full = [i for i in range(hist) if water_year(days[i]) != water_year(days[0]) or _dt.date.fromordinal(days[0]).strftime("%m-%d") == "10-01"]
         full = [i for i in full if water_year(days[i]) != water_year(days[hist - 1]) or _dt.date.fromordinal(days[hist - 1]).strftime("%m-%d") == "09-30"]

@@ -12,7 +12,7 @@ import { prepareRun, type PreparedRun } from '../prepare';
 import type { DailySeries, ModelInput, UnitChirpsLevel, UnitRainRule } from '../project';
 import { chirpsFactorOn } from '../rain';
 import { checkedUnitGauge } from './unitGaugeChecks';
-import { UNIT_RAIN_SOURCE, unitRainForcing, unitRainOn, type UnitRainRecipe } from './unitRain';
+import { UNIT_RAIN_SOURCE, unitRainForcing, type UnitRainRecipe } from './unitRain';
 import { unitRainSeriesKey } from '../project';
 
 /** Which link of the §2.4h chain gave a day's rain: own gauge, catchment gauge × MAP ratio, own CHIRPS (levelled), the catchment rain, a forecast, or none (dry). */
@@ -66,13 +66,12 @@ const CODE: Record<number, UnitRainDaySource> = {
 
 /**
  * A land unit's rain under its §2.4h rule over the run window `input` gives,
- * with each link of its chain; null when per-unit rain is off, the node isn't
+ * with each link of its chain; null when the node isn't
  * a land unit of the run, or the unit is on its rainfall station (§2.4i,
  * stationAreaRain's). `prep` is prepareRun(input), passed in when several
  * units are read from one input.
  */
 export function unitAreaRain(input: ModelInput, nodeId: string, prep: PreparedRun = prepareRun(input)): UnitAreaRain | null {
-	if (!unitRainOn(prep.settings)) return null;
 	const warnings = [...prep.warnings];
 	const built = unitRainForcing(
 		{

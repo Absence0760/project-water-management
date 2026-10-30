@@ -36,8 +36,8 @@ import type { RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { hasDailyEt0Value } from '../evaporation/et0Daily';
-import { catchmentRainUnits, resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
-import { shareForcingSettings, simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
+import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
 import { rainStationSummary } from '../runoff/stationForcing';
 import { catchmentStationFingerprint, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
@@ -295,7 +295,7 @@ export interface CalibrationReport {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing the fit ran under (engine ≥ 1.78.0, docs/model.md §2.4h); absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
-	/** Under Fragmentation, the forcing its share runs ran on (engine ≥ 1.105.0, issue #616); null without a land unit, absent under Per unit. */
+	/** Under Fragmentation (engines 1.105.0 to 1.108.x, issue #616), the forcing its share runs ran on; null without a land unit. No engine since writes it. */
 	shareRain?: UnitRainFingerprint | null;
 	/** The catchment's rainfall station the fit's rain read (engine ≥ 1.91.0, docs/model.md §2.4i); absent without one. */
 	catchmentStation?: CatchmentStationFingerprint | null;
@@ -405,11 +405,6 @@ export interface CalibrationProblem {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing (engine ≥ 1.78.0, settings.unitRain `perUnit`), for fit provenance; absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
-	/**
-	 * Under Fragmentation, the forcing its share runs ran on (engine ≥ 1.105.0, issue #616: the units' shares split the
-	 * flow each candidate is scored on), for fit provenance; null without a land unit, absent under Per unit.
-	 */
-	shareRain?: UnitRainFingerprint | null;
 	/** The catchment's rainfall station (engine ≥ 1.91.0, §2.4i), for fit provenance; absent without one. */
 	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
@@ -454,7 +449,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const baseParams = resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings);
 	const zones = resolveZones(input.model.nodes, settings, baseParams, warnings);
 	if (zoneNodeId !== null) {
-		if (!zones) throw new Error('calibration zones need Per unit flow generation and a ticked, usable gauge: there is no zone to fit');
+		if (!zones) throw new Error('calibration zones need a ticked, usable gauge: there is no zone to fit');
 		if (!zones.zones.some((z) => z.nodeId === zoneNodeId)) throw new Error(`no ticked calibration zone at gauge node ${zoneNodeId}`);
 	}
 	const cs = zoneCalibrationSettings(settings, zoneNodeId);
@@ -475,17 +470,6 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		settings.unitRain?.pinned ?? undefined
 	);
 	const unitBuffers = perUnit ? perUnit.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
-	// Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b, runoff/simulate.ts ewrShareRunoff): the same per-unit runs on
-	// the Per unit forcing, into buffers the plan's EWR split reads, refilled for each candidate (its parameters move
-	// the shares). Their warnings are Per unit's, not the fit's.
-	const shareForcing = perUnit
-		? null
-		: unitRainForcing(
-				{ settings: shareForcingSettings(settings), series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays, forecastRainSource: input.forecastRainSource ?? null, stations: run.stations?.context ?? null, stationInputs: input.stations ?? null },
-				[],
-				settings.unitRain?.pinned ?? undefined
-			);
-	const shareBuffers = shareForcing ? shareForcing.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
 	const { plan, topo, outletEwr, ewrSplit } = buildNetworkPlan(
 		input,
 		settings,
@@ -495,7 +479,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		natural,
 		warnings,
 		start,
-		unitBuffers ? { unitRunoff: unitBuffers } : shareBuffers ? { shareRunoff: shareBuffers, shareCatchmentRain: catchmentRainUnits(shareForcing!.units) } : {},
+		unitBuffers ? { unitRunoff: unitBuffers } : {},
 		historyDays
 	);
 
@@ -577,15 +561,6 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		}
 		const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n, cycleDays: historyDays });
 		for (let t = 0; t < n; t++) natural[t] = tr.qMm[t]! * toM3;
-		if (shareForcing) {
-			// The share runs, as ewrShareRunoff makes them (the products in the same order), so the shares are runModel's to the bit.
-			const traces = simulateUnits(shareForcing.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays });
-			shareForcing.units.forEach((u, k) => {
-				const q = traces[k]!.qMm;
-				const buf = shareBuffers![k]!.runoffM3Day;
-				for (let t = 0; t < n; t++) buf[t] = q[t]! * u.areaKm2 * MM_KM2_TO_M3;
-			});
-		}
 	};
 	/** The series a record is scored against, simulated for days 0 … n − 1. */
 	// Land cover (WP-1.35) reads the whole run's natural flow (its low-flow
@@ -605,9 +580,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		const runoffTo = splitRefill ? Math.max(n, splitRefill.days.to) : n;
 		return (p: ParamSet): Float64Array => {
 			runoff(p, runoffTo);
-			// The unit shares follow each candidate's units' runoff (Per unit's, or Fragmentation's share runs), as a run on
-			// it would: the flow under Fragmentation, the EWR and the land-cover threshold read them as the network runs,
-			// and the senior users' claims are made again from them (engine 1.105.0, issue #616).
+			// The unit shares follow each candidate's units' runoff, as a run on it would: the EWR and the land-cover
+			// threshold read them as the network runs, and the senior users' claims are made again from them (engine
+			// 1.105.0, issue #616).
 			refillShares?.();
 			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would: after
 			// the shares, which the natural flow crosses the units by when a reach loses.
@@ -666,7 +641,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
-		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : { shareRain: shareForcing ? unitRainFingerprint(shareForcingSettings(settings).unitRain, shareForcing.recipes) : null }),
+		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : {}),
 		...(run.stations?.catchment ? { catchmentStation: catchmentStationFingerprint(rainStationSummary(run.stations.context, run.stations.catchment, [], run.stations.plan?.map ?? null)) } : {}),
 		rain: arealRainOn(usedRain, areal, month),
 		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
@@ -1282,7 +1257,6 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
 		...(pb.unitRain ? { unitRain: pb.unitRain } : {}),
-		...(pb.shareRain !== undefined ? { shareRain: pb.shareRain } : {}),
 		...(pb.catchmentStation ? { catchmentStation: pb.catchmentStation } : {}),
 		dayQuality: pb.dayQuality ?? null,
 		fitAllDays,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
-import { defaultDataQualitySettings, defaultProjectSettings, rainCheckLimits, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, defaultProjectSettings, rainCheckLimits, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
 import { et0FitWindow } from '../evaporation/et0Daily';
@@ -391,7 +391,9 @@ describe('fit record', () => {
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, fillAboveChirpsMm: 2 } }, withZr).forcingChanged).toBe(false);
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, fillAboveChirpsMm: 5 } }, withZr).forcingChanged).toBe(true);
 		// … a fit by an engine before 1.81.0 filled every flagged day, so today's threshold is a change …
-		const pre181 = { ...withZr, engineVersion: '1.80.0' };
+		// A Per unit fit (its forcing records the units' rain; one without it from before 1.109.0 ran Fragmentation, a
+		// change of its own), so only the zero-run fill is compared.
+		const pre181 = { ...withZr, engineVersion: '1.80.0', forcing: { ...withZr.forcing!, unitRain: { mode: 'perUnit' as const, gaugeMapMm: null, mapPeriod: { ...DEFAULT_UNIT_MAP_PERIOD }, units: [] } } };
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: zr }, pre181).forcingChanged).toBe(true);
 		// … except where nothing was filled: 'asRecorded' on both sides.
 		const pre181Dry = { ...pre181, forcing: { ...pre181.forcing!, zeroRainRuns: { ...zr, mode: 'asRecorded' as const } } };

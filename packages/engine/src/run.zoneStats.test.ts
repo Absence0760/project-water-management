@@ -68,9 +68,9 @@ function input(zones: CalibrationZone[] | undefined, mode: 'perUnit' | null = 'p
 }
 
 describe('calibration statistics at each zone’s gauge (RunSummary.calibrationZones)', () => {
-	it('is absent without a zone, under Fragmentation, and with the only row unticked', () => {
+	it('is absent without a zone and with the only row unticked; settings without unitRain score it as Per unit does', () => {
 		expect(runModel(input(undefined)).summary.calibrationZones).toBeUndefined();
-		expect(runModel(input([zone('H')], null)).summary.calibrationZones).toBeUndefined();
+		expect(runModel(input([zone('H')], null)).summary.calibrationZones).toEqual(runModel(input([zone('H')])).summary.calibrationZones);
 		expect(runModel(input([zone('H', { enabled: false })])).summary.calibrationZones).toBeUndefined();
 	});
 

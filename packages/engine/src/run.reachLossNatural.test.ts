@@ -148,13 +148,19 @@ describe('the natural flow net of the natural bed losses (engine 1.76.0)', () =>
 	});
 
 	it('the calibration’s MAR penalty reads the same flow, so a fit with both on counts a loss once', () => {
-		const flow = new Float64Array(days).fill(86_400);
-		const a = prepareCalibration(catchment(0)).marPenalty!;
-		const b = prepareCalibration(catchment(LOSS)).marPenalty!;
-		expect(b.simulatedMar(flow) / a.simulatedMar(flow)).toBeCloseTo(1 - LOSS, 12);
+		// Each unit makes its own runoff (Per unit, the only method since engine 1.109.0): a candidate fills the units'
+		// runoff, which the penalty routes down net of the losses, as the run does.
+		const pa = prepareCalibration(catchment(0));
+		const pb = prepareCalibration(catchment(LOSS));
+		pa.simulate(pa.startParams);
+		pb.simulate(pb.startParams);
+		const a = pa.marPenalty!;
+		const b = pb.marPenalty!;
+		expect(Array.from(pb.natural)).toEqual(Array.from(pa.natural));
+		expect(b.simulatedMar(pb.natural) / a.simulatedMar(pa.natural)).toBeCloseTo(1 - LOSS, 12);
 		expect(b.targetMarMm3).toBe(a.targetMarMm3);
 		// The penalty is the band's distance from what the losses leave, not from the runoff.
-		expect(b.penalty(flow)).not.toBe(a.penalty(flow));
+		expect(b.penalty(pb.natural)).not.toBe(a.penalty(pa.natural));
 	});
 
 	it('says the pragmatic EWR is passed down whole, only when bed losses are on', () => {

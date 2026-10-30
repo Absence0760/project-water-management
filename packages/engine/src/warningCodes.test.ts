@@ -465,7 +465,6 @@ const ELSEWHERE: Partial<Record<WarningCode, string>> = {
 	'calibration.zone.noGauge': 'calibrate/zones.test.ts',
 	'calibration.zone.duplicate': 'calibrate/zones.test.ts',
 	'calibration.zone.badParams': 'calibrate/zones.test.ts',
-	'calibration.zone.needsPerUnit': 'calibrate/zones.test.ts',
 	'calibration.zone.unusable': 'calibrate/zones.test.ts',
 	'calibration.zone.unfitted': 'calibrate/zones.test.ts',
 	'calibration.zone.siteOnlyElsewhere': 'calibrate/zones.test.ts',

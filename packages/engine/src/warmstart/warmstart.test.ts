@@ -90,8 +90,10 @@ describe('the snapshot', () => {
 		const k = dayIndex(output, '2009-05-17');
 		expect(s.nodes[1]!.storageM3).toBe(col(output, 'a', 'dam_storage')![k - 1]);
 		expect(s.runoff.model).toBe('gr4j');
-		// GR4J: S, R and both unit-hydrograph queues (X4 = 1.5: 2 + 3 ordinates).
-		expect(s.runoff.state).toHaveLength(2 + 2 + 3);
+		// GR4J per land unit (Per unit, the only method since engine 1.109.0): each unit's S, R and both unit-hydrograph
+		// queues (X4 = 1.5: 2 + 3 ordinates); the catchment's own state is empty.
+		expect(s.runoff.state).toHaveLength(0);
+		expect(s.runoff.units!.map((u) => [u.id, u.state.length])).toEqual(output.summary.unitRain!.units.map((u) => [u.nodeId, 2 + 2 + 3]));
 		expect(s.pinned.lowFlowThresholdM3Day).toBe(output.summary.landCover!.lowFlowThresholdM3Day);
 		expect(s.pinned.reserveNatural).toEqual([{ site: '', curves: output.summary.ewrAssurance![0]!.byMonth.map((m) => m.naturalCurve) }]);
 		expect(s.reserveMonths[0]!.carry).toMatchObject({ days: 16 });

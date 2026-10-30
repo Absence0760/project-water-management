@@ -341,7 +341,8 @@ MUTANTS = [
     ("the base-flow gain is left out of the runoff", "                Ib = I - lost_bf + bg_", "                Ib = I - lost_bf"),
     ("the runoff split reads the runoff before the base flow", '                M = Ib * x["pctRunoffToDam"]', '                M = I * x["pctRunoffToDam"]'),
     # Runoff from each unit's own rain (§2.4h, engine 1.78.0).
-    ("per-unit rain off: the units' records are used whatever the mode", 'per_unit = isinstance(ur, dict) and ur.get("mode") == "perUnit"', "per_unit = isinstance(ur, dict)"),
+    # Per unit is the only method (engine 1.109.0, issue #658): the retired catchment mode and an absent setting run it.
+    ("the retired Fragmentation still runs when unitRain is absent, null or catchment (before engine 1.109.0)", "    per_unit = True\n", '    per_unit = (settings.get("unitRain") or {}).get("mode") == "perUnit"\n'),
     ("a unit's local inflow is natural × share, not its own runoff", "I = natural[i] * shares.get(xid, 0.0) if local is None else", "I = natural[i] * shares.get(xid, 0.0) if True else"),
     ("the catchment area is catchmentAreaKm2 under per-unit rain", "if per_unit or area_km2 is None:", "if area_km2 is None:"),
     ("per-unit rain with no land unit is refused", "        per_unit = False\n", '        raise Refused("catchment area is 0")\n'),
@@ -448,11 +449,9 @@ MUTANTS = [
     ("rule 2's level under the catchment's station is the station MAP, without r", '"gauge_level": None if st_map is None else st_map * r,', '"gauge_level": None if st_map is None else st_map,'),
     ("rule 2 applies on gaugeMapMm when the catchment's station has no MAP", '        gauge_level = rain["gauge_level"]\n', '        gauge_level = rain["gauge_level"] or gauge_map\n'),
     ("the reference fit keeps the catchment station's accumulation windows", '"fit_window_days": rec.prep["fit_window_days"],', '"fit_window_days": set(),'),
-    # The one natural MAR share per unit (§2.5, §2.5b: the EWR from engine 1.94.0, issue #553; under both methods from
-    # 1.105.0, issue #615; the flow under Fragmentation and the senior claims too, issue #616).
+    # The one natural MAR share per unit (§2.5, §2.5b: the EWR from engine 1.94.0, issue #553; the senior claims too from
+    # 1.105.0, issue #616; Per unit only from 1.109.0, issue #658).
     ("the natural MAR share is ignored (no unit gets a share)", "    if split_src is not None:", "    if False:"),
-    ("Fragmentation's share runs are ignored (no share under Fragmentation)", "split_src = local if local is not None else share_local", "split_src = local"),
-    ("Fragmentation's flow is split by area, not the natural MAR share (before engine 1.105.0)", 'I = natural[i] * shares.get(xid, 0.0) if local is None', 'I = natural[i] * area_share.get(xid, 0.0) if local is None'),
     ("the EWR is split by area, the flow by the natural MAR share", 'ewr_share = {x["id"]: shares.get(x["id"], 0.0) for x in farms}', 'ewr_share = dict(area_share)'),
     ("the senior users' claims are split by area, not the natural MAR share", ("            tot += shares.get(fid, 0.0)\n", "            tot += area_share.get(fid, 0.0)\n"), ('v = Dn[u["id"]][i] * shares.get(fid, 0.0) / tot', 'v = Dn[u["id"]][i] * area_share.get(fid, 0.0) / tot')),
     ("the natural MAR is taken over every day, not the complete water years", "period = full if full else list(range(hist))", "period = list(range(hist))"),

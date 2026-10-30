@@ -127,7 +127,7 @@ describe('chirpsChoiceWarnings at each land unit', () => {
 	const pick = (name: string, firstDay: string) => ({ name, others: [{ name: 'Unit record', firstDay, lastDay: '2020-12-31' }] });
 
 	const perUnit = { unitRain: { mode: 'perUnit' } } as never;
-	it('under per-unit rain, warns for each modelled unit whose own CHIRPS another series of that unit outspans, naming the unit, after the outlet and in the model’s order', () => {
+	it('warns for each modelled unit whose own CHIRPS another series of that unit outspans, naming the unit, after the outlet and in the model’s order', () => {
 		const input = {
 			model,
 			settings: perUnit,
@@ -143,9 +143,9 @@ describe('chirpsChoiceWarnings at each land unit', () => {
 			'for the unit “Lower”, the run read the CHIRPS series “CHIRPS v3 (rnl) Lower” (2 Dec 2020 to 31 Dec 2020), which spans 30 of its 366 days, but “Unit record” (1 Jan 2020 to 31 Dec 2020) spans 366: ' +
 				'a run reads a unit’s first CHIRPS series by name and uses only that one for the unit’s own rain. Rename or remove one of them so the run reads the record you mean'
 		]);
-		// Without per-unit rain the run reads no unit’s own CHIRPS: no unit warning (the outlet's still would be).
-		expect(chirpsChoiceWarnings({ ...input, settings: {} }, START, DAYS)).toEqual([]);
-		expect(chirpsChoiceWarnings({ ...input, settings: { unitRain: { mode: 'off' } } as never }, START, DAYS)).toEqual([]);
+		// Per unit is the only method (engine ≥ 1.109.0): settings without unitRain, or with the retired catchment mode, warn the same.
+		expect(chirpsChoiceWarnings({ ...input, settings: {} }, START, DAYS)).toEqual(chirpsChoiceWarnings(input, START, DAYS));
+		expect(chirpsChoiceWarnings({ ...input, settings: { unitRain: { mode: 'catchment' } } as never }, START, DAYS)).toEqual(chirpsChoiceWarnings(input, START, DAYS));
 	});
 
 	it('ignores a malformed unit map or entry, never throwing', () => {

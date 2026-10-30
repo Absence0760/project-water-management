@@ -65,19 +65,20 @@ describe('settings.arealRain: none', () => {
 });
 
 describe('settings.arealRain: a factor', () => {
-	it('multiplies the rain GR4J runs on by its water-year month’s factor, and adds the areal rain column', () => {
+	it('multiplies the rain GR4J runs on by its water-year month’s factor (units on the catchment rain, rule 4: Per unit, engine ≥ 1.109.0)', () => {
 		const monthly = flat(1);
 		(monthly.factors as unknown as number[])[0] = 2; // October only
 		(monthly.factors as unknown as number[])[4] = 1.5; // February
 		const out = runModel(catchment({ arealRain: monthly }));
 		const used = series(out, 'rain_used')!;
 		const final = series(out, 'rain_final')!;
-		const areal = series(out, 'rain_areal')!;
-		expect(used[0]).toBe(final[0]! * 2); // 1 October 2020
+		// Per unit (the only method since engine 1.109.0): GR4J runs on each unit's own rain, so no catchment rain_areal column;
+		// both units have no rain of their own (rule 4) and run on the catchment's × the factor, so the area-weighted rain is it.
+		expect(series(out, 'rain_areal')).toBeUndefined();
+		expect(used[0]).toBeCloseTo(final[0]! * 2, 12); // 1 October 2020
 		const feb = 31 + 30 + 31 + 31; // 1 February 2021
 		expect(used[feb + 1]).toBeCloseTo(final[feb + 1]! * 1.5, 12);
-		expect(used[40]).toBe(final[40]); // November: × 1
-		expect(areal.slice(0, 365)).toEqual(used.slice(0, 365));
+		expect(used[40]).toBeCloseTo(final[40]!, 12); // November: × 1
 		// The rain before the correction is recorded with it.
 		expect(out.summary.runoff?.arealRain?.method).toBe('map');
 		expect(out.summary.runoff?.arealRain?.rainBeforeMm).toBeCloseTo(sum(final), 9);
@@ -107,19 +108,19 @@ describe('settings.arealRain: a factor', () => {
 		const out = runModelChecked(catchment({ arealRain: flat(2) }));
 		const areaM3PerMm = 16.5 * 1000;
 		const natural = sum(series(out, 'natural_flow'));
-		// Runoff coefficient: natural flow ÷ the areal rain volume, not ÷ the recorded rain.
-		expect(out.summary.catchment.runoffCoefficient).toBeCloseTo(natural / (sum(series(out, 'rain_areal')) * areaM3PerMm), 9);
+		// Runoff coefficient: natural flow ÷ the areal rain volume (the units' rain GR4J ran on), not ÷ the recorded rain.
+		expect(out.summary.catchment.runoffCoefficient).toBeCloseTo(natural / (sum(series(out, 'rain_used')) * areaM3PerMm), 9);
 		// The water balance's whole-run row reads the areal rain too.
 		const whole = out.summary.waterBalance!.total;
-		expect(whole.rainMm).toBeCloseTo(sum(series(out, 'rain_areal')), 6);
+		expect(whole.rainMm).toBeCloseTo(sum(series(out, 'rain_used')), 6);
 		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
-		// Days with no rain value from any source stay NaN in both columns, and the checks still pass.
+		// Days with no rain value from any source stay NaN in rain_final (the units run them dry), and the checks still pass.
 		const gappy = catchment({ arealRain: flat(2) });
 		const values = [...gappy.series!.rain_catchment_mm!.values];
 		for (const t of [5, 6, 7, 400]) values[t] = null;
 		gappy.series!.rain_catchment_mm = { ...gappy.series!.rain_catchment_mm!, values };
 		const g = runModelChecked(gappy);
-		expect(Number.isNaN(series(g, 'rain_areal')![6])).toBe(true);
+		expect(series(g, 'rain_used')![6]).toBe(0);
 		expect(Number.isNaN(series(g, 'rain_final')![6])).toBe(true);
 		expect(g.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
 	});

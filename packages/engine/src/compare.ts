@@ -35,6 +35,7 @@ import {
 	RETIRED_CALIBRATION_KEYS,
 	resolveArealRain,
 	resolveUnitRain,
+	storedPerUnit,
 	DEFAULT_UNIT_MAP_PERIOD,
 	parseUnitRainSeriesKey,
 	resolvePe,
@@ -747,10 +748,14 @@ function arealRainChange(ra: unknown, rb: unknown): string | null {
 const AREAL_RAIN_LABEL = 'Areal rainfall correction (GR4J)';
 const UNIT_RAIN_LABEL = 'Runoff from each unit’s own rain';
 
-/** settings.unitRain in words (engine ≥ 1.78.0): "off", or "on (gauge MAP 600 mm (source); MAP period …)". */
+/**
+ * settings.unitRain in words (engine ≥ 1.78.0): "off", or "on (gauge MAP 600 mm (source); MAP period …)". "off" is
+ * a run's stored setting that chose Fragmentation (absent, null or `catchment`), as engines before 1.109.0 ran it;
+ * a run's stored settings from 1.109.0 (issue #658) always hold Per unit (the backend writes it, migration 286).
+ */
 export function unitRainText(raw: unknown): string {
+	if (!storedPerUnit(raw)) return 'off';
 	const u = resolveUnitRain(raw, []);
-	if (u?.mode !== 'perUnit') return 'off';
 	const gauge = u.gaugeMapMm != null ? `gauge MAP ${fmtValue(u.gaugeMapMm, 0)} mm${u.gaugeMapSource ? ` (${u.gaugeMapSource})` : ''}` : 'no gauge MAP';
 	const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	// The reference gauge and unit (engine ≥ 1.80.0), only when set, so a setting without one reads as before.

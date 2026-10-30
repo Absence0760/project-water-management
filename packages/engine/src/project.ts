@@ -344,7 +344,7 @@ export const RETIRED_NODE_FIELDS = ['areaHiKm2', 'areaLoKm2', 'flowShareManual']
  * 1.105.0, issue #616): the flow is split by each unit's natural MAR instead. Once per run.
  */
 export function flowShareMethodRetiredWarning(method: 'hiLo' | 'manual'): string {
-	return `this project's flow-share method (${method === 'hiLo' ? 'Hi/Lo MAP' : 'specific shares'}) was removed in engine 1.105.0: the flow is now split between the units by each unit's natural MAR, as the EWR is (Model settings → Model selection for flow generation)`;
+	return `this project's flow-share method (${method === 'hiLo' ? 'Hi/Lo MAP' : 'specific shares'}) was removed in engine 1.105.0: the flow is now split between the units by each unit's natural MAR, as the EWR is (Model settings → Flow generation)`;
 }
 
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
@@ -499,10 +499,12 @@ export interface ProjectSettings {
 	 */
 	arealRain?: ArealRain | null;
 	/**
-	 * How each land unit's runoff is forced (docs/model.md §2.4h, issue
-	 * #482). Absent or `{ mode: 'catchment' }`: one GR4J run on the
-	 * catchment rain, split to the units by flow shares, as before.
-	 * `perUnit`: GR4J per land unit on its own rain (UnitRainSeriesKey).
+	 * How each land unit's own rain is made (docs/model.md §2.4h, issue
+	 * #482): GR4J runs once per land unit on its own rain
+	 * (UnitRainSeriesKey). Since engine 1.109.0 (issue #658) that is the
+	 * only flow generation method: absent, null and the retired `{ mode:
+	 * 'catchment' }` (Fragmentation: one GR4J run on the catchment rain,
+	 * split to the units) run Per unit too (resolveUnitRain).
 	 */
 	unitRain?: UnitRainSettings | null;
 	/**
@@ -1136,6 +1138,7 @@ export interface ArealRain {
 
 import type { UnitRainRecipe } from './runoff/unitRain';
 
+/** The stored modes: `perUnit`, and `catchment`, Fragmentation's, retired in engine 1.109.0 (issue #658) and still read (it runs Per unit). */
 export const UNIT_RAIN_MODES = ['catchment', 'perUnit'] as const;
 export type UnitRainMode = (typeof UNIT_RAIN_MODES)[number];
 
@@ -1381,7 +1384,7 @@ export function mapMmError(mapMm: unknown, source: unknown): string | null {
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Why a stored settings.unitRain can't be used, or null (absent and null are fine: catchment rain). The API applies the same rules. */
+/** Why a stored settings.unitRain can't be used, or null (absent and null are fine: Per unit's defaults). The API applies the same rules. `catchment` still passes, so an older stored setting reads; it runs Per unit. */
 export function unitRainError(raw: unknown): string | null {
 	if (raw === null || raw === undefined) return null;
 	if (typeof raw !== 'object' || Array.isArray(raw)) return 'not a unit rain setting';
@@ -1410,20 +1413,27 @@ export function unitRainError(raw: unknown): string | null {
 	return null;
 }
 
+/** settings.unitRain with nothing set: Per unit, no gauge MAP, the default MAP period, no reference gauge. */
+export const DEFAULT_UNIT_RAIN: Readonly<UnitRainSettings> = Object.freeze({ mode: 'perUnit', gaugeMapMm: null, gaugeMapSource: null, mapPeriod: null });
+
 /**
- * A stored `unitRain` as the engine runs it (docs/model.md §2.4h): absent or
- * null = catchment rain; unusable = catchment rain, with a warning.
+ * A stored `unitRain` as the engine runs it (docs/model.md §2.4h). Since
+ * engine 1.109.0 (issue #658) Per unit is the only flow generation method:
+ * absent, null and the retired `{ mode: 'catchment' }` (Fragmentation) all
+ * run Per unit, keeping the rest of a stored setting (its gauge MAP, MAP
+ * period and reference gauge); an unusable one runs Per unit's defaults, with
+ * a warning. Never null.
  */
-export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSettings | null {
-	if (raw === null || raw === undefined) return null;
+export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSettings {
+	if (raw === null || raw === undefined) return { ...DEFAULT_UNIT_RAIN };
 	const e = unitRainError(raw);
 	if (e) {
-		warnings.push(`the per-unit rain setting is ignored (${e}): GR4J runs on the catchment rain`);
-		return null;
+		warnings.push(`the per-unit rain setting is ignored (${e}): each unit runs on its own rain with no gauge MAP, the default MAP period and no reference gauge`);
+		return { ...DEFAULT_UNIT_RAIN };
 	}
 	const r = raw as UnitRainSettings;
 	return {
-		mode: r.mode,
+		mode: 'perUnit',
 		gaugeMapMm: r.gaugeMapMm ?? null,
 		gaugeMapSource: r.gaugeMapSource ?? null,
 		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null,
@@ -1434,6 +1444,13 @@ export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSetti
 		...(Array.isArray(r.pinned) ? { pinned: structuredClone(r.pinned) } : {})
 	};
 }
+
+/**
+ * Whether a stored `unitRain` chose Per unit (`perUnit`, usable) as a run before engine 1.109.0 read it: absent,
+ * null, `catchment` or unusable was Fragmentation. For reading older runs and fits (the run comparison's diff line);
+ * a run now is always Per unit (resolveUnitRain).
+ */
+export const storedPerUnit = (raw: unknown): boolean => raw !== null && typeof raw === 'object' && (raw as { mode?: unknown }).mode === 'perUnit' && unitRainError(raw) === null;
 
 /**
  * A stored `arealRain` as the engine runs it: absent, null or unusable (with a
@@ -4448,7 +4465,8 @@ export interface RunSummary {
 	 * and factors), as a Fragmentation fit records it (FitRecord.forcing
 	 * .shareRain), so the fit reads "Forcing changed since fit" when it moved.
 	 * null when the run had no land unit; absent under Per unit (`unitRain`
-	 * is it), on a resumed run, and before 1.105.0.
+	 * is it), on a resumed run, before 1.105.0, and from 1.109.0 (issue #658:
+	 * Fragmentation is retired, so no run writes it). Kept so older runs read.
 	 */
 	shareRain?: UnitRainFingerprint | null;
 	catchment: {

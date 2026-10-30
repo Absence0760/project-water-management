@@ -19,7 +19,7 @@ import { checkedStationRecord } from './stationRecord';
 import { pairingFactorOn } from './stationPairing';
 import { goldenDiff, goldenFingerprint, type GoldenFingerprint } from '../testing/golden';
 import { calibrate } from '../calibrate/calibrate';
-import { fitFlowMethod, fitRecordCaveats, fitRecordFromReport, fitRecordStatus, flowMethodOf } from '../calibrate/provenance';
+import { fitFlowMethod, fitRecordCaveats, fitRecordFromReport, fitRecordStatus, type FitRecord } from '../calibrate/provenance';
 import { catchmentStationFingerprint, catchmentStationFingerprintChanged, catchmentStationFingerprintError, catchmentStationSettingChanged } from './stationFingerprint';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary } from './unitRainFingerprint';
 
@@ -268,7 +268,9 @@ describe('the catchment on its station', () => {
 		const rec = checkedStationRecord(settingsOf(x), x.series, 'S')!.record.values;
 		const ch = x.series.rain_chirps_mm!.values as number[];
 		const fit = out.summary.stations!.pairings[0]!;
-		const used = col(out, 'rain_used');
+		// The catchment's rain (rain_final: what demand, the dams and a unit on rule 4 read). GR4J's rain_used is the
+		// units' own, area-weighted (Per unit, the only method since engine 1.109.0).
+		const used = col(out, 'rain_final');
 		for (let t = 0; t < DAYS; t++) {
 			if (rec[t] != null) expect(used[t]).toBe(rec[t]! * ratio);
 			else expect(used[t]).toBe(ch[t]! * pairingFactorOn(fit, D0 + t)!);
@@ -285,7 +287,7 @@ describe('the catchment on its station', () => {
 		const out = runModel(x);
 		expect(out.summary.stations).toMatchObject({ catchmentMapMm: 1200, catchmentMapFromUnits: false });
 		expect(out.summary.stations!.catchment!.ratio).toBe(2);
-		expect(col(out, 'rain_final')).toEqual(col(out, 'rain_used'));
+		expect(col(out, 'rain_final')).toEqual(stationAreaRain(x, null)!.rainMm);
 	});
 
 	it('a refused pairing leaves the gaps to the forecast (dry here), and a missing station runs the catchment rain as before', () => {
@@ -620,13 +622,15 @@ describe('the patching priority (issue #612)', () => {
 		const map = (10 * 900 + 6 * 600 + 3 * 750 + 1.5 * 600) / 20.5;
 		const rec = checkedStationRecord(settingsOf(x), x.series, 'S')!.record.values;
 		const p = x.series[stationSeriesKey('P')]!.values;
-		const used = col(out, 'rain_used');
+		// The catchment's rain (rain_final), which GR4J's per-unit rain_used is not (Per unit, engine ≥ 1.109.0).
+		const used = col(out, 'rain_final');
 		for (let t = 0; t < DAYS; t++) if (rec[t] == null && p[t] != null) expect(used[t]).toBeCloseTo(p[t]! * (map / 450), 12);
 		const c = out.summary.stations!.catchment!;
 		expect(c.days.patch).toBeGreaterThan(0);
 		expect(c.days.chirps).toBe(0); // no CHIRPS in its chain
 		const r = stationAreaRain(x, null)!;
-		expect(r.rainMm).toEqual(used);
+		// A day with no value from any source: rain_final NaN, the area's rain dry (0 mm), as GR4J runs it.
+		expect(r.rainMm).toEqual(used.map((v) => (Number.isNaN(v) ? 0 : v)));
 		expect(r.source.filter((v) => v === 'patch')).toHaveLength(c.days.patch!);
 		expect(r.patchStationId.filter((v) => v === 'P')).toHaveLength(c.days.patch!);
 	});
@@ -1019,28 +1023,68 @@ describe('the station paths stay unchanged (golden)', () => {
 			}
 		},
 		catchment: {
-			shape: "9ef861481d952b7d",
+			shape: "4dfbbd1095456425",
 			series: {
 				"natural_flow@": {
-					sum: 139036884.13131243,
-					sumSq: 15253739085967.236,
-					weighted: 208092671.15366083
+					sum: 43262835.21512982,
+					sumSq: 1337395549951.835,
+					weighted: 64778751.29452676
 				},
 				"rain_used@": {
+					sum: 6409.537543442317,
+					sumSq: 125846.80712032544,
+					weighted: 9586.07514299556
+				},
+				"rain_unit@A": {
+					sum: 5400.0000000000655,
+					sumSq: 121987.82178161456,
+					weighted: 8113.070075860531
+				},
+				"runoff_natural@A": {
+					sum: 11023214.079512136,
+					sumSq: 85425313499.31387,
+					weighted: 16537542.499490967
+				},
+				"rain_unit@B": {
+					sum: 3599.999999999979,
+					sumSq: 54216.80968071774,
+					weighted: 5423.116996600983
+				},
+				"runoff_natural@B": {
+					sum: 1719329.4970369388,
+					sumSq: 1842740815.3652272,
+					weighted: 2578325.660730049
+				},
+				"rain_unit@C": {
 					sum: 12399.004364569928,
 					sumSq: 643128.281687236,
-					weighted: 18560.278106540507
+					weighted: 18589.183293872487
+				},
+				"runoff_natural@C": {
+					sum: 20346861.09238721,
+					sumSq: 326671390300.309,
+					weighted: 30616818.3499968
+				},
+				"rain_unit@D": {
+					sum: 12399.004364569928,
+					sumSq: 643128.281687236,
+					weighted: 18713.63575624259
+				},
+				"runoff_natural@D": {
+					sum: 10173430.546193605,
+					sumSq: 81667847575.07726,
+					weighted: 15215800.224967165
 				},
 				"rain_final@": {
 					sum: 12399.004364569928,
 					sumSq: 643128.281687236,
-					weighted: 18638.883760659843
+					weighted: 18531.015047881006
 				}
 			},
 			rest: {
-				sum: 1015456949.4520895,
-				sumSq: 67625179408458.5,
-				weighted: 1520772933.3445058
+				sum: 344811128.82954514,
+				sumSq: 6925517187267.047,
+				weighted: 516909413.6437971
 			},
 			summary: {
 				sum: 25414.456551038187,
@@ -1183,36 +1227,41 @@ describe('fit provenance', () => {
 		expect(unitRainFingerprintChanged(fit, unitRainFingerprintOfSummary(runModel(x).summary.unitRain, runModel(x).summary.stations))).toBe(false);
 	});
 
-	// Settings → Model selection for flow generation (issue #553 round 3): the form has no run, so the settings alone must say a method switch and a unit's station change.
-	describe('the Model selection for flow generation form, without a run', () => {
+	// Settings → Flow generation (issue #553 round 3; one method since #658): the form has no run, so the settings alone must say an older fit's method and a unit's station change.
+	describe('the Flow generation form, without a run', () => {
 		const perUnit = catchment({ unitRain: PER_UNIT, rainStations: { units: { A: { stationId: 'S' } }, sites: SITES } });
 		const perUnitRecord = fitRecordFromReport(calibrate(perUnit, { budget: 10, seed: 1 }), ctxOf(perUnit));
 
-		it('names the method a fit ran under and the one the settings choose', () => {
-			expect(fitFlowMethod(plainRecord)).toBe('fragmentation');
+		// A fit made under Fragmentation (engines before 1.109.0, issue #658): no per-unit fingerprint in its forcing.
+		const fragRecord: FitRecord = { ...plainRecord, engineVersion: '1.108.0', forcing: { ...plainRecord.forcing!, unitRain: undefined } };
+
+		it('names the method a fit ran under: Fragmentation only for an older fit without per-unit rain', () => {
+			expect(fitFlowMethod(fragRecord)).toBe('fragmentation');
 			expect(fitFlowMethod(perUnitRecord)).toBe('perUnit');
-			expect(fitFlowMethod({ forcing: undefined })).toBeNull();
-			expect([undefined, null, { mode: 'catchment' }, { mode: 'perUnit' }, 'nonsense'].map(flowMethodOf)).toEqual(['fragmentation', 'fragmentation', 'fragmentation', 'perUnit', 'fragmentation']);
+			// Every fit is Per unit now, the settings' default (no unitRain) included.
+			expect(fitFlowMethod(plainRecord)).toBe('perUnit');
+			expect(plainRecord.forcing!.unitRain).toBeTruthy();
+			// From 1.109.0 a fit without a fingerprint (a model with no land unit) is Per unit too.
+			expect(fitFlowMethod({ ...fragRecord, engineVersion: '1.109.0' })).toBe('perUnit');
+			expect(fitFlowMethod({ forcing: undefined, engineVersion: '1.108.0' })).toBeNull();
 		});
 
-		it('switching method marks the fit "not fitted for this method", either way, and no other change does', () => {
-			for (const [settings, record] of [
-				[settingsOf(perUnit), plainRecord],
-				[settingsOf(plain), perUnitRecord]
-			] as const) {
-				const st = fitRecordStatus(settings, record);
+		it('a fit made under Fragmentation reads "not fitted for this method", whatever the settings say; no Per unit fit does', () => {
+			for (const settings of [settingsOf(perUnit), settingsOf(plain), settingsOf(catchment({ unitRain: { mode: 'catchment' } }))]) {
+				const st = fitRecordStatus(settings, fragRecord);
 				expect(st.methodChanged).toBe(true);
 				expect(st.forcingChanged).toBe(true);
 				const caveats = fitRecordCaveats(st);
-				expect(caveats.filter((c) => c.startsWith('Parameters not fitted for this method'))).toHaveLength(1);
+				expect(caveats.filter((c) => c.startsWith('Parameters not fitted for this method: the fit ran under Fragmentation'))).toHaveLength(1);
 				// Said once, by its own caveat, not again as the general forcing one.
 				expect(caveats.some((c) => c.startsWith('The potential evaporation GR4J runs on'))).toBe(false);
 			}
 			expect(fitRecordStatus(settingsOf(plain), plainRecord).methodChanged).toBeUndefined();
+			expect(fitRecordStatus(settingsOf(plain), plainRecord).forcingChanged).toBe(false);
 			expect(fitRecordStatus(settingsOf(perUnit), perUnitRecord).methodChanged).toBeUndefined();
 			expect(fitRecordStatus(settingsOf(perUnit), perUnitRecord).forcingChanged).toBe(false);
 			// A record from before forcing was recorded can't say its method.
-			const { forcing: _f, ...bare } = plainRecord;
+			const { forcing: _f, ...bare } = fragRecord;
 			expect(fitRecordStatus(settingsOf(perUnit), bare).methodChanged).toBeUndefined();
 		});
 

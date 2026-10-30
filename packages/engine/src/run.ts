@@ -45,7 +45,7 @@ import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIE
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { baseflowOf, BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, hasBaseflow } from './network/baseflow';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
-import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, areaShares, fillPlanShares, type EwrSplitInfo, type EwrSplitPlan, type EwrSplitUnit, type PinnedEwrSplit } from './network/ewrSplit';
+import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, areaShares, fillPlanShares, type EwrSplitInfo, type EwrSplitPlan, type PinnedEwrSplit } from './network/ewrSplit';
 import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
@@ -373,8 +373,6 @@ function runNetworkIn(
 		...(capturing ? { captureAt: captureAt! } : {}),
 		// Each land unit's own runoff as its local inflow (engine ≥ 1.78.0, §2.4h).
 		...(nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {}),
-		// Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b): the units' own runoff, for the shares only.
-		...(nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {}),
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
 		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {}),
 		// The daily outlet EWR's scale factor (engine ≥ 1.77.0): the capture run's, as its other record-wide figures.
@@ -897,7 +895,8 @@ function runNetworkIn(
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
 			// Its one share as applied (engine ≥ 1.105.0, §2.5, ./network/ewrSplit.ts): its natural MAR share, which splits the
-			// flow under Fragmentation, the EWR, the land-cover threshold and the senior users' claims; both fields say it.
+			// EWR, the land-cover threshold and the senior users' claims (and, engines 1.105.0 – 1.108.x, the flow under
+			// Fragmentation); both fields say it.
 			flowShare: plan.nodes[i]!.share,
 			ewrShare: plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
@@ -1303,8 +1302,6 @@ function runNetworkIn(
 			curtailment,
 			ewrCompliance: compliance,
 			ewrSplit: built.ewrSplit.info,
-			// The forcing Fragmentation's share runs ran on (engine ≥ 1.105.0, issue #616), for its fit's provenance.
-			...(nf.shareRain !== undefined ? { shareRain: nf.shareRain } : {}),
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
@@ -1644,12 +1641,6 @@ export function buildNetworkPlan(
 		 */
 		unitRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
 		/**
-		 * Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b): each land unit's natural runoff from the share runs
-		 * (runoff/simulate.ts ewrShareRunoff), and the units of those on the catchment rain. Ignored with unitRunoff.
-		 */
-		shareRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
-		shareCatchmentRain?: readonly EwrSplitUnit[];
-		/**
 		 * The EWR split's period and shares (engine ≥ 1.94.0; every run from 1.105.0): the capture run's, as its other
 		 * record-wide figures. null: a resumed run whose capture run pinned none, which keeps the flow share.
 		 */
@@ -1955,11 +1946,10 @@ export function buildNetworkPlan(
 		},
 		scaledObjects: (i, k) => (factored(nodes[i]!) && objectsBy.has(nodes[i]!.id) ? objectsOf(nodes[i]!, { scale: k }) : undefined)
 	});
-	// Each unit's one share (engine ≥ 1.105.0, ./network/ewrSplit.ts, §2.5 and §2.5b): its natural MAR share, from Per
-	// unit's own runoff or Fragmentation's share runs, set on the plan's farms. It splits the flow under Fragmentation,
-	// the EWR and the land-cover threshold (all read at simulation time) and the senior users' claims, made from it here.
-	const shareRunoffOf = unitRunoffOf.size ? unitRunoffOf : new Map((warm.shareRunoff ?? []).map((u) => [u.nodeId, u.runoffM3Day]));
-	const ewrSplit = planUnitShares(plan, nodes, shareRunoffOf, unitRunoffOf.size ? 'unitRain' : 'shareRuns', unitRunoffOf.size ? [] : (warm.shareCatchmentRain ?? []), start, historyDays, warm.ewrSplit);
+	// Each unit's one share (engine ≥ 1.105.0, ./network/ewrSplit.ts, §2.5 and §2.5b): its natural MAR share, from its
+	// own runoff (Per unit, the only method since 1.109.0), set on the plan's farms. It splits the EWR and the land-cover
+	// threshold (both read at simulation time) and the senior users' claims, made from it here.
+	const ewrSplit = planUnitShares(plan, nodes, unitRunoffOf, start, historyDays, warm.ewrSplit);
 	// The daily outlet EWR reads the natural flow at the outlet, which crosses the units by their shares when a reach
 	// loses (naturalAtOutlet): filled once the shares are set.
 	let outletEwr: OutletEwrPlan | undefined;
@@ -2005,16 +1995,13 @@ export interface PlannedEwrSplit {
 
 /**
  * Set the plan's farms' shares (§2.5, §2.5b): a resumed run's pinned shares; else each land unit's natural MAR over
- * the complete water years of the historical days, from its own runoff (Per unit's local runoff, or Fragmentation's
- * share runs); the area shares with no runoff over the period, with natural flow supplied without the units' runoff
+ * the complete water years of the historical days, from its own runoff (Per unit's local runoff); the area shares with no runoff over the period, with natural flow supplied without the units' runoff
  * (runModelWith), or on a resumed run whose snapshot pinned none; every share 0 without a land unit.
  */
 function planUnitShares(
 	plan: NetworkPlan,
 	nodes: readonly NetworkNode[],
 	runoffOf: ReadonlyMap<string, Float64Array>,
-	from: 'unitRain' | 'shareRuns',
-	catchmentRain: readonly EwrSplitUnit[],
 	start: number | undefined,
 	historyDays: number,
 	pinned: PinnedEwrSplit | null | undefined
@@ -2057,8 +2044,7 @@ function planUnitShares(
 		applied: filled.applied,
 		...(filled.applied === 'area' ? { why: 'noRunoff' as const } : {}),
 		period,
-		runoffFrom: from,
-		...(catchmentRain.length ? { catchmentRain: catchmentRain.map((u) => ({ ...u })) } : {})
+		runoffFrom: 'unitRain'
 	};
 	const pin: PinnedEwrSplit = { period, shares: [...filled.shares].map(([nodeId, share]) => ({ nodeId, share })), info };
 	return { info, refill, pin, shares: filled.shares };
@@ -2076,7 +2062,7 @@ export function ewrSplitPinOf(input: ModelInput): PinnedEwrSplit | null {
 	const read = run.series !== input.series ? { ...input, series: run.series } : input;
 	const nf = naturalFlowFor(settings.runoffModel)(read, { settings, startDate, days, aligned, historyDays, chirpsCorrection: run.chirpsCorrection, stations: run.stations?.context ?? null });
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
-	const warm = nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {};
+	const warm = nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {};
 	return buildNetworkPlan(read, settings, days, month, aligned, natural, [], start, warm, historyDays).ewrSplit.pin ?? null;
 }
 

@@ -16,7 +16,6 @@ export {
 	unitRainFingerprintOfSummary,
 	unitRainFingerprintChanged,
 	unitRainFingerprintError,
-	unitRainOn,
 	UNIT_MAP_MIN_YEARS,
 	UNIT_RAIN_SOURCE,
 	unitRainForcing,
