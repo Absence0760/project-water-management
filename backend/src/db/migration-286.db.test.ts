@@ -22,7 +22,8 @@ let db: pg.Client;
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 // UNSET: never chose (Fragmentation, the default). NULLED: unitRain null. CATCHMENT: Fragmentation chosen, with a
 // gauge MAP, a MAP period and a reference kept. FITTED: Fragmentation with a fit record. PER_UNIT: already Per unit.
-const [UNSET, NULLED, CATCHMENT, FITTED, PER_UNIT] = [id(1), id(2), id(3), id(4), id(5)];
+// NO_MODE: an object with no mode. SCALAR: not an object at all. NULL_FIT: fitRecord null. ZONE_FIT: only a zone's fit.
+const [UNSET, NULLED, CATCHMENT, FITTED, PER_UNIT, NO_MODE, SCALAR, NULL_FIT, ZONE_FIT] = [id(1), id(2), id(3), id(4), id(5), id(6), id(7), id(8), id(9)];
 const OTHER = { lakeEvapFactor: 0.7, apanMm: new Array<number>(12).fill(150), rainStations: { units: { u1: { stationId: 's1' } } } };
 const KEPT = { gaugeMapMm: 640, gaugeMapSource: 'Synthetic gauge record', mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, reference: { gauge: 'rain_catchment_mm', unitId: 'u1' } };
 const FIT = { model: 'gr4j', params: { x1: 300, x2: 0, x3: 80, x4: 1.5 }, engineVersion: '1.108.0', forcing: { panCoefficient: [] } };
@@ -44,6 +45,10 @@ beforeAll(async () => {
 	await project(CATCHMENT, { ...OTHER, unitRain: { mode: 'catchment', ...KEPT } });
 	await project(FITTED, { unitRain: { mode: 'catchment' }, fitRecord: FIT });
 	await project(PER_UNIT, { ...OTHER, unitRain: { mode: 'perUnit', ...KEPT }, fitRecord: FIT });
+	await project(NO_MODE, { unitRain: { gaugeMapMm: 640, gaugeMapSource: 'Synthetic' } });
+	await project(SCALAR, { unitRain: 'catchment' });
+	await project(NULL_FIT, { unitRain: { mode: 'catchment' }, fitRecord: null });
+	await project(ZONE_FIT, { calibrationZones: [{ nodeId: 'g1', enabled: true, fitRecord: FIT }, { nodeId: 'g2', enabled: false }] });
 	await db.query(await readFile(join(DIR, FILE), 'utf8'));
 });
 
@@ -83,7 +88,16 @@ describe('migration 286: Fragmentation is retired, every project runs Per unit',
 		expect((await eventsOf(FITTED)).map((e) => e.subject)).toEqual([{ unitRain: { mode: 'catchment' }, fitted: true }]);
 	});
 
-	it('leaves a project already on Per unit as it was, and records nothing for it (positive control: the four above)', async () => {
+	it('adds the mode to an object without one, replaces a value that is no object, and counts a zone’s fit as a fit', async () => {
+		expect((await settingsOf(NO_MODE)).unitRain).toEqual({ gaugeMapMm: 640, gaugeMapSource: 'Synthetic', mode: 'perUnit' });
+		expect((await settingsOf(SCALAR)).unitRain).toEqual({ mode: 'perUnit' });
+		expect((await eventsOf(SCALAR)).map((e) => e.subject)).toEqual([{ unitRain: 'catchment', fitted: false }]);
+		expect((await eventsOf(NULL_FIT)).map((e) => e.subject)).toEqual([{ unitRain: { mode: 'catchment' }, fitted: false }]);
+		expect((await eventsOf(ZONE_FIT)).map((e) => e.subject)).toEqual([{ unitRain: null, fitted: true }]);
+		expect((await settingsOf(ZONE_FIT)).calibrationZones).toEqual([{ nodeId: 'g1', enabled: true, fitRecord: FIT }, { nodeId: 'g2', enabled: false }]);
+	});
+
+	it('leaves a project already on Per unit as it was, and records nothing for it (positive control: the others)', async () => {
 		expect(await settingsOf(PER_UNIT)).toEqual({ ...OTHER, unitRain: { mode: 'perUnit', ...KEPT }, fitRecord: FIT });
 		expect(await eventsOf(PER_UNIT)).toEqual([]);
 	});
@@ -100,7 +114,11 @@ describe('migration 286: Fragmentation is retired, every project runs Per unit',
 			{ project_id: UNSET, n: 1 },
 			{ project_id: NULLED, n: 1 },
 			{ project_id: CATCHMENT, n: 1 },
-			{ project_id: FITTED, n: 1 }
+			{ project_id: FITTED, n: 1 },
+			{ project_id: NO_MODE, n: 1 },
+			{ project_id: SCALAR, n: 1 },
+			{ project_id: NULL_FIT, n: 1 },
+			{ project_id: ZONE_FIT, n: 1 }
 		]);
 	});
 });

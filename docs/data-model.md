@@ -1054,7 +1054,8 @@ the result change?", and put back any earlier version.
   areaLoKm2, flowShareManual }] }`; no actor, written by the migration),
   `settings.flow_method_reset` (286, issue #658: a project moved from
   Fragmentation to Per unit, `{ unitRain, fitted }`, the stored setting as
-  it was and whether it had a fit; no actor, written by the migration),
+  it was and whether it had a fit, its own or a calibration zone's; no actor,
+  written by the migration),
   `model.ewr_rules_reset` (220, issue #523 B4: the stored rules that kept
   water for the EWR were switched off, `{ rules: [...] }`, each
   `{ kind: 'damPassInflow' | 'unitHandsOff', id, name }`,
@@ -4289,7 +4290,8 @@ to choose. 286 is data only:
 - It writes one `settings.flow_method_reset` History event (no actor) per
   project whose stored `unitRain` was not a `perUnit` object, with what it
   was: `{ unitRain: <the stored setting, or null when never set>, fitted:
-  <whether the project had a fit record> }`. A re-run writes none.
+  <whether the project had a fit record: settings.fitRecord or a
+  calibration zone's> }`. A re-run writes none.
 - It then sets `settings.unitRain` to `{ mode: 'perUnit' }`, merged over a
   stored object, so the gauge MAP and its source, the MAP period and the
   reference gauge stay. Each unit then takes the rule its records imply; a

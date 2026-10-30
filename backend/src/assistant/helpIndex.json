@@ -2430,7 +2430,7 @@
 		{
 			"kind": "glossary",
 			"id": "flow-share",
-			"title": "Flow share (fragmentation)",
+			"title": "Flow share",
 			"aliases": [
 				"fragmentation",
 				"fragmented flow",

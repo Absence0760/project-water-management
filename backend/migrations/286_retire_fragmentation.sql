@@ -30,7 +30,8 @@
 -- not Per unit gets one `settings.flow_method_reset` History event, with no
 -- actor (a migration, not a person), holding what it was:
 --   { unitRain: <the stored settings.unitRain, or null when never set>,
---     fitted: <whether the project had a fit record> }
+--     fitted: <whether the project had a fit record: settings.fitRecord or a
+--              calibration zone's (calibrationZones[].fitRecord)> }
 -- written before the setting changes, from the same rows, once per project
 -- (a re-run finds it and writes none).
 --
@@ -57,6 +58,11 @@ SELECT
 	jsonb_build_object(
 		'unitRain', coalesce(p.settings -> 'unitRain', 'null'::jsonb),
 		'fitted', coalesce(jsonb_typeof(p.settings -> 'fitRecord') = 'object', false)
+			OR EXISTS (
+				SELECT 1
+				FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.settings -> 'calibrationZones') = 'array' THEN p.settings -> 'calibrationZones' ELSE '[]'::jsonb END) z
+				WHERE jsonb_typeof(z -> 'fitRecord') = 'object'
+			)
 	)
 FROM project p
 WHERE NOT coalesce(jsonb_typeof(p.settings -> 'unitRain') = 'object' AND p.settings -> 'unitRain' ->> 'mode' = 'perUnit', false)

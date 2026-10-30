@@ -742,7 +742,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'flow-share',
-		term: 'Flow share (fragmentation)',
+		term: 'Flow share',
 		short: 'Each hydrological unit’s natural MAR share, from the latest run: it splits the EWR between the units.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
