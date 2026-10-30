@@ -45,7 +45,7 @@
 //                 workflow that deploys no release: load-reference.yml)
 //   env: RELEASE_TAG, GITHUB_EVENT_NAME, GITHUB_REPOSITORY, GH_TOKEN,
 //        REQUIRED_CONFIG (comma-separated env var names that must be set),
-//        CI_WAIT_SECONDS (default 1800), GITHUB_OUTPUT.
+//        CI_WAIT_SECONDS (default 5400), GITHUB_OUTPUT.
 // Usage (local):  RELEASE_TAG=web@0.1.0 GITHUB_EVENT_NAME=workflow_dispatch \
 //                 GITHUB_REPOSITORY=Absence0760/project-water-management \
 //                 node scripts/release/preflight.mjs web
@@ -332,13 +332,19 @@ function checkEnvironment(repo, errors) {
 	}
 }
 
+// How long the ci check waits for a running ci.yml. CI on main takes about
+// an hour (the engine cross-check alone ~55 min), so 30 min refused every
+// release cut straight after a merge. The preflight jobs' timeout-minutes
+// must stay above it (preflight.test.mjs).
+export const CI_WAIT_DEFAULT_SECONDS = 5400;
+
 async function main() {
 	const component = process.argv[2];
 	const env = process.env;
 	const repo = env.GITHUB_REPOSITORY ?? '';
 	const tag = (env.RELEASE_TAG ?? '').trim();
 	const isReleaseEvent = env.GITHUB_EVENT_NAME === 'release';
-	const waitSeconds = Number(env.CI_WAIT_SECONDS ?? 1800);
+	const waitSeconds = Number(env.CI_WAIT_SECONDS ?? CI_WAIT_DEFAULT_SECONDS);
 	/** @type {string[]} */
 	const errors = [];
 	/** @type {Record<string, string>} */

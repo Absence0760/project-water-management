@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { branchPolicyProblem, ciGateState, compareVersions, environmentProblem, missingConfig, notNewerThan, parseReleaseTag, runningCiRuns, tagRulesetProblem, trustedCiGateRuns } from './preflight.mjs';
+import { readFileSync } from 'node:fs';
+import { CI_WAIT_DEFAULT_SECONDS, branchPolicyProblem, ciGateState, compareVersions, environmentProblem, missingConfig, notNewerThan, parseReleaseTag, runningCiRuns, tagRulesetProblem, trustedCiGateRuns } from './preflight.mjs';
 
 test('release tags are <component>@semver', () => {
 	assert.deepEqual(parseReleaseTag('web@1.2.3', 'web'), { ok: true, version: '1.2.3', prerelease: false });
@@ -242,4 +243,14 @@ test('while ci.yml is still running on the commit, the missing CI gate is a wait
 	assert.equal(ciGateState([], [], 0, 0).state, 'fail');
 	// once a trusted gate exists it decides, running or not
 	assert.equal(ciGateState([{ id: 1, status: 'completed', conclusion: 'failure' }], [], 0, 1).state, 'fail');
+});
+
+test("each release preflight job outlives the preflight's own CI wait", () => {
+	for (const wf of ['deploy-backend.yml', 'deploy-frontend.yml']) {
+		const text = readFileSync(new URL(`../../.github/workflows/${wf}`, import.meta.url), 'utf8');
+		const job = text.match(/\n  preflight:\n((?:    .*\n|\s*\n)*)/);
+		assert.ok(job, `${wf} has a preflight job`);
+		const minutes = Number(job[1].match(/^    timeout-minutes: (\d+)$/m)?.[1]);
+		assert.ok(minutes * 60 > CI_WAIT_DEFAULT_SECONDS, `${wf}: preflight timeout-minutes ${minutes} must exceed the ${CI_WAIT_DEFAULT_SECONDS / 60}-minute CI wait`);
+	}
 });

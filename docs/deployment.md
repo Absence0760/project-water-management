@@ -1091,8 +1091,8 @@ nothing. Step by step:
    - the release is published, not a draft. Prereleases (`-rc.1`, or the
      prerelease box) are skipped and never reach production;
    - the tagged commit is on `main` and its `CI gate` passed (it waits up to
-     30 minutes while CI is still running, so a release can be cut straight
-     after a merge: `CI gate` is ci.yml's last job and has no check run until
+     90 minutes while CI is still running, so a release can be cut straight
+     after a merge; CI on `main` takes about an hour: `CI gate` is ci.yml's last job and has no check run until
      the others finish, so an unfinished ci.yml run of the commit counts as
      still running). Only a `CI gate` posted by the
      GitHub Actions app (`github-actions`, id 15368) from a run of
