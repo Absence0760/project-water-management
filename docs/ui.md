@@ -8566,7 +8566,12 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   `settings.calibrateAtOutlet`), then each gauge with a record by name
   (`settings.calibrationZones`), then any ticked row whose gauge has left
   the model or lost its record (*Can’t be fitted: …*, so it can be
-  unticked). Each row has **Calibrate here: <location>**, a **Headline**
+  unticked). A new project is created with the outlet ticked before it has
+  a record: its row shows *Can’t be fitted: no flow record at the outlet
+  yet. Add one on Data, or untick it.*, and the fit card refuses its step
+  before starting ("The outlet has no flow record yet, so its step can’t be
+  fitted: …"). The regional prior asks for the outlet's own zone as
+  `zone=outlet` and for the headline with no zone. Each row has **Calibrate here: <location>**, a **Headline**
   radio, its **Record** coverage in complete water years spanned (gaps not
   counted; "(too short)" under 2, from the series list) and its
   **Parameters** (the outlet's are the catchment parameters, GR4J

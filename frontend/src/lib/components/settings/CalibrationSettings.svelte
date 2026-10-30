@@ -709,6 +709,7 @@
 		settings={() => $state.snapshot(s) as unknown as ProjectSettings}
 		model={() => (editor?.dirty ? editor.snapshot() : undefined)}
 		{nodes}
+		outletHasRecord={outletRecords.length > 0}
 		hasObserved={hasRecord || calSites.length > 0 || outletRecords.length > 0}
 		seriesKinds={recordKinds}
 		calibrationFlowKind={s.calibrationFlowKind}

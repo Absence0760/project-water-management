@@ -97,7 +97,9 @@ export const PATCH_REPLACED_WHOLE: ReadonlySet<string> = new Set([
 	'ewrDailySource',
 	'unitRain',
 	'rainStations',
-	'flowMissing'
+	'flowMissing',
+	// Each unit's Parameters from (issue #659): a removed assignment must go.
+	'unitParamsFrom'
 ]);
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);

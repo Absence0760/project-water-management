@@ -57,7 +57,7 @@ describe('the locations table', () => {
 	it('leaves the outlet out when it has no record and isn’t ticked, and keeps it (flagged) when it is ticked', () => {
 		expect(locationRows(NODES, [weir], [], fresh({ calibrateAtOutlet: false })).map((r) => r.key)).toEqual(['H']);
 		const rows = locationRows(NODES, [weir], [], fresh());
-		expect(rows[0]).toEqual(expect.objectContaining({ key: null, ticked: true, problem: 'the outlet has no flow record' }));
+		expect(rows[0]).toEqual(expect.objectContaining({ key: null, ticked: true, problem: 'no flow record at the outlet yet' }));
 	});
 
 	it('keeps a ticked row whose gauge is gone or lost its record, so it can be unticked', () => {

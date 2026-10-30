@@ -151,7 +151,9 @@
 								<!-- The column says it; the box's own name says it to a screen reader. -->
 								<span class="visually-hidden">Calibrate here</span>
 							</label>
-							{#if r.problem}<span class="warn small" id="{uid}-{r.nodeId}-p">Can’t be fitted: {r.problem}.</span>{/if}
+							{#if r.problem}<span class="warn small" id="{uid}-{r.nodeId}-p" data-testid="calibration-location-problem"
+									>Can’t be fitted: {r.problem}.{#if r.kind === 'outlet' && !readonly}{' '}Add one on <a href="?tab=series">Data</a>, or untick it.{/if}</span
+								>{/if}
 						</td>
 						<td>
 							<label class="check">

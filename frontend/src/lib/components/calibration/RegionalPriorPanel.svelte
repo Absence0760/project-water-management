@@ -59,7 +59,8 @@
 		loading = true;
 		error = null;
 		try {
-			const d = await api.gr4jPrior.get(projectId, { zone });
+			// With gauge locations, the null choice is the outlet's own zone (`zone=outlet`, issue #659); alone, the headline's.
+			const d = await api.gr4jPrior.get(projectId, { zone: zone ?? (zones.length ? 'outlet' : null) });
 			if (mine === seq) data = d;
 		} catch (e) {
 			if (mine === seq) error = msg(e);
@@ -96,7 +97,7 @@
 		busy = true;
 		startError = null;
 		try {
-			await api.gr4jPrior.start(projectId, { zone, ...(ok.dataset ? { dataset: ok.dataset.dataset } : {}) });
+			await api.gr4jPrior.start(projectId, { zone: zone ?? (zones.length ? 'outlet' : null), ...(ok.dataset ? { dataset: ok.dataset.dataset } : {}) });
 			notice = `GR4J’s parameters for ${targetName} now start from the regional prior’s medians, saved as a settings revision.`;
 			await Promise.all([load(), onApplied()]);
 			await frame?.focusNotice();

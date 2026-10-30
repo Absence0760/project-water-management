@@ -12,7 +12,7 @@
 // headline pointer: they need the API to accept them (slice B of issue #659).
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { addMember, createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
+import { addMember, calibratedAtGauge, createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openFold, saveSettings } from '../support/settings.ts';
@@ -60,23 +60,34 @@ async function openZoneFold(fold: Locator) {
 	await expect(fold).toHaveAttribute('open', '');
 }
 
-test('with two gauge records and none ticked, the page says no location is calibrated, Fit says why, and a run still runs', async ({ page, owner }) => {
+test('a new project’s outlet is ticked before it has a record: the row and the fit say why; unticked, none is calibrated and a run still runs', async ({ page, owner }) => {
 	void owner;
 	const { project } = await seed(page.request, 'Locations none', { outletRecord: false });
 	await page.goto(`/projects/${project.id}?tab=calibration`);
-	// Both gauges listed, neither ticked; no outlet row without an outlet record.
+	// A new project is created with the outlet ticked (slice B): its row shows, with no record yet.
+	await expect(locations(page).getByTestId('calibration-location-row')).toHaveCount(3);
+	const outletTick = locations(page).getByRole('checkbox', { name: 'Calibrate here: Outflow gauge' });
+	await expect(outletTick).toBeChecked();
+	await expect(row(page, 'Outflow gauge').getByTestId('calibration-location-problem')).toHaveText(
+		'Can’t be fitted: no flow record at the outlet yet. Add one on Data, or untick it.'
+	);
+	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await expect(fit.getByTestId('fit-plan-error')).toContainText('The outlet has no flow record yet');
+	await expect(fit.getByRole('button', { name: 'Fit automatically', exact: true })).toBeDisabled();
+	await expectNoViolations(page);
+
+	// Unticked: with no record the outlet leaves the table, and no location is calibrated; the page and the fit say so.
+	// A click, not uncheck(): there is no box left to see unchecked.
+	await outletTick.click();
 	await expect(locations(page).getByTestId('calibration-location-row')).toHaveCount(2);
-	await expect(locations(page).getByRole('checkbox', { name: 'Calibrate here: Middle weir' })).not.toBeChecked();
-	await expect(locations(page).getByRole('checkbox', { name: 'Calibrate here: Low weir' })).not.toBeChecked();
 	await expect(page.getByTestId('calibration-none')).toHaveText(
 		'No location is calibrated: every unit runs on the catchment parameters (GR4J parameters, above). Tick Calibrate here at a location to fit it.'
 	);
 	await expect(page.getByTestId('summary-record')).toContainText('No location calibrated');
-	// Fit automatically has nothing to fit, and says so before anything starts.
-	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await expect(fit.getByTestId('fit-plan-error')).toContainText('No location is calibrated');
 	await expect(fit.getByRole('button', { name: 'Fit automatically', exact: true })).toBeDisabled();
-	await expectNoViolations(page);
+	await saveSettings(page);
+	expect((await stored(page.request, project.id)).calibrateAtOutlet).toBe(false);
 	// Zero ticked is allowed: a run runs on the catchment parameters.
 	const runId = await createRun(page.request, project.id, 'None calibrated');
 	expect(runId).toBeTruthy();
@@ -201,26 +212,11 @@ test('on a phone the locations table scrolls in its box, never the page', async 
 	await expectNoViolations(page, { include: '#set-record' });
 });
 
-test('a legacy project scored at an inner gauge reads as that gauge’s ticked location and headline, unedited', async ({ page, owner }) => {
-	void owner;
-	const { project, weir } = await seed(page.request, 'Locations legacy', { outletRecord: true });
-	// Settings from before engine 1.110.0 (no calibrateAtOutlet): scored at the weir.
-	await updateSettings(page.request, project.id, { calibrationSiteNodeId: weir.id, calibrationStart: '2021-10-15' });
-	await page.goto(`/projects/${project.id}?tab=calibration`);
-	await expect(locations(page).getByRole('checkbox', { name: 'Calibrate here: Middle weir' })).toBeChecked();
-	await expect(locations(page).getByRole('checkbox', { name: 'Calibrate here: Outflow gauge' })).not.toBeChecked();
-	await expect(row(page, 'Middle weir').getByRole('radio', { name: 'Headline: Middle weir' })).toBeChecked();
-	await openZoneFold(zoneFold(page, 'Middle weir'));
-	await expect(zoneFold(page, 'Middle weir').getByLabel('From', { exact: true })).toHaveValue('15 Oct 2021');
-	// Reading it in the new shape is not an edit.
-	await expect(page.getByRole('region', { name: /^Unsaved / })).toHaveCount(0);
-});
-
 test('a ticked gauge that lost its record says it can’t be fitted, and can still be unticked', async ({ page, owner }) => {
 	void owner;
 	const { project, weir } = await seed(page.request, 'Locations record gone', { outletRecord: true });
-	// Scored at the weir (settings from before engine 1.110.0), then its record moved back to the outlet.
-	await updateSettings(page.request, project.id, { calibrationSiteNodeId: weir.id });
+	// Calibrated at the weir alone, its headline, then its record moved back to the outlet.
+	await updateSettings(page.request, project.id, calibratedAtGauge(weir.id));
 	const rec = await seriesId(page.request, project.id, 'Weir record');
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec}`, { data: { siteNodeId: null } })).status()).toBe(200);
 
@@ -232,7 +228,7 @@ test('a ticked gauge that lost its record says it can’t be fitted, and can sti
 	await expect(page.getByTestId('calibration-locations-ticked')).toContainText('Headline: Middle weir.');
 	// A click, not uncheck(): unticked, the row leaves the table, so there is no box left to see unchecked.
 	await tick.click();
-	// Unticked, with no record it leaves the table, and nothing is ticked: the outlet was unticked when scored at the weir.
+	// Unticked, with no record it leaves the table, and nothing is ticked.
 	await expect(row(page, 'Middle weir')).toHaveCount(0);
 	await expect(page.getByTestId('calibration-none')).toBeVisible();
 });

@@ -79,6 +79,7 @@
 		settings,
 		model,
 		nodes = [],
+		outletHasRecord = true,
 		hasObserved,
 		seriesKinds = null,
 		calibrationFlowKind = null,
@@ -95,6 +96,8 @@
 		model?: () => ProjectModel | undefined;
 		/** The network's nodes as the form edits them: the fit's plan (its locations in dependency order) is read from them and the form. */
 		nodes?: readonly NetworkNode[];
+		/** The outlet has a flow record of its own (no site): a ticked outlet without one can't be fitted. */
+		outletHasRecord?: boolean;
 		hasObserved: boolean;
 		/** Series kinds the project has (null = not known): decides which records can validate the fit. */
 		seriesKinds?: string[] | null;
@@ -146,7 +149,11 @@
 	// or why none can be fitted (none ticked, a group with no unit draining through it, a borrowing cycle), shown
 	// before any worker starts.
 	const planned = $derived(nodes.length ? fitPlanOf(settings(), nodes) : null);
-	const planError = $derived(planned?.error ?? null);
+	// A ticked outlet with no record yet (a new project is created with the outlet ticked): its step can't be scored.
+	const outletMissing = $derived(!!planned?.plan?.some((st) => st.zoneNodeId === null) && !outletHasRecord);
+	const planError = $derived(
+		planned?.error ?? (outletMissing ? 'The outlet has no flow record yet, so its step can’t be fitted: add one on Data, or untick Calibrate here at the outlet.' : null)
+	);
 	const noneTicked = $derived(!!planned?.none);
 	const canStart = $derived(hasObserved && !planError && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && !priorProblem && startsOk && !session.busy);
 	const columns = $derived(report ? scoreColumns(report) : []);
@@ -190,7 +197,8 @@
 				plan = p.plan;
 				if (priorUse !== 'off') {
 					for (const zone of plan.map((st) => st.zoneNodeId)) {
-						const got = await api.gr4jPrior.get(projectId, { zone });
+						// The outlet's location is `zone=outlet` (issue #659); a gauge's, its node id.
+						const got = await api.gr4jPrior.get(projectId, { zone: zone ?? 'outlet' });
 						const prior = calibrationPriorOf(got, priorUse, priorWeight);
 						if (!prior) throw new Error(`The regional prior can’t be used${zone ? ' for a calibration zone' : ''}: ${got.problem ?? 'there is none'}`);
 						priors[priorKey(zone)] = prior;

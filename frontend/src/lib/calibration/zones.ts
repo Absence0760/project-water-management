@@ -118,7 +118,7 @@ export function locationRows(nodes: readonly LocNode[], sites: readonly Calibrat
 			zone: null,
 			ticked: s.calibrateAtOutlet === true,
 			params: s.gr4j ? gr4jOf(s.gr4j) : null,
-			problem: outletRecords.length ? null : 'the outlet has no flow record',
+			problem: outletRecords.length ? null : 'no flow record at the outlet yet',
 			unusable: false
 		});
 	for (const site of sites) {

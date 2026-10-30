@@ -100,8 +100,8 @@ test('with the outlet not a calibration location, Calibration says no fit uses t
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; name: string }[];
 	const rec = list.find((s) => s.name === 'Weir record')!;
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
-	// Settings from before engine 1.110.0, scored at the weir: read as the weir's location, the outlet unticked (issue #659).
-	await updateSettings(page.request, project.id, { calibrationSiteNodeId: weir.id, qualityFlags: { lowFlowPeriods: [PERIOD] } });
+	// The outlet not a calibration location (issue #659).
+	await updateSettings(page.request, project.id, { calibrateAtOutlet: false, qualityFlags: { lowFlowPeriods: [PERIOD] } });
 
 	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const outletTick = page.getByTestId('calibration-locations').getByRole('checkbox', { name: 'Calibrate here: Outflow gauge' });
