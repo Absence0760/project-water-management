@@ -35,7 +35,9 @@ the lag alarm's missing-data rule both see that run.
 its files**: the error propagates, so the Lambda errors and the event lands
 in the DLQ. infra/ingest.tf sets no retries. A backfill whose product is
 held by another run raises lease.MirrorBusy (the Step Functions map retries
-that); the daily monthly run just ends.
+that); the daily monthly run just ends. A file whose body keeps ending before
+its Content-Length (polite.TruncatedDownload, after the client's own retries)
+fails the invocation; the backfill state machine retries that month.
 
 **CHC's request slot** (lease.hold_host): rnl and sat take the one slot this
 job shares with the fetcher Lambda before they ask CHC anything, so at most
@@ -223,16 +225,23 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
 
         opener = fixturehttp.FixtureOpener(variant=os.environ.get("INGEST_FIXTURE_VARIANT") or None)
     client_kw = {"opener": opener} if opener is not None else {}
+    budget = chirps_final.Budget(context)
     run = chirps_final.Run(
         # Fixtures mode has no upstream to be polite to: no pacing, same code.
         client=polite.PoliteClient(
             contact=os.environ.get("INGEST_CONTACT"),
             min_interval=1.0 if live else 0.0,
+            # A file that ends early is asked for again no sooner than D4's
+            # one download a minute, and only while a whole download still
+            # fits in this invocation; past that it raises TruncatedDownload,
+            # which the backfill state machine retries (ingest_backfill.tf).
+            truncated_backoff=chirps_final.DOWNLOAD_INTERVAL_S if live else 0.0,
+            may_retry=budget.allows,
             **client_kw,
             **({"sleep": sleep} if sleep else {}),
             **({"clock": clock} if clock else {}),
         ),
-        budget=chirps_final.Budget(context),
+        budget=budget,
         interval=chirps_final.DOWNLOAD_INTERVAL_S if live else 0.0,
         **({"clock": clock} if clock else {}),
         **({"sleep": sleep} if sleep else {}),

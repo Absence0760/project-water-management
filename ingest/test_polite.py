@@ -4,6 +4,7 @@
 """
 
 import email.message
+import http.client
 import io
 import sys
 import tempfile
@@ -28,6 +29,20 @@ class FakeResponse(io.BytesIO):
         super().__init__(body)
         self.status = status
         self.headers = headers(**hdrs)
+
+
+class BrokenResponse(FakeResponse):
+    """A body that breaks after `body`: http.client's IncompleteRead, a reset, a timeout."""
+
+    def __init__(self, body=b"", error=None, **hdrs):
+        super().__init__(body, **hdrs)
+        self.error = error or http.client.IncompleteRead(body, 10)
+
+    def read(self, n=-1):
+        chunk = super().read(n)
+        if chunk:
+            return chunk
+        raise self.error
 
 
 class FakeServer:
@@ -175,6 +190,107 @@ class Refusals(unittest.TestCase):
     def test_unreadable_retry_after(self):
         self.assertIsNone(polite.retry_after_seconds("soon"))
         self.assertIsNone(polite.retry_after_seconds(None))
+
+
+class Truncation(unittest.TestCase):
+    """A body shorter than its Content-Length, or one that breaks mid-read, is
+    retried like a 503 and never handed back as if whole (the 1986-08 backfill)."""
+
+    def test_short_body_is_retried_then_succeeds(self):
+        for dest in (False, True):
+            with self.subTest(dest=dest), tempfile.TemporaryDirectory() as tmp:
+                server = FakeServer(FakeResponse(b"0123", Content_Length="10"), FakeResponse(b"0123456789", Content_Length="10"))
+                c, t = client(server, default_backoff=10)
+                r = c.get("https://x/f.nc", dest=f"{tmp}/f" if dest else None)
+                self.assertEqual(r.size, 10)
+                self.assertEqual(len(server.requests), 2)
+                self.assertEqual(c.requests, 2)
+                self.assertEqual(t.slept, [10.0])  # the backoff; the 1 s pacing is already covered
+                if dest:
+                    self.assertEqual(Path(f"{tmp}/f").read_bytes(), b"0123456789")  # the short attempt overwritten
+                else:
+                    self.assertEqual(r.body, b"0123456789")
+
+    def test_always_short_raises_truncated_download_after_max_retries(self):
+        server = FakeServer(*[FakeResponse(b"012", Content_Length="10") for _ in range(3)])
+        c, t = client(server, max_retries=2, default_backoff=10)
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(polite.TruncatedDownload) as e:
+            c.get("https://x/f.nc", dest=f"{tmp}/f")
+        self.assertIsInstance(e.exception, polite.RetryLater)
+        self.assertIn("3 of 10 bytes", str(e.exception))
+        self.assertEqual(len(server.requests), 3)
+        self.assertEqual(t.slept, [10.0, 20.0])
+
+    def test_truncated_backoff_overrides_and_paces_every_retry(self):
+        server = FakeServer(FakeResponse(b"0", Content_Length="2"), FakeResponse(b"01", Content_Length="2"))
+        c, t = client(server, truncated_backoff=0.0, min_interval=5)
+        c.get("https://x/f")
+        self.assertEqual(t.slept, [0.0, 5.0])  # no backoff, but still one request per min_interval
+
+    def test_may_retry_refusing_gives_up_at_once(self):
+        asked = []
+        server = FakeServer(FakeResponse(b"0", Content_Length="2"), FakeResponse(b"01", Content_Length="2"))
+        c, t = client(server, default_backoff=60, may_retry=lambda wait: asked.append(wait) or False)
+        with self.assertRaises(polite.TruncatedDownload):
+            c.get("https://x/f")
+        self.assertEqual(asked, [60.0])
+        self.assertEqual(len(server.requests), 1)
+        self.assertEqual(t.slept, [])
+
+    def test_a_backoff_over_max_wait_gives_up(self):
+        c, t = client(FakeServer(FakeResponse(b"0", Content_Length="2")), default_backoff=600, max_wait=300)
+        with self.assertRaises(polite.TruncatedDownload):
+            c.get("https://x/f")
+        self.assertEqual(t.slept, [])
+
+    def test_connection_breaking_mid_body_is_retried(self):
+        for error in (http.client.IncompleteRead(b"01", 8), ConnectionResetError(104, "reset"), TimeoutError("timed out")):
+            for dest in (False, True):
+                with self.subTest(error=type(error).__name__, dest=dest), tempfile.TemporaryDirectory() as tmp:
+                    server = FakeServer(BrokenResponse(b"01", error=error, Content_Length="10"), FakeResponse(b"0123456789", Content_Length="10"))
+                    c, _ = client(server, default_backoff=1)
+                    r = c.get("https://x/f", dest=f"{tmp}/f" if dest else None)
+                    self.assertEqual(r.size, 10)
+                    self.assertEqual(len(server.requests), 2)
+
+    def test_a_disk_error_is_not_retried(self):
+        server = FakeServer(FakeResponse(b"0123456789", Content_Length="10"))
+        c, _ = client(server)
+        with self.assertRaises(OSError):
+            c.get("https://x/f", dest="/nonexistent-dir/f")
+        self.assertEqual(len(server.requests), 1)
+
+    def test_no_content_length_is_accepted_as_before(self):
+        c, t = client(FakeServer(FakeResponse(b"0123")))
+        r = c.get("https://x/f")
+        self.assertEqual((r.size, r.body), (4, b"0123"))
+        self.assertEqual(t.slept, [])
+
+    def test_a_content_encoding_skips_the_length_check(self):
+        c, _ = client(FakeServer(FakeResponse(b"decoded body", Content_Length="5", Content_Encoding="gzip")))
+        self.assertEqual(c.get("https://x/f").size, 12)
+
+    def test_a_206_part_is_checked_against_its_own_length(self):
+        server = FakeServer(
+            FakeResponse(b"23", status=206, Content_Length="4", Content_Range="bytes 2-5/100"),
+            FakeResponse(b"2345", status=206, Content_Length="4", Content_Range="bytes 2-5/100"),
+        )
+        c, _ = client(server, default_backoff=1)
+        r = c.get("https://x/f", byte_range=(2, 5))
+        self.assertEqual((r.status, r.body), (206, b"2345"))
+        self.assertEqual(len(server.requests), 2)
+
+    def test_304_is_unaffected(self):
+        server = FakeServer(FakeResponse(b"", status=304, ETag='"abc"', Content_Length="10"))
+        c, t = client(server)
+        r = c.get("https://x/f", etag='"abc"')
+        self.assertTrue(r.not_modified)
+        self.assertEqual(len(server.requests), 1)
+        self.assertEqual(t.slept, [])
+
+    def test_unreadable_content_length_is_ignored(self):
+        self.assertIsNone(polite.expected_length(headers(Content_Length="ten")))
+        self.assertEqual(polite.expected_length(headers(Content_Length="10", Content_Encoding="identity")), 10)
 
 
 if __name__ == "__main__":

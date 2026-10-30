@@ -737,8 +737,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
   Lambda errors and throttles (`lambda-throttles`: the API at its reserved
   concurrency, issue #541), `unhandled_error` and `mail_send_failed`, 13
-  alarm metrics; 15 once `ingest_image_tag` is set, with the data mirror's
-  two freshness alarms (§ The data mirror).
+  alarm metrics; 16 once `ingest_image_tag` is set, with the data mirror's
+  two freshness alarms and `mirror-backfill-failed` (§ The data mirror).
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
   prod tfvars to page on all of it (~$5/month in af-south-1). The RDS event
@@ -1599,6 +1599,17 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
     just before CHC's monthly release) on two days running, **and when no
     datapoint arrives for two days** (`treat_missing_data = "breaching"`): a
     job that stopped running, or fails before it measures, alarms too.
+  - `mirror-backfill-failed` (essential tier): an execution of the
+    `water-management-mirror-backfill` state machine failed
+    (`AWS/States` `ExecutionsFailed` > 0 in 5 minutes, dimension
+    `StateMachineArn`; missing data is OK). The freshness alarms are in
+    ALARM for the whole backfill, so this is the only page that says it
+    stopped (2026-10-30: a failed execution sat unnoticed for 20 h). Only
+    failures: an execution has no timeout of its own and an abort is the
+    operator stopping it. *Runbook:* open the execution; its error is the
+    failed month's (`StopRun` = HTTP 403, don't re-run straight away;
+    `TruncatedDownload` = the file kept ending early after every retry, a
+    connection problem: resume), then resume as in [§ Backfill](#backfill).
   - `mirror-ingest-errors` and `mirror-ingest-dlq-arrivals` (full tier): a
     run raised or timed out.
   - *Runbook.* Read the run in the `/aws/lambda/water-management-mirror-ingest`
@@ -1831,8 +1842,16 @@ invokes the ingest Lambda with `{"product","mode":"backfill","month"}` once
 per month, **one month at a time** (a finals chunk holds a whole year, so two
 months of one year written at once would lose one) and **waits 60 s after
 each** (`ingest_backfill_wait_seconds`, D4's one file a minute). A month that
-fails, an HTTP 403 above all, fails the execution; only Lambda's own service
-errors (throttling, a transient API error) and the two waits are retried:
+fails, an HTTP 403 above all, fails the execution (and pages:
+`mirror-backfill-failed`, above); only Lambda's own service
+errors (throttling, a transient API error), a download that kept ending
+early and the two waits are retried. A file whose body ends before its
+`Content-Length` (a dropped connection) is asked for again inside the
+invocation, a minute later, while a whole download still fits its time
+(ingest/README.md § The polite client); past that the month fails with
+`TruncatedDownload`, which the state machine retries 3 times, 5, 10 and
+20 minutes on, before the execution fails (2026-10-30: one dropped
+connection on 1986-08 ended a ~30 h run). The two waits:
 `MirrorBusy` (the daily run holds the product's lease) and `HostBusy` (the
 fetcher Lambda holds CHC's one request slot, which the two share so CHC sees
 one of our processes at a time; architecture.md § Data feeds, Throttling).

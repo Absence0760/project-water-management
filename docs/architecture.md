@@ -1785,7 +1785,7 @@ EventBridge, daily
   └─► indices pass (the same mode, "pass":"indices", 05:50 UTC; issue #620)
         NOAA CPC's ONI and AAO files whole, two requests; a new revision only on a change
   (once) backfill: Step Functions over the byMonth list from 1981, 2 at a time
-                │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop
+                │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop, a body short of its Content-Length = retry
                 ▼
   s3://<project>-mirror-<account> (private, versioned)
         rnl/, sat/  (year, doy, lat, lon) Zarr v3 · prelim/, gefs/<issue>/ (day, lat, lon) · manifest.json each

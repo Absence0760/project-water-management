@@ -965,10 +965,11 @@ run "essential_tier_keeps_the_freshness_alarms" {
   assert {
     condition = (
       length(aws_cloudwatch_metric_alarm.mirror_lag) == 2 &&
+      length(aws_cloudwatch_metric_alarm.backfill_failed) == 1 &&
       length(aws_cloudwatch_metric_alarm.ingest_errors) == 0 &&
       length(aws_cloudwatch_metric_alarm.ingest_dlq_depth) == 0
     )
-    error_message = "alarm_tier = \"essential\" keeps the two freshness alarms and drops the ingest errors and DLQ alarms."
+    error_message = "alarm_tier = \"essential\" keeps the two freshness alarms and the failed-backfill alarm, and drops the ingest errors and DLQ alarms."
   }
 }
 
@@ -1338,7 +1339,8 @@ run "backfill_off_without_the_ingest_function" {
     condition = (
       length(aws_sfn_state_machine.ingest_backfill) == 0 &&
       length(aws_iam_role.ingest_backfill) == 0 &&
-      length(aws_iam_role_policy.ingest_backfill) == 0
+      length(aws_iam_role_policy.ingest_backfill) == 0 &&
+      length(aws_cloudwatch_metric_alarm.backfill_failed) == 0
     )
     error_message = "No backfill state machine (or its role) before the ingest function exists."
   }
@@ -1379,9 +1381,27 @@ run "backfill_one_month_at_a_time_paced_and_never_retrying_a_refusal" {
   }
   assert {
     condition = alltrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
-      alltrue([for e in r.ErrorEquals : (startswith(e, "Lambda.") && e != "Lambda.Unknown") || e == "MirrorBusy" || e == "HostBusy"])
+      alltrue([for e in r.ErrorEquals : (startswith(e, "Lambda.") && e != "Lambda.Unknown") || e == "MirrorBusy" || e == "HostBusy" || e == "TruncatedDownload"])
     ])
-    error_message = "Only Lambda's own service errors, MirrorBusy and HostBusy are retried: never States.ALL, States.TaskFailed or StopRun, so a month that met HTTP 403 fails the execution at once."
+    error_message = "Only Lambda's own service errors, MirrorBusy, HostBusy and TruncatedDownload are retried: never States.ALL, States.TaskFailed or StopRun, so a month that met HTTP 403 fails the execution at once."
+  }
+  assert {
+    condition = anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
+      r.ErrorEquals == ["TruncatedDownload"] && r.IntervalSeconds >= 60 && r.MaxAttempts >= 1 && r.MaxAttempts <= 5
+    ])
+    error_message = "A month whose file kept ending early (polite.py TruncatedDownload, a dropped connection) is retried a bounded number of times, at least a minute apart (D4), instead of ending the execution."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.backfill_failed[0].alarm_name == "water-management-mirror-backfill-failed" &&
+      aws_cloudwatch_metric_alarm.backfill_failed[0].namespace == "AWS/States" &&
+      aws_cloudwatch_metric_alarm.backfill_failed[0].metric_name == "ExecutionsFailed" &&
+      aws_cloudwatch_metric_alarm.backfill_failed[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.backfill_failed[0].comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.backfill_failed[0].treat_missing_data == "notBreaching" &&
+      aws_cloudwatch_metric_alarm.backfill_failed[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+    )
+    error_message = "A failed backfill execution alarms to the alerts topic (the mirror-lag alarms are in ALARM throughout a backfill, so they can't say it stopped)."
   }
   assert {
     condition = anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
