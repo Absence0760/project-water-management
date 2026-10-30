@@ -1,7 +1,7 @@
 """Run verify/model.py and the engine's `runModel` on the same inputs and
 report, per output column, the largest absolute and relative difference.
 
-    python3 verify/diff.py [--random N] [--dense N] [--seed S] [--no-examples] [--keep DIR]
+    python3 verify/diff.py [--random N] [--dense N] [--seed S] [--no-examples] [--keep DIR] [--workers N]
 
 Inputs: (a) the three invented example catchments `pnpm seed:examples`
 builds (their inputs come from verify/run_engine.ts, without the automatic
@@ -27,6 +27,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
+import types
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -51,12 +54,30 @@ NOT_COMPARED = {
 # unless an engine behaviour is recorded in docs/followups.md.
 KNOWN_DIFFERENCES: dict[str, str] = {}
 
-def run_engine(pairs: list[tuple[Path, Path]]) -> None:
+def default_workers() -> int:
+    """VERIFY_WORKERS, else the cores this process may use, at most 4 (CI's
+    runner has 4; a shared laptop shouldn't lose all of its cores to a check).
+    The results never depend on it: every case is a fixed seed, and the
+    results are merged in case order."""
+    env = os.environ.get("VERIFY_WORKERS")
+    if env:
+        return max(1, int(env))
+    return max(1, min(4, os.process_cpu_count() or 1))
+
+
+def run_engine(pairs: list[tuple[Path, Path]], workers: int = 1) -> None:
+    """runModel on every (input, output) pair: one tsx process per worker,
+    each given every `workers`-th pair, run at once."""
     tsx = ROOT / "backend" / "node_modules" / ".bin" / "tsx"
-    args = [str(tsx), str(HERE / "run_engine.ts"), "run"]
-    for a, b in pairs:
-        args += [str(a), str(b)]
-    subprocess.run(args, check=True, cwd=ROOT)
+    procs = []
+    for w in range(max(1, min(workers, len(pairs)))):
+        args = [str(tsx), str(HERE / "run_engine.ts"), "run"]
+        for a, b in pairs[w::workers]:
+            args += [str(a), str(b)]
+        procs.append(subprocess.Popen(args, cwd=ROOT))
+    codes = [p.wait() for p in procs]
+    if any(codes):
+        raise subprocess.CalledProcessError(next(c for c in codes if c), "tsx verify/run_engine.ts run")
 
 
 def example_inputs(tmp: Path) -> list[Path]:
@@ -249,9 +270,9 @@ def compare_summary(py: dict, eng: dict | None) -> tuple[dict, list[str]]:
     return parts, bad
 
 
-def build_cases(tmp: Path, n_random: int, seed: int, examples: bool, n_dense: int = 0) -> list[tuple[str, Path, Path]]:
-    """Write every case's input, run the engine on all of them in one process,
-    and return (name, input path, engine output path)."""
+def build_cases(tmp: Path, n_random: int, seed: int, examples: bool, n_dense: int = 0, workers: int = 1) -> list[tuple[str, Path, Path]]:
+    """Write every case's input, run the engine on all of them (`workers` tsx
+    processes), and return (name, input path, engine output path)."""
     cases: list[tuple[str, Path]] = []
     if examples:
         for p in example_inputs(tmp / "examples"):
@@ -277,69 +298,204 @@ def build_cases(tmp: Path, n_random: int, seed: int, examples: bool, n_dense: in
         if extra:
             raise SystemExit(f"{name}: uses features outside phases 1 and 2a: {', '.join(extra)}")
     out = [(name, p, p.with_name(f"{name}.engine.json")) for name, p in cases]
-    run_engine([(p, e) for _, p, e in out])
+    run_engine([(p, e) for _, p, e in out], workers)
     return out
 
 
-def evaluate(cases, impl=model, notes=None, stop_first=False) -> dict:
-    """Compare `impl` (verify/model.py, or a mutant of it in the self-test)
-    with the engine's stored outputs. `stop_first` returns at the first case
-    that disagrees (all a mutant needs)."""
+def _case_result(case, impl) -> dict:
+    """One case's share of `evaluate`'s result: its column aggregates, coverage
+    counts, refusal, failures and notes. `_merge` adds these up in case order,
+    so the result is the same whatever process computed each case."""
+    name, p, eng_path = case
     per_key: dict[str, dict] = {}
     coverage: dict[str, list[int]] = {}
-    refused = 0
     failures: list[str] = []
-    for name, p, eng_path in cases:
-        if stop_first and failures:
-            break
-        doc = json.loads(p.read_text())
-        eng = json.loads(eng_path.read_text())
-        try:
-            py = impl.run(doc)
-        except impl.Refused as e:
-            if "error" not in eng:
-                failures.append(f"{name}: python refuses the run ({e}), the engine runs it")
-            refused += 1
-            continue
-        if "error" in eng:
-            failures.append(f"{name}: the engine refuses the run ({eng['error']}), python runs it")
-            continue
-        for k, v in py.get("diag", {}).items():
-            c = coverage.setdefault(k, [0, 0])
-            c[0] += v
-            c[1] += 1 if v else 0
-        r = compare(py, eng)
-        if r["window"]:
-            failures.append(f"{name}: run window {r['window']}")
-            continue
-        for k in r["only_python"]:
-            failures.append(f"{name}: {k[1]} ({k[0] or 'catchment'}) only in python")
-        for k in r["only_engine"]:
-            if notes is not None:
-                notes.append(f"{name}: {k[1]} ({k[0] or 'catchment'}) only in the engine's output")
-        parts, bad = compare_summary(py.get("summary") or {}, eng.get("allocations"))
-        failures.extend(f"{name}: {b}" for b in bad)
-        for part, rows in parts.items():
-            agg = per_key.setdefault(f"allocations.{part}", {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
-            for worst, ok in rows:
-                agg["n"] += 1
-                agg["abs"] = max(agg["abs"], worst)
-                agg["bad"] += 0 if ok else 1
-        for (node, key), c in r["columns"].items():
-            if "@" in key:
-                key = key.split("@")[0] + "@<id>"
-            agg = per_key.setdefault(key, {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
+    notes: list[str] = []
+    out = {"per_key": per_key, "coverage": coverage, "refused": 0, "failures": failures, "notes": notes}
+    doc = json.loads(p.read_text())
+    eng = json.loads(eng_path.read_text())
+    try:
+        py = impl.run(doc)
+    except impl.Refused as e:
+        if "error" not in eng:
+            failures.append(f"{name}: python refuses the run ({e}), the engine runs it")
+        out["refused"] = 1
+        return out
+    if "error" in eng:
+        failures.append(f"{name}: the engine refuses the run ({eng['error']}), python runs it")
+        return out
+    for k, v in py.get("diag", {}).items():
+        c = coverage.setdefault(k, [0, 0])
+        c[0] += v
+        c[1] += 1 if v else 0
+    r = compare(py, eng)
+    if r["window"]:
+        failures.append(f"{name}: run window {r['window']}")
+        return out
+    for k in r["only_python"]:
+        failures.append(f"{name}: {k[1]} ({k[0] or 'catchment'}) only in python")
+    for k in r["only_engine"]:
+        notes.append(f"{name}: {k[1]} ({k[0] or 'catchment'}) only in the engine's output")
+    parts, bad = compare_summary(py.get("summary") or {}, eng.get("allocations"))
+    failures.extend(f"{name}: {b}" for b in bad)
+    for part, rows in parts.items():
+        agg = per_key.setdefault(f"allocations.{part}", {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
+        for worst, ok in rows:
             agg["n"] += 1
-            agg["abs"] = max(agg["abs"], c["abs"])
-            agg["rel"] = max(agg["rel"], c["rel"])
-            if not c["ok"]:
-                agg["bad"] += 1
-                if key not in KNOWN_DIFFERENCES:
-                    failures.append(
-                        f"{name}: {key} ({node or 'catchment'}) max |Δ| {c['abs']:.3g} (rel {c['rel']:.3g}) on day {c['day']}"
-                        + (" (NaN on one side)" if c["nan"] else "")
-                    )
-    return {"per_key": per_key, "coverage": coverage, "refused": refused, "failures": failures}
+            agg["abs"] = max(agg["abs"], worst)
+            agg["bad"] += 0 if ok else 1
+    for (node, key), c in r["columns"].items():
+        if "@" in key:
+            key = key.split("@")[0] + "@<id>"
+        agg = per_key.setdefault(key, {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
+        agg["n"] += 1
+        agg["abs"] = max(agg["abs"], c["abs"])
+        agg["rel"] = max(agg["rel"], c["rel"])
+        if not c["ok"]:
+            agg["bad"] += 1
+            if key not in KNOWN_DIFFERENCES:
+                failures.append(
+                    f"{name}: {key} ({node or 'catchment'}) max |Δ| {c['abs']:.3g} (rel {c['rel']:.3g}) on day {c['day']}"
+                    + (" (NaN on one side)" if c["nan"] else "")
+                )
+    return out
+
+
+def _merge(total: dict, part: dict, notes) -> None:
+    for key, a in part["per_key"].items():
+        agg = total["per_key"].setdefault(key, {"abs": 0.0, "rel": 0.0, "n": 0, "bad": 0})
+        agg["abs"] = max(agg["abs"], a["abs"])
+        agg["rel"] = max(agg["rel"], a["rel"])
+        agg["n"] += a["n"]
+        agg["bad"] += a["bad"]
+    for k, (v, any_) in part["coverage"].items():
+        c = total["coverage"].setdefault(k, [0, 0])
+        c[0] += v
+        c[1] += any_
+    total["refused"] += part["refused"]
+    total["failures"].extend(part["failures"])
+    if notes is not None:
+        notes.extend(part["notes"])
+
+
+def _model_case(case) -> dict:
+    return _case_result(case, model)
+
+
+class Progress:
+    """A line per batch of cases (and when a group finishes), flushed, so a
+    long run shows it is alive and where it is: `random 50/200 ok, 3m05s`."""
+
+    def __init__(self, label: str, cases, every: int = 25):
+        self.label, self.every, self.t0 = label, every, time.monotonic()
+        self.total: dict[str, int] = {}
+        for c in cases:
+            g = self.group(c[0])
+            self.total[g] = self.total.get(g, 0) + 1
+        self.done = {g: 0 for g in self.total}
+        self.bad = {g: 0 for g in self.total}
+
+    @staticmethod
+    def group(name: str) -> str:
+        for g in ("probe", "random", "dense"):
+            if name.startswith(g + "-"):
+                return g
+        return "example"
+
+    def elapsed(self) -> str:
+        s = int(time.monotonic() - self.t0)
+        return f"{s // 60}m{s % 60:02d}s"
+
+    def __call__(self, name: str, failed: bool) -> None:
+        g = self.group(name)
+        self.done[g] += 1
+        self.bad[g] += 1 if failed else 0
+        n, of = self.done[g], self.total[g]
+        if n % self.every == 0 or n == of:
+            state = "ok" if not self.bad[g] else f"{self.bad[g]} failing"
+            print(f"{self.label}: {g} {n}/{of} {state}, {self.elapsed()}", flush=True)
+
+
+def evaluate(cases, impl=model, notes=None, stop_first=False, workers: int = 1, progress=None) -> dict:
+    """Compare `impl` (verify/model.py, or a mutant of it in the self-test)
+    with the engine's stored outputs. `stop_first` returns at the first case
+    that disagrees (all a mutant needs). `workers` > 1 runs verify/model.py
+    (only it, never a mutant: that is `mutants_caught`'s job) on that many
+    processes; the result, failures in case order included, is the same.
+    `progress(name, failed)` is called after each case."""
+    total = {"per_key": {}, "coverage": {}, "refused": 0, "failures": []}
+    if workers > 1 and len(cases) > 1 and not stop_first:
+        if impl is not model:
+            raise ValueError("evaluate runs only verify/model.py on several workers")
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            parts = pool.map(_model_case, cases)
+            for case, part in zip(cases, parts):
+                _merge(total, part, notes)
+                if progress:
+                    progress(case[0], bool(part["failures"]))
+        return total
+    for case in cases:
+        if stop_first and total["failures"]:
+            break
+        part = _case_result(case, impl)
+        _merge(total, part, notes)
+        if progress:
+            progress(case[0], bool(part["failures"]))
+    return total
+
+
+def build_mutant(*edits: tuple[str, str]) -> types.ModuleType:
+    """verify/model.py with each (text, replacement) edit applied in order;
+    each text must occur exactly once when its edit is applied."""
+    src = (HERE / "model.py").read_text()
+    for old, new in edits:
+        if src.count(old) != 1:
+            raise AssertionError(f"mutant text found {src.count(old)} times in model.py: {old!r}")
+        src = src.replace(old, new)
+    mod = types.ModuleType("model_mutant")
+    mod.__file__ = str(HERE / "model.py")
+    sys.modules["model_mutant"] = mod
+    exec(compile(src, "model_mutant", "exec"), mod.__dict__)
+    return mod
+
+
+_mutant_cases: list = []
+
+
+def _init_mutant_worker(cases) -> None:
+    global _mutant_cases
+    _mutant_cases = cases
+
+
+def _mutant_result(edits) -> tuple[str | None, list[str]]:
+    """(an error building the mutant, or None; the first disagreement it causes)."""
+    try:
+        mod = build_mutant(*edits)
+    except AssertionError as e:
+        return str(e), []
+    return None, evaluate(_mutant_cases, mod, stop_first=True)["failures"][:1]
+
+
+def mutants_caught(cases, mutants: list[list[tuple[str, str]]], workers: int = 1, progress=None) -> list[tuple[str | None, list[str]]]:
+    """Per mutant (a list of edits), in order: (an error building it, or None;
+    the first case it disagrees on, empty when no case sees it). Each mutant
+    runs the cases in order and stops at its first disagreement, on one of
+    `workers` processes; `progress(i, caught)` is called after each."""
+    out = []
+    if workers > 1 and len(mutants) > 1:
+        with ProcessPoolExecutor(max_workers=workers, initializer=_init_mutant_worker, initargs=(cases,)) as pool:
+            for i, r in enumerate(pool.map(_mutant_result, mutants)):
+                out.append(r)
+                if progress:
+                    progress(i, bool(r[1]))
+        return out
+    _init_mutant_worker(cases)
+    for i, edits in enumerate(mutants):
+        r = _mutant_result(edits)
+        out.append(r)
+        if progress:
+            progress(i, bool(r[1]))
+    return out
 
 
 def main(argv=None) -> int:
@@ -351,15 +507,17 @@ def main(argv=None) -> int:
     ap.add_argument("--no-examples", action="store_true")
     ap.add_argument("--keep", type=Path, default=None, help="keep inputs and outputs here")
     ap.add_argument("--verbose", action="store_true", help="list series only the engine outputs")
+    ap.add_argument("--workers", type=int, default=default_workers(),
+                    help="processes for the engine and the Python model (VERIFY_WORKERS; default the cores, at most 4)")
     args = ap.parse_args(argv)
 
     tmp_ctx = tempfile.TemporaryDirectory(prefix="verify-") if args.keep is None else None
     tmp = Path(tmp_ctx.name) if tmp_ctx else args.keep
     tmp.mkdir(parents=True, exist_ok=True)
     try:
-        cases = build_cases(tmp, args.random, args.seed, not args.no_examples, args.dense)
+        cases = build_cases(tmp, args.random, args.seed, not args.no_examples, args.dense, args.workers)
         notes: list[str] = []
-        r = evaluate(cases, model, notes)
+        r = evaluate(cases, model, notes, workers=args.workers, progress=Progress("verify", cases))
     finally:
         if tmp_ctx:
             tmp_ctx.cleanup()

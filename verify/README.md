@@ -43,13 +43,35 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 191 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 191 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
+VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
 
 It needs Python 3.14 and the repo's `pnpm install` (for `tsx`); no database,
-no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`).
+no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
+3 shards.
+
+**Where the time goes, and the workers.** Nearly all of it is Python: each
+case is `model.py`'s run plus `diff.compare` over every column and day
+(about half each; 0.1–2 s a case), while the engine runs all ~90 default
+cases in one tsx process in about 5 s. The mutation self-test is the bulk:
+191 mutants, each running the cases in order until its first disagreement
+(about a third of them on average), about 35 min on one core, against about
+3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
+the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
+(default the cores, at most 4, so a shared laptop keeps the rest; `diff.py
+--workers N`): the sweep and the engine split the cases, the self-test the
+mutants. Every case is a fixed seed and the results are merged in case
+order, so the worker count changes no result (`test_workers_do_not_change_the_result`
+checks one against two). Progress is a flushed line per batch of 25 cases
+or mutants (`agreement: random 50/200 ok, 1m12s`, `mutants: 75/191 run, 75
+caught, 3m29s`), so a long run shows it is alive and where it is.
+`VERIFY_SHARD=k/K` (default `1/1`) splits the mutants K ways: shard k runs
+every K-th mutant from the k-th on the same cases, and only shard 1 runs the
+agreement sweep (its coverage check needs every case). CI's 3 shards
+together run each mutant once.
 
 ## What phase 1 covers
 

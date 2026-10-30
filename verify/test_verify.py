@@ -8,7 +8,13 @@
   with the engine somewhere, or the cases don't exercise that rule;
 - the generator stays inside phases 1 and 2a and is a pure function of its seed.
 
-Run: python3 -m unittest discover -s verify
+The agreement sweep, the engine runs and the mutants run on VERIFY_WORKERS
+processes (default the cores, at most 4); every case is a fixed seed and the
+results are merged in case order, so the worker count never changes them.
+VERIFY_SHARD=k/K splits the mutants K ways (CI runs K jobs; see shard()).
+
+Run: python3 -u verify/test_verify.py (pnpm test:verify), or
+python3 -m unittest discover -s verify
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ import json
 import os
 import sys
 import tempfile
-import types
+import time
 import unittest
 from pathlib import Path
 
@@ -30,6 +36,21 @@ import model  # noqa: E402
 
 MUTANT_RANDOM = 12
 MUTANT_DENSE = 12
+
+
+def shard() -> tuple[int, int]:
+    """VERIFY_SHARD=k/K (default 1/1): CI's verify job runs K of these at once.
+    Shard 1 runs the agreement sweep (all of it: its coverage check needs every
+    case) and the determinism check; every shard runs every K-th mutant from
+    the k-th, each on the same cases, so together they run each mutant once."""
+    k, _, n = os.environ.get("VERIFY_SHARD", "1/1").partition("/")
+    k, n = int(k), int(n or 1)
+    if not 1 <= k <= n:
+        raise ValueError(f"VERIFY_SHARD={k}/{n}: want k/K with 1 <= k <= K")
+    return k, n
+
+
+SHARD, SHARDS = shard()
 
 # (what the mutant breaks, text in model.py, replacement), or (what, (text,
 # replacement), …) for a mutant of several edits, applied in order. Each
@@ -451,17 +472,9 @@ MUTANTS = [
 ]
 
 
-def mutant(*edits: tuple[str, str]) -> types.ModuleType:
-    src = (HERE / "model.py").read_text()
-    for old, new in edits:
-        if src.count(old) != 1:
-            raise AssertionError(f"mutant text found {src.count(old)} times in model.py: {old!r}")
-        src = src.replace(old, new)
-    mod = types.ModuleType("model_mutant")
-    mod.__file__ = str(HERE / "model.py")
-    sys.modules["model_mutant"] = mod
-    exec(compile(src, "model_mutant", "exec"), mod.__dict__)
-    return mod
+# One mutant's model module (diff.build_mutant, which the self-test's worker
+# processes call).
+mutant = diff.build_mutant
 
 
 class CrossCheck(unittest.TestCase):
@@ -475,14 +488,25 @@ class CrossCheck(unittest.TestCase):
         n = int(os.environ.get("VERIFY_TEST_RANDOM", "12"))
         nd = int(os.environ.get("VERIFY_TEST_DENSE", "12"))
         cls.seed = int(os.environ.get("VERIFY_SEED", "1"))
-        cls.cases = diff.build_cases(Path(cls.tmp.name), max(n, MUTANT_RANDOM), cls.seed, True, max(nd, MUTANT_DENSE))
+        if SHARD != 1:
+            # Only the mutants run here, on the first MUTANT_RANDOM and MUTANT_DENSE networks.
+            n, nd = MUTANT_RANDOM, MUTANT_DENSE
+        # VERIFY_WORKERS processes (default the cores, at most 4): the results never depend on it.
+        cls.workers = diff.default_workers()
+        t0 = time.monotonic()
+        cls.cases = diff.build_cases(
+            Path(cls.tmp.name), max(n, MUTANT_RANDOM), cls.seed, True, max(nd, MUTANT_DENSE), cls.workers
+        )
+        print(f"verify: engine ran {len(cls.cases)} cases on {cls.workers} worker(s), {time.monotonic() - t0:.0f}s", flush=True)
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
     def test_engine_and_python_agree(self):
-        r = diff.evaluate(self.cases, model)
+        if SHARD != 1:
+            self.skipTest(f"the agreement sweep runs in shard 1/{SHARDS}")
+        r = diff.evaluate(self.cases, model, workers=self.workers, progress=diff.Progress("agreement", self.cases))
         self.assertEqual(r["failures"], [], "\n".join(r["failures"][:20]))
         # The cases reach the paths the mutants target.
         cov = r["coverage"]
@@ -520,12 +544,40 @@ class CrossCheck(unittest.TestCase):
             return True
 
         cases = [c for c in self.cases if mutant_case(c[0])]
-        for what, *edits in MUTANTS:
-            if isinstance(edits[0], str):
-                edits = [tuple(edits)]
+        mine = MUTANTS[SHARD - 1 :: SHARDS]
+        edit_lists = [[tuple(edits)] if isinstance(edits[0], str) else list(edits) for _, *edits in mine]
+        t0 = time.monotonic()
+        seen = {"caught": 0}
+        label = f"mutants (shard {SHARD}/{SHARDS})" if SHARDS > 1 else "mutants"
+
+        def progress(i, caught):
+            seen["caught"] += 1 if caught else 0
+            if (i + 1) % 25 == 0 or i + 1 == len(mine):
+                s_ = int(time.monotonic() - t0)
+                print(f"{label}: {i + 1}/{len(mine)} run, {seen['caught']} caught, {s_ // 60}m{s_ % 60:02d}s", flush=True)
+
+        results = diff.mutants_caught(cases, edit_lists, self.workers, progress)
+        for (what, *_), (error, failures) in zip(mine, results):
             with self.subTest(what):
-                r = diff.evaluate(cases, mutant(*edits), stop_first=True)
-                self.assertNotEqual(r["failures"], [], f"the cases don't see: {what}")
+                if error:
+                    raise AssertionError(error)
+                self.assertNotEqual(failures, [], f"the cases don't see: {what}")
+
+
+    def test_workers_do_not_change_the_result(self):
+        if SHARD != 1:
+            self.skipTest(f"runs in shard 1/{SHARDS}")
+        # A few cases of each kind, on one process and on two: the same failures, columns and coverage.
+        cases = [c for c in self.cases if c[0].startswith(("probe-unit-rain", "random-", "dense-"))]
+        cases = [c for c in cases if not c[0][-1:].isdigit() or int(c[0].rsplit("-", 1)[1]) < self.seed + 3]
+        runs = []
+        for w in (1, 2):
+            notes: list[str] = []
+            runs.append(diff.evaluate(cases, model, notes, workers=w) | {"notes": notes})
+        self.assertGreater(len(cases), 6)
+        self.assertEqual(runs[0], runs[1])
+        edits = [[tuple(m[1:])] for m in MUTANTS[:4] if isinstance(m[1], str)]
+        self.assertEqual(diff.mutants_caught(cases, edits, 1), diff.mutants_caught(cases, edits, 2))
 
 
 class Generator(unittest.TestCase):
@@ -580,4 +632,4 @@ class Gr4jPieces(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=2)

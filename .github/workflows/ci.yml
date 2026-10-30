@@ -684,12 +684,25 @@ jobs:
   # model written only from the docs, run beside runModel on the example
   # catchments, the probes, 200 random and 200 dense networks (every
   # phase-2a feature in most), with its mutation self-test. Stdlib Python;
-  # tsx from the pnpm install runs the engine side.
+  # tsx from the pnpm install runs the engine side. Serial on one core it took
+  # about an hour (2026-10-29), nearly all of it the mutants. Now 3 shards
+  # (VERIFY_SHARD): shard 1 runs the whole agreement sweep, and each shard
+  # every 3rd mutant; inside a shard the engine runs, the sweep and the
+  # mutants use the runner's 4 cores (VERIFY_WORKERS defaults to the cores,
+  # at most 4; seeds are fixed, so neither count changes a result), with a
+  # progress line per batch. The gate's `needs: verify` covers every shard.
+  # The timeout is about twice a shard's expected time.
   verify:
-    name: Engine cross-check (Python)
+    name: Engine cross-check (Python) ${{ matrix.shard }}/3
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      # Every shard reports, so one red shard doesn't hide the others.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -717,6 +730,7 @@ jobs:
         env:
           VERIFY_TEST_RANDOM: '200'
           VERIFY_TEST_DENSE: '200'
+          VERIFY_SHARD: ${{ matrix.shard }}/3
         run: pnpm test:verify
 
   # Credential-free Terraform checks (fmt, validate, plan-only `terraform
