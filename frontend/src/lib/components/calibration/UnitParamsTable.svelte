@@ -48,7 +48,7 @@
 </div>
 {#if rows.length}
 	<fieldset class="plain unit-params" id="fld-unit-params" data-testid="unit-params" aria-describedby="{uid}-h">
-		<legend class="label">Parameters from <HelpTip key="calibration-zones" label="About calibration locations" /></legend>
+		<legend class="label">Parameters from <HelpTip key="calibration-zones" label="About where a unit’s parameters come from" /></legend>
 		<p class="hint explain" id="{uid}-h">
 			A unit runs on the parameters of the first ticked location downstream. A unit on a river with no gauge of its own can take a similar gauged
 			location’s parameters instead; that location’s fit then sets them for both.
