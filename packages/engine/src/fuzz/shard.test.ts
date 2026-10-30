@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ruleOf, shardRange, shardTimeoutMs, SHARDS } from './shard';
+import { chunkRanges, CHUNK, ruleOf, shardRange, shardTimeoutMs, SHARDS } from './shard';
 
 describe('shardRange', () => {
 	it('splits the seeds into contiguous slices that cover the range exactly once', () => {
@@ -11,6 +11,29 @@ describe('shardRange', () => {
 			}
 			expect(seeds).toEqual(Array.from({ length: cases }, (_, k) => seed0 + k));
 		}
+	});
+});
+
+describe('chunkRanges', () => {
+	it("cuts a shard's seeds into tests of at most CHUNK that cover every seed exactly once, so the 400-seed sweep is unchanged", () => {
+		for (const [cases, seed0] of [[400, 1], [401, 7], [3, 1], [20000, 100], [1600, 1]] as const) {
+			const seeds: number[] = [];
+			for (let i = 1; i <= SHARDS; i++) {
+				const [from, to] = shardRange(i, SHARDS, cases, seed0);
+				for (const [a, b] of chunkRanges(from, to)) {
+					expect(b - a).toBeGreaterThan(0);
+					expect(b - a).toBeLessThanOrEqual(CHUNK);
+					for (let s = a; s < b; s++) seeds.push(s);
+				}
+			}
+			expect(seeds).toEqual(Array.from({ length: cases }, (_, k) => seed0 + k));
+		}
+	});
+
+	it('gives the default 100-seed shard four tests of 25, and an empty range none', () => {
+		expect(chunkRanges(1, 101)).toEqual([[1, 26], [26, 51], [51, 76], [76, 101]]);
+		expect(chunkRanges(5, 5)).toEqual([]);
+		expect(chunkRanges(1, 4, 0)).toEqual([[1, 2], [2, 3], [3, 4]]); // a malformed size never loops forever
 	});
 });
 

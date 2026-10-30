@@ -146,14 +146,18 @@ describe('prepareCalibration scores what runModel produces', () => {
 describe('calibrate', () => {
 	it('recovers known GR4J parameters from noise-free flow (X1, X3 within 10 %, X4 within 0.2 days)', () => {
 		const truth = { x1: 420, x2: 0, x3: 85, x4: 2.3 };
-		const report = calibrate(synthetic(truth), { budget: 5000, seed: 1, validate: false });
+		// 2 500 model runs, not 5 000: across seeds 1–12 both stay inside these
+		// tolerances with the same margins (worst X3 3.0 % vs 3.3 %, X4 0.099 vs
+		// 0.101 days, KGE' 0.9936 vs 0.9966), at half the time; 5 000 ran 176 s on
+		// a slow CI runner against the 120 s hang guard (run 41083075763).
+		const report = calibrate(synthetic(truth), { budget: 2500, seed: 1, validate: false });
 		expect(Math.abs(report.params.x1! / truth.x1 - 1)).toBeLessThan(0.1);
 		expect(Math.abs(report.params.x3! / truth.x3 - 1)).toBeLessThan(0.1);
 		expect(Math.abs(report.params.x4! - truth.x4)).toBeLessThan(0.2);
 		expect(report.params.x2).toBe(0);
 		expect(report.fit.scores.kgePrime!).toBeGreaterThan(0.99);
 		expect(report.before.scores.kgePrime!).toBeLessThan(report.fit.scores.kgePrime!);
-		expect(report.evaluations).toBe(5000);
+		expect(report.evaluations).toBe(2500);
 	}, 120_000);
 
 	it('fitted parameters, applied to the project, pass every run invariant', () => {

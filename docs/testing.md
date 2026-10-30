@@ -304,7 +304,20 @@ so that test pins them exactly beside the report.
   serialising them twice, which cost as much as a run. A shard is fixed,
   CPU-bound work, not a wait: 2026-10-02, shard 2 took 17 s alone, 34 s with
   the four shards side by side and about 20 s at a load average near 40,
-  against its 120 s limit, and no seed passed 0.8 s.
+  against its 120 s limit, and no seed passed 0.8 s. Each shard is itself
+  cut into tests of 25 seeds (`CHUNK`, `chunkRanges`), run one after another
+  in the shard's worker: on main's CI run 41083075763 (2026-10-30) a slow
+  runner took the whole job from ~15 min to 45 min, and three 100-seed shard
+  tests passed the 120 s guard with every invariant holding. The 400 seeds
+  are the same; a 25-seed test takes 2.5–6 s alone on the 16-thread laptop
+  (a 100-seed shard 15 s), so a runner several times slower stays well inside
+  it. `FUZZ_MAX_FAILURES` caps the failures each test reports.
+- **Recovering GR4J parameters** (`packages/engine/src/calibrate/calibrate.test.ts`,
+  "recovers known GR4J parameters"): one calibration at 2 500 model runs,
+  ~6 s in its file. It ran 5 000 until that CI run took it to 176 s; across
+  seeds 1–12, 2 500 recovers X1, X3 and X4 inside the same tolerances with the
+  same margins as 5 000 (worst X3 3.0 % against 3.3 %, X4 0.099 against 0.101
+  days, KGE′ 0.9936 against 0.9966), so the larger budget proved nothing more.
 - **Loading the Lambda entry points** (`backend/src/config/production.security.test.ts`):
   the test starts each Lambda's entry point to show it runs the production
   config check at init. It imports esbuild bundles of them natively (the same
@@ -315,8 +328,9 @@ so that test pins them exactly beside the report.
   graph, fresh for each case, should do the same rather than `vi.resetModules()`
   and re-import it.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
-  WP-2.12): 40 random networks with a forecast tail in `pnpm test` (about
-  6 s; three model runs a case). Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C
+  WP-2.12): 40 random networks with a forecast tail in `pnpm test`, as four
+  tests of 10 seeds (2–3.5 s each alone, ~11 s in all; three model runs a
+  case). One 40-seed test passed the 120 s guard on the slow CI run above. Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C
   packages/engine exec vitest run src/forecast.invariants.test.ts` (about
   21 minutes, one worker; 2026-09-26: 20 000 cases clean once two seeds'
   invalid inputs were told apart).
