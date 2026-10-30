@@ -134,7 +134,7 @@ async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 	}
 }
 
-/** Scheduled alert checks are spaced this far apart per project (data going stale, feeds failing, dead jobs). */
+/** Scheduled alert checks are spaced this far apart per project (data going stale, feeds failing, dead jobs, a forecast's days passing: 287). */
 export const ALERT_CHECK_GAP = '1 hour';
 /** Alert deliveries (and events cleared this long ago) are kept this long, then the tick deletes them. */
 export const ALERT_RETENTION_DAYS = 180;

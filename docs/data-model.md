@@ -5358,7 +5358,9 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     a farmer, to that farm). Pre-auth, like `app_consume_email_token`.
   - `app_alert_schedule(project, gap, limit)`: queues an `alert_eval` for one
     project, or for up to `limit` projects with an enabled `data_stale`,
-    `feed_failing` or `job_dead` rule and none queued or made in the last
+    `feed_failing`, `job_dead` or (287) `ewr_forecast_fail` rule (its
+    forecast goes out of date with the calendar, not with a run) and none
+    queued or made in the last
     `gap`, as the first of: a rule's creator, a feed's acting user, the
     longest-standing owner, who is an editor or owner now.
   - `app_mail_suppress(email, reason, sent_at)` (057): SES reported a

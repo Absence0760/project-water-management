@@ -1549,7 +1549,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | PUT | `/me/alerts/:projectId` | `{ items: { kind, nodeId?, mode }[] }` (1–100) | `{ project: ProjectAlerts }` | farmer (not contributor) |
 | POST | `/me/alerts/resume` | – | `{ mailSuppressed: null }`. Turns alert emails back on after SES suppressed your address: takes it off SES's suppression list (production), then clears the flag; your choices apply again as they were. Harmless when nothing is paused. `429` within a day of the last resume (the address bounced again) | signed in |
 | GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, a `dam_below` per farm in network order, a `data_stale` per data feed (057), and a `data_stale` per series an API key writes (141; by kind and name); one not saved yet is `{ id: null, enabled: false }` at its default threshold (a feed's: its source's; a series': 2). An unsaved feed's or series' rule is `enabled: true` while any `data_stale` rule is on (the next evaluation switches it on) | editor |
-| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
+| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, clears at once the firing events of every rule now off (none is queued once every rule is off, so the save does it), and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
 | GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 151) | editor |
@@ -1611,7 +1611,9 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   farms);
   `feed_failing` `{ feeds: { label, failures }[] }`; `job_dead` `{ count }`;
   `restriction_published` `{ publicationId, level, pct, lifted, publishedAt }`.
-  While an event fires, its `value` and `detail` follow the figure. A
+  While an event fires, its `value` and `detail` follow the figure, the
+  detail even when the value stays the same (another feed failing below
+  the worst one's count; the dam at the same level on a later day). A
   forecast's `madeOn` is the day the run was made, and "still current" (its
   `to` not yet past) is judged against today, both in the project's time
   zone.
@@ -1669,8 +1671,10 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   the limit, never sent later.
 - The mail is built **as its recipient**, under RLS, when it is sent: their
   access and choice are checked again then (a member removed since the
-  event, or who turned the alert off, gets nothing), and it can only name
-  what they may read.
+  event, or who turned the alert off, gets nothing; nor does anyone once an
+  editor has switched the event's rule off, so a digest line queued before
+  the switch doesn't go out the next morning), and it can only name what
+  they may read.
 - `ALERTS_ENABLED=false` (the kill switch) stops all sending: events still
   open and clear in the app, and deliveries waiting to go out are dropped,
   not sent later ([deployment.md § Runbooks](./deployment.md#runbooks)).

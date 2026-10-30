@@ -1725,7 +1725,9 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   own context, and nobody else. When the mail is built, the worker opens a
   transaction **as the recipient** (`withUser`) and asks
   `app_alert_my_mode` again: a member removed after the event, or who
-  turned the alert off, gets nothing (the delivery is `skipped` with why).
+  turned the alert off, gets nothing (the delivery is `skipped` with why);
+  nor does anyone once an editor has switched the event's rule off
+  (`alerts/send.ts` `RULE_OFF`).
 - **A farmer's mail names only their own farm.** The mail is built as the
   recipient under RLS: the event (`alert_event` RLS: a farmer sees their own
   farms' events and the notice events), the farm's name (`node` RLS) and the

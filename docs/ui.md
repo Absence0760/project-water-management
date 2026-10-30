@@ -14158,10 +14158,13 @@ the catalogue, [§ Language](#language)); both unit-tested.
   days, a feed's past its own usual delay, defaulting by source, a series'
   with no new reading past yesterday's, 2 by default; a feed's failures in
   a row, dead jobs in 24 hours, units short in the last 7 days; range-checked in the form and by the
-  API; while staleness alerts are on for anything, an unsaved feed's or
+  API, the form checking only a rule that is on: one switched off keeps the
+  level it was saved with when its box holds an empty or out-of-range one,
+  `alerts.ts` `ruleChanges`, so that box can't refuse the save; while staleness alerts are on for anything, an unsaved feed's or
   series' rule shows as on, since the next evaluation switches it on and
   Save writes every row), a
-  *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
+  *Firing* mark (switching a rule off and saving clears it at once, and its
+  waiting mails aren't sent), and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing. Under the rules, **Was it
   useful?** (`alerts/AlertFeedbackSummary.svelte`, 151, issue #74): what
   people answered to "Was this alert useful?" over the last year, one line

@@ -998,8 +998,9 @@ flowchart LR
    too), after a person publishes or
    changes the restriction notice, and when an editor changes the rules.
    The tick queues the checks no run causes (a feed going stale or failing,
-   dead jobs) through `app_alert_schedule`: hourly for projects with those
-   rules on, and at once for a job that just died.
+   dead jobs, a firing EWR forecast alert whose forecast's days have passed
+   while no new forecast run came, 287) through `app_alert_schedule`: hourly
+   for projects with those rules on, and at once for a job that just died.
 2. **Evaluate** (`alerts/evaluate.ts`, as the job's acting editor under
    RLS). Values come from the current publication (dam level: the farm's
    published projection, and its published forecast's lowest), the newest
