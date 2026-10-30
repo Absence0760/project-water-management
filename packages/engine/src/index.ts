@@ -44,7 +44,7 @@ export * from './calibrate/provenance';
 export * from './calibrate/rulesSettings';
 export * from './calibrate/rules';
 export * from './calibrate/auto';
-export { dds, reflect, type Bounds, type DdsOptions, type DdsResult } from './calibrate/dds';
+export { dds, reflect, type Bounds, type DdsOptions, type DdsResult, type DdsState } from './calibrate/dds';
 export { Rng } from './random';
 export * from './quality';
 export * from './checkPeriods';

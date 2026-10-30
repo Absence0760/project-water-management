@@ -44,7 +44,7 @@ import { catchmentStationFingerprint, type CatchmentStationFingerprint } from '.
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
-import { dds } from './dds';
+import { dds, type DdsState } from './dds';
 import { CALIBRATION_PARAMS, MAX_STARTS, type FitBounds, type ParamSet } from './params';
 import { calibrationPriorError, priorBox, priorPenalty, sameTarget, type CalibrationPrior, type ParamPriors, type PriorFitResult, type PriorParam } from './prior';
 import { excludedDayMask, exclusionRanges } from './provenance';
@@ -762,6 +762,23 @@ interface FitResult {
 	cancelled: boolean;
 }
 
+/**
+ * One optimisation of a calibration as it ended, JSON-safe, so a server job
+ * can store it and a later one finish the report from it
+ * (prepareCalibrationFits): `loss` null is a loss of +∞ (no finite
+ * evaluation). The in-process calibrate() goes through the same form, so the
+ * two can't differ.
+ */
+export interface FitOutcome {
+	params: ParamSet;
+	loss: number | null;
+	evaluations: number;
+	cancelled: boolean;
+}
+
+const toOutcome = (r: FitResult): FitOutcome => ({ params: r.params, loss: Number.isFinite(r.loss) ? r.loss : null, evaluations: r.evaluations, cancelled: r.cancelled });
+const fromOutcome = (o: FitOutcome): FitResult => ({ params: o.params, loss: o.loss ?? Infinity, evaluations: o.evaluations, cancelled: o.cancelled });
+
 /** Seed of start `i` (0-based) of a fit seeded `seed`: start 0 is the seed itself, so one start reproduces a single-start fit. */
 export const startSeed = (seed: number, i: number): number => (seed + i * 1_000_003) % 2 ** 31;
 
@@ -829,8 +846,9 @@ function fit(
 	penalty: Wr2012Penalty | null = null,
 	bounds: FitBounds = 'wide',
 	start?: { start: number; starts: number },
-	prior: FitPrior | null = null
-): FitResult {
+	prior: FitPrior | null = null,
+	step: FitStepOptions = {}
+): FitResult | { paused: DdsState } {
 	const specs = free.map((k) => CALIBRATION_PARAMS[pb.model].find((s) => s.key === k)!);
 	const p: ParamSet = { ...pb.startParams };
 	const obs = new Float64Array(idx.length);
@@ -860,9 +878,12 @@ function fit(
 			budget,
 			seed,
 			x0: specs.map((s) => pb.startParams[s.key]!),
-			onEvaluation: (n, f) => onProgress?.({ stage, ...start, evaluations: n, budget, best: 1 - f }) === true
+			onEvaluation: (n, f) => onProgress?.({ stage, ...start, evaluations: n, budget, best: 1 - f }) === true,
+			...(step.resume ? { resume: step.resume } : {}),
+			...(step.pause ? { pause: step.pause } : {})
 		}
 	);
+	if (res.paused) return { paused: res.state };
 	const params: ParamSet = { ...pb.startParams };
 	specs.forEach((s, j) => (params[s.key] = res.x[j]!));
 	return { params, loss: res.f, evaluations: res.evaluations, cancelled: res.stopped };
@@ -1041,8 +1062,53 @@ export function priorNotes(p: CalibrationPrior, bounded: boolean, free: readonly
 	return out;
 }
 
-/** Calibrate a runoff model's parameters against the project's observed flow. */
-export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): CalibrationReport {
+/** How one optimisation of a fit may be paused and resumed (prepareCalibrationFits). */
+export interface FitStepOptions {
+	/** Go on from a paused optimisation's state. */
+	resume?: DdsState;
+	/** Asked after every model run: true pauses the optimisation there, to go on later from its state. */
+	pause?: (evaluations: number) => boolean;
+}
+
+/** One optimisation of a fit: what it fits to (`idx`), from which seed, and with or without the WR2012 penalty. */
+interface FitTask {
+	stage: CalibrationStage;
+	seed: number;
+	idx: Int32Array;
+	penalty: boolean;
+	start?: { start: number; starts: number };
+}
+
+/** The dry → wet test's water years, ranked once before any fit (calibrate's differential split-sample). */
+interface DsstSetup {
+	notes: string[];
+	/** Null when the record has too few water years to test. */
+	split: { dry: { year: number; idx: number[]; mean: number }[]; wet: { year: number; idx: number[]; mean: number }[]; di: Int32Array; wi: Int32Array; rankedBy: DsstRanking } | null;
+	years: number;
+}
+
+/** Everything a fit fixes before its first model run: the problem, the search and the optimisations in order. */
+interface CalibrationSetup {
+	objective: ObjectiveId;
+	bounds: FitBounds;
+	budget: number;
+	seed: number;
+	starts: number;
+	pb: CalibrationProblem;
+	specs: (typeof CALIBRATION_PARAMS)['gr4j'];
+	free: string[];
+	prior: FitPrior | null;
+	penalty: Wr2012Penalty | null;
+	all: Int32Array;
+	split: { a: Int32Array; b: Int32Array } | null;
+	dsst: DsstSetup | null;
+	/** The optimisations in the order calibrate() runs them: the starts, then split, dry → wet and unpenalised as they apply. */
+	tasks: FitTask[];
+	/** Index in `tasks` of each validation optimisation, or -1. */
+	at: { split: number; dsst: number; unpenalised: number };
+}
+
+function setupCalibration(input: ModelInput, opts: CalibrateOptions): CalibrationSetup {
 	const objective = opts.objective ?? 'kgePrime';
 	const bounds = opts.bounds ?? 'wide';
 	const budget = Math.max(10, Math.floor(opts.budget ?? 1500));
@@ -1055,24 +1121,131 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	const unknown = free.filter((k) => !specs.some((s) => s.key === k));
 	if (unknown.length) throw new Error(`not a calibratable ${pb.model} parameter: ${unknown.join(', ')}`);
 	const prior = fitPriorOf(opts.prior, bounds, free, pb);
+	const penalty = pb.marPenalty;
+	const all = pb.scoredDays;
+	const validate = opts.validate !== false;
+
+	// The whole record from each start; the lowest loss is kept (CR-2).
+	const tasks: FitTask[] = [];
+	for (let i = 0; i < starts; i++) tasks.push({ stage: 'full', seed: startSeed(seed, i), idx: all, penalty: true, ...(starts > 1 ? { start: { start: i + 1, starts } } : {}) });
+	const at = { split: -1, dsst: -1, unpenalised: -1 };
+	let split: CalibrationSetup['split'] = null;
+	let dsst: DsstSetup | null = null;
+	if (validate) {
+		// Split-sample: first half of the observed days vs the second.
+		const half = Math.floor(all.length / 2);
+		split = { a: all.slice(0, half), b: all.slice(half) };
+		at.split = tasks.push({ stage: 'split', seed: seed + 1, idx: split.a, penalty: true }) - 1;
+		dsst = dsstSetup(pb, opts);
+		if (dsst.split) at.dsst = tasks.push({ stage: 'dsst', seed: seed + 2, idx: dsst.split.di, penalty: true }) - 1;
+	}
+	// The same fit without the penalty, so its effect is visible.
+	if (penalty) at.unpenalised = tasks.push({ stage: 'unpenalised', seed, idx: all, penalty: false }) - 1;
+	return { objective, bounds, budget, seed, starts, pb, specs, free, prior, penalty, all, split, dsst, tasks, at };
+}
+
+/**
+ * Differential split-sample: driest half of the water years vs the wettest,
+ * ranked by the reference gauge when it covers them (a regional index, never
+ * scored), else by the fitted record's own flow.
+ */
+function dsstSetup(pb: CalibrationProblem, opts: CalibrateOptions): DsstSetup {
+	const notes: string[] = [];
+	const years = waterYears(pb, MIN_DAYS_PER_YEAR);
+	const want: DsstRanking = opts.rankYearsBy ?? (pb.reference ? 'reference' : 'observed');
+	let rankedBy: DsstRanking = 'observed';
+	let rankOf = new Map(years.map((y) => [y.year, y.mean]));
+	if (want === 'reference' && years.length >= 4) {
+		if (!pb.reference) {
+			notes.push('The project has no reference gauge, so the dry → wet test ranks water years by their own observed flow.');
+		} else {
+			const ref = referenceYearMeans(pb.reference, pb.startDate, MIN_DAYS_PER_YEAR);
+			const missing = years.filter((y) => !ref.has(y.year)).map((y) => y.year);
+			if (missing.length) {
+				notes.push(
+					`The reference gauge has fewer than ${MIN_DAYS_PER_YEAR} days in ${missing.length} of the ${years.length} water years the dry → wet test uses ` +
+						`(${missing.map((y) => `WY ${waterYearLabel(y)}`).join(', ')}), so it ranks them by their own observed flow instead.`
+				);
+			} else {
+				rankOf = ref;
+				rankedBy = 'reference';
+			}
+		}
+	}
+	years.sort((x, y) => rankOf.get(x.year)! - rankOf.get(y.year)!);
+	if (years.length < 4) return { notes, split: null, years: years.length };
+	const k = Math.floor(years.length / 2);
+	const dry = years.slice(0, k);
+	const wet = years.slice(years.length - k);
+	const idxOf = (ys: typeof years) => Int32Array.from(ys.flatMap((y) => y.idx).sort((p, q) => p - q));
+	return { notes, split: { dry, wet, di: idxOf(dry), wi: idxOf(wet), rankedBy }, years: years.length };
+}
+
+/** Run optimisation `k` of a set-up fit, or pause it (`step.pause`) and say where it stands. */
+function runFitTask(c: CalibrationSetup, k: number, onProgress: CalibrateOptions['onProgress'], step: FitStepOptions = {}): FitResult | { paused: DdsState } {
+	const t = c.tasks[k];
+	if (!t) throw new Error(`the fit has no optimisation ${k + 1}`);
+	return fit(c.pb, t.idx, c.free, c.objective, c.budget, t.seed, t.stage, onProgress, t.penalty ? c.penalty : null, c.bounds, t.start, c.prior, step);
+}
+
+/** Calibrate a runoff model's parameters against the project's observed flow. */
+export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): CalibrationReport {
+	const c = setupCalibration(input, opts);
+	// Through the stored form, as a server job's optimisations are (prepareCalibrationFits), so the two can't differ.
+	return calibrationReport(input, opts, c, (k) => toOutcome(runFitTask(c, k, opts.onProgress) as FitResult));
+}
+
+/**
+ * A calibration whose optimisations are run one at a time, each pausable, so
+ * a server can spread one fit over several background jobs (docs/model.md
+ * §2.10j, backend calibration/store.ts): `fit(k)` runs optimisation k (or
+ * pauses it, handing back its state to resume from), and `report` builds the
+ * report from every optimisation's outcome. The report is calibrate()'s with
+ * the same input and options, to the bit, however the optimisations were
+ * paused and resumed and in however many jobs (calibrate.test.ts pins it).
+ * No progress and no cancel: a job that stops simply doesn't store its work.
+ */
+export interface CalibrationFits {
+	/** Optimisations the fit makes, in order (the starts, then the validation fits, then the one without the WR2012 penalty). */
+	readonly count: number;
+	/** Model runs each optimisation makes. */
+	readonly budget: number;
+	fit(k: number, step?: FitStepOptions): { done: FitOutcome } | { paused: DdsState };
+	report(outcomes: readonly FitOutcome[]): CalibrationReport;
+}
+
+/** Set up a fit to run in steps (CalibrationFits). Throws where calibrate() would, before any model run. */
+export function prepareCalibrationFits(input: ModelInput, opts: Omit<CalibrateOptions, 'onProgress'> = {}): CalibrationFits {
+	const c = setupCalibration(input, opts);
+	return {
+		count: c.tasks.length,
+		budget: c.budget,
+		fit(k, step = {}) {
+			const r = runFitTask(c, k, undefined, step);
+			return 'paused' in r ? r : { done: toOutcome(r) };
+		},
+		report(outcomes) {
+			if (outcomes.length !== c.tasks.length) throw new Error(`the fit has ${c.tasks.length} optimisations, not ${outcomes.length}`);
+			return calibrationReport(input, opts, c, (k) => outcomes[k]!);
+		}
+	};
+}
+
+/** The report from a set-up fit, taking each optimisation's outcome from `fitAt` in calibrate()'s order (it stops at a cancel). */
+function calibrationReport(input: ModelInput, opts: CalibrateOptions, c: CalibrationSetup, fitAt: (k: number) => FitOutcome): CalibrationReport {
+	const { objective, bounds, budget, seed, starts, pb, specs, free, prior, penalty, all } = c;
 	let evaluations = 0;
 	let cancelled = false;
-	const penalty = pb.marPenalty;
-	const fitOnce = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true, start?: { start: number; starts: number }) => {
-		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds, start, prior);
+	const take = (k: number) => {
+		const r = fromOutcome(fitAt(k));
 		evaluations += r.evaluations;
 		cancelled ||= r.cancelled;
 		return r;
 	};
-	const run = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true) => fitOnce(idx, stage, s, withPenalty).params;
 
-	const all = pb.scoredDays;
 	// The whole record from each start; the lowest loss is kept (CR-2).
 	const fulls: { seed: number; r: FitResult }[] = [];
-	for (let i = 0; i < starts && !cancelled; i++) {
-		const s = startSeed(seed, i);
-		fulls.push({ seed: s, r: fitOnce(all, 'full', s, true, starts > 1 ? { start: i + 1, starts } : undefined) });
-	}
+	for (let i = 0; i < starts && !cancelled; i++) fulls.push({ seed: c.tasks[i]!.seed, r: take(i) });
 	const kept = fulls.reduce((b, x) => (x.r.loss < b.r.loss ? x : b), fulls[0]!);
 	const params = kept.r.params;
 	const startResults: StartResult[] = fulls.map((x) => ({
@@ -1087,54 +1260,24 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	let splitSample: ValidationTest | null = null;
 	let differential: DifferentialTest | null = null;
 
-	if (opts.validate !== false && !cancelled) {
+	if (c.split && !cancelled) {
 		// Split-sample: first half of the observed days vs the second.
-		const half = Math.floor(all.length / 2);
-		const a = all.slice(0, half);
-		const b = all.slice(half);
-		const p1 = run(a, 'split', seed + 1);
+		const { a, b } = c.split;
+		const p1 = take(c.at.split).params;
 		splitSample = { params: p1, calibration: scored(pb, p1, a), validation: scored(pb, p1, b, pb, false, a) };
 	}
-	if (opts.validate !== false && !cancelled) {
-		// Differential split-sample: driest half of the water years vs the wettest,
-		// ranked by the reference gauge when it covers them (a regional index,
-		// never scored), else by the fitted record's own flow.
-		const years = waterYears(pb, MIN_DAYS_PER_YEAR);
-		const want: DsstRanking = opts.rankYearsBy ?? (pb.reference ? 'reference' : 'observed');
-		let rankedBy: DsstRanking = 'observed';
-		let rankOf = new Map(years.map((y) => [y.year, y.mean]));
-		if (want === 'reference' && years.length >= 4) {
-			if (!pb.reference) {
-				notes.push('The project has no reference gauge, so the dry → wet test ranks water years by their own observed flow.');
-			} else {
-				const ref = referenceYearMeans(pb.reference, pb.startDate, MIN_DAYS_PER_YEAR);
-				const missing = years.filter((y) => !ref.has(y.year)).map((y) => y.year);
-				if (missing.length) {
-					notes.push(
-						`The reference gauge has fewer than ${MIN_DAYS_PER_YEAR} days in ${missing.length} of the ${years.length} water years the dry → wet test uses ` +
-							`(${missing.map((y) => `WY ${waterYearLabel(y)}`).join(', ')}), so it ranks them by their own observed flow instead.`
-					);
-				} else {
-					rankOf = ref;
-					rankedBy = 'reference';
-				}
-			}
-		}
-		years.sort((x, y) => rankOf.get(x.year)! - rankOf.get(y.year)!);
-		if (years.length < 4) {
+	if (c.dsst && !cancelled) {
+		// Differential split-sample: driest half of the water years vs the wettest (dsstSetup).
+		notes.push(...c.dsst.notes);
+		if (!c.dsst.split) {
 			notes.push(
-				`The record has ${years.length} water year${years.length === 1 ? '' : 's'} with at least ${MIN_DAYS_PER_YEAR} observed days, too few to fit on dry years and test on wet ones. ` +
+				`The record has ${c.dsst.years} water year${c.dsst.years === 1 ? '' : 's'} with at least ${MIN_DAYS_PER_YEAR} observed days, too few to fit on dry years and test on wet ones. ` +
 					'How the model behaves in wet years is weakly constrained.'
 			);
 		} else {
-			const k = Math.floor(years.length / 2);
-			const dry = years.slice(0, k);
-			const wet = years.slice(years.length - k);
-			const idxOf = (ys: typeof years) => Int32Array.from(ys.flatMap((y) => y.idx).sort((p, q) => p - q));
-			const di = idxOf(dry);
-			const wi = idxOf(wet);
-			const pd = run(di, 'dsst', seed + 2);
-			const meanOf = (ys: typeof years) => ys.reduce((s, y) => s + y.mean * y.idx.length, 0) / ys.reduce((s, y) => s + y.idx.length, 0);
+			const { dry, wet, di, wi, rankedBy } = c.dsst.split;
+			const pd = take(c.at.dsst).params;
+			const meanOf = (ys: typeof dry) => ys.reduce((s, y) => s + y.mean * y.idx.length, 0) / ys.reduce((s, y) => s + y.idx.length, 0);
 			const ratio = meanOf(wet) / meanOf(dry);
 			differential = {
 				params: pd,
@@ -1195,7 +1338,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		let unpenalised: MarPenaltyResult['unpenalised'] = null;
 		if (!cancelled) {
 			// The same fit without the penalty, so its effect is visible.
-			const p0 = run(all, 'unpenalised', seed, false);
+			const p0 = take(c.at.unpenalised).params;
 			unpenalised = { params: p0, fit: scored(pb, p0, all), marRatio: ratio(p0) };
 		}
 		marPenalty = {
