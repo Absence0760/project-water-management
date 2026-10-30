@@ -143,7 +143,9 @@
 		</p>
 	{:else}
 		<p class="banner banner-red" role="note" data-testid="pack-banner">
-			<strong>Withdrawn.</strong> Reason (shown publicly on the verify page): <span class="reason">{pack.statusReason}</span>
+			<strong>Withdrawn.</strong>
+			{#if pack.issuedAt}Reason (shown publicly on the verify page):{:else}It was never issued, so no verify page answers for it. Reason:{/if}
+			<span class="reason">{pack.statusReason}</span>
 			<HelpTip key="pack-lifecycle" label="About an evidence pack’s lifecycle" />
 		</p>
 	{/if}
@@ -168,10 +170,17 @@
 {#if withdrawing}
 	<Dialog bind:open={withdrawing} title="Withdraw version {pack.version} of this pack">
 		<form id="pack-withdraw-form" onsubmit={withdraw}>
-			<p>
-				A withdrawn pack stays on record and its verify page says it is withdrawn, and why.
-				<strong>The reason is public:</strong> anyone holding the pack’s code reads it, so write it for the licensing authority, not the team.
-			</p>
+			{#if pack.issuedAt}
+				<p>
+					A withdrawn pack stays on record and its verify page says it is withdrawn, and why.
+					<strong>The reason is public:</strong> anyone holding the pack’s code reads it, so write it for the licensing authority, not the team.
+				</p>
+			{:else}
+				<p>
+					A withdrawn draft stays on record with its sign-offs and is never issued. It has no verify page, so the reason is for the project’s
+					members: it shows on this page and in the project’s history.
+				</p>
+			{/if}
 			<div class="field">
 				<label for="pack-withdraw-reason">Reason</label>
 				<textarea id="pack-withdraw-reason" rows="3" maxlength="1000" bind:value={reason} required></textarea>

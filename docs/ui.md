@@ -13117,14 +13117,17 @@ their own application's in [their own view](#the-applicants-pack-view).
   the API (the frozen report may be issued, both runs still carry the
   server's stamp, signed under the current pack statement), each ticked or
   with what to do; an issued pack's issue stamp; a superseded pack's link to
-  the newer version; a withdrawn pack's reason, marked as shown publicly. A
+  the newer version; a withdrawn pack's reason, marked as shown publicly
+  (for a draft withdrawn before issue, which has no verify page, marked as
+  the members' only, and the page prints no verify line or **Verify page**
+  for it: `packVerifyRef` needs an issue date). A
   red alert when the stored manifest no longer matches its hash. For an
   editor: **Issue pack** (enabled once every line is ticked; a confirm says
   the verify page then answers publicly with the signers' names), **Delete
   draft** (an unsigned draft only), **New version…** of an issued pack (a
   new draft from the same run's report, superseding it once issued),
   **Withdraw…** (a dialog asking for a reason, 1–1 000 characters, that says
-  the reason is public). The server holds every rule and its refusal is
+  the reason is public, or for a draft that it stays with the members). The server holds every rule and its refusal is
   shown with the ways out it names.
 - **Sign-off** is Appendix B.2's, against the pack statement: **Sign off this
   evidence pack…** opens the run's sign-off dialog with the pack's version,
