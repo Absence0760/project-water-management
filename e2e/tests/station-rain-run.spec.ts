@@ -1,10 +1,12 @@
 // Runs & results → the rainfall stations a run ran on (issue #553, docs/ui.md
 // § Runs & results, docs/model.md §2.4i). A synthetic runnable project gets a
 // rainfall station with its own MAP and a gap, and settings.rainStations
-// assigns it to the catchment with an entered catchment MAP. Without rain for
-// each unit, the run still shows the panel, as Rain from rainfall stations:
-// the catchment's station, both MAPs, the ratio and the days by source, and
-// the station's CHIRPS pairing (refused here: the project has no CHIRPS).
+// assigns it to the catchment with an entered catchment MAP. Every run is Per
+// unit since engine 1.109.0 (issue #658), so the stations show inside Rain for
+// each unit, under Rainfall stations: the catchment's station, both MAPs, the
+// ratio and the days by source, and the station's CHIRPS pairing (refused
+// here: the project has no CHIRPS). An older run with stations but no rain for
+// each unit heads the panel Rain from rainfall stations (stationRain.test.ts).
 import { createRun, seedRunnableProject, syntheticRain, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -29,7 +31,8 @@ test('a run whose catchment ran on a rainfall station shows its station, MAPs, r
 	// Model quality is on Calibration (issue #586 Round 3).
 	await page.goto(`/projects/${id}?tab=calibration&run=${runId}`);
 	const panel = page.getByTestId('run-unit-rain');
-	await expect(panel.getByRole('heading', { level: 3, name: 'Rain from rainfall stations' })).toBeVisible();
+	await expect(panel.getByRole('heading', { level: 3, name: /^Rain for each unit/ })).toBeVisible();
+	await expect(panel.getByRole('heading', { level: 4, name: 'Rainfall stations' })).toBeVisible();
 	await expect(panel).toContainText(`Catchment MAP ${CATCHMENT_MAP} mm (entered).`);
 	const rows = panel.getByTestId('run-station-row');
 	await expect(rows).toHaveCount(1);

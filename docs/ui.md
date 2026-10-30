@@ -9656,7 +9656,13 @@ read it before.
      **Show only the first 3 things to check**, so the results reach the
      first screen, issue #521; the report lists them all; each item starts with
      a capital, `warningItem`, though some engine warnings start lower case,
-     #586 round 2), then, collapsed,
+     #586 round 2; the engine's one warning per unit with no rain of its own,
+     engine-audit.md FM3, reads as one item when two or more units have it,
+     `groupUnitsOnCatchmentRain`: "Unit rain: 58 units have no rain of their
+     own …, so they run on the catchment rain: "Farm 1", … "Farm 5", and 53
+     more (Rain for each unit names them all)", at the first one's place, the units in name order, so
+     a project on catchment rain alone doesn't fold every other warning away;
+     the Warnings page keeps each unit's own warning), then, collapsed,
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). A warning with a stable code (`summary.warningCodes`, engine

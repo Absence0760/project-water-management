@@ -55,8 +55,57 @@ export function warningGroups(warnings: readonly string[] | undefined, codes?: r
 	const check: string[] = [];
 	const data: string[] = [];
 	const codeOf = new Map<string, string>((codes ?? []).map((c) => [c.text, c.code]));
-	for (const w of warnings ?? []) (isDataNote(w, codeOf) ? data : check).push(warningItem(w));
-	return { check, data };
+	for (const w of warnings ?? []) (isDataNote(w, codeOf) ? data : check).push(w);
+	return { check: groupUnitsOnCatchmentRain(check).map(warningItem), data: data.map(warningItem) };
+}
+
+/**
+ * The engine's warning for a unit with no rain of its own (runoff/unitRain.ts rule 4, engine-audit.md FM3): one per
+ * unit, so a project on catchment rain alone with 60 units would fill the things to check and fold every other warning
+ * away. Group 2 is set when the unit's CHIRPS totals 0 mm; group 3 is " × the areal correction" when that is on.
+ */
+const NO_OWN_RAIN =
+	/^unit rain: "(.*)" has no (usable )?rain of its own \((?:no rain gauge or CHIRPS series of its own, and no MAP to scale the catchment gauge by|its CHIRPS totals 0 mm, no rain gauge of its own, and no MAP to scale the catchment gauge by)\): it runs on the catchment rain(.*)$/s;
+/** How many units the grouped line names before "and N more". */
+export const NO_OWN_RAIN_NAMED = 5;
+
+/**
+ * Two or more units with no rain of their own read as one thing to check, at the first one's place, counting them all
+ * and naming the first NO_OWN_RAIN_NAMED in name order. One unit keeps the engine's sentence. The Warnings page keeps each unit's
+ * own warning, and the run's Rain for each unit names every unit.
+ */
+export function groupUnitsOnCatchmentRain(items: readonly string[]): string[] {
+	type Group = { first: string; names: string[]; usable: boolean; tail: string };
+	const groups = new Map<string, Group>();
+	const out: (string | Group)[] = [];
+	for (const w of items) {
+		const m = NO_OWN_RAIN.exec(w);
+		if (!m) {
+			out.push(w);
+			continue;
+		}
+		const usable = m[2] !== undefined;
+		const tail = m[3]!;
+		const key = `${usable}|${tail}`;
+		const g = groups.get(key);
+		if (g) g.names.push(m[1]!);
+		else {
+			const ng: Group = { first: w, names: [m[1]!], usable, tail };
+			groups.set(key, ng);
+			out.push(ng);
+		}
+	}
+	return out.map((x) => {
+		if (typeof x === 'string') return x;
+		if (x.names.length === 1) return x.first;
+		// By name (the engine lists them in node-id order, which means nothing to a reader).
+		const named = [...x.names].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).slice(0, NO_OWN_RAIN_NAMED).map((n) => `"${n}"`);
+		const more = x.names.length - named.length;
+		const why = x.usable
+			? 'no usable rain of their own (their CHIRPS totals 0 mm, no rain gauge of their own, and no MAP to scale the catchment gauge by)'
+			: 'no rain of their own (no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by)';
+		return `unit rain: ${fmtNum(x.names.length)} units have ${why}, so they run on the catchment rain${x.tail}: ${named.join(', ')}${more > 0 ? `, and ${fmtNum(more)} more (Rain for each unit names them all)` : ''}`;
+	});
 }
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'none';
