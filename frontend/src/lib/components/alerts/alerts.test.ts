@@ -1,7 +1,7 @@
 // The alert pages' words and parsing (WP-2.13): the workspace's (./alerts.ts) and the translated pages' (./words.ts).
 import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '#lib/api/types.js';
-import { eventKindName, eventText, feedbackKindName, feedbackRows, feedbackShare, feedRuleLabel, groupRules, outOfDateText, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+import { eventKindName, eventText, feedbackKindName, feedbackRows, feedbackShare, feedRuleLabel, groupRules, outOfDateText, ruleChanges, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 import { ApiError } from '#lib/api/client.js';
 import { choiceLabel, farmAlertText, feedbackThanks, fragmentAnswer, fragmentToken, modeLabel, resumeProblem, suppressedText, thresholdLine, unsubscribedText } from './words';
 
@@ -182,6 +182,42 @@ describe('the rule editor', () => {
 		expect(thresholdProblem('restriction_published', 0)).toBeNull();
 		expect(thresholdProblem('farms_short', 1000)).toBeNull();
 		expect(thresholdProblem('farms_short', 1001)).toBe('Between 1 and 1000.');
+	});
+
+	it('saves a rule switched off at its saved level when its disabled box holds a bad one, so the save goes through', () => {
+		const rule = (kind: AlertRule['kind'], threshold: number, enabled: boolean, input: number | null): AlertRule & { input: number | null } => ({
+			id: 'x',
+			kind,
+			nodeId: kind === 'dam_below' ? 'n' : null,
+			nodeName: null,
+			feedId: null,
+			feedName: null,
+			feedEnabled: null,
+			seriesId: null,
+			seriesName: null,
+			seriesKeyFed: null,
+			threshold,
+			enabled,
+			firing: false,
+			input
+		});
+		const sent = ruleChanges([
+			// Off: typed 0 (refused by the API), and an emptied box (binds null): their saved levels.
+			rule('dam_below', 0.3, false, 0),
+			rule('job_dead', 2, false, null),
+			// Off with a fine level: that level. On: the typed level.
+			rule('feed_failing', 3, false, 5),
+			rule('dam_below', 0.3, true, 25),
+			rule('restriction_published', 0, true, 0)
+		]);
+		expect(sent.map((r) => [r.kind, r.threshold, r.enabled])).toEqual([
+			['dam_below', 0.3, false],
+			['job_dead', 2, false],
+			['feed_failing', 5, false],
+			['dam_below', 0.25, true],
+			['restriction_published', 0, true]
+		]);
+		expect(thresholdProblem('job_dead', null)).toBe('Enter a number.');
 	});
 
 	it('puts the catchment’s rules first, then the farms’ dam rules, then a staleness rule per data feed, then per ingest-key series', () => {
