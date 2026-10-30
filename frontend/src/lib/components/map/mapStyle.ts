@@ -108,6 +108,18 @@ export function labelLayers(dark: boolean): Layer[] {
 	];
 }
 
+/**
+ * Geometry-type filters for the basemap's layers. A Protomaps source layer
+ * mixes geometries: `water` holds lakes and dams (polygons), rivers and
+ * streams (lines) and label points in one layer. MapLibre's fill bucket
+ * triangulates whatever reaches it, so a fill without a polygon filter closes
+ * each river line into a polygon and draws it as straight-edged spikes and
+ * wedges (seen round Wemmershoek Dam at z13 and closer, where the tiles carry
+ * the streams). Every basemap fill takes POLYGONS; rivers draw as lines.
+ */
+const POLYGONS = ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]];
+const LINES = ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]];
+
 /** The basemap: a background, and the Protomaps layers when there is a tiles URL. */
 export function basemapStyle(tilesUrl: string | null, dark: boolean): Style {
 	const c = dark ? DARK : LIGHT;
@@ -115,10 +127,11 @@ export function basemapStyle(tilesUrl: string | null, dark: boolean): Style {
 	if (!tilesUrl) return { version: 8, sources: {}, layers };
 	const src = { source: 'basemap' };
 	layers.push(
-		{ id: 'bm-earth', type: 'fill', ...src, 'source-layer': 'earth', paint: { 'fill-color': c.earth } },
-		{ id: 'bm-landcover', type: 'fill', ...src, 'source-layer': 'landcover', filter: ['in', ['get', 'kind'], ['literal', ['forest', 'grassland', 'scrub', 'farmland']]], paint: { 'fill-color': c.green, 'fill-opacity': 0.6 } },
-		{ id: 'bm-landuse', type: 'fill', ...src, 'source-layer': 'landuse', filter: ['in', ['get', 'kind'], ['literal', ['park', 'nature_reserve', 'farmland', 'orchard', 'vineyard']]], paint: { 'fill-color': c.green, 'fill-opacity': 0.5 } },
-		{ id: 'bm-water', type: 'fill', ...src, 'source-layer': 'water', paint: { 'fill-color': c.water } },
+		{ id: 'bm-earth', type: 'fill', ...src, 'source-layer': 'earth', filter: POLYGONS, paint: { 'fill-color': c.earth } },
+		{ id: 'bm-landcover', type: 'fill', ...src, 'source-layer': 'landcover', filter: ['all', POLYGONS, ['in', ['get', 'kind'], ['literal', ['forest', 'grassland', 'scrub', 'farmland']]]], paint: { 'fill-color': c.green, 'fill-opacity': 0.6 } },
+		{ id: 'bm-landuse', type: 'fill', ...src, 'source-layer': 'landuse', filter: ['all', POLYGONS, ['in', ['get', 'kind'], ['literal', ['park', 'nature_reserve', 'farmland', 'orchard', 'vineyard']]]], paint: { 'fill-color': c.green, 'fill-opacity': 0.5 } },
+		{ id: 'bm-water', type: 'fill', ...src, 'source-layer': 'water', filter: POLYGONS, paint: { 'fill-color': c.water } },
+		{ id: 'bm-waterway', type: 'line', ...src, 'source-layer': 'water', minzoom: 9, filter: ['all', LINES, ['in', ['get', 'kind'], ['literal', ['river', 'stream', 'canal']]]], paint: { 'line-color': c.water, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.5, 15, 2.5] } },
 		{ id: 'bm-boundaries', type: 'line', ...src, 'source-layer': 'boundaries', paint: { 'line-color': c.border, 'line-width': 1, 'line-dasharray': [3, 2] } },
 		{ id: 'bm-roads-case', type: 'line', ...src, 'source-layer': 'roads', minzoom: 9, paint: { 'line-color': c.roadCase, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.5, 14, 6] } },
 		{ id: 'bm-roads', type: 'line', ...src, 'source-layer': 'roads', paint: { 'line-color': c.road, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 14, 4] } }

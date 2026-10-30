@@ -102,6 +102,27 @@ describe('basemapStyle', () => {
 		expect(s.layers.some((l) => l.type === 'symbol')).toBe(false);
 		expect(basemapLayerIds(s).length).toBeGreaterThan(3);
 	});
+
+	// Protomaps' `water` layer carries rivers and streams as lines beside the
+	// lakes' polygons; a fill with no polygon filter closes each line into a
+	// polygon and draws spikes and wedges (production, Wemmershoek Dam, z13+).
+	it('fills only polygons, and draws the rivers in the water layer as lines', () => {
+		const polygons = ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]];
+		for (const dark of [false, true]) {
+			const layers = basemapStyle('x', dark).layers;
+			const fills = layers.filter((l) => l.type === 'fill');
+			expect(fills.map((l) => l.id)).toEqual(['bm-earth', 'bm-landcover', 'bm-landuse', 'bm-water']);
+			for (const l of fills) {
+				const f = l.filter as unknown[];
+				expect(f[0] === 'all' ? f.slice(1) : [f], l.id).toContainEqual(polygons);
+			}
+			const waterway = layers.find((l) => l.id === 'bm-waterway')!;
+			expect(waterway).toMatchObject({ type: 'line', 'source-layer': 'water' });
+			expect((waterway.filter as unknown[])[1]).toEqual(['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]]);
+			expect(waterway.paint).toMatchObject({ 'line-color': basemapColours(dark).water });
+			expect(layers.findIndex((l) => l.id === 'bm-waterway')).toBe(layers.findIndex((l) => l.id === 'bm-water') + 1);
+		}
+	});
 });
 
 describe('overlay', () => {
