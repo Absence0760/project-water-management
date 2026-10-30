@@ -34,7 +34,7 @@ const NEEDS: Record<string, MissingPanel> = {
 		link: { href: '?tab=settings#set-share', label: 'Flow generation' }
 	},
 	'res-unit-rain': {
-		text: 'This run has no rain for each unit. It needs Per unit flow generation, with rain for each unit or rainfall stations, set under Flow generation.',
+		text: 'This run has no rain for each unit. Every unit runs on its own rain now, so the run was made before that (under Fragmentation), or the model has no land unit with a GR4J runoff model. Run the model again to see it.',
 		link: { href: '?tab=settings#set-share', label: 'Flow generation' }
 	},
 	'res-gap-rain': {

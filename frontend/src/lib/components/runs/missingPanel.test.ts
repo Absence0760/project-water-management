@@ -27,6 +27,9 @@ describe('missingPanel', () => {
 		expect(missingPanel('res-gauges', bare)!.link?.href).toBe('?tab=series');
 		// Data feeds is on the Data page (issue #586), not Settings.
 		expect(missingPanel('res-forecast', bare)!.link).toEqual({ href: '?tab=series#data-feeds', label: 'Data feeds' });
+		// Per unit is the only method (issue #658): no rain per unit means an older run or no land unit, not a setting to change.
+		expect(missingPanel('res-unit-rain', bare)!.text).not.toMatch(/needs Per unit/);
+		expect(missingPanel('res-unit-rain', bare)!.text).toMatch(/Run the model again/);
 	});
 
 	it('is null for a panel the run draws', () => {

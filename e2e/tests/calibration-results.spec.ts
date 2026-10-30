@@ -63,8 +63,7 @@ test('a link to a Model quality panel this run doesn’t have says what the pane
 	const runId = await createRun(page.request, project.id, 'Plain');
 	for (const [anchor, needs, href] of [
 		['res-wr2012', 'It needs a WR2012 reference for the catchment', '?tab=calibration#set-wr2012'],
-		['res-gauges', 'It needs a flow record at a gauge that is not a ticked calibration location', '?tab=series'],
-		['res-unit-rain', 'It needs Per unit flow generation', '?tab=settings#set-share']
+		['res-gauges', 'It needs a flow record at a gauge that is not a ticked calibration location', '?tab=series']
 	] as const) {
 		await page.goto(`/projects/${project.id}?tab=overview`);
 		await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}#${anchor}`);
@@ -118,7 +117,8 @@ test('the run picker: the newest by default, a pick writes ?run= as a step Back 
 
 	// A run that's gone: the newest shows, and says so.
 	await page.goto(`/projects/${project.id}?tab=calibration&run=no-such-run`);
-	await expect(page.getByRole('note')).toContainText('That run no longer exists');
+	// The page has other notes (the areal-rain line, issue #658): pick the run's.
+	await expect(page.getByRole('note').filter({ hasText: 'That run no longer exists' })).toBeVisible();
 	await shows(newest, 'Newest');
 });
 
