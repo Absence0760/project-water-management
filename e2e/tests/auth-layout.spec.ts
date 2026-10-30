@@ -89,17 +89,21 @@ for (const theme of PANEL_THEMES) {
 		if (theme.force) await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
 
 		const m = await page.evaluate(() => {
-			const rgb = (s: string) => (s.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
-			const lum = ([r, g, b]: number[]) => {
+			type Rgb = [number, number, number];
+			const rgb = (s: string): Rgb => {
+				const [r = 0, g = 0, b = 0] = (s.match(/[\d.]+/g) ?? []).map(Number);
+				return [r, g, b];
+			};
+			const lum = ([r, g, b]: Rgb) => {
 				const f = (c: number) => ((c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 				return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
 			};
-			const ratio = (a: number[], b: number[]) => {
-				const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+			const ratio = (a: Rgb, b: Rgb) => {
+				const [x, y] = [Math.max(lum(a), lum(b)), Math.min(lum(a), lum(b))];
 				return (x + 0.05) / (y + 0.05);
 			};
 			/** A colour at an opacity, laid over the panel's ground. */
-			const over = (c: number[], alpha: number, ground: number[]) => c.map((v, i) => v * alpha + ground[i] * (1 - alpha));
+			const over = (c: Rgb, alpha: number, ground: Rgb): Rgb => [0, 1, 2].map((i) => c[i]! * alpha + ground[i]! * (1 - alpha)) as Rgb;
 			const panel = document.querySelector('.panel-brand')!;
 			const ground = rgb(getComputedStyle(panel).backgroundColor);
 			const text = (sel: string) => ratio(rgb(getComputedStyle(panel.querySelector(sel)!).color), ground);
