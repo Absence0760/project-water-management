@@ -85,6 +85,7 @@ describe('a sign-off and an issue of the same pack at once', () => {
 		await issuer.query('BEGIN');
 		await issuer.query(`SELECT set_config('app.current_user_id', $1, true)`, [owner.id]);
 		await issuer.query(`UPDATE evidence_pack SET status = 'issued' WHERE id = $1`, [pack]);
+		const signerPid = (await signer.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
 		await signer.query('BEGIN');
 		await signer.query(`SET LOCAL lock_timeout = '10s'`);
 		let settled = false;
@@ -95,7 +96,7 @@ describe('a sign-off and an issue of the same pack at once', () => {
 		void signing.then(() => (settled = true));
 		// It waits on the issue's row lock (pg_locks shows the signer blocked), rather than going in on the draft it read.
 		await expect
-			.poll(async () => (await issuer.query<{ n: number }>('SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = $2', [signer.processID, 'Lock'])).rows[0]!.n)
+			.poll(async () => (await issuer.query<{ n: number }>('SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = $2', [signerPid, 'Lock'])).rows[0]!.n)
 			.toBe(1);
 		expect(settled).toBe(false);
 		await issuer.query('COMMIT');
