@@ -9,7 +9,7 @@ import { gr4j } from './gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from './params';
 import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
 import type { DayFluxes, NaturalFlowGenerator, NaturalFlowInput, ParamSpec, RunContext, RunoffModel } from './types';
-import { resolveZones, zoneParamsOf, zoneSiteName, type ZoneAssignment } from '../calibrate/zones';
+import { locationParamsOf, resolveLocations, type LocationAssignment } from '../calibrate/locations';
 import { simulateUnits, unitRainForcing, unitRainSummary } from './unitRain';
 import { resolveUnitRain, UNIT_RAIN_SERIES, type ModelInput } from '../project';
 
@@ -186,8 +186,9 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	const warmupDays = resolveWarmupDays(ctx.settings.gr4j?.warmupDays, warnings);
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): Per unit, the only flow generation method
 	// since engine 1.109.0 (issue #658; Fragmentation, one run on the catchment rain split by share, is retired).
-	// Calibration zones (engine 1.106.0, issue #555, ../calibrate/zones.ts): each ticked gauge's land units on its own parameters.
-	const zones = resolveZones(input.model.nodes, ctx.settings, p, warnings);
+	// Calibration locations (engine 1.106.0, issue #555; 1.110.0, issue #659, ../calibrate/locations.ts): each land unit
+	// on its group's parameters.
+	const zones = resolveLocations(input.model.nodes, ctx.settings, p, warnings);
 	const perUnit = unitNaturalFlow(input, ctx, p, warmupDays, warnings, zones);
 	if (perUnit) return perUnit;
 	// No land unit (unitRainRecipes warned): GR4J runs once on the catchment rain, over the catchment area.
@@ -243,7 +244,7 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
  * summary.unitRain. Null when the model has no land unit (the run warns and
  * forces the catchment as before).
  */
-function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warmupDays: number, warnings: string[], zones: ZoneAssignment | null = null): NaturalFlowInput | null {
+function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warmupDays: number, warnings: string[], zones: LocationAssignment | null = null): NaturalFlowInput | null {
 	if (ctx.chirpsCorrection === undefined) throw new Error('per-unit rain needs the run\u2019s CHIRPS correction in the run context');
 	const w = ctx.warm;
 	// A snapshot of catchment rain can't resume here (run.ts refuses it first, as a ModelStateMismatchError).
@@ -272,7 +273,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 	const days = ctx.days;
 	// The catchment PE (runoffForcing's), the same for every unit.
 	const petMm = runoffForcing({ ...ctx.settings, arealRain: null }, ctx).petMm;
-	const paramsOf = zoneParamsOf(zones, p);
+	const paramsOf = locationParamsOf(zones, p);
 	const traces = simulateUnits(units, p, petMm, {
 		warmupDays,
 		...(paramsOf ? { paramsOf } : {}),
@@ -322,7 +323,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 		{ key: 'aet', label: 'Actual evaporation', unit: 'mm', values: Array.from(aet) },
 		...gr4j.stores.map((s, j) => ({ key: s.key, label: s.label, unit: 'mm', values: Array.from(stores[j]!) }))
 	];
-	if (p.x2 !== 0 || zones?.zones.some((z) => z.units.length > 0 && z.params.x2 !== 0)) series.push({ key: 'exchange', label: 'Groundwater exchange (+ gained / − lost)', unit: 'mm', values: Array.from(ex) });
+	if (p.x2 !== 0 || zones?.locations.some((z) => z.units.length > 0 && z.params.x2 !== 0)) series.push({ key: 'exchange', label: 'Groundwater exchange (+ gained / − lost)', unit: 'mm', values: Array.from(ex) });
 	const total = (a: ArrayLike<number>) => {
 		let s = 0;
 		for (let t = 0; t < a.length; t++) s += a[t]!;
@@ -340,7 +341,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 		nodeSeries,
 		warnings,
 		unitRunoff,
-		unitRain: unitRainSummary(ctx.settings.unitRain ?? resolveUnitRain(null, []), units, traces, petMm, built.reference, zones ? { assignment: zones, base: p, siteName: zoneSiteName(input.model.nodes, ctx.settings.calibrationSiteNodeId ?? null) } : null),
+		unitRain: unitRainSummary(ctx.settings.unitRain ?? resolveUnitRain(null, []), units, traces, petMm, built.reference, zones ? { assignment: zones, base: p } : null),
 		unitRecipes: recipes,
 		...(built.stations.length ? { stationUnits: built.stations } : {}),
 		balance: {

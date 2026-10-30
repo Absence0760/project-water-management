@@ -55,7 +55,7 @@ import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
 import { calibrationSiteError } from './calibrate/site';
-import { zoneCalibrationSettings } from './calibrate/zones';
+import { calibrationLocationError, headlineCalibrationSettings, locationCalibrationSettings, outletNode } from './calibrate/locations';
 import { calibrationStats } from './network/stats';
 import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology';
 import { cmpStr } from './order';
@@ -490,16 +490,21 @@ function runNetworkIn(
 			push(null, c.code.key, c.code.label, '', f.code);
 		}
 	}
-	// The calibration site (engine ≥ 1.41.0, settings.calibrationSiteNodeId): a gauge inside the network whose
-	// record the run's calibration statistics score. Its record is that node's `observed_flow` series (and the
-	// other record, when it has both), beside the node's own `outflow`. An unusable site warns and the run scores the outlet.
-	const calSite = runCalibrationSite(input, settings.calibrationSiteNodeId ?? null, topo.outflow, warnings);
+	// The headline calibration location (engine 1.110.0, issue #659, ./calibrate/locations.ts; before it the calibration
+	// site, engine ≥ 1.41.0): every reader of "the site" reads its settings (headlineCalibrationSettings). At a gauge
+	// inside the network the run's calibration statistics score that node's `observed_flow` series (and the other
+	// record, when it has both), beside the node's own `outflow`. A headline gauge the run can't use warns and the run
+	// scores the outlet, on the outlet's (top-level) settings.
+	const headlineSettings = headlineCalibrationSettings(settings, nodes);
+	const calSite = runCalibrationSite(input, headlineSettings.calibrationSiteNodeId ?? null, topo.outflow, warnings);
+	/** The settings the scored record is read by: the headline gauge's, else the outlet's (the top level). */
+	const scoredSettings = calSite ? headlineSettings : settings;
 	let calKind = observedKind;
 	let calObserved = observedM3s;
 	let calSim = simOutflow;
 	if (calSite) {
 		const kinds = calibrationRecordsAt(series, calSite.nodeId);
-		const wanted = settings.calibrationFlowKind;
+		const wanted = scoredSettings.calibrationFlowKind;
 		calKind = wanted && kinds.includes(wanted) ? wanted : kinds[0]!;
 		const at = (k: CalibrationFlowKind) => alignFlow(series[calibrationSeriesKey(k, calSite.nodeId)], start, days);
 		calObserved = at(calKind);
@@ -510,7 +515,7 @@ function runNetworkIn(
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
 	}
 	// The kind the gauges' checks read (gaugeCheckKind, engine-audit.md G2): the scored kind, else the kind asked for.
-	const gaugeKind = calKind ?? settings.calibrationFlowKind ?? null;
+	const gaugeKind = calKind ?? scoredSettings.calibrationFlowKind ?? null;
 	// Every other gauge inside the network with a record of its own (engine ≥ 1.90.0, issue #554, docs/model.md
 	// §2.10k): the record its plausibility checks read (plausibility/index.ts gaugeChecks), beside the gauge's `outflow`, for its checks-only hydrograph.
 	for (const [i, node] of nodes.map((n, i) => [i, n] as const).sort(([, a], [, b]) => cmpStr(a.id, b.id))) {
@@ -546,7 +551,7 @@ function runNetworkIn(
 			series: record,
 			start,
 			days,
-			settings,
+			settings: scoredSettings,
 			siteNodeId: siteId,
 			flowFill,
 			...(noHistory ? { suspect: false } : {})
@@ -1022,25 +1027,50 @@ function runNetworkIn(
 		? {
 				...calibrationStats(calSim, calScored, {
 					startDate,
-					windowStart: settings.calibrationStart,
-					windowEnd: settings.calibrationEnd,
-					exclusions: exclusionRanges(settings.calibrationExclusions)
+					windowStart: scoredSettings.calibrationStart,
+					windowEnd: scoredSettings.calibrationEnd,
+					exclusions: exclusionRanges(scoredSettings.calibrationExclusions)
 				}),
 				flowKind: calKind,
 				simulatedKey: 'simulated_outflow' as const,
 				...(calSite ? { siteNodeId: calSite.nodeId, siteName: nodes[calSite.node]!.name } : {}),
-				fitStatus: calibrationFitStatus(settings, calKind, calSite?.nodeId ?? null)
+				// A headline gauge the run can't score falls back to the outlet's record, but its units ran on the headline's
+				// fitted parameters: the fit status is judged on the headline's fit record and parameters (as before 1.110.0).
+				fitStatus: calibrationFitStatus(
+					!calSite && headlineSettings.calibrationSiteNodeId != null ? { ...settings, fitRecord: headlineSettings.fitRecord, gr4j: headlineSettings.gr4j } : scoredSettings,
+					calKind,
+					calSite?.nodeId ?? null
+				)
 			}
 		: null;
-	// Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n): its record against its
-	// simulated outflow on the zone's own window and exclusions, each in or out of sample by the zone's own fit record.
-	const calibrationZones = zoneCalibrationStats(nf.unitRain?.zones, settings, series, start, days, sim.nodes, nodes, startDate);
+	// Calibration statistics at every other ticked location (issue #555; issue #659, docs/model.md §2.10n): its record
+	// against its simulated outflow on its own window and exclusions, each in or out of sample by its own fit record.
+	// The outlet's, when ticked and not the headline, reads the outlet record as summary.calibration would.
+	const outletScored = observedKind ? withoutPeriodHighs(observedM3s, lowFlowPeriods, observedKind, start, flowFill?.[observedKind]?.code) : null;
+	const calibrationZones = zoneCalibrationStats(nf.unitRain?.zones, settings, series, start, days, sim.nodes, nodes, startDate, {
+		scoredAtOutlet: !calSite,
+		kind: observedKind,
+		observed: outletScored,
+		simulated: simOutflow
+	});
+	// No location ticked (engine 1.110.0, issue #659) though records could calibrate: allowed, every unit on settings.gr4j.
+	if (settings.calibrateAtOutlet === false && !(settings.calibrationZones ?? []).some((z) => z.enabled && !calibrationLocationError(nodes, z.nodeId))) {
+		const records = (observedKind ? 1 : 0) + nodes.filter((n, i) => n.kind === 'gauge' && i !== topo.outflow && calibrationRecordsAt(series, n.id).length > 0).length;
+		if (records)
+			warnings.push(
+				warn(
+					'calibration.zone.noneTicked',
+					{ records },
+					`No calibration location is ticked, though ${records} flow record${records === 1 ? '' : 's'} could calibrate the model: every land unit runs on the catchment's GR4J parameters (Calibration → Calibration record)`
+				)
+			);
+	}
 	if (!calKind) warnings.push(warn('calibration.noObserved', {}, 'no observed flow series: calibration statistics not computed'));
 	else if (calibration && calibration.days === 0) {
 		warnings.push(
 			calibration.excludedDays
 				? warn('calibration.allExcluded', { days: calibration.excludedDays }, 'every observed day inside the calibration window falls in a calibration exclusion')
-				: settings.calibrationStart || settings.calibrationEnd
+				: scoredSettings.calibrationStart || scoredSettings.calibrationEnd
 					? warn('calibration.noValuesInWindow', { kind: calKind }, 'observed flow has no values inside the calibration window')
 					: warn('calibration.noValuesInPeriod', { kind: calKind }, 'observed flow has no values inside the simulation period')
 		);
@@ -1131,7 +1161,14 @@ function runNetworkIn(
 		// The scored record (engine ≥ 1.55.0): the hydrological signatures follow the calibration site.
 		scored:
 			calKind && scoredFlowFlags
-				? { kind: calKind, observedM3s: calScored, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
+				? {
+						kind: calKind,
+						observedM3s: calScored,
+						simulatedM3Day: calSim,
+						flags: scoredFlowFlags,
+						site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null,
+						exclusions: exclusionRanges(scoredSettings.calibrationExclusions)
+					}
 				: null
 	});
 	if (checked) warnings.push(...checked.warnings);
@@ -1372,6 +1409,8 @@ function runPlausibility(r: {
 		simulatedM3Day: ArrayLike<number>;
 		flags: Uint8Array;
 		site: { nodeId: string; name: string } | null;
+		/** The scored location's exclusions (the headline's, engine 1.110.0); absent = the top level's. */
+		exclusions?: readonly { start: string; end: string }[];
 	} | null;
 }) {
 	const { input, settings, start, days, plan, sim } = r;
@@ -1379,10 +1418,13 @@ function runPlausibility(r: {
 	const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
 	// A reading above a low-flow period's threshold (engine ≥ 1.90.0, issue #557) misleads the checks as it would the scores.
 	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = withoutPeriodHighs(r.aligned(kind), settings.qualityFlags.lowFlowPeriods, kind, start, r.flowFill?.[kind]?.code);
-	const excluded = new Uint8Array(days);
-	for (const x of exclusionRanges(settings.calibrationExclusions)) {
-		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;
-	}
+	const maskOf = (ranges: readonly { start: string; end: string }[]) => {
+		const m = new Uint8Array(days);
+		for (const x of ranges) for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) m[t] = 1;
+		return m;
+	};
+	// The outlet records' checks read the top level's exclusions; the scored record's segments its own location's.
+	const excluded = maskOf(exclusionRanges(settings.calibrationExclusions));
 	const nodes = input.model.nodes;
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 	/** Σ over the farms in `among` (every node when null) of their dams' storage gain + evaporation − rain on them, per day. */
@@ -1414,6 +1456,7 @@ function runPlausibility(r: {
 	// classes the run stores as `observed_flow_quality` (at a calibration site without a gauged range or gap fill).
 	const sc = r.scored;
 	const scoredFlagged = sc ? flaggedDayMask(sc.flags) : null;
+	const scoredExcluded = sc?.exclusions ? maskOf(sc.exclusions) : excluded;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -1445,7 +1488,7 @@ function runPlausibility(r: {
 					site: sc.site,
 					observedM3s: sc.observedM3s,
 					simulatedM3Day: sc.simulatedM3Day,
-					segmentMask: scoredFlagged ? Uint8Array.from(excluded, (v, t) => (v || scoredFlagged[t] ? 1 : 0)) : excluded
+					segmentMask: scoredFlagged ? Uint8Array.from(scoredExcluded, (v, t) => (v || scoredFlagged[t] ? 1 : 0)) : scoredExcluded
 				}
 			: null
 	});
@@ -1482,11 +1525,14 @@ function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflo
 }
 
 /**
- * Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n), upstream first as
- * summary.unitRain.zones lists them (the site's own zone is `calibration`, so it is left out here): the gauge's
- * record (the row's, else its first) against its simulated outflow, on the zone's own window and exclusions, with
- * `fitStatus` by the zone's own fit record and parameters (zoneCalibrationSettings), so each site is in or out of
- * sample on its own. A zone whose gauge has no record is left out. [] when the run applied no zone.
+ * Calibration statistics at every ticked location but the headline (issue #555; engine 1.110.0, issue #659,
+ * docs/model.md §2.10n), in summary.unitRain.zones' order (the headline's is `calibration`, so it is left out here):
+ * a gauge's record (the row's, else its first) against its simulated outflow, on the location's own window and
+ * exclusions, with `fitStatus` by its own fit record and parameters (locationCalibrationSettings), so each is in or
+ * out of sample on its own. The outlet's location, when ticked and not the headline, scores the outlet record
+ * (`outlet`, its low-flow periods applied as summary.calibration's) on the top-level settings, with the outlet node's
+ * id as `siteNodeId`; it is left out when the run's statistics already fell back to the outlet. A location without a
+ * record is left out. [] when the run applied no gauge location.
  */
 function zoneCalibrationStats(
 	zones: readonly UnitRainZoneSummary[] | undefined,
@@ -1496,15 +1542,35 @@ function zoneCalibrationStats(
 	days: number,
 	results: readonly NodeResult[],
 	nodes: readonly NetworkNode[],
-	startDate: string
+	startDate: string,
+	outlet: { scoredAtOutlet: boolean; kind: CalibrationFlowKind | null; observed: (number | null)[] | null; simulated: ArrayLike<number> }
 ): CalibrationStats[] {
 	const out: CalibrationStats[] = [];
 	for (const z of zones ?? []) {
-		if (z.nodeId === null) continue;
+		if (z.headline || z.kind === 'default') continue;
+		if (z.nodeId === null) {
+			// Before engine 1.110.0 (no `kind`) the null entry was the calibration site's own zone, never listed here.
+			const o = outletNode(nodes);
+			if (z.kind !== 'outlet' || outlet.scoredAtOutlet || !outlet.kind || !outlet.observed || !o) continue;
+			out.push({
+				...calibrationStats(outlet.simulated, outlet.observed, {
+					startDate,
+					windowStart: settings.calibrationStart,
+					windowEnd: settings.calibrationEnd,
+					exclusions: exclusionRanges(settings.calibrationExclusions)
+				}),
+				flowKind: outlet.kind,
+				simulatedKey: 'simulated_outflow',
+				siteNodeId: o.id,
+				siteName: o.name,
+				fitStatus: calibrationFitStatus(locationCalibrationSettings(settings, null), outlet.kind, null)
+			});
+			continue;
+		}
 		const node = nodes.findIndex((n) => n.id === z.nodeId);
 		const kinds = calibrationRecordsAt(series, z.nodeId);
 		if (node < 0 || !kinds.length) continue;
-		const zs = zoneCalibrationSettings(settings, z.nodeId);
+		const zs = locationCalibrationSettings(settings, z.nodeId);
 		const kind = zs.calibrationFlowKind && kinds.includes(zs.calibrationFlowKind) ? zs.calibrationFlowKind : kinds[0]!;
 		out.push({
 			...calibrationStats(results[node]!.outflow, alignFlow(series[calibrationSeriesKey(kind, z.nodeId)], start, days), {

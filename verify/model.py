@@ -564,19 +564,34 @@ class Gr4j:
 GR4J_BOUNDS = {"x1": (10, 3000), "x2": (-5, 3), "x3": (1, 1000), "x4": (0.5, 10)}
 
 
-def zone_params(settings: dict, nodes: list[dict], units: list[dict]) -> dict[str, dict]:
-    """§2.10n (engine 1.106.0, issue #555): each land unit in a usable ticked
-    calibration zone -> that zone's X1–X4 (the row's gr4j, else the
-    catchment's). A ticked row is usable when its node is a gauge inside the
-    network, not the calibration site and not on the site's path to the
-    outlet. A unit belongs to the first usable ticked gauge on its path
-    downstream; a unit reaching none (the site's zone) is not in the result.
+def location_params(settings: dict, nodes: list[dict], units: list[dict]) -> dict[str, dict]:
+    """§2.10n (engine 1.110.0, issue #659; zones from 1.106.0, issue #555),
+    from the docs: each land unit in a gauge location's group -> that
+    location's X1–X4 (the row's gr4j inside the bounds, else the catchment's).
+    A unit on the outlet's location or on settings.gr4j is not in the result
+    (it runs on the catchment's gr4j).
+
+    The locations: the outlet when calibrateAtOutlet is true, and each ticked
+    row (first of a gauge) whose node is a gauge inside the network (not the
+    outlet). Settings without a boolean calibrateAtOutlet are from before
+    1.110.0: an inner-gauge site G becomes G's ticked row on the catchment's
+    X1–X4, every ticked row at or below G is unticked, the outlet is not a
+    location, the rest rule is 'headline' and G the headline; any other site
+    (the outlet, or a stale one) makes the outlet a location. With no gauge
+    location every unit runs on gr4j.
+
+    A unit's group: its unitParamsFrom target when that is a location (the
+    outlet's node id for the outlet); else the first location on its path
+    downstream; else the rest rule (calibrationRest, absent = 'headline'):
+    'nearest', walking its path down, at the first node with a location
+    upstream (or at) it, the one fewest hops up, then name, then id;
+    'headline', the headline (the calibrationSiteNodeId pointer when it is a
+    location, else the outlet when ticked, else the gauge location with the
+    most land-unit area above it, then name, then id); 'default', gr4j.
     Per unit only: the caller asks only then."""
-    rows = settings.get("calibrationZones")
-    if not isinstance(rows, list):
-        return {}
     by_id = {n["id"]: n for n in nodes}
-    site = settings.get("calibrationSiteNodeId")
+    g = settings["gr4j"]
+    outlet = next((n["id"] for n in nodes if n.get("downstreamNodeId") is None), None)
 
     def down(i):
         out, seen = [], set()
@@ -586,25 +601,99 @@ def zone_params(settings: dict, nodes: list[dict], units: list[dict]) -> dict[st
             i = (by_id.get(i) or {}).get("downstreamNodeId")
         return out
 
-    below_site = set(down(site)) if site in by_id else set()
-    usable: dict[str, dict] = {}
-    seen_rows = set()
+    def inner_gauge(i):
+        n = by_id.get(i)
+        return n is not None and n["kind"] == "gauge" and n.get("downstreamNodeId") is not None
+
+    raw = settings.get("calibrationZones")
+    rows = [dict(z) for z in raw if isinstance(z, dict) and isinstance(z.get("nodeId"), str)] if isinstance(raw, list) else []
+    first: list[dict] = []
+    seen_rows: set = set()
     for z in rows:
-        if not isinstance(z, dict) or not isinstance(z.get("nodeId"), str) or z["nodeId"] in seen_rows:
-            continue
-        seen_rows.add(z["nodeId"])
-        n = by_id.get(z["nodeId"])
-        if z.get("enabled") is not True or not n or n["kind"] != "gauge" or n.get("downstreamNodeId") is None or z["nodeId"] in below_site:
+        if z["nodeId"] not in seen_rows:
+            seen_rows.add(z["nodeId"])
+            first.append(z)
+    rows = first
+    at_outlet = settings.get("calibrateAtOutlet")
+    pointer = settings.get("calibrationSiteNodeId")
+    rest = settings.get("calibrationRest")
+    if not isinstance(at_outlet, bool):
+        # Settings from before calibration locations.
+        rest = "headline"
+        if isinstance(pointer, str) and inner_gauge(pointer):
+            below = set(down(pointer))
+            rows = [({**z, "enabled": False} if z.get("enabled") is True and z["nodeId"] in below else z) for z in rows if z["nodeId"] != pointer]
+            rows.append({"nodeId": pointer, "enabled": True, "gr4j": {k: g[k] for k in GR4J_BOUNDS}})
+            at_outlet = False
+        else:
+            pointer = None
+            at_outlet = True
+    if rest not in ("nearest", "headline", "default"):
+        rest = "headline"
+    if outlet is None:
+        at_outlet = False
+
+    params: dict[str, dict] = {}
+    for z in rows:
+        if z.get("enabled") is not True or not inner_gauge(z["nodeId"]):
             continue
         p = z.get("gr4j")
         ok = isinstance(p, dict) and all(isinstance(p.get(k), (int, float)) and lo <= p[k] <= hi for k, (lo, hi) in GR4J_BOUNDS.items())
-        usable[z["nodeId"]] = {k: p[k] for k in GR4J_BOUNDS} if ok else settings["gr4j"]
+        params[z["nodeId"]] = {k: p[k] for k in GR4J_BOUNDS} if ok else g
+    if not params:
+        return {}
+    OUT = "\0outlet"
+    locs = list(params) + ([OUT] if at_outlet else [])
+    node_of = lambda k: outlet if k == OUT else k
+    name_of = lambda k: by_id[node_of(k)]["name"]
+    land = sorted((u for u in units), key=lambda u: u["id"])
+
+    def area_above(i):
+        return sum(float(u["areaKm2"]) for u in land if i in down(u["id"]))
+
+    if pointer in params:
+        headline = pointer
+    elif at_outlet:
+        headline = OUT
+    else:
+        headline = sorted(params, key=lambda k: (-area_above(k), name_of(k), k))[0]
+
+    def own(u):
+        # The unit itself counts (an outlet that is a farm is its own outlet location).
+        for i in down(u):
+            if i in params:
+                return i
+            if at_outlet and i == outlet:
+                return OUT
+        return None
+
+    def nearest(u):
+        for x in down(u):
+            best = None
+            for k in locs:
+                path = down(node_of(k))
+                if x in path:
+                    key = (path.index(x), name_of(k), node_of(k))
+                    if best is None or key < best[0]:
+                        best = (key, k)
+            if best:
+                return best[1]
+        return None
+
+    assign = settings.get("unitParamsFrom") if isinstance(settings.get("unitParamsFrom"), dict) else {}
     out: dict[str, dict] = {}
-    for u in units:
-        for i in down(u["id"])[1:]:
-            if i in usable:
-                out[u["id"]] = usable[i]
-                break
+    for u in land:
+        t = assign.get(u["id"])
+        if isinstance(t, str) and t in params:
+            group = t
+        elif isinstance(t, str) and at_outlet and t == outlet:
+            group = OUT
+        else:
+            group = own(u["id"])
+            if group is None:
+                group = headline if rest == "headline" else nearest(u["id"]) if rest == "nearest" else None
+        if group is not None and group != OUT:
+            out[u["id"]] = params[group]
     return out
 
 
@@ -1590,8 +1679,8 @@ def run(doc: dict) -> dict:
         local = {}
         acc = {k: [0.0] * n for k in ("rain", "aet", "prod", "rout", "uh", "exch")}
         natural = [0.0] * n
-        # §2.10n (engine 1.106.0, issue #555): each land unit on its calibration zone's X1–X4.
-        zone_p = zone_params(settings, model["nodes"], units)
+        # §2.10n (engine 1.110.0, issue #659): each land unit on its calibration location's X1–X4.
+        zone_p = location_params(settings, model["nodes"], units)
         diag["zone_units"] = diag.get("zone_units", 0) + len(zone_p)
         for u in units:
             a = float(u["areaKm2"])
@@ -1624,8 +1713,8 @@ def run(doc: dict) -> dict:
     put(None, "routing_store", rout)
     put(None, "uh_store", uhs)
     put(None, "natural_flow", natural)
-    # §2.10n: the exchange series is written when the catchment's X2, or any applied zone's, is not 0.
-    if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in zone_params(settings, model["nodes"], units).values())):
+    # §2.10n: the exchange series is written when the catchment's X2, or any applied location's, is not 0.
+    if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in location_params(settings, model["nodes"], units).values())):
         put(None, "exchange", exch)
     if rain["chirps"] and rain["bias_on"] and any(f is not None for f in rain["fit_factors"][1:]):
         put(None, "chirps_factor", [NAN if rain["fit_factors"][cal_month(o)] is None else rain["fit_factors"][cal_month(o)] for o in days])

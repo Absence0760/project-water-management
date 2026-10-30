@@ -103,4 +103,22 @@ describe('calibration statistics at each zone’s gauge (RunSummary.calibrationZ
 		expect(runModel(input([{ ...fitted, calibrationStart: '2001-10-01' }])).summary.calibrationZones![0]!.fitStatus).toBe('otherPeriod');
 		expect(runModel(input([{ ...fitted, gr4j: { ...fitted.gr4j!, x1: fitted.gr4j!.x1 + 1 } }])).summary.calibrationZones![0]!.fitStatus).toBe('edited');
 	});
+
+	it('lists the outlet as a location beside a headline gauge, and the headline gauge as `calibration` (engine 1.110.0, issue #659)', () => {
+		const base = input([zone('H', { calibrationStart: '2001-10-01' })]);
+		const out = runModel({ ...base, settings: { ...base.settings, calibrateAtOutlet: true, calibrationRest: 'headline', calibrationSiteNodeId: 'H', calibrationEnd: '2002-09-30' } });
+		// The headline is the weir: its record, its window.
+		expect(out.summary.calibration).toMatchObject({ siteNodeId: 'H', siteName: 'Weir', windowStart: '2001-10-01', windowEnd: '2003-09-30' });
+		// The outlet is the other ticked location: its own record and the top-level window, by the outlet node's id.
+		expect(out.summary.calibrationZones).toHaveLength(1);
+		expect(out.summary.calibrationZones![0]).toMatchObject({ siteNodeId: 'G', siteName: 'Outlet', flowKind: 'flow_observed_m3s', windowStart: '2000-10-01', windowEnd: '2002-09-30', days: 730 });
+		const outlet = runModel({ ...base, settings: { ...base.settings, calibrateAtOutlet: true, calibrationEnd: '2002-09-30' } });
+		expect(out.summary.calibrationZones![0]!.nse).toBe(outlet.summary.calibration!.nse);
+		// The headline auto: the outlet when it is ticked, so the weir is the zone.
+		expect(outlet.summary.calibrationZones!.map((z) => z.siteNodeId)).toEqual(['H']);
+		// Without the outlet ticked the auto headline is the weir, and nothing else is listed.
+		const inner = runModel({ ...base, settings: { ...base.settings, calibrateAtOutlet: false } });
+		expect(inner.summary.calibration?.siteNodeId).toBe('H');
+		expect(inner.summary.calibrationZones).toBeUndefined();
+	});
 });

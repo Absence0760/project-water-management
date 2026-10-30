@@ -235,7 +235,10 @@
 		// A stepwise fit (issue #555): each upstream zone's record is made on the settings its step read (its row's).
 		const zones: { nodeId: string; params: Gr4jParams; record: FitRecord }[] = [];
 		for (const st of session.steps ?? []) {
-			if (st.zoneNodeId === null) continue;
+			// The last step is applied below as the form's own parameters. Settings from before engine 1.110.0 (no
+			// calibrateAtOutlet) keep the site's parameters at the top level, so its step (the headline) is that one too.
+			const legacySite = typeof ran.settings.calibrateAtOutlet !== 'boolean' && st.zoneNodeId === (ran.settings.calibrationSiteNodeId ?? null);
+			if (st.zoneNodeId === null || legacySite) continue;
 			const sr = st.report;
 			const e = ran.et0Series === undefined ? undefined : await et0DailyOfValues(ran.et0Series, fitScoredThrough(sr));
 			const origin = ran.origins?.[calibrationSeriesKey(sr.flowKind as CalibrationFlowKind, sr.siteNodeId ?? null)];

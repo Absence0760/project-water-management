@@ -72,7 +72,7 @@ import {
 import { CHIRPS_FACTOR_MIN_DAYS, CHIRPS_FACTOR_MIN_MM, chirpsFactorOn, type ChirpsCorrection } from '../rain';
 import { cmpStr } from '../order';
 import { gr4j } from './gr4j';
-import type { ZoneAssignment } from '../calibrate/zones';
+import type { LocationAssignment } from '../calibrate/locations';
 import type { Gr4jParams } from './params';
 import { simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
 import { isLandUnit, MM_KM2_TO_M3 } from './area';
@@ -95,7 +95,7 @@ import {
 	type StationContext,
 	type UnitStationRecipe
 } from './stationForcing';
-import type { RainStationInputs, StationAreaForcing } from '../project';
+import type { RainStationInputs, StationAreaForcing, UnitRainZoneSummary } from '../project';
 import { warn } from '../warningCodes';
 
 export { isLandUnit, perUnitAreaKm2 } from './area';
@@ -671,7 +671,7 @@ export function simulateUnits(
 		cycleDays?: number;
 		initial?: readonly { id: string; state: readonly number[] }[];
 		captureAt?: number;
-		/** Each unit's parameters under calibration zones (engine 1.106.0, ../calibrate/zones.ts zoneParamsOf); absent = `p` for every unit. */
+		/** Each unit's parameters under calibration zones (engine 1.106.0, ../calibrate/locations.ts locationParamsOf); absent = `p` for every unit. */
 		paramsOf?: (unitId: string) => Gr4jParams;
 	}
 ): RunoffTrace[] {
@@ -701,7 +701,7 @@ export function unitRainSummary(
 	traces: readonly RunoffTrace[],
 	petMm: Float64Array,
 	reference?: UnitRainReferenceFit | null,
-	zones?: { assignment: ZoneAssignment; base: Gr4jParams; siteName: string } | null
+	zones?: { assignment: LocationAssignment; base: Gr4jParams } | null
 ): UnitRainSummary {
 	const sum = (a: ArrayLike<number>) => {
 		let s = 0;
@@ -759,13 +759,29 @@ export function unitRainSummary(
 		}),
 		// Only with a reference, so a summary without one is as before 1.80.0.
 		...(reference ? { reference: structuredClone(reference) } : {}),
-		// Only when the run applied calibration zones (engine 1.106.0, issue #555), so a summary without is as before.
+		// Only when the run applied a gauge location (engine 1.106.0, issue #555; 1.110.0, issue #659), so a summary
+		// without is as before: each location's group in the locations' order (the headline last), then settings.gr4j's.
 		...(zones
 			? {
 					zones: [
-						...zones.assignment.zones.map((z) => ({ nodeId: z.nodeId, name: z.name, units: [...z.units], params: { ...z.params }, fitted: z.fitted })),
-						{ nodeId: null, name: zones.siteName, units: [...zones.assignment.primaryUnits], params: { ...zones.base }, fitted: true }
-					]
+						...zones.assignment.locations.map(
+							(l): UnitRainZoneSummary => ({
+								nodeId: l.key,
+								name: l.name,
+								units: [...l.units],
+								params: { ...l.params },
+								fitted: l.fitted,
+								kind: l.kind,
+								...(l.key === zones.assignment.headline ? { headline: true } : {}),
+								borrowed: [...l.borrowed],
+								rest: [...l.rest]
+							})
+						),
+						...(zones.assignment.defaultUnits.length
+							? [{ nodeId: null, name: 'Catchment parameters', units: [...zones.assignment.defaultUnits], params: { ...zones.base }, fitted: true, kind: 'default' as const, borrowed: [], rest: [] }]
+							: [])
+					],
+					paramSource: structuredClone(zones.assignment.paramSource)
 				}
 			: {})
 	};

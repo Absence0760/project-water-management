@@ -1979,7 +1979,7 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
 		expect(r.version).toBe('evidence-24');
 		expect(r.calibrationZones).toEqual([
-			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
+			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }), kind: 'gauge' },
 			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
 		]);
 		// The zone's gauge scored its own record (its outflow, unchanged): a perfect fit.

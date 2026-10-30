@@ -5,6 +5,7 @@ import type { ForecastSummary } from './forecast';
 import type { RunDrought } from './drought/summary';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { CalibrationZone } from './calibrate/zones';
+import type { CalibrationRest, UnitParamSource } from './calibrate/locations';
 import type { PriorStartRecord } from './calibrate/prior';
 import type { FlowMissingSettings } from './recordPeriods';
 import type { WarningKept } from './checkItems';
@@ -643,26 +644,50 @@ export interface ProjectSettings {
 	 */
 	calibrationFlowKind: CalibrationFlowKind | null;
 	/**
-	 * Where calibration scores the model (engine ≥ 1.41.0, docs/model.md
-	 * §2.10k): null = the outlet (every engine before), else a gauge node inside
-	 * the network with an observed record of its own (a GaugeSeriesKey series,
-	 * 084_gauge_records.sql). calibrate() then scores that gauge's simulated
-	 * flow against that gauge's record (calibrationFlowKind picks among its
-	 * records), and the run's own calibration statistics (summary.calibration)
-	 * are scored there too. The outlet's observed-flow EWR test stays the
-	 * outlet's; each gauge EWR site with a record gets its own.
+	 * The headline calibration location (engine 1.110.0, issue #659,
+	 * ./calibrate/locations.ts headlineLocation, docs/model.md §2.10k): a
+	 * ticked gauge of `calibrationZones` whose statistics are
+	 * summary.calibration and that the uncertainty ensemble and automated
+	 * calibration act on; null = auto (the outlet when `calibrateAtOutlet`,
+	 * else the ticked gauge with the largest area above it). Before 1.110.0 it
+	 * was where calibration scored (engine ≥ 1.41.0: null = the outlet, else
+	 * an inner gauge); such settings are read through
+	 * normalizeCalibrationLocations, which keeps that gauge as the headline.
 	 */
 	calibrationSiteNodeId: string | null;
 	/**
-	 * Calibration zones (engine 1.106.0, issue #555, ./calibrate/zones.ts,
-	 * docs/model.md §2.10n): gauges above the calibration site that calibrate
-	 * the land units draining to them on their own record, each with its own
-	 * GR4J X1–X4, window, exclusions, record, quality flags and fit record.
-	 * The site's own zone (the rest) keeps the settings above and `gr4j`.
-	 * Applies only under Per unit flow generation (`unitRain` perUnit).
-	 * Absent, [] or no ticked row = one parameter set, every engine before.
+	 * Calibration locations at the gauges inside the network (engine 1.106.0,
+	 * issue #555; equals of the outlet's since 1.110.0, issue #659,
+	 * ./calibrate/zones.ts, ./calibrate/locations.ts, docs/model.md §2.10n):
+	 * one row per gauge, each with Calibrate here and its own window,
+	 * exclusions, record, quality flags, GR4J X1–X4 and fit record. A ticked
+	 * row's group (its own zone, borrowed and rest units) runs on its
+	 * parameters. Absent, [] or no ticked row = no gauge location.
 	 */
 	calibrationZones?: CalibrationZone[] | null;
+	/**
+	 * Calibrate here at the outlet (engine 1.110.0, issue #659): the outlet's
+	 * location is the top-level calibration settings (window, flow kind,
+	 * exclusions, quality flags, `gr4j`, `fitRecord`), ticked by this. Absent
+	 * = settings from before 1.110.0, read through
+	 * normalizeCalibrationLocations. Never defaulted (defaultProjectSettings
+	 * leaves it out); the backend writes it on a new project.
+	 */
+	calibrateAtOutlet?: boolean;
+	/**
+	 * What land units with no ticked location downstream take (engine
+	 * 1.110.0, ./calibrate/locations.ts): 'nearest' the nearest ticked
+	 * location upstream on their river, 'headline' the headline's, 'default'
+	 * settings.gr4j. Absent = 'headline' (every engine before); never
+	 * defaulted, a new project is written 'nearest' by the backend.
+	 */
+	calibrationRest?: CalibrationRest;
+	/**
+	 * Parameters from (engine 1.110.0, issue #659 option 2): land unit node id
+	 * → the location whose parameters it runs on, a gauge's node id or the
+	 * outlet's, even when it isn't upstream of it. Absent = its own zone.
+	 */
+	unitParamsFrom?: Record<string, string> | null;
 	/**
 	 * Periods left out of every calibration score (automatic calibration and
 	 * the run's calibration statistics): whole water years or date ranges,
@@ -4074,25 +4099,37 @@ export interface UnitRainSummary {
 	/** The reference gauge's fit (engine ≥ 1.80.0); absent when the setting has no reference. */
 	reference?: UnitRainReferenceFit;
 	/**
-	 * The calibration zones the run applied (engine 1.106.0, issue #555,
-	 * docs/model.md §2.10n), upstream first, then the calibration site's own
-	 * zone (`nodeId` null, the rest). Absent when it applied none: every unit
-	 * ran on settings.gr4j.
+	 * The groups the run applied (engine 1.106.0, issue #555; 1.110.0, issue
+	 * #659, docs/model.md §2.10n): each ticked location's, upstream first and
+	 * the headline last, then the units on settings.gr4j (`kind` 'default')
+	 * when any. `nodeId` null is the top-level parameters' (the outlet's
+	 * location, or settings.gr4j; before 1.110.0 the calibration site's own
+	 * zone). Absent when no gauge location applied: every unit ran on
+	 * settings.gr4j.
 	 */
 	zones?: UnitRainZoneSummary[];
+	/** Where each land unit's GR4J parameters came from (engine 1.110.0); absent when no gauge location applied. */
+	paramSource?: Record<string, UnitParamSource>;
 }
 
-/** One calibration zone as a run applied it (summary.unitRain.zones). */
+/** One group as a run applied it (summary.unitRain.zones). */
 export interface UnitRainZoneSummary {
-	/** The zone's gauge; null = the calibration site's zone (the outlet's, or Scored at's gauge). */
+	/** The location's gauge; null = the top-level parameters (the outlet's location, or with `kind` 'default' settings.gr4j; before 1.110.0 the calibration site's zone). */
 	nodeId: string | null;
 	name: string;
-	/** Its land units, node-id order. */
+	/** Its land units (own, borrowed and rest), node-id order. */
 	units: string[];
 	/** The GR4J parameters its units ran on. */
 	params: Gr4jParams;
-	/** False when the zone had none of its own yet and took the catchment's. */
+	/** False when the location had none of its own yet and took the catchment's. */
 	fitted: boolean;
+	/** A gauge's location, the outlet's, or the units on settings.gr4j (engine 1.110.0; absent before). */
+	kind?: 'gauge' | 'outlet' | 'default';
+	/** It is the headline location (engine 1.110.0; absent before and on the default group). */
+	headline?: boolean;
+	/** Units assigned to it from elsewhere (settings.unitParamsFrom), and the ones the rest rule sent it (engine 1.110.0; absent before). */
+	borrowed?: string[];
+	rest?: string[];
 }
 
 /** A station pairing's fit (summary.stations.pairings, issue #553): station vs the CHIRPS at it, 12 monthly factors. */
@@ -4509,10 +4546,11 @@ export interface RunSummary {
 	};
 	calibration: CalibrationStats | null;
 	/**
-	 * Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n), upstream first: its
-	 * record against its simulated outflow on the zone's own window and exclusions, each with `siteNodeId`,
-	 * `siteName` and `fitStatus` by the zone's own fit record, so each is in or out of sample on its own. The
-	 * calibration site's own zone is `calibration`. Absent when the run applied no zone, and on older runs.
+	 * Calibration statistics at every ticked location but the headline (issue #555; 1.110.0, issue #659,
+	 * docs/model.md §2.10n), in summary.unitRain.zones' order: its record against its simulated outflow on its own
+	 * window and exclusions, each with `siteNodeId`, `siteName` and `fitStatus` by its own fit record, so each is in
+	 * or out of sample on its own. The outlet's, when it is ticked and not the headline, has the outlet node's id as
+	 * `siteNodeId`. The headline's is `calibration`. Absent when the run applied no gauge location, and on older runs.
 	 */
 	calibrationZones?: CalibrationStats[];
 	/**

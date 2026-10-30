@@ -113,7 +113,8 @@ function zoned(): ModelInput {
  * leaves last-bit differences between macOS and CI's Linux in a report's statistics (a hash taken on a Mac failed on
  * CI, run 40775756367), while the search takes the same path on both, so the parameters agree to the bit. Taken on
  * macOS arm64 and checked on Linux arm64 and x64 (Node 24.22.1). Rewrite with `GOLDEN_WRITE=1`, only for a change
- * that is meant to move a calibration with the prior off.
+ * that is meant to move a calibration with the prior off. The `zoned` entry's shape was retaken at engine 1.110.0
+ * (issue #659: the zone step's note names a calibration location); its parameters and numbers are 1.106.0's.
  */
 const BEFORE_PRIOR_FILE = new URL('../../fixtures/prior-off-calibration.golden.json', import.meta.url);
 type Pinned = Record<string, { params: unknown; golden: ReportGolden }>;
@@ -343,7 +344,7 @@ describe('the prior under calibration zones', () => {
 				prior: (step) => (step.zoneNodeId === 'H' ? forStep('H') : undefined),
 				onProgress: () => void fits++
 			})
-		).toThrow(/prior for every calibration zone/);
+		).toThrow(/prior for every calibration location/);
 		expect(fits).toBe(0);
 		// The upstream zone's prior on the site's step, or the catchment's on a zone's, is refused.
 		expect(() => calibrate(z, { ...OPTS, budget: 20, prior: forStep('H') })).toThrow(/another target/);

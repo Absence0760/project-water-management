@@ -98,12 +98,13 @@ export function startStepwiseFit(
 			if (cancelled) throw new FitCancelled();
 			const { prior: _one, ...rest } = req;
 			const prior = priors?.[step.zoneNodeId ?? ''];
-			current = startFit({ ...rest, input, ...(step.zoneNodeId !== null ? { zone: step.zoneNodeId } : {}), ...(prior ? { prior } : {}) }, (p) =>
+			current = startFit({ ...rest, input, zone: step.zoneNodeId, ...(prior ? { prior } : {}) }, (p) =>
 				onProgress({ ...p, step: i + 1, steps: plan.length, zoneNodeId: step.zoneNodeId })
 			);
 			const report = await current.result;
 			done.push({ ...step, report });
-			if (step.zoneNodeId !== null) input = withZoneParams(input, step.zoneNodeId, gr4jOfParamSet(report.params));
+			// Every step's parameters, the outlet location's (null) included (engine 1.110.0: steps run in dependency order).
+			input = withZoneParams(input, step.zoneNodeId, gr4jOfParamSet(report.params));
 		}
 		return done;
 	};
