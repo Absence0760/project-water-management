@@ -427,28 +427,30 @@ export function resolveLocations(nodes: readonly LocNode[], settings: Partial<Pr
 	};
 	const DEFAULT = '\u0000default';
 	const group = new Map<string, LocationKey | typeof DEFAULT>();
-	const paramSource: Record<string, UnitParamSource> = {};
+	// Keyed by node id, which a project's data names: a Map, made into the record by Object.fromEntries so no id can reach a prototype.
+	const sources = new Map<string, UnitParamSource>();
 	const ownOf = new Map<string, LocationKey | undefined>();
 	for (const u of units) {
 		const o = own(u);
 		ownOf.set(u, o);
 		if (assigned.has(u) && assigned.get(u) !== o) {
 			group.set(u, assigned.get(u)!);
-			paramSource[u] = { from: assigned.get(u)!, how: 'assigned' };
+			sources.set(u, { from: assigned.get(u)!, how: 'assigned' });
 		} else if (o !== undefined) {
 			group.set(u, o);
-			paramSource[u] = { from: o, how: 'zone' };
+			sources.set(u, { from: o, how: 'zone' });
 		} else {
 			const r = rule === 'headline' ? headline : rule === 'nearest' ? nearest(u) : undefined;
 			if (r === undefined) {
 				group.set(u, DEFAULT);
-				paramSource[u] = { from: null, how: 'default' };
+				sources.set(u, { from: null, how: 'default' });
 			} else {
 				group.set(u, r);
-				paramSource[u] = { from: r, how: 'rest' };
+				sources.set(u, { from: r, how: 'rest' });
 			}
 		}
 	}
+	const paramSource: Record<string, UnitParamSource> = Object.fromEntries(sources);
 	const row = new Map(rows.map((z) => [z.nodeId, z]));
 	// Upstream first: a location with more ticked locations (other than the headline) below it is further up (one that
 	// drains through another always has more), then by name and id; the outlet after the gauges, the headline last.
@@ -462,9 +464,9 @@ export function resolveLocations(nodes: readonly LocNode[], settings: Partial<Pr
 				nodeId: nodeOf(k),
 				name: nameOf(k),
 				kind: k === null ? 'outlet' : 'gauge',
-				own: inGroup.filter((u) => paramSource[u]!.how === 'zone'),
-				borrowed: inGroup.filter((u) => paramSource[u]!.how === 'assigned'),
-				rest: inGroup.filter((u) => paramSource[u]!.how === 'rest'),
+				own: inGroup.filter((u) => sources.get(u)!.how === 'zone'),
+				borrowed: inGroup.filter((u) => sources.get(u)!.how === 'assigned'),
+				rest: inGroup.filter((u) => sources.get(u)!.how === 'rest'),
 				units: inGroup,
 				params: z?.gr4j ? { ...z.gr4j } : { ...base },
 				fitted: z ? !!z.gr4j : true,

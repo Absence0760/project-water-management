@@ -106,6 +106,15 @@ describe('resolving the locations', () => {
 		expect(a.locations.find((l) => l.key === 'K')!.rest).toEqual(['U3']);
 	});
 
+	it('keeps a unit whose id is a prototype key as a plain entry of paramSource (CodeQL js/remote-property-injection)', () => {
+		const hostile = JSON.parse(JSON.stringify(NODES).replaceAll('"U3"', '"__proto__"')) as typeof NODES;
+		const a = resolveLocations(hostile, settingsOf({ calibrationRest: 'nearest' }), P, [])!;
+		expect(Object.getPrototypeOf(a.paramSource)).toBe(Object.prototype);
+		expect(Object.prototype.hasOwnProperty.call(a.paramSource, '__proto__')).toBe(true);
+		expect(Object.getOwnPropertyDescriptor(a.paramSource, '__proto__')!.value).toEqual({ from: 'K', how: 'rest' });
+		expect(a.locations.find((l) => l.key === 'K')!.rest).toEqual(['__proto__']);
+	});
+
 	it('nearest breaks a tie of hops by name, then id, and walks only downstream', () => {
 		const renamed = NODES.map((n) => (n.id === 'K' ? { ...n, name: 'Zulu weir' } : n));
 		const a = resolveLocations(renamed, mergeSettings({ calibrateAtOutlet: false, calibrationZones: ROWS, calibrationRest: 'nearest' } as ModelInput['settings'], [], renamed), P, [])!;
