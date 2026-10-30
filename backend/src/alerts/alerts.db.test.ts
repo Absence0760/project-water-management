@@ -630,6 +630,42 @@ describe('scheduled checks: data going stale, failing feeds', () => {
 	});
 });
 
+describe('scheduled checks: an EWR forecast going out of date (287)', () => {
+	it('the tick checks a project whose only alert is the EWR forecast one, so a firing alert clears once its forecast’s days have passed (positive control: none while it is off)', async () => {
+		const { id: pid, runId } = await makeProject(owner, 'Forecast passes');
+		const setForecast = (to: string) =>
+			asOwner(`UPDATE model_run SET trigger = 'forecast', summary = jsonb_set(summary, '{forecast}', $2::jsonb) WHERE id = $1`, [
+				runId,
+				JSON.stringify({ from: '2026-01-01', to, days: 14, outletEwrDaysAtRisk: 5, perFarm: [] })
+			]);
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold, created_by) VALUES ($1, 'ewr_forecast_fail', 3, $2) RETURNING id`, [pid, owner.id]);
+		await setForecast('2999-12-31');
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		const state = async () => (await asOwner(`SELECT state FROM alert_event WHERE rule_id = $1`, [rule.id])).map((r) => r.state);
+		expect(await state()).toEqual(['firing']);
+		// No forecast run since (the forecast feed stopped), and its days have passed.
+		await setForecast('2026-01-14');
+		const since = (await asOwner('SELECT now() AS t'))[0].t;
+		const schedule = () => withoutUser(async (db) => (await db.query("SELECT app_alert_schedule(NULL, interval '0', 1000)")).rows);
+		const queued = async () => (await asOwner(`SELECT project_id FROM job WHERE kind = 'alert_eval' AND status = 'queued' AND created_at >= $1`, [since])).map((r) => r.project_id);
+		// The tick's call checks every project with a scheduled kind on; others' checks aren't this test's.
+		const dropOthers = () => asOwner(`DELETE FROM job WHERE kind = 'alert_eval' AND status = 'queued' AND created_at >= $1 AND project_id <> $2`, [since, pid]);
+		// Positive control: switched off, it isn't checked.
+		await asOwner('UPDATE alert_rule SET enabled = false WHERE id = $1', [rule.id]);
+		await schedule();
+		expect(await queued()).not.toContain(pid);
+		await dropOthers();
+		await asOwner('UPDATE alert_rule SET enabled = true WHERE id = $1', [rule.id]);
+		await schedule();
+		expect(await queued()).toContain(pid);
+		await dropOthers();
+		await tick();
+		expect(await state()).toEqual(['cleared']);
+		await settlePendingNotices(pid);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+});
+
 describe('per-feed staleness levels (057 feed_id)', () => {
 	/** A feed whose newest day is `ago` days old (as the schema owner: the feed's health is not what's under test). */
 	const feed = async (pid: string, source: 'dws' | 'chirps', name: string, ago: number, enabled = true) =>
