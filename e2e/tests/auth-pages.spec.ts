@@ -237,10 +237,24 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 800
 				await agree.focus();
 				await page.keyboard.press('Shift+Tab');
 				await expect(box).toBeFocused();
-				await page.keyboard.press('ArrowDown');
-				await expect.poll(() => box.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-				await page.keyboard.press('End');
-				await expect.poll(() => box.evaluate((el) => Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight)).toBe(true);
+				// Chromium animates a keyboard scroll, and an End pressed while the arrow's animation is still running can be dropped
+				// (the box stayed one step down). `scrollend` is the real signal that a scroll has finished: wait for it between the keys.
+				// The listener is installed (awaited) before the key goes, and the flag set by it is polled.
+				const scrollEnded = async (key: string) => {
+					await box.evaluate((el) => {
+						(el as HTMLElement & { ended?: boolean }).ended = false;
+						el.addEventListener('scrollend', () => ((el as HTMLElement & { ended?: boolean }).ended = true), { once: true });
+					});
+					await page.keyboard.press(key);
+					await expect.poll(() => box.evaluate((el) => (el as HTMLElement & { ended?: boolean }).ended), { message: `scrollend after ${key}` }).toBe(true);
+				};
+				await scrollEnded('ArrowDown');
+				expect(await box.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+				await scrollEnded('End');
+				// The box's height is fractional (83.03 px) while clientHeight, scrollTop and scrollHeight are each rounded to whole pixels, so
+				// "at the end" can read 1 px short (305 + 83 = 388 of 389) with the last line fully in view. One pixel is the component's own
+				// test for "more below" (TermsSummary `measure`), so use it here: the fade assertion below checks the two agree.
+				await expect.poll(() => box.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThanOrEqual(1);
 				await expect(fade).not.toHaveClass(/\bmore\b/);
 				await expectNoViolations(page);
 			});
