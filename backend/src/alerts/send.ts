@@ -15,7 +15,8 @@
 // Each mail is built in a transaction *as its recipient* (withUser), under
 // RLS: their access is checked again now (app_alert_my_mode: a member removed
 // since the event, or who turned the alert off, gets nothing; nor does an
-// address SES has suppressed since, mail/suppression.ts), and the mail
+// address SES has suppressed since, mail/suppression.ts; nor anyone, once an
+// editor has switched the event's rule off: RULE_OFF), and the mail
 // can only say what they may read, so a farmer's names their own farm and
 // nothing of a neighbour's. The mail goes out after that transaction, and the
 // outcome is recorded in the worker's own context (app_alert_finish). A
@@ -79,6 +80,7 @@ interface EventRow {
 	detail: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 	node_id: string | null;
 	threshold: number;
+	enabled: boolean;
 }
 
 /**
@@ -160,18 +162,26 @@ async function context(db: Db, projectId: string): Promise<Context | string> {
 	return { recipient: { email: r.email, locale: r.locale, farmer: r.role === 'farmer' }, role: r.role, project: { id: projectId, name: r.name, timeZone: r.time_zone ?? DEFAULT_TIME_ZONE } };
 }
 
+/**
+ * Why a delivery goes unsent when an editor switched its rule off after the
+ * event opened (a digest line waiting for 06:00, an immediate mail over the
+ * cap): "nothing is sent" for a rule that is off, as the rule editor says.
+ */
+export const RULE_OFF = 'the catchment switched this alert off';
+
 /** One event as the recipient may read it, or why not. */
 async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 	const { rows: mode } = await db.query<{ mode: AlertMode | null }>('SELECT app_alert_my_mode($1, $2, $3) AS mode', [c.project_id, c.kind, c.node_id]);
 	if (!mode[0]?.mode) return 'no longer gets this alert';
 	if (mode[0].mode === 'off') return 'turned this alert off';
 	const { rows } = await db.query<EventRow>(
-		`SELECT e.id, e.kind, e.state, e.value, e.detail, e.node_id, r.threshold
+		`SELECT e.id, e.kind, e.state, e.value, e.detail, e.node_id, r.threshold, r.enabled
 		 FROM alert_event e JOIN alert_rule r ON r.id = e.rule_id WHERE e.id = $1`,
 		[c.event_id]
 	);
 	const e = rows[0];
 	if (!e) return 'cannot see this alert';
+	if (!e.enabled) return RULE_OFF;
 	const d = e.detail;
 	switch (e.kind) {
 		case 'dam_below': {
@@ -353,8 +363,11 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
  */
 async function countable(db: Db, lines: Claimed[]): Promise<{ counted: Claimed[]; skipped: { c: Claimed; why: string }[] }> {
 	if (!lines.length) return { counted: [], skipped: [] };
-	const { rows: visible } = await db.query<{ id: string }>('SELECT id FROM alert_event WHERE id = ANY($1::uuid[])', [lines.map((c) => c.event_id)]);
-	const seen = new Set(visible.map((v) => v.id));
+	const { rows: visible } = await db.query<{ id: string; enabled: boolean }>(
+		'SELECT e.id, r.enabled FROM alert_event e JOIN alert_rule r ON r.id = e.rule_id WHERE e.id = ANY($1::uuid[])',
+		[lines.map((c) => c.event_id)]
+	);
+	const seen = new Map(visible.map((v) => [v.id, v.enabled]));
 	const modes = new Map<string, AlertMode | null>();
 	const counted: Claimed[] = [];
 	const skipped: { c: Claimed; why: string }[] = [];
@@ -367,6 +380,7 @@ async function countable(db: Db, lines: Claimed[]): Promise<{ counted: Claimed[]
 		const mode = modes.get(key);
 		if (!mode || mode === 'off') skipped.push({ c, why: mode ? 'turned this alert off' : 'no longer gets this alert' });
 		else if (!seen.has(c.event_id)) skipped.push({ c, why: 'cannot see this alert' });
+		else if (!seen.get(c.event_id)) skipped.push({ c, why: RULE_OFF });
 		else counted.push(c);
 	}
 	return { counted, skipped };

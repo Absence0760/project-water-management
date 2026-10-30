@@ -68,7 +68,6 @@ interface RuleRow {
 	threshold: number;
 	enabled: boolean;
 	event_id: string | null;
-	event_value: number | null;
 }
 
 interface Observation {
@@ -233,7 +232,7 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 	await ensureFeedRules(db, projectId);
 	await ensureSeriesRules(db, projectId);
 	const { rows: rules } = await db.query<RuleRow>(
-		`SELECT r.id, r.kind, r.node_id, r.feed_id, r.series_id, r.threshold, r.enabled, e.id AS event_id, e.value AS event_value
+		`SELECT r.id, r.kind, r.node_id, r.feed_id, r.series_id, r.threshold, r.enabled, e.id AS event_id
 		 FROM alert_rule r LEFT JOIN alert_event e ON e.rule_id = r.id AND e.state = 'firing'
 		 WHERE r.project_id = $1 ORDER BY r.kind, r.node_id, r.feed_id, r.series_id`,
 		[projectId]
@@ -418,9 +417,16 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 		const s = step(r.event_id !== null, r.kind, r.threshold, o.value);
 		if (s === 'open') await open(r, o);
 		else if (s === 'clear') await clear(r.event_id!);
-		else if (r.event_id && o.value !== null && o.value !== r.event_value) {
-			// Still firing: the event follows the figure, for the pages that show it (no new mail).
-			await db.query('UPDATE alert_event SET value = $2, detail = $3 WHERE id = $1', [r.event_id, o.value, JSON.stringify(o.detail)]);
+		else if (r.event_id && o.value !== null) {
+			// Still firing: the event follows the figure and what it says (which feeds fail, the
+			// dam's date, the forecast's days), for the pages and mails that show it (no new mail).
+			// The detail can change while the value doesn't: another feed starts failing below the
+			// worst one's count, a new publication puts the dam at the same level on a later day.
+			await db.query('UPDATE alert_event SET value = $2, detail = $3 WHERE id = $1 AND (value IS DISTINCT FROM $2 OR detail IS DISTINCT FROM $3::jsonb)', [
+				r.event_id,
+				o.value,
+				JSON.stringify(o.detail)
+			]);
 		}
 	}
 	return out;

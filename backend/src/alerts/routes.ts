@@ -270,7 +270,9 @@ export const RulesBody = z
 						const t = THRESHOLD[r.kind].safeParse(r.threshold);
 						if (!t.success) ctx.addIssue({ code: 'custom', path: ['threshold'], message: `not a threshold for ${r.kind}` });
 						if ((r.kind === 'dam_below') !== !!r.nodeId) ctx.addIssue({ code: 'custom', path: ['nodeId'], message: 'a dam alert names its farm; no other kind does' });
-						if ((r.kind === 'data_stale') !== (!!r.feedId !== !!r.seriesId))
+						// data_stale: exactly one of the two; every other kind: neither (both at once on
+						// another kind would pass a one-of test and reach the table's checks as a 409).
+						if (r.kind === 'data_stale' ? !!r.feedId === !!r.seriesId : !!r.feedId || !!r.seriesId)
 							ctx.addIssue({ code: 'custom', path: ['feedId'], message: 'a data alert names its feed or its series (not both); no other kind does' });
 					})
 			)
@@ -436,6 +438,13 @@ export const alertProjectRoutes = new Hono<AuthEnv>()
 					[id, r.kind, nodeId, feedId, seriesId, r.threshold, r.enabled]
 				);
 			}
+			// A rule switched off stops firing now, not at the next evaluation: with every rule off
+			// none is queued (alerts are opt-in, queueAlertEval), and nothing else would clear it.
+			await db.query(
+				`UPDATE alert_event e SET state = 'cleared' FROM alert_rule r
+				 WHERE r.id = e.rule_id AND r.project_id = $1 AND NOT r.enabled AND e.state = 'firing'`,
+				[id]
+			);
 			const kinds = [...new Set(body.rules.map((r) => r.kind))];
 			await recordAudit(db, id, 'alert_rules.changed', {
 				rules: body.rules.length,
