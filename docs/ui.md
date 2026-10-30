@@ -11654,7 +11654,9 @@ to look into first** (`foldList` from `common/fold.ts`, so six rows show
 whole). A `unit=` link to a unit further down keeps its rows (both sources)
 after the five, so a shared link shows its row on the first screen.
 
-**The picked hydrological unit** (`unit=`, else the first row) sits beside the list: its
+**The picked hydrological unit** (`unit=`, else the first row; a `unit=` the run's list
+doesn't have shows the first row with a note, "That hydrological unit isn't in this
+run, so this shows …", as a deleted `run=` does) sits beside the list: its
 name with links to it **On the Network** and in **Hydrological units**; a bar per
 water year and source under the caption "Modelled use per water year
 (October–September), m³" (modelled use, amber above registered, green within

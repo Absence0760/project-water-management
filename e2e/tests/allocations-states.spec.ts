@@ -1,6 +1,7 @@
 // The Allocations page's states between actions (docs/ui.md § Allocations, ux-hunt 2026-10-30): what the page shows
 // while another run's comparison loads or after it failed, where the focus goes when a registered volume or an
-// import is removed, and what the "What viewers see" switch shows when saving it failed. Synthetic data only.
+// import is removed, and what the "What viewers see" switch shows when saving it failed,
+// and a `unit=` link to a unit not on the run's list. Synthetic data only.
 import type { Page, Route } from '@playwright/test';
 import { addAllocation, compareCard, openAllocations, volumesCard } from '../support/allocations.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
@@ -112,4 +113,35 @@ test('a failed "What viewers see" save says so as an error and leaves the switch
 	await expect(page.getByRole('status').filter({ hasText: 'Viewers now see each farm’s registered volumes.' })).toBeVisible();
 	await expect(page.getByRole('alert').filter({ hasText: 'Settings store unavailable' })).toHaveCount(0);
 	await expect(sw).toBeChecked();
+});
+
+test('a unit link to a unit not on the run’s list says so, like a run link to a deleted run, and picking a unit clears it', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Allocations stale unit');
+	const upper = project.model.nodes[1]!;
+	await addAllocation(page.request, project.id, { nodeId: upper.id as string, registrationNo: 'SU-1', authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 40_000 });
+	await createRun(page.request, project.id, 'Stale unit');
+	const note = page.getByRole('note').filter({ hasText: 'That hydrological unit isn’t in this run' });
+
+	// Positive control: a link to a unit on the list picks it, with no note.
+	await openAllocations(page, project.id, `&unit=${upper.id as string}`);
+	await expect(compareCard(page)).toBeVisible();
+	await expect(detail(page).getByRole('heading', { level: 2 })).toHaveText(upper.name as string);
+	await expect(note).toHaveCount(0);
+
+	// A unit the run doesn't have: the first on the list is shown, and the note names it.
+	await openAllocations(page, project.id, '&unit=00000000-0000-0000-0000-000000000000');
+	await expect(compareCard(page)).toBeVisible();
+	const first = compareCard(page).getByRole('listitem').first().getByRole('link');
+	const firstName = (await first.textContent())!.trim();
+	await expect(detail(page).getByRole('heading', { level: 2 })).toHaveText(firstName);
+	await expect(note).toHaveText(`That hydrological unit isn’t in this run, so this shows ${firstName}.`);
+	await expect(page.getByTestId('allocation-compare')).toContainText('Run “Stale unit”');
+
+	// Picking a unit replaces the dead id in the address, and the note goes.
+	await first.click();
+	await expect(page).not.toHaveURL(/unit=00000000-/);
+	await expect(page).toHaveURL(/[?&]unit=[0-9a-f-]{36}/);
+	await expect(note).toHaveCount(0);
 });
