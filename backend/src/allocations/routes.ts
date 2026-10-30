@@ -67,7 +67,8 @@ const volume = z.number().finite().min(0).lt(1e12);
  */
 const FIELDS = {
 	nodeId: z.string().uuid().nullable(),
-	registrationNo: text(103),
+	/** allocation.registration_no's CHECK (038) and the import's parser allow 100. */
+	registrationNo: text(100),
 	propertyRef: text(200),
 	/** The registered user's name; '' = none. Editors only (D3). */
 	holder: text(200),
