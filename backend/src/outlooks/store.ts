@@ -616,12 +616,13 @@ type ForecastInputs = { inputs: C3sInputs } | { problem: string };
 
 /**
  * The forecast area (outlooks/c3s.ts forecastArea: the catchment boundary,
- * else the units' polygons; each unit's own under per-unit rain, §2.4h) and
+ * else the units' polygons; each unit's own, §2.4h) and
  * the copy's forecasts issued by the decision date with their hindcasts. A
  * copy laid out otherwise fails the job (MirrorFormatError, no retry).
  */
 async function readForecastInputs(db: Db, projectId: string, raw: ModelInput, decisionDate: string, progress: (pct: number) => Promise<boolean>): Promise<ForecastInputs> {
-	const area: ForecastArea | { problem: string } = await forecastArea(db, projectId, raw.settings.unitRain?.mode === 'perUnit');
+	// Each unit's own cells (Per unit, the only flow generation method since engine 1.109.0, issue #658).
+	const area: ForecastArea | { problem: string } = await forecastArea(db, projectId, true);
 	if ('problem' in area) return { problem: area.problem };
 	// A heartbeat after each system's reads (0 %: no member has run yet), so reading the copy keeps the lease; a lost lease stops here.
 	const onSystem = async () => {

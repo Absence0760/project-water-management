@@ -122,7 +122,7 @@ describe('GET …/runs/:runId/reproduce', () => {
 		expect((plain.warnings as string[]).some((w) => w.startsWith('the run read the CHIRPS series'))).toBe(false);
 	});
 
-	it('under per-unit rain, warns when a land unit’s own CHIRPS is shadowed by a longer series of that unit, naming the unit, and reproduces it', async () => {
+	it('warns when a land unit’s own CHIRPS is shadowed by a longer series of that unit, naming the unit, and reproduces it', async () => {
 		const u = await signUp('ReproUnitChirps');
 		const p = await importProjectData(small, u.email);
 		const rain = small.series.find((x) => x.kind === 'rain_catchment_mm')!;
@@ -137,10 +137,7 @@ describe('GET …/runs/:runId/reproduce', () => {
 		await put('B long own', rain.startDate, rain.values.map(() => 1));
 		const stored = async (run: string) =>
 			(await asOwner(`SELECT summary->'warnings' AS warnings, inputs->'seriesChoice' AS choice FROM model_run WHERE id = $1`, [run]))[0] as { warnings: string[]; choice: unknown };
-		// Unit rain off: the run reads no unit's own CHIRPS, so the choice is recorded but nothing is said (the positive control below).
-		const off = await stored(await newRun(u, p, 'unit rain off'));
-		expect(off.warnings.some((w) => w.startsWith('for the unit'))).toBe(false);
-		expect((await u.call('PATCH', `/projects/${p}`, { settings: { unitRain: { mode: 'perUnit' } } })).status).toBe(200);
+		// No unitRain stored: Per unit all the same (Fragmentation is retired, issue #658), so the unit's own CHIRPS is read.
 		const r = await newRun(u, p, 'unit CHIRPS');
 		const row = await stored(r);
 		expect(row.choice).toEqual({ unitChirps: { [unit.id]: { name: 'A short own', others: [{ name: 'B long own', firstDay: rain.startDate, lastDay: expect.any(String) }] } } });

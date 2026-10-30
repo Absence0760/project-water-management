@@ -708,9 +708,11 @@ const ArealRain = z
 	.strict();
 
 /**
- * settings.unitRain (issue #482, docs/model.md §2.4h): whether each land unit
- * runs GR4J on its own rain (`perUnit`) or the catchment's (`catchment`,
- * like absent or null), the catchment gauge's own MAP with its source, the
+ * settings.unitRain (issue #482, docs/model.md §2.4h): each land unit runs
+ * GR4J on its own rain (`perUnit`, the only flow generation method since
+ * engine 1.109.0, issue #658: the retired `catchment`, Fragmentation, is
+ * still read, as an older export or client may send it, and stored as
+ * `perUnit`, as the engine runs it), the catchment gauge's own MAP with its source, the
  * period a unit's CHIRPS MAP factor is computed over (null/absent = 1991–2020),
  * and the reference gauge and unit whose monthly factors level every unit's
  * CHIRPS (engine ≥ 1.80.0, issue #500; null/absent = none).
@@ -731,7 +733,8 @@ export const UnitRain = z
 	.superRefine((v, ctx) => {
 		const err = unitRainError(v);
 		if (err) ctx.addIssue({ code: 'custom', message: `unit rain: ${err}` });
-	});
+	})
+	.transform((v) => ({ ...v, mode: 'perUnit' as const }));
 
 /**
  * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23, docs/model.md §2.4b

@@ -156,7 +156,7 @@ class Variants(unittest.TestCase):
             self.extract_all()
 
     def test_the_fragmentation_method_is_noted_unless_it_is_area(self):
-        # Issue #616: the app splits the flow by each unit's natural MAR, so any method but Area is noted as not used.
+        # Issues #616, #658: each unit makes its own runoff, so any method but Area is noted as not used.
         for method, noted in (("Area", False), ("Hi/Lo", True), ("Specific", True), ("Equal shares", True)):
             with self.subTest(method=method), unittest.mock.patch.object(gen, "FRAGMENTATION_METHOD", method):
                 project, expected, notes = self.extract_all()
