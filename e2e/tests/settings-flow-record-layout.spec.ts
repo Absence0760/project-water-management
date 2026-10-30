@@ -81,29 +81,22 @@ test('at 1440×900 Flow calibration opens on its parameters, and its folds open 
 	await expect(page.locator('#set-demand').getByLabel(/^Rain threshold for demand/)).toHaveValue('2');
 });
 
-test('with the explanations on, the model selection’s explanation sits on its own line under its two method cards', async ({ page, owner }) => {
+test('with the explanations on, Flow generation’s explanation sits on its own line under the method’s words', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const project = await openProject(page, 'Flow explain');
-	// The model selection for flow generation is on Model settings.
+	// Flow generation is on Model settings; Per unit is its only method (issue #658), said on one line.
 	await openSettings(page, project.id);
 	await showExplanations(page);
 	const method = page.getByTestId('flowgen-method');
-	const first = await box(method.locator('.opt').first());
-	const second = await box(method.locator('.opt').nth(1));
-	// The two methods side by side as choice cards at 1440 (issue #614), each with its plain words under its name
-	// (settings-model-layout.spec.ts checks the words themselves).
-	expect(Math.abs(second.y - first.y)).toBeLessThanOrEqual(1);
-	expect(second.x).toBeGreaterThanOrEqual(first.x + first.width);
-	for (const i of [0, 1]) {
-		const name = await box(method.locator('label.check').nth(i));
-		const words = await box(method.getByTestId('flowgen-what').nth(i));
-		expect(words.y).toBeGreaterThanOrEqual(name.y + name.height - 8);
-	}
-	// The explanation on its own line under both cards, lined up with the first.
+	const name = await box(method.locator('strong'));
+	const words = await box(method.getByTestId('flowgen-what'));
+	// The method's plain words on its name's line (settings-model-layout.spec.ts checks the words themselves).
+	expect(Math.abs(words.y - name.y)).toBeLessThanOrEqual(4);
+	// The explanation on its own line under them, lined up with the name.
 	const hint = await box(method.locator('.hint.explain'));
-	expect(hint.y).toBeGreaterThanOrEqual(Math.max(first.y + first.height, second.y + second.height) - 1);
-	expect(Math.abs(hint.x - first.x)).toBeLessThanOrEqual(1);
+	expect(hint.y).toBeGreaterThanOrEqual(words.y + words.height - 1);
+	expect(Math.abs(hint.x - name.x)).toBeLessThanOrEqual(1);
 });
 
 test('at 1440×900 the Calibration record opens on the window and the exclusions, with Exclude… in the list’s header row', async ({ page, owner }) => {

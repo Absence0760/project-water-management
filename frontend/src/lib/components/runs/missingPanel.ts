@@ -30,12 +30,12 @@ const NEEDS: Record<string, MissingPanel> = {
 		link: { href: '?tab=series', label: 'Data' }
 	},
 	'res-runoff': {
-		text: 'This run has no runoff model balance. It is shown for a conceptual runoff model (GR4J), chosen under Model selection for flow generation.',
-		link: { href: '?tab=settings#set-share', label: 'Model selection for flow generation' }
+		text: 'This run has no runoff model balance. It is shown for a conceptual runoff model (GR4J), chosen under Flow generation.',
+		link: { href: '?tab=settings#set-share', label: 'Flow generation' }
 	},
 	'res-unit-rain': {
-		text: 'This run has no rain for each unit. It needs Per unit flow generation, with rain for each unit or rainfall stations, set under Model selection for flow generation.',
-		link: { href: '?tab=settings#set-share', label: 'Model selection for flow generation' }
+		text: 'This run has no rain for each unit. It needs Per unit flow generation, with rain for each unit or rainfall stations, set under Flow generation.',
+		link: { href: '?tab=settings#set-share', label: 'Flow generation' }
 	},
 	'res-gap-rain': {
 		text: 'This run filled no rain gaps from another product. It needs ERA5-Land or IMERG Late chosen as the gap-filling product, under Rain gaps.',

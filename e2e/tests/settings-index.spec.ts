@@ -95,7 +95,7 @@ test('the index moves with the arrow keys, and a panel with a Save blocker is ma
 	await openSettings(page, project.id);
 	const menu = settingsMenu(page);
 	// The first link is the panel that heads the page (issue #614), the judge panel's next (issue #586 R4-B).
-	const first = menu.getByRole('link', { name: 'Model selection for flow generation', exact: true });
+	const first = menu.getByRole('link', { name: 'Flow generation', exact: true });
 	await first.focus();
 	await page.keyboard.press('ArrowDown');
 	await expect(menu.getByRole('link', { name: 'EWR the results are judged by', exact: true })).toBeFocused();

@@ -229,14 +229,11 @@ export function roleBadge(
 		calibrationSite: string | null;
 		/** The land units a rain series can be measured at (209_unit_rain_series): node id → name (issue #553). */
 		units?: ReadonlyMap<string, string>;
-		/** Per-unit rain is on (settings.unitRain `perUnit`): a unit's own rain is read for it. */
-		unitRainOn?: boolean;
 		/**
 		 * Where each rainfall station's rain goes, by series id (groups.ts stationUses, issue #553): the areas a run
-		 * reads it for, as their rain or their CHIRPS correction, and the units it is assigned to while per-unit rain
-		 * is off. The row's "Rain for …" line reads the same, so the two never disagree (issue #589).
+		 * reads it for, as their rain or their CHIRPS correction. The row's "Rain for …" line reads the same, so the two never disagree (issue #589).
 		 */
-		stationUses?: ReadonlyMap<string, { rainFor: readonly string[]; corrects: readonly string[]; idle?: readonly string[] }>;
+		stationUses?: ReadonlyMap<string, { rainFor: readonly string[]; corrects: readonly string[] }>;
 		/** settings.rainStations.catchment's station id: when it is one of the project's stations, it is the catchment rain, not the catchment rain series read by name (docs/model.md §2.4i). */
 		catchmentStationId?: string | null;
 	}
@@ -245,10 +242,9 @@ export function roleBadge(
 	if (!role) return null;
 	const unused = !ctx.inUse.has(s.id) && !ctx.gaugeInUse.has(s.id);
 	const kindRead = (k: string) => ctx.list.some((x) => x.kind === k && ctx.inUse.has(x.id));
-	// A unit's own rain (its CHIRPS feed, a migration-209 gauge): read for that unit under per-unit rain, not a gauge record.
+	// A unit's own rain (its CHIRPS feed, a migration-209 gauge): read for that unit (Per unit, the only method), not a gauge record.
 	const unit = s.siteNodeId ? ctx.units?.get(s.siteNodeId) : undefined;
-	if (unit !== undefined)
-		return ctx.unitRainOn ? { label: `${unit}’s own rain`, unused: false, why: null } : { label: 'Not used: per-unit rain is off', unused: true, why: null };
+	if (unit !== undefined) return { label: `${unit}’s own rain`, unused: false, why: null };
 	// A rainfall station (catchment rain at no site, issue #553): the catchment rain a run reads by name keeps its role;
 	// any other is read only for the areas settings.rainStations assigns it, as a run reads them (stationUses), and
 	// says so in station terms, never as a second catchment rain series (issue #589). Its row's line names the areas.
@@ -260,7 +256,6 @@ export function roleBadge(
 		if (ctx.inUse.has(s.id) && !catchmentStation) return { label: role.role, unused: false, why: null };
 		const uses = ctx.stationUses?.get(s.id);
 		if (uses && (uses.rainFor.length > 0 || uses.corrects.length > 0)) return { label: 'Rainfall station', unused: false, why: null };
-		if (uses?.idle?.length) return { label: 'Not used: per-unit rain is off', unused: true, why: null };
 		if (ctx.inUse.has(s.id)) return { label: 'Not used: the catchment runs on its station', unused: true, why: null };
 		return { label: 'Not used: no area is assigned to it', unused: true, why: null };
 	}

@@ -50,7 +50,7 @@ describe('zoneColouring (issue #555)', () => {
 		{ id: 'B', name: 'Farm B', kind: 'farm', downstreamNodeId: 'G', areaKm2: 60 },
 		{ id: 'U', name: 'Pump', kind: 'farm', downstreamNodeId: 'G', areaKm2: 0 }
 	] as NetworkNode[];
-	const groups = zoneGroups(nodes, { ...defaultProjectSettings(), unitRain: { mode: 'perUnit' } as never, calibrationZones: [{ ...newCalibrationZone('H'), enabled: true }] })!;
+	const groups = zoneGroups(nodes, { ...defaultProjectSettings(), calibrationZones: [{ ...newCalibrationZone('H'), enabled: true }] })!;
 
 	it('colours each unit by its zone, with the zone’s name as its label line, and a legend entry per zone', () => {
 		const c = zoneColouring(nodes, groups);

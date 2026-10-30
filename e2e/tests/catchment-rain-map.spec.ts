@@ -1,4 +1,4 @@
-// Model settings → Model selection for flow generation → The catchment's rainfall station → Catchment MAP (issue #612
+// Model settings → Flow generation → The catchment's rainfall station → Catchment MAP (issue #612
 // follow-up, docs/ui.md § Model settings, docs/model.md §2.4i). On the sample model with one invented rainfall station
 // (Ridge, MAP 600 mm) as the catchment's station:
 // - Blank, the field stands for the land units' area-weighted mean MAP.

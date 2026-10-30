@@ -1,10 +1,9 @@
-// Settings → Model selection for flow generation → Per unit → Units without a station (UnitRainFields.svelte,
-// issues #482 and #553 round 3), rendered with Svelte's server renderer: with
-// Fragmentation (settings.unitRain off) only its heading and line show; under
-// Per unit the coverage, the gauge MAP read from the catchment rain station
-// (issue #553) with a link to edit it, and the MAP period; a problem sits under
-// its field, named by aria-describedby. The switch is the flow generation
-// radio's (SettingsTab.svelte); the browser flow is pinned by
+// Settings → Flow generation → Units without a station (UnitRainFields.svelte,
+// issues #482 and #553 round 3), rendered with Svelte's server renderer: the
+// coverage, the gauge MAP read from the catchment rain station (issue #553)
+// with a link to edit it, and the MAP period; a problem sits under its field,
+// named by aria-describedby. There is no switch: Per unit is the only method
+// (issue #658). The browser flow is pinned by
 // e2e/tests/flow-generation.spec.ts and e2e/tests/unit-rain.spec.ts.
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -31,8 +30,8 @@ const nodes = [
 ];
 
 describe('UnitRainFields', () => {
-	it('has no switch of its own (the flow generation radio is), and shows its fields under Fragmentation too (issue #615)', () => {
-		// Fragmentation's EWR shares run on this setup, so a project that never set it (null) shows the defaults.
+	it('has no switch, and shows its fields on a project that never set it, or still holds the retired catchment (issue #658)', () => {
+		// Per unit is the only method: a project that never set it (null) shows Per unit's defaults.
 		const { body } = render(UnitRainFields, { props: { value: null, nodes } });
 		expect(body).toContain('Units without a station');
 		expect(body).not.toContain('type="checkbox"');

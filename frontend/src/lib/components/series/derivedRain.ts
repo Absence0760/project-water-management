@@ -1,6 +1,6 @@
 // An area's rain under its rainfall station, for the Data tab (issue #553
 // round 5, docs/ui.md § Data, docs/model.md §2.4i): the lines behind the rain
-// a run reads for the catchment (Fragmentation's average catchment rainfall)
+// a run reads for the catchment (the average catchment rainfall)
 // or a land unit (per-unit rain): the station as recorded, the station × the
 // MAP ratio, the area's CHIRPS as stored and corrected by the pairing's
 // monthly factors, and the rain used with each day's source.

@@ -6,8 +6,8 @@
 	(settings.calibrationZones[].enabled) gives the land units draining to it
 	their own GR4J parameters, fitted on its record; its fold holds the row's
 	window, record, exclusions and suspect-day rule. The site's own row is the
-	form's fields above, always ticked. Only under Per unit flow generation:
-	under Fragmentation the ticks are disabled, with a note. Bind `zones`;
+	form's fields above, always ticked. Per unit flow generation is the only
+	method (issue #658), so every gauge can be ticked. Bind `zones`;
 	`error` is the first row whose window can't be saved.
 -->
 <script lang="ts">
@@ -29,7 +29,6 @@
 		siteNodeId,
 		siteName,
 		siteKind,
-		perUnit,
 		readonly
 	}: {
 		/** settings.calibrationZones; undefined on settings saved before it (none). */
@@ -44,8 +43,6 @@
 		siteName: string;
 		/** The record the site's own zone fits (settings.calibrationFlowKind). */
 		siteKind: CalibrationFlowKind | null;
-		/** Per unit flow generation (settings.unitRain perUnit): the only method zones apply under. */
-		perUnit: boolean;
 		readonly: boolean;
 	} = $props();
 
@@ -96,12 +93,7 @@
 		A ticked gauge gives the land units draining to it their own GR4J parameters, fitted on its record before the zones below it; the
 		calibration site fits the rest. Unticked, a gauge’s record stays a check and its units join the next ticked site downstream.
 	</p>
-	{#if !perUnit}
-		<p class="alert alert-info small" data-testid="calibration-zones-fragmentation">
-			Calibrating at several gauges needs Per unit flow generation: under Fragmentation one GR4J runs for the whole catchment. Switch
-			<a href="?tab=settings#set-share">Model selection for flow generation</a> (Model settings) to Per unit to tick a gauge.
-		</p>
-	{:else if ticked}
+	{#if ticked}
 		<p class="hint" data-testid="calibration-zones-ticked">Fit automatically fits {ticked + 1} zones, upstream first.</p>
 	{/if}
 	<div class="table-wrap">
@@ -130,7 +122,7 @@
 								<input
 									type="checkbox"
 									checked={!!r.zone?.enabled}
-									disabled={readonly || !perUnit}
+									disabled={readonly}
 									onchange={(e) => tick(r.site.nodeId, e.currentTarget.checked)}
 									aria-label="Calibrate here: {r.site.name}"
 								/>

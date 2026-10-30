@@ -21,7 +21,7 @@ import { headerControl } from '../support/sectionHeader.ts';
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const SETTINGS_INDEX: [string | null, string[]][] = [
 	// The two panels that head the page, in a group with no name (issue #614; issue #586 R4-B).
-	[null, ['Model selection for flow generation', 'EWR the results are judged by']],
+	[null, ['Flow generation', 'EWR the results are judged by']],
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
@@ -59,10 +59,10 @@ test('Model settings’ header points at Calibration for the fit, and its side i
 	}
 
 	// A link lands on its panel, at the top of the window beside the index, and the index marks it.
-	await menu.getByRole('link', { name: 'Model selection for flow generation' }).click();
+	await menu.getByRole('link', { name: 'Flow generation' }).click();
 	await expect(page).toHaveURL(/\?tab=settings#set-share$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Model selection for flow generation' })).toBeInViewport();
-	await expect(menu.getByRole('link', { name: 'Model selection for flow generation' })).toHaveAttribute('aria-current', 'location');
+	await expect(page.getByRole('heading', { level: 2, name: 'Flow generation' })).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Flow generation' })).toHaveAttribute('aria-current', 'location');
 	await expect(menu).toBeInViewport();
 
 	// The last panel has its own link.
@@ -424,12 +424,11 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 
 	// Model settings' panels.
 	await openSettings(page, project.id);
-	// Model selection for flow generation (issue #553 round 3, issue #614): Fragmentation by default, its cards the Per
-	// unit setup (shown under both methods, issue #615: it makes each unit's natural MAR share), the catchment's station
-	// first (issue #612), then the flow share (issue #616). MAP from the grid is lazy: wait for it.
+	// Flow generation (issue #553 round 3, issue #614): Per unit, its only method (issue #658), its cards the Per
+	// unit setup, the catchment's station first (issue #612), then the flow share (issue #616). MAP from the grid is lazy: wait for it.
 	await expect(page.locator('#set-share').getByRole('heading', { name: 'MAP from the grid' })).toBeVisible();
 	expect(await names('set-share')).toEqual([
-		'Model selection for flow generation',
+		'Flow generation',
 		'The catchment’s rainfall station',
 		'Each unit’s rainfall station',
 		'MAP from the grid',

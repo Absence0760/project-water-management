@@ -1,11 +1,10 @@
 <!--
-	Settings → Model selection for flow generation → Per unit → Units without a station (settings.unitRain, issue #482, issue #553 round 3,
+	Settings → Flow generation → Units without a station (settings.unitRain, issue #482, issue #553 round 3,
 	docs/model.md §2.4h, docs/ui.md § Model settings): what a land unit with no rainfall station runs on, the
 	rule from before stations. The catchment rain gauge's MAP (a read-out of the catchment rain station's since issue
 	#553, edited in the Data tab's Series details), the MAP period the CHIRPS factors compare over, and the reference
 	gauge and unit whose monthly factors level every such unit's CHIRPS (issue #500, docs/model.md §2.4h *Reference
-	gauge*). The flow generation radio switches settings.unitRain between `perUnit` and `catchment` (SettingsTab.svelte);
-	this shows under both, since Fragmentation's EWR shares run on the same setup (issue #615). The parent works out `error` (unitRainProblem), which blocks Save; it shows under the field
+	gauge*). Per unit is the only flow generation method (issue #658), so every change writes `perUnit`. The parent works out `error` (unitRainProblem), which blocks Save; it shows under the field
 	it is fixed in. Its own chunk: the Settings tab chunk sits at its size ceiling.
 -->
 <script lang="ts">
@@ -26,6 +25,7 @@
 		withMapPeriodYears,
 		withReferenceGauge,
 		withReferenceUnit,
+		perUnitSetting,
 		type CatchmentStation
 	} from './unitRain';
 
@@ -44,9 +44,9 @@
 	} = $props();
 
 	const uid = $props.id();
-	// Shown under both methods (issue #615): under Fragmentation it sets only the unit shares' runs (#616), and a project that
-	// never set it reads as Fragmentation's bare setting until a field is changed.
-	const cur = $derived<UnitRainSettings>(value ?? { mode: 'catchment' });
+	// Per unit (issue #658): a project that never set it, or still holds Fragmentation's retired `catchment`, reads as
+	// Per unit's defaults, and its first change stores `perUnit`.
+	const cur = $derived<UnitRainSettings>(perUnitSetting(value));
 	const problem = $derived(unitRainProblem(value));
 	const years = $derived(mapPeriodYears(cur));
 	const note = $derived(mapPeriodNote(cur));

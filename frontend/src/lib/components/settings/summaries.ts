@@ -121,19 +121,18 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
-		// Model selection for flow generation (issue #553 round 3): the method, the units on a station (the Per unit setup,
-		// which Fragmentation's shares read too, issue #615), and what each unit's natural MAR share splits (one share per
-		// unit since the flow-share methods went, issue #616).
+		// Flow generation (issue #553 round 3): the method (Per unit, the only one since issue #658), the
+		// units on a station, and what each unit's natural MAR share splits (one share per unit since the flow-share methods
+		// went, issue #616).
 		'set-share': [
-			s.unitRain?.mode === 'perUnit' ? 'Per unit' : 'Fragmentation',
+			'Per unit',
 			// The catchment's station (issue #612 follow-up): said only when set, since most projects run on the rain series.
 			s.rainStations?.catchment ? 'catchment rain from a station' : null,
 			(() => {
 				const n = Object.keys(s.rainStations?.units ?? {}).length;
-				// Under Fragmentation said only when a unit has one: a new project has none and needs no word of it.
-				return n ? `${plural(n, 'unit')} on a rainfall station` : s.unitRain?.mode === 'perUnit' ? 'no unit on a rainfall station' : null;
+				return n ? `${plural(n, 'unit')} on a rainfall station` : 'no unit on a rainfall station';
 			})(),
-			s.unitRain?.mode === 'perUnit' ? 'EWR by each unit’s natural MAR' : 'flow and EWR by each unit’s natural MAR'
+			'EWR by each unit’s natural MAR'
 		]
 			.filter(Boolean)
 			.join(' · '),

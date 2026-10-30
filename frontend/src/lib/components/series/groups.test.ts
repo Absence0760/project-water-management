@@ -35,20 +35,21 @@ describe('groupSeries', () => {
 		expect(groups.map((g) => [g.title, g.items.map((i) => i.id)])).toEqual([
 			['Rainfall stations', ['Bergwater', 'Kloof']],
 			['Catchment rainfall', ['chirps', 'forecast']],
-			['Hydrological units', [unitItemId('A')]],
+			// Every land unit is listed, B with no series of its own too: each runs on its own rain (Per unit, issue #658).
+			['Hydrological units', [unitItemId('A'), unitItemId('B')]],
 			['Flow records', ['flow', 'weir']],
 			['Other inputs', ['evap']]
 		]);
 		const unit = groups[2]!.items[0]!;
 		expect(unit.type === 'unit' && unit.series.map((s) => s.id)).toEqual(['chirpsA']);
-		expect(groupSeries([ser('flow', 'flow_observed_m3s')], NODES, null).map((g) => g.id)).toEqual(['flow']);
+		// The units group stays with the units even when they hold no series yet: their chain rows are their rain.
+		expect(groupSeries([ser('flow', 'flow_observed_m3s')], NODES, null).map((g) => g.id)).toEqual(['units', 'flow']);
+		expect(groupSeries([ser('flow', 'flow_observed_m3s')], [], null).map((g) => g.id)).toEqual(['flow']);
 	});
 
-	it('with per-unit rain or a unit’s station every land unit is listed (never a node without land); the catchment’s station adds its row', () => {
-		const settings = { unitRain: { mode: 'perUnit' }, rainStations: { catchment: { stationId: 'Bergwater' } } } as unknown as ProjectSettings;
-		expect(listedUnits(NODES, settings, []).map((n) => n.id)).toEqual(['A', 'B']);
-		expect(listedUnits(NODES, { rainStations: { units: { B: { stationId: 'Kloof' } } } } as unknown as ProjectSettings, []).map((n) => n.id)).toEqual(['A', 'B']);
-		expect(listedUnits(NODES, null, []).map((n) => n.id)).toEqual([]);
+	it('lists every land unit, each on rain of its own under Per unit (issue #658; never a node without land); the catchment’s station adds its row', () => {
+		const settings = { rainStations: { catchment: { stationId: 'Bergwater' } } } as unknown as ProjectSettings;
+		expect(listedUnits(NODES).map((n) => n.id)).toEqual(['A', 'B']);
 		const groups = groupSeries(LIST, NODES, settings);
 		expect(groups.find((g) => g.id === 'catchment')!.items.map((i) => i.id)).toEqual(['area:catchment', 'chirps', 'forecast']);
 		expect(groups.find((g) => g.id === 'units')!.items.map((i) => i.id)).toEqual(['unit:A', 'unit:B']);
@@ -102,7 +103,7 @@ describe('stationUses', () => {
 			rainStations: { catchment: { stationId: 'Bergwater' }, units: { A: { stationId: 'Bergwater' }, B: { stationId: 'Kloof', correctAgainst: 'Bergwater' } } }
 		} as unknown as ProjectSettings;
 		const uses = stationUses('Bergwater', settings, NODES);
-		expect(uses).toEqual({ rainFor: ['the catchment', 'Unit A'], corrects: ['Unit B'], idle: [] });
+		expect(uses).toEqual({ rainFor: ['the catchment', 'Unit A'], corrects: ['Unit B'] });
 		expect(stationUsesText(uses)).toBe('Rain for the catchment and Unit A. Corrects the CHIRPS gaps of Unit B.');
 		expect(stationUsesText(stationUses('Kloof', settings, NODES))).toBe('Rain for Unit B.');
 		expect(stationUsesText(stationUses('Bergwater', null, NODES))).toBe('Not assigned to the catchment or a unit.');
@@ -112,17 +113,15 @@ describe('stationUses', () => {
 		expect(stationUsesText({ rainFor: ['A', 'B', 'C'], corrects: [] })).toBe('Rain for A, B and C.');
 	});
 
-	it('reads a unit’s assignment only under per-unit rain, and only for a land unit, as a run does (issue #589)', () => {
+	it('reads a unit’s assignment only for a land unit, as a run does (issue #589), whatever unitRain holds (Per unit only, issue #658)', () => {
 		const rainStations = { catchment: { stationId: 'Bergwater' }, units: { A: { stationId: 'Kloof' }, B: { stationId: 'Bergwater', correctAgainst: 'Kloof' }, gone: { stationId: 'Kloof' } } };
-		const fragmentation = { rainStations } as unknown as ProjectSettings;
-		// Fragmentation: the catchment's station is read; the units' assignments wait for per-unit rain.
-		expect(stationUses('Bergwater', fragmentation, NODES)).toEqual({ rainFor: ['the catchment'], corrects: [], idle: ['Unit B'] });
-		expect(stationUses('Kloof', fragmentation, NODES)).toEqual({ rainFor: [], corrects: [], idle: ['Unit A', 'Unit B'] });
-		expect(stationUsesText(stationUses('Kloof', fragmentation, NODES))).toBe('Assigned to Unit A and Unit B, read only under per-unit rain.');
-		expect(stationUsesText(stationUses('Bergwater', fragmentation, NODES))).toBe('Rain for the catchment. Assigned to Unit B, read only under per-unit rain.');
-		// Per unit: a unit no longer in the model ("gone") is not an area it serves.
-		const perUnit = { unitRain: { mode: 'perUnit' }, rainStations } as unknown as ProjectSettings;
-		expect(stationUses('Kloof', perUnit, NODES)).toEqual({ rainFor: ['Unit A'], corrects: ['Unit B'], idle: [] });
+		// A unit no longer in the model ("gone") is not an area it serves. A project still holding the retired `catchment`
+		// (or no unitRain) runs Per unit, so its units' assignments are read the same.
+		for (const unitRain of [undefined, { mode: 'catchment' }, { mode: 'perUnit' }]) {
+			const settings = { unitRain, rainStations } as unknown as ProjectSettings;
+			expect(stationUses('Kloof', settings, NODES)).toEqual({ rainFor: ['Unit A'], corrects: ['Unit B'] });
+			expect(stationUses('Bergwater', settings, NODES)).toEqual({ rainFor: ['the catchment', 'Unit B'], corrects: [] });
+		}
 	});
 });
 
@@ -157,14 +156,12 @@ describe('areaRowInfo and areaNames', () => {
 	});
 
 	it('a unit without a station says what its rain is instead, and offers its series only when it has some', () => {
-		expect(areaRowInfo(unitItem(), ctx({ unitRain: { mode: 'perUnit' } }))).toMatchObject({ sentence: 'No rainfall station assigned: its rain follows Model settings → Model selection for flow generation → Units without a station.', toggle: null });
-		const off = { rainStations: { units: { A: { stationId: 'Bergwater' } } } };
-		expect(areaRowInfo(unitItem([ser('x', 'rain_chirps_mm', { siteNodeId: 'A' })]), ctx(off))).toMatchObject({
-			sentence: 'Runs split the catchment’s flow by the flow share (per-unit rain is off); its station sets only the unit’s share of the EWR.',
-			toggle: 'its series'
-		});
-		expect(areaNames(unitItem(), ctx(off))).toBeNull();
-		expect(areaRowInfo(unitItem(), ctx(null)).sentence).toBe('Runs split the catchment’s flow by the flow share; this unit has no rain of its own, so its share of the EWR follows its area.');
+		// Per unit is the only method (issue #658): the same whatever unitRain holds.
+		const chain = 'No rainfall station assigned: its rain follows Model settings → Flow generation → Units without a station.';
+		for (const s of [{ unitRain: { mode: 'perUnit' } }, { unitRain: { mode: 'catchment' } }, null]) expect(areaRowInfo(unitItem(), ctx(s))).toMatchObject({ sentence: chain, toggle: null });
+		expect(areaRowInfo(unitItem([ser('x', 'rain_chirps_mm', { siteNodeId: 'A' })]), ctx(null))).toMatchObject({ sentence: chain, toggle: 'its series' });
+		// A unit's station is read without unitRain set.
+		expect(areaNames(unitItem(), ctx({ rainStations: { units: { A: { stationId: 'Bergwater' } } } }))?.stationName).toBe('Bergwater');
 		expect(areaRowInfo({ type: 'unit', id: 'unit:A', series: [], unit: { ...unitA, mapMm: null } as NetworkNode }, ctx(null)).map).toBe('No MAP');
 	});
 

@@ -53,20 +53,12 @@ export interface SeriesGroup<T> {
 export const unitItemId = (nodeId: string) => `unit:${nodeId}`;
 export const CATCHMENT_ITEM_ID = 'area:catchment';
 
-/** Whether a run gives the land units rain of their own: per-unit rain on, or a station assigned to a unit. */
-export const unitsHaveRain = (settings: ProjectSettings | null | undefined) =>
-	settings?.unitRain?.mode === 'perUnit' || Object.keys(settings?.rainStations?.units ?? {}).length > 0;
-
 /**
- * The land units the Hydrological units group lists, in the model's order:
- * every one when units have rain of their own (unitsHaveRain), else only
- * those a series is measured at.
+ * The land units the Hydrological units group lists, in the model's order: every one, since each runs on rain of its
+ * own (Per unit, the only flow generation method since issue #658).
  */
-export function listedUnits(nodes: readonly NetworkNode[], settings: ProjectSettings | null | undefined, list: readonly Meta[]): NetworkNode[] {
-	const land = nodes.filter(isLandUnit);
-	if (unitsHaveRain(settings)) return land;
-	const sited = new Set(list.map((s) => s.siteNodeId).filter((x): x is string => !!x));
-	return land.filter((n) => sited.has(n.id));
+export function listedUnits(nodes: readonly NetworkNode[]): NetworkNode[] {
+	return nodes.filter(isLandUnit);
 }
 
 /**
@@ -81,7 +73,7 @@ export function groupSeries<T extends Meta>(
 	/** The series behind (freshness.ts): a unit holding one comes first in its group, as a series behind does in its own. */
 	behind: ReadonlySet<string> = new Set()
 ): SeriesGroup<T>[] {
-	const units = listedUnits(nodes, settings, rows);
+	const units = listedUnits(nodes);
 	const unitIds = new Set(units.map((u) => u.id));
 	const items: Record<SeriesGroupId, GroupItem<T>[]> = { stations: [], catchment: [], units: [], flow: [], other: [] };
 	if (settings?.rainStations?.catchment?.stationId) items.catchment.push({ type: 'catchment', id: CATCHMENT_ITEM_ID });
@@ -163,10 +155,7 @@ export const catchmentMap = (settings: ProjectSettings | null | undefined, nodes
  * Which areas a station serves, as a run reads settings.rainStations
  * (docs/model.md §2.4i): the catchment and the units whose rain it is, and
  * those whose CHIRPS gaps it corrects without being their station. A unit's
- * assignment is read only under per-unit rain (settings.unitRain `perUnit`,
- * the engine's unitRain.ts) and only for a land unit of the model; units it
- * is assigned to while per-unit rain is off are `idle`, read by no run until
- * it is on. Unit names in the model's order. The row's line
+ * assignment is read only for a land unit of the model. Unit names in the model's order. The row's line
  * (stationUsesText) and its role badge (roles.ts roleBadge) both read this,
  * so they never disagree (issue #589).
  */
@@ -174,28 +163,20 @@ export function stationUses(stationId: string, settings: ProjectSettings | null 
 	const rs = settings?.rainStations;
 	const rainFor: string[] = [];
 	const corrects: string[] = [];
-	const idle: string[] = [];
-	const names = (a: RainStationAssignment | null | undefined) => !!a?.stationId && (a.stationId === stationId || a.correctAgainst === stationId);
 	const add = (a: RainStationAssignment | null | undefined, name: string) => {
 		if (!a?.stationId) return;
 		if (a.stationId === stationId) rainFor.push(name);
 		else if (a.correctAgainst === stationId) corrects.push(name);
 	};
 	add(rs?.catchment, 'the catchment');
-	for (const n of nodes.filter(isLandUnit)) {
-		const a = rs?.units?.[n.id];
-		if (perUnitOn(settings)) add(a, n.name);
-		else if (names(a)) idle.push(n.name);
-	}
-	return { rainFor, corrects, idle };
+	for (const n of nodes.filter(isLandUnit)) add(rs?.units?.[n.id], n.name);
+	return { rainFor, corrects };
 }
 
 /** Where a station's rain goes (stationUses). */
 export interface StationUses {
 	rainFor: string[];
 	corrects: string[];
-	/** Units it is assigned to (as their station or their CHIRPS correction) while per-unit rain is off: no run reads it there. */
-	idle: string[];
 }
 
 /** Whether a run reads the station for some area (stationUses): as its rain or its CHIRPS correction. */
@@ -211,14 +192,12 @@ const nameList = (xs: string[]) => {
 /**
  * A station row's line about where its rain goes: "Rain for the catchment and Unit A. Corrects the CHIRPS gaps of
  * Unit C." Past three areas the units are counted ("the catchment and 15 units"), so a row stays short whatever the
- * model's size; each unit's own row names its station. Units it is assigned to while per-unit rain is off are said
- * apart: "Assigned to Unit A, read only under per-unit rain."
+ * model's size; each unit's own row names its station.
  */
-export function stationUsesText(uses: { rainFor: string[]; corrects: string[]; idle?: string[] }): string {
+export function stationUsesText(uses: { rainFor: string[]; corrects: string[] }): string {
 	const parts: string[] = [];
 	if (uses.rainFor.length) parts.push(`Rain for ${nameList(uses.rainFor)}.`);
 	if (uses.corrects.length) parts.push(`Corrects the CHIRPS gaps of ${nameList(uses.corrects)}.`);
-	if (uses.idle?.length) parts.push(`Assigned to ${nameList(uses.idle)}, read only under per-unit rain.`);
 	return parts.length ? parts.join(' ') : 'Not assigned to the catchment or a unit.';
 }
 
@@ -236,13 +215,11 @@ export interface AreaContext {
 	catchmentChirps: boolean;
 }
 
-const perUnitOn = (settings: ProjectSettings | null | undefined) => settings?.unitRain?.mode === 'perUnit';
-
-/** The station a run reads for the area with the settings as saved, or null (a unit's only under per-unit rain). */
+/** The station a run reads for the area with the settings as saved, or null. */
 export function areaAssignment<T>(it: AreaItem<T>, settings: ProjectSettings | null | undefined): RainStationAssignment | null {
 	const rs = settings?.rainStations;
 	if (it.type === 'catchment') return rs?.catchment ?? null;
-	return perUnitOn(settings) ? (rs?.units?.[it.unit.id] ?? null) : null;
+	return rs?.units?.[it.unit.id] ?? null;
 }
 
 /** The names an open row's chart uses; null when no run reads a station for the area (nothing to draw). */
@@ -285,14 +262,9 @@ export function areaRowInfo(it: AreaItem<Pick<SeriesMeta, 'id' | 'kind' | 'name'
 	}
 	const u = it.unit;
 	const n = it.series.length;
-	const perUnit = perUnitOn(ctx.settings);
 	const sentence =
 		areaSentence({ name: u.name, mapMm: u.mapMm ?? null, catchment: false, hasChirps: it.series.some((s) => s.kind === 'rain_chirps_mm') }, a, ctx.stations) ??
-		(ctx.settings?.rainStations?.units?.[u.id] && !perUnit
-			? 'Runs split the catchment’s flow by the flow share (per-unit rain is off); its station sets only the unit’s share of the EWR.'
-			: perUnit
-				? 'No rainfall station assigned: its rain follows Model settings → Model selection for flow generation → Units without a station.'
-				: 'Runs split the catchment’s flow by the flow share; this unit has no rain of its own, so its share of the EWR follows its area.');
+		'No rainfall station assigned: its rain follows Model settings → Flow generation → Units without a station.';
 	return {
 		kind: 'Hydrological unit',
 		name: u.name,

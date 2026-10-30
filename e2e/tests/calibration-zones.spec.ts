@@ -1,7 +1,7 @@
 // Calibrating at several gauges, upstream units first (issue #555, engine
-// 1.106.0; docs/ui.md § Settings & calibration, docs/model.md §2.10n). Under
-// Fragmentation the gauge's Calibrate here tick is disabled with a note; under
-// Per unit it ticks, saves into settings.calibrationZones, and Fit
+// 1.106.0; docs/ui.md § Settings & calibration, docs/model.md §2.10n). Per unit
+// is the only flow generation method (issue #658), so a project that never set
+// settings.unitRain can tick a gauge at once: it ticks, saves into settings.calibrationZones, and Fit
 // automatically fits two steps (the weir's zone, then the outlet's) that Apply
 // writes as one. Names and numbers are invented.
 import { API_URL } from '../support/env.ts';
@@ -29,18 +29,13 @@ test('a ticked gauge fits its own zone first, then the outlet, and both apply', 
 	const rec = list.find((s) => s.name === 'Weir record')!;
 	expect((await page.request.patch(`${API_URL}/projects/${project.id}/series/${rec.id}`, { data: { siteNodeId: weir.id } })).status()).toBe(200);
 
-	// Fragmentation: the weir's tick is disabled, and the note says to switch.
+	// No method to switch first (issue #658): the weir's tick is enabled, with no note.
 	await page.goto(`/projects/${project.id}?tab=calibration`);
 	const zones = page.getByTestId('calibration-zones');
 	const tick = zones.getByRole('checkbox', { name: 'Calibrate here: Middle weir' });
-	await expect(tick).toBeDisabled();
-	await expect(zones.getByTestId('calibration-zones-fragmentation')).toContainText('needs Per unit flow generation');
-	await expect(zones.getByTestId('calibration-zone-site')).toContainText('Outflow gauge');
-
-	// Per unit: tick the weir and save.
-	await updateSettings(page.request, project.id, { unitRain: { mode: 'perUnit' } });
-	await page.reload();
 	await expect(tick).toBeEnabled();
+	await expect(zones.getByTestId('calibration-zones-fragmentation')).toHaveCount(0);
+	await expect(zones.getByTestId('calibration-zone-site')).toContainText('Outflow gauge');
 	await tick.check();
 	await expect(zones.getByTestId('calibration-zones-ticked')).toHaveText('Fit automatically fits 2 zones, upstream first.');
 	await saveSettings(page);

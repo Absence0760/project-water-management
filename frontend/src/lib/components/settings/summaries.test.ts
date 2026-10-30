@@ -39,7 +39,7 @@ describe('settingsSummaries', () => {
 		expect(s['set-period']).toBe('The whole rain record');
 		expect(s['set-rain']).toBe('CHIRPS bias-corrected per month fills gaps · fitted on the whole record · zero runs treated as missing');
 		expect(s['set-quality']).toBe('The default limits');
-		expect(s['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
+		expect(s['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 		expect(s['set-restrict']).toBe('Off');
 		expect(s['set-reserve']).toBe('');
 		expect(s['set-evidence']).toBe('No uncertainty rule declared');
@@ -67,26 +67,24 @@ describe('settingsSummaries', () => {
 		expect(s['set-demand']).toMatch(/^A-pan 1\s?230 mm a year · effective rain/);
 		// The rain threshold for demand lives in Demand (issue #521), so its line names it.
 		expect(s['set-demand']).toMatch(/ · rain threshold \d+(\.\d)? mm · /);
-		expect(s['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
+		expect(s['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 		expect(c['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · low flows only in 1 period · river stops Feb, Mar, Apr');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 
-	it('names the flow generation method in the Model selection for flow generation summary, with the units on a station (issues #482, #553)', () => {
-		expect(settingsSummaries(base())['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
-		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-share']).toMatch(/^Fragmentation · /);
-		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
+	it('names the flow generation method in the Flow generation summary, with the units on a station (issues #482, #553)', () => {
+		// Per unit is the only method (issue #658): a project with no unitRain, or the retired `catchment`, reads as Per unit.
+		for (const unitRain of [undefined, { mode: 'catchment' as const }, { mode: 'perUnit' as const }])
+			expect(settingsSummaries(base({ unitRain }))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 		const units = { a: { stationId: 's' }, b: { stationId: 's' } };
-		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' }, rainStations: { units } }))['set-share']).toBe('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
-		// Under Fragmentation the stations set the units' EWR shares (issue #615), so they count there too.
-		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Fragmentation · 2 units on a rainfall station · flow and EWR by each unit’s natural MAR');
+		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
 		expect(settingsSummaries(base({ rainStations: { catchment: { stationId: 's' }, units } }))['set-share']).toBe(
-			'Fragmentation · catchment rain from a station · 2 units on a rainfall station · flow and EWR by each unit’s natural MAR'
+			'Per unit · catchment rain from a station · 2 units on a rainfall station · EWR by each unit’s natural MAR'
 		);
 		// No longer said in Flow calibration's line.
 		expect(calibrationSummaries(cal({ unitRain: { mode: 'perUnit' } }))['set-flow']).not.toContain('rain for each unit');
 		// The retired EWR split (issue #615) and flow-share method (#616) change nothing: one share per unit, its natural MAR.
-		expect(settingsSummaries(base({ ewrSplit: 'flowShare', flowShareMethod: 'manual' } as never))['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
+		expect(settingsSummaries(base({ ewrSplit: 'flowShare', flowShareMethod: 'manual' } as never))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 	});
 });
 

@@ -99,7 +99,6 @@ const CAL_WINDOW = field('calibration', 'fld-cal-window', 'Go to the calibration
 const CAL_EXCLUSIONS = field('calibration', 'fld-cal-exclusions', 'Go to Excluded periods');
 const CAL_ZONES = field('calibration', 'fld-cal-zones', 'Go to Calibrate at several gauges');
 const FIT = field('calibration', 'set-fit', 'Go to Fit the parameters');
-const FLOW_GENERATION: FixAction = { kind: 'link', label: 'Go to Model selection for flow generation', href: '?tab=settings#set-share' };
 const FEEDS: FixAction = { kind: 'link', label: 'Go to Data feeds', href: '?tab=series#data-feeds' };
 const ADD_DATA: FixAction = { kind: 'link', label: 'Add data', href: '?tab=series&add=data' };
 const DATA: FixAction = { kind: 'link', label: 'Go to Data', href: '?tab=series' };
@@ -167,7 +166,6 @@ export const CODE_FIXES: Record<WarningCode, Fix> = {
 	'calibration.zone.noGauge': { how: 'A stored calibration zone names no gauge and was ignored. Tick the gauges to calibrate at again.', action: CAL_ZONES },
 	'calibration.zone.duplicate': { how: 'A gauge has two calibration zone rows; the run used the first. Check that gauge’s row.', action: CAL_ZONES },
 	'calibration.zone.badParams': { how: 'A zone’s GR4J parameters are outside the bounds, so its units ran on the catchment’s. Fit the zone again.', action: FIT },
-	'calibration.zone.needsPerUnit': { how: 'Gauges are ticked to calibrate at, but zones need Per unit flow generation. Switch to Per unit, or untick the gauges.', action: FLOW_GENERATION },
 	'calibration.zone.unusable': { how: 'A ticked gauge can’t hold a zone (gone, not a gauge, or at or below the site), so its units joined the zone below. Untick it.', action: CAL_ZONES },
 	'calibration.zone.unfitted': { how: 'A calibration zone has no parameters of its own yet, so its units ran on the catchment’s. Fit the parameters.', action: FIT },
 	'calibration.zone.siteOnlyElsewhere': { how: 'Some units ran on their zone’s parameters, but the uncertainty ensemble and automated calibration vary only the site’s. Keep it in mind.', action: CAL_ZONES },

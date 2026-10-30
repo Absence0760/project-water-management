@@ -2,8 +2,8 @@
 // page, renamed in plain words ("EWR the results are judged by", "Judge results by" until finding E14) with its line
 // at the same gap under its heading as every other panel's (it ran into the heading); Demand's A-pan row on one
 // line with its year total inside the panel (the label wrapped to three lines and the total ran past the panel
-// beside the side index); Model selection for flow generation ("Flow generation" until issue #614, which put it
-// first) saying what each method does and where the runoff model's parameters are set, so it can't be taken for
+// beside the side index); Flow generation ("Model selection for flow generation" from issue #614, which put it
+// first, until issue #658 left Per unit its only method) saying what the method does and where the runoff model's parameters are set, so it can't be taken for
 // Calibration's Flow calibration; and Find a setting finding the judge panel, which had no link. Synthetic data only
 // (the Showcase's model and settings).
 import type { Page } from '@playwright/test';
@@ -81,27 +81,21 @@ for (const [width, height] of [
 	});
 }
 
-test('Model selection for flow generation says what each method does and where the runoff parameters are, and its link lands on Calibration’s Flow calibration', async ({ page, owner }) => {
+test('Flow generation says what its method does and where the runoff parameters are, and its link lands on Calibration’s Flow calibration', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Model settings flow words');
 	await openSettings(page, project.id);
 	const panel = page.locator('#set-share');
-	await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Model selection for flow generation');
-	// The choice is named for what it decides, each method described in plain words, shown without the explanations.
-	const method = panel.getByRole('group', { name: /^How natural flow is made/ });
+	await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Flow generation');
+	// Per unit, the only method (issue #658), in plain words, shown without the explanations; no choice to make.
+	const method = panel.getByTestId('flowgen-method');
 	await expect(page.getByRole('checkbox', { name: 'Explain each setting under its field' })).not.toBeChecked();
-	await expect(method.getByRole('radio', { name: 'Fragmentation', exact: true })).toHaveAccessibleDescription('one runoff run on the catchment rain, split between the units');
-	await expect(method.getByRole('radio', { name: 'Per unit', exact: true })).toHaveAccessibleDescription('a runoff run for each unit with land, on its own rain');
-	for (const what of await panel.getByTestId('flowgen-what').all()) await expect(what).toBeVisible();
-	// Each method's words under its name, inside its choice card (issue #614).
-	for (const [i, name] of ['Fragmentation', 'Per unit'].entries()) {
-		const card = (await method.locator('.opt').nth(i).boundingBox())!;
-		const label = (await method.locator('label.check').nth(i).boundingBox())!;
-		const words = (await method.getByTestId('flowgen-what').nth(i).boundingBox())!;
-		expect(words.y, name).toBeGreaterThanOrEqual(label.y + label.height - 8);
-		expect(words.y + words.height, name).toBeLessThanOrEqual(card.y + card.height);
-	}
+	await expect(panel.getByRole('radio')).toHaveCount(0);
+	await expect(method.locator('strong')).toHaveText('Per unit');
+	await expect(method.getByTestId('flowgen-what')).toHaveText('a runoff run for each unit with land, on its own rain');
+	await expect(method.getByTestId('flowgen-what')).toBeVisible();
+	await expect(method.locator('.hint.explain')).toBeHidden();
 
 	// Where the runoff model's parameters are: on Calibration, under Flow calibration, which the link lands on.
 	const where = panel.getByTestId('flowgen-where');
@@ -118,7 +112,7 @@ test('Model selection for flow generation says what each method does and where t
 	await expectNoViolations(page);
 });
 
-test('the model selection panel leads the page and its two methods are choice cards (issue #614)', async ({ page, owner, signIn }) => {
+test('Flow generation leads the page, framed in the accent (issue #614)', async ({ page, owner, signIn }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Model settings lead card');
@@ -143,39 +137,15 @@ test('the model selection panel leads the page and its two methods are choice ca
 	expect(await border('#set-share')).toBe(accent);
 	expect(await border('#set-judge')).not.toBe(accent);
 
-	// The two methods side by side as cards, the picked one marked, each a radio still.
-	const method = lead.getByRole('group', { name: /^How natural flow is made/ });
-	const cards = method.locator('.opt');
-	await expect(cards).toHaveCount(2);
-	const [a, b] = [(await cards.nth(0).boundingBox())!, (await cards.nth(1).boundingBox())!];
-	expect(Math.abs(a.y - b.y)).toBeLessThan(1);
-	expect(b.x).toBeGreaterThanOrEqual(a.x + a.width);
-	const fragmentation = method.getByRole('radio', { name: 'Fragmentation', exact: true });
-	const perUnit = method.getByRole('radio', { name: 'Per unit', exact: true });
-	await expect(fragmentation).toBeChecked();
-	// The keyboard picks a method as it did: the arrow moves the pick within the group.
-	await fragmentation.focus();
-	await page.keyboard.press('ArrowRight');
-	await expect(perUnit).toBeChecked();
-	await expect(perUnit).toBeFocused();
-	// A click on a card's words picks it too: the label covers the card (a mouse click at the words, since the label
-	// lies over them).
-	const words = (await method.getByTestId('flowgen-what').nth(0).boundingBox())!;
-	await page.mouse.click(words.x + words.width / 2, words.y + words.height / 2);
-	await expect(fragmentation).toBeChecked();
+	// Its method in words, never a choice (issue #658), for an editor and a viewer alike.
+	await expect(lead.getByRole('radio')).toHaveCount(0);
+	await expect(lead.getByTestId('flowgen-method')).toContainText('Per unit');
 	await expectNoViolations(page, { include: '#set-share' });
-
-	// A viewer reads the cards and can't change the pick: a click on the other card's words leaves it.
 	const viewer = await signIn('Lead card viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await openSettings(viewer.page, project.id);
-	const seen = viewer.page.locator('#set-share').getByRole('group', { name: /^How natural flow is made/ });
-	await expect(seen.getByRole('radio')).toHaveCount(2);
-	for (const radio of await seen.getByRole('radio').all()) await expect(radio).toBeDisabled();
-	await expect(seen.getByRole('radio', { name: 'Fragmentation', exact: true })).toBeChecked();
-	const other = (await seen.getByTestId('flowgen-what').nth(1).boundingBox())!;
-	await viewer.page.mouse.click(other.x + other.width / 2, other.y + other.height / 2);
-	await expect(seen.getByRole('radio', { name: 'Fragmentation', exact: true })).toBeChecked();
+	await expect(viewer.page.locator('#set-share').getByTestId('flowgen-method')).toContainText('Per unit');
+	await expect(viewer.page.locator('#set-share').getByRole('radio')).toHaveCount(0);
 	await expectNoViolations(viewer.page, { include: '#set-share' });
 });
 
@@ -186,7 +156,7 @@ test('Find a setting finds the judge panel, by its heading, and the index lists 
 	await openSettings(page, project.id);
 	const menu = settingsMenu(page);
 	// The model selection leads (issue #614), the judge panel right under it.
-	await expect(menu.getByRole('link').first()).toHaveText('Model selection for flow generation');
+	await expect(menu.getByRole('link').first()).toHaveText('Flow generation');
 	await expect(menu.getByRole('link').first()).toHaveAttribute('href', '#set-share');
 	await expect(menu.getByRole('link').nth(1)).toHaveText('EWR the results are judged by');
 	await expect(menu.getByRole('link').nth(1)).toHaveAttribute('href', '#set-judge');
@@ -206,36 +176,19 @@ test.describe('on a phone', () => {
 		test.describe(colorScheme, () => {
 			test.use({ viewport: { width: 390, height: 844 }, colorScheme });
 
-			test(`each method’s words sit under its name, lined up with it, nothing scrolls sideways, and axe passes (${colorScheme})`, async ({ page, owner }) => {
+			test(`the method’s line fits the panel, nothing scrolls sideways, and axe passes (${colorScheme})`, async ({ page, owner }) => {
 				void owner;
 				const project = await createProject(page.request, `Model settings phone ${colorScheme}`);
 				await openSettings(page, project.id);
-				const method = page.locator('#set-share').getByRole('group', { name: /^How natural flow is made/ });
+				const panel = page.locator('#set-share');
+				const method = panel.getByTestId('flowgen-method');
 				await method.scrollIntoViewIfNeeded();
-				// The choice cards stack, each the group's width (issue #614).
-				const group = (await method.boundingBox())!;
-				const [one, two] = [(await method.locator('.opt').nth(0).boundingBox())!, (await method.locator('.opt').nth(1).boundingBox())!];
-				expect(two.y).toBeGreaterThanOrEqual(one.y + one.height);
-				expect(Math.abs(two.x - one.x)).toBeLessThanOrEqual(1);
-				for (const card of [one, two]) expect(card.width).toBeGreaterThan(group.width - 24);
-				/** Where an element's words start (its text, not its padding), after `skip` when given (the radio). */
-				const textLeft = (el: Element, skip: string | null) => {
-					const r = document.createRange();
-					r.selectNodeContents(el);
-					const after = skip ? el.querySelector(skip) : null;
-					if (after) r.setStartAfter(after);
-					return r.getBoundingClientRect().left;
-				};
-				for (const [i, name] of ['Fragmentation', 'Per unit'].entries()) {
-					const label = method.locator('label.check').nth(i);
-					const words = method.getByTestId('flowgen-what').nth(i);
-					const labelBox = (await label.boundingBox())!;
-					// Under the name, starting where the name's words start (past the radio), not under the radio.
-					expect((await words.boundingBox())!.y, name).toBeGreaterThanOrEqual(labelBox.y + labelBox.height - 8);
-					const nameLeft = await label.evaluate(textLeft, 'input');
-					const wordsLeft = await words.evaluate(textLeft, null);
-					expect(Math.abs(wordsLeft - nameLeft), name).toBeLessThanOrEqual(4);
-				}
+				// Per unit's line wraps inside the panel (issue #658: no choice cards left to stack).
+				const box = (await method.boundingBox())!;
+				const panelBox = (await panel.boundingBox())!;
+				expect(box.x).toBeGreaterThanOrEqual(panelBox.x);
+				expect(box.x + box.width).toBeLessThanOrEqual(panelBox.x + panelBox.width);
+				await expect(method.getByTestId('flowgen-what')).toBeVisible();
 				await expect(page.locator('#set-judge').getByRole('heading', { level: 2 })).toHaveText('EWR the results are judged by');
 				await expectNoSidewaysScroll(page);
 				await expectNoViolations(page);
