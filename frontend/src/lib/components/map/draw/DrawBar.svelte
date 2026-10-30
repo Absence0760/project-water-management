@@ -27,7 +27,7 @@
 
 	let {
 		draft,
-		mapReady,
+		mapStatus,
 		saving = false,
 		error = null,
 		onsave,
@@ -41,8 +41,8 @@
 		minOccurrence = $bindable(25)
 	}: {
 		draft: Draft;
-		/** false without WebGL: no clicks to place, so the bar leads with pasting and typed coordinates. */
-		mapReady: boolean;
+		/** The map's state (CatchmentMap's onstatus). failed (no WebGL): no clicks to place, so the bar leads with pasting and typed coordinates. */
+		mapStatus: 'loading' | 'ready' | 'failed';
 		saving?: boolean;
 		error?: string | null;
 		/** Save: a new shape opens its sheet, a new point the Place sheet, an edit saves at once. */
@@ -61,6 +61,7 @@
 		/** Tracing: the share of observations (%) a cell must be water in. */
 		minOccurrence?: MinOccurrence;
 	} = $props();
+	const mapReady = $derived(mapStatus === 'ready');
 
 	const uid = $props.id();
 	const split = $derived(draft.splitResult);
@@ -103,7 +104,8 @@
 	}
 
 	const howTo = $derived.by(() => {
-		if (!mapReady) return draft.shape === 'point' ? 'The map can’t be drawn here: enter the point’s coordinates.' : 'The map can’t be drawn here: paste the shape as GeoJSON or WKT.';
+		// Only a map that failed can't be drawn; one still loading gets the usual how-to.
+		if (mapStatus === 'failed') return draft.shape === 'point' ? 'The map can’t be drawn here: enter the point’s coordinates.' : 'The map can’t be drawn here: paste the shape as GeoJSON or WKT.';
 		if (draft.whole) return 'A pasted shape of several parts: save it as it is, or paste another.';
 		if (draft.mode === 'split') {
 			return draft.phase === 'drawing'

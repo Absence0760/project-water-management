@@ -26,7 +26,7 @@
 	let {
 		divider,
 		pieces = [],
-		mapReady,
+		mapStatus,
 		placement = 'side',
 		ondone,
 		onsave,
@@ -37,8 +37,8 @@
 		divider: ClickDivider;
 		/** The map's pieces (clickShape), for each line's tint. */
 		pieces?: readonly ProposalPiece[];
-		/** false without WebGL: no clicks, so the panel leads with typed coordinates. */
-		mapReady: boolean;
+		/** The map's state (CatchmentMap's onstatus). failed (no WebGL): no clicks, so the panel leads with typed coordinates. */
+		mapStatus: 'loading' | 'ready' | 'failed';
 		/** side: the side column's panel; above: a bar over the map (a narrow page). */
 		placement?: 'side' | 'above';
 		ondone: () => void;
@@ -59,8 +59,19 @@
 	const inflows = $derived(r ? r.pieces.filter((p) => p.open).length : 0);
 	const tintOf = (i: number) => pieces.find((p) => p.key === String(i))?.tint ?? -1;
 
+	const mapReady = $derived(mapStatus === 'ready');
+	const mapFailed = $derived(mapStatus === 'failed');
+
+	// Typed coordinates are folded while the map draws or is still loading, and open once it
+	// can't be drawn: they are then the only way in. Only failing opens them, never loading: a
+	// panel opened before the map had loaded used to stay open after it drew, so the editor's
+	// click on Enter coordinates (and e2e's, map-start-data.spec.ts, CI runs 40803033108 and
+	// 41068074039) shut it instead of opening it.
 	// svelte-ignore state_referenced_locally
-	let showCoords = $state(!mapReady);
+	let showCoords = $state(mapStatus === 'failed');
+	$effect(() => {
+		if (mapFailed) showCoords = true;
+	});
 	let latText = $state('');
 	let lonText = $state('');
 	let tried = $state(false);
@@ -76,7 +87,7 @@
 		lonText = '';
 		await divider.add(at);
 		// Folded again once it has added one (it stays open without a map: it is the only way in).
-		if (mapReady && !divider.error) showCoords = false;
+		if (!mapFailed && !divider.error) showCoords = false;
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -92,7 +103,7 @@
 	<h2 class="bar-h" id="{uid}-h">Sub-catchments <HelpTip key="sub-catchments" /></h2>
 	<DelineateChoice value="clicks" onchange={(v) => v === 'one' && onone()} />
 	<p class="how small" data-testid="map-click-how">
-		{mapReady
+		{!mapFailed
 			? `${phone ? 'Tap' : 'Click'} a terrain channel for each outlet, or press Enter at the crosshair. Each gets the land that drains to it before any other ${phone ? 'tap' : 'click'}, following the terrain.`
 			: 'The map can’t be drawn here: enter each outlet’s coordinates.'}
 	</p>

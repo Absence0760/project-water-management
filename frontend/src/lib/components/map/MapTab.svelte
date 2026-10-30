@@ -1158,7 +1158,7 @@
 {#snippet drawBar()}
 	<DrawBar
 		{draft}
-		mapReady={mapState === 'ready'}
+		mapStatus={mapState}
 		saving={drawSaving}
 		error={drawError}
 		onsave={saveDraft}
@@ -1451,7 +1451,7 @@
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
 					{#if canEdit && dividing && !wide}
-						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
+						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
 					{:else if canEdit && draft.active && !dividing && !wide}
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
@@ -1608,7 +1608,7 @@
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
-							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
+							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
 						</div>
 
 					{:else if !features.length}

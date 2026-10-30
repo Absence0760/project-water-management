@@ -14,6 +14,8 @@
 //   applied only after the confirm, and the item turns Done;
 // - the points step makes units' boundaries (F13): Sub-catchments, one per
 //   click, saves its piece and comes back to the sheet with it as a unit;
+//   opened while the map is still loading, its Enter coordinates is folded
+//   until clicked, and stays open once the map draws;
 // - the A-pan row (issue #646 item 5) reads "A-pan not set" until the A-pan
 //   is, and a unit boundary redrawn after the start shows in the Checks as an
 //   area from an earlier outline, whose Use takes the area now (item 4, F6).
@@ -176,6 +178,42 @@ test('the points step makes units’ boundaries: Sub-catchments, one per click, 
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'points');
 	await expect(startSheet(page).getByTestId('start-points').locator('select[id*="-role-"]')).toHaveCount(1);
 	await expect(startSheet(page).getByTestId('start-points').locator('select[id*="-role-"]').first()).toHaveValue('unit');
+});
+
+test('Sub-catchments opened while the map is still loading: Enter coordinates is folded, one click opens it, and it stays open once the map draws', async ({ page, owner }) => {
+	// The panel used to open the typed coordinates whenever it mounted before the map had drawn, as if the map
+	// had failed, and keep them open after it drew: a click on Enter coordinates then shut them (CI runs
+	// 40803033108 and 41068074039 timed out on the test above filling a hidden Latitude). The map library's
+	// chunk is held back until the form is open, so the panel mounts while the map is loading, every time.
+	void owner;
+	test.setTimeout(60_000);
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route('**/_app/immutable/chunks/*.js', async (route) => {
+		const res = await route.fetch();
+		const body = await res.text();
+		if (body.includes('maplibre')) await held;
+		await route.fulfill({ response: res, body });
+	});
+	const { id } = await createProject(page.request, 'Start points while the map loads');
+	await post(page.request, `/projects/${id}/map/features`, { kind: 'catchment_boundary', name: 'Valley', geometry: area(unionRing()) });
+	await openMap(page, id, '&start=1');
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'points');
+	await startSheet(page).getByTestId('start-subcatchments').click();
+	const bar = page.getByTestId('map-click-bar');
+	await expect(bar).toBeVisible();
+	await expect(page.locator('.map-wrap')).toHaveAttribute('data-status', 'loading');
+	await expect(bar.getByTestId('map-click-how')).toContainText('Click a terrain channel for each outlet');
+	await expect(bar.getByTestId('map-click-lat')).toBeHidden();
+	await bar.getByText('Enter coordinates').click();
+	await expect(bar.getByTestId('map-click-lat')).toBeVisible();
+	release();
+	await expect(page.locator('.map-wrap')).toHaveAttribute('data-status', 'ready');
+	await expect(bar.getByTestId('map-click-lat')).toBeVisible();
+	await bar.getByTestId('map-click-lat').fill(String(FIXTURE_DAM[1]));
+	await bar.getByTestId('map-click-lon').fill(String(FIXTURE_DAM[0]));
+	await bar.getByTestId('map-click-add').click();
+	await expect(bar.getByTestId('map-click-piece')).toHaveCount(1);
 });
 
 test('the A-pan row says it isn’t set until it is, and a redrawn unit boundary offers its area now in the Checks', async ({ page, owner }) => {
