@@ -9,8 +9,9 @@
 // #555, #659), the location's group of land units, borrowed and rest units
 // included (each location takes the prior built for its own group, never the
 // catchment's, model.md §2.10m). `zone` names the location: a gauge's node
-// id, null for the outlet's location, absent for the headline location
-// (engine headlineLocation), which the answer's target.zoneNodeId resolves.
+// id, 'outlet' for the outlet's location, absent (or, in the start's body,
+// null) for the headline location (engine headlineLocation), which the
+// answer's target.zoneNodeId resolves.
 // Its attributes are what the app knows of
 // it: the area, the run's mean annual rain and aridity, the soil grid's PAWC
 // over the catchment boundary. Slope, clay, sand and forest stay unknown
@@ -58,8 +59,12 @@ const Dataset = z.string().trim().min(1).max(50);
 
 /** GET's query: the calibration location (a gauge's node id; absent = the headline location, or with none ticked the catchment) and the donor set (absent = the default). */
 export const PriorQuery = z.object({ zone: z.union([Zone, z.literal('outlet')]).optional(), dataset: Dataset.optional() }).strict();
-/** POST …/start: the same choice in the body; `zone: null` is the outlet's location, absent the headline's. */
-export const PriorStart = z.object({ zone: Zone.nullable().optional(), dataset: Dataset.optional() }).strict();
+/**
+ * POST …/start: the same choice in the body, `'outlet'` for the outlet's
+ * location. Absent or null is the headline's: null meant "the calibration
+ * site's own zone" before engine 1.110.0, which the headline is now.
+ */
+export const PriorStart = z.object({ zone: z.union([Zone, z.literal('outlet')]).nullable().optional(), dataset: Dataset.optional() }).strict();
 
 /** The location a request names: a gauge's node id, null for the outlet's, undefined for the headline's. */
 export type PriorZone = string | null | undefined;
@@ -339,7 +344,7 @@ export const priorRoutes = new Hono<AuthEnv>()
 	.post('/:id/gr4j-prior/start', async (c) => {
 		const id = c.req.param('id');
 		const body = PriorStart.parse(await readJson(c));
-		const zone: PriorZone = body.zone;
+		const zone: PriorZone = body.zone === 'outlet' ? null : (body.zone ?? undefined);
 		const userId = c.get('userId');
 		const loaded = await withUser(
 			userId,

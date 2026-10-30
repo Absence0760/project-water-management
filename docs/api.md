@@ -733,7 +733,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `calibrateAtOutlet` changes, the locations are checked as a whole (engine
   `calibrationLocationsError`: no gauge twice, every ticked row a usable
   gauge, the headline pointer above); a stored row or headline whose gauge
-  has gone blocks no save that leaves it alone (the run warns). A row's fit
+  has gone blocks no save that leaves it alone (the run warns); a ticked row
+  whose node is still there but can no longer be a location (no longer a
+  gauge, or now the outlet) is refused by any save that sends the list, until
+  it is unticked or removed. A row's fit
   record may be an automated one only when it is the one the server applied
   there (the headline gauge's, [§ Automated calibration](#automated-calibration))
   carried back as stored (`409`, as the top level's). Each row's fit record
@@ -4633,7 +4636,7 @@ and "Start from the prior".
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/gr4j-prior` | `?zone=<gauge node id> \| outlet` (optional: a ticked calibration location, a gauge's or the outlet's; absent = the headline location, or with no gauge location ticked the catchment), `?dataset=<label>` (optional; default a real donor set before the synthetic one, then the newest load) | `200 { dataset, datasets, soil, target, prior, problem, donors, ranges, provenance, started }` | viewer |
-| POST | `/projects/:id/gr4j-prior/start` | `{ zone?: <gauge node id> \| null, dataset?: <label> }` (`null` = the outlet's location, absent = the headline's) | `200 { params: { x1, x2, x3, x4 }, record: PriorStartRecord, revisionId }` | editor |
+| POST | `/projects/:id/gr4j-prior/start` | `{ zone?: <gauge node id> \| 'outlet' \| null, dataset?: <label> }` (`'outlet'` = the outlet's location; absent or `null` = the headline's, which is what `null`, "the calibration site's own zone", started before engine 1.110.0) | `200 { params: { x1, x2, x3, x4 }, record: PriorStartRecord, revisionId }` | editor |
 
 - `dataset`: the donor set read (`{ dataset, version, source, method,
   attribution, synthetic, donorSetSha256, donors }`), `null` with none

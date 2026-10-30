@@ -50,6 +50,10 @@
 --      engine's read path can't see records and assumes one, so a fit that
 --      failed at an outlet without a record now fits the gauges instead.
 --
+--    No History event is written (286 wrote one): the change of shape loses
+--    nothing and changes no run or fit, and comparing a run from before with
+--    today's inputs reads the run in the new shape too (history/routes.ts).
+--
 --    Stored runs (model_run.inputs), model revisions and scenarios keep their
 --    JSON: the engine converts a snapshot when it reads it, and so does the
 --    API when it restores or imports one (projects/calibrationSite.ts

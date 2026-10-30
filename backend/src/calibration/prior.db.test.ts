@@ -238,9 +238,19 @@ describe('a calibration zone’s prior', () => {
 		expect(settings.calibrationZones[0].gr4j).toBeNull();
 		expect(settings.gr4jPrior.map((r: { provenance: { target: unknown } }) => r.provenance.target)).toEqual([{ zoneNodeId: null, units: [c.id] }]);
 
-		// The weir as the headline, the outlet unticked: absent names the weir now, and the outlet is no location.
+		// 'outlet' names the outlet's location in the body too.
+		expect((await owner.call('POST', `/projects/${id}/gr4j-prior/start`, { zone: 'outlet' })).status).toBe(200);
+
+		// The weir as the headline, the outlet unticked (what 289 gives a project calibrated at an inner gauge): absent names the
+		// weir now, and the outlet is no location.
 		expect((await owner.call('PATCH', `/projects/${id}`, { settings: { calibrateAtOutlet: false, calibrationSiteNodeId: weir.id } })).status).toBe(200);
 		expect((await owner.call('GET', `/projects/${id}/gr4j-prior`)).body.target).toMatchObject({ zoneNodeId: weir.id });
 		expect((await owner.call('GET', `/projects/${id}/gr4j-prior?zone=outlet`)).status).toBe(400);
+		// A start sent with zone null (what "the calibration site's own zone" sent before 1.110.0) starts the headline's: the weir's row.
+		const legacy = await owner.call('POST', `/projects/${id}/gr4j-prior/start`, { zone: null });
+		expect(legacy.status, JSON.stringify(legacy.body)).toBe(200);
+		const after = (await owner.call('GET', `/projects/${id}`)).body.project.settings;
+		expect(after.calibrationZones[0].gr4j).toEqual(legacy.body.params);
+		expect(legacy.body.record.provenance.target.zoneNodeId).toBe(weir.id);
 	});
 });
