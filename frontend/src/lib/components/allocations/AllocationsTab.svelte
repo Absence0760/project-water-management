@@ -227,8 +227,11 @@
 	const units = $derived(comparison ? unitRows(comparison) : []);
 
 	// --- the picked unit (`unit=`), else the first on the list ---
-	const pickedId = $derived(pickUnit(units, url.searchParams.get('unit')));
+	const unitParam = $derived(url.searchParams.get('unit'));
+	const pickedId = $derived(pickUnit(units, unitParam));
 	const pickedName = $derived(units.find((u) => u.nodeId === pickedId)?.name ?? '');
+	/** `unit=` names a unit that isn't on this run's list (removed since, or not in this run): the first is shown, and said, as `gone` for a run. */
+	const unitGone = $derived(!!unitParam && !!comparison && units.length > 0 && unitParam !== pickedId);
 	const pickedYears = $derived(rows.filter((r) => r.nodeId === pickedId));
 	const pickedStorage = $derived(comparison?.nodes.find((n) => n.nodeId === pickedId)?.storage ?? null);
 	// The dam against its registered storage (s21b), in words (issue #72).
@@ -435,6 +438,7 @@
      and moves it down when it lands, so assistive tech and the e2e helper (support/allocations.ts) wait for it. -->
 <div class="allocations" bind:clientWidth={pageW} aria-busy={loading || cLoading} data-testid="allocations-page">
 	{#if gone}<p class="alert alert-info" role="note">That run no longer exists, so this compares the {defaultRun?.published ? 'published' : 'newest'} run.</p>{/if}
+	{#if unitGone && !data?.unitsHidden}<p class="alert alert-info" role="note">That hydrological unit isn’t in this run, so this shows {pickedName}.</p>{/if}
 	{#if notice}<p class="alert alert-info slim" role="status">{notice}</p>{/if}
 	{#if actionError}<p class="alert alert-error slim" role="alert">{actionError}</p>{/if}
 
