@@ -1243,7 +1243,9 @@ function diffSettings(
 		if (k === 'ewrSplit' || k === 'flowShareMethod') continue;
 		// The zones, one line per zone (calibrationZoneChanges, below).
 		if (k === 'calibrationZones') continue;
-		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
+		// The calibration site by its gauge's name, as the rule tables' sites (the outlet when null).
+		const fmt: Fmt = k === 'calibrationSiteNodeId' ? (v) => (v ? `the gauge ${siteName(String(v))}` : 'the outlet') : f.fmt;
+		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${fmt(a[k])} → ${fmt(b[k])}`);
 	}
 	for (const c of calibrationZoneChanges(a.calibrationZones, b.calibrationZones, (id) => siteName(id))) out.push({ area: 'settings', kind: c.kind, subject: SETTINGS_FIELDS.calibrationZones!.label, text: c.text });
 	const split = ewrSplitChange(ra, rb);
@@ -2315,6 +2317,40 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 	for (const [k, f] of Object.entries(CALIBRATION_FIELDS)) out.push([`Calibration ${f.label}`, `calibration.${k}`]);
 	out.push(['Flagged zero-rain runs', 'zeroRainRuns.mode'], ['Multi-day rain accumulations', 'zeroRainRuns.accumulationMode']);
 	for (const k of GAP_FILL_KINDS) out.push([`Gap filling of the ${gapFillRecordLabel(k)}`, `flowGapFill.${k}`]);
+	return out;
+}
+
+/**
+ * The settings the input diff words part by part (each part has its own label in settingsChangePaths), named as a
+ * whole: what get_settings calls the setting when it sends the whole of it.
+ */
+const SETTINGS_GROUP_LABELS: Record<string, string> = {
+	gr4j: 'GR4J parameters',
+	calibration: 'Calibration settings (rain threshold, catchment area)',
+	dataQuality: 'Data quality checks',
+	wr2012: 'WR2012 reference',
+	ewrRules: 'EWR rule tables',
+	calibrationExclusions: 'Calibration exclusions',
+	flowMissing: 'Missing periods of the flow records',
+	zeroRainRuns: 'Flagged rain (zero-rain runs and accumulations)',
+	flowGapFill: 'Gap filling of the flow records',
+	qualityFlags: 'Quality flags',
+	calibrationRules: 'Calibration rules',
+	fitRecord: 'Fit record',
+	arealRain: AREAL_RAIN_LABEL,
+	unitRain: UNIT_RAIN_LABEL,
+	droughtRestriction: DROUGHT_RESTRICTION_LABEL
+};
+
+/**
+ * Each setting's name in the app's words, by its path (`rainSource` → "Rain-source periods", `gr4j.x1` → "GR4J
+ * production store X1"): the labels the input diff and the field history use (settingsChangePaths), and a name for
+ * each setting the diff words part by part. The assistant's get_settings sends them beside the values (issue #610),
+ * so an answer names a setting as the app does, never by its key.
+ */
+export function settingLabels(): Record<string, string> {
+	const out: Record<string, string> = { ...SETTINGS_GROUP_LABELS };
+	for (const [label, path] of settingsChangePaths()) out[path] ??= label;
 	return out;
 }
 

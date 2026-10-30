@@ -50,6 +50,31 @@ function chat(over: Partial<{ status: AssistantStatus; turns: AssistantChat['tur
 
 const answer = (over: Partial<AssistantTurn> = {}): AssistantTurn => ({ role: 'assistant', text: '', tools: [], proposals: [], error: null, stopped: false, done: true, ...over });
 const html = (c: AssistantChat) => render(AssistantPanel, { props: { open: true, chat: c } }).body;
+/** The rendered answer's markup: from its container to the end of the answer's list item. */
+function answerPart(out: string): string {
+	const from = out.indexOf('data-testid="assistant-text"');
+	return out.slice(out.indexOf('>', from) + 1, out.indexOf('</div>', from));
+}
+/** How many elements open with `<tag` (an exact prefix, no pattern). */
+const tagCount = (markup: string, tag: string) => markup.split(`<${tag}`).length - 1;
+/**
+ * The text a reader gets from server-rendered markup: everything outside its tags and comments, with Svelte's two
+ * escapes undone. Exact for Svelte's output, where every `<` in text is escaped, so each `<` opens a tag or comment.
+ */
+function textContent(markup: string): string {
+	let out = '';
+	let i = 0;
+	while (i < markup.length) {
+		if (markup.startsWith('<!--', i)) {
+			const end = markup.indexOf('-->', i + 4);
+			i = end === -1 ? markup.length : end + 3;
+		} else if (markup[i] === '<') {
+			const end = markup.indexOf('>', i);
+			i = end === -1 ? markup.length : end + 1;
+		} else out += markup[i++];
+	}
+	return out.split('&lt;').join('<').split('&amp;').join('&');
+}
 /** Svelte escapes text: compare against the same escaping. */
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
@@ -102,6 +127,28 @@ describe('AssistantPanel', () => {
 		expect(out).toContain('New conversation');
 		// No examples once the conversation has started.
 		expect(out).not.toContain('For example');
+	});
+
+	it('shows an answer’s paragraphs, lists and bold as elements, the markup’s characters gone (the 2026-10-30 production test)', () => {
+		const text = '### What a run needs\n\nThe model needs **two** things:\n- a network\n- a rainfall series\n\n---\n\n1. Draw it\n2. Upload rain';
+		const answerHtml = answerPart(html(chat({ turns: [{ role: 'user', text: 'Q' }, answer({ text })] })));
+		expect(tagCount(answerHtml, 'p class="heading')).toBe(1);
+		expect(tagCount(answerHtml, 'strong')).toBe(2);
+		expect(tagCount(answerHtml, 'ul')).toBe(1);
+		expect(tagCount(answerHtml, 'ol start="1"')).toBe(1);
+		expect(tagCount(answerHtml, 'li')).toBe(4);
+		// What reads on the page: the words, without the marks.
+		expect(textContent(answerHtml)).toBe('What a run needsThe model needs two things:a networka rainfall seriesDraw itUpload rain');
+	});
+
+	it('shows hostile text in an answer as text: no element from it reaches the page, and its words read as written', () => {
+		const lines = ['<script>alert(1)</script> <SCRIPT>x</SCRIPT> <!--\n--> &amp; [x](javascript:alert(1))', '- <a href="javascript:alert(2)">y</a> <img src=x onerror=alert(1)>'];
+		const answerHtml = answerPart(html(chat({ turns: [{ role: 'user', text: 'Q' }, answer({ text: lines.join('\n') })] })));
+		// The only elements are the answer's own: its paragraph, the list and the item. None from the text.
+		for (const tag of ['script', 'img', 'a ', 'a>']) expect(tagCount(answerHtml.toLowerCase(), tag), tag).toBe(0);
+		expect(tagCount(answerHtml, 'li')).toBe(1);
+		// The text node holds every character of it, in order (the comment's line break is the paragraph's own line break).
+		expect(textContent(answerHtml)).toBe(lines[0]!.split('\n').join('') + lines[1]!.slice(2));
 	});
 
 	it('shows a proposal’s server-built title, each change’s lines with its own reason, and Apply for an editor', () => {
