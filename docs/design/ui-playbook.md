@@ -1000,6 +1000,14 @@ section it belongs to, with the example that taught it.
 
 - **Colours are tokens** in `frontend/src/app.css` with dark-theme values
   (`--series-*`, `--accent`, `--warning`…); no raw hex in components.
+  A "brand" surface is no exception: the sign-in pages' panel was a fixed
+  navy in light mode beside a light form until the operator reported it
+  (`layout/AuthCard.svelte`, now `--accent-soft` light and `--brand-panel`
+  dark). A component's own dark values go under the app's selector,
+  `@media (prefers-color-scheme: dark) { :global(:root:not([data-theme='light'])) .x { … } }`,
+  never a bare media query, so `data-theme="light"` (print, a forced
+  theme) wins; a drawing inside takes its colours as custom properties
+  from its container (`--scene-*`), not hex of its own.
 - **Type scale: small text is a token, and a phone's floor is 12 px.**
   Small text takes `--font-xs` (0.75rem: badges, units, tags, a table's
   card labels, counts, kickers) or `--font-sm` (0.8rem: hints, captions,

@@ -69,3 +69,66 @@ for (const size of SIZES) {
 		});
 	}
 }
+
+// The brand panel follows the app's theme (the operator's report: production
+// /login in light mode kept a navy panel beside the light form). Light: a pale
+// ground with dark text; dark: the navy panel; a dark OS with data-theme="light"
+// on <html>: light again. In each, the copy passes WCAG 1.4.3 (4.5:1) and the
+// scene's marks (rivers, farms, outlet) 1.4.11 (3:1) against the panel.
+const PANEL_THEMES = [
+	{ name: 'light', colorScheme: 'light', force: false, light: true },
+	{ name: 'dark', colorScheme: 'dark', force: false, light: false },
+	{ name: 'data-theme light on a dark OS', colorScheme: 'dark', force: true, light: true }
+] as const;
+for (const theme of PANEL_THEMES) {
+	test(`the brand panel follows the theme: ${theme.name}`, async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.emulateMedia({ colorScheme: theme.colorScheme });
+		await page.goto('/login');
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		if (theme.force) await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+
+		const m = await page.evaluate(() => {
+			type Rgb = [number, number, number];
+			const rgb = (s: string): Rgb => {
+				const [r = 0, g = 0, b = 0] = (s.match(/[\d.]+/g) ?? []).map(Number);
+				return [r, g, b];
+			};
+			const lum = ([r, g, b]: Rgb) => {
+				const f = (c: number) => ((c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+				return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+			};
+			const ratio = (a: Rgb, b: Rgb) => {
+				const [x, y] = [Math.max(lum(a), lum(b)), Math.min(lum(a), lum(b))];
+				return (x + 0.05) / (y + 0.05);
+			};
+			/** A colour at an opacity, laid over the panel's ground. */
+			const over = (c: Rgb, alpha: number, ground: Rgb): Rgb => [0, 1, 2].map((i) => c[i]! * alpha + ground[i]! * (1 - alpha)) as Rgb;
+			const panel = document.querySelector('.panel-brand')!;
+			const ground = rgb(getComputedStyle(panel).backgroundColor);
+			const text = (sel: string) => ratio(rgb(getComputedStyle(panel.querySelector(sel)!).color), ground);
+			const mark = (sel: string, prop: 'fill' | 'stroke') => {
+				const s = getComputedStyle(panel.querySelector(sel)!);
+				const alpha = Number(prop === 'fill' ? s.fillOpacity : s.strokeOpacity);
+				return ratio(over(rgb(prop === 'fill' ? s.fill : s.stroke), alpha, ground), ground);
+			};
+			return {
+				groundLum: lum(ground),
+				heading: text('h2'),
+				kicker: text('.kicker'),
+				bullet: text('li'),
+				river: mark('.bed.main', 'stroke'),
+				farm: mark('.farm', 'fill'),
+				outlet: mark('.core', 'fill')
+			};
+		});
+		if (theme.light) expect(m.groundLum).toBeGreaterThan(0.7);
+		else expect(m.groundLum).toBeLessThan(0.05);
+		expect(m.heading).toBeGreaterThanOrEqual(4.5);
+		expect(m.kicker).toBeGreaterThanOrEqual(4.5);
+		expect(m.bullet).toBeGreaterThanOrEqual(4.5);
+		expect(m.river).toBeGreaterThanOrEqual(3);
+		expect(m.farm).toBeGreaterThanOrEqual(3);
+		expect(m.outlet).toBeGreaterThanOrEqual(3);
+	});
+}
