@@ -525,7 +525,8 @@ counsel: what it assumes and what is open is in [legal-status.md](./legal-status
 same frame, prerendered; 2026-10-02): the third-party data the service
 serves or reads (the basemap, the Copernicus GLO-30 relief and delineation
 DEM, HydroRIVERS, ESA WorldCover, JRC Global Surface Water (Trace a dam),
-dPET (the evaporation proposals), CHIRPS, the map's label fonts), each with
+dPET (the evaporation proposals), CHIRPS, Digital Earth Africa
+Waterbodies and WOfS (the dams seen from space), the map's label fonts), each with
 what it is used for, its publisher, its licence (and the day it was read, "read on …") and the credit that licence
 asks for, word for word: the HydroSHEDS Exhibit B statement, the Copernicus
 Art. 6(b) notice and Art. 6(c) liability sentence, the WorldCover credit,

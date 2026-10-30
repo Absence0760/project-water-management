@@ -2911,8 +2911,10 @@ In short:
     waterbodies (public DE Africa ids) and **every traced dam's outline**
     with its map feature id, from all projects (`app_dam_outlines`, worker
     only). An outline is a project's drawing, so it leaves the VPC only to
-    our own bucket, for our own fetcher; what DE Africa receives is a
-    waterbody uid in a public file path (Waterbodies), or for WOfS a STAC
+    our own bucket, for our own fetcher; what DE Africa receives is, for
+    Waterbodies, a list of public waterbody uids in a WFS filter (for their
+    integer ids) and that id in the API's path, with the date range asked
+    (a request names no dam, project or person), or for WOfS a STAC
     search over the dam's box **snapped outward to a 0.05° grid** (about
     5.5 km; `stac.ts` `snapSearchBox`), never the outline or its exact box,
     and then HTTP range reads of the scenes' COGs, which reveal only which
@@ -2924,7 +2926,13 @@ In short:
     bounded again by `app_dam_observation_load`, and land only on dams the
     file's uid is matched to, or the dam its feature id names. The live
     client's `FEED_HOSTS` gained `deafrica-services.s3.af-south-1.amazonaws.com`
-    only; the log lines carry counts and a reason, never a uid or dam.
+    and, for the Waterbodies API (2026-10-30), `api.digitalearth.africa`
+    and `geoserver.digitalearth.africa`, each kept by `FEED_HOST_PATHS` to
+    the one path we read (`/waterbodies/`, `/geoserver/wfs`), since both
+    serve far more; the WFS filter is built only from uids that match
+    `WATERBODY_UID` (no quote can reach the CQL), and its JSON answer is
+    checked per feature (`parseWbIds`). The log lines carry counts and a
+    reason, never a uid or dam.
   - **Reference evaporation in the copy** (issue #604 R5-E). The
     mirror-ingest Lambda (outside the VPC) also calls the Copernicus CDS for
     AgERA5, with ERA5-Land's CDS key read from Secrets Manager at run time
