@@ -771,7 +771,10 @@ no `kind`), each with
   its parameters come from (`members`, from `summary.unitRain.paramSource`:
   `zone` its own zone, `assigned` borrowed by Parameters from, `rest` the
   rule for units outside every location, `default` the catchment
-  parameters; a run from before engine 1.110.0 has every unit `zone`). The
+  parameters; a run from before engine 1.110.0 recorded none, so they are
+  read from its network: a gauge's units and those draining through its
+  calibration site are `zone`, the site zone's units beside or below the
+  site `rest`). The
   pack already names every unit (§ 4); an applicant's copy is an allowlisted
   projection that holds no calibration section ([§ Applicants](#applicants)),
 - the X1–X4 its units ran on (`summary.unitRain.zones`), and whether they
@@ -787,7 +790,8 @@ no `kind`), each with
   run's calibration statistics), null with no scored day.
 
 § 3's calibration record and validation read the headline location's window
-and fit record (`headlineSnapshotSettings`, issue #659: a gauge's row when the
+and fit record (the frontend's `zones.ts` `runHeadlineSettings`, the engine's
+`headlineCalibrationSettings`, issue #659: a gauge's row when the
 headline is a gauge, the top level for the outlet, a legacy site's as it ran).
 
 Everything is read from what the run froze (its summary, settings snapshot

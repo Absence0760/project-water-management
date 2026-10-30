@@ -66,7 +66,7 @@ describe('zoneColouring (issue #555; locations, issue #659)', () => {
 			{ band: 'zone', label: 'Outlet zone (outlet, headline): 2 units', swatch: 'var(--series-2)' },
 			{ band: 'none', label: 'No land area, in no zone' }
 		]);
-		expect(c.caption).not.toContain('outlined');
+		expect(c.caption).not.toContain('ring');
 	});
 
 	it('gives a borrowed unit its donor’s colour, an outline marker and "borrowed from" in its label and the key (issue #659)', () => {
@@ -79,6 +79,6 @@ describe('zoneColouring (issue #555; locations, issue #659)', () => {
 			{ band: 'zone', label: 'Outlet zone (outlet, headline): 1 unit', swatch: 'var(--series-2)' },
 			{ band: 'none', label: 'No land area, in no zone' }
 		]);
-		expect(c.caption).toContain('an outlined unit borrows another location’s');
+		expect(c.caption).toContain('a unit in a dotted ring runs on another location’s parameters');
 	});
 });

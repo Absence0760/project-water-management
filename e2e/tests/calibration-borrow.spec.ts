@@ -19,7 +19,7 @@ const DAYS = 120;
 const quiet = { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 };
 
 test('a unit on another tributary borrows the upstream gauge’s parameters: fitted with it first, marked on the Network and the Map, and one line in the comparison', async ({ page, owner }) => {
-	test.setTimeout(180_000);
+	test.setTimeout(120_000);
 	void owner;
 	const project = await createProject(page.request, 'Borrowed parameters');
 	// The upper weir drains to the middle weir, the middle weir to the outlet. The side farm is on a tributary of
@@ -61,9 +61,9 @@ test('a unit on another tributary borrows the upstream gauge’s parameters: fit
 	await openFold(params, 'unit-params-fold');
 	const sideRow = params.getByTestId('unit-params-row').filter({ hasText: 'Side farm' });
 	// With no location downstream it takes the nearest upstream on its river: the middle weir.
-	await expect(sideRow.getByTestId('unit-params-runs-on')).toHaveText('Middle weir (nearest upstream)');
+	await expect(sideRow.getByTestId('unit-params-runs-on')).toHaveText('Runs on: Middle weir (nearest upstream)');
 	await params.getByLabel('Parameters from: Side farm').selectOption({ label: 'Upper weir' });
-	await expect(sideRow.getByTestId('unit-params-runs-on')).toHaveText('Upper weir (borrowed)');
+	await expect(sideRow.getByTestId('unit-params-runs-on')).toHaveText('Runs on: Upper weir (borrowed)');
 	await expect(params.getByTestId('unit-params-error')).toHaveCount(0);
 	await saveSettings(page);
 	const saved = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings;
@@ -79,10 +79,12 @@ test('a unit on another tributary borrows the upstream gauge’s parameters: fit
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
 	const steps = fit.getByTestId('fit-steps').getByTestId('fit-step');
 	await expect(steps).toHaveCount(2);
-	await expect(steps.nth(0)).toContainText('Upper weir');
-	await expect(steps.nth(0)).toContainText('Side farm');
-	await expect(steps.nth(1)).toContainText('Middle weir');
-	await expect(steps.nth(1)).toContainText('after: Upper weir');
+	// Each step's row: its location, the locations fitted before it, and its units with how many it borrowed.
+	await expect(steps.nth(0).getByRole('cell').nth(0)).toHaveText('Upper weir');
+	await expect(steps.nth(0).getByRole('cell').nth(1)).toHaveText('–');
+	await expect(steps.nth(0).getByRole('cell').nth(2)).toHaveText('2 (1 borrowed)');
+	await expect(steps.nth(1).getByRole('cell').nth(0)).toHaveText('Middle weir');
+	await expect(steps.nth(1).getByRole('cell').nth(1)).toHaveText('after Upper weir');
 
 	// 5. Apply: both rows get their parameters, the upper weir's fit record naming the borrowed unit.
 	await fit.getByRole('button', { name: 'Apply to form' }).click();

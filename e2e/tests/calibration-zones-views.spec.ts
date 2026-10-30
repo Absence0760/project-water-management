@@ -48,7 +48,7 @@ const SITE_ZONE = 'Outflow gauge zone (outlet, headline)';
 async function zoneRows(page: Page) {
 	const table = page.getByTestId('zone-calibration');
 	await expect(table.getByRole('heading', { name: 'Calibration locations' })).toBeVisible();
-	return table.locator('tbody tr');
+	return table.locator('tbody tr[data-zone]');
 }
 
 test('the Network and the Map colour each unit by its calibration zone, with a legend; a run scores each zone’s gauge on Calibration and in the report', async ({ page, owner }) => {

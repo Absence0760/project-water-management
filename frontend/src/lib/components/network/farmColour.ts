@@ -127,7 +127,7 @@ export function zoneColouring(nodes: readonly NetworkNode[], groups: readonly Zo
 		mode: 'zone',
 		byNode,
 		legend,
-		caption: `Hydrological units coloured by the calibration location whose parameters they run on: each ticked location’s units, upstream first, the headline’s last${groups.some((g) => g.borrowed.length) ? '; an outlined unit borrows another location’s' : ''} (Calibration → Calibration record, as saved).`,
+		caption: `Hydrological units coloured by the calibration location whose parameters they run on: each ticked location’s units, upstream first, the headline’s last${groups.some((g) => g.borrowed.length) ? '; a unit in a dotted ring runs on another location’s parameters' : ''} (Calibration → Calibration record, as saved).`,
 		unsaved: false
 	};
 }

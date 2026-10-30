@@ -115,7 +115,7 @@ describe('calibration zones on the map (issue #555; locations, issue #659)', () 
 		expect(zoneLegendRows([weir, site])).toEqual([
 			{ key: 'H', text: 'Weir zone, not fitted yet', count: 1, note: '', token: '--series-1', marker: false },
 			{ key: 'H:borrowed', text: 'Borrowed from Weir, not fitted yet', count: 1, note: '', token: '--series-1', marker: true },
-			{ key: 'G', text: 'Outlet zone (outlet, headline)', count: 2, note: '1 nearest upstream', token: '--series-2', marker: false }
+			{ key: 'G', text: 'Outlet zone (outlet, headline)', count: 2, note: '1 placed by nearest upstream', token: '--series-2', marker: false }
 		]);
 	});
 

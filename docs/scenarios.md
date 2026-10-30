@@ -259,7 +259,15 @@ over the row's own, or the top level's it ran on while not fitted yet), the
 statistics and the parameters the run reads for it; with the outlet as the
 headline, and for settings from before 1.110.0 (whose top level was the
 site's and is moved into its row when the run reads them), the top level, as
-before. `gr4j.warmupDays` is always the project's own.
+before. `gr4j.warmupDays` is always the project's own. The headline is the
+one the settings name when the op applies (automatic: the outlet when ticked,
+else the ticked gauge with the largest area above it), so an earlier op that
+changes areas can move it. One difference from settings before 1.110.0: there
+a `gr4j.x*` override also moved a ticked gauge not fitted yet (it ran on the
+top level); in the locations' shape such a gauge still runs on the top level,
+which the override no longer touches. The run comparison shows which
+parameters a scenario changed. A reversed window in the headline's row is
+refused as the top level's is (`structure.ts`).
 
 **`settings.set` paths:** `februaryDays`, `effectiveRainFraction`,
 `effectiveRainFractionMonthly`, `effectiveRainStoreMm`, `lakeEvapFactor`, `lakeEvapFactorMonthly`, `apanMm`, `panCoefficient`,

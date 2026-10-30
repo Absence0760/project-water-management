@@ -2309,7 +2309,44 @@ function cropSystemText(m: ProjectModel, c: CropDef): string {
 function locatedSettings(r: RunInputsSnapshot | null | undefined): RunInputsSnapshot['settings'] | undefined {
 	const nodes = r?.model?.nodes;
 	if (!r?.settings || !Array.isArray(nodes) || !nodes.length) return r?.settings;
-	return normalizeCalibrationLocations(r.settings as never, nodes as never) as RunInputsSnapshot['settings'];
+	// Whether the outlet had a record, as the migration judges it (a run with no series list: as the engine reads it, yes).
+	const keys = r.series ? Object.keys(r.series) : null;
+	const outletRecord = keys === null || keys.includes('flow_observed_m3s') || keys.includes('flow_logger_m3s');
+	return normalizeCalibrationLocations(r.settings as never, nodes as never, outletRecord) as RunInputsSnapshot['settings'];
+}
+
+/** A legacy snapshot (no boolean calibrateAtOutlet) whose calibration site was a gauge inside the network: normalising made it a row. */
+const legacyInnerSite = (raw: RunInputsSnapshot['settings'] | undefined, located: RunInputsSnapshot['settings'] | undefined) =>
+	!!raw && typeof (raw as { calibrateAtOutlet?: unknown }).calibrateAtOutlet !== 'boolean' && typeof (located as { calibrationSiteNodeId?: unknown } | undefined)?.calibrationSiteNodeId === 'string';
+
+/**
+ * Two snapshots from before engine 1.110.0, each with its calibration site at a gauge: normalising copied the site's
+ * window, record, exclusions, suspect-day rule and X1–X4 into that gauge's row and left them at the top level too,
+ * where both runs read them only as the site's. The row's line says each change; B's top level takes A's for those
+ * keys, so it isn't said a second time as if the outlet's had changed.
+ */
+function withoutSiteEcho(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+	const qa = (a.qualityFlags ?? {}) as Record<string, unknown>;
+	const qb = (b.qualityFlags ?? {}) as Record<string, unknown>;
+	const ga = (a.gr4j ?? {}) as Record<string, unknown>;
+	const gb = (b.gr4j ?? {}) as Record<string, unknown>;
+	return {
+		...b,
+		calibrationStart: a.calibrationStart,
+		calibrationEnd: a.calibrationEnd,
+		calibrationFlowKind: a.calibrationFlowKind,
+		calibrationExclusions: a.calibrationExclusions,
+		qualityFlags: { ...qb, suspect: qa.suspect, zeroFlowMonths: qa.zeroFlowMonths },
+		gr4j: { ...gb, x1: ga.x1, x2: ga.x2, x3: ga.x3, x4: ga.x4 }
+	};
+}
+
+/** diffSettings over the snapshots in the calibration locations' shape (locatedSettings, withoutSiteEcho). */
+function diffLocatedSettings(a: RunInputsSnapshot | null | undefined, b: RunInputsSnapshot | null | undefined, siteName: (id: string | null) => string, recordName: (id: string) => string): InputChange[] {
+	const la = locatedSettings(a);
+	let lb = locatedSettings(b);
+	if (la && lb && legacyInnerSite(a?.settings, la) && legacyInnerSite(b?.settings, lb)) lb = withoutSiteEcho(la, lb) as RunInputsSnapshot['settings'];
+	return diffSettings(la, lb, siteName, { a: a?.stations, b: b?.stations }, recordName);
 }
 
 export function diffInputs(
@@ -2331,7 +2368,7 @@ export function diffInputs(
 	const recordName = (id: string) => recordNames.get(id) ?? stationNames.get(id) ?? id;
 	return [
 		...diffModel(a?.model, b?.model),
-		...diffSettings(locatedSettings(a), locatedSettings(b), siteName, { a: a?.stations, b: b?.stations }, recordName),
+		...diffLocatedSettings(a, b, siteName, recordName),
 		...diffStations(a?.stations, b?.stations),
 		...diffSeries(a?.series, b?.series, values, (id) => names.get(id) ?? id, (id) => stationNames.get(id) ?? id)
 	];
@@ -2381,7 +2418,10 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource'],
 		[RAIN_STATIONS_LABEL, 'rainStations'],
 		['Kept data checks', 'checksKept'],
-		['Kept warnings', 'warningsKept']
+		['Kept warnings', 'warningsKept'],
+		// The labels before issue #659 (engine 1.110.0), which stored revisions keep.
+		['Calibration site', 'calibrationSiteNodeId'],
+		['Calibration zones', 'calibrationZones']
 	);
 	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) out.push([`Data quality ${f.label}`, `dataQuality.${k}`]);
 	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);

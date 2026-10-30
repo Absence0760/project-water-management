@@ -968,16 +968,16 @@ next run applies.
 - **Colours** (`mapResults.ts` `zoneFills`): each area linked to a land unit
   takes its group's colour token, the crop palette's in order
   (`ZONE_TOKENS`, `--series-1`, `--series-2`, `--series-3`, `--series-5`, …;
-  upstream first, the headline location's last, then `--text-muted` for the
-  units on the catchment parameters), read from `<html>`'s computed style and
+  upstream first, the headline location's last, then the next token for the
+  units on the catchment parameters, never "No figure"'s grey), read from `<html>`'s computed style and
   again on a theme switch (`MapResults.zoneColours`), as the bands are. A unit
   given another location's parameters by **Parameters from** takes its
   donor's colour. Every other area (not linked, a gauge, a water user, a farm
   with no land area) takes "No figure"'s colour (`resultFills`). Past nine
   locations the colours repeat; the name beside each is what tells them apart.
 - **Words.** The legend lists each group ("Middle weir zone (1 unit)",
-  "Outflow gauge zone (outlet, headline) (2 units, 1 nearest upstream)", ",
-  not fitted yet") and, on its own line with a dashed swatch, each group's
+  "Outflow gauge zone (outlet, headline) (2 units, 1 placed by nearest upstream)", ",
+  not fitted yet") and, on its own line with the donor's swatch, each group's
   borrowed units ("Borrowed from Upper weir (1 unit)"); the card adds
   **Calibration zone** ("Borrowed from Upper weir", "Nearest upstream: Middle
   weir") and Every feature a **Calibration zone** column (`featureZone`), so a

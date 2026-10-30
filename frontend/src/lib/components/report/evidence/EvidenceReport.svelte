@@ -12,7 +12,6 @@
 		declaredRuleText,
 		describeFitRecord,
 		ENSEMBLE_MEASURES_SINCE,
-		headlineSnapshotSettings,
 		SSP_LABEL,
 		type Band,
 		type EvidenceReport,
@@ -29,6 +28,7 @@
 	import CalibrationPanel from '#lib/components/calibration/CalibrationPanel.svelte';
 	import ZoneCalibrationTable from '#lib/components/calibration/ZoneCalibrationTable.svelte';
 	import { evidenceZoneRows } from '#lib/calibration/zoneStats.js';
+	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 	import FitProvenance from '#lib/components/calibration/FitProvenance.svelte';
 	import Disclaimer from '#lib/components/liability/Disclaimer.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -173,7 +173,7 @@
 	const modeText = (m: keyof typeof ALLOCATION_MODE_LABEL | null) => (m === null ? 'not recorded (a run before engine 1.18.0)' : ALLOCATION_MODE_LABEL[m]);
 	// The headline calibration location's settings (issue #659): its window and fit record are the calibration record
 	// and validation below (a gauge's row, or the outlet's top level; a legacy site's as it ran).
-	const headline = $derived(headlineSnapshotSettings(base) as { calibrationStart?: string | null; calibrationEnd?: string | null; fitRecord?: Parameters<typeof describeFitRecord>[0] | null });
+	const headline = $derived((runHeadlineSettings(base as never) ?? {}) as { calibrationStart?: string | null; calibrationEnd?: string | null; fitRecord?: Parameters<typeof describeFitRecord>[0] | null });
 	const fit = $derived(headline.fitRecord ?? null);
 </script>
 

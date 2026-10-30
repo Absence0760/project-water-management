@@ -15,15 +15,16 @@
 </script>
 
 <p class="small muted caption" data-testid="map-zone-caption">
-	Each unit’s area in the colour of the calibration location whose parameters it runs on: each ticked location’s units, upstream first, the headline’s last; a
-	borrowed unit takes its donor’s colour. From the saved settings (Calibration → Calibration record), not a run.
+	Each unit’s area in the colour of the calibration location whose parameters it runs on: each ticked location’s units, upstream first, the headline’s last. A
+	borrowed unit’s area has its donor’s colour, with nothing else to tell it apart: its line below, and its card, say so. From the saved settings (Calibration →
+	Calibration record), not a run.
 </p>
 <div class="legend small" role="group" aria-labelledby="{uid}-zone-h" data-testid="map-zone-legend">
 	<span class="key-h" id="{uid}-zone-h">Calibration zone</span>
 	<ul class="legend-items">
 		{#each rows as r (r.key)}
 			<li class="legend-item" data-zone={r.key} data-token={r.token} data-colour={colours[r.token]} data-marker={r.marker ? 'borrowed' : undefined}>
-				<span class="sw" class:borrowed={r.marker} style:--c={colours[r.token]} aria-hidden="true"></span>
+				<span class="sw" style:--c={colours[r.token]} aria-hidden="true"></span>
 				<span>{r.text}{' '}<span class="muted">({unitCount(r.count)}{r.note ? `, ${r.note}` : ''})</span></span>
 			</li>
 		{/each}
@@ -60,9 +61,5 @@
 		height: 0.75rem;
 		border: 2px solid var(--c);
 		background: color-mix(in srgb, var(--c) 75%, transparent);
-	}
-	/* A group's borrowed units: the same colour, outlined dashed in the text colour, as the Network rings them. */
-	.sw.borrowed {
-		border: 2px dashed var(--text);
 	}
 </style>

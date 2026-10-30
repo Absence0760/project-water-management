@@ -14,11 +14,9 @@ import { calibrationRestOf, GR4J_PARAMS, resolveLocations, type CalibrationRest,
  * both themes, `--series-4` left to the line charts). A group's name is always
  * written beside its colour (legend, label line, card), so a reused colour past
  * the ninth never stands alone. The units on the catchment parameters take the
- * drawing's plain fill (`--text-muted`), as no location's.
+ * next colour after the locations', never the map's "no figure" grey.
  */
 export const ZONE_TOKENS = ['--series-1', '--series-2', '--series-3', '--series-5', '--series-6', '--series-7', '--series-8', '--series-9', '--series-10'] as const;
-/** The colour of the units on the catchment parameters (no location's group). */
-export const DEFAULT_GROUP_TOKEN = '--text-muted';
 
 export interface ZoneGroup {
 	/** Unique per group: the location's node id, or 'default' for the units on the catchment parameters. */
@@ -87,7 +85,7 @@ export function zoneGroups(nodes: readonly NetworkNode[], settings: ZoneSettings
 			rest: [],
 			restRule,
 			fitted: true,
-			token: DEFAULT_GROUP_TOKEN
+			token: ZONE_TOKENS[groups.length % ZONE_TOKENS.length]!
 		});
 	// One group is one parameter set: nothing to tell apart.
 	return groups.length > 1 ? groups : null;
@@ -121,6 +119,8 @@ export function unitPlacement(g: Pick<ZoneGroup, 'kind' | 'borrowed' | 'rest'>, 
 
 /** The rest rule in a unit's words: "nearest upstream", "the headline’s". */
 export const REST_WORDS: Record<CalibrationRest, string> = { nearest: 'nearest upstream', headline: 'the headline’s', default: 'the catchment parameters' };
+/** The rest rule after a count, in a key: "1 placed by nearest upstream". */
+const REST_COUNT_WORDS: Record<CalibrationRest, string> = { nearest: 'placed by nearest upstream', headline: 'given the headline’s parameters', default: 'on the catchment parameters' };
 
 /**
  * One unit's group in words, for its label line, card and tooltip: "Weir zone", "borrowed from Weir",
@@ -143,7 +143,7 @@ export interface ZoneKeyEntry {
 	text: string;
 	/** Its units. */
 	count: number;
-	/** How many of them the rest rule placed, in words ("1 nearest upstream"); '' = none. */
+	/** How many of them the rest rule placed, in words ("1 placed by nearest upstream"); '' = none. */
 	note: string;
 	token: string;
 	marker: boolean;
@@ -158,12 +158,12 @@ export function zoneKeyEntries(groups: readonly ZoneGroup[]): ZoneKeyEntry[] {
 	const out: ZoneKeyEntry[] = [];
 	for (const g of groups) {
 		const own = g.units.length - g.borrowed.length;
-		const note = g.rest.length ? `${g.rest.length} ${REST_WORDS[g.restRule]}` : '';
+		const note = g.rest.length ? `${g.rest.length} ${REST_COUNT_WORDS[g.restRule]}` : '';
 		if (own) out.push({ key: g.key, text: zoneName(g), count: own, note, token: g.token, marker: false });
 		if (g.borrowed.length) out.push({ key: `${g.key}:borrowed`, text: `Borrowed from ${g.name}${g.fitted ? '' : ', not fitted yet'}`, count: g.borrowed.length, note: '', token: g.token, marker: true });
 	}
 	return out;
 }
 
-/** An entry as one line: "Weir zone: 2 units, 1 nearest upstream". */
+/** An entry as one line: "Weir zone: 2 units, 1 placed by nearest upstream". */
 export const keyEntryText = (e: Pick<ZoneKeyEntry, 'text' | 'count' | 'note'>) => `${e.text}: ${unitCount(e.count)}${e.note ? `, ${e.note}` : ''}`;

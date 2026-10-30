@@ -539,6 +539,12 @@ describe('applyScenario: each op', () => {
 		// Settings from before engine 1.110.0 keep the top level (the run's normaliser moves it into the site's row).
 		const legacy = applyScenario(base(), [{ op: 'settings.set', path: 'calibrationStart', value: '2021-01-01' }]);
 		expect(legacy.input.settings.calibrationStart).toBe('2021-01-01');
+		// A reversed window in the headline's row is refused, as the top level's is.
+		const reversed = applyScenario(b, [
+			{ op: 'settings.set', path: 'calibrationEnd', value: '2010-09-30' },
+			{ op: 'settings.set', path: 'calibrationStart', value: '2015-10-01' }
+		]);
+		expect(reversed.problems.join(' ')).toMatch(/the calibration window at Weir starts \(2015-10-01\) after it ends \(2010-09-30\)/);
 		// The outlet as the headline: the top level, as before.
 		const atOutlet = base();
 		atOutlet.settings = { ...atOutlet.settings, calibrateAtOutlet: true } as never;

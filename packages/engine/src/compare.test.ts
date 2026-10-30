@@ -1338,6 +1338,16 @@ describe('diffInputs', () => {
 		});
 		const migrated = at({ calibrateAtOutlet: false, calibrationSiteNodeId: 'H', calibrationStart: '2005-10-01', gr4j: { ...defaultProjectSettings().gr4j, x1: 900, x2: 0, x3: 220, x4: 3.1 }, calibrationZones: [{ ...row, qualityFlags: { suspect: defaultProjectSettings().qualityFlags.suspect } }] });
 		expect(diffInputs(legacy, migrated)).toEqual([]);
+		// Two such runs: a change at the site is said once, as the weir's row, not again as the outlet's top level.
+		const later = { ...legacy, settings: { ...legacy.settings, calibrationStart: '2008-10-01', gr4j: { ...(legacy.settings.gr4j as object), x1: 999 } } as never };
+		expect(texts(legacy, later)).toEqual(['Calibration location at Weir: X1 900 → 999; window 2005-10-01 to end of record → 2008-10-01 to end of record']);
+		// A legacy run with no outlet record against the same settings migrated (outlet unticked, rest on the catchment
+		// parameters): the migration's own reading, so nothing changed. With an outlet record, the outlet stays ticked.
+		expect(diffInputs(snapshot(), snapshot({ settings: { ...defaultProjectSettings(), calibrateAtOutlet: false, calibrationRest: 'default' } as never }))).toEqual([]);
+		const withRecord = (over: Record<string, unknown>) => snapshot({ series: { ...snapshot().series, flow_observed_m3s: { startDate: '2000-01-01', length: 366 } }, settings: { ...defaultProjectSettings(), ...over } as never });
+		expect(diffInputs(withRecord({}), withRecord({ calibrateAtOutlet: true, calibrationRest: 'headline' }))).toEqual([]);
+		// Revisions saved before keep the old labels: they still name their setting.
+		expect(settingsChangePaths()).toEqual(expect.arrayContaining([['Calibration site', 'calibrationSiteNodeId'], ['Calibration zones', 'calibrationZones']]));
 	});
 
 	it('describes a change of the CHIRPS bias correction', () => {

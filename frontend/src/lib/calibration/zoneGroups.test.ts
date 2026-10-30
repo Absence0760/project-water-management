@@ -3,7 +3,7 @@
 // rest units marked; null when every unit runs on one parameter set.
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, newCalibrationZone, type NetworkNode, type ProjectSettings } from '@water-management/engine';
-import { DEFAULT_GROUP_TOKEN, keyEntryText, unitCount, unitPlacement, unitZoneText, zoneByUnit, zoneGroups, zoneKeyEntries, zoneName, ZONE_TOKENS, type ZoneGroup } from './zoneGroups';
+import { keyEntryText, unitCount, unitPlacement, unitZoneText, zoneByUnit, zoneGroups, zoneKeyEntries, zoneName, ZONE_TOKENS, type ZoneGroup } from './zoneGroups';
 
 const node = (id: string, name: string, kind: NetworkNode['kind'], downstreamNodeId: string | null, areaKm2 = 0) => ({ id, name, kind, downstreamNodeId, areaKm2 }) as NetworkNode;
 /** A drains to the weir H, H and B to the outlet G; U is a farm with no land area. */
@@ -43,11 +43,13 @@ describe('zoneGroups', () => {
 			['H', true, ['A', 'E'], ['E'], []]
 		]);
 		const [k, h] = g as [ZoneGroup, ZoneGroup];
+		// The headline rule's count words say what the units were given.
+		expect(zoneKeyEntries(zoneGroups(branched, both({ calibrationRest: 'headline', unitParamsFrom: { E: 'H' } }))!).map(keyEntryText)).toContain('Weir zone (headline): 2 units, 1 given the headline’s parameters');
 		expect([unitPlacement(h, 'E'), unitPlacement(k, 'B'), unitPlacement(k, 'C')]).toEqual(['borrowed', 'rest', 'zone']);
 		expect(unitZoneText(h, 'E')).toBe('borrowed from Weir');
 		expect(unitZoneText(k, 'B')).toBe('nearest upstream: Kloof, not fitted yet');
 		expect(unitZoneText(k, 'C')).toBe('Kloof zone, not fitted yet');
-		expect(zoneKeyEntries(g).map(keyEntryText)).toEqual(['Kloof zone, not fitted yet: 2 units, 1 nearest upstream', 'Weir zone (headline): 1 unit', 'Borrowed from Weir: 1 unit']);
+		expect(zoneKeyEntries(g).map(keyEntryText)).toEqual(['Kloof zone, not fitted yet: 2 units, 1 placed by nearest upstream', 'Weir zone (headline): 1 unit', 'Borrowed from Weir: 1 unit']);
 		expect(zoneKeyEntries(g).map((e) => e.marker)).toEqual([false, false, true]);
 		// A location whose every unit is borrowed away has no group to colour (the fit refuses it): here one group is left.
 		expect(zoneGroups(branched, both({ calibrationRest: 'nearest', unitParamsFrom: { C: 'H', E: 'H', B: 'H' } }))).toBeNull();
@@ -61,7 +63,7 @@ describe('zoneGroups', () => {
 			['default', ['B']]
 		]);
 		const d = g[2]!;
-		expect([d.nodeId, d.kind, d.token, zoneName(d), unitZoneText(d, 'B')]).toEqual([null, 'default', DEFAULT_GROUP_TOKEN, 'Catchment parameters (no location)', 'Catchment parameters (no location)']);
+		expect([d.nodeId, d.kind, d.token, zoneName(d), unitZoneText(d, 'B')]).toEqual([null, 'default', ZONE_TOKENS[2], 'Catchment parameters (no location)', 'Catchment parameters (no location)']);
 	});
 
 	it('is null with no ticked gauge, when the only ticked gauge is unusable, or with one group', () => {

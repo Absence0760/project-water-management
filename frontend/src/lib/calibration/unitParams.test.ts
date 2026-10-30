@@ -40,20 +40,25 @@ describe('unitParamsRows', () => {
 
 	it('says a borrowed unit runs on its donor’s, and treats its own location chosen by name as its own zone', () => {
 		const rows = unitParamsRows(nodes, settings({ unitParamsFrom: { C: 'H', A: 'H' } }), { C: 'H', A: 'H' });
+		// The borrowed unit first, then the rest by name.
 		expect(view(rows).map((r) => [r[0], r[1], r[3]])).toEqual([
+			['Farm C', 'H', 'Weir (borrowed)'],
 			['Farm A', '', 'Weir (its own zone)'],
-			['Farm B', '', 'Outflow gauge (its own zone)'],
-			['Farm C', 'H', 'Weir (borrowed)']
+			['Farm B', '', 'Outflow gauge (its own zone)']
 		]);
-		expect(unitParamsLine(rows)).toBe('1 unit borrows another location’s parameters');
-		expect(unitParamsLine(unitParamsRows(nodes, settings(), null))).toBe('every unit takes its own zone’s');
+		expect(unitParamsLine(rows)).toBe('Farm C from Weir');
+		expect(unitParamsLine(unitParamsRows(nodes, settings(), null))).toBe('No unit borrows another location’s parameters');
+		const four = [...nodes, node('D', 'Farm D', 'farm', 'G', 3), node('E', 'Farm E', 'farm', 'G', 3)];
+		expect(unitParamsLine(unitParamsRows(four, settings(), { A: 'K', B: 'H', D: 'H', E: 'K' }))).toBe('4 units borrow another location’s parameters');
 	});
 
 	it('offers the rule for units outside every location to a unit with no location downstream', () => {
 		// The outlet not ticked: Farm B is below every ticked gauge.
 		const nearest = unitParamsRows(nodes, settings({ calibrateAtOutlet: false }), null).find((r) => r.name === 'Farm B')!;
-		// The rule's location isn't offered again: choosing it by name would run the same.
-		expect([nearest.options.map((o) => o.label), nearest.runsOn]).toEqual([['Nearest upstream (Kloof)', 'Weir'], 'Kloof (nearest upstream)']);
+		// The rule's location is offered by name too: choosing it pins the unit there whatever the rule becomes.
+		expect([nearest.options.map((o) => o.label), nearest.runsOn]).toEqual([['Nearest upstream (Kloof)', 'Kloof', 'Weir'], 'Kloof (nearest upstream)']);
+		const pinned = unitParamsRows(nodes, settings({ calibrateAtOutlet: false }), { B: 'K' }).find((r) => r.name === 'Farm B')!;
+		expect([pinned.value, pinned.runsOn]).toEqual(['K', 'Kloof (borrowed)']);
 		const plain = unitParamsRows(nodes, settings({ calibrateAtOutlet: false, calibrationRest: 'default' }), null).find((r) => r.name === 'Farm B')!;
 		expect([plain.options[0]!.label, plain.runsOn]).toEqual(['The catchment parameters (no location)', 'The catchment parameters']);
 	});

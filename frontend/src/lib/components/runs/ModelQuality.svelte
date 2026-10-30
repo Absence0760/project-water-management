@@ -193,7 +193,7 @@
 	const flowsDrawn = $derived(hasObserved ? 'natural, simulated and observed' : 'natural and simulated (no observed record in this run)');
 	const siteSources = $derived(siteId ? observedSources(refs, siteId) : {});
 	const siteSeries = $derived(siteId ? hydrographSeries(site, conv, true, siteSources) : []);
-	const siteName = $derived(siteId ? (nodeNames.get(siteId) ?? 'the calibration site') : '');
+	const siteName = $derived(siteId ? (nodeNames.get(siteId) ?? 'the headline calibration location') : '');
 	// The run's calibration exclusions over the hydrograph's days, each with its reason in the key under it.
 	const excluded = $derived(clipExclusions(exclusions, seriesSpan(hydroSeries)));
 	const excludedKey = $derived(excluded.length ? { label: 'Excluded from calibration', items: excluded.map(exclusionKeyText) } : undefined);
@@ -326,13 +326,13 @@
 			{@render loadFailed("the observed flow's quality flags", qualityError)}
 		{/if}
 		{#if siteId}
-			<!-- The calibration site (engine ≥ 1.41.0): the pair the run's calibration statistics score. -->
+			<!-- The headline calibration location (engine ≥ 1.41.0 the calibration site; issue #659): the pair the run's calibration statistics score. -->
 			{#if siteError}
 				{@render loadFailed(`the flows at ${siteName}`, siteError)}
 			{:else if siteSeries.length}
 				<LineChart
-					title="Flow at {siteName}, the calibration site: simulated and observed"
-					toolsLabel="Calibration site hydrograph controls"
+					title="Flow at {siteName}, the headline calibration location: simulated and observed"
+					toolsLabel="Headline location hydrograph controls"
 					unit={flowUnit}
 					series={siteSeries}
 					logToggle
@@ -348,7 +348,7 @@
 					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Calibration record → Scored at, above)."
 				/>
 			{:else}
-				<div class="chart-ph" style:height="390px" role="status">Loading flows at the calibration site…</div>
+				<div class="chart-ph" style:height="390px" role="status">Loading flows at the headline calibration location…</div>
 			{/if}
 		{/if}
 	</section>

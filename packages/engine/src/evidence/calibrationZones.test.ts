@@ -2,7 +2,7 @@
 // scores and the errata versions, read from what a run froze; each location's
 // period and each unit's parameter source (evidence-25, issue #659).
 import { describe, expect, it } from 'vitest';
-import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection, headlineFitRecord, headlineSnapshotSettings } from './calibrationZones';
+import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection, headlineFitRecord } from './calibrationZones';
 
 const params = { x1: 500, x2: 0, x3: 100, x4: 2 };
 const fit = (engineVersion: string) => ({
@@ -111,11 +111,35 @@ describe('calibrationZonesSection', () => {
 			['Outlet', { start: '2001-10-01', end: null }, [{ nodeId: 'B', name: 'Lower', how: 'zone' }]],
 			['Catchment parameters', null, [{ nodeId: 'D', name: 'Dry', how: 'default' }]]
 		]);
-		// A run from before engine 1.110.0 has no paramSource: every unit is its own zone's.
+		// A run from before engine 1.110.0 has no paramSource: a gauge's units are its own zone's, and so are the site's at the outlet.
 		expect(calibrationZonesSection(run(null, null))!.map((x) => x.members!.map((m) => m.how))).toEqual([['zone', 'zone'], ['zone']]);
+		// With its site at a gauge, the site's zone held the units draining through it and, as the rest, those beside it.
+		const legacyAtGauge = {
+			summary: { unitRain: { zones: [{ nodeId: 'K', name: 'Kloof', units: ['C'], params, fitted: true }, { nodeId: null, name: 'Weir', units: ['A', 'B'], params, fitted: true }] } },
+			inputs: {
+				settings: { calibrationSiteNodeId: 'H', calibrationZones: [{ nodeId: 'K', enabled: true, fitRecord: null }] },
+				model: {
+					nodes: [
+						{ id: 'G', name: 'Outlet', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
+						{ id: 'H', name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0 },
+						{ id: 'K', name: 'Kloof', kind: 'gauge', downstreamNodeId: 'H', areaKm2: 0 },
+						{ id: 'A', name: 'Above', kind: 'farm', downstreamNodeId: 'H', areaKm2: 10 },
+						{ id: 'B', name: 'Beside', kind: 'farm', downstreamNodeId: 'G', areaKm2: 5 },
+						{ id: 'C', name: 'Crest', kind: 'farm', downstreamNodeId: 'K', areaKm2: 3 }
+					]
+				}
+			}
+		} as never;
+		expect(calibrationZonesSection(legacyAtGauge)!.map((x) => x.members!.map((m) => [m.name, m.how]))).toEqual([
+			[['Crest', 'zone']],
+			[
+				['Above', 'zone'],
+				['Beside', 'rest']
+			]
+		]);
 	});
 
-	it('reads the headline location’s window and fit record, a legacy inner site’s included (issue #659)', () => {
+	it('reads the headline location’s fit record, a legacy inner site’s included (issue #659)', () => {
 		const nodes = [
 			{ id: 'G', name: 'Outlet', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
 			{ id: 'H', name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0 },
@@ -124,14 +148,13 @@ describe('calibrationZonesSection', () => {
 		const record = fit('1.104.0');
 		// Before engine 1.110.0: the site at the weir, its window and fit record at the top level.
 		const legacy = { settings: { calibrationSiteNodeId: 'H', calibrationStart: '2004-10-01', calibrationEnd: '2012-09-30', fitRecord: record }, model: { nodes } } as never;
-		expect(headlineSnapshotSettings(legacy)).toMatchObject({ calibrationSiteNodeId: 'H', calibrationStart: '2004-10-01', calibrationEnd: '2012-09-30', fitRecord: record });
 		expect(headlineFitRecord(legacy)).toEqual(record);
 		// Engine 1.110.0: the weir's row is the headline, the outlet's top level is the outlet record's.
 		const row = { nodeId: 'H', enabled: true, calibrationStart: '2010-10-01', calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: params, fitRecord: record };
 		const now = { settings: { calibrateAtOutlet: false, calibrationSiteNodeId: 'H', calibrationStart: '2001-10-01', fitRecord: null, calibrationZones: [row] }, model: { nodes } } as never;
-		expect(headlineSnapshotSettings(now)).toMatchObject({ calibrationStart: '2010-10-01', calibrationEnd: null, fitRecord: record });
+		expect(headlineFitRecord(now)).toEqual(record);
 		// No network to read it by: as stored.
-		expect(headlineSnapshotSettings({ settings: { calibrationStart: '2001-10-01' } } as never)).toEqual({ calibrationStart: '2001-10-01' });
+		expect(headlineFitRecord({ settings: { fitRecord: record } } as never)).toEqual(record);
 	});
 
 	it('is null when the run applied no zone', () => {

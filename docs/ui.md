@@ -3274,19 +3274,19 @@ itself.
     groups from `calibration/zoneGroups.ts`): each land unit in its group's
     colour (the crop palette's tokens in order, `ZONE_TOKENS`, upstream first,
     the headline location's last, then the units on the catchment parameters
-    in the muted ink), from the model as edited and the saved settings by the
+    in the next colour), from the model as edited and the saved settings by the
     engine's own rule (`resolveLocations`), so it is what the next run
     applies, not a run's (no "unsaved changes" line). Label: "Middle weir
     zone", "Outflow gauge zone (outlet, headline)", "Catchment parameters (no
     location)", ", not fitted yet" while a location's units take the
     catchment's parameters. A unit given another location's parameters by
-    **Parameters from** takes its donor's colour inside a dashed ring in the
+    **Parameters from** takes its donor's colour inside a dotted ring in the
     drawing's ink (`data-marker="borrowed"`) and reads "borrowed from Upper
     weir"; a unit with no ticked location downstream reads what the rule for
     such units gave it ("nearest upstream: Middle weir", "the headline's:
     …"). A farm with no land area is dashed, "no land area, in no zone". The
     key (**Colour: calibration zone**) lists each group with its own units
-    ("Middle weir zone: 2 units, 1 nearest upstream"), then each group's
+    ("Middle weir zone: 2 units, 1 placed by nearest upstream"), then each group's
     borrowed units on their own ringed line ("Borrowed from Upper weir: 1
     unit"), and the caption mentions the ring only when a unit is borrowed.
     With one parameter set (no usable ticked gauge, or one group holding
@@ -4116,8 +4116,8 @@ map" card) stays the schematic; this is the geography.
   says where the groups come from, the legend (**Calibration zone**,
   `MapZoneKey.svelte`, its own chunk, loaded only while zones show, which keeps
   the Map tab's chunk under its 60 KB ceiling) lists each group in words with
-  its unit count ("Upper weir zone (2 units, 1 nearest upstream)"), and each
-  group's borrowed units on their own line with a dashed swatch ("Borrowed
+  its unit count ("Upper weir zone (2 units, 1 placed by nearest upstream)"), and each
+  group's borrowed units on their own line with the donor's swatch ("Borrowed
   from Upper weir (1 unit)", `data-marker="borrowed"`); the picked feature's
   card adds **Calibration zone** ("Middle weir zone"; "Borrowed from Upper
   weir"; "Nearest upstream: Middle weir"; "Not linked to a unit"; "In no zone
@@ -8629,23 +8629,28 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   (issue #659 option 2, `calibration/UnitParamsTable.svelte`, its own chunk
   lazily imported by the locations table, rows from
   `lib/calibration/unitParams.ts`, `settings.unitParamsFrom`; model.md
-  §2.10n): a fold ("Parameters from: every unit takes its own zone’s", or
-  "2 units borrow another location’s parameters"; open while any unit
-  borrows or the fit would refuse) holding a table of every land unit, by
-  name, with a select **Parameters from: <unit>** (*Its own zone (Middle
-  weir)*, or for a unit with no ticked location downstream the rule that
-  places it, *Nearest upstream (Middle weir)*, *The headline’s (…)* or *The
-  catchment parameters (no location)*; then every other ticked location,
-  gauges by name, the outlet as "Outflow gauge (outlet)") and **Runs on**,
-  what the next run gives it by the engine's own rule ("Upper weir
-  (borrowed)", "Middle weir (nearest upstream)", "The catchment
-  parameters"). A choice of a location no longer ticked stays, marked
-  invalid, with a line saying the unit takes its own zone's until changed.
-  Above the fold, a live line gives the fit's refusal of the choices as
-  they stand (the engine's `locationFitPlan`: a borrowing cycle naming both
-  gauges, or a location left with no unit draining through it), e.g. "Fit
-  automatically can’t run: the units above "Upper weir" borrow …". Save
-  isn't blocked by it (a run needs no fit); Fit automatically is.
+  §2.10n), with the *Calibration locations* help tip: a fold ("No unit
+  borrows another location’s parameters", or the borrowers by name, "Side
+  farm from Upper weir", up to three, else "4 units borrow …"; its action
+  *Choose per unit*; open while any unit borrows or the fit would refuse)
+  holding a table of every land unit (a stale choice first, then the
+  borrowed units, then the rest, each by name) with a select **Parameters
+  from: <unit>** (*Its own zone (Middle weir)*, or for a unit with no ticked
+  location downstream the rule that places it, *Nearest upstream (Middle
+  weir)*, *The headline’s (…)* or *The catchment parameters (no location)*;
+  then every other ticked location, gauges by name, the outlet as "Outflow
+  gauge (outlet)"; the rule's own location too, which pins the unit there)
+  and under it **Runs on:**, what the next run gives it by the engine's own
+  rule ("Upper weir (borrowed)", "Middle weir (nearest upstream)", "The
+  catchment parameters"), as the select's description. Two columns, so it
+  fits a phone. A choice of a location no longer ticked stays, marked
+  invalid, with a line saying a choice reading "(not a ticked location)"
+  needs changing. Above the fieldset, a live region gives the fit's refusal
+  of the choices as they stand (the engine's `locationFitPlan`: a borrowing
+  cycle naming both gauges, or a location left with no unit draining
+  through it), e.g. "Fit automatically can’t run: the units above "Upper
+  weir" borrow …"; any other exception is a bug and throws. Save isn't
+  blocked by it (a run needs no fit); Fit automatically is.
     **Flow records not placed in the network** (`lib/calibration/unplaced.ts`):
   a flow record whose Measured at names a gauge no longer in the model or a
   node that isn't a gauge inside the network, or a second outlet record of
@@ -12968,7 +12973,7 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     when every set has run), the baseline's bands (R1), the paired bands
     (R2) and the printed rules.
   - **3 Model and data**: calibration record (the headline location's
-    window, `headlineSnapshotSettings`, issue #659), then, when the baseline
+    window, `zones.ts` `runHeadlineSettings`, issue #659), then, when the baseline
     ran with calibration zones (`evidence-22`, issue #555), **Calibration
     locations**: the run's location table plus, from `evidence-25` (issue
     #659), each location's **Period** and every unit by where its parameters

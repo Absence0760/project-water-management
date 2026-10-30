@@ -110,8 +110,9 @@ export function unitParamsRows(nodes: readonly NetworkNode[], settings: UnitPara
 		.sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
 		.map((u) => {
 			const base = own[u.id];
-			// Its own location's node (null = none), so the list doesn't offer it twice.
-			const ownNode = base && base.how !== 'default' ? (base.from ?? outlet?.id ?? null) : null;
+			// Its own zone's location (null = none), so the list doesn't offer it twice. A location the rest rule gives it
+			// is offered by name: choosing it pins the unit there whatever the rule becomes.
+			const ownNode = base && base.how === 'zone' ? (base.from ?? outlet?.id ?? null) : null;
 			const first: UnitParamsOption = {
 				value: '',
 				label:
@@ -125,9 +126,13 @@ export function unitParamsRows(nodes: readonly NetworkNode[], settings: UnitPara
 			const options = [first, ...choices.filter((c) => c.nodeId !== ownNode).map((c) => ({ value: c.nodeId, label: c.label }))];
 			const stale = value !== '' && !choices.some((c) => c.nodeId === value);
 			if (stale) options.push({ value, label: `${byId.get(value)?.name ?? 'A node no longer in the model'} (not a ticked location)` });
-			// Its own location chosen by name: the same as its own zone, listed as the first option.
+			// Its own zone's location chosen by name: the same as its own zone (the engine reads it so), the first option.
 			return { unitId: u.id, name: u.name, value: value === ownNode ? '' : value, options, runsOn: words(now[u.id]), stale };
-		});
+		})
+		// The rows that need a look first: a stale choice, then the borrowed units, then the rest, each by name.
+		.map((r, i) => ({ r, i, rank: r.stale ? 0 : r.value !== '' ? 1 : 2 }))
+		.sort((a, b) => a.rank - b.rank || a.i - b.i)
+		.map((x) => x.r);
 }
 
 /** Parameters from with one unit's choice set ('' or null = its own zone), or null when no unit has one. */
@@ -138,11 +143,12 @@ export function withUnitParamsFrom(assignments: Record<string, string> | null | 
 	return Object.keys(next).length ? next : null;
 }
 
-/** "Every unit takes its own zone’s" or "2 units borrow another location’s parameters" (the fold's line). */
+/** The fold's line: "No unit borrows another location’s parameters", the borrowers by name up to three ("Side farm from Upper weir"), else a count. */
 export function unitParamsLine(rows: readonly UnitParamsRow[]): string {
-	const n = rows.filter((r) => r.value !== '').length;
-	if (!n) return 'every unit takes its own zone’s';
-	return `${n} unit${n === 1 ? '' : 's'} borrow${n === 1 ? 's' : ''} another location’s parameters`;
+	const borrowing = rows.filter((r) => r.value !== '' && !r.stale);
+	if (!borrowing.length) return 'No unit borrows another location’s parameters';
+	if (borrowing.length <= 3) return borrowing.map((r) => `${r.name} from ${r.options.find((o) => o.value === r.value)?.label ?? r.value}`).join(' · ');
+	return `${borrowing.length} units borrow another location’s parameters`;
 }
 
 /**
@@ -156,7 +162,8 @@ export function unitParamsPlanError(nodes: readonly NetworkNode[], settings: Uni
 		locationFitPlan({ model: { nodes: [...nodes] }, settings: located(nodes, settings, assignments) } as unknown as ModelInput);
 		return null;
 	} catch (e) {
-		const text = e instanceof Error ? e.message : String(e);
-		return `Fit automatically can’t run: ${text}.`;
+		// The plan's refusals are plain Errors (locationFitPlan); anything else is a bug, not a refusal: let it throw.
+		if (!(e instanceof Error) || e.constructor !== Error) throw e;
+		return `Fit automatically can’t run: ${e.message}.`;
 	}
 }

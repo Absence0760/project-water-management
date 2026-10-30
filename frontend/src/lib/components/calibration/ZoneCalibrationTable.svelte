@@ -56,7 +56,7 @@
 				<tbody>
 					{#each rows as r (r.key)}
 						<tr data-zone={r.key}>
-							<th scope="row">{r.name}<span class="sub">{r.what}</span>{#if r.sources}<span class="sub" data-testid="zone-sources">{r.sources}</span>{/if}</th>
+							<th scope="row">{r.name}<span class="sub">{r.what}</span></th>
 							<td class="num">{r.units}</td>
 							{#if withPeriod}<td>{r.period ?? '–'}</td>{/if}
 							<td>{r.params}</td>
@@ -64,7 +64,7 @@
 							<td class="num">{r.nse}</td>
 							<td class="num">{r.kge}</td>
 							<td class="num">{r.pbias}</td>
-							<td data-testid="zone-sample">{!r.scored ? 'not a location: not scored' : r.days ? (r.sample ?? 'not recorded') : 'no record in its window'}</td>
+							<td data-testid="zone-sample">{!r.scored ? '–' : r.days ? (r.sample ?? 'not recorded') : 'no record in its window'}</td>
 							{#if withFit}
 								{#if !r.scored}
 									<td colspan="4" class="muted">No location: not fitted</td>
@@ -78,6 +78,12 @@
 								{/if}
 							{/if}
 						</tr>
+						{#if r.sources}
+							<!-- Its units by where their parameters come from, full width under its row (a long list stays out of the row's header). -->
+							<tr class="sources" data-zone-sources={r.key}>
+								<td colspan={8 + (withPeriod ? 1 : 0) + (withFit ? 4 : 0)} data-testid="zone-sources"><span class="visually-hidden">{r.name}: </span>{r.sources}</td>
+							</tr>
+						{/if}
 					{/each}
 				</tbody>
 			</table>
@@ -88,6 +94,11 @@
 <style>
 	.zones {
 		margin-top: 1rem;
+	}
+	.sources td {
+		padding-top: 0;
+		color: var(--text-2);
+		font-size: var(--font-sm);
 	}
 	.sub {
 		display: block;

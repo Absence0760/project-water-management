@@ -19,7 +19,7 @@ import type { CalibrationFitStatus, CalibrationStats, RunSummary } from '../proj
 import type { RunInputsSnapshot } from '../compare';
 import { describeFitRecord } from '../compare';
 import { editedParams, type FitRecord } from '../calibrate/provenance';
-import { headlineCalibrationSettings, outletNode, type UnitParamSource } from '../calibrate/locations';
+import { headlineCalibrationSettings, outletNode, pathDown, type UnitParamSource } from '../calibrate/locations';
 import { mergeSettings } from '../prepare';
 import type { ModelInput } from '../project';
 import type { Gr4jParams } from '../runoff/params';
@@ -91,7 +91,7 @@ export function headlineFitRecord(inputs: RunInputsSnapshot | null | undefined):
  * rest the project's. For a snapshot with no network to read it by, its settings as stored (the top level was the
  * site's). What the evidence report's calibration record and validation read.
  */
-export function headlineSnapshotSettings(inputs: RunInputsSnapshot | null | undefined): RunInputsSnapshot['settings'] {
+function headlineSnapshotSettings(inputs: RunInputsSnapshot | null | undefined): RunInputsSnapshot['settings'] {
 	const l = locatedSettings(inputs);
 	if (!l) return (inputs?.settings ?? {}) as RunInputsSnapshot['settings'];
 	return headlineCalibrationSettings(l.settings, l.nodes) as unknown as RunInputsSnapshot['settings'];
@@ -176,6 +176,11 @@ export function calibrationZonesSection(run: { summary: RunSummary; inputs: RunI
 	const area = new Map(modelNodes.map((n) => [n.id, finite(n.areaKm2) ?? 0]));
 	const nameOf = new Map(modelNodes.map((n) => [n.id, typeof n.name === 'string' ? n.name : n.id]));
 	const source = run.summary.unitRain?.paramSource ?? {};
+	// A run from before engine 1.110.0 recorded no sources: its calibration site's own zone held the units draining
+	// through the site and, as "the rest", every unit below or beside it; read them so from the run's network.
+	const legacySiteId = typeof (raw as { calibrationSiteNodeId?: unknown }).calibrationSiteNodeId === 'string' ? (raw as { calibrationSiteNodeId: string }).calibrationSiteNodeId : null;
+	const byId = new Map(modelNodes.map((n) => [n.id, n as unknown as { id: string; name: string; kind: 'farm'; downstreamNodeId: string | null }]));
+	const legacyHow = (u: string): UnitParamSource['how'] => (legacySiteId === null || !byId.has(legacySiteId) || pathDown(byId as never, u).includes(legacySiteId) ? 'zone' : 'rest');
 	const stats = new Map((run.summary.calibrationZones ?? []).map((s) => [s.siteNodeId, s]));
 	return zones.map((z) => {
 		// Before engine 1.110.0 (no `kind`) the null entry was the site's own zone: the top level and the run's statistics.
@@ -188,7 +193,7 @@ export function calibrationZonesSection(run: { summary: RunSummary; inputs: RunI
 		const row = z.nodeId === null ? null : rows.find((r) => r.nodeId === z.nodeId && r.enabled === true);
 		const win = z.kind === 'default' ? null : z.nodeId === null ? settings : (row ?? null);
 		const members = z.units
-			.map((u): EvidenceZoneMember => ({ nodeId: u, name: nameOf.get(u) ?? u, how: source[u]?.how ?? (z.kind === 'default' ? 'default' : 'zone') }))
+			.map((u): EvidenceZoneMember => ({ nodeId: u, name: nameOf.get(u) ?? u, how: source[u]?.how ?? (z.kind === 'default' ? 'default' : legacySite ? legacyHow(u) : 'zone') }))
 			.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : x.nodeId < y.nodeId ? -1 : 1));
 		return {
 			nodeId: z.nodeId,

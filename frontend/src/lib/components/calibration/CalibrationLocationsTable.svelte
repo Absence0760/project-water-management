@@ -16,7 +16,6 @@
 <script lang="ts">
 	import type { CalibrationFlowKind, CalibrationRest, CalibrationSite, CalibrationZone, NetworkNode, ProjectSettings, SeriesMeta } from '@water-management/engine';
 	import { CALIBRATION_RESTS } from '@water-management/engine';
-	import type { Component } from 'svelte';
 	import { api } from '#lib/api/index.js';
 	import DayInput from '#lib/components/common/DayInput.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
@@ -99,15 +98,12 @@
 	// What the rest rule reaches now: under 'default' the units on the catchment parameters, else those it sends to a location.
 	const restReach = $derived(st.rest === 'default' ? st.defaultUnits : st.restUnits);
 
-	// Parameters from (issue #659 option 2, slice D): its table mounts here once it exists, so this chunk never
-	// depends on it. A glob, not an import: an absent file is no entry.
-	const unitParamsModules = import.meta.glob<{ default: Component<Record<string, unknown>> }>('./UnitParamsTable.svelte');
-	const loadUnitParams = Object.values(unitParamsModules)[0];
-	let UnitParams = $state.raw<Component<Record<string, unknown>> | null>(null);
+	// Parameters from (issue #659 option 2): its own chunk, loaded once the table shows, so this one stays small.
+	let UnitParams = $state.raw<typeof import('./UnitParamsTable.svelte').default | null>(null);
 	$effect(() => {
-		if (!loadUnitParams || UnitParams) return;
+		if (UnitParams) return;
 		let live = true;
-		loadUnitParams().then((m) => live && (UnitParams = m.default));
+		import('./UnitParamsTable.svelte').then((m) => live && (UnitParams = m.default));
 		return () => {
 			live = false;
 		};

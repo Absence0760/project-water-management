@@ -384,7 +384,7 @@
 					<li data-supply={l.band} data-marker={l.marker} style:--zone-fill={l.swatch}>
 						{#if l.marker}
 							<!-- A borrowed unit (issue #659): its donor's colour, ringed as on the drawing. -->
-							<svg width="36" height="18" viewBox="-10 -10 38 20"><circle class="farm" r="6" /><circle class="borrow-ring" r="9" /></svg>
+							<svg width="36" height="18" viewBox="-10 -10 38 20"><circle class="farm" r="5" /><circle class="borrow-ring" r="9" /></svg>
 						{:else}
 							<svg width="36" height="18" viewBox="-10 -10 38 20"><circle class="farm" r="8" /><rect class="farm" x="10" y="-8" width="16" height="16" rx="3" /></svg>
 						{/if}
@@ -488,8 +488,8 @@
 					<circle class="farm" r="8" />
 				{/if}
 				{#if sup?.marker === 'borrowed'}
-					<!-- Takes another location's parameters (Parameters from, issue #659): a dashed ring, with "borrowed from" in the label line. -->
-					<circle class="borrow-ring" r={dam ? 14 : 12} data-testid="borrowed-mark" />
+					<!-- Takes another location's parameters (Parameters from, issue #659): a dotted ring, with "borrowed from" in the label line. -->
+					<circle class="borrow-ring" r={dam ? 16 : 13} data-testid="borrowed-mark" />
 				{/if}
 				{#if chg}
 					<!-- Edited since the coloured run (issue #444): a mark on the symbol's corner, with "changed" in the label line. -->
@@ -811,13 +811,15 @@
 		fill: var(--sch-fill);
 		stroke-dasharray: 2 2;
 	}
-	/* Borrowed by Parameters from (issue #659): a dashed ring in the drawing's ink around the donor's colour, so it
-	   reads on every zone colour in both themes; "borrowed from" is in the label line, the key and the drainage tree. */
+	/* Borrowed by Parameters from (issue #659): a dotted ring (round dots, unlike the dashed outline of a farm with no
+	   land) in the drawing's ink around the donor's colour, outside the symbol and its corner mark, so it reads on every
+	   zone colour in both themes; "borrowed from" is in the label line, the key and the drainage tree. */
 	.borrow-ring {
 		fill: none;
 		stroke: var(--sch-node);
-		stroke-width: 1.6;
-		stroke-dasharray: 3 2;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-dasharray: 0.1 3.4;
 	}
 	[data-supply='absent'] .farm {
 		fill: var(--sch-hatch);
