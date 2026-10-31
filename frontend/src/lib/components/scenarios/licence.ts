@@ -7,6 +7,13 @@
 import { DECISION_EVENT_FORUM_LABEL, DECISION_EVENT_LABEL, type DecisionEvent, type DecisionEventForum, type DecisionEventKind, type LicenceTerms, type Scenario } from '#lib/api/types.js';
 import { fmtDay } from '#lib/format/number.js';
 
+/**
+ * Under each free text a share link prints (a licence's conditions, an
+ * event's reference and note, the decision's reasons): a public record that
+ * must never hold personal information (docs/security.md § Scenario links).
+ */
+export const PUBLIC_RECORD_HINT = 'Shown on the application’s public share link: don’t include personal information, such as a name.';
+
 /** "Water Tribunal, 5 Oct 2026": where and when an event happened. */
 export const eventWhere = (e: Pick<DecisionEvent, 'forum' | 'eventDate'>) => `${DECISION_EVENT_FORUM_LABEL[e.forum]}, ${fmtDay(e.eventDate)}`;
 
