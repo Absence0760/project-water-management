@@ -1800,6 +1800,14 @@ export interface ShareScenario {
 		opNames: { id: string; name: string }[];
 		/** Each op's class as its latest run applied it; null without a run. */
 		classified: ('proposal' | 'baseline')[] | null;
+		/** How many ops set a registered volume on another unit and are left out (#523 G1); 0 when none. */
+		withheldOps: number;
+		/** With a licence issued (227, 291): the terms it was granted on; null otherwise. */
+		grantedTerms: SharedTerms | null;
+		/** What followed the decision (228, 291): appeals and their outcomes, oldest first. */
+		decisionEvents: SharedDecisionEvent[];
+		/** Whether the licence stands now, and from what; null until decided with an outcome. */
+		licence: SharedLicence | null;
 	};
 	/** ready: both runs verify; none: not run on its current ops; unverified: a stamp fails, so no result. */
 	results: 'ready' | 'none' | 'unverified';
@@ -1809,6 +1817,35 @@ export interface ShareScenario {
 	comments: SharedComment[];
 	/** Where written objections go, when the applicant gave it (166). */
 	objection: ShareObjection | null;
+}
+
+/** A licence's terms on a share page (backend share/links.ts SharedTerms): own nodes' names only, another unit's volume left out. */
+export interface SharedTerms {
+	ops: ScenarioOp[];
+	opsSha256: string;
+	opNames: { id: string; name: string }[];
+	conditions: string;
+	asApplied: boolean;
+	withheldOps: number;
+}
+
+/** An event after the decision on a share page (backend share/links.ts SharedDecisionEvent): never who recorded it. */
+export interface SharedDecisionEvent {
+	position: number;
+	kind: DecisionEventKind;
+	forum: DecisionEventForum;
+	eventDate: string;
+	reference: string;
+	note: string;
+	terms: SharedTerms | null;
+}
+
+/** Whether a shared application's licence stands (backend share/links.ts SharedLicence): the event by position. */
+export interface SharedLicence {
+	inForce: boolean;
+	from: 'decision' | 'event';
+	eventPosition: number | null;
+	appealPending: boolean;
 }
 
 /** A public comment as a share page shows it. */

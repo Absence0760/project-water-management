@@ -2969,8 +2969,14 @@ Read-only links to the current publication for people outside the project
     scenario link whose application is `submitted` or `decided`, one row of
     `project_name, scenario (allowlisted jsonb: ids, name, description,
     origin, status, decision, ops and hash, owned node ids, the op names of
-    the owned nodes only), base_run, base_stamp, base_digest, runs,
-    comments`. `runs` are the newest 5 runs whose snapshot records the
+    the owned nodes only; since 291 the granted terms with a licence issued
+    (`app_share_terms`: ops, hash, the owned nodes' names among
+    granted_op_names, conditions, as applied), the `decision_event` rows
+    (position, kind, forum, date, reference, note, a variation's terms;
+    never `recorded_by` or `recorded_at`, the newest 100) and
+    `app_scenario_licence`'s standing with its event by position),
+    base_run, base_stamp, base_digest, runs, comments`. `app_share_terms`
+    is callable only by the schema owner. `runs` are the newest 5 runs whose snapshot records the
     scenario's current ops hash and base, each with its projection
     (app_share_run_projection: dates, engine version, EWR days not met, each
     EWR site's compliance with the outlet unnamed; volumes only at 5 or more

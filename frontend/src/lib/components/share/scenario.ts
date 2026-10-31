@@ -10,9 +10,9 @@
 // them (5 or more hydrological units), then the public comments. No other
 // unit is named: the API names only the application's own nodes.
 import { classifyOp, type OpClass, type ScenarioOp } from '@water-management/engine';
-import type { SharedEwrSite, SharedRun, ShareScenario } from '#lib/api/types.js';
-import { count, fmtM3Day, fmtNumber, fmtPct, fmtStampDay, MONTHS } from '#lib/components/farm/format.js';
-import { t } from '#lib/i18n/locale.svelte.js';
+import type { SharedDecisionEvent, SharedEwrSite, SharedRun, SharedTerms, ShareScenario } from '#lib/api/types.js';
+import { count, fmtDay, fmtM3Day, fmtNumber, fmtPct, fmtStampDay, MONTHS } from '#lib/components/farm/format.js';
+import { plural, t } from '#lib/i18n/locale.svelte.js';
 
 // i18n-section: share.scenario
 
@@ -87,12 +87,69 @@ export interface ChangeRow {
  * the op alone, which calls anything it can't place a baseline assumption.
  */
 export function changeRows(sc: ShareScenario['scenario']): ChangeRow[] {
-	const names = new Map(sc.opNames.map((n) => [n.id, n.name]));
+	return opRows(sc.ops, sc.opNames, sc.ownedNodeIds, sc.classified);
+}
+
+/**
+ * A licence's granted or varied terms in the same words, each change classed
+ * by the engine's rule on the op alone (no run of the terms is shown).
+ */
+export function termsRows(terms: SharedTerms, ownedNodeIds: readonly string[]): ChangeRow[] {
+	return opRows(terms.ops, terms.opNames, ownedNodeIds, null);
+}
+
+function opRows(ops: readonly ScenarioOp[], opNames: readonly { id: string; name: string }[], owned: readonly string[], classified: readonly OpClass[] | null): ChangeRow[] {
+	const names = new Map(opNames.map((n) => [n.id, n.name]));
 	const unit = (id: string | null | undefined) => (id && names.get(id)) || t('another hydrological unit');
-	return sc.ops.map((op, i) => {
-		const cls: OpClass = sc.classified && sc.classified.length === sc.ops.length ? sc.classified[i]! : classifyOp(op, sc.ownedNodeIds);
+	return ops.map((op, i) => {
+		const cls: OpClass = classified && classified.length === ops.length ? classified[i]! : classifyOp(op, [...owned]);
 		return { cls, label: cls === 'proposal' ? t('Proposal') : t('Baseline assumption'), text: describe(op, unit) };
 	});
+}
+
+const WITHHELD_CHANGES = plural({ one: 'change', other: 'changes' });
+
+/** "Not shown: 1 change that sets another hydrological unit’s registered volume.", or '' when none is left out. */
+export function withheldLine(n: number): string {
+	if (!n) return '';
+	return t('Not shown: {changes} setting another hydrological unit’s registered volume. A share link shows no registered volume but the applicant’s own.', { changes: count(WITHHELD_CHANGES, n) });
+}
+
+/** What followed the decision, in the Act's words (228). */
+function eventKind(k: SharedDecisionEvent['kind']): string {
+	return k === 'lodged' ? t('Appeal lodged') : k === 'upheld' ? t('Decision upheld') : k === 'set_aside' ? t('Decision set aside') : t('Decision varied');
+}
+
+function forumName(f: SharedDecisionEvent['forum']): string {
+	return f === 'water_tribunal' ? t('Water Tribunal') : t('Court');
+}
+
+/** "Appeal lodged: Water Tribunal, 2 Oct 2026". */
+export function eventHeading(e: SharedDecisionEvent): string {
+	return t('{event}: {forum}, {date}', { event: eventKind(e.kind), forum: forumName(e.forum), date: e.eventDate ? fmtDay(e.eventDate) : '–' });
+}
+
+/**
+ * Where the licence stands, one sentence (app_scenario_licence, 228): on its
+ * granted terms, on the terms an appeal varied it to, set aside, or no
+ * licence at all; with an appeal open, that nothing changes until it is
+ * decided. '' until decided with an outcome.
+ */
+export function licenceLine(sc: Pick<ShareScenario['scenario'], 'licence' | 'decisionEvents'>): string {
+	const l = sc.licence;
+	if (!l) return '';
+	const from = l.from === 'event' && l.eventPosition !== null ? sc.decisionEvents.find((e) => e.position === l.eventPosition) : undefined;
+	const where = from ? t('{forum}, {date}', { forum: forumName(from.forum), date: from.eventDate ? fmtDay(from.eventDate) : '–' }) : '';
+	let line = l.inForce
+		? from
+			? t('The licence stands on the terms it was varied to on appeal ({where}).', { where })
+			: t('The licence stands on the terms it was granted on.')
+		: from
+			? t('The decision was set aside on appeal ({where}): no licence stands.', { where })
+			: t('No licence was issued.');
+	const open = sc.decisionEvents.at(-1);
+	if (l.appealPending && open?.kind === 'lodged') line += ' ' + t('An appeal is lodged with the {forum}: nothing changes until it is decided.', { forum: forumName(open.forum) });
+	return line;
 }
 
 function describe(op: ScenarioOp, unit: (id: string | null | undefined) => string): string {

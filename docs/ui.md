@@ -14407,8 +14407,18 @@ signed in or out, for someone outside the project, on a phone first.
   itself, so not shown). Then **What the application changes**: each change
   in words, the applicant's own unit by name and any other as "another
   hydrological unit", marked *Proposal* or, in red, *Baseline assumption*
-  (with a line saying what that means), and the description. In the right
-  column: the decision's reasons (once decided), **The catchment's totals**
+  (with a line saying what that means), "Not shown: *n* changes setting
+  another hydrological unit's registered volume" when any is left out
+  (291), and the description. In the right column: **The decision** (once
+  decided; 291): where the licence stands ("The licence stands on the terms
+  it was granted on", "… varied to on appeal (*forum*, *date*)", "The
+  decision was set aside on appeal …", "No licence was issued", and "An
+  appeal is lodged with the *forum*: nothing changes until it is decided"
+  while one is open), the decision's reasons, **The terms granted** (with
+  a licence issued: "As applied for" or each change in the same words,
+  and the conditions), and **After the decision**, each appeal event
+  ("Appeal lodged: Water Tribunal, 2 Oct 2026", its reference and note,
+  and a variation's terms in the same form); **The catchment's totals**
   (flow out, water supplied, units short of 95 % of demand, baseline and
   application; only at five or more units), **Public comments** (oldest
   first, author and date, *edited*), and **About this page**. The comments
