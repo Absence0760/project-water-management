@@ -1001,7 +1001,8 @@ the result change?", and put back any earlier version.
   `fields` sent and the whole notice as it then stands. So the record of
   what was announced, and from which figures, outlives the 12 publications
   `run_publication` keeps and the run itself; events from before it hold
-  only the level, % and farm count), `outlook.published/unpublished`
+  only the level, % and farm count; `GET …/restriction-log` lists them as
+  the Restriction log, `publish/restrictionLog.ts`), `outlook.published/unpublished`
   (106, issue #53 R5: the publication and outlook ids, the level, the
   season and the number of farms), `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
