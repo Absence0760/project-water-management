@@ -24,7 +24,7 @@ import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../
 import { describeFailure, JOB_ERROR_MAX, JobError, JobRelease, LeaseLostError } from './errors.js';
 import { handlers as builtInHandlers } from './handlers/index.js';
 import { claimJobs, finishJob, type JobStatus, purgeJobs, queueStats, type QueueStats } from './queue.js';
-import type { ClaimedJob, HandlerRegistry } from './registry.js';
+import type { ClaimedJob, HandlerRegistry, JobHandler } from './registry.js';
 import { logEvent } from '../logging/logEvent.js';
 import { type MfaResetTickResult, runMfaResets } from '../auth/mfaReset.js';
 import { type MirrorTickResult, runMirrorTick } from './handlers/mirror-tick.js';
@@ -84,8 +84,22 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 			// when the project has it on (a check queued now; never for a dead alert check).
 			logEvent('error', { event: 'job_dead', jobId: job.id, projectId: job.projectId, kind: job.kind, attempts: job.attempts });
 			if (job.kind !== 'alert_eval') await scheduleAlertCheck(job.projectId);
+			// What waited on it records its death (an assessment_yield job's assessment fails, 297).
+			if (handler?.onDead) await afterDeath(job, handler);
 		}
 		return status === 'failed' || status === 'dead' ? status : 'lost';
+	}
+}
+
+/** A dead job's handler's onDead, as the acting user, after the death is recorded; a failure is logged, never thrown. */
+async function afterDeath(job: ClaimedJob, handler: JobHandler<unknown>): Promise<void> {
+	try {
+		await withUser(job.actingUserId, async (db) => {
+			const parsed = handler.payload.safeParse(await readPayload(db, job.id).catch(() => null));
+			if (parsed.success) await handler.onDead!({ db, job, payload: parsed.data });
+		});
+	} catch (err) {
+		logEvent('error', { event: 'job_on_dead_failed', jobId: job.id, kind: job.kind, ...safeError(err) });
 	}
 }
 

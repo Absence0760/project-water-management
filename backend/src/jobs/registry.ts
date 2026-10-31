@@ -97,6 +97,14 @@ export interface JobHandler<P = unknown> {
 	 * it would hold the transaction open.
 	 */
 	run(ctx: JobContext<P>): Promise<void>;
+	/**
+	 * Called once the job is dead (its attempts spent, or a failure no retry can fix), in a new transaction as the
+	 * acting user, with the stored payload as `payload` parsed (skipped when it doesn't parse): for a kind whose
+	 * death leaves something else waiting on it, to record that (`assessment_yield` fails its assessment, 297).
+	 * Best effort: a throw is logged, never recorded on the job. Not called for a job the claim killed after its
+	 * lease ran out with no attempts left (app_claim_jobs, in SQL), nor for one superseded by a newer job.
+	 */
+	onDead?(ctx: { db: Db; job: Readonly<ClaimedJob>; payload: P }): Promise<void>;
 }
 
 export type HandlerRegistry = Partial<Record<JobKind, JobHandler<any>>>;

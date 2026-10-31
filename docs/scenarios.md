@@ -1255,9 +1255,14 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   attempts spent, its user no longer an editor, the worker stopping past
   its lease) or ends without its yield fails the assessment with one line
   naming the run and dam (`"The baseline: the firm yield of "Upper farm"
-  didn't finish (…)"`): the next sibling to gather records it, and the API
-  reads a pending assessment with such a row as `failed` at once
-  (`stoppedYieldsSql`), so the last one dying doesn't leave it pending. A
+  didn't finish (…)"`): the dead job's own `onDead` hook (the worker calls
+  it as the acting user once the job is dead, `jobs/runner.ts`) gathers and
+  stores the assessment as `failed`, and so does the next sibling to gather.
+  Two deaths no hook sees, the claim killing a job whose lease ran out with
+  no attempts left (`app_claim_jobs`, in SQL) and a job whose user is no
+  longer an editor (who can't write the assessment), leave the row pending
+  until a sibling gathers; the API reads a pending assessment with such a
+  row as `failed` at once (`stoppedYieldsSql`) either way. A
   yield job on another engine than the runs' (a deploy in between) fails it
   too, rather than mix two engines in one report. The optional background
   (295) works out no dam yields and is computed by the `assessment` job as
@@ -1268,7 +1273,8 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
 - Tests: `yields.db.test.ts` (six dams with two applications, more than
   the old one-job budget of five, all with firm-yield rows equal to the
   engine's; the pending state with `yields`; a dead yield job failing the
-  assessment as read and as recorded; the engine changing; the per-user cap
+  assessment as read and as recorded, and the last one dying storing it
+  failed through its `onDead`; the engine changing; the per-user cap
   counting an assessment with yields out; the purge; RLS and the insert
   guard); `jobs/trust.security.db.test.ts` (the kind's role re-check and a
   cross-project payload); `assessments.db.test.ts` (two applications end to end, the single

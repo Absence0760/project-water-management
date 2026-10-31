@@ -6058,8 +6058,8 @@ Left:
       assessment (40 dams with two applications, 16 with eight), bounded by
       the per-user assessment cap (2 in flight, counting its yield jobs)
       rather than one job's time. A yield job that dies, or ends without its
-      yield, fails the assessment naming the run and dam, recorded by a
-      sibling and read so by the API at once; an engine change in between
+      yield, fails the assessment naming the run and dam, stored by the
+      dead job's `onDead` hook or a sibling and read so by the API at once; an engine change in between
       fails it too. The background at full allocation (295) still computes
       no dam yields. Tests: `assessments/yields.db.test.ts`, the job trust
       sweep, the catalogue, `cumulative.test.ts` (engine and frontend),

@@ -14,6 +14,9 @@ import { damFirmYields, ENGINE_VERSION } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { JobError } from '../jobs/errors.js';
+import { assessmentYieldHandler } from '../jobs/handlers/assessment-yield.js';
+import { handlers } from '../jobs/handlers/index.js';
 import { runTick } from '../jobs/runner.js';
 import { loadBaseInput } from '../scenarios/execute.js';
 import { ASSESSMENT_JOBS_PER_USER } from './schema.js';
@@ -139,6 +142,35 @@ describe('the assessment fans its dams’ firm yields out to jobs and gathers th
 		expect((await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'pending' });
 		// The siblings run: the first records it; the rest find it finished and store nothing more.
 		await tick();
+		expect((await asOwner('SELECT status, problems, gathering, report FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });
+		expect(await get(id)).toMatchObject({ status: 'failed', problems: [line] });
+	});
+
+	it('the last yield job dying, with no sibling left to see it, stores the assessment as failed, naming the run and dam', async () => {
+		const { id } = await assess('Last one dies');
+		await tick(1);
+		const jobs = await yieldJobs(id);
+		const victim = jobs.find((j) => j.run === 'combined' && j.dam_name === 'Fonteinkloof')!;
+		// Every other yield job runs first and stores its yield; the victim waits.
+		await asOwner(`UPDATE job SET run_after = now() + interval '1 day' WHERE id = $1`, [victim.job_id]);
+		await tick();
+		expect((await asOwner(`SELECT count(*)::int AS n FROM assessment_yield WHERE assessment_id = $1 AND status = 'pending'`, [id]))[0]).toEqual({ n: 1 });
+		expect((await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'pending' });
+		// Then it fails past retrying (its search throws), as the real handler's onDead sees it: dead.
+		await asOwner(`UPDATE job SET run_after = now() - interval '1 second' WHERE id = $1`, [victim.job_id]);
+		const failing = {
+			...handlers,
+			assessment_yield: {
+				...assessmentYieldHandler,
+				run: async () => {
+					throw new JobError('the search ran out of memory', { retry: false });
+				}
+			}
+		};
+		await runTick({ feeds: false, reports: false, alerts: false, projectIds: [projectId], handlers: failing });
+		expect((await asOwner('SELECT status FROM job WHERE id = $1', [victim.job_id]))[0]).toEqual({ status: 'dead' });
+		const line = 'All together: the firm yield of "Fonteinkloof" didn\'t finish (the search ran out of memory)';
+		// The row itself, not only as the API reads it.
 		expect((await asOwner('SELECT status, problems, gathering, report FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });
 		expect(await get(id)).toMatchObject({ status: 'failed', problems: [line] });
 	});
