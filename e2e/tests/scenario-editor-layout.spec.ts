@@ -40,9 +40,11 @@ test('at 1440×900 Add change is on the first screen, and Application details is
 	await expect(page.getByTestId('proposer-fold').locator(':scope > summary')).toHaveText(/^Proposer: none ticked Change$/);
 	// The WULA it models (294_wula_reference): none given yet.
 	await expect(page.getByTestId('scenario-wula').locator(':scope > summary')).toHaveText(/^WULA: Not given Change$/);
+	// The mitigation alternatives it cites (298_scenario_alternatives): none yet.
+	await expect(page.getByTestId('scenario-alternatives').locator(':scope > summary')).toHaveText(/^Alternatives: None cited Change$/);
 	await expect(page.getByTestId('scenario-statement').locator(':scope > summary')).toHaveText(/^Statement: 0 of 3 answered Change$/);
 	await expect(page.getByTestId('rebase-fold').locator(':scope > summary')).toHaveText(/^Based on Calibrated baseline: rebase onto another run Rebase…$/);
-	for (const id of ['proposer-fold', 'scenario-wula', 'scenario-statement', 'rebase-fold']) {
+	for (const id of ['proposer-fold', 'scenario-wula', 'scenario-alternatives', 'scenario-statement', 'rebase-fold']) {
 		const fold = page.getByTestId(id);
 		await expect(fold).not.toHaveAttribute('open');
 		// Each summary is one line and has its disclosure marker (the rebase line had none).
@@ -51,7 +53,7 @@ test('at 1440×900 Add change is on the first screen, and Application details is
 		expect(await summary.evaluate((el) => getComputedStyle(el, '::before').borderRightWidth)).toBe('2px');
 	}
 
-	expect(await expectFoldsNamed(details(page))).toBe(4);
+	expect(await expectFoldsNamed(details(page))).toBe(5);
 
 	// Each opens to its form.
 	await openDetails(page, 'proposer-fold');
@@ -85,6 +87,7 @@ test('a viewer reads the summaries and opens them read only; no rebase is offere
 	await expect(viewer.page.getByTestId('scenario-wula').locator(':scope > summary')).toHaveText(/^WULA: Not given Show$/);
 	await openDetails(viewer.page, 'scenario-wula');
 	await expect(viewer.page.getByTestId('scenario-wula').getByRole('button')).toHaveCount(0);
+	await expect(viewer.page.getByTestId('scenario-alternatives').locator(':scope > summary')).toHaveText(/^Alternatives: None cited Show$/);
 });
 
 test('the editor stacks on a phone with no sideways scroll, folds open, and passes axe', async ({ page, owner }) => {
@@ -96,7 +99,7 @@ test('the editor stacks on a phone with no sideways scroll, folds open, and pass
 		await resizeTo(page, { width, height: 844 });
 		await expectNoSidewaysScroll(page);
 	}
-	for (const id of ['proposer-fold', 'scenario-wula', 'scenario-statement', 'rebase-fold'] as const) await openDetails(page, id);
+	for (const id of ['proposer-fold', 'scenario-wula', 'scenario-alternatives', 'scenario-statement', 'rebase-fold'] as const) await openDetails(page, id);
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page, { include: '[data-testid="application-details"]' });
 });
