@@ -2557,7 +2557,11 @@ pill (`portfolio.spec.ts` pins the withheld row); with the published restriction
 under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
 without a publication, where the dam already says *Not published*), **Data**
 (the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
-the figures*, the drought badge below, the feeds' health), **Last run** (its age, then the date or
+the figures*, the drought badge below, the feeds' health: "2 feeds OK",
+"1 of 3 feeds failing or stale", and a feed waiting on our late rain copy
+(the feed panel's **Copy behind**) named apart, "1 of 2 feeds waiting for
+our rain copy", never as failing nor as a Needs attention reason, since no
+catchment can fix it), **Last run** (its age, then the date or
 when it was published) and **Alerts** (the alerts firing now, "None" or a
 "2 firing" badge, from `alertsFiring`, [§ Alerts](#alerts)). A
 project where your role is farmer or applicant has no figures ("Not shown

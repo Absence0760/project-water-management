@@ -334,7 +334,11 @@ provenance, `ingest/verify_copy.py`):
       the next one has yielded. Trigger: before the cutover, since the copy
       must keep up for `chirps_source = "mirror"`; until then the next
       daily run after the backfill ends catches up the missed days.
-- [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
+- [x] **The portfolio counts a copy-behind feed as stale.** Done: the
+      portfolio and project-list routes pass `rainCopy(db)` into
+      `loadPortfolio`/`loadMyOutcomes`, which count such feeds in a new
+      `feeds.copyBehind` (neither ok nor failing), named apart on the Data
+      column ("1 of 2 feeds waiting for our rain copy"). `portfolio.ts`
       judges feed health without the copy (`feedHealth(f, today, tz)`), so
       a feed the panel shows as **Copy behind** counts there as failing or
       stale once its data is old. Pass the copy (`rainCopy(db)`) into

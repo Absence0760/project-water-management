@@ -166,11 +166,17 @@ export function alertsText(p: Pick<PortfolioProject, 'alertsFiring'>): string {
 	return p.alertsFiring > 0 ? `${fmtNum(p.alertsFiring)} firing` : 'None';
 }
 
-/** "No feeds", "2 feeds OK", "1 of 3 feeds failing or stale". */
+/**
+ * "No feeds", "2 feeds OK", "1 of 3 feeds failing or stale". Feeds waiting on our late rain copy (the feed
+ * panel's Copy behind: the feed is fine, the copy isn't) are named apart, never as failing or stale:
+ * "1 of 2 feeds waiting for our rain copy", or after the failing ones.
+ */
 export function feedsText(p: Pick<PortfolioProject, 'feeds'>): string {
 	const f = p.feeds;
 	if (!f.total) return 'No feeds';
-	if (f.failing) return `${f.failing} of ${plural(f.total, 'feed')} failing or stale`;
+	const copy = f.copyBehind ?? 0;
+	if (f.failing) return `${f.failing} of ${plural(f.total, 'feed')} failing or stale${copy ? `, ${copy} waiting for our rain copy` : ''}`;
+	if (copy) return `${copy} of ${plural(f.total, 'feed')} waiting for our rain copy`;
 	if (f.ok === f.total) return `${plural(f.total, 'feed')} OK`;
 	return `${f.ok} of ${plural(f.total, 'feed')} OK, the rest waiting or off`;
 }

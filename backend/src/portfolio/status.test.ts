@@ -2,6 +2,7 @@
 // shaped from what the query read (WP-2.14, docs/api.md § Portfolio).
 import { afterEach, describe, expect, it } from 'vitest';
 import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
+import { rainCopyStatus } from '../feeds/health.js';
 import { toPortfolioProject, type PortfolioRow } from './portfolio.js';
 import { ageDays, EWR_THRESHOLDS, ewrFigure, ewrStatus, IRRIGATION_THRESHOLDS, irrigationFigure, irrigationStatus, isStale } from './status.js';
 
@@ -191,7 +192,7 @@ describe('toPortfolioProject', () => {
 			lowestDamPct: { nodeName: 'Kareebos', pct: 0.18 },
 			damsKnown: true,
 			figuresWithheld: false,
-			feeds: { total: 0, ok: 0, failing: 0 },
+			feeds: { total: 0, ok: 0, failing: 0, copyBehind: 0 },
 			alertsFiring: 0,
 			restriction: { level: 'advisory', pct: 12.5 },
 			drought: { month: '2026-08', driest: { kind: 'spei', scale: 12, value: -1.62, class: 'severely-dry', from: '2025-09' } }
@@ -287,7 +288,25 @@ describe('toPortfolioProject', () => {
 			}),
 			today
 		);
-		expect(p.feeds).toEqual({ total: 4, ok: 1, failing: 2 });
+		expect(p.feeds).toEqual({ total: 4, ok: 1, failing: 2, copyBehind: 0 });
+	});
+
+	// The feed panel shows a CHIRPS feed waiting on our late copy as Copy behind (feeds/health.ts), not stale:
+	// the portfolio counts it the same way, as neither ok nor failing.
+	it('feeds: a CHIRPS feed waiting on our late copy counts as copy-behind, not stale; its own failure still wins', () => {
+		const chirps = { source: 'chirps' as const, config: { cells: [{ lat: -30, lon: 20, weight: 1 }] }, enabled: true, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastError: null, lastAttemptAt: '2026-09-26T01:00:00Z', lastSuccessAt: '2026-09-26T01:00:00Z', consecutiveFailures: 0 };
+		// Its newest day is 2026-09-01: 25 days old, past CHIRPS' 12, so stale without the copy.
+		const old = { ...chirps, lastDataDate: '2026-09-01' };
+		const failing = { ...old, consecutiveFailures: 2, lastError: 'x' };
+		const days = (prelimThrough: string) => ({ sat: { finalThrough: '2026-08-31' }, rnl: { finalThrough: '2026-08-31' }, prelim: { prelimThrough } });
+		const late = rainCopyStatus(days('2026-09-01'), '2026-09-26');
+		const onTime = rainCopyStatus(days('2026-09-23'), '2026-09-26');
+		const r = row({ feeds: [old, failing] });
+		expect(toPortfolioProject(r, today, undefined, late).feeds).toEqual({ total: 2, ok: 0, failing: 1, copyBehind: 1 });
+		// Positive controls: without a copy (CHC read directly), or with one on time, the old feed is stale.
+		expect(toPortfolioProject(r, today).feeds).toEqual({ total: 2, ok: 0, failing: 2, copyBehind: 0 });
+		expect(toPortfolioProject(r, today, undefined, onTime).feeds).toEqual({ total: 2, ok: 0, failing: 2, copyBehind: 0 });
+		expect(toPortfolioProject(r, today, undefined, { readable: false }).feeds).toEqual({ total: 2, ok: 0, failing: 2, copyBehind: 0 });
 	});
 
 	// Each row counts to its own project's today (project.time_zone, 058), never
@@ -303,7 +322,7 @@ describe('toPortfolioProject', () => {
 		expect(utc).toMatchObject({ timeZone: 'UTC', today: '2026-09-25', figuresAgeDays: 7, stale: false });
 		// A feed's newest day is judged against the same local day (a CHIRPS feed is stale past 12 days).
 		const feed = { source: 'chirps' as const, config: { cells: [{ lat: -30, lon: 20, weight: 1 }] }, enabled: true, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', lastError: null, lastAttemptAt: '2026-09-25T06:00:00Z', lastSuccessAt: '2026-09-25T06:00:00Z', lastDataDate: '2026-09-13', consecutiveFailures: 0 };
-		expect(toPortfolioProject(row({ feeds: [feed] }), late).feeds).toEqual({ total: 1, ok: 0, failing: 1 });
-		expect(toPortfolioProject(row({ feeds: [feed], time_zone: 'UTC' }), late).feeds).toEqual({ total: 1, ok: 1, failing: 0 });
+		expect(toPortfolioProject(row({ feeds: [feed] }), late).feeds).toEqual({ total: 1, ok: 0, failing: 1, copyBehind: 0 });
+		expect(toPortfolioProject(row({ feeds: [feed], time_zone: 'UTC' }), late).feeds).toEqual({ total: 1, ok: 1, failing: 0, copyBehind: 0 });
 	});
 });

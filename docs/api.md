@@ -1514,8 +1514,12 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     `lowestDamPct` is `null`, as that viewer's farm previews of such a
     publication are refused (#523 I; security.md § Allocations). The EWR
     counts and the farms-short counts stay.
-  - `feeds = { total, ok, failing }`: `failing` counts failing **and** stale
-    feeds (`feeds/health.ts`); pending and disabled ones count in neither.
+  - `feeds = { total, ok, failing, copyBehind }`: `failing` counts failing
+    **and** stale feeds (`feeds/health.ts`); `copyBehind` the CHIRPS feeds
+    waiting on our late rain copy (health `copy-behind`, judged against the
+    same `rainCopy` the feed panel reads, [§ Data feeds](#data-feeds)), which
+    count as neither ok nor failing; pending and disabled ones count in none.
+    `copyBehind` is always `0` while CHIRPS is read from CHC directly.
   - `alertsFiring`: the alerts firing now (`alert_event` rows in state
     `firing`, [§ Alerts](#alerts)); `0` when none, and for a catchment with
     no alert switched on.

@@ -1,11 +1,12 @@
 // The team portfolio (WP-2.14, docs/api.md § Portfolio): one query, RLS-bound
 // rows, and figures that say where they come from. Every "cannot see" check
 // has a positive control.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, signUp, disableFeedsAfterFile } from '../__tests__/helpers.js';
 import type { Db } from '../db/tx.js';
-import { withUser } from '../db/tx.js';
+import { withoutUser, withUser } from '../db/tx.js';
 import { utcToday } from '../feeds/fetch.js';
+import { recordMirrorCopy } from '../feeds/mirrorRevision.js';
 import { loadMyOutcomes, loadPortfolio, type PortfolioProject } from './portfolio.js';
 import { localDate } from '../projects/timeZone.js';
 import { ageDays, ewrStatus, irrigationStatus } from './status.js';
@@ -183,7 +184,7 @@ describe('the figures, and where they come from', () => {
 			lowestDamPct: null,
 			damsKnown: false,
 			figuresWithheld: false,
-			feeds: { total: 0, ok: 0, failing: 0 },
+			feeds: { total: 0, ok: 0, failing: 0, copyBehind: 0 },
 			alertsFiring: 0,
 			restriction: null,
 			drought: null
@@ -339,7 +340,43 @@ describe('the figures, and where they come from', () => {
 		expect(row.dataUntil).toBe('2024-01-08');
 		expect(row.figuresUntil).toBe('2023-12-29');
 		expect(row.behindData).toBe(true);
-		expect(row.feeds).toEqual({ total: 2, ok: 1, failing: 1 });
+		expect(row.feeds).toEqual({ total: 2, ok: 1, failing: 1, copyBehind: 0 });
+	});
+});
+
+// A CHIRPS feed read from our late copy (CHIRPS_SOURCE=mirror, issue #604) shows as Copy behind on the feed
+// panel; the portfolio and the project list read the same copy (rainCopy) and count it apart, not as stale.
+describe('feeds waiting on our late CHIRPS copy', () => {
+	afterEach(async () => {
+		vi.unstubAllEnvs();
+		await asOwner('DELETE FROM mirror_copy');
+	});
+
+	it('count as copy-behind on the portfolio and the project list, and as stale while CHC is read directly', async () => {
+		await asOwner('DELETE FROM mirror_copy');
+		const pid = await makeProject(admin, 'Foxtrot copy', teamId);
+		// Fetched today, its newest day long past CHIRPS' usual lag: stale on its own.
+		await asOwner(
+			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_scheduled_at, last_attempt_at, last_success_at, last_data_date, consecutive_failures)
+			 VALUES ($1, 'chirps', '{"cells":[{"lat":-33,"lon":19,"weight":1}]}', 'rain_chirps_mm', 'CHIRPS v3 (sat) copy', $2, $2, now(), now(), now(), '2025-06-30', 0)`,
+			[pid, admin.id]
+		);
+		const outcomes = async () => byId((await admin.call('GET', '/projects/outcomes')).body.projects, pid)!.feeds;
+		// CHC read directly (the test setup's CHIRPS_SOURCE=chc): no copy, so the old feed is stale.
+		expect(byId((await portfolio(admin)).body.projects, pid)!.feeds).toEqual({ total: 1, ok: 0, failing: 1, copyBehind: 0 });
+		expect(await outcomes()).toEqual({ total: 1, ok: 0, failing: 1, copyBehind: 0 });
+
+		// Our copy (the sample's origin, counted to the day it was made), its sat finals and preliminary days months late.
+		vi.stubEnv('CHIRPS_SOURCE', 'mirror');
+		const manifest = (product: string, days: { finalThrough?: string; prelimThrough?: string }) => ({ product, revision: 2, finalThrough: null, prelimThrough: null, ...days });
+		await withoutUser((db) => recordMirrorCopy(db, 'fixtures', 'sat', manifest('sat', { finalThrough: '2025-06-30' })));
+		await withoutUser((db) => recordMirrorCopy(db, 'fixtures', 'rnl', manifest('rnl', { finalThrough: '2025-06-30' })));
+		await withoutUser((db) => recordMirrorCopy(db, 'fixtures', 'prelim', manifest('prelim', { prelimThrough: '2025-06-30' })));
+		expect(byId((await portfolio(admin)).body.projects, pid)!.feeds).toEqual({ total: 1, ok: 0, failing: 0, copyBehind: 1 });
+		expect(await outcomes()).toEqual({ total: 1, ok: 0, failing: 0, copyBehind: 1 });
+		// The loaders take the copy they are handed: none, and the same feed is stale again.
+		expect(byId(await withUser(admin.id, (db) => loadPortfolio(db, teamId, new Date())), pid)!.feeds).toMatchObject({ failing: 1, copyBehind: 0 });
+		expect(byId(await withUser(admin.id, (db) => loadMyOutcomes(db, new Date())), pid)!.feeds).toMatchObject({ failing: 1, copyBehind: 0 });
 	});
 });
 
