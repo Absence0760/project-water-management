@@ -6,6 +6,8 @@
 // like any run.
 import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type CreditedEt0Product, et0ProductsOf, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
+import type { JobMeta } from '../jobs/queue.js';
+import { LICENSED_RUN_JOB_SQL } from './licensedRun.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
 import { applicationMask } from './applicant.js';
@@ -85,6 +87,13 @@ export interface ScenarioRow {
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * The newest background run of its licensed terms (293_scenario_run_job,
+	 * scenarios/licensedRun.ts), queued when a licence was issued on other
+	 * terms than those applied for or varied on appeal; null when none, or the
+	 * reader can't read the project's jobs (a contributor).
+	 */
+	licensedRunJob: JobMeta | null;
 	/** Runs of this scenario still stored, and the newest one. */
 	runCount: number;
 	lastRun: { id: string; label: string; createdAt: string } | null;
@@ -128,6 +137,7 @@ export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
 	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)
 	 FROM scenario_member m JOIN app_user mu ON mu.id = m.user_id WHERE m.scenario_id = s.id) AS members,
 	s.created_at AS "createdAt", s.updated_at AS "updatedAt",
+	${LICENSED_RUN_JOB_SQL} AS "licensedRunJob",
 	(SELECT count(*)::int FROM app_scenario_run_meta(s.project_id, s.id)) AS "runCount",
 	(SELECT jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) FROM app_scenario_run_meta(s.project_id, s.id) r
 	 ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS "lastRun"

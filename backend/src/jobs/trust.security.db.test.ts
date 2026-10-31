@@ -27,7 +27,7 @@ vi.mock('./transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
-import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { FIXTURE_CELL } from '../feeds/fixtures.js';
 import { rank, type Role } from '../projects/access.js';
@@ -39,7 +39,7 @@ import { runTick } from './runner.js';
 type User = Awaited<ReturnType<typeof signUp>>;
 
 const cleanup: string[] = [];
-/** Projects holding an issued evidence pack: the schema keeps them (112), so their pending jobs are retired instead. */
+/** Projects holding an issued evidence pack (112) or a decided scenario (161_licence_record): the schema keeps them, so their pending jobs are retired instead. */
 const kept = new Set<string>();
 beforeEach(() => {
 	vi.stubEnv('FEED_FETCHER', 'sqs');
@@ -261,6 +261,26 @@ async function issuedApplicationPack(projectId: string, runId: string, userId: s
 }
 
 const CROSS: Partial<Record<JobKind, CrossCase>> = {
+	scenario_run: {
+		// 293: a team scenario of B's decided by its owner, acting for the authority, with a licence on other terms than its ops.
+		async queue(owner, b) {
+			await actForAuthority(owner, b.projectId, owner.id);
+			const sc = await owner.call('POST', `/projects/${b.projectId}/scenarios`, { name: 'licensed', baseRunId: b.runId, ops: [{ op: 'node.set', nodeId: b.farmId, field: 'damCapacityM3', value: 100_000 }], ownedNodeIds: [b.farmId] });
+			expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+			const sid = sc.body.scenario.id as string;
+			expect((await owner.call('POST', `/projects/${b.projectId}/scenarios/${sid}/submit`, {})).status).toBe(200);
+			const res = await owner.call('POST', `/projects/${b.projectId}/scenarios/${sid}/decide`, {
+				...DECISION,
+				outcome: 'licence_issued',
+				granted: { ops: [{ op: 'node.set', nodeId: b.farmId, field: 'damCapacityM3', value: 90_000 }] }
+			});
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			// A decided scenario is a record the schema keeps (161_licence_record), so B stays; its pending jobs are retired instead.
+			kept.add(b.projectId);
+			return { jobId: res.body.scenario.licensedRunJob.id, ref: sid };
+		},
+		effect: async (sid) => (await asOwner('SELECT count(*)::int AS n FROM model_run WHERE scenario_id = $1', [sid]))[0].n
+	},
 	delineate: {
 		// B's click handed to the worker (191), against the committed synthetic DEM (its valley's dam wall): B's job proposes it.
 		async queue(owner, b) {
