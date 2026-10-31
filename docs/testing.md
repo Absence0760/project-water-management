@@ -271,6 +271,21 @@ calibrations this way, in `packages/engine/fixtures/prior-off-calibration.golden
 Linux (run 40775756367); the fitted parameters do agree to the bit there,
 so that test pins them exactly beside the report.
 
+`calibrate/locations.legacy.test.ts` (the legacy guard of calibration
+locations, issue #659) pinned sha256 digests of every run series and fit
+score, and failed 9 of 11 on macOS arm64 while CI's x64 passed. It is the
+same libm effect (GR4J's `**` and `tanh` feed every store), not a behaviour
+change: engine 1.109.0 and current main give byte-identical JSON on one Mac
+(the one exception is the documented stale-site fit, CZ2). It now pins
+`goldenFingerprint` moments per series and `reportGolden` per fit, plus the
+fitted parameters to the bit, in `packages/engine/fixtures/locations-legacy.golden.json`
+(made from 3aa2338af, engine 1.109.0; `GOLDEN_WRITE=1` rewrites it). It
+passes on macOS arm64 and Linux x64 (Node 24); a 0.01 mm change to one pan
+value fails 9 of its 11 tests. To check x64 from a Mac:
+`docker run --platform linux/amd64 -v "$PWD":/w -w /w/packages/engine node:24 npx vitest run <file>`
+after a `pnpm install` inside that container. Don't hash model output with
+`sha256(JSON.stringify(...))` in a test.
+
 ## Why the slow ones are shaped the way they are
 
 - **Engine random soak** (`packages/engine/src/fuzz/`): checkAll on 400 seeds
