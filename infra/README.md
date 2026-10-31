@@ -1165,7 +1165,12 @@ makes the script stop and ask you to delete it. If you create an override
 by hand, delete it before any real `terraform init
 -backend-config=backend.config`. `CHECK_INFRA_KEEP=1` keeps the copy and
 prints its path; arguments go to `terraform test`
-(`pnpm check:infra -filter=tests/logging.tftest.hcl` runs one file). `pnpm test:guards` tests the script against a fake
+(`pnpm check:infra -filter=tests/logging.tftest.hcl` runs one file). With no arguments the
+test files run in parallel, each in its own copy of the checked tree, `CHECK_INFRA_JOBS` at a
+time (default: the CPUs), longest first; each file's output prints in name order and the run
+fails when any file does. One file at a time the suite outgrew CI's 10-minute job (2026-10-31:
+about 590 s, `guardrails.tftest.hcl` alone 240 s); in parallel it takes about 2.5 minutes on a
+12-core laptop and the longest file plus setup in CI. `pnpm test:guards` tests the script against a fake
 `terraform` (`infra/scripts/check-infra.test.mjs`).
 
 The test suite (`tests/*.tftest.hcl`: `guardrails.tftest.hcl`, plus `observability.tftest.hcl`

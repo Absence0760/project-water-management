@@ -26,6 +26,13 @@
 #   CHECK_INFRA_KEEP=1 bin/check-infra.sh   keeps the copy and prints its path
 #   bin/check-infra.sh -filter=tests/logging.tftest.hcl
 #                                           passes its arguments to `terraform test`
+#   CHECK_INFRA_JOBS=4 bin/check-infra.sh   test files at once (default: the CPUs)
+#
+# With no arguments the test files run in parallel, each in its own copy of
+# the checked tree (`terraform test` runs a file's run blocks one by one, and
+# the whole suite one file at a time took CI's 10-minute job past its limit),
+# longest first by size; each file's output prints in name order when all are
+# done, and the run fails when any file does.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,9 +49,11 @@ if [ -f "$src/backend_override.tf" ] && [ "$(cat "$src/backend_override.tf")" = 
 	exit 1
 fi
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/check-infra.XXXXXX")"
+base="$(mktemp -d "${TMPDIR:-/tmp}/check-infra.XXXXXX")"
+work="$base/infra"
+mkdir "$work"
 cleanup() {
-	if [ "${CHECK_INFRA_KEEP:-}" = 1 ]; then echo "check-infra: kept $work" >&2; else rm -rf "$work"; fi
+	if [ "${CHECK_INFRA_KEEP:-}" = 1 ]; then echo "check-infra: kept $base" >&2; else rm -rf "$base"; fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -79,4 +88,46 @@ else
 	terraform init -backend=false -input=false -lockfile=readonly >/dev/null
 fi
 terraform validate
-terraform test "$@"
+
+files="$(cd "$work" && ls -S tests/*.tftest.hcl 2>/dev/null || true)"
+count="$(printf '%s\n' "$files" | grep -c . || true)"
+jobs="${CHECK_INFRA_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
+if [ "$#" -gt 0 ] || [ "$count" -le 1 ] || [ "$jobs" -le 1 ]; then
+	terraform test "$@"
+	exit
+fi
+
+# One file in one copy of the checked tree (.terraform/ included: its
+# providers are links into the plugin cache), its output and status kept for
+# the summary below.
+run_file() {
+	local f="$1" name slot
+	name="$(basename "$f" .tftest.hcl)"
+	slot="$(mktemp -d "$CHECK_INFRA_BASE/slot.XXXXXX")"
+	cp -pR "$CHECK_INFRA_WORK/." "$slot/"
+	if (cd "$slot" && terraform test -filter="$f") >"$CHECK_INFRA_BASE/$name.log" 2>&1; then
+		echo 0 >"$CHECK_INFRA_BASE/$name.status"
+	else
+		echo "$?" >"$CHECK_INFRA_BASE/$name.status"
+	fi
+	rm -rf "$slot"
+}
+export -f run_file
+export CHECK_INFRA_BASE="$base" CHECK_INFRA_WORK="$work"
+echo "terraform test: $count files, $jobs at a time"
+printf '%s\n' "$files" | xargs -P "$jobs" -I{} bash -c 'run_file "$1"' _ {}
+
+failed=0
+for f in $(printf '%s\n' "$files" | sort); do
+	name="$(basename "$f" .tftest.hcl)"
+	cat "$base/$name.log"
+	if [ "$(cat "$base/$name.status" 2>/dev/null || echo 1)" != 0 ]; then
+		failed=$((failed + 1))
+		echo "check-infra: $f failed" >&2
+	fi
+done
+if [ "$failed" -gt 0 ]; then
+	echo "check-infra: $failed of $count test files failed" >&2
+	exit 1
+fi
+echo "check-infra: all $count test files passed"
