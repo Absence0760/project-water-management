@@ -10,7 +10,6 @@
 import type { ModelInput, ProjectSettings, RunoffBalance, SeriesKind, UnitRainSummary } from '../project';
 import type { ChirpsCorrection } from '../rain';
 import type { UnitRainRecipe } from './unitRain';
-import type { UnitRainFingerprint } from './unitRainFingerprint';
 import type { StationContext } from './stationForcing';
 import type { StationAreaForcing } from '../project';
 
@@ -118,20 +117,6 @@ export interface NaturalFlowInput {
 	unitStates?: { id: string; state: number[] }[];
 	/** The land units on rule 'station' (engine ≥ 1.91.0, §2.4i), as summary.stations.units reports them; with unitRunoff. */
 	stationUnits?: StationAreaForcing[];
-	/**
-	 * Fragmentation's unit shares (engine ≥ 1.105.0, issues #615, #616, docs/model.md §2.5, §2.5b): each land unit's own
-	 * natural runoff (m³/day) from GR4J on the Per unit forcing, node-id order, for the shares only: the catchment's one
-	 * run makes the natural flow, which the shares split.
-	 * Absent under Per unit (unitRunoff is it), without a land unit, and on a resumed run (its snapshot pins the shares).
-	 */
-	shareRunoff?: { nodeId: string; runoffM3Day: Float64Array }[];
-	/** With shareRunoff: the land units on rule 4 (the catchment rain), whose share is their area's. */
-	shareCatchmentRain?: { nodeId: string; name: string }[];
-	/**
-	 * The forcing the share runs ran on (engine ≥ 1.105.0, issue #616: unitRainFingerprint of the Per unit setup), so a
-	 * Fragmentation fit can tell when it moved (RunSummary.shareRain); null when they were tried without a land unit.
-	 */
-	shareRain?: UnitRainFingerprint | null;
 }
 
 export interface RunContext {

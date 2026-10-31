@@ -151,8 +151,9 @@ start from on an empty project list (**Start from an example**, docs/ui.md §
 Project list): `pnpm gen:example` writes it to
 `frontend/src/lib/components/projects/exampleCatchment.generated.json`, and
 `backend/scripts/example-file.test.ts` fails until you rerun that after
-changing the examples or the model's fields. Each runs under Fragmentation
-with a Per unit rain setup (issue #615): every unit with land has an invented
+changing the examples or the model's fields. Each runs Per unit (the only
+flow generation method from engine 1.109.0, issue #658; they were on
+Fragmentation with a Per unit setup before): every unit with land has an invented
 MAP and the rain gauge its MAP, so every unit runs on the gauge × its MAP
 ratio and the EWR is split by each unit's MAP-weighted natural runoff, with
 no unit left on the catchment rain. Between them they show every feature of

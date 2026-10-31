@@ -1,6 +1,6 @@
 <!--
 	Automated calibration (issue #153): the server runs the project's saved
-	calibration rules, one background job per fit, and keeps a fit by its
+	calibration rules, in background jobs, and keeps a fit by its
 	held-out score among the fits that pass the filters, or none, saying why.
 	New data can queue a run too (the rules' "after" group). Applying the kept
 	fit is the server's: it saves the parameters with a fit record it builds,
@@ -89,7 +89,7 @@
 		<p class="muted small" data-testid="auto-no-record">Add an observed or logger flow record on <a href="?tab=series">Data</a> to calibrate against it.</p>
 	{:else}
 		<p class="muted small">
-			The server runs the saved calibration rules below from start to finish, one background job per fit: no one chooses after the scores are seen.
+			The server runs the saved calibration rules below from start to finish, in background jobs: no one chooses after the scores are seen.
 			Applying the kept fit saves it at once, with a record of how the rules chose it.
 		</p>
 		<dl class="rules small" data-testid="auto-rules">

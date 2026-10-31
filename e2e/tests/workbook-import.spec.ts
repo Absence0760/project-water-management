@@ -132,7 +132,7 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	await expect(notes.getByRole('listitem')).toHaveCount(21);
 	// The synthetic workbook's fragmentation method is Specific: retired, so the flow is split by natural MAR (issue #616).
 	await expect(
-		notes.getByRole('listitem').filter({ hasText: "the workbook's fragmentation method 'Specific' is not used: the app splits the flow by each unit's natural MAR" })
+		notes.getByRole('listitem').filter({ hasText: "the workbook's fragmentation method 'Specific' is not used: each unit makes its own runoff on its own rain" })
 	).toHaveCount(1);
 	await expect(notes.getByRole('listitem').filter({ hasText: 'transfer Foxtrot Farm -> Golf Farm (column AA): its draw formula is the constant 0' })).toHaveCount(1);
 	await expect(notes.getByRole('listitem').filter({ hasText: 'transfer Alpha Farm -> Zulu Farm names an unknown element; skipped' })).toHaveCount(1);

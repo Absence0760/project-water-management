@@ -1,6 +1,6 @@
 import type { RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { credibility, warningGroups } from './credibility';
+import { credibility, groupUnitsOnCatchmentRain, NO_OWN_RAIN_NAMED, warningGroups, warningItem } from './credibility';
 import { calibrationHref } from '#lib/components/calibration/links.js';
 
 describe('warningGroups', () => {
@@ -42,6 +42,44 @@ describe('warningGroups', () => {
 		expect(g.check).toEqual([doubted, 'A warning the engine adds next year']);
 		// Without codes (a run before 1.102.0) the texts decide, as before.
 		expect(warningGroups([handled, doubted], null)).toEqual({ check: [handled], data: [doubted] });
+	});
+
+	describe('units with no rain of their own (engine-audit.md FM3)', () => {
+		// The engine's texts (runoff/unitRain.ts rule 4), for invented units.
+		const noRain = (name: string, tail = '') =>
+			`unit rain: "${name}" has no rain of its own (no rain gauge or CHIRPS series of its own, and no MAP to scale the catchment gauge by): it runs on the catchment rain${tail}`;
+		const noUsable = (name: string) =>
+			`unit rain: "${name}" has no usable rain of its own (its CHIRPS totals 0 mm, no rain gauge of its own, and no MAP to scale the catchment gauge by): it runs on the catchment rain`;
+		const other = 'farm flow shares sum to 80.00%, not 100% (tolerance ±0.02%)';
+
+		it('one unit keeps the engine’s sentence', () => {
+			expect(warningGroups([other, noRain('Upper farm')]).check).toEqual([warningItem(other), warningItem(noRain('Upper farm'))]);
+		});
+
+		it('many units are one thing to check at the first one’s place, counting them all and naming the first 5 by name', () => {
+			const names = Array.from({ length: 58 }, (_, i) => `Farm ${58 - i}`); // node-id order isn't name order
+			const g = warningGroups([...names.slice(0, 2).map((n) => noRain(n)), other, ...names.slice(2).map((n) => noRain(n))]);
+			expect(g.check).toEqual([
+				'Unit rain: 58 units have no rain of their own (no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by), so they run on the catchment rain: "Farm 1", "Farm 2", "Farm 3", "Farm 4", "Farm 5", and 53 more (Rain for each unit names them all)',
+				warningItem(other)
+			]);
+			expect(NO_OWN_RAIN_NAMED).toBe(5);
+		});
+
+		it('names every unit when there are no more than 5, keeps the areal correction, and groups 0 mm CHIRPS apart', () => {
+			const tail = ' × the areal correction';
+			const g = groupUnitsOnCatchmentRain([noRain('C', tail), noUsable('Z2'), noRain('A', tail), noUsable('Z1'), noRain('B', tail)]);
+			expect(g).toEqual([
+				'unit rain: 3 units have no rain of their own (no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by), so they run on the catchment rain × the areal correction: "A", "B", "C"',
+				'unit rain: 2 units have no usable rain of their own (their CHIRPS totals 0 mm, no rain gauge of their own, and no MAP to scale the catchment gauge by), so they run on the catchment rain: "Z1", "Z2"'
+			]);
+		});
+
+		it('leaves the other unit rain warnings, and a name with quotes in it, alone', () => {
+			const fell = 'unit rain: "Upper farm" ran 3 of its 120 days on the catchment\'s rain, where its station and its patching sources had no value';
+			expect(groupUnitsOnCatchmentRain([fell, noRain('The "big" farm'), noRain('B')])).toEqual([fell, expect.stringContaining('2 units have no rain of their own') as unknown as string]);
+			expect(groupUnitsOnCatchmentRain([noRain('The "big" farm'), noRain('B')])[0]).toContain(': "B", "The "big" farm"');
+		});
 	});
 
 	it('gives every code the group its text gave before codes, where the regexes knew the text', () => {

@@ -91,9 +91,15 @@ describe('members share the history', () => {
 
 	it('from the snapshot, members differ only in their season’s rain', () => {
 		const inputs = views.map((v) => outlookSeasonInput(input, v, SEASON, a).input);
-		const { rain_forecast_mm: _r0, ...rest0 } = inputs[0]!.series;
+		// The season's rain: the catchment's, and each land unit's own (rain_forecast_mm@<unit>, Per unit, the only method
+		// since engine 1.109.0).
+		const season = (k: string) => k === 'rain_forecast_mm' || k.startsWith('rain_forecast_mm@');
+		const split = (series: object) => Object.entries(series).filter(([k]) => !season(k));
+		const { rain_forecast_mm: _r0 } = inputs[0]!.series;
+		const rest0 = split(inputs[0]!.series);
 		for (const m of inputs.slice(1)) {
-			const { rain_forecast_mm: r, ...rest } = m.series;
+			const { rain_forecast_mm: r } = m.series;
+			const rest = split(m.series);
 			expect(r).not.toEqual(_r0);
 			expect(rest).toStrictEqual(rest0);
 			expect(m.settings).toStrictEqual(inputs[0]!.settings);

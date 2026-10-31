@@ -1,18 +1,23 @@
 // The regional GR4J prior for a project (issue #622 step 5, docs/model.md
 // §2.10m, docs/api.md § Regional GR4J prior):
 //
-//   GET  /projects/:id/gr4j-prior          viewer  the prior for the catchment, or one calibration zone (?zone=), from a donor set (?dataset=)
+//   GET  /projects/:id/gr4j-prior          viewer  the prior for a calibration location (?zone=; absent = the headline), from a donor set (?dataset=)
 //   POST /projects/:id/gr4j-prior/start    editor  "Start from the prior": write its p50s into that target's GR4J parameters, with a start record
 //
 // The target is what the fit it serves fits (engine priorTargetOf): with no
-// calibration zone, the catchment; under zones (issue #555), the zone's own
-// land units (each zone takes the prior built for its own units, never the
-// catchment's, model.md §2.10m). Its attributes are what the app knows of
+// gauge location ticked, the catchment; under calibration locations (issues
+// #555, #659), the location's group of land units, borrowed and rest units
+// included (each location takes the prior built for its own group, never the
+// catchment's, model.md §2.10m). `zone` names the location: a gauge's node
+// id, 'outlet' for the outlet's location, absent (or, in the start's body,
+// null) for the headline location (engine headlineLocation), which the
+// answer's target.zoneNodeId resolves.
+// Its attributes are what the app knows of
 // it: the area, the run's mean annual rain and aridity, the soil grid's PAWC
 // over the catchment boundary. Slope, clay, sand and forest stay unknown
 // until a target's own HydroATLAS attributes load (docs/followups.md), so
 // the donors are compared on those three and on distance. Its position is
-// the zone's gauge on the map, else the boundary's centroid.
+// the location's gauge on the map, else the boundary's centroid.
 //
 // Everything is read in one read-only transaction, as the user (the donors
 // and soil grid are reference tables any signed-in user reads; the project's
@@ -21,6 +26,7 @@
 import {
 	currentPriorStart,
 	ENGINE_VERSION,
+	headlineLocation,
 	priorStartParams,
 	priorTargetOf,
 	regionalPrior,
@@ -51,10 +57,17 @@ import { loadModelInput } from '../runs/execute.js';
 const Zone = z.string().regex(UUID, 'a gauge node id');
 const Dataset = z.string().trim().min(1).max(50);
 
-/** GET's query: the calibration zone (absent = the site's own zone, or with no zone the catchment) and the donor set (absent = the default). */
-export const PriorQuery = z.object({ zone: Zone.optional(), dataset: Dataset.optional() }).strict();
-/** POST …/start: the same choice in the body; `zone: null` is the site's own zone. */
-export const PriorStart = z.object({ zone: Zone.nullable().optional(), dataset: Dataset.optional() }).strict();
+/** GET's query: the calibration location (a gauge's node id; absent = the headline location, or with none ticked the catchment) and the donor set (absent = the default). */
+export const PriorQuery = z.object({ zone: z.union([Zone, z.literal('outlet')]).optional(), dataset: Dataset.optional() }).strict();
+/**
+ * POST …/start: the same choice in the body, `'outlet'` for the outlet's
+ * location. Absent or null is the headline's: null meant "the calibration
+ * site's own zone" before engine 1.110.0, which the headline is now.
+ */
+export const PriorStart = z.object({ zone: z.union([Zone, z.literal('outlet')]).nullable().optional(), dataset: Dataset.optional() }).strict();
+
+/** The location a request names: a gauge's node id, null for the outlet's, undefined for the headline's. */
+export type PriorZone = string | null | undefined;
 
 /** Where the target's position came from. */
 export type PositionFrom = 'gauge' | 'boundary';
@@ -153,7 +166,7 @@ interface Loaded {
 }
 
 /** Everything the prior needs, read as the user (the caller checks the role first). */
-async function load(db: Db, projectId: string, zone: string | null, wanted: string | undefined): Promise<Loaded> {
+async function load(db: Db, projectId: string, wanted: string | undefined, zone: PriorZone): Promise<Loaded> {
 	const datasets = await donorDatasets(db);
 	const dataset = wanted === undefined ? (datasets[0] ?? null) : (datasets.find((d) => d.dataset === wanted) ?? null);
 	if (wanted !== undefined && !dataset) throw new ApiError(400, `No donor set “${wanted}” is loaded.`);
@@ -163,10 +176,13 @@ async function load(db: Db, projectId: string, zone: string | null, wanted: stri
 		[projectId]
 	);
 	const boundary = b[0]?.geometry ?? null;
-	const { rows: g } = zone
+	const input = await loadModelInput(db, projectId);
+	// The headline location when none is named (engine 1.110.0): a gauge's position is its gauge's; the outlet's, the boundary's.
+	const at = zone === undefined ? headlineLocation(input.model.nodes, input.settings) : zone;
+	const { rows: g } = at
 		? await db.query<{ geometry: Geometry }>(
 				`SELECT geometry FROM map_feature WHERE project_id = $1 AND kind = 'gauge' AND node_id = $2 AND geometry ->> 'type' = 'Point' ORDER BY created_at, id LIMIT 1`,
-				[projectId, zone]
+				[projectId, at]
 			)
 		: { rows: [] };
 	const gp = g[0]?.geometry;
@@ -176,11 +192,11 @@ async function load(db: Db, projectId: string, zone: string | null, wanted: stri
 	const line = dataset ? (await referenceProvenance(db)).find((r) => r.kind === 'gr4j-donors' && r.dataset === dataset.dataset) : undefined;
 	const referenceLoad = line ? { loadedAt: line.recordedOn, upstreamVersion: line.version, licence: line.licence } : null;
 	const { rows: p } = await db.query<{ settings: unknown; updated_at: Date }>('SELECT settings, updated_at FROM project WHERE id = $1', [projectId]);
-	return { input: await loadModelInput(db, projectId), stored: p[0]?.settings, dataset, datasets, donors, soil, soilResult, boundary, gauge, referenceLoad, updatedAt: p[0]!.updated_at.toISOString() };
+	return { input, stored: p[0]?.settings, dataset, datasets, donors, soil, soilResult, boundary, gauge, referenceLoad, updatedAt: p[0]!.updated_at.toISOString() };
 }
 
 /** The prior from what `load` read (no transaction open: the target's climate takes a run's preparation). */
-export function computePrior(l: Loaded, zone: string | null): PriorResponse {
+export function computePrior(l: Loaded, zone: PriorZone): PriorResponse {
 	const settings = mergeSettings(l.stored);
 	const base: PriorResponse = {
 		dataset: l.dataset
@@ -263,7 +279,7 @@ export function computePrior(l: Loaded, zone: string | null): PriorResponse {
 	};
 }
 
-/** The target's current GR4J parameters: a zone row's (null until fitted: the catchment's), else the catchment's. */
+/** The target's current GR4J parameters: a gauge location's row's (null until fitted: the catchment's), else (the outlet's location, or the catchment) gr4j. */
 function zoneParams(settings: ReturnType<typeof mergeSettings>, zone: string | null) {
 	if (zone === null) return settings.gr4j;
 	const row = (settings.calibrationZones ?? []).find((z) => z.nodeId === zone);
@@ -290,17 +306,18 @@ export async function writePriorStart(db: Db, id: string, zone: string | null, r
 	const params = record.params;
 	const others = ((current as { gr4jPrior?: PriorStartRecord[] | null }).gr4jPrior ?? []).filter((r) => (r?.provenance?.target?.zoneNodeId ?? null) !== zone);
 	let patch: Record<string, unknown>;
+	// The outlet's location's parameters are gr4j (engine 1.110.0), as the catchment's are with no gauge location.
 	if (zone === null) patch = { gr4j: { ...current.gr4j, ...params } };
 	else {
 		const zones = (current.calibrationZones ?? []) as CalibrationZone[];
-		if (!zones.some((z) => z.nodeId === zone)) throw new ApiError(400, 'That gauge is not a calibration zone of the project.');
+		if (!zones.some((z) => z.nodeId === zone)) throw new ApiError(400, 'That gauge is not a calibration location of the project.');
 		patch = { calibrationZones: zones.map((z) => (z.nodeId === zone ? { ...z, gr4j: { ...params } } : z)) };
 	}
 	patch.gr4jPrior = [...others, record];
 	await db.query('UPDATE project SET settings = $2::jsonb, updated_at = now() WHERE id = $1', [id, JSON.stringify(patchSettings(stored, patch))]);
 	const pv = record.provenance;
 	const n = pv.donors.length;
-	const where = zone === null ? 'GR4J’s parameters' : 'the calibration zone’s GR4J parameters';
+	const where = zone === null ? 'GR4J’s parameters' : 'the calibration location’s GR4J parameters';
 	const reason =
 		`${where} started from the regional prior: X1 ${fmt(params.x1)} mm, X3 ${fmt(params.x3)} mm, X4 ${fmt(params.x4)} days, the medians of ${n} donor basin${n === 1 ? '' : 's'} ` +
 		`of donor set “${pv.dataset}” (${pv.datasetVersion}, SHA-256 ${pv.donorSetSha256.slice(0, 12)}…)${pv.x1From === 'soil' ? ', X1 from the soil water capacity relation' : ''}; not calibrated.`;
@@ -312,26 +329,28 @@ export const priorRoutes = new Hono<AuthEnv>()
 	.get('/:id/gr4j-prior', async (c) => {
 		const id = c.req.param('id');
 		const q = PriorQuery.parse(c.req.query());
+		// ?zone=outlet names the outlet's location (a query can't carry null); absent, the headline's.
+		const zone: PriorZone = q.zone === 'outlet' ? null : q.zone;
 		const loaded = await withUser(
 			c.get('userId'),
 			async (db) => {
 				await requireRole(db, id, 'viewer');
-				return load(db, id, q.zone ?? null, q.dataset);
+				return load(db, id, q.dataset, zone);
 			},
 			{ readOnly: true }
 		);
-		return c.json(computePrior(loaded, q.zone ?? null));
+		return c.json(computePrior(loaded, zone));
 	})
 	.post('/:id/gr4j-prior/start', async (c) => {
 		const id = c.req.param('id');
 		const body = PriorStart.parse(await readJson(c));
-		const zone = body.zone ?? null;
+		const zone: PriorZone = body.zone === 'outlet' ? null : (body.zone ?? undefined);
 		const userId = c.get('userId');
 		const loaded = await withUser(
 			userId,
 			async (db) => {
 				await requireRole(db, id, 'editor');
-				return load(db, id, zone, body.dataset);
+				return load(db, id, body.dataset, zone);
 			},
 			{ readOnly: true }
 		);
@@ -342,7 +361,8 @@ export const priorRoutes = new Hono<AuthEnv>()
 		const record: PriorStartRecord = { appliedAt: new Date().toISOString(), engineVersion: ENGINE_VERSION, params, ranges: p.ranges, provenance: p.provenance };
 		const out = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
-			return writePriorStart(db, id, zone, loaded.updatedAt, record);
+			// The location the prior was built for (the headline's resolved when none was named).
+			return writePriorStart(db, id, p.target!.zoneNodeId, loaded.updatedAt, record);
 		});
 		return c.json(out);
 	});

@@ -415,6 +415,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const units = Array.isArray(s.units) ? s.units.length : 0;
 			return `The flow split “${method}${hiLo}” was replaced by each unit’s natural-MAR share${units ? ` (${plural(units, 'unit')} had High-MAP, Low-MAP or manual values)` : ''}: the area, Hi/Lo MAP and specific shares were removed`;
 		}
+		// 286 (issue #658): Fragmentation was retired; a project on it moved to Per unit, keeping its Per unit setup.
+		case 'settings.flow_method_reset':
+			return 'Flow generation moved to Per unit: Fragmentation (one GR4J run on the catchment rain, split between the units) is retired. A fit made under it needs refitting';
 		case 'allocation.created':
 			return `Added a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
 		case 'allocation.changed':

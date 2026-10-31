@@ -37,5 +37,15 @@ export function structureIssues(input: ModelInput): StructureIssues {
 		const y = s[b];
 		if (typeof x === 'string' && typeof y === 'string' && x > y) add(`window:${label}`, `the ${label} window starts (${x}) after it ends (${y})`);
 	}
+	// Each ticked calibration location's own window (issue #659: a scenario's calibration window is the headline gauge's row).
+	for (const z of Array.isArray(s.calibrationZones) ? (s.calibrationZones as { nodeId?: unknown; enabled?: unknown; calibrationStart?: unknown; calibrationEnd?: unknown }[]) : []) {
+		if (!z || z.enabled !== true) continue;
+		const x = z.calibrationStart;
+		const y = z.calibrationEnd;
+		if (typeof x === 'string' && typeof y === 'string' && x > y) {
+			const name = m.nodes.find((n) => n.id === z.nodeId)?.name ?? String(z.nodeId);
+			add(`window:calibration:${String(z.nodeId)}`, `the calibration window at ${name} starts (${x}) after it ends (${y})`);
+		}
+	}
 	return out;
 }

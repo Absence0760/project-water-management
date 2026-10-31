@@ -836,10 +836,19 @@ alerts plug in as a further kind.
   run; no cancel. At most 2 pending per user.
 - **`auto_calibration`** (issue #153, `jobs/handlers/auto-calibration.ts`,
   [api.md § Automated calibration](./api.md#automated-calibration),
-  [model.md §2.10j](./model.md)): one case (a full GR4J fit with validation)
-  of a run of the calibration rules, as the editor it runs as; the job fits
-  it, appends it and queues the next case's job, so no job runs longer than
-  one fit (the request refuses rules estimated past 4 minutes a fit). The
+  [model.md §2.10j](./model.md)): the next piece of a run of the
+  calibration rules, as the editor it runs as. A case's fit (each start and
+  validation fit a separate DDS search) runs over as many jobs as it needs:
+  a job runs the searches in order until one more model run would pass its
+  4 minutes (or the worker's deadline), pauses the one under way, stores its
+  state and the finished searches' outcomes in the row's `work` (290) and
+  queues the next piece; the job that has every search builds the case and
+  appends it. A paused search resumes exactly, so the case is an unbroken
+  fit's. One job at a time per run, 2 attempts each; a job claimed with under
+  30 s left in the tick is handed back (`JobRelease`); a fit taking far more
+  jobs than estimated fails the run. The request refuses rules whose last
+  step of a fit can't fit one job, or whose whole run is estimated past 6
+  hours, from the model's size rather than a clock (`calibration/estimate.ts`). The
   last case picks the kept fit. Queued by new data (`start: 'new_data'`,
   `app_enqueue_auto_calibration`), the first job plans the run instead, and
   the last applies the kept fit when the rules say so and are signed off. At
@@ -848,7 +857,8 @@ alerts plug in as a further kind.
   server's own run of an uncertainty ensemble started on the run an applied
   automated fit made; it computes every member and stores the row once
   (nothing to verify: the server ran it). Refused when a run × the members
-  would take more than 4 minutes; the browser path (Runs tab) still works.
+  is estimated, from the model's size, to take more than 4 minutes, and
+  stopped if it runs past them; the browser path (Runs tab) still works.
 - **`outlook`** (issue #53 R5, `jobs/handlers/outlook.ts`, [api.md § Seasonal outlooks](./api.md#seasonal-outlooks),
   [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)):
   a base run × a season × up to 6 demand levels over the record's analogue
@@ -998,8 +1008,9 @@ flowchart LR
    too), after a person publishes or
    changes the restriction notice, and when an editor changes the rules.
    The tick queues the checks no run causes (a feed going stale or failing,
-   dead jobs) through `app_alert_schedule`: hourly for projects with those
-   rules on, and at once for a job that just died.
+   dead jobs, a firing EWR forecast alert whose forecast's days have passed
+   while no new forecast run came, 287) through `app_alert_schedule`: hourly
+   for projects with those rules on, and at once for a job that just died.
 2. **Evaluate** (`alerts/evaluate.ts`, as the job's acting editor under
    RLS). Values come from the current publication (dam level: the farm's
    published projection, and its published forecast's lowest), the newest
@@ -1072,8 +1083,8 @@ row names a source, where to read it and the series it merges into:
   Each writes the unit's own `rain_chirps_mm` series (`site_node_id` = the
   unit, 209_unit_rain_series; [data-model.md § Unit rain
   series](./data-model.md#unit-rain-series-209_unit_rain_seriessql)), which a
-  run reads under `rain_chirps_mm@<unit id>` and only `settings.unitRain`
-  `perUnit` uses. The fetch, the ingest and the health are those of any CHIRPS
+  run reads under `rain_chirps_mm@<unit id>` (every run with land units:
+  Per unit, the only method from engine 1.109.0). The fetch, the ingest and the health are those of any CHIRPS
   feed; the series is created sited before the first fetch, and a trigger
   sites it again if the feed ever recreates it. The feeds count against the
   60-feed cap like any other.

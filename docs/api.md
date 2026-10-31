@@ -693,38 +693,69 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `calibrationStart/End` are `YYYY-MM-DD` or `null` (a `null` simulation end follows the rain record, [model.md § 2.1](./model.md#21-pipeline)), and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
   (`flow_pitman_m3s` was removed in engine 0.10.0).
-  `calibrationSiteNodeId` (engine ≥ 1.41.0, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410))
-  is where calibration scores: `null` (the default) = the outlet, else a
-  UUID. A new site must be a gauge of the project's network above the outlet
-  with an observed flow record attached to it (`time_series.site_node_id`)
-  (`400 calibrationSiteNodeId: no such node in this project` / `the site is
-  the outlet (null) or a gauge above it` / `that gauge has no observed flow
-  record attached`); the check runs only when the site changes, so a stored
-  site whose gauge or record has gone doesn't block other saves (a fit then
-  refuses it, saying why). A copy or an imported project document moves it to
-  the copy's gauge. A run reads it too: its calibration statistics are
-  scored at the site (`RunSummary.calibration.siteNodeId`, below), and a
-  stored site the run can't use (its gauge gone, or no record attached any
-  more) warns (`Calibration site: …`) while the run scores the outlet.
-  `calibrationZones` (engine 1.106.0, issue #555, [model.md §2.10n](./model.md))
-  is the whole list of the gauges that calibrate their own zone, replaced on a
-  save (`[]` = none, which migration 270 stored in every project): each row
-  `{ nodeId (UUID), enabled, calibrationStart, calibrationEnd
+  Calibration locations (engine 1.110.0, issue #659, [model.md §2.10n](./model.md)):
+  every gauge inside the network with a record of its own and the outlet is
+  a calibration location, none is special and none is required.
+  `calibrateAtOutlet` (`true | false`) ticks the outlet's location, which is
+  the top-level calibration keys (`calibrationStart/End`,
+  `calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j`,
+  `fitRecord`); a new project is created with it `true`, beside
+  `calibrationRest: 'nearest'`, both stated (migration 289 wrote them into
+  every older project, [data-model.md § Calibration locations](./data-model.md#calibration-locations-289_calibration_locationssql)).
+  `calibrationRest` (`nearest | headline | default`) is what the land units
+  with no ticked location downstream take: the nearest ticked location
+  upstream on their river, the headline's parameters (what an older project
+  ran, and what absent means), or `gr4j`.
+  `calibrationSiteNodeId` (engine ≥ 1.41.0 the calibration site; since 1.110.0
+  the optional headline location, whose statistics are the run's
+  calibration statistics and which the uncertainty ensemble and automated
+  calibration act on) is `null` (auto: the outlet when ticked, else the
+  ticked gauge with the largest area above it) or a UUID that names a ticked
+  gauge's row, or the outlet's node while `calibrateAtOutlet` is `true`
+  (`400 calibrationSiteNodeId: headline location: "<node>" is not a gauge` /
+  `… is not a ticked calibration location: …` / `… is the outlet, whose
+  location is the catchment's own settings …` / `its gauge is no longer in
+  the model` for any other node, another project's included).
+  `calibrationZones` (engine 1.106.0, issue #555) is the whole list of the
+  gauges' locations, replaced on a save (`[]` = none): each row
+  `{ nodeId (UUID), enabled (Calibrate here), calibrationStart, calibrationEnd
   (YYYY-MM-DD | null), calibrationFlowKind, calibrationExclusions (as the
-  site's), qualityFlags ({ suspect: exclude | include, zeroFlowMonths? } |
+  top level's), qualityFlags ({ suspect: exclude | include, zeroFlowMonths? } |
   null), gr4j ({ x1, x2, x3, x4 } inside the bounds calibration searches |
-  null), fitRecord (a fit record, never an automated one, | null) }`, a
-  gauge at most once. Each row new to the list is checked as a new site is
-  (`400 calibrationZones: no such hydrological unit in this project` / `the
-  site is the outlet (null) or a gauge above it` / `that gauge has no
-  observed flow record attached`), and whenever the list or
-  `calibrationSiteNodeId` changes, no ticked row may be the calibration site
-  or below it (`400 calibrationZones: calibration zone: "<gauge>" is the
-  calibration site (Scored at), …` / `… is below the calibration site, …`);
-  a stored row whose gauge has gone blocks no save (the run warns and leaves
-  it out). Each row's fit record has its `editedParams` recomputed against
-  the row's own parameters. A copy or an imported project document moves
-  each row, and its fit record's site and zone (`FitRecord.zone` `{ nodeId,
+  null), fitRecord (a fit record | null) }`, a gauge at most once. A row may
+  lie anywhere on the network (the "at or below the calibration site"
+  refusal of #555 is gone). Each row new to the list must be a gauge above
+  the outlet with an observed flow record attached (`time_series.site_node_id`)
+  (`400 calibrationZones: no such hydrological unit in this project` / `a
+  calibration location’s row is a gauge above the outlet (the outlet’s
+  location is calibrateAtOutlet)` / `that gauge has no observed flow record
+  attached`). Whenever the list, `calibrationSiteNodeId` or
+  `calibrateAtOutlet` changes, the locations are checked as a whole (engine
+  `calibrationLocationsError`: no gauge twice, every ticked row a usable
+  gauge, the headline pointer above); a stored row or headline whose gauge
+  has gone blocks no save that leaves it alone (the run warns); a ticked row
+  whose node is still there but can no longer be a location (no longer a
+  gauge, or now the outlet) is refused by any save that sends the list, until
+  it is unticked or removed. A row's fit
+  record may be an automated one only when it is the one the server applied
+  there (the headline gauge's, [§ Automated calibration](#automated-calibration))
+  carried back as stored (`409`, as the top level's). Each row's fit record
+  has its `editedParams` recomputed against the row's own parameters.
+  `unitParamsFrom` (`{ <land unit id>: <location node id> } | null`, at most
+  500, replaced whole) gives a unit another location's parameters
+  (Parameters from): each key must be a land unit of the project and each
+  value a gauge with a row or the outlet's node (`400 unitParamsFrom:
+  parameters from: … is not a land unit (a farm with an area)` / `… takes its
+  parameters from …, which is not a calibration location`); an unticked
+  target is stored (the run warns and the unit takes its own zone's). A
+  borrowing cycle is not refused on save, since a run doesn't care: the fit
+  and the Calibration page refuse it (engine `locationFitPlan`). A copy or an
+  imported project document moves the headline, each row and its fit
+  record's site and zone (`FitRecord.zone` `{ nodeId, units, borrowed? }`),
+  both sides of `unitParamsFrom` and each regional-prior start's target to
+  the copy's nodes. A document (or a restored run or revision) stored before
+  calibration locations is stored in their shape, as migration 289 moved the
+  rows, its outlet ticked only when the project has an outlet record.
   units }`), to the copy's nodes. `dataQuality` (the data-check limits) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
   `agreementMinDays` (whole days, 1–366), and (engine ≥ 1.20.0, issue #66)
@@ -840,11 +871,13 @@ alongside teams, e.g. to give an outside client `viewer` access.
   Anything else is a `400` (the engine's `chirpsQuantileMapError`, which a
   table test holds to the schema); settings stored before it read back as
   `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23).
-  `unitRain` (issue #482) is `null` or absent (the default: every unit runs
-  on the catchment's rain) or `{ mode: "catchment" | "perUnit", gaugeMapMm?,
-  gaugeMapSource?, mapPeriod?, reference? }`, replaced whole by a `PATCH`. `perUnit` runs
-  each land unit on its own rain (its rain series, below; [model.md
-  §2.4h](./model.md)). `gaugeMapMm` (1–12 000 mm or `null`) is the catchment
+  `unitRain` (issue #482) is `null` or absent (Per unit's defaults) or
+  `{ mode: "perUnit" | "catchment", gaugeMapMm?, gaugeMapSource?, mapPeriod?,
+  reference? }`, replaced whole by a `PATCH`. Every land unit runs on its own
+  rain (its rain series, below; [model.md §2.4h](./model.md)): Per unit is
+  the only flow generation method from engine 1.109.0 (issue #658). The
+  retired `"catchment"` (Fragmentation) is still accepted, for an older
+  client or export, and stored as `"perUnit"` with the rest kept. `gaugeMapMm` (1–12 000 mm or `null`) is the catchment
   rain gauge's own MAP and needs `gaugeMapSource` (1–600 characters);
   `mapPeriod` (`{ start, end }`, calendar dates at least a year apart, or
   `null` = 1991-01-01 … 2020-12-31) is the period a unit's CHIRPS MAP factor
@@ -1025,7 +1058,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   multi-start fit (absent on a record made before those, i.e. one start),
   `siteNodeId` (engine ≥ 1.41.0: the gauge the fit was scored at, a node
   id of at most 100 characters, or `null` for the outlet; absent on older
-  records = the outlet; a copy moves it with `calibrationSiteNodeId`),
+  records = the outlet; a copy moves it with `calibrationSiteNodeId`), `zone`
+  (engine 1.106.0: `{ nodeId, units }` of the location the fit was one step
+  of, and from 1.110.0 `borrowed`, the units in it borrowed from elsewhere),
   `observedOrigin` (`{ source, unit, factor }` of the fitted record, 107, or
   `null`) and `flowGapFill` (`{ spec }`, engine ≥ 1.23.0; both
   absent on older records), and from engine 1.22.0 the optional `qualityFlags` (validated like the
@@ -1549,7 +1584,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | PUT | `/me/alerts/:projectId` | `{ items: { kind, nodeId?, mode }[] }` (1–100) | `{ project: ProjectAlerts }` | farmer (not contributor) |
 | POST | `/me/alerts/resume` | – | `{ mailSuppressed: null }`. Turns alert emails back on after SES suppressed your address: takes it off SES's suppression list (production), then clears the flag; your choices apply again as they were. Harmless when nothing is paused. `429` within a day of the last resume (the address bounced again) | signed in |
 | GET | `/projects/:id/alert-rules` | – | `{ rules: AlertRule[] }`: every project-wide kind, a `dam_below` per farm in network order, a `data_stale` per data feed (057), and a `data_stale` per series an API key writes (141; by kind and name); one not saved yet is `{ id: null, enabled: false }` at its default threshold (a feed's: its source's; a series': 2). An unsaved feed's or series' rule is `enabled: true` while any `data_stale` rule is on (the next evaluation switches it on) | editor |
-| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
+| PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, clears at once the firing events of every rule now off (none is queued once every rule is off, so the save does it), and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
 | GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 151) | editor |
@@ -1611,7 +1646,9 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   farms);
   `feed_failing` `{ feeds: { label, failures }[] }`; `job_dead` `{ count }`;
   `restriction_published` `{ publicationId, level, pct, lifted, publishedAt }`.
-  While an event fires, its `value` and `detail` follow the figure. A
+  While an event fires, its `value` and `detail` follow the figure, the
+  detail even when the value stays the same (another feed failing below
+  the worst one's count; the dam at the same level on a later day). A
   forecast's `madeOn` is the day the run was made, and "still current" (its
   `to` not yet past) is judged against today, both in the project's time
   zone.
@@ -1669,8 +1706,10 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   the limit, never sent later.
 - The mail is built **as its recipient**, under RLS, when it is sent: their
   access and choice are checked again then (a member removed since the
-  event, or who turned the alert off, gets nothing), and it can only name
-  what they may read.
+  event, or who turned the alert off, gets nothing; nor does anyone once an
+  editor has switched the event's rule off, so a digest line queued before
+  the switch doesn't go out the next morning), and it can only name what
+  they may read.
 - `ALERTS_ENABLED=false` (the kill switch) stops all sending: events still
   open and clear in the app, and deliveries waiting to go out are dropped,
   not sent later ([deployment.md § Runbooks](./deployment.md#runbooks)).
@@ -1966,8 +2005,8 @@ node carries `mapMm` (1–12 000 mm, or `null` = none) and `mapSource` (where
 it came from, at most 600 characters, or `null`). A MAP needs its source
 (`400 … a MAP needs its source`, the engine's `mapMmError`); a source sent
 with no MAP is not kept (`null`). A body without them gets `null` (no MAP, no
-change to any run). Only land units read it, under `settings.unitRain`
-`perUnit`; the project document, a copy and an import carry it with the node.
+change to any run). Only land units read it (each runs on its own rain,
+Per unit); the project document, a copy and an import carry it with the node.
 `POST /projects/:id/map/unit-map` also writes it, from a MAP grid, with a
 source line of the form `<grid> <version>, area-weighted mean over the
 unit’s parcel, <n> cells`, which that route reads back to keep one grid per
@@ -2282,8 +2321,11 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
   (`summary.forecast.from`), else `null`. `fitEngineVersion` is the engine
-  of the automatic fit the run's parameters came from
-  (`settings.fitRecord.engineVersion`), else `null`; `errata` the ids of the
+  of the fit the run's headline parameters came from
+  (`run_fit_engine_version`, 289: the headline gauge's row's
+  `fitRecord.engineVersion` when `summary.unitRain.zones` marks a gauge the
+  headline, engine 1.110.0, else `settings.fitRecord.engineVersion`), else
+  `null`; `errata` the ids of the
   known engine bugs that may affect the run (issue #103,
   [engine-errata.md](./engine-errata.md)): the errata whose range holds its
   engine, or its fit's for a `fit` erratum, `[]` for none. The list and
@@ -2582,8 +2624,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `storageStartMm`. GR4J runs also
   carry the catchment series `pet`, `aet`, `production_store`, `routing_store`,
   `uh_store` (mm), and `exchange` when X2 ≠ 0.
-- `summary.unitRain` (engine ≥ 1.78.0, only under `settings.unitRain`
-  `{ mode: 'perUnit' }`, [model.md §2.4h](./model.md)) is each land unit's
+- `summary.unitRain` (engine ≥ 1.78.0, under `settings.unitRain`
+  `{ mode: 'perUnit' }`, and from 1.109.0 every run with a land unit,
+  [model.md §2.4h](./model.md)) is each land unit's
   forcing and GR4J balance: `{ mode, gaugeMapMm, gaugeMapSource, mapPeriod,
   units }`, one entry per land unit in node-id order with its `rule`
   (`unitGauge` | `gaugeMap` | `unitChirps` | `catchment`), `rainKey`,
@@ -4597,18 +4640,20 @@ and "Start from the prior".
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/gr4j-prior` | `?zone=<gauge node id>` (optional: a ticked calibration zone; absent = the calibration site's own zone, or with no zone the catchment), `?dataset=<label>` (optional; default a real donor set before the synthetic one, then the newest load) | `200 { dataset, datasets, soil, target, prior, problem, donors, ranges, provenance, started }` | viewer |
-| POST | `/projects/:id/gr4j-prior/start` | `{ zone?: <gauge node id> \| null, dataset?: <label> }` | `200 { params: { x1, x2, x3, x4 }, record: PriorStartRecord, revisionId }` | editor |
+| GET | `/projects/:id/gr4j-prior` | `?zone=<gauge node id> \| outlet` (optional: a ticked calibration location, a gauge's or the outlet's; absent = the headline location, or with no gauge location ticked the catchment), `?dataset=<label>` (optional; default a real donor set before the synthetic one, then the newest load) | `200 { dataset, datasets, soil, target, prior, problem, donors, ranges, provenance, started }` | viewer |
+| POST | `/projects/:id/gr4j-prior/start` | `{ zone?: <gauge node id> \| 'outlet' \| null, dataset?: <label> }` (`'outlet'` = the outlet's location; absent or `null` = the headline's, which is what `null`, "the calibration site's own zone", started before engine 1.110.0) | `200 { params: { x1, x2, x3, x4 }, record: PriorStartRecord, revisionId }` | editor |
 
 - `dataset`: the donor set read (`{ dataset, version, source, method,
   attribution, synthetic, donorSetSha256, donors }`), `null` with none
   loaded; `datasets` every loaded set; `soil` the soil grid read (`{
   dataset, version, attribution, synthetic }`) or `null`.
-- `target`: `{ zoneNodeId, units (sorted, null = every unit), lon, lat,
+- `target`: `{ zoneNodeId (the location resolved: a gauge's node id, or
+  `null` for the outlet's location or the catchment), units (its group,
+  borrowed and rest units included, sorted; null = every unit), lon, lat,
   positionFrom ('gauge' | 'boundary' | null), attributes (the engine's
   CatchmentAttributes: area, MAP and aridity from the project, the
   HydroATLAS-only ones null), pawcMm, soilProblem, climateYears, rainFrom
-  ('catchment' | 'units') }`. The position is the zone's gauge on the map,
+  ('catchment' | 'units') }`. The position is the location's gauge on the map,
   else the catchment boundary's centroid; PAWC is the soil grid over the
   boundary.
 - `prior` is the engine's `RegionalPrior` (or `null` with no donors or no
@@ -4621,12 +4666,15 @@ and "Start from the prior".
   parameters. `problem` says why there is no prior to use (no donors loaded,
   no boundary, the engine's reason), else `null`. `started` the target's
   start record while its parameters still hold what it wrote, else `null`.
-- `400` for an unknown dataset or a gauge that isn't a calibration zone;
+- `400` for an unknown dataset, or a gauge (or the outlet) that isn't a
+  ticked calibration location;
   `404` for a non-member.
 - `POST …/start` re-derives the prior on the server (the client only names
   the target and dataset) and writes the p50s into the target's GR4J
-  parameters (`gr4j`, or the zone's row), with a `PriorStartRecord` in
-  `settings.gr4jPrior` replacing that target's (one per zone), as one
+  parameters (`gr4j` for the outlet's location or the catchment, or the
+  gauge's row; with no location named, the headline's), with a
+  `PriorStartRecord` in `settings.gr4jPrior` replacing that target's (one per
+  location), as one
   settings revision whose reason names the donors. `settings.gr4jPrior` is
   never written by a settings save (`PATCH /projects/:id` drops it). `400`
   when there is no prior (the `problem`); `409` when the donor set changed
@@ -4636,7 +4684,8 @@ and "Start from the prior".
 
 A server run of the project's saved calibration rules (issue #153,
 [model.md §2.10j](./model.md)): the water years they leave out, every fit
-they ask for (one background `auto_calibration` job each) and the fit kept by
+they ask for (fitted by a chain of background `auto_calibration` jobs, a fit
+over as many as it needs) and the fit kept by
 its held-out score among those that pass the filters, or none. Applying the
 kept fit is the server's too.
 
@@ -4651,24 +4700,38 @@ kept fit is the server's too.
   decide everything, the search included.
 - `POST …/auto-calibrations`: `400` when the rules can't run on the project
   (no observed record, a pan preset under a monthly PE row, selecting by
-  the other record with only one, or a fit estimated past 4 minutes: "lower
-  the model runs per fit or the starts"). **At most 1 queued or running per
+  the other record with only one; a model so large that a fit's last step,
+  which can't be cut, is estimated past one job's 4 minutes: "the model is
+  too large to calibrate on the server: the last step of each fit … lower
+  the starts in the calibration rules or shorten the simulation period"; or
+  a whole run estimated past 6 hours on the server: "the rules would take up
+  to about *N* hours on the server (*K* fits of *M* model runs each) … lower
+  the model runs per fit, the starts or the fits"). The estimate is from
+  the model's size, never a clock, so the same project and rules always get
+  the same answer ([model.md §2.10j](./model.md), `calibration/estimate.ts`). **At most 1 queued or running per
   user**, across all their projects (`429`). Its `error` says where the
   running one is: "…in this project" when it's this project's, else "…in the
   project “*name*”, and only one at a time is allowed" (`pendingCalibrationMessage`,
   `calibration/store.ts`), so a run elsewhere doesn't read as running here. A project keeps its newest **20** runs of the rules (an
-  applied one is never deleted). Each case job gets 2 attempts.
+  applied one is never deleted). Each job gets 2 attempts.
 - `AutoCalibration = { id, trigger ('manual' | 'new_data'), status
   ('running' | 'complete' | 'failed'), rulesRevision, rules, plan: {
   flowKind, siteNodeId, validationRecord, years, ruleExclusions, notes, cases }
   (`siteNodeId` the calibration site the rules ran at, engine ≥ 1.41.0, `null`
   = the outlet, absent on older runs), cases:
   AutoCalibrationCase[], report: { chosen, notes, eligible, reasons } |
-  null, chosen, error, engineVersion, job, createdBy, createdAt, completedAt,
-  appliedBy, appliedAt, appliedRunId, uncertaintyId }`. `cases` grows by one
-  per job; `job` is the job fitting the next (`{ id, status, error, progress
-  }`, or `null` once purged); a `failed` run says why in `error` (the
-  project's data or settings changed between its cases).
+  null, chosen, error, engineVersion, work, job, createdBy, createdAt,
+  completedAt, appliedBy, appliedAt, appliedRunId, uncertaintyId }`.
+  `cases` grows by one as each fit is finished; a fit runs over as many jobs
+  as it needs, and `work` is the fit under way once it has started (`{ done,
+  total }`: its model runs made so far and in all; `null` between fits and
+  once the run ends; 290_auto_calibration_work). `job` is the job fitting
+  the next piece (`{ id, status, error, progress }`, `progress` the run's
+  share done when that job ended, or `null` once purged); a `dead` job means
+  the run stopped. A `failed` run says why in `error` (the project's data
+  or settings changed between two of its jobs, a release changed the
+  server's model engine between them, or a fit took far more jobs than
+  estimated, the server being far slower than the estimate).
   `AutoCalibrationCase = { label, pan, bounds, objective, score,
   naturalMarMm3, eligible, reasons, filters, error, params }`.
 - `…/apply`: `409` when the run is still running or failed, nothing was
@@ -4676,11 +4739,16 @@ kept fit is the server's too.
   content or sign-off), or the project's inputs no longer hash as they did
   when it ran. It writes the kept case's parameters (and a preset's pan
   coefficient) with a fit record the server builds (`fitRecord.auto`), as a
-  settings revision, then runs the model (`runId`). A run that fails leaves
+  settings revision, then runs the model (`runId`). The fit is the headline
+  location's (engine 1.110.0, issue #659): a gauge's goes into its row of
+  `calibrationZones` (`gr4j` and `fitRecord`, the record reading that row's
+  window, exclusions and quality flags), the outlet's (or, with no gauge
+  location, the catchment's) into the top level; `409` when the row is gone. A run that fails leaves
   the fit applied and says why in `runError`. With `after.ensemble` the
   ensemble around the fit is started on that run and computed by an
   `uncertainty` job (`uncertaintyId`, [§ Uncertainty bands](#uncertainty-bands)),
-  or refused by that job when it would take more than 4 minutes.
+  or refused by that job when it is estimated (from the model's size × the
+  members) to take more than 4 minutes, or stopped when it runs past them.
 - New data: with `settings.calibrationRules.after.onNewData` `report` or
   `apply`, new days of any series but the forecast queue a run of the rules
   (`trigger: 'new_data'`, one pending per project, debounced like the
@@ -5332,8 +5400,8 @@ lines.
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, the runoff removed by land cover (only a farm with land cover; I + it = natural flow × share), J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain). A **forecast run** (WP-2.12) leads with `forecast (F = modelled on forecast rain)` after `date`: `F` on each day from `summary.forecast.from`, empty before; the observed flow quality flags (`observed_flow_quality`, engine ≥ 1.48.0, only when a day is flagged) follow the observed records and their gap fill, as class codes the header spells out (`Observed flow quality flag (0 = in the gauged range, …, 6 = missing)`), in the catchment file or, at a calibration site, the gauge's; and every run with rain has the `Rain source` column in its catchment file (`rain_source`: with rain-source periods from engine 0.30.0, in every run with rain from 1.27.0). So does `farms.csv`, and the `.xlsx` workbook's daily sheets lead with `forecast (1 = modelled on forecast rain)`, 1 or 0 |
 | `/projects/:id/runs/:runId/export/farms.csv` | `key`, `from?`, `to?` | `date` + one column per farm of the run, in the run's farm order (upstream first, the order of `RunSummary.farms`), for one farm series `key` (any key of `FARM_COLUMNS`, the optional ones included, e.g. `landcover_reduction`; `400` otherwise). `key=runoff` is the workbook's `[Fragmented flow]` sheet (column I), `key=ewr` its `[Fragmented EWR]` sheet (column Y). Each header is the farm's current name, then the letter and unit (`Farm A [I] (m³/day)`); a farm deleted from the model since the run keeps its column under the name the run knew (a run keeps all its series, migration 024), and a farm without that series (a dam column on a farm with no dam) is left out. `404` when no farm has the series |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (the engine version, then `Runoff model` as the run's settings had it; ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first, for a run from engine 1.105.0 (issue #616), one `Natural MAR share (%)` column, the unit's one share: of the flow under Fragmentation, of the EWR, of the land-cover threshold and of the priority users' demand; an older run keeps its two columns as it recorded them: `Flow share (%)`, the farm's share of the natural flow as the run applied it (and of the EWR under the default split), engine ≥ 0.27.0, empty on older runs, then `EWR share (%)`, its share of the EWR as applied, engine ≥ 1.94.0, its flow share unless `settings.ewrSplit` split it by natural MAR, an older run's flow share; a line above the table, `EWR split between units by`, names the split applied (every run from engine 1.105.0; 1.94.0 – 1.104.x only a split other than the flow share) and its MAR period or why it fell back, and under Fragmentation that the shares came from runs on each unit's own rain and which units ran on the catchment rain; then the averages, `Dam capacity (m³)` from the run's own model so storage can be checked against it (and, only when some dam's capacity changes over the run, engine ≥ 1.30.0, issue #67, `Dam capacity on the last day (m³)`, what its end storage is within), and, engine ≥ 1.2.0, the dam's storage figures under labelled headers), catchment figures (the runoff coefficient labelled, and with an observed record the outlet EWR test on the observed record vs the simulated outflow, the whole record then each water year: counts, hit rate, false-alarm ratio, frequency bias), the water balance per water year and for the whole run (its equation row names only the terms the run has, each of them a column, storage set by a storage reset included; the optional terms, groundwater, storage set, base-flow gain, other users' use, stream depletion, seepage lost, pool evaporation, off-take losses, bed losses, transferred out of the catchment and base-flow loss, are columns only on a run that has them, so the columns close to the residual), the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural; from issue #45 every EWR charge, charge part, other user's charge and site shortfall is written as the positive volume charged, the column headers saying "m³/day charged" or "positive", the curtailment R header "workbook R × −1"), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, from engine 1.19.0 (CR-29) the days below the day's requirement with the % of time and of volume not met and the EWR as % of natural MAR (with the low flows' share when the table has a low-flow grid), a row per month of the year, from engine 1.19.0 a row per month of the year from daily data (days assessed, days not met, time not met %, required and shortfall m³, volume not met %) and a row per month × % point of the EWR, natural and simulated flow-duration curves, and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the assurance of supply (engine ≥ 0.32.0; `Not computed: run made before engine 0.32.0 …` in each block on older runs: `Assurance of supply (reporting window)` with the window, the annual threshold and a row per farm and user, then the time-based and volumetric reliability by month; `Stress classes by month (supplied ÷ demand)` with the thresholds and, for all farms and users then each one, a row per water year of class and % per month; `Water account by water year (Oct–Sep)` with the in, out, storage, residual and memo columns per water year and the whole run (the `IN` columns add up to `Total in` and the `OUT` columns to `Total out`; storage set by a storage reset, base-flow gain, pool evaporation, dam seepage lost, off-take losses, bed losses, transferred out of the catchment, base-flow loss and the release memo are columns only on a run that has them), then the EWR required vs met per site), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep, then from engine 1.21.0 a `Daily intensity` row per period: the heavy-day threshold, the reference, the reference's, the series × factor's and (with a quantile map) the mapped heavy-day share as percentages, the band in points, whether they differ by more than it, and the quantile map in words or `none: the monthly factor alone`; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; the recession diagnostics (engine ≥ 1.19.0, `Run made before engine 1.19.0: …` on older runs: the record, segment count and settings, a, b, −dQ/dt ÷ Q at the reference flow, points and segments for the record and the simulated outflow, the rate ratio and b difference, and whether they agree, indicatively); the hydrological signatures (engine ≥ 1.55.0, `Run made before engine 1.55.0: …` on older runs, `Not computed: …` without an observed record: the scored record and site; the base-flow index by the Hughes et al. (2003) and Eckhardt (2005) filters with their parameters, days, stretches, observed, simulated, difference and whether within ±0.15; the low-flow FDC's days, observed and simulated Q70 and Q95, the slopes ln(Q70/Q95)/0.25, the slope bias %, %BiasFLV and whether within ±50 %; the held-out recessions' segments, every nth, held out, days scored, the law's a and b, the skill and log RMSE of the simulated flow and of the law, and whether the simulated skill is at least 0); then, engine ≥ 1.4.0, for each gauge with its own record an `At gauge <name>` line with its share of the natural flow, from engine 1.90.0 a `Fit check (out of sample)` row (the record, days, NSE, KGE, PBIAS %; `Run made before engine 1.90.0: not computed` on older runs), and the naturalised and low-flow blocks again at that gauge; each part says `Not checked: …` when the run lacks what it needs), calibration (from engine 0.39.0 with `Parameters fitted on these days (fitted = in-sample scores)` = the `fitStatus`; every score under a label with its unit, never its raw key: the window, KGE with r, α and β, r², log-NSE and its ε in m³/s, volume error %, the record scored; then the calibration exclusions it applied, `From,To,Reason`, and the annual volumes on the observed days, water year, days, observed and simulated Mm³ and the difference %; from engine 1.19.0 the WR2012 statistics on monthly flows, CR-28: the complete water years, whether the bands are indicative, then MAR, mean of log10 annual flows, SD, log SD and seasonal index with observed, simulated, the difference %, the band and `yes`/`no`, or `Not computed: …` when no water year has all 12 months observed; never under the raw key `wr2012Fit`), the flow-duration percentiles (issue #45: the FDC table Calibration shows for a run, from the same engine function, `views/fdc.ts` `fdcPercentileTable`: `Days ranked,Flow record,Q10 (m³/s),Q50 (m³/s),Q90 (m³/s),Q95 (m³/s),Days`, a `Whole run` row for natural flow, simulated outflow and the observed record, then, when the observed record misses some of the run's days, `Observed days only (n of N)` rows with natural and simulated ranked on only its days, the chart's default; unrounded; on a forecast run every row ranks only the days before the forecast, after a `The n forecast days are left out: every row ranks the N days before them` line, the first rows labelled `Whole run before the forecast`, issue #51; `No catchment flow series stored for this run` otherwise), a forecast run's forecast days (WP-2.12, only on a forecast run: first and last forecast day, days, last observed rain, forecast rain, outlet EWR days at risk, then per farm the lowest dam level expected (%), days short, demand, supplied and supplied % of demand; every other block covers the days before them), runoff from each unit's own rain (engine ≥ 1.78.0, only under `settings.unitRain` `perUnit`, [model.md §2.4h](./model.md): the gauge MAP and MAP period, then one row per land unit with its area, MAP and source, the rule its rain came from, the record, the factor and where it came from, whether it was clamped, the CHIRPS mean annual and its years, the run days by source, rain, actual evaporation, runoff in mm and m³ and the runoff coefficient; from engine 1.85.0 an `Outside 0.5–2` column, a factor whose own value lies outside 0.5–2 but inside the 0.25–4 clamp; with a reference gauge, engine ≥ 1.80.0, the factor column holds a unit's k_unit on the monthly factors (from engine 1.85.0; 1.80.0–1.84.0 held its MAP ÷ the reference unit's MAP), and the block ends with the reference gauge, unit and cell, from 1.85.0 the cell's reason and whether the fit read the checked gauge rain, then one row per calendar month: shared days, gauge and CHIRPS mm, own factor, factor applied, clamped, outside 0.5–2, fitted), the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Natural MAR share (%)`, `Flow share (%)`, `EWR share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `ewrShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
-| `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values as stored (the file's first two columns, unchanged since before issue #66, so it uploads again as it is), then `Flags` (`missing`, `negative`, `outlier`, `flat-line`, `; `-separated, by the project's current data-quality limits: engine `seriesRowFlags`). A flow series adds its value in m³/day, and the outlet's gauge or logger record `Excluded from calibration (reason)` (the project's current `calibrationExclusions`). A record with its own missing periods (`settings.flowMissing`, engine ≥ 1.102.0) adds `Missing in this record (reason)`, and a rain record with unreliable periods (`settings.rainStations.unreliable`) `Marked unreliable`; each only when the record has any. When a run read this series (`run_input_series.series_id`: the latest one the caller can see; never a scenario run, nor a run from before migration 056), the file leads with that run's `#` lines (the legacy warning, the disclaimer, the provenance line, `withRunComments`) and adds that run's columns, each header ending `[run <label, else its date>]`: for catchment rain, `Rain used` (`rain_final`), `Rain source` (catchment / alternative gauge / CHIRPS / reanalysis / forecast; `rain_source`, stored by every run with rain from engine 1.27.0, left out for older runs), `Rain above the <n> mm threshold` (the run's `calibration.rainThresholdMm`, engine `aboveRainThreshold`, what irrigation demand reads) and, when the run has them, the set-aside and accumulation columns; for CHIRPS, the day's bias factor and the corrected rain; for the outlet's gauge or logger record, the simulated outflow; for a gauge node's record, the flow simulated at that gauge; for a land unit's own rain (issue #482), `Rain used at <unit>` (the run's `rain_unit` on that unit, made only under `settings.unitRain` `perUnit`; none from a run on the catchment's rain). A series changed since that run adds `# series_changed_since_run=true; …` under the provenance: the run columns are what the run read. No run read it: no `#` lines and no run columns (`backend/src/export/series-columns.ts`) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (the engine version, then `Runoff model` as the run's settings had it; ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first, for a run from engine 1.105.0 (issue #616), one `Natural MAR share (%)` column, the unit's one share: of the flow under Fragmentation, of the EWR, of the land-cover threshold and of the priority users' demand; an older run keeps its two columns as it recorded them: `Flow share (%)`, the farm's share of the natural flow as the run applied it (and of the EWR under the default split), engine ≥ 0.27.0, empty on older runs, then `EWR share (%)`, its share of the EWR as applied, engine ≥ 1.94.0, its flow share unless `settings.ewrSplit` split it by natural MAR, an older run's flow share; a line above the table, `EWR split between units by`, names the split applied (every run from engine 1.105.0; 1.94.0 – 1.104.x only a split other than the flow share) and its MAR period or why it fell back, and under Fragmentation that the shares came from runs on each unit's own rain and which units ran on the catchment rain; then the averages, `Dam capacity (m³)` from the run's own model so storage can be checked against it (and, only when some dam's capacity changes over the run, engine ≥ 1.30.0, issue #67, `Dam capacity on the last day (m³)`, what its end storage is within), and, engine ≥ 1.2.0, the dam's storage figures under labelled headers), catchment figures (the runoff coefficient labelled, and with an observed record the outlet EWR test on the observed record vs the simulated outflow, the whole record then each water year: counts, hit rate, false-alarm ratio, frequency bias), the water balance per water year and for the whole run (its equation row names only the terms the run has, each of them a column, storage set by a storage reset included; the optional terms, groundwater, storage set, base-flow gain, other users' use, stream depletion, seepage lost, pool evaporation, off-take losses, bed losses, transferred out of the catchment and base-flow loss, are columns only on a run that has them, so the columns close to the residual), the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural; from issue #45 every EWR charge, charge part, other user's charge and site shortfall is written as the positive volume charged, the column headers saying "m³/day charged" or "positive", the curtailment R header "workbook R × −1"), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, from engine 1.19.0 (CR-29) the days below the day's requirement with the % of time and of volume not met and the EWR as % of natural MAR (with the low flows' share when the table has a low-flow grid), a row per month of the year, from engine 1.19.0 a row per month of the year from daily data (days assessed, days not met, time not met %, required and shortfall m³, volume not met %) and a row per month × % point of the EWR, natural and simulated flow-duration curves, and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the assurance of supply (engine ≥ 0.32.0; `Not computed: run made before engine 0.32.0 …` in each block on older runs: `Assurance of supply (reporting window)` with the window, the annual threshold and a row per farm and user, then the time-based and volumetric reliability by month; `Stress classes by month (supplied ÷ demand)` with the thresholds and, for all farms and users then each one, a row per water year of class and % per month; `Water account by water year (Oct–Sep)` with the in, out, storage, residual and memo columns per water year and the whole run (the `IN` columns add up to `Total in` and the `OUT` columns to `Total out`; storage set by a storage reset, base-flow gain, pool evaporation, dam seepage lost, off-take losses, bed losses, transferred out of the catchment, base-flow loss and the release memo are columns only on a run that has them), then the EWR required vs met per site), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep, then from engine 1.21.0 a `Daily intensity` row per period: the heavy-day threshold, the reference, the reference's, the series × factor's and (with a quantile map) the mapped heavy-day share as percentages, the band in points, whether they differ by more than it, and the quantile map in words or `none: the monthly factor alone`; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; the recession diagnostics (engine ≥ 1.19.0, `Run made before engine 1.19.0: …` on older runs: the record, segment count and settings, a, b, −dQ/dt ÷ Q at the reference flow, points and segments for the record and the simulated outflow, the rate ratio and b difference, and whether they agree, indicatively); the hydrological signatures (engine ≥ 1.55.0, `Run made before engine 1.55.0: …` on older runs, `Not computed: …` without an observed record: the scored record and site; the base-flow index by the Hughes et al. (2003) and Eckhardt (2005) filters with their parameters, days, stretches, observed, simulated, difference and whether within ±0.15; the low-flow FDC's days, observed and simulated Q70 and Q95, the slopes ln(Q70/Q95)/0.25, the slope bias %, %BiasFLV and whether within ±50 %; the held-out recessions' segments, every nth, held out, days scored, the law's a and b, the skill and log RMSE of the simulated flow and of the law, and whether the simulated skill is at least 0); then, engine ≥ 1.4.0, for each gauge with its own record an `At gauge <name>` line with its share of the natural flow, from engine 1.90.0 a `Fit check (out of sample)` row (the record, days, NSE, KGE, PBIAS %; `Run made before engine 1.90.0: not computed` on older runs; `Fit check (in sample at a calibration location)` at the headline's gauge and, engine 1.110.0, every other ticked location's), and the naturalised and low-flow blocks again at that gauge; each part says `Not checked: …` when the run lacks what it needs), calibration (from engine 0.39.0 with `Parameters fitted on these days (fitted = in-sample scores)` = the `fitStatus`; every score under a label with its unit, never its raw key: the window, KGE with r, α and β, r², log-NSE and its ε in m³/s, volume error %, the record scored; then the calibration exclusions it applied, `From,To,Reason`, and the annual volumes on the observed days, water year, days, observed and simulated Mm³ and the difference %; from engine 1.19.0 the WR2012 statistics on monthly flows, CR-28: the complete water years, whether the bands are indicative, then MAR, mean of log10 annual flows, SD, log SD and seasonal index with observed, simulated, the difference %, the band and `yes`/`no`, or `Not computed: …` when no water year has all 12 months observed; never under the raw key `wr2012Fit`; this block is the headline location's, its gauge named by `Scored at the gauge`; then, engine 1.110.0, issue #659, a `Calibration at another location: <name>` block of the same rows for every other ticked location in `summary.calibrationZones`, the outlet's included when it isn't the headline), the flow-duration percentiles (issue #45: the FDC table Calibration shows for a run, from the same engine function, `views/fdc.ts` `fdcPercentileTable`: `Days ranked,Flow record,Q10 (m³/s),Q50 (m³/s),Q90 (m³/s),Q95 (m³/s),Days`, a `Whole run` row for natural flow, simulated outflow and the observed record, then, when the observed record misses some of the run's days, `Observed days only (n of N)` rows with natural and simulated ranked on only its days, the chart's default; unrounded; on a forecast run every row ranks only the days before the forecast, after a `The n forecast days are left out: every row ranks the N days before them` line, the first rows labelled `Whole run before the forecast`, issue #51; `No catchment flow series stored for this run` otherwise), a forecast run's forecast days (WP-2.12, only on a forecast run: first and last forecast day, days, last observed rain, forecast rain, outlet EWR days at risk, then per farm the lowest dam level expected (%), days short, demand, supplied and supplied % of demand; every other block covers the days before them), runoff from each unit's own rain (engine ≥ 1.78.0, only under `settings.unitRain` `perUnit`, [model.md §2.4h](./model.md): the gauge MAP and MAP period, then one row per land unit with its area, MAP and source, the rule its rain came from, the record, the factor and where it came from, whether it was clamped, the CHIRPS mean annual and its years, the run days by source, rain, actual evaporation, runoff in mm and m³ and the runoff coefficient; from engine 1.85.0 an `Outside 0.5–2` column, a factor whose own value lies outside 0.5–2 but inside the 0.25–4 clamp; with a reference gauge, engine ≥ 1.80.0, the factor column holds a unit's k_unit on the monthly factors (from engine 1.85.0; 1.80.0–1.84.0 held its MAP ÷ the reference unit's MAP), and the block ends with the reference gauge, unit and cell, from 1.85.0 the cell's reason and whether the fit read the checked gauge rain, then one row per calendar month: shared days, gauge and CHIRPS mm, own factor, factor applied, clamped, outside 0.5–2, fitted; on a run that applied a gauge location, engine 1.110.0, a last `Parameters from` column: the location whose GR4J parameters the unit ran on and how, `<location> (its own zone)`, `(assigned)` or `(no location downstream)`, or `Catchment parameters`), the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Natural MAR share (%)`, `Flow share (%)`, `EWR share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `ewrShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values as stored (the file's first two columns, unchanged since before issue #66, so it uploads again as it is), then `Flags` (`missing`, `negative`, `outlier`, `flat-line`, `; `-separated, by the project's current data-quality limits: engine `seriesRowFlags`). A flow series adds its value in m³/day, and a calibration location's gauge or logger record `Excluded from calibration (reason)`: the outlet's record the project's current `calibrationExclusions`, a gauge's its row's of `calibrationZones` (issue #659; a gauge with no row, none). A record with its own missing periods (`settings.flowMissing`, engine ≥ 1.102.0) adds `Missing in this record (reason)`, and a rain record with unreliable periods (`settings.rainStations.unreliable`) `Marked unreliable`; each only when the record has any. When a run read this series (`run_input_series.series_id`: the latest one the caller can see; never a scenario run, nor a run from before migration 056), the file leads with that run's `#` lines (the legacy warning, the disclaimer, the provenance line, `withRunComments`) and adds that run's columns, each header ending `[run <label, else its date>]`: for catchment rain, `Rain used` (`rain_final`), `Rain source` (catchment / alternative gauge / CHIRPS / reanalysis / forecast; `rain_source`, stored by every run with rain from engine 1.27.0, left out for older runs), `Rain above the <n> mm threshold` (the run's `calibration.rainThresholdMm`, engine `aboveRainThreshold`, what irrigation demand reads) and, when the run has them, the set-aside and accumulation columns; for CHIRPS, the day's bias factor and the corrected rain; for the outlet's gauge or logger record, the simulated outflow; for a gauge node's record, the flow simulated at that gauge; for a land unit's own rain (issue #482), `Rain used at <unit>` (the run's `rain_unit` on that unit, made only under `settings.unitRain` `perUnit`; none from a run on the catchment's rain). A series changed since that run adds `# series_changed_since_run=true; …` under the provenance: the run columns are what the run read. No run read it: no `#` lines and no run columns (`backend/src/export/series-columns.ts`) |
 | `/projects/:id/export.json` | – | The project document (below) |
 
 CSV format: RFC 4180 (CRLF, fields with `,` `"` or line breaks quoted, `"`

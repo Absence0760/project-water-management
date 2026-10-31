@@ -92,8 +92,8 @@ describe('unitAreaRain', () => {
 		expect(d.source[20]).toBe('none');
 	});
 
-	it('null with per-unit rain off, for a node that isn’t a land unit, and for a unit on its station', () => {
-		expect(unitAreaRain(catchment({ mode: 'catchment' }), 'A')).toBeNull();
+	it('null for a node that isn’t a land unit and for a unit on its station; the retired catchment mode reads as Per unit', () => {
+		expect(unitAreaRain(catchment({ mode: 'catchment' }), 'A')).toEqual(unitAreaRain(catchment({ mode: 'perUnit' }), 'A'));
 		expect(unitAreaRain(catchment({ mode: 'perUnit' }), 'G')).toBeNull();
 		expect(unitAreaRain(catchment({ mode: 'perUnit' }), 'nope')).toBeNull();
 		const x = catchment({ mode: 'perUnit' });

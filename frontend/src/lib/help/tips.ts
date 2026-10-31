@@ -470,16 +470,16 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'calibration-window',
 		term: 'Calibration window',
-		short: 'The period, observed flow record and site (the outlet or an inner gauge) that score the fit. Empty = every day with an observation.',
+		short: 'The period and observed flow record the outlet’s fit is scored on (a gauge location has its own). Empty = every day with an observation.',
 		category: 'fit',
-		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind', 'settings.calibrationSiteNodeId']
+		fields: ['settings.calibrationStart', 'settings.calibrationEnd', 'settings.calibrationFlowKind']
 	},
 	{
 		id: 'calibration-zones',
-		term: 'Calibration zones',
-		short: 'Under Per unit, a ticked gauge gives the land units draining to it their own GR4J parameters, fitted on its record, upstream first.',
+		term: 'Calibration locations',
+		short: 'The outlet and each gauge with a record; a ticked one fits GR4J for the units draining to it, in dependency order. None is required.',
 		category: 'fit',
-		fields: ['settings.calibrationZones']
+		fields: ['settings.calibrationZones', 'settings.calibrationSiteNodeId']
 	},
 	{
 		id: 'gauge-logger-agreement',
@@ -735,15 +735,15 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'unit-map',
 		term: 'Unit rainfall level',
-		short: 'The unit’s own MAP in mm and its source: under Per unit flow generation, it sets the level of the unit’s rain.',
+		short: 'The unit’s own MAP in mm and its source: it sets the level of the unit’s rain.',
 		units: 'mm/year',
 		category: 'farm',
 		fields: ['node.mapMm', 'node.mapSource']
 	},
 	{
 		id: 'flow-share',
-		term: 'Flow share (fragmentation)',
-		short: 'Each hydrological unit’s natural MAR share, from the latest run: it splits the natural flow and the EWR between the units.',
+		term: 'Flow share',
+		short: 'Each hydrological unit’s natural MAR share, from the latest run: it splits the EWR between the units.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		fields: ['summary.flowShare']
@@ -1151,8 +1151,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'unit-rain',
-		term: 'Model selection for flow generation: fragmentation or per unit',
-		short: 'Fragmentation runs GR4J once on the catchment rain; Per unit runs it on each unit’s rain (its station × MAP ratio) and sums the flow.',
+		term: 'Flow generation: per unit',
+		short: 'GR4J runs on each unit’s own rain (its station × MAP ratio) and sums the flow; Per unit is the only method.',
 		units: 'mm/day',
 		category: 'flow',
 		fields: ['settings.unitRain']
@@ -1160,7 +1160,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'rain-stations',
 		term: 'A unit’s rainfall station',
-		short: 'Per unit, a unit runs on its station’s rain × unit MAP ÷ station MAP; on the station’s gaps its CHIRPS, corrected against a station.',
+		short: 'A unit runs on its station’s rain × unit MAP ÷ station MAP; on the station’s gaps its CHIRPS, corrected against a station.',
 		units: 'mm/day',
 		category: 'flow',
 		fields: ['settings.rainStations']
@@ -1332,7 +1332,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'catchment-area',
 		term: 'Catchment area (rain)',
-		short: 'Area, in km², that rain falls on when converting mm to m³. Empty = the sum of the hydrological unit areas.',
+		short: 'Area, in km², that rain falls on (mm to m³). Empty = the units’ summed areas, which a run always uses once a unit has land.',
 		units: 'km²',
 		category: 'flow',
 		fields: ['calibration.catchmentAreaKm2']
@@ -1500,7 +1500,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-split',
 		term: 'How the EWR is split between units',
-		short: 'Each unit’s EWR share is its natural MAR ÷ the units’ total, from its own GR4J runoff under both Per unit and Fragmentation.',
+		short: 'Each unit’s EWR share is its natural MAR ÷ the units’ total, from its own GR4J runoff.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'ewr',
 		fields: ['summary.ewrShare']

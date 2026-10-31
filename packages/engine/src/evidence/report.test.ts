@@ -334,7 +334,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -1039,7 +1039,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-24');
+		expect(got.version).toBe('evidence-25');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1698,7 +1698,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1754,7 +1754,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1965,7 +1965,7 @@ describe('observed wet days (evidence-21; Sentinel-2 beside WOfS from evidence-2
 	});
 });
 
-describe('calibration zones (evidence-22, issue #555)', () => {
+describe('calibration zones (evidence-22, issue #555; periods and parameter sources from evidence-25, issue #659)', () => {
 	// The baseline with the weir S as a calibration zone's gauge (Farm two above it), Per unit flow generation.
 	const zin = baseInput({ midGauge: true });
 	zin.settings.unitRain = { mode: 'perUnit' } as never;
@@ -1977,10 +1977,23 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 
 	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.calibrationZones).toEqual([
-			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
-			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
+			{
+				nodeId: 'S',
+				name: 'Weir',
+				units: 1,
+				areaKm2: 15,
+				params: { x1: 400, x2: 0, x3: 80, x4: 1.9 },
+				fitted: true,
+				fit: null,
+				stats: expect.objectContaining({ fitStatus: 'notFitted' }),
+				kind: 'gauge',
+				// evidence-25 (issue #659): the location's period and each unit's parameter source.
+				window: { start: null, end: null },
+				members: [{ nodeId: expect.any(String), name: 'Farm two', how: 'zone' }]
+			},
+			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null, window: { start: null, end: null }, members: [expect.objectContaining({ how: 'zone' })] })
 		]);
 		// The zone's gauge scored its own record (its outflow, unchanged): a perfect fit.
 		expect(r.calibrationZones![0]!.stats!.nse).toBeCloseTo(1, 9);
@@ -2005,7 +2018,7 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 
 	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
 		const r = evidenceReport(input({ futureYield: found }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		const s = r.futureYield!;
 		expect(s).toMatchObject({ status: 'ok', createdAt: found.createdAt, createdBy: 'Analyst', complete: true, fewModels: true, models: ['SYN-A', 'SYN-B', 'SYN-C'] });
 		if (s.status !== 'ok') throw new Error('unreachable');

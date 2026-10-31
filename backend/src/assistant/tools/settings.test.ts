@@ -51,13 +51,21 @@ describe('settingsView', () => {
 		expect(unkinded.sort()).toEqual(Object.keys(NOT_PROPOSED).filter((k) => (MODEL_INPUT as readonly string[]).includes(k)).sort());
 	});
 
+	it('sends the calibration locations’ keys (issue #659): the outlet’s tick and the rest rule as their kinds, the units’ sources as no one’s to propose', () => {
+		const { settings, kinds } = settingsView({ calibrateAtOutlet: false, calibrationRest: 'nearest', unitParamsFrom: { u1: 'g1' } }, undefined, true);
+		expect(settings).toMatchObject({ calibrateAtOutlet: false, calibrationRest: 'nearest', unitParamsFrom: { u1: 'g1' } });
+		expect(kinds).toMatchObject({ calibrateAtOutlet: 'input', calibrationRest: 'calibrated' });
+		expect(kinds.unitParamsFrom).toBeUndefined();
+		expect(NOT_PROPOSED.unitParamsFrom).toMatch(/judgement/);
+	});
+
 	it('names each setting as the app does, so an answer never quotes a key (the 2026-10-30 production test)', () => {
 		const { labels } = settingsView({}, undefined, true);
 		// The keys the production answer quoted, each with the app's name.
 		expect(labels).toMatchObject({
 			rainSource: 'Rain-source periods',
 			apanMm: 'A-pan evaporation',
-			calibrationSiteNodeId: 'Calibration site',
+			calibrationSiteNodeId: 'Headline calibration location',
 			simulationStart: 'Simulation start',
 			reportStart: 'Curtailment report start',
 			gr4j: 'GR4J parameters',

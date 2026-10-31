@@ -18,11 +18,11 @@ import { calibrationHref } from '#lib/components/calibration/links.js';
 export const JUDGE_HEADING = 'EWR the results are judged by';
 
 /** The heading of the page's first panel, its lead card (#set-share): how natural flow is made (issue #614). */
-export const FLOW_GENERATION_HEADING = 'Model selection for flow generation';
+export const FLOW_GENERATION_HEADING = 'Flow generation';
 
 export const SETTINGS_SECTIONS = [
 	// The lead group, with no name, above the first task's (issue #614). First the model selection: how rain becomes
-	// natural flow, Fragmentation or Per unit (issue #553 round 3; "Flow generation" until issue #614, in a "Runoff"
+	// natural flow, Per unit (the only method since issue #658; issue #553 round 3; "Model selection for flow generation" from issue #614 to #658; first in a "Runoff"
 	// group of its own). The id is the old Flow share panel's, so its links still land. The runoff parameters and
 	// their fit moved to Calibration (issue #586 round 3).
 	{ id: 'set-share', label: FLOW_GENERATION_HEADING, group: null },

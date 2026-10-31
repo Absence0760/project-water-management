@@ -37,6 +37,8 @@ describe('modelQualitySections', () => {
 		const checked = { plausibility: { gauges: [gauge('a')] } as RunSummary['plausibility'] };
 		expect(ids(checked).slice(0, 3)).toEqual(['res-hydrograph', 'res-fdc', 'res-gauges']);
 		expect(ids({ ...checked, calibration: { siteNodeId: 'a' } })).not.toContain('res-gauges');
+		// Nor another ticked location's gauge (issue #659): its record is a calibration score, not a check.
+		expect(ids({ ...checked, calibration: { siteNodeId: undefined }, calibrationZones: [{ siteNodeId: 'a' }] })).not.toContain('res-gauges');
 	});
 
 	it('names each link as its panel’s heading, word for word, with no shorter bar name', () => {

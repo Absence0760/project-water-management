@@ -116,7 +116,7 @@ describe('roleBadge', () => {
 		inUse: seriesInUse(list),
 		gaugeInUse: gaugeRecordsInUse(list, [{ id: 'n1' }]),
 		gaugeIds: new Set(['n1']),
-		calibrationSite: null,
+		calibrationGauges: new Set<string>(),
 		...extra
 	});
 
@@ -132,7 +132,7 @@ describe('roleBadge', () => {
 		const checks = roleBadge(g, ctx([g]));
 		expect(checks?.label).toBe('Gauge record (checks only)');
 		expect(checks?.why).toMatch(/Calibration → Calibration record/);
-		expect(roleBadge(g, ctx([g], { calibrationSite: 'n1' }))?.label).toBe('Gauge record (calibration site)');
+		expect(roleBadge(g, ctx([g], { calibrationGauges: new Set(['n1']) }))?.label).toBe('Gauge record (calibration location)');
 		const gone = { ...g, siteNodeId: 'n9' };
 		expect(roleBadge(gone, ctx([gone]))?.label).toBe('Not used: its gauge is no longer in the model');
 	});
@@ -140,8 +140,8 @@ describe('roleBadge', () => {
 	it('a unit’s own rain is its unit’s, not a gauge record; an assigned station is a rainfall station (issue #553)', () => {
 		const own = { ...meta('u', 'rain_chirps_mm', 'CHIRPS Upper'), siteNodeId: 'u1' };
 		const units = new Map([['u1', 'Upper unit']]);
-		expect(roleBadge(own, ctx([own], { units, unitRainOn: true }))).toEqual({ label: 'Upper unit’s own rain', unused: false, why: null });
-		expect(roleBadge(own, ctx([own], { units, unitRainOn: false }))).toEqual({ label: 'Not used: per-unit rain is off', unused: true, why: null });
+		// Per unit is the only method (issue #658): a unit's own rain is always read for it.
+		expect(roleBadge(own, ctx([own], { units }))).toEqual({ label: 'Upper unit’s own rain', unused: false, why: null });
 		// Without the units known it reads as before (a record at a node that isn't a gauge).
 		expect(roleBadge(own, ctx([own]))?.label).toBe('Not used: its gauge is no longer in the model');
 	});
@@ -149,7 +149,7 @@ describe('roleBadge', () => {
 	describe('a rainfall station (issue #589)', () => {
 		const a = meta('a', 'rain_catchment_mm', 'A');
 		const b = meta('b', 'rain_catchment_mm', 'Kloof');
-		const uses = (u: Partial<{ rainFor: string[]; corrects: string[]; idle: string[] }>) => ({ rainFor: [], corrects: [], idle: [], ...u });
+		const uses = (u: Partial<{ rainFor: string[]; corrects: string[] }>) => ({ rainFor: [], corrects: [], ...u });
 
 		it('a station a run reads for an area or a pairing is a rainfall station, never “Not used”', () => {
 			expect(roleBadge(b, ctx([a, b], { stationUses: new Map([['b', uses({ rainFor: ['Lower unit'] })]]) }))).toEqual({ label: 'Rainfall station', unused: false, why: null });
@@ -163,10 +163,6 @@ describe('roleBadge', () => {
 			expect(roleBadge(b, ctx([a, b], { stationUses: new Map([['b', uses({})]]) }))).toEqual({ label: 'Not used: no area is assigned to it', unused: true, why: null });
 			// Without the stations' uses known it reads the same.
 			expect(roleBadge(b, ctx([a, b]))?.label).toBe('Not used: no area is assigned to it');
-		});
-
-		it('a station assigned only to units while per-unit rain is off is not read, and says why', () => {
-			expect(roleBadge(b, ctx([a, b], { stationUses: new Map([['b', uses({ idle: ['Lower unit'] })]]) }))).toEqual({ label: 'Not used: per-unit rain is off', unused: true, why: null });
 		});
 
 		it('with a station for the catchment, the catchment rain read by name is read only where it is assigned', () => {

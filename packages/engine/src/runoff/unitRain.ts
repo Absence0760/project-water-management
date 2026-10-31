@@ -1,7 +1,8 @@
-// Per-unit rain (engine ≥ 1.78.0, issue #482, docs/model.md §2.4h): under
-// settings.unitRain `perUnit` each land unit (a farm with an area) runs GR4J
-// on its own daily rain, with the one parameter set and the catchment PE, and
-// its runoff replaces natural × share as its local inflow. This module builds
+// Per-unit rain (engine ≥ 1.78.0, issue #482, docs/model.md §2.4h): each
+// land unit (a farm with an area) runs GR4J on its own daily rain, with the
+// one parameter set and the catchment PE, and its runoff is its local inflow.
+// Since engine 1.109.0 (issue #658) this is the only flow generation method
+// (Fragmentation, one run on the catchment rain split by share, is retired). This module builds
 // each unit's rain (the forcing rule) and runs GR4J per unit; ./simulate.ts
 // (runs, firm yield) and ../calibrate/calibrate.ts (each evaluation) call it.
 //
@@ -42,6 +43,7 @@
 // the rule; a unit without a station keeps the chain above, bit for bit.
 import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import {
+	resolveUnitRain,
 	AREAL_RAIN_FACTOR_MAX,
 	AREAL_RAIN_FACTOR_MIN,
 	AREAL_RAIN_FACTOR_WARN_MAX,
@@ -70,7 +72,7 @@ import {
 import { CHIRPS_FACTOR_MIN_DAYS, CHIRPS_FACTOR_MIN_MM, chirpsFactorOn, type ChirpsCorrection } from '../rain';
 import { cmpStr } from '../order';
 import { gr4j } from './gr4j';
-import type { ZoneAssignment } from '../calibrate/zones';
+import type { LocationAssignment } from '../calibrate/locations';
 import type { Gr4jParams } from './params';
 import { simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
 import { isLandUnit, MM_KM2_TO_M3 } from './area';
@@ -93,7 +95,7 @@ import {
 	type StationContext,
 	type UnitStationRecipe
 } from './stationForcing';
-import type { RainStationInputs, StationAreaForcing } from '../project';
+import type { RainStationInputs, StationAreaForcing, UnitRainZoneSummary } from '../project';
 import { warn } from '../warningCodes';
 
 export { isLandUnit, perUnitAreaKm2 } from './area';
@@ -178,18 +180,6 @@ function stationsOf(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 'startDate'>
 	return (ctx.stations = stationContext({ settings: ctx.settings, series: ctx.series, stations: ctx.stationInputs, nodes: ctx.nodes }, warnings));
 }
 
-/**
- * The settings with Per unit on, keeping the rest of settings.unitRain (its MAP period, reference gauge and
- * pinned recipes): the forcing Fragmentation's EWR shares are made on (engine ≥ 1.105.0, issue #615, §2.5b), so a
- * unit's share is the same under both methods for the same inputs.
- */
-export function shareForcingSettings(s: ProjectSettings): ProjectSettings {
-	return { ...s, unitRain: { ...(s.unitRain ?? {}), mode: 'perUnit' } };
-}
-
-/** settings.unitRain is on: mode `perUnit`. */
-export const unitRainOn = (s: { unitRain?: UnitRainSettings | null } | null | undefined): boolean => s?.unitRain?.mode === 'perUnit';
-
 const clampFactor = (k: number) => Math.min(AREAL_RAIN_FACTOR_MAX, Math.max(AREAL_RAIN_FACTOR_MIN, k));
 const usableMap = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= MAP_MM_MIN && v <= MAP_MM_MAX ? v : null);
 /** A rain reading: finite and not negative (a negative value is a no-data code). */
@@ -263,7 +253,7 @@ export function referenceFit(
 	checkedGauge?: DailySeries | null
 ): UnitRainReferenceFit | null {
 	const ref = u?.reference;
-	if (u?.mode !== 'perUnit' || !ref) return null;
+	if (!ref) return null;
 	const node = nodes.find((n) => n.id === ref.unitId);
 	if (!node || !isLandUnit(node)) {
 		warnings.push(
@@ -342,8 +332,7 @@ const biasExists = (c: ChirpsCorrection | null): boolean => !!c && c.mode === 'm
 
 /**
  * Each land unit's rule and factors (node-id order), with the warnings a run
- * gives about them; null when settings.unitRain is off or the model has no
- * land unit (that warns). `pinned` (a resumed run) replaces a unit's recipe
+ * gives about them; null when the model has no land unit (that warns). `pinned` (a resumed run) replaces a unit's recipe
  * computed from the input.
  */
 export function unitRainRecipes(
@@ -352,11 +341,11 @@ export function unitRainRecipes(
 	pinned?: readonly UnitRainRecipe[],
 	fit?: { reference: UnitRainReferenceFit | null }
 ): UnitRainRecipe[] | null {
-	const u = ctx.settings.unitRain;
-	if (u?.mode !== 'perUnit') return null;
+	// Per unit is the only method (engine ≥ 1.109.0): a setting not resolved yet (absent, null, the retired `catchment`) runs it too.
+	const u = ctx.settings.unitRain?.mode === 'perUnit' ? ctx.settings.unitRain : resolveUnitRain(ctx.settings.unitRain, []);
 	const units = ctx.nodes.filter(isLandUnit).sort((a, b) => cmpStr(a.id, b.id));
 	if (!units.length) {
-		warnings.push('Runoff from each unit’s own rain is on, but no unit has an area: GR4J runs on the catchment rain');
+		warnings.push('No unit has an area, so there is no unit to make runoff on its own rain: GR4J runs once on the catchment rain');
 		return null;
 	}
 	const series = ctx.series;
@@ -682,7 +671,7 @@ export function simulateUnits(
 		cycleDays?: number;
 		initial?: readonly { id: string; state: readonly number[] }[];
 		captureAt?: number;
-		/** Each unit's parameters under calibration zones (engine 1.106.0, ../calibrate/zones.ts zoneParamsOf); absent = `p` for every unit. */
+		/** Each unit's parameters under calibration zones (engine 1.106.0, ../calibrate/locations.ts locationParamsOf); absent = `p` for every unit. */
 		paramsOf?: (unitId: string) => Gr4jParams;
 	}
 ): RunoffTrace[] {
@@ -712,7 +701,7 @@ export function unitRainSummary(
 	traces: readonly RunoffTrace[],
 	petMm: Float64Array,
 	reference?: UnitRainReferenceFit | null,
-	zones?: { assignment: ZoneAssignment; base: Gr4jParams; siteName: string } | null
+	zones?: { assignment: LocationAssignment; base: Gr4jParams } | null
 ): UnitRainSummary {
 	const sum = (a: ArrayLike<number>) => {
 		let s = 0;
@@ -770,13 +759,29 @@ export function unitRainSummary(
 		}),
 		// Only with a reference, so a summary without one is as before 1.80.0.
 		...(reference ? { reference: structuredClone(reference) } : {}),
-		// Only when the run applied calibration zones (engine 1.106.0, issue #555), so a summary without is as before.
+		// Only when the run applied a gauge location (engine 1.106.0, issue #555; 1.110.0, issue #659), so a summary
+		// without is as before: each location's group in the locations' order (the headline last), then settings.gr4j's.
 		...(zones
 			? {
 					zones: [
-						...zones.assignment.zones.map((z) => ({ nodeId: z.nodeId, name: z.name, units: [...z.units], params: { ...z.params }, fitted: z.fitted })),
-						{ nodeId: null, name: zones.siteName, units: [...zones.assignment.primaryUnits], params: { ...zones.base }, fitted: true }
-					]
+						...zones.assignment.locations.map(
+							(l): UnitRainZoneSummary => ({
+								nodeId: l.key,
+								name: l.name,
+								units: [...l.units],
+								params: { ...l.params },
+								fitted: l.fitted,
+								kind: l.kind,
+								...(l.key === zones.assignment.headline ? { headline: true } : {}),
+								borrowed: [...l.borrowed],
+								rest: [...l.rest]
+							})
+						),
+						...(zones.assignment.defaultUnits.length
+							? [{ nodeId: null, name: 'Catchment parameters', units: [...zones.assignment.defaultUnits], params: { ...zones.base }, fitted: true, kind: 'default' as const, borrowed: [], rest: [] }]
+							: [])
+					],
+					paramSource: structuredClone(zones.assignment.paramSource)
 				}
 			: {})
 	};

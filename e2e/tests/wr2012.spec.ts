@@ -91,7 +91,14 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With WR2012' })).toBeVisible();
 	// The same plain-language flag is a run warning.
-	await expect(page.getByRole('status').filter({ hasText: /to check before relying on this run/ })).toContainText('WR2012 naturalised MAR for Z99A');
+	// The things to check show their first 3 (issue #521), and this one is further down the list.
+	const checks = page.getByRole('status').filter({ hasText: /to check before relying on this run/ });
+	// The sample's two units on the catchment rain (Per unit is the only method, engine 1.109.0, FM3) are one of them, not two.
+	await expect(checks.getByRole('listitem').filter({ hasText: /^Unit rain: / })).toHaveText([
+		'Unit rain: 2 units have no rain of their own (no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by), so they run on the catchment rain: "Lower farm", "Upper farm"'
+	]);
+	await checks.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
+	await expect(checks).toContainText('WR2012 naturalised MAR for Z99A');
 	// The Summary's model checks link to the check, in Model quality on Calibration, for this run (issue #586 Round 3).
 	const runId = new URL(page.url()).searchParams.get('run')!;
 	const item = page.getByTestId('credibility').getByRole('link', { name: /^WR2012 / });

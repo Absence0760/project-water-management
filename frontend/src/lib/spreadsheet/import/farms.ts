@@ -40,15 +40,17 @@ export interface FarmSpecTable {
 }
 
 /**
- * b023's fragmentation methods are retired (issue #616): under Fragmentation
- * the app splits the flow by each unit's natural MAR, so the workbook's
+ * b023's fragmentation methods are retired (issue #616), and the app's
+ * Fragmentation with them (issue #658): each unit makes its own runoff (Per
+ * unit, the only method; an imported project stores no unitRain and runs Per
+ * unit's defaults), and the EWR is split by each unit's natural MAR, so the workbook's
  * method, its Hi/Lo split and the High-/Low-MAP area and External
  * fragmentation columns aren't read (a workbook that still has them imports
  * as before). A method other than Area (Hi/Lo, Specific, or one the list
  * doesn't have) gets this note (flow_share_method_note; same text).
  */
 export function flowShareMethodNote(methodRaw: string): string {
-	return `[Farm spec] the workbook's fragmentation method ${pyRepr(methodRaw)} is not used: the app splits the flow by each unit's natural MAR (docs/model.md §2.5)`;
+	return `[Farm spec] the workbook's fragmentation method ${pyRepr(methodRaw)} is not used: each unit makes its own runoff on its own rain (docs/model.md §2.4h)`;
 }
 
 /**

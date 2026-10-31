@@ -45,6 +45,9 @@ import { resizeDamCurve, resizedFullArea } from '../network/damResize';
 import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
 import type { AllocationEntry } from '../allocations/compare';
 import { FARMER_K } from '../views/farmView';
+import { headlineLocation } from '../calibrate/locations';
+import type { CalibrationZone } from '../calibrate/zones';
+import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
 
 /** An op that was applied, with what it did besides its own edit (re-links, dropped references, days scaled). */
 export interface AppliedOp {
@@ -800,6 +803,10 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (path === 'droughtRestriction' && value === null && (s.droughtRestriction === null || s.droughtRestriction === undefined)) break;
 			// Likewise no daily EWR source and null (the pragmatic EWR; a scenario path engine ≥ 1.80.0).
 			if (path === 'ewrDailySource' && value === null && (s.ewrDailySource === null || s.ewrDailySource === undefined)) break;
+			// The headline location's own window, record and X1–X4 (engine 1.110.0, issue #659): when it is a gauge, its
+			// row's, as the run scores and the ensemble varies it. Settings from before keep the top level, which
+			// normalizeCalibrationLocations copies into that row when the run reads them.
+			if (writeHeadlineRow(d, path, value)) break;
 			if (leaf === undefined) s[head] = value;
 			else {
 				const cur = s[head];
@@ -1027,6 +1034,40 @@ function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | nul
 		group = [];
 	});
 	return { input: cur, applied, problems, assessorProblems, maskedRules, before, pending: pending ?? draft };
+}
+
+/** The settings.set paths a calibration location holds of its own (the rest are the project's). */
+const LOCATION_PATHS: Readonly<Record<string, (z: CalibrationZone, value: unknown, top: Record<string, unknown>) => CalibrationZone>> = {
+	calibrationStart: (z, v) => ({ ...z, calibrationStart: v as string | null }),
+	calibrationEnd: (z, v) => ({ ...z, calibrationEnd: v as string | null }),
+	calibrationFlowKind: (z, v) => ({ ...z, calibrationFlowKind: v as CalibrationZone['calibrationFlowKind'] }),
+	...Object.fromEntries(
+		GR4J_PARAMS.map((p) => [
+			`gr4j.${p.key}`,
+			(z: CalibrationZone, v: unknown, top: Record<string, unknown>) => {
+				// A row not fitted yet ran on the top level's X1–X4: the override starts from those, as withLocationParams does.
+				const from = z.gr4j ?? (Object.fromEntries(GR4J_PARAMS.map((q) => [q.key, typeof top[q.key] === 'number' ? top[q.key] : q.default])) as unknown as Gr4jParams);
+				return { ...z, gr4j: { ...from, [p.key]: v } as Gr4jParams };
+			}
+		])
+	)
+};
+
+/**
+ * Writes a scenario's calibration window, record or GR4J X1–X4 into the headline location's row when the headline
+ * is a gauge inside the network (engine 1.110.0, issue #659; calibrate/locations.ts headlineLocation), and says
+ * whether it did. Settings from before 1.110.0 (no boolean calibrateAtOutlet) and an outlet headline keep the top level.
+ */
+function writeHeadlineRow(d: ModelInput, path: string, value: unknown): boolean {
+	const write = LOCATION_PATHS[path];
+	const s = d.settings as Record<string, unknown>;
+	if (!write || typeof s.calibrateAtOutlet !== 'boolean') return false;
+	const key = headlineLocation(d.model.nodes, s as never);
+	const rows = Array.isArray(s.calibrationZones) ? (s.calibrationZones as CalibrationZone[]) : [];
+	if (key === null || !rows.some((z) => z.nodeId === key)) return false;
+	const top = (s.gr4j && typeof s.gr4j === 'object' ? s.gr4j : {}) as Record<string, unknown>;
+	s.calibrationZones = rows.map((z) => (z.nodeId === key ? write(z, value, top) : z));
+	return true;
 }
 
 /**

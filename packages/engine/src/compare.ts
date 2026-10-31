@@ -25,6 +25,7 @@ import { originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOr
 import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFillSpec } from './flowGapFill';
 import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import { calibrationRulesChanges, resolveCalibrationRules } from './calibrate/rulesSettings';
+import { calibrationRestOf, normalizeCalibrationLocations, type CalibrationRest } from './calibrate/locations';
 import { chirpsQuantileMapText, fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { patchChainOfSetting } from './runoff/stationFingerprint';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
@@ -35,6 +36,7 @@ import {
 	RETIRED_CALIBRATION_KEYS,
 	resolveArealRain,
 	resolveUnitRain,
+	storedPerUnit,
 	DEFAULT_UNIT_MAP_PERIOD,
 	parseUnitRainSeriesKey,
 	resolvePe,
@@ -199,6 +201,11 @@ export interface RunComparison {
 	calibration: {
 		/** Whether each run's scores are in-sample (CalibrationStats.fitStatus, engine ≥ 0.39.0); null = not recorded. */
 		fitStatus: { a: CalibrationFitStatus | null; b: CalibrationFitStatus | null };
+		/**
+		 * Where each run scored them, its headline location (CalibrationStats.siteName, issue #659): a gauge's name,
+		 * or null at the outlet (and for a run without statistics). Two different places don't compare like for like.
+		 */
+		site: { a: string | null; b: string | null };
 		days: MetricDelta;
 		nse: MetricDelta;
 		/** Kling–Gupta efficiency (absent on runs saved before engine 0.3.0). */
@@ -514,6 +521,7 @@ export function compareRuns(a: ComparableRun, b: ComparableRun): RunComparison {
 			ka || kb
 				? {
 						fitStatus: { a: ka?.fitStatus ?? null, b: kb?.fitStatus ?? null },
+						site: { a: ka?.siteName ?? null, b: kb?.siteName ?? null },
 						days: metricDelta(ka?.days, kb?.days),
 						nse: metricDelta(ka?.nse, kb?.nse),
 						kge: metricDelta(ka?.kge, kb?.kge),
@@ -747,10 +755,14 @@ function arealRainChange(ra: unknown, rb: unknown): string | null {
 const AREAL_RAIN_LABEL = 'Areal rainfall correction (GR4J)';
 const UNIT_RAIN_LABEL = 'Runoff from each unit’s own rain';
 
-/** settings.unitRain in words (engine ≥ 1.78.0): "off", or "on (gauge MAP 600 mm (source); MAP period …)". */
+/**
+ * settings.unitRain in words (engine ≥ 1.78.0): "off", or "on (gauge MAP 600 mm (source); MAP period …)". "off" is
+ * a run's stored setting that chose Fragmentation (absent, null or `catchment`), as engines before 1.109.0 ran it;
+ * a run's stored settings from 1.109.0 (issue #658) always hold Per unit (the backend writes it, migration 286).
+ */
 export function unitRainText(raw: unknown): string {
+	if (!storedPerUnit(raw)) return 'off';
 	const u = resolveUnitRain(raw, []);
-	if (u?.mode !== 'perUnit') return 'off';
 	const gauge = u.gaugeMapMm != null ? `gauge MAP ${fmtValue(u.gaugeMapMm, 0)} mm${u.gaugeMapSource ? ` (${u.gaugeMapSource})` : ''}` : 'no gauge MAP';
 	const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	// The reference gauge and unit (engine ≥ 1.80.0), only when set, so a setting without one reads as before.
@@ -863,6 +875,17 @@ const flowShareText: Fmt = (v) => (v === 'hiLo' ? 'Hi/Lo MAP' : v === 'manual' ?
 const flowShareGone = `removed in engine ${FLOW_SHARE_RETIRED_IN} (the flow is split by ${EWR_SPLIT_LABEL.naturalMar})`;
 const ewrSplitText: Fmt = (v) => (v === 'naturalMar' ? EWR_SPLIT_LABEL.naturalMar : v === 'flowShare' || v === undefined ? EWR_SPLIT_LABEL.flowShare : String(v));
 
+/** The settings calibrationLocationChanges words (issue #659), not the generic loop. */
+const LOCATION_KEYS = new Set(['calibrationSiteNodeId', 'calibrationZones', 'calibrateAtOutlet', 'calibrationRest', 'unitParamsFrom']);
+const HEADLINE_LABEL = 'Headline calibration location';
+const REST_LABEL = 'Units outside every calibration location take';
+const PARAMS_FROM_LABEL = 'Parameters from';
+const REST_TEXT: Record<CalibrationRest, string> = {
+	nearest: 'the nearest location upstream',
+	headline: 'the headline location’s parameters',
+	default: 'the catchment parameters'
+};
+
 const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	februaryDays: { label: 'Days in February', fmt: plain },
 	effectiveRainFraction: { label: 'Effective rain fraction', fmt: plain },
@@ -930,10 +953,16 @@ const SETTINGS_FIELDS: Record<string, ScalarField> = {
 	calibrationStart: { label: 'Calibration window start', fmt: (v) => (v ? String(v) : 'start of record') },
 	calibrationEnd: { label: 'Calibration window end', fmt: (v) => (v ? String(v) : 'end of record') },
 	calibrationFlowKind: { label: 'Calibration flow series', fmt: (v) => (v ? (SERIES_LABELS[String(v)] ?? String(v)) : 'default (observed, else logger)') },
-	// Engine ≥ 1.41.0; a snapshot without it calibrated at the outlet. Only calibration reads it, never the run.
-	calibrationSiteNodeId: { label: 'Calibration site', fmt: (v) => (v ? `gauge node ${String(v)}` : 'the outlet') },
+	// Engine ≥ 1.41.0 the calibration site; engine 1.110.0 (issue #659) the headline location's pointer, null = automatic.
+	// Worded by diffSettings with the gauge's name (calibrationLocationChanges), not by this formatter.
+	calibrationSiteNodeId: { label: HEADLINE_LABEL, fmt: (v) => (v ? `gauge node ${String(v)}` : 'automatic') },
 	// Engine 1.106.0 (issue #555); a snapshot without it (or with [] or every row unticked) ran one parameter set.
-	calibrationZones: { label: 'Calibration zones', fmt: calibrationZonesText }
+	calibrationZones: { label: 'Calibration locations', fmt: calibrationZonesText },
+	// Engine 1.110.0 (issue #659): worded by calibrationLocationChanges. A snapshot from before is read through
+	// normalizeCalibrationLocations (diffInputs), so it compares as what it ran.
+	calibrateAtOutlet: { label: 'Calibrate at the outlet', fmt: (v) => (v === false ? 'no' : 'yes') },
+	calibrationRest: { label: REST_LABEL, fmt: (v) => REST_TEXT[calibrationRestOf({ calibrationRest: v as CalibrationRest })] },
+	unitParamsFrom: { label: PARAMS_FROM_LABEL, fmt: (v) => `${Object.keys(v && typeof v === 'object' ? v : {}).length} unit(s) assigned` }
 };
 
 /** The ticked calibration zones and their parameters, in one line (the label's formatter; the input diff words each zone, calibrationZoneChanges). */
@@ -1197,13 +1226,13 @@ function calibrationZoneChanges(ra: unknown, rb: unknown, name: (id: string) => 
 	for (const id of [...new Set([...a.keys(), ...b.keys()])].sort()) {
 		const x = a.get(id);
 		const y = b.get(id);
-		const at = `Calibration zone at ${name(id)}`;
+		const at = `Calibration location at ${name(id)}`;
 		if (!x) {
 			out.push({ kind: 'added', text: `${at}: added (${zoneParamsText(y!.gr4j)})` });
 			continue;
 		}
 		if (!y) {
-			out.push({ kind: 'removed', text: `${at}: removed (was ${zoneParamsText(x.gr4j)}); its units joined the next zone downstream` });
+			out.push({ kind: 'removed', text: `${at}: removed (was ${zoneParamsText(x.gr4j)}); its units take their next location` });
 			continue;
 		}
 		const parts: string[] = [];
@@ -1227,6 +1256,39 @@ function calibrationZoneChanges(ra: unknown, rb: unknown, name: (id: string) => 
 	return out;
 }
 
+/**
+ * The calibration locations between two snapshots (issue #659, docs/run-comparison.md), each in the locations'
+ * shape (diffInputs normalises a snapshot from before engine 1.110.0): the outlet's Calibrate here, each gauge's row
+ * (calibrationZoneChanges), the headline pointer by name, the rest rule, and one line per land unit whose
+ * Parameters from changed. Absent and null Parameters from are the same (every unit its own zone).
+ */
+function calibrationLocationChanges(a: Record<string, unknown>, b: Record<string, unknown>, name: (id: string | null) => string): Omit<InputChange, 'area'>[] {
+	const out: Omit<InputChange, 'area'>[] = [];
+	const line = (subject: string, kind: InputChange['kind'], text: string) => out.push({ kind, subject, text });
+	if ((a.calibrateAtOutlet === false) !== (b.calibrateAtOutlet === false))
+		line('Calibrate at the outlet', 'changed', `Calibrate at the outlet: ${SETTINGS_FIELDS.calibrateAtOutlet!.fmt(a.calibrateAtOutlet)} → ${SETTINGS_FIELDS.calibrateAtOutlet!.fmt(b.calibrateAtOutlet)}`);
+	for (const c of calibrationZoneChanges(a.calibrationZones, b.calibrationZones, (id) => name(id))) line(SETTINGS_FIELDS.calibrationZones!.label, c.kind, c.text);
+	const ha = (a.calibrationSiteNodeId as string | null | undefined) ?? null;
+	const hb = (b.calibrationSiteNodeId as string | null | undefined) ?? null;
+	const headline = (v: string | null) => (v === null ? 'automatic' : name(v));
+	if (ha !== hb) line(HEADLINE_LABEL, 'changed', `${HEADLINE_LABEL}: ${headline(ha)} → ${headline(hb)}`);
+	const ra = calibrationRestOf(a as { calibrationRest?: CalibrationRest });
+	const rb = calibrationRestOf(b as { calibrationRest?: CalibrationRest });
+	if (ra !== rb) line(REST_LABEL, 'changed', `${REST_LABEL}: ${REST_TEXT[ra]} → ${REST_TEXT[rb]}`);
+	const from = (v: unknown): Record<string, string> =>
+		v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === 'string')) : {};
+	const fa = from(a.unitParamsFrom);
+	const fb = from(b.unitParamsFrom);
+	const target = (v: string | undefined) => (v === undefined ? 'its own zone' : name(v));
+	const units = [...new Set([...Object.keys(fa), ...Object.keys(fb)])].sort((x, y) => cmpStr(name(x), name(y)) || cmpStr(x, y));
+	for (const u of units) {
+		if (fa[u] === fb[u]) continue;
+		const kind: InputChange['kind'] = fa[u] === undefined ? 'added' : fb[u] === undefined ? 'removed' : 'changed';
+		line(PARAMS_FROM_LABEL, kind, `${PARAMS_FROM_LABEL}, ${name(u)}: ${target(fa[u])} → ${target(fb[u])}`);
+	}
+	return out;
+}
+
 function diffSettings(
 	ra: RunInputsSnapshot['settings'] | undefined,
 	rb: RunInputsSnapshot['settings'] | undefined,
@@ -1241,13 +1303,11 @@ function diffSettings(
 
 	for (const [k, f] of Object.entries(SETTINGS_FIELDS)) {
 		if (k === 'ewrSplit' || k === 'flowShareMethod') continue;
-		// The zones, one line per zone (calibrationZoneChanges, below).
-		if (k === 'calibrationZones') continue;
-		// The calibration site by its gauge's name, as the rule tables' sites (the outlet when null).
-		const fmt: Fmt = k === 'calibrationSiteNodeId' ? (v) => (v ? `the gauge ${siteName(String(v))}` : 'the outlet') : f.fmt;
-		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${fmt(a[k])} → ${fmt(b[k])}`);
+		// The locations, the headline, the rest rule and each unit's Parameters from (calibrationLocationChanges, below).
+		if (LOCATION_KEYS.has(k)) continue;
+		if (!same(a[k], b[k])) push(f.label, `${f.label}: ${f.fmt(a[k])} → ${f.fmt(b[k])}`);
 	}
-	for (const c of calibrationZoneChanges(a.calibrationZones, b.calibrationZones, (id) => siteName(id))) out.push({ area: 'settings', kind: c.kind, subject: SETTINGS_FIELDS.calibrationZones!.label, text: c.text });
+	for (const c of calibrationLocationChanges(a, b, siteName)) out.push({ area: 'settings', ...c });
 	const split = ewrSplitChange(ra, rb);
 	if (split) push(EWR_SPLIT_FIELD, split);
 	for (const [k, f] of Object.entries(SETTINGS_MONTHLY)) {
@@ -2241,6 +2301,54 @@ function cropSystemText(m: ProjectModel, c: CropDef): string {
 	return c.irrigationEfficiency != null ? `${Math.round(c.irrigationEfficiency * 1000) / 10} %` : "the unit's";
 }
 
+/**
+ * A snapshot's settings in the calibration locations' shape (engine 1.110.0, issue #659,
+ * normalizeCalibrationLocations, by its own network), so a run from before compares as what it ran: its
+ * calibration site's window and parameters are that gauge's row, not a change. As stored without a network.
+ */
+function locatedSettings(r: RunInputsSnapshot | null | undefined): RunInputsSnapshot['settings'] | undefined {
+	const nodes = r?.model?.nodes;
+	if (!r?.settings || !Array.isArray(nodes) || !nodes.length) return r?.settings;
+	// Whether the outlet had a record, as the migration judges it (a run with no series list: as the engine reads it, yes).
+	const keys = r.series ? Object.keys(r.series) : null;
+	const outletRecord = keys === null || keys.includes('flow_observed_m3s') || keys.includes('flow_logger_m3s');
+	return normalizeCalibrationLocations(r.settings as never, nodes as never, outletRecord) as RunInputsSnapshot['settings'];
+}
+
+/** A legacy snapshot (no boolean calibrateAtOutlet) whose calibration site was a gauge inside the network: normalising made it a row. */
+const legacyInnerSite = (raw: RunInputsSnapshot['settings'] | undefined, located: RunInputsSnapshot['settings'] | undefined) =>
+	!!raw && typeof (raw as { calibrateAtOutlet?: unknown }).calibrateAtOutlet !== 'boolean' && typeof (located as { calibrationSiteNodeId?: unknown } | undefined)?.calibrationSiteNodeId === 'string';
+
+/**
+ * Two snapshots from before engine 1.110.0, each with its calibration site at a gauge: normalising copied the site's
+ * window, record, exclusions, suspect-day rule and X1–X4 into that gauge's row and left them at the top level too,
+ * where both runs read them only as the site's. The row's line says each change; B's top level takes A's for those
+ * keys, so it isn't said a second time as if the outlet's had changed.
+ */
+function withoutSiteEcho(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+	const qa = (a.qualityFlags ?? {}) as Record<string, unknown>;
+	const qb = (b.qualityFlags ?? {}) as Record<string, unknown>;
+	const ga = (a.gr4j ?? {}) as Record<string, unknown>;
+	const gb = (b.gr4j ?? {}) as Record<string, unknown>;
+	return {
+		...b,
+		calibrationStart: a.calibrationStart,
+		calibrationEnd: a.calibrationEnd,
+		calibrationFlowKind: a.calibrationFlowKind,
+		calibrationExclusions: a.calibrationExclusions,
+		qualityFlags: { ...qb, suspect: qa.suspect, zeroFlowMonths: qa.zeroFlowMonths },
+		gr4j: { ...gb, x1: ga.x1, x2: ga.x2, x3: ga.x3, x4: ga.x4 }
+	};
+}
+
+/** diffSettings over the snapshots in the calibration locations' shape (locatedSettings, withoutSiteEcho). */
+function diffLocatedSettings(a: RunInputsSnapshot | null | undefined, b: RunInputsSnapshot | null | undefined, siteName: (id: string | null) => string, recordName: (id: string) => string): InputChange[] {
+	const la = locatedSettings(a);
+	let lb = locatedSettings(b);
+	if (la && lb && legacyInnerSite(a?.settings, la) && legacyInnerSite(b?.settings, lb)) lb = withoutSiteEcho(la, lb) as RunInputsSnapshot['settings'];
+	return diffSettings(la, lb, siteName, { a: a?.stations, b: b?.stations }, recordName);
+}
+
 export function diffInputs(
 	a: RunInputsSnapshot | null | undefined,
 	b: RunInputsSnapshot | null | undefined,
@@ -2260,7 +2368,7 @@ export function diffInputs(
 	const recordName = (id: string) => recordNames.get(id) ?? stationNames.get(id) ?? id;
 	return [
 		...diffModel(a?.model, b?.model),
-		...diffSettings(a?.settings, b?.settings, siteName, { a: a?.stations, b: b?.stations }, recordName),
+		...diffLocatedSettings(a, b, siteName, recordName),
 		...diffStations(a?.stations, b?.stations),
 		...diffSeries(a?.series, b?.series, values, (id) => names.get(id) ?? id, (id) => stationNames.get(id) ?? id)
 	];
@@ -2310,7 +2418,10 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource'],
 		[RAIN_STATIONS_LABEL, 'rainStations'],
 		['Kept data checks', 'checksKept'],
-		['Kept warnings', 'warningsKept']
+		['Kept warnings', 'warningsKept'],
+		// The labels before issue #659 (engine 1.110.0), which stored revisions keep.
+		['Calibration site', 'calibrationSiteNodeId'],
+		['Calibration zones', 'calibrationZones']
 	);
 	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) out.push([`Data quality ${f.label}`, `dataQuality.${k}`]);
 	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);

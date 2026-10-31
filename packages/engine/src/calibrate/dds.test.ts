@@ -76,3 +76,44 @@ describe('reflect', () => {
 		expect(reflect(4, b)).toBe(4);
 	});
 });
+
+describe('DDS paused and resumed (a fit spread over server jobs)', () => {
+	/** The search in pieces of `every` evaluations, its state through JSON between them, as a job stores it for the next. */
+	const inPieces = (f: (x: Float64Array) => number, bounds: Bounds[], opts: Parameters<typeof dds>[2], every: number) => {
+		let state: ReturnType<typeof dds>['state'] | undefined;
+		let res: ReturnType<typeof dds>;
+		let pieces = 0;
+		do {
+			const from = state?.evaluations ?? 0;
+			res = dds(f, bounds, { ...opts, ...(state ? { resume: state } : {}), pause: (n) => n - from >= every });
+			state = JSON.parse(JSON.stringify(res.state));
+			pieces++;
+		} while (res.paused);
+		return { res, pieces };
+	};
+
+	it('goes on from its state to the unbroken search’s result, paused anywhere, with or without x0', () => {
+		for (const opts of [{ budget: 300, seed: 4 }, { budget: 300, seed: 4, x0: [1, -1, 2] }]) {
+			const whole = dds(rastrigin, box(3, -5, 5), opts);
+			expect(whole.paused).toBe(false);
+			// Every 1 and 3 pause inside the initial samples too (5 of them without x0).
+			for (const every of [1, 3, 7, 299]) {
+				const { res, pieces } = inPieces(rastrigin, box(3, -5, 5), opts, every);
+				expect({ x: res.x, f: res.f, evaluations: res.evaluations }).toEqual({ x: whole.x, f: whole.f, evaluations: whole.evaluations });
+				expect(pieces).toBe(Math.ceil(300 / every));
+			}
+		}
+	});
+
+	it('keeps a loss of +∞ through its JSON state, and refuses a state that isn’t this search’s', () => {
+		const opts = { budget: 20, seed: 2 };
+		const whole = dds(() => NaN, box(2, 0, 1), opts);
+		expect(whole.f).toBe(Infinity);
+		const { res } = inPieces(() => NaN, box(2, 0, 1), opts, 3);
+		expect({ x: res.x, f: res.f }).toEqual({ x: whole.x, f: Infinity });
+		const paused = dds(sphere([0, 0]), box(2, -1, 1), { ...opts, pause: (n) => n >= 4 });
+		expect(paused).toMatchObject({ paused: true, evaluations: 4, state: { evaluations: 4 } });
+		expect(() => dds(sphere([0, 0, 0]), box(3, -1, 1), { ...opts, resume: paused.state })).toThrow('does not match');
+		expect(() => dds(sphere([0, 0]), box(2, -1, 1), { budget: 4, resume: paused.state })).toThrow('does not match');
+	});
+});

@@ -9,7 +9,7 @@
 // that does) here, so esbuild keeps it out of the deployment bundle.
 import { isFlowSiteKind, isUnitRainKind, siteProblem } from '../series/site.js';
 import { stationProblem } from '../series/station.js';
-import { resolveFitRecord, type ProjectModel } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, resolveFitRecord, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { REASON_MAX, recordModelRevision } from '../history/record.js';
@@ -22,7 +22,8 @@ import { requireTeamRole } from '../teams/access.js';
 import { ProjectFile } from './document.js';
 import { normaliseBaselineEwrRules } from './ewrRules.js';
 import { remapSettingSeriesIds } from './flowMissingSettings.js';
-import { importedAutoFitError, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds } from './settings.js';
+import { locatedSettings } from './calibrationSite.js';
+import { importedAutoFitError, mergeSettings, normaliseBaselineAllocationMode, remapSettingNodeIds, resolveZoneFitRecord } from './settings.js';
 
 /**
  * Body cap for POST /projects/import: 5 MB, the same as the JSON export cap
@@ -115,7 +116,9 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	const id = crypto.randomUUID();
 	// A series' fresh id (a station's, issue #553; any series the settings name, issue #611): the settings follow it from the file's.
 	const seriesIds = new Map(data.series.flatMap((s) => (s.id !== undefined ? [[s.id, crypto.randomUUID()] as const] : [])));
-	const settings = importedSettings(data.settings, ids, seriesIds);
+	// A file from before calibration locations (engine 1.110.0, issue #659) is stored in their shape, its outlet ticked when it has an outlet record.
+	const outletRecord = data.series.some((s) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(s.kind) && !s.siteNodeId);
+	const settings = importedSettings(data.settings, ids, seriesIds, fresh.nodes, outletRecord);
 	// Licence data never drives the baseline (issue #507): a file that caps or fully allocates it imports comparing only, and the import's revision says so.
 	const allocNote = normaliseBaselineAllocationMode(settings);
 	// Nor is the EWR applied in it (issue #523 B4): a file's rules that keep the EWR import switched off, and the revision says which.
@@ -173,15 +176,28 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 /**
  * The stored settings for an import: the document's own (a workbook import's
  * partial settings stay partial, so later engine defaults still apply), with
- * node references following the fresh ids and the fit record's hand-edit list
- * recomputed, as PATCH does, so a file can't hide or invent an edit.
+ * node references following the fresh ids, in the calibration locations'
+ * shape (calibrationSite.ts locatedSettings, as 289 moved the stored rows),
+ * and each fit record's hand-edit list recomputed, as PATCH does, so a file
+ * can't hide or invent an edit.
  */
-function importedSettings(settings: ProjectFile['settings'], ids: ReadonlyMap<string, string>, seriesIds: ReadonlyMap<string, string>) {
-	const out = remapSettingNodeIds(settings, ids);
+function importedSettings(
+	settings: ProjectFile['settings'],
+	ids: ReadonlyMap<string, string>,
+	seriesIds: ReadonlyMap<string, string>,
+	nodes: ProjectModel['nodes'],
+	outletRecord: boolean
+) {
+	const out = locatedSettings(remapSettingNodeIds(settings, ids), nodes, outletRecord);
 	// The series the settings name follow them to the fresh ids (the rainfall stations, issue #553; the records with unreliable or
 	// missing periods and the kept data checks, issue #611); one the file doesn't carry stays, and the run matches nothing (a station warns).
 	Object.assign(out, remapSettingSeriesIds(out, seriesIds));
 	if (out.fitRecord !== undefined) out.fitRecord = resolveFitRecord(mergeSettings(out) as unknown as Parameters<typeof resolveFitRecord>[0]);
+	// Each calibration location's fit record against its own parameters (issue #555).
+	if (Array.isArray(out.calibrationZones)) {
+		const gr4j = mergeSettings(out).gr4j;
+		out.calibrationZones = out.calibrationZones.map((z: unknown) => resolveZoneFitRecord(gr4j, z));
+	}
 	return out;
 }
 

@@ -440,15 +440,16 @@ def convert_upstream_pct(wb: Workbook, farms: dict[str, dict[str, Any]]) -> None
     )
 
 
-# b023's fragmentation methods are retired (issue #616): under Fragmentation the app splits the flow by each unit's
-# natural MAR, so the workbook's method, its Hi/Lo split and the High-/Low-MAP area and External fragmentation
+# b023's fragmentation methods are retired (issue #616), and the app's Fragmentation with them (issue #658): each unit
+# makes its own runoff (Per unit, the only method; the project stores no unitRain and runs Per unit's defaults) and the
+# EWR is split by each unit's natural MAR, so the workbook's method, its Hi/Lo split and the High-/Low-MAP area and External fragmentation
 # columns aren't read into the project (a workbook that still has them imports as before). The workbook's "Selected
 # fragmentation" still goes to expected.json, for the client regression suite. A method other than Area (Hi/Lo,
 # Specific, or one the list doesn't have) gets a note, since the app's shares differ from the workbook's.
 def flow_share_method_note(method_raw: str) -> str:
     return (
-        f"[Farm spec] the workbook's fragmentation method {method_raw!r} is not used: the app splits the flow by "
-        "each unit's natural MAR (docs/model.md §2.5)"
+        f"[Farm spec] the workbook's fragmentation method {method_raw!r} is not used: each unit makes its own "
+        "runoff on its own rain (docs/model.md §2.4h)"
     )
 
 

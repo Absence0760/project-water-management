@@ -24,7 +24,7 @@ test('Add data adds a rainfall station with its MAP and coordinates, and the Dat
 	// Today's catchment rain says where a station is picked instead.
 	await expect(kind).toHaveAccessibleDescription(/For one gauge’s record with its own MAP, pick Rainfall — station\./);
 	await kind.selectOption({ label: 'Rainfall — station' });
-	await expect(kind).toHaveAccessibleDescription(/each can serve one or more hydrological units: Settings → Model selection for flow generation says which\. Until a station is assigned to the catchment there, runs read catchment rainfall as before/);
+	await expect(kind).toHaveAccessibleDescription(/each can serve one or more hydrological units: Settings → Flow generation says which\. Until a station is assigned to the catchment there, runs read catchment rainfall as before/);
 	const name = dialog.getByLabel('Station name', { exact: true });
 	await expect(name).toHaveValue('');
 	const station = dialog.getByRole('group', { name: 'The station' });
@@ -96,17 +96,12 @@ test('a station assigned to a unit is a rainfall station on the Data tab once ru
 	const { series } = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()) as { series: { id: string; name: string }[] };
 	const bergId = series.find((s) => s.name === 'Bergwater')!.id;
 
-	// Assigned to the unit under Fragmentation: no run reads a unit's station then, and the row says why.
+	// Assigned to the unit, with no settings.unitRain stored: Per unit is the only method (issue #658), so runs read it for
+	// the unit and it is a rainfall station, never "Not used".
 	await updateSettings(page.request, project.id, { rainStations: { units: { [unit.id]: { stationId: bergId } } } });
 	await openData(page, project.id);
 	const berg = seriesRow(page, 'Bergwater');
 	await expect(berg.locator('.kind')).toHaveText('Rainfall — station');
-	await expect(berg.getByTestId('series-station-uses')).toHaveText('Assigned to Upper unit, read only under per-unit rain.');
-	await expect(berg.getByTestId('series-role')).toHaveText('Not used: per-unit rain is off');
-
-	// Per unit: runs read it for the unit, so it is a rainfall station, never "Not used".
-	await updateSettings(page.request, project.id, { unitRain: { mode: 'perUnit' } });
-	await page.reload();
 	await expect(berg.getByTestId('series-station-uses')).toHaveText('Rain for Upper unit.');
 	await expect(berg.getByTestId('series-role')).toHaveText('Rainfall station');
 	await expect(seriesRow(page, 'Average').getByTestId('series-role')).toHaveText('Main rainfall');

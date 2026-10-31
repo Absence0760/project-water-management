@@ -14,13 +14,16 @@ import { ENGINE_VERSION } from '../version';
 import { resolvePe, type CalibrationFlowKind, type ModelInput, type ProjectSettings } from '../project';
 import { mergeSettings } from '../prepare';
 import { runModel } from '../run';
-import { calibrate, prepareCalibration, type CalibrationProgress, type CalibrationReport } from './calibrate';
+import { calibrate, prepareCalibration, prepareCalibrationFits, type CalibrateOptions, type CalibrationProgress, type CalibrationReport, type FitOutcome, type FitStepOptions } from './calibrate';
+import type { DdsState } from './dds';
 import type { ObjectiveId } from './objectives';
 import { flaggedYearExclusions, type FlaggedYearShare } from './dayFlags';
 import { exclusionRanges, type CalibrationExclusion } from './provenance';
 import { selectCase, typicalParamsFilter, wr2012MarFilter, type FilterResult } from './rules';
 import { resolveCalibrationRules, rulePanLabel, rulePanValues, SELECTION_TEST_LABEL, type CalibrationRules, type RulePan } from './rulesSettings';
 import type { CalibrationBounds } from './params';
+import { withHeadlineParams } from './locations';
+import type { Gr4jParams } from '../runoff/params';
 
 /** The seed, starts and model runs come from the rules (rules.run), never the caller: they can't be chosen after a result is seen. */
 export interface AutoCalibrateOptions {
@@ -167,31 +170,33 @@ export function planAutoCalibration(input: ModelInput): AutoCalibrationPlan {
 	};
 }
 
-/** Fit case `i` of a plan with validation, run the model with the fit for its MAR and filters, and score it on the rules' test. */
-export function runAutoCase(input: ModelInput, plan: AutoCalibrationPlan, i: number, onProgress?: (p: CalibrationProgress) => boolean | void): AutoCase {
-	const settings = mergeSettings(input.settings, []);
+/** Case `i` of a plan as a fit sees it: its input (under its pan preset) and the fit's options, the seed and search the rules'. */
+function caseSetup(input: ModelInput, plan: AutoCalibrationPlan, i: number) {
 	const { rules } = plan;
 	const c = plan.cases[i]!;
 	const ruleRanges = exclusionRanges(plan.ruleExclusions).map(({ start, end }) => ({ start, end }));
 	const caseInput: ModelInput = c.pan.values ? { ...input, settings: { ...input.settings, panCoefficient: c.pan.values as unknown as ProjectSettings['panCoefficient'] } } : input;
-	let report: CalibrationReport | null = null;
-	let error: string | null = null;
-	try {
-		report = calibrate(caseInput, {
-			model: 'gr4j',
-			objective: c.objective,
-			bounds: c.bounds,
-			seed: rules.run.seed,
-			starts: rules.run.starts,
-			budget: rules.run.budget,
-			validate: true,
-			exclusions: ruleRanges,
-			...(plan.validationRecord ? { validationRecord: plan.validationRecord } : {}),
-			...(onProgress ? { onProgress } : {})
-		});
-	} catch (e) {
-		error = `the fit failed: ${e instanceof Error ? e.message : String(e)}`;
-	}
+	const opts: CalibrateOptions = {
+		model: 'gr4j',
+		objective: c.objective,
+		bounds: c.bounds,
+		seed: rules.run.seed,
+		starts: rules.run.starts,
+		budget: rules.run.budget,
+		validate: true,
+		exclusions: ruleRanges,
+		...(plan.validationRecord ? { validationRecord: plan.validationRecord } : {})
+	};
+	return { input, plan, c, caseInput, opts };
+}
+
+const fitFailed = (e: unknown) => `the fit failed: ${e instanceof Error ? e.message : String(e)}`;
+
+/** The case from its fit (or why there is none): run the model with the fit for its MAR and filters, and score it on the rules' test. */
+function caseFrom(s: ReturnType<typeof caseSetup>, report: CalibrationReport | null, failed: string | null): AutoCase {
+	const settings = mergeSettings(s.input.settings, []);
+	const { rules } = s.plan;
+	let error = failed;
 	if (report?.cancelled) error = 'cancelled';
 	let naturalMarMm3: number | null = null;
 	const filters: FilterResult[] = [];
@@ -199,7 +204,8 @@ export function runAutoCase(input: ModelInput, plan: AutoCalibrationPlan, i: num
 	if (report && !error) {
 		// A run that fails with the fitted parameters fails this case only, never the fits already made.
 		try {
-			const out = runModel({ ...caseInput, settings: { ...caseInput.settings, gr4j: { ...settings.gr4j, ...report.params } } });
+			// The fit is the headline location's (engine 1.110.0, issue #659): its parameters go where that location's are.
+			const out = runModel(withHeadlineParams(s.caseInput, report.zoneNodeId ?? null, report.params as unknown as Gr4jParams));
 			naturalMarMm3 = naturalMar(out);
 			if (rules.filters.wr2012Mar) filters.push(wr2012MarFilter(out.summary.wr2012, settings.wr2012.calibrationPenalty));
 			if (rules.filters.typicalParams) filters.push(typicalParamsFilter(report.params, report.free));
@@ -208,7 +214,66 @@ export function runAutoCase(input: ModelInput, plan: AutoCalibrationPlan, i: num
 			error = `the run with the fitted parameters failed: ${e instanceof Error ? e.message : String(e)}`;
 		}
 	}
-	return { ...c, report, error, naturalMarMm3, filters, score: held.score, eligible: false, reasons: held.missing ? [held.missing] : [] };
+	return { ...s.c, report, error, naturalMarMm3, filters, score: held.score, eligible: false, reasons: held.missing ? [held.missing] : [] };
+}
+
+/** Fit case `i` of a plan with validation, run the model with the fit for its MAR and filters, and score it on the rules' test. */
+export function runAutoCase(input: ModelInput, plan: AutoCalibrationPlan, i: number, onProgress?: (p: CalibrationProgress) => boolean | void): AutoCase {
+	const s = caseSetup(input, plan, i);
+	let report: CalibrationReport | null = null;
+	let error: string | null = null;
+	try {
+		report = calibrate(s.caseInput, { ...s.opts, ...(onProgress ? { onProgress } : {}) });
+	} catch (e) {
+		error = fitFailed(e);
+	}
+	return caseFrom(s, report, error);
+}
+
+/**
+ * Case `i` of a plan fitted in steps, so a server can spread it over several
+ * background jobs (backend calibration/store.ts fitNextCase, docs/model.md
+ * §2.10j): run its fit's optimisations in order with `fit` (each pausable,
+ * handing back its state to resume from in a later job, ./dds.ts), then build
+ * the case from their outcomes with `finish`. The case is runAutoCase's with
+ * the same input and plan, to the bit (auto.test.ts pins it). `failed` makes
+ * the case of a fit that threw, as runAutoCase would.
+ */
+export interface AutoCaseFits {
+	/** Optimisations the case's fit makes. */
+	readonly count: number;
+	/** Model runs each makes. */
+	readonly budget: number;
+	fit(k: number, step?: FitStepOptions): { done: FitOutcome } | { paused: DdsState };
+	finish(outcomes: readonly FitOutcome[]): AutoCase;
+	failed(e: unknown): AutoCase;
+}
+
+/** Set up case `i` to fit in steps, or the case itself when its fit can't start (as runAutoCase says why). */
+export function prepareAutoCase(input: ModelInput, plan: AutoCalibrationPlan, i: number): AutoCaseFits | AutoCase {
+	const s = caseSetup(input, plan, i);
+	let fits: ReturnType<typeof prepareCalibrationFits>;
+	try {
+		fits = prepareCalibrationFits(s.caseInput, s.opts);
+	} catch (e) {
+		return caseFrom(s, null, fitFailed(e));
+	}
+	return {
+		count: fits.count,
+		budget: fits.budget,
+		fit: (k, step) => fits.fit(k, step),
+		finish(outcomes) {
+			let report: CalibrationReport | null = null;
+			let error: string | null = null;
+			try {
+				report = fits.report(outcomes);
+			} catch (e) {
+				error = fitFailed(e);
+			}
+			return caseFrom(s, report, error);
+		},
+		failed: (e) => caseFrom(s, null, fitFailed(e))
+	};
 }
 
 /** The report once every case is fitted (or the run stopped): which may be kept, the one kept, and the notes. */

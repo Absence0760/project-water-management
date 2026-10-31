@@ -5,6 +5,7 @@ import type { ForecastSummary } from './forecast';
 import type { RunDrought } from './drought/summary';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
 import type { CalibrationZone } from './calibrate/zones';
+import type { CalibrationRest, UnitParamSource } from './calibrate/locations';
 import type { PriorStartRecord } from './calibrate/prior';
 import type { FlowMissingSettings } from './recordPeriods';
 import type { WarningKept } from './checkItems';
@@ -344,7 +345,7 @@ export const RETIRED_NODE_FIELDS = ['areaHiKm2', 'areaLoKm2', 'flowShareManual']
  * 1.105.0, issue #616): the flow is split by each unit's natural MAR instead. Once per run.
  */
 export function flowShareMethodRetiredWarning(method: 'hiLo' | 'manual'): string {
-	return `this project's flow-share method (${method === 'hiLo' ? 'Hi/Lo MAP' : 'specific shares'}) was removed in engine 1.105.0: the flow is now split between the units by each unit's natural MAR, as the EWR is (Model settings → Model selection for flow generation)`;
+	return `this project's flow-share method (${method === 'hiLo' ? 'Hi/Lo MAP' : 'specific shares'}) was removed in engine 1.105.0: the flow is now split between the units by each unit's natural MAR, as the EWR is (Model settings → Flow generation)`;
 }
 
 /** The legacy runoff model's keys under settings.calibration, dropped since engine 1.0.0 (issue #16). */
@@ -499,10 +500,12 @@ export interface ProjectSettings {
 	 */
 	arealRain?: ArealRain | null;
 	/**
-	 * How each land unit's runoff is forced (docs/model.md §2.4h, issue
-	 * #482). Absent or `{ mode: 'catchment' }`: one GR4J run on the
-	 * catchment rain, split to the units by flow shares, as before.
-	 * `perUnit`: GR4J per land unit on its own rain (UnitRainSeriesKey).
+	 * How each land unit's own rain is made (docs/model.md §2.4h, issue
+	 * #482): GR4J runs once per land unit on its own rain
+	 * (UnitRainSeriesKey). Since engine 1.109.0 (issue #658) that is the
+	 * only flow generation method: absent, null and the retired `{ mode:
+	 * 'catchment' }` (Fragmentation: one GR4J run on the catchment rain,
+	 * split to the units) run Per unit too (resolveUnitRain).
 	 */
 	unitRain?: UnitRainSettings | null;
 	/**
@@ -641,26 +644,50 @@ export interface ProjectSettings {
 	 */
 	calibrationFlowKind: CalibrationFlowKind | null;
 	/**
-	 * Where calibration scores the model (engine ≥ 1.41.0, docs/model.md
-	 * §2.10k): null = the outlet (every engine before), else a gauge node inside
-	 * the network with an observed record of its own (a GaugeSeriesKey series,
-	 * 084_gauge_records.sql). calibrate() then scores that gauge's simulated
-	 * flow against that gauge's record (calibrationFlowKind picks among its
-	 * records), and the run's own calibration statistics (summary.calibration)
-	 * are scored there too. The outlet's observed-flow EWR test stays the
-	 * outlet's; each gauge EWR site with a record gets its own.
+	 * The headline calibration location (engine 1.110.0, issue #659,
+	 * ./calibrate/locations.ts headlineLocation, docs/model.md §2.10k): a
+	 * ticked gauge of `calibrationZones` whose statistics are
+	 * summary.calibration and that the uncertainty ensemble and automated
+	 * calibration act on; null = auto (the outlet when `calibrateAtOutlet`,
+	 * else the ticked gauge with the largest area above it). Before 1.110.0 it
+	 * was where calibration scored (engine ≥ 1.41.0: null = the outlet, else
+	 * an inner gauge); such settings are read through
+	 * normalizeCalibrationLocations, which keeps that gauge as the headline.
 	 */
 	calibrationSiteNodeId: string | null;
 	/**
-	 * Calibration zones (engine 1.106.0, issue #555, ./calibrate/zones.ts,
-	 * docs/model.md §2.10n): gauges above the calibration site that calibrate
-	 * the land units draining to them on their own record, each with its own
-	 * GR4J X1–X4, window, exclusions, record, quality flags and fit record.
-	 * The site's own zone (the rest) keeps the settings above and `gr4j`.
-	 * Applies only under Per unit flow generation (`unitRain` perUnit).
-	 * Absent, [] or no ticked row = one parameter set, every engine before.
+	 * Calibration locations at the gauges inside the network (engine 1.106.0,
+	 * issue #555; equals of the outlet's since 1.110.0, issue #659,
+	 * ./calibrate/zones.ts, ./calibrate/locations.ts, docs/model.md §2.10n):
+	 * one row per gauge, each with Calibrate here and its own window,
+	 * exclusions, record, quality flags, GR4J X1–X4 and fit record. A ticked
+	 * row's group (its own zone, borrowed and rest units) runs on its
+	 * parameters. Absent, [] or no ticked row = no gauge location.
 	 */
 	calibrationZones?: CalibrationZone[] | null;
+	/**
+	 * Calibrate here at the outlet (engine 1.110.0, issue #659): the outlet's
+	 * location is the top-level calibration settings (window, flow kind,
+	 * exclusions, quality flags, `gr4j`, `fitRecord`), ticked by this. Absent
+	 * = settings from before 1.110.0, read through
+	 * normalizeCalibrationLocations. Never defaulted (defaultProjectSettings
+	 * leaves it out); the backend writes it on a new project.
+	 */
+	calibrateAtOutlet?: boolean;
+	/**
+	 * What land units with no ticked location downstream take (engine
+	 * 1.110.0, ./calibrate/locations.ts): 'nearest' the nearest ticked
+	 * location upstream on their river, 'headline' the headline's, 'default'
+	 * settings.gr4j. Absent = 'headline' (every engine before); never
+	 * defaulted, a new project is written 'nearest' by the backend.
+	 */
+	calibrationRest?: CalibrationRest;
+	/**
+	 * Parameters from (engine 1.110.0, issue #659 option 2): land unit node id
+	 * → the location whose parameters it runs on, a gauge's node id or the
+	 * outlet's, even when it isn't upstream of it. Absent = its own zone.
+	 */
+	unitParamsFrom?: Record<string, string> | null;
 	/**
 	 * Periods left out of every calibration score (automatic calibration and
 	 * the run's calibration statistics): whole water years or date ranges,
@@ -1136,6 +1163,7 @@ export interface ArealRain {
 
 import type { UnitRainRecipe } from './runoff/unitRain';
 
+/** The stored modes: `perUnit`, and `catchment`, Fragmentation's, retired in engine 1.109.0 (issue #658) and still read (it runs Per unit). */
 export const UNIT_RAIN_MODES = ['catchment', 'perUnit'] as const;
 export type UnitRainMode = (typeof UNIT_RAIN_MODES)[number];
 
@@ -1381,7 +1409,7 @@ export function mapMmError(mapMm: unknown, source: unknown): string | null {
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Why a stored settings.unitRain can't be used, or null (absent and null are fine: catchment rain). The API applies the same rules. */
+/** Why a stored settings.unitRain can't be used, or null (absent and null are fine: Per unit's defaults). The API applies the same rules. `catchment` still passes, so an older stored setting reads; it runs Per unit. */
 export function unitRainError(raw: unknown): string | null {
 	if (raw === null || raw === undefined) return null;
 	if (typeof raw !== 'object' || Array.isArray(raw)) return 'not a unit rain setting';
@@ -1410,20 +1438,27 @@ export function unitRainError(raw: unknown): string | null {
 	return null;
 }
 
+/** settings.unitRain with nothing set: Per unit, no gauge MAP, the default MAP period, no reference gauge. */
+export const DEFAULT_UNIT_RAIN: Readonly<UnitRainSettings> = Object.freeze({ mode: 'perUnit', gaugeMapMm: null, gaugeMapSource: null, mapPeriod: null });
+
 /**
- * A stored `unitRain` as the engine runs it (docs/model.md §2.4h): absent or
- * null = catchment rain; unusable = catchment rain, with a warning.
+ * A stored `unitRain` as the engine runs it (docs/model.md §2.4h). Since
+ * engine 1.109.0 (issue #658) Per unit is the only flow generation method:
+ * absent, null and the retired `{ mode: 'catchment' }` (Fragmentation) all
+ * run Per unit, keeping the rest of a stored setting (its gauge MAP, MAP
+ * period and reference gauge); an unusable one runs Per unit's defaults, with
+ * a warning. Never null.
  */
-export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSettings | null {
-	if (raw === null || raw === undefined) return null;
+export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSettings {
+	if (raw === null || raw === undefined) return { ...DEFAULT_UNIT_RAIN };
 	const e = unitRainError(raw);
 	if (e) {
-		warnings.push(`the per-unit rain setting is ignored (${e}): GR4J runs on the catchment rain`);
-		return null;
+		warnings.push(`the per-unit rain setting is ignored (${e}): each unit runs on its own rain with no gauge MAP, the default MAP period and no reference gauge`);
+		return { ...DEFAULT_UNIT_RAIN };
 	}
 	const r = raw as UnitRainSettings;
 	return {
-		mode: r.mode,
+		mode: 'perUnit',
 		gaugeMapMm: r.gaugeMapMm ?? null,
 		gaugeMapSource: r.gaugeMapSource ?? null,
 		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null,
@@ -1434,6 +1469,13 @@ export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSetti
 		...(Array.isArray(r.pinned) ? { pinned: structuredClone(r.pinned) } : {})
 	};
 }
+
+/**
+ * Whether a stored `unitRain` chose Per unit (`perUnit`, usable) as a run before engine 1.109.0 read it: absent,
+ * null, `catchment` or unusable was Fragmentation. For reading older runs and fits (the run comparison's diff line);
+ * a run now is always Per unit (resolveUnitRain).
+ */
+export const storedPerUnit = (raw: unknown): boolean => raw !== null && typeof raw === 'object' && (raw as { mode?: unknown }).mode === 'perUnit' && unitRainError(raw) === null;
 
 /**
  * A stored `arealRain` as the engine runs it: absent, null or unusable (with a
@@ -4057,25 +4099,37 @@ export interface UnitRainSummary {
 	/** The reference gauge's fit (engine ≥ 1.80.0); absent when the setting has no reference. */
 	reference?: UnitRainReferenceFit;
 	/**
-	 * The calibration zones the run applied (engine 1.106.0, issue #555,
-	 * docs/model.md §2.10n), upstream first, then the calibration site's own
-	 * zone (`nodeId` null, the rest). Absent when it applied none: every unit
-	 * ran on settings.gr4j.
+	 * The groups the run applied (engine 1.106.0, issue #555; 1.110.0, issue
+	 * #659, docs/model.md §2.10n): each ticked location's, upstream first and
+	 * the headline last, then the units on settings.gr4j (`kind` 'default')
+	 * when any. `nodeId` null is the top-level parameters' (the outlet's
+	 * location, or settings.gr4j; before 1.110.0 the calibration site's own
+	 * zone). Absent when no gauge location applied: every unit ran on
+	 * settings.gr4j.
 	 */
 	zones?: UnitRainZoneSummary[];
+	/** Where each land unit's GR4J parameters came from (engine 1.110.0); absent when no gauge location applied. */
+	paramSource?: Record<string, UnitParamSource>;
 }
 
-/** One calibration zone as a run applied it (summary.unitRain.zones). */
+/** One group as a run applied it (summary.unitRain.zones). */
 export interface UnitRainZoneSummary {
-	/** The zone's gauge; null = the calibration site's zone (the outlet's, or Scored at's gauge). */
+	/** The location's gauge; null = the top-level parameters (the outlet's location, or with `kind` 'default' settings.gr4j; before 1.110.0 the calibration site's zone). */
 	nodeId: string | null;
 	name: string;
-	/** Its land units, node-id order. */
+	/** Its land units (own, borrowed and rest), node-id order. */
 	units: string[];
 	/** The GR4J parameters its units ran on. */
 	params: Gr4jParams;
-	/** False when the zone had none of its own yet and took the catchment's. */
+	/** False when the location had none of its own yet and took the catchment's. */
 	fitted: boolean;
+	/** A gauge's location, the outlet's, or the units on settings.gr4j (engine 1.110.0; absent before). */
+	kind?: 'gauge' | 'outlet' | 'default';
+	/** It is the headline location (engine 1.110.0; absent before and on the default group). */
+	headline?: boolean;
+	/** Units assigned to it from elsewhere (settings.unitParamsFrom), and the ones the rest rule sent it (engine 1.110.0; absent before). */
+	borrowed?: string[];
+	rest?: string[];
 }
 
 /** A station pairing's fit (summary.stations.pairings, issue #553): station vs the CHIRPS at it, 12 monthly factors. */
@@ -4448,7 +4502,8 @@ export interface RunSummary {
 	 * and factors), as a Fragmentation fit records it (FitRecord.forcing
 	 * .shareRain), so the fit reads "Forcing changed since fit" when it moved.
 	 * null when the run had no land unit; absent under Per unit (`unitRain`
-	 * is it), on a resumed run, and before 1.105.0.
+	 * is it), on a resumed run, before 1.105.0, and from 1.109.0 (issue #658:
+	 * Fragmentation is retired, so no run writes it). Kept so older runs read.
 	 */
 	shareRain?: UnitRainFingerprint | null;
 	catchment: {
@@ -4491,10 +4546,11 @@ export interface RunSummary {
 	};
 	calibration: CalibrationStats | null;
 	/**
-	 * Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n), upstream first: its
-	 * record against its simulated outflow on the zone's own window and exclusions, each with `siteNodeId`,
-	 * `siteName` and `fitStatus` by the zone's own fit record, so each is in or out of sample on its own. The
-	 * calibration site's own zone is `calibration`. Absent when the run applied no zone, and on older runs.
+	 * Calibration statistics at every ticked location but the headline (issue #555; 1.110.0, issue #659,
+	 * docs/model.md §2.10n), in summary.unitRain.zones' order: its record against its simulated outflow on its own
+	 * window and exclusions, each with `siteNodeId`, `siteName` and `fitStatus` by its own fit record, so each is in
+	 * or out of sample on its own. The outlet's, when it is ticked and not the headline, has the outlet node's id as
+	 * `siteNodeId`. The headline's is `calibration`. Absent when the run applied no gauge location, and on older runs.
 	 */
 	calibrationZones?: CalibrationStats[];
 	/**

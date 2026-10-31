@@ -16,7 +16,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:backend` | backend unit | ~15 s |
 | `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
-| `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database; the backend's also the V8 deopt stress run of the assurance of supply (`model/assurance-jit.perf.test.ts`, issue #192: 8 child processes under `node --deopt-every-n-times`, timing-dependent, so alone) | seconds; the stress run ~1–5 min |
+| `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database; the backend's also the V8 deopt stress run of the assurance of supply (`model/assurance-jit.perf.test.ts`, issue #192: 8 child processes under `node --deopt-every-n-times`, timing-dependent, so alone) and the check that the server's time estimate still bounds a fit evaluation and a model run on this machine (`calibration/estimate.perf.test.ts`; its envelope was measured on a Ryzen 9 5900HX) | seconds; the stress run ~1–5 min |
 | `pnpm test:verify` | the independent cross-check of the engine (verify/README.md): a Python model written from the docs against `runModel` on the example catchments, the probes, 12 random and 12 dense networks (every phase-2a feature in most), and its 191-mutant self-test, per-unit rain (§2.4h) included; Python 3.14, no DB. Runs on `VERIFY_WORKERS` processes (default the cores, at most 4; the results never depend on it) with a progress line per batch; the mutants are most of the time (verify/README.md § Running it). CI's `verify` job runs 200 of each (`VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200`) in 3 shards (`VERIFY_SHARD=k/3`: shard 1 the agreement sweep, each a third of the mutants), about 10 min each; serial on one core it took about an hour. Run it when you change `packages/engine` or `verify/`, or the model's docs | ~11 min (4 workers; ~35 min on one) |
 | `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat; the Map's search over 150 000 invented gazetteer places (`geo/search.db.perf.test.ts`): each search's plan, explained in the search's own transaction (so with its sequential scans off, maps.md § Gazetteer), goes through both trigram indexes, never a scan of the table, and answers under 40 ms, median of 7 (measured 5–11 ms; about 150 ms before the index); reading 5,000 allocations and their holders as an editor, a viewer with the switch on and the authority's member under 250 ms each, median of 7 (`allocations/allocations.db.perf.test.ts`, 235: measured ~100 ms; 231's per-row policy ~560 ms) | ~4 min, most of it the 30 simulated days |
 
@@ -304,7 +304,20 @@ so that test pins them exactly beside the report.
   serialising them twice, which cost as much as a run. A shard is fixed,
   CPU-bound work, not a wait: 2026-10-02, shard 2 took 17 s alone, 34 s with
   the four shards side by side and about 20 s at a load average near 40,
-  against its 120 s limit, and no seed passed 0.8 s.
+  against its 120 s limit, and no seed passed 0.8 s. Each shard is itself
+  cut into tests of 25 seeds (`CHUNK`, `chunkRanges`), run one after another
+  in the shard's worker: on main's CI run 41083075763 (2026-10-30) a slow
+  runner took the whole job from ~15 min to 45 min, and three 100-seed shard
+  tests passed the 120 s guard with every invariant holding. The 400 seeds
+  are the same; a 25-seed test takes 2.5–6 s alone on the 16-thread laptop
+  (a 100-seed shard 15 s), so a runner several times slower stays well inside
+  it. `FUZZ_MAX_FAILURES` caps the failures each test reports.
+- **Recovering GR4J parameters** (`packages/engine/src/calibrate/calibrate.test.ts`,
+  "recovers known GR4J parameters"): one calibration at 2 500 model runs,
+  ~6 s in its file. It ran 5 000 until that CI run took it to 176 s; across
+  seeds 1–12, 2 500 recovers X1, X3 and X4 inside the same tolerances with the
+  same margins as 5 000 (worst X3 3.0 % against 3.3 %, X4 0.099 against 0.101
+  days, KGE′ 0.9936 against 0.9966), so the larger budget proved nothing more.
 - **Loading the Lambda entry points** (`backend/src/config/production.security.test.ts`):
   the test starts each Lambda's entry point to show it runs the production
   config check at init. It imports esbuild bundles of them natively (the same
@@ -315,8 +328,9 @@ so that test pins them exactly beside the report.
   graph, fresh for each case, should do the same rather than `vi.resetModules()`
   and re-import it.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
-  WP-2.12): 40 random networks with a forecast tail in `pnpm test` (about
-  6 s; three model runs a case). Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C
+  WP-2.12): 40 random networks with a forecast tail in `pnpm test`, as four
+  tests of 10 seeds (2–3.5 s each alone, ~11 s in all; three model runs a
+  case). One 40-seed test passed the 120 s guard on the slow CI run above. Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C
   packages/engine exec vitest run src/forecast.invariants.test.ts` (about
   21 minutes, one worker; 2026-09-26: 20 000 cases clean once two seeds'
   invalid inputs were told apart).

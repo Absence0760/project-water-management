@@ -3,7 +3,7 @@
 // the workspace. No message catalogue here: the workspace never loads it
 // (lib/i18n/boundary.test.ts). The farmer-facing pages' words are in
 // ./words.ts. Pure, so it is unit-tested apart from the pages.
-import type { AlertEvent, AlertFeedbackSummary, AlertKind, AlertRule } from '#lib/api/types.js';
+import type { AlertEvent, AlertFeedbackSummary, AlertKind, AlertRule, AlertRuleChange } from '#lib/api/types.js';
 import { fmtDay, fmtNum } from '#lib/format/number.js';
 
 export const KIND_NAME: Record<AlertKind, string> = {
@@ -106,14 +106,37 @@ export const THRESHOLD_INPUT: Record<AlertKind, { min: number; max: number; step
 	restriction_published: { min: 0, max: 0, step: 1 }
 };
 
-/** Whether a typed threshold is within its kind's range; null when fine, else why not. */
-export function thresholdProblem(kind: AlertKind, value: number): string | null {
+/** Whether a typed threshold is within its kind's range; null when fine, else why not (an emptied box binds null). */
+export function thresholdProblem(kind: AlertKind, value: number | null): string | null {
 	if (kind === 'restriction_published') return null;
 	const r = THRESHOLD_INPUT[kind];
-	if (!Number.isFinite(value)) return 'Enter a number.';
+	if (value === null || !Number.isFinite(value)) return 'Enter a number.';
 	if (kind !== 'dam_below' && !Number.isInteger(value)) return 'Enter a whole number.';
 	if (value < r.min || value > r.max) return `Between ${r.min} and ${r.max}.`;
 	return null;
+}
+
+/**
+ * What the editor saves: every row, each at its typed level. The editor
+ * checks the level of a rule that is on only, so a rule switched off keeps
+ * the level it was saved with when what's typed in its (disabled) box is
+ * out of range or empty: the API checks every rule's threshold, and one
+ * bad box on a rule being switched off would refuse the whole save.
+ */
+export function ruleChanges(rows: (AlertRule & { input: number | null })[]): AlertRuleChange[] {
+	return rows.map((r) => ({
+		kind: r.kind,
+		nodeId: r.nodeId,
+		feedId: r.feedId,
+		seriesId: r.seriesId,
+		threshold:
+			r.kind === 'restriction_published'
+				? 0
+				: r.enabled || thresholdProblem(r.kind, r.input) === null
+					? thresholdFromInput(r.kind, r.input as number)
+					: r.threshold,
+		enabled: r.enabled
+	}));
 }
 
 /**

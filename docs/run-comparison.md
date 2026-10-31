@@ -262,7 +262,11 @@ bottom:
    engine ≥ 1.78.0, [model.md §2.4h](./model.md)) is a settings line
    labelled **Runoff from each unit's own rain**: "off → on (gauge MAP 600
    mm (source); MAP period 1991-01-01 to 2020-12-31)" (a run saved before
-   1.78.0 is off), with "; reference gauge rain_catchment_mm at the unit …"
+   1.78.0 is off, and so is a run whose stored setting was Fragmentation:
+   absent, null or `catchment`, which engines before 1.109.0 ran on the
+   catchment rain; from 1.109.0, issue #658, every run's stored inputs hold
+   `perUnit`, so comparing an older Fragmentation run with a newer run reads
+   "off → on …"; engine `compare.ts` `storedPerUnit`), with "; reference gauge rain_catchment_mm at the unit …"
    inside the brackets when it has a reference gauge (engine ≥ 1.80.0), and
    only that line: from 1.80.0 a change of the setting no longer also adds
    a bare `Setting "unitRain" changed`. A unit's MAP and its source are node lines ("MAP none →
@@ -304,13 +308,19 @@ bottom:
    **calibration period (in-sample)** when both runs' parameters were fitted
    on the days scored, the shared reason when neither was ("parameters not
    from an automatic fit", "parameters edited since the fit", "fitted on other days"), and
-   "run A …, run B …" when they differ. When either run scored a
-   calibration zone's gauge (issue #555, `summary.calibrationZones`), a
-   **Calibration zone at &lt;gauge&gt;** table follows for each gauge either
-   run scored (`comparison.calibrationZones`, matched by gauge, run A's order
-   first): KGE, NSE, percent bias and the overlapping days, A and B and the
-   change, under a line saying whether each side is in sample by its own
-   zone's fit; a side that didn't score the gauge is blank. Under it, **Fit and validation** sets each run's fit record side
+   "run A …, run B …" when they differ. A line above the table names where
+   the runs scored it, their headline calibration location (issue #659,
+   `comparison.calibration.site`, each run's `summary.calibration.siteName`,
+   null at the outlet): "At the headline location, Middle weir.", or, when
+   the two runs' headlines differ, says so in bold and that the differences
+   aren't like for like. When either run scored another calibration location
+   (issue #555, `summary.calibrationZones`), a **Calibration location at
+   &lt;gauge&gt;** table follows for each one either run scored
+   (`comparison.calibrationZones`, matched by node, run A's order first; the
+   outlet's when it is a location but not the headline): KGE, NSE, percent
+   bias and the overlapping days, A and B and the change, under a line
+   saying whether each side is in sample by its own location's fit; a side
+   that didn't score it is blank. Under it, **Fit and validation** sets each run's fit record side
    by side: the fit (model, time, objective, seed; the time day first in UTC, "GR4J fit of 24 Sep 2026
    10:05 UTC", as the run's own provenance says it: the engine's `describeFitRecord` takes the stored
    `fittedAt` and the screen's formatter, `fittedAtText`, issue #521), the bounds it searched
@@ -738,22 +748,45 @@ patch at no cover that grows, or one whose cover changes on no area, is
 listed (*"… 0 km² → 0 km² condensed (area 1 km² → 2 km²)"*, *"…, its
 patches’ cover changed"*).
 
-**Calibration zones** (issue #555, `calibrationZoneChanges`): one line per
-gauge ticked in either run, named by the gauge, under the subject
-*Calibration zones*. A gauge ticked in B only reads *"Calibration zone at
-Middle weir: added (X1 900, X2 0, X3 220, X4 3.1)"*; one ticked in A only,
-*"…: removed (was …); its units joined the next zone downstream"*; one
-ticked in both lists what changed, joined by semicolons: each parameter
-(*"X1 350 → 900"*, or *"X1 …, X4 … → the catchment’s parameters"* when one
-side has none of its own), its window, its flow series, its exclusions
-(matched by period with their reasons, as the site's below: *"exclusion WY
-2015/16 added: “weir rebuilt”"*), its quality flags (*"quality flags the
-catchment’s → suspect days exclude, zero flow in months 7, 8"*; they move its
-in-sample status too) and its fit record as the site's is worded below
-(*"parameters now from a GR4J fit of …"*). A row unticked in both, and `[]` against none,
-are no change: no run reads them. (Round 3 wrote every ticked row in one
-line and treated a window or a fit record as no change; since a run scores
-each zone's gauge on its own window, those now matter.)
+**Calibration locations** (issue #555, `calibrationZoneChanges`; issue
+#659, `calibrationLocationChanges`): each snapshot is first read in the
+locations' shape by its own network (`normalizeCalibrationLocations`), so a
+run from before engine 1.110.0 compares as what it ran: its calibration
+site's window and parameters are that gauge's row, and against the same
+settings stored after the migration nothing changes. Then:
+
+- **Calibrate at the outlet** (`calibrateAtOutlet`): *"Calibrate at the
+  outlet: yes → no"*.
+- One line per gauge ticked in either run, named by the gauge, under the
+  subject *Calibration locations*. A gauge ticked in B only reads
+  *"Calibration location at Middle weir: added (X1 900, X2 0, X3 220, X4
+  3.1)"*; one ticked in A only, *"…: removed (was …); its units take their
+  next location"*; one ticked in both lists what changed, joined by
+  semicolons: each parameter (*"X1 350 → 900"*, or *"X1 …, X4 … → the
+  catchment’s parameters"* when one side has none of its own), its window,
+  its flow series, its exclusions (matched by period with their reasons, as
+  the outlet's below: *"exclusion WY 2015/16 added: “weir rebuilt”"*), its
+  quality flags (*"quality flags the catchment’s → suspect days exclude, zero
+  flow in months 7, 8"*; they move its in-sample status too) and its fit
+  record as the outlet's is worded below (*"parameters now from a GR4J fit of
+  …"*). A row unticked in both, and `[]` against none, are no change: no run
+  reads them. (Round 3 of issue #555 wrote every ticked row in one line and
+  treated a window or a fit record as no change; since a run scores each
+  location on its own window, those now matter.)
+- **Headline calibration location** (`calibrationSiteNodeId`, the headline
+  pointer since engine 1.110.0; before, the calibration site): by name,
+  *"Headline calibration location: automatic → Middle weir"*.
+- **Units outside every calibration location take** (`calibrationRest`;
+  absent reads 'headline', as engines before ran): *"the headline location’s
+  parameters → the nearest location upstream"*, or *"the catchment
+  parameters"*.
+- **Parameters from** (`unitParamsFrom`, issue #659 option 2): one line per
+  land unit whose choice changed, by name, unit-name order, added, removed or
+  changed: *"Parameters from, Side farm: its own zone → Upper weir"*. Absent
+  and null are the same (every unit its own zone).
+
+The outlet's own window, record, exclusions, quality flags and fit record
+are the top-level settings, worded as before (below).
 
 **Calibration provenance.** Calibration exclusions are matched by their
 period (a water year, or a start–end range): one added or removed is listed

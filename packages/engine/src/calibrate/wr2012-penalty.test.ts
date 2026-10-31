@@ -5,7 +5,7 @@ import { daysPerMonth, toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModel } from '../run';
-import { calibrate, prepareCalibration } from './calibrate';
+import { calibrate, prepareCalibration, prepareCalibrationFits, type FitOutcome } from './calibrate';
 import { defaultWr2012Settings, type Wr2012Settings } from '../reference/wr2012Settings';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
@@ -165,5 +165,28 @@ describe('WR2012 MAR band penalty in calibration (issue #4 phase 6: two disagree
 		expect(r.marPenalty!.marLowMm3).toBeNull();
 		expect(r.marPenalty!.marHighMm3).toBeNull();
 		expect(r.marPenalty!.targetMarMm3).toBeCloseTo(mar * 1.4, 10);
+	});
+});
+
+describe('the WR2012 MAR penalty in a fit run in steps (prepareCalibrationFits)', () => {
+	it('runs the unpenalised fit as its own optimisation and gives calibrate()’s report to the bit', () => {
+		const { input, mar } = synthetic();
+		const ref = withReference(input, mar, 1.4, { enabled: true, weight: 2, marLowMm3: null, marHighMm3: null });
+		const opts = { budget: 30, starts: 2, seed: 5 } as const;
+		const fits = prepareCalibrationFits(ref, opts);
+		// Two starts, the split-sample and dry → wet fits, and the fit without the penalty.
+		expect(fits.count).toBe(5);
+		const outcomes: FitOutcome[] = [];
+		for (let k = 0; k < fits.count; k++) {
+			let r = fits.fit(k, { pause: (n) => n >= 13 });
+			while ('paused' in r) {
+				const at = r.paused.evaluations;
+				r = prepareCalibrationFits(ref, opts).fit(k, { resume: JSON.parse(JSON.stringify(r.paused)), pause: (n) => n >= at + 13 });
+			}
+			outcomes.push(JSON.parse(JSON.stringify(r.done)));
+		}
+		const report = prepareCalibrationFits(ref, opts).report(outcomes);
+		expect(report.marPenalty?.unpenalised).not.toBeNull();
+		expect(report).toEqual(calibrate(ref, opts));
 	});
 });

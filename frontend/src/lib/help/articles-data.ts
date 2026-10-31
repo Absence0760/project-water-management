@@ -180,13 +180,13 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
 	},
 	'preview-area-station-scaled': {
-		long: 'Shown for the average catchment rainfall and each land unit that reads a rainfall station (Settings → Model selection for flow generation). It is the station’s record as stored, multiplied by the ratio a run applies: the area’s MAP divided by the station’s MAP, or 1 when a MAP is missing or the scaling is off. Blank where the station has no reading.\n\nNothing here is stored: it is worked out when the preview opens, with the same engine code a run uses over the inputs a run would read, so it changes as soon as a series or a setting does. It is the same column as “station × ratio” in the Data tab’s Full CSV. In a unit’s own view (the View select) its header names the station, the unit and the ratio to three decimals, and the station raw column sits beside it.',
+		long: 'Shown for the average catchment rainfall and each land unit that reads a rainfall station (Settings → Flow generation). It is the station’s record as stored, multiplied by the ratio a run applies: the area’s MAP divided by the station’s MAP, or 1 when a MAP is missing or the scaling is off. Blank where the station has no reading.\n\nNothing here is stored: it is worked out when the preview opens, with the same engine code a run uses over the inputs a run would read, so it changes as soon as a series or a setting does. It is the same column as “station × ratio” in the Data tab’s Full CSV. In a unit’s own view (the View select) its header names the station, the unit and the ratio to three decimals, and the station raw column sits beside it.',
 		aliases: ['station times ratio', 'scaled station rain'],
 		related: ['rain-stations', 'unit-rain', 'preview-area-rain-used'],
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
 	},
 	'preview-area-patch-raw': {
-		long: 'Each station in the area’s patching priority (Model settings → Model selection for flow generation, under Per unit: “Then patch gaps from”) as stored, cut to the run window, shown in the area’s own view after the main station’s lines and before its CHIRPS, in priority order. The header numbers it by its place in the priority, the same number the Rain used from column gives a day it fills, so a CHIRPS earlier in the list keeps its place. A station the run skips (no record, or no MAP while scaling to the MAP) has no lines.\n\nThe All view leaves it out: the station is a stored series column there already.',
+		long: 'Each station in the area’s patching priority (Model settings → Flow generation: “Then patch gaps from”) as stored, cut to the run window, shown in the area’s own view after the main station’s lines and before its CHIRPS, in priority order. The header numbers it by its place in the priority, the same number the Rain used from column gives a day it fills, so a CHIRPS earlier in the list keeps its place. A station the run skips (no record, or no MAP while scaling to the MAP) has no lines.\n\nThe All view leaves it out: the station is a stored series column there already.',
 		aliases: ['patch station', 'patching priority'],
 		related: ['preview-area-patch-scaled', 'preview-area-rain-from', 'rain-stations'],
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
@@ -208,7 +208,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.4i'
 	},
 	'preview-area-rain-used': {
-		long: 'The rain a run reads for this area, to the bit: the station × ratio where the station has a reading, else the first source of its patching priority with one (another station × its ratio, or the corrected CHIRPS), else the next fallback, else nothing (read as dry, 0). For a unit without a station, the first link of its per-unit chain that has a value: its own gauge, the catchment gauge × its MAP ratio, its levelled CHIRPS, then the catchment rain. For the average catchment rainfall it is Fragmentation’s rain; for a land unit, its per-unit rain. It covers the run window only.\n\nIt is computed when the preview opens with the engine’s own code over the inputs a run would read, not stored, so it is never older than the series and settings. The Rain used from column says, day by day, which source it came from.',
+		long: 'The rain a run reads for this area, to the bit: the station × ratio where the station has a reading, else the first source of its patching priority with one (another station × its ratio, or the corrected CHIRPS), else the next fallback, else nothing (read as dry, 0). For a unit without a station, the first link of its per-unit chain that has a value: its own gauge, the catchment gauge × its MAP ratio, its levelled CHIRPS, then the catchment rain. For the average catchment rainfall it is the catchment rain demand and the dams read; for a land unit, its per-unit rain. It covers the run window only.\n\nIt is computed when the preview opens with the engine’s own code over the inputs a run would read, not stored, so it is never older than the series and settings. The Rain used from column says, day by day, which source it came from.',
 		aliases: ['unit rain used', 'area rain'],
 		related: ['rain-stations', 'unit-rain', 'preview-area-rain-from'],
 		source: 'Not in the workbook; docs/model.md §2.4i'
@@ -224,7 +224,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.4h'
 	},
 	'preview-area-gauge-scaled': {
-		long: 'The catchment rain × the unit’s MAP ÷ the catchment gauge’s MAP (Settings → Model selection for flow generation → Units without a station), the ratio three decimals in the header and kept between 0.25 and 4. A unit with no gauge of its own reads it first; one with its own gauge reads it after its own CHIRPS. Shown only when the ratio applies: the unit has a MAP, the gauge MAP is set and there is catchment rain.\n\nDerived when the preview opens, never stored: the Full CSV’s “catchment gauge × MAP ratio” column.',
+		long: 'The catchment rain × the unit’s MAP ÷ the catchment gauge’s MAP (Settings → Flow generation → Units without a station), the ratio three decimals in the header and kept between 0.25 and 4. A unit with no gauge of its own reads it first; one with its own gauge reads it after its own CHIRPS. Shown only when the ratio applies: the unit has a MAP, the gauge MAP is set and there is catchment rain.\n\nDerived when the preview opens, never stored: the Full CSV’s “catchment gauge × MAP ratio” column.',
 		related: ['unit-rain', 'preview-area-rain-used'],
 		source: 'Not in the workbook; docs/model.md §2.4h'
 	},
@@ -247,7 +247,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		countries: ['ZA']
 	},
 	'map': {
-		long: 'MAP varies across a catchment, which is why each hydrological unit can have its own MAP: under Per unit it sets the level of the unit’s rain, and with it the unit’s natural MAR share of the flow and the EWR. (The Water Balance Tool workbook split unit areas into high- and low-MAP zones instead; that split was removed in engine 1.105.0.)',
+		long: 'MAP varies across a catchment, which is why each hydrological unit can have its own MAP: it sets the level of the unit’s rain, and with it the unit’s natural MAR share of the flow and the EWR. (The Water Balance Tool workbook split unit areas into high- and low-MAP zones instead; that split was removed in engine 1.105.0.)',
 		aliases: ['MAP', 'MAR', 'mean annual precipitation', 'mean annual runoff'],
 		related: ['unit-map', 'flow-share'],
 		source: 'docs/model.md §7'
@@ -406,7 +406,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/maps.md (Rain from the boundary)'
 	},
 	'unit-rain-feeds': {
-		long: 'Under **Data → Data feeds → Attach a feed**, the **Area** **Each unit’s parcel** (**Rain for each unit**) proposes one CHIRPS feed for each hydrological unit with land and a parcel on the map (its delineated or drawn area, linked to the unit). Each feed averages the 0.05° CHIRPS cells the parcel covers, each weighted by the share of it inside and by its area, and writes into that unit’s own rain series.\n\nOne daily product serves every unit, end to end: **rnl** (from 1981, final days only) by default, or **sat** (from 1998, with preliminary days); a feed never splices one onto the other. Without a start date the feeds read from the product’s first day, so the MAP period has its years. Units without a parcel are listed, with a link to the map.\n\nNeighbouring small units often share cells, so their raw CHIRPS is nearly the same: what tells them apart is each unit’s MAP, which levels its CHIRPS. The series are read only under **Model settings → Model selection for flow generation**, with Per unit chosen, where they fill a station’s gaps or, for a unit with no station, are its rain.',
+		long: 'Under **Data → Data feeds → Attach a feed**, the **Area** **Each unit’s parcel** (**Rain for each unit**) proposes one CHIRPS feed for each hydrological unit with land and a parcel on the map (its delineated or drawn area, linked to the unit). Each feed averages the 0.05° CHIRPS cells the parcel covers, each weighted by the share of it inside and by its area, and writes into that unit’s own rain series.\n\nOne daily product serves every unit, end to end: **rnl** (from 1981, final days only) by default, or **sat** (from 1998, with preliminary days); a feed never splices one onto the other. Without a start date the feeds read from the product’s first day, so the MAP period has its years. Units without a parcel are listed, with a link to the map.\n\nNeighbouring small units often share cells, so their raw CHIRPS is nearly the same: what tells them apart is each unit’s MAP, which levels its CHIRPS. The series are read under **Model settings → Flow generation**, where they fill a station’s gaps or, for a unit with no station, are its rain.',
 		aliases: ['per-unit CHIRPS', 'unit CHIRPS', 'CHIRPS per unit', 'from-units'],
 		related: ['unit-rain', 'unit-map', 'boundary-rain', 'chirps-version'],
 		source: 'docs/maps.md § Rain for each unit; issue #482'

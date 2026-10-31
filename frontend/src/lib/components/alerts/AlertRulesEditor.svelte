@@ -11,11 +11,11 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { api, type AlertRule } from '#lib/api/index.js';
 	import AlertFeedbackSummary from './AlertFeedbackSummary.svelte';
-	import { feedRuleLabel, groupRules, SERIES_STALE_NAME, seriesRuleLabel, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+	import { feedRuleLabel, groupRules, ruleChanges, SERIES_STALE_NAME, seriesRuleLabel, KIND_NAME, THRESHOLD_INPUT, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 
 	let { projectId, onClose, onSaved }: { projectId: string; onClose: () => void; onSaved: () => void } = $props();
 
-	type Row = AlertRule & { input: number };
+	type Row = AlertRule & { input: number | null };
 	let rows = $state<Row[] | null>(null);
 	let error = $state<string | null>(null);
 	let saving = $state(false);
@@ -42,15 +42,7 @@
 		saved = false;
 		error = null;
 		try {
-			const changes = rows.map((r) => ({
-				kind: r.kind,
-				nodeId: r.nodeId,
-				feedId: r.feedId,
-				seriesId: r.seriesId,
-				threshold: r.kind === 'restriction_published' ? 0 : thresholdFromInput(r.kind, r.input),
-				enabled: r.enabled
-			}));
-			rows = toRows(await api.alerts.saveRules(projectId, changes));
+			rows = toRows(await api.alerts.saveRules(projectId, ruleChanges(rows)));
 			saved = true;
 			onSaved();
 		} catch (err) {

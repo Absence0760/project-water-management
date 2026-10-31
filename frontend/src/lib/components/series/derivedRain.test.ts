@@ -24,13 +24,13 @@ const DAYS = toEpochDay('2021-01-01') - D0; // six whole calendar years
 const rainOf = (k: number, phase = 0) => Array.from({ length: DAYS }, (_, i) => ((i + phase) % 13 === 0 ? 30 * k : (i + phase) % 4 === 0 ? 2 * k : 0));
 const GAP = [69, 70, 71]; // 11–13 March 2015: S has no reading
 
-function input(rainStations: RainStationSettings, perUnit = true): ModelInput {
+function input(rainStations: RainStationSettings): ModelInput {
 	const node = { sortOrder: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const unit = (id: string, areaKm2: number, mapMm: number) => ({ ...node, id, name: `Unit ${id}`, kind: 'farm' as const, downstreamNodeId: 'G', areaKm2, mapMm, mapSource: 'invented' });
 	const s: (number | null)[] = rainOf(1.6, 1);
 	for (const t of GAP) s[t] = null;
 	return {
-		settings: { runoffModel: 'gr4j', apanMm: apan as never, ...(perUnit ? { unitRain: { mode: 'perUnit' } } : {}), rainStations },
+		settings: { runoffModel: 'gr4j', apanMm: apan as never, unitRain: { mode: 'perUnit' }, rainStations },
 		model: {
 			nodes: [{ ...node, id: 'G', name: 'Gauge', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 }, unit('A', 10, 900), unit('B', 6, 600)],
 			crops: [],
@@ -108,18 +108,18 @@ describe('areaRainLines for a unit', () => {
 		expect(sourceCounts(b.source).chirps).toBe(0);
 	});
 
-	it('null for a unit without a station, or with per-unit rain off', () => {
+	it('null for a unit without a station', () => {
 		expect(areaRainLines(input({ units: { A: { stationId: 'S' } }, sites: SITES }), 'B')).toBeNull();
-		expect(areaRainLines(input({ units: { A: { stationId: 'S' } }, sites: SITES }, false), 'A')).toBeNull();
 	});
 });
 
 describe('areaRainLines for the catchment', () => {
-	it('the rain used is the run’s rain_used, the catchment CHIRPS corrected against the catchment’s station', () => {
-		const x = input({ catchment: { stationId: 'S' }, sites: SITES }, false);
+	it('the rain used is the run’s catchment rain (rain_final), the catchment CHIRPS corrected against the catchment’s station', () => {
+		const x = input({ catchment: { stationId: 'S' }, sites: SITES });
 		const out = runModel(x);
 		const c = areaRainLines(x, null)!;
-		expect(c.rainUsed).toEqual(col(out, 'rain_used'));
+		// Per unit (the only method, issue #658): GR4J's rain_used is the units' own, so the catchment's is the final catchment rain.
+		expect(c.rainUsed).toEqual(col(out, 'rain_final'));
 		expect(c.chirpsRaw).toEqual(rainOf(0.7, 2));
 		for (let t = 0; t < c.rainUsed.length; t++) if (c.source[t] === 'chirps') expect(c.rainUsed[t]).toBe(c.chirpsCorrected![t]);
 		const map = (10 * 900 + 6 * 600) / 16;
@@ -127,7 +127,7 @@ describe('areaRainLines for the catchment', () => {
 		expect(c.factors).toEqual(out.summary.stations!.pairings.find((p) => p.stationId === 'S')!.months.map((m) => m.factor));
 		expect(c.refused).toBeNull();
 		for (let t = 0; t < c.rainUsed.length; t++) if (c.source[t] === 'station') expect(c.rainUsed[t]).toBe(Math.max(0, c.stationScaled[t]!));
-		expect(areaRainLines(input({ units: { A: { stationId: 'S' } } }, false), null)).toBeNull();
+		expect(areaRainLines(input({ units: { A: { stationId: 'S' } } }), null)).toBeNull();
 	});
 });
 
@@ -235,9 +235,8 @@ describe('unitChainLines for a unit without a station (issue #613 slice 2)', () 
 		expect(isChain(areaRainLines(x, 'A')!)).toBe(false);
 	});
 
-	it('none for a unit on its station, or with per-unit rain off; areaRainLines has none for the chain unit', () => {
+	it('none for a unit on its station; areaRainLines has none for the chain unit', () => {
 		expect(unitChainLines(x, 'A')).toBeNull();
 		expect(areaRainLines(x, 'B')).toBeNull();
-		expect(unitChainLines(input({}, false), 'B')).toBeNull();
 	});
 });

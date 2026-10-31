@@ -407,15 +407,10 @@ describe('off is unchanged', () => {
 		}
 	});
 
-	it('per-unit rain off runs no reference into the flow; the EWR shares read it, as Per unit’s do (issue #615)', () => {
-		const plain = runModel(catchment('absent'));
+	it('a reference stored with the retired catchment mode runs as Per unit’s, to the bit (engine ≥ 1.109.0, issue #658)', () => {
 		const y = withReference();
 		y.settings.unitRain = { ...y.settings.unitRain!, mode: 'catchment', reference: REF };
-		const out = runModel(y);
-		expect(out.series.find((s) => s.nodeId === null && s.key === 'natural_flow')!.values).toEqual(plain.series.find((s) => s.nodeId === null && s.key === 'natural_flow')!.values);
-		expect(out.summary.unitRain).toBeUndefined();
-		const per = runModel(withReference());
-		for (const f of per.summary.farms) expect(out.summary.farms.find((g) => g.nodeId === f.nodeId)!.ewrShare, f.nodeId).toBe(f.ewrShare);
+		expect(JSON.stringify(runModel(y))).toBe(JSON.stringify(runModel(withReference())));
 	});
 });
 

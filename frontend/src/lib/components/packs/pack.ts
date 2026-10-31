@@ -71,9 +71,13 @@ export interface VerifyRef {
 	url: string;
 }
 
-/** The pack's VerifyRef on this site, or null for a draft: no verify page answers for a draft. */
-export function packVerifyRef(p: Pick<Pack, 'status' | 'manifestSha256' | 'shortCode'>, origin: string, base: string): VerifyRef | null {
-	if (p.status === 'draft') return null;
+/**
+ * The pack's VerifyRef on this site, or null for a pack never issued: no
+ * verify page answers for a draft, nor for one withdrawn before it was issued
+ * (app_verify_pack answers only a pack with an issue date, 404 otherwise).
+ */
+export function packVerifyRef(p: Pick<Pack, 'status' | 'manifestSha256' | 'shortCode' | 'issuedAt'>, origin: string, base: string): VerifyRef | null {
+	if (p.status === 'draft' || !p.issuedAt) return null;
 	return { sha256: p.manifestSha256, code: p.shortCode, url: verifyUrl(origin, base, p.shortCode) };
 }
 

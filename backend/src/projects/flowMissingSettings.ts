@@ -65,12 +65,19 @@ function collect(settings: Record<string, unknown>, out: Set<string>): void {
 		if (isObj(rs.pinnedFactors)) for (const k of Object.keys(rs.pinnedFactors)) out.add(k.split('|')[0]!);
 	}
 	if (isObj(settings.flowMissing)) for (const id of Object.keys(settings.flowMissing)) out.add(id);
-	// The fit record's own (engine ≥ 1.102.0): the series it was fitted to, and the kept checks it ran on.
-	if (isObj(settings.fitRecord)) {
-		if (typeof settings.fitRecord.flowSeriesId === 'string') out.add(settings.fitRecord.flowSeriesId);
-		collectKept(settings.fitRecord.checksKept, out);
+	// Each fit record's own (engine ≥ 1.102.0): the series it was fitted to, and the kept checks it ran on. The outlet's, and
+	// each calibration location's row's (issues #555, #659).
+	for (const fr of fitRecordsOf(settings)) {
+		if (typeof fr.flowSeriesId === 'string') out.add(fr.flowSeriesId);
+		collectKept(fr.checksKept, out);
 	}
 	collectKept(settings.checksKept, out);
+}
+
+/** The settings' fit records: the top level's, then each calibration location row's. */
+function fitRecordsOf(settings: Record<string, unknown>): Record<string, unknown>[] {
+	const rows = Array.isArray(settings.calibrationZones) ? settings.calibrationZones : [];
+	return [settings.fitRecord, ...rows.map((z: unknown) => (isObj(z) ? z.fitRecord : null))].filter(isObj);
 }
 
 function collectKept(list: unknown, out: Set<string>): void {
@@ -99,13 +106,17 @@ export function remapSettingSeriesIds(settings: Record<string, unknown>, ids: Re
 			return ref && to ? `${ref.check}:${to}:${ref.start}:${ref.end}` : item;
 		});
 	if (Array.isArray(out.checksKept)) out.checksKept = kept(out.checksKept);
-	// The fit record names its series too (engine ≥ 1.102.0), so a copy's fit stays current with the copy's ids.
-	if (isObj(out.fitRecord)) {
-		const fr: Record<string, unknown> = { ...out.fitRecord };
+	// The fit record names its series too (engine ≥ 1.102.0), so a copy's fit stays current with the copy's ids; so does each
+	// calibration location row's (issues #555, #659).
+	const remapFit = (r: Record<string, unknown>): Record<string, unknown> => {
+		const fr: Record<string, unknown> = { ...r };
 		if (typeof fr.flowSeriesId === 'string' && ids.has(fr.flowSeriesId)) fr.flowSeriesId = ids.get(fr.flowSeriesId);
 		if (Array.isArray(fr.checksKept)) fr.checksKept = (kept(fr.checksKept) as string[]).sort();
 		if (isObj(fr.flowMissing)) fr.flowMissing = Object.fromEntries(Object.entries(fr.flowMissing).map(([id, l]) => [ids.get(id) ?? id, l]));
-		out.fitRecord = fr;
-	}
+		return fr;
+	};
+	if (isObj(out.fitRecord)) out.fitRecord = remapFit(out.fitRecord);
+	if (Array.isArray(out.calibrationZones))
+		out.calibrationZones = out.calibrationZones.map((z: unknown) => (isObj(z) && isObj(z.fitRecord) ? { ...z, fitRecord: remapFit(z.fitRecord) } : z));
 	return out;
 }

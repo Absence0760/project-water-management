@@ -108,7 +108,8 @@ describe('calibration sites', () => {
 		expect(calibrationSiteError(nodes, 0, 'A')).toMatch(/"Farm A" is not a gauge/);
 		expect(calibrationSiteError(nodes, 0, 'G')).toMatch(/is the outlet/);
 		expect(calibrationSiteError(nodes, 0, 'H')).toBeNull();
-		expect(() => prepareCalibration(atSite(input, 'gone'))).toThrow(/no longer in the model/);
+		// A stale site is read as the outlet since engine 1.110.0 (issue #659, normalizeCalibrationLocations): the fit scores there, as the run does.
+		expect(prepareCalibration(atSite(input, 'gone')).siteNodeId).toBeNull();
 		expect(() => prepareCalibration(atSite(input, 'K'))).toThrow(/no observed flow record at the calibration site "Bare gauge"/);
 	});
 

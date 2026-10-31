@@ -138,6 +138,11 @@ describe('settingsRows', () => {
 		expect(legacy['Runoff model']).toBe('Legacy (the original workbook’s, removed in engine 1.0.0): workbook comparison only');
 		expect(legacy['GR4J parameters']).toBeUndefined();
 		expect(legacy['Calibration window']).toBe('from 2003-10-01');
+		// The calibration rows name the headline location's window and record (issue #659), when the page reads it.
+		const headline = effectiveSettings({ runoffModel: 'gr4j', calibrationStart: '2010-10-01', calibrationFlowKind: 'flow_logger_m3s' });
+		const atHead = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', calibrationStart: '2003-10-01' }), run, headline));
+		expect(atHead['Calibration window']).toBe('from 2010-10-01');
+		expect(atHead['Calibration record']).toMatch(/logger/i);
 	});
 
 	it('lists the rain-source periods, or none (engine ≥ 0.30.0)', () => {

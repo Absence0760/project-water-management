@@ -516,6 +516,41 @@ describe('applyScenario: each op', () => {
 		expect(r.input.settings.calibration).toEqual({ rainThresholdMm: 3, catchmentAreaKm2: 12.5 });
 	});
 
+	it('settings.set writes the calibration window, record and X1–X4 into the headline gauge’s row (issue #659)', () => {
+		// A gauge W between C and A: the headline location, the outlet not ticked.
+		const b = base();
+		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'A', areaKm2: 0, divertCapacityM3Day: 0 }));
+		b.model.nodes.find((n) => n.id === 'C')!.downstreamNodeId = 'W';
+		const row = { nodeId: 'W', enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null };
+		b.settings = { ...b.settings, calibrateAtOutlet: false, calibrationRest: 'nearest', calibrationZones: [row], gr4j: { x1: 400, x2: 0, x3: 90, x4: 1.7, warmupDays: 365 } } as never;
+		const r = applyScenario(b, [
+			{ op: 'settings.set', path: 'calibrationStart', value: '2021-01-01' },
+			{ op: 'settings.set', path: 'calibrationFlowKind', value: 'flow_logger_m3s' },
+			{ op: 'settings.set', path: 'gr4j.x1', value: 700 },
+			{ op: 'settings.set', path: 'gr4j.warmupDays', value: 100 }
+		]);
+		expect(r.problems).toEqual([]);
+		const s = r.input.settings as Record<string, unknown>;
+		// The row's own; it had no X1–X4 yet, so the others are the top level's it ran on.
+		expect((s.calibrationZones as unknown[])[0]).toEqual({ ...row, calibrationStart: '2021-01-01', calibrationFlowKind: 'flow_logger_m3s', gr4j: { x1: 700, x2: 0, x3: 90, x4: 1.7 } });
+		// The top level keeps its window and X1–X4; the warm-up is the project's own, so it is written there.
+		expect(s.calibrationStart).toBeUndefined();
+		expect(s.gr4j).toEqual({ x1: 400, x2: 0, x3: 90, x4: 1.7, warmupDays: 100 });
+		// Settings from before engine 1.110.0 keep the top level (the run's normaliser moves it into the site's row).
+		const legacy = applyScenario(base(), [{ op: 'settings.set', path: 'calibrationStart', value: '2021-01-01' }]);
+		expect(legacy.input.settings.calibrationStart).toBe('2021-01-01');
+		// A reversed window in the headline's row is refused, as the top level's is.
+		const reversed = applyScenario(b, [
+			{ op: 'settings.set', path: 'calibrationEnd', value: '2010-09-30' },
+			{ op: 'settings.set', path: 'calibrationStart', value: '2015-10-01' }
+		]);
+		expect(reversed.problems.join(' ')).toMatch(/the calibration window at Weir starts \(2015-10-01\) after it ends \(2010-09-30\)/);
+		// The outlet as the headline: the top level, as before.
+		const atOutlet = base();
+		atOutlet.settings = { ...atOutlet.settings, calibrateAtOutlet: true } as never;
+		expect(applyScenario(atOutlet, [{ op: 'settings.set', path: 'calibrationEnd', value: '2021-06-30' }]).input.settings.calibrationEnd).toBe('2021-06-30');
+	});
+
 	it('settings.set refuses an unknown path, a bad value and a window that ends before it starts', () => {
 		expect(one({ op: 'settings.set', path: 'fitRecord', value: null } as unknown as ScenarioOp).problems[0]).toMatch(/not a setting a scenario can change/);
 		// The legacy runoff model's paths (engine 1.0.0): a stored op on one names why it is refused.

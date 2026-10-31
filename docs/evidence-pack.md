@@ -79,7 +79,10 @@ under each climate model's monthly change factors (report format
 [§ Future yield](#future-yield)); and § 7 counting Sentinel-2 beside WOfS,
 each source and the dates either saw together (report format
 `evidence-24`, issue #624 step 7, 2026-10-29; [§ Observed wet
-days](#observed-wet-days)). What is left is
+days](#observed-wet-days)); and § 3's calibration locations, each with its
+period and every land unit with where its parameters come from (report
+format `evidence-25`, issue #659, 2026-10-30; [§ Calibration
+zones](#calibration-zones)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -749,16 +752,31 @@ and no pack made of it).
 
 ## Calibration zones
 
-A baseline calibrated at several gauges (model.md §2.10n) runs each ticked
-gauge's land units on that zone's own GR4J parameters, so the site's
-parameters and fit no longer describe every unit's runoff. From report
-format `evidence-22` (issue #555, `evidence/calibrationZones.ts`
-`calibrationZonesSection`) the document carries `calibrationZones`: one
-entry per zone the baseline applied, upstream first, the calibration site's
-own zone last (`nodeId` null), each with
+A baseline calibrated at several locations (model.md §2.10n) runs each
+ticked location's group of land units on that location's own GR4J
+parameters, so the headline location's parameters and fit no longer
+describe every unit's runoff. From report format `evidence-22` (issue #555,
+`evidence/calibrationZones.ts` `calibrationZonesSection`) the document
+carries `calibrationZones`: one entry per group the baseline applied, in the
+run's order (upstream first, the headline location last, `headline`; then
+the units on the catchment parameters, `kind` 'default'; a run from before
+engine 1.110.0 has the calibration site's own zone last, `nodeId` null and
+no `kind`), each with
 
-- its gauge's name, its land units' count and area (km², the run's model;
-  no unit names, as elsewhere in a baseline report),
+- its location's name and `kind` (a gauge's, the outlet's), its land units'
+  count and area (km², the run's model),
+- from `evidence-25` (issue #659): its period (`window`, the gauge row's or
+  the outlet's top-level window, null ends the record's own; none for the
+  catchment-parameter units) and every unit in its group by name with where
+  its parameters come from (`members`, from `summary.unitRain.paramSource`:
+  `zone` its own zone, `assigned` borrowed by Parameters from, `rest` the
+  rule for units outside every location, `default` the catchment
+  parameters; a run from before engine 1.110.0 recorded none, so they are
+  read from its network: a gauge's units and those draining through its
+  calibration site are `zone`, the site zone's units beside or below the
+  site `rest`). The
+  pack already names every unit (§ 4); an applicant's copy is an allowlisted
+  projection that holds no calibration section ([§ Applicants](#applicants)),
 - the X1–X4 its units ran on (`summary.unitRain.zones`), and whether they
   were the zone's own or the catchment's (`fitted`),
 - its fit (`fit`): the fit record's description, its engine version, its
@@ -767,9 +785,14 @@ own zone last (`nodeId` null), each with
   edited since (judged against the parameters the units ran on, as the run's
   `fitStatus` is, not the record's stored list); null when the zone's
   parameters don't come from a stored fit,
-- the run's statistics at its gauge (`stats`: days, NSE, KGE, PBIAS and
-  `fitStatus`, the zone's own in or out of sample; the site's are the run's
-  calibration statistics), null with no scored day.
+- the run's statistics at its location (`stats`: days, NSE, KGE, PBIAS and
+  `fitStatus`, the location's own in or out of sample; the headline's are the
+  run's calibration statistics), null with no scored day.
+
+§ 3's calibration record and validation read the headline location's window
+and fit record (the frontend's `zones.ts` `runHeadlineSettings`, the engine's
+`headlineCalibrationSettings`, issue #659: a gauge's row when the
+headline is a gauge, the top level for the outlet, a legacy site's as it ran).
 
 Everything is read from what the run froze (its summary, settings snapshot
 and model), so the manifest's hash covers each zone's parameters and fit
@@ -788,9 +811,11 @@ which keeps its document. § 3 prints the section as a table
 site's parameters (followups.md § Calibration zones).
 
 Tests: `evidence/calibrationZones.test.ts` (the fit's scores, the errata
-versions, the flag), `evidence/report.test.ts` (a zoned baseline's section,
+versions, the flag, each location's period and each unit's source, the
+headline's settings), `evidence/report.test.ts` (a zoned baseline's section,
 upstream first, its gauge scored on its own record, and null with one
-parameter set), the evidence DB tests (`evidence-22`).
+parameter set), `frontend/src/lib/calibration/zoneStats.test.ts` (the table's
+rows, the headline first), the evidence DB tests.
 
 ## The responsible authority
 
@@ -1472,7 +1497,8 @@ per pack, 3 attempts). The worker runs it as that editor, under RLS:
    the stored results or a re-run), `other_engine` (only the re-runs
    differ, and a run was made with another engine version than the one the
    server runs: expected, not a fault; check out that engine to reproduce
-   it), or `no_bundle` (a pack issued without one). With it go the engine
+   it; the re-runs are `reproduce:<run>`, `reproduce:headline` and § 8's
+   `climate:delta`, `isRerunCheck`), or `no_bundle` (a pack issued without one). With it go the engine
    that re-ran the runs, the runs' own engines, the bundle's hash and every
    check (`pack_reproduction`,
    [data-model.md](./data-model.md#evidence-packs-112_evidence_packsql)). Once per engine version:
@@ -1770,7 +1796,12 @@ against hostile names).
 - `water_app` may `UPDATE` only the lifecycle columns (column grants), and
   RLS lets it delete only a draft.
 - `project_pack_guard` refuses deleting a project with a pack past draft.
-- `signoff_pack_draft` refuses a sign-off of a pack that isn't a draft.
+- `signoff_pack_draft` refuses a sign-off of a pack that isn't a draft. It
+  reads the pack row `FOR SHARE` (288_signoff_pack_lock): the applicant's
+  specialist signs without locking the pack (they read no pack row), so
+  without the lock a sign-off sent during an issue went in after it, a
+  signer issue never checked. Now it waits for the issue, then is refused
+  (`evidence/signoff-issue-race.db.test.ts`, with its control).
 - `app_record_pack_pdf` records a PDF only from its pack's running render
   job, under the key it derives, once ([§ The PDF](#the-pdf)).
 - Tests: `backend/src/evidence/packs.db.test.ts` (each refusal with its

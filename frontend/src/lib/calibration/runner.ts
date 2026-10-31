@@ -4,7 +4,8 @@
 // saves anything).
 import {
 	gr4jOfParamSet,
-	withZoneParams,
+	withLocationParams,
+	normalizedInput,
 	type CalibrationPrior,
 	type CalibrationProgress,
 	type CalibrationReport,
@@ -24,9 +25,9 @@ import type { SensitivityJob, SensitivityWorkerMessage } from './sensitivity';
 import autocalWorkerUrl from 'virtual:autocal-worker-url';
 
 export interface FitHandle {
-	/** The fit's report: under calibration zones, the last step's (the calibration site's own zone). */
+	/** The fit's report: the headline location's step's (issue #659), else the last step's. */
 	result: Promise<CalibrationReport>;
-	/** A stepwise fit's every step, upstream first (issue #555); absent for one fit. Settles with `result`. */
+	/** A stepwise fit's every step, in dependency order (issue #659); absent for one fit. Settles with `result`. */
 	steps?: Promise<ZoneFitStep[]>;
 	cancel(): void;
 }
@@ -78,9 +79,10 @@ export function startFit(req: FitRequest, onProgress: (p: CalibrationProgress) =
 }
 
 /**
- * The stepwise fit of calibration zones (issue #555, engine calibrateStepwise, docs/model.md §2.10n), one worker per
- * step, upstream first: each step fits its zone on the input with the zones before it at their fitted parameters, as
- * the engine's calibrateStepwise does. cancel() stops the step running and every one after it.
+ * The stepwise fit of the calibration locations (issue #659, engine calibrateStepwise, docs/model.md §2.10n), one
+ * worker per step of the engine's plan (locationFitPlan: dependency order, the headline last among the ready ones):
+ * each step fits its location's group on the input with the locations before it at their fitted parameters, as the
+ * engine's calibrateStepwise does. cancel() stops the step running and every one after it.
  */
 export function startStepwiseFit(
 	req: FitRequest,
@@ -93,24 +95,27 @@ export function startStepwiseFit(
 	let cancelled = false;
 	const run = async (): Promise<ZoneFitStep[]> => {
 		const done: ZoneFitStep[] = [];
-		let input = req.input;
+		// In the locations shape once, so every step's parameters land where the engine reads them (normalizeCalibrationLocations).
+		let input = normalizedInput(req.input);
 		for (const [i, step] of plan.entries()) {
 			if (cancelled) throw new FitCancelled();
 			const { prior: _one, ...rest } = req;
 			const prior = priors?.[step.zoneNodeId ?? ''];
-			current = startFit({ ...rest, input, ...(step.zoneNodeId !== null ? { zone: step.zoneNodeId } : {}), ...(prior ? { prior } : {}) }, (p) =>
+			current = startFit({ ...rest, input, zone: step.zoneNodeId, ...(prior ? { prior } : {}) }, (p) =>
 				onProgress({ ...p, step: i + 1, steps: plan.length, zoneNodeId: step.zoneNodeId })
 			);
 			const report = await current.result;
 			done.push({ ...step, report });
-			if (step.zoneNodeId !== null) input = withZoneParams(input, step.zoneNodeId, gr4jOfParamSet(report.params));
+			// Every step's parameters, the outlet location's (null) included (engine 1.110.0: steps run in dependency order).
+			input = withLocationParams(input, step.zoneNodeId, gr4jOfParamSet(report.params));
 		}
 		return done;
 	};
 	const steps = run();
 	return {
 		steps,
-		result: steps.then((s) => s[s.length - 1]!.report),
+		// The headline's step: its report is the fit's, whichever step it was (a location below it can depend on it).
+		result: steps.then((s) => (s.find((x) => x.headline) ?? s[s.length - 1]!).report),
 		cancel() {
 			cancelled = true;
 			current?.cancel();

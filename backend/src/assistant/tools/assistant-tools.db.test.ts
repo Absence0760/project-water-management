@@ -5,7 +5,7 @@
 // series of a cap run; the owner reads them all (positive control). A gauge's
 // fit is the engine's calibrationStats on its stored outflow and record.
 // Synthetic data only.
-import { calibrationStats } from '@water-management/engine';
+import { calibrationStats, newCalibrationZone } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../../__tests__/helpers.js';
 import { withUser } from '../../db/tx.js';
@@ -173,17 +173,17 @@ describe('ids named in the output (the 2026-10-30 production test)', () => {
 		const rec = (await owner.call('PUT', `${at}/series`, { kind: 'flow_observed_m3s', name: 'Named record', unit: 'm3/s', startDate: '2021-10-01', values: [1, 2, 3] })).body.id as string;
 		expect((await owner.call('PATCH', `${at}/series/${rec}`, { siteNodeId: gauge.id })).status).toBe(200);
 		const station = (await owner.call('PUT', `${at}/series`, { kind: 'rain_catchment_mm', name: 'Named station', unit: 'mm', startDate: '2021-10-01', values: [1, 0, 2] })).body.id as string;
-		const patched = await owner.call('PATCH', at, { settings: { calibrationSiteNodeId: gauge.id, rainStations: { units: { [up.id]: { stationId: station } } } } });
+		const patched = await owner.call('PATCH', at, { settings: { calibrationZones: [{ ...newCalibrationZone(gauge.id), enabled: true }], calibrationSiteNodeId: gauge.id, rainStations: { units: { [up.id]: { stationId: station } } } } });
 		expect(patched.status, JSON.stringify(patched.body)).toBe(200);
-		// A reference to a node since deleted, planted (the app's checks refuse one on a save).
-		await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{calibrationZones}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify([{ nodeId: crypto.randomUUID(), enabled: false }])]);
+		// A reference to a node since deleted, planted beside the ticked gauge (the app's checks refuse one on a save).
+		await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{calibrationZones}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify([{ ...newCalibrationZone(gauge.id), enabled: true }, { nodeId: crypto.randomUUID(), enabled: false }])]);
 		const run = (name: string, args: unknown) => withUser(owner.id, (db) => tool(name).run({ db, userId: owner.id, projectId: pid, runId: null }, args), { readOnly: true });
 
 		const settings = data(await run(TOOL_NAMES.settings, { source: 'project', keys: ['calibrationSiteNodeId', 'rainStations', 'calibrationZones'] }));
 		expect(settings.settings).toMatchObject({
 			calibrationSiteNodeId: "the gauge 'Named weir'",
 			rainStations: { units: { "the hydrological unit 'Top farm'": { stationId: "the series 'Named station'" } } },
-			calibrationZones: [{ nodeId: 'a node that no longer exists' }]
+			calibrationZones: [{ nodeId: "the gauge 'Named weir'" }, { nodeId: 'a node that no longer exists' }]
 		});
 		const network = data(await run(TOOL_NAMES.network, { source: 'project' }));
 		expect(network.transfers).toEqual([expect.objectContaining({ id: transfer.id, from: 'Top farm', to: 'Outlet' })]);
@@ -255,5 +255,23 @@ describe('the sign-off', () => {
 		}
 		// Positive control: the stored settings do hold the name.
 		expect(JSON.stringify((await owner.call('GET', at)).body.project.settings.calibrationRules)).toContain(signer);
+	});
+});
+
+// Last too: it ticks a gauge and adds a run.
+describe('a gauge’s fit at every calibration location (engine 1.110.0, issue #659)', () => {
+	it('answers a ticked gauge’s from the run’s statistics at it, and the headline outlet’s from the run’s calibration statistics', async () => {
+		const at = `/projects/${projectId}`;
+		const row = { nodeId: weir.id, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null };
+		const set = await owner.call('PATCH', at, { settings: { calibrationZones: [row] } });
+		expect(set.status, JSON.stringify(set.body)).toBe(200);
+		const zonedRun = (await owner.call('POST', `${at}/runs`, { label: 'Zoned' })).body.run.id as string;
+		const [stored] = await asOwner(`SELECT summary->'calibrationZones' AS zones FROM model_run WHERE id = $1`, [zonedRun]);
+		const atWeir = (stored.zones as { siteNodeId: string; nse: number }[]).find((z) => z.siteNodeId === weir.id)!;
+		const fit = data(await as(viewer, TOOL_NAMES.gaugeFit, { node: 'Middle weir' }, zonedRun));
+		expect(fit.source).toBe('the run’s statistics at this calibration location');
+		// The tools round to four significant digits.
+		expect((fit.stats as { nse: number }).nse).toBeCloseTo(atWeir.nse, 2);
+		expect(data(await as(viewer, TOOL_NAMES.gaugeFit, { node: 'Outlet' }, zonedRun)).source).toBe('the run’s calibration statistics (the headline location)');
 	});
 });

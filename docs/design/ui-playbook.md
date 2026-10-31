@@ -1000,6 +1000,14 @@ section it belongs to, with the example that taught it.
 
 - **Colours are tokens** in `frontend/src/app.css` with dark-theme values
   (`--series-*`, `--accent`, `--warning`…); no raw hex in components.
+  A "brand" surface is no exception: the sign-in pages' panel was a fixed
+  navy in light mode beside a light form until the operator reported it
+  (`layout/AuthCard.svelte`, now `--accent-soft` light and `--brand-panel`
+  dark). A component's own dark values go under the app's selector,
+  `@media (prefers-color-scheme: dark) { :global(:root:not([data-theme='light'])) .x { … } }`,
+  never a bare media query, so `data-theme="light"` (print, a forced
+  theme) wins; a drawing inside takes its colours as custom properties
+  from its container (`--scene-*`), not hex of its own.
 - **Type scale: small text is a token, and a phone's floor is 12 px.**
   Small text takes `--font-xs` (0.75rem: badges, units, tags, a table's
   card labels, counts, kickers) or `--font-sm` (0.8rem: hints, captions,
@@ -1777,7 +1785,8 @@ Interaction details that bit:
   (`lib/a11y/focusAfterRemove.ts`) focuses the same control on the row now
   at that index (else the last row), or the fallback (the list's heading,
   its add field) once it is empty. Runs, Data, the project list, the team's
-  and the project's members, the pending invitations and the farmers use it;
+  and the project's members, the pending invitations, the farmers and
+  Allocations' volumes and imports use it;
   Crops' `removed()` and the Network's `remove()` did the same by hand, and
   Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
   A row that stays but loses its control does the same: revoking an API key

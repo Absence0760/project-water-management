@@ -246,6 +246,9 @@ export type AuditKind =
 	// 266 (issue #616): the retired flow-share method and the nodes' High-MAP, Low-MAP and manual shares, as they were,
 	// { method, hiLoSplit, units: [{ id, name, areaHiKm2, areaLoKm2, flowShareManual }] }; no actor.
 	| 'settings.flow_share_reset'
+	// 286 (issue #658): Fragmentation retired, the project moved to Per unit; { unitRain } is the stored setting as it
+	// was (null when never set, or { mode: 'catchment', … }); no actor.
+	| 'settings.flow_method_reset'
 	| 'allocation.created'
 	| 'allocation.changed'
 	| 'allocation.deleted'

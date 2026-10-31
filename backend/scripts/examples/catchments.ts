@@ -348,10 +348,10 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 	const model: ProjectModel = { nodes, crops, cropAreas, transfers, ...(demandObjects.length ? { demandObjects } : {}) };
 
 	const truthRain = dailyRain(spec.climate, START, DAYS, spec.seed, spec.rainScale);
-	// A Per unit rain setup (issue #615, docs/model.md §2.5b): each unit with land a MAP and the rain gauge its MAP, so
-	// every unit runs on the gauge × its MAP ratio (§2.4h rule 2) and the EWR is split by MAP-weighted natural runoff,
-	// under Fragmentation as under Per unit, with no unit left on the catchment rain. Invented: the catchment's mean
-	// annual rain, the units a little wetter or drier round it.
+	// The Per unit rain setup (issue #615, docs/model.md §2.4h, §2.5b): each unit with land a MAP and the rain gauge its
+	// MAP, so every unit runs on the gauge × its MAP ratio (§2.4h rule 2) and the EWR is split by MAP-weighted natural
+	// runoff, with no unit left on the catchment rain. Invented: the catchment's mean annual rain, the units a little
+	// wetter or drier round it.
 	const gaugeMapMm = Math.round((truthRain.reduce((a, b) => a + b, 0) / DAYS) * 365.25);
 	const UNIT_MAP_FACTORS = [1.15, 1, 0.9, 1.05, 0.95];
 	nodes.forEach((n, i) => {
@@ -364,8 +364,8 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 		...spec.settings,
 		apanMm: spec.apan as unknown as ProjectSettings['apanMm'],
 		calibration: { ...d.calibration, ...spec.calibration },
-		// Fragmentation, with the Per unit setup its EWR shares run on (issue #615).
-		unitRain: { mode: 'catchment', gaugeMapMm, gaugeMapSource: 'Invented for the demo: the gauge’s mean annual rain over its record' }
+		// Per unit, the only flow generation method (engine ≥ 1.109.0, issue #658).
+		unitRain: { mode: 'perUnit', gaugeMapMm, gaugeMapSource: 'Invented for the demo: the gauge’s mean annual rain over its record' }
 	};
 
 	// First pass on the true rain, without EWR or observed flow, to learn the

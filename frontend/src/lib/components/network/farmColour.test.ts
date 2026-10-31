@@ -42,28 +42,43 @@ describe('supplyColouring', () => {
 	});
 });
 
-describe('zoneColouring (issue #555)', () => {
+describe('zoneColouring (issue #555; locations, issue #659)', () => {
 	const nodes = [
 		{ id: 'G', name: 'Outlet', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
 		{ id: 'H', name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0 },
 		{ id: 'A', name: 'Farm A', kind: 'farm', downstreamNodeId: 'H', areaKm2: 40 },
 		{ id: 'B', name: 'Farm B', kind: 'farm', downstreamNodeId: 'G', areaKm2: 60 },
+		{ id: 'C', name: 'Farm C', kind: 'farm', downstreamNodeId: 'G', areaKm2: 5 },
 		{ id: 'U', name: 'Pump', kind: 'farm', downstreamNodeId: 'G', areaKm2: 0 }
 	] as NetworkNode[];
-	const groups = zoneGroups(nodes, { ...defaultProjectSettings(), unitRain: { mode: 'perUnit' } as never, calibrationZones: [{ ...newCalibrationZone('H'), enabled: true }] })!;
+	const base = { ...defaultProjectSettings(), calibrationZones: [{ ...newCalibrationZone('H'), enabled: true }] };
 
-	it('colours each unit by its zone, with the zone’s name as its label line, and a legend entry per zone', () => {
-		const c = zoneColouring(nodes, groups);
+	it('colours each unit by its group, with the group’s name as its label line, and a legend entry per group', () => {
+		const c = zoneColouring(nodes, zoneGroups(nodes, base)!);
 		expect(c.mode).toBe('zone');
 		expect(c.unsaved).toBe(false);
 		expect(c.byNode.get('A')).toEqual({ band: 'zone', text: 'Weir zone, not fitted yet', swatch: 'var(--series-1)' });
-		expect(c.byNode.get('B')).toEqual({ band: 'zone', text: 'Outlet zone (calibration site)', swatch: 'var(--series-2)' });
+		expect(c.byNode.get('B')).toEqual({ band: 'zone', text: 'Outlet zone (outlet, headline)', swatch: 'var(--series-2)' });
 		expect(c.byNode.get('U')).toEqual({ band: 'none', text: 'no land area, in no zone' });
 		expect(c.byNode.has('G')).toBe(false);
 		expect(c.legend).toEqual([
 			{ band: 'zone', label: 'Weir zone, not fitted yet: 1 unit', swatch: 'var(--series-1)' },
-			{ band: 'zone', label: 'Outlet zone (calibration site): 1 unit', swatch: 'var(--series-2)' },
+			{ band: 'zone', label: 'Outlet zone (outlet, headline): 2 units', swatch: 'var(--series-2)' },
 			{ band: 'none', label: 'No land area, in no zone' }
 		]);
+		expect(c.caption).not.toContain('ring');
+	});
+
+	it('gives a borrowed unit its donor’s colour, an outline marker and "borrowed from" in its label and the key (issue #659)', () => {
+		const c = zoneColouring(nodes, zoneGroups(nodes, { ...base, calibrateAtOutlet: true, calibrationRest: 'nearest', unitParamsFrom: { C: 'H' } })!);
+		expect(c.byNode.get('C')).toEqual({ band: 'zone', text: 'borrowed from Weir, not fitted yet', swatch: 'var(--series-1)', marker: 'borrowed' });
+		expect(c.byNode.get('A')!.marker).toBeUndefined();
+		expect(c.legend).toEqual([
+			{ band: 'zone', label: 'Weir zone, not fitted yet: 1 unit', swatch: 'var(--series-1)' },
+			{ band: 'zone', label: 'Borrowed from Weir, not fitted yet: 1 unit', swatch: 'var(--series-1)', marker: 'borrowed' },
+			{ band: 'zone', label: 'Outlet zone (outlet, headline): 1 unit', swatch: 'var(--series-2)' },
+			{ band: 'none', label: 'No land area, in no zone' }
+		]);
+		expect(c.caption).toContain('a unit in a dotted ring runs on another location’s parameters');
 	});
 });

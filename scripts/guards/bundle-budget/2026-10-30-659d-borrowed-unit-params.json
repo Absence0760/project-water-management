@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #659 slice D: Parameters from (UnitParamsTable, its own lazy chunk, 2.8 KB gzipped), the borrowed and rest markers on the Network and Map, the locations results table and comparison wording; measured 2284 KB against the 2280 KB ceiling after merging slices B and C (+4 KB, about 1 KB headroom)"
+}

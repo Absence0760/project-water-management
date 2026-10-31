@@ -7,11 +7,11 @@ const base = (patch: Partial<SummaryInput['s']> = {}): SummaryInput => ({
 	ewrAnnualMm3: 12.598,
 	ewrSource: 'Pragmatic EWR at the outflow gauge'
 });
-const cal = (patch: Partial<SummaryInput['s']> = {}, siteName?: string): CalibrationSummaryInput => ({
+const cal = (patch: Partial<SummaryInput['s']> = {}, locations?: CalibrationSummaryInput['locations']): CalibrationSummaryInput => ({
 	s: { ...defaultProjectSettings(), ...patch } as SummaryInput['s'],
 	unitAreaKm2: 70,
 	peAnnualMm: 1200,
-	siteName
+	locations
 });
 
 describe('dateSpan', () => {
@@ -39,7 +39,7 @@ describe('settingsSummaries', () => {
 		expect(s['set-period']).toBe('The whole rain record');
 		expect(s['set-rain']).toBe('CHIRPS bias-corrected per month fills gaps · fitted on the whole record · zero runs treated as missing');
 		expect(s['set-quality']).toBe('The default limits');
-		expect(s['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
+		expect(s['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 		expect(s['set-restrict']).toBe('Off');
 		expect(s['set-reserve']).toBe('');
 		expect(s['set-evidence']).toBe('No uncertainty rule declared');
@@ -61,32 +61,30 @@ describe('settingsSummaries', () => {
 			autoRun: { enabled: true, debounceMinutes: 30, publish: 'never' }
 		} as Partial<SummaryInput['s']>;
 		const s = settingsSummaries(base(set));
-		const c = calibrationSummaries(cal(set, 'Melkhout Gauge'));
+		const c = calibrationSummaries(cal(set, { names: ['Outlet', 'Melkhout Gauge'], headline: 'Melkhout Gauge', outlet: true }));
 		expect(s['set-period']).toBe('1 Oct 2015 – 30 Sep 2020');
 		expect(s['set-rain']).toBe('Raw CHIRPS fills gaps · zero runs treated as missing');
 		expect(s['set-demand']).toMatch(/^A-pan 1\s?230 mm a year · effective rain/);
 		// The rain threshold for demand lives in Demand (issue #521), so its line names it.
 		expect(s['set-demand']).toMatch(/ · rain threshold \d+(\.\d)? mm · /);
-		expect(s['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
-		expect(c['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · low flows only in 1 period · river stops Feb, Mar, Apr');
+		expect(s['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
+		expect(c['set-record']).toBe('Calibrated at Outlet, Melkhout Gauge · headline Melkhout Gauge · outlet: from 1 Oct 2001 · 1 period left out · low flows only in 1 period · river stops Feb, Mar, Apr');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
 
-	it('names the flow generation method in the Model selection for flow generation summary, with the units on a station (issues #482, #553)', () => {
-		expect(settingsSummaries(base())['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
-		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-share']).toMatch(/^Fragmentation · /);
-		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
+	it('names the flow generation method in the Flow generation summary, with the units on a station (issues #482, #553)', () => {
+		// Per unit is the only method (issue #658): a project with no unitRain, or the retired `catchment`, reads as Per unit.
+		for (const unitRain of [undefined, { mode: 'catchment' as const }, { mode: 'perUnit' as const }])
+			expect(settingsSummaries(base({ unitRain }))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 		const units = { a: { stationId: 's' }, b: { stationId: 's' } };
-		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' }, rainStations: { units } }))['set-share']).toBe('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
-		// Under Fragmentation the stations set the units' EWR shares (issue #615), so they count there too.
-		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Fragmentation · 2 units on a rainfall station · flow and EWR by each unit’s natural MAR');
+		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
 		expect(settingsSummaries(base({ rainStations: { catchment: { stationId: 's' }, units } }))['set-share']).toBe(
-			'Fragmentation · catchment rain from a station · 2 units on a rainfall station · flow and EWR by each unit’s natural MAR'
+			'Per unit · catchment rain from a station · 2 units on a rainfall station · EWR by each unit’s natural MAR'
 		);
 		// No longer said in Flow calibration's line.
 		expect(calibrationSummaries(cal({ unitRain: { mode: 'perUnit' } }))['set-flow']).not.toContain('rain for each unit');
 		// The retired EWR split (issue #615) and flow-share method (#616) change nothing: one share per unit, its natural MAR.
-		expect(settingsSummaries(base({ ewrSplit: 'flowShare', flowShareMethod: 'manual' } as never))['set-share']).toBe('Fragmentation · flow and EWR by each unit’s natural MAR');
+		expect(settingsSummaries(base({ ewrSplit: 'flowShare', flowShareMethod: 'manual' } as never))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 	});
 });
 
@@ -106,7 +104,13 @@ describe('calibrationSummaries', () => {
 	it('gives the four panels on Calibration their lines, and Model settings none of them', () => {
 		const own = calibrationSummaries(cal());
 		expect(Object.keys(own).sort()).toEqual([...CAL].sort());
-		expect(own['set-record']).toBe('The whole flow record · at the outlet');
+		expect(own['set-record']).toBe('The whole flow record');
+		// The calibration locations first (issue #659): one by name, or none.
+		expect(calibrationSummaries(cal({}, { names: ['Outflow gauge'], headline: null, outlet: true }))['set-record']).toBe('Calibrated at Outflow gauge · outlet: the whole flow record');
+		// The outlet's window isn't named when the outlet isn't a location: no fit uses it.
+		expect(calibrationSummaries(cal({ calibrationStart: '2001-10-01' }, { names: ['Weir'], headline: null, outlet: false }))['set-record']).toBe('Calibrated at Weir');
+		expect(calibrationSummaries(cal({}, { names: [], headline: null, outlet: false }))['set-record']).toBe('No location calibrated');
+		expect(calibrationSummaries(cal({}, { names: ['A', 'B', 'C', 'D'], headline: 'B', outlet: false }))['set-record']).toBe('Calibrated at 4 locations · headline B');
 		// The rules' state, not the header's fit line again (issue #586, C19).
 		expect(own['set-fit']).toBe('Calibration rules revision 1 · draft, not signed off');
 		expect(calibrationSummaries(cal({ calibrationRules: { ...defaultProjectSettings().calibrationRules!, revision: 3, signedOff: { by: 'A. Hydrologist', on: '2026-09-29' } } }))['set-fit']).toBe(

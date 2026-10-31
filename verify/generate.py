@@ -265,9 +265,52 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_external_transfers(random.Random(seed * 49979687 + 13), doc, dense)
     add_rain_stations(random.Random(seed * 67867967 + 5), doc, start, days, dense)
     add_calibration_zones(random.Random(seed * 86028121 + 17), doc, dense)
+    add_calibration_locations(random.Random(seed * 52368691 + 23), doc)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
+
+
+def add_calibration_locations(rng: random.Random, doc: dict) -> None:
+    """Calibration locations (§2.10n, engine 1.110.0, issue #659), from their
+    own stream so the other draws don't move (the last stream drawn). In 60 %
+    of networks with calibration rows, the settings are in the locations'
+    shape: the outlet ticked or not, a rest rule of the three, now and then a
+    headline pointer at a ticked row (or at a gauge that isn't one), and in
+    half of them one land unit taking a row's parameters (Parameters from),
+    preferably a gauge it doesn't drain to. The other 40 % stay in the shape
+    of before (read as legacy), half of those with a site at a gauge inside
+    the network."""
+    s = doc["settings"]
+    rows = s.get("calibrationZones") or []
+    if not rows:
+        return
+    nodes = doc["model"]["nodes"]
+    by_id = {n["id"]: n for n in nodes}
+    if rng.random() >= 0.6:
+        # The shape of before: in half of them a site at a gauge inside the network, read as its location.
+        inner = sorted(n["id"] for n in nodes if n["kind"] == "gauge" and n.get("downstreamNodeId") is not None)
+        if inner and rng.random() < 0.5:
+            s["calibrationSiteNodeId"] = rng.choice(inner)
+        return
+
+    def down(i):
+        out = []
+        while i is not None and i not in out:
+            out.append(i)
+            i = by_id[i].get("downstreamNodeId")
+        return out
+
+    s["calibrateAtOutlet"] = rng.random() < 0.5
+    s["calibrationRest"] = rng.choice(["nearest", "headline", "default"])
+    ticked = [z["nodeId"] for z in rows if z.get("enabled")]
+    r = rng.random()
+    s["calibrationSiteNodeId"] = rng.choice(ticked) if ticked and r < 0.3 else (rng.choice([z["nodeId"] for z in rows]) if r < 0.4 else None)
+    units = sorted((n for n in nodes if n["kind"] == "farm" and (n.get("areaKm2") or 0) > 0), key=lambda n: n["id"])
+    if units and rng.random() < 0.5:
+        u = rng.choice(units)
+        others = [z["nodeId"] for z in rows if z["nodeId"] not in down(u["id"])]
+        s["unitParamsFrom"] = {u["id"]: rng.choice(others or [z["nodeId"] for z in rows])}
 
 
 def add_calibration_zones(rng: random.Random, doc: dict, dense: bool = False) -> None:
@@ -277,8 +320,9 @@ def add_calibration_zones(rng: random.Random, doc: dict, dense: bool = False) ->
     drains to (a dense one without such a gauge gets one, put on a land unit's
     way down), a row for most gauges inside the network, most ticked, each
     with its own X1–X4 inside the bounds, now and then none (not fitted yet)
-    or one outside them. Under Fragmentation, in 30 % of networks with a gauge
-    inside, rows that are in the input but unused."""
+    or one outside them. Under the retired catchment mode (Fragmentation, which
+    runs Per unit since engine 1.109.0), in 30 % of networks with a gauge
+    inside, rows too."""
     s = doc["settings"]
     nodes = doc["model"]["nodes"]
     per_unit = (s.get("unitRain") or {}).get("mode") == "perUnit"
@@ -359,13 +403,13 @@ def add_unit_rain(rng: random.Random, doc: dict, start: dt.date, days: int, dens
     own gauge, its own CHIRPS, both or neither, and a MAP or none, a few far
     enough from the gauge MAP or the CHIRPS mean to be clamped; now and then
     a forecast tail the units reach through the catchment's rain. In 15 % of
-    those networks the setting is `catchment` instead, the units' records
-    and MAPs in the input but unused."""
+    those networks the setting is the retired `catchment` instead, which runs
+    Per unit all the same (engine >= 1.109.0, issue #658)."""
     if rng.random() >= (0.75 if dense else 0.35):
         return
     s = doc["settings"]
     series = doc["series"]
-    # Now and then the records and MAPs with the setting off: they change nothing (§2.4h).
+    # Now and then the retired catchment mode (Fragmentation): it runs Per unit (§2.4h, engine >= 1.109.0).
     ur: dict = {"mode": "perUnit" if rng.random() < 0.85 else "catchment"}
     if rng.random() < 0.65:
         ur["gaugeMapMm"] = round(rng.uniform(300, 1200))
@@ -565,7 +609,7 @@ def add_rain_stations(rng: random.Random, doc: dict, start: dt.date, days: int, 
         if rng.random() < 0.3:
             rs["catchmentMapMm"] = rng.choice([round(rng.uniform(300, 1500)), round(rng.uniform(300, 1500)), 20000])
             rs["catchmentMapSource"] = "synthetic"
-        # Fragmentation's catchment MAP is the farms' mean: give them MAPs, now and then not all of them.
+        # The catchment MAP is the farms' mean: give them MAPs, now and then not all of them.
         if not per_unit:
             every = rng.random() < 0.8
             for f in farms:

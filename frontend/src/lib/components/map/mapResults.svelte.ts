@@ -26,8 +26,8 @@ export interface MapResultsInput {
 	params: () => ReadonlyURLSearchParams;
 	/** The app's theme now (appTheme.ts): the fills are read again when it changes. */
 	dark: () => boolean;
-	/** The project's saved settings, for the calibration zones (issue #555); null while unknown. */
-	settings?: () => Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'unitRain' | 'gr4j'> | null;
+	/** The project's saved settings, for the calibration locations' groups (issues #555, #659); null while unknown. */
+	settings?: () => (Pick<ProjectSettings, 'calibrationZones' | 'calibrationSiteNodeId' | 'unitRain' | 'gr4j'> & Partial<Pick<ProjectSettings, 'calibrateAtOutlet' | 'calibrationRest' | 'unitParamsFrom'>>) | null;
 }
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -58,7 +58,7 @@ export class MapResults {
 	}
 	/** A measure is shown: a run to read and a measure picked (calibration zone is the settings', not a run's measure). */
 	readonly on: boolean = $derived(!!this.run && this.view !== 'kind' && this.view !== 'zone');
-	/** The calibration zones the next run applies (issue #555), from the model now and the saved settings; null = none. */
+	/** The calibration locations' groups the next run applies (issues #555, #659), from the model now and the saved settings; null = one parameter set. */
 	readonly zones: ZoneGroup[] | null = $derived(zoneGroups(this.#in().nodes(), this.#in().settings?.() ?? null));
 	/** Calibration zones are shown: picked, and some apply. No run is needed. */
 	readonly zoneOn: boolean = $derived(this.view === 'zone' && !!this.zones);

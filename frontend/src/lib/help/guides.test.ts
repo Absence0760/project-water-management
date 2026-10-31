@@ -353,8 +353,8 @@ describe('Settings paths named in help and in the app', () => {
 		expect(settingsPaths('`pick a gauge in Calibration → Calibration record`')).toEqual([{ page: 'calibration', steps: ['Calibration record'] }]);
 		expect(settingsPaths('keep them dry in Settings -> Rain gaps -> Flagged rain')).toEqual([{ page: 'settings', steps: ['Rain gaps', 'Flagged rain'] }]);
 		expect(settingsPaths('as Model settings → Rain gaps → Flagged rain says')).toEqual([{ page: 'settings', steps: ['Rain gaps', 'Flagged rain says'] }]);
-		expect(settingsPaths('in Model settings → Model selection for flow generation → The catchment’s rainfall station.')).toEqual([
-			{ page: 'settings', steps: ['Model selection for flow generation', 'The catchment’s rainfall station'] }
+		expect(settingsPaths('in Model settings → Flow generation → The catchment’s rainfall station.')).toEqual([
+			{ page: 'settings', steps: ['Flow generation', 'The catchment’s rainfall station'] }
 		]);
 		expect(settingsPaths('under ‘Model settings → Rain gaps’ there')).toEqual([{ page: 'settings', steps: ['Rain gaps'] }]);
 		// "Settings & calibration" is the old page's name, never the Calibration page's.
@@ -365,9 +365,9 @@ describe('Settings paths named in help and in the app', () => {
 		expect(pathProblem(['Fit the parameters', 'Fit automatically'], 'calibration')).toBeNull();
 		expect(pathProblem(['Rain gaps'], 'calibration')).toMatch(/no panel on Calibration/);
 		expect(pathProblem(['Plausibility checks lists the signatures'], 'calibration')).toBeNull();
-		expect(pathProblem(['Model selection for flow generation', 'Units without a station'])).toBeNull();
-		// Its name before issue #614 is no panel now.
-		expect(pathProblem(['Flow generation', 'Units without a station'])).toMatch(/no Settings panel/);
+		expect(pathProblem(['Flow generation', 'Units without a station'])).toBeNull();
+		// Its name from issue #614 to #658 is no panel now.
+		expect(pathProblem(['Model selection for flow generation', 'Units without a station'])).toMatch(/no Settings panel/);
 		expect(pathProblem(['Rain gaps', 'Nowhere in particular'])).toMatch(/isn’t shown under Rain gaps/);
 	});
 

@@ -145,14 +145,18 @@ describe('fitValidationRows', () => {
 		});
 		// Assigned since a fit without one: said from the settings alone.
 		expect(row(fitValidationRows(withForcing, null, withStation, null), 'Forcing changed since fit').a).toBe('yes (the catchment’s rainfall station changed)');
-		// Issue #553 round 3: a run under Per unit on a fit made under Fragmentation (its forcing records no unitRain), and the other way round.
+		// Issue #658: a fit made under Fragmentation (an engine before 1.109.0, its forcing recording no unitRain) is not fitted
+		// for Per unit, now the only method, whatever the settings hold; a Per unit fit (positive control) is.
 		const perUnit = { ...settings, unitRain: { mode: 'perUnit' } } as unknown as Partial<ProjectSettings>;
-		expect(row(fitValidationRows(withForcing, withForcing, perUnit, settings), 'Forcing changed since fit')).toMatchObject({
+		const fragFit = record({ ...withForcing, engineVersion: '1.108.0' });
+		const unitFit = record({ ...withForcing, engineVersion: '1.108.0', forcing: { ...withForcing.forcing!, unitRain: { mode: 'perUnit', gaugeMapMm: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [] } } });
+		expect(row(fitValidationRows(fragFit, unitFit, perUnit, perUnit), 'Forcing changed since fit')).toMatchObject({
 			a: 'yes (fitted under the other flow generation method)',
 			b: 'no'
 		});
-		const unitFit = record({ ...withForcing, forcing: { ...withForcing.forcing!, unitRain: { mode: 'perUnit', gaugeMapMm: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [] } } });
-		expect(row(fitValidationRows(unitFit, null, settings, null), 'Forcing changed since fit').a).toBe('yes (fitted under the other flow generation method)');
+		expect(row(fitValidationRows(fragFit, null, settings, null), 'Forcing changed since fit').a).toBe('yes (fitted under the other flow generation method)');
+		// From 1.109.0 a fit with no unitRain is a model with no land unit, still Per unit.
+		expect(row(fitValidationRows(record({ ...withForcing, engineVersion: '1.109.0' }), null, perUnit, null), 'Forcing changed since fit').a).toBe('no');
 	});
 });
 

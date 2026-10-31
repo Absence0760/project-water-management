@@ -33,6 +33,7 @@
 	import { forecastBand } from '#lib/components/forecast/forecast.js';
 	import { toDisplayUnit } from './results';
 	import { clipExclusions, exclusionKeyText, runExclusions, seriesSpan } from './exclusionShading';
+	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
 	import FlowUnitSwitch from './FlowUnitSwitch.svelte';
 	import GaugeCheckFlows from './GaugeCheckFlows.svelte';
@@ -41,7 +42,7 @@
 	import PlausibilityPanel from './PlausibilityPanel.svelte';
 	import { unitRainOf } from './unitRain';
 	import { stationsOf } from './stationRain';
-	import { isLowerAnchor } from './modelQuality';
+	import { isLowerAnchor, scoredGaugeIds } from './modelQuality';
 	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
@@ -89,13 +90,16 @@
 	const forecastFrom = $derived(summary.forecast?.from ?? null);
 	const band = $derived(forecastBand(forecastFrom));
 	/** The run's own settings, or the project's for a run that kept none: the calibration window it asked for. */
-	const windowSettings = $derived(run.settings ?? projectSettings);
+	// The run's headline location (issue #659): its window, exclusions, quality flags and fit record are the
+	// calibration statistics' (summary.calibration). An older run's are its top-level settings, as before.
+	const hs = $derived(runHeadlineSettings(run));
+	const windowSettings = $derived(hs ?? projectSettings);
 	/** The periods this run's calibration left out (its own settings snapshot): tinted on the hydrograph. */
-	const exclusions = $derived(runExclusions(run.settings, summary.calibration?.exclusions));
+	const exclusions = $derived(runExclusions(hs, summary.calibration?.exclusions));
 	/** How Fit automatically treats each flagged class, from the run's own settings snapshot: the flag key says so. Null: not said. */
-	const flagUse = $derived(run.settings ? resolveQualityFlags(run.settings.qualityFlags) : null);
+	const flagUse = $derived(hs ? resolveQualityFlags(hs.qualityFlags) : null);
 	/** The gauges inside the network whose records the run checks but doesn't score (issue #554): a hydrograph and FDC each, after the outlet's. */
-	const checkGauges = $derived(checksOnlyGauges(summary.plausibility?.gauges, refs, summary.calibration?.siteNodeId, nodeOrder));
+	const checkGauges = $derived(checksOnlyGauges(summary.plausibility?.gauges, refs, scoredGaugeIds(summary), nodeOrder));
 
 	const has = (key: string, nodeId: string | null = null) => refs.some((r) => r.key === key && r.nodeId === nodeId);
 	const get = (key: string, nodeId: string | null = null): Promise<DailySeries> =>
@@ -189,7 +193,7 @@
 	const flowsDrawn = $derived(hasObserved ? 'natural, simulated and observed' : 'natural and simulated (no observed record in this run)');
 	const siteSources = $derived(siteId ? observedSources(refs, siteId) : {});
 	const siteSeries = $derived(siteId ? hydrographSeries(site, conv, true, siteSources) : []);
-	const siteName = $derived(siteId ? (nodeNames.get(siteId) ?? 'the calibration site') : '');
+	const siteName = $derived(siteId ? (nodeNames.get(siteId) ?? 'the headline calibration location') : '');
 	// The run's calibration exclusions over the hydrograph's days, each with its reason in the key under it.
 	const excluded = $derived(clipExclusions(exclusions, seriesSpan(hydroSeries)));
 	const excludedKey = $derived(excluded.length ? { label: 'Excluded from calibration', items: excluded.map(exclusionKeyText) } : undefined);
@@ -322,13 +326,13 @@
 			{@render loadFailed("the observed flow's quality flags", qualityError)}
 		{/if}
 		{#if siteId}
-			<!-- The calibration site (engine ≥ 1.41.0): the pair the run's calibration statistics score. -->
+			<!-- The headline calibration location (engine ≥ 1.41.0 the calibration site; issue #659): the pair the run's calibration statistics score. -->
 			{#if siteError}
 				{@render loadFailed(`the flows at ${siteName}`, siteError)}
 			{:else if siteSeries.length}
 				<LineChart
-					title="Flow at {siteName}, the calibration site: simulated and observed"
-					toolsLabel="Calibration site hydrograph controls"
+					title="Flow at {siteName}, the headline calibration location: simulated and observed"
+					toolsLabel="Headline location hydrograph controls"
 					unit={flowUnit}
 					series={siteSeries}
 					logToggle
@@ -344,7 +348,7 @@
 					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Calibration record → Scored at, above)."
 				/>
 			{:else}
-				<div class="chart-ph" style:height="390px" role="status">Loading flows at the calibration site…</div>
+				<div class="chart-ph" style:height="390px" role="status">Loading flows at the headline calibration location…</div>
 			{/if}
 		{/if}
 	</section>
@@ -421,9 +425,9 @@
 					{flowUnit}
 					toolbar={unitToggle}
 				/>
-				{#if run.settings}
+				{#if hs}
 					<div class="provenance">
-						<FitProvenance headingId={CAL_SUBSECTIONS.provenance.id} headingLevel={4} record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, run.settings.fitRecord)} />
+						<FitProvenance headingId={CAL_SUBSECTIONS.provenance.id} headingLevel={4} record={hs.fitRecord} settings={hs} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} runForcing={runForcingOfSummary(run.summary)} observedOrigin={originOfFit(run.inputSeries, hs.fitRecord)} />
 					</div>
 				{/if}
 				{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}

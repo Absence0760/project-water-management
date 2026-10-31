@@ -1,13 +1,14 @@
-import { unitRainError, type ModelInput, type NetworkNode, type UnitRainSettings } from '../project';
+import type { ModelInput, NetworkNode } from '../project';
 import { cmpStr } from '../order';
 
 /** 1 mm over 1 km² = 1 000 m³. */
 export const MM_KM2_TO_M3 = 1000;
 
 /**
- * Explicit catchment area, else the sum of the farm areas (the workbook's
- * rFarmSpec_AreaTotal). Under settings.unitRain `perUnit` the sum of the land
- * units' areas, whatever the override (docs/model.md §2.4h).
+ * The sum of the land units' areas, which GR4J runs on (docs/model.md §2.4h:
+ * Per unit, the only method since engine 1.109.0, issue #658), whatever the
+ * override. A model with no land unit: the explicit catchment area, else the
+ * sum of the farm areas (the workbook's rFarmSpec_AreaTotal).
  */
 export function resolveCatchmentAreaKm2(cal: { catchmentAreaKm2: number | null }, input: ModelInput): number {
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): the land units' areas, which GR4J runs on.
@@ -33,14 +34,12 @@ export function requireCatchmentAreaKm2(cal: { catchmentAreaKm2: number | null }
 export const isLandUnit = (n: NetworkNode): boolean => n.kind === 'farm' && n.areaKm2 > 0;
 
 /**
- * Under settings.unitRain `perUnit` with at least one land unit, the sum of
- * the land units' areas (node-id order): the area the per-unit runoff is made
- * on, which replaces calibration.catchmentAreaKm2. Null otherwise.
+ * With at least one land unit, the sum of the land units' areas (node-id
+ * order): the area the per-unit runoff is made on, which replaces
+ * calibration.catchmentAreaKm2. Null without a land unit. Per unit is the only
+ * method since engine 1.109.0 (issue #658), so the settings play no part.
  */
-export function perUnitAreaKm2(input: Pick<ModelInput, 'model'> & { settings?: { unitRain?: unknown } | null }): number | null {
-	const u = input.settings?.unitRain as UnitRainSettings | null | undefined;
-	// As prepareRun reads it: an unusable setting is off.
-	if (u?.mode !== 'perUnit' || unitRainError(u) !== null) return null;
+export function perUnitAreaKm2(input: Pick<ModelInput, 'model'> & { settings?: unknown }): number | null {
 	const units = input.model.nodes.filter(isLandUnit).sort((a, b) => cmpStr(a.id, b.id));
 	if (!units.length) return null;
 	return units.reduce((s, n) => s + n.areaKm2, 0);

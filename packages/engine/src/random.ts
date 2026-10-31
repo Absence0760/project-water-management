@@ -8,6 +8,14 @@ export class Rng {
 	constructor(seed: number) {
 		this.a = seed >>> 0;
 	}
+	/**
+	 * The generator's whole state, a 32-bit integer: `new Rng(rng.state)` goes
+	 * on with exactly the numbers this one would draw next (a calibration fit
+	 * paused in one server job and resumed in the next, calibrate/dds.ts).
+	 */
+	get state(): number {
+		return this.a;
+	}
 	/** Uniform in [0, 1). */
 	next(): number {
 		this.a = (this.a + 0x6d2b79f5) >>> 0;

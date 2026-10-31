@@ -82,8 +82,10 @@ rows and columns don't break it.
   inverse of the "Upstream element" columns. `areaKm2` is the farm's total area
   (the Total area column). The High-/Low-MAP area and "External fragmentation"
   columns aren't read: the app has no Area, Hi/Lo MAP or Specific flow-share
-  method, and under Fragmentation it splits the flow by each unit's natural
-  MAR (issue #616, docs/model.md §2.5). A workbook that still has them imports
+  method (issue #616), and no Fragmentation either (issue #658): each unit
+  makes its own runoff (Per unit; the project stores no `unitRain`, which runs
+  Per unit's defaults) and the EWR is split by each unit's natural MAR
+  (docs/model.md §2.4h, §2.5). A workbook that still has them imports
   as before. The workbook's selected method gets a note saying it isn't used,
   unless it is Area; its "Selected fragmentation" column still goes to
   `expected.json` (`farmShares`, with `shareTolerance`) for the client

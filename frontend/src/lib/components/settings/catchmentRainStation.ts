@@ -1,7 +1,7 @@
-// Settings → Model selection for flow generation → The catchment's rainfall station (issue #612 follow-up,
+// Settings → Flow generation → The catchment's rainfall station (issue #612 follow-up,
 // docs/ui.md § Model settings, docs/model.md §2.4i): settings.rainStations.catchment, the station whose rain is the
-// catchment rain (what GR4J's one run reads under Fragmentation, and what demand and the dams read under either
-// method), with its patching priority. Same shape and same rule as a unit's assignment (#619's decision), so the
+// catchment rain (what demand and the dams read, and what a unit scaled from the gauge or with no rain of its own
+// runs GR4J on), with its patching priority. Same shape and same rule as a unit's assignment (#619's decision), so the
 // stored-default rules are flowGeneration.ts's: no assignment = the catchment rain series as before stations, the
 // default patching priority [CHIRPS] stored as none, the main station never in its own priority, scaling on and the
 // station itself as the correcting station stored as none. Pure.

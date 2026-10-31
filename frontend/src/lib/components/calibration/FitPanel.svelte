@@ -17,10 +17,11 @@
 		type CalibrationPrior,
 		calibrationSeriesKey,
 		gr4jOfParamSet,
-		zoneCalibrationSettings,
-		zoneFitPlan,
+		locationName,
 		type CalibrationFlowKind,
 		type Gr4jParams,
+		type LocationKey,
+		type NetworkNode,
 		type SeriesOrigin,
 		type ZoneFitPlanStep,
 		type CalibrationReport,
@@ -63,9 +64,9 @@
 	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
 	import { wr2012FitPeriods } from '#lib/calibration/wr2012Fit.js';
-	import { startFit, startStepwiseFit } from '#lib/calibration/runner.js';
+	import { startStepwiseFit } from '#lib/calibration/runner.js';
 	import { calibrationPriorOf, fitBoundsOf, priorKey, priorUseHint, priorWeightError, PRIOR_USE_LABEL, PRIOR_USES } from '#lib/calibration/prior.js';
-	import { stepRows } from '#lib/calibration/zones.js';
+	import { afterText, fitPlanOf, locationSettings, stepRows } from '#lib/calibration/zones.js';
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
@@ -77,6 +78,8 @@
 		x2Open,
 		settings,
 		model,
+		nodes = [],
+		outletHasRecord = true,
 		hasObserved,
 		seriesKinds = null,
 		calibrationFlowKind = null,
@@ -91,6 +94,10 @@
 		settings: () => ProjectSettings;
 		/** The network with unsaved edits, if any (else the saved one is used). */
 		model?: () => ProjectModel | undefined;
+		/** The network's nodes as the form edits them: the fit's plan (its locations in dependency order) is read from them and the form. */
+		nodes?: readonly NetworkNode[];
+		/** The outlet has a flow record of its own (no site): a ticked outlet without one can't be fitted. */
+		outletHasRecord?: boolean;
 		hasObserved: boolean;
 		/** Series kinds the project has (null = not known): decides which records can validate the fit. */
 		seriesKinds?: string[] | null;
@@ -98,10 +105,10 @@
 		calibrationFlowKind?: CalibrationFlowKind | null;
 		readonly: boolean;
 		/**
-		 * Writes the fit into the form, with its record (never saves). A stepwise fit (calibration zones, issue #555)
-		 * also gives each upstream zone's parameters and record, all applied as one.
+		 * Writes the fit into the form (never saves): every step's location (null the outlet's), its report, its fitted
+		 * parameters and its fit record, all applied as one (issue #659).
 		 */
-		onApply: (report: CalibrationReport, record: FitRecord, zones?: { nodeId: string; params: Gr4jParams; record: FitRecord }[]) => void;
+		onApply: (steps: { key: LocationKey; report: CalibrationReport; params: Gr4jParams; record: FitRecord }[]) => void;
 		/** The workspace's fit: choices, progress and result, kept across tab changes. */
 		session: FitSession;
 		/** The WR2012 MAR penalty's fields (a saved setting, Settings' form), beside the fit's own choices. */
@@ -138,7 +145,17 @@
 	// The regional prior (issue #622): a penalty, the search box or both; its weight only matters with the penalty.
 	const priorProblem = $derived(priorWeightError(session.priorUse, session.priorWeight));
 	const priorBox = $derived(session.priorUse === 'bounds' || session.priorUse === 'both');
-	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && !priorProblem && startsOk && !session.busy);
+	// The fit's plan, from the form and the network as they stand (issue #659): the ticked locations in dependency order,
+	// or why none can be fitted (none ticked, a group with no unit draining through it, a borrowing cycle), shown
+	// before any worker starts.
+	const planned = $derived(nodes.length ? fitPlanOf(settings(), nodes) : null);
+	// A ticked outlet with no record yet (a new project is created with the outlet ticked): its step can't be scored.
+	const outletMissing = $derived(!!planned?.plan?.some((st) => st.zoneNodeId === null) && !outletHasRecord);
+	const planError = $derived(
+		planned?.error ?? (outletMissing ? 'The outlet has no flow record yet, so its step can’t be fitted: add one on Data, or untick Calibrate here at the outlet.' : null)
+	);
+	const noneTicked = $derived(!!planned?.none);
+	const canStart = $derived(hasObserved && !planError && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && !priorProblem && startsOk && !session.busy);
 	const columns = $derived(report ? scoreColumns(report) : []);
 	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.19.0, CR-5); none on an older report.
 	const benchCols = $derived(benchmarkColumns(columns));
@@ -152,7 +169,9 @@
 	const pct = $derived(
 		progress ? Math.round((100 * ((stepOf ? stepOf.step - 1 : 0) + progressFraction(progress, session.runValidate, penalty, session.runStarts))) / (stepOf?.steps ?? 1)) : 0
 	);
-	const steps = $derived(session.steps && session.steps.length > 1 ? stepRows(session.steps) : null);
+	const steps = $derived(session.steps && session.steps.length > 1 ? stepRows(session.steps, nodes) : null);
+	// The headline's step, shown in full below the steps (the last of a one-step fit).
+	const headlineStep = $derived(session.steps?.find((x) => x.headline) ?? session.steps?.[session.steps.length - 1] ?? null);
 	// A report for another model than the form now shows can't be applied.
 
 	function start() {
@@ -162,8 +181,8 @@
 		const validationRecord = chosenRecord;
 		let server: Awaited<ReturnType<typeof api.runs.modelInput>>;
 		let input: ReturnType<typeof fitInput>;
-		// Calibration zones (issue #555): the stepwise fit's steps, upstream first; null = one fit, as before.
-		let plan: ZoneFitPlanStep[] | null = null;
+		// The calibration locations (issue #659): the stepwise fit's steps, in dependency order.
+		let plan: ZoneFitPlanStep[] = [];
 		// The regional prior per step, each built for its own target by the server (issue #622): by priorKey.
 		const priors: Record<string, CalibrationPrior> = {};
 		void session.start(
@@ -171,11 +190,15 @@
 				server = await api.runs.modelInput(projectId);
 				const form = settings();
 				input = fitInput(server, form, model?.());
-				// Refuses a zone, or a site, with no land unit (engine zoneFitError): the fit's error line says why.
-				plan = zoneFitPlan(input);
+				// Refuses no location ticked, a group with no unit draining through it, or a borrowing cycle (engine
+				// locationFitPlan); the card says so before Fit starts, and the fit's error line if the data changed since.
+				const p = fitPlanOf(input.settings as Partial<ProjectSettings>, input.model.nodes);
+				if (p.error !== null) throw new Error(p.error);
+				plan = p.plan;
 				if (priorUse !== 'off') {
-					for (const zone of plan ? plan.map((st) => st.zoneNodeId) : [null]) {
-						const got = await api.gr4jPrior.get(projectId, { zone });
+					for (const zone of plan.map((st) => st.zoneNodeId)) {
+						// The outlet's location is `zone=outlet` (issue #659); a gauge's, its node id.
+						const got = await api.gr4jPrior.get(projectId, { zone: zone ?? 'outlet' });
 						const prior = calibrationPriorOf(got, priorUse, priorWeight);
 						if (!prior) throw new Error(`The regional prior can’t be used${zone ? ' for a calibration zone' : ''}: ${got.problem ?? 'there is none'}`);
 						priors[priorKey(zone)] = prior;
@@ -200,18 +223,16 @@
 				session.runValidate = validate;
 				const f = free;
 				const req = { input, model: 'gr4j' as const, objective, bounds, budget, free: f, validate, seed, starts, validationRecord: validationRecord ?? undefined };
-				if (plan)
-					return startStepwiseFit(
-						req,
-						plan,
-						(p) => {
-							session.progress = p;
-							session.stepProgress = { step: p.step, steps: p.steps, zoneNodeId: p.zoneNodeId };
-						},
-						priors
-					);
-				const prior = priors[priorKey(null)];
-				return startFit(prior ? { ...req, prior } : req, (p) => (session.progress = p));
+				return startStepwiseFit(
+					req,
+					plan,
+					(p) => {
+						session.progress = p;
+						// One step: no "Step 1 of 1".
+						session.stepProgress = p.steps > 1 ? { step: p.step, steps: p.steps, zoneNodeId: p.zoneNodeId } : null;
+					},
+					priors
+				);
 			},
 			// The fitted record's source and given unit as the server loaded it (107_series_source.sql); undefined when it didn't say.
 			// At the calibration site: the outlet's record, or a gauge's (engine ≥ 1.41.0).
@@ -231,22 +252,23 @@
 	async function apply() {
 		const { report: r, ran } = session;
 		if (!r || !ran) return;
-		const et0Daily = ran.et0Series === undefined ? undefined : await et0DailyOfValues(ran.et0Series, fitScoredThrough(r));
-		// A stepwise fit (issue #555): each upstream zone's record is made on the settings its step read (its row's).
-		const zones: { nodeId: string; params: Gr4jParams; record: FitRecord }[] = [];
-		for (const st of session.steps ?? []) {
-			if (st.zoneNodeId === null) continue;
+		// Every step (issue #659): each location's record is made on the settings its step read (its own window,
+		// record and exclusions), the outlet's (key null) on the top level's.
+		const steps = session.steps ?? [];
+		const net = model?.()?.nodes ?? nodes;
+		const out: { key: LocationKey; report: CalibrationReport; params: Gr4jParams; record: FitRecord }[] = [];
+		for (const st of steps) {
 			const sr = st.report;
 			const e = ran.et0Series === undefined ? undefined : await et0DailyOfValues(ran.et0Series, fitScoredThrough(sr));
 			const origin = ran.origins?.[calibrationSeriesKey(sr.flowKind as CalibrationFlowKind, sr.siteNodeId ?? null)];
-			const record = fitRecordFor(sr, zoneCalibrationSettings(ran.settings, st.zoneNodeId), {
+			const record = fitRecordFor(sr, locationSettings(ran.settings, net, st.zoneNodeId), {
 				...ran,
 				...(e !== undefined ? { et0Daily: e } : {}),
 				...(origin !== undefined ? { observedOrigin: origin } : {})
 			});
-			zones.push({ nodeId: st.zoneNodeId, params: gr4jOfParamSet(sr.params), record });
+			out.push({ key: st.zoneNodeId, report: sr, params: gr4jOfParamSet(sr.params), record });
 		}
-		onApply(r, fitRecordFor(r, ran.settings, { ...ran, ...(et0Daily !== undefined ? { et0Daily } : {}) }), zones.length ? zones : undefined);
+		onApply(out);
 		session.applied = true;
 	}
 
@@ -356,10 +378,29 @@
 			{#if status === 'running' || status === 'loading'}
 				<button type="button" class="btn" onclick={() => session.cancel()} disabled={status === 'loading'}>Cancel</button>
 			{:else}
-				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart} aria-describedby="{uid}-runs">Fit automatically</button>
+				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart} aria-describedby={planError ? `${uid}-plan ${uid}-runs` : `${uid}-runs`}>Fit automatically</button>
 			{/if}
-			<span class="muted small" id="{uid}-runs" data-testid="fit-runs">{fmtNum(runs)} runs in all.</span>
+			<span class="muted small" id="{uid}-runs" data-testid="fit-runs"
+				>{planned?.plan && planned.plan.length > 1
+					? `${fmtNum(runs)} runs a location, ${fmtNum(runs * planned.plan.length)} in all over ${planned.plan.length} locations.`
+					: `${fmtNum(runs)} runs in all.`}</span
+			>
 		</div>
+		<!-- The plan (issue #659): why nothing can be fitted, before any worker starts, or the locations in the order they're fitted. -->
+		{#if planError}
+			<p class={noneTicked ? 'muted small' : 'alert alert-error small'} id="{uid}-plan" data-testid="fit-plan-error">
+				{#if noneTicked}No location is calibrated: tick Calibrate here at a location under <a href="#fld-cal-zones">Calibration locations</a> to fit it.
+					Until then every unit runs on the catchment parameters.{:else}{planError}{/if}
+			</p>
+		{:else if planned?.plan && planned.plan.length > 1}
+			<p class="small muted plan-h" id="{uid}-plan-h">Fits in this order:</p>
+			<ol class="plan small muted" data-testid="fit-plan" aria-labelledby="{uid}-plan-h">
+				{#each planned.plan as st (st.zoneNodeId ?? 'outlet')}
+					{@const after = afterText(st, nodes)}
+					<li data-testid="fit-plan-step">{st.name}{st.headline ? ' (headline)' : ''}{after ? `, ${after}` : ''}</li>
+				{/each}
+			</ol>
+		{/if}
 
 		{#if status === 'loading'}
 			<p class="muted small" role="status">Loading the project’s data…</p>
@@ -377,7 +418,7 @@
 					<span style:width="{pct}%"></span>
 				</div>
 				<p class="muted small" aria-live="polite" data-testid="fit-progress-line">
-					{#if stepOf}Step {stepOf.step} of {stepOf.steps} ({stepOf.zoneNodeId === null ? 'the calibration site' : 'an upstream zone'}) · {/if}{#if progress}{stageText(progress)}: {fmtNum(progress.evaluations)} of {fmtNum(progress.budget)} runs · best {fmtNum(progress.best, 3)}{:else}Starting…{/if}
+					{#if stepOf}Step {stepOf.step} of {stepOf.steps} ({locationName(nodes, stepOf.zoneNodeId)}) · {/if}{#if progress}{stageText(progress)}: {fmtNum(progress.evaluations)} of {fmtNum(progress.budget)} runs · best {fmtNum(progress.best, 3)}{:else}Starting…{/if}
 				</p>
 				<p class="muted small">You can open other tabs while it runs; the fit carries on and its result waits here.</p>
 			</div>
@@ -388,13 +429,13 @@
 		{#if report}
 			<div class="result">
 				{#if steps}
-					<!-- The stepwise fit of calibration zones (issue #555, model.md §2.10n): every step, upstream first, then the
-					     calibration site's own step in full below. Apply writes them all, as one. -->
+					<!-- The stepwise fit of the calibration locations (issue #659, model.md §2.10n): every step, in dependency
+					     order, then the headline's step in full below. Apply writes them all, as one. -->
 					<section class="steps" aria-labelledby="{uid}-steps-h" data-testid="fit-steps">
-						<h5 id="{uid}-steps-h">Steps, upstream first <HelpTip key="calibration-zones" label="About calibration zones" /></h5>
+						<h5 id="{uid}-steps-h">Steps, in dependency order <HelpTip key="calibration-zones" label="About calibration locations" /></h5>
 						<p class="small muted">
-							Each zone was fitted on its own gauge’s record with the zones above it fixed at their fitted parameters, then the calibration site
-							last. Apply writes every step’s parameters and fit record.
+							Each location was fitted on its own record with the locations it depends on (those its units drain through, or borrow from)
+							fixed at their fitted parameters. Apply writes every step’s parameters and fit record.
 						</p>
 						<div class="table-wrap">
 							<table class="data compact">
@@ -402,7 +443,8 @@
 								<thead>
 									<tr>
 										<th scope="col">Step</th>
-										<th scope="col">Scored at</th>
+										<th scope="col">Location</th>
+										<th scope="col">After</th>
 										<th scope="col" class="num">Land units</th>
 										<th scope="col">Fitted parameters</th>
 										<th scope="col" class="num">{objectiveName(report.objective)}, fit</th>
@@ -415,7 +457,8 @@
 										<tr data-testid="fit-step">
 											<th scope="row">{st.step}. {st.what}</th>
 											<td>{st.name}</td>
-											<td class="num">{st.units}</td>
+											<td>{st.after ?? '–'}</td>
+											<td class="num">{st.units}{st.borrowed ? ` (${st.borrowed} borrowed)` : ''}</td>
 											<td>{st.params}</td>
 											<td class="num">{fmtScore(st.fit)}</td>
 											<td class="num">{fmtScore(st.split)}</td>
@@ -425,7 +468,7 @@
 								</tbody>
 							</table>
 						</div>
-						{#each steps.slice(0, -1) as st (st.key)}
+						{#each steps.filter((x) => x.what !== 'Headline') as st (st.key)}
 							{#if st.notes.length}
 								<details class="step-notes">
 									<summary>Notes on step {st.step} ({st.name}): {st.notes.length}</summary>
@@ -435,7 +478,7 @@
 						{/each}
 					</section>
 				{/if}
-				<h5>{steps ? `Step ${steps.length}: the calibration site` : 'Result'}</h5>
+				<h5>{steps && headlineStep ? `Step ${steps.find((x) => x.what === 'Headline')?.step ?? steps.length}: ${headlineStep.name}, the headline` : 'Result'}</h5>
 				<p class="small muted">
 					{objectiveName(report.objective)} · {BOUNDS_LABEL[report.bounds].replace(' (default)', '')} bounds · seed {report.seed}{report.starts > 1 ? ` · ${report.starts} starts` : ''} · {fmtNum(report.evaluations)} runs{report.exclusions.length ? ` · ${report.exclusions.length} excluded period${report.exclusions.length === 1 ? '' : 's'}` : ''} · fitted against the simulated outflow
 				</p>
@@ -609,6 +652,14 @@
 </section>
 
 <style>
+	/* The fit's order (issue #659): a short numbered list under the button. */
+	.plan-h {
+		margin: 0.25rem 0 0;
+	}
+	.plan {
+		margin: 0;
+		padding-left: 1.25rem;
+	}
 	/* Its card (Settings' .sub-card) draws the frame. */
 	.fit {
 		margin: 0;

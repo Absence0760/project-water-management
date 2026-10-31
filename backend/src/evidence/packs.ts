@@ -212,7 +212,7 @@ async function packStatementFor(
 async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManifest): Promise<PackErratum[]> {
 	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : [])];
 	const { rows } = await db.query<{ id: string; engineVersion: string; fitEngineVersion: string | null }>(
-		`SELECT id, engine_version AS "engineVersion", inputs->'settings'->'fitRecord'->>'engineVersion' AS "fitEngineVersion" FROM model_run WHERE id = ANY($1::uuid[])`,
+		`SELECT id, engine_version AS "engineVersion", run_fit_engine_version(inputs, summary) AS "fitEngineVersion" FROM model_run WHERE id = ANY($1::uuid[])`,
 		[ids]
 	);
 	const identity = manifest.report.identity;
