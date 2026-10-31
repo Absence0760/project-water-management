@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DecisionEvent, JobMeta, LicenceTerms } from '#lib/api/types.js';
-import { earliestEventDate, eventHeading, licensedRunState, licensedTerms, licenceLine, nextEvents } from './licence';
+import { earliestEventDate, eventHeading, licensedRunFinished, licensedRunState, licensedTerms, licenceLine, nextEvents } from './licence';
 
 const terms = (v: number): LicenceTerms => ({
 	ops: [{ op: 'node.set', nodeId: 'n', field: 'damCapacityM3', value: v }],
@@ -127,5 +127,36 @@ describe('licensedRunState (293_scenario_run_job)', () => {
 		expect(licensedRunState({ ...inForce, licensedRunJob: null, lastRun: null })).toBeNull();
 		expect(licensedRunState({ ...inForce, licensedRunJob: undefined, lastRun: null })).toBeNull();
 		expect(licensedRunState({ ...inForce, licence: { inForce: false, from: 'event', eventId: 'e', appealPending: false }, licensedRunJob: job('queued'), lastRun: null })).toBeNull();
+	});
+});
+
+describe('licensedRunFinished (293): when the run list is read again', () => {
+	const job = (id: string, status: JobMeta['status']): JobMeta => ({
+		id,
+		kind: 'scenario_run',
+		status,
+		attempts: 1,
+		maxAttempts: 2,
+		runAfter: '2026-10-30T08:00:00Z',
+		createdAt: '2026-10-30T08:00:00Z',
+		startedAt: null,
+		finishedAt: null,
+		error: null,
+		createdBy: 'Assessor',
+		progress: null
+	});
+	const at = (j: JobMeta | null) => ({ licensedRunJob: j });
+
+	it('asks once the job read waiting, running or retrying reads done', () => {
+		for (const was of ['queued', 'running', 'failed'] as const) expect(licensedRunFinished(at(job('j', was)), at(job('j', 'done'))), was).toBe(true);
+	});
+
+	it('asks for nothing while it runs, when it failed for good, for another job, or one first seen done', () => {
+		expect(licensedRunFinished(at(job('j', 'queued')), at(job('j', 'running')))).toBe(false);
+		expect(licensedRunFinished(at(job('j', 'running')), at(job('j', 'dead')))).toBe(false);
+		expect(licensedRunFinished(at(job('j', 'done')), at(job('j', 'done')))).toBe(false);
+		expect(licensedRunFinished(at(job('a', 'queued')), at(job('b', 'done')))).toBe(false);
+		expect(licensedRunFinished(at(null), at(job('j', 'done')))).toBe(false);
+		expect(licensedRunFinished({}, at(job('j', 'done')))).toBe(false);
 	});
 });
