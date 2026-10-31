@@ -11543,10 +11543,11 @@ closing, and **Discard edits** puts it back. **Edits to record**
   separately). **Changes** with **Add a change** (and Undo, **Edit in the
   model tables**) is the first, the editor's main job; **Application
   details** (`application-details`) is the second: the proposer's units,
-  the applicant's statement and the rebase, each a `common/Fold.svelte` whose
+  the WULA reference, the applicant's statement and the rebase, each a `common/Fold.svelte` whose
   closed line says its value with the app's fold chevron before it ("Proposer: none
   ticked" or up to two names and "and N more", `scenarios/details.ts`
-  `proposerSummary`; "Statement: 0 of 3 answered"; "Based on Calibrated
+  `proposerSummary`; "WULA: Not given" or "WU/2026/0042 · 1 works applied
+  for" (`scenarios/wula.ts`); "Statement: 0 of 3 answered"; "Based on Calibrated
   baseline" with **Rebase…**), **Change** (an editor) or **Show** (a
   reader) at its end and **Hide** while open. Each starts closed, and again
   on another scenario. `e2e/tests/scenario-editor-layout.spec.ts` pins Add
@@ -11585,6 +11586,17 @@ closing, and **Discard edits** puts it back. **Edits to record**
   hydrological unit**, **Remove a hydrological unit**, **Move what a
   hydrological unit drains into**, **Insert a hydrological unit on a
   reach**, the picker **Hydrological unit**.)
+- **WULA reference** (`WulaReference.svelte`, every scenario, 294_wula_reference;
+  [scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)):
+  the water-use licence application's number and the works as applied for
+  (a ref and the works in words per row, **Add works**), edited by whoever
+  may change the scenario while it is a draft and frozen once submitted.
+  With works listed, each change in the list of changes has a **Models**
+  select (the works it models, or *No works named*); read only, a tagged
+  change shows "Models W1". The check's warnings against it show in an info
+  box under the list (`scenario-wula-warnings`), never blocking the run or
+  the submission. The workspace stays English, so these strings aren't
+  translated.
 - **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
   application's too; the **Statement** fold): the evidence report's fixed Appendix C prompts
   (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and

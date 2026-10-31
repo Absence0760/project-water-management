@@ -46,6 +46,7 @@ import type {
 	RunSummary,
 	ScenarioConflict,
 	ScenarioOp,
+	WulaReference,
 	SeasonalOutlook,
 	ClimateIndexId,
 	ClimateOutlook,
@@ -1150,6 +1151,11 @@ export interface Scenario {
 	 */
 	objectionAddress: string | null;
 	objectionClosingDate: string | null;
+	/**
+	 * The water-use licence application it models (294_wula_reference): its number (null: not given) and the works
+	 * as applied for, each a ref an op's `works` tag names. Set while a draft, frozen once submitted.
+	 */
+	wula: WulaReference;
 	baseRunId: string;
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -1454,6 +1460,12 @@ export interface ScenarioCheck {
 	 * contributor's name no unit). Absent from an older server; empty for a base from 220 on.
 	 */
 	baseEwrRules?: string[];
+	/**
+	 * The WULA reference's warnings (294, engine wulaWarnings): no number, no works, a proposal tied to no listed
+	 * works, a tag the list lacks, works no change models. Never a block. Every application's; a team scenario's
+	 * once it records a reference. Absent from an older server.
+	 */
+	wulaWarnings?: string[];
 }
 
 /** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */

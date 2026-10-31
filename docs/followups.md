@@ -2541,7 +2541,7 @@ headline location's group", engine-audit.md CZ1/CZ2). Slice D built:
   card; a rest unit "nearest upstream: G" (ui.md § Network, maps.md §
   Calibration zones on the map).
 - ✅ **Results, the report and the evidence pack**: the locations table, the
-  headline first, each unit's source named (`evidence-25`, each location's
+  headline first, each unit's source named (`evidence-26`, each location's
   period and every unit's source; evidence-pack.md § Calibration zones).
 - ✅ **The run comparison**: the outlet's tick, the headline, the rest rule
   and one line per unit's Parameters from; legacy snapshots read through the
@@ -6821,12 +6821,24 @@ Left, from the design and the persona review (§11), each with its trigger.
       built (CR-28, engine 1.19.0, `summary.calibration.wr2012Fit`) and the
       calibration record shows it. Fixed in the same change: the line now
       prints *Not assessed* only when `wr2012Fit` is null.
-- [ ] **Applied-for works against the modelled ones** (licensing
-      authority). Nothing ties the scenario's ops to what the WULA applies
-      for. Durable fix: a WULA reference field on the scenario (application
-      number, the works as applied for), printed on page 1 and Appendix A.2,
-      and a check that each proposal op names the works it models. Trigger:
-      before the pilot.
+- [x] **Applied-for works against the modelled ones** (licensing
+      authority). Built (294_wula_reference, report `evidence-26`): the
+      scenario's WULA reference (its number and the works as applied for,
+      each with a ref), frozen once submitted; each op names the works it
+      models (its `works` tag, hashed with the ops); the check warns of a
+      proposal tied to no listed works, a tag the list lacks and works no
+      change models; page 1 prints the number, the works' refs and the tie,
+      A.2 the works in words and each change's works
+      ([scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
+- [ ] **The WULA reference on the share link** (licensing authority, public
+      participation). A submitted application's share link
+      (`app_share_scenario`, 115/291) doesn't print the WULA's number or its
+      works, though a public reader matching the app's record to the
+      authority's notice would want the number. Durable fix: a new migration
+      adds `wula: { number, works }` to the link's `scenario` object for an
+      application, and the share page prints it (farmer-facing: its labels go
+      through the i18n agents). Trigger: once 291's change to
+      `app_share_scenario` has landed, before the pilot.
 - [ ] **Labelled mitigation alternatives** (licence applicant). The report
       shows one application; applicants must show the mitigation they
       weighed. Durable fix: an application may cite other scenario runs on

@@ -50,7 +50,7 @@ import { IN_APP_CHECK } from './questions.js';
 import { queueLicensedRun } from './licensedRun.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { AppealBody, CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
-import type { ScenarioOp } from '@water-management/engine';
+import { wulaWarnings, type ScenarioOp } from '@water-management/engine';
 
 /**
  * What the editor shows beside the ops: which applied, which don't, and how
@@ -84,7 +84,10 @@ async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) 
 	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario, check: checkWithout(checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), drop), checkError: null, unverifiedRunIds };
+		const check = checkWithout(checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), drop);
+		// The WULA reference's warnings (294, engine wulaWarnings): over the ops as the caller reads them, so their op numbers match the list's. Never a block.
+		const wulaLines = wulaWarnings(scenario.ops, check.classified, scenario.wula, { application: isApplication(s) });
+		return { scenario, check: { ...check, wulaWarnings: wulaLines }, checkError: null, unverifiedRunIds };
 	} catch (err) {
 		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
 		throw err;
@@ -352,6 +355,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				if (body.objectionAddress !== undefined) set.push(['objection_address', body.objectionAddress]);
 				if (body.objectionClosingDate !== undefined) set.push(['objection_closing_date', body.objectionClosingDate]);
 			}
+			// The WULA reference (294): any scenario's, frozen once it is submitted (scenario_wula_frozen).
+			if (body.wulaNumber !== undefined || body.wulaWorks !== undefined) {
+				if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario's WULA reference is frozen; withdraw it to change it`);
+				if (body.wulaNumber !== undefined) set.push(['wula_number', body.wulaNumber]);
+				if (body.wulaWorks !== undefined) set.push(['wula_works', JSON.stringify(body.wulaWorks)]);
+			}
 			if (ops !== undefined)
 				set.push(
 					['ops', JSON.stringify(ops)],
@@ -377,6 +386,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				monitoring: s.monitoring,
 				objectionAddress: s.objectionAddress,
 				objectionClosingDate: s.objectionClosingDate,
+				wulaNumber: s.wula.number,
+				wulaWorks: JSON.stringify(s.wula.works),
 				ops: s.opsSha256,
 				owned_node_ids: [...s.ownedNodeIds].sort().join(','),
 				status: s.status
@@ -389,6 +400,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				monitoring: body.monitoring,
 				objectionAddress: body.objectionAddress,
 				objectionClosingDate: body.objectionClosingDate,
+				wulaNumber: body.wulaNumber,
+				wulaWorks: body.wulaWorks !== undefined ? JSON.stringify(body.wulaWorks) : undefined,
 				ops: ops !== undefined ? opsSha256(ops) : undefined,
 				owned_node_ids: owned !== undefined ? [...owned].sort().join(',') : undefined,
 				status: body.status

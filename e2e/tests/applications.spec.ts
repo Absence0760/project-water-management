@@ -15,7 +15,8 @@
 // longer matches, docs/security.md § Run stamps) shows the assessor a
 // warning and can't be decided; a run with a baseline assumption shows the
 // applicant the published baseline's river beside nothing of theirs but the
-// EWR (issue #523 G9 (d)). Axe on
+// EWR (issue #523 G9 (d)); the applicant gives the WULA reference and ties
+// the change to its works, which the submission freezes (294_wula_reference). Axe on
 // both views, light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
@@ -24,6 +25,7 @@ import { plantDwsGaugeRecord, tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { openDetails } from '../support/scenarios.ts';
 
 const NAME = 'Raise the Upper farm dam';
 // Under each free text a share link prints (frontend scenarios/licence.ts PUBLIC_RECORD_HINT).
@@ -68,6 +70,20 @@ test('an applicant submits an application on the published baseline, and the ass
 	const changes = a.getByRole('list', { name: `Changes in ${NAME}` });
 	await expect(changes.getByRole('listitem')).toContainText('Proposal');
 
+	// The WULA it models (294_wula_reference): the check warns, never blocks, until the change names the works it models.
+	const warnings = a.getByTestId('scenario-wula-warnings');
+	await expect(warnings).toContainText('No WULA application number is given');
+	await openDetails(a, 'scenario-wula');
+	const wula = a.getByTestId('scenario-wula');
+	await wula.getByRole('button', { name: 'Add the WULA reference' }).click();
+	await wula.getByLabel('Application number').fill('WU/2026/0042');
+	await wula.getByRole('group', { name: 'Works 1' }).getByLabel('The works').fill('Raise the Upper farm dam to 200 000 m³');
+	await wula.getByRole('button', { name: 'Save the WULA reference' }).click();
+	await expect(wula.getByTestId('wula-summary')).toHaveText('WU/2026/0042 · 1 works applied for');
+	await expect(warnings).toContainText('op 1 (node.set): a proposal tied to none of the works the WULA applies for');
+	await changes.getByLabel('Works change 1 models').selectOption('W1');
+	await expect(warnings).toHaveCount(0);
+
 	// Run it: their own view of the results (the assessors compare it in full), then submit it.
 	await expect(a.getByTestId('applicant-results-empty')).toBeVisible();
 	await a.getByRole('button', { name: 'Run scenario' }).click();
@@ -96,6 +112,11 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
 	await expect(a.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
 	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	// Submitted, the WULA reference and the change's works are frozen with the changes.
+	await expect(wula.getByRole('button', { name: 'Edit the WULA reference' })).toHaveCount(0);
+	await expect(wula.getByTestId('wula-frozen')).toBeVisible();
+	await expect(changes.getByLabel('Works change 1 models')).toHaveCount(0);
+	await expect(changes.getByTestId('op-works')).toHaveText('Models W1');
 
 	// The assessor's Applications tab lists it; they open and decide it.
 	await page.goto(`/projects/${project.id}?tab=applications`);

@@ -650,7 +650,8 @@ describe('ewrRule.set: a site\'s Reserve rule table (engine ≥ 1.6.0, WP-3.7)',
 describe('opItems', () => {
 	it('describes each op against the input it meets, with its class, problem and notes, ids named', () => {
 		const b = base();
-		const again: ScenarioOp = { op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 200_000 };
+		// Tied to the WULA's works W1 (294_wula_reference): the item carries the tag.
+		const again: ScenarioOp = { op: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 200_000, works: 'W1' };
 		const gone: ScenarioOp = { op: 'node.remove', nodeId: LO };
 		const ops = [raise, again, gone];
 		const { items, other } = opItems(
@@ -667,10 +668,10 @@ describe('opItems', () => {
 			namesOf([b.model], ops)
 		);
 		expect(items).toEqual([
-			{ text: 'Upper farm: Dam capacity 150\u202f000 m³ → 180\u202f000 m³', cls: 'proposal', problem: null, notes: [] },
+			{ text: 'Upper farm: Dam capacity 150\u202f000 m³ → 180\u202f000 m³', cls: 'proposal', problem: null, notes: [], works: null },
 			// The second raise replaces the first one's value, not the base's.
-			{ text: 'Upper farm: Dam capacity 180\u202f000 m³ → 200\u202f000 m³', cls: 'proposal', problem: null, notes: ['re-linked “Outflow gauge”'] },
-			{ text: 'Remove “Lower farm”', cls: 'baseline', problem: 'node “Lower farm” not found', notes: [] }
+			{ text: 'Upper farm: Dam capacity 180\u202f000 m³ → 200\u202f000 m³', cls: 'proposal', problem: null, notes: ['re-linked “Outflow gauge”'], works: 'W1' },
+			{ text: 'Remove “Lower farm”', cls: 'baseline', problem: 'node “Lower farm” not found', notes: [], works: null }
 		]);
 		expect(other).toEqual(['stray']);
 	});
@@ -683,7 +684,7 @@ describe('opItems', () => {
 		// The server's check is the engine's applyScenario on the run's input.
 		const shown = (ops: ScenarioOp[]) => opItems(ops, null, applyScenario(trig, ops), trig, names).items;
 		const half = shown([rule]);
-		expect(half).toEqual([{ text: 'Upper farm: Supply rule dam, river when low → run of river', cls: null, problem: expect.stringMatching(/^"Upper farm": run of river has no dam/), notes: [] }]);
+		expect(half).toEqual([{ text: 'Upper farm: Supply rule dam, river when low → run of river', cls: null, problem: expect.stringMatching(/^"Upper farm": run of river has no dam/), notes: [], works: null }]);
 		const whole = shown([rule, dam]);
 		expect(whole.map((i) => i.problem)).toEqual([null, null]);
 		expect(whole[1]!.text).toBe('Upper farm: Dam capacity 150\u202f000 m³ → 0 m³');
@@ -694,7 +695,7 @@ describe('opItems', () => {
 
 	it('still lists the ops with no base and no check', () => {
 		const { items } = opItems([raise], null, null, null, namesOf([base().model]));
-		expect(items).toEqual([{ text: 'Upper farm: Dam capacity → 180\u202f000 m³', cls: null, problem: null, notes: [] }]);
+		expect(items).toEqual([{ text: 'Upper farm: Dam capacity → 180\u202f000 m³', cls: null, problem: null, notes: [], works: null }]);
 	});
 });
 

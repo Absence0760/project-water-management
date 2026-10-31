@@ -16,6 +16,7 @@ import type { AllocationLimitBound, DemandMonthlyUnit, DemandObjectCategory, Dem
 import type { CumulativeReport } from '../scenario/cumulative';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
+import type { WulaReference, WulaTie, WulaWork } from '../scenario/wula';
 import type { Band } from '../uncertainty/bands';
 import type { EnsembleSummary } from '../uncertainty/ensemble';
 import type { LicenceImpact } from '../views/licenceImpact';
@@ -218,6 +219,13 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * (licences never drive the baseline, issue #507). Counts only, so a reader
  * kept from the volumes reads it as it is (D3). A pack drafted before keeps
  * its document, without it.
+ * Also evidence-26 (294_wula_reference, docs/followups.md "Applied-for works against
+ * the modelled ones"): page 1 and Appendix A.2 print the water-use licence
+ * application the scenario models (`identity.application.wula`: its number and
+ * the works as applied for), and A.2 says which works each change models (the
+ * op's `works` tag), which proposals model none of them and which works no
+ * change models; questions ask about either. Null for a team scenario that
+ * records no reference. A pack drafted before keeps its document, without it.
  */
 export const EVIDENCE_REPORT_VERSION = 'evidence-26';
 
@@ -277,6 +285,8 @@ export interface EvidenceScenarioInput {
 	description: string;
 	/** The answers to Appendix C's fixed prompts (129_scenario_statement); '' = not given. Appendix C only (G13). */
 	prompts: ApplicantPrompts;
+	/** The WULA the scenario models (294_wula_reference), as the scenario holds it now; absent reads as none. */
+	wula?: WulaReference;
 	/** draft | submitted | withdrawn | decided; null once the scenario is deleted. */
 	status: string | null;
 	/** Display name of the scenario's owner; null when unknown. */
@@ -1182,6 +1192,17 @@ export interface EvidenceLicenceImpact {
 	result: { status: 'ok'; impact: LicenceImpact } | { status: 'unavailable'; reason: EvidenceLicenceImpactUnavailable; detail: string | null };
 }
 
+/**
+ * The WULA reference as page 1 prints it (evidence-26): the number, the works'
+ * refs, and how the run's recorded ops meet them (scenario/wula.ts wulaTie;
+ * 0-based op indices, as `ops[].index`). The works in words are A.2's
+ * (`appendix.wulaWorks`): page 1 holds none of the applicant's own words (G13).
+ */
+export interface EvidenceWula extends WulaTie {
+	number: string | null;
+	refs: string[];
+}
+
 export interface EvidenceReport {
 	version: typeof EVIDENCE_REPORT_VERSION;
 	mode: EvidenceMode;
@@ -1225,6 +1246,11 @@ export interface EvidenceReport {
 			assumptions: number;
 			/** An applicant's application or the team's scenario (evidence-17); absent from an older pack's document. */
 			origin?: 'team' | 'applicant';
+			/**
+			 * The water-use licence application it models (evidence-26, page 1 and A.2): null for a team scenario
+			 * that records no reference; absent from a pack drafted before evidence-26.
+			 */
+			wula?: EvidenceWula | null;
 		} | null;
 	};
 	checks: EvidenceCheck[];
@@ -1314,6 +1340,12 @@ export interface EvidenceReport {
 		baselineInputs: RunInputsSnapshot;
 		/** The full input diff, application against baseline (A.2). */
 		changes: InputChange[];
+		/**
+		 * The works as the WULA applies for them, in words (evidence-26, A.2; 294_wula_reference): what each
+		 * op's `works` tag names. Empty for baseline evidence and when none are listed; absent from a pack
+		 * drafted before evidence-26.
+		 */
+		wulaWorks?: WulaWork[];
 		/** Each input series of each run: kind, first day, days and SHA-256 (A.3). */
 		series: { run: 'baseline' | 'application'; kind: string; startDate: string; days: number; sha256: string | null }[];
 		history: EvidenceInput['history'];

@@ -6,3 +6,4 @@ export * from './combine';
 export * from './cumulative';
 export * from './cumulativeYield';
 export * from './climate';
+export * from './wula';
