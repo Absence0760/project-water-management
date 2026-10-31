@@ -18,4 +18,35 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+22 strings: 22 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### share.scenario
+
+Shared application: a page anyone with a link to one water-use licence application can open without signing in (an NGO, a catchment forum). Its effect on the river’s ecological reserve (the EWR) at each site against the published baseline, what it changes (a “baseline assumption” changes the shared model itself, not only the applicant’s own proposal), and the public comments. Never names another hydrological unit. Technical names inside {field}, {path} and {kind} stay as they are.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `fe74a332` | As applied for: the same changes as the application. |  |  |
+| `51cba6d7` | Conditions |  |  |
+| `beb39194` | The terms granted |  |  |
+| `8ec95a30` | After the decision |  |  |
+| `b04c1979` | Reference: {reference} | Keep: {reference} |  |
+| `32c65a9f` | The terms it was varied to |  |  |
+| `f4dd043a.one` | change |  |  |
+| `f4dd043a.other` | changes |  |  |
+| `18fc1a61` | Not shown: {changes} setting another hydrological unit’s registered volume. A share link shows no registered volume but the applicant’s own. | Keep: {changes} |  |
+| `048437e3` | Appeal lodged |  |  |
+| `4286b183` | Decision upheld |  |  |
+| `0881bebf` | Decision set aside |  |  |
+| `2ef997f8` | Decision varied |  |  |
+| `0792b90b` | Water Tribunal |  |  |
+| `e1b61bc8` | Court |  |  |
+| `437f95a8` | {event}: {forum}, {date} | Keep: {date}, {event}, {forum} |  |
+| `84b0f722` | {forum}, {date} | Keep: {date}, {forum} |  |
+| `fbc956ef` | The licence stands on the terms it was varied to on appeal ({where}). | Keep: {where} |  |
+| `939c4e0d` | The licence stands on the terms it was granted on. |  |  |
+| `0e819f46` | The decision was set aside on appeal ({where}): no licence stands. | Keep: {where} |  |
+| `c40321b5` | No licence was issued. |  |  |
+| `99074b37` | An appeal is lodged with the {forum}: nothing changes until it is decided. | Keep: {forum} |  |

@@ -7407,13 +7407,17 @@ events after a decision, append-only (228_decision_events). Left open:
       the evidence report's outcome words, through counsel as D14 was.
       Trigger: the pilot authority's first lapsed application, or counsel's D14
       review.
-- [ ] **Share links don't print the terms.** A decided application's
+- [x] **Share links don't print the terms.** A decided application's
       read-only share link (`app_share_scenario`, 115) shows the outcome and
       note but not the granted terms or the appeal events. (§ 4 of the
       evidence report now says a licence's run applied its licensed terms,
       `terms: 'licensed'`, `evidence-20`.) Durable fix: add the terms and
       events to the share projection. Trigger: a pilot reader of a share
-      link asking which terms were granted.
+      link asking which terms were granted. Done (291_share_licence_terms):
+      `app_share_scenario` adds the granted terms, the events (never who
+      recorded them) and the licence's standing, and the share page prints
+      them in The decision card; another unit's registered volume is left
+      out of every list of ops on a link, applied ops included.
 - [ ] **The licensed-terms run isn't made for the assessor.** An issued
       licence whose granted terms differ from the ops applied for, or one
       varied on appeal, counts in § 4's table only once someone runs its

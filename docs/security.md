@@ -1406,7 +1406,17 @@ differences:
   projection, D2), each op's class; for the base run and its newest run of
   the current ops, dates, engine version, EWR days not met and each EWR
   site's Reserve compliance (the outlet unnamed); and the public comments
-  with their authors' display names. Flow volumes, farm totals and site
+  with their authors' display names. Since 291, once decided: the licence's
+  granted terms (ops and hash, own nodes' names only, the conditions in
+  words, a public record as the decision note is), what followed the
+  decision (`decision_event`: kind, forum, date, reference, note, a
+  variation's terms; never who recorded it or when) and the licence's
+  standing (`app_scenario_licence`, its event by position, not id). Every
+  `allocation.set` on a unit that isn't the application's own is left out
+  of the ops and every terms' ops in `toShareScenario`
+  (`withheldAllocationOps`, as for a viewer kept from each farm's volume,
+  #523 G1), with a count: a registered volume never leaves through a
+  link. Flow volumes, farm totals and site
   deficits only at 5 or more farm holders (the k rule above). Never a farm's
   row or figures, a member list, an e-mail, an allocation or its holder
   (`user_display`), or a `parties` / `assessors` / `team` note.
@@ -1469,7 +1479,11 @@ differences:
   token; the string scan for other farms' names and ids, members, e-mails,
   the holder and non-public notes; unverified results hidden; the k rule),
   `share/links.test.ts` (the TypeScript allowlist against a row with
-  planted extras) and `routes.test.ts` (`POST /share/scenario` public).
+  planted extras, the terms and events included) and `routes.test.ts` (`POST /share/scenario` public);
+  `share/scenario-share-licence.db.test.ts` (291: none while submitted;
+  the granted terms, events and standing once decided; another unit's
+  volume, its name and who recorded an event never shown, each with the
+  assessor's read as control; `app_share_terms` refused to water_app).
 
 ## API keys
 

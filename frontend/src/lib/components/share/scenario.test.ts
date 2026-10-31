@@ -3,8 +3,8 @@
 // one; volumes only when the API sends them; the link's kind from the fragment.
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode, ScenarioOp } from '@water-management/engine';
-import type { SharedRun, ShareScenario } from '#lib/api/types.js';
-import { changeRows, daysLine, ewrRows, readShareKind, resultsNote, statusLine, volumeRows } from './scenario';
+import type { SharedDecisionEvent, SharedRun, SharedTerms, ShareScenario } from '#lib/api/types.js';
+import { changeRows, daysLine, eventHeading, ewrRows, licenceLine, readShareKind, resultsNote, statusLine, termsRows, volumeRows, withheldLine } from './scenario';
 
 const sp = (s: string | null | undefined) => s?.replace(/[\u00a0\u202f]/g, ' ');
 const OWN = 'n-own';
@@ -42,6 +42,10 @@ const scenario = (over: Partial<ShareScenario['scenario']> = {}): ShareScenario[
 	ownedNodeIds: [OWN],
 	opNames: [{ id: OWN, name: 'Rooikloof' }],
 	classified: null,
+	withheldOps: 0,
+	grantedTerms: null,
+	decisionEvents: [],
+	licence: null,
 	...over
 });
 
@@ -180,5 +184,67 @@ describe('volumeRows, statusLine, resultsNote', () => {
 		expect(resultsNote('ready')).toBeNull();
 		expect(resultsNote('none')).toMatch(/not been run/);
 		expect(resultsNote('unverified')).toMatch(/weren’t stored by the model run itself/);
+	});
+});
+
+// 291: the licence's terms and what followed the decision.
+const terms = (over: Partial<SharedTerms> = {}): SharedTerms => ({
+	ops: [{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 110000 }],
+	opsSha256: 'b'.repeat(64),
+	opNames: [{ id: OWN, name: 'Rooikloof' }],
+	conditions: '',
+	asApplied: false,
+	withheldOps: 0,
+	...over
+});
+const event = (over: Partial<SharedDecisionEvent> = {}): SharedDecisionEvent => ({
+	position: 1,
+	kind: 'lodged',
+	forum: 'water_tribunal',
+	eventDate: '2026-10-02',
+	reference: '',
+	note: '',
+	terms: null,
+	...over
+});
+
+describe('termsRows, withheldLine, eventHeading, licenceLine', () => {
+	it('words the granted terms as the changes are, naming only the applicant’s own unit', () => {
+		const rows = termsRows(terms({ ops: [...terms().ops, { op: 'node.set', nodeId: 'n-other', field: 'damCapacityM3', value: 2 }] }), [OWN]);
+		expect(rows.map((r) => [r.text, r.cls])).toEqual([
+			['Rooikloof: damCapacityM3 set to 110000', 'proposal'],
+			['another hydrological unit: damCapacityM3 set to 2', 'baseline']
+		]);
+	});
+
+	it('says how many registered volumes on another unit are left out, and nothing when none is', () => {
+		expect(withheldLine(0)).toBe('');
+		expect(sp(withheldLine(1))).toBe('Not shown: 1 change setting another hydrological unit’s registered volume. A share link shows no registered volume but the applicant’s own.');
+		expect(sp(withheldLine(2))).toMatch(/^Not shown: 2 changes setting/);
+	});
+
+	it('heads each event with what happened, where and when', () => {
+		expect(sp(eventHeading(event()))).toBe('Appeal lodged: Water Tribunal, 2 Oct 2026');
+		expect(sp(eventHeading(event({ kind: 'set_aside', forum: 'court' })))).toBe('Decision set aside: Court, 2 Oct 2026');
+		expect(eventHeading(event({ kind: 'upheld' }))).toMatch(/^Decision upheld: /);
+		expect(eventHeading(event({ kind: 'varied' }))).toMatch(/^Decision varied: /);
+	});
+
+	it('says where the licence stands: granted terms, varied, set aside, none; and an open appeal', () => {
+		expect(licenceLine(scenario())).toBe('');
+		expect(licenceLine(scenario({ licence: { inForce: true, from: 'decision', eventPosition: null, appealPending: false } }))).toBe('The licence stands on the terms it was granted on.');
+		expect(licenceLine(scenario({ licence: { inForce: false, from: 'decision', eventPosition: null, appealPending: false } }))).toBe('No licence was issued.');
+		const lodged = event();
+		expect(licenceLine(scenario({ decisionEvents: [lodged], licence: { inForce: true, from: 'decision', eventPosition: null, appealPending: true } }))).toBe(
+			'The licence stands on the terms it was granted on. An appeal is lodged with the Water Tribunal: nothing changes until it is decided.'
+		);
+		const varied = event({ position: 2, kind: 'varied', eventDate: '2026-10-08', terms: terms() });
+		expect(sp(licenceLine(scenario({ decisionEvents: [lodged, varied], licence: { inForce: true, from: 'event', eventPosition: 2, appealPending: false } })))).toBe(
+			'The licence stands on the terms it was varied to on appeal (Water Tribunal, 8 Oct 2026).'
+		);
+		const aside = event({ position: 2, kind: 'set_aside', eventDate: '2026-10-05' });
+		expect(sp(licenceLine(scenario({ decisionEvents: [lodged, aside], licence: { inForce: false, from: 'event', eventPosition: 2, appealPending: false } })))).toBe(
+			'The decision was set aside on appeal (Water Tribunal, 5 Oct 2026): no licence stands.'
+		);
 	});
 });

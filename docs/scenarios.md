@@ -1815,6 +1815,11 @@ links](./security.md#share-links).
   scenario's ops name every farm, so it is refused), the EWR at each site on the
   baseline beside the application, and the catchment's totals only at five
   or more farm holders. Results show only when both runs' stamps verify.
+  Once decided it also prints where the licence stands, the terms it was
+  granted on with their conditions, and each appeal event after the
+  decision with a variation's terms (291; never who recorded an event). A
+  change that sets another unit's registered volume is left out of every
+  list of changes there, with a line saying how many.
   The link is dead while the application is withdrawn or back to draft.
 - **Comments.** A scenario's notes have three audiences beside `team`:
   `assessors`, `parties` (the assessors and the applicant's party) and

@@ -3571,11 +3571,24 @@ never a farm's row, name or id.
   its first forecast day (190): the monthly means and the last 365 days are
   the record's, never forecast rain read as the river's flow.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
-  `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
+  `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified, withheldOps, grantedTerms, decisionEvents, licence }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
   or back to draft: `404`, until it is submitted again). `opNames` names the
   scenario's own nodes only; `classified` is each op's class (`proposal` |
-  `baseline`) as the shown run applied it (`null` without one). `base` and
+  `baseline`) as the shown run applied it (`null` without one). An
+  `allocation.set` on a unit that isn't the application's own (it carries a
+  registered volume) is left out of `ops`, `classified` and every terms'
+  `ops`, as for a viewer kept from each farm's volume (#523 G1), with
+  `withheldOps` saying how many. A decided application (291, issue #523
+  G3/G4) adds `grantedTerms` with a licence issued
+  (`{ ops, opsSha256, opNames, conditions, asApplied, withheldOps }`, own
+  nodes' names only; else `null`), `decisionEvents` (what followed the
+  decision, oldest first, the newest 100:
+  `{ position, kind: 'lodged' | 'upheld' | 'set_aside' | 'varied', forum: 'water_tribunal' | 'court', eventDate, reference, note, terms }`,
+  `terms` in `grantedTerms`' shape on `varied` only; never who recorded it)
+  and `licence` (`{ inForce, from: 'decision' | 'event', eventPosition, appealPending }`,
+  `app_scenario_licence`'s standing, the event by its position; `null` until
+  decided with an outcome). A submitted one has `null`, `[]` and `null`. `base` and
   `run` are the base run and the scenario's newest run of its current ops
   whose stamp verifies (of its newest five),
   each `{ engineVersion, startDate, endDate, createdAt, ewrDaysNotMet, ewrFractionDaysNotMet, volumes, ewrSites }`:
