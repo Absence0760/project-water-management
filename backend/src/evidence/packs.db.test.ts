@@ -1971,3 +1971,78 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 		}
 	});
 });
+
+describe.skipIf(!minio)('an applicant’s application pack citing the applicant’s own alternative, whose ops their mask changes (bundle-3, evidence-26)', () => {
+	let applicant: User;
+	let base: string;
+	let appRunId: string;
+	let altRunId: string;
+	const lower = node('Lower', null);
+
+	beforeAll(async () => {
+		applicant = await signUp('PkMaskApplicant');
+		expect((await owner.call('POST', `${at()}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		expect((await owner.call('PUT', `${at()}/farmers/${applicant.id}`, { nodeIds: [farmId] })).status).toBe(200);
+		// A second farm the applicant doesn't own: the mask hides it ("Farm 1"), and its name with it.
+		const model = (await owner.call('GET', `${at()}/model`)).body;
+		const outlet = model.nodes.find((n: { kind: string }) => n.kind === 'gauge');
+		const farm = { ...lower, id: crypto.randomUUID(), kind: 'farm', downstreamNodeId: outlet.id, sortOrder: 2 };
+		expect((await owner.call('PUT', `${at()}/model`, { ...model, nodes: [...model.nodes, farm] })).status).toBe(200);
+		base = await newRun('Baseline with Lower');
+		expect((await owner.call('POST', `${at()}/evidence`, { runId: base, reason: 'Calibrated baseline, with Lower' })).status).toBe(201);
+		const cited = await ensemble(base, { request: declaredRuleRequest(RULE) });
+		expect((await owner.call('POST', `${at()}/publication`, { runId: base })).status).toBe(201);
+		const scenario = async (name: string, ops: unknown[]) => {
+			const created = await applicant.call('POST', `${at()}/scenarios`, { name, baseRunId: base, ops });
+			expect(created.status, JSON.stringify(created.body)).toBe(201);
+			const sid = created.body.scenario.id as string;
+			const ran = await applicant.call('POST', `${at()}/scenarios/${sid}/runs`, {});
+			expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+			return { sid, runId: ran.body.run.id as string };
+		};
+		const app = await scenario('Upper dam, applied for', [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 300_000 }]);
+		// The alternative renames the applicant's own farm to the hidden farm's real name: under the mask (what the
+		// applicant's ops always meet) it applies, and the hidden one becomes "Lower (2)"; without it, a duplicate name.
+		const alt = await scenario('Upper dam, smaller', [
+			{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 150_000 },
+			{ op: 'node.set', nodeId: farmId, field: 'name', value: 'Lower' }
+		]);
+		appRunId = app.runId;
+		altRunId = alt.runId;
+		const cite = await applicant.call('PUT', `${at()}/scenarios/${app.sid}/alternatives`, { alternatives: [{ runId: alt.runId, label: 'Smaller dam' }] });
+		expect(cite.status, JSON.stringify(cite.body)).toBe(200);
+		expect((await applicant.call('POST', `${at()}/scenarios/${app.sid}/submit`, {})).status).toBe(200);
+		const baseEnsemble = (await owner.call('GET', `${runPath(base)}/uncertainty/${cited}`)).body.ensemble;
+		await ensemble(app.runId, { baselineId: cited }, { options: baseEnsemble.options, header: baseEnsemble.result.header, members: baseEnsemble.result.members });
+	}, 600_000);
+
+	it('the alternative’s run is the masked one (the hidden farm renamed, not a refused op)', async () => {
+		const [row] = await asOwner(`SELECT inputs->'model'->'nodes' AS nodes FROM model_run WHERE id = $1`, [altRunId]);
+		expect((row!.nodes as { name: string }[]).map((n) => n.name).sort()).toEqual(['Lower', 'Lower (2)', 'Outlet']);
+	});
+
+	it('issues it, and the bundle reproduces the alternative offline and on the server', async () => {
+		vi.stubEnv('REPORT_RENDERER', 'sqs');
+		vi.stubEnv('RENDER_REQUESTS_QUEUE_URL', 'memory://render-requests');
+		try {
+			const p = await draft(editor, appRunId);
+			const [m] = await asOwner('SELECT manifest FROM evidence_pack WHERE id = $1', [p.id]);
+			expect((m!.manifest as PackManifest).report.alternatives!.map((a) => [a.runId, a.notAssessed])).toEqual([[altRunId, null]]);
+			await sign(editor, p.id);
+			const res = await issue(editor, p.id);
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			const { bytes } = await downloadBundle(editor, p.id);
+			const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
+			const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
+			expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
+			expect(checked.checks.map((k) => k.id)).toEqual(expect.arrayContaining(['alternative:1', 'reproduce:alternative:1']));
+			await runTick({ feeds: false, reports: false, alerts: false });
+			await runTick({ feeds: false, reports: false, alerts: false });
+			const { reproduction } = (await editor.call('GET', packPath(p.id))).body;
+			expect(reproduction.status, JSON.stringify(reproduction.checks.filter((c: { ok: boolean }) => !c.ok))).toBe('reproduced');
+		} finally {
+			vi.unstubAllEnvs();
+			sent.length = 0;
+		}
+	}, 300_000);
+});

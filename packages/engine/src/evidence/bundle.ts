@@ -79,6 +79,7 @@ import { checkFutureYield, futureFactorTableError } from './future';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
 import { ALTERNATIVE_SUMMARY_ROWS, alternativeSummaryCell } from './report';
 import { applyScenario } from '../scenario/overrides';
+import { applicationMask } from '../scenario/applicant';
 import type { RunSummary } from '../project';
 import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
 import type { ScenarioOp } from '../scenario/ops';
@@ -1249,7 +1250,8 @@ const cellRun = (c: { change: { run: number | null } | null } | undefined) => c?
  * alternatives' runs; each one's run, engine and ops hash are the manifest's,
  * its ops are the ones it records and hash to it, it ran on the pack's
  * baseline, and its input is the baseline's with those ops applied (its
- * settings, model and each series); its stored results give the digest
+ * settings, model and each series; an applicant's under the mask its own
+ * units give it, as its run applied them); its stored results give the digest
  * bundle.json names; and every page-1 cell that reads its run's summary
  * (alternativeSummaryCell) is what its stored summary gives. With the re-run,
  * `reproduce:alternative:<n>` re-runs its input and compares its digest. A
@@ -1325,7 +1327,12 @@ async function checkAlternatives(
 		}
 		if (!baseline?.input) problems.push("its input can't be checked: the baseline's inputs failed a check above");
 		else if (ops) {
-			const applied = applyScenario(baseline.input, ops);
+			// As its run was made (backend checkScenario): an applicant's ops under the mask their own units give it, a
+			// team scenario's without. An alternative is the citing application's origin (298's guard), which the
+			// manifest records; its own units are in its run's record.
+			const owned = Array.isArray((sc as { ownedNodeIds?: unknown }).ownedNodeIds) ? ((sc as { ownedNodeIds: unknown[] }).ownedNodeIds.filter((x) => typeof x === 'string') as string[]) : [];
+			const masked = identity.application?.origin === 'applicant';
+			const applied = applyScenario(baseline.input, ops, masked ? { mask: applicationMask(baseline.input, owned) } : {});
 			if (applied.problems.length) problems.push(`its ops don't apply to the baseline (${applied.problems.slice(0, 3).join('; ')})`);
 			else {
 				if (!sameJson(applied.input.settings, snapshot.settings)) problems.push(`its settings aren't the baseline's with its ops applied (${differingPaths(applied.input.settings, snapshot.settings).join(', ')})`);
