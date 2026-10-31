@@ -41,6 +41,19 @@
 // background's. A bundle-1 or bundle-2 bundle is checked as it was, and says
 // the combined row isn't included.
 //
+// bundle-3 also carries the mitigation alternatives page 1 sets beside the
+// application (evidence-26, 298_scenario_alternatives), each assessed one as
+// a run of its own:
+//
+//   runs/alternative-<n>/input.json     its stored input (the baseline's with its recorded ops)
+//   runs/alternative-<n>/results.json   its stored results
+//
+// <n> its place among the manifest's alternatives (1 …), and `alternatives`
+// in bundle.json. The check ties each to the manifest (its run, engine and
+// ops hash; its input the baseline's with its ops applied; its page-1 cells
+// that read the run's summary, alternativeSummaryCell: `alternative:<n>`)
+// and re-runs it (`reproduce:alternative:<n>`).
+//
 // What ties it together: manifest.json hashes to the pack's manifest hash
 // (which the public verify lookup returns); the manifest names both runs and
 // lists every input series' hash, the baseline's settings and model, the
@@ -64,6 +77,9 @@ import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
 import { checkDamObservations, checkDamObservationsBySource, EVIDENCE_OBSERVED_SOURCES, EVIDENCE_OBSERVED_SOURCE_LABEL, isDamObservationsV1, DAM_OBSERVATIONS_VERSION } from './damObservations';
 import { checkFutureYield, futureFactorTableError } from './future';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
+import { ALTERNATIVE_SUMMARY_ROWS, alternativeSummaryCell } from './report';
+import { applyScenario } from '../scenario/overrides';
+import type { RunSummary } from '../project';
 import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
 import type { ScenarioOp } from '../scenario/ops';
 import type { ModelOutput } from '../project';
@@ -126,6 +142,21 @@ export interface PackBundleInput {
 	application: PackBundleRun | null;
 	/** The cumulative assessment § 4's combined row reads (bundle-3); required when the manifest cites one, absent or null otherwise. */
 	assessment?: PackBundleAssessment | null;
+	/**
+	 * The runs of the alternatives page 1 assesses (bundle-3, evidence-26): one per manifest alternative whose
+	 * column is assessed (`notAssessed` null), in the manifest's order. Absent or [] when it cites none.
+	 */
+	alternatives?: PackBundleRun[] | null;
+}
+
+/** An alternative's run in the bundle: `runs/alternative-<n>/` (bundle-3), n its place among the manifest's alternatives, from 1. */
+export const bundleAlternativeDir = (n: number) => `runs/alternative-${n}`;
+
+/** The manifest's alternatives whose column is assessed, with their place (from 1): the ones the bundle carries a run of. */
+export function assessedAlternatives(m: PackManifest): { n: number; runId: string; engineVersion: string; opsSha256: string; ops: ScenarioOp[]; label: string }[] {
+	return (m.report.alternatives ?? []).flatMap((x, i) =>
+		x.notAssessed ? [] : [{ n: i + 1, runId: x.runId, engineVersion: x.engineVersion, opsSha256: x.opsSha256, ops: x.ops.map((o) => o.op), label: x.label }]
+	);
 }
 
 /** The bundle's assessment entries (bundle-3). */
@@ -174,6 +205,11 @@ export interface PackBundleIndex {
 	 * background run; null when the manifest cites none. Absent from a bundle-1 or bundle-2 bundle.
 	 */
 	assessment?: { id: string; engineVersion: string | null; backgroundRunId: string | null } | null;
+	/**
+	 * bundle-3: each assessed alternative's run (its place `n` among the manifest's alternatives, from 1), its
+	 * engine and results digest; [] when the report cites none. Absent from an older bundle.
+	 */
+	alternatives?: { n: number; runId: string; engineVersion: string; resultsSha256: string }[];
 	/** Every other entry of the zip, by name, with its SHA-256. */
 	files: Record<string, string>;
 }
@@ -356,6 +392,11 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 						: "It also classifies the observed wet days again (wet, dry, inconclusive) from the dates the manifest freezes, over the baseline run's period it records: each source under its own rule (`observations:s2`, `observations:wofs`) and the dates either saw together (`observations:days`). Those dates are Sentinel-2 (contains modified Copernicus Sentinel data, processed by Digital Earth Africa) and Digital Earth Africa WOfS (CC BY 4.0), summed inside each dam's outline; the scenes themselves aren't in the bundle."
 				]
 			: []),
+		...(index.alternatives?.length
+			? [
+					`It also checks each mitigation alternative page 1 sets beside the application (${index.alternatives.map((x) => `alternative ${x.n}, run \`${x.runId}\``).join('; ')}): its run, engine and ops hash are the manifest's, its input is the baseline's with its recorded ops, and its page-1 cells that read its run's summary (the Reserve, the EWR days and shortfall, the no-flow days, the outflow) are its stored results' (\`alternative:<n>\`); then re-runs it and compares its results digest (\`reproduce:alternative:<n>\`).`
+				]
+			: []),
 		...(index.assessment
 			? [
 					`It also runs § 4's combined row again from the cumulative assessment it cites (\`${index.assessment.id}\`, engine ${index.assessment.engineVersion ?? 'unknown'}): the baseline, each application alone (an applicant's ops under the mask its own units give it) and all of them together (\`combineScenarios\`), and checks every row of the assessment's stored report, which the manifest's combined section is read from (\`assessment\`, \`reproduce:combined\`); each dam the applications touch, its firm yield and assurance of supply on every run (\`reproduce:dams\`, when the assessment has them)${index.assessment.backgroundRunId ? "; and the same again on its background at full allocation, from the background run's stored input (`inputs:background`, `reproduce:background`)" : ''}.`
@@ -374,6 +415,9 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'- `runs/<run>/input.json`: the run\'s stored inputs: settings, model, and each series\' first day, days and SHA-256.',
 		'- `runs/<run>/results.json`: the run\'s stored summary and the SHA-256 of each daily output. The results digest is the SHA-256 of its canonical text (engine `runResultsText`).',
 		'- `series/<sha256>.csv`: each input series\' values, `date,value`, a missing day empty; named by the SHA-256 of the values\' JSON array.',
+		...(index.alternatives?.length
+			? ['- `runs/alternative-<n>/input.json`, `runs/alternative-<n>/results.json`: each assessed alternative\'s stored inputs and results, as a run\'s above (<n> its place among page 1\'s alternatives).']
+			: []),
 		...(index.assessment
 			? [
 					"- `assessment/assessment.json`: the cumulative assessment § 4's combined row reads: its members in the order it ran them (each one's ops, their SHA-256, its origin and an applicant's own units), its engine, its baseline and background runs.",
@@ -405,16 +449,14 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 	const put = (name: string, text: string) => files.set(name, enc.encode(text));
 	put('manifest.json', manifestText);
 
-	const runs: PackBundleIndex['runs'] = { baseline: null, application: null };
-	for (const name of RUNS) {
-		const run = input[name];
-		if (!run) continue;
-		put(`runs/${name}/input.json`, canonicalJson(run.inputs));
+	/** A run's input, its series and its results under `dir`; its results digest. */
+	const putRun = async (dir: string, what: string, run: PackBundleRun) => {
+		put(`${dir}/input.json`, canonicalJson(run.inputs));
 		for (const [kind, snap] of Object.entries(run.inputs.series ?? {})) {
 			if (!snap) continue;
 			const values = run.values[kind];
-			if (!values || !snap.valuesSha256) throw new Error(`the ${name} run's ${kind} series has no stored values`);
-			if ((await hash(seriesDigest(values))) !== snap.valuesSha256) throw new Error(`the ${name} run's ${kind} series fails its SHA-256 check`);
+			if (!values || !snap.valuesSha256) throw new Error(`the ${what} run's ${kind} series has no stored values`);
+			if ((await hash(seriesDigest(values))) !== snap.valuesSha256) throw new Error(`the ${what} run's ${kind} series fails its SHA-256 check`);
 			put(bundleSeriesPath(snap.valuesSha256), seriesCsv(snap.startDate, values));
 		}
 		const digest = await runResultsDigest(run, hash);
@@ -426,8 +468,24 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 			summary: asStored(run.summary),
 			series: digest.series
 		};
-		put(`runs/${name}/results.json`, canonicalJson(results));
-		runs[name] = { runId: run.runId, engineVersion: run.engineVersion, resultsSha256: digest.sha256 };
+		put(`${dir}/results.json`, canonicalJson(results));
+		return digest.sha256;
+	};
+	const runs: PackBundleIndex['runs'] = { baseline: null, application: null };
+	for (const name of RUNS) {
+		const run = input[name];
+		if (!run) continue;
+		runs[name] = { runId: run.runId, engineVersion: run.engineVersion, resultsSha256: await putRun(`runs/${name}`, name, run) };
+	}
+	// The assessed alternatives' runs (bundle-3, evidence-26): exactly the manifest's, in its order.
+	const wanted = assessedAlternatives(m);
+	const given = input.alternatives ?? [];
+	if (given.length !== wanted.length || given.some((r, i) => r.runId !== wanted[i]!.runId))
+		throw new Error(`the bundle was given alternatives ${given.map((r) => r.runId).join(', ') || 'none'}; the manifest assesses ${wanted.map((w) => w.runId).join(', ') || 'none'}`);
+	const alternatives: NonNullable<PackBundleIndex['alternatives']> = [];
+	for (const [i, run] of given.entries()) {
+		const n = wanted[i]!.n;
+		alternatives.push({ n, runId: run.runId, engineVersion: run.engineVersion, resultsSha256: await putRun(bundleAlternativeDir(n), `alternative ${n}`, run) });
 	}
 	if (input.application?.inputs.scenario) put('scenario.json', canonicalJson(input.application.inputs.scenario));
 
@@ -468,7 +526,8 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 		engine: { version: m.engine.version, build: m.engine.build },
 		runs,
 		headline: input.application && pair ? { baselineResultsSha256: pair.baselineResultsSha256, applicationResultsSha256: pair.applicationResultsSha256 } : null,
-		assessment: a ? { id: a.id, engineVersion: a.engineVersion, backgroundRunId: a.backgroundRunId } : null
+		assessment: a ? { id: a.id, engineVersion: a.engineVersion, backgroundRunId: a.backgroundRunId } : null,
+		alternatives
 	} as const;
 	put('README.md', readme(m, head, `pack-${head.pack.shortCode}.zip`, bundleRainCredits(input)));
 	const names = [...files.keys()].sort();
@@ -517,7 +576,7 @@ export interface BundleCheckResult {
  * A re-run the server runs as its own job (bundleParts.ts, pack_reproduce_part): one run, the headline pair,
  * § 8's pairs, the combined row's assessment (its dams' firm yields aside), or its background.
  */
-export type BundlePartKey = 'run:baseline' | 'run:application' | 'headline' | 'climate' | 'combined' | 'background';
+export type BundlePartKey = 'run:baseline' | 'run:application' | `alternative:${number}` | 'headline' | 'climate' | 'combined' | 'background';
 
 /** What the combined row's assessment looks like once checked, for the server's dam parts (bundleParts.ts). */
 export interface BundleAssessmentContext {
@@ -859,38 +918,14 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 				add(`reproduce:${r}`, false, 'not re-run: its inputs or stored results failed a check above');
 				continue;
 			}
-			let fresh;
-			try {
-				fresh = runModelChecked(structuredClone(input));
-			} catch (e) {
-				add(`reproduce:${r}`, false, `this engine (${ENGINE_VERSION}) refuses the run's input: ${message(e)}`);
-				continue;
-			}
-			freshRuns[r] = fresh;
-			const again = await runResultsDigest({ startDate: fresh.startDate, summary: fresh.summary, series: fresh.series }, hash);
-			if (again.sha256 === named.resultsSha256) {
-				add(`reproduce:${r}`, true, `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, the same`);
-				continue;
-			}
-			const why: string[] = [];
-			if (fresh.startDate !== stored.startDate) why.push(`it starts on ${fresh.startDate}, not ${stored.startDate}`);
-			const paths = differingPaths(stored.summary, fresh.summary);
-			if (paths.length) why.push(`summary differs at ${paths.join(', ')}`);
-			// An output by its key, and its node when it has one ("simulated_outflow", "dam_volume at node n1").
-			const name = (s: { nodeId: string | null; key: string }) => (s.nodeId === null ? s.key : `${s.key} at hydrological unit ${s.nodeId}`);
-			const was = new Map(stored.series.map((s) => [name(s), s.valuesSha256]));
-			const now = new Map(again.series.map((s) => [name(s), s.valuesSha256]));
-			const changed = [...was.keys()].filter((k) => now.has(k) && now.get(k) !== was.get(k));
-			const gone = [...was.keys()].filter((k) => !now.has(k));
-			const added = [...now.keys()].filter((k) => !was.has(k));
-			const some = (names: string[]) => `${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}`;
-			if (changed.length) why.push(`${changed.length === 1 ? '1 daily output differs' : `${changed.length} daily outputs differ`} (${some(changed)})`);
-			if (gone.length) why.push(`${gone.length === 1 ? '1 stored output is' : `${gone.length} stored outputs are`} not produced (${some(gone)})`);
-			if (added.length) why.push(`${added.length === 1 ? '1 output is' : `${added.length} outputs are`} not stored (${some(added)})`);
-			const engineNote = named.engineVersion !== ENGINE_VERSION ? ` The run was made with engine ${named.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
-			add(`reproduce:${r}`, false, `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, not ${named.resultsSha256}: ${why.join('; ') || 'the digests differ'}.${engineNote}`);
+			const again = await reproduceRun(input, stored, named, hash);
+			if (again.fresh) freshRuns[r] = again.fresh;
+			add(`reproduce:${r}`, again.ok, again.detail);
 		}
 	}
+
+	// The alternatives page 1 assesses (bundle-3, evidence-26): each tied to the manifest, then re-run.
+	await checkAlternatives(index, manifest, text, inputs.baseline ?? null, results.baseline ?? null, opts, add, runEngines);
 
 	// The headline board's full-allocation pair (bundle-2, #523 G2): recorded in the manifest, re-derived and re-run here.
 	if (index.runs.application) {
@@ -1169,4 +1204,168 @@ async function checkAssessment(
 		}
 	}
 	return 'checked';
+}
+
+/** Re-run one run from its input with this engine and compare its results digest with the stored one; never throws. */
+async function reproduceRun(
+	input: ModelInput,
+	stored: RunResultsFile,
+	named: { engineVersion: string; resultsSha256: string },
+	hash: BundleHash
+): Promise<{ ok: boolean; detail: string; fresh: ModelOutput | null }> {
+	let fresh: ModelOutput;
+	try {
+		fresh = runModelChecked(structuredClone(input));
+	} catch (e) {
+		return { ok: false, detail: `this engine (${ENGINE_VERSION}) refuses the run's input: ${message(e)}`, fresh: null };
+	}
+	const again = await runResultsDigest({ startDate: fresh.startDate, summary: fresh.summary, series: fresh.series }, hash);
+	if (again.sha256 === named.resultsSha256) return { ok: true, detail: `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, the same`, fresh };
+	const why: string[] = [];
+	if (fresh.startDate !== stored.startDate) why.push(`it starts on ${fresh.startDate}, not ${stored.startDate}`);
+	const paths = differingPaths(stored.summary, fresh.summary);
+	if (paths.length) why.push(`summary differs at ${paths.join(', ')}`);
+	// An output by its key, and its node when it has one ("simulated_outflow", "dam_volume at node n1").
+	const name = (s: { nodeId: string | null; key: string }) => (s.nodeId === null ? s.key : `${s.key} at hydrological unit ${s.nodeId}`);
+	const was = new Map(stored.series.map((s) => [name(s), s.valuesSha256]));
+	const now = new Map(again.series.map((s) => [name(s), s.valuesSha256]));
+	const changed = [...was.keys()].filter((k) => now.has(k) && now.get(k) !== was.get(k));
+	const gone = [...was.keys()].filter((k) => !now.has(k));
+	const added = [...now.keys()].filter((k) => !was.has(k));
+	const some = (names: string[]) => `${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}`;
+	if (changed.length) why.push(`${changed.length === 1 ? '1 daily output differs' : `${changed.length} daily outputs differ`} (${some(changed)})`);
+	if (gone.length) why.push(`${gone.length === 1 ? '1 stored output is' : `${gone.length} stored outputs are`} not produced (${some(gone)})`);
+	if (added.length) why.push(`${added.length === 1 ? '1 output is' : `${added.length} outputs are`} not stored (${some(added)})`);
+	const engineNote = named.engineVersion !== ENGINE_VERSION ? ` The run was made with engine ${named.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
+	return { ok: false, detail: `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, not ${named.resultsSha256}: ${why.join('; ') || 'the digests differ'}.${engineNote}`, fresh };
+}
+
+/** A missing cell value and a change with no run read alike: the report writes null for both. */
+const cellRun = (c: { change: { run: number | null } | null } | undefined) => c?.change?.run ?? null;
+
+/**
+ * The alternatives page 1 assesses (bundle-3, evidence-26), each as
+ * `alternative:<n>`: the bundle carries exactly the manifest's assessed
+ * alternatives' runs; each one's run, engine and ops hash are the manifest's,
+ * its ops are the ones it records and hash to it, it ran on the pack's
+ * baseline, and its input is the baseline's with those ops applied (its
+ * settings, model and each series); its stored results give the digest
+ * bundle.json names; and every page-1 cell that reads its run's summary
+ * (alternativeSummaryCell) is what its stored summary gives. With the re-run,
+ * `reproduce:alternative:<n>` re-runs its input and compares its digest. A
+ * bundle-1 or bundle-2 bundle carries none and adds no check.
+ */
+async function checkAlternatives(
+	index: PackBundleIndex,
+	manifest: PackManifest,
+	text: ReadonlyMap<string, string>,
+	baseline: { snapshot: PackBundleRun['inputs']; input: ModelInput | null; values: Record<string, (number | null)[]> } | null,
+	baselineResults: RunResultsFile | null,
+	opts: CheckPackBundleOptions,
+	add: (id: string, ok: boolean, detail: string) => boolean,
+	runEngines: string[]
+): Promise<void> {
+	if (index.version !== 'bundle-3') return;
+	const { hash } = opts;
+	const wanted = assessedAlternatives(manifest);
+	const named = index.alternatives ?? [];
+	const carried = [...text.keys()].filter((k) => k.startsWith('runs/alternative-'));
+	if (!wanted.length) {
+		if (named.length || carried.length) add('alternatives', false, "the bundle carries an alternative's run the manifest doesn't assess");
+		return;
+	}
+	const identity = manifest.report.identity;
+	for (const w of wanted) {
+		const id = `alternative:${w.n}`;
+		const dir = bundleAlternativeDir(w.n);
+		const entry = named.find((x) => x.n === w.n);
+		if (!entry || !text.has(`${dir}/input.json`) || !text.has(`${dir}/results.json`)) {
+			add(id, false, `page 1 assesses alternative ${w.n} (“${w.label}”), whose run the bundle doesn't carry`);
+			continue;
+		}
+		runEngines.push(entry.engineVersion);
+		const snapshot = JSON.parse(text.get(`${dir}/input.json`)!) as PackBundleRun['inputs'];
+		const stored = JSON.parse(text.get(`${dir}/results.json`)!) as RunResultsFile;
+		const problems: string[] = [];
+		if (entry.runId !== w.runId || stored.runId !== w.runId) problems.push(`its run is ${String(entry.runId)}, the manifest names ${w.runId}`);
+		if (entry.engineVersion !== w.engineVersion || stored.engineVersion !== w.engineVersion) problems.push(`its engine is ${String(entry.engineVersion)}, the manifest names ${w.engineVersion}`);
+		// Its ops: the ones the run recorded, the manifest's, hashing to the hash both name.
+		const sc = snapshot.scenario;
+		const ops = Array.isArray(sc?.ops) ? (sc!.ops as ScenarioOp[]) : null;
+		if (!sc || !ops) problems.push('its input records no scenario ops');
+		else {
+			const sha = await hash(canonicalJson(ops));
+			if (sha !== sc.opsSha256 || sha !== w.opsSha256) problems.push(`its ops hash to ${sha}; the run records ${String(sc.opsSha256)}, the manifest ${w.opsSha256}`);
+			if (!sameJson(ops, w.ops)) problems.push("its ops aren't the ones the manifest lists");
+			if ((sc as { baseRunId?: string }).baseRunId !== identity.baseline.runId) problems.push(`it ran on base run ${String((sc as { baseRunId?: string }).baseRunId)}, not the pack's baseline ${identity.baseline.runId}`);
+		}
+		// Its series, each against its hash; then its input against the baseline's with its ops applied.
+		const series: Record<string, DailySeries> = {};
+		for (const [kind, snap] of Object.entries(snapshot.series ?? {})) {
+			if (!snap) continue;
+			const csv = snap.valuesSha256 ? text.get(bundleSeriesPath(snap.valuesSha256)) : undefined;
+			if (csv === undefined) {
+				problems.push(`${kind}: no values file`);
+				continue;
+			}
+			try {
+				const parsed = parseSeriesCsv(csv);
+				if (parsed.values.length !== snap.length || (snap.length > 0 && parsed.startDate !== snap.startDate)) throw new Error(`it has ${parsed.values.length} days from ${parsed.startDate}, not ${snap.length} from ${snap.startDate}`);
+				if ((await hash(seriesDigest(parsed.values))) !== snap.valuesSha256) throw new Error('its values fail their SHA-256 check');
+				series[kind] = {
+					startDate: snap.startDate,
+					values: parsed.values,
+					...(snap.provenance !== undefined ? { provenance: snap.provenance } : {}),
+					...(snap.origin !== undefined ? { origin: snap.origin } : {}),
+					...(typeof snap.seriesId === 'string' ? { seriesId: snap.seriesId } : {})
+				};
+			} catch (e) {
+				problems.push(`${kind}: ${message(e)}`);
+			}
+		}
+		if (!baseline?.input) problems.push("its input can't be checked: the baseline's inputs failed a check above");
+		else if (ops) {
+			const applied = applyScenario(baseline.input, ops);
+			if (applied.problems.length) problems.push(`its ops don't apply to the baseline (${applied.problems.slice(0, 3).join('; ')})`);
+			else {
+				if (!sameJson(applied.input.settings, snapshot.settings)) problems.push(`its settings aren't the baseline's with its ops applied (${differingPaths(applied.input.settings, snapshot.settings).join(', ')})`);
+				if (!sameJson(applied.input.model, snapshot.model)) problems.push(`its model isn't the baseline's with its ops applied (${differingPaths(applied.input.model, snapshot.model).join(', ')})`);
+				for (const [kind, s] of Object.entries(applied.input.series)) {
+					if (!s) continue;
+					const sha = await hash(seriesDigest(s.values.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : null))));
+					if (sha !== (snapshot.series?.[kind]?.valuesSha256 ?? null)) problems.push(`its ${kind} series isn't the baseline's with its ops applied`);
+				}
+			}
+		}
+		// Its stored results: the digest bundle.json names, and the page-1 cells that read the run's summary.
+		if (stored.version !== RUN_RESULTS_VERSION) problems.push(`results.json is version ${String(stored.version)}; this code reads ${RUN_RESULTS_VERSION}`);
+		const sha = await hash(runResultsText(stored));
+		if (sha !== entry.resultsSha256) problems.push(`its results digest is ${sha}, not the ${entry.resultsSha256} bundle.json names`);
+		const i = w.n - 1;
+		let cells = 0;
+		if (!baselineResults) problems.push("its page-1 cells can't be checked: the baseline's stored results failed a check above");
+		else
+			for (const row of manifest.report.rows) {
+				if (!ALTERNATIVE_SUMMARY_ROWS.has(row.id)) continue;
+				const cell = row.alternatives?.[i];
+				const want = alternativeSummaryCell(row, baselineResults.summary as RunSummary, stored.summary as RunSummary);
+				if (!want) continue;
+				cells++;
+				if (!sameJson(cell?.value ?? null, want.value) || !sameJson(cellRun(cell), want.run))
+					problems.push(`its ${row.id}${row.subject ? ` (${row.subject})` : ''} cell on page 1 is ${String(cell?.value ?? null)} (change ${String(cellRun(cell))}); its stored results give ${String(want.value)} (change ${String(want.run)})`);
+			}
+		const ok = add(
+			id,
+			problems.length === 0,
+			problems.join('; ') ||
+				`alternative ${w.n} (“${w.label}”): run ${w.runId} on the pack's baseline, its ops the manifest's, its input the baseline's with them applied; its ${cells} page-1 cell${cells === 1 ? '' : 's'} read from the run are its stored results'; results digest ${sha}`
+		);
+		if (!wantsPart(opts, `alternative:${w.n}`)) continue;
+		if (!ok || !Object.keys(series).length) {
+			add(`reproduce:alternative:${w.n}`, false, 'not re-run: its inputs or stored results failed a check above');
+			continue;
+		}
+		const again = await reproduceRun(bundleRunInput(snapshot, series), stored, entry, hash);
+		add(`reproduce:alternative:${w.n}`, again.ok, again.detail);
+	}
 }

@@ -26,7 +26,7 @@ import { calendarMonthOf, monthName } from '../uncertainty/ensemble';
 import type { PairedSummary } from '../uncertainty/paired';
 import { NO_FLOW_M3_DAY } from '../reserve/riverMeasures';
 import type { ScenarioOp } from '../scenario/ops';
-import type { NetworkNode, ProjectModel } from '../project';
+import type { NetworkNode, ProjectModel, RunSummary } from '../project';
 import { canonicalJson } from '../manifest';
 import type { CumulativeReport } from '../scenario/cumulative';
 import { demandSourceShares, type DemandSourceShare } from '../network/demandSources';
@@ -1543,6 +1543,49 @@ function alternativesOf(input: EvidenceInput, rows: EvidenceRow[], cited: Eviden
 		});
 	}
 	return out;
+}
+
+/** The page-1 rows an alternative's cell reads from its run's summary alone (the river at the outlet and the Reserve sites). */
+export const ALTERNATIVE_SUMMARY_ROWS: ReadonlySet<EvidenceRow['id']> = new Set<EvidenceRow['id']>(['reserve', 'ewrDays', 'shortfall', 'noFlowDays', 'outflowMar']);
+
+/**
+ * An alternative's cell on a page-1 row that reads only its run's summary and
+ * the baseline's (ALTERNATIVE_SUMMARY_ROWS), as changeRows builds it: the
+ * value and the run's own change against the baseline (the band aside, which
+ * reads ensembles). Null for any other row. The reproduction bundle checks a
+ * cited alternative's column with it (bundle.ts, `alternative:<n>`).
+ */
+export function alternativeSummaryCell(row: Pick<EvidenceRow, 'id' | 'subject'>, baseline: RunSummary, alt: RunSummary): { value: number | null; run: number | null } | null {
+	const b = { summary: baseline } as EvidenceRunInput;
+	const a = { summary: alt } as EvidenceRunInput;
+	switch (row.id) {
+		case 'reserve': {
+			const site = (baseline.ewrAssurance ?? []).find((s) => s.name === row.subject);
+			if (!site) return { value: null, run: null };
+			const ra = site.overall.rate;
+			const rb = matchSite(alt.ewrAssurance ?? [], site)?.overall.rate ?? null;
+			return { value: rb === null ? null : rb * 100, run: ra === null || rb === null ? null : (rb - ra) * 100 };
+		}
+		case 'ewrDays':
+			return { value: alt.catchment.ewrDaysNotMet, run: diff(baseline.catchment.ewrDaysNotMet, alt.catchment.ewrDaysNotMet) };
+		case 'shortfall': {
+			const sa = outletShortfallMm3(b);
+			const sb = outletShortfallMm3(a);
+			return { value: sb, run: diff(sa, sb) };
+		}
+		case 'noFlowDays': {
+			const fa = baseline.catchment.noFlow ?? null;
+			const fb = alt.catchment.noFlow ?? null;
+			return { value: fb?.days ?? null, run: fa && fb ? fb.days - fa.days : null };
+		}
+		case 'outflowMar': {
+			const oa = marMm3(baseline.catchment.meanSimulatedOutflowM3Day);
+			const ob = marMm3(alt.catchment.meanSimulatedOutflowM3Day);
+			return { value: ob, run: diff(oa, ob) };
+		}
+		default:
+			return null;
+	}
 }
 
 /** What an assessor will ask about the alternatives (evidence-26). */

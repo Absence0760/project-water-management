@@ -26,10 +26,11 @@ import { applicationMask } from '../scenario/applicant';
 import { replayAssessment, type BundleAssessmentMember, type BundleAssessmentReport, type PackBundleAssessment } from '../evidence/bundleAssessment';
 import type { ScenarioOp } from '../scenario/ops';
 import { localityMapSvg } from '../geo/localityMap';
-import type { EvidenceReport } from '../evidence/types';
+import type { EvidenceAlternative, EvidenceReport, EvidenceRow } from '../evidence/types';
+import { alternativeSummaryCell } from '../evidence/report';
 import { damObservationsSection, damObservationsSectionV1, type EvidenceDamObservations, type EvidenceDamObservationsAny, type EvidenceDamObservationsV1 } from '../evidence/damObservations';
 import { canonicalJson, seriesDigest } from '../manifest';
-import type { ModelInput, ModelOutput, NetworkNode } from '../project';
+import type { ModelInput, ModelOutput, NetworkNode, RunSummary } from '../project';
 import { Rng } from '../random';
 import { runModelChecked } from '../run';
 import { ENGINE_VERSION } from '../version';
@@ -494,4 +495,91 @@ export function assessmentPackFixture(hash: SyncHash, opts: { background?: boole
 			background
 		}
 	};
+}
+
+/** The alternatives fixture's runs (synthetic): Farm one's maize at 450 000 m² and at 500 000 m² instead of the application's 600 000. */
+export const ALTERNATIVE_FIXTURE_AREAS = [450_000, 500_000] as const;
+
+/**
+ * An application pack whose page 1 sets mitigation alternatives beside it
+ * (evidence-26, 298_scenario_alternatives; bundle-3): the default pack, and
+ * `count` (1 or 2) alternatives, each a scenario run of the baseline with its
+ * own ops (Farm one's maize at a smaller area), and page-1 rows whose
+ * alternative cells read the runs' summaries as report.ts does
+ * (alternativeSummaryCell). With `unassessed`, the last alternative's column
+ * is not assessed (another baseline), so the bundle carries no run of it.
+ */
+export function alternativesPackFixture(hash: SyncHash, opts: { count?: number; unassessed?: boolean } = {}): PackBundleInput {
+	const p = packBundleFixture(hash);
+	const base = packFixtureInput();
+	const runs: PackBundleRun[] = [];
+	const listed: EvidenceAlternative[] = [];
+	ALTERNATIVE_FIXTURE_AREAS.slice(0, opts.count ?? 1).forEach((areaM2, i) => {
+		const ops: ScenarioOp[] = [{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2 }];
+		const input = applyScenario(base, ops).input;
+		const scenarioId = `00000000-0000-4000-8000-0000000000d${i + 1}`;
+		const run = storedRun(hash, `00000000-0000-4000-8000-0000000000b${i + 1}`, input, runModelChecked(structuredClone(input)), {
+			id: scenarioId,
+			baseRunId: p.baseline.runId,
+			ops,
+			opsSha256: hash(canonicalJson(ops))
+		});
+		const unassessed = opts.unassessed && i === (opts.count ?? 1) - 1;
+		if (!unassessed) runs.push(run);
+		listed.push({
+			label: `Smaller field ${i + 1}`,
+			runId: run.runId,
+			runLabel: '',
+			engineVersion: run.engineVersion,
+			createdAt: '2026-10-30T00:00:00.000Z',
+			createdBy: 'Applicant',
+			scenarioId,
+			scenarioName: `Smaller field ${i + 1}`,
+			opsSha256: hash(canonicalJson(ops)),
+			ops: ops.map((op, index) => ({ index, class: 'proposal' as const, op })),
+			proposals: 1,
+			assumptions: 0,
+			allocationMode: null,
+			pairedId: null,
+			notAssessed: unassessed ? 'Not assessed: this alternative ran on another baseline than the application.' : null
+		});
+	});
+	const report = structuredClone(p.manifest.report) as EvidenceReport;
+	const baseSummary = p.baseline.summary as RunSummary;
+	const appSummary = p.application!.summary as RunSummary;
+	const subjects: { id: EvidenceRow['id']; subject: string | null }[] = [
+		...(baseSummary.ewrAssurance ?? []).map((s) => ({ id: 'reserve' as const, subject: s.name })),
+		{ id: 'ewrDays', subject: null },
+		{ id: 'shortfall', subject: null },
+		{ id: 'noFlowDays', subject: null },
+		{ id: 'outflowMar', subject: null },
+		{ id: 'applicantSupply', subject: null }
+	];
+	report.alternatives = listed;
+	report.rows = subjects.map(({ id, subject }): EvidenceRow => {
+		const app = alternativeSummaryCell({ id, subject }, baseSummary, appSummary);
+		return {
+			id,
+			label: id,
+			basis: '',
+			subject,
+			unit: '',
+			higherIsWorse: true,
+			baseline: null,
+			application: app?.value ?? null,
+			change: app ? { run: app.run, band: null, bandNote: 'no band', worse: null } : null,
+			notAssessed: null,
+			note: null,
+			alternatives: listed.map((alt) => {
+				if (alt.notAssessed) return { value: null, change: null, notAssessed: alt.notAssessed, note: null };
+				const run = runs.find((r) => r.runId === alt.runId)!;
+				// A row that reads more than the summary (the applicant's own supply): an invented value the check leaves alone.
+				const c = alternativeSummaryCell({ id, subject }, baseSummary, run.summary as RunSummary) ?? { value: 42, run: 1 };
+				return { value: c.value, change: { run: c.run, band: null, bandNote: 'no band', worse: null }, notAssessed: null, note: null };
+			})
+		};
+	});
+	const project = { id: '00000000-0000-4000-8000-0000000000f1', name: 'Catchment' };
+	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
+	return { ...p, manifest: JSON.parse(JSON.stringify(manifest)), alternatives: runs };
 }

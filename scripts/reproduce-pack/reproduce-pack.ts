@@ -23,7 +23,11 @@
 // background at full allocation when it had one (`assessment`,
 // `inputs:background`, `reproduce:combined`, `reproduce:dams`,
 // `reproduce:background`); an older bundle says the combined row isn't
-// included. --no-run stops before the re-run. Exits 0 when everything matches, 1 on any mismatch, 2 on a usage
+// included. Each mitigation alternative page 1 assesses (bundle-3,
+// evidence-26) is checked against the manifest, its input against the
+// baseline's with its ops, its page-1 cells read from its run's summary
+// against its stored results (`alternative:<n>`), and re-run
+// (`reproduce:alternative:<n>`). --no-run stops before the re-run. Exits 0 when everything matches, 1 on any mismatch, 2 on a usage
 // error or an unreadable file. --json prints the checks as JSON instead.
 //
 // Run through the backend's tsx (root package.json `reproduce:pack`); a
@@ -74,12 +78,17 @@ export function formatResult(r: BundleCheckResult, file: string): string {
 	if (r.combined === 'older') lines.push('Note: combined row not included (older bundle): the cumulative assessment § 4’s combined row reads is not in this bundle, so that row is not re-run; the runs above are.');
 	const failed = r.checks.filter((c) => !c.ok).length;
 	const reran = r.checks.some((c) => c.id.startsWith('reproduce:'));
-	const also = [...(r.headline === 'checked' ? ['the headline pair at full allocation'] : []), ...(r.combined === 'checked' ? ['the cumulative assessment behind § 4’s combined row'] : [])];
+	const alternatives = r.checks.filter((c) => /^reproduce:alternative:\d+$/.test(c.id)).length;
+	const also = [
+		...(alternatives ? [alternatives === 1 ? 'the alternative page 1 sets beside the application' : `the ${alternatives} alternatives page 1 sets beside the application`] : []),
+		...(r.headline === 'checked' ? ['the headline pair at full allocation'] : []),
+		...(r.combined === 'checked' ? ['the cumulative assessment behind § 4’s combined row'] : [])
+	];
 	lines.push(
 		r.ok
 			? reran
 				? also.length
-					? `Reproduced: every file matches, each run re-runs to the same results, and so ${also.length === 1 ? 'does' : 'do'} ${also.join(' and ')}.`
+					? `Reproduced: every file matches, each run re-runs to the same results, and so ${also.length === 1 && alternatives < 2 ? 'does' : 'do'} ${also.join(' and ')}.`
 					: 'Reproduced: every file matches, and each run re-runs to the same results.'
 				: 'Checked: every file matches its hash and the manifest (not re-run: --no-run).'
 			: `NOT reproduced: ${failed} check${failed === 1 ? '' : 's'} failed.`

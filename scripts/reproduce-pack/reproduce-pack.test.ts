@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildPackBundle } from '../../packages/engine/src/evidence/bundle';
 import { packManifestText } from '../../packages/engine/src/evidence/pack';
-import { assessmentPackFixture, fixtureObservations, fixtureObservationsV1, headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
+import { alternativesPackFixture, assessmentPackFixture, fixtureObservations, fixtureObservationsV1, headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
 import { canonicalJson } from '../../packages/engine/src/manifest';
 import { zip, ZipArchive } from '../../packages/engine/src/zip';
 import { main, parseArgs } from './reproduce-pack';
@@ -241,6 +241,25 @@ describe('reproduce:pack', () => {
 			expect(code, out).toBe(0);
 			expect(out).toMatch(/ok\s+assessment\s+combined row not included \(older bundle\)/);
 			expect(out).toContain('Note: combined row not included (older bundle)');
+		});
+	});
+
+	describe('the mitigation alternatives (bundle-3, evidence-26)', () => {
+		it('checks and re-runs each alternative: exit 0, each its own check, the verdict says so', async () => {
+			await writeFile(join(dir, 'alternatives.zip'), (await buildPackBundle(alternativesPackFixture(hash, { count: 2 }), hash)).bytes);
+			const { code, out } = await run(['alternatives.zip']);
+			expect(code, out).toBe(0);
+			for (const id of ['alternative:1', 'reproduce:alternative:1', 'alternative:2', 'reproduce:alternative:2']) expect(out).toMatch(new RegExp(`ok\\s+${id}\\s`));
+			expect(out).toContain('and so do the 2 alternatives page 1 sets beside the application');
+		});
+
+		it('a page-1 cell the alternative’s run doesn’t give: exit 1, alternative:1 named', async () => {
+			const input = alternativesPackFixture(hash);
+			input.manifest.report.rows.find((x) => x.id === 'ewrDays')!.alternatives![0]!.value = 9999;
+			await writeFile(join(dir, 'alternatives-bad.zip'), (await buildPackBundle(input, hash)).bytes);
+			const { code, out } = await run(['alternatives-bad.zip', '--no-run']);
+			expect(code).toBe(1);
+			expect(out).toMatch(/FAIL\s+alternative:1\s+its ewrDays cell on page 1 is 9999/);
 		});
 	});
 

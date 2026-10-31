@@ -12,7 +12,7 @@
 // 302 functions refuse anyone but the jobs (positive controls: the runs
 // above). The bundles are the engine's synthetic fixtures (invented values).
 import { randomUUID } from 'node:crypto';
-import { assessmentPackFixture } from '@water-management/engine/testing';
+import { alternativesPackFixture, assessmentPackFixture } from '@water-management/engine/testing';
 import { buildPackBundle, type BundleCheck, type PackBundleInput } from '@water-management/engine';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -120,6 +120,19 @@ describe('the server’s re-run in parts (302)', () => {
 		expect((await gathering(packId))!.status).toBe('recorded');
 		expect((await parts(g.id)).every((p) => p.status === 'done')).toBe(true);
 		expect(await state(viewer, packId)).toMatchObject({ status: 'reproduced', canRerun: false });
+	}, 120_000);
+
+	it('two mitigation alternatives: a part each beside the runs; reproduced, each alternative’s checks in the record', async () => {
+		const packId = await issuedPackOf(alternativesPackFixture(bundleHash, { count: 2 }));
+		await queue(packId);
+		await tick(1);
+		const g = (await gathering(packId))!;
+		expect((await parts(g.id)).map((p) => p.kind)).toEqual(['run:baseline', 'run:application', 'alternative:1', 'alternative:2']);
+		await drain();
+		const o = (await outcome(packId))!;
+		expect(o.outcome, JSON.stringify(o.checks.filter((c) => !c.ok))).toBe('reproduced');
+		const ids = o.checks.map((c) => c.id);
+		expect(ids.slice(ids.indexOf('reproduce:application') + 1, ids.indexOf('reproduce:application') + 5)).toEqual(['alternative:1', 'reproduce:alternative:1', 'alternative:2', 'reproduce:alternative:2']);
 	}, 120_000);
 
 	it('a stored firm yield tampered with: not reproduced, naming reproduce:dams alone', async () => {

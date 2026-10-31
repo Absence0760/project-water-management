@@ -1334,6 +1334,50 @@ describe.skipIf(!minio)('an application pack’s bundle', () => {
 	});
 });
 
+describe.skipIf(!minio)('an application pack with a mitigation alternative (bundle-3, evidence-26)', () => {
+	it('issues it with the alternative’s run in its bundle, which reproduces offline and on the server (one part for the alternative)', async () => {
+		vi.stubEnv('REPORT_RENDERER', 'sqs');
+		vi.stubEnv('RENDER_REQUESTS_QUEUE_URL', 'memory://render-requests');
+		try {
+			const runId = await scenarioRun('Upper dam, weighed', [{ op: 'node.set', nodeId: '', field: 'damCapacityM3', value: 400_000 }]);
+			const [{ scenario_id: sid }] = await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [runId]);
+			// The alternative: a smaller dam, run on the same baseline, cited by the application, labelled.
+			const alt = await owner.call('POST', `${at()}/scenarios`, { name: 'Upper dam, smaller', baseRunId: baseRun, ops: [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 200_000 }], ownedNodeIds: [farmId] });
+			expect(alt.status, JSON.stringify(alt.body)).toBe(201);
+			const altRun = await owner.call('POST', `${at()}/scenarios/${alt.body.scenario.id}/runs`, {});
+			expect(altRun.status, JSON.stringify(altRun.body)).toBe(201);
+			const cite = await owner.call('PUT', `${at()}/scenarios/${sid}/alternatives`, { alternatives: [{ runId: altRun.body.run.id, label: 'Smaller dam' }] });
+			expect(cite.status, JSON.stringify(cite.body)).toBe(200);
+
+			const p = await draft(editor, runId);
+			await sign(editor, p.id);
+			const res = await issue(editor, p.id);
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			const { bytes } = await downloadBundle(editor, p.id);
+			const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
+			const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
+			expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
+			expect(checked.checks.map((k) => k.id)).toEqual(expect.arrayContaining(['alternative:1', 'reproduce:alternative:1']));
+			expect(checked.checks.find((k) => k.id === 'alternative:1')!.detail).toContain(altRun.body.run.id);
+
+			// The server's re-run: its parts, the alternative's among them, gathered into the record.
+			await runTick({ feeds: false, reports: false, alerts: false });
+			await runTick({ feeds: false, reports: false, alerts: false });
+			const kinds = await asOwner(
+				`SELECT p.part->>'kind' AS kind FROM pack_reproduce_part p JOIN pack_reproduce_gathering g ON g.id = p.gathering_id WHERE g.pack_id = $1 ORDER BY p.position`,
+				[p.id]
+			);
+			expect(kinds.map((k) => k.kind)).toContain('alternative:1');
+			const { reproduction } = (await editor.call('GET', packPath(p.id))).body;
+			expect(reproduction.status, JSON.stringify(reproduction.checks.filter((c: { ok: boolean }) => !c.ok))).toBe('reproduced');
+			expect(reproduction.checks.map((c: { id: string }) => c.id)).toEqual(expect.arrayContaining(['alternative:1', 'reproduce:alternative:1']));
+		} finally {
+			vi.unstubAllEnvs();
+			sent.length = 0;
+		}
+	}, 300_000);
+});
+
 describe('the runs a pack cites', () => {
 	it('keeps them through the storage cap, and the run DELETE names the pack', async () => {
 		const cited = await asOwner('SELECT model_run_cited($1) AS b, model_run_cited($2) AS a, model_run_cited($3) AS s', [baseRun, appRun, seedRun]);
@@ -1429,7 +1473,8 @@ describe.skipIf(!minio)('deleting a project with packs', () => {
 		const other = await smallProject('Other');
 		const byRun = await owner.call('POST', `${at()}/packs`, { runId: other.runId });
 		expect(byRun.status).toBe(404);
-		const issued = (await asOwner(`SELECT id FROM evidence_pack WHERE project_id = $1 AND status = 'issued' LIMIT 1`, [projectId]))[0]!.id as string;
+		// The project's issued baseline pack (a new version of it is drafted on baseRun below; an application pack's is another application's).
+		const issued = (await asOwner(`SELECT id FROM evidence_pack WHERE project_id = $1 AND status = 'issued' AND scenario_id IS NULL LIMIT 1`, [projectId]))[0]!.id as string;
 		await asOwner(`UPDATE evidence_pack SET status = 'withdrawn', status_reason = 'x' WHERE id = $1`, [other.packId]);
 		const byPack = await owner.call('POST', `${at()}/packs`, { runId: baseRun, supersedesId: other.packId });
 		expect(byPack.status).toBe(404);
@@ -1637,6 +1682,25 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		withheld(await viewer.call('GET', `${packPath(pack)}/bundle`));
 		// Positive control: the editor passes the check (a draft: 409).
 		expect((await editor.call('GET', `${packPath(pack)}/bundle`)).status).toBe(409);
+	});
+
+	it('refuses the bundle of a pack whose cited alternative’s run carries a volume though neither of its own runs does (bundle-3: the bundle holds that run too)', async () => {
+		const plain = await teamScenario('G1 plain dam on Upper', baseRun, [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 120_000 }]);
+		const voluminous = await teamScenario('G1 alternative with a volume', baseRun, [
+			{ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: farmId, waterSource: 'surface', volumeM3PerYear: 4343 } }
+		]);
+		const cite = (runId: string, notAssessed: string | null) => (r: PackManifest['report']) =>
+			({ ...r, alternatives: [{ label: 'With a volume', runId, runLabel: '', engineVersion: ENGINE_VERSION, createdAt: '', createdBy: null, scenarioId: '', scenarioName: '', opsSha256: '', ops: [], proposals: 0, assumptions: 0, allocationMode: null, pairedId: null, notAssessed }] }) as PackManifest['report'];
+		const pack = await plant('evidence-26', { scenario: plain, edit: cite(voluminous.runId, null) });
+		withheld(await viewer.call('GET', `${packPath(pack)}/bundle`));
+		// The page says so: the bundle alone is withheld, the manifest isn't.
+		expect((await viewer.call('GET', packPath(pack))).body).toMatchObject({ volumesWithheld: false, bundleWithheld: true });
+		expect((await editor.call('GET', packPath(pack))).body).toMatchObject({ volumesWithheld: false, bundleWithheld: false });
+		// The pack's own runs carry none: its manifest isn't withheld for that viewer (only the bundle holds the alternative's inputs).
+		expect(await withUser(viewer.id, (db) => packVolumesWithheld(db, projectId, { baselineRunId: baseRun, scenarioRunId: plain.runId }, 'viewer'))).toBe(false);
+		// Positive control: an alternative page 1 doesn't assess carries no run in the bundle, so the viewer passes the check (a draft: 409).
+		const unassessed = await plant('evidence-26', { scenario: plain, edit: cite(voluminous.runId, 'Not assessed: another baseline.') });
+		expect((await viewer.call('GET', `${packPath(unassessed)}/bundle`)).status).toBe(409);
 	});
 
 	it('counts a run the viewer can’t read as carrying volumes (fail closed)', async () => {

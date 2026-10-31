@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RunInputsSnapshot } from '../compare';
 import { canonicalJson } from '../manifest';
-import { assessmentPackFixture, ASSESSMENT_FIXTURE, fixtureObservations, fixtureObservationsV1, headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
+import { alternativesPackFixture, assessmentPackFixture, ASSESSMENT_FIXTURE, fixtureObservations, fixtureObservationsV1, headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
 import { ENGINE_VERSION } from '../version';
 import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
@@ -742,6 +742,98 @@ describe('the combined row’s cumulative assessment (bundle-3, followups § Cum
 		expect(ids(r)).not.toContain('reproduce:combined');
 		// A pack that cites none adds no check (control).
 		expect((await checkPackBundle((await buildPackBundle(packInput(), hash)).bytes, { hash, rerun: false })).combined).toBe('none');
+	});
+});
+
+describe('the mitigation alternatives’ runs (bundle-3, evidence-26)', () => {
+	const ids = (r: Awaited<ReturnType<typeof checkPackBundle>>) => r.checks.map((c) => c.id);
+	const detail = (r: Awaited<ReturnType<typeof checkPackBundle>>, id: string) => r.checks.find((c) => c.id === id)!.detail;
+	const editJson = (bytes: Uint8Array<ArrayBuffer>, name: string, edit: (v: any) => void) =>
+		rezip(bytes, (f) => {
+			const v = JSON.parse(f.get(name)!);
+			edit(v);
+			f.set(name, canonicalJson(v));
+		});
+
+	it('carries each assessed alternative’s run, checks it against the manifest and its page-1 cells, and re-runs it', async () => {
+		const input = alternativesPackFixture(hash, { count: 2 });
+		const built = await buildPackBundle(input, hash);
+		expect(built.index.alternatives!.map((a) => [a.n, a.runId])).toEqual(input.alternatives!.map((r, i) => [i + 1, r.runId]));
+		expect(Object.keys(built.index.files)).toEqual(expect.arrayContaining(['runs/alternative-1/input.json', 'runs/alternative-2/results.json']));
+		const r = await checkPackBundle(built.bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(ids(r)).toEqual(expect.arrayContaining(['alternative:1', 'reproduce:alternative:1', 'alternative:2', 'reproduce:alternative:2']));
+		// After the runs' re-runs, each alternative's check then its re-run.
+		expect(ids(r).slice(ids(r).indexOf('reproduce:application') + 1, ids(r).indexOf('reproduce:application') + 5)).toEqual(['alternative:1', 'reproduce:alternative:1', 'alternative:2', 'reproduce:alternative:2']);
+		expect(detail(r, 'alternative:1')).toMatch(/its 4 page-1 cells read from the run are its stored results'/);
+		expect(r.engine.runs).toHaveLength(4);
+		const readme = new TextDecoder().decode(await (await ZipArchive.open(built.bytes)).read('README.md'));
+		expect(readme).toContain('`reproduce:alternative:<n>`');
+		// --no-run: the checks without the re-runs.
+		expect(ids(await checkPackBundle(built.bytes, { hash, rerun: false })).filter((x) => x.includes('alternative'))).toEqual(['alternative:1', 'alternative:2']);
+	});
+
+	it('carries no run of an alternative page 1 doesn’t assess, and refuses to build without one it does', async () => {
+		const input = alternativesPackFixture(hash, { count: 2, unassessed: true });
+		const built = await buildPackBundle(input, hash);
+		expect(built.index.alternatives!.map((a) => a.n)).toEqual([1]);
+		expect(failing(await checkPackBundle(built.bytes, { hash }))).toEqual([]);
+		await expect(buildPackBundle({ ...input, alternatives: [] }, hash)).rejects.toThrow(/the manifest assesses/);
+		// A pack that cites none carries none and adds no check (control).
+		expect(ids(await checkPackBundle((await buildPackBundle(packInput(), hash)).bytes, { hash, rerun: false })).some((x) => x.includes('alternative'))).toBe(false);
+	});
+
+	it('an alternative’s op tampered: its hash left fails on the hash; fixed too, its input is no longer the baseline’s with its ops', async () => {
+		const built = await buildPackBundle(alternativesPackFixture(hash), hash);
+		const op = (v: any) => (v.scenario.ops[0].areaM2 = 300_000);
+		const r = await checkPackBundle(await editJson(built.bytes, 'runs/alternative-1/input.json', op), { hash, rerun: false });
+		expect(failing(r)).toEqual(['alternative:1']);
+		expect(detail(r, 'alternative:1')).toMatch(/its ops hash to [0-9a-f]{64}; the run records/);
+		const rehashed = await editJson(built.bytes, 'runs/alternative-1/input.json', (v) => {
+			op(v);
+			v.scenario.opsSha256 = hash(canonicalJson(v.scenario.ops));
+		});
+		const again = await checkPackBundle(rehashed, { hash, rerun: false });
+		expect(failing(again)).toEqual(['alternative:1']);
+		expect(detail(again, 'alternative:1')).toContain("the manifest");
+		// Its model changed with the op (the hash and the manifest's ops aside): not the baseline's with its ops.
+		const model = await editJson(built.bytes, 'runs/alternative-1/input.json', (v) => (v.model.cropAreas[0].areaM2 = 300_000));
+		const m = await checkPackBundle(model, { hash });
+		expect(failing(m)).toEqual(['alternative:1', 'reproduce:alternative:1']);
+		expect(detail(m, 'alternative:1')).toContain("its model isn't the baseline's with its ops applied");
+	});
+
+	it('a page-1 cell tampered in the manifest (its hash the pack’s): alternative fails naming the row; stored results tampered: the re-run fails', async () => {
+		const input = alternativesPackFixture(hash);
+		const row = input.manifest.report.rows.find((x) => x.id === 'outflowMar')!;
+		row.alternatives![0]!.value = (row.alternatives![0]!.value ?? 0) + 1;
+		const r = await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash });
+		expect(failing(r)).toEqual(['alternative:1', 'reproduce:alternative:1']);
+		expect(detail(r, 'reproduce:alternative:1')).toMatch(/^not re-run/);
+		expect(detail(r, 'alternative:1')).toMatch(/its outflowMar cell on page 1 is .*; its stored results give/);
+		// A cell the check can't read from the summary (the applicant's own supply) is left alone (positive control).
+		const other = alternativesPackFixture(hash);
+		other.manifest.report.rows.find((x) => x.id === 'applicantSupply')!.alternatives![0]!.value = 7;
+		expect(failing(await checkPackBundle((await buildPackBundle(other, hash)).bytes, { hash, rerun: false }))).toEqual([]);
+		// The stored daily output changed before the build: every hash agrees, the re-run doesn't.
+		const bad = alternativesPackFixture(hash);
+		const out = bad.alternatives![0]!.series.find((s) => s.key === 'simulated_outflow')!;
+		out.values = out.values.map((v, i) => (i === 200 && v !== null ? v * 2 + 1 : v));
+		expect(failing(await checkPackBundle((await buildPackBundle(bad, hash)).bytes, { hash }))).toEqual(['reproduce:alternative:1']);
+	});
+
+	it('an older bundle (bundle-2) of a pack with alternatives checks as it did, with no alternative check', async () => {
+		const built = await buildPackBundle(alternativesPackFixture(hash), hash);
+		const older = await rezip(built.bytes, (f) => {
+			for (const n of [...f.keys()]) if (n.startsWith('runs/alternative-')) f.delete(n);
+			const index = JSON.parse(f.get('bundle.json')!) as PackBundleIndex;
+			delete index.alternatives;
+			delete index.assessment;
+			f.set('bundle.json', canonicalJson({ ...index, version: 'bundle-2' }));
+		});
+		const r = await checkPackBundle(older, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(ids(r).some((x) => x.includes('alternative'))).toBe(false);
 	});
 });
 

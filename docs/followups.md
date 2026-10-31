@@ -6903,16 +6903,23 @@ Left, from the design and the persona review (§11), each with its trigger.
       changes; the runs, ops and hashes are in the manifest
       ([scenarios.md § Mitigation alternatives](./scenarios.md#mitigation-alternatives),
       [evidence-pack.md § Mitigation alternatives](./evidence-pack.md#mitigation-alternatives)).
-- [ ] **The alternatives' runs in the reproduction bundle** (licensing
-      authority). An evidence pack's manifest freezes each mitigation
-      alternative's run id, engine, ops hash and page-1 cells, but the
-      reproduction bundle carries only the baseline and the application, so
-      `reproduce:pack` can't re-run an alternative's column. Durable fix: the
-      bundle adds each alternative's input (the baseline's with its recorded
-      ops, as the application's) and results digest, and `reproduce:pack`
-      re-runs and checks each (a new bundle version). Left out of 298 because
-      the bundle was changing in parallel (feat/o30b-r3-bundle-assessment).
-      Trigger: once that lands, or the first issued pack cites an alternative.
+- [x] **The alternatives' runs in the reproduction bundle** (licensing
+      authority). Done (bundle `bundle-3`, still unreleased, extended;
+      2026-10-31): the bundle carries each alternative page 1 assesses
+      (`runs/alternative-<n>/`: its stored input and results, `alternatives`
+      in `bundle.json`), and `checkPackBundle` ties each to the manifest (run,
+      engine, ops and hash; its input the baseline's with its ops applied; its
+      page-1 cells that read its run's summary, engine
+      `alternativeSummaryCell`: `alternative:<n>`) and re-runs it
+      (`reproduce:alternative:<n>`), so `pnpm reproduce:pack` and the server
+      (one `pack_reproduce_part` each, 302) both do. A `bundle-1`/`bundle-2`
+      bundle checks as it did. The bundle download is refused to a viewer
+      kept from the volumes when an alternative's run, the assessment's
+      background or a member op carries one (`packBundleVolumesWithheld`).
+      Tests: engine `bundle.test.ts`, `bundleParts.test.ts`,
+      `reproduce-pack.test.ts`, `packs.db.test.ts`,
+      `pack-reproduce-parts.db.test.ts`
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - [x] **EWR rows below each storage or abstraction op** (environmentalist).
       Built (engine 1.33.0, report `evidence-4`): for each proposal op that
       builds or raises storage or abstraction at a node, a page-1 row at the
