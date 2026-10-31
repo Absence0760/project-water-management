@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "The areal rainfall correction's Work it out from a MAP helper (docs/followups.md): ArealMapHelper.svelte in the ArealRainBody chunk and the lazy arealForcing.ts (0.4 KB gz). Measured locally +3.3 KB gz against feat/combined-o30b @ 92d9011ab (2807138 -> 2810481 bytes); rounded up to 4. The base branch was already 4 KB over its ceiling before this change."
+}

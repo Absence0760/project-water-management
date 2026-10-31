@@ -8346,7 +8346,21 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     null, and the correction switched off comes back if ticked again before
     saving). On, it shows a "Factor in every month" input (fills all twelve;
     blank when the months differ), a "Derived from" select (Independent MAP,
-    Rain gauges, Fitted to the flow record, each with its hint), the twelve
+    Rain gauges, Fitted to the flow record, each with its hint), for an
+    editor a closed **Work it out from a MAP** fold
+    (`settings/ArealMapHelper.svelte`, sums in `settings/arealFromMap.ts`,
+    the rain read by `settings/arealForcing.ts`, a lazy import): the
+    catchment's MAP (mm) and where it comes from (required), **Read the
+    rain** (`GET …/model-input` with the form's unsaved settings and model,
+    prepared by the engine as a run would, forecast tail cut: catchment rain
+    ?? corrected CHIRPS ?? forecast, before the correction, the rain of the
+    units that fall back to the catchment's), then the mean over its
+    complete water years, MAP ÷ mean = the factor to three decimals, and the
+    source note it would write, all shown before anything changes. A factor
+    outside 0.25–4 is refused (check the MAP's units), one outside 0.5–2
+    flagged; a catchment on a rainfall station says the run doesn't apply
+    the correction. **Use × k** fills the factor in every month, Independent
+    MAP and the note; the save bar saves it. Then the twelve
     monthly factors (0.25–4, Oct … Sep) and a required Source. A factor out
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran

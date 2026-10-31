@@ -6,20 +6,28 @@
 	setting; the page works out `arealError` (arealRainFormError), which blocks Save and shows under the source.
 -->
 <script lang="ts">
-	import type { ProjectSettings } from '@water-management/engine';
+	import type { ProjectModel, ProjectSettings } from '@water-management/engine';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
+	import ArealMapHelper from './ArealMapHelper.svelte';
 	import { AREAL_METHOD_OPTIONS, flatFactor, storedArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
 
 	let {
 		value = $bindable(),
 		arealError = null,
-		readonly = false
+		readonly = false,
+		projectId,
+		settings,
+		model
 	}: {
 		value: ProjectSettings['arealRain'];
 		arealError?: string | null;
 		readonly?: boolean;
+		/** For the "from a MAP" helper (ArealMapHelper): the project, and the form's settings and model a run would read. */
+		projectId?: string;
+		settings?: () => ProjectSettings;
+		model?: () => ProjectModel | undefined;
 	} = $props();
 
 	const areal = $derived(value as unknown as EditableArealRain);
@@ -61,6 +69,10 @@
 		<span class="hint explain" id="st-areal-method-h">{AREAL_METHOD_OPTIONS.find((o) => o.value === areal.method)?.hint}</span>
 	</div>
 </div>
+{#if !readonly && projectId && settings}
+	<!-- An independent MAP ÷ the rain GR4J runs on (engine arealFactorFromMap): shown before Use fills anything. -->
+	<ArealMapHelper {projectId} {settings} {model} current={areal} onapply={(next) => (value = storedArealRain(next))} />
+{/if}
 <div class="table-wrap">
 	<table class="data compact monthly">
 		<thead>

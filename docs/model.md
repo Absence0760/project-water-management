@@ -2561,7 +2561,13 @@ MAP from an independent source; divide by the forcing's mean annual rain;
 check the implied runoff ratio against a Budyko curve and the published MAR;
 then fit GR4J at the fixed factor (and at a small grid of factors around it,
 to report how much the fit and the results depend on it). Calibration → Flow
-calibration → **Areal rainfall correction** edits it (ui.md).
+calibration → **Areal rainfall correction** edits it (ui.md); its **Work it
+out from a MAP** fold does the division with `arealFactorFromMap` over the
+rain a run with the form's settings would scale (catchment ?? corrected CHIRPS
+?? forecast, the forecast tail cut, a day with none left as no value so its
+year drops out rather than counting as dry), and fills the flat factor, method
+`'map'` and a source note naming the MAP, its reference, the mean and the
+water years, after showing them.
 
 ### 2.4h Runoff from each unit's own rain (engine ≥ 1.78.0, issue #482)
 
