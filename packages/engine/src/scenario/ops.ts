@@ -11,6 +11,7 @@ import { dayText, isIsoDate } from '../calendar';
 /** An ISO calendar date that exists (not 2021-02-30): the calendar's own, here for the scenario code that imports it from this module. */
 export { isIsoDate };
 import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '../names';
+import { WULA_WORK_REF_MAX } from './wula';
 import {
 	ACCUMULATION_MODES,
 	BOREHOLE_MODES,
@@ -1015,7 +1016,21 @@ export type DemandObjectSetOp = {
  * (or adds one with a fresh id), so a scenario lines up with its base run by
  * id in run comparison. docs/scenarios.md has the catalogue.
  */
-export type ScenarioOp =
+export type ScenarioOp = ScenarioOpKind & OpWorksTag;
+
+/**
+ * The works an op models (294_wula_reference, scenario/wula.ts): the `ref` of
+ * one of the scenario's WULA works, as its applicant or modeller tied it. Any
+ * op may carry it; it changes nothing the op does (applyScenario never reads
+ * it), but it is part of the op, so it is hashed with the ops and recorded
+ * with every run. Absent: the op names no works.
+ */
+export interface OpWorksTag {
+	works?: string;
+}
+
+/** The ops themselves, without the works tag every op may carry (ScenarioOp). */
+export type ScenarioOpKind =
 	| NodeSetOp
 	/** A new leaf node draining into an existing one (it can't become the outflow). */
 	| { op: 'node.add'; node: NetworkNode }
@@ -1488,6 +1503,12 @@ function climateDeltaClashes(raw: readonly unknown[]): string[] {
 	return out;
 }
 
+/** An op's `works` tag is a WULA works ref as the list holds it: trimmed, 1–WULA_WORK_REF_MAX characters, no control characters. */
+function worksTagError(v: unknown): string | null {
+	if (typeof v !== 'string' || v !== v.trim() || v.length < 1 || v.length > WULA_WORK_REF_MAX) return `must be a works reference of 1–${WULA_WORK_REF_MAX} characters, without spaces at either end`;
+	return hasNameControlChars(v) ? NAME_CONTROL_MESSAGE : null;
+}
+
 /**
  * Check an untrusted op list (a request body, a stored `scenario.ops`).
  * Returns the ops rebuilt from their known fields only (unknown keys are
@@ -1508,7 +1529,15 @@ export function validateScenarioOps(raw: unknown, opts: { stored?: unknown } = {
 	try {
 		raw.forEach((r, i) => {
 			const op = validateOne(r, `ops[${i}]`, errors);
-			if (op) ops.push(op);
+			if (!op) return;
+			// The works it models (294_wula_reference): kept beside whatever the op is.
+			const works = isObj(r) ? r.works : undefined;
+			if (works !== undefined && works !== null) {
+				const e = worksTagError(works);
+				if (e) errors.push(`ops[${i}].works: ${e}`);
+				else op.works = works as string;
+			}
+			ops.push(op);
 		});
 	} finally {
 		keptTexts = null;

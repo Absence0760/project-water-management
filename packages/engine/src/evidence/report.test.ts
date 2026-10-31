@@ -23,6 +23,8 @@ import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
 import { band as bandOf } from '../uncertainty/bands';
 import { licenceImpactByYearClass } from '../views/licenceImpact';
 import { APPLICANT_PROMPTS } from './prompts';
+import type { OpClass } from '../scenario/overrides';
+import type { EvidenceScenarioInput } from './types';
 import { FUTURE_YIELD_CAVEAT, futureCaveatPending, runFutureYield } from './future';
 import { FUTURE_FIXTURE_DAM, fixtureFactorTable, packFixtureInput } from '../testing/packBundle';
 import {
@@ -334,7 +336,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -342,6 +344,51 @@ describe('evidenceReport: an application on the nominated run', () => {
 		});
 		// One answer per prompt, in the prompts' order, and nothing else.
 		expect(Object.keys(r.applicantStatement!.prompts!)).toEqual(APPLICANT_PROMPTS.map((p) => p.id));
+	});
+
+	describe('the WULA reference on page 1 and A.2 (evidence-25, 294_wula_reference)', () => {
+		const withWula = (ops: unknown[], wula: EvidenceScenarioInput['wula'], classified = ['proposal', 'proposal'] as OpClass[], origin: 'applicant' | 'team' = 'applicant') => {
+			const i = input();
+			return evidenceReport({ ...i, application: { ...i.application!, scenario: { ...i.application!.scenario, ops: ops as never, classified, origin, ...(wula ? { wula } : {}) } } });
+		};
+		const [dam, crop] = input().application!.scenario.ops;
+		const WULA = { number: 'WU/2026/0042', works: [{ ref: 'W1', text: 'A 1.5 million m³ dam on Farm two' }, { ref: 'W2', text: 'A weir on the river' }] };
+
+		it('prints the number and the works, and ties each change to the works it names', () => {
+			const r = withWula([{ ...dam, works: 'W1' }, crop], WULA);
+			expect(r.version).toBe('evidence-25');
+			expect(r.identity.application!.wula).toEqual({ number: 'WU/2026/0042', refs: ['W1', 'W2'], untiedProposals: [1], unknownRefs: [], unmodelled: ['W2'] });
+			// The works in words are A.2's alone: page 1 holds none of the applicant's words (G13).
+			expect(r.appendix.wulaWorks).toEqual(WULA.works);
+			expect(JSON.stringify({ identity: r.identity, flags: r.flags, rows: r.rows, questions: r.questions })).not.toContain('A weir on the river');
+			// A.2 reads each op's tag from the op itself.
+			expect(r.ops.map((o) => o.op.works)).toEqual(['W1', undefined]);
+			expect(r.questions.some((q) => q.startsWith('1 proposal models none of the works the WULA applies for (A.2)'))).toBe(true);
+			expect(r.questions.some((q) => q.startsWith('No change models works “W2” (A.2)'))).toBe(true);
+		});
+
+		it('asks for nothing when every proposal is tied and every works modelled (positive control)', () => {
+			const r = withWula([{ ...dam, works: 'W1' }, { ...crop, works: 'W2' }], WULA);
+			expect(r.identity.application!.wula).toMatchObject({ untiedProposals: [], unknownRefs: [], unmodelled: [] });
+			expect(r.questions.filter((q) => /WULA|\(A\.2\)/.test(q))).toEqual([]);
+		});
+
+		it('holds an application with no reference to it: no number, every proposal untied', () => {
+			const r = withWula([dam, crop], undefined);
+			expect(r.identity.application!.wula).toEqual({ number: null, refs: [], untiedProposals: [0, 1], unknownRefs: [], unmodelled: [] });
+			expect(r.appendix.wulaWorks).toEqual([]);
+			expect(r.questions.some((q) => q.startsWith('The WULA application number is not given (page 1)'))).toBe(true);
+		});
+
+		it('leaves it out of a team scenario that records none, and prints one that does', () => {
+			expect(withWula([dam, crop], undefined, undefined, 'team').identity.application!.wula).toBeNull();
+			expect(withWula([dam, crop], WULA, undefined, 'team').identity.application!.wula?.number).toBe('WU/2026/0042');
+		});
+
+		it('doesn’t count a baseline assumption as untied', () => {
+			const r = withWula([{ ...dam, works: 'W1' }, crop], { number: 'WU/1', works: [WULA.works[0]!] }, ['proposal', 'baseline']);
+			expect(r.identity.application!.wula).toMatchObject({ untiedProposals: [], unmodelled: [] });
+		});
 	});
 
 	it('lists every input series with its hash, and every warning verbatim', () => {
@@ -1039,7 +1086,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-24');
+		expect(got.version).toBe('evidence-25');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1698,7 +1745,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1754,7 +1801,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1977,7 +2024,7 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 
 	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.calibrationZones).toEqual([
 			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
 			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
@@ -2005,7 +2052,7 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 
 	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
 		const r = evidenceReport(input({ futureYield: found }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		const s = r.futureYield!;
 		expect(s).toMatchObject({ status: 'ok', createdAt: found.createdAt, createdBy: 'Analyst', complete: true, fewModels: true, models: ['SYN-A', 'SYN-B', 'SYN-C'] });
 		if (s.status !== 'ok') throw new Error('unreachable');

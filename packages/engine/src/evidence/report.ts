@@ -66,11 +66,15 @@ import {
 	type EvidenceReport,
 	type EvidenceRow,
 	type EvidenceRunInput,
+	type EvidenceScenarioInput,
 	type EvidenceServedWhileFailing,
 	type EvidenceSite,
 	type EvidenceSiteMonth,
-	type EvidenceUser
+	type EvidenceUser,
+	type EvidenceWula
 } from './types';
+import type { OpClass } from '../scenario/overrides';
+import { NO_WULA, wulaApplies, wulaTie } from '../scenario/wula';
 
 const DAYS_PER_YEAR = 365.25;
 
@@ -502,7 +506,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 						opsSha256: a.scenario.opsSha256,
 						proposals: classes.filter((c) => c === 'proposal').length,
 						assumptions: classes.filter((c) => c === 'baseline').length,
-						origin: a.scenario.origin ?? 'team'
+						origin: a.scenario.origin ?? 'team',
+						wula: evidenceWula(a.scenario, classes)
 					}
 				: null
 		},
@@ -557,6 +562,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],
+			// A.2's works as applied for (evidence-25): the applicant's words, so never on page 1 (G13).
+			wulaWorks: a ? (a.scenario.wula?.works ?? []).map((w) => ({ ...w })) : [],
 			series: [...seriesRows('baseline', b), ...(a ? seriesRows('application', a) : [])],
 			history: input.history,
 			warnings: { baseline: [...b.summary.warnings], application: a ? [...a.summary.warnings] : null },
@@ -2069,6 +2076,19 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	if (!(input.baseline.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord)
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');
+	const wula = input.application ? evidenceWula(input.application.scenario, input.application.scenario.classified) : null;
+	if (wula) {
+		if (wula.number === null) out.push('The WULA application number is not given (page 1): expect the assessor to ask which application this models; add it to the scenario’s WULA reference.');
+		const untied = wula.untiedProposals.length;
+		if (untied)
+			out.push(
+				`${untied} ${untied === 1 ? 'proposal models' : 'proposals model'} none of the works the WULA applies for (A.2): expect the assessor to ask what ${untied === 1 ? 'it models' : 'each models'}; name its works on the scenario, then run the application again.`
+			);
+		if (wula.unmodelled.length)
+			out.push(
+				`No change models ${wula.unmodelled.length === 1 ? 'works' : 'the works'} ${wula.unmodelled.map((r) => `“${r}”`).join(', ')} (A.2): expect the assessor to ask why the model leaves out works the WULA applies for.`
+			);
+	}
 	const unsourced = (demand?.objects ?? []).filter((o) => o.change !== 'removed' && o.source === null).length;
 	if (unsourced)
 		out.push(
@@ -2080,6 +2100,13 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
+
+/** The WULA reference as page 1 and A.2 print it (evidence-25): null for a team scenario that records none. */
+function evidenceWula(s: EvidenceScenarioInput, classes: readonly OpClass[]): EvidenceWula | null {
+	const w = s.wula ?? NO_WULA;
+	if (!wulaApplies((s.origin ?? 'team') === 'applicant', w)) return null;
+	return { number: w.number, refs: w.works.map((x) => x.ref), ...wulaTie(s.ops, classes, w.works) };
+}
 
 function seriesRows(run: 'baseline' | 'application', r: EvidenceRunInput): EvidenceReport['appendix']['series'] {
 	return Object.entries(r.inputs?.series ?? {})
