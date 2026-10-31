@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CumulativeReport, CumulativeRow } from '@water-management/engine';
 import type { AssessorQuestion, Scenario } from '#lib/api/types.js';
-import { assessable, assessmentCsv, assessmentState, changeText, changeTone, interactionWords, pickBlocked, rowLabel, valueText } from './cumulative';
+import { assessable, assessmentCsv, assessmentState, baselineOf, changeText, changeTone, interactionWords, pickBlocked, rowLabel, valueText } from './cumulative';
 
 const app = (id: string, status: Scenario['status'], baseRunId = 'r1', name = id): Scenario => ({ id, name, status, baseRunId }) as Scenario;
 
@@ -126,5 +126,32 @@ describe('assessmentState', () => {
 		expect(assessmentState({ status: 'pending', job: job('queued'), problems: [] })).toMatchObject({ kind: 'pending', progress: null });
 		expect(assessmentState({ status: 'pending', job: job('dead', 'boom'), problems: [] })).toEqual({ kind: 'stopped', text: 'This assessment could not run: boom', lines: [] });
 		expect(assessmentState({ status: 'pending', job: null, problems: [] })).toMatchObject({ kind: 'stopped' });
+	});
+});
+
+describe('the background at full allocation (295)', () => {
+	const baseline: CumulativeReport = { scenarios: [{ id: 'a', name: 'A' }], rows: [row(), row({ metric: 'outlet_flow', site: null, isOutlet: false, unit: 'm³/day', baseline: 1000 })], warnings: [] };
+	const bgTable: CumulativeReport = {
+		scenarios: [{ id: 'a', name: 'A' }],
+		rows: [row({ baseline: 40, singles: [44], combined: 50, singleChanges: [4], sumOfSingles: 4, combinedChange: 10, interaction: 6 })],
+		warnings: []
+	};
+	const background = { label: 'Existing authorised use (full allocation)', run: { id: 'r9', label: 'Full allocation', scenarioName: 'At full allocation', createdAt: '2026-10-30T00:00:00Z' }, report: bgTable };
+
+	it('baselineOf finds the hydrologist’s baseline value of the same measure at the same site', () => {
+		expect(baselineOf(baseline, bgTable.rows[0]!)).toBe(10);
+		expect(baselineOf(baseline, { metric: 'outlet_flow', siteNodeId: null, isOutlet: false })).toBe(1000);
+		expect(baselineOf(baseline, { metric: 'reserve_deficit', siteNodeId: null, isOutlet: true })).toBeNull();
+	});
+
+	it('the CSV keeps the baseline’s table as it was, then the background’s own labelled table with the baseline beside it', () => {
+		const plain = assessmentCsv(baseline).split('\r\n');
+		const lines = assessmentCsv({ ...baseline, background }).split('\r\n');
+		expect(lines.slice(0, 3)).toEqual(plain.slice(0, 3));
+		expect(lines[3]).toBe('');
+		expect(lines[4]).toBe('Existing authorised use (full allocation): Full allocation,A separate comparison: the baseline above stays the hydrologist’s run');
+		expect(lines[5]).toBe('Measure,Site,Unit,Baseline,Background (full allocation),A alone,All together,Change: A alone,Sum of changes alone,Change together,Interaction (together − sum)');
+		expect(lines[6]).toBe('Days the EWR is not met,Outlet (Outlet gauge),days,10,40,44,50,4,4,10,6');
+		expect(lines[7]).toBe('');
 	});
 });

@@ -634,6 +634,49 @@
 							</p>
 						{/if}
 						{#each cb.warnings as w (w)}<p class="na">{w}</p>{/each}
+						{#if cb.background}
+							{@const bg = cb.background}
+							<!-- evidence-25: the assessment's background at full allocation, its own rows beside the baseline's, never in their place. -->
+							<h4>{bg.label}</h4>
+							<p class="small">
+								The same applications on “{bg.runLabel || 'a run of this baseline at full allocation'}”: the baseline with every registered or licensed
+								volume taken in full, which the assessor chose for this assessment. A separate comparison: the figures above are against the baseline as
+								the hydrologist modelled it, and stay so.
+							</p>
+							<div class="table-wrap">
+								<table class="data compact" data-testid="evidence-combined-background">
+									<thead>
+										<tr>
+											<th scope="col">At the outlet</th>
+											<th scope="col" class="num">Days below {dailyName}</th>
+											<th scope="col" class="num">Reserve months met at the outlet</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<th scope="row">At full allocation<span class="sub">against the baseline</span></th>
+											<td class="num">{bg.ewrDays?.baseline ?? '–'}{bg.ewrDays?.baseline != null && cb.ewrDays?.baseline != null ? ` (${measureText(bg.ewrDays.baseline - cb.ewrDays.baseline, 'days')})` : ''}</td>
+											<td class="num">{bg.reserveMonths?.baseline ?? '–'}{bg.reserveMonths?.baseline != null && cb.reserveMonths?.baseline != null ? ` (${measureText(bg.reserveMonths.baseline - cb.reserveMonths.baseline, 'months')})` : ''}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">Sum of each alone</th>
+											<td class="num">{measureText(bg.ewrDays?.sumOfSingles, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.sumOfSingles, 'months')}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">All together</th>
+											<td class="num">{measureText(bg.ewrDays?.change, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.change, 'months')}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">Interaction<span class="sub">together, beyond the sum of each alone</span></th>
+											<td class="num">{measureText(bg.ewrDays?.interaction, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.interaction, 'months')}</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						{/if}
 					{/if}
 				{/if}
 			{:else if s.id === 'allocations'}
