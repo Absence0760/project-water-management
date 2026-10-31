@@ -260,6 +260,9 @@ function runsOf(day0: number, n: number, pick: (k: number) => boolean): DayRuns 
 	return out;
 }
 
+/** The days of `daily` holding a value, as runs. */
+export const valueRuns = (daily: Daily): DayRuns => runsOf(toEpochDay(daily.startDate), daily.values.length, (k) => daily.values[k] !== null);
+
 /** Both run lists' days, normalised (overlapping and adjacent runs joined). */
 export function unionRuns(a: DayRuns, b: DayRuns): DayRuns {
 	const out: DayRuns = [];
@@ -724,9 +727,9 @@ async function trackKeyDays(
 
 /** A datemultirange from two int[] parameters: epoch-day run starts and ends, by parameter number. NULL for no runs. */
 /** Day runs as feedDaysSql's two parameters. */
-const runParams = (runs: DayRuns): [number[], number[]] => [runs.map((r) => r[0]), runs.map((r) => r[1])];
+export const runParams = (runs: DayRuns): [number[], number[]] => [runs.map((r) => r[0]), runs.map((r) => r[1])];
 
-const feedDaysSql = (starts: number, ends: number) =>
+export const feedDaysSql = (starts: number, ends: number) =>
 	`(SELECT range_agg(daterange(DATE '1970-01-01' + s, DATE '1970-01-01' + e)) FROM unnest(\$${starts}::int[], \$${ends}::int[]) AS t(s, e))`;
 
 /**

@@ -296,7 +296,7 @@ describe('a boundary feed beside the CHIRPS record runs read (issue #561)', () =
 		expect(after.replace).toBeNull();
 	});
 
-	it('offers no replacement of a record another feed writes, or one already of the version the feed would write', async () => {
+	it('replaces a record another catchment feed writes through that feed: a version replacement while it holds another version', async () => {
 		const { owner, pid, b } = await withRecord();
 		const other = await owner.call('POST', `/projects/${pid}/feeds`, {
 			source: 'chirps',
@@ -305,9 +305,20 @@ describe('a boundary feed beside the CHIRPS record runs read (issue #561)', () =
 			replaceSeries: true
 		});
 		expect(other.status, JSON.stringify(other.body)).toBe(201);
-		const p = (await owner.call('GET', at(pid))).body;
-		expect(p.replace).toMatchObject({ available: false, targetName: RECORD, reason: expect.stringMatching(/a feed already writes “Rainfall CHIRPS satelite \(mm\)”/) });
+		const fid = other.body.feed.id as string;
+		// A unit's feed never writes the record runs read, and its cells are its unit's: not offered through it.
+		await asOwner(`UPDATE data_feed SET config = config || '{"unit": {}}'::jsonb WHERE id = $1`, [fid]);
+		expect((await owner.call('GET', at(pid))).body.replace).toMatchObject({ available: false, reason: expect.stringMatching(/a feed other than a catchment CHIRPS feed writes/) });
 		expect((await apply(owner, pid, b, { replace: true })).body.details).toMatchObject({ code: 'series_replace' });
+		await asOwner(`UPDATE data_feed SET config = config - 'unit' WHERE id = $1`, [fid]);
+		const p = (await owner.call('GET', at(pid))).body;
+		// The record is an unrecorded version: the feed that writes it takes the boundary's cells and replaces it whole (#40c).
+		expect(p.replace).toEqual({ available: true, targetName: RECORD, product: 'rnl', startDate: '1995-01-01', feedId: fid });
+		const r = await apply(owner, pid, b, { replace: true });
+		expect(r.status, JSON.stringify(r.body)).toBe(200);
+		expect(r.body.feed).toMatchObject({ id: fid, targetName: RECORD, replaceFrom: '', config: { product: 'rnl', startDate: '1995-01-01', boundary: { featureId: b.id } } });
+		expect(r.body.feed.config.cells).toHaveLength(9);
+		expect((await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds).toHaveLength(1);
 
 		const same = await setup();
 		await same.owner.call('PUT', `/projects/${same.pid}/series`, { kind: 'rain_chirps_mm', name: RECORD, unit: 'mm', startDate: '2001-01-01', values: [1], product: 'CHIRPS sat', productVersion: '3.0' });

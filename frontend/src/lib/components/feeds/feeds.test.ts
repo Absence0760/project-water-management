@@ -201,6 +201,9 @@ describe('the CHIRPS version guard (issue #40c)', () => {
 			/^Replacement confirmed: the feed backfills CHIRPS sat v3\.0 from its start date, then replaces the series \(CHIRPS v2\.0\) with it whole\. Until then runs use the series as it is/
 		);
 		expect(conflictMessage({ ...f, versionConflict: false })).toBeNull();
+		// An area replacement (296) says so whether or not the version matches.
+		expect(conflictMessage({ ...f, versionConflict: false, replaceFrom: 'area:CHIRPS sat/3.0' })).toMatch(/^Re-reading the record over new cells: .* days you entered stay as they are\.$/);
+		expect(conflictMessage({ ...f, versionConflict: false, writes: null, replaceFrom: 'area:' })).toMatch(/^Re-reading the record over new cells/);
 	});
 });
 
@@ -488,6 +491,15 @@ describe('the rain feed from the catchment boundary (issue #326 B-rain)', () => 
 		);
 		expect(applyWords(p, [], { replace: true, product: 'rnl', startDate: '' })).toMatch(
 			/^Apply attaches a CHIRPS feed \(rnl\) that replaces “Rainfall CHIRPS” with the boundary’s rain: it reads the whole record again from .+ into a stage, and runs keep reading the old values until the new record is complete/
+		);
+		// Through the catchment feed that writes it (296): that feed re-reads its own record over the boundary's cells.
+		const area = { ...p, replace: { ...p.replace, feedId: 'f9', area: true as const, startDate: '2001-03-01' } };
+		expect(applyWords(area, [], { replace: true, product: 'rnl', startDate: '' })).toBe(
+			`Apply gives the CHIRPS feed that writes “Rainfall CHIRPS” the boundary’s cells: it reads its whole record again over them from ${fmtDay('2001-03-01')} into a stage, and runs keep reading the old values until the new record is complete, then its own days take their place (days you entered stay as they are; the old values stay in the series’ history).`
+		);
+		// Through that feed, with another version in the record: replaced whole.
+		expect(applyWords({ ...p, replace: { ...p.replace, feedId: 'f9' } }, [], { replace: true, product: 'rnl', startDate: '' })).toMatch(
+			/^Apply gives the CHIRPS feed that writes “Rainfall CHIRPS” the boundary’s cells \(rnl\): it reads the whole record again from .+ then it takes their place whole/
 		);
 		const boundary2 = { featureId: 'b1', name: 'B', updatedAt: '2026-10-01T08:00:00.000Z', areaKm2: 1 };
 		expect(boundaryApplyBody({ ...p, boundary: boundary2 }, { replace: false, product: 'rnl', startDate: ' 1995-01-01 ' })).toEqual({

@@ -40,7 +40,10 @@ export interface FeedMeta {
 	 * replacing it (replaceSeries) or the feed is pointed at another series.
 	 */
 	versionConflict: boolean;
-	/** An owner confirmed the feed may replace the target while it holds this (`CHIRPS/2.0`, '' = unrecorded); the next fetch does it. */
+	/**
+	 * An owner confirmed the feed may replace the target while it holds this (`CHIRPS/2.0`, '' = unrecorded), or re-read
+	 * its own days over new cells (`area:CHIRPS sat/3.0`, `area:`; 296); the next fetch starts it.
+	 */
 	replaceFrom: string | null;
 	/**
 	 * A confirmed replacement being backfilled (feed_stage, 032): the new
@@ -89,7 +92,10 @@ export interface FeedRow {
 	revisionXmin?: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
 	version: string;
-	/** What an owner confirmed the feed may replace (data_feed.replace_series_from, 032): `CHIRPS/2.0`, '' = unrecorded; null = nothing. */
+	/**
+	 * What an owner confirmed the feed may replace (data_feed.replace_series_from, 032): `CHIRPS/2.0`, '' = unrecorded,
+	 * `area:…` = its whole record re-read over new cells (296); null = nothing.
+	 */
 	replaceFrom: string | null;
 }
 
@@ -173,6 +179,20 @@ export async function targetSeries(
 	};
 }
 
+/**
+ * The first day of a feed's own days in its series (time_series.feed_days,
+ * 031), or null when it holds none there: what an area replacement (296)
+ * must re-read from, since every later day of the feed's is the old area's.
+ */
+export async function feedFirstOwnDay(db: Db, projectId: string, feedId: string, kind: string, name: string): Promise<string | null> {
+	const { rows } = await db.query<{ firstDay: string | null }>(
+		`SELECT to_char(lower(feed_days), 'YYYY-MM-DD') AS "firstDay" FROM time_series
+		 WHERE project_id = $1 AND kind = $2 AND name = $3 AND feed_id = $4 AND feed_days IS NOT NULL AND NOT isempty(feed_days)`,
+		[projectId, kind, name, feedId]
+	);
+	return rows[0]?.firstDay ?? null;
+}
+
 /** The series of a kind a run reads now (runSeries), with what it holds and the feed that writes it, if any. */
 export interface RunSeriesPick {
 	name: string;
@@ -230,14 +250,46 @@ export async function createFeed(db: Db, projectId: string, input: FeedInput, re
  * null to withdraw one, or undefined to keep the feed's own (the trigger
  * drops it on a re-target, and discards a staged replacement on any change).
  */
-export async function updateFeed(db: Db, projectId: string, feedId: string, input: FeedInput, replaceFrom?: string | null): Promise<boolean> {
+export async function updateFeed(
+	db: Db,
+	projectId: string,
+	feedId: string,
+	input: FeedInput,
+	replaceFrom?: string | null,
+	replaceConfigFrom: FeedConfig | null = null
+): Promise<boolean> {
+	// replaceConfigFrom (296): with a new area confirmation, the config the series' record was read over; a confirmation
+	// kept as it is keeps its own, and the trigger drops it with any confirmation that isn't an area one.
 	const { rowCount } = await db.query(
 		`UPDATE data_feed SET source = $3, config = $4, target_kind = $5, target_name = $6, enabled = $7, schedule = $8,
-			replace_series_from = CASE WHEN $9::boolean THEN $10 ELSE replace_series_from END
+			replace_series_from = CASE WHEN $9::boolean THEN $10 ELSE replace_series_from END,
+			replace_config_from = CASE WHEN $9::boolean THEN $11::jsonb ELSE replace_config_from END
 		 WHERE project_id = $1 AND id = $2`,
-		[projectId, feedId, input.source, JSON.stringify(input.config), input.targetKind, input.targetName, input.enabled, input.schedule, replaceFrom !== undefined, replaceFrom ?? null]
+		[
+			projectId,
+			feedId,
+			input.source,
+			JSON.stringify(input.config),
+			input.targetKind,
+			input.targetName,
+			input.enabled,
+			input.schedule,
+			replaceFrom !== undefined,
+			replaceFrom ?? null,
+			replaceConfigFrom === null ? null : JSON.stringify(replaceConfigFrom)
+		]
 	);
 	return (rowCount ?? 0) > 0;
+}
+
+/**
+ * The config an area replacement started from (data_feed.replace_config_from,
+ * 296): the cells the series' record was read over, which withdrawing the
+ * replacement puts back. Null when no area replacement is pending.
+ */
+export async function replaceConfigFrom(db: Db, projectId: string, feedId: string): Promise<FeedConfig | null> {
+	const { rows } = await db.query<{ config: FeedConfig | null }>('SELECT replace_config_from AS config FROM data_feed WHERE project_id = $1 AND id = $2', [projectId, feedId]);
+	return rows[0]?.config ?? null;
 }
 
 export async function deleteFeed(db: Db, projectId: string, feedId: string): Promise<boolean> {

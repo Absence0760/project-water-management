@@ -1319,11 +1319,17 @@ describe('ingest: how a fetch result becomes the series (feeds/ingest.ts → ser
 		expect(await ingest(ok('2026-01-04', [9], { days: 1 }))).toEqual({ merged: 0, lastDate: null });
 		expect((await feedRow(id)).last_error).toBe('the fetcher’s answer was not valid, so nothing was written');
 
-		// Saving the box again resets the count (data_feed_stamp clears last_meta on a config change): the way out.
-		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { config: { bbox: { ...bbox, north: -20.21 }, skipNoData: true } })).status).toBe(200);
+		// Saving a new box resets the count (data_feed_stamp clears last_meta on a config change): the way out. It is
+		// another area under the feed's record, so the owner confirms re-reading the record over it (296_feed_area_replace):
+		// the days go to the stage, swapped in once the backfill is caught up (this answer's window reaches the newest day).
+		const box2 = { config: { bbox: { ...bbox, north: -20.21 }, skipNoData: true } };
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, box2)).body.details).toMatchObject({ code: 'series_area' });
+		expect((await owner.call('PATCH', `/projects/${pid}/feeds/${id}`, { ...box2, replaceSeries: true })).status).toBe(200);
 		expect((await feedRow(id)).last_meta).toBeNull();
 		expect(await ingest(ok('2026-01-04', [4], { days: 1, cellsUsed: 2 }))).toEqual({ merged: 1, lastDate: '2026-01-04' });
 		expect((await feedRow(id)).last_meta).toMatchObject({ cellsUsed: 2 });
+		// The record is the new box's: the old box's days it has no value for are cleared, never spliced onto it.
+		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual([null, null, null, 4]);
 	});
 
 	it('records no cellsUsed for a feed that doesn’t leave out sea cells, whatever the fetcher says', async () => {

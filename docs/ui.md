@@ -6828,8 +6828,12 @@ editors run one now and read the map's proposals, viewers read.
   which units that would refuse), an optional **Start date** (checked
   against the product's first day; without one the feeds read from it), a
   sentence of what the button does, and the button itself, named by what it
-  does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**
-  (from each unit's `action`), in the panel's action row with Close. When
+  does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**,
+  **Re-read the record** / **Set up 3 feeds** when a unit's parcel was
+  redrawn after its feed fetched (its `replace` action, 296: the sentence
+  says the record is read again over the new cells, runs use the old one
+  until it is complete, and days entered by hand stay) (from each unit's
+  `action`; `unitRain.ts unitRainAction`), in the panel's action row with Close. When
   the new feeds would pass the project's feed cap (the proposal's `maxFeeds`, 60; the catchment's
   included) a warning says so plainly, with the room left, before the button
   is pressed (`feedLimitNote`; the server refuses it, `feed_limit`). With

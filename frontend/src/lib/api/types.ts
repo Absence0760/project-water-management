@@ -4303,8 +4303,12 @@ export interface UnitRainProposalUnit {
 	feedId: string | null;
 	/** Days that series holds (0 before the first fetch). */
 	seriesDays: number;
-	/** What POST does for it: make its feed, give its (still empty) feed these cells or this product, or nothing (it reads them already). */
-	action: 'create' | 'update' | 'none';
+	/**
+	 * What POST does for it: make its feed, give its (still empty) feed these cells or this product, give its feed these
+	 * cells and re-read its whole record over them (`replace`: the series holds days; backend 296_feed_area_replace), or
+	 * nothing (it reads them already).
+	 */
+	action: 'create' | 'update' | 'replace' | 'none';
 }
 
 /** GET …/feeds/chirps/from-units: every land unit's proposal, and the units it can't propose for. */
@@ -4332,7 +4336,10 @@ export interface UnitRainApplyBody {
 /** POST …/feeds/chirps/from-units answer: the feeds made and changed, one per unit. */
 export interface UnitRainApplyResult {
 	created: number;
+	/** Every feed changed, the ones re-reading their record included. */
 	updated: number;
+	/** Of those, the feeds re-reading their whole record over the new cells (296). */
+	replaced?: number;
 	feeds: { nodeId: string; feedId: string }[];
 	/** The units left out (refused, or with no parcel), and why. */
 	skipped?: { nodeId: string; name: string; reason: string }[];

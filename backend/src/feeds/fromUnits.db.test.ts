@@ -177,17 +177,30 @@ describe('rain for each unit (from-units)', () => {
 		// A start before the product's first day is refused.
 		expect((await s.owner.call('POST', at(s.pid), { product: 'sat', startDate: '1990-01-01' })).status).toBe(400);
 
-		// Once the series holds days, new cells would splice two areas: refused, and the feed is left as it is.
+		// Once the series holds the feed's days, new cells would splice two areas: the feed re-reads its whole record over
+		// them instead (296_feed_area_replace), staged and swapped in once complete; until then the series is as it was.
 		const [series] = await unitSeries(s.pid, s.a.id);
-		await asOwner(`UPDATE time_series SET start_date = '2024-01-01', "values" = '{1,0,2}' WHERE id = $1`, [series.id]);
+		await asOwner(
+			`UPDATE time_series SET start_date = '2024-01-01', "values" = '{1,0,2}', feed_id = $2, feed_days = '{[2024-01-01,2024-01-04)}' WHERE id = $1`,
+			[series.id, feedId]
+		);
+		const before = await config();
 		await s.owner.call('PATCH', `/projects/${s.pid}/map/features/${f.id}`, { geometry: PARCEL_A });
 		const p = (await s.owner.call('GET', at(s.pid))).body;
-		expect(p.units).toEqual([]);
-		expect(p.refused).toEqual([{ nodeId: s.a.id, name: 'Unit A', reason: expect.stringMatching(/its parcel changed after its feed began fetching/) }]);
-		const named = await s.owner.call('POST', at(s.pid), { nodeIds: [s.a.id] });
-		expect(named.status).toBe(409);
-		expect(named.body.details).toMatchObject({ code: 'unit_refused', units: [{ nodeId: s.a.id }] });
-		expect((await config()).config.cells).toHaveLength(1);
+		expect(p.refused).toEqual([]);
+		expect(p.units).toEqual([expect.objectContaining({ nodeId: s.a.id, feedId, action: 'replace', seriesDays: 3 })]);
+		// A start date after the feed's first own day would leave some of them over the old cells: refused.
+		const late = await s.owner.call('POST', at(s.pid), { product: 'sat', startDate: '2024-06-01' });
+		expect(late.status).toBe(409);
+		expect(late.body.details).toMatchObject({ code: 'series_backfill', firstDay: '2024-01-01' });
+		const re = await s.owner.call('POST', at(s.pid), { nodeIds: [s.a.id] });
+		expect(re.status, JSON.stringify(re.body)).toBe(200);
+		expect(re.body).toMatchObject({ created: 0, updated: 1, replaced: 1 });
+		const [pending] = await asOwner('SELECT replace_series_from AS "from", replace_config_from AS "configFrom" FROM data_feed WHERE id = $1', [feedId]);
+		expect(pending).toEqual({ from: 'area:CHIRPS sat/3.0', configFrom: before.config });
+		expect((await config()).config.cells.length).toBeGreaterThan(1);
+		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'feed.configured' ORDER BY id DESC LIMIT 1`, [s.pid]);
+		expect(ev.subject).toMatchObject({ action: 'units', updated: 1, units: [{ nodeId: s.a.id, action: 'replaced' }] });
 		// Unit B has no polygon: naming it is a 409 too; a node that isn't a land unit, a 400.
 		expect((await s.owner.call('POST', at(s.pid), { nodeIds: [s.b.id] })).status).toBe(409);
 		expect((await s.owner.call('POST', at(s.pid), { nodeIds: [s.user.id] })).body.details).toMatchObject({ code: 'unit_unknown' });

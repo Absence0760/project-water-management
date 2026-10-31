@@ -5117,16 +5117,21 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       boundary** proposes the CHIRPS cells the boundary covers, weighted by
       the share of each inside (exact clipping), and an owner applies it
       ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
-- [ ] **Re-read a feed's record over new cells** (WP-2.10, M; found in #326
-      B-rain): new cells (from the boundary, or a redrawn one) go only to a
-      feed whose series is empty, else to a new feed in a separate series,
-      because a feed's existing days were averaged over its old cells and it
-      never splices two areas. Durable fix: a staged same-product
-      replacement, like the version replacement of issue #40c (backfill the
-      whole record over the new cells in `feed_stage`, swap it in whole),
-      so the boundary feed can take over the default series. Trigger: a
-      hydrologist wanting the boundary's rain in an existing CHIRPS series
-      without comparing two series.
+- [x] **Re-read a feed's record over new cells** (WP-2.10, M; found in #326
+      B-rain; done 2026-10-31, `296_feed_area_replace.sql`): new cells under
+      a record a gridded feed (`chirps`, `agera5_et0`) wrote are refused
+      (409 `series_area`) unless the owner confirms an **area replacement**
+      (`replaceSeries: true`, `replace_series_from` `area:…`): the feed
+      backfills its whole record over the new cells into `feed_stage` from
+      its first own day and the ingest swaps it in once caught up, replacing
+      only its own days (a person's days and hand edits stay; the reference
+      ET product days are rebuilt from the stage), the old values kept as a
+      `feed_replace` revision; withdrawing puts the old cells back. The
+      boundary's **Replace** goes through the catchment feed that writes the
+      default series, and **Rain for each unit** re-reads a redrawn parcel's
+      record (`replace`). Also fixed: an `agera5_et0` feed was never caught
+      up, so it fetched again a minute after every fetch
+      ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 - [x] **Drawing polygons on the map** (D9 (b)): superseded by issue #326
       C1 (2026-10-01): editors draw polygons and lines, place points by
       click, and reshape them, with paste-a-shape and keyboard placement as
