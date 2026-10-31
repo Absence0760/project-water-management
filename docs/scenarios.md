@@ -2004,6 +2004,57 @@ application (WULA) applies for?
   submitted. A tag goes with its op, so a withheld op (another unit's
   registered volume, `app_share_kept`) takes its tag with it.
 
+### Mitigation alternatives
+
+`298_scenario_alternatives`; backend `scenarios/alternatives.ts`;
+[api.md § Scenarios](./api.md), [data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql),
+[evidence-pack.md § Mitigation alternatives](./evidence-pack.md#mitigation-alternatives).
+The licence applicant's question (followups.md, "Labelled mitigation
+alternatives"): the report showed one application, but an applicant must
+show the mitigation they weighed.
+
+- **What it records.** Up to three (`ALTERNATIVES_MAX`) runs the scenario
+  cites, in order, each with a label of 1–80 characters ("smaller dam",
+  "winter abstraction only"). It cites a **run**, not a scenario: a run's
+  ops and results never change, so the citation is the alternative as it
+  was weighed. Application details → *Alternatives* in the editor.
+- **Which runs.** A run of another of the caller's own scenarios, of the
+  same origin (an application's: the same applicant's; a team scenario's:
+  another team scenario), on the scenario's own base run.
+  `GET …/alternatives` lists those (`candidates`, newest first) to whoever
+  may change the scenario and no one else; `PUT …/alternatives` refuses any
+  other run with one `422` (another applicant's, the scenario's own, one on
+  another base run or project, or none), so no answer says another
+  applicant's run exists, and `scenario_alternative_guard` refuses it in
+  the table too.
+- **Who, and when.** Whoever may change the scenario replaces the list (an
+  editor on a team scenario, only the applicant on an application, never a
+  consultant it is shared with), **while it is a draft**: submitted, it is
+  frozen with the ops (the route's `409`, the guard's `restrict_violation`
+  on a delete); withdrawn it stays frozen, reopened as a draft it takes
+  changes again. A rebase drops the citations on the old base
+  (`scenario_alternative_rebase`), so every alternative is on the
+  scenario's base. Whoever reads the scenario reads the list.
+- **Kept and readable with it.** A draft's runs are its parties' alone, and
+  an alternative usually stays a draft, so a run a scenario **past draft**
+  cites is readable by whoever reads that scenario (the assessors once
+  submitted, viewers once decided; `app_alternative_run_readable` in
+  `model_run_select`, `app_hidden_scenario_runs`, `app_run_digest` and the
+  allocation-holder definers), and kept: no trim, no delete
+  (`model_run_cited`), and its scenario can't be deleted (`409`). Nothing
+  else of the applicant's drafts becomes readable. A draft's citations keep
+  nothing, so a draft's cited run the applicant's cap trims drops out of the
+  list (cite the newest), and deleting an account's drafts isn't held up by
+  them. The Runs tab tags a kept one *Alternative*.
+- **On the evidence report.** Page 1 sets each beside the application, a
+  column with its value and its change against the baseline on every row,
+  and A.2 lists its changes ([evidence-pack.md § Mitigation
+  alternatives](./evidence-pack.md#mitigation-alternatives)).
+- **The log.** `scenario.changed` with `fields: ['alternatives']` and the
+  count; an application's carries no name, as above.
+- **Not on the share link or the applicant's copy of a pack**: both read
+  allowlisted fields only.
+
 ### Sharing and comments (WP-3.15)
 
 `115_scenario_share_notes.sql`; [api.md § Share](./api.md#share),

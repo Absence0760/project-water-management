@@ -210,7 +210,9 @@ async function packStatementFor(
  * manifest names, without a fit.
  */
 async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManifest): Promise<PackErratum[]> {
-	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : [])];
+	// The mitigation alternatives' runs too (evidence-26): page 1 prints their figures, so their errata reach the pack.
+	const alternatives = (manifest.report.alternatives ?? []).filter((x) => typeof x?.runId === 'string');
+	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : []), ...alternatives.map((x) => x.runId)];
 	const { rows } = await db.query<{ id: string; engineVersion: string; fitEngineVersion: string | null }>(
 		`SELECT id, engine_version AS "engineVersion", run_fit_engine_version(inputs, summary) AS "fitEngineVersion" FROM model_run WHERE id = ANY($1::uuid[])`,
 		[ids]
@@ -218,7 +220,8 @@ async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManife
 	const identity = manifest.report.identity;
 	const named: Record<string, string | undefined> = {
 		[pack.baselineRunId]: identity.baseline.engineVersion,
-		...(pack.scenarioRunId ? { [pack.scenarioRunId]: identity.application?.engineVersion } : {})
+		...(pack.scenarioRunId ? { [pack.scenarioRunId]: identity.application?.engineVersion } : {}),
+		...Object.fromEntries(alternatives.map((x) => [x.runId, x.engineVersion]))
 	};
 	const runs: PackRunEngines[] = ids.flatMap((id) => {
 		const r = rows.find((x) => x.id === id);

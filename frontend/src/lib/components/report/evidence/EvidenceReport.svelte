@@ -52,6 +52,7 @@
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
 	import { opWorksText } from './wula';
+	import { alternativeLine } from './alternatives';
 	import { CHANGE_LABEL, sizingText } from './demandObjects';
 	import { factorText, futureRows } from './future';
 	import { sourceLabel, sourceLine } from '#lib/components/runs/demandSources.js';
@@ -104,6 +105,16 @@
 			works: wula ? opWorksText(wula, o.index, o.op.works, o.class) : null
 		}));
 	});
+
+	// Appendix A.2's mitigation alternatives (evidence-26): each one's ops in words, against the baseline input they meet.
+	const altOps = $derived.by(() =>
+		(app ? (report.alternatives ?? []) : []).map((a) => {
+			const list = a.ops.map((o) => o.op);
+			const before = stepInputs(snapshotInput(base.model, base.settings), list).before;
+			const names = namesOf([base.model], list);
+			return { alt: a, ops: a.ops.map((o, i) => ({ index: o.index, cls: o.class, text: describeOp(o.op, before[i] ?? null, names) })) };
+		})
+	);
 
 	/** A site's FDC points for one calendar month, both runs, with each run's 5–95 % band where the report has one (ER5). */
 	function fdcPoints(key: string, month: number) {
@@ -1060,6 +1071,18 @@
 					<ul class="changes">
 						{#each report.appendix.changes as c, i (i)}<li>{c.text}</li>{:else}<li class="na">No input differs.</li>{/each}
 					</ul>
+					<!-- evidence-26 (298_scenario_alternatives): page 1's other columns, each with the changes its run made. -->
+					{#if altOps.length}
+						<h4>Mitigation alternatives (page 1’s other columns)</h4>
+						{#each altOps as x (x.alt.runId)}
+							<div class="alternative" data-testid="evidence-a2-alternative">
+								<p><strong>{x.alt.label}</strong>: {alternativeLine(x.alt)}.{#if x.alt.notAssessed} <span class="na">{x.alt.notAssessed}</span>{/if}</p>
+								<ol class="ops">
+									{#each x.ops as o (o.index)}<li><span class="pill" class:pill-red={o.cls === 'baseline'}>{CLASS_LABEL[o.cls]}</span> {o.text}</li>{:else}<li class="na">No changes.</li>{/each}
+								</ol>
+							</div>
+						{/each}
+					{/if}
 				{:else}
 					<p class="na">None: a baseline-evidence report has no application.</p>
 				{/if}

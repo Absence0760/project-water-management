@@ -169,7 +169,8 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  */
 // Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
 // § 8's future yield is written once by its job, and the newest few kept per pair (280); so is a climate factor table, per project (282).
-const NO_UPDATE = new Set(['yield_result', 'future_yield', 'climate_factors', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
+// A scenario's mitigation alternative is replaced (delete, insert), never changed; its guard refuses an UPDATE (298).
+const NO_UPDATE = new Set(['yield_result', 'future_yield', 'climate_factors', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact', 'scenario_alternative']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes

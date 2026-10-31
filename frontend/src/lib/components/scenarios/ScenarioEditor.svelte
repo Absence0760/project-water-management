@@ -38,6 +38,7 @@
 	import ApplicantResults from './ApplicantResults.svelte';
 	import ScenarioStatement from './ScenarioStatement.svelte';
 	import WulaReference from './WulaReference.svelte';
+	import MitigationAlternatives from './MitigationAlternatives.svelte';
 	import { tagOp } from './wula';
 	import AskAssessors from './AskAssessors.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
@@ -579,6 +580,19 @@
 		<!-- The WULA it models (294_wula_reference): frozen with the changes once submitted. -->
 		{#key s.id}
 			<WulaReference scenarioName={s.name} wula={s.wula} {editable} frozen={canChange && s.status !== 'draft'} {saving} onsave={(p) => patch(p)} />
+		{/key}
+
+		<!-- The mitigation alternatives it cites (298_scenario_alternatives): page 1's other columns, frozen with the changes once submitted. -->
+		{#key s.id}
+			<MitigationAlternatives
+				{projectId}
+				scenarioId={s.id}
+				scenarioName={s.name}
+				alternatives={data.alternatives ?? []}
+				{editable}
+				frozen={canChange && s.status !== 'draft'}
+				onsaved={(list) => onchange({ ...data, alternatives: list })}
+			/>
 		{/key}
 
 		<!-- Appendix C's fixed prompts (129_scenario_statement): changed on the description's terms, so not frozen by a submission. -->

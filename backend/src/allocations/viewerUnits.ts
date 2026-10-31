@@ -36,7 +36,7 @@ import {
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
-import { authorisedVerdicts, boardVerdicts, combinedDamVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
+import { authorisedVerdicts, boardVerdicts, combinedDamVerdicts, ROW_VERDICTS, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 
 /**
  * Whether the caller is kept from each registered volume: a viewer on a
@@ -315,8 +315,40 @@ type ReportLike = {
 	allocations?: unknown;
 	mode?: string;
 	flags?: { id: string; text: string }[];
-	rows?: { id: string }[];
+	rows?: { id: string; alternatives?: unknown[] }[];
+	/** evidence-26's mitigation alternatives; typed loosely, as above. */
+	alternatives?: { ops?: { op: ScenarioOp }[]; allocationMode?: string | null }[];
 };
+
+/** A page-1 cell under an alternative that such a viewer isn't given (evidence-26). */
+export const ALTERNATIVE_CELL_WITHHELD = {
+	value: null,
+	change: null,
+	notAssessed: 'Withheld: this figure rests on registered volumes this project shows to its editors and owners only.',
+	note: null
+} as const;
+
+/**
+ * The mitigation alternatives (evidence-26) as a viewer kept from each
+ * volume reads them: each one's ops without those that set another unit's
+ * registered volume (as the application's, withheldAllocationOps); on page 1,
+ * every alternative's "Registered vs modelled use" cell withheld (it counts
+ * every unit's years over the band, #523 G1c), and, under an alternative whose
+ * run rests on a cap or full allocation, every cell but the counts' (#523 I).
+ */
+function redactAlternatives<R extends ReportLike>(report: R, rows: R['rows'], own: readonly string[]): Pick<ReportLike, 'alternatives' | 'rows'> {
+	const alts = report.alternatives;
+	if (!Array.isArray(alts) || !alts.length) return {};
+	return {
+		alternatives: alts.map((a) => (a.ops ? { ...a, ops: withoutPositions(a.ops, withheldAllocationOps(a.ops.map((o) => o.op), own)) } : a)),
+		rows: rows?.map((r) => ({
+			...r,
+			alternatives: alts.map((a, i) =>
+				r.id === 'registeredUse' || (holdsToVolume(a.allocationMode) && !ROW_VERDICTS.has(r.id)) ? { ...ALTERNATIVE_CELL_WITHHELD } : (r.alternatives?.[i] ?? { ...ALTERNATIVE_CELL_WITHHELD })
+			)
+		}))
+	};
+}
 
 /** A run mode that holds use to the registered volume: its modelled use is the volume wherever supply meets demand (#523 R5-2). */
 const holdsToVolume = (mode: string | null | undefined) => mode === 'cap' || mode === 'fullAllocation';
@@ -465,6 +497,8 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 				: {}),
 		...(report.flags ? { flags: withoutOthersOver(report.flags, report.allocations as EvidenceAllocations | undefined, report.mode === 'application') } : {})
 	};
+	// evidence-26's alternatives, over the rows as redacted above (the "Registered vs modelled use" row is rebuilt there).
+	Object.assign(out, redactAlternatives(report, (out as ReportLike).rows as R['rows'], own));
 	// A report on a cap or full-allocation run: its verdicts and counts only (#523 I).
 	return verdictsReport(out as unknown as Parameters<typeof verdictsReport>[0]) as unknown as R;
 }

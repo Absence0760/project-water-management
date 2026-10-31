@@ -2454,7 +2454,18 @@ In short:
     decided. The project's log names an application only once it is decided.
     Notes on its runs, sign-offs of them and yields of it or its runs follow
     it too (045 rewrote `note_select`, `signoff_select` and
-    `yield_result_select`, which had checked the project role only).
+    `yield_result_select`, which had checked the project role only). One
+    exception, the applicant's own choice: a run their application cites as
+    a mitigation alternative (298_scenario_alternatives) is readable with
+    that application once it is past draft (`app_alternative_run_readable`,
+    in `model_run_select`, `app_hidden_scenario_runs`, `app_run_digest` and
+    the allocation-holder definers), never before and nothing else of the
+    alternative's scenario; an alternative is only ever the applicant's own
+    scenario's run on the application's base run, checked by the route
+    against `app_scenario_alternative_candidates` and by
+    `scenario_alternative_guard` in the table, with one refusal for any
+    other run so none is shown to exist
+    (`scenarios/alternatives.db.test.ts`).
   - **Tables added alongside it** (sign-offs, notes, allocations, API keys,
     yields and jobs, dam curves, boreholes) were audited at the merge: a
     contributor reads only their own linked farm's farm-scoped rows (as a
@@ -2651,7 +2662,9 @@ In short:
   `app_run_digest` answers only for a run the caller reads or has just
   stored. Where a run is judged, it must verify: a sign-off refuses one that
   doesn't (`409`, code `run_unverified`), and so does an application's
-  decision while any of its runs doesn't. `GET …/runs/:runId` says
+  decision while any of its runs doesn't; the evidence report prints no
+  figure from a mitigation alternative whose run doesn't (298, its column
+  *Not assessed*). `GET …/runs/:runId` says
   `verified`, and the assessors see an application's unverified runs
   (`unverifiedRunIds`, a warning in its panel). Editor-made runs are stamped
   too (the same path, and an editor can write run rows directly just as

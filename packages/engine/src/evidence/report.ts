@@ -40,6 +40,7 @@ import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSecti
 import { FUTURE_YIELD_CAVEAT, futureCaveatPending, futureFactorsComplete, type FutureYieldCaveat } from './future';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
+	ALTERNATIVES_MAX,
 	EVIDENCE_REPORT_VERSION,
 	type EvidenceAllocationCounts,
 	type EvidenceAllocations,
@@ -57,6 +58,9 @@ import {
 	type EvidenceCumulative,
 	type EvidenceCumulativeApplication,
 	type EvidenceDemandObject,
+	type EvidenceAlternative,
+	type EvidenceAlternativeCell,
+	type EvidenceAlternativeInput,
 	type EvidenceDemandObjects,
 	type EvidenceEnsembleInput,
 	type EvidenceEnsembleRef,
@@ -457,11 +461,15 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	};
 	const licenceImpact = licenceImpactSection(b, a, input.impact);
 	if (a) rows.push(combinedRow(cumulative.combined!));
+	// The mitigation alternatives the application cites (evidence-26): a column each on every page-1 row.
+	const alternatives = a ? alternativesOf(input, rows, cited) : [];
 	// The baseline's calibration zones (evidence-22, issue #555): every zone's parameters, fit record and statistics.
 	const calibrationZones = calibrationZonesSection(b);
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
 		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : []),
+		// The alternatives' runs (evidence-26): page 1 prints their figures, so their engines' errata reach it.
+		...citedAlternatives(input).flatMap((x) => errataFor(x.run.engineVersion, input.liability.errata, fitVersion(x.run))),
 		// Each zone's own fit (evidence-22): an erratum keyed on the fit's engine reaches the units it fitted.
 		...calibrationZoneFitVersions(calibrationZones).flatMap((v) => errataFor(b.engineVersion, input.liability.errata, v)),
 		// § 8's pairs (evidence-23) ran on the engine of the day the job ran.
@@ -520,8 +528,9 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		issuable: !refused && checks.every((c) => c.passed || !c.blocksIssue),
 		ops: a ? a.scenario.ops.map((op, index) => ({ index, class: classes[index] ?? 'baseline', op })) : [],
 		flags,
-		questions: questions(checks, rows, river, input, demandObjects),
+		questions: [...questions(checks, rows, river, input, demandObjects), ...alternativeQuestions(alternatives, a?.engineVersion ?? null)],
 		rows,
+		alternatives,
 		byMonth,
 		worstMonths,
 		improvingMonths,
@@ -1405,6 +1414,151 @@ function combinedRow(c: EvidenceCombined): EvidenceRow {
 				? `${all.length} applications together: ${names.join(', ')}.${m.interaction === null ? '' : ` Interaction ${signed(fixed(m.interaction, 0))} ${Math.abs(Math.round(m.interaction)) === 1 ? 'day' : 'days'}: what they do together beyond the sum of each alone.`} Assessment “${at.name}” (${day(at.createdAt)}${at.engineVersion ? `, engine ${at.engineVersion}` : ''}).`
 				: null
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Page 1: the mitigation alternatives (evidence-26, 298_scenario_alternatives)
+// ---------------------------------------------------------------------------
+
+/** An alternative on another baseline than the report's: its whole column. */
+export const ALTERNATIVE_OTHER_BASELINE = 'Not assessed: this alternative ran on another baseline than the application, so its figures aren’t comparable; cite a run of it on the application’s baseline.';
+/** An alternative whose run's server stamp doesn't match its results (077): its whole column. */
+export const ALTERNATIVE_UNVERIFIED =
+	'Not assessed: this alternative’s run was not stored by the model run itself (its server stamp is missing or no longer matches its results); run it again and cite the new run.';
+/** Page 1's combined row, under an alternative. */
+export const ALTERNATIVE_NOT_COMBINED = 'Not assessed for an alternative: the other applications are assessed together with the application, not its alternatives.';
+/** A row the alternative's run has nothing for (works or a unit it doesn't have). */
+export const ALTERNATIVE_NO_ROW = 'Not assessed: the alternative’s run has nothing to set beside this row.';
+
+/** The alternatives the report reads: the first ALTERNATIVES_MAX, none for baseline evidence. */
+const citedAlternatives = (input: EvidenceInput): EvidenceAlternativeInput[] => (input.application ? (input.alternatives ?? []).slice(0, ALTERNATIVES_MAX) : []);
+
+const rowKey = (r: Pick<EvidenceRow, 'id' | 'subject'>) => `${r.id}\u0000${r.subject ?? ''}`;
+
+/**
+ * Each alternative's column on page 1 (evidence-26): the rows are the
+ * application's (G6: page 1's rows are fixed by the application), and each
+ * gains one cell per alternative with the alternative's value and its change
+ * against the baseline, built by the same rules as the application's own
+ * column (changeRows), banded by the alternative's own paired ensemble on the
+ * cited one when it has one. The works rows stay at the application's works,
+ * so the alternative is read at the same sites. Another unit whose supply only
+ * an alternative moves gets a row of its own, with the application's value
+ * beside it, so a mitigation that shifts the loss to a neighbour shows. Mutates
+ * `rows`; returns the alternatives as the document lists them.
+ */
+function alternativesOf(input: EvidenceInput, rows: EvidenceRow[], cited: EvidenceEnsembleInput | null): EvidenceAlternative[] {
+	const a = input.application!;
+	const b = input.baseline;
+	const list = citedAlternatives(input);
+	if (!list.length) return [];
+	const cells: Map<string, EvidenceAlternativeCell>[] = [];
+	const altUsers: EvidenceUser[][] = [];
+	const out = list.map((alt): EvidenceAlternative => {
+		const sc = alt.run.scenario;
+		const why = sc.baseRunId !== b.id ? ALTERNATIVE_OTHER_BASELINE : !alt.verified ? ALTERNATIVE_UNVERIFIED : null;
+		const onBase = why === null;
+		const pairedRow = onBase ? citedPaired(alt.paired, cited) : null;
+		const paired = pairedRow?.paired ?? null;
+		// Read at the application's works (worksRows takes the ops and classes), with the alternative's own units and figures.
+		const asApp = { ...alt.run, scenario: { ...sc, ops: a.scenario.ops, classified: a.scenario.classified } };
+		const altInput: EvidenceInput = { ...input, application: asApp };
+		const change = changeCell(altInput, cited, paired);
+		const own = new Map<string, EvidenceAlternativeCell>();
+		if (onBase) {
+			for (const r of changeRows(altInput, paired, allocationSection(b, asApp), change))
+				if (r.id !== 'userSupply' || r.subject === null) own.set(rowKey(r), { value: r.application, change: r.change, notAssessed: r.notAssessed, note: r.note });
+			altUsers.push(userRows(b, asApp, paired, change));
+		} else altUsers.push([]);
+		cells.push(own);
+		const classes = sc.classified;
+		return {
+			label: alt.label,
+			runId: alt.run.id,
+			runLabel: alt.run.label,
+			engineVersion: alt.run.engineVersion,
+			createdAt: alt.run.createdAt,
+			createdBy: alt.run.createdBy,
+			scenarioId: sc.id,
+			scenarioName: sc.name,
+			opsSha256: sc.opsSha256,
+			ops: sc.ops.map((op, index) => ({ index, class: classes[index] ?? 'baseline', op })),
+			proposals: classes.filter((c) => c === 'proposal').length,
+			assumptions: classes.filter((c) => c === 'baseline').length,
+			allocationMode: alt.run.summary.allocations?.mode ?? null,
+			pairedId: pairedRow?.id ?? null,
+			notAssessed: why
+		};
+	});
+
+	// Another unit whose supply only an alternative moves: a row of its own, the application's value beside it.
+	const appUsers = userRows(b, a, citedPaired(input.ensembles.paired, cited)?.paired ?? null, () => null);
+	const inBoth = (u: EvidenceUser) => !u.own && u.onlyIn === null && u.suppliedA !== null && u.suppliedB !== null;
+	const moved = (u: EvidenceUser) => inBoth(u) && Math.abs((u.suppliedB! - u.suppliedA!) * 100) >= 0.1;
+	const listed = new Set(rows.filter((r) => r.id === 'userSupply' && r.subject !== null).map((r) => r.subject!));
+	const extra = new Map<string, EvidenceUser>();
+	for (const us of altUsers) for (const u of us) if (moved(u) && !listed.has(u.name) && !extra.has(u.name)) extra.set(u.name, u);
+	if (extra.size) {
+		const last = rows.reduce((at, r, i) => (r.id === 'userSupply' ? i : at), -1);
+		const added = [...extra.values()]
+			.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0))
+			.map((x): EvidenceRow => {
+				const u = appUsers.find((y) => y.nodeId === x.nodeId) ?? null;
+				const fa = u?.suppliedA ?? x.suppliedA;
+				const fb = u && inBoth(u) ? u.suppliedB : null;
+				return {
+					id: 'userSupply',
+					label: 'Other users’ supply',
+					basis: 'Share of demand supplied, whole run',
+					subject: x.name,
+					unit: '% of demand',
+					higherIsWorse: false,
+					baseline: fa === null ? null : fa * 100,
+					application: fb === null ? null : fb * 100,
+					// Unbanded here: the application's band on this unit is § 4's (its own rows above carry theirs).
+					change: fa !== null && fb !== null ? { run: (fb - fa) * 100, band: null, bandNote: 'no band: listed because an alternative moves it; § 4 bands the application’s change', worse: null } : null,
+					notAssessed: null,
+					note: 'Listed because an alternative moves it by 0.1 percentage points or more.'
+				};
+			});
+		rows.splice(last + 1, 0, ...added);
+	}
+
+	for (const r of rows) {
+		r.alternatives = out.map((alt, i) => {
+			if (alt.notAssessed) return { value: null, change: null, notAssessed: alt.notAssessed, note: null };
+			if (r.id === 'otherApplications') return { value: null, change: null, notAssessed: ALTERNATIVE_NOT_COMBINED, note: null };
+			if (r.id === 'userSupply' && r.subject !== null) {
+				const u = altUsers[i]!.find((x) => x.name === r.subject && inBoth(x));
+				return u ? { value: u.suppliedB! * 100, change: u.change, notAssessed: null, note: null } : { value: null, change: null, notAssessed: ALTERNATIVE_NO_ROW, note: null };
+			}
+			const found = cells[i]!.get(rowKey(r));
+			if (found) return found;
+			// The application moved no other unit, this alternative does: they are the rows below.
+			if (r.id === 'userSupply') {
+				const n = altUsers[i]!.filter(moved).length;
+				return { value: null, change: null, notAssessed: null, note: `${n} other ${n === 1 ? 'unit’s' : 'units’'} supply changed by 0.1 percentage points or more under this alternative (listed below).` };
+			}
+			return { value: null, change: null, notAssessed: ALTERNATIVE_NO_ROW, note: null };
+		});
+	}
+	return out;
+}
+
+/** What an assessor will ask about the alternatives (evidence-26). */
+function alternativeQuestions(alts: readonly EvidenceAlternative[], applicationEngine: string | null): string[] {
+	const out: string[] = [];
+	for (const x of alts) {
+		const name = `Alternative “${x.label}”`;
+		if (x.notAssessed) out.push(`${name}: ${x.notAssessed}`);
+		if (x.assumptions)
+			out.push(
+				`${name} changes ${x.assumptions === 1 ? 'a baseline assumption' : `${x.assumptions} baseline assumptions`} (A.2): expect the assessor to ask whether its column compares like with like; keep an alternative to the applicant’s own works.`
+			);
+		if (applicationEngine && x.engineVersion !== applicationEngine)
+			out.push(`${name} ran on engine ${x.engineVersion}, the application on ${applicationEngine}: expect the assessor to ask whether the difference is the engine’s; run both again on one engine.`);
+	}
+	return out;
 }
 
 function userRows(b: EvidenceRunInput, a: EvidenceInput['application'], paired: PairedSummary | null, change: ChangeCell): EvidenceUser[] {

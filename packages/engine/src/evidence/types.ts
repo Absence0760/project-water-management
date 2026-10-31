@@ -226,6 +226,15 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * op's `works` tag), which proposals model none of them and which works no
  * change models; questions ask about either. Null for a team scenario that
  * records no reference. A pack drafted before keeps its document, without it.
+ * Also evidence-26 (298_scenario_alternatives, docs/followups.md "Labelled mitigation
+ * alternatives"): page 1 sets the alternatives the application cites beside it
+ * (`alternatives`, at most ALTERNATIVES_MAX): each a labelled run of another of
+ * the applicant's own scenarios on the same baseline, its run, ops and hash
+ * frozen with the report, and on every page-1 row a column of its own
+ * (`EvidenceRow.alternatives`): its value and its change against the baseline,
+ * paired when the alternative's run has a paired ensemble on the cited one.
+ * The combined row isn't assessed for an alternative. A pack drafted before
+ * keeps its document, without them.
  */
 export const EVIDENCE_REPORT_VERSION = 'evidence-26';
 
@@ -513,10 +522,37 @@ export interface EvidenceInput {
 	/** The project's traced dams with their WOfS and Sentinel-2 rows in the baseline's period (dam_observation, under the reader's RLS), for the observed wet days (evidence-21; Sentinel-2 from evidence-24); absent or [] = none. */
 	damObservations?: EvidenceDamObservationInput[] | null;
 	/**
+	 * The mitigation alternatives the application cites (298_scenario_alternatives, evidence-26), in the
+	 * application's order; at most ALTERNATIVES_MAX are read. Absent, null or [] = none (and always none for
+	 * baseline evidence).
+	 */
+	alternatives?: EvidenceAlternativeInput[] | null;
+	/**
 	 * § 8's stored result for these two runs (280 future_yield, under the reader's RLS; evidence-23):
 	 * `{ notRun: true }` when FUTURE_YIELD is on and none matches; absent or null when it is off, or for baseline evidence.
 	 */
 	futureYield?: EvidenceFutureYieldInput | null;
+}
+
+/** Most alternatives an application cites, so page 1 stays readable (298_scenario_alternatives caps it too). */
+export const ALTERNATIVES_MAX = 3;
+
+/**
+ * One mitigation alternative the application cites (evidence-26, 298_scenario_alternatives): a run of
+ * another of the applicant's own scenarios on the same baseline, with the label the applicant gave it.
+ */
+export interface EvidenceAlternativeInput {
+	/** The applicant's label ("smaller dam", "winter abstraction only"), 1–80 characters. */
+	label: string;
+	/** The alternative's run, with its scenario as the run recorded it (inputs.scenario). */
+	run: EvidenceRunInput & { scenario: EvidenceScenarioInput };
+	/** Every paired ensemble on the alternative's run, as `ensembles.paired` holds the application's. */
+	paired: EvidenceEnsembleInput[];
+	/**
+	 * The run's server stamp matches its results (077, backend runs/stamp.ts): an applicant may write their own
+	 * application's run rows, so a column is printed only from a run the model run itself stored.
+	 */
+	verified: boolean;
 }
 
 /** What the backend found for § 8 (evidence-23). */
@@ -641,6 +677,46 @@ export interface EvidenceRow {
 	notAssessed: string | null;
 	/** A second reading beside the value (outflow as % of natural MAR). */
 	note: string | null;
+	/**
+	 * evidence-26: one cell per alternative the report cites (`EvidenceReport.alternatives`, same order):
+	 * its value and change against the baseline. Absent on a baseline report, a report citing none and a
+	 * pack drafted before.
+	 */
+	alternatives?: EvidenceAlternativeCell[];
+}
+
+/** A page-1 row's value under one alternative (evidence-26). */
+export interface EvidenceAlternativeCell {
+	/** The alternative's value; null when it has none (`notAssessed` says why when it is a reason, not an absence). */
+	value: number | null;
+	/** Alternative − baseline, banded when the alternative's run has a paired ensemble on the cited one. */
+	change: EvidenceChange | null;
+	notAssessed: string | null;
+	note: string | null;
+}
+
+/** A mitigation alternative as page 1 and A.2 print it (evidence-26, 298_scenario_alternatives). */
+export interface EvidenceAlternative {
+	/** The applicant's label for it. */
+	label: string;
+	runId: string;
+	runLabel: string;
+	engineVersion: string;
+	createdAt: string;
+	createdBy: string | null;
+	scenarioId: string;
+	scenarioName: string;
+	opsSha256: string;
+	/** Its ops, each with its class, as its run recorded them (A.2). */
+	ops: { index: number; class: OpClass; op: ScenarioOp }[];
+	proposals: number;
+	assumptions: number;
+	/** The run's allocation mode (summary.allocations.mode); null when it records none. */
+	allocationMode: AllocationMode | null;
+	/** The paired ensemble its change cells are banded by; null when none (each cell says why). */
+	pairedId: string | null;
+	/** Why its column isn't assessed at all (another baseline, an unverified run); null when it is. */
+	notAssessed: string | null;
 }
 
 /** A calendar month's paired change in days below the EWR (D-U9), water-year order. */
@@ -1267,6 +1343,12 @@ export interface EvidenceReport {
 	questions: string[];
 	/** Page 1's change table, fixed rows (G6). */
 	rows: EvidenceRow[];
+	/**
+	 * The mitigation alternatives page 1 sets beside the application (evidence-26): one column each, in the
+	 * application's order. [] for baseline evidence and an application that cites none; absent from a pack
+	 * drafted before.
+	 */
+	alternatives?: EvidenceAlternative[];
 	/** The paired change in days below the outlet EWR, by calendar month (D-U9); null without a paired band or for baseline evidence. */
 	byMonth: EvidenceMonthChange[] | null;
 	/** The three months with the largest paired median increase, and any month that improves. */

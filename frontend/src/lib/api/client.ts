@@ -129,6 +129,8 @@ import type {
 	AppealRequest,
 	ScenarioStatus,
 	ScenarioWithCheck,
+	ScenarioAlternative,
+	AlternativeCandidate,
 	ShareLink,
 	ShareSeries,
 	ShareSeriesKey,
@@ -1161,6 +1163,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
 			/** Record what followed the decision (228): an appeal lodged, upheld, set aside or varied. */
 			appeal: (id: string, sid: string, body: AppealRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/appeals`, body),
+			/** The mitigation alternatives a scenario cites (298), and the runs the caller may cite (none unless they may change it). */
+			alternatives: (id: string, sid: string) =>
+				request<{ alternatives: ScenarioAlternative[]; candidates: AlternativeCandidate[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/alternatives`),
+			/** Replace them (at most ALTERNATIVES_MAX, in page-1 order): whoever may change the scenario, while it is a draft. */
+			setAlternatives: (id: string, sid: string, alternatives: { runId: string; label: string }[]) =>
+				request<{ alternatives: ScenarioAlternative[]; candidates: AlternativeCandidate[] }>('PUT', `${p(id)}/scenarios/${enc(sid)}/alternatives`, { alternatives }),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>
 				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),

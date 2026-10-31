@@ -90,7 +90,10 @@ allocation as its own rows, when it has one (also `evidence-26`, WP-3.10,
 295_assessment_background); and page 1 and Appendix A.2 printing the
 water-use licence application the scenario models and which of its works
 each change models (also `evidence-26`, 294_wula_reference, 2026-10-30;
-[§ The WULA reference](#the-wula-reference)). What is left is
+[§ The WULA reference](#the-wula-reference)); and page 1 setting the
+mitigation alternatives the application cites beside it, a column each
+(also `evidence-26`, 298_scenario_alternatives, 2026-10-31;
+[§ Mitigation alternatives](#mitigation-alternatives)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -896,6 +899,59 @@ them now, which is the submitted reference once it is submitted
 (`scenario_wula_frozen`). The report is hashed into the pack's manifest, so
 a pack drafted before `evidence-26` keeps its document without either, and
 its page says nothing of a WULA.
+
+## Mitigation alternatives
+
+Report format `evidence-26` (298_scenario_alternatives;
+[scenarios.md § Mitigation alternatives](./scenarios.md#mitigation-alternatives)).
+An applicant must show the mitigation they weighed, not only the option
+they applied for. The application cites up to three runs of the applicant's
+own other scenarios on the same base run, each labelled ("smaller dam",
+"winter abstraction only"), and the report sets each beside the
+application:
+
+- **Page 1** (`alternatives`, `rows[].alternatives`): one column per
+  alternative after the application's, headed by its label and its
+  scenario's name, on every row of the change table: its value and its
+  change against the baseline, built by the same rules as the application's
+  own column (`changeRows`). The change is banded only by the alternative's
+  own paired ensemble on the cited one (`pairedId`), never the
+  application's; without one the cell says so, as the application's does.
+  The rows stay the application's (G6): the works rows are read at the
+  application's works, so the two are compared at the same EWR sites;
+  another unit whose supply only an alternative moves by 0.1 points or more
+  gets a row of its own, with the application's value beside it, so a
+  mitigation that moves the loss to a neighbour shows. The combined row (the
+  other applications together) is the application's, *Not assessed for an
+  alternative*.
+- **Not assessed, whole column**: an alternative on another baseline
+  (`ALTERNATIVE_OTHER_BASELINE`; the database refuses one, so this is a
+  frozen pack's guard), and one whose run's server stamp doesn't match its
+  results (`ALTERNATIVE_UNVERIFIED`, [security.md § Run
+  stamps](./security.md#run-stamps)): an applicant may write their own
+  runs' rows, so no figure is printed from a run the model run didn't store.
+- **Appendix A.2**: each alternative's run, engine and changes, each with
+  its class, as the run recorded them.
+- **Questions**: an alternative that changes a baseline assumption (its
+  column doesn't compare like with like), or that ran on another engine
+  than the application. Neither stops issue.
+- **Errata**: the alternatives' engines reach B.1's errata, and a pack's
+  "errata found since" check reads their runs too.
+
+The alternatives are the scenario's as it cites them now, which is the
+submitted list once it is submitted (frozen like the ops,
+`scenario_alternative_guard`). Each one's run id, engine, ops and their
+hash, label and every page-1 cell are in the report, so the manifest hash
+covers them as it covers the application's run. The reproduction bundle
+doesn't carry the alternatives' runs yet ([followups.md](./followups.md)):
+`reproduce:pack` re-runs the baseline and the application, not the
+alternatives. For a viewer kept from each registered volume, each
+alternative's ops leave out another unit's volume, its *Registered vs
+modelled use* cell is withheld, and under an alternative whose run caps or
+fully allocates only the counts' cells stay (backend
+`allocations/viewerUnits.ts`). Neither an applicant's copy of a pack nor a
+share link shows them: both read allowlisted fields only. A pack drafted
+before keeps its document, without them.
 
 ## The responsible authority
 
