@@ -1699,7 +1699,11 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     state machine's last step; `lease.hold_host_for_backfill`), so the
     fetches defer for hours and resume after it; a backfill month waiting
     for the slot reserves the next turn (`reserved.json`), which every
-    other taker yields to (deployment.md § Backfill). A slot that can't be read or written fails the fetch
+    other taker yields to (deployment.md § Backfill). A month CHC kept
+    answering 429 or 503 fails with `RetryLater`, which the state machine
+    retries 15, 30, 60 and 120 minutes on; its hold lapses during those
+    waits (it is kept only through the pause plus 5 minutes), so the
+    fetcher's fetches may run then, and the retry takes the slot back. A slot that can't be read or written fails the fetch
     closed ("the request slot could not be taken"); CHC is never asked
     without it. With no `MIRROR_URL` (a local run, the tests) there is no
     slot and nothing changes; with a `file://` one it is the same file,
@@ -1795,8 +1799,9 @@ EventBridge, daily
   │     the newest complete CHIRPS-GEFS issue, its 16 TIFFs' region rows; keeps 7 issues
   └─► indices pass (the same mode, "pass":"indices", 05:50 UTC; issue #620)
         NOAA CPC's ONI and AAO files whole, two requests; a new revision only on a change
-  (once) backfill: Step Functions over the byMonth list from 1981, 2 at a time
-                │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop, a body short of its Content-Length = retry
+  (once) backfill: Step Functions over the byMonth list from 1981, 1 at a time
+                │  polite client: one User-Agent, conditional GETs, ~1 request/s, 403 = stop, a body short of its Content-Length = retry,
+                │  429/503 = logged with its Retry-After, then RetryLater, which the state machine retries 15 min on, doubling, 4 times
                 ▼
   s3://<project>-mirror-<account> (private, versioned)
         rnl/, sat/  (year, doy, lat, lon) Zarr v3 · prelim/, gefs/<issue>/ (day, lat, lon) · manifest.json each

@@ -1609,7 +1609,10 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
     operator stopping it. *Runbook:* open the execution; its error is the
     failed month's (`StopRun` = HTTP 403, don't re-run straight away;
     `TruncatedDownload` = the file kept ending early after every retry, a
-    connection problem: resume), then resume as in [§ Backfill](#backfill).
+    connection problem: resume; `RetryLater` = CHC kept answering HTTP 429
+    or 503 through ~4 hours of retries: read the month's log lines for the
+    `Retry-After` CHC sent, wait at least that, then resume), then resume as
+    in [§ Backfill](#backfill).
   - `mirror-ingest-errors` and `mirror-ingest-dlq-arrivals` (full tier): a
     run raised or timed out.
   - *Runbook.* Read the run in the `/aws/lambda/water-management-mirror-ingest`
@@ -1845,13 +1848,27 @@ each** (`ingest_backfill_wait_seconds`, D4's one file a minute). A month that
 fails, an HTTP 403 above all, fails the execution (and pages:
 `mirror-backfill-failed`, above); only Lambda's own service
 errors (throttling, a transient API error), a download that kept ending
-early and the two waits are retried. A file whose body ends before its
+early, CHC asking us to slow down and the two waits are retried. A file whose body ends before its
 `Content-Length` (a dropped connection) is asked for again inside the
 invocation, a minute later, while a whole download still fits its time
 (ingest/README.md § The polite client); past that the month fails with
 `TruncatedDownload`, which the state machine retries 3 times, 5, 10 and
 20 minutes on, before the execution fails (2026-10-30: one dropped
-connection on 1986-08 ended a ~30 h run). The two waits:
+connection on 1986-08 ended a ~30 h run). A 429 or 503 is retried inside
+the invocation as `Retry-After` asks (30, 60 then 120 s without one), each
+logged with its status, attempt and `Retry-After` (or "absent"); a month
+that still meets one, or that is asked to wait longer than the invocation
+can, fails with `RetryLater` (its message names the `Retry-After`), which
+the state machine retries 4 times, 15, 30, 60 and 120 minutes on (3 h 45 min
+in all), before the execution fails (2026-10-31: a sustained 429 on 2019-08
+ended a 400-month run). Step Functions matches the exact error name, so a
+`TruncatedDownload` keeps its own shorter waits, and a month that had too
+little time left to start its download (also `RetryLater`, having asked CHC
+nothing) waits the same 15 minutes. The execution's hold on CHC's slot
+lapses during these long waits (and `TruncatedDownload`'s 10 and 20
+minutes): a month keeps it only through the pause plus 5 minutes, so the
+fetcher may fetch meanwhile, and the retry takes it back (through `HostBusy`
+below if the fetcher has it then). The two waits:
 `MirrorBusy` (the daily run holds the product's lease) and `HostBusy` (the
 fetcher Lambda holds CHC's one request slot, which the two share so CHC sees
 one of our processes at a time; architecture.md § Data feeds, Throttling).

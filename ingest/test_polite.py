@@ -179,6 +179,57 @@ class Refusals(unittest.TestCase):
         self.assertEqual(t.slept, [10.0, 20.0])
         self.assertEqual(len(server.requests), 3)
 
+    def test_each_429_and_503_is_logged_with_its_retry_after(self):
+        server = FakeServer((429, {"Retry-After": "7"}), 503, (429, {"Retry-After": " 120 "}), (429, {"Retry-After": "9"}))
+        c, t = client(server, max_retries=3, default_backoff=10)
+        with self.assertLogs("ingest", level="WARNING") as logs, self.assertRaises(polite.RetryLater) as e:
+            c.get("https://x/f.nc")
+        self.assertEqual(
+            [r.getMessage() for r in logs.records],
+            [
+                "https://x/f.nc answered HTTP 429 (attempt 1 of 4), Retry-After '7'",
+                "https://x/f.nc answered HTTP 503 (attempt 2 of 4), Retry-After absent",
+                "https://x/f.nc answered HTTP 429 (attempt 3 of 4), Retry-After '120'",
+                "https://x/f.nc answered HTTP 429 (attempt 4 of 4), Retry-After '9'",
+            ],
+        )
+        self.assertEqual(t.slept, [7.0, 20.0, 120.0])
+        # The message the backfill execution fails with names what CHC asked for last.
+        self.assertEqual(str(e.exception), "https://x/f.nc still answered HTTP 429 after 3 retries (Retry-After '9')")
+        self.assertNotIsInstance(e.exception, polite.TruncatedDownload)
+
+    def test_retry_later_says_when_retry_after_was_absent(self):
+        c, _ = client(FakeServer(503, 503), max_retries=1, default_backoff=1)
+        with self.assertLogs("ingest", level="WARNING"), self.assertRaises(polite.RetryLater) as e:
+            c.get("https://x/f")
+        self.assertIn("(Retry-After absent)", str(e.exception))
+
+    def test_too_long_a_retry_after_is_named_in_the_message(self):
+        c, _ = client(FakeServer((429, {"Retry-After": "3600"})), max_wait=300)
+        with self.assertLogs("ingest", level="WARNING"), self.assertRaises(polite.RetryLater) as e:
+            c.get("https://x/f")
+        self.assertIn("HTTP 429", str(e.exception))
+        self.assertIn("Retry-After '3600'", str(e.exception))
+
+    def test_a_wait_past_the_time_budget_gives_up_instead_of_sleeping(self):
+        asked = []
+        server = FakeServer((429, {"Retry-After": "200"}), FakeResponse(b"ok"))
+        c, t = client(server, may_retry=lambda wait: asked.append(wait) or False)
+        with self.assertLogs("ingest", level="WARNING"), self.assertRaises(polite.RetryLater) as e:
+            c.get("https://x/f")
+        self.assertEqual(asked, [200.0])
+        self.assertEqual(t.slept, [])
+        self.assertEqual(len(server.requests), 1)
+        self.assertIn("no time left", str(e.exception))
+        self.assertIn("Retry-After '200'", str(e.exception))
+
+    def test_a_wait_the_budget_allows_is_slept(self):
+        server = FakeServer((503, {"Retry-After": "5"}), FakeResponse(b"ok"))
+        c, t = client(server, may_retry=lambda wait: True)
+        with self.assertLogs("ingest", level="WARNING"):
+            self.assertEqual(c.get("https://x/f").body, b"ok")
+        self.assertEqual(t.slept, [5.0])
+
     def test_other_errors_raise_without_retry(self):
         server = FakeServer(404)
         c, _ = client(server)

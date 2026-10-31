@@ -7,8 +7,13 @@
 - Pacing: at most one request every `min_interval` seconds (1 by default),
   retries included, so the job never runs more than one request at a time.
 - 429 and 503 honour `Retry-After` (seconds or an HTTP date), up to
-  `max_retries` times; a wait longer than `max_wait` gives up instead of
-  sleeping past the Lambda's budget.
+  `max_retries` times; a wait longer than `max_wait`, or one `may_retry(wait)`
+  refuses (the Lambda's time budget), gives up with `RetryLater` instead of
+  sleeping past the Lambda's budget. Each 429/503 is logged (warning) with its
+  status, the attempt and the Retry-After received (or "absent"), and the
+  `RetryLater` message names that Retry-After too, so a failed backfill says
+  what CHC asked for (2026-10-31). The backfill state machine retries
+  `RetryLater` with long waits (infra/ingest_backfill.tf).
 - **A 403 raises `StopRun` at once and is never retried**: CHC bans by
   volume (2026-10-25), and the run must stop and alert, not keep knocking.
 - **A body that ends early is a failed request, not a file.** When the
@@ -31,12 +36,15 @@ from __future__ import annotations
 
 import email.utils
 import http.client
+import logging
 import ssl
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable
+
+log = logging.getLogger("ingest")
 
 USER_AGENT = "water-management-ingest/1 (+https://github.com/Absence0760/project-water-management)"
 
@@ -226,13 +234,18 @@ class PoliteClient:
                     raise StopRun(url) from None
                 if status in (429, 503):
                     attempt += 1
+                    raw = e.headers.get("Retry-After") if e.headers is not None else None
+                    asked = "absent" if raw is None else repr(raw.strip())
+                    log.warning("%s answered HTTP %d (attempt %d of %d), Retry-After %s", url, status, attempt, self.max_retries + 1, asked)
                     if attempt > self.max_retries:
-                        raise RetryLater(f"{url} still answered HTTP {status} after {self.max_retries} retries") from None
-                    wait = retry_after_seconds(e.headers.get("Retry-After"), self.wall_clock)
+                        raise RetryLater(f"{url} still answered HTTP {status} after {self.max_retries} retries (Retry-After {asked})") from None
+                    wait = retry_after_seconds(raw, self.wall_clock)
                     if wait is None:
                         wait = self.default_backoff * 2 ** (attempt - 1)
                     if wait > self.max_wait:
-                        raise RetryLater(f"{url} asked us to wait {wait:.0f} s (over {self.max_wait:.0f} s)") from None
+                        raise RetryLater(f"{url} answered HTTP {status} and asked us to wait {wait:.0f} s (over {self.max_wait:.0f} s; Retry-After {asked})") from None
+                    if self.may_retry is not None and not self.may_retry(wait):
+                        raise RetryLater(f"{url} answered HTTP {status}; no time left in this invocation to wait {wait:.0f} s (Retry-After {asked})") from None
                     self.sleep(wait)
                     continue
                 raise HttpError(url, status) from None
