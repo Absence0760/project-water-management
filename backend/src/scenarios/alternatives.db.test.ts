@@ -55,6 +55,16 @@ beforeAll(async () => {
 	expect((await owner.call('PATCH', P(), { settings: { apanMm: monthly(150) } })).status).toBe(200);
 	const rain = Array.from({ length: 60 }, (_, i) => (i % 7 === 0 ? 20 : 0));
 	expect((await owner.call('PUT', `${P()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+	// A registered volume, so every run carries allocation rows and holder keys (219/226: app_run_allocation_holders, _kinds).
+	const allocation = await owner.call('POST', `${P()}/allocations`, {
+		nodeId: farmId,
+		registrationNo: 'REG-ALT-1',
+		authorisation: 'registration',
+		holder: 'Invented Holder',
+		waterSource: 'surface',
+		volumeM3PerYear: 100_000
+	});
+	expect(allocation.status, JSON.stringify(allocation.body)).toBe(201);
 	published = (await owner.call('POST', `${P()}/runs`, { label: 'Baseline' })).body.run.id;
 	expect((await owner.call('POST', `${P()}/publication`, { runId: published })).status).toBe(201);
 	for (const [u, role] of [
@@ -219,6 +229,66 @@ describe('an application’s mitigation alternatives', () => {
 			expect((await viewer.call('GET', `${P()}/runs/${smaller.runId}`)).status).toBe(404);
 			// The editors read the list with the application.
 			expect((await editor.call('GET', S(app.sid))).body.alternatives.map((a: { label: string }) => a.label)).toEqual(['Smaller dam', 'Winter abstraction only']);
+		});
+
+		/**
+		 * Everything 298 opened to a cited run, as `u` reads it: the run (model_run_select), its series by the route and
+		 * in the table (app_hidden_scenario_runs, which run_series and the share and pack policies read), its digest
+		 * (app_run_digest) and its allocations' holder keys and kinds (app_run_allocation_holders / _kinds). Each read
+		 * separately, so reverting any one of them fails.
+		 */
+		async function reads(u: User, runId: string) {
+			const run = (await u.call('GET', `${P()}/runs/${runId}`)).status;
+			const series = (await u.call('GET', `${P()}/runs/${runId}/series?key=simulated_outflow`)).status;
+			const ids = (await asOwner('SELECT allocation_id FROM run_allocation_holder WHERE run_id = $1', [runId])).map((r) => r.allocation_id as string);
+			expect(ids.length, `${runId} carries allocation rows`).toBeGreaterThan(0);
+			return withUser(u.id, async (db) => {
+				const q = async (sql: string, params: unknown[]) => {
+					await db.query('SAVEPOINT r');
+					try {
+						return (await db.query(sql, params)).rows;
+					} catch {
+						await db.query('ROLLBACK TO SAVEPOINT r');
+						return 'refused' as const;
+					}
+				};
+				const rows = await q('SELECT count(*)::int AS n FROM run_series WHERE run_id = $1', [runId]);
+				const digest = await q('SELECT app_run_digest($1) IS NOT NULL AS d', [runId]);
+				const holders = await q('SELECT count(*)::int AS n FROM app_run_allocation_holders($1, $2, $3)', [projectId, runId, ids]);
+				const kinds = await q('SELECT count(*)::int AS n FROM app_run_allocation_kinds($1, $2, $3)', [projectId, runId, ids]);
+				const one = (r: unknown, k: string) => (r === 'refused' ? r : (r as Record<string, unknown>[])[0]![k]);
+				return { run, series, seriesRows: one(rows, 'n'), digest: one(digest, 'd'), holders: one(holders, 'n'), kinds: one(kinds, 'n') };
+			});
+		}
+		const opened = { run: 200, series: 200, digest: true };
+		const closed = { run: 404, series: 404, seriesRows: 0, digest: false, holders: 0, kinds: 0 };
+
+		it('opens each of a cited run’s reads to the assessors, and none of an uncited draft’s (each with its control)', async () => {
+			const cited = await reads(editor, smaller.runId);
+			expect(cited).toMatchObject(opened);
+			expect(cited.seriesRows).toBeGreaterThan(0);
+			expect(cited.holders).toBeGreaterThan(0);
+			expect(cited.kinds).toBeGreaterThan(0);
+			// The applicant's uncited draft, and another applicant's run: closed on every read.
+			const listed = await applicant.call('GET', `${S(app.sid)}/alternatives`);
+			const uncited = listed.body.candidates.map((c: { runId: string }) => c.runId).find((id: string) => id !== smaller.runId && id !== winter.runId);
+			for (const id of [uncited, others.runId]) expect(await reads(editor, id), id).toEqual(closed);
+		});
+
+		it('opens none of them to a viewer before the decision, nor to a contributor, the application’s own consultant included', async () => {
+			expect(await reads(viewer, smaller.runId)).toEqual(closed);
+			// A contributor reads no run row and no digest; the holder definers refuse a non-viewer outright.
+			const none = { run: 403, series: 403, digest: false, holders: 'refused', kinds: 'refused' };
+			expect(await reads(consultant, smaller.runId)).toEqual({ ...none, seriesRows: 0 });
+			// The applicant reads their own run's own-unit series as before 298 (046/164, run_series_select_contributor), nothing more.
+			const own = await reads(applicant, smaller.runId);
+			expect(own).toMatchObject(none);
+			const [{ n: ownRows }] = await asOwner(
+				`SELECT count(*)::int AS n FROM run_series WHERE run_id = $1 AND (node_id = $2 OR (node_id IS NULL AND key IN ('natural_flow', 'ewr', 'simulated_outflow', 'observed_flow', 'ewr_shortfall', 'observed_flow_other')))`,
+				[smaller.runId, farmId]
+			);
+			expect(own.seriesRows).toBeLessThanOrEqual(ownRows);
+			expect((await withUser(applicant.id, (db) => db.query('SELECT 1 FROM run_series WHERE run_id = $1 AND node_id IS NOT NULL AND node_id <> $2', [smaller.runId, farmId]))).rowCount).toBe(0);
 		});
 
 		it('sets them beside the application on the evidence report’s page 1 (evidence-26)', async () => {
