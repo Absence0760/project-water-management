@@ -28,6 +28,7 @@
 	import { withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import { guardUnsaved } from '#lib/nav/unsaved.js';
 	import { leavesScenariosTab } from './leaves';
+	import { licensedRunFinished } from './licence';
 	import ScenarioEditor from './ScenarioEditor.svelte';
 	import { scenariosSummary } from './summary';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
@@ -160,10 +161,13 @@
 	}
 
 	function changed(d: ScenarioWithCheck) {
-		const rebased = detail?.scenario.id === d.scenario.id && detail.scenario.baseRunId !== d.scenario.baseRunId;
+		const same = detail?.scenario.id === d.scenario.id;
+		const rebased = same && detail!.scenario.baseRunId !== d.scenario.baseRunId;
+		// The licensed terms' background run (293) just stored its run: re-read the run list, as after a rebase.
+		const ranInBackground = same && licensedRunFinished(detail!.scenario, d.scenario);
 		detail = d;
 		scenarios = (scenarios ?? []).map((x) => (x.id === d.scenario.id ? d.scenario : x));
-		if (rebased) refreshRuns();
+		if (rebased || ranInBackground) refreshRuns();
 	}
 	async function deleted() {
 		const id = detail?.scenario.id;

@@ -11937,7 +11937,10 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   (293_scenario_run_job), the block says so there instead (`licence.ts`
   `licensedRunState`): "Queued…" or "Running…" with the button hidden, the
   scenario read again every 4 s until the job ends; after a failure the
-  button is back beside why; a finished job says nothing more.
+  button is back beside why; a finished job says nothing more, and the
+  tab reads the run list again then (`licensedRunFinished`, in
+  `ScenariosTab.svelte` `changed`, as after a rebase), so its run shows
+  without a reload.
 - **Appeals** (228_decision_events, #523 G4), under the decision: the
   events in order ("Appeal lodged: Water Tribunal, 2 Oct 2026", its
   reference, who recorded it and when, its note, a variation's terms), or

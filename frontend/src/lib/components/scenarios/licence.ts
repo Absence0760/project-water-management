@@ -96,3 +96,17 @@ export function licensedRunState(
 			return null;
 	}
 }
+
+/**
+ * The background run of the licensed terms (293) finished between two reads
+ * of a scenario: the job read before was waiting, running or retrying, and
+ * the same job reads `done` now. Its run is then stored, so the run list is
+ * read again (ScenariosTab `changed`, as after a rebase). A job first seen
+ * done (an old one, or a page opened after it ran) asks for nothing: the list
+ * read then already had its run.
+ */
+export function licensedRunFinished(before: Pick<Scenario, 'licensedRunJob'>, after: Pick<Scenario, 'licensedRunJob'>): boolean {
+	const was = before.licensedRunJob;
+	const now = after.licensedRunJob;
+	return !!was && !!now && was.id === now.id && was.status !== 'done' && was.status !== 'dead' && now.status === 'done';
+}
