@@ -10,7 +10,6 @@ import {
 	ENGINE_VERSION,
 	runModelChecked,
 	type CombineScenario,
-	type CumulativeReport,
 	type ModelInput,
 	type RunSummary,
 	type ScenarioConflict,
@@ -22,6 +21,7 @@ import { LeaseLostError } from '../jobs/errors.js';
 import { enqueueJob, type JobMeta, type JobStatus } from '../jobs/queue.js';
 import { applicationMask } from '../scenarios/applicant.js';
 import { checkScenario, countedOps, loadBaseInput, loadScenario, type ScenarioOrigin, type ScenarioRow } from '../scenarios/execute.js';
+import { assessBackground, loadBackground, type AssessmentBackground, type AssessmentReport } from './background.js';
 import { ASSESSMENTS_KEPT, type CreateAssessmentBody } from './schema.js';
 
 export type AssessmentStatus = 'pending' | 'complete' | 'refused' | 'failed';
@@ -47,11 +47,17 @@ export interface AssessmentRow {
 	name: string;
 	baseRunId: string;
 	baseRun: { id: string; label: string; createdAt: string };
+	/** The optional background at full allocation (295, background.ts); null when none was asked for. */
+	backgroundRunId: string | null;
+	backgroundRun: { id: string; label: string; createdAt: string } | null;
 	status: AssessmentStatus;
 	/** Why it was refused or failed: the conflicts and ops that don't apply, or the engine's message. */
 	problems: string[];
-	/** The cumulative report (engine CumulativeReport); only on GET …/assessments/:aid, and only when complete. */
-	report?: CumulativeReport | null;
+	/**
+	 * The cumulative report (engine CumulativeReport), with the background's table beside it when one was asked
+	 * for (`background`); only on GET …/assessments/:aid, and only when complete.
+	 */
+	report?: AssessmentReport | null;
 	engineVersion: string | null;
 	job: { id: string; status: JobStatus; error: string | null; progress: number | null } | null;
 	createdBy: string | null;
@@ -73,7 +79,8 @@ const memberFields = `jsonb_build_object('id', m.id, 'position', m.position, 'sc
 	'startDate', m.start_date, 'endDate', m.end_date)`;
 
 const assessmentSelect = (withReport: boolean) => `SELECT a.id, a.name, a.base_run_id AS "baseRunId",
-	jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) AS "baseRun",
+	jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) AS "baseRun", a.background_run_id AS "backgroundRunId",
+	(SELECT jsonb_build_object('id', b.id, 'label', b.label, 'createdAt', b.created_at) FROM model_run b WHERE b.id = a.background_run_id) AS "backgroundRun",
 	a.status, a.problems${withReport ? ', a.report' : ''}, a.engine_version AS "engineVersion",
 	CASE WHEN j.id IS NULL THEN NULL ELSE jsonb_build_object('id', j.id, 'status', j.status, 'error', j.last_error, 'progress', j.progress) END AS job,
 	u.display_name AS "createdBy", a.created_at AS "createdAt", a.completed_at AS "completedAt",
@@ -121,8 +128,20 @@ async function loadRequest(db: Db, projectId: string, ids: readonly string[]): P
 	return { scenarios: scenarios.map((s) => ({ ...s, ...countedOps(s) })), baseRunId, base: await loadBaseInput(db, projectId, baseRunId) };
 }
 
+/** The baseline's check, and the background's (295) when there is one: its conflicts and problems prefixed so they read as the background's. */
+function withBackgroundCheck(check: AssessmentCheck, background: AssessmentCheck | null): AssessmentCheck {
+	if (!background || background.ok) return check;
+	const at = (p: string) => `At full allocation: ${p}`;
+	return {
+		ok: false,
+		conflicts: [...check.conflicts, ...background.conflicts.map((c) => ({ ...c, message: at(c.message) }))],
+		problems: [...check.problems, ...background.problems.map(at)]
+	};
+}
+
 /**
- * Check that the scenarios combine and, unless `dryRun`, write the
+ * Check that the scenarios combine (on the background too, when one is
+ * asked for: background.ts loadBackground) and, unless `dryRun`, write the
  * assessment, its members and its job as the transaction's user (an editor,
  * RLS), keeping the project's newest ASSESSMENTS_KEPT. Refused (422, the
  * conflicts and problems in `details`) when they don't combine: never a run
@@ -135,7 +154,8 @@ export async function createAssessment(
 	body: CreateAssessmentBody
 ): Promise<{ check: AssessmentCheck; assessment: AssessmentRow | null; job: JobMeta | null }> {
 	const { scenarios, baseRunId, base } = await loadRequest(db, projectId, body.scenarioIds);
-	const check = checkCombination(base, scenarios);
+	const bg = body.backgroundRunId ? await loadBackground(db, projectId, baseRunId, body.backgroundRunId) : null;
+	const check = withBackgroundCheck(checkCombination(base, scenarios), bg && checkCombination(bg.input, scenarios));
 	if (!check.ok) {
 		const n = check.conflicts.length;
 		throw new ApiError(
@@ -147,7 +167,14 @@ export async function createAssessment(
 	if (body.dryRun) return { check, assessment: null, job: null };
 	const assessmentId = randomUUID();
 	const { job } = await enqueueJob(db, { projectId, kind: 'assessment', payload: { assessmentId }, maxAttempts: 2 });
-	await db.query('INSERT INTO assessment (id, project_id, base_run_id, job_id, name) VALUES ($1, $2, $3, $4, $5)', [assessmentId, projectId, baseRunId, job.id, body.name]);
+	await db.query('INSERT INTO assessment (id, project_id, base_run_id, job_id, name, background_run_id) VALUES ($1, $2, $3, $4, $5, $6)', [
+		assessmentId,
+		projectId,
+		baseRunId,
+		job.id,
+		body.name,
+		bg?.run.id ?? null
+	]);
 	// The guard copies each scenario's name, origin, ops and own nodes; these columns are placeholders it overwrites.
 	await db.query(
 		`INSERT INTO assessment_member (assessment_id, project_id, scenario_id, position, name, origin, ops, ops_sha256)
@@ -215,10 +242,10 @@ function run(input: ModelInput): { ok: true; out: ReturnType<typeof runModelChec
  * nothing stored. Returns false when there was nothing to do.
  */
 export async function computeAssessment(db: Db, projectId: string, assessmentId: string, progress: (pct: number) => Promise<boolean>): Promise<boolean> {
-	const { rows } = await db.query<{ baseRunId: string; status: AssessmentStatus }>('SELECT base_run_id AS "baseRunId", status FROM assessment WHERE project_id = $1 AND id = $2', [
-		projectId,
-		assessmentId
-	]);
+	const { rows } = await db.query<{ baseRunId: string; backgroundRunId: string | null; status: AssessmentStatus }>(
+		'SELECT base_run_id AS "baseRunId", background_run_id AS "backgroundRunId", status FROM assessment WHERE project_id = $1 AND id = $2',
+		[projectId, assessmentId]
+	);
 	const a = rows[0];
 	if (!a || a.status !== 'pending') return false;
 	// A base run that can no longer be rebuilt fails the job (an ApiError: no retry); the assessment stays pending.
@@ -228,7 +255,8 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 		 FROM assessment_member WHERE assessment_id = $1 ORDER BY position`,
 		[assessmentId]
 	);
-	const total = members.length + 2;
+	// With a background (295), the same runs again on it.
+	const total = (members.length + 2) * (a.backgroundRunId ? 2 : 1);
 	let done = 0;
 	const step = async () => {
 		if (!(await progress((100 * ++done) / total))) throw new LeaseLostError();
@@ -292,9 +320,26 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 		singles,
 		{ summary: together.out.summary, startDate: together.out.startDate, endDate: together.out.endDate }
 	);
+	// The background at full allocation (295): its own row set beside the baseline's, never in its place.
+	let background: AssessmentBackground | null = null;
+	if (a.backgroundRunId) {
+		const bg = await assessBackground(
+			db,
+			projectId,
+			a.baseRunId,
+			a.backgroundRunId,
+			members.map((m) => ({ id: m.scenarioId ?? m.id, name: m.name, ops: m.ops, origin: m.origin, ownedNodeIds: m.ownedNodeIds })),
+			step
+		);
+		if (!bg.ok) {
+			await finish(bg.status, bg.problems);
+			return true;
+		}
+		background = bg.background;
+	}
 	await db.query(
 		`UPDATE assessment SET status = 'complete', report = $2, combined_summary = $3, start_date = $4, end_date = $5, engine_version = $6 WHERE id = $1`,
-		[assessmentId, JSON.stringify(report), JSON.stringify(together.out.summary), together.out.startDate, together.out.endDate, ENGINE_VERSION]
+		[assessmentId, JSON.stringify(background ? { ...report, background } : report), JSON.stringify(together.out.summary), together.out.startDate, together.out.endDate, ENGINE_VERSION]
 	);
 	return true;
 }

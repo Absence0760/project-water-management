@@ -334,7 +334,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -1039,7 +1039,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-24');
+		expect(got.version).toBe('evidence-25');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1686,6 +1686,36 @@ describe('page 1’s combined row: every application together (evidence-11, find
 	it('is deterministic: the same input gives the same document', () => {
 		expect(canonicalJson(evidenceReport(input({ combined: combined() })))).toBe(canonicalJson(evidenceReport(input({ combined: combined() }))));
 	});
+
+	it('evidence-25: adds the assessment’s background at full allocation as its own labelled row set, the baseline’s figures and page 1’s row unchanged', () => {
+		// Any other table stands in for the background's run: what is checked is where each figure goes.
+		const bgReport = cumulativeImpact(
+			{ summary: otherOut.summary, ...window },
+			[
+				{ id: 'scn', name: 'Farm two dam', summary: togetherOut.summary, ...window },
+				{ id: 'scn-2', name: 'Farm one dam', summary: otherOut.summary, ...window }
+			],
+			{ summary: togetherOut.summary, ...window }
+		);
+		const background = { label: 'Existing authorised use (full allocation)', runLabel: 'At full allocation', report: bgReport };
+		const plain = evidenceReport(input({ combined: combined() }));
+		const r = evidenceReport(input({ combined: combined({ assessment: { ...assessment, background } }) }));
+		const c = r.cumulative.combined!;
+		const outlet = bgReport.rows.find((x) => x.metric === 'ewr_days_not_met' && x.isOutlet)!;
+		expect(c.background).toEqual({
+			label: background.label,
+			runLabel: 'At full allocation',
+			ewrDays: { baseline: outlet.baseline, combined: outlet.combined, change: outlet.combinedChange, sumOfSingles: outlet.sumOfSingles, interaction: outlet.interaction },
+			reserveMonths: expect.objectContaining({ baseline: expect.any(Number) })
+		});
+		// Never in the baseline's place: its measures, the applications' changes and page 1's row are the baseline's.
+		expect(c.ewrDays).toEqual(plain.cumulative.combined!.ewrDays);
+		expect(c.applications).toEqual(plain.cumulative.combined!.applications);
+		expect(r.rows.at(-1)).toEqual(plain.rows.at(-1));
+		// Without one, or when not assessed, there is none.
+		expect(plain.cumulative.combined!.background).toBeNull();
+		expect(evidenceReport(input({ combined: combined({ assessment: { ...assessment, background }, conflicts: ['x'] }) })).cumulative.combined!.background).toBeNull();
+	});
 });
 
 describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', () => {
@@ -1698,7 +1728,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1754,7 +1784,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1977,7 +2007,7 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 
 	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.calibrationZones).toEqual([
 			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
 			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
@@ -2005,7 +2035,7 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 
 	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
 		const r = evidenceReport(input({ futureYield: found }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		const s = r.futureYield!;
 		expect(s).toMatchObject({ status: 'ok', createdAt: found.createdAt, createdBy: 'Analyst', complete: true, fewModels: true, models: ['SYN-A', 'SYN-B', 'SYN-C'] });
 		if (s.status !== 'ok') throw new Error('unreachable');

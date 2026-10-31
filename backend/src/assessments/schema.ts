@@ -26,6 +26,12 @@ export const CreateAssessmentBody = z
 			.min(ASSESSMENT_SCENARIOS_MIN, `an assessment needs at least ${ASSESSMENT_SCENARIOS_MIN} scenarios`)
 			.max(ASSESSMENT_SCENARIOS_MAX, `an assessment takes at most ${ASSESSMENT_SCENARIOS_MAX} scenarios`)
 			.refine((ids) => new Set(ids).size === ids.length, 'a scenario can be in an assessment once'),
+		/**
+		 * Optional background at full allocation (295, WP-3.10): a scenario run on the same baseline at full
+		 * allocation (assessments/background.ts). The members are also assessed on it, as a second row set;
+		 * the baseline stays the hydrologist's run.
+		 */
+		backgroundRunId: z.string().uuid().optional(),
 		/** Only check that the scenarios combine (conflicts and problems); write nothing, queue nothing. */
 		dryRun: z.boolean().optional()
 	})

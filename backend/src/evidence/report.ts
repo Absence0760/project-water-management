@@ -20,7 +20,6 @@ import {
 	withLocalitySvgHash,
 	type EnsembleHeader,
 	type EnsembleSummary,
-	type CumulativeReport,
 	type EvidenceCombinedInput,
 	type EvidenceEnsembleInput,
 	type EvidenceImpactInput,
@@ -41,6 +40,7 @@ import { createHash } from 'node:crypto';
 import { runAllocationComparison } from '../allocations/runUse.js';
 import { allocationHolderKeys } from '../allocations/holders.js';
 import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
+import type { AssessmentReport } from '../assessments/background.js';
 import { checkCombination } from '../assessments/store.js';
 import { ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -426,7 +426,7 @@ async function loadCombined(
 		return { ...none, others: listed, unavailable: `${total} applications are based on this baseline, and an assessment takes at most ${ASSESSMENT_SCENARIOS_MAX} together.` };
 
 	const members = [...(own ? [`${own.id}:${own.opsSha256}`] : []), ...others.map((o) => `${o.scenarioId}:${o.opsSha256}`)];
-	const { rows: found } = await db.query<{ id: string; name: string; createdAt: Date; createdBy: string | null; engineVersion: string | null; status: 'complete' | 'pending'; report: CumulativeReport | null }>(
+	const { rows: found } = await db.query<{ id: string; name: string; createdAt: Date; createdBy: string | null; engineVersion: string | null; status: 'complete' | 'pending'; report: AssessmentReport | null }>(
 		`SELECT a.id, a.name, a.created_at AS "createdAt", u.display_name AS "createdBy", a.engine_version AS "engineVersion", a.status, a.report
 		 FROM assessment a LEFT JOIN app_user u ON u.id = a.created_by
 		 WHERE a.project_id = $1 AND a.base_run_id = $2 AND a.status IN ('complete', 'pending')
@@ -442,7 +442,16 @@ async function loadCombined(
 		return {
 			...none,
 			others: listed,
-			assessment: { id: hit.id, name: hit.name, createdAt: iso(hit.createdAt)!, createdBy: hit.createdBy, engineVersion: hit.engineVersion, report: hit.report }
+			assessment: {
+				id: hit.id,
+				name: hit.name,
+				createdAt: iso(hit.createdAt)!,
+				createdBy: hit.createdBy,
+				engineVersion: hit.engineVersion,
+				report: hit.report,
+				// evidence-25: its background at full allocation, a row set beside the baseline's (assessments/background.ts).
+				background: hit.report.background ? { label: hit.report.background.label, runLabel: hit.report.background.run.label, report: hit.report.background.report } : null
+			}
 		};
 	// None on the baseline's engine (a pending one comes next, then one on another engine): one on another engine
 	// isn't read, and says why; nor can one be made now while the server runs another engine than the baseline's.

@@ -194,8 +194,18 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * reproduce:pack checks each source (`observations:s2`, `observations:wofs`)
  * and the dates together (`observations:days`). A pack drafted before keeps
  * its document and its `dam-obs-1` section, still checked as it was.
+ * evidence-25 (WP-3.10, followups § Cumulative impact): § 4's combined
+ * table, when the assessment it reads was also run on a background at full
+ * allocation (295, backend assessments/background.ts), adds that row set
+ * beside the baseline's (`cumulative.combined.background`): the background's
+ * outlet days and Reserve months, each application's sum alone and all of
+ * them together on it, and the interaction. Labelled existing authorised use,
+ * never the baseline: the baseline's figures and page 1's row are unchanged
+ * (licences never drive the baseline, issue #507). Counts only, so a reader
+ * kept from the volumes reads it as it is (D3). A pack drafted before keeps
+ * its document, without it.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-24';
+export const EVIDENCE_REPORT_VERSION = 'evidence-25';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -389,6 +399,20 @@ export interface EvidenceAssessmentInput {
 	/** The engine that ran the baseline, each application alone and all together. */
 	engineVersion: string | null;
 	/** Its stored report (engine cumulativeImpact). */
+	report: CumulativeReport;
+	/**
+	 * Its background at full allocation, when it was run on one (evidence-25): the same table with the
+	 * full-allocation run in the baseline's column. Absent or null otherwise.
+	 */
+	background?: EvidenceAssessmentBackgroundInput | null;
+}
+
+/** An assessment's background at full allocation as the report reads it (evidence-25). */
+export interface EvidenceAssessmentBackgroundInput {
+	/** What it is, in words (backend BACKGROUND_LABEL): existing authorised use, never the baseline. */
+	label: string;
+	/** The background run's label, as the assessment recorded it. */
+	runLabel: string;
 	report: CumulativeReport;
 }
 
@@ -919,6 +943,26 @@ export interface EvidenceCombined {
 	warnings: string[];
 	/** Why there is no combined figure, in words; null when there is one. */
 	notAssessed: string | null;
+	/**
+	 * The same measures on the assessment's background at full allocation (evidence-25), beside the
+	 * baseline's, never in their place; null when it has none or isn't read. Absent from a pack drafted before.
+	 */
+	background?: EvidenceCombinedBackground | null;
+}
+
+/**
+ * § 4's row set against existing authorised use (evidence-25, WP-3.10): the
+ * assessment's run of the baseline at full allocation (every registered or
+ * licensed volume taken in full), each application alone and all together on
+ * it. Each measure's `baseline` is the background's own value. Days and
+ * months only: verdicts and counts, which D3 gives every reader of a
+ * full-allocation run.
+ */
+export interface EvidenceCombinedBackground {
+	label: string;
+	runLabel: string;
+	ewrDays: EvidenceCombinedMeasure | null;
+	reserveMonths: EvidenceCombinedMeasure | null;
 }
 
 /** One water year of a unit's use from one water source, both runs (§ 5). */

@@ -280,7 +280,8 @@ describe('route auth inventory', () => {
 
 	// Cumulative impact assessments (WP-3.11, 145_assessment): auth-gated like every project route (editors only, assessments.db.test.ts).
 	it('inventories the assessment routes as auth-gated', () => {
-		for (const r of ['POST /projects/:id/assessments', 'GET /projects/:id/assessments', 'GET /projects/:id/assessments/:aid']) {
+		// The background candidates at full allocation (295) likewise.
+		for (const r of ['POST /projects/:id/assessments', 'GET /projects/:id/assessments', 'GET /projects/:id/assessments/backgrounds', 'GET /projects/:id/assessments/:aid']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
