@@ -78,27 +78,43 @@ describe('the reference ET credits (issue #604 R5-E)', () => {
 		expect(runRainCredits({ summary: {}, et0Products: 'agera5_et0' }, '2026-10-30')).toEqual([]);
 	});
 
-	describe('et0ProductsRead: the feed’s days the run read, split where AgERA5’s copy ends', () => {
+	describe('et0ProductsRead: the products the feed recorded for the days the run read', () => {
 		const used = (first: string, last: string) => ({ used: true, dailyDays: 10, first, last });
-		const feed = { days: [['2026-01-01', '2026-09-30'], ['2026-10-05', '2026-10-25']] as [string, string][], agera5Through: '2026-09-30' };
+		const feed = {
+			agera5: [['2026-01-01', '2026-09-30']] as [string, string][],
+			power: [['2026-10-05', '2026-10-25']] as [string, string][],
+			unrecorded: [] as [string, string][]
+		};
 
-		it('credits AgERA5 for days on or before agera5Through and NASA POWER for days after', () => {
+		it('credits each product whose days the run read', () => {
 			expect(et0ProductsRead(feed, used('2025-01-01', '2026-10-28'))).toEqual(['agera5_et0', 'power_et0']);
 			expect(et0ProductsRead(feed, used('2025-01-01', '2026-09-30'))).toEqual(['agera5_et0']);
 			expect(et0ProductsRead(feed, used('2026-10-01', '2026-10-28'))).toEqual(['power_et0']);
-			// The boundary day itself is AgERA5's.
-			expect(et0ProductsRead({ ...feed, agera5Through: '2026-10-05' }, used('2026-10-05', '2026-10-05'))).toEqual(['agera5_et0']);
+			// Each range's first and last days count.
+			expect(et0ProductsRead(feed, used('2026-09-30', '2026-10-05'))).toEqual(['agera5_et0', 'power_et0']);
+		});
+
+		it('a long pause: NASA POWER days the feed never re-read, before days AgERA5 later wrote, are credited to POWER alone', () => {
+			// AgERA5 reached 2026-09-30 at the newest fetch, but the feed paused past its re-read, so July stayed POWER's.
+			const paused = {
+				agera5: [['2026-01-01', '2026-06-30'], ['2026-08-01', '2026-09-30']] as [string, string][],
+				power: [['2026-07-01', '2026-07-31']] as [string, string][],
+				unrecorded: [] as [string, string][]
+			};
+			expect(et0ProductsRead(paused, used('2026-07-01', '2026-07-31'))).toEqual(['power_et0']);
+			expect(et0ProductsRead(paused, used('2026-07-10', '2026-08-10'))).toEqual(['agera5_et0', 'power_et0']);
 		});
 
 		it('credits nothing for run days the feed didn’t write (a person’s edit, the gap between ranges, outside the series)', () => {
 			expect(et0ProductsRead(feed, used('2026-10-01', '2026-10-04'))).toEqual([]);
 			expect(et0ProductsRead(feed, used('2024-01-01', '2025-12-31'))).toEqual([]);
-			expect(et0ProductsRead({ days: [], agera5Through: '2026-09-30' }, used('2025-01-01', '2026-10-28'))).toEqual([]);
+			expect(et0ProductsRead({ agera5: [], power: [], unrecorded: [] }, used('2025-01-01', '2026-10-28'))).toEqual([]);
 		});
 
-		it('credits NASA POWER alone when the copy held no AgERA5, and both when where it reached is unknown', () => {
-			expect(et0ProductsRead({ ...feed, agera5Through: null }, used('2025-01-01', '2026-10-28'))).toEqual(['power_et0']);
-			expect(et0ProductsRead({ days: feed.days }, used('2026-02-01', '2026-02-02'))).toEqual(['agera5_et0', 'power_et0']);
+		it('credits both for a day with no recorded product (written before the record existed), and only when the run read one', () => {
+			const old = { ...feed, unrecorded: [['2025-06-01', '2025-12-31']] as [string, string][] };
+			expect(et0ProductsRead(old, used('2025-07-01', '2025-07-02'))).toEqual(['agera5_et0', 'power_et0']);
+			expect(et0ProductsRead(old, used('2026-10-10', '2026-10-12'))).toEqual(['power_et0']);
 		});
 
 		it('credits nothing when GR4J didn’t read the series, or it supplied no day, or no feed wrote it', () => {

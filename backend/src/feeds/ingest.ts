@@ -559,9 +559,11 @@ export async function ingestResult(
 				// other value, an upload or an import, is kept (031_feed_days, #30).
 				// provenance: labels a new or empty series with what the feed writes.
 				// origin (107_series_source.sql): a new or empty series records the feed as its source.
+				// dayProducts: a reference ET feed's product for each day it writes (292_feed_et0_product_days), for a run's credits.
 				const r = await mergeSeries(db, feed.projectId, body, {
 					keepOnNull: true,
 					feedId: feed.id,
+					...(feed.source === 'agera5_et0' && checked.dayProducts ? { dayProducts: checked.dayProducts } : {}),
 					origin: bodyOrigin({ ...body, source: feedSourceText(feed.source, feed.config) }),
 					...(writes ? { provenance: writes } : {})
 				});

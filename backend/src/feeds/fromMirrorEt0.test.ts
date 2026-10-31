@@ -15,6 +15,7 @@ import { MirrorOutsideRegionError } from '../mirror/grid.js';
 import { MirrorNotReadyError } from '../mirror/readCells.js';
 import { openStore } from '../mirror/store.js';
 import type { GridConfig } from './config.js';
+import { FetchResult } from './fetch.js';
 import { ET0_FIXTURE, et0Cell, et0FromMirror, type Et0Reader, fixtureEt0Reader, liveEt0Reader } from './fromMirrorEt0.js';
 
 const tmp: string[] = [];
@@ -53,6 +54,9 @@ describe('the live copy (the committed fixture, read as it stood)', () => {
 		expect(r.values[1]).toBe(round2(et0FixtureValue('2025-12-31', 1, 2, 'agera5')));
 		expect(r.values[2]).toBe(round2(et0FixtureValue('2026-01-01', 1, 2, 'power')));
 		expect(r.meta).toEqual({ days: r.values.length, agera5Days: 2, powerDays: r.values.length - 2, agera5Through: '2025-12-31' });
+		// Each day's product, for the ingest to record (292_feed_et0_product_days).
+		expect(r.dayProducts).toEqual(['agera5_et0', 'agera5_et0', ...Array(r.values.length - 2).fill('power_et0')]);
+		expect(FetchResult.safeParse(r).success).toBe(true);
 	});
 
 	it('averages the 0.1° cells by the feed cells’ weights', async () => {
@@ -81,6 +85,21 @@ describe('the refusals', () => {
 		const config: GridConfig = { cells: [cellAt(0, 0), cellAt(0, 1)] };
 		await expect(et0FromMirror(config, { start: '2025-06-01', end: '2025-06-01' }, at([31, 4]))).rejects.toThrow(/implausible reference evapotranspiration of 31 mm/);
 		expect((await et0FromMirror(config, { start: '2025-06-01', end: '2025-06-01' }, at([Number.NaN, 4]))).values).toEqual([4]);
+	});
+
+	it('names a day POWER’s when AgERA5’s copy holds it but no cell has a value there, and none for a gap', async () => {
+		const reader: Et0Reader = async () => ({
+			agera5: [[Number.NaN], [Number.NaN], [3]],
+			power: [[2], [Number.NaN], [Number.NaN]],
+			agera5Through: '2025-06-03'
+		});
+		const r = await et0FromMirror({ cells: [cellAt(0, 0)] }, { start: '2025-06-01', end: '2025-06-03' }, reader);
+		expect(r).toMatchObject({ values: [2, null, 3], dayProducts: ['power_et0', null, 'agera5_et0'] });
+		expect(FetchResult.safeParse(r).success).toBe(true);
+		// The answer's shape: a product for each value, none for a gap, as many as the values.
+		expect(FetchResult.safeParse({ ...r, dayProducts: ['power_et0', 'power_et0', 'agera5_et0'] }).success).toBe(false);
+		expect(FetchResult.safeParse({ ...r, dayProducts: ['power_et0', null] }).success).toBe(false);
+		expect(FetchResult.safeParse({ ...r, dayProducts: ['chirps', null, 'agera5_et0'] }).success).toBe(false);
 	});
 
 	it('the fixture copy can be written to: a live copy without POWER still answers from AgERA5', async () => {

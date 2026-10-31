@@ -70,12 +70,12 @@ describe('runEt0Products (issue #604 R5-E)', () => {
 	const read = { used: true, dailyDays: 30, fallbackDays: 0, invalidDays: 0, first: '2026-08-01', last: '2026-08-30' };
 	const notRead = { used: false, dailyDays: 0, fallbackDays: 30, invalidDays: 0, first: null, last: null };
 
-	it('a run of the live model: the feed’s days the run read, split where AgERA5 reached', () => {
-		const et0Feed = { days: [['2026-01-01', '2026-08-31']] as [string, string][], agera5Through: '2026-08-15' };
+	it('a run of the live model: the products the feed recorded for the days the run read', () => {
+		const et0Feed = { agera5: [['2026-01-01', '2026-08-15']] as [string, string][], power: [['2026-08-16', '2026-08-31']] as [string, string][], unrecorded: [] };
 		expect(runEt0Products({ et0Feed }, read)).toEqual(['agera5_et0', 'power_et0']);
 		expect(runEt0Products({ et0Feed }, notRead)).toEqual([]);
 		// The feed's record wins over anything inherited.
-		expect(runEt0Products({ et0Feed: { days: [], agera5Through: null }, et0Products: ['agera5_et0'] }, read)).toEqual([]);
+		expect(runEt0Products({ et0Feed: { agera5: [], power: [], unrecorded: [] }, et0Products: ['agera5_et0'] }, read)).toEqual([]);
 	});
 
 	it('a scenario run: its base run’s products, only when the scenario’s own run read the series', () => {

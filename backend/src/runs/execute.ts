@@ -506,8 +506,8 @@ export interface RunPlan {
 	forecastRainEcmwf?: boolean;
 	/**
 	 * A run of the live model whose daily reference ET series an `agera5_et0`
-	 * feed wrote (et0FeedDays below): the days it wrote and where AgERA5's copy
-	 * reached, as they stood when the input was read. storeRun turns it into
+	 * feed wrote (et0FeedDays below): the days it wrote, by the product it
+	 * recorded for each, as they stood when the input was read. storeRun turns it into
 	 * the run's `et0Products` with the run days GR4J read (engine
 	 * et0ProductsRead), for AgERA5's and NASA POWER's credits.
 	 */
@@ -603,27 +603,32 @@ export async function forecastRainEcmwf(db: Db, seriesId: string | undefined, fr
 /**
  * The days an `agera5_et0` feed wrote into a daily reference ET series and
  * still holds (time_series.feed_id + feed_days, 031_feed_days: a person's
- * upload or edit releases the days it covers), as inclusive ISO ranges, and
- * where AgERA5's copy reached at the feed's latest fetch
- * (data_feed.last_meta.agera5Through, feeds/fromMirrorEt0.ts): the feed takes
- * AgERA5 on every day its copy holds and NASA POWER only after it. A fetch
- * that recorded its counts (agera5Days) without agera5Through found no
- * AgERA5 (null); no counts at all (the config changed since) is unknown
- * (undefined: both are credited). null when no such feed wrote the series.
+ * upload or edit releases the days it covers), as inclusive ISO ranges, by
+ * the product the ingest recorded for each (feed_agera5_days /
+ * feed_power_days, 292_feed_et0_product_days); a day with neither was
+ * written before that record existed, and the credit owes both for it.
+ * null when no such feed wrote the series.
  */
 export async function et0FeedDays(db: Db, seriesId: string | undefined): Promise<Et0FeedDays | null> {
 	if (!seriesId) return null;
-	const { rows } = await db.query<{ days: [string, string][] | null; through: string | null; counted: boolean }>(
-		`SELECT (SELECT array_agg(ARRAY[lower(r)::text, (upper(r) - 1)::text] ORDER BY lower(r)) FROM unnest(s.feed_days) r) AS days,
-			CASE WHEN f.last_meta->>'agera5Through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN f.last_meta->>'agera5Through' END AS through,
-			f.last_meta ? 'agera5Days' AS counted
-		 FROM time_series s JOIN data_feed f ON f.project_id = s.project_id AND f.id = s.feed_id
-		 WHERE s.id = $1 AND f.source = 'agera5_et0'`,
+	type Ranges = [string, string][] | null;
+	const { rows } = await db.query<{ agera5: Ranges; power: Ranges; unrecorded: Ranges }>(
+		`WITH d AS (
+			SELECT s.feed_days * coalesce(s.feed_agera5_days, '{}') AS agera5,
+				s.feed_days * coalesce(s.feed_power_days, '{}') AS power,
+				s.feed_days - coalesce(s.feed_agera5_days, '{}') - coalesce(s.feed_power_days, '{}') AS unrecorded
+			 FROM time_series s JOIN data_feed f ON f.project_id = s.project_id AND f.id = s.feed_id
+			 WHERE s.id = $1 AND f.source = 'agera5_et0'
+		)
+		SELECT (SELECT array_agg(ARRAY[lower(r)::text, (upper(r) - 1)::text] ORDER BY lower(r)) FROM unnest(d.agera5) r) AS agera5,
+			(SELECT array_agg(ARRAY[lower(r)::text, (upper(r) - 1)::text] ORDER BY lower(r)) FROM unnest(d.power) r) AS power,
+			(SELECT array_agg(ARRAY[lower(r)::text, (upper(r) - 1)::text] ORDER BY lower(r)) FROM unnest(d.unrecorded) r) AS unrecorded
+		 FROM d`,
 		[seriesId]
 	);
 	const r = rows[0];
 	if (!r) return null;
-	return { days: r.days ?? [], ...(r.through ? { agera5Through: r.through } : r.counted ? { agera5Through: null } : {}) };
+	return { agera5: r.agera5 ?? [], power: r.power ?? [], unrecorded: r.unrecorded ?? [] };
 }
 
 /**

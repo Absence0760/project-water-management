@@ -286,11 +286,18 @@ export function subtractRuns(a: DayRuns, b: DayRuns): DayRuns {
 	return out;
 }
 
+/** `a`'s days that `b` holds too. */
+export function intersectRuns(a: DayRuns, b: DayRuns): DayRuns {
+	return subtractRuns(a, subtractRuns(a, b));
+}
+
 export interface FeedDays {
 	/** The days to merge (with keepOnNull): a day the feed may not replace is null. */
 	incoming: Daily;
 	/** The feed's days afterwards: the ones it held, plus every day it writes now. */
 	owned: DayRuns;
+	/** The days it writes now. */
+	wrote: DayRuns;
 	/** Days holding a value the feed didn't write, which it keeps rather than replaces. */
 	kept: number;
 	/** Days the feed writes: empty ones, and ones it wrote before. */
@@ -326,9 +333,38 @@ export function feedDays(existing: Daily | null, owned: DayRuns, incoming: Daily
 	return {
 		incoming: { startDate: incoming.startDate, values },
 		owned: unionRuns(owned, mineNow),
+		wrote: mineNow,
 		kept,
 		written: mineNow.reduce((sum, [s, e]) => sum + e - s, 0)
 	};
+}
+
+/** The days of a series' feed days each reference ET product wrote (292_feed_et0_product_days). */
+export interface ProductDays {
+	agera5: DayRuns;
+	power: DayRuns;
+}
+
+/**
+ * Which product wrote each feed day after a merge (292_feed_et0_product_days):
+ * a day the feed writes now takes the product `dayProducts` names for it
+ * (aligned with the incoming days from `start`), or none when it names none
+ * (unknown: the credit owes both); every other day keeps its product; and
+ * only the days the series' feed still holds (`owned`) keep one.
+ */
+export function feedProductDays(held: ProductDays, owned: DayRuns, write?: { wrote: DayRuns; start: string; dayProducts?: readonly (string | null)[] }): ProductDays {
+	let { agera5, power } = held;
+	if (write) {
+		agera5 = subtractRuns(agera5, write.wrote);
+		power = subtractRuns(power, write.wrote);
+		const products = write.dayProducts;
+		if (products) {
+			const i0 = toEpochDay(write.start);
+			agera5 = unionRuns(agera5, intersectRuns(write.wrote, runsOf(i0, products.length, (k) => products[k] === 'agera5_et0')));
+			power = unionRuns(power, intersectRuns(write.wrote, runsOf(i0, products.length, (k) => products[k] === 'power_et0')));
+		}
+	}
+	return { agera5: intersectRuns(agera5, owned), power: intersectRuns(power, owned) };
 }
 
 /**
@@ -463,7 +499,15 @@ export async function mergeSeries(
 	db: Db,
 	projectId: string,
 	body: SeriesBody,
-	{ keepOnNull = false, feedId, provenance, origin, byKey = false, byHand = false }: MergeOptions & { feedId?: string; byKey?: boolean; byHand?: boolean } = {}
+	{
+		keepOnNull = false,
+		feedId,
+		dayProducts,
+		provenance,
+		origin,
+		byKey = false,
+		byHand = false
+	}: MergeOptions & { feedId?: string; dayProducts?: readonly (string | null)[]; byKey?: boolean; byHand?: boolean } = {}
 ): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
 	const { rows: cur } = await db.query<{
@@ -473,6 +517,8 @@ export async function mergeSeries(
 		values: (number | null)[];
 		feed_id: string | null;
 		feed_days: DayRuns;
+		feed_agera5_days: DayRuns;
+		feed_power_days: DayRuns;
 		hand_days: DayRuns;
 		product: string | null;
 		productVersion: string | null;
@@ -484,6 +530,10 @@ export async function mergeSeries(
 			source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
 			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
 			 FROM unnest(feed_days) r) AS feed_days,
+			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
+			 FROM unnest(feed_agera5_days) r) AS feed_agera5_days,
+			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
+			 FROM unnest(feed_power_days) r) AS feed_power_days,
 			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
 			 FROM unnest(hand_days) r) AS hand_days
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
@@ -524,14 +574,20 @@ export async function mergeSeries(
 	let owned: DayRuns = row?.feed_days ?? [];
 	let kept = 0;
 	let written = incoming.values.filter((v) => v !== null || !keepOnNull).length;
+	// Which reference ET product wrote each feed day (292): kept in step with the feed's days.
+	const productsBefore: ProductDays = { agera5: row?.feed_agera5_days ?? [], power: row?.feed_power_days ?? [] };
+	let products: ProductDays;
 	if (feedId) {
 		// The days of a feed that no longer writes here (it was removed or re-targeted, which clears them anyway) aren't this one's.
-		const plan = feedDays(existing, owner === feedId ? owned : [], incoming);
+		const mine = owner === feedId;
+		const plan = feedDays(existing, mine ? owned : [], incoming);
 		({ incoming, kept, written } = plan);
 		owner = feedId;
 		owned = plan.owned;
+		products = feedProductDays(mine ? productsBefore : { agera5: [], power: [] }, owned, { wrote: plan.wrote, start: incoming.startDate, ...(dayProducts ? { dayProducts } : {}) });
 	} else {
 		owned = releaseDays(owned, incoming, { keepOnNull });
+		products = feedProductDays(productsBefore, owned);
 	}
 	if (owned.length === 0) owner = null;
 	const merged = mergeDaily(existing, incoming, { keepOnNull });
@@ -555,7 +611,11 @@ export async function mergeSeries(
 			}
 		: null;
 	const sameOwner =
-		!!row && row.feed_id === owner && JSON.stringify(row.feed_days) === JSON.stringify(owned) && JSON.stringify(handBefore) === JSON.stringify(hand);
+		!!row &&
+		row.feed_id === owner &&
+		JSON.stringify(row.feed_days) === JSON.stringify(owned) &&
+		JSON.stringify(handBefore) === JSON.stringify(hand) &&
+		JSON.stringify(productsBefore) === JSON.stringify(products);
 	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
 	// leave the values, so updated_at still says when the values last changed.
 	if (row && row.unit === body.unit && sameDaily(existing!, merged) && sameProvenance(held, label) && sameOrigin(heldOrigin, whence)) {
@@ -566,9 +626,21 @@ export async function mergeSeries(
 					body.name
 				])
 			: await db.query<SeriesMetaRow>(
-					`UPDATE time_series SET feed_id = $4, feed_days = ${feedDaysSql(5, 6)}, hand_days = ${feedDaysSql(7, 8)}
+					`UPDATE time_series SET feed_id = $4, feed_days = ${feedDaysSql(5, 6)}, hand_days = ${feedDaysSql(7, 8)},
+						feed_agera5_days = ${feedDaysSql(9, 10)}, feed_power_days = ${feedDaysSql(11, 12)}
 					 WHERE project_id = $1 AND kind = $2 AND name = $3 RETURNING ${SERIES_META}`,
-					[projectId, body.kind, body.name, owner, owned.map((r) => r[0]), owned.map((r) => r[1]), hand.map((r) => r[0]), hand.map((r) => r[1])]
+					[
+						projectId,
+						body.kind,
+						body.name,
+						owner,
+						owned.map((r) => r[0]),
+						owned.map((r) => r[1]),
+						hand.map((r) => r[0]),
+						hand.map((r) => r[1]),
+						...runParams(products.agera5),
+						...runParams(products.power)
+					]
 				);
 		// A person re-sending a key's values makes them theirs all the same (a key's re-send changes nothing, so records nothing).
 		await trackKeyDays(db, projectId, rows[0]!.id, existing, incoming, { keepOnNull, byKey });
@@ -576,11 +648,12 @@ export async function mergeSeries(
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
 		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days, product, product_version,
-			source, source_unit, source_unit_factor, hand_days)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11, $12, $13, $14, ${feedDaysSql(15, 16)})
+			source, source_unit, source_unit_factor, hand_days, feed_agera5_days, feed_power_days)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11, $12, $13, $14, ${feedDaysSql(15, 16)}, ${feedDaysSql(17, 18)}, ${feedDaysSql(19, 20)})
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now(),
 			feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days, hand_days = EXCLUDED.hand_days,
+			feed_agera5_days = EXCLUDED.feed_agera5_days, feed_power_days = EXCLUDED.feed_power_days,
 			product = EXCLUDED.product, product_version = EXCLUDED.product_version,
 			source = EXCLUDED.source, source_unit = EXCLUDED.source_unit, source_unit_factor = EXCLUDED.source_unit_factor
 		 RETURNING ${SERIES_META}`,
@@ -600,7 +673,9 @@ export async function mergeSeries(
 			whence?.unit ?? null,
 			whence?.factor ?? null,
 			hand.map((r) => r[0]),
-			hand.map((r) => r[1])
+			hand.map((r) => r[1]),
+			...runParams(products.agera5),
+			...runParams(products.power)
 		]
 	);
 	await trackKeyDays(db, projectId, rows[0]!.id, existing, incoming, { keepOnNull, byKey });
@@ -648,6 +723,9 @@ async function trackKeyDays(
 }
 
 /** A datemultirange from two int[] parameters: epoch-day run starts and ends, by parameter number. NULL for no runs. */
+/** Day runs as feedDaysSql's two parameters. */
+const runParams = (runs: DayRuns): [number[], number[]] => [runs.map((r) => r[0]), runs.map((r) => r[1])];
+
 const feedDaysSql = (starts: number, ends: number) =>
 	`(SELECT range_agg(daterange(DATE '1970-01-01' + s, DATE '1970-01-01' + e)) FROM unnest(\$${starts}::int[], \$${ends}::int[]) AS t(s, e))`;
 

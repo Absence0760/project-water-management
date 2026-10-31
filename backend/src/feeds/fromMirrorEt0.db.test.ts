@@ -3,7 +3,7 @@
 // feed writes `evap_et0_mm` from AgERA5, with NASA POWER on the newest days,
 // no FetchRequest leaves even with FEED_FETCHER=sqs, a day POWER filled is
 // replaced by AgERA5's once the copy holds its month (the merge replaces the
-// feed's own days), a copy holding neither product waits without a failure,
+// feed's own days, and the product recorded for each, 292), a copy holding neither product waits without a failure,
 // and a cell outside the region fails naming it.
 //
 // DB test files run one at a time; this one removes every feed and feed job
@@ -107,7 +107,7 @@ describe('a reference ET feed reads our copy', () => {
 		expect(row.last_meta).toMatchObject({ agera5Through, powerDays: toEpochDay(powerThrough) - toEpochDay(agera5Through) });
 	});
 
-	it('a run’s credits read the days the feed wrote and where AgERA5 reached (issue #604 R5-E), not the days a person wrote', async () => {
+	it('a run’s credits read the product the feed recorded for each day (292), not where AgERA5 last reached, nor days a person wrote', async () => {
 		const today = utcToday();
 		const shift = toEpochDay(today) - toEpochDay(ET0_FIXTURE.today);
 		const owner = await signUp('Et0Credits');
@@ -117,19 +117,34 @@ describe('a reference ET feed reads our copy', () => {
 		const seriesId = ((await owner.call('GET', `/projects/${f.pid}/series`)).body.series as { id: string; kind: string }[]).find((x) => x.kind === 'evap_et0_mm')!.id;
 		const last = fromEpochDay(toEpochDay(got.startDate) + got.values.length - 1);
 		const agera5Through = fromEpochDay(toEpochDay(ET0_FIXTURE_HOLDS.agera5.finalThrough) + shift);
-		const read = () => withUser(owner.id, (db) => et0FeedDays(db, seriesId));
-		expect(await read()).toEqual({ days: [[got.startDate, last]], agera5Through });
-		// A run over every day credits both; one that ends on AgERA5's last day, AgERA5 alone.
-		const info = (first: string, to: string) => ({ used: true, dailyDays: 1, fallbackDays: 0, invalidDays: 0, first, last: to });
-		expect(runEt0Products({ et0Feed: (await read())! }, info(got.startDate, last))).toEqual(['agera5_et0', 'power_et0']);
-		expect(runEt0Products({ et0Feed: (await read())! }, info(got.startDate, agera5Through))).toEqual(['agera5_et0']);
-		// A person wrote over POWER's days (031_feed_days: their edit releases them): only AgERA5's are left to credit.
 		const powerFrom = fromEpochDay(toEpochDay(agera5Through) + 1);
-		await asOwner(`UPDATE time_series SET feed_days = feed_days - datemultirange(daterange($2::date, $3::date, '[]')) WHERE id = $1`, [seriesId, powerFrom, last]);
-		expect(await read()).toEqual({ days: [[got.startDate, agera5Through]], agera5Through });
-		expect(runEt0Products({ et0Feed: (await read())! }, info(got.startDate, last))).toEqual(['agera5_et0']);
-		// No feed's series (an upload), or none at all: nothing to read.
+		const read = () => withUser(owner.id, (db) => et0FeedDays(db, seriesId));
+		// The ingest recorded each day's product as it wrote it.
+		expect(await read()).toEqual({ agera5: [[got.startDate, agera5Through]], power: [[powerFrom, last]], unrecorded: [] });
+		// A run over every day credits both; one that ends on AgERA5's last day, AgERA5 alone; one over POWER's days, POWER alone.
+		const info = (first: string, to: string) => ({ used: true, dailyDays: 1, fallbackDays: 0, invalidDays: 0, first, last: to });
+		const credit = async (first: string, to: string) => runEt0Products({ et0Feed: (await read())! }, info(first, to));
+		expect(await credit(got.startDate, last)).toEqual(['agera5_et0', 'power_et0']);
+		expect(await credit(got.startDate, agera5Through)).toEqual(['agera5_et0']);
+		expect(await credit(powerFrom, last)).toEqual(['power_et0']);
+		// A long pause: the feed's latest fetch says AgERA5 reached past every POWER day it never re-read (the old
+		// split at last_meta.agera5Through credited them to AgERA5 alone). The record still says POWER.
+		await asOwner(`UPDATE data_feed SET last_meta = last_meta || jsonb_build_object('agera5Through', $2::text) WHERE id = $1`, [f.feedId, last]);
+		expect(await credit(powerFrom, last)).toEqual(['power_et0']);
+		// Days written before the record existed: no product recorded, so both are credited for them.
+		await asOwner('UPDATE time_series SET feed_power_days = NULL WHERE id = $1', [seriesId]);
+		expect(await read()).toEqual({ agera5: [[got.startDate, agera5Through]], power: [], unrecorded: [[powerFrom, last]] });
+		expect(await credit(powerFrom, last)).toEqual(['agera5_et0', 'power_et0']);
+		expect(await credit(got.startDate, agera5Through)).toEqual(['agera5_et0']);
+		// A person wrote over the last days (031_feed_days: their merge releases them, and their products with them).
+		const name = ((await owner.call('GET', `/projects/${f.pid}/series/${seriesId}`)).body as { name: string }).name;
+		const merged = await owner.call('POST', `/projects/${f.pid}/series/merge`, { kind: 'evap_et0_mm', name, unit: 'mm', startDate: powerFrom, values: Array(toEpochDay(last) - toEpochDay(powerFrom) + 1).fill(5) });
+		expect(merged.status, JSON.stringify(merged.body)).toBe(200);
+		expect(await read()).toEqual({ agera5: [[got.startDate, agera5Through]], power: [], unrecorded: [] });
+		expect(await credit(got.startDate, last)).toEqual(['agera5_et0']);
+		// No feed's series (an upload), or none at all: nothing to read; the trigger clears the products with the feed's days.
 		await asOwner('UPDATE time_series SET feed_id = NULL WHERE id = $1', [seriesId]);
+		expect(await asOwner('SELECT feed_days, feed_agera5_days, feed_power_days FROM time_series WHERE id = $1', [seriesId])).toEqual([{ feed_days: null, feed_agera5_days: null, feed_power_days: null }]);
 		expect(await read()).toBeNull();
 		expect(await withUser(owner.id, (db) => et0FeedDays(db, undefined))).toBeNull();
 	});
@@ -165,6 +180,10 @@ describe('a reference ET feed reads our copy', () => {
 			// A day past AgERA5's month is still POWER's.
 			expect(after.values[toEpochDay('2026-02-03') - toEpochDay(after.startDate)]).toBe(round2(et0FixtureValue('2026-02-03', 1, 2, 'power')));
 			expect((await feedRow(f.feedId)).last_meta).toMatchObject({ agera5Through: '2026-01-31' });
+			// The record moved with the values: January is AgERA5's now, February's days still POWER's (292).
+			const seriesId = ((await owner.call('GET', `/projects/${f.pid}/series`)).body.series as { id: string; kind: string }[]).find((x) => x.kind === 'evap_et0_mm')!.id;
+			const last = fromEpochDay(toEpochDay(after.startDate) + after.values.length - 1);
+			expect(await withUser(owner.id, (db) => et0FeedDays(db, seriesId))).toEqual({ agera5: [[after.startDate, '2026-01-31']], power: [['2026-02-01', last]], unrecorded: [] });
 		} finally {
 			vi.useRealTimers();
 		}

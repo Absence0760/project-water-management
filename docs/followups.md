@@ -451,18 +451,15 @@ provenance, `ingest/verify_copy.py`):
       (2026-10-30).** Done: a run records `et0Products` from the feed's
       days GR4J read, and the report, CSVs, workbook, evidence pack README
       and Data sources page credit them ([data-sources.md § ERA5-Land](./data-sources.md#era5-land-r4-a), *Where the credits show*).
-- [ ] **Record which product wrote each reference ET day.** A run's
-      AgERA5/NASA POWER credit splits the `agera5_et0` feed's `feed_days`
-      at the feed's latest `last_meta.agera5Through`, since the series
-      doesn't record a product per day; a POWER day the feed never re-read
-      after AgERA5's month landed (the feed paused longer than its 75-day
-      re-read) is then credited to AgERA5 alone. **Durable fix:** the
-      ingest keeps the days each product wrote (a `datemultirange` per
-      product beside `feed_days`, cleared by the same edits), and
-      `runs/execute.ts` `et0FeedDays` reads it instead of the split.
-      **Trigger:** the first `agera5_et0` feed paused (failing, or off)
-      for more than 75 days, or an evidence pack on a project whose feed
-      was.
+- [x] **Record which product wrote each reference ET day (2026-10-30).**
+      Done: the ingest records the days each product wrote
+      (`time_series.feed_agera5_days` / `feed_power_days`,
+      292_feed_et0_product_days, kept within `feed_days` by the same
+      merges and cleared with it), and `runs/execute.ts` `et0FeedDays`
+      reads them instead of splitting at `last_meta.agera5Through`, so a
+      POWER day the feed never re-read after AgERA5's month landed is
+      credited to POWER. A day written before 292 has no product recorded
+      and credits both ([data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)).
 
 ## Observing dams (issue #604 Round 5)
 
