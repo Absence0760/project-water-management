@@ -13,7 +13,7 @@ import pg from 'pg';
 import { damFirmYields, ENGINE_VERSION } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
-import { withUser } from '../db/tx.js';
+import { withoutUser, withUser } from '../db/tx.js';
 import { JobError } from '../jobs/errors.js';
 import { assessmentYieldHandler } from '../jobs/handlers/assessment-yield.js';
 import { handlers } from '../jobs/handlers/index.js';
@@ -129,21 +129,76 @@ describe('the assessment fans its dams’ firm yields out to jobs and gathers th
 		await tick(1);
 		const jobs = await yieldJobs(id);
 		const victim = jobs.find((j) => j.run === 'baseline' && j.dam_name === 'Cederhof')!;
-		// Its user no longer an editor of the project, as the worker would find when it claims it: dead, no retry.
-		// First in the queue, so the next one-job tick claims it.
-		await asOwner(`UPDATE job SET acting_user_id = $2, run_after = now() - interval '1 minute' WHERE id = $1`, [victim.job_id, viewer.id]);
-		await tick(1);
-		const [{ status: victimStatus }] = (await asOwner('SELECT status FROM job WHERE id = $1', [victim.job_id])) as [{ status: string }];
-		expect(victimStatus).toBe('dead');
-		const line = 'The baseline: the firm yield of "Cederhof" didn\'t finish (the user who queued this job no longer has the editor role on the project)';
-		// As read now, before any sibling has run: failed, never pending.
-		const read = await get(id);
-		expect(read).toMatchObject({ status: 'failed', problems: [line] });
+		// Dead with no tick yet (as a claim leaves one whose lease ran out): nothing has recorded it.
+		await asOwner(`UPDATE job SET status = 'dead', finished_at = now(), last_error = 'boom' WHERE id = $1`, [victim.job_id]);
+		const line = 'The baseline: the firm yield of "Cederhof" didn\'t finish (boom)';
+		// As read now: failed, never pending, though the row still is.
+		expect(await get(id)).toMatchObject({ status: 'failed', problems: [line] });
 		expect((await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'pending' });
-		// The siblings run: the first records it; the rest find it finished and store nothing more.
+		// The tick: the first sibling (or the sweep) records it; the rest find it finished and store nothing more.
 		await tick();
 		expect((await asOwner('SELECT status, problems, gathering, report FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });
 		expect(await get(id)).toMatchObject({ status: 'failed', problems: [line] });
+	});
+
+	/** An assessment whose yield jobs are all back but `victim`'s (the combined run's Fonteinkloof), which waits. */
+	async function allButOne(name: string) {
+		const { id } = await assess(name);
+		await tick(1);
+		const victim = (await yieldJobs(id)).find((j) => j.run === 'combined' && j.dam_name === 'Fonteinkloof')!;
+		await asOwner(`UPDATE job SET run_after = now() + interval '1 day' WHERE id = $1`, [victim.job_id]);
+		await tick();
+		expect((await asOwner(`SELECT count(*)::int AS n FROM assessment_yield WHERE assessment_id = $1 AND status = 'pending'`, [id]))[0]).toEqual({ n: 1 });
+		expect((await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'pending' });
+		return { id, victim };
+	}
+	const stored = async (id: string) => (await asOwner('SELECT status, problems, gathering, report FROM assessment WHERE id = $1', [id]))[0];
+
+	it('the tick fails it when the claim kills the last yield job, its lease run out with no attempts left (301)', async () => {
+		const { id, victim } = await allButOne('Lease ran out');
+		// The worker stopped mid-search on its last attempt: running, its lease long gone.
+		await asOwner(`UPDATE job SET status = 'running', attempts = max_attempts, locked_until = now() - interval '1 minute', lease_token = gen_random_uuid(), run_after = now() WHERE id = $1`, [
+			victim.job_id
+		]);
+		const r = await tick();
+		expect((await asOwner('SELECT status FROM job WHERE id = $1', [victim.job_id]))[0]).toEqual({ status: 'dead' });
+		expect(r.assessmentsFailed).toBe(1);
+		const line = 'All together: the firm yield of "Fonteinkloof" didn\'t finish (the worker stopped before the job finished, and it has no attempts left)';
+		expect(await stored(id)).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });
+	});
+
+	it('the tick fails it when the last yield job dies because its user is no longer an editor (301)', async () => {
+		const { id, victim } = await allButOne('Demoted');
+		expect((await owner.call('PATCH', `${P()}/members/${assessor.id}`, { role: 'viewer' })).status).toBe(200);
+		try {
+			await asOwner(`UPDATE job SET run_after = now() WHERE id = $1`, [victim.job_id]);
+			const r = await tick();
+			expect((await asOwner('SELECT status FROM job WHERE id = $1', [victim.job_id]))[0]).toEqual({ status: 'dead' });
+			expect(r.assessmentsFailed).toBe(1);
+			const line = 'All together: the firm yield of "Fonteinkloof" didn\'t finish (the user who queued this job no longer has the editor role on the project)';
+			expect(await stored(id)).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });
+		} finally {
+			expect((await owner.call('PATCH', `${P()}/members/${assessor.id}`, { role: 'editor' })).status).toBe(200);
+		}
+	});
+
+	it('the sweep leaves an assessment with live yield jobs alone, only the worker calls it, and the exception fails only on stopped yields (301)', async () => {
+		const { id } = await assess('Still working');
+		await tick(1);
+		// That tick's sweep ran: its yield jobs are queued, so it stays pending; and again, directly, as the worker.
+		expect(await stored(id)).toMatchObject({ status: 'pending', problems: [] });
+		expect(await withoutUser(async (db) => (await db.query('SELECT app_fail_stopped_assessments() AS n')).rows[0].n)).toBe(0);
+		expect(await stored(id)).toMatchObject({ status: 'pending' });
+		// water_app as a signed-in user (the assessor, an editor) is refused.
+		await expect(withUser(assessor.id, (db) => db.query('SELECT app_fail_stopped_assessments()'))).rejects.toThrow(/only the worker/);
+		// Nor can it read the lines' helper.
+		await expect(withUser(assessor.id, (db) => db.query('SELECT assessment_stopped_yields($1)', [id]))).rejects.toThrow(/permission denied/);
+		// The exception holds only for a failure on stopped yields: with none, not even the schema owner fails it so.
+		await expect(
+			asOwner(`UPDATE assessment SET status = 'failed', problems = '["x"]', engine_version = gathering->>'engineVersion', gathering = NULL WHERE id = $1`, [id])
+		).rejects.toThrow(/only whoever asked/);
+		await tick();
+		expect(await stored(id)).toMatchObject({ status: 'complete' });
 	});
 
 	it('the last yield job dying, with no sibling left to see it, stores the assessment as failed, naming the run and dam', async () => {
@@ -167,8 +222,10 @@ describe('the assessment fans its dams’ firm yields out to jobs and gathers th
 				}
 			}
 		};
-		await runTick({ feeds: false, reports: false, alerts: false, projectIds: [projectId], handlers: failing });
+		const r = await runTick({ feeds: false, reports: false, alerts: false, projectIds: [projectId], handlers: failing });
 		expect((await asOwner('SELECT status FROM job WHERE id = $1', [victim.job_id]))[0]).toEqual({ status: 'dead' });
+		// Its onDead recorded it, before the tick's sweep (301) had anything left to do.
+		expect(r.assessmentsFailed).toBe(0);
 		const line = 'All together: the firm yield of "Fonteinkloof" didn\'t finish (the search ran out of memory)';
 		// The row itself, not only as the API reads it.
 		expect((await asOwner('SELECT status, problems, gathering, report FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });

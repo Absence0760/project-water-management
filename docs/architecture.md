@@ -733,7 +733,8 @@ cumulative assessment's `assessment_yield` (`jobs/handlers/assessment-yield.ts`,
 297: one dam's firm yield on one of its runs, fanned out by the `assessment`
 job and gathered by the last one back; a dead one fails the assessment
 through its handler's `onDead`, which the runner calls as the acting user
-once a job is dead, [scenarios.md § Cumulative
+once a job is dead, or, for a death no hook sees, the tick's sweep after its
+jobs (301 `app_fail_stopped_assessments`), [scenarios.md § Cumulative
 impact](./scenarios.md#cumulative-impact-wp-311)); step 2's
 alerts plug in as a further kind.
 

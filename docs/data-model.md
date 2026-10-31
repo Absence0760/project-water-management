@@ -4112,6 +4112,20 @@ cell is `null`).
   DELETE`, `UPDATE` of the outcome columns. No farmer reads it; no personal
   data.
 - `job.kind` accepts `assessment_yield`.
+- **301_assessment_yield_stopped:** `app_fail_stopped_assessments()`
+  (`SECURITY DEFINER`, the worker only: `alert_worker_context`, no user or
+  API key; `EXECUTE` revoked from `PUBLIC`, granted to water_app, which the
+  tick runs as) fails every pending assessment that is gathering and has a
+  stopped yield (a pending row whose job is dead, done without storing it,
+  or purged), its `problems` the lines of `assessment_stopped_yields(id)`
+  (owner only; the same lines as the backend's `stoppedYieldsSql`) and its
+  `gathering` cleared. The tick calls it after its jobs.
+  `assessment_complete` (from 145) and `assessment_gathering_guard` (from
+  297) take one exception to "only whoever asked"
+  (`assessment_fails_on_stopped_yields`, never NULL): an update that fails,
+  never completes, a pending gathering assessment whose problems are exactly
+  those lines, with its gathering's engine, no report and its gathering
+  cleared.
 
 ### Seasonal outlooks (063_seasonal_outlook.sql)
 

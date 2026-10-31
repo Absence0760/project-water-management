@@ -227,6 +227,11 @@ export interface TickResult {
 	lost: number;
 	/** Handed back to the queue for a later tick, their attempt given back (JobRelease). */
 	released: number;
+	/**
+	 * Pending assessments failed on a firm-yield job that stopped without its yield where nothing else could record
+	 * it (301 app_fail_stopped_assessments): a lease run out with no attempts left, or its user no longer an editor.
+	 */
+	assessmentsFailed: number;
 	/** The queue after the tick. */
 	stats: QueueStats;
 	/** Data feeds queued by this tick (absent when feeds were off). */
@@ -276,6 +281,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		dead: 0,
 		lost: 0,
 		released: 0,
+		assessmentsFailed: 0,
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
 		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
 		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
@@ -325,6 +331,11 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		result.claimed++;
 		result[await runJob(job, o.handlers, o.deadline ?? null)]++;
 	}
+	// After the jobs (a claim may have killed one whose lease ran out): an assessment whose yield job stopped where
+	// neither its onDead nor a sibling could record it is stored as failed (301). Global, like the purges.
+	result.assessmentsFailed = await withoutUser(
+		async (db) => (await db.query<{ n: number }>('SELECT app_fail_stopped_assessments() AS n')).rows[0]?.n ?? 0
+	);
 	// After the jobs, so every delivery an alert_eval queued is sent once it committed.
 	result.alerts = { scheduled: alertsScheduled, purged: alertsPurged, ...(await sendAlerts()) };
 	// Queued by the issue or withdraw route itself (no job), so sent every tick; global like the alert sends.

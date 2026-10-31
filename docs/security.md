@@ -2284,7 +2284,10 @@ In short:
   sweeps, outlooks, yield calculations and cumulative assessments (2 each;
   an assessment counts while its job or any of its dams' firm-yield jobs,
   `assessment_yield` (297), is pending, so the cap also bounds those, at most
-  the engine's `CUMULATIVE_YIELD_SEARCHES_MAX` (160) an assessment)
+  the engine's `CUMULATIVE_YIELD_SEARCHES_MAX` (160) an assessment; the
+  tick's `app_fail_stopped_assessments` (301) runs for the worker only, and
+  the one exception it uses in the assessment's complete-once guards fails,
+  never completes, and only on a yield the job table shows stopped)
   are counted under a per-user advisory lock, so a concurrent burst can't
   pass them, and the database refuses a sweep member, assessment member or
   outlook level past the API's cap
