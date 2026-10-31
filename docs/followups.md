@@ -6019,16 +6019,41 @@ Left:
       submitted, as § 4 always did. **Confirmed (operator, 2026-10-01):
       both stay as built** ([evidence-pack.md § The other applications
       together](./evidence-pack.md#the-other-applications-together)).
-- [ ] **The reproduction bundle carries the combined row's runs.** An
-      `evidence-11` pack's combined row cites an assessment, whose runs (the
-      baseline, each alone, all together, on the assessment's engine) the
-      bundle doesn't hold, so `reproduce:pack` re-runs the baseline and the
-      application but not that row. Durable fix: the bundle adds the
-      assessment's members (ops and hashes, as `scenario.json` does for the
-      application) and its stored report, and `reproduce:pack` re-runs the
-      combination with `combineScenarios` and compares the outlet rows.
-      Trigger: the first issued pack whose combined row is assessed, or an
-      assessor asking to reproduce it.
+- [x] **The reproduction bundle carries the combined row's runs.** Done
+      (bundle layout `bundle-3`, 2026-10-30; the report stays `evidence-26`):
+      the bundle adds the assessment § 4's combined row cites
+      (`assessment/assessment.json`: its members' ops, hashes, origin and an
+      applicant's own units; `assessment/report.json`: its stored report;
+      `assessment/background/input.json`: its background run's input at full
+      allocation), and `checkPackBundle` ties the stored report to the
+      manifest's combined section (`assessment`), checks the background is
+      the baseline at full allocation (`inputs:background`), and re-runs the
+      combination as the job did (engine `evidence/bundleAssessment.ts`:
+      each member alone under its applicant's mask, `combineScenarios`,
+      `cumulativeImpact`, the dam yields, the background), each part its own
+      check (`reproduce:combined`, `reproduce:dams`, `reproduce:background`),
+      so `pnpm reproduce:pack` and the server's `pack_reproduce` both run
+      it. The applicant projection moved to the engine
+      (`scenario/applicant.ts`) so the mask is derived offline. A `bundle-1`
+      or `bundle-2` bundle checks as it did, the row *not included (older
+      bundle)*; an assessment gone by issue refuses the issue (`409`, draft
+      again). Tests: engine `bundle.test.ts` (each tampering beside its
+      control), `reproduce-pack.test.ts`, `pack-reproduce.test.ts`,
+      `evidence/bundle-assessment.db.test.ts` (the job's own assessment
+      re-run offline; a tampered member op and background input fail)
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- [ ] **The server re-run's time with the combined row.** `pack_reproduce`
+      now re-runs a pack's cumulative assessment too (`bundle-3`): up to its
+      applications + 2 runs and 20 firm-yield searches (about 95 s worst
+      case, measured for the assessment job), as many runs again with a
+      background, on top of the two runs, the headline pair and § 8's
+      pairs, all inside the worker's 300 s Lambda. Not measured together:
+      a large catchment with § 8 and an assessed combined row with a
+      background could pass it, and the job would fail and retry without an
+      outcome. Durable fix: record each part's outcome as it finishes and
+      split the re-run into a job per part (runs, headline, § 8, combined
+      row), each with its own lease. Trigger: a `pack_reproduced` log line
+      over 200 s, or a re-run that times out.
 - [x] **Yield and reliability per dam, together.** Done (report format
       `evidence-26`, 2026-10-30): the `assessment` job works out, for each
       dam the applications touch (engine `scenario/cumulativeYield.ts`

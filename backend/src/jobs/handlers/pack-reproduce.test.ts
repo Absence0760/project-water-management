@@ -5,8 +5,8 @@
 // whose stored bytes aren't the recorded ones, one missing from the store, a
 // pack without a bundle, and when it fails the job instead. The same against
 // Postgres and MinIO: evidence/packs.db.test.ts.
-import { buildPackBundle, ENGINE_VERSION, type BundleCheck } from '@water-management/engine';
-import { packBundleFixture } from '@water-management/engine/testing';
+import { buildPackBundle, canonicalJson, ENGINE_VERSION, type BundleCheck } from '@water-management/engine';
+import { assessmentPackFixture, packBundleFixture } from '@water-management/engine/testing';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -89,6 +89,27 @@ describe('pack_reproduce', () => {
 		expect(r).toMatchObject({ packId: K, outcome: 'reproduced', engine: ENGINE_VERSION, runEngines: [ENGINE_VERSION], bundleSha256: bundle.sha256 });
 		expect(r.checks.map((c) => c.id)).toEqual(['stored', 'archive', 'files', 'manifest', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'reproduce:baseline', 'reproduce:application', 'headline']);
 		expect(r.checks.every((c) => c.ok)).toBe(true);
+	});
+
+	it('re-runs the combined row’s assessment too (bundle-3): reproduced as stored; a member’s op changed before the build (its hash fixed) not reproduced, naming the row', async () => {
+		const input = assessmentPackFixture(hash, { background: true });
+		const good = await buildPackBundle(input, hash);
+		const row = (b: typeof good): PackRow => ({ issued: true, manifestSha256: b.index.pack.manifestSha256, bundleKey: `packs/${P}/${K}/${b.sha256}.zip`, bundleSha256: b.sha256 });
+		getPackBundle.mockResolvedValueOnce(good.bytes);
+		const ok = fakeDb(row(good));
+		await run(ok.db);
+		expect(ok.recorded[0]!.outcome).toBe('reproduced');
+		expect(ok.recorded[0]!.checks.map((c) => c.id).slice(-5)).toEqual(['assessment', 'inputs:background', 'reproduce:combined', 'reproduce:dams', 'reproduce:background']);
+		const bad = structuredClone(input);
+		const m = bad.assessment!.members[1]!;
+		m.ops = [{ op: 'cropArea.set', nodeId: 'F2', cropId: 'c', areaM2: 900_000 }];
+		m.opsSha256 = hash(canonicalJson(m.ops));
+		const tampered = await buildPackBundle(bad, hash);
+		getPackBundle.mockResolvedValueOnce(tampered.bytes);
+		const no = fakeDb(row(tampered));
+		await run(no.db);
+		expect(no.recorded[0]!.outcome).toBe('not_reproduced');
+		expect(no.recorded[0]!.checks.filter((c) => !c.ok).map((c) => c.id)).toEqual(['reproduce:combined', 'reproduce:background']);
 	});
 
 	it('records stored bytes that aren’t the recorded bundle as not reproduced, without re-running them (positive control above)', async () => {
@@ -187,6 +208,13 @@ describe('reproductionOutcome', () => {
 		expect(reproductionOutcome({ ok: false, checks: [ok('reproduce:baseline'), bad('climate:delta')], engine: { here, runs: [here] } })).toBe('not_reproduced');
 		// Another engine, but the manifest failed as well: not explained by the engine.
 		expect(reproductionOutcome({ ok: false, checks: [bad('manifest'), bad('climate:delta')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
+	});
+
+	it('counts the combined row’s re-runs (reproduce:combined, :dams, :background) as re-runs, and its assessment check not', () => {
+		const reruns = [ok('assessment'), bad('reproduce:combined'), bad('reproduce:dams'), bad('reproduce:background')];
+		expect(reproductionOutcome({ ok: false, checks: reruns, engine: { here, runs: [here, '0.0.1'] } })).toBe('other_engine');
+		expect(reproductionOutcome({ ok: false, checks: [bad('assessment'), bad('reproduce:combined')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
+		expect(reproductionOutcome({ ok: false, checks: [bad('inputs:background'), ok('reproduce:combined')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
 	});
 
 	it('not_reproduced for a failure with no checks to explain it', () => {

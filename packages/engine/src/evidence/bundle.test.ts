@@ -8,15 +8,19 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { RunInputsSnapshot } from '../compare';
 import { canonicalJson } from '../manifest';
-import { fixtureObservations, fixtureObservationsV1, headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
+import { assessmentPackFixture, ASSESSMENT_FIXTURE, fixtureObservations, fixtureObservationsV1, headlinePackFixture, HEADLINE_KINDS, packBundleFixture, PACK_FIXTURE_ID } from '../testing/packBundle';
 import { ENGINE_VERSION } from '../version';
 import { crc32, storedZip, zip, ZipArchive } from '../zip';
 import {
+	BUNDLE_ASSESSMENT_FILE,
+	BUNDLE_ASSESSMENT_REPORT,
+	BUNDLE_BACKGROUND_INPUT,
 	BUNDLE_ZIP_LIMITS,
 	buildPackBundle,
 	bundleRainCredits,
 	bundleRunInput,
 	checkPackBundle,
+	COMBINED_NOT_INCLUDED,
 	HEADLINE_NOT_INCLUDED,
 	PACK_BUNDLE_VERSION,
 	parseSeriesCsv,
@@ -526,7 +530,7 @@ describe('the headline board’s full-allocation pair (bundle-2, evidence-19, is
 		const input = await headlinePackFixture(hash);
 		const built = await buildPackBundle(input, hash);
 		const rec = input.manifest.report.licenceImpactAuthorised!.reproduction!;
-		expect(built.index.version).toBe('bundle-2');
+		expect(built.index.version).toBe(PACK_BUNDLE_VERSION);
 		expect(built.index.headline).toEqual({ baselineResultsSha256: rec.baselineResultsSha256, applicationResultsSha256: rec.applicationResultsSha256 });
 		// The pair isn't the stored runs: different digests (every holder at their registered volume).
 		expect(rec.baselineResultsSha256).not.toBe(built.index.runs.baseline!.resultsSha256);
@@ -612,6 +616,132 @@ describe('the headline board’s full-allocation pair (bundle-2, evidence-19, is
 		// An unknown layout is still refused (control).
 		const unknown = await rezip(built.bytes, (f) => f.set('bundle.json', canonicalJson({ ...(JSON.parse(f.get('bundle.json')!) as object), version: 'bundle-9' })));
 		expect(failing(await checkPackBundle(unknown, { hash, rerun: false }))).toEqual(['archive']);
+	});
+});
+
+describe('the combined row’s cumulative assessment (bundle-3, followups § Cumulative impact)', () => {
+	const plain = assessmentPackFixture(hash);
+	const withBackground = assessmentPackFixture(hash, { background: true });
+	const ids = (r: Awaited<ReturnType<typeof checkPackBundle>>) => r.checks.map((c) => c.id);
+	const detail = (r: Awaited<ReturnType<typeof checkPackBundle>>, id: string) => r.checks.find((c) => c.id === id)!.detail;
+	/** Rewrite a JSON entry of a built bundle (its hashes fixed), so the check reached is the assessment's, not `files`. */
+	const editJson = (bytes: Uint8Array<ArrayBuffer>, name: string, edit: (v: any) => void) =>
+		rezip(bytes, (f) => {
+			const v = JSON.parse(f.get(name)!);
+			edit(v);
+			f.set(name, canonicalJson(v));
+		});
+
+	it('carries the members, the stored report and nothing else without a background; re-runs every row and the dam rows', async () => {
+		const built = await buildPackBundle(plain, hash);
+		expect(built.index.assessment).toEqual({ id: ASSESSMENT_FIXTURE.id, engineVersion: ENGINE_VERSION, backgroundRunId: null });
+		expect(Object.keys(built.index.files)).toEqual(expect.arrayContaining([BUNDLE_ASSESSMENT_FILE, BUNDLE_ASSESSMENT_REPORT]));
+		expect(Object.keys(built.index.files)).not.toContain(BUNDLE_BACKGROUND_INPUT);
+		// The fixture touches Farm one's dam: the report has its rows.
+		expect(plain.assessment!.report.dams).toEqual({ nodeIds: ['F1'], onVolumes: false });
+		const r = await checkPackBundle(built.bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(ids(r).slice(-3)).toEqual(['assessment', 'reproduce:combined', 'reproduce:dams']);
+		expect(r.combined).toBe('checked');
+		expect(detail(r, 'reproduce:combined')).toMatch(/each of the 2 applications alone and all of them together, re-run with engine .*, give every row of the stored report/);
+		const readme = new TextDecoder().decode(await (await ZipArchive.open(built.bytes)).read('README.md'));
+		expect(readme).toContain('`reproduce:combined`');
+		expect(readme).not.toContain('`reproduce:background`');
+	});
+
+	it('with a background at full allocation: its input is checked and its row set re-run too', async () => {
+		const built = await buildPackBundle(withBackground, hash);
+		expect(built.index.assessment!.backgroundRunId).toBe(ASSESSMENT_FIXTURE.background);
+		expect(Object.keys(built.index.files)).toContain(BUNDLE_BACKGROUND_INPUT);
+		const r = await checkPackBundle(built.bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(ids(r).slice(-5)).toEqual(['assessment', 'inputs:background', 'reproduce:combined', 'reproduce:dams', 'reproduce:background']);
+		// --no-run: the static checks alone.
+		const quick = await checkPackBundle(built.bytes, { hash, rerun: false });
+		expect(failing(quick)).toEqual([]);
+		expect(ids(quick).slice(-2)).toEqual(['assessment', 'inputs:background']);
+	});
+
+	it('a member’s op tampered (its hash left): assessment fails on the hash; with the hash fixed too, the re-run fails', async () => {
+		const built = await buildPackBundle(plain, hash);
+		const op = (v: any) => (v.members[1].ops[0].areaM2 = 900_000);
+		const r = await checkPackBundle(await editJson(built.bytes, BUNDLE_ASSESSMENT_FILE, op), { hash });
+		expect(failing(r)).toEqual(['assessment', 'reproduce:combined', 'reproduce:dams']);
+		expect(detail(r, 'assessment')).toContain(`"Farm two maize"'s ops hash to`);
+		expect(detail(r, 'reproduce:combined')).toBe('not re-run: the assessment or the baseline inputs failed a check above');
+		const rehashed = await editJson(built.bytes, BUNDLE_ASSESSMENT_FILE, (v) => {
+			op(v);
+			v.members[1].opsSha256 = hash(canonicalJson(v.members[1].ops));
+		});
+		const again = await checkPackBundle(rehashed, { hash });
+		expect(failing(again)).toEqual(['reproduce:combined']);
+		expect(detail(again, 'reproduce:combined')).toMatch(/^re-run with engine .*: .* differs \(stored all together [0-9.e-]+, here [0-9.e-]+\)/);
+	});
+
+	it('a stored row tampered: the manifest’s combined section no longer reads from it (assessment), or the re-run differs (reproduce:dams)', async () => {
+		const built = await buildPackBundle(plain, hash);
+		const outlet = await editJson(built.bytes, BUNDLE_ASSESSMENT_REPORT, (v) => {
+			const row = v.rows.find((x: any) => x.metric === 'ewr_days_not_met' && x.isOutlet);
+			row.combined += 1;
+		});
+		expect(failing(await checkPackBundle(outlet, { hash, rerun: false }))).toEqual(['assessment']);
+		// A row the manifest doesn't carry (the dam's assurance alone): only the re-run sees it.
+		const dam = await editJson(built.bytes, BUNDLE_ASSESSMENT_REPORT, (v) => {
+			const row = v.rows.find((x: any) => x.metric === 'dam_reliability');
+			row.singles[1] = 0.123;
+		});
+		const r = await checkPackBundle(dam, { hash });
+		expect(failing(r)).toEqual(['reproduce:dams']);
+		expect(detail(r, 'reproduce:dams')).toContain('dam_reliability at Farm one differs');
+	});
+
+	it('a background input tampered: inputs:background fails, and the background isn’t re-run', async () => {
+		const built = await buildPackBundle(withBackground, hash);
+		// One more op that changes the catchment, not only the volumes (the hash fixed): not the baseline at full allocation.
+		const bad = await editJson(built.bytes, BUNDLE_BACKGROUND_INPUT, (v) => {
+			v.scenario.ops.push({ op: 'cropArea.set', nodeId: 'F2', cropId: 'c', areaM2: 900_000 });
+			v.scenario.opsSha256 = hash(canonicalJson(v.scenario.ops));
+			v.model.cropAreas.find((a: any) => a.nodeId === 'F2').areaM2 = 900_000;
+		});
+		const r = await checkPackBundle(bad, { hash });
+		expect(failing(r)).toEqual(['inputs:background', 'reproduce:background']);
+		expect(detail(r, 'inputs:background')).toContain("an op isn't the baseline at full allocation");
+		expect(detail(r, 'reproduce:background')).toMatch(/^not re-run/);
+		// The volumes changed instead, as an allocation op would, but not recorded as one: its model isn't the baseline's with its ops.
+		const quiet = await editJson(built.bytes, BUNDLE_BACKGROUND_INPUT, (v) => (v.model.allocations[0].volumeM3PerYear = 99_000));
+		const q = await checkPackBundle(quiet, { hash, rerun: false });
+		expect(failing(q)).toEqual(['inputs:background']);
+		expect(detail(q, 'inputs:background')).toContain("its model isn't the baseline's with its ops applied");
+	});
+
+	it('refuses to build without the assessment the manifest cites, and an assessment it doesn’t cite fails the check', async () => {
+		await expect(buildPackBundle({ ...plain, assessment: null }, hash)).rejects.toThrow(/cites assessment/);
+		const built = await buildPackBundle(plain, hash);
+		const r = await checkPackBundle(
+			await rezip(built.bytes, (f) => {
+				for (const n of [BUNDLE_ASSESSMENT_FILE, BUNDLE_ASSESSMENT_REPORT]) f.delete(n);
+			}),
+			{ hash, rerun: false }
+		);
+		expect(failing(r)).toEqual(['assessment']);
+		expect(detail(r, 'assessment')).toMatch(/cites assessment .*, which the bundle doesn't carry/);
+	});
+
+	it('an older bundle (bundle-2) of a pack whose combined row cites an assessment: checked as it was, the row not included', async () => {
+		const built = await buildPackBundle(plain, hash);
+		const older = await rezip(built.bytes, (f) => {
+			for (const n of [BUNDLE_ASSESSMENT_FILE, BUNDLE_ASSESSMENT_REPORT]) f.delete(n);
+			const index = JSON.parse(f.get('bundle.json')!) as PackBundleIndex;
+			delete index.assessment;
+			f.set('bundle.json', canonicalJson({ ...index, version: 'bundle-2' }));
+		});
+		const r = await checkPackBundle(older, { hash });
+		expect(failing(r)).toEqual([]);
+		expect(detail(r, 'assessment')).toMatch(new RegExp(`^${COMBINED_NOT_INCLUDED.replace(/[()]/g, '\\$&')}: its bundle \\(bundle-2\\)`));
+		expect(r.combined).toBe('older');
+		expect(ids(r)).not.toContain('reproduce:combined');
+		// A pack that cites none adds no check (control).
+		expect((await checkPackBundle((await buildPackBundle(packInput(), hash)).bytes, { hash, rerun: false })).combined).toBe('none');
 	});
 });
 

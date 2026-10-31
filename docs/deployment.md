@@ -3224,7 +3224,11 @@ queues, and kept in a bucket of its own (infra/packs.tf):
   (`pack_reproduced` in the worker's log, `warn` unless it reproduced, with
   the failed checks' ids and how long it took). It runs the engine twice in
   the worker (each run as long as it took in the API), well inside the
-  worker's 300 s; 3 attempts when the bucket can't be read, then the pack
+  worker's 300 s, plus the headline pair, § 8's pairs and, from `bundle-3`,
+  the cumulative assessment behind § 4's combined row (up to about 95 s
+  for its runs and dam yields, more with a background: the time is
+  watched in the log's duration, followups.md "The server re-run's time
+  with the combined row"); 3 attempts when the bucket can't be read, then the pack
   page says the re-run couldn't be done. No infrastructure of its own.
 - **The bucket**: `water-management-packs-<account>`, private (public access
   blocked, bucket-owner objects), SSE-S3, TLS only, **versioned with Object

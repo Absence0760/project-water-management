@@ -19,6 +19,7 @@
 // Reserve months rows, no flow, volume or use row.
 import {
 	authorisedTakes,
+	backgroundOpProblem,
 	combineScenarios,
 	cumulativeImpact,
 	runModelChecked,
@@ -56,12 +57,11 @@ export interface AssessmentBackground {
 /** The stored report: the baseline's cumulative table, and the background's beside it when one was asked for. */
 export type AssessmentReport = CumulativeReport & { background?: AssessmentBackground };
 
-/** A background run's ops: what may differ from the baseline (the mode, and registered volumes as assumptions of authorised use). */
-function opProblem(op: ScenarioOp): string | null {
-	if (op.op === 'settings.set' && op.path === 'allocationMode') return op.value === 'fullAllocation' ? null : `it sets the allocation mode to ${String(op.value)}`;
-	if (op.op === 'allocation.set' || op.op === 'allocation.remove') return null;
-	return `it changes more than the allocation mode and registered volumes (${op.op})`;
-}
+/**
+ * A background run's ops: what may differ from the baseline (the mode, and registered volumes as assumptions of
+ * authorised use). The engine's (evidence/bundleAssessment.ts), so a pack's reproduction bundle checks the same rule.
+ */
+const opProblem = backgroundOpProblem;
 
 interface CandidateRow {
 	id: string;

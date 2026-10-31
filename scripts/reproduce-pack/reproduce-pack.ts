@@ -15,7 +15,15 @@
 // baseline input at fullAllocation, scenario.json's ops on it), re-runs it and
 // checks both results digests, the board and the authorised volume's mix as
 // at the baseline (issue #523 G2); an older pack's bundle says the headline
-// isn't included and verifies as it did. --no-run stops before the re-run. Exits 0 when everything matches, 1 on any mismatch, 2 on a usage
+// isn't included and verifies as it did. For a bundle-3 bundle whose § 4
+// combined row reads a cumulative assessment, it checks the assessment's
+// members (their ops against their hashes) and stored report against the
+// manifest's combined section, and re-runs it: each application alone and all
+// together (combineScenarios), the dams' firm yields and assurance, and the
+// background at full allocation when it had one (`assessment`,
+// `inputs:background`, `reproduce:combined`, `reproduce:dams`,
+// `reproduce:background`); an older bundle says the combined row isn't
+// included. --no-run stops before the re-run. Exits 0 when everything matches, 1 on any mismatch, 2 on a usage
 // error or an unreadable file. --json prints the checks as JSON instead.
 //
 // Run through the backend's tsx (root package.json `reproduce:pack`); a
@@ -63,13 +71,15 @@ export function formatResult(r: BundleCheckResult, file: string): string {
 	const other = [...new Set(r.engine.runs)].filter((v) => v !== r.engine.here);
 	if (other.length) lines.push(`Note: the runs were made with engine ${other.join(', ')}; this checkout is engine ${r.engine.here}. Check out that engine (README.md) to re-run them.`);
 	if (r.headline === 'older') lines.push('Note: headline not included (older pack): the board against full authorised use on page 1 is not re-run; the runs above are.');
+	if (r.combined === 'older') lines.push('Note: combined row not included (older bundle): the cumulative assessment § 4’s combined row reads is not in this bundle, so that row is not re-run; the runs above are.');
 	const failed = r.checks.filter((c) => !c.ok).length;
 	const reran = r.checks.some((c) => c.id.startsWith('reproduce:'));
+	const also = [...(r.headline === 'checked' ? ['the headline pair at full allocation'] : []), ...(r.combined === 'checked' ? ['the cumulative assessment behind § 4’s combined row'] : [])];
 	lines.push(
 		r.ok
 			? reran
-				? r.headline === 'checked'
-					? 'Reproduced: every file matches, each run re-runs to the same results, and so does the headline pair at full allocation.'
+				? also.length
+					? `Reproduced: every file matches, each run re-runs to the same results, and so ${also.length === 1 ? 'does' : 'do'} ${also.join(' and ')}.`
 					: 'Reproduced: every file matches, and each run re-runs to the same results.'
 				: 'Checked: every file matches its hash and the manifest (not re-run: --no-run).'
 			: `NOT reproduced: ${failed} check${failed === 1 ? '' : 's'} failed.`

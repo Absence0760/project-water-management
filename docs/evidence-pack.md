@@ -1459,17 +1459,21 @@ non-member `404`, as for every pack route; share links, the verify page and
 the applicant's view never offer the bundle, the manifest or the PDF.
 
 **What it holds** (engine `packages/engine/src/evidence/bundle.ts`,
-`buildPackBundle`, layout `bundle-2` since issue #523 G2; `checkPackBundle`
-reads `bundle-1` and `bundle-2`):
+`buildPackBundle`, layout `bundle-3` since 2026-10-30 (`bundle-2` from
+issue #523 G2); `checkPackBundle` reads `bundle-1`, `bundle-2` and
+`bundle-3`):
 
 | Entry | What |
 | --- | --- |
-| `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, the headline pair's two results digests (`headline`, `bundle-2`; null without a recorded pair), and the SHA-256 of every other entry |
+| `bundle.json` | the index: the pack (id, version, manifest hash, short code), the engine, each run's id, engine and **results digest**, the headline pair's two results digests (`headline`, `bundle-2`; null without a recorded pair), the cumulative assessment § 4's combined row reads (`assessment`, `bundle-3`: its id, engine and background run; null when the row cites none), and the SHA-256 of every other entry |
 | `manifest.json` | the manifest as its RFC 8785 text: its SHA-256 *is* the manifest hash |
 | `runs/<run>/input.json` | the run's stored input snapshot (`model_run.inputs`: settings, model, each input series' first day, length and hash, and, when the run had them, `seriesChoice`, the CHIRPS series it read and the others at the outlet and at each land unit, a forecast run's `forecastRainSource`, and under `settings.rainStations` the rainfall stations' details, `stations`, engine ≥ 1.91.0: the re-run passes them back to the engine, which reads them, `bundleRunInput`; a station's record and the CHIRPS at its cell are input series like any other, `rain_station_mm#<id>` and `rain_chirps_station_mm#<id>`), `<run>` `baseline` and, for an application, `application` |
 | `runs/<run>/results.json` | the run's stored summary and the SHA-256 of each daily output (results `results-1`) |
 | `series/<sha256>.csv` | each input series' values, `date,value` one row a day, a missing day empty, named by the SHA-256 of the values (runs that share a series share its file) |
 | `scenario.json` | the application's scenario as its run recorded it: the ops, their hash, the base run (application packs only) |
+| `assessment/assessment.json` | `bundle-3`, when § 4's combined row reads a cumulative assessment ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)): its members in the order its runs took them, each with the ops it counted with (a licence in force's terms, else its own), their SHA-256, its origin and an applicant's own units (the mask its ops apply under, engine `scenario/applicant.ts`); its engine, its baseline run (the pack's) and its background run (`assessment-1`) |
+| `assessment/report.json` | the assessment's stored report: the baseline's table (each application alone, all together, the interaction), each touched dam's firm yield and assurance rows (`report.dams`), and the background's table beside it (`report.background`) |
+| `assessment/background/input.json` | the background run's stored input, when the assessment was also run at full allocation (295): a scenario run on the baseline whose ops set the mode and registered volumes; its series are the baseline's, in `series/` |
 | `README.md` | how to reproduce it, and which engine to check out; and, when a run's input series hold rain from ERA5-Land or IMERG Late (`settings.gapRain`) or its forecast came from an ECMWF ENS feed, or its GR4J read AgERA5's or NASA POWER's reference ET (the run's `et0Products`, R5-E), a **Data credits** section with each source's credit word for word (engine `bundleRainCredits`, issue #604 R4-E; docs/data-sources.md). The manifest itself lists no data sources: the report it carries and the runs' inputs name them |
 
 The **results digest** of a run is the SHA-256 of `runResultsText`: RFC 8785
@@ -1542,6 +1546,11 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | `results:<run>` | the stored summary is the manifest's, and `results.json` gives the digest `bundle.json` names |
 | `reproduce:<run>` | re-running the run's input with this checkout's engine gives the same results digest (skipped with `--no-run`) |
 | `headline` | application packs: the manifest's headline board records its pair (`evidence-19`) with the digests `bundle.json` names, the application's ops hash and the baseline's engine, and the full mix built again from the baseline input's registered volumes and the recorded kinds (as at the baseline) is the manifest's. Passes with *headline not included (older pack)* for a `bundle-1` bundle or a board built before the pair was recorded, and with *no headline board to re-run* when page 1 has none |
+| `assessment` | `bundle-3`, when § 4's combined row cites an assessment: the bundle carries that assessment (its id and engine the manifest's, its baseline the pack's), each member's ops hash to its recorded SHA-256, and the manifest's combined section is what the stored report gives (the outlet's days and Reserve months, each application's change alone by its scenario, each dam's firm yield and assurance, the background's rows and label), its applications the members. Fails a bundle that cites none and carries one, or the reverse. Passes with *combined row not included (older bundle)* for a `bundle-1` or `bundle-2` bundle of a pack whose combined row cites one |
+| `inputs:background` | the background run's input is the baseline at full allocation: a scenario run on the pack's baseline run, `allocationMode` `fullAllocation`, its ops only the mode and registered volumes (as the assessment's own rule, `backgroundOpProblem`), their hash its recorded one, the baseline's settings and model with them applied, and the baseline's series |
+| `reproduce:combined` | the assessment run again with this checkout's engine on the bundle's baseline input (engine `evidence/bundleAssessment.ts` `replayAssessment`, the job's steps: each member alone through `applyScenario` under an applicant's mask, all together through `combineScenarios`, `cumulativeImpact`) gives every row of the stored report but the dams', and its scenarios (skipped with `--no-run`) |
+| `reproduce:dams` | each dam the members touch, its firm yield on every run and its unit's assurance of supply, re-worked out (`touchedDams`, `damFirmYields`, `cumulativeDamRows`) gives the stored dam rows and `report.dams`; only when the stored report has them (skipped with `--no-run`) |
+| `reproduce:background` | the same on the background's input: the background, each member alone and all together on it give every row of the stored background table (skipped with `--no-run`) |
 | `reproduce:headline` | the pair re-derived from the bundle (the baseline input at `fullAllocation`, `scenario.json`'s ops on it) and re-run with this checkout's engine gives both recorded results digests, and the board built again over it is the manifest's (skipped with `--no-run`) |
 
 The folded mix a restricted viewer reads isn't checked: it counts holders by
@@ -1549,14 +1558,41 @@ The folded mix a restricted viewer reads isn't checked: it counts holders by
 the summary's paths, the daily outputs), and 2 on a usage error. A run made
 with another engine version is expected to differ: the output says which
 engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
-(round trip, determinism, and each tampering beside a positive control),
+(round trip, determinism, and each tampering beside a positive control; the
+combined row's assessment: a member op tampered with or without its hash,
+a stored row, a background input, a missing assessment, an older bundle),
 `packages/engine/src/zip/zip.test.ts`,
 `scripts/reproduce-pack/reproduce-pack.test.ts` (with the headline pair: a
-tampered digest fails, an older bundle passes with the note) and, against
+tampered digest fails, an older bundle passes with the note; the same for
+the combined row's assessment) and, against
 the database and MinIO, `backend/src/evidence/packs.db.test.ts` (issue,
 download, reproduce both a baseline and an application pack; the setter's
 refusals) and `backend/src/evidence/authorised-impact.db.test.ts` (a bundle
-of a report with a recorded pair re-runs it offline).
+of a report with a recorded pair re-runs it offline), and
+`backend/src/evidence/bundle-assessment.db.test.ts` (a bundle of a report
+whose combined row reads the assessment job's own assessment, with a dam and
+a background, re-runs it offline to every stored row; a tampered member op
+or background input fails its check; the bundle is refused once the
+assessment is gone).
+
+**The combined row's assessment** (`bundle-3`, followups.md § Cumulative
+impact). § 4's combined row (evidence-11) reads a completed cumulative
+assessment on the baseline's engine, whose runs (the baseline, each
+application alone, all together, each touched dam's firm yield, and the
+background at full allocation when it has one) are not stored as runs. The
+bundle carries what re-runs them: the members' ops and hashes, the stored
+report and the background's input; the check ties the stored report to the
+manifest and re-runs it. The issue reads the assessment as the issuer
+(`loadBundleAssessment` in `backend/src/evidence/bundle.ts`); one gone by
+then (each project keeps its newest assessments, and one goes with its base
+or background run) refuses the issue with `409`, as runs that can't be
+rebuilt do: the editor drafts the pack again, which reads the assessments
+there are. The re-run costs what the assessment job did, up to its
+applications + 2 runs (twice with a background) and 20 firm-yield
+searches, about 95 s in the worst case ([scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311)); `pack_reproduce` runs it
+inside its job like the other re-runs, and an assessment on another engine
+than the server's is `other_engine`, its re-runs being `reproduce:` checks.
 
 **Re-run on the server** (154_pack_reproduce, 2026-10-01). Issue checks the
 bundle as `--no-run` would; the re-run takes as long as the runs, so the
@@ -1577,8 +1613,10 @@ per pack, 3 attempts). The worker runs it as that editor, under RLS:
    the stored results or a re-run), `other_engine` (only the re-runs
    differ, and a run was made with another engine version than the one the
    server runs: expected, not a fault; check out that engine to reproduce
-   it; the re-runs are `reproduce:<run>`, `reproduce:headline` and § 8's
-   `climate:delta`, `isRerunCheck`), or `no_bundle` (a pack issued without one). With it go the engine
+   it; the re-runs are `reproduce:<run>`, `reproduce:headline`, the
+   combined row's `reproduce:combined`, `reproduce:dams` and
+   `reproduce:background` (the assessment's engine counted among the
+   runs'), and § 8's `climate:delta`, `isRerunCheck`), or `no_bundle` (a pack issued without one). With it go the engine
    that re-ran the runs, the runs' own engines, the bundle's hash and every
    check (`pack_reproduction`,
    [data-model.md](./data-model.md#evidence-packs-112_evidence_packsql)). Once per engine version:

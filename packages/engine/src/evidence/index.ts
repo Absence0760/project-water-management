@@ -7,6 +7,7 @@ export * from './authorised';
 export * from './authorisedPair';
 export * from './pack';
 export * from './bundle';
+export * from './bundleAssessment';
 export * from './prompts';
 export * from './riverWorks';
 export * from './regionalPrior';
