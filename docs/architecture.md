@@ -724,7 +724,11 @@ the data copy's NEX-GDDP-CMIP6 aggregates, [evidence-pack.md § Future
 yield](./evidence-pack.md#future-yield)), and the Scenarios tab's
 `climate_factors` (`jobs/handlers/climate-factors.ts`, the same reading of
 the copy, stored as the catchment's change factor table, [scenarios.md §
-Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)); step 2's
+Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)), and an
+issued licence's `scenario_run` (`jobs/handlers/scenario-run.ts`, 293: the
+run of its licensed terms that the evidence report's § 4 reads, queued by
+`…/decide` and `…/appeals` when the terms in force differ from the ops
+applied for, [scenarios.md § Applications](./scenarios.md#applications-wp-33)); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,

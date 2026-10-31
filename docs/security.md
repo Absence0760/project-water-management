@@ -2271,7 +2271,12 @@ In short:
   are counted under a per-user advisory lock, so a concurrent burst can't
   pass them, and the database refuses a sweep member, assessment member or
   outlook level past the API's cap
-  (`jobs/costCaps.security.db.test.ts`).
+  (`jobs/costCaps.security.db.test.ts`). An issued licence's background run
+  of its terms (`scenario_run`, 293) is one engine run, queued only by a
+  decision or appeal event recorded with two-step sign-in by a member acting
+  for the authority, one pending per scenario and at most 5 per member under
+  the same kind of lock; past the cap nothing is queued and the decision
+  still stands (`scenarios/licensedRun.db.test.ts`).
   **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
   `SECURITY DEFINER app_enqueue_rerun`, which touches only that project's

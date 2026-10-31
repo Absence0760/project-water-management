@@ -7483,7 +7483,7 @@ events after a decision, append-only (228_decision_events). Left open:
       recorded them) and the licence's standing, and the share page prints
       them in The decision card; another unit's registered volume is left
       out of every list of ops on a link, applied ops included.
-- [ ] **The licensed-terms run isn't made for the assessor.** An issued
+- [x] **The licensed-terms run isn't made for the assessor.** An issued
       licence whose granted terms differ from the ops applied for, or one
       varied on appeal, counts in § 4's table only once someone runs its
       licensed terms (**Run the licensed terms**). Since `evidence-20` the
@@ -7497,6 +7497,13 @@ events after a decision, append-only (228_decision_events). Left open:
       a `varied` appeal event. Trigger: a pilot assessor's report showing the
       line, or a second report-request feature that needs a scenario run off
       the request path.
+      Built (293_scenario_run_job): `…/decide` with changed terms and an
+      appeal event that leaves terms in force with no run (a variation)
+      queue a `scenario_run` job (`scenarios/licensedRun.ts`,
+      `jobs/handlers/scenario-run.ts`) that stores the run as the deciding
+      member, one pending per scenario and at most 5 per member; the
+      Application panel shows it where the button is, and the button still
+      works ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
 
 ## Map edits and the values taken from the map (issue #646 items 4 and 5, 2026-10-28)
 
