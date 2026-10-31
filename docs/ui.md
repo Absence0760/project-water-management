@@ -12582,7 +12582,7 @@ baseline card links to the published run's report (**Report**, beside
   `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
   doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
   `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
-  uploaded forecast (the Rain data credits still credit ECMWF when any
+  uploaded forecast (the Data credits still credit ECMWF when any
   forecast day was an ECMWF feed's, `forecastRainEcmwf`); a **Read this first** box above the summary sentence
   (`report/sections.ts` `readFirst`, the engine's `REPORT_READ_FIRST`): the
   disclaimer's key points with the Disclaimer's section number, then who

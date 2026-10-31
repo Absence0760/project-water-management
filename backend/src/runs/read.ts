@@ -110,10 +110,12 @@ export async function readRun(db: Db, projectId: string, role: Role, runId: stri
 	// are in series_blob): the fit record compares the CHIRPS version.
 	// forecastRainSource: a forecast run's rain source ('chirps_gefs' |
 	// 'ecmwf_ens' | 'other', runs/execute.ts forecastRainSource), null otherwise;
-	// forecastRainEcmwf: any of its forecast days was an ECMWF feed's (ECMWF's credit, execute.ts forecastRainEcmwf).
+	// forecastRainEcmwf: any of its forecast days was an ECMWF feed's (ECMWF's credit, execute.ts forecastRainEcmwf);
+	// et0Products: the reference ET products GR4J read on some run day (their credits, execute.ts storeRun), [] when none.
 	const { rows } = await db.query<RunDetail>(
 		`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings, r.inputs->'model' AS model, r.inputs->'series' AS "inputSeries",
-			r.inputs->>'forecastRainSource' AS "forecastRainSource", r.inputs->'forecastRainEcmwf' = 'true'::jsonb IS TRUE AS "forecastRainEcmwf" ${FROM_RUN}
+			r.inputs->>'forecastRainSource' AS "forecastRainSource", r.inputs->'forecastRainEcmwf' = 'true'::jsonb IS TRUE AS "forecastRainEcmwf",
+			CASE WHEN jsonb_typeof(r.inputs->'et0Products') = 'array' THEN r.inputs->'et0Products' ELSE '[]'::jsonb END AS "et0Products" ${FROM_RUN}
 		 WHERE r.project_id = $1 AND r.id = $2`,
 		[projectId, runId]
 	);

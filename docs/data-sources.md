@@ -1005,7 +1005,11 @@ as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
   Climate Change Service (C3S) Climate Data Store (CDS). DOI:
   10.24381/cds.6c68c9bb". The array carries it (`attrs.attribution`); the
   feed card shows the credit (`et0Note`), and the series is labelled
-  "AgERA5 daily reference evapotranspiration data feed".
+  "AgERA5 daily reference evapotranspiration data feed". A run whose GR4J
+  read the feed's AgERA5 days prints both, word for word (engine
+  `copernicusAgera5Notice`, `AGERA5_CITATION`), wherever the rain products'
+  credits show (§ ERA5-Land, *Where the credits show*), and the Data
+  sources and credits page has it (`/data-sources#agera-et`).
 - **Contact:** ECMWF support (CDS).
 - **Access pattern:** the mirror-ingest Lambda once a day
   (`{"product":"agera5_et0","mode":"monthly"}`), ERA5-Land's
@@ -1049,7 +1053,10 @@ as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
 - **Attribution:** "NASA Prediction of Worldwide Energy Resources (POWER)
   Project, CC BY 4.0; FAO-56 Penman-Monteith reference evapotranspiration
   computed by us from its daily meteorology", on the array and on the feed
-  card when a fetch took days from it ("N newer days from NASA POWER").
+  card when a fetch took days from it ("N newer days from NASA POWER"),
+  and, word for word (engine `NASA_POWER_ET0_CREDIT`), in a run's report,
+  exports and evidence pack bundle when its GR4J read a POWER day, and on
+  the Data sources and credits page (`/data-sources#nasa-power`).
   POWER's referencing guide is
   [power.larc.nasa.gov/docs/referencing](https://power.larc.nasa.gov/docs/referencing/).
 - **Contact:** the POWER team, through the contact link on
@@ -1402,6 +1409,28 @@ starts.
   on CHIRPS alone and an uploaded forecast print none of them; a forecast
   an ECMWF feed wrote only some days of (one edited by hand) still prints
   ECMWF's (the run's `forecastRainEcmwf`, backend `runs/execute.ts`).
+
+  The reference ET products (issue #604 R5-E) are credited in the same
+  places, from the same module (`AGERA5_CITATION`,
+  `copernicusAgera5Notice`, `NASA_POWER_ET0_CREDIT`; `rainCredits` lists
+  them after the rain's): the report's **Data credits** (the heading was
+  *Rain data credits*), the workbook's first sheet (**Data credits**), the
+  catchment's daily CSV and the `evap_et0_mm` series file's `# credit`
+  lines, the summary CSV's **Daily reference evapotranspiration** block,
+  an evidence pack's README, and the Data sources and credits page. A run
+  owes them when GR4J read the `agera5_et0` feed's values on some run day:
+  the run records `et0Products` (backend `runs/execute.ts` `et0FeedDays`,
+  engine `et0ProductsRead`) from the days the feed wrote and no person has
+  since (`feed_days`) within the run days the series supplied
+  (`summary.et0Daily` first..last), AgERA5 on days up to where its copy
+  reached at the feed's latest fetch (`last_meta.agera5Through`) and NASA
+  POWER after; with no fetch recorded since the feed's config changed, both.
+  The days aren't stored per product, so a POWER day the feed never re-read
+  after AgERA5's month landed (a feed paused for more than its 75-day
+  re-read) counts as AgERA5's: [followups.md](./followups.md). Model
+  quality's Rain gaps panel keeps the rain products' only. A run on an
+  uploaded ET₀ record, or under an A-pan PE (GR4J doesn't read the series),
+  prints none.
 - **How a day is defined:** the UTC day. ERA5-Land's `tp` accumulates from
   00 UTC, so the 00 UTC step of D+1 is the whole of day D, stored under D.
 - **Against CHIRPS's day:** CHIRPS v3 splits pentad totals into days with

@@ -125,14 +125,19 @@ describe('buildWorkbook', () => {
 		expect(rows).toContain(`Disclaimer version ${DISCLAIMER.version}.`);
 	});
 
-	it('credits the rain sources under the disclaimer, word for word, only when the run owes them (issue #604 R4-E)', async () => {
+	it('credits the rain and reference ET sources under the disclaimer, word for word, only when the run owes them (issue #604 R4-E, R5-E)', async () => {
 		const credits = rainCredits({ era5l: true, imergVersions: ['V07'], ecmwf: true }, '2026-10-27');
 		const rows = aoa(read(await buildWorkbook(input({ credits }))).Sheets['Read this first']!).map((r) => r[0]);
-		const at = rows.indexOf('Rain data credits');
+		const at = rows.indexOf('Data credits');
 		expect(at).toBeGreaterThan(rows.indexOf(`Disclaimer version ${DISCLAIMER.version}.`));
 		expect(rows.slice(at + 1, at + 5)).toEqual([`ERA5-Land: ${credits[0]!.lines[0]}`, `ERA5-Land: ${credits[0]!.lines[1]}`, `IMERG Late: ${credits[1]!.lines[0]}`, 'ECMWF ENS forecast: ECMWF open data, CC BY 4.0']);
+		// The reference ET products GR4J read (R5-E) follow the rain's under the same heading.
+		const et0 = rainCredits({ era5l: true, agera5: true, power: true }, '2026-10-27');
+		const et0Rows = aoa(read(await buildWorkbook(input({ credits: et0 }))).Sheets['Read this first']!).map((r) => r[0]);
+		const h = et0Rows.indexOf('Data credits');
+		expect(et0Rows.slice(h + 3, h + 6)).toEqual([`AgERA5 reference evapotranspiration: ${et0[1]!.lines[0]}`, `AgERA5 reference evapotranspiration: ${et0[1]!.lines[1]}`, `NASA POWER reference evapotranspiration: ${et0[2]!.lines[0]}`]);
 		// None owed: the sheet is as before.
-		expect(aoa(wb.Sheets['Read this first']!).map((r) => r[0])).not.toContain('Rain data credits');
+		expect(aoa(wb.Sheets['Read this first']!).map((r) => r[0])).not.toContain('Data credits');
 	});
 
 	it('keeps the products’ daily columns and puts the gap-filling block with the data checks (issue #604 R4-E)', async () => {

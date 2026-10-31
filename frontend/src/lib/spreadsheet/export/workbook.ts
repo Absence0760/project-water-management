@@ -49,7 +49,7 @@ export interface WorkbookInput {
 	nodes: DailyTable[];
 	/** The site's address, for the disclaimer's Terms URL (the worker's own origin); '' leaves the path. */
 	site?: string;
-	/** The credits the run's rain owes (engine runRainCredits, issue #604 R4-E): on the first sheet, word for word. Absent or empty: none. */
+	/** The credits the run's data owe (engine runRainCredits, issue #604 R4-E, R5-E: rain and reference ET products): on the first sheet, word for word. Absent or empty: none. */
 	credits?: readonly RainCredit[];
 }
 
@@ -225,8 +225,8 @@ export function readFirstRows(site = '', credits: readonly RainCredit[] = []): R
 		...DISCLAIMER.paragraphs.map((p, i) => [`${i + 1}. ${withSite(p, site)}`]),
 		[],
 		[`Disclaimer version ${DISCLAIMER.version}.`],
-		// The rain sources whose values the sheets hold (issue #604 R4-E, docs/data-sources.md), each as it asks.
-		...(credits.length ? [[], ['Rain data credits'], ...credits.flatMap((c) => c.lines.map((l) => [`${c.name}: ${l}`]))] : [])
+		// The rain and reference ET sources whose values the sheets hold (issue #604 R4-E, R5-E, docs/data-sources.md), each as it asks.
+		...(credits.length ? [[], ['Data credits'], ...credits.flatMap((c) => c.lines.map((l) => [`${c.name}: ${l}`]))] : [])
 	];
 }
 

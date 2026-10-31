@@ -28,6 +28,8 @@ import { type Block, ensureFinals, writeFinalsYear } from '../mirror/arrays.js';
 import { PRODUCT_GRIDS } from '../mirror/grid.js';
 import { readManifest, writeManifest } from '../mirror/manifest.js';
 import { openStore } from '../mirror/store.js';
+import { withUser } from '../db/tx.js';
+import { et0FeedDays, runEt0Products } from '../runs/execute.js';
 import { utcToday } from './fetch.js';
 import { ET0_FIXTURE } from './fromMirrorEt0.js';
 
@@ -103,6 +105,33 @@ describe('a reference ET feed reads our copy', () => {
 		const row = await feedRow(f.feedId);
 		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: powerThrough });
 		expect(row.last_meta).toMatchObject({ agera5Through, powerDays: toEpochDay(powerThrough) - toEpochDay(agera5Through) });
+	});
+
+	it('a run’s credits read the days the feed wrote and where AgERA5 reached (issue #604 R5-E), not the days a person wrote', async () => {
+		const today = utcToday();
+		const shift = toEpochDay(today) - toEpochDay(ET0_FIXTURE.today);
+		const owner = await signUp('Et0Credits');
+		const f = await feed(owner, { cells: [CELL] });
+		expect((await tick()).done).toBe(1);
+		const got = (await et0(owner, f.pid))!;
+		const seriesId = ((await owner.call('GET', `/projects/${f.pid}/series`)).body.series as { id: string; kind: string }[]).find((x) => x.kind === 'evap_et0_mm')!.id;
+		const last = fromEpochDay(toEpochDay(got.startDate) + got.values.length - 1);
+		const agera5Through = fromEpochDay(toEpochDay(ET0_FIXTURE_HOLDS.agera5.finalThrough) + shift);
+		const read = () => withUser(owner.id, (db) => et0FeedDays(db, seriesId));
+		expect(await read()).toEqual({ days: [[got.startDate, last]], agera5Through });
+		// A run over every day credits both; one that ends on AgERA5's last day, AgERA5 alone.
+		const info = (first: string, to: string) => ({ used: true, dailyDays: 1, fallbackDays: 0, invalidDays: 0, first, last: to });
+		expect(runEt0Products({ et0Feed: (await read())! }, info(got.startDate, last))).toEqual(['agera5_et0', 'power_et0']);
+		expect(runEt0Products({ et0Feed: (await read())! }, info(got.startDate, agera5Through))).toEqual(['agera5_et0']);
+		// A person wrote over POWER's days (031_feed_days: their edit releases them): only AgERA5's are left to credit.
+		const powerFrom = fromEpochDay(toEpochDay(agera5Through) + 1);
+		await asOwner(`UPDATE time_series SET feed_days = feed_days - datemultirange(daterange($2::date, $3::date, '[]')) WHERE id = $1`, [seriesId, powerFrom, last]);
+		expect(await read()).toEqual({ days: [[got.startDate, agera5Through]], agera5Through });
+		expect(runEt0Products({ et0Feed: (await read())! }, info(got.startDate, last))).toEqual(['agera5_et0']);
+		// No feed's series (an upload), or none at all: nothing to read.
+		await asOwner('UPDATE time_series SET feed_id = NULL WHERE id = $1', [seriesId]);
+		expect(await read()).toBeNull();
+		expect(await withUser(owner.id, (db) => et0FeedDays(db, undefined))).toBeNull();
 	});
 
 	it('a day NASA POWER filled is replaced by AgERA5’s once the copy holds its month', async () => {

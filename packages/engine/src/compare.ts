@@ -89,6 +89,8 @@ export interface RunInputsSnapshot {
 	forecastRainSource?: 'chirps_gefs' | 'ecmwf_ens' | 'other' | null;
 	/** A forecast run: true when any forecast day held an ECMWF ENS feed's value (backend runs/execute.ts forecastRainEcmwf), so its credit is owed; absent otherwise. Not a model input. */
 	forecastRainEcmwf?: boolean;
+	/** The reference ET products whose values GR4J read on some run day (backend runs/execute.ts, engine et0ProductsRead; issue #604 R5-E), so their credits are owed; absent when none. Not a model input. */
+	et0Products?: ('agera5_et0' | 'power_et0')[];
 	/** The rainfall stations' names and details (ModelInput.stations, engine ≥ 1.91.0, issue #553); absent unless settings.rainStations assigns a station. */
 	stations?: RainStationInputs | null;
 	/** Units whose area is from an earlier outline of their polygon (ModelInput.mapAreas, issue #646 F6); absent when none. */

@@ -468,10 +468,10 @@
 							[3, 4],
 							coverageRows(series, run)
 						)}
-						<!-- The credits the run's rain owes (issue #604 R4-E): ERA5-Land, IMERG Late, the ECMWF forecast, word for word. -->
+						<!-- The credits the run's data owe (issue #604 R4-E, R5-E): ERA5-Land, IMERG Late, the ECMWF forecast, AgERA5 and NASA POWER's reference ET, word for word. -->
 						{@const credits = reportRainCredits(run)}
 						{#if credits.length}
-							<h3>Rain data credits</h3>
+							<h3>Data credits</h3>
 							<ul class="credits" data-testid="report-rain-credits">
 								{#each credits as c (c.product)}{#each c.lines as l (l)}<li><strong>{c.name}:</strong> {l}</li>{/each}{/each}
 							</ul>

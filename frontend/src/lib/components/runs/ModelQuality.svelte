@@ -446,9 +446,10 @@
 			{/if}
 			{#if summary.gapRain}
 				<div class="panel" id="res-gap-rain">
+					<!-- The rain products' credits only: the reference ET's (et0Products, issue #604 R5-E) belong to the report and exports, not to the rain gaps. -->
 					<Lazy load={loadGapRainRunPanel}>
 						{#snippet children(GapRainRunPanel)}
-							<GapRainRunPanel info={summary.gapRain!} credits={runRainCredits(run, run.createdAt.slice(0, 10))} />
+							<GapRainRunPanel info={summary.gapRain!} credits={runRainCredits({ ...run, et0Products: undefined }, run.createdAt.slice(0, 10))} />
 						{/snippet}
 					</Lazy>
 				</div>

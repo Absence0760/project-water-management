@@ -299,10 +299,11 @@ export function stationPairingRows(summary: unknown): string[][] {
 /**
  * The credits a run's report owes (issue #604 R4-E, docs/data-sources.md):
  * ERA5-Land's Copernicus notice and citation and IMERG Late's citation when
- * the run read them, ECMWF's for a forecast an ECMWF feed wrote, each word
- * for word; read on the run's creation day. Empty for a run on CHIRPS alone
+ * the run read them, ECMWF's for a forecast an ECMWF feed wrote, AgERA5's
+ * and NASA POWER's for the reference ET GR4J read (R5-E, `et0Products`),
+ * each word for word; read on the run's creation day. Empty for a run on CHIRPS alone
  * and an uploaded forecast, whose reports read as before.
  */
-export function reportRainCredits(run: { createdAt: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; summary?: Parameters<typeof runRainCredits>[0]['summary'] }): RainCredit[] {
+export function reportRainCredits(run: { createdAt: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; et0Products?: readonly string[]; summary?: Parameters<typeof runRainCredits>[0]['summary'] }): RainCredit[] {
 	return runRainCredits(run, run.createdAt.slice(0, 10));
 }

@@ -17,6 +17,7 @@ import {
 	numCell,
 	provenanceValue,
 	runProvenanceComment,
+	seriesCredits,
 	seriesHeader,
 	slugify,
 	textCell,
@@ -315,6 +316,7 @@ describe('file names', () => {
 
 describe('creditComments (issue #604 R4-E)', () => {
 	const credits = rainCredits({ era5l: true, imergVersions: ['V07'], ecmwf: true }, '2026-10-27');
+	const withEt0 = rainCredits({ era5l: true, ecmwf: true, agera5: true, power: true }, '2026-10-27');
 
 	it('one # line per credit line, the licensor’s text word for word, after the provenance line', () => {
 		const lines = creditComments(credits);
@@ -330,8 +332,14 @@ describe('creditComments (issue #604 R4-E)', () => {
 		expect([...withRunComments(false, p, ['date,x'])]).toHaveLength(3);
 	});
 
+	it('a series download credits catchment rain with the rain products and the daily reference ET with its own (issue #604 R5-E), nothing else', () => {
+		expect(seriesCredits('rain_catchment_mm', withEt0).map((c) => c.product)).toEqual(['era5l', 'ecmwf_ens']);
+		expect(seriesCredits('evap_et0_mm', withEt0).map((c) => c.product)).toEqual(['agera5_et0', 'power_et0']);
+		expect(seriesCredits('flow_observed_m3s', withEt0)).toEqual([]);
+	});
+
 	it('stays harmless to a reader that doesn’t skip comments: no quote, no =, no line break, and no later cell a formula', () => {
-		for (const l of creditComments(credits)) {
+		for (const l of creditComments(withEt0)) {
 			expect(l).not.toMatch(/["=\r\n]/);
 			for (const cell of l.split(',').slice(1)) expect(cell).toMatch(/^ [^=+\-@]/);
 		}

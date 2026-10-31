@@ -685,7 +685,15 @@ forecast day is still an ECMWF ENS feed's (its `feed_days` overlap the
 forecast days), even with a day edited by hand: not a model input, only
 the flag ECMWF's CC BY credit reads (engine `runRainCredits`: the report,
 the CSVs, the workbook and an evidence pack's bundle).
-The engine reads it too (§2.4h's forecast days), so a reproduction, a
+Any run may also hold `et0Products` (`agera5_et0`, `power_et0`; issue #604
+R5-E, `runs/execute.ts` `et0FeedDays` and `runEt0Products`): the reference ET
+products whose values GR4J read on some run day, from the `agera5_et0`
+feed's `feed_days` in the `evap_et0_mm` series (read with the input) within
+the run's `summary.et0Daily` first..last, split at the feed's
+`last_meta.agera5Through` (AgERA5 on and before it, NASA POWER after); a
+scenario run takes its base run's when it read the series too. Like
+`forecastRainEcmwf`, only the credits read it (engine `runRainCredits`).
+The engine reads `forecastRainSource` too (§2.4h's forecast days), so a reproduction, a
 scenario on the run and an evidence pack's re-run carry it. A
 run of a project with two or more CHIRPS series at the outlet or at a land
 unit also holds `seriesChoice` (engine ≥ 1.90.0, issue #561, `runs/execute.ts`
