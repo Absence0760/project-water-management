@@ -20,6 +20,7 @@ import {
 	withLocalitySvgHash,
 	type EnsembleHeader,
 	type EnsembleSummary,
+	type EvidenceAlternativeInput,
 	type EvidenceCombinedInput,
 	type EvidenceEnsembleInput,
 	type EvidenceImpactInput,
@@ -55,6 +56,8 @@ import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
 import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
 import { loadAuthorisedImpact } from './authorisedImpact.js';
+import { loadAlternatives } from '../scenarios/alternatives.js';
+import { verifiedRuns } from '../runs/stamp.js';
 import { loadDamObservations } from './damObservations.js';
 import { futureYieldEnabled, latestFutureYield } from '../future/store.js';
 
@@ -543,6 +546,49 @@ async function loadMapFeatures(db: Db, projectId: string): Promise<EvidenceMapFe
 	}));
 }
 
+/**
+ * The mitigation alternatives the application's scenario cites (298, evidence-26), in its order: each run as the
+ * report reads the application's (its allocations, its scenario as the run recorded it), its paired ensembles on
+ * the baseline's, and whether its server stamp matches (077: an applicant may write their own runs' rows, so an
+ * unverified one prints no figure). Under the reader's RLS: a cited run is readable with the scenario that cites it
+ * once that is past draft (app_alternative_run_readable), so one the reader can't read is left out.
+ */
+async function loadAlternativeInputs(db: Db, projectId: string, scenarioId: string, baselineRunId: string): Promise<EvidenceAlternativeInput[]> {
+	const cited = await loadAlternatives(db, projectId, scenarioId);
+	if (!cited.length) return [];
+	const verified = await verifiedRuns(db, cited.map((x) => x.runId));
+	const out: EvidenceAlternativeInput[] = [];
+	for (const x of cited) {
+		const row = await loadRun(db, projectId, x.runId);
+		const rec = row?.inputs.scenario;
+		if (!row || !rec) continue;
+		const run = await withAllocations(db, projectId, runInput(row));
+		out.push({
+			label: x.label,
+			run: {
+				...run,
+				scenario: {
+					id: rec.id,
+					name: x.scenarioName || rec.name,
+					// An alternative prints its label, run and ops only: the applicant's words are the application's (Appendix C).
+					description: '',
+					prompts: { purposeAndNeed: '', mitigation: '', monitoring: '' },
+					status: null,
+					ownerName: null,
+					baseRunId: rec.baseRunId,
+					ops: rec.ops,
+					opsSha256: rec.opsSha256,
+					ownedNodeIds: rec.ownedNodeIds,
+					classified: rec.classified
+				}
+			},
+			paired: (await loadEnsembles(db, projectId, baselineRunId, row.id, rec.ownedNodeIds)).paired,
+			verified: verified.get(row.id) ?? false
+		});
+	}
+	return out;
+}
+
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
 /** How a report is built for its reader. */
 export interface EvidenceBuildOptions {
@@ -701,7 +747,9 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		// The applicant's own dams' WOfS rows over the baseline's period (evidence-21); none for a team scenario or baseline evidence.
 		damObservations: await loadDamObservations(db, projectId, ownUnitsForD3(ownOrigin, recorded?.ownedNodeIds), baseline.startDate, baseline.endDate),
 		// § 8 (evidence-23): the newest stored future yield of these two runs, under the reader's RLS; none while FUTURE_YIELD is off.
-		futureYield: application ? await loadFutureYield(db, projectId, application.id, baseline.id) : null
+		futureYield: application ? await loadFutureYield(db, projectId, application.id, baseline.id) : null,
+		// Page 1's mitigation alternatives (evidence-26, 298): the scenario's, as it cites them now (frozen once submitted).
+		alternatives: recorded && application ? await loadAlternativeInputs(db, projectId, recorded.id, baseline.id) : []
 	};
 }
 

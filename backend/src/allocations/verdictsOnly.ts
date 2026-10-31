@@ -189,7 +189,7 @@ export function ensembleVerdicts<T>(v: T): T {
 }
 
 /** The evidence report's page-1 rows that are counts or verdicts. */
-const ROW_VERDICTS: ReadonlySet<string> = new Set(['reserve', 'ewrDays', 'noFlowDays', 'ewrBelowWorks', 'otherApplications']);
+export const ROW_VERDICTS: ReadonlySet<string> = new Set(['reserve', 'ewrDays', 'noFlowDays', 'ewrBelowWorks', 'otherApplications']);
 /** Its flags that say nothing of a unit's figure or a flow. */
 const FLAG_VERDICTS: ReadonlySet<string> = new Set(['assumptions', 'reference', 'ewrZero', 'noReserve', 'gated', 'noRule', 'noCalibration', 'noFit', 'chirps', 'dataQuality', 'notEndorsed']);
 /** An EWR site's section (EvidenceSite) as verdicts: the months met, no delivered share, natural or flow figure. */
@@ -220,6 +220,8 @@ const REPORT_VERDICTS: Record<string, (v: unknown) => unknown> = {
 	assumptionsChanged: (v) => v,
 	issuable: (v) => v,
 	ops: (v) => v,
+	// The mitigation alternatives (evidence-26): labels, runs and ops, as `ops`; their cells go with the rows kept.
+	alternatives: (v) => v,
 	rules: (v) => v,
 	credibility: (v) => v,
 	localityMap: (v) => v,

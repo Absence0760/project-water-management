@@ -49,6 +49,7 @@ import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './n
 import { IN_APP_CHECK } from './questions.js';
 import { queueLicensedRun } from './licensedRun.js';
 import { wakeWorker } from '../jobs/wake.js';
+import { alternativeCandidates, AlternativesBody, loadAlternatives, replaceAlternatives } from './alternatives.js';
 import { AppealBody, CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
 import { wulaWarnings, type ScenarioOp } from '@water-management/engine';
 
@@ -82,14 +83,16 @@ async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) 
 	// runs/stamp.ts), for the assessors: its decision waits until none remain.
 	// null for a team scenario and for anyone below editor.
 	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
+	// The mitigation alternatives it cites (298), for whoever reads it.
+	const alternatives = await loadAlternatives(db, projectId, s.id);
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
 		const check = checkWithout(checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), drop);
 		// The WULA reference's warnings (294, engine wulaWarnings): over the ops as the caller reads them, so their op numbers match the list's. Never a block.
 		const wulaLines = wulaWarnings(scenario.ops, check.classified, scenario.wula, { application: isApplication(s) });
-		return { scenario, check: { ...check, wulaWarnings: wulaLines }, checkError: null, unverifiedRunIds };
+		return { scenario, check: { ...check, wulaWarnings: wulaLines }, checkError: null, unverifiedRunIds, alternatives };
 	} catch (err) {
-		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
+		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds, alternatives };
 		throw err;
 	}
 }
@@ -114,6 +117,8 @@ const duplicateName = (application: boolean) => (err: unknown): never => {
 const PG_RESTRICT = '23001';
 const signedKept = () =>
 	new ApiError(409, 'this scenario has a signed-off run or an evidence pack, so it is kept: the run stays the scenario run that was signed or packed');
+const alternativeKept = () =>
+	new ApiError(409, 'a submitted scenario cites a run of this one as a mitigation alternative, so it is kept: the alternative stays what was submitted');
 const commentsKept = () => new ApiError(409, 'this application drew public comments, so it is kept: they are the record of its public participation');
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned hydrological units and base run can't change`);
 const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
@@ -431,6 +436,14 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// trigger (072) refuses the DELETE too, whoever runs it, and sees the
 			// sign-offs a contributor can't read; its restrict_violation is the same 409.
 			// An evidence pack of the scenario likewise (112_evidence_pack): the same trigger refuses it.
+			// A run of it that a frozen scenario cites as a mitigation alternative (298) is kept with its scenario: the
+			// scenario_alternative_guard refuses the cascade too, whoever runs it.
+			const cited = await db.query(
+				`SELECT 1 FROM scenario_alternative sa JOIN scenario c ON c.id = sa.scenario_id
+				 WHERE sa.project_id = $1 AND sa.alternative_scenario_id = $2 AND c.status <> 'draft' LIMIT 1`,
+				[id, sid]
+			);
+			if (cited.rowCount) throw alternativeKept();
 			const signed = await db.query(
 				`SELECT 1 FROM signoff so JOIN model_run r ON r.id = so.run_id WHERE r.scenario_id = $1
 				 UNION ALL SELECT 1 FROM evidence_pack ep WHERE ep.scenario_id = $1 LIMIT 1`,
@@ -441,7 +454,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const { rows: commented } = await db.query<{ yes: boolean }>('SELECT app_scenario_has_public_comments($1, $2) AS yes', [id, sid]);
 			if (commented[0]?.yes) throw commentsKept();
 			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]).then(mustChange, (err: { code?: string; message?: string }) => {
-				throw err.code === PG_RESTRICT ? (err.message?.includes('public comments') ? commentsKept() : signedKept()) : err;
+				throw err.code === PG_RESTRICT
+					? err.message?.includes('public comments')
+						? commentsKept()
+						: err.message?.includes('alternatives are frozen')
+							? alternativeKept()
+							: signedKept()
+					: err;
 			});
 			await recordAudit(db, id, 'scenario.deleted', subject(s));
 			return c.body(null, 204);
@@ -506,6 +525,33 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['base_run_id'], baseRunId: body.baseRunId }));
 			}
 			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s, await hiddenHolders(db, s)), role) });
+		});
+	})
+	// --- the mitigation alternatives (298_scenario_alternatives) -----------------------
+	// The list, and the runs the caller may cite (only whoever may change it gets any).
+	.get('/:id/scenarios/:sid/alternatives', async (c) => {
+		const { id, sid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			return c.json({ alternatives: await loadAlternatives(db, id, s.id), candidates: await alternativeCandidates(db, id, s.id) });
+		});
+	})
+	// Replace the list: whoever may change the scenario, while it is a draft (frozen with the ops once submitted).
+	.put('/:id/scenarios/:sid/alternatives', async (c) => {
+		const { id, sid } = c.req.param();
+		const body = AlternativesBody.parse(await readJson(c));
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			assertCanChange(await loadScenario(db, id, scenarioId(sid)), role, c.get('userId'));
+			// Held against a concurrent submit (its FOR UPDATE waits), so the status read here is the one the rows go in under.
+			const s = await loadScenario(db, id, sid, true);
+			if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario's alternatives are frozen; withdraw it to change them`);
+			const before = await loadAlternatives(db, id, s.id);
+			const alternatives = await replaceAlternatives(db, id, s.id, body.alternatives);
+			const key = (l: readonly { runId: string; label: string }[]) => JSON.stringify(l.map((x) => [x.runId, x.label]));
+			if (key(before) !== key(alternatives)) await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['alternatives'], alternatives: alternatives.length }));
+			return c.json({ alternatives, candidates: await alternativeCandidates(db, id, s.id) });
 		});
 	})
 	// --- the submission workflow (WP-3.3) ---------------------------------------------

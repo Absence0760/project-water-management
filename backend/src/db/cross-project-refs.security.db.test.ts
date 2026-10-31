@@ -229,9 +229,11 @@ async function world(name: string): Promise<World> {
 		const packId = await pack('draft', 1, null);
 		const issuedPackId = await pack('issued', 1, null);
 		const successorPackId = await pack('issued', 2, issuedPackId);
+		// On the team scenario's base run, as its inputs record it (a mitigation alternative's guard reads it, 298).
 		const scenarioRunId = await one(
-			`INSERT INTO model_run (project_id, created_by, engine_version, start_date, end_date, inputs, scenario_id) VALUES ($1, $2, 'x', '2020-01-01', '2020-01-02', '{}', $3)`,
-			[projectId, u, ids.scenarioId]
+			`INSERT INTO model_run (project_id, created_by, engine_version, start_date, end_date, inputs, scenario_id)
+			 VALUES ($1, $2, 'x', '2020-01-01', '2020-01-02', jsonb_build_object('scenario', jsonb_build_object('baseRunId', $4::text)), $3)`,
+			[projectId, u, ids.scenarioId, runId]
 		);
 		return { packId, issuedPackId, successorPackId, scenarioRunId };
 	});
@@ -657,6 +659,35 @@ const CASES: Record<string, Case> = {
 	'scenario.base_run_id': {
 		ref: (w) => w.runId,
 		insert: (h, ref) => [`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256) VALUES ($1, $2, $3, repeat('a', 64))`, [h.projectId, `S ${randomUUID()}`, ref]]
+	},
+	// A mitigation alternative (298): scenario_alternative_same_project checks all three, and its guard the run's scenario and base.
+	'scenario_alternative.scenario_id': {
+		ref: (w) => w.scenarioId,
+		insert: async (h, ref, db) => {
+			const alt = (await db.query<{ id: string }>(`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256) VALUES ($1, $2, $3, repeat('a', 64)) RETURNING id`, [h.projectId, `S ${randomUUID()}`, h.runId])).rows[0]!.id;
+			const run = (
+				await db.query<{ id: string }>(
+					`INSERT INTO model_run (project_id, created_by, engine_version, start_date, end_date, inputs, scenario_id)
+					 VALUES ($1, $2, 'x', '2020-01-01', '2020-01-02', jsonb_build_object('scenario', jsonb_build_object('baseRunId', $4::text)), $3) RETURNING id`,
+					[h.projectId, u(), alt, h.runId]
+				)
+			).rows[0]!.id;
+			return ['INSERT INTO scenario_alternative (project_id, scenario_id, alternative_scenario_id, run_id, position, label) VALUES ($1, $2, $3, $4, 0, $5)', [h.projectId, ref, alt, run, 'Smaller dam']];
+		}
+	},
+	'scenario_alternative.alternative_scenario_id': {
+		ref: (w) => w.scenarioId,
+		insert: async (h, ref, db) => {
+			const citing = (await db.query<{ id: string }>(`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256) VALUES ($1, $2, $3, repeat('a', 64)) RETURNING id`, [h.projectId, `S ${randomUUID()}`, h.runId])).rows[0]!.id;
+			return ['INSERT INTO scenario_alternative (project_id, scenario_id, alternative_scenario_id, run_id, position, label) VALUES ($1, $2, $3, $4, 0, $5)', [h.projectId, citing, ref, h.scenarioRunId, 'Smaller dam']];
+		}
+	},
+	'scenario_alternative.run_id': {
+		ref: (w) => w.scenarioRunId,
+		insert: async (h, ref, db) => {
+			const citing = (await db.query<{ id: string }>(`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256) VALUES ($1, $2, $3, repeat('a', 64)) RETURNING id`, [h.projectId, `S ${randomUUID()}`, h.runId])).rows[0]!.id;
+			return ['INSERT INTO scenario_alternative (project_id, scenario_id, alternative_scenario_id, run_id, position, label) VALUES ($1, $2, $3, $4, 0, $5)', [h.projectId, citing, h.scenarioId, ref, 'Smaller dam']];
+		}
 	},
 	'scenario_member.scenario_id': {
 		ref: (w) => w.applicationId,
@@ -1295,6 +1326,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'runs/uncertainty.ts:baselineId': 'checked by run_uncertainty_start (the SQL case); the route needs a completed ensemble, uncertainty.db.test.ts',
 	'scenarios/schema.ts:baseRunId': ['POST /projects/:id/scenarios baseRunId'],
 	'series/routes.ts:siteNodeId': 'setSite finds the node in the project (400 otherwise) and time_series_site_same_project refuses another project’s node: series/site.db.test.ts, both',
+	'scenarios/alternatives.ts:runId':
+		'checked against the caller’s candidates (app_scenario_alternative_candidates: runs WHERE project_id = the route’s project), so another project’s run is a 422 before any insert; scenario_alternative_same_project refuses one too (the SQL case; scenarios/alternatives.db.test.ts tries the route)',
 	'scenarios/schema.ts:userId': 'a person, not a project row: scenario_member’s composite key on (project_id, user_id)',
 	'sweeps/routes.ts:baseRunId': 'a read filter within the project',
 	'sweeps/schema.ts:baseRunId': ['POST /projects/:id/sweeps baseRunId'],

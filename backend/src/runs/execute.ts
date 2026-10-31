@@ -357,7 +357,8 @@ export const RUN_KEPT_SQL = `app_run_kept(r.id)`;
  * (RLS): publications (022_publication.sql; `name` is the day it was
  * published, YYYY-MM-DD, in the project's time zone, 058/059), scenarios (024_scenarios.sql) and sign-offs
  * (036_signoff.sql; `name` is the signer's full name) and evidence packs
- * (112_evidence_pack.sql; `name` is `version N`). Assessments add their kind
+ * (112_evidence_pack.sql; `name` is `version N`) and mitigation alternatives a
+ * scenario past draft cites (298; `name` is that scenario's). Assessments add their kind
  * here with their migration. `model_run_cited`
  * answers "is it cited at all", including citations the caller can't see.
  */
@@ -369,11 +370,14 @@ export const CITED_BY_SQL = `(SELECT COALESCE(jsonb_agg(jsonb_build_object('kind
 		SELECT 'signoff', so.id, so.full_name, so.signed_at FROM signoff so WHERE so.run_id = r.id
 		UNION ALL
 		SELECT 'pack', ep.id, 'version ' || ep.version, ep.created_at FROM evidence_pack ep WHERE ep.baseline_run_id = r.id OR ep.scenario_run_id = r.id
+		UNION ALL
+		SELECT 'alternative', sa.scenario_id, cs.name, sa.created_at FROM scenario_alternative sa JOIN scenario cs ON cs.id = sa.scenario_id
+		WHERE sa.run_id = r.id AND cs.status <> 'draft'
 	) c)`;
 
 /** One citation of a run (RunMeta.citedBy). For a publication, `name` is the day it was published (YYYY-MM-DD, in the project's time zone). */
 export interface RunCitation {
-	kind: 'publication' | 'scenario' | 'signoff' | 'pack';
+	kind: 'publication' | 'scenario' | 'signoff' | 'pack' | 'alternative';
 	id: string;
 	name: string;
 }
