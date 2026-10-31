@@ -1313,6 +1313,9 @@ function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): 
 	].map((x) => ({ ...x, ewrDays: single(ewrRow, x.scenarioId), reserveMonths: single(reserveRow, x.scenarioId) }));
 	const measure = (row: typeof ewrRow): EvidenceCombinedMeasure | null =>
 		row ? { baseline: row.baseline, combined: row.combined, change: row.combinedChange, sumOfSingles: row.sumOfSingles, interaction: row.interaction } : null;
+	// evidence-26: the assessment's background at full allocation, its own row set beside the baseline's.
+	const bg = c.assessment?.background ?? null;
+	const bgRow = (metric: 'ewr_days_not_met' | 'reserve_months_met') => bg?.report.rows.find((r) => r.metric === metric && r.isOutlet) ?? null;
 	const notAssessed = !others.length
 		? COMBINED_NONE
 		: applications.length < 2
@@ -1339,8 +1342,9 @@ function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): 
 		problems: [...c.problems],
 		ewrDays: assessed ? measure(ewrRow) : null,
 		reserveMonths: assessed ? measure(reserveRow) : null,
-		warnings: assessed ? [...(report?.warnings ?? [])] : [],
-		notAssessed
+		warnings: assessed ? [...(report?.warnings ?? []), ...(bg?.report.warnings ?? []).map((w) => `${bg!.label}: ${w}`)] : [],
+		notAssessed,
+		background: assessed && bg ? { label: bg.label, runLabel: bg.runLabel, ewrDays: measure(bgRow('ewr_days_not_met')), reserveMonths: measure(bgRow('reserve_months_met')) } : null
 	};
 }
 

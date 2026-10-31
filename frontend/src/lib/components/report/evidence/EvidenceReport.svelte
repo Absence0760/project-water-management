@@ -167,7 +167,7 @@
 	const combinedStatus = (o: NonNullable<EvidenceReport['cumulative']['combined']>['applications'][number]) =>
 		o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome ?? '–'}` : (o.status ?? '–');
 	const measureText = (v: number | null | undefined, unit: string) => (v === null || v === undefined ? '–' : `${signed(v, 0)} ${unit}`);
-	// evidence-25: § 4's dams together (a firm yield in m³/year, an assurance of supply as a share), or a direction alone.
+	// evidence-26: § 4's dams together (a firm yield in m³/year, an assurance of supply as a share), or a direction alone.
 	const damYield = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${fmtNum(v, 0)} m³/year`);
 	const damYieldChange = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${signed(v, 0)} m³/year`);
 	const damShare = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${fmtNum(v * 100, 0)} %`);
@@ -644,7 +644,7 @@
 							</p>
 						{/if}
 						{#if cb.dams?.length}
-							<!-- evidence-25: each dam the applications touch, from the same assessment; directions only where a run rested on the registered volumes and this reader is kept from them. -->
+							<!-- evidence-26: each dam the applications touch, from the same assessment; directions only where a run rested on the registered volumes and this reader is kept from them. -->
 							<div class="table-wrap">
 								<table class="data compact" data-testid="evidence-combined-dams">
 									<caption class="visually-hidden">Each dam the applications touch, on the baseline and with every application together</caption>
@@ -687,6 +687,49 @@
 							</p>
 						{/if}
 						{#each cb.warnings as w (w)}<p class="na">{w}</p>{/each}
+						{#if cb.background}
+							{@const bg = cb.background}
+							<!-- evidence-26: the assessment's background at full allocation, its own rows beside the baseline's, never in their place. -->
+							<h4>{bg.label}</h4>
+							<p class="small">
+								The same applications on “{bg.runLabel || 'a run of this baseline at full allocation'}”: the baseline with every registered or licensed
+								volume taken in full, which the assessor chose for this assessment. A separate comparison: the figures above are against the baseline as
+								the hydrologist modelled it, and stay so.
+							</p>
+							<div class="table-wrap">
+								<table class="data compact" data-testid="evidence-combined-background">
+									<thead>
+										<tr>
+											<th scope="col">At the outlet</th>
+											<th scope="col" class="num">Days below {dailyName}</th>
+											<th scope="col" class="num">Reserve months met at the outlet</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<th scope="row">At full allocation<span class="sub">against the baseline</span></th>
+											<td class="num">{bg.ewrDays?.baseline ?? '–'}{bg.ewrDays?.baseline != null && cb.ewrDays?.baseline != null ? ` (${measureText(bg.ewrDays.baseline - cb.ewrDays.baseline, 'days')})` : ''}</td>
+											<td class="num">{bg.reserveMonths?.baseline ?? '–'}{bg.reserveMonths?.baseline != null && cb.reserveMonths?.baseline != null ? ` (${measureText(bg.reserveMonths.baseline - cb.reserveMonths.baseline, 'months')})` : ''}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">Sum of each alone</th>
+											<td class="num">{measureText(bg.ewrDays?.sumOfSingles, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.sumOfSingles, 'months')}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">All together</th>
+											<td class="num">{measureText(bg.ewrDays?.change, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.change, 'months')}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">Interaction<span class="sub">together, beyond the sum of each alone</span></th>
+											<td class="num">{measureText(bg.ewrDays?.interaction, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.interaction, 'months')}</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						{/if}
 					{/if}
 				{/if}
 			{:else if s.id === 'allocations'}

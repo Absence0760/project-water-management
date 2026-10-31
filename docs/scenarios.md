@@ -1259,11 +1259,60 @@ assessed together ([evidence-pack.md § The other applications
 together](./evidence-pack.md#the-other-applications-together)). Tests:
 `evidence/report-combined.db.test.ts`.
 
+### Against existing authorised use: a background at full allocation
+
+The baseline column is the hydrologist's run, and stays so: **licences never
+drive the baseline** (the operator's rule, issue #507,
+[allocations.md § The allocation mode](./allocations.md#the-allocation-mode-engine--1180)).
+Assessing against *existing authorised use* (NWA s27(1)(a), s29(1)(a)(iii):
+every holder taking what they are registered or licensed for) is a separate
+comparison the assessor opts into, never a replacement (WP-3.10, migration
+`295_assessment_background.sql`, backend `assessments/background.ts`):
+
+- **The background is a run the assessor picks.** `POST …/assessments`
+  takes an optional `backgroundRunId`: a scenario run on the **same base
+  run** as the applications whose input ran at **full allocation**
+  (`settings.set allocationMode fullAllocation`), with no change but the
+  mode and registered volumes (`allocation.set` / `allocation.remove`, the
+  assumptions about authorised use), and at least one registered volume that
+  takes. Another project's run, or none, is 404; a run of the model, a
+  scenario run on another base, at another mode or with any other change is
+  422, as is a baseline with no volumes; the database's
+  `assessment_background_guard` holds the project, base and mode rules too.
+  The combination is checked on the background as well, its conflicts and
+  problems prefixed *At full allocation*. `GET …/assessments/backgrounds?baseRunId=`
+  lists the runs that qualify; Assess together offers them under *Also
+  against existing authorised use (optional)*.
+- **Its own row set.** The job runs the baseline's table exactly as without a
+  background, then the background, each application alone on it and all
+  together on it (the same applicant masks), with the current engine, and
+  stores that table beside the baseline's as `report.background`
+  (`{ label: 'Existing authorised use (full allocation)', run, report }`):
+  the background in the baseline's column, changes and the interaction
+  against the background. Twice the runs (up to 2 × (8 + 2)). The screen
+  shows it as a second, labelled table under the matrix, with each measure's
+  baseline value beside it, and the CSV as a second table.
+- **Who reads it.** An assessment is an editor's, and an editor reads every
+  volume (decision D3). A reader kept from the volumes (a report render
+  queued without them, 218) gets its EWR days and Reserve months rows only
+  (`backgroundVerdicts`, `verdictsOnly: true`), as for any full-allocation
+  run ([allocations.md § Who sees what](./allocations.md#who-sees-what)).
+- **The evidence report** (`evidence-26`) adds its outlet days and Reserve
+  months to § 4's combined table as its own rows when the assessment it
+  reads has one; page 1's row and the baseline's figures are unchanged
+  ([evidence-pack.md § The other applications
+  together](./evidence-pack.md#the-other-applications-together)).
+- Tests: `assessments/background.db.test.ts` (the table beside an unchanged
+  baseline's, the background column the full-allocation run's, every refusal
+  in the API and the database, a viewer reading none and a reader kept from
+  the volumes the verdicts only, with the assessor as positive control),
+  `background.test.ts`, the engine's evidence report test, the frontend's
+  `cumulative.test.ts`, and `e2e/tests/assess-together.spec.ts`.
+
 ### Not yet
 
 - **Yield and reliability per dam** together (WP-3.6's yield on the combined
-  input), and a **full-allocation background** (WP-3.10) as the baseline
-  column, are not in the report yet ([followups.md](./followups.md)).
+  input) is not in the report yet ([followups.md](./followups.md)).
 
 ## UI
 

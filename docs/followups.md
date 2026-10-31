@@ -6028,7 +6028,7 @@ Left:
       Trigger: the first issued pack whose combined row is assessed, or an
       assessor asking to reproduce it.
 - [x] **Yield and reliability per dam, together.** Done (report format
-      `evidence-25`, 2026-10-30): the `assessment` job works out, for each
+      `evidence-26`, 2026-10-30): the `assessment` job works out, for each
       dam the applications touch (engine `scenario/cumulativeYield.ts`
       `touchedDams`), its firm yield (the yield job's defaults) and its
       unit's annual assurance of supply on the baseline, each alone and all
@@ -6055,12 +6055,25 @@ Left:
       bounded by the per-user job caps instead of one job's time. Trigger:
       an assessment that names a dam in that warning which the assessor
       needs in the report.
-- [ ] **A full-allocation baseline column** (WP-3.10): the baseline run as it
-      is today; making it *existing authorised use* means assessing on a
-      full-allocation run. Durable fix: the assessment takes an optional
-      `backgroundRunId` (a full-allocation run of the same model) as the
-      baseline. Trigger: the first assessment on a catchment with WARMS
-      volumes imported.
+- [x] **A full-allocation baseline column** (WP-3.10). **Built
+      (2026-10-30, 295_assessment_background, report format
+      `evidence-26`):** the assessment takes an optional `backgroundRunId`,
+      a scenario run on the same base run at full allocation with no other
+      change than the mode and registered volumes (404 another project's,
+      422 a run of the model, another base, another mode, other changes or
+      no volume; the database guard holds project, base and mode). The job
+      also runs the background, each application alone and all together on
+      it, and stores that table beside the baseline's (`report.background`),
+      labelled *Existing authorised use (full allocation)*: **beside the
+      baseline, never as it**, since licences never drive the baseline
+      (operator, issue #507). Shown as a second table on Assess together,
+      in the CSV and in the evidence report's § 4; a reader kept from the
+      volumes reads its EWR days and Reserve months only (D3)
+      ([scenarios.md § Against existing authorised
+      use](./scenarios.md#against-existing-authorised-use-a-background-at-full-allocation)).
+      Tests: `assessments/background.db.test.ts`, `background.test.ts`, the
+      engine's evidence report test, `cumulative.test.ts`,
+      `assess-together.spec.ts`.
 
 ## Applicants (WP-3.3)
 

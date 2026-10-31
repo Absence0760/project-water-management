@@ -1723,6 +1723,34 @@ describe('page 1’s combined row: every application together (evidence-11, find
 		// An assessment made before the dam rows, and a row not assessed, carry none.
 		expect(read(assessment)).toEqual([]);
 		expect(evidenceReport(input({ combined: combined({ assessment: withDams(80_000, 0.8), conflicts: ['x'] }) })).cumulative.combined!.dams).toEqual([]);
+	it('evidence-26: adds the assessment’s background at full allocation as its own labelled row set, the baseline’s figures and page 1’s row unchanged', () => {
+		// Any other table stands in for the background's run: what is checked is where each figure goes.
+		const bgReport = cumulativeImpact(
+			{ summary: otherOut.summary, ...window },
+			[
+				{ id: 'scn', name: 'Farm two dam', summary: togetherOut.summary, ...window },
+				{ id: 'scn-2', name: 'Farm one dam', summary: otherOut.summary, ...window }
+			],
+			{ summary: togetherOut.summary, ...window }
+		);
+		const background = { label: 'Existing authorised use (full allocation)', runLabel: 'At full allocation', report: bgReport };
+		const plain = evidenceReport(input({ combined: combined() }));
+		const r = evidenceReport(input({ combined: combined({ assessment: { ...assessment, background } }) }));
+		const c = r.cumulative.combined!;
+		const outlet = bgReport.rows.find((x) => x.metric === 'ewr_days_not_met' && x.isOutlet)!;
+		expect(c.background).toEqual({
+			label: background.label,
+			runLabel: 'At full allocation',
+			ewrDays: { baseline: outlet.baseline, combined: outlet.combined, change: outlet.combinedChange, sumOfSingles: outlet.sumOfSingles, interaction: outlet.interaction },
+			reserveMonths: expect.objectContaining({ baseline: expect.any(Number) })
+		});
+		// Never in the baseline's place: its measures, the applications' changes and page 1's row are the baseline's.
+		expect(c.ewrDays).toEqual(plain.cumulative.combined!.ewrDays);
+		expect(c.applications).toEqual(plain.cumulative.combined!.applications);
+		expect(r.rows.at(-1)).toEqual(plain.rows.at(-1));
+		// Without one, or when not assessed, there is none.
+		expect(plain.cumulative.combined!.background).toBeNull();
+		expect(evidenceReport(input({ combined: combined({ assessment: { ...assessment, background }, conflicts: ['x'] }) })).cumulative.combined!.background).toBeNull();
 	});
 });
 

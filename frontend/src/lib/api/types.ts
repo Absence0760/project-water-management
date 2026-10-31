@@ -2753,17 +2753,42 @@ export interface AssessmentMember {
 	endDate: string | null;
 }
 
+/** A run that can be an assessment's background at full allocation (295, GET …/assessments/backgrounds). */
+export interface AssessmentBackgroundRun {
+	id: string;
+	label: string;
+	scenarioName: string | null;
+	createdAt: string;
+}
+
+/**
+ * An assessment's background at full allocation (295, WP-3.10; backend
+ * assessments/background.ts): the same table with every registered or
+ * licensed volume taken in full in the baseline's column. A separate,
+ * labelled comparison; never the baseline.
+ */
+export interface AssessmentBackground {
+	label: string;
+	run: AssessmentBackgroundRun;
+	report: CumulativeReport;
+	/** For a reader kept from the registered volumes: only the EWR days and Reserve months rows are left. */
+	verdictsOnly?: true;
+}
+
 /** A cumulative impact assessment (roadmap WP-3.11, docs/api.md § Assessments). */
 export interface Assessment {
 	id: string;
 	name: string;
 	baseRunId: string;
 	baseRun: { id: string; label: string; createdAt: string };
+	/** The optional background at full allocation it was also assessed on (295); null for none. Absent from an older API. */
+	backgroundRunId?: string | null;
+	backgroundRun?: { id: string; label: string; createdAt: string } | null;
 	/** refused: the scenarios no longer combine (`problems`); failed: the engine refused an input. */
 	status: 'pending' | 'complete' | 'refused' | 'failed';
 	problems: string[];
-	/** Only on GET …/assessments/:aid, and only when complete. */
-	report?: CumulativeReport | null;
+	/** Only on GET …/assessments/:aid, and only when complete; with the background's table beside it when it had one. */
+	report?: (CumulativeReport & { background?: AssessmentBackground }) | null;
 	engineVersion: string | null;
 	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
 	createdBy: string | null;
@@ -2782,6 +2807,8 @@ export interface Assessment {
 export interface AssessmentRequest {
 	name: string;
 	scenarioIds: string[];
+	/** Optional background at full allocation (295): a scenario run on the same baseline at full allocation. */
+	backgroundRunId?: string;
 	/** Only check that the scenarios combine; write nothing. */
 	dryRun?: boolean;
 }

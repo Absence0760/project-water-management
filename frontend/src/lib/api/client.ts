@@ -152,6 +152,7 @@ import type {
 	Sweep,
 	SweepRequest,
 	Assessment,
+	AssessmentBackgroundRun,
 	AssessmentCheck,
 	AssessmentRequest,
 	Outlook,
@@ -1470,7 +1471,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ check: AssessmentCheck }>('POST', `${p(id)}/assessments`, { ...body, dryRun: true }).then((r) => r.check),
 			create: (id: string, body: Omit<AssessmentRequest, 'dryRun'>) => request<{ assessment: Assessment; jobId: string; job: JobMeta }>('POST', `${p(id)}/assessments`, body),
 			list: (id: string) => request<{ assessments: Assessment[] }>('GET', `${p(id)}/assessments`).then((r) => r.assessments),
-			get: (id: string, assessmentId: string) => request<{ assessment: Assessment }>('GET', `${p(id)}/assessments/${enc(assessmentId)}`).then((r) => r.assessment)
+			get: (id: string, assessmentId: string) => request<{ assessment: Assessment }>('GET', `${p(id)}/assessments/${enc(assessmentId)}`).then((r) => r.assessment),
+			/** The runs that can be the background at full allocation of an assessment on `baseRunId` (295), newest first. */
+			backgrounds: (id: string, baseRunId: string) =>
+				request<{ runs: AssessmentBackgroundRun[] }>('GET', `${p(id)}/assessments/backgrounds?baseRunId=${enc(baseRunId)}`).then((r) => r.runs)
 		},
 		/**
 		 * Automated calibration run by the server (docs/api.md § Automated

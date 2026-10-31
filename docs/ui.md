@@ -12214,12 +12214,28 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   answered yet*, kept for the authority's written reasons. The CSV carries
   them too, after a blank line: *Application, Asked, The applicant read,
   In its own words, Answer, Answered*.
+- **Also against existing authorised use (optional)** (295, WP-3.10;
+  `CumulativeBackground.svelte`): once an application is ticked, a select
+  lists the full-allocation scenario runs of its base run (`GET
+  …/assessments/backgrounds`), *No: the baseline only* first and chosen by
+  default; shown only when there is one. Picked, the check and the
+  assessment take it too, and the result line says *and at full allocation
+  on …*. The complete result keeps the matrix as it is and adds, under it, a
+  second table headed **Existing authorised use (full allocation)**: the
+  run it is on and why it is separate (the table above stays the
+  hydrologist's baseline), columns **Baseline** (the hydrologist's value of
+  the same measure), **At full allocation** (with its change from the
+  baseline), each application **alone** and **All together** on it (each
+  with its change from the background) and **Interaction**. The CSV adds it
+  after a blank line. For a reader kept from the volumes only its EWR days
+  and Reserve months rows, with a note saying why.
 - Workspace English, like the rest of the assessors' tab.
 
 e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
 conflicting pair refused with both changes named, a pair that combines run
 by a worker tick into the matrix, the CSV, Back to the list; axe light and
-dark).
+dark; and a pair assessed against a full-allocation background, its own
+labelled table under an unchanged matrix).
 
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the

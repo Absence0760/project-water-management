@@ -4790,8 +4790,9 @@ submitted applications, which neither contributors nor viewers read.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/assessments` | `{ name, scenarioIds, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
+| POST | `/projects/:id/assessments` | `{ name, scenarioIds, backgroundRunId?, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
 | GET | `/projects/:id/assessments` | – | `{ assessments: Assessment[] }`, newest first, **without** `report` | editor |
+| GET | `/projects/:id/assessments/backgrounds?baseRunId=` | – | `{ runs: [{ id, label, scenarioName, createdAt }] }`: the runs that can be the background at full allocation of an assessment on that base run (295), newest first, at most 50; `400` for a `baseRunId` that isn't a UUID | editor |
 | GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report` and `questions`: the "Ask the assessors why" questions on its applications in the editors' shape ([§ Scenarios](#scenarios)), oldest first, answered or not (issue #523 G7: exported with the matrix for the authority's s42 written reasons; the list leaves them out); `404` for one that isn't this project's | editor |
 
 - Body (strict): `name` 1–200 characters (trimmed); `scenarioIds` **2–8**
@@ -4809,13 +4810,33 @@ submitted applications, which neither contributors nor viewers read.
   naming the scenario (`"App B" alone: op 2 …`, or `"App B": op 1 …` for an
   op that applies alone but not on top of the others). The message says how
   many conflicts. Nothing is written.
+- **`backgroundRunId` (optional, 295, WP-3.10): assessing against existing
+  authorised use as well.** A scenario run on the **same base run** whose
+  input ran at full allocation, with no change but `settings.set
+  allocationMode fullAllocation` and registered volumes (`allocation.set` /
+  `allocation.remove`), holding at least one registered volume that takes.
+  `404` for a run the caller doesn't read in this project (another
+  project's); `422` for a run of the model, a scenario run on another base,
+  at another mode or with any other change, or no volume; `409` when its
+  input can't be rebuilt. The combination is checked on it too (its
+  conflicts and problems prefixed *At full allocation*), dry run included.
+  It never replaces the baseline (licences never drive the baseline, issue
+  #507): the job adds a second table (`report.background`).
 - **At most 2 assessment jobs queued or running per user** (`429`; a dry run
   doesn't count). A job gets 2 attempts. A project keeps its newest **20**
   assessments; one goes with its base run.
 - `Assessment = { id, name, baseRunId, baseRun: { id, label, createdAt },
-  status, problems, report?, engineVersion, job, createdBy, createdAt,
-  completedAt, members: AssessmentMember[] }`. `status`: `pending`, then
-  `complete` (`report` is the engine's `CumulativeReport`), `refused` (the
+  backgroundRunId, backgroundRun: { id, label, createdAt } | null, status,
+  problems, report?, engineVersion, job, createdBy, createdAt, completedAt,
+  members: AssessmentMember[] }`. `status`: `pending`, then
+  `complete` (`report` is the engine's `CumulativeReport`, with
+  `background: { label: 'Existing authorised use (full allocation)', run:
+  { id, label, scenarioName, createdAt }, report: CumulativeReport,
+  verdictsOnly? }` when it had one: the same table with the background run
+  in the baseline's column, each application alone and all together on it;
+  for a reader kept from the registered volumes only its
+  `ewr_days_not_met` and `reserve_months_met` rows, `verdictsOnly: true`,
+  D3), `refused` (the
   job found the scenarios no longer combine, or one doesn't apply alone;
   `problems` says why) or `failed` (the engine refused an input). `job` as
   for a sweep.
