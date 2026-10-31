@@ -1605,7 +1605,9 @@ scenario is `'team'`, and behaves exactly as above).
   `app_published_run_input` / `app_published_run_series`) and never returns
   it. An unpublished run answers `404`, as if it didn't exist.
 - **What the applicant sees of it** (`GET …/scenarios/:sid/base`,
-  `backend/src/scenarios/applicant.ts`): the settings, their own farms (their
+  engine `scenario/applicant.ts`, which `backend/src/scenarios/applicant.ts`
+  re-exports, so a pack's reproduction bundle derives the same mask offline):
+  the settings, their own farms (their
   farm links) and every gauge in full; every other node by its kind and
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
   its values blanked but for the bed losses in the reach below it (engine ≥
