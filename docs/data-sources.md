@@ -1426,12 +1426,12 @@ starts.
   the run records `et0Products` (backend `runs/execute.ts` `et0FeedDays`,
   engine `et0ProductsRead`) from the days the feed wrote and no person has
   since (`feed_days`) within the run days the series supplied
-  (`summary.et0Daily` first..last), AgERA5 on days up to where its copy
-  reached at the feed's latest fetch (`last_meta.agera5Through`) and NASA
-  POWER after; with no fetch recorded since the feed's config changed, both.
-  The days aren't stored per product, so a POWER day the feed never re-read
-  after AgERA5's month landed (a feed paused for more than its 75-day
-  re-read) counts as AgERA5's: [followups.md](./followups.md). Model
+  (`summary.et0Daily` first..last), by the product the ingest recorded for
+  each day as it wrote it (`feed_agera5_days` / `feed_power_days`,
+  292_feed_et0_product_days; [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)).
+  So a POWER day the feed never re-read after AgERA5's month landed stays
+  POWER's, however far AgERA5 has reached since. A feed day written before
+  that record existed has no product, and both are credited for it. Model
   quality's Rain gaps panel keeps the rain products' only. A run on an
   uploaded ET₀ record, or under an A-pan PE (GR4J doesn't read the series),
   prints none.

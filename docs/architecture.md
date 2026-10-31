@@ -1997,7 +1997,9 @@ EventBridge, daily
   rolling 120 days). Neither enters the cell cache: an `agera5_et0`
   feed_fetch reads both in the job (`feeds/fromMirrorEt0.ts`, at most a year
   a window, one read per year chunk), AgERA5 where its copy holds the day,
-  POWER after it, and writes `evap_et0_mm`; there is no per-feed path to the
+  POWER after it, and writes `evap_et0_mm`, recording which product wrote
+  each day (`time_series.feed_agera5_days` / `feed_power_days`, 292, for a
+  run's credits); there is no per-feed path to the
   CDS or NASA, and the fetcher refuses one. A copy with neither product
   waits without a failure (as ECMWF's). The feeds fall due on the default
   daily rule (260_feed_source_agera5_et0.sql). Both jobs are off in

@@ -1,5 +1,6 @@
 // A run whose GR4J read an AgERA5 feed's daily reference ET records the
-// products it read (inputs.et0Products, runs/execute.ts; issue #604 R5-E), and
+// products it read (inputs.et0Products, runs/execute.ts; issue #604 R5-E), from
+// the product the feed recorded for each day (292_feed_et0_product_days), and
 // the run's reads and exports credit them: GET …/runs/:runId, the summary CSV's
 // block, the catchment's daily CSV and the reference ET series file. Under an
 // A-pan PE GR4J doesn't read the series, so the run owes none (the control).
@@ -41,8 +42,13 @@ beforeAll(async () => {
 	const feed = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'agera5_et0', config: { cells: [{ lat: -33.525, lon: 19.525, weight: 1 }] } });
 	expect(feed.status, JSON.stringify(feed.body)).toBe(201);
 	et0SeriesId = (await asOwner(`SELECT id FROM time_series WHERE project_id = $1 AND kind = 'evap_et0_mm'`, [pid]))[0].id as string;
-	// As if the feed had written every day (031_feed_days), AgERA5's to AGERA5_THROUGH and NASA POWER's after.
-	await asOwner(`UPDATE time_series SET feed_id = $2, feed_days = datemultirange(daterange($3::date, $3::date + $4::int)) WHERE id = $1`, [et0SeriesId, feed.body.feed.id, START, DAYS]);
+	// As if the feed had written every day (031_feed_days), recording AgERA5's to AGERA5_THROUGH and NASA POWER's after (292).
+	await asOwner(
+		`UPDATE time_series SET feed_id = $2, feed_days = datemultirange(daterange($3::date, $3::date + $4::int)),
+			feed_agera5_days = datemultirange(daterange($3::date, $5::date, '[]')), feed_power_days = datemultirange(daterange($5::date + 1, $3::date + $4::int))
+		 WHERE id = $1`,
+		[et0SeriesId, feed.body.feed.id, START, DAYS, AGERA5_THROUGH]
+	);
 	await asOwner(`UPDATE data_feed SET enabled = false, last_meta = $2::jsonb WHERE id = $1`, [feed.body.feed.id, JSON.stringify({ days: DAYS, agera5Days: 385, powerDays: 15, agera5Through: AGERA5_THROUGH })]);
 }, 60_000);
 
@@ -70,6 +76,25 @@ describe('a run’s reference ET credits (issue #604 R5-E)', () => {
 		await asOwner(`UPDATE time_series SET feed_days = feed_days - datemultirange(daterange($2::date + 1, $3::date + $4::int)) WHERE id = $1`, [et0SeriesId, AGERA5_THROUGH, START, DAYS]);
 		const id = await run();
 		expect((await owner.call('GET', `/projects/${pid}/runs/${id}`)).body.run.et0Products).toEqual(['agera5_et0']);
+	});
+
+	it('a long pause: the feed’s latest fetch says AgERA5 reached past days NASA POWER wrote and the feed never re-read: POWER alone for them', async () => {
+		// Every day the feed holds is POWER's by its record, though last_meta says AgERA5 reached the last one (the old split's AgERA5 alone).
+		await asOwner(
+			`UPDATE time_series SET feed_days = datemultirange(daterange($2::date, $2::date + $3::int)), feed_agera5_days = NULL,
+				feed_power_days = datemultirange(daterange($2::date, $2::date + $3::int)) WHERE id = $1`,
+			[et0SeriesId, START, DAYS]
+		);
+		await asOwner(`UPDATE data_feed SET last_meta = last_meta || jsonb_build_object('agera5Through', ($2::date + $3::int - 1)::text) WHERE project_id = $1`, [pid, START, DAYS]);
+		const id = await run();
+		expect((await owner.call('GET', `/projects/${pid}/runs/${id}`)).body.run.et0Products).toEqual(['power_et0']);
+		expect((await text(`/projects/${pid}/runs/${id}/export/summary.csv`)).body).not.toContain('Credit: AgERA5');
+	});
+
+	it('days written before the record existed (no product recorded): both credited', async () => {
+		await asOwner(`UPDATE time_series SET feed_power_days = NULL WHERE id = $1`, [et0SeriesId]);
+		const id = await run();
+		expect((await owner.call('GET', `/projects/${pid}/runs/${id}`)).body.run.et0Products).toEqual(['agera5_et0', 'power_et0']);
 	});
 
 	it('under an A-pan PE GR4J doesn’t read the series: none owed, nothing printed', async () => {

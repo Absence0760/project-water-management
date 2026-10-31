@@ -689,8 +689,9 @@ Any run may also hold `et0Products` (`agera5_et0`, `power_et0`; issue #604
 R5-E, `runs/execute.ts` `et0FeedDays` and `runEt0Products`): the reference ET
 products whose values GR4J read on some run day, from the `agera5_et0`
 feed's `feed_days` in the `evap_et0_mm` series (read with the input) within
-the run's `summary.et0Daily` first..last, split at the feed's
-`last_meta.agera5Through` (AgERA5 on and before it, NASA POWER after); a
+the run's `summary.et0Daily` first..last, by the product recorded for each
+day (`feed_agera5_days` / `feed_power_days`, 292, [§ Feed days](#feed-days-031_feed_dayssql);
+both for a day with none recorded); a
 scenario run takes its base run's when it read the series too. Like
 `forecastRainEcmwf`, only the credits read it (engine `runRainCredits`).
 The engine reads `forecastRainSource` too (§2.4h's forecast days), so a reproduction, a
@@ -5186,7 +5187,8 @@ step 5). Nothing here feeds the engine.
 
 Which days of a series its feed wrote, so a feed replaces only those and
 never an uploaded or imported value (#30, [architecture.md § Data
-feeds](./architecture.md#data-feeds)). Two columns on `time_series`:
+feeds](./architecture.md#data-feeds)). Two columns on `time_series`, and
+two more for a reference ET feed's products (292, below):
 
 | Column | Holds |
 | --- | --- |
@@ -5208,7 +5210,21 @@ feeds](./architecture.md#data-feeds)). Two columns on `time_series`:
   its old series when it is re-targeted. A project copy or import writes new
   rows without them.
 - **No backfill**: days written before `031` are nobody's, so feeds keep them.
-- Tests: `series/merge.test.ts` (the day-run arithmetic and `feedDays`),
+- **Which product wrote each day (292_feed_et0_product_days)**: an
+  `agera5_et0` feed writes AgERA5's value or NASA POWER's
+  (`feeds/fromMirrorEt0.ts`; its answer's `dayProducts` names each day's),
+  and two more `datemultirange` columns record which, for a run's credits
+  (`runs/execute.ts` `et0FeedDays`, [data-sources.md § ERA5-Land](./data-sources.md#era5-land-r4-a),
+  *Where the credits show*). `feed_agera5_days` and `feed_power_days` are
+  subsets of `feed_days` (`CHECK`: only with a `feed_id`): the ingest's
+  merge (`mergeSeries` `dayProducts`, `feedProductDays`) records the product
+  of every day it writes and forgets the old one of a day it rewrites
+  without one; every merge keeps only the days still in `feed_days`; a
+  replace clears both, and the `time_series_feed_days` trigger clears them
+  with `feed_days`. A feed day in neither was written before 292 (no
+  backfill): the credit owes both products for it. Readers intersect with
+  `feed_days` anyway, so a stray day can't be credited.
+- Tests: `series/merge.test.ts` (the day-run arithmetic, `feedDays` and `feedProductDays`),
   `feeds/feeds.db.test.ts` (user values kept; final replaces preliminary and
   a re-fetch revises; a user's merge or PUT wins afterwards, under skewed
   time zones; removing and re-targeting release; the composite key).

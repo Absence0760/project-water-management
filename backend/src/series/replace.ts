@@ -50,6 +50,7 @@ export async function replaceSeries(
 		// feed_days, 031_feed_days). A data feed's confirmed replacement
 		// (opts.feedId, feeds/ingest.ts) makes it the feed's: every day of the
 		// new record is one it wrote, so its later re-reads still revise them.
+		// Either way no day has a recorded reference ET product (292_feed_et0_product_days): a replace says none.
 		// A restore of a deleted series (opts.reuseId, history/routes.ts) brings it back under its own id while no series
 		// holds that id, so what names it by id (settings.rainStations, issue #553) finds it again.
 		`INSERT INTO time_series (id, project_id, kind, name, unit, start_date, "values", product, product_version, feed_id, feed_days,
@@ -62,7 +63,7 @@ export async function replaceSeries(
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", product = EXCLUDED.product,
 			product_version = EXCLUDED.product_version, updated_at = now(), feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days,
 			source = EXCLUDED.source, source_unit = EXCLUDED.source_unit, source_unit_factor = EXCLUDED.source_unit_factor,
-			hand_days = NULL
+			hand_days = NULL, feed_agera5_days = NULL, feed_power_days = NULL
 		 RETURNING ${META}`,
 		[
 			projectId,

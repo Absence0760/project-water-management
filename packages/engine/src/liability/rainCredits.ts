@@ -110,24 +110,25 @@ export const et0ProductsOf = (v: unknown): CreditedEt0Product[] => (Array.isArra
 
 /**
  * The days an `agera5_et0` feed wrote into the reference ET series a run read
- * (time_series.feed_days as inclusive ISO ranges, the days no person has
- * since edited), and where its copy's AgERA5 reached at its latest fetch
- * (last_meta.agera5Through): the feed takes AgERA5's value on every day its
- * copy holds and NASA POWER's only after it (backend feeds/fromMirrorEt0.ts).
- * `agera5Through` null: the copy held no AgERA5 (every day is POWER's);
- * undefined: not known (no fetch recorded since the feed's config changed),
- * so either may have written a day and both are credited.
+ * and still holds (time_series.feed_days, the days no person has since
+ * edited), as inclusive ISO ranges, by the product the feed recorded for each
+ * (time_series.feed_agera5_days / feed_power_days, backend
+ * 292_feed_et0_product_days): AgERA5's, NASA POWER's, and the days with no
+ * recorded product (written before the record existed), which either may
+ * have supplied, so both are credited for them.
  */
 export interface Et0FeedDays {
-	days: readonly (readonly [string, string])[];
-	agera5Through?: string | null;
+	agera5: readonly (readonly [string, string])[];
+	power: readonly (readonly [string, string])[];
+	unrecorded: readonly (readonly [string, string])[];
 }
 
 /**
- * Which reference ET products a run read (issue #604 R5-E): the feed's days
- * within the run days the series supplied (RunSummary.et0Daily first..last;
- * none when GR4J didn't read it), split at `agera5Through`. Pure ISO-date
- * comparisons, so this module keeps no imports.
+ * Which reference ET products a run read (issue #604 R5-E): the products of
+ * the feed's days within the run days the series supplied
+ * (RunSummary.et0Daily first..last; none when GR4J didn't read it), both for
+ * a day with no recorded product. Pure ISO-date comparisons, so this module
+ * keeps no imports.
  */
 export function et0ProductsRead(
 	feed: Et0FeedDays | null | undefined,
@@ -135,20 +136,10 @@ export function et0ProductsRead(
 ): CreditedEt0Product[] {
 	if (!feed || !info?.used || info.dailyDays <= 0 || !info.first || !info.last) return [];
 	const { first, last } = info;
-	const through = feed.agera5Through;
-	let agera5 = false;
-	let power = false;
-	for (const [lo, hi] of feed.days) {
-		const a = lo > first ? lo : first;
-		const b = hi < last ? hi : last;
-		if (a > b) continue;
-		if (through === undefined) agera5 = power = true;
-		else if (through === null) power = true;
-		else {
-			if (a <= through) agera5 = true;
-			if (b > through) power = true;
-		}
-	}
+	const read = (ranges: readonly (readonly [string, string])[]) => ranges.some(([lo, hi]) => lo <= last && hi >= first);
+	const unknown = read(feed.unrecorded);
+	const agera5 = unknown || read(feed.agera5);
+	const power = unknown || read(feed.power);
 	return ET0_PRODUCTS.filter((p) => (p === 'agera5_et0' ? agera5 : power));
 }
 
