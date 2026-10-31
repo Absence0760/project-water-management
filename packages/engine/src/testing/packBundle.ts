@@ -195,10 +195,13 @@ export function packBundleFixture(
 		observations?: boolean | EvidenceDamObservationsAny;
 		/** § 8 (evidence-23): Farm one gets a dam, and the report the future yield of the fixture's factors (or this result, a tampered one). */
 		future?: boolean | ((r: FutureYieldResult) => FutureYieldResult);
+		/** A second farm, "Other farm" (F2), beside Farm one: hidden from an applicant owning Farm one only. */
+		otherFarm?: boolean;
 	} = {}
 ): PackBundleInput {
 	const base = packFixtureInput();
 	if (opts.future) base.model.nodes = base.model.nodes.map((n) => (n.id === 'F1' ? { ...n, ...FUTURE_FIXTURE_DAM } : n));
+	if (opts.otherFarm) base.model.nodes = [...base.model.nodes, OTHER_FARM];
 	// Two CHIRPS series, the one read the shorter (engine ≥ 1.90.0, issue #561): its runs warn, and the warning reads input.seriesChoice.
 	if (opts.seriesChoice) {
 		base.series.rain_chirps_mm = { startDate: START, values: Array.from({ length: 30 }, () => 1) };
@@ -497,6 +500,9 @@ export function assessmentPackFixture(hash: SyncHash, opts: { background?: boole
 	};
 }
 
+/** A second farm beside Farm one (synthetic), hidden from an applicant who owns Farm one only. */
+const OTHER_FARM: NetworkNode = node({ id: 'F2', name: 'Other farm', downstreamNodeId: 'G', areaKm2: 10, sortOrder: 1 });
+
 /** The alternatives fixture's runs (synthetic): Farm one's maize at 450 000 m² and at 500 000 m² instead of the application's 600 000. */
 export const ALTERNATIVE_FIXTURE_AREAS = [450_000, 500_000] as const;
 
@@ -509,20 +515,28 @@ export const ALTERNATIVE_FIXTURE_AREAS = [450_000, 500_000] as const;
  * (alternativeSummaryCell). With `unassessed`, the last alternative's column
  * is not assessed (another baseline), so the bundle carries no run of it.
  */
-export function alternativesPackFixture(hash: SyncHash, opts: { count?: number; unassessed?: boolean } = {}): PackBundleInput {
-	const p = packBundleFixture(hash);
+export function alternativesPackFixture(hash: SyncHash, opts: { count?: number; unassessed?: boolean; applicant?: boolean } = {}): PackBundleInput {
+	const p = packBundleFixture(hash, { otherFarm: opts.applicant });
 	const base = packFixtureInput();
+	if (opts.applicant) base.model.nodes = [...base.model.nodes, OTHER_FARM];
+	// An applicant's (owning Farm one): its ops apply under the mask, which hides Other farm, so naming Farm one after it applies
+	// (Other farm becomes "Other farm (2)"); without the mask it is a duplicate name and wouldn't.
+	const mask = opts.applicant ? { mask: applicationMask(base, ['F1']) } : {};
 	const runs: PackBundleRun[] = [];
 	const listed: EvidenceAlternative[] = [];
 	ALTERNATIVE_FIXTURE_AREAS.slice(0, opts.count ?? 1).forEach((areaM2, i) => {
-		const ops: ScenarioOp[] = [{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2 }];
-		const input = applyScenario(base, ops).input;
+		const ops: ScenarioOp[] = [
+			{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2 },
+			...(opts.applicant ? [{ op: 'node.set' as const, nodeId: 'F1', field: 'name' as const, value: 'Other farm' }] : [])
+		];
+		const input = applyScenario(base, ops, mask).input;
 		const scenarioId = `00000000-0000-4000-8000-0000000000d${i + 1}`;
 		const run = storedRun(hash, `00000000-0000-4000-8000-0000000000b${i + 1}`, input, runModelChecked(structuredClone(input)), {
 			id: scenarioId,
 			baseRunId: p.baseline.runId,
 			ops,
-			opsSha256: hash(canonicalJson(ops))
+			opsSha256: hash(canonicalJson(ops)),
+			ownedNodeIds: ['F1']
 		});
 		const unassessed = opts.unassessed && i === (opts.count ?? 1) - 1;
 		if (!unassessed) runs.push(run);
@@ -556,6 +570,7 @@ export function alternativesPackFixture(hash: SyncHash, opts: { count?: number; 
 		{ id: 'applicantSupply', subject: null }
 	];
 	report.alternatives = listed;
+	if (opts.applicant) report.identity = { ...report.identity, application: { ...report.identity.application!, origin: 'applicant' } };
 	report.rows = subjects.map(({ id, subject }): EvidenceRow => {
 		const app = alternativeSummaryCell({ id, subject }, baseSummary, appSummary);
 		return {

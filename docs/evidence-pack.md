@@ -1613,7 +1613,7 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 | `reproduce:combined` | the assessment run again with this checkout's engine on the bundle's baseline input (engine `evidence/bundleAssessment.ts` `replayAssessment`, the job's steps: each member alone through `applyScenario` under an applicant's mask, all together through `combineScenarios`, `cumulativeImpact`) gives every row of the stored report but the dams', and its scenarios (skipped with `--no-run`) |
 | `reproduce:dams` | each dam the members touch, its firm yield on every run and its unit's assurance of supply, re-worked out (`touchedDams`, `damFirmYields`, `cumulativeDamRows`) gives the stored dam rows and `report.dams`; only when the stored report has them (skipped with `--no-run`) |
 | `reproduce:background` | the same on the background's input: the background, each member alone and all together on it give every row of the stored background table (skipped with `--no-run`) |
-| `alternative:<n>` | `bundle-3`, each alternative page 1 assesses: the bundle carries its run (a bundle that carries one the manifest doesn't assess fails `alternatives`); its run, engine, ops and their hash are the manifest's and the run's own record; it ran on the pack's baseline run; its input is the baseline's with its ops applied (settings, model and each series); its stored results give the digest `bundle.json` names; and every page-1 cell that reads only its run's summary and the baseline's (the Reserve per site, days below the EWR, the shortfall, the no-flow days, the outflow: engine `alternativeSummaryCell`, the value and the run's own change) is its stored results'. The cells that read more (the works rows, the applicant's and other users' supply, the registered use) and the bands (ensembles) rest on the re-run's digest. A `bundle-1` or `bundle-2` bundle adds no check |
+| `alternative:<n>` | `bundle-3`, each alternative page 1 assesses: the bundle carries its run (a bundle that carries one the manifest doesn't assess fails `alternatives`); its run, engine, ops and their hash are the manifest's and the run's own record; it ran on the pack's baseline run; its input is the baseline's with its ops applied (settings, model and each series), an applicant's under the mask its own units give it as its run applied them (engine `applicationMask` on the baseline's input and the units its run records; an alternative is the citing application's origin, which the manifest records), since an applicant's ops meet another unit's hidden data under its mask name; its stored results give the digest `bundle.json` names; and every page-1 cell that reads only its run's summary and the baseline's (the Reserve per site, days below the EWR, the shortfall, the no-flow days, the outflow: engine `alternativeSummaryCell`, the value and the run's own change) is its stored results'. The cells that read more (the works rows, the applicant's and other users' supply, the registered use) and the bands (ensembles) rest on the re-run's digest. A `bundle-1` or `bundle-2` bundle adds no check |
 | `reproduce:alternative:<n>` | re-running the alternative's input with this checkout's engine gives the results digest `bundle.json` names (skipped with `--no-run`) |
 | `reproduce:headline` | the pair re-derived from the bundle (the baseline input at `fullAllocation`, `scenario.json`'s ops on it) and re-run with this checkout's engine gives both recorded results digests, and the board built again over it is the manifest's (skipped with `--no-run`) |
 
@@ -1638,12 +1638,17 @@ whose combined row reads the assessment job's own assessment, with a dam and
 a background, re-runs it offline to every stored row; a tampered member op
 or background input fails its check; the bundle is refused once the
 assessment is gone); the alternatives: engine `bundle.test.ts` (clean, an
-unassessed one, a tampered op with and without its hash, a tampered model, a
-tampered cell, a stored output, an older bundle), `bundleParts.test.ts`,
+unassessed one, an applicant's alternative checked under its mask with a
+team reading as the control, a tampered op with and without its hash, a
+tampered model, a tampered cell, a stored output, an older bundle), `bundleParts.test.ts`,
 `reproduce-pack.test.ts`, `packs.db.test.ts` (a pack citing an alternative
-issued, its bundle reproduced offline and on the server; the bundle refused
+issued, its bundle reproduced offline and on the server, and an applicant's
+application citing an alternative whose op only applies under their mask,
+issued and reproduced the same way; the bundle refused
 to a viewer kept from volumes when only the alternative's run carries one)
-and `pack-reproduce-parts.db.test.ts` (two alternatives, a part each).
+and `pack-reproduce-parts.db.test.ts` (two alternatives, a part each); the
+pack page's note when only the bundle is withheld: e2e
+`evidence-pack-pdf.spec.ts`.
 
 **The combined row's assessment** (`bundle-3`, followups.md § Cumulative
 impact). § 4's combined row (evidence-11) reads a completed cumulative

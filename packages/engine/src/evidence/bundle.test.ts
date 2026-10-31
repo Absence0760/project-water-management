@@ -773,6 +773,19 @@ describe('the mitigation alternatives’ runs (bundle-3, evidence-26)', () => {
 		expect(ids(await checkPackBundle(built.bytes, { hash, rerun: false })).filter((x) => x.includes('alternative'))).toEqual(['alternative:1', 'alternative:2']);
 	});
 
+	it('an applicant’s alternative is checked under the mask its own units give it, as its run applied its ops (control: read as a team scenario’s, the same ops don’t apply)', async () => {
+		const input = alternativesPackFixture(hash, { applicant: true });
+		// The masked run: Farm one took the hidden farm's name, which became "Other farm (2)".
+		expect(input.alternatives![0]!.inputs.model.nodes.map((n) => n.name)).toEqual(['Gauge', 'Other farm', 'Other farm (2)']);
+		const r = await checkPackBundle((await buildPackBundle(input, hash)).bytes, { hash });
+		expect(failing(r)).toEqual([]);
+		const team = alternativesPackFixture(hash, { applicant: true });
+		team.manifest = { ...team.manifest, report: { ...team.manifest.report, identity: { ...team.manifest.report.identity, application: { ...team.manifest.report.identity.application!, origin: 'team' } } } };
+		const t = await checkPackBundle((await buildPackBundle(team, hash)).bytes, { hash, rerun: false });
+		expect(failing(t)).toEqual(['alternative:1']);
+		expect(detail(t, 'alternative:1')).toMatch(/its ops don't apply to the baseline \(op 2 \(node\.set\): duplicate hydrological unit name/);
+	});
+
 	it('carries no run of an alternative page 1 doesn’t assess, and refuses to build without one it does', async () => {
 		const input = alternativesPackFixture(hash, { count: 2, unassessed: true });
 		const built = await buildPackBundle(input, hash);
