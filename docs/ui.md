@@ -12434,8 +12434,19 @@ and on which run, for its members and the responsible authority.
   authority included); the API refuses farmers (`403`) and applicants, who
   read the notice in force on their own pages.
 - **Header:** the context line says what is in force ("In force: Restricted
-  · 25 %, since 4 Mar 2026 by Ann") or "Nothing published yet"; the action
-  **Publication** goes to the panel (`?tab=runs#res-publication`).
+  · 25 %, since 4 Mar 2026 by Ann") or "Nothing published yet"; the actions
+  are **Download CSV** (once there is a decision: `GET
+  …/restriction-log/export.csv`, the whole log in one file whatever pages
+  are loaded, for handing to the responsible authority; a plain link, so the
+  cookie goes with it) and **Publication**, which goes to the panel
+  (`?tab=runs#res-publication`).
+- **Print:** the page prints as a plain list in the light theme
+  (`printTheme.ts` on `beforeprint`): the app frame, the phone nav, the
+  header's buttons, How this page works, Assistant and Show older decisions
+  are left off; a line under the heading says when it was printed and how
+  many decisions, and, while older ones aren't loaded, that the CSV holds the
+  whole log. Each decision stays whole on one page, the level pills keep
+  their colours, and **Open the run** becomes "run 0b1f6c1e".
 - **The list** ("Restriction decisions", newest first, an `ol`): every
   publication and every notice change that sent the restriction or the next
   date. A change to the staff note alone isn't a restriction decision and

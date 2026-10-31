@@ -4,7 +4,7 @@ import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import type { RestrictionDecision } from '#lib/api/types.js';
 import RestrictionLogList from './RestrictionLogList.svelte';
-import { decisionBy, decisionFacts, decisionNotices, decisionTitle, inForceId, levelText, logContext, runHref } from './log';
+import { decisionBy, decisionFacts, decisionNotices, decisionTitle, inForceId, levelText, logContext, printedNote, runHref } from './log';
 
 const RUN = '0b1f6c1e-8d1c-4c43-9a55-3f0a7e7c2a11';
 const decision = (o: Partial<RestrictionDecision> = {}): RestrictionDecision => ({
@@ -123,5 +123,19 @@ describe('RestrictionLogList', () => {
 		expect(entries[2]).toContain(`run ${RUN.slice(0, 8)} no longer kept`);
 		expect(entries[2]).toContain('By a former member');
 		expect(entries[2]).toContain('Recorded before notices were kept in the log');
+	});
+});
+
+describe('the printed page', () => {
+	const at = new Date('2026-03-04T08:30:00Z');
+	it('says what the paper holds, and that the CSV holds the whole log while older decisions aren’t loaded', () => {
+		expect(printedNote(1, false, at)).toMatch(/^Printed .*2026.*: 1 decision, newest first\.$/);
+		expect(printedNote(50, true, at)).toMatch(/: 50 decisions, newest first\. Older decisions weren’t loaded: Download CSV holds the whole log\.$/);
+	});
+
+	it('names the run by its short id on paper, where the link can’t be followed', () => {
+		const html = render(RestrictionLogList, { props: { items: [decision({ runKept: true })] } }).body;
+		expect(html).toContain('class="screen-only');
+		expect(html).toMatch(/<span class="print-only[^"]*">run 0b1f6c1e<\/span>/);
 	});
 });

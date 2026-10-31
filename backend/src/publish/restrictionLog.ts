@@ -14,6 +14,7 @@
 import type { NoticeText, RestrictionLevel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
+import { csvRow } from '../export/csv.js';
 
 /** Most decisions per page of GET …/restriction-log. */
 export const RESTRICTION_LOG_PAGE_MAX = 100;
@@ -113,13 +114,8 @@ const TS = `to_char(e.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US
 // A uuid read from a subject, or NULL: a subject is jsonb, and a cast of anything else would abort the page.
 const subjectUuid = (key: string) => `CASE WHEN e.subject->>'${key}' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (e.subject->>'${key}')::uuid END`;
 
-/**
- * One page of the project's restriction decisions, newest first, as the
- * caller may read them (the caller's transaction: RLS shows the audit log to
- * viewers and above only). A notice change that sent only the note is left
- * out. `next` is the cursor of the following page, null on the last.
- */
-export async function restrictionLog(db: Db, projectId: string, q: z.infer<typeof RestrictionLogQuery>): Promise<{ items: RestrictionDecision[]; next: string | null }> {
+/** The decisions' rows, newest first, `limit` of them (null: every one), before the cursor. */
+async function decisionRows(db: Db, projectId: string, before: { ts: string; id: string } | null, limit: number | null): Promise<Row[]> {
 	const { rows } = await db.query<Row>(
 		`SELECT e.id, ${TS} AS ts, e.kind, e.actor_label AS actor, app_audit_subject(e.project_id, e.kind, e.subject) AS subject,
 			EXISTS (SELECT 1 FROM run_publication p WHERE p.project_id = e.project_id AND p.id = ${subjectUuid('publicationId')} AND p.superseded_at IS NULL) AS current,
@@ -131,10 +127,96 @@ export async function restrictionLog(db: Db, projectId: string, q: z.infer<typeo
 			AND ($2::timestamptz IS NULL OR (e.created_at, e.id) < ($2::timestamptz, $3::bigint))
 		 ORDER BY e.created_at DESC, e.id DESC
 		 LIMIT $4`,
-		[projectId, q.before?.ts ?? null, q.before?.id ?? null, q.limit + 1]
+		[projectId, before?.ts ?? null, before?.id ?? null, limit]
 	);
+	return rows;
+}
+
+/**
+ * One page of the project's restriction decisions, newest first, as the
+ * caller may read them (the caller's transaction: RLS shows the audit log to
+ * viewers and above only). A notice change that sent only the note is left
+ * out. `next` is the cursor of the following page, null on the last.
+ */
+export async function restrictionLog(db: Db, projectId: string, q: z.infer<typeof RestrictionLogQuery>): Promise<{ items: RestrictionDecision[]; next: string | null }> {
+	const rows = await decisionRows(db, projectId, q.before ?? null, q.limit + 1);
 	const more = rows.length > q.limit;
 	const page = rows.slice(0, q.limit);
 	const last = page.at(-1);
 	return { items: page.map(toDecision), next: more && last ? `${last.ts}|${last.id}` : null };
+}
+
+/** Most decisions one CSV export reads (a WUA publishing weekly makes ~50 a year); past it the export is refused, never cut short. */
+export const RESTRICTION_LOG_EXPORT_MAX = 20_000;
+
+/** Every restriction decision, newest first (the CSV export: the whole log, not a page), or null past RESTRICTION_LOG_EXPORT_MAX. */
+export async function restrictionLogAll(db: Db, projectId: string): Promise<RestrictionDecision[] | null> {
+	const rows = await decisionRows(db, projectId, null, RESTRICTION_LOG_EXPORT_MAX + 1);
+	return rows.length > RESTRICTION_LOG_EXPORT_MAX ? null : rows.map(toDecision);
+}
+
+/** The notice's language codes across the log: English first, then the rest in code order (one CSV column each). */
+export function noticeCodes(items: readonly RestrictionDecision[]): string[] {
+	const codes = new Set<string>();
+	for (const d of items) for (const k of Object.keys(d.restriction.notice ?? {})) codes.add(k);
+	return [...codes].sort((a, b) => (a === 'en' ? -1 : b === 'en' ? 1 : a.localeCompare(b)));
+}
+
+/**
+ * The restriction log as CSV lines (docs/api.md § Publication): one row per decision, newest first, as the page
+ * shows them, for handing to the responsible authority. `in_force` marks the newest decision of the current
+ * publication (the page's In force). The staff note is in it, as on the page (viewers and above only); never a
+ * unit's figures, only how many units a publication went to. Text cells are csvRow's (formula-looking text
+ * prefixed with an apostrophe).
+ */
+export function restrictionLogCsvLines(items: readonly RestrictionDecision[]): string[] {
+	const codes = noticeCodes(items);
+	const inForce = items.find((d) => d.current)?.id ?? null;
+	const yes = (b: boolean) => (b ? 'yes' : 'no');
+	return [
+		csvRow([
+			'decided_at_utc',
+			'decision',
+			'changed',
+			'by',
+			'automatic',
+			'level',
+			'restriction_pct',
+			'in_force',
+			...codes.map((c) => `notice_${c}`),
+			'notice_recorded',
+			'next_expected_on',
+			'season_from',
+			'season_to',
+			'data_until',
+			'hydrological_units',
+			'staff_note',
+			'run_id',
+			'run_kept',
+			'publication_id'
+		]),
+		...items.map((d) =>
+			csvRow([
+				d.at,
+				d.kind,
+				(d.fields ?? []).join(' | '),
+				d.by ?? '',
+				yes(d.auto),
+				d.restriction.level ?? '',
+				d.restriction.pct,
+				d.id === inForce ? 'yes' : 'no',
+				...codes.map((c) => d.restriction.notice?.[c as keyof NoticeText] ?? ''),
+				yes(d.restriction.notice !== null),
+				d.nextExpectedOn ?? '',
+				d.season?.from ?? '',
+				d.season?.to ?? '',
+				d.season?.dataUntil ?? '',
+				d.farms,
+				d.note ?? '',
+				d.runId ?? '',
+				yes(d.runKept),
+				d.publicationId ?? ''
+			])
+		)
+	];
 }

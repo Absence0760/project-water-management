@@ -205,6 +205,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'api.farm.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/farm/[projectId]/+page.svelte'] },
 	'api.scenarios.participationCsvUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/projects/[id]/scenarios/[sid]/participation/+page.svelte'] },
 	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },
+	'api.publication.logCsvUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/restrictions/RestrictionLogTab.svelte'] },
 	// data: URLs built in code, a synthetic CSV example with a `download` attribute (never user text, never HTML).
 	'download.href': {
 		why: 'PasteDialogFrame, from its two callers: GridPasteDialog `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed), and EwrHighFlowsEditor `data:text/csv;charset=utf-8,` + encodeURIComponent(its synthetic high-flows CSV)',
