@@ -42,6 +42,9 @@ describe('the matrix cells', () => {
 		expect(rowLabel(row())).toEqual({ measure: 'Days the EWR is not met', site: 'Outlet (Outlet gauge)' });
 		expect(rowLabel(row({ isOutlet: false, site: 'Weir', siteNodeId: 'g' }))).toEqual({ measure: 'Days the EWR is not met', site: 'Weir' });
 		expect(rowLabel(row({ metric: 'outlet_flow', site: null, isOutlet: false }))).toEqual({ measure: 'Mean flow at the outlet', site: 'Catchment' });
+		// A dam the applications touch: its own name, never "Outlet" or "Catchment".
+		expect(rowLabel(row({ metric: 'dam_firm_yield', site: 'Rooikloof', siteNodeId: 'r', isOutlet: false, unit: 'm³/year' }))).toEqual({ measure: 'Firm yield of the dam', site: 'Rooikloof' });
+		expect(rowLabel(row({ metric: 'dam_reliability', site: 'Rooikloof', siteNodeId: 'r', isOutlet: false, unit: 'fraction' }))).toEqual({ measure: 'Assurance of supply at the dam', site: 'Rooikloof' });
 	});
 
 	it('writes values and signed changes in their unit', () => {
@@ -53,6 +56,8 @@ describe('the matrix cells', () => {
 		expect(changeText(-1500, 'm³/day')).toBe('−1\u202f500 m³/day');
 		expect(changeText(0, 'months')).toBe('±0');
 		expect(changeText(-0.021, 'fraction')).toBe('−2.1 pts');
+		expect(valueText(250_000, 'm³/year')).toBe('250\u202f000 m³/year');
+		expect(changeText(-12_000, 'm³/year')).toBe('−12\u202f000 m³/year');
 	});
 
 	it('tones a change by whether a rise is worse', () => {
@@ -83,6 +88,12 @@ describe('assessmentCsv', () => {
 		expect(lines[1]).toBe('Days the EWR is not met,Outlet (Outlet gauge),days,10,12,13,18,2,3,5,8,3');
 		expect(lines[2]).toBe('Mean flow at the outlet,Catchment,m³/day,1000.5,12,13,18,2,3,5,8,');
 		expect(lines[3]).toBe('');
+	});
+
+	it('carries the dam rows (evidence-25 assessments) like any other row', () => {
+		const dam = row({ metric: 'dam_firm_yield', site: 'Rooikloof', siteNodeId: 'r', isOutlet: false, unit: 'm³/year', higherIsWorse: false, baseline: 365_250 });
+		const report: CumulativeReport = { scenarios: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], rows: [dam], warnings: [], dams: { nodeIds: ['r'], onVolumes: false } };
+		expect(assessmentCsv(report).split('\r\n')[1]).toBe('Firm yield of the dam,Rooikloof,m³/year,365250,12,13,18,2,3,5,8,3');
 	});
 
 	it('with questions, a blank line then each "Ask the assessors why" question and its answer (issue #523 G7)', () => {

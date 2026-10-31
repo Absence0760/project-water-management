@@ -4,8 +4,9 @@
 // so Back returns to the list), checks a pair that changes the same dam and
 // is shown the conflict with both changes side by side, then assesses a pair
 // that combines: the job runs (a scoped worker tick) and the matrix shows the
-// baseline, each application alone, all together and the interaction, with
-// a CSV. Axe in light and dark. Synthetic data only.
+// baseline, each application alone, all together and the interaction (the
+// dam they both touch with its firm yield and assurance of supply), with a
+// CSV. Axe in light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { openApplications, seedApplicantProject, submitApplication } from '../support/applications.ts';
 import { API_URL } from '../support/env.ts';
@@ -67,6 +68,11 @@ for (const colorScheme of ['light', 'dark'] as const) {
 		await expect(matrix.getByRole('columnheader')).toHaveText(['Measure', 'Site', 'Baseline', 'Raise the Upper dam alone', 'Bigger river pump alone', 'All together', 'Interaction']);
 		await expect(matrix.getByRole('rowheader', { name: 'Days the EWR is not met' }).first()).toBeVisible();
 		await expect(matrix.getByRole('rowheader', { name: 'Mean flow at the outlet' })).toBeVisible();
+		// Both change the Upper farm, which has a dam: its firm yield and assurance of supply; the untouched Lower farm dam has none.
+		for (const metric of ['dam_firm_yield', 'dam_reliability']) await expect(matrix.locator(`tr[data-metric="${metric}"]`).getByRole('cell').first()).toHaveText('Upper farm');
+		await expect(matrix.getByRole('rowheader', { name: 'Firm yield of the dam' })).toHaveCount(1);
+		await expect(matrix.locator('tr[data-metric="dam_firm_yield"]').getByRole('cell').nth(1)).toHaveText(/ m³\/year$/);
+		await expect(panel.getByTestId('assess-dams-note')).toBeVisible();
 		await expect(panel.getByLabel('Assessment')).toContainText('Dam and pump');
 		const download = page.waitForEvent('download');
 		await result.getByRole('button', { name: 'Download CSV' }).click();

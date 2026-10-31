@@ -4763,7 +4763,13 @@ submitted applications, which neither contributors nor viewers read.
   isOutlet, unit, higherIsWorse, baseline, singles[], combined,
   singleChanges[], sumOfSingles, combinedChange, interaction }`, a missing
   value `null` ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)
-  lists the measures).
+  lists the measures). For each dam the applications touch (at most
+  `floor(20 ÷ (applications + 2))`; the rest named in `warnings`), two
+  more rows with `siteNodeId` the dam's unit and `site` its name:
+  `dam_firm_yield` (`m³/year`) and `dam_reliability` (`fraction`, the
+  unit's annual assurance of supply), and `dams: { nodeIds, onVolumes }`
+  (`onVolumes`: a run capped use at, or scaled demand to, the registered
+  volumes). An assessment made before them has neither.
 
 ## Seasonal outlooks
 

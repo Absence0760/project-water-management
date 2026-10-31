@@ -22,7 +22,11 @@ export type CumulativeMetric =
 	/** Mean supplied to the baseline's farms and other water users together, m³/day. */
 	| 'existing_supplied'
 	/** Σ supplied ÷ Σ demand over the baseline's farms and other water users (0–1). */
-	| 'existing_reliability';
+	| 'existing_reliability'
+	/** A dam the applications touch: its firm yield, m³/year (network/yield.ts, the yield job's defaults; scenario/cumulativeYield.ts). */
+	| 'dam_firm_yield'
+	/** That dam's unit: water years its demand was met ÷ water years (annual assurance of supply, §2.11a; 0–1). */
+	| 'dam_reliability';
 
 export const CUMULATIVE_METRIC_LABEL: Record<CumulativeMetric, string> = {
 	ewr_days_not_met: 'Days the EWR is not met',
@@ -31,7 +35,9 @@ export const CUMULATIVE_METRIC_LABEL: Record<CumulativeMetric, string> = {
 	reserve_deficit: 'Reserve deficit',
 	outlet_flow: 'Mean flow at the outlet',
 	existing_supplied: 'Supplied to existing users',
-	existing_reliability: 'Existing users’ share of demand met'
+	existing_reliability: 'Existing users’ share of demand met',
+	dam_firm_yield: 'Firm yield of the dam',
+	dam_reliability: 'Assurance of supply at the dam'
 };
 
 export const CUMULATIVE_METRIC_UNIT: Record<CumulativeMetric, string> = {
@@ -41,7 +47,9 @@ export const CUMULATIVE_METRIC_UNIT: Record<CumulativeMetric, string> = {
 	reserve_deficit: 'm³',
 	outlet_flow: 'm³/day',
 	existing_supplied: 'm³/day',
-	existing_reliability: 'fraction'
+	existing_reliability: 'fraction',
+	dam_firm_yield: 'm³/year',
+	dam_reliability: 'fraction'
 };
 
 /** Whether a rise in the measure is worse for the river or its users. */
@@ -52,7 +60,9 @@ export const CUMULATIVE_HIGHER_IS_WORSE: Record<CumulativeMetric, boolean> = {
 	reserve_deficit: true,
 	outlet_flow: false,
 	existing_supplied: false,
-	existing_reliability: false
+	existing_reliability: false,
+	dam_firm_yield: false,
+	dam_reliability: false
 };
 
 /** One run's summary and window. */
@@ -100,6 +110,14 @@ export interface CumulativeReport {
 	 * counts then don't line up.
 	 */
 	warnings: string[];
+	/**
+	 * The dams the applications touch, whose rows (`dam_firm_yield`,
+	 * `dam_reliability`) the assessment job added (scenario/cumulativeYield.ts),
+	 * and whether any run it worked a yield out on capped use at, or scaled
+	 * demand to, the registered volumes (a viewer kept from them reads only
+	 * verdicts). Absent from an assessment made before them.
+	 */
+	dams?: { nodeIds: string[]; onVolumes: boolean };
 }
 
 type Getter = (s: RunSummary) => number | null;

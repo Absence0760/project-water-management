@@ -38,7 +38,7 @@ import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { allocationUnitsHidden, countsOthersYears, redactReportAllocations } from '../allocations/viewerUnits.js';
-import { authorisedVerdicts, boardVerdicts, reportVerdictsOnly } from '../allocations/verdictsOnly.js';
+import { authorisedVerdicts, boardVerdicts, combinedDamVerdicts, reportVerdictsOnly } from '../allocations/verdictsOnly.js';
 import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
@@ -561,7 +561,16 @@ export const packRoutes = new Hono<AuthEnv>()
 					manifest: scope
 						? { ...manifest, report: redactReportAllocations(manifest.report, scope.own) }
 						: (await allocationUnitsHidden(db, id, role))
-							? { ...manifest, report: { ...manifest.report, licenceImpact: boardVerdicts(manifest.report.licenceImpact), licenceImpactAuthorised: authorisedVerdicts(manifest.report.licenceImpactAuthorised) } }
+							? {
+									...manifest,
+									report: {
+										...manifest.report,
+										licenceImpact: boardVerdicts(manifest.report.licenceImpact),
+										licenceImpactAuthorised: authorisedVerdicts(manifest.report.licenceImpactAuthorised),
+										// A combined dam's yield on a run resting on the registered volumes: its direction only (evidence-25).
+										cumulative: combinedDamVerdicts(manifest.report.cumulative, false)
+									}
+								}
 							: manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,

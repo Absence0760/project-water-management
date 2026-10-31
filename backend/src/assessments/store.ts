@@ -6,9 +6,13 @@
 import { randomUUID } from 'node:crypto';
 import {
 	combineScenarios,
+	cumulativeDamRows,
 	cumulativeImpact,
+	damFirmYields,
 	ENGINE_VERSION,
+	resolveAllocationMode,
 	runModelChecked,
+	touchedDams,
 	type CombineScenario,
 	type CumulativeReport,
 	type ModelInput,
@@ -193,6 +197,15 @@ interface MemberRow {
 	ownedNodeIds: string[];
 }
 
+/** The dams the members' ops touch (engine touchedDams), on their combination; none when they don't combine. */
+function damsTouched(base: ModelInput, members: readonly MemberRow[]): ReturnType<typeof touchedDams> {
+	const together = combineScenarios(
+		base,
+		members.map((m) => combineEntry(base, { id: m.scenarioId ?? m.id, name: m.name, ops: m.ops, origin: m.origin, ownedNodeIds: m.ownedNodeIds }))
+	);
+	return together.input ? touchedDams(base, members, together.input) : { dams: [], left: [] };
+}
+
 /** The engine on one input: its output, or its own words (plain text, never DB text). */
 function run(input: ModelInput): { ok: true; out: ReturnType<typeof runModelChecked> } | { ok: false; message: string } {
 	try {
@@ -209,8 +222,10 @@ function run(input: ModelInput): { ok: true; out: ReturnType<typeof runModelChec
  * (combineScenarios, checked again: the base run is stored, so it can't have
  * changed, but the check is the rule), with the current engine for all of
  * them, so every column of the report is one engine's; then the cumulative
- * report. A member whose ops don't apply alone stores its problems and the
- * assessment is refused; an engine refusal fails it. `progress` is called
+ * report, and for each dam the applications touch (touchedDams, at most
+ * cumulativeYieldDamsMax) its firm yield on each run and its assurance of
+ * supply: two more rows per dam and `report.dams`. A member whose ops don't
+ * apply alone stores its problems and the assessment is refused; an engine refusal fails it. `progress` is called
  * after each run (0–100); a false answer (the lease was lost) stops it with
  * nothing stored. Returns false when there was nothing to do.
  */
@@ -228,7 +243,10 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 		 FROM assessment_member WHERE assessment_id = $1 ORDER BY position`,
 		[assessmentId]
 	);
-	const total = members.length + 2;
+	// The dams the applications touch get a firm yield on every run (scenario/cumulativeYield.ts): one more step per run.
+	// Known up front for the progress, from the combination (pure, no model run; applied again below as it always was).
+	const touched = damsTouched(base, members);
+	const total = (members.length + 2) * (touched.dams.length ? 2 : 1);
 	let done = 0;
 	const step = async () => {
 		if (!(await progress((100 * ++done) / total))) throw new LeaseLostError();
@@ -238,7 +256,7 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 
 	const baseline = run(base);
 	await step();
-	const singles: { id: string; name: string; summary: RunSummary; startDate: string; endDate: string }[] = [];
+	const singles: { id: string; name: string; summary: RunSummary; startDate: string; endDate: string; input: ModelInput }[] = [];
 	const memberProblems: string[] = [];
 	let failed = !baseline.ok ? [`the baseline: ${baseline.message}`] : [];
 	for (const m of members) {
@@ -257,7 +275,7 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 					r.out.startDate,
 					r.out.endDate
 				]);
-				singles.push({ id: entry.id, name: m.name, summary: r.out.summary, startDate: r.out.startDate, endDate: r.out.endDate });
+				singles.push({ id: entry.id, name: m.name, summary: r.out.summary, startDate: r.out.startDate, endDate: r.out.endDate, input: check.input });
 			} else {
 				await db.query(`UPDATE assessment_member SET status = 'failed', problems = $2 WHERE id = $1`, [m.id, JSON.stringify([r.message])]);
 				failed = [...failed, `"${m.name}" alone: ${r.message}`];
@@ -292,6 +310,28 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 		singles,
 		{ summary: together.out.summary, startDate: together.out.startDate, endDate: together.out.endDate }
 	);
+	if (touched.dams.length) {
+		// Yield and reliability per dam, on every run (followups.md § Cumulative impact): one firm-yield search per dam and run.
+		const { dams, left } = touched;
+		const yields = async (input: ModelInput, summary: RunSummary, what: string) => {
+			const y = damFirmYields(input, dams, what);
+			report.warnings.push(...y.warnings);
+			await step();
+			return { summary, yields: y.yields };
+		};
+		const b = await yields(base, baseline.out.summary, 'The baseline');
+		const one = [];
+		for (const s of singles) one.push(await yields(s.input, s.summary, `"${s.name}" alone`));
+		const c = await yields(combined.input, together.out.summary, 'All together');
+		report.rows.push(...cumulativeDamRows(dams, b, one, c));
+		if (left.length)
+			report.warnings.push(
+				`The applications touch ${dams.length + left.length} dams; with ${members.length} applications an assessment works out a firm yield for ${dams.length} of them (by name), so ${left.map((d) => `"${d.name}"`).join(', ')} ${left.length === 1 ? 'has' : 'have'} no yield rows: run its yield from the Yield panel.`
+			);
+		// A run that caps use at, or scales demand to, the registered volumes: its yields rest on them (#523 I).
+		const capped = [base, ...singles.map((s) => s.input), combined.input].some((i) => ['cap', 'fullAllocation'].includes(resolveAllocationMode(i.settings.allocationMode, [])));
+		report.dams = { nodeIds: dams.map((d) => d.nodeId), onVolumes: capped };
+	}
 	await db.query(
 		`UPDATE assessment SET status = 'complete', report = $2, combined_summary = $3, start_date = $4, end_date = $5, engine_version = $6 WHERE id = $1`,
 		[assessmentId, JSON.stringify(report), JSON.stringify(together.out.summary), together.out.startDate, together.out.endDate, ENGINE_VERSION]

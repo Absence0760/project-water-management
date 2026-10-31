@@ -177,6 +177,23 @@ describe('redactReportAllocations (issue #523 G1)', () => {
 		// Baseline evidence: no application summary.
 		expect(redactReportAllocations({ ...report, summaries: { ...report.summaries, application: null } }).summaries.application).toBeNull();
 	});
+
+	it('cuts § 4’s combined dam whose yields rest on the registered volumes to its direction, on compare-only runs too; the other dam stays (evidence-25)', () => {
+		const m = { baseline: 50_000, combined: 40_000, change: -10_000, sumOfSingles: -10_000, interaction: 0 };
+		const dam = (nodeId: string, onVolumes: boolean) => ({ nodeId, name: nodeId, firmYield: m, reliability: m, verdict: { firmYield: 'lower', reliability: 'lower' }, onVolumes });
+		const report = {
+			version: 'evidence-25',
+			cumulative: { combined: { notAssessed: null, dams: [dam('capped', true), dam('plain', false)] } },
+			appendix: { baselineInputs: null },
+			summaries: { baseline: null, application: null }
+		};
+		const out = redactReportAllocations(report as never) as unknown as typeof report;
+		expect(out.cumulative.combined.dams).toEqual([
+			{ nodeId: 'capped', name: 'capped', verdict: { firmYield: 'lower', reliability: 'lower' }, onVolumes: true, firmYield: null, reliability: null, withheld: true },
+			dam('plain', false)
+		]);
+		expect(report.cumulative.combined.dams[0]!.firmYield).toBe(m);
+	});
 });
 
 describe('§ 5 for a viewer kept from each volume (#523 K/L/M)', () => {

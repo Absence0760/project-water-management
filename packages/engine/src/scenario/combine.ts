@@ -408,3 +408,29 @@ export function combineScenarios(base: ModelInput, scenarios: readonly CombineSc
 	});
 	return { input: problems.length ? null : cur, conflicts, problems, renamed, reIds };
 }
+
+/**
+ * The nodes a scenario's ops name, read as scenarioConflicts reads them (a
+ * node an op writes, adds, removes or depends on, the units a demand scaling
+ * or a planting reaches, a transfer's, patch's or borehole's ends), in first
+ * mention order: the dams a cumulative assessment works out a yield for
+ * (scenario/cumulativeYield.ts). Ids as the ops give them.
+ */
+export function scenarioNodeIds(base: ModelInput, ops: readonly ScenarioOp[]): string[] {
+	const out: string[] = [];
+	const add = (id: string) => {
+		if (id && id !== '*' && !out.includes(id)) out.push(id);
+	};
+	const read = (entity: string) => {
+		const [kind, rest = ''] = [entity.slice(0, entity.indexOf(':')), entity.slice(entity.indexOf(':') + 1)];
+		if (kind === 'node' || kind === 'demand') add(rest);
+		else if (kind === 'cropArea') add(rest.split('|')[0]!);
+	};
+	ops.forEach((_, i) => {
+		const t = touches(base.model, ops, i);
+		for (const w of t.writes) read(w.entity);
+		for (const r of t.removes) read(r);
+		for (const u of t.uses) read(u);
+	});
+	return out;
+}

@@ -287,7 +287,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-24');
+		expect(manifest.report.version).toBe('evidence-25');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -1807,7 +1807,7 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 		const [row] = await asOwner('SELECT manifest, manifest_sha256 FROM evidence_pack WHERE id = $1', [p.id]);
 		const manifest = row!.manifest as PackManifest;
 		const obs = manifest.report.damObservations as EvidenceDamObservations;
-		expect(manifest.report.version).toBe('evidence-24');
+		expect(manifest.report.version).toBe('evidence-25');
 		expect(obs).toMatchObject({ version: 'dam-obs-2', startDate: manifest.report.identity.baseline.startDate, endDate: manifest.report.identity.baseline.endDate });
 		expect(obs.sources.map((x) => [x.source, x.citation])).toEqual([
 			['s2', 'Contains modified Copernicus Sentinel data 2019, processed by Digital Earth Africa'],
