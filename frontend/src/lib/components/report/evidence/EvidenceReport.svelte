@@ -166,6 +166,12 @@
 	const combinedStatus = (o: NonNullable<EvidenceReport['cumulative']['combined']>['applications'][number]) =>
 		o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome ?? '–'}` : (o.status ?? '–');
 	const measureText = (v: number | null | undefined, unit: string) => (v === null || v === undefined ? '–' : `${signed(v, 0)} ${unit}`);
+	// evidence-25: § 4's dams together (a firm yield in m³/year, an assurance of supply as a share), or a direction alone.
+	const damYield = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${fmtNum(v, 0)} m³/year`);
+	const damYieldChange = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${signed(v, 0)} m³/year`);
+	const damShare = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${fmtNum(v * 100, 0)} %`);
+	const damShareChange = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${signed(v * 100, 0)} pts`);
+	const damVerdict = (v: 'lower' | 'unchanged' | 'higher' | null) => (v === null ? '–' : v === 'unchanged' ? 'Unchanged' : v === 'lower' ? 'Lower' : 'Higher');
 	const use = $derived(useRows(al));
 	/** Page 1's row says why nothing is judged when every year is a part year. */
 	const useJudged = $derived(report.rows.find((r) => r.id === 'registeredUse')?.notAssessed ?? null);
@@ -631,6 +637,49 @@
 								From the cumulative assessment “{cb.assessment.name}”, made {fmtDate(cb.assessment.createdAt)}{cb.assessment.createdBy ? ` by ${cb.assessment.createdBy}` : ''}{cb.assessment.engineVersion
 									? `, engine ${cb.assessment.engineVersion}`
 									: ''}: the baseline, each application alone and all together, run on one engine, so these changes may differ from the stored runs’ above.
+							</p>
+						{/if}
+						{#if cb.dams?.length}
+							<!-- evidence-25: each dam the applications touch, from the same assessment; directions only where a run rested on the registered volumes and this reader is kept from them. -->
+							<div class="table-wrap">
+								<table class="data compact" data-testid="evidence-combined-dams">
+									<caption class="visually-hidden">Each dam the applications touch, on the baseline and with every application together</caption>
+									<thead>
+										<tr>
+											<th scope="col">Dam</th>
+											<th scope="col" class="num">Firm yield, baseline</th>
+											<th scope="col" class="num">Together, change</th>
+											<th scope="col" class="num">Interaction</th>
+											<th scope="col" class="num">Assurance of supply, baseline</th>
+											<th scope="col" class="num">Together, change</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each cb.dams as d (d.nodeId)}
+											<tr>
+												<th scope="row">{d.name}</th>
+												{#if d.withheld}
+													<td class="num">–</td>
+													<td class="num">{damVerdict(d.verdict.firmYield)}</td>
+													<td class="num">–</td>
+													<td class="num">–</td>
+													<td class="num">{damVerdict(d.verdict.reliability)}</td>
+												{:else}
+													<td class="num">{damYield(d.firmYield?.baseline)}</td>
+													<td class="num">{damYieldChange(d.firmYield?.change)}</td>
+													<td class="num">{damYieldChange(d.firmYield?.interaction)}</td>
+													<td class="num">{damShare(d.reliability?.baseline)}</td>
+													<td class="num">{damShareChange(d.reliability?.change)}</td>
+												{/if}
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+							<p class="small" data-testid="evidence-combined-dams-note">
+								Firm yield: the largest steady draft each dam supplies on every day of the record, worked out on the baseline, each application alone
+								and all together (a constant draft, as the Yield panel’s default). Assurance of supply: the share of water years its unit’s demand was
+								met.{#if cb.dams.some((d) => d.withheld)} Where a run capped use at, or scaled demand to, the registered volumes, only the direction is given: the figures rest on volumes this reader isn’t shown.{/if}
 							</p>
 						{/if}
 						{#each cb.warnings as w (w)}<p class="na">{w}</p>{/each}

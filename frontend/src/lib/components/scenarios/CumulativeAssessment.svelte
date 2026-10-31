@@ -247,6 +247,13 @@
 						<strong>Interaction</strong> is the change with every application together, less the changes each makes alone added up. Zero means
 						their effects simply add; a change shown as worse means together they do more harm than their separate effects suggest.
 					</p>
+					{#if report.dams?.nodeIds.length}
+						<p class="small" data-testid="assess-dams-note">
+							For each dam the applications touch: its <strong>firm yield</strong>, the largest steady draft it supplies on every day of the record
+							(as the Yield panel works it out, constant over the year), and the <strong>assurance of supply</strong> of its unit, the share of water
+							years whose demand it met. “–” where a run has no such dam or no whole water year.
+						</p>
+					{/if}
 					<div class="table-wrap">
 						<table class="data matrix">
 							<caption class="visually-hidden">Each measure on the baseline, each application alone, all together, and the interaction</caption>
