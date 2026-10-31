@@ -31,7 +31,9 @@ export const PackReproducePayload = z.object({ packId: z.string().uuid() }).stri
 
 /**
  * Whether a check re-runs the model with this engine: each run and the
- * headline pair (`reproduce:<run>`, `reproduce:headline`), and § 8's future
+ * headline pair (`reproduce:<run>`, `reproduce:headline`), § 4's combined
+ * row's assessment (`reproduce:combined`, `reproduce:dams`,
+ * `reproduce:background`, bundle-3), and § 8's future
  * yield, every pair run again from the frozen factors (`climate:delta`,
  * evidence-23). On another engine than the runs' these are expected to differ.
  */

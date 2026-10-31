@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildPackBundle } from '../../packages/engine/src/evidence/bundle';
 import { packManifestText } from '../../packages/engine/src/evidence/pack';
-import { fixtureObservations, fixtureObservationsV1, headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
+import { assessmentPackFixture, fixtureObservations, fixtureObservationsV1, headlinePackFixture, packBundleFixture } from '../../packages/engine/src/testing/packBundle';
 import { canonicalJson } from '../../packages/engine/src/manifest';
 import { zip, ZipArchive } from '../../packages/engine/src/zip';
 import { main, parseArgs } from './reproduce-pack';
@@ -198,6 +198,49 @@ describe('reproduce:pack', () => {
 			expect(out).toMatch(/ok\s+headline\s+headline not included \(older pack\)/);
 			expect(out).toContain('Note: headline not included (older pack)');
 			expect(out).toContain('Reproduced: every file matches, and each run re-runs to the same results.');
+		});
+	});
+
+	describe('§ 4’s combined row and its cumulative assessment (bundle-3)', () => {
+		it('re-runs the assessment, its dam rows and its background: exit 0, each its own check, the verdict says so', async () => {
+			await writeFile(join(dir, 'combined.zip'), (await buildPackBundle(assessmentPackFixture(hash, { background: true }), hash)).bytes);
+			const { code, out } = await run(['combined.zip']);
+			expect(code, out).toBe(0);
+			for (const id of ['assessment', 'inputs:background', 'reproduce:combined', 'reproduce:dams', 'reproduce:background']) expect(out).toMatch(new RegExp(`ok\\s+${id}\\s`));
+			expect(out).toContain('and so does the cumulative assessment behind § 4’s combined row.');
+		});
+
+		it('a member op changed (its hash fixed): exit 1, reproduce:combined named', async () => {
+			const input = assessmentPackFixture(hash);
+			const m = input.assessment!.members[1]!;
+			m.ops = [{ op: 'cropArea.set', nodeId: 'F2', cropId: 'c', areaM2: 900_000 }];
+			m.opsSha256 = hash(canonicalJson(m.ops));
+			await writeFile(join(dir, 'combined-bad.zip'), (await buildPackBundle(input, hash)).bytes);
+			const { code, out } = await run(['combined-bad.zip']);
+			expect(code).toBe(1);
+			expect(out).toMatch(/FAIL\s+reproduce:combined\s+re-run with engine .* differs/);
+			expect(out).toContain('NOT reproduced: 1 check failed.');
+		});
+
+		it('an older bundle (bundle-2) of such a pack passes as it did, with the note “combined row not included (older bundle)”', async () => {
+			const built = await buildPackBundle(assessmentPackFixture(hash), hash);
+			const archive = await ZipArchive.open(built.bytes);
+			const entries = [];
+			for (const name of archive.names) {
+				if (name.startsWith('assessment/')) continue;
+				const data = new Uint8Array(await archive.read(name));
+				if (name !== 'bundle.json') entries.push({ name, data });
+				else {
+					const { assessment: _a, files, ...index } = JSON.parse(new TextDecoder().decode(data));
+					const kept = Object.fromEntries(Object.entries(files as Record<string, string>).filter(([n]) => !n.startsWith('assessment/')));
+					entries.push({ name, data: new TextEncoder().encode(canonicalJson({ ...index, files: kept, version: 'bundle-2' })) });
+				}
+			}
+			await writeFile(join(dir, 'combined-older.zip'), await zip(entries));
+			const { code, out } = await run(['combined-older.zip']);
+			expect(code, out).toBe(0);
+			expect(out).toMatch(/ok\s+assessment\s+combined row not included \(older bundle\)/);
+			expect(out).toContain('Note: combined row not included (older bundle)');
 		});
 	});
 
