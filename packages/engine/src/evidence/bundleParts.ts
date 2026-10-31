@@ -52,8 +52,7 @@ export interface BundlePartResult {
 
 type Opts = Omit<CheckPackBundleOptions, 'rerun' | 'parts' | 'onAssessment'>;
 
-/** The checks each part adds (and only it). */
-export const BUNDLE_PART_CHECKS: Record<BundlePartKey, readonly string[]> = {
+const FIXED_PART_CHECKS: Record<Exclude<BundlePartKey, `alternative:${number}`>, readonly string[]> = {
 	'run:baseline': ['reproduce:baseline'],
 	'run:application': ['reproduce:application'],
 	headline: ['reproduce:headline'],
@@ -61,13 +60,18 @@ export const BUNDLE_PART_CHECKS: Record<BundlePartKey, readonly string[]> = {
 	combined: ['reproduce:combined', 'reproduce:dams'],
 	background: ['reproduce:background']
 };
+const isAlternativePart = (k: BundlePartKey): k is `alternative:${number}` => k.startsWith('alternative:');
+
+/** The checks each part adds (and only it): an alternative's re-run is `reproduce:alternative:<n>`. */
+export const bundlePartChecks = (k: BundlePartKey): readonly string[] => (isAlternativePart(k) ? [`reproduce:${k}`] : FIXED_PART_CHECKS[k]);
 
 /** The check a part reports under when it couldn't run at all. */
-export const bundlePartCheckId = (p: BundleRerunPart): string => (p.kind === 'dam' ? 'reproduce:dams' : BUNDLE_PART_CHECKS[p.kind][0]!);
+export const bundlePartCheckId = (p: BundleRerunPart): string => (p.kind === 'dam' ? 'reproduce:dams' : bundlePartChecks(p.kind)[0]!);
 
 /** A part's name, for a message and the record's lines. */
 export function bundlePartLabel(p: BundleRerunPart): string {
 	if (p.kind === 'dam') return `the firm yield of "${p.name}" (${p.label})`;
+	if (isAlternativePart(p.kind)) return `the run of alternative ${p.kind.slice('alternative:'.length)}`;
 	return { 'run:baseline': 'the baseline run', 'run:application': 'the application run', headline: 'the headline pair', climate: '§ 8’s pairs', combined: 'the combined row’s assessment', background: 'its background at full allocation' }[p.kind];
 }
 
@@ -84,6 +88,8 @@ export async function planPackBundleReruns(bytes: Uint8Array<ArrayBuffer>, opts:
 	const has = (id: string) => result.checks.some((c) => c.id === id);
 	const parts: BundleRerunPart[] = [];
 	for (const r of ['baseline', 'application'] as const) if (has(`results:${r}`)) parts.push({ kind: `run:${r}` });
+	// Each alternative page 1 assesses (bundle-3, evidence-26): its own re-run.
+	for (const c of result.checks) if (/^alternative:\d+$/.test(c.id)) parts.push({ kind: c.id as `alternative:${number}` });
 	if (result.headline === 'checked') parts.push({ kind: 'headline' });
 	if (result.combined === 'checked' && ctx) {
 		parts.push({ kind: 'combined' });
@@ -127,7 +133,7 @@ export async function rerunPackBundlePart(bytes: Uint8Array<ArrayBuffer>, part: 
 	const notRun = (why: string): BundlePartResult => ({ checks: [{ id: bundlePartCheckId(part), ok: false, detail: `not re-run: ${why}` }] });
 	if (part.kind !== 'dam') {
 		const r = await checkPackBundle(bytes, { ...opts, rerun: true, parts: [part.kind] });
-		const ids = BUNDLE_PART_CHECKS[part.kind];
+		const ids = bundlePartChecks(part.kind);
 		const checks = r.checks.filter((c) => ids.includes(c.id));
 		return checks.length ? { checks } : notRun(`the bundle failed a check before ${bundlePartLabel(part)} (${r.checks.filter((c) => !c.ok).map((c) => c.id).join(', ') || 'none ran'})`);
 	}
@@ -175,6 +181,9 @@ const ORDER = [
 	'climate:delta'
 ];
 const rank = (id: string) => {
+	// An alternative's checks come after the runs' re-runs, each alternative's check then its re-run (checkPackBundle's order).
+	const alt = /^(reproduce:)?alternative:(\d+)$/.exec(id);
+	if (alt) return ORDER.indexOf('reproduce:application') + 0.5 + Number(alt[2]) / 1000 + (alt[1] ? 1 / 4000 : 0);
 	const i = ORDER.indexOf(id);
 	return i < 0 ? ORDER.length : i;
 };

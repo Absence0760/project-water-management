@@ -9,7 +9,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { canonicalJson } from '../manifest';
-import { assessmentPackFixture, headlinePackFixture, packBundleFixture } from '../testing/packBundle';
+import { alternativesPackFixture, assessmentPackFixture, headlinePackFixture, packBundleFixture } from '../testing/packBundle';
 import { buildPackBundle, checkPackBundle, type PackBundleInput } from './bundle';
 import { foldPackBundleReruns, planPackBundleReruns, rerunPackBundlePart, type BundleRerunPart } from './bundleParts';
 
@@ -81,5 +81,13 @@ describe('many dams', () => {
 		expect(folded.ok).toBe(true);
 		expect(shape(folded)).toEqual(shape(await checkPackBundle(bytes, { hash })));
 		expect(folded.checks.find((c) => c.id === 'reproduce:dams')!.detail).toMatch(/24 searches, each its own job\) and assurance of supply of each of the 6 dams/);
+	});
+});
+
+describe('the alternatives in parts', () => {
+	it('one part per assessed alternative; folded, the full re-run’s checks word for word', async () => {
+		const { plan, folded, bytes } = await inParts(alternativesPackFixture(hash, { count: 2 }));
+		expect(plan.parts.map((p) => p.kind)).toEqual(['run:baseline', 'run:application', 'alternative:1', 'alternative:2']);
+		expect(folded.checks).toEqual((await checkPackBundle(bytes, { hash })).checks);
 	});
 });

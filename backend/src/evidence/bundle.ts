@@ -15,6 +15,7 @@
 // pack_reproduce job re-run that row too. An assessment is an editor's (145),
 // as the issuer is.
 import {
+	assessedAlternatives,
 	buildPackBundle,
 	checkPackBundle,
 	citedAssessment,
@@ -98,13 +99,22 @@ export async function loadBundleAssessment(db: Db, pack: { baselineRunId: string
 	return { id: cited.id, name: a.name, engineVersion: a.engineVersion, baseRunId: a.baseRunId, backgroundRunId: a.backgroundRunId, members, report: a.report, background };
 }
 
-/** What buildPackBundle needs for a pack: its stored manifest, both runs, and the assessment its combined row cites. */
+/** The runs of the alternatives page 1 assesses, one at a time on the transaction's client. */
+async function alternativeRuns(db: Db, manifest: PackManifest): Promise<PackBundleRun[]> {
+	const out: PackBundleRun[] = [];
+	for (const a of assessedAlternatives(manifest)) out.push(await loadBundleRun(db, a.runId));
+	return out;
+}
+
+/** What buildPackBundle needs for a pack: its stored manifest, both runs, the assessment its combined row cites, and the alternatives' runs. */
 export async function loadPackBundleInput(db: Db, pack: { baselineRunId: string; scenarioRunId: string | null }, manifest: PackManifest): Promise<PackBundleInput> {
 	return {
 		manifest,
 		baseline: await loadBundleRun(db, pack.baselineRunId),
 		application: pack.scenarioRunId ? await loadBundleRun(db, pack.scenarioRunId) : null,
-		assessment: await loadBundleAssessment(db, pack, manifest)
+		assessment: await loadBundleAssessment(db, pack, manifest),
+		// The alternatives page 1 assesses (bundle-3, evidence-26), each a run of its own, in the manifest's order.
+		alternatives: await alternativeRuns(db, manifest)
 	};
 }
 
