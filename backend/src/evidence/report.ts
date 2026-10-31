@@ -34,7 +34,8 @@ import {
 	type ResolvedEnsembleOptions,
 	type RunInputsSnapshot,
 	type RunSummary,
-	type ScenarioOp
+	type ScenarioOp,
+	type WulaReference
 } from '@water-management/engine';
 import { Hono } from 'hono';
 import { createHash } from 'node:crypto';
@@ -579,8 +580,10 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 			status: string;
 			origin: ScenarioOrigin;
 			ownerName: string | null;
+			wula: WulaReference;
 		}>(
-			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, s.origin, u.display_name AS "ownerName"
+			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, s.origin, u.display_name AS "ownerName",
+			        jsonb_build_object('number', s.wula_number, 'works', s.wula_works) AS wula
 			 FROM scenario s LEFT JOIN app_user u ON u.id = s.owner_user_id
 			 WHERE s.project_id = $1 AND s.id = $2`,
 			[projectId, recorded.id]
@@ -595,6 +598,8 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 				description: meta?.description ?? '',
 				// Appendix C's fixed prompts (129), as the scenario holds them now: a deleted scenario answered none.
 				prompts: { purposeAndNeed: meta?.purposeAndNeed ?? '', mitigation: meta?.mitigation ?? '', monitoring: meta?.monitoring ?? '' },
+				// The WULA it models (294, evidence-25), as the scenario holds it now (frozen once submitted): a deleted scenario recorded none.
+				wula: meta?.wula ?? { number: null, works: [] },
 				status: meta?.status ?? null,
 				ownerName: meta?.ownerName ?? null,
 				baseRunId: recorded.baseRunId,

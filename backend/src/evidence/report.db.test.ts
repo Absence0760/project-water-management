@@ -129,6 +129,22 @@ describe('GET …/runs/:runId/evidence-report', () => {
 		expect((await report(owner, 'not-a-uuid')).status).toBe(404);
 	});
 
+	it('prints the scenario’s WULA reference on page 1 against the run’s recorded ops (evidence-25, 294); none recorded on a team scenario, none printed', async () => {
+		expect(((await report(viewer, appRun)).body.report as EvidenceReport).identity.application!.wula).toBeNull();
+		const [{ sid }] = await asOwner('SELECT scenario_id AS sid FROM model_run WHERE id = $1', [appRun]);
+		const wula = { number: 'WU/2026/0007', works: [{ ref: 'W1', text: 'A 500 000 m³ dam on Upper' }] };
+		expect((await owner.call('PATCH', `/projects/${projectId}/scenarios/${sid}`, { wulaNumber: wula.number, wulaWorks: wula.works })).status).toBe(200);
+		try {
+			const r = (await report(viewer, appRun)).body.report as EvidenceReport;
+			// The run's dam op names no works: A.2's tie reads the ops the run recorded, not today's.
+			expect(r.identity.application!.wula).toEqual({ number: wula.number, refs: ['W1'], untiedProposals: [0], unknownRefs: [], unmodelled: ['W1'] });
+			expect(r.appendix.wulaWorks).toEqual(wula.works);
+			expect(r.questions.some((q) => q.startsWith('1 proposal models none of the works the WULA applies for (A.2)'))).toBe(true);
+		} finally {
+			expect((await owner.call('PATCH', `/projects/${projectId}/scenarios/${sid}`, { wulaNumber: null, wulaWorks: [] })).status).toBe(200);
+		}
+	});
+
 	it('refuses a contributor and a farmer (403: members below viewer), for the application and the baseline', async () => {
 		for (const u of [contributor, farmer])
 			for (const runId of [appRun, baseRun]) {
@@ -235,7 +251,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.allocations.notAssessed).toBeNull();
 		// Baseline evidence has no applicant: Upper isn't the applicant's, and one unit is too few for a total, so § 5 names no unit.
 		expect(r.allocations.units).toEqual([]);
@@ -446,7 +462,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([

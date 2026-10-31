@@ -279,7 +279,7 @@ describe("the assessors' words on a submitted application", () => {
 		const sid = res.body.scenario.id;
 		expect((await applicant.call('POST', `${P()}/scenarios/${sid}/submit`)).status).toBe(200);
 		const mine = await applicant.call('GET', `${P()}/scenarios/${sid}`);
-		expect(mine.body.check).toEqual({ applied: expect.any(Array), problems: [], classified: expect.any(Array), maskedRules: [], baseEwrRules: [] });
+		expect(mine.body.check).toEqual({ applied: expect.any(Array), problems: [], classified: expect.any(Array), maskedRules: [], baseEwrRules: [], wulaWarnings: expect.any(Array) });
 		const theirs = await assessor.call('GET', `${P()}/scenarios/${sid}`);
 		expect(theirs.body.check).toMatchObject({ problems: [], maskedRules: [], assessorProblems: [], renamed: [], reIds: [] });
 	});

@@ -4,7 +4,18 @@
 // this wraps it in zod and tightens every id to a UUID, because the rows a
 // scenario run writes (run_series.node_id) are uuid columns.
 import { createHash } from 'node:crypto';
-import { APPLICANT_PROMPT_MAX, canonicalJson, validateScenarioOps, type ScenarioOp } from '@water-management/engine';
+import {
+	APPLICANT_PROMPT_MAX,
+	canonicalJson,
+	hasNameControlChars,
+	NAME_CONTROL_MESSAGE,
+	validateScenarioOps,
+	WULA_NUMBER_MAX,
+	WULA_WORK_REF_MAX,
+	WULA_WORK_TEXT_MAX,
+	WULA_WORKS_MAX,
+	type ScenarioOp
+} from '@water-management/engine';
 import { z } from 'zod';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -189,6 +200,34 @@ export const objectionClosingDate = z
 	.nullable();
 
 /**
+ * The water-use licence application the scenario models (294_wula_reference): its number ('' or null clears) and
+ * the works as applied for, each a short ref (what an op's `works` tag names; unique in the list) and the works in
+ * words. Whoever may change the scenario sets them, while it is a draft (scenario_wula_frozen).
+ */
+export const wulaNumber = z
+	.string()
+	.trim()
+	.max(WULA_NUMBER_MAX)
+	.refine((s) => !hasNameControlChars(s), NAME_CONTROL_MESSAGE)
+	.nullable()
+	.transform((s) => (s ? s : null));
+export const wulaWorks = z
+	.array(
+		z
+			.object({
+				ref: z.string().trim().min(1).max(WULA_WORK_REF_MAX).refine((s) => !hasNameControlChars(s), NAME_CONTROL_MESSAGE),
+				text: z
+					.string()
+					.transform((s) => s.replace(/\r\n?/g, '\n').trim())
+					.pipe(z.string().min(1, 'say what the works are').max(WULA_WORK_TEXT_MAX))
+					.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters')
+			})
+			.strict()
+	)
+	.max(WULA_WORKS_MAX)
+	.refine((w) => new Set(w.map((x) => x.ref)).size === w.length, 'each works needs its own reference');
+
+/**
  * PATCH: `ops` replaces the whole list. Ops, owned nodes and the base change only while the scenario is a draft.
  * `ops` is read here as it came; the route checks it against the scenario's stored ops (parsePatchOps), which a
  * list may keep names from (issue #385).
@@ -203,6 +242,9 @@ export const PatchScenarioBody = z
 		/** An application's only, while it is a draft (scenario_objection_frozen). */
 		objectionAddress: objectionAddress.optional(),
 		objectionClosingDate: objectionClosingDate.optional(),
+		/** Any scenario's, while it is a draft (scenario_wula_frozen). */
+		wulaNumber: wulaNumber.optional(),
+		wulaWorks: wulaWorks.optional(),
 		ops: z.unknown().optional(),
 		ownedNodeIds: ownedNodeIds.optional(),
 		status: z.enum(SCENARIO_STATUSES).optional()
@@ -210,7 +252,7 @@ export const PatchScenarioBody = z
 	.strict()
 	.refine(
 		(b) => Object.values(b).some((v) => v !== undefined),
-		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, objectionAddress, objectionClosingDate, ops, ownedNodeIds, status'
+		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, objectionAddress, objectionClosingDate, wulaNumber, wulaWorks, ops, ownedNodeIds, status'
 	);
 
 /** A PATCH's `ops`, checked as replacing `stored`; a ZodError at path `ops` like any body field. */

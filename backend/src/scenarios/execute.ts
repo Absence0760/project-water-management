@@ -4,7 +4,7 @@
 // through the same save path as any other (storeRun), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type CreditedEt0Product, et0ProductsOf, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type CreditedEt0Product, et0ProductsOf, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp, type WulaReference } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
@@ -36,6 +36,8 @@ export interface ScenarioRow {
 	/** Where and by when written objections go, as the application's notice gives them (166_public_participation); null: not given. */
 	objectionAddress: string | null;
 	objectionClosingDate: string | null;
+	/** The water-use licence application it models (294_wula_reference): its number (null: not given) and the works as applied for. Frozen once submitted. */
+	wula: WulaReference;
 	baseRunId: string;
 	/** The base run's label and date, for the "Based on run X" banner (label '' and createdAt null if the caller can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -110,7 +112,8 @@ const termsJson = (ops: string, sha: string, names: string, conditions: string) 
 
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
 	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring,
-	s.objection_address AS "objectionAddress", to_char(s.objection_closing_date, 'YYYY-MM-DD') AS "objectionClosingDate", s.base_run_id AS "baseRunId",
+	s.objection_address AS "objectionAddress", to_char(s.objection_closing_date, 'YYYY-MM-DD') AS "objectionClosingDate",
+	jsonb_build_object('number', s.wula_number, 'works', s.wula_works) AS wula, s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
 	s.ops, s.ops_sha256 AS "opsSha256",
 	CASE WHEN s.origin = 'applicant' AND app_is_contributor(s.project_id) THEN app_application_own_nodes(s.id) ELSE s.owned_node_ids END AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
