@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "The Restriction log page (docs/followups.md, WUA persona): its lazy tab chunk (3.0 KB gz) and decision list (1.4 KB gz), its help guide and the tab wiring; measured locally 2281 KB against 2278 (over by 3), so +5 leaves ~2 KB headroom"
+}

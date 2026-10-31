@@ -22,7 +22,8 @@
 		allocations: () => import('#lib/components/allocations/AllocationsTab.svelte'),
 		project: () => import('#lib/components/project/ProjectTab.svelte'),
 		applications: () => import('#lib/components/scenarios/ApplicationsTab.svelte'),
-		history: () => import('#lib/components/history/HistoryTab.svelte')
+		history: () => import('#lib/components/history/HistoryTab.svelte'),
+		restrictions: () => import('#lib/components/restrictions/RestrictionLogTab.svelte')
 	};
 	const loadAddData = () => import('#lib/components/series/AddDataDialog.svelte');
 	// The Data row's count of open warnings (issue #611): the Warnings page's own loader and helper, its chunk
@@ -136,7 +137,9 @@
 		'catchment-map': 'map',
 		details: 'project',
 		members: 'project',
-		sharing: 'project'
+		sharing: 'project',
+		'restriction-log': 'restrictions',
+		decisions: 'restrictions'
 	};
 
 	const projectId = $derived(page.params.id ?? '');
@@ -1359,6 +1362,10 @@
 				{:else if tab === 'history'}
 					<Lazy load={LOAD.history}>
 						{#snippet children(HistoryTab)}<HistoryTab {projectId} {editor} {canEdit} onRestored={reloadInputs} onSeriesRestored={loadLists} />{/snippet}
+					</Lazy>
+				{:else if tab === 'restrictions'}
+					<Lazy load={LOAD.restrictions}>
+						{#snippet children(RestrictionLogTab)}<RestrictionLogTab {projectId} />{/snippet}
 					</Lazy>
 				{/if}
 			</section>

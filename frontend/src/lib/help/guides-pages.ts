@@ -602,6 +602,34 @@ export const PAGE_GUIDES: Guide[] = [
 			}
 		],
 		terms: ['run', 'roles'],
-		related: ['project-page']
+		related: ['project-page', 'restriction-log-page']
+	},
+	{
+		id: 'restriction-log-page',
+		title: 'Restriction log: every restriction published to farmers',
+		summary: 'Which restriction the water user association published, when, by whom and on which run, kept for the life of the project.',
+		kind: 'page',
+		tab: 'restrictions',
+		sections: [
+			{
+				heading: 'What the page shows',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Every time a run is published to farmers, and every time the [[restriction-notice|restriction notice]] of the publication in force is changed, newest first: the day and time, who did it, the level and cut, the notice in each language it was written in, the season the figures cover, how many hydrological units got them, the next publication date and the staff note. The decision farmers read now is marked **In force**.'
+					},
+					{
+						type: 'p',
+						text: 'It is the record a water user association shows its members and the responsible authority. The Publication panel in Runs & results keeps the last 12 publications; this log keeps them all. A change to the staff note alone isn’t a restriction decision and shows only in History.'
+					},
+					{
+						type: 'p',
+						text: 'Open it from **Restriction log** on the Publication panel. **Open the run** goes to the run a decision rested on while that run is still kept. Viewers, editors and owners read it; farmers read the notice in force on their own page.'
+					}
+				]
+			}
+		],
+		terms: ['published-baseline', 'restriction-notice', 'roles'],
+		related: ['history-page', 'run-and-read-results']
 	}
 ];

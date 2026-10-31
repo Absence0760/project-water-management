@@ -12,6 +12,7 @@ import { rank, requireRole, UUID } from '../projects/access.js';
 import { requireStepUp } from '../auth/stepUp.js';
 import { requireActsForAuthority } from '../projects/authoritySettings.js';
 import { EndorseBody, endorsePublication, listPublications, patchPublication, PatchBody, publishRun, PublishBody } from './publish.js';
+import { restrictionLog, RestrictionLogQuery } from './restrictionLog.js';
 import { runPublication } from './runPublication.js';
 
 export const publicationRoutes = new Hono<AuthEnv>()
@@ -22,6 +23,16 @@ export const publicationRoutes = new Hono<AuthEnv>()
 			return c.json(await listPublications(db, c.req.param('id'), rank[role] >= rank.viewer));
 		})
 	)
+	// Every restriction the WUA published or changed, from the decision log (restrictionLog.ts), which outlives the
+	// 12 publications run_publication keeps. Viewer: it is the audit log, which farmers don't read (030).
+	.get('/:id/restriction-log', async (c) => {
+		const q = RestrictionLogQuery.parse(c.req.query());
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return c.json(await restrictionLog(db, id, q));
+		});
+	})
 	// One run's publication and the changes since the one before (the printable report, issue #70).
 	// Viewer: the changes come from the change history, which farmers don't read.
 	.get('/:id/runs/:runId/publication', async (c) =>

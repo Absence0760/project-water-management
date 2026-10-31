@@ -106,6 +106,7 @@ import type {
 	PublicationPatch,
 	PublishRequest,
 	RunPublication,
+	RestrictionDecision,
 	Role,
 	Run,
 	RunCompareResponse,
@@ -957,7 +958,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			endorse: (id: string, pubId: string, note: string) =>
 				request<{ publication: PublicationMeta }>('POST', `${p(id)}/publication/${enc(pubId)}/endorse`, { note }).then((r) => r.publication),
 			/** One run's publication and the changes since the one before (viewer; the printable report). */
-			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`)
+			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`),
+			/** Every restriction decision, newest first, a page at a time (viewer; the Restriction log page). `before`: the last page's `next`. */
+			log: (id: string, before?: string | null) =>
+				request<{ items: RestrictionDecision[]; next: string | null }>('GET', `${p(id)}/restriction-log${before ? `?before=${encodeURIComponent(before)}` : ''}`)
 		},
 		shareLinks: {
 			/** The project's baseline links, newest first, revoked and expired ones included (owner). */
