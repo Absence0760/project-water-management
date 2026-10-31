@@ -1416,7 +1416,13 @@ differences:
   of the ops and every terms' ops in `toShareScenario`
   (`withheldAllocationOps`, as for a viewer kept from each farm's volume,
   #523 G1), with a count: a registered volume never leaves through a
-  link. Flow volumes, farm totals and site
+  link. The SQL still returns those ops, as it did for `ops` before 291,
+  so `toShareScenario` is the only code that may serve
+  `app_share_scenario`'s output. The free text a link reader now sees (the
+  conditions, and each event's reference and note, beside the decision
+  note) is a public record: whoever records a decision must never put
+  personal information in it, such as an appellant's name; the schema
+  caps only its length (228). Flow volumes, farm totals and site
   deficits only at 5 or more farm holders (the k rule above). Never a farm's
   row or figures, a member list, an e-mail, an allocation or its holder
   (`user_display`), or a `parties` / `assessors` / `team` note.

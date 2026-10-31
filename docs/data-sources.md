@@ -1009,7 +1009,11 @@ as it stands ([model.md §2.4a](./model.md) *Daily reference ET*).
   read the feed's AgERA5 days prints both, word for word (engine
   `copernicusAgera5Notice`, `AGERA5_CITATION`), wherever the rain products'
   credits show (§ ERA5-Land, *Where the credits show*), and the Data
-  sources and credits page has it (`/data-sources#agera-et`).
+  sources and credits page has it (`/data-sources#agera-et`). Only runs
+  made since the credit was built record the products they read
+  (`inputs.et0Products`); an older run, and a scenario run on one, prints
+  no AgERA5 or NASA POWER credit. No backfill: the copy's job has been off
+  in production, so no production run read either product before then.
 - **Contact:** ECMWF support (CDS).
 - **Access pattern:** the mirror-ingest Lambda once a day
   (`{"product":"agera5_et0","mode":"monthly"}`), ERA5-Land's
