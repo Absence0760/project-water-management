@@ -862,7 +862,7 @@ the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections, in this order: **Review**
-(Project, Applications, History), **Build the model** (Network, Map, Crops &
+(Project, Applications, History, and the Restriction log while it is open), **Build the model** (Network, Map, Crops &
 demand, Transfers, Data, Model settings, Calibration) and **Outcomes** (Summary,
 EWR, Hydrological units, Runs & results, Dams, Compare runs,
 Scenarios, Allocations). The operator chose this order on 2026-10-05 (before
@@ -945,6 +945,7 @@ shown sets nothing for a later Back or link.
 | Project | `project` | `details`, `members`, `sharing` | `lib/components/project/` ([§ Project](#project)) |
 | Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
+| Restriction log | `restrictions` | `restriction-log`, `decisions` | `lib/components/restrictions/` ([§ Restriction log](#restriction-log-tabrestrictions)) |
 
 **Tabs by role** (`lib/workspace/tabs.ts`, issue #6). One pure function,
 `visibleTabs(role, prefs, rendered)`, decides which tabs the sections list shows and
@@ -9899,7 +9900,9 @@ read it before.
   responsible authority**, which evidence reports on it say on page 1;
   163_licensing_authority), and a member acting for the authority gets
   **Endorse as the responsible authority** with an optional note, once
-  (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. The farm
+  (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. Under the
+  notice, while something is published, **Restriction log** links to every restriction decision
+  ([§ Restriction log](#restriction-log-tabrestrictions)), not only the 12 publications kept here. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Summary" region, under a visible **Summary** heading that
   matches the side index, #586 D4): it opens with one or two plain
@@ -12258,6 +12261,52 @@ after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: he
 deep link, the filters' URL and Back, pagination, a restore picking itself,
 empty states, a viewer, the phone layout, `?tab=changes`, axe at desktop
 light and dark and phone).
+
+## Restriction log (`?tab=restrictions`)
+
+The WUA persona's log of restriction decisions (docs/followups.md): which
+restriction the water user association published to farmers, when, by whom
+and on which run, for its members and the responsible authority.
+`restrictions/RestrictionLogTab.svelte` loads `GET …/restriction-log`
+([api.md § Publication](./api.md#publication)); each decision is
+`restrictions/RestrictionLogList.svelte`, its wording `restrictions/log.ts`.
+
+- **Where it is:** linked-only (`tabs.ts` `LINKED_ONLY`, as Compare runs:
+  the sidebar has no spare row, `app-sidebar.spec.ts`). It opens from
+  **Restriction log** under the notice on the Publication panel (Runs &
+  results) and shows under **Review**, after History, while open. Core
+  group: owners, editors and viewers (a member acting for the responsible
+  authority included); the API refuses farmers (`403`) and applicants, who
+  read the notice in force on their own pages.
+- **Header:** the context line says what is in force ("In force: Restricted
+  · 25 %, since 4 Mar 2026 by Ann") or "Nothing published yet"; the action
+  **Publication** goes to the panel (`?tab=runs#res-publication`).
+- **The list** ("Restriction decisions", newest first, an `ol`): every
+  publication and every notice change that sent the restriction or the next
+  date. A change to the staff note alone isn't a restriction decision and
+  shows only in History. Each decision: the day and time (`time`), a heading
+  ("Published a run", "Published an automatic run", "Changed the restriction
+  and next publication date"), the level as a pill in words ("Restricted · 25
+  %", "Advisory", "No restriction"; the colour repeats it), **In force** on
+  the newest decision of the current publication, who made it ("By …"; the
+  name then, "Deleted user" after an account deletion, "the automatic run"
+  for an auto run's own publish), **Open the run** (that run's Publication
+  panel, `?tab=runs&run=<id>#res-publication`) while the run is kept, else
+  "run 0b1f6c1e no longer kept", the notice in each language it was written
+  in (`dl`, each text with its `lang`), then the season, the number of
+  hydrological units, the next publication date and the staff note
+  ("farmers don't see it"). A decision recorded before the decision log
+  widened (issue #119) says it kept the level only. Under 36 rem the day
+  sits above the decision.
+- **Paging:** 50 at a time; **Show older decisions** (44 px) loads the next
+  page; a failure says so beside it and keeps what is shown.
+- **Empty:** "No restriction decisions yet." and how the first one is made,
+  linking to the Publication panel.
+- **Why a page of its own:** the Publication panel's history holds the 12
+  publications `run_publication` keeps (`run_publication_cap`); this log reads
+  the decision log's audit events, kept for the life of the project, so no
+  decision drops off. History's `&kind=publication` holds the same events,
+  with each unit's figures, among every other change.
 
 ## Assistant
 

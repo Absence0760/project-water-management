@@ -7331,10 +7331,15 @@ own. Loop in the CISO or security analyst before acting on any of them.
       event on Active alerts (ui.md § Alerts), and a mail of it sent
       meanwhile says the same (`mail.alert.ewr.outOfDate`). The farm page
       and the farmer alert pages show no EWR event (staff only).
-- [ ] **A log of restriction decisions** (WUA persona): which restriction
-      the WUA published, when, and by whom, for members and the CMA. The
-      publication history holds it; a page that lists it doesn't exist.
-      Trigger: a WUA asks, or Step 3's licensing evidence needs it.
+- [x] **A log of restriction decisions** (WUA persona, 2026-10-30): which
+      restriction the WUA published, when, and by whom, for members and the
+      CMA. The Restriction log (`?tab=restrictions`, linked from the
+      Publication panel; `GET /projects/:id/restriction-log`) lists every
+      publication and notice change from the decision log's audit events,
+      which outlive the 12 publications `run_publication` keeps, so no
+      migration was needed. Viewers and above, as the audit log is; farmers
+      read the notice in force on their farm page ([ui.md § Restriction
+      log](./ui.md#restriction-log-tabrestrictions)).
 - [x] **One guard for views over a run's stored series** (2026-10-03).
       `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`) lists every
       reader of a run's stored series (the frontend's `api.runs.series`, the

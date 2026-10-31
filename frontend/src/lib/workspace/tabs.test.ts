@@ -220,10 +220,22 @@ describe('navSections', () => {
 
 	it('puts review first, then the model, then the outcomes', () => {
 		expect(navSections(ALL_TABS)).toEqual([
-			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
+			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history', 'restrictions'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }
 		]);
+	});
+
+	it('opens the Restriction log from its links for owners, editors and viewers, and shows it under Review only while open', () => {
+		expect(LINKED_ONLY).toContain('restrictions');
+		for (const role of ['owner', 'editor', 'viewer'] as const) {
+			expect(visibleTabs(role, { showModelInputs: true, hidden: [] })).not.toContain('restrictions');
+			expect(canOpenTab(role, 'restrictions')).toBe(true);
+			const strip = stripTabs(visibleTabs(role, { hidden: [] }), 'restrictions', ALL_TABS);
+			expect(navSections(strip).find((s) => s.id === 'review')!.tabs.at(-1)).toBe('restrictions');
+		}
+		// Farmers and applicants get their own views; the workspace never lists it for them.
+		for (const role of ['contributor', 'farmer', null] as const) expect(visibleTabs(role, {}, ALL_TABS)).toEqual(['overview']);
 	});
 
 	it('shows Calibration to everyone who opens the workspace, a viewer too, without the model inputs (issue #586)', () => {
@@ -311,7 +323,7 @@ describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
 
 describe('Warnings has a row; Compare runs is linked-only (issue #611)', () => {
 	it('lists Warnings for every member right after Data, and Compare runs only while it is open, under Runs & results', () => {
-		expect(LINKED_ONLY).toEqual(['compare']);
+		expect(LINKED_ONLY).toEqual(['compare', 'restrictions']);
 		expect(TAB_GROUP.warnings).toBe('core');
 		for (const role of ['owner', 'editor', 'viewer'] as const) {
 			const shown = visibleTabs(role, { hidden: [] });

@@ -1557,6 +1557,35 @@ export interface Publication extends Omit<PublicationMeta, 'restriction'> {
 }
 
 /**
+ * One restriction decision (GET …/restriction-log, backend publish/restrictionLog.ts): a publication, or a change to
+ * the notice of the publication then current, read from the decision log, which outlives the 12 publications kept.
+ */
+export interface RestrictionDecision {
+	id: string;
+	kind: 'published' | 'notice_changed';
+	at: string;
+	/** Who made it, by their name then ('Deleted user' once that account is gone); null when no one is named. */
+	by: string | null;
+	/** An auto run published by itself. */
+	auto: boolean;
+	publicationId: string | null;
+	runId: string | null;
+	/** level null: an unknown level; notice null: an event older than the decision log (issue #119), which kept no text. */
+	restriction: { level: RestrictionLevel | null; pct: number | null; notice: NoticeText | null };
+	/** undefined when the event kept none (older than the decision log). */
+	nextExpectedOn?: string | null;
+	note?: string;
+	/** A notice change: which parts were sent ('restriction', 'nextExpectedOn', 'note'). */
+	fields?: string[];
+	farms: number | null;
+	season: { from: string; to: string; dataUntil: string | null } | null;
+	/** The publication is the current one. */
+	current: boolean;
+	/** The run is still kept (runs are trimmed by the run cap). */
+	runKept: boolean;
+}
+
+/**
  * One run's place in its project's publications (GET …/runs/:runId/publication,
  * issue #70): the printable report's published-by line and notice, and its
  * changes since the previous publication.
