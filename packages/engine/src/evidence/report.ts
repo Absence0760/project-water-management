@@ -28,6 +28,7 @@ import { NO_FLOW_M3_DAY } from '../reserve/riverMeasures';
 import type { ScenarioOp } from '../scenario/ops';
 import type { NetworkNode, ProjectModel } from '../project';
 import { canonicalJson } from '../manifest';
+import type { CumulativeReport } from '../scenario/cumulative';
 import { demandSourceShares, type DemandSourceShare } from '../network/demandSources';
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
@@ -50,7 +51,9 @@ import {
 	type EvidenceCheck,
 	type EvidenceCombined,
 	type EvidenceCombinedInput,
+	type EvidenceCombinedDam,
 	type EvidenceCombinedMeasure,
+	type EvidenceCombinedVerdict,
 	type EvidenceCumulative,
 	type EvidenceCumulativeApplication,
 	type EvidenceDemandObject,
@@ -1329,6 +1332,7 @@ function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): 
 							: COMBINED_NOT_RUN(applications.length);
 	const assessed = notAssessed === null;
 	return {
+		dams: assessed && report ? combinedDams(report) : [],
 		applications: assessed ? applications : applications.map((x) => ({ ...x, ewrDays: null, reserveMonths: null })),
 		assessment: c.assessment && assessed ? { id: c.assessment.id, name: c.assessment.name, createdAt: c.assessment.createdAt, createdBy: c.assessment.createdBy, engineVersion: c.assessment.engineVersion } : null,
 		conflicts: [...c.conflicts],
@@ -1338,6 +1342,34 @@ function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): 
 		warnings: assessed ? [...(report?.warnings ?? [])] : [],
 		notAssessed
 	};
+}
+
+/**
+ * The assessment's dam rows (evidence-25): each dam it worked a firm yield
+ * out for, in its order. A firm yield within the search's own tolerance of
+ * the baseline's (network/yield.ts YIELD_DEFAULT_TOLERANCE, 0.1 % of the larger;
+ * not imported, so the report page doesn't load the model) is unchanged.
+ */
+const DAM_YIELD_TOLERANCE = 0.001;
+function combinedDams(report: CumulativeReport): EvidenceCombinedDam[] {
+	const ids = report.dams?.nodeIds ?? [];
+	const onVolumes = report.dams?.onVolumes ?? false;
+	const verdict = (m: EvidenceCombinedMeasure | null, tol: number): EvidenceCombinedVerdict | null => {
+		if (!m || m.change === null || m.baseline === null || m.combined === null) return null;
+		if (Math.abs(m.change) <= tol * Math.max(Math.abs(m.baseline), Math.abs(m.combined))) return 'unchanged';
+		return m.change > 0 ? 'higher' : 'lower';
+	};
+	return ids.flatMap((id) => {
+		const row = (metric: 'dam_firm_yield' | 'dam_reliability') => report.rows.find((r) => r.metric === metric && r.siteNodeId === id) ?? null;
+		const y = row('dam_firm_yield');
+		const r = row('dam_reliability');
+		if (!y && !r) return [];
+		const m = (x: typeof y): EvidenceCombinedMeasure | null =>
+			x ? { baseline: x.baseline, combined: x.combined, change: x.combinedChange, sumOfSingles: x.sumOfSingles, interaction: x.interaction } : null;
+		const firmYield = m(y);
+		const reliability = m(r);
+		return [{ nodeId: id, name: (y ?? r)!.site ?? id, firmYield, reliability, verdict: { firmYield: verdict(firmYield, DAM_YIELD_TOLERANCE), reliability: verdict(reliability, 1e-9) }, onVolumes }];
+	});
 }
 
 /** Page 1's row over every application together (application reports only). */

@@ -334,7 +334,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -1039,7 +1039,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-24');
+		expect(got.version).toBe('evidence-25');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1686,6 +1686,44 @@ describe('page 1’s combined row: every application together (evidence-11, find
 	it('is deterministic: the same input gives the same document', () => {
 		expect(canonicalJson(evidenceReport(input({ combined: combined() })))).toBe(canonicalJson(evidenceReport(input({ combined: combined() }))));
 	});
+
+	it('lists each dam the assessment worked a yield out for, with its direction together (evidence-25); none from an assessment before them', () => {
+		const dam = (metric: 'dam_firm_yield' | 'dam_reliability', baseline: number, combinedV: number) => ({
+			metric,
+			siteNodeId: 'F1',
+			site: 'Farm one',
+			isOutlet: false,
+			unit: metric === 'dam_firm_yield' ? 'm³/year' : 'fraction',
+			higherIsWorse: false,
+			baseline,
+			singles: [baseline, combinedV],
+			combined: combinedV,
+			singleChanges: [0, combinedV - baseline],
+			sumOfSingles: combinedV - baseline,
+			combinedChange: combinedV - baseline,
+			interaction: 0
+		});
+		const withDams = (y: number, r: number, onVolumes = false): EvidenceAssessmentInput => ({
+			...assessment,
+			report: { ...cumulative, rows: [...cumulative.rows, dam('dam_firm_yield', 100_000, y), dam('dam_reliability', 0.9, r)], dams: { nodeIds: ['F1'], onVolumes } }
+		});
+		const read = (a: EvidenceAssessmentInput) => evidenceReport(input({ combined: combined({ assessment: a }) })).cumulative.combined!.dams;
+		const [d] = read(withDams(80_000, 0.8, true))!;
+		expect(d).toEqual({
+			nodeId: 'F1',
+			name: 'Farm one',
+			firmYield: { baseline: 100_000, combined: 80_000, change: -20_000, sumOfSingles: -20_000, interaction: 0 },
+			reliability: { baseline: 0.9, combined: 0.8, change: 0.8 - 0.9, sumOfSingles: 0.8 - 0.9, interaction: 0 },
+			verdict: { firmYield: 'lower', reliability: 'lower' },
+			onVolumes: true
+		});
+		// Within the yield search's own tolerance (0.1 %): unchanged.
+		expect(read(withDams(100_050, 0.95))![0]!.verdict).toEqual({ firmYield: 'unchanged', reliability: 'higher' });
+		expect(read(withDams(120_000, 0.9))![0]!.verdict).toEqual({ firmYield: 'higher', reliability: 'unchanged' });
+		// An assessment made before the dam rows, and a row not assessed, carry none.
+		expect(read(assessment)).toEqual([]);
+		expect(evidenceReport(input({ combined: combined({ assessment: withDams(80_000, 0.8), conflicts: ['x'] }) })).cumulative.combined!.dams).toEqual([]);
+	});
 });
 
 describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', () => {
@@ -1698,7 +1736,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1754,7 +1792,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1977,7 +2015,7 @@ describe('calibration zones (evidence-22, issue #555)', () => {
 
 	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		expect(r.calibrationZones).toEqual([
 			{ nodeId: 'S', name: 'Weir', units: 1, areaKm2: 15, params: { x1: 400, x2: 0, x3: 80, x4: 1.9 }, fitted: true, fit: null, stats: expect.objectContaining({ fitStatus: 'notFitted' }) },
 			expect.objectContaining({ nodeId: null, name: 'Gauge', units: 1, areaKm2: 25, fitted: true, fit: null })
@@ -2005,7 +2043,7 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 
 	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
 		const r = evidenceReport(input({ futureYield: found }));
-		expect(r.version).toBe('evidence-24');
+		expect(r.version).toBe('evidence-25');
 		const s = r.futureYield!;
 		expect(s).toMatchObject({ status: 'ok', createdAt: found.createdAt, createdBy: 'Analyst', complete: true, fewModels: true, models: ['SYN-A', 'SYN-B', 'SYN-C'] });
 		if (s.status !== 'ok') throw new Error('unreachable');

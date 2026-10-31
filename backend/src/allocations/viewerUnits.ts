@@ -36,7 +36,7 @@ import {
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
-import { authorisedVerdicts, boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
+import { authorisedVerdicts, boardVerdicts, combinedDamVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 
 /**
  * Whether the caller is kept from each registered volume: a viewer on a
@@ -455,6 +455,8 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 		...(lia ? { licenceImpactAuthorised: authorisedVerdicts((({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia)) } : {}),
 		...('licenceImpact' in report ? { licenceImpact: boardVerdicts((report as { licenceImpact?: unknown }).licenceImpact) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
+		// A combined dam's yield on a run that rests on the registered volumes: its direction only (evidence-25).
+		...('cumulative' in report ? { cumulative: combinedDamVerdicts((report as { cumulative?: unknown }).cumulative, false) } : {}),
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
 		...(Array.isArray((report.allocations as EvidenceAllocations | undefined)?.units)
 			? withOwnUnitYears(report, withoutOthersRegistered(report.allocations as EvidenceAllocations))

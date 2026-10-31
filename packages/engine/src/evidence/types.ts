@@ -194,8 +194,15 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * reproduce:pack checks each source (`observations:s2`, `observations:wofs`)
  * and the dates together (`observations:days`). A pack drafted before keeps
  * its document and its `dam-obs-1` section, still checked as it was.
+ * evidence-25 (followups § Cumulative impact, yield per dam): § 4's *All of
+ * them together* adds each dam the applications touch (`cumulative.combined.dams`):
+ * its firm yield and its unit's assurance of supply on the baseline and all
+ * together, with the change, the sum of each alone and the interaction, from
+ * the cumulative assessment's dam rows; a reader kept from the registered
+ * volumes gets each direction only when a run rested on them. A pack drafted
+ * before keeps its document, without them.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-24';
+export const EVIDENCE_REPORT_VERSION = 'evidence-25';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -919,6 +926,33 @@ export interface EvidenceCombined {
 	warnings: string[];
 	/** Why there is no combined figure, in words; null when there is one. */
 	notAssessed: string | null;
+	/**
+	 * evidence-25: each dam the applications touch, its firm yield and its
+	 * unit's assurance of supply on the baseline and all together, from the
+	 * assessment (scenario/cumulativeYield.ts). Empty when not assessed or the
+	 * assessment worked none out (one made before, or no dam touched). Absent
+	 * from a document before evidence-25.
+	 */
+	dams?: EvidenceCombinedDam[];
+}
+
+/** Which way a measure moved, all together against the baseline: what a viewer kept from the registered volumes reads (evidence-25). */
+export type EvidenceCombinedVerdict = 'lower' | 'unchanged' | 'higher';
+
+/** One dam the applications touch, across the combination (evidence-25). */
+export interface EvidenceCombinedDam {
+	nodeId: string;
+	name: string;
+	/** Firm yield, m³/year (the yield job's defaults); null when withheld (`withheld`). */
+	firmYield: EvidenceCombinedMeasure | null;
+	/** Its unit's annual assurance of supply, 0–1; null when withheld. */
+	reliability: EvidenceCombinedMeasure | null;
+	/** The direction of each, all together against the baseline; null when a run lacks the dam or its figure. */
+	verdict: { firmYield: EvidenceCombinedVerdict | null; reliability: EvidenceCombinedVerdict | null };
+	/** Some run the yields came from capped use at, or scaled demand to, the registered volumes (CumulativeReport.dams.onVolumes). */
+	onVolumes: boolean;
+	/** The figures left out for a reader kept from the registered volumes: the verdicts stay (D3, #523 I). */
+	withheld?: true;
 }
 
 /** One water year of a unit's use from one water source, both runs (§ 5). */

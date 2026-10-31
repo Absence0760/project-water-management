@@ -8,7 +8,9 @@ export const ASSESSMENT_SCENARIOS_MIN = 2;
 /**
  * Most scenarios an assessment takes (145_assessment CHECK on position). The
  * job runs the baseline, each alone and all together: 8 + 2 runs, well inside
- * one job's lease (runner.ts DEFAULT_LEASE_SECONDS) on an example catchment.
+ * one job's lease (runner.ts DEFAULT_LEASE_SECONDS) on an example catchment,
+ * plus at most the engine's CUMULATIVE_YIELD_SEARCHES_MAX firm-yield searches
+ * for the dams the applications touch.
  */
 export const ASSESSMENT_SCENARIOS_MAX = 8;
 /** Most queued or running assessment jobs one user may have across all projects. */
