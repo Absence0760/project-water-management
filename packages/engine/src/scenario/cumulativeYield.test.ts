@@ -10,7 +10,7 @@ import type { ModelInput, NetworkNode } from '../project';
 import { combineScenarios, scenarioNodeIds } from './combine';
 import { applyScenario } from './overrides';
 import type { ScenarioOp } from './ops';
-import { CUMULATIVE_YIELD_SEARCHES_MAX, cumulativeDamRows, cumulativeYieldDamsMax, damFirmYields, touchedDams } from './cumulativeYield';
+import { CUMULATIVE_YIELD_SEARCHES_MAX, cumulativeDamRow, cumulativeDamRows, cumulativeYieldDamsMax, damFirmYields, isCumulativeDam, touchedDams } from './cumulativeYield';
 
 function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 	return {
@@ -91,8 +91,8 @@ describe('touchedDams', () => {
 	});
 
 	it('caps the searches: fewer dams the more applications', () => {
-		expect(cumulativeYieldDamsMax(2)).toBe(5);
-		expect(cumulativeYieldDamsMax(8)).toBe(2);
+		expect(cumulativeYieldDamsMax(2)).toBe(40);
+		expect(cumulativeYieldDamsMax(8)).toBe(16);
 		for (let n = 2; n <= 8; n++) expect(cumulativeYieldDamsMax(n) * (n + 2)).toBeLessThanOrEqual(CUMULATIVE_YIELD_SEARCHES_MAX);
 	});
 
@@ -106,8 +106,10 @@ describe('touchedDams', () => {
 		const scenarios = [{ ops: raiseA }, { ops: adds }];
 		const combined = combineScenarios(b, scenarios.map((s, i) => ({ id: `s${i}`, ops: s.ops }))).input!;
 		const { dams, left } = touchedDams(b, scenarios, combined);
-		expect(dams.map((d) => d.name)).toEqual(['Avondrust', ...Array.from({ length: max - 1 }, (_, i) => `New dam ${i}`)]);
-		expect(left.map((d) => d.name)).toEqual([`New dam ${max - 1}`]);
+		// By name: "New dam 10" sorts before "New dam 2".
+		const byName = Array.from({ length: max }, (_, i) => `New dam ${i}`).sort();
+		expect(dams.map((d) => d.name)).toEqual(['Avondrust', ...byName.slice(0, max - 1)]);
+		expect(left.map((d) => d.name)).toEqual([byName[max - 1]]);
 	});
 });
 
@@ -146,6 +148,16 @@ describe('damFirmYields and cumulativeDamRows', () => {
 		}
 		const rel = runs[0]!.summary.supplyAssurance!.reliability.find((x) => x.nodeId === 'A')!.annualReliability;
 		expect(rows[1]!.baseline).toBe(rel);
+		// One row from its values alone (what an assessment fills in once its yield jobs are back) is the same row.
+		for (const [i, d] of dams.entries())
+			expect(cumulativeDamRow('dam_firm_yield', d, runs[0]!.yields[i]!, [runs[1]!.yields[i]!, runs[2]!.yields[i]!], runs[3]!.yields[i]!)).toEqual(rows[2 * i]);
+	});
+
+	it('isCumulativeDam: a unit with land and a dam above 0 m³ only', () => {
+		const b = base();
+		expect(isCumulativeDam(b, 'A')).toBe(true);
+		expect(isCumulativeDam(b, 'nope')).toBe(false);
+		expect(isCumulativeDam(applyScenario(b, [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 0 }]).input, 'A')).toBe(false);
 	});
 
 	it('gives null for a run without the dam, so its changes are not assessed', () => {

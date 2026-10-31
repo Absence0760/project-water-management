@@ -93,8 +93,11 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	auto_calibration: ['applied_at', 'applied_run_id', 'cases', 'chosen', 'error', 'job_id', 'report', 'status', 'uncertainty_id', 'work'],
 	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary'],
 	// An assessment's base run, job and name, and its members' copied ops, are fixed at insert; each gets its outcome once (145_assessment.sql).
-	assessment: ['combined_summary', 'completed_at', 'end_date', 'engine_version', 'problems', 'report', 'start_date', 'status'],
+	// The report waiting for its dams' firm yields is set once and cleared on completion (297_assessment_yield_jobs, assessment_gathering_guard).
+	assessment: ['combined_summary', 'completed_at', 'end_date', 'engine_version', 'gathering', 'problems', 'report', 'start_date', 'status'],
 	assessment_member: ['end_date', 'finished_at', 'problems', 'start_date', 'status', 'summary'],
+	// One firm-yield search of an assessment: its run, dam and job are fixed at insert; it gets its yield once (297).
+	assessment_yield: ['finished_at', 'status', 'warning', 'yield_m3_year'],
 	// An outlook's base run, job, season, levels and share are fixed at insert; it is completed once (063_seasonal_outlook.sql).
 	seasonal_outlook: ['completed_at', 'engine_version', 'result', 'status', 'triggers'],
 	// An outlook publication's level, season and publisher never change; it is ended once (106_outlook_triggers_publication.sql).
@@ -286,7 +289,8 @@ const READ_ONLY = new Set([
 // et_observation_load_mark (277) is the ET tick's own bookkeeping per unit: owner only, read by no app role (OWNER_ONLY).
 // future_yield (280) is § 8 of an evidence report on whole-catchment runs, viewers and an application's applicant.
 // climate_factors (282) is the catchment's climate change factors for the Scenarios tab: viewers only.
-const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'future_yield', 'climate_factors', 'crop_area_land_cover', 'et_observation_load_mark']);
+// assessment_yield (297) is one dam's firm yield on one run of a cumulative assessment: editors only, as the assessment (145).
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'future_yield', 'climate_factors', 'crop_area_land_cover', 'et_observation_load_mark', 'assessment_yield']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
@@ -430,6 +434,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
  */
 const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger: true; purgeTest: string }> = {
 	'assessment.job_id': { updateTrigger: true, purgeTest: 'src/assessments/assessments.db.test.ts' },
+	'assessment_yield.job_id': { updateTrigger: true, purgeTest: 'src/assessments/yields.db.test.ts' },
 	'auto_calibration.job_id': { updateTrigger: true, purgeTest: 'src/calibration/calibration.db.test.ts' },
 	'delineation_request.job_id': { updateTrigger: true, purgeTest: 'src/delineation/requests.db.test.ts' },
 	'report.job_id': { updateTrigger: false },

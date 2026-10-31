@@ -1203,15 +1203,24 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   kept when it is a unit with land and a dam above 0 m³ in the baseline or
   the combination; sorted by name. A dam only some runs have (one an
   application adds) is `null` in the others, so its changes are not
-  assessed. **Cost cap:** at most `CUMULATIVE_YIELD_SEARCHES_MAX` (20)
-  firm-yield searches an assessment, so `floor(20 ÷ (applications + 2))`
-  dams (5 with two applications, 2 with eight); the rest are named in the
-  report's `warnings` (run them from the Yield panel). Measured on
-  `yield.perf.test.ts`'s 30-year, 16-node catchment (M3 Pro): a search
-  about 3.9 s, a run 1.7 s, so the worst case (8 applications, 2 dams:
-  10 runs and 20 searches) is about 95 s inside the job's 300 s Lambda and
-  360 s lease; on the DB tests' 120-day fixture the whole assessment with
-  two dams takes under 0.1 s. `report.dams = { nodeIds, onVolumes }` names
+  assessed. **Each search is its own job** (297_assessment_yield_jobs,
+  `assessments/yields.ts`): the `assessment` job builds the report with the
+  `dam_firm_yield` cells empty, keeps it in `assessment.gathering` and
+  queues one `assessment_yield` job per dam and run that has the dam; the
+  last one back fills the cells (`cumulativeDamRow`, the same arithmetic)
+  and completes the assessment, so the report's shape is unchanged.
+  **Cost cap:** at most `CUMULATIVE_YIELD_SEARCHES_MAX` (160) searches an
+  assessment, so `floor(160 ÷ (applications + 2))` dams (40 with two
+  applications, 16 with eight); the rest are named in the report's
+  `warnings` (run them from the Yield panel). The bound is the work one
+  assessment may queue, not one job's time: measured on
+  `yield.perf.test.ts`'s 30-year, 16-node catchment (M3 Pro), a search
+  about 3.9 s and the run that prepares it 1.7 s, so at most about 15
+  minutes of worker time an assessment, and at most 2 assessments in
+  flight per user (an assessment counts while any of its jobs is pending).
+  The worker takes up to 25 jobs a tick, so a full fan-out spans several
+  5-minute ticks. On the DB tests' 120-day fixture an assessment with six
+  dams (24 yield jobs) completes in one tick in well under a second. `report.dams = { nodeIds, onVolumes }` names
   the dams and says whether a run capped use at, or scaled demand to, the
   registered volumes (a viewer kept from them reads only each direction:
   [evidence-pack.md § The other applications together](./evidence-pack.md#the-other-applications-together)).
@@ -1237,11 +1246,32 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
 - The job (as the editor who asked, under RLS) runs the baseline, each
   member alone and all together on **the current engine**, so every column
   is one engine's (the published run's stored summary may be an older
-  engine's), then stores `cumulativeImpact`'s report. It checks the
+  engine's), then stores `cumulativeImpact`'s report, or, when the
+  applications touch a dam, fans its firm yields out (above): each
+  `assessment_yield` job rebuilds its run's input from the stored base run
+  and copied ops, searches, stores its yield on its row and gathers under a
+  per-assessment advisory lock, so of two finishing at once the second sees
+  the first's row. **Never left hanging:** a yield job that dies (its
+  attempts spent, its user no longer an editor, the worker stopping past
+  its lease) or ends without its yield fails the assessment with one line
+  naming the run and dam (`"The baseline: the firm yield of "Upper farm"
+  didn't finish (…)"`): the next sibling to gather records it, and the API
+  reads a pending assessment with such a row as `failed` at once
+  (`stoppedYieldsSql`), so the last one dying doesn't leave it pending. A
+  yield job on another engine than the runs' (a deploy in between) fails it
+  too, rather than mix two engines in one report. The optional background
+  (295) works out no dam yields and is computed by the `assessment` job as
+  before. It checks the
   combination again and marks the assessment `refused` if it no longer
   holds. No `model_run` rows: like a sweep, an assessment never counts
   against the 20-run cap. Editors only (RLS and the routes).
-- Tests: `assessments.db.test.ts` (two applications end to end, the single
+- Tests: `yields.db.test.ts` (six dams with two applications, more than
+  the old one-job budget of five, all with firm-yield rows equal to the
+  engine's; the pending state with `yields`; a dead yield job failing the
+  assessment as read and as recorded; the engine changing; the per-user cap
+  counting an assessment with yields out; the purge; RLS and the insert
+  guard); `jobs/trust.security.db.test.ts` (the kind's role re-check and a
+  cross-project payload); `assessments.db.test.ts` (two applications end to end, the single
   equal to the application's own run and the baseline to the published
   run, the interaction, a conflicting pair refused with nothing written,
   the dry run, drafts and other bases refused, RLS with a positive control,

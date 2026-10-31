@@ -12206,8 +12206,11 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   not together (two new dams given one name) are listed too.
 - **The result** (the newest assessment, or one picked under **Assessment**):
   while it runs, *Queued* or *Running each application alone and all
-  together… N %* (followed every 1.5 s); a refused or failed one says why,
-  line by line. Complete: one matrix, rows = each measure at each EWR site
+  together… N %*, then, while its dams' firm-yield jobs come back (297),
+  *Working out the firm yield of each dam the applications touch (n of m)…*
+  with its share as the bar (followed every 1.5 s); a refused or failed one
+  says why, line by line (a firm-yield job that stopped names the run and
+  the dam). Complete: one matrix, rows = each measure at each EWR site
   (the outlet first) and for the catchment (days the EWR is not met, mean
   EWR shortfall, Reserve months met and deficit at each rule-table site,
   mean flow at the outlet, supplied to existing users and their share of

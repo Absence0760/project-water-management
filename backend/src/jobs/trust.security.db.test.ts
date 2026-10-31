@@ -378,6 +378,21 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 		},
 		effect: async (id) => (await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0].status
 	},
+	assessment_yield: {
+		// B's assessment of two scenarios touching its farm dam (297): its own job run alone, so its yield jobs wait queued; one of them.
+		async queue(owner, b) {
+			const { jobId: parent, ref: assessmentId } = await CROSS.assessment!.queue(owner, b);
+			await asOwner(`UPDATE job SET run_after = now() - interval '1 minute' WHERE id = $1`, [parent]);
+			await runTick({ feeds: false, reports: false, alerts: false, projectIds: [b.projectId], maxJobs: 1 });
+			expect(await jobRow(parent)).toMatchObject({ status: 'done' });
+			const [y] = await asOwner(`SELECT id, job_id FROM assessment_yield WHERE assessment_id = $1 AND run = 'baseline'`, [assessmentId]);
+			expect(y, 'a baseline yield job').toBeTruthy();
+			// Only the one under test may run when B's turn comes: its siblings wait.
+			await asOwner(`UPDATE job SET run_after = now() + interval '1 day' WHERE kind = 'assessment_yield' AND project_id = $1 AND id <> $2`, [b.projectId, y.job_id]);
+			return { jobId: y.job_id, ref: y.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status, yield_m3_year FROM assessment_yield WHERE id = $1', [id]))[0]
+	},
 	auto_calibration: {
 		// A run of B's calibration rules: a quick search, so B's own job fits its one case.
 		async queue(owner, b) {

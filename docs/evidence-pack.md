@@ -379,7 +379,7 @@ change with every application together and the interaction, and its unit's
 annual assurance of supply on the baseline and the change, read from the same
 assessment's dam rows ([scenarios.md § Cumulative
 impact](./scenarios.md#cumulative-impact-wp-311): at most
-`floor(20 ÷ (applications + 2))` dams; the rest are in the assessment's
+`floor(160 ÷ (applications + 2))` dams (each firm yield its own job, 297); the rest are in the assessment's
 warnings, which § 4 prints). Each dam also carries the **direction** of
 each measure together against the baseline (`verdict`: `lower`,
 `unchanged` within the yield search's 0.1 % tolerance, or `higher`).

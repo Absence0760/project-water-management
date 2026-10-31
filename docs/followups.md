@@ -6046,15 +6046,25 @@ Left:
       Yield job's, the verdicts-only reader with its positive control),
       `verdictsOnly.test.ts`, `viewerUnits.test.ts`, `cumulative.test.ts`,
       e2e `assess-together.spec.ts` and `evidence-combined.spec.ts`.
-- [ ] **More dams than one assessment's yield budget.** An assessment works
-      out a firm yield for at most `floor(20 ÷ (applications + 2))` of the
-      dams the applications touch (the job's 300 s Lambda); the rest are
-      named in its warnings, with no rows. Durable fix: each dam × run
-      search becomes its own `yield`-style job the assessment fans out to and
-      gathers (the assessment completing when they have), so the count is
-      bounded by the per-user job caps instead of one job's time. Trigger:
-      an assessment that names a dam in that warning which the assessor
-      needs in the report.
+- [x] **More dams than one assessment's yield budget.** An assessment
+      worked out a firm yield for at most `floor(20 ÷ (applications + 2))`
+      of the dams the applications touch (the job's 300 s Lambda); the rest
+      were named in its warnings, with no rows. **Built (2026-10-30,
+      297_assessment_yield_jobs):** each dam × run firm-yield search is its
+      own `assessment_yield` job the `assessment` job fans out to; the last
+      one back (under a per-assessment lock) fills the report's
+      `dam_firm_yield` cells and completes it, the report's shape unchanged.
+      The cap is now `CUMULATIVE_YIELD_SEARCHES_MAX` 160 searches an
+      assessment (40 dams with two applications, 16 with eight), bounded by
+      the per-user assessment cap (2 in flight, counting its yield jobs)
+      rather than one job's time. A yield job that dies, or ends without its
+      yield, fails the assessment naming the run and dam, recorded by a
+      sibling and read so by the API at once; an engine change in between
+      fails it too. The background at full allocation (295) still computes
+      no dam yields. Tests: `assessments/yields.db.test.ts`, the job trust
+      sweep, the catalogue, `cumulative.test.ts` (engine and frontend),
+      `e2e/tests/assess-together.spec.ts`
+      ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
 - [x] **A full-allocation baseline column** (WP-3.10). **Built
       (2026-10-30, 295_assessment_background, report format
       `evidence-26`):** the assessment takes an optional `backgroundRunId`,

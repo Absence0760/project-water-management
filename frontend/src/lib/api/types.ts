@@ -2803,6 +2803,12 @@ export interface Assessment {
 	report?: (CumulativeReport & { background?: AssessmentBackground }) | null;
 	engineVersion: string | null;
 	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	/**
+	 * The dams' firm-yield jobs (297): how many are back of how many its job queued; null when it queued none.
+	 * It stays pending until they are all back; one that stops fails it (`problems` names the dam and run).
+	 * Absent from an older API.
+	 */
+	yields?: { done: number; total: number } | null;
 	createdBy: string | null;
 	createdAt: string;
 	completedAt: string | null;

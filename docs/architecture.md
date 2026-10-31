@@ -728,7 +728,11 @@ Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_fact
 issued licence's `scenario_run` (`jobs/handlers/scenario-run.ts`, 293: the
 run of its licensed terms that the evidence report's § 4 reads, queued by
 `…/decide` and `…/appeals` when the terms in force differ from the ops
-applied for, [scenarios.md § Applications](./scenarios.md#applications-wp-33)); step 2's
+applied for, [scenarios.md § Applications](./scenarios.md#applications-wp-33)), and a
+cumulative assessment's `assessment_yield` (`jobs/handlers/assessment-yield.ts`,
+297: one dam's firm yield on one of its runs, fanned out by the `assessment`
+job and gathered by the last one back, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311)); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,

@@ -138,6 +138,21 @@ describe('assessmentState', () => {
 		expect(assessmentState({ status: 'pending', job: job('dead', 'boom'), problems: [] })).toEqual({ kind: 'stopped', text: 'This assessment could not run: boom', lines: [] });
 		expect(assessmentState({ status: 'pending', job: null, problems: [] })).toMatchObject({ kind: 'stopped' });
 	});
+
+	it('its job done, its dams’ firm-yield jobs still coming back (297): pending, with how many are back', () => {
+		expect(assessmentState({ status: 'pending', job: job('done', null, 100), problems: [], yields: { done: 6, total: 24 } })).toEqual({
+			kind: 'pending',
+			text: 'Working out the firm yield of each dam the applications touch (6 of 24)…',
+			progress: 25
+		});
+		// Its job still running: the runs first, whatever the yields say.
+		expect(assessmentState({ status: 'pending', job: job('running', null, 40), problems: [], yields: null })).toMatchObject({ progress: 40 });
+		// A yield job that stopped: the API reads the assessment as failed, naming it.
+		expect(assessmentState({ status: 'failed', job: job('done'), problems: ['The baseline: the firm yield of "Upper farm" didn’t finish (boom)'], yields: { done: 3, total: 4 } })).toMatchObject({
+			kind: 'stopped',
+			lines: ['The baseline: the firm yield of "Upper farm" didn’t finish (boom)']
+		});
+	});
 });
 
 describe('the background at full allocation (295)', () => {

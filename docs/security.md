@@ -2272,7 +2272,10 @@ In short:
   there, even for someone who edits both (the handler scopes every read by
   the job's project; `app_begin_feed_fetch` and the `yield_result` guard
   check it again in the database). The per-user caps on queued
-  sweeps, outlooks, yield calculations and cumulative assessments (2 each)
+  sweeps, outlooks, yield calculations and cumulative assessments (2 each;
+  an assessment counts while its job or any of its dams' firm-yield jobs,
+  `assessment_yield` (297), is pending, so the cap also bounds those, at most
+  the engine's `CUMULATIVE_YIELD_SEARCHES_MAX` (160) an assessment)
   are counted under a per-user advisory lock, so a concurrent burst can't
   pass them, and the database refuses a sweep member, assessment member or
   outlook level past the API's cap
