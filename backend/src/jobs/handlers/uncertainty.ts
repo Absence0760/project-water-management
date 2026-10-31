@@ -16,7 +16,7 @@ import { ensembleSeconds, modelSize, wallClock } from '../../calibration/estimat
 import { ENSEMBLE_SECONDS_MAX, UncertaintyPayload } from '../../calibration/schema.js';
 import { ApiError } from '../../http/errors.js';
 import { runModelInput } from '../../runs/uncertainty.js';
-import { JobError, LeaseLostError } from '../errors.js';
+import { JobError, LeaseLostError, unexpectedFailure } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const uncertaintyHandler = defineHandler({
@@ -58,7 +58,8 @@ export const uncertaintyHandler = defineHandler({
 			]);
 		} catch (err) {
 			if (err instanceof ApiError || err instanceof JobError || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
-			throw new JobError(`the ensemble failed: ${(err as Error).message}`, { retry: false });
+			// Not an error of ours: fixed words stored, the detail logged (jobs/errors.ts unexpectedFailure).
+			throw unexpectedFailure(err, 'the ensemble failed', job);
 		}
 	}
 });

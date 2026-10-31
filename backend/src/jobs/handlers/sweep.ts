@@ -11,7 +11,7 @@
 import { ApiError } from '../../http/errors.js';
 import { SweepPayload } from '../../sweeps/schema.js';
 import { computeSweep } from '../../sweeps/store.js';
-import { JobError, LeaseLostError } from '../errors.js';
+import { JobError, LeaseLostError, unexpectedFailure } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const sweepHandler = defineHandler({
@@ -23,7 +23,8 @@ export const sweepHandler = defineHandler({
 			await computeSweep(db, job.projectId, payload.sweepId, progress);
 		} catch (err) {
 			if (err instanceof ApiError || err instanceof JobError || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
-			throw new JobError(`the sweep failed: ${(err as Error).message}`, { retry: false });
+			// Not an error of ours: fixed words stored, the detail logged (jobs/errors.ts unexpectedFailure).
+			throw unexpectedFailure(err, 'the sweep failed', job);
 		}
 	}
 });

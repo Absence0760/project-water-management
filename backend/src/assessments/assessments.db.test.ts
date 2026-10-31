@@ -7,7 +7,20 @@
 // control), the member's ops copied from its scenario, and write-once
 // outcomes. Synthetic catchment: invented names and values.
 import { randomUUID } from 'node:crypto';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+
+// The assessment job's work throwing something not of ours (a path, a name): switched on by one test, through the real handler.
+const { boom } = vi.hoisted(() => ({ boom: { on: false } }));
+vi.mock('./store.js', async (orig) => {
+	const m = await orig<typeof import('./store.js')>();
+	return {
+		...m,
+		computeAssessment: async (...a: Parameters<typeof m.computeAssessment>) => {
+			if (boom.on) throw new Error('ENOENT: /var/task/secret-detail.js for holder Jane Holder');
+			return m.computeAssessment(...a);
+		}
+	};
+});
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
@@ -209,6 +222,24 @@ describe('POST /projects/:id/assessments', () => {
 		expect((await assessor.call('POST', `${P()}/assessments`, { name: 'x', scenarioIds: [appA] })).status).toBe(400);
 		expect((await assessor.call('POST', `${P()}/assessments`, { name: 'x', scenarioIds: [appA, appA] })).status).toBe(400);
 		expect((await assessor.call('POST', `${P()}/assessments`, { name: 'x', scenarioIds: Array.from({ length: ASSESSMENT_SCENARIOS_MAX + 1 }, () => randomUUID()) })).status).toBe(400);
+	});
+});
+
+describe('a job failure not of ours', () => {
+	it('stores fixed words on the job, and the served assessment carries none of the detail', async () => {
+		const res = await assessor.call('POST', `${P()}/assessments`, { name: 'Fails oddly', scenarioIds: [appA, appB] });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		boom.on = true;
+		try {
+			await tick();
+		} finally {
+			boom.on = false;
+		}
+		expect(await job(res.body.jobId)).toMatchObject({ status: 'dead', last_error: 'the assessment failed' });
+		const served = await assessor.call('GET', `${P()}/assessments/${res.body.assessment.id}`);
+		expect(served.body.assessment.job).toMatchObject({ status: 'dead', error: 'the assessment failed' });
+		const jobs = await assessor.call('GET', `${P()}/jobs`);
+		for (const body of [served.body, jobs.body]) for (const leak of ['secret-detail', '/var/task', 'Jane Holder', 'ENOENT']) expect(JSON.stringify(body), leak).not.toContain(leak);
 	});
 });
 
