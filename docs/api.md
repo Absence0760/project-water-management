@@ -3629,7 +3629,7 @@ never a farm's row, name or id.
   its first forecast day (190): the monthly means and the last 365 days are
   the record's, never forecast rain read as the river's flow.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
-  `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified, withheldOps, grantedTerms, decisionEvents, licence }, results, base, run, comments }`.
+  `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified, withheldOps, grantedTerms, decisionEvents, licence, wula }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
   or back to draft: `404`, until it is submitted again). `opNames` names the
   scenario's own nodes only; `classified` is each op's class (`proposal` |
@@ -3649,7 +3649,11 @@ never a farm's row, name or id.
   `terms` in `grantedTerms`' shape on `varied` only; never who recorded it)
   and `licence` (`{ inForce, from: 'decision' | 'event', eventPosition, appealPending }`,
   `app_scenario_licence`'s standing, the event by its position; `null` until
-  decided with an outcome). A submitted one has `null`, `[]` and `null`. `base` and
+  decided with an outcome). A submitted one has `null`, `[]` and `null`.
+  `wula` (291, from 294's reference; submitted or decided): `{ number:
+  string | null, works: [{ ref, text }] }`, the WULA's number and the
+  works as applied for in the applicant's words, or `null` when neither was
+  given; each op's `works` tag (inside `ops`) names one of those refs. `base` and
   `run` are the base run and the scenario's newest run of its current ops
   whose stamp verifies (of its newest five),
   each `{ engineVersion, startDate, endDate, createdAt, ewrDaysNotMet, ewrFractionDaysNotMet, volumes, ewrSites }`:

@@ -6840,15 +6840,19 @@ Left, from the design and the persona review (§11), each with its trigger.
       change models; page 1 prints the number, the works' refs and the tie,
       A.2 the works in words and each change's works
       ([scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
-- [ ] **The WULA reference on the share link** (licensing authority, public
+- [x] **The WULA reference on the share link** (licensing authority, public
       participation). A submitted application's share link
-      (`app_share_scenario`, 115/291) doesn't print the WULA's number or its
-      works, though a public reader matching the app's record to the
-      authority's notice would want the number. Durable fix: a new migration
-      adds `wula: { number, works }` to the link's `scenario` object for an
-      application, and the share page prints it (farmer-facing: its labels go
-      through the i18n agents). Trigger: once 291's change to
-      `app_share_scenario` has landed, before the pilot.
+      (`app_share_scenario`, 115/291) didn't print the WULA's number or its
+      works. **Built (2026-10-30):** 291 (unreleased, edited in place) adds
+      `wula: { number, works }` to the link's `scenario` object for a
+      submitted or decided application, and the share page prints it under
+      the changes with each change's **Works *ref***; the works' words are
+      the applicant's own, as the description already shown. Its 4 new
+      `share.scenario` strings are on the Afrikaans sheet, untranslated
+      until the i18n agents run (`pnpm gen:i18n:export af …`). Tests:
+      `share/scenario-share-licence.db.test.ts`, `share/links.test.ts`,
+      `share/scenario.test.ts`, `e2e/tests/scenario-share.spec.ts`
+      ([scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
 - [ ] **Labelled mitigation alternatives** (licence applicant). The report
       shows one application; applicants must show the mitigation they
       weighed. Durable fix: an application may cite other scenario runs on

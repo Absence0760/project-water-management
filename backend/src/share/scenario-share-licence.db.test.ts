@@ -10,6 +10,9 @@
 //   - each appeal event with its forum, date, reference, note and a
 //     variation's terms, never who recorded it (an assessor reads that);
 //   - app_share_terms isn't callable by water_app;
+//   - the WULA reference (294) once submitted: its number and the works as
+//     applied for in the applicant's words, each op's `works` tag in its ops;
+//     none for an application that gave none;
 //   - app_share_scenario itself, called as the share path calls it, leaves
 //     another unit's `allocation.set` out of every list of ops (its own,
 //     the granted terms', a variation's) and counts it, the applicant's own
@@ -38,6 +41,11 @@ const P = () => `/projects/${projectId}`;
 const dam = (nodeId: string, value: number) => ({ op: 'node.set', nodeId, field: 'damCapacityM3', value });
 const neighbourVolume = { op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: neighbour.id, waterSource: 'surface', volumeM3PerYear: CANARY } };
 const ownVolume = (v: number) => ({ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: own.id, waterSource: 'surface', volumeM3PerYear: v } });
+const WULA_NUMBER = 'WU-2026-0042';
+const WULA_WORKS = [
+	{ ref: 'W1', text: 'Raise the dam wall by 2 m' },
+	{ ref: 'W2', text: 'A pipeline to the lower lands' }
+];
 const tokenOf = (url: string) => new URLSearchParams(new URL(url).hash.slice(1)).get('t')!;
 const open = async () => {
 	const res = await anon('POST', '/share/scenario', { token });
@@ -68,9 +76,12 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role })).status, u.email).toBe(201);
 	await actForAuthority(owner, projectId, assessor.id);
 	expect((await owner.call('PUT', `${P()}/farmers/${applicant.id}`, { nodeIds: [own.id] })).status).toBe(200);
-	const created = await applicant.call('POST', `${P()}/scenarios`, { name: 'Raise my dam', baseRunId: published, ops: [dam(own.id, 150_000)] });
+	const created = await applicant.call('POST', `${P()}/scenarios`, { name: 'Raise my dam', baseRunId: published, ops: [{ ...dam(own.id, 150_000), works: 'W1' }] });
 	expect(created.status, JSON.stringify(created.body)).toBe(201);
 	sid = created.body.scenario.id;
+	// The WULA it models (294), given while a draft.
+	const wula = await applicant.call('PATCH', `${P()}/scenarios/${sid}`, { wulaNumber: WULA_NUMBER, wulaWorks: WULA_WORKS });
+	expect(wula.status, JSON.stringify(wula.body)).toBe(200);
 	expect((await applicant.call('POST', `${P()}/scenarios/${sid}/submit`, {})).status).toBe(200);
 	const made = await applicant.call('POST', `${P()}/share-links`, { label: 'Forum', expiresInDays: 30, targetKind: 'scenario', targetId: sid });
 	expect(made.status, JSON.stringify(made.body)).toBe(201);
@@ -85,6 +96,27 @@ describe("a decided application's link: the licence's terms and what followed (2
 	it('shows no terms, events or standing while the application is only submitted', async () => {
 		const v = await open();
 		expect(v.scenario).toMatchObject({ status: 'submitted', grantedTerms: null, decisionEvents: [], licence: null, withheldOps: 0 });
+	});
+
+	it('shows the WULA reference once submitted: its number, the works as applied for and each op’s works tag', async () => {
+		const v = await open();
+		expect(v.scenario.wula).toEqual({ number: WULA_NUMBER, works: WULA_WORKS });
+		expect(v.scenario.ops).toEqual([{ ...dam(own.id, 150_000), works: 'W1' }]);
+		// The database projection carries exactly those two keys.
+		const rows = await withUser(applicant.id, async (db) => (await db.query<{ scenario: Record<string, unknown> }>('SELECT scenario FROM app_share_scenario($1)', [parseToken(token)])).rows);
+		expect(Object.keys(rows[0]!.scenario.wula as object).sort()).toEqual(['number', 'works']);
+	});
+
+	it('shows no WULA reference for an application that gave none (positive control: the one above)', async () => {
+		const other = await applicant.call('POST', `${P()}/scenarios`, { name: 'Without a WULA', baseRunId: published, ops: [dam(own.id, 130_000)] });
+		expect(other.status, JSON.stringify(other.body)).toBe(201);
+		const oid = other.body.scenario.id as string;
+		expect((await applicant.call('POST', `${P()}/scenarios/${oid}/submit`, {})).status).toBe(200);
+		const made = await applicant.call('POST', `${P()}/share-links`, { label: 'Forum 2', expiresInDays: 30, targetKind: 'scenario', targetId: oid });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const res = await anon('POST', '/share/scenario', { token: tokenOf(made.body.link.url) });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.scenario.wula).toBeNull();
 	});
 
 	it('shows the granted terms and their conditions once issued, without another unit’s registered volume', async () => {

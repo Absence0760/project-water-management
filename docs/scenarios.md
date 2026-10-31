@@ -1981,9 +1981,16 @@ application (WULA) applies for?
   problems: a change can model applied-for works without the tag, and an
   untied proposal still runs and submits. The assessor reads the tie on the
   evidence report (page 1 and A.2, `evidence-26`).
-- **Not on the share link.** `app_share_scenario` (115/291) doesn't give the
-  reference; whether a public reader should see the WULA's number is open
-  ([followups.md](./followups.md)).
+- **On the share link** (291, `app_share_scenario`): a submitted or
+  decided application's link carries `scenario.wula = { number, works: [{
+  ref, text }] }` (`null` when neither was given), and the share page prints
+  it under the changes as **The water-use licence application** (the
+  number, then each works' ref and words), each change with **Works
+  *ref*** beside it from its op's `works` tag. The works' words are the
+  applicant's own, as the scenario's name and description the link already
+  shows; frozen once submitted, so what the link shows is what was
+  submitted. A tag goes with its op, so a withheld op (another unit's
+  registered volume, `app_share_kept`) takes its tag with it.
 
 ### Sharing and comments (WP-3.15)
 

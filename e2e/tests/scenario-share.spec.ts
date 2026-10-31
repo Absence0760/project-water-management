@@ -11,7 +11,9 @@
 // dialog, the shared view (signed out and signed in) and the comments drawer
 // (with the warning shown). A decided application's link prints where the
 // licence stands, the terms it was granted on and the appeals after it
-// (291_share_licence_terms). Invented names only.
+// (291_share_licence_terms); a submitted one's prints the water-use licence
+// application it models (294's reference, on the link since 291): the number,
+// the works as applied for and each change's works. Invented names only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedApplicantProject, submitApplication } from '../support/applications.ts';
@@ -36,6 +38,8 @@ const TABLE = {
 };
 const COMMENT = 'The wetland below the weir needs its winter flows. Please keep them.';
 const NOTICE_ADDRESS = 'The Catchment Manager, Private Bag X1, Rooikloof';
+const WULA_NUMBER = 'WU-2026-0042';
+const WORKS = 'Raise the Upper farm dam wall by 2 m';
 
 /** A published baseline with an EWR rule table, an applicant linked to the Upper farm, and their run and submitted application. */
 async function seed(page: Page, applicant: Page, applicantEmail: string, applicantId: string) {
@@ -47,13 +51,16 @@ async function seed(page: Page, applicant: Page, applicantEmail: string, applica
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
 	expect((await page.request.put(`${API_URL}/projects/${project.id}/farmers/${applicantId}`, { data: { nodeIds: [upper] } })).status()).toBe(200);
 	const at = `${API_URL}/projects/${project.id}/scenarios`;
-	const created = await applicant.request.post(at, { data: { name: NAME, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 }] } });
+	const created = await applicant.request.post(at, { data: { name: NAME, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000, works: 'W1' }] } });
 	expect(created.status(), await created.text()).toBe(201);
 	const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
 	const ran = await applicant.request.post(`${at}/${sid}/runs`, { data: {} });
 	expect(ran.status(), await ran.text()).toBe(201);
 	// Where written objections go, as the notice gives them (166): printed beside the warning on the share page.
-	const notice = await applicant.request.patch(`${at}/${sid}`, { data: { objectionAddress: NOTICE_ADDRESS, objectionClosingDate: '2026-12-01' } });
+	// And the WULA it models (294), its works tied to the change: on the link since 291.
+	const notice = await applicant.request.patch(`${at}/${sid}`, {
+		data: { objectionAddress: NOTICE_ADDRESS, objectionClosingDate: '2026-12-01', wulaNumber: WULA_NUMBER, wulaWorks: [{ ref: 'W1', text: WORKS }] }
+	});
 	expect(notice.status(), await notice.text()).toBe(200);
 	expect((await applicant.request.post(`${at}/${sid}/submit`, { data: {} })).status()).toBe(200);
 	return { projectId: project.id, sid };
@@ -92,7 +99,14 @@ test('an NGO opens an application’s link, reads the EWR per site, signs in and
 	await expect(shared.getByTestId('share-scenario-status')).toContainText('awaiting a decision');
 	// The other farm is never named; the applicant's own is.
 	await expect(shared.getByText('Lower farm')).toHaveCount(0);
-	await expect(shared.getByRole('region', { name: 'What the application changes' })).toContainText('Upper farm');
+	const changes = shared.getByRole('region', { name: 'What the application changes' });
+	await expect(changes).toContainText('Upper farm');
+	// The WULA it models: its number, the works in the applicant's words, and the change tied to them.
+	await expect(changes.getByRole('listitem').first()).toContainText('Works W1');
+	const wula = changes.getByTestId('share-scenario-wula');
+	await expect(wula).toContainText(`Application number: ${WULA_NUMBER}`);
+	await expect(wula.getByRole('term')).toHaveText('W1');
+	await expect(wula.getByRole('definition')).toHaveText(WORKS);
 	await expectNoSidewaysScroll(shared);
 	await expectNoViolations(shared);
 

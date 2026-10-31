@@ -14629,7 +14629,12 @@ signed in or out, for someone outside the project, on a phone first.
   hydrological unit", marked *Proposal* or, in red, *Baseline assumption*
   (with a line saying what that means), "Not shown: *n* changes setting
   another hydrological unit's registered volume" when any is left out
-  (291), and the description. In the right column: **The decision** (once
+  (291), and the description; each change modelling WULA works says
+  **Works *ref*** beside it, and when the applicant gave a WULA reference
+  (294, on the link since 291) **The water-use licence application**
+  follows (`share-scenario-wula`): "Application number: *number*" and
+  "The works applied for, in the applicant's words", each ref with its
+  works. In the right column: **The decision** (once
   decided; 291): where the licence stands ("The licence stands on the terms
   it was granted on", "… varied to on appeal (*forum*, *date*)", "The
   decision was set aside on appeal …", "No licence was issued", and "An
