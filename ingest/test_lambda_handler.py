@@ -554,6 +554,33 @@ class FixturesRun(unittest.TestCase):
             lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, Context(), opener=opener)
         self.assertEqual(state["files"], 1)
 
+    def test_a_file_chc_keeps_answering_429_fails_the_month_as_retry_later(self):
+        import email.message
+        import urllib.error
+
+        import fixturehttp
+
+        base = fixturehttp.FixtureOpener()
+        asked = {"files": 0}
+
+        def opener(req, timeout=None):
+            if not req.full_url.endswith(".nc"):
+                return base(req, timeout=timeout)
+            asked["files"] += 1
+            h = email.message.Message()
+            h["Retry-After"] = "0"
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", h, None)
+
+        with self.assertLogs("ingest", level="WARNING") as logs, self.assertRaises(polite.RetryLater) as caught:
+            lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, None, opener=opener)
+        # The backfill state machine retries it by this exact name, with long
+        # waits (infra/ingest_backfill.tf); TruncatedDownload has its own rule.
+        self.assertEqual(type(caught.exception).__name__, "RetryLater")
+        self.assertIn("HTTP 429 after 3 retries (Retry-After '0')", str(caught.exception))
+        self.assertEqual(asked["files"], 4)  # the first try and polite's 3 retries
+        self.assertEqual(sum("answered HTTP 429" in r.getMessage() for r in logs.records), 4)
+        self.assertFalse((self.root / "rnl" / "manifest.json").exists())
+
     def test_a_month_chc_does_not_list_is_a_404(self):
         with self.assertRaises(polite.HttpError) as caught:
             lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "1999-01"})

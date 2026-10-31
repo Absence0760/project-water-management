@@ -23,7 +23,10 @@
 #     A download that kept ending early (TruncatedDownload, after the
 #     client's own retries) is a dropped connection, not a refusal, and is
 #     retried 3 times, 5 minutes apart and doubling (2026-10-30: one dropped
-#     connection on 1986-08 ended a ~30 h run).
+#     connection on 1986-08 ended a ~30 h run). CHC still answering 429 or
+#     503 after the client's own retries (RetryLater) is CHC asking us to
+#     slow down: retried 4 times, 15 minutes apart and doubling (2026-10-31:
+#     a sustained 429 on 2019-08 ended a 400-month run).
 #     Two "busy" errors are waits, not failures, and are retried: MirrorBusy
 #     (the daily run holds the product's lease) and HostBusy (the fetcher
 #     Lambda holds CHC's one request slot, feeds.tf header): a month that
@@ -191,6 +194,27 @@ resource "aws_sfn_state_machine" "ingest_backfill" {
                 IntervalSeconds = 300
                 MaxAttempts     = 3
                 BackoffRate     = 2
+                }, {
+                # RetryLater (ingest/polite.py): CHC kept answering HTTP 429
+                # or 503 through the client's own retries in that invocation
+                # (30 s to a few minutes), or asked for a wait longer than it
+                # could sleep. CHC is asking us to slow down, so back right
+                # off: 15, 30, 60 then 120 minutes (3 h 45 min in all) before
+                # failing the execution, each retry one more request for one
+                # file (2026-10-31: a sustained 429 on 2019-08 ended a 400-month
+                # run). Step Functions matches the error's exact name, never
+                # its Python base class, so a TruncatedDownload (a RetryLater
+                # subclass) still takes its own rule above, and the backfill's
+                # "too little time left" RetryLater (chirps_final.py, which
+                # asked CHC nothing) is retried here too. The month's hold on
+                # CHC's slot lapses during these waits (it is kept for the
+                # pause plus BACKFILL_HOLD_MARGIN_S, as through TruncatedDownload's
+                # longer waits) and the retry takes it again, through HostBusy's
+                # rule if the fetcher has it then.
+                ErrorEquals     = ["RetryLater"]
+                IntervalSeconds = 900
+                MaxAttempts     = 4
+                BackoffRate     = 2
               }]
               Next = "Pace"
             }
@@ -280,7 +304,7 @@ resource "aws_cloudwatch_metric_alarm" "backfill_failed" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "A ${local.ingest_backfill_name} execution failed: a month's error ended the run (its hold on CHC's slot was released). Open the execution in Step Functions: the failed month's error is the execution's error (StopRun = CHC answered HTTP 403, never re-run straight away; TruncatedDownload = the file kept ending early after every retry). Then resume: re-run the plan, which skips the months the manifest holds (docs/deployment.md § Backfill)."
+  alarm_description   = "A ${local.ingest_backfill_name} execution failed: a month's error ended the run (its hold on CHC's slot was released). Open the execution in Step Functions: the failed month's error is the execution's error (StopRun = CHC answered HTTP 403, never re-run straight away; TruncatedDownload = the file kept ending early after every retry; RetryLater = CHC kept answering 429/503 through ~4 h of retries, its log lines name the Retry-After it sent). Then resume: re-run the plan, which skips the months the manifest holds (docs/deployment.md § Backfill)."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 

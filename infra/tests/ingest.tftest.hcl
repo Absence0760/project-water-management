@@ -1381,15 +1381,25 @@ run "backfill_one_month_at_a_time_paced_and_never_retrying_a_refusal" {
   }
   assert {
     condition = alltrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
-      alltrue([for e in r.ErrorEquals : (startswith(e, "Lambda.") && e != "Lambda.Unknown") || e == "MirrorBusy" || e == "HostBusy" || e == "TruncatedDownload"])
+      alltrue([for e in r.ErrorEquals : (startswith(e, "Lambda.") && e != "Lambda.Unknown") || e == "MirrorBusy" || e == "HostBusy" || e == "TruncatedDownload" || e == "RetryLater"])
     ])
-    error_message = "Only Lambda's own service errors, MirrorBusy, HostBusy and TruncatedDownload are retried: never States.ALL, States.TaskFailed or StopRun, so a month that met HTTP 403 fails the execution at once."
+    error_message = "Only Lambda's own service errors, MirrorBusy, HostBusy, TruncatedDownload and RetryLater are retried: never States.ALL, States.TaskFailed or StopRun, so a month that met HTTP 403 fails the execution at once."
   }
   assert {
     condition = anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
       r.ErrorEquals == ["TruncatedDownload"] && r.IntervalSeconds >= 60 && r.MaxAttempts >= 1 && r.MaxAttempts <= 5
     ])
     error_message = "A month whose file kept ending early (polite.py TruncatedDownload, a dropped connection) is retried a bounded number of times, at least a minute apart (D4), instead of ending the execution."
+  }
+  assert {
+    condition = anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry :
+      r.ErrorEquals == ["RetryLater"] && r.IntervalSeconds >= 600 && r.BackoffRate >= 1 && r.MaxAttempts >= 1 && r.MaxAttempts <= 5
+    ])
+    error_message = "A month that CHC kept answering 429/503 (polite.py RetryLater) is retried a bounded number of times, at least 10 minutes apart (CHC asking us to slow down), instead of ending the execution (2026-10-31)."
+  }
+  assert {
+    condition     = length([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry : r if contains(r.ErrorEquals, "RetryLater") || contains(r.ErrorEquals, "TruncatedDownload")]) == 2 && !anytrue([for r in jsondecode(aws_sfn_state_machine.ingest_backfill[0].definition).States.Months.ItemProcessor.States.Ingest.Retry : contains(r.ErrorEquals, "RetryLater") && contains(r.ErrorEquals, "TruncatedDownload")])
+    error_message = "TruncatedDownload and RetryLater each have their own rule (Step Functions matches the exact error name, not polite.py's class hierarchy), so a dropped connection keeps its shorter waits."
   }
   assert {
     condition = (
