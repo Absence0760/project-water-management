@@ -2020,7 +2020,9 @@ EventBridge, daily
   old (the lag alarm's threshold: CHC publishes a month's finals during the
   next month, so a healthy copy runs up to ~56 days behind), and the
   preliminary days behind past 7 days. A fetched CHIRPS feed whose part of
-  the copy is behind shows **Copy behind** instead of OK or Stale, and the
+  the copy is behind shows **Copy behind** instead of OK or Stale (the
+  portfolio and the project list read the same copy and count it apart,
+  `feeds.copyBehind`, [api.md § Portfolio](./api.md#portfolio)), and the
   panel says how far the copy reaches ("Rain data copied to 31 Jul 2026
   (final) / 5 Oct 2026 (preliminary)"; [ui.md § Data feeds](./ui.md#data-feeds),
   [api.md § Data feeds](./api.md#data-feeds)). The operator learns it first

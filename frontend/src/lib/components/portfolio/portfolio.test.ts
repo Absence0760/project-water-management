@@ -52,7 +52,7 @@ const row = (over: Partial<PortfolioProject> = {}): PortfolioProject => ({
 	lowestDamPct: { nodeName: 'Kareebos', pct: 0.183 },
 	damsKnown: true,
 	figuresWithheld: false,
-	feeds: { total: 0, ok: 0, failing: 0 },
+	feeds: { total: 0, ok: 0, failing: 0, copyBehind: 0 },
 	alertsFiring: 0,
 	restriction: { level: 'advisory', pct: 12.5 },
 	drought: null,
@@ -119,6 +119,11 @@ describe('wording: every status is words, every unknown says why', () => {
 		expect(feedsText(row({ feeds: { total: 2, ok: 2, failing: 0 } }))).toBe('2 feeds OK');
 		expect(feedsText(row({ feeds: { total: 3, ok: 1, failing: 1 } }))).toBe('1 of 3 feeds failing or stale');
 		expect(feedsText(row({ feeds: { total: 2, ok: 1, failing: 0 } }))).toBe('1 of 2 feeds OK, the rest waiting or off');
+		// A feed waiting on our late rain copy is named apart, never as failing or stale (the feed panel's Copy behind).
+		expect(feedsText(row({ feeds: { total: 2, ok: 1, failing: 0, copyBehind: 1 } }))).toBe('1 of 2 feeds waiting for our rain copy');
+		expect(feedsText(row({ feeds: { total: 3, ok: 0, failing: 1, copyBehind: 2 } }))).toBe('1 of 3 feeds failing or stale, 2 waiting for our rain copy');
+		// Positive control: no copy-behind count (an older backend) reads as before.
+		expect(feedsText(row({ feeds: { total: 2, ok: 2, failing: 0, copyBehind: 0 } }))).toBe('2 feeds OK');
 	});
 });
 

@@ -8,6 +8,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { requireTeamRole } from '../teams/access.js';
 import { appliedThresholds } from '../teams/settings.js';
+import { rainCopy } from '../feeds/rainCopy.js';
 import { loadPortfolio } from './portfolio.js';
 
 export const portfolioRoutes = new Hono<AuthEnv>().get('/:id/portfolio', async (c) =>
@@ -18,6 +19,7 @@ export const portfolioRoutes = new Hono<AuthEnv>().get('/:id/portfolio', async (
 		const thresholds = appliedThresholds(rows[0]!.settings);
 		const { source: _source, ...cutoffs } = thresholds;
 		// Each project's ages count to its own today (its time zone, 058): there is no one "today" for the team.
-		return c.json({ team: { id, name: rows[0]!.name, role }, thresholds, projects: await loadPortfolio(db, id, new Date(), cutoffs) });
+		// Feeds waiting on our late CHIRPS copy count as copy-behind, as the feed panel says (feeds/rainCopy.ts).
+		return c.json({ team: { id, name: rows[0]!.name, role }, thresholds, projects: await loadPortfolio(db, id, new Date(), cutoffs, await rainCopy(db)) });
 	})
 );

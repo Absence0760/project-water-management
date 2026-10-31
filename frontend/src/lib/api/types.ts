@@ -575,7 +575,11 @@ export interface PortfolioProject {
 	/** Lowest farm dam on figuresUntil, 0–1; null with no dams or when unknown (damsKnown). */
 	lowestDamPct: { nodeName: string; pct: number } | null;
 	damsKnown: boolean;
-	feeds: { total: number; ok: number; failing: number };
+	/**
+	 * Data feeds: `failing` counts failing and stale ones; `copyBehind` the CHIRPS feeds waiting on our late rain
+	 * copy (the feed panel's Copy behind), counted in neither. Absent from a backend older than the field.
+	 */
+	feeds: { total: number; ok: number; failing: number; copyBehind?: number };
 	/** Alerts firing now (WP-2.13); 0 when none, or when the catchment has no alert switched on. */
 	alertsFiring: number;
 	restriction: { level: 'none' | 'advisory' | 'restricted'; pct: number | null } | null;
