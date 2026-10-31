@@ -3,7 +3,7 @@
 // refusal) is in allocations.db.test.ts.
 import { compareAllocations, registeredUseRow, ALLOCATIONS_NOT_ASSESSED, type EvidenceAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { comparisonTotals, countsOthersYears, redactReportAllocations, redactRunAllocations, volumeTotals, withheldAllocationOps, withoutAllocationIdentifiers, withoutOthersRegistered, type VolumeRow } from './viewerUnits.js';
+import { ALTERNATIVE_CELL_WITHHELD, comparisonTotals, countsOthersYears, redactReportAllocations, redactRunAllocations, volumeTotals, withheldAllocationOps, withoutAllocationIdentifiers, withoutOthersRegistered, type VolumeRow } from './viewerUnits.js';
 
 let nextHolder = 0;
 const key = () => `k${++nextHolder}`;
@@ -176,6 +176,53 @@ describe('redactReportAllocations (issue #523 G1)', () => {
 		expect(report.summaries.baseline.allocations.nodes).toHaveLength(1);
 		// Baseline evidence: no application summary.
 		expect(redactReportAllocations({ ...report, summaries: { ...report.summaries, application: null } }).summaries.application).toBeNull();
+	});
+
+	it('cuts § 4’s combined dam whose yields rest on the registered volumes to its direction, on compare-only runs too; the other dam stays (evidence-26)', () => {
+		const m = { baseline: 50_000, combined: 40_000, change: -10_000, sumOfSingles: -10_000, interaction: 0 };
+		const dam = (nodeId: string, onVolumes: boolean) => ({ nodeId, name: nodeId, firmYield: m, reliability: m, verdict: { firmYield: 'lower', reliability: 'lower' }, onVolumes });
+		const report = {
+			version: 'evidence-26',
+			cumulative: { combined: { notAssessed: null, dams: [dam('capped', true), dam('plain', false)] } },
+			appendix: { baselineInputs: null },
+			summaries: { baseline: null, application: null }
+		};
+		const out = redactReportAllocations(report as never) as unknown as typeof report;
+		expect(out.cumulative.combined.dams).toEqual([
+			{ nodeId: 'capped', name: 'capped', verdict: { firmYield: 'lower', reliability: 'lower' }, onVolumes: true, firmYield: null, reliability: null, withheld: true },
+			dam('plain', false)
+		]);
+		expect(report.cumulative.combined.dams[0]!.firmYield).toBe(m);
+	});
+
+	it('gives the mitigation alternatives (evidence-26) without another unit’s volume: their ops, the registered-use cell, and every figure but a count of one that rests on a cap', () => {
+		const cell = (value: number) => ({ value, change: { run: 1, band: null, bandNote: 'no band', worse: null }, notAssessed: null, note: null });
+		const vol = (nodeId: string) => ({ op: 'allocation.set', allocation: { id: `a-${nodeId}`, nodeId, volumeM3PerYear: 1000 } });
+		const report = {
+			version: 'evidence-26',
+			mode: 'application',
+			appendix: { baselineInputs: null },
+			summaries: { baseline: null, application: null },
+			rows: [
+				{ id: 'ewrDays', alternatives: [cell(10), cell(11)] },
+				{ id: 'outflowMar', alternatives: [cell(2), cell(3)] },
+				{ id: 'registeredUse', alternatives: [cell(1), cell(1)] }
+			],
+			alternatives: [
+				{ label: 'Smaller dam', allocationMode: 'compare', ops: [{ index: 0, class: 'proposal', op: vol('own') }, { index: 1, class: 'baseline', op: vol('theirs') }] },
+				{ label: 'Capped', allocationMode: 'cap', ops: [] }
+			]
+		};
+		const out = redactReportAllocations(report as never, ['own']) as unknown as typeof report;
+		expect(out.alternatives[0]!.ops.map((o) => o.index)).toEqual([0]);
+		const row = (id: string) => out.rows.find((r) => r.id === id)!.alternatives;
+		// A count stays under both; a volume-bearing figure only under the one not on a cap; the registered-use cell under neither.
+		expect(row('ewrDays')).toEqual([cell(10), cell(11)]);
+		expect(row('outflowMar')).toEqual([cell(2), ALTERNATIVE_CELL_WITHHELD]);
+		expect(row('registeredUse')).toEqual([ALTERNATIVE_CELL_WITHHELD, ALTERNATIVE_CELL_WITHHELD]);
+		// The original isn't changed; a report with none is left without any.
+		expect(report.alternatives[0]!.ops).toHaveLength(2);
+		expect(redactReportAllocations({ ...report, alternatives: [] } as never)).not.toHaveProperty('rows.0.alternatives.0.notAssessed', ALTERNATIVE_CELL_WITHHELD.notAssessed);
 	});
 });
 

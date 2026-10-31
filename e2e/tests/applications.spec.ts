@@ -9,13 +9,18 @@
 // in the Applications tab and records the authority's decision, with the
 // licence's granted terms (a smaller dam than applied for, and its conditions;
 // 227_licence_terms), then an appeal lodged with the Water Tribunal and the
-// decision set aside (228_decision_events), which the applicant reads; an
+// decision set aside (228_decision_events), which the applicant reads (each
+// free text a share link prints says it's public: no personal information); an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
 // warning and can't be decided; a run with a baseline assumption shows the
 // applicant the published baseline's river beside nothing of theirs but the
-// EWR (issue #523 G9 (d)). Axe on
-// both views, light and dark. Synthetic data only.
+// EWR (issue #523 G9 (d)); the applicant gives the WULA reference and ties
+// the change to its works, which the submission freezes (294_wula_reference);
+// the applicant cites a smaller dam as a mitigation alternative, which the
+// submission freezes too and the assessor reads as its own column on the
+// evidence report's page 1 (298_scenario_alternatives). Axe on both views,
+// light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { AUTHORITY, seedApplicantProject, submitApplication } from '../support/applications.ts';
@@ -23,8 +28,11 @@ import { plantDwsGaugeRecord, tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { openDetails } from '../support/scenarios.ts';
 
 const NAME = 'Raise the Upper farm dam';
+// Under each free text a share link prints (frontend scenarios/licence.ts PUBLIC_RECORD_HINT).
+const PUBLIC_RECORD = 'Shown on the application’s public share link: don’t include personal information, such as a name.';
 
 test('an applicant submits an application on the published baseline, and the assessor decides it', async ({ page, owner, signIn }) => {
 	void owner;
@@ -65,6 +73,20 @@ test('an applicant submits an application on the published baseline, and the ass
 	const changes = a.getByRole('list', { name: `Changes in ${NAME}` });
 	await expect(changes.getByRole('listitem')).toContainText('Proposal');
 
+	// The WULA it models (294_wula_reference): the check warns, never blocks, until the change names the works it models.
+	const warnings = a.getByTestId('scenario-wula-warnings');
+	await expect(warnings).toContainText('No WULA application number is given');
+	await openDetails(a, 'scenario-wula');
+	const wula = a.getByTestId('scenario-wula');
+	await wula.getByRole('button', { name: 'Add the WULA reference' }).click();
+	await wula.getByLabel('Application number').fill('WU/2026/0042');
+	await wula.getByRole('group', { name: 'Works 1' }).getByLabel('The works').fill('Raise the Upper farm dam to 200 000 m³');
+	await wula.getByRole('button', { name: 'Save the WULA reference' }).click();
+	await expect(wula.getByTestId('wula-summary')).toHaveText('WU/2026/0042 · 1 works applied for');
+	await expect(warnings).toContainText('op 1 (node.set): a proposal tied to none of the works the WULA applies for');
+	await changes.getByLabel('Works change 1 models').selectOption('W1');
+	await expect(warnings).toHaveCount(0);
+
 	// Run it: their own view of the results (the assessors compare it in full), then submit it.
 	await expect(a.getByTestId('applicant-results-empty')).toBeVisible();
 	await a.getByRole('button', { name: 'Run scenario' }).click();
@@ -93,6 +115,11 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
 	await expect(a.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
 	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	// Submitted, the WULA reference and the change's works are frozen with the changes.
+	await expect(wula.getByRole('button', { name: 'Edit the WULA reference' })).toHaveCount(0);
+	await expect(wula.getByTestId('wula-frozen')).toBeVisible();
+	await expect(changes.getByLabel('Works change 1 models')).toHaveCount(0);
+	await expect(changes.getByTestId('op-works')).toHaveText('Models W1');
 
 	// The assessor's Applications tab lists it; they open and decide it.
 	await page.goto(`/projects/${project.id}?tab=applications`);
@@ -113,6 +140,8 @@ test('an applicant submits an application on the published baseline, and the ass
 	await decide.getByLabel('Licence or file reference').fill('WU-SYN-001');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('Yes').check();
 	await decide.getByLabel('Note: the authority’s reasons').fill('Enough is left for the Reserve at a smaller dam.');
+	// The free text a share link prints is a public record (security.md § Scenario links): each field says so.
+	await expect(decide.getByLabel('Note: the authority’s reasons')).toHaveAccessibleDescription(`${PUBLIC_RECORD} The applicant can make a share link too.`);
 	// The granted terms (227): less than applied for. They start from the changes applied for; the assessor replaces the dam size.
 	const terms = decide.getByTestId('decide-terms');
 	await terms.getByLabel('With changes').check();
@@ -128,6 +157,7 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(granted.getByRole('listitem')).toHaveCount(1);
 	await expect(granted.getByRole('listitem')).toContainText('180 000');
 	await terms.getByLabel(/^Licence conditions/).fill('Release 5 % of inflow in dry months.');
+	await expect(terms.getByLabel(/^Licence conditions/)).toHaveAccessibleDescription(PUBLIC_RECORD);
 	await record.click();
 	const decision = page.getByTestId('application-decision');
 	await expect(decision).toContainText('Licence issued (see its conditions): the decision of Synthetic catchment management agency, dated 30 Sep 2026.');
@@ -148,6 +178,8 @@ test('an applicant submits an application on the published baseline, and the ass
 	await appeal.getByLabel('Where').selectOption({ label: 'Water Tribunal (National Water Act s148)' });
 	await appeal.getByLabel('Date lodged').fill('2026-10-02');
 	await appeal.getByLabel(/^Case reference/).fill('WT 12/2026');
+	await expect(appeal.getByLabel(/^Case reference/)).toHaveAccessibleDescription(PUBLIC_RECORD);
+	await expect(appeal.getByLabel(/^Note/)).toHaveAccessibleDescription(PUBLIC_RECORD);
 	await appeal.getByRole('button', { name: 'Record it' }).click();
 	await expect(appeals.getByTestId('application-appeal-event')).toHaveCount(1);
 	await expect(appeals.getByTestId('application-appeal-event')).toContainText('Appeal lodged: Water Tribunal, 2 Oct 2026');
@@ -161,6 +193,7 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(appeal.getByLabel('Where')).toHaveValue('Water Tribunal');
 	// A variation records new terms, in the same editor as the decision's (axe over the decided panel with it open).
 	await appeal.getByLabel('Decision varied').check();
+	await expect(appeal.getByTestId('appeal-terms').getByLabel(/^Licence conditions/)).toHaveAccessibleDescription(PUBLIC_RECORD);
 	await expect(appeal.getByTestId('appeal-terms').getByRole('list', { name: 'Granted changes' }).getByRole('listitem')).toContainText('180\u202f000');
 	await expectNoViolations(page);
 	await appeal.getByLabel('Decision set aside').check();
@@ -209,6 +242,69 @@ test('an application whose run was changed behind the API shows the assessor a w
 	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('No').check();
 	await expect(decide.getByRole('button', { name: 'Record the authority’s decision' })).toBeDisabled();
+});
+
+test('an applicant cites a smaller dam as a mitigation alternative, frozen on submission, and the assessor reads it beside the application on page 1', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Alternatives applicant');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications alternatives', applicant.user);
+	const P = `${API_URL}/projects/${project.id}`;
+	const req = applicant.context.request;
+	/** One of the applicant's scenarios on the published baseline, run once; its id and the run's. */
+	const scenario = async (name: string, dam: number) => {
+		const made = await req.post(`${P}/scenarios`, { data: { name, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: dam }] } });
+		expect(made.status(), await made.text()).toBe(201);
+		const sid = (await made.json()).scenario.id as string;
+		const ran = await req.post(`${P}/scenarios/${sid}/runs`, { data: { label: name } });
+		expect(ran.status(), await ran.text()).toBe(201);
+		return { sid, runId: (await ran.json()).run.id as string };
+	};
+	const app = await scenario(NAME, 200_000);
+	await scenario('Upper farm dam, smaller', 170_000);
+
+	const a = applicant.page;
+	await a.goto(`/projects/${project.id}`);
+	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
+	await expect(a.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
+	await openDetails(a, 'scenario-alternatives');
+	const fold = a.getByTestId('scenario-alternatives');
+	await expect(fold.getByTestId('alternatives-summary')).toHaveText('None cited');
+	await fold.getByRole('button', { name: 'Cite alternatives' }).click();
+	const first = fold.getByRole('group', { name: 'Alternative 1' });
+	// Their own other scenario's run is offered, never the application's own.
+	await expect(first.getByLabel('Run').getByRole('option', { name: /^Upper farm dam, smaller — / })).toHaveCount(1);
+	await expect(first.getByLabel('Run').getByRole('option', { name: new RegExp(`^${NAME} — `) })).toHaveCount(0);
+	// A label is asked for before anything is sent.
+	await first.getByLabel('Run').selectOption({ label: 'Upper farm dam, smaller — Upper farm dam, smaller' });
+	await fold.getByRole('button', { name: 'Save the alternatives' }).click();
+	await expect(fold.getByRole('alert')).toContainText('Alternative 1 needs a label');
+	await first.getByLabel('Label').fill('Smaller dam');
+	await expectNoViolations(a);
+	await fold.getByRole('button', { name: 'Save the alternatives' }).click();
+	await expect(fold.getByTestId('alternatives-summary')).toHaveText('Smaller dam');
+	await expect(fold.getByTestId('alternatives-list')).toContainText('Smaller dam Upper farm dam, smaller — Upper farm dam, smaller');
+
+	// Submitted, the alternatives are frozen with the changes.
+	await a.getByRole('button', { name: 'Submit to the assessors' }).click();
+	await answerConfirm(a, true, `Submit “${NAME}” to the assessors?`);
+	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
+	await expect(fold.getByRole('button', { name: 'Change the alternatives' })).toHaveCount(0);
+	await expect(fold.getByTestId('alternatives-frozen')).toBeVisible();
+
+	// The assessor's evidence report (on the nominated baseline): page 1 sets the alternative beside the application, and A.2 lists its change.
+	expect((await page.request.post(`${P}/evidence`, { data: { runId, reason: 'Calibrated baseline' } })).status()).toBe(201);
+	await page.goto(`/projects/${project.id}/report?run=${app.runId}&evidence`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	const table = page.getByTestId('evidence-change-table');
+	await expect(table.getByTestId('evidence-alternative-heading')).toHaveText(/^Smaller damAlternative 1: “Upper farm dam, smaller”/);
+	const days = table.getByRole('row', { name: /^Days below the EWR/ }).first();
+	await expect(days.getByRole('cell')).toHaveCount(5);
+	await expect(days.getByRole('cell').last()).toContainText(/days/);
+	await expect(table.getByRole('row', { name: /^This and the other applications on this baseline, together/ }).getByRole('cell').last()).toHaveText(/^Not assessed for an alternative/);
+	await expect(page.getByTestId('evidence-alternatives-note')).toContainText('The last column is a mitigation alternative');
+	const a2 = page.getByTestId('evidence-a2-alternative');
+	await expect(a2).toContainText('Smaller dam: “Upper farm dam, smaller”, run “Upper farm dam, smaller”');
+	await expect(a2.getByRole('listitem')).toContainText('170');
 });
 
 test('a run with a baseline assumption shows the applicant the published baseline’s river beside nothing of theirs but the EWR', async ({ page, owner, signIn }) => {

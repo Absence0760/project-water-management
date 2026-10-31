@@ -279,6 +279,8 @@
 			<dd>{current.nextExpectedOn ? fmtDay(current.nextExpectedOn) : 'Not set'}</dd>
 			{#if current.updatedAt}<dt>Notice changed</dt><dd>{fmt(current.updatedAt)}{current.updatedBy ? ` by ${current.updatedBy}` : ''}</dd>{/if}
 		</dl>
+		<!-- Every decision, not only the 12 publications kept here (docs/ui.md § Restriction log). -->
+		<p class="small"><a href="?tab=restrictions" data-testid="restriction-log-link">Restriction log</a>: every restriction published to farmers, every change to its notice, and who made it.</p>
 	{/if}
 
 	{#if canEdit}

@@ -7,53 +7,33 @@
 //
 // It does what an assessor's `pnpm reproduce:pack --expect <hash>` does, on
 // the bytes the app stored: read the bundle back from the packs bucket, check
-// they hash to the pack's recorded bundle_sha256, then the engine's
-// checkPackBundle with the re-run (every file, the manifest against the
-// pack's hash, the inputs, the stored results, and each run re-run to its
-// results digest). The outcome, this engine's version, the runs' engines and
-// every check are recorded through app_record_pack_reproduction, which takes
-// them only from this job's own transaction, once per engine version.
+// they hash to the pack's recorded bundle_sha256, then check it without
+// re-running (engine planPackBundleReruns: every file, the manifest against
+// the pack's hash, the inputs, the stored results). A failed check is the
+// outcome now, recorded through app_record_pack_reproduction from this job's
+// own transaction, once per engine version. Otherwise the re-runs go out as
+// parts, each its own `pack_reproduce_part` job (302, so a pack whose
+// combined row holds 160 firm-yield searches never runs past one job's
+// 300 s), gathered into the same record by the last one back
+// (evidence/packReproduceParts.ts).
 //
 // A bundle that doesn't reproduce is an outcome, recorded, not a job failure:
 // the job is done. Only what another attempt can fix fails it (the store
 // unreachable), with retries; then the pack's page says the check failed.
-import { type BundleCheck, type BundleCheckResult, BUNDLE_ZIP_LIMITS, checkPackBundle, ENGINE_VERSION } from '@water-management/engine';
+import { type BundleCheck, BUNDLE_ZIP_LIMITS, ENGINE_VERSION, planPackBundleReruns } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../../db/tx.js';
 import { bundleHash } from '../../evidence/bundle.js';
 import type { PackReproductionOutcome } from '../../evidence/packReproduce.js';
+import { fanOutReproduction, reproductionOutcome, storedBundleCheck } from '../../evidence/packReproduceParts.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { getPackBundle } from '../../reports/storage.js';
 import { JobError } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
+export { isRerunCheck, reproductionOutcome, storedBundleCheck } from '../../evidence/packReproduceParts.js';
+
 export const PackReproducePayload = z.object({ packId: z.string().uuid() }).strict();
-
-/**
- * Whether a check re-runs the model with this engine: each run and the
- * headline pair (`reproduce:<run>`, `reproduce:headline`), and § 8's future
- * yield, every pair run again from the frozen factors (`climate:delta`,
- * evidence-23). On another engine than the runs' these are expected to differ.
- */
-export const isRerunCheck = (id: string) => id.startsWith('reproduce:') || id === 'climate:delta';
-
-/** What the outcome is called on the pack, from the engine's checks. */
-export function reproductionOutcome(r: Pick<BundleCheckResult, 'ok' | 'checks' | 'engine'>): Exclude<PackReproductionOutcome, 'no_bundle'> {
-	if (r.ok) return 'reproduced';
-	// Only the re-runs differ, and some run was made with another engine than this one: expected to differ, not evidence of a fault.
-	const failed = r.checks.filter((c) => !c.ok);
-	const onlyReruns = failed.length > 0 && failed.every((c) => isRerunCheck(c.id));
-	if (onlyReruns && r.engine.runs.some((v) => v !== r.engine.here)) return 'other_engine';
-	return 'not_reproduced';
-}
-
-/** A check the job adds before the engine's: the stored bytes are the bundle the pack records. */
-export function storedBundleCheck(stored: { sha256: string } | null, recorded: string): BundleCheck {
-	if (!stored) return { id: 'stored', ok: false, detail: 'the packs bucket holds no object under the pack’s recorded bundle key' };
-	return stored.sha256 === recorded
-		? { id: 'stored', ok: true, detail: `the stored bundle hashes to the pack’s recorded SHA-256 ${recorded}` }
-		: { id: 'stored', ok: false, detail: `the stored bundle hashes to ${stored.sha256}, not the pack’s recorded ${recorded}` };
-}
 
 async function record(
 	db: Db,
@@ -112,10 +92,17 @@ export const packReproduceHandler = defineHandler({
 			outcome = 'not_reproduced';
 			checks = [stored];
 		} else {
-			const result = await checkPackBundle(bytes, { hash: bundleHash, rerun: true, expectManifestSha256: pack.manifestSha256 });
-			outcome = reproductionOutcome(result);
-			checks = [stored, ...result.checks];
-			runEngines = [...new Set(result.engine.runs)];
+			// Checked without re-running; the re-runs are parts, each its own job (302, evidence/packReproduceParts.ts).
+			const plan = await planPackBundleReruns(bytes, { hash: bundleHash, expectManifestSha256: pack.manifestSha256 });
+			runEngines = [...new Set(plan.result.engine.runs)];
+			checks = [stored, ...plan.result.checks];
+			if (plan.parts.length) {
+				const gatheringId = await fanOutReproduction(db, job, { id: payload.packId, bundleSha256: pack.bundleSha256 }, { checks, runEngines, parts: plan.parts });
+				logEvent('info', { event: 'pack_reproduce_fanned_out', packId: payload.packId, projectId: job.projectId, gatheringId, parts: plan.parts.length, ms: Date.now() - started });
+				return;
+			}
+			// A check failed before any re-run (or there was none to make): the outcome is known now.
+			outcome = reproductionOutcome({ ok: plan.result.ok, checks, engine: plan.result.engine });
 		}
 		const recorded = await record(db, payload.packId, outcome, runEngines, pack.bundleSha256, checks);
 		logEvent(outcome === 'reproduced' ? 'info' : 'warn', {

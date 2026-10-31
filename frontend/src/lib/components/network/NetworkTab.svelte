@@ -994,6 +994,7 @@
 					onremove={() => remove(editing!.id, editing!.name || 'unnamed hydrological unit')}
 					farmersNote={editing.kind === 'farm' ? linkedNote(farmerCount?.[editing.id] ?? 0) : null}
 					mapHref={mapped.has(editing.id) ? mapNodeHref(editing.id) : null}
+					damSiting={mapped.dams(editing.id)}
 					previewHref={editing.kind === 'farm' && projectId ? resolve(`farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(editing.id)}`) : null}
 					onmakeoutlet={() => setOutlet(editing.id)}
 					landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === editing.id)}

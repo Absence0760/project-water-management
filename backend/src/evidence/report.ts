@@ -20,7 +20,7 @@ import {
 	withLocalitySvgHash,
 	type EnsembleHeader,
 	type EnsembleSummary,
-	type CumulativeReport,
+	type EvidenceAlternativeInput,
 	type EvidenceCombinedInput,
 	type EvidenceEnsembleInput,
 	type EvidenceImpactInput,
@@ -34,13 +34,15 @@ import {
 	type ResolvedEnsembleOptions,
 	type RunInputsSnapshot,
 	type RunSummary,
-	type ScenarioOp
+	type ScenarioOp,
+	type WulaReference
 } from '@water-management/engine';
 import { Hono } from 'hono';
 import { createHash } from 'node:crypto';
 import { runAllocationComparison } from '../allocations/runUse.js';
 import { allocationHolderKeys } from '../allocations/holders.js';
 import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
+import type { AssessmentReport } from '../assessments/background.js';
 import { checkCombination } from '../assessments/store.js';
 import { ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -54,6 +56,8 @@ import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
 import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
 import { loadAuthorisedImpact } from './authorisedImpact.js';
+import { loadAlternatives } from '../scenarios/alternatives.js';
+import { verifiedRuns } from '../runs/stamp.js';
 import { loadDamObservations } from './damObservations.js';
 import { futureYieldEnabled, latestFutureYield } from '../future/store.js';
 
@@ -426,7 +430,7 @@ async function loadCombined(
 		return { ...none, others: listed, unavailable: `${total} applications are based on this baseline, and an assessment takes at most ${ASSESSMENT_SCENARIOS_MAX} together.` };
 
 	const members = [...(own ? [`${own.id}:${own.opsSha256}`] : []), ...others.map((o) => `${o.scenarioId}:${o.opsSha256}`)];
-	const { rows: found } = await db.query<{ id: string; name: string; createdAt: Date; createdBy: string | null; engineVersion: string | null; status: 'complete' | 'pending'; report: CumulativeReport | null }>(
+	const { rows: found } = await db.query<{ id: string; name: string; createdAt: Date; createdBy: string | null; engineVersion: string | null; status: 'complete' | 'pending'; report: AssessmentReport | null }>(
 		`SELECT a.id, a.name, a.created_at AS "createdAt", u.display_name AS "createdBy", a.engine_version AS "engineVersion", a.status, a.report
 		 FROM assessment a LEFT JOIN app_user u ON u.id = a.created_by
 		 WHERE a.project_id = $1 AND a.base_run_id = $2 AND a.status IN ('complete', 'pending')
@@ -442,7 +446,16 @@ async function loadCombined(
 		return {
 			...none,
 			others: listed,
-			assessment: { id: hit.id, name: hit.name, createdAt: iso(hit.createdAt)!, createdBy: hit.createdBy, engineVersion: hit.engineVersion, report: hit.report }
+			assessment: {
+				id: hit.id,
+				name: hit.name,
+				createdAt: iso(hit.createdAt)!,
+				createdBy: hit.createdBy,
+				engineVersion: hit.engineVersion,
+				report: hit.report,
+				// evidence-26: its background at full allocation, a row set beside the baseline's (assessments/background.ts).
+				background: hit.report.background ? { label: hit.report.background.label, runLabel: hit.report.background.run.label, report: hit.report.background.report } : null
+			}
 		};
 	// None on the baseline's engine (a pending one comes next, then one on another engine): one on another engine
 	// isn't read, and says why; nor can one be made now while the server runs another engine than the baseline's.
@@ -533,6 +546,49 @@ async function loadMapFeatures(db: Db, projectId: string): Promise<EvidenceMapFe
 	}));
 }
 
+/**
+ * The mitigation alternatives the application's scenario cites (298, evidence-26), in its order: each run as the
+ * report reads the application's (its allocations, its scenario as the run recorded it), its paired ensembles on
+ * the baseline's, and whether its server stamp matches (077: an applicant may write their own runs' rows, so an
+ * unverified one prints no figure). Under the reader's RLS: a cited run is readable with the scenario that cites it
+ * once that is past draft (app_alternative_run_readable), so one the reader can't read is left out.
+ */
+async function loadAlternativeInputs(db: Db, projectId: string, scenarioId: string, baselineRunId: string): Promise<EvidenceAlternativeInput[]> {
+	const cited = await loadAlternatives(db, projectId, scenarioId);
+	if (!cited.length) return [];
+	const verified = await verifiedRuns(db, cited.map((x) => x.runId));
+	const out: EvidenceAlternativeInput[] = [];
+	for (const x of cited) {
+		const row = await loadRun(db, projectId, x.runId);
+		const rec = row?.inputs.scenario;
+		if (!row || !rec) continue;
+		const run = await withAllocations(db, projectId, runInput(row));
+		out.push({
+			label: x.label,
+			run: {
+				...run,
+				scenario: {
+					id: rec.id,
+					name: x.scenarioName || rec.name,
+					// An alternative prints its label, run and ops only: the applicant's words are the application's (Appendix C).
+					description: '',
+					prompts: { purposeAndNeed: '', mitigation: '', monitoring: '' },
+					status: null,
+					ownerName: null,
+					baseRunId: rec.baseRunId,
+					ops: rec.ops,
+					opsSha256: rec.opsSha256,
+					ownedNodeIds: rec.ownedNodeIds,
+					classified: rec.classified
+				}
+			},
+			paired: (await loadEnsembles(db, projectId, baselineRunId, row.id, rec.ownedNodeIds)).paired,
+			verified: verified.get(row.id) ?? false
+		});
+	}
+	return out;
+}
+
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
 /** How a report is built for its reader. */
 export interface EvidenceBuildOptions {
@@ -579,8 +635,10 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 			status: string;
 			origin: ScenarioOrigin;
 			ownerName: string | null;
+			wula: WulaReference;
 		}>(
-			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, s.origin, u.display_name AS "ownerName"
+			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, s.origin, u.display_name AS "ownerName",
+			        jsonb_build_object('number', s.wula_number, 'works', s.wula_works) AS wula
 			 FROM scenario s LEFT JOIN app_user u ON u.id = s.owner_user_id
 			 WHERE s.project_id = $1 AND s.id = $2`,
 			[projectId, recorded.id]
@@ -595,6 +653,8 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 				description: meta?.description ?? '',
 				// Appendix C's fixed prompts (129), as the scenario holds them now: a deleted scenario answered none.
 				prompts: { purposeAndNeed: meta?.purposeAndNeed ?? '', mitigation: meta?.mitigation ?? '', monitoring: meta?.monitoring ?? '' },
+				// The WULA it models (294, evidence-26), as the scenario holds it now (frozen once submitted): a deleted scenario recorded none.
+				wula: meta?.wula ?? { number: null, works: [] },
 				status: meta?.status ?? null,
 				ownerName: meta?.ownerName ?? null,
 				baseRunId: recorded.baseRunId,
@@ -687,7 +747,9 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		// The applicant's own dams' WOfS rows over the baseline's period (evidence-21); none for a team scenario or baseline evidence.
 		damObservations: await loadDamObservations(db, projectId, ownUnitsForD3(ownOrigin, recorded?.ownedNodeIds), baseline.startDate, baseline.endDate),
 		// § 8 (evidence-23): the newest stored future yield of these two runs, under the reader's RLS; none while FUTURE_YIELD is off.
-		futureYield: application ? await loadFutureYield(db, projectId, application.id, baseline.id) : null
+		futureYield: application ? await loadFutureYield(db, projectId, application.id, baseline.id) : null,
+		// Page 1's mitigation alternatives (evidence-26, 298): the scenario's, as it cites them now (frozen once submitted).
+		alternatives: recorded && application ? await loadAlternativeInputs(db, projectId, recorded.id, baseline.id) : []
 	};
 }
 

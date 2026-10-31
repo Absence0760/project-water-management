@@ -49,6 +49,15 @@
 // forcing as changed (engine fitRecordStatus), and the run comparison notes
 // the new version.
 //
+// A feed given new cells (another box, the catchment boundary's, a unit's
+// redrawn parcel) never splices them onto days it wrote over its old ones:
+// an owner confirms re-reading its whole record over them
+// (replace_series_from 'area:…', 296_feed_area_replace; routes.ts areaCheck).
+// Those days are staged the same way, in the version the series already
+// holds (none, for a reference ET feed, with each day's product), and the
+// swap replaces only the feed's own days, keeping a person's
+// (series/replace.ts replaceFeedRecord).
+//
 // A CHIRPS answer to a request with `cells` (the cell cache, 208) carries
 // each cell's own values, not the feed's mean (fromCells below). They are
 // checked (the days inside the window, the cells the feed's own), merged into
@@ -77,13 +86,39 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
-import { bodyOrigin, hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
+import {
+	bodyOrigin,
+	type DayRuns,
+	feedDaysSql,
+	feedProductDays,
+	hasValues,
+	MAX_SERIES_VALUES,
+	mergeDaily,
+	mergeSeries,
+	type ProductDays,
+	rowProvenance,
+	runParams,
+	SeriesBody,
+	valueRuns
+} from '../series/merge.js';
 import { onSeriesDaysChanged } from '../series/newData.js';
-import { replaceSeries } from '../series/replace.js';
+import { replaceFeedRecord, replaceSeries } from '../series/replace.js';
 import { unitFeedProblem } from './unitFeed.js';
 import { REVISION_REFRESH_DAYS, seriesFromCache, uniqueCells } from './cellCache.js';
 import { applyRecheck, type CacheOrigin, cacheOrigin, mergeCellCache, readCellCache, revisedDays, revisionMarkNow, staleLeft } from './cellCacheStore.js';
-import { bboxCellCount, chirpsProduct, FORECAST_DAYS, type FeedSource, feedProvenance, feedSourceText, type GridConfig, gridCells, isForecastSource, SOURCES } from './config.js';
+import {
+	bboxCellCount,
+	chirpsProduct,
+	FORECAST_DAYS,
+	type FeedSource,
+	feedProvenance,
+	feedSourceText,
+	type GridConfig,
+	gridCells,
+	isAreaReplace,
+	isForecastSource,
+	SOURCES
+} from './config.js';
 import { CellsResult, chirpsPendingFrom, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
@@ -108,9 +143,14 @@ export const CACHED_NEXT_SECONDS = 5;
  * on (its end is recorded as `through`), so the chain ends when the feed is
  * caught up. As the acting user, in the ingest's transaction.
  */
-/** The window reached the newest day the source can have: a CHIRPS day is yesterday at best, a DWS day today. */
+/**
+ * The window reached the newest day the source can have: a CHIRPS or reference
+ * ET day is yesterday at best (fetch.ts fetchWindow ends there), a DWS day
+ * today. Before 296 an `agera5_et0` feed was measured against today, which its
+ * window never reaches, so it queued another fetch a minute after every one.
+ */
 const caughtUp = (feed: FeedRow, window: FetchWindow) =>
-	window.end >= (feed.source === 'chirps' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday());
+	window.end >= (feed.source === 'chirps' || feed.source === 'agera5_et0' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday());
 
 async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number, more = false): Promise<void> {
 	// `more`: a caught-up CHIRPS feed with re-check work left (stale finals to read, revised days to refresh).
@@ -284,25 +324,40 @@ function checkCellsUsed(feed: FeedRow, result: OkResult): { cellsUsed: number | 
 	return { cellsUsed: got };
 }
 
+const STAGE_RUNS = (col: string) =>
+	`(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]') FROM unnest(${col}) r)`;
+
 /**
  * A confirmed replacement's fetch (see the header): merge the days into the
  * feed's stage, and swap the stage in once the backfill is caught up. The
  * live series is untouched until then.
+ *
+ * `area` (296_feed_area_replace): the feed re-reads its own record over new
+ * cells, in the product and version it already writes (`writes`, null for a
+ * source whose series carry none). The swap then replaces only the feed's own
+ * days (series/replace.ts replaceFeedRecord) and keeps a person's, where a
+ * version replacement (#40c) replaces the series whole. Either way the stage
+ * records which reference ET product read each day (an `agera5_et0` feed's
+ * dayProducts, 292), so the swap rebuilds the series' product days with the
+ * record.
  */
 async function stageReplacement(
 	db: Db,
 	feed: FeedRow,
 	result: OkResult,
 	window: FetchWindow,
-	writes: SeriesProvenance,
+	writes: SeriesProvenance | null,
 	held: SeriesProvenance | null,
-	nextSeconds: number
+	nextSeconds: number,
+	area = false
 ): Promise<IngestOutcome> {
-	const { rows } = await db.query<{ startDate: string; values: (number | null)[] }>(
-		`SELECT to_char(start_date, 'YYYY-MM-DD') AS "startDate", "values" FROM feed_stage WHERE feed_id = $1 FOR UPDATE`,
+	const { rows } = await db.query<{ startDate: string; values: (number | null)[]; agera5: DayRuns; power: DayRuns }>(
+		`SELECT to_char(start_date, 'YYYY-MM-DD') AS "startDate", "values", ${STAGE_RUNS('agera5_days')} AS agera5, ${STAGE_RUNS('power_days')} AS power
+		 FROM feed_stage WHERE feed_id = $1 FOR UPDATE`,
 		[feed.id]
 	);
-	let stage: { startDate: string; values: (number | null)[] } | null = rows[0] ?? null;
+	let stage: { startDate: string; values: (number | null)[] } | null = rows[0] ? { startDate: rows[0].startDate, values: rows[0].values } : null;
+	let products: ProductDays = { agera5: rows[0]?.agera5 ?? [], power: rows[0]?.power ?? [] };
 	let lastDate: string | null = null;
 	let lastValue: number | null = null;
 	let merged = 0;
@@ -310,13 +365,29 @@ async function stageReplacement(
 	if (result.startDate !== null && result.values.some((v) => v !== null)) {
 		// Canonical unit, as a series is stored (series/merge.ts).
 		const body = SeriesBody.parse({ kind: feed.targetKind, name: feed.targetName, unit, startDate: result.startDate, values: result.values });
-		const next = mergeDaily(stage, { startDate: body.startDate, values: body.values }, { keepOnNull: true });
+		const incoming = { startDate: body.startDate, values: body.values };
+		const next = mergeDaily(stage, incoming, { keepOnNull: true });
 		if (next.values.length > MAX_SERIES_VALUES) return failed(db, feed, `the series could not take the new days: series would exceed ${MAX_SERIES_VALUES} days`);
+		// The product of each day written now (none named: unknown); every staged day stays in the stage's span.
+		const span: DayRuns = [[toEpochDay(next.startDate), toEpochDay(next.startDate) + next.values.length]];
+		const dayProducts = feed.source === 'agera5_et0' ? result.dayProducts : undefined;
+		products = feedProductDays(products, span, { wrote: valueRuns(incoming), start: incoming.startDate, ...(dayProducts ? { dayProducts } : {}) });
 		await db.query(
-			`INSERT INTO feed_stage (feed_id, project_id, start_date, "values", product, product_version, replace_from)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
-			 ON CONFLICT (feed_id) DO UPDATE SET start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now()`,
-			[feed.id, feed.projectId, next.startDate, next.values, writes.product, writes.version, feed.replaceFrom ?? '']
+			`INSERT INTO feed_stage (feed_id, project_id, start_date, "values", product, product_version, replace_from, agera5_days, power_days)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, ${feedDaysSql(10, 11)})
+			 ON CONFLICT (feed_id) DO UPDATE SET start_date = EXCLUDED.start_date, "values" = EXCLUDED."values",
+				agera5_days = EXCLUDED.agera5_days, power_days = EXCLUDED.power_days, updated_at = now()`,
+			[
+				feed.id,
+				feed.projectId,
+				next.startDate,
+				next.values,
+				writes?.product ?? null,
+				writes?.version ?? null,
+				feed.replaceFrom ?? '',
+				...runParams(products.agera5),
+				...runParams(products.power)
+			]
 		);
 		stage = next;
 		let lastIdx = result.values.length - 1;
@@ -330,22 +401,25 @@ async function stageReplacement(
 	if (done) {
 		// Caught up: the new record goes in whole, in this transaction.
 		let replaced;
+		// The feed is the replaced record's source (107); its values come in the stored unit.
+		const origin = { source: feedSourceText(feed.source, feed.config), unit, factor: 1 };
 		try {
-			replaced = await replaceSeries(
-				db,
-				feed.projectId,
-				{
-					kind: feed.targetKind,
-					name: feed.targetName,
-					unit,
-					startDate: stage!.startDate,
-					values: stage!.values,
-					provenance: writes,
-					// The feed is the replaced record's source (107); its values come in the stored unit.
-					origin: { source: feedSourceText(feed.source, feed.config), unit, factor: 1 }
-				},
-				{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source }, feedId: feed.id }
-			);
+			replaced = area
+				? // Its own days re-read over the new cells; a person's days stay (296).
+					await replaceFeedRecord(
+						db,
+						feed.projectId,
+						{ kind: feed.targetKind, name: feed.targetName, unit, provenance: writes, origin },
+						stage!,
+						products,
+						{ feedId: feed.id, audit: { feedId: feed.id, source: feed.source, area: true } }
+					)
+				: await replaceSeries(
+						db,
+						feed.projectId,
+						{ kind: feed.targetKind, name: feed.targetName, unit, startDate: stage!.startDate, values: stage!.values, provenance: writes, origin },
+						{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source }, feedId: feed.id }
+					);
 		} catch (err) {
 			if (!(err instanceof ApiError)) throw err;
 			return failed(db, feed, `the series could not take the new days: ${err.message}`);
@@ -355,7 +429,7 @@ async function stageReplacement(
 		// The whole new record went in: the new-data hook (series/newData.ts).
 		const m = replaced.meta;
 		await onSeriesDaysChanged(db, feed.projectId, { seriesId: m.id, kind: m.kind, name: m.name, daysChanged: replaced.daysChanged, via: 'feed' });
-		meta = { ...fetcherMeta(result), merged, replaced: provenanceLabel(held).slice(0, 100), through: window.end };
+		meta = { ...fetcherMeta(result), merged, replaced: area ? 'area' : provenanceLabel(held).slice(0, 100), through: window.end };
 	} else {
 		meta = { ...fetcherMeta(result), merged, staged: stage?.values.length ?? 0, through: window.end };
 	}
@@ -521,11 +595,13 @@ export async function ingestResult(
 	const checked: OkResult = { ...result, meta: used.cellsUsed === null ? claimedMeta : { ...claimedMeta, cellsUsed: used.cellsUsed } };
 
 	const writes = feedProvenance(feed.source, feed.config);
-	if (writes) {
+	// An owner confirmed re-reading the feed's whole record over its new cells (296): staged, as a version replacement is.
+	const area = isAreaReplace(feed.replaceFrom);
+	if (writes || area) {
 		// The version guard, on the locked row: nothing can relabel or refill it between the check and the write.
 		const cur = await lockSeries(db, feed.projectId, feed.targetKind, feed.targetName);
 		const held = cur ? rowProvenance({ product: cur.product ?? null, productVersion: cur.productVersion ?? null }) : null;
-		if (!seriesAccepts(writes, cur ? { filled: hasValues(cur.values), provenance: held } : null)) {
+		if (writes && !seriesAccepts(writes, cur ? { filled: hasValues(cur.values), provenance: held } : null)) {
 			if (feed.replaceFrom !== provenanceKey(held)) {
 				return failed(
 					db,
@@ -536,6 +612,8 @@ export async function ingestResult(
 			// The revised days wait for the swap (the marker carries on): the stage was computed from the cache as it is.
 			return stageReplacement(db, feed, checked, window, writes, held, nextSeconds);
 		}
+		// The series holds what the feed writes (or nothing): its own days are re-read over the new cells, then swapped in.
+		if (area) return stageReplacement(db, feed, checked, window, writes, held, nextSeconds, true);
 	}
 
 	let lastDate: string | null = null;
@@ -559,9 +637,11 @@ export async function ingestResult(
 				// other value, an upload or an import, is kept (031_feed_days, #30).
 				// provenance: labels a new or empty series with what the feed writes.
 				// origin (107_series_source.sql): a new or empty series records the feed as its source.
+				// dayProducts: a reference ET feed's product for each day it writes (292_feed_et0_product_days), for a run's credits.
 				const r = await mergeSeries(db, feed.projectId, body, {
 					keepOnNull: true,
 					feedId: feed.id,
+					...(feed.source === 'agera5_et0' && checked.dayProducts ? { dayProducts: checked.dayProducts } : {}),
 					origin: bodyOrigin({ ...body, source: feedSourceText(feed.source, feed.config) }),
 					...(writes ? { provenance: writes } : {})
 				});

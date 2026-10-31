@@ -1,4 +1,5 @@
-// Rain data credits (issue #604 R4-E, docs/data-sources.md).
+// Rain data credits (issue #604 R4-E, docs/data-sources.md), and the
+// reference ET products' (AgERA5, NASA POWER; R5-E).
 // A module of its own, with no imports (engine `@water-management/engine/credits`),
 // so the public Data sources page and the map's attribution, which show
 // only these, load none of the rest of the liability texts.
@@ -76,8 +77,71 @@ export function c3sSeasonalCredit(systems: readonly string[], accessed: string):
 	return lines;
 }
 
-/** A rain product whose credit must go with its values. */
-export type CreditedRainProduct = 'era5l' | 'imerg_late' | 'ecmwf_ens';
+/**
+ * AgERA5 v2.0's dataset citation (docs/data-sources.md § agera5), after
+ * Copernicus's notice (`copernicusAgera5Notice`, the same words as
+ * ERA5-Land's: the copy converts it too). The ingest writes the same words
+ * into the array (ingest/agera5.py ATTRIBUTION; its test checks).
+ */
+export const AGERA5_CITATION =
+	'Boogaard, H., Schubert, J., De Wit, A., Lazebnik, J., Hutjes, R., Van der Grijn, G. (2020): Agrometeorological indicators from 1979 to present derived from reanalysis. Copernicus Climate Change Service (C3S) Climate Data Store (CDS). DOI: 10.24381/cds.6c68c9bb';
+
+/** Copernicus's notice for AgERA5 (docs/data-sources.md § agera5): ERA5-Land's words, with the year the data were read. */
+export const copernicusAgera5Notice = copernicusEra5lNotice;
+
+/**
+ * NASA POWER's credit for the FAO-56 reference ET we compute from its daily
+ * meteorology (docs/data-sources.md § nasa-power, CC BY 4.0); the ingest
+ * writes the same words into the array (ingest/nasapower.py ATTRIBUTION).
+ */
+export const NASA_POWER_ET0_CREDIT =
+	'NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; FAO-56 Penman-Monteith reference evapotranspiration computed by us from its daily meteorology';
+
+/** A reference ET product whose credit must go with its values (issue #604 R5-E): the `agera5_et0` feed's two sources. */
+export type CreditedEt0Product = 'agera5_et0' | 'power_et0';
+
+/** A product whose credit must go with its values: the rain products, then the reference ET ones. */
+export type CreditedRainProduct = 'era5l' | 'imerg_late' | 'ecmwf_ens' | CreditedEt0Product;
+
+const ET0_PRODUCTS: readonly CreditedEt0Product[] = ['agera5_et0', 'power_et0'];
+
+/** A stored run's `et0Products` (inputs.et0Products, backend runs/execute.ts), read safely: the known products, each once, in a fixed order. */
+export const et0ProductsOf = (v: unknown): CreditedEt0Product[] => (Array.isArray(v) ? ET0_PRODUCTS.filter((p) => v.includes(p)) : []);
+
+/**
+ * The days an `agera5_et0` feed wrote into the reference ET series a run read
+ * and still holds (time_series.feed_days, the days no person has since
+ * edited), as inclusive ISO ranges, by the product the feed recorded for each
+ * (time_series.feed_agera5_days / feed_power_days, backend
+ * 292_feed_et0_product_days): AgERA5's, NASA POWER's, and the days with no
+ * recorded product (written before the record existed), which either may
+ * have supplied, so both are credited for them.
+ */
+export interface Et0FeedDays {
+	agera5: readonly (readonly [string, string])[];
+	power: readonly (readonly [string, string])[];
+	unrecorded: readonly (readonly [string, string])[];
+}
+
+/**
+ * Which reference ET products a run read (issue #604 R5-E): the products of
+ * the feed's days within the run days the series supplied
+ * (RunSummary.et0Daily first..last; none when GR4J didn't read it), both for
+ * a day with no recorded product. Pure ISO-date comparisons, so this module
+ * keeps no imports.
+ */
+export function et0ProductsRead(
+	feed: Et0FeedDays | null | undefined,
+	info: { used: boolean; dailyDays: number; first: string | null; last: string | null } | null | undefined
+): CreditedEt0Product[] {
+	if (!feed || !info?.used || info.dailyDays <= 0 || !info.first || !info.last) return [];
+	const { first, last } = info;
+	const read = (ranges: readonly (readonly [string, string])[]) => ranges.some(([lo, hi]) => lo <= last && hi >= first);
+	const unknown = read(feed.unrecorded);
+	const agera5 = unknown || read(feed.agera5);
+	const power = unknown || read(feed.power);
+	return ET0_PRODUCTS.filter((p) => (p === 'agera5_et0' ? agera5 : power));
+}
 
 /** One product's credit lines: its name, then the notice or citation, word for word. */
 export interface RainCredit {
@@ -88,16 +152,23 @@ export interface RainCredit {
 
 /**
  * The credits a run (or a view of the products) owes: ERA5-Land's Copernicus
- * notice and citation, IMERG Late's citation per version, ECMWF's credit, in
- * that order, each once. `accessed` is the day the values were read
- * (YYYY-MM-DD, the run's creation day); its year goes in the Copernicus line.
+ * notice and citation, IMERG Late's citation per version, ECMWF's credit,
+ * then the reference ET products' (AgERA5's Copernicus notice and citation,
+ * NASA POWER's credit), in that order, each once. `accessed` is the day the
+ * values were read (YYYY-MM-DD, the run's creation day); its year goes in the
+ * Copernicus lines.
  */
-export function rainCredits(used: { era5l?: boolean; imergVersions?: readonly string[]; ecmwf?: boolean }, accessed: string): RainCredit[] {
+export function rainCredits(
+	used: { era5l?: boolean; imergVersions?: readonly string[]; ecmwf?: boolean; agera5?: boolean; power?: boolean },
+	accessed: string
+): RainCredit[] {
 	const out: RainCredit[] = [];
 	if (used.era5l) out.push({ product: 'era5l', name: 'ERA5-Land', lines: [copernicusEra5lNotice(accessed.slice(0, 4)), ERA5L_CITATION] });
 	const versions = [...new Set(used.imergVersions ?? [])];
 	if (versions.length) out.push({ product: 'imerg_late', name: 'IMERG Late', lines: versions.map((v) => imergCitation(accessed, v)) });
 	if (used.ecmwf) out.push({ product: 'ecmwf_ens', name: 'ECMWF ENS forecast', lines: [ECMWF_CREDIT] });
+	if (used.agera5) out.push({ product: 'agera5_et0', name: 'AgERA5 reference evapotranspiration', lines: [copernicusAgera5Notice(accessed.slice(0, 4)), AGERA5_CITATION] });
+	if (used.power) out.push({ product: 'power_et0', name: 'NASA POWER reference evapotranspiration', lines: [NASA_POWER_ET0_CREDIT] });
 	return out;
 }
 
@@ -108,22 +179,28 @@ export function rainCredits(used: { era5l?: boolean; imergVersions?: readonly st
  * ECMWF feed's: `forecastRainSource` 'ecmwf_ens' (the feed wrote every one),
  * or `forecastRainEcmwf` true (it wrote some, and a person the rest; backend
  * runs/execute.ts forecastRainEcmwf). ERA5-Land's and IMERG's presence is
- * the products' own, never all-or-nothing.
+ * the products' own, never all-or-nothing. AgERA5 and NASA POWER when the
+ * run's daily reference ET held their values on a day GR4J read
+ * (`et0Products`, backend runs/execute.ts, et0ProductsRead).
  */
 export function runRainCredits(
 	run: {
 		summary?: { gapRain?: { products: readonly { product: string; version: string | null; present: boolean }[] } | null } | null;
 		forecastRainSource?: unknown;
 		forecastRainEcmwf?: unknown;
+		et0Products?: unknown;
 	},
 	accessed: string
 ): RainCredit[] {
 	const products = run.summary?.gapRain?.products.filter((p) => p.present) ?? [];
+	const et0 = et0ProductsOf(run.et0Products);
 	return rainCredits(
 		{
 			era5l: products.some((p) => p.product === 'era5l'),
 			imergVersions: products.filter((p) => p.product === 'imerg_late' && p.version).map((p) => p.version!),
-			ecmwf: run.forecastRainSource === 'ecmwf_ens' || run.forecastRainEcmwf === true
+			ecmwf: run.forecastRainSource === 'ecmwf_ens' || run.forecastRainEcmwf === true,
+			agera5: et0.includes('agera5_et0'),
+			power: et0.includes('power_et0')
 		},
 		accessed
 	);

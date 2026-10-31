@@ -8,6 +8,7 @@ import { compareAllocations, type AllocationEntry } from '../allocations/compare
 import { toEpochDay } from '../calendar';
 import { compareRuns } from '../compare';
 import { ENGINE_ERRATA } from '../liability/errata.generated';
+import type { Erratum } from '../liability/errata';
 import { KNOWN_LIMITATIONS } from '../liability/limitations.generated';
 import { METHODOLOGY } from '../liability/methodology.generated';
 import { canonicalJson } from '../manifest';
@@ -23,10 +24,16 @@ import { runPairedEnsemble, summarisePaired } from '../uncertainty/paired';
 import { band as bandOf } from '../uncertainty/bands';
 import { licenceImpactByYearClass } from '../views/licenceImpact';
 import { APPLICANT_PROMPTS } from './prompts';
+import type { OpClass } from '../scenario/overrides';
+import type { EvidenceScenarioInput } from './types';
 import { FUTURE_YIELD_CAVEAT, futureCaveatPending, runFutureYield } from './future';
 import { FUTURE_FIXTURE_DAM, fixtureFactorTable, packFixtureInput } from '../testing/packBundle';
+import { ALTERNATIVES_MAX } from './types';
 import {
 	ALLOCATIONS_NOT_ASSESSED,
+	ALTERNATIVE_NOT_COMBINED,
+	ALTERNATIVE_OTHER_BASELINE,
+	ALTERNATIVE_UNVERIFIED,
 	BASIS_NO_FLOW,
 	BASIS_PRAGMATIC,
 	citedEnsemble,
@@ -334,7 +341,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-25');
+		expect(r.version).toBe('evidence-26');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -342,6 +349,187 @@ describe('evidenceReport: an application on the nominated run', () => {
 		});
 		// One answer per prompt, in the prompts' order, and nothing else.
 		expect(Object.keys(r.applicantStatement!.prompts!)).toEqual(APPLICANT_PROMPTS.map((p) => p.id));
+	});
+
+	describe('the WULA reference on page 1 and A.2 (evidence-26, 294_wula_reference)', () => {
+		const withWula = (ops: unknown[], wula: EvidenceScenarioInput['wula'], classified = ['proposal', 'proposal'] as OpClass[], origin: 'applicant' | 'team' = 'applicant') => {
+			const i = input();
+			return evidenceReport({ ...i, application: { ...i.application!, scenario: { ...i.application!.scenario, ops: ops as never, classified, origin, ...(wula ? { wula } : {}) } } });
+		};
+		const [dam, crop] = input().application!.scenario.ops;
+		const WULA = { number: 'WU/2026/0042', works: [{ ref: 'W1', text: 'A 1.5 million m³ dam on Farm two' }, { ref: 'W2', text: 'A weir on the river' }] };
+
+		it('prints the number and the works, and ties each change to the works it names', () => {
+			const r = withWula([{ ...dam, works: 'W1' }, crop], WULA);
+			expect(r.version).toBe('evidence-26');
+			expect(r.identity.application!.wula).toEqual({ number: 'WU/2026/0042', refs: ['W1', 'W2'], untiedProposals: [1], unknownRefs: [], unmodelled: ['W2'] });
+			// The works in words are A.2's alone: page 1 holds none of the applicant's words (G13).
+			expect(r.appendix.wulaWorks).toEqual(WULA.works);
+			expect(JSON.stringify({ identity: r.identity, flags: r.flags, rows: r.rows, questions: r.questions })).not.toContain('A weir on the river');
+			// A.2 reads each op's tag from the op itself.
+			expect(r.ops.map((o) => o.op.works)).toEqual(['W1', undefined]);
+			expect(r.questions.some((q) => q.startsWith('1 proposal models none of the works the WULA applies for (A.2)'))).toBe(true);
+			expect(r.questions.some((q) => q.startsWith('No change models works “W2” (A.2)'))).toBe(true);
+		});
+
+		it('asks for nothing when every proposal is tied and every works modelled (positive control)', () => {
+			const r = withWula([{ ...dam, works: 'W1' }, { ...crop, works: 'W2' }], WULA);
+			expect(r.identity.application!.wula).toMatchObject({ untiedProposals: [], unknownRefs: [], unmodelled: [] });
+			expect(r.questions.filter((q) => /WULA|\(A\.2\)/.test(q))).toEqual([]);
+		});
+
+		it('holds an application with no reference to it: no number, every proposal untied', () => {
+			const r = withWula([dam, crop], undefined);
+			expect(r.identity.application!.wula).toEqual({ number: null, refs: [], untiedProposals: [0, 1], unknownRefs: [], unmodelled: [] });
+			expect(r.appendix.wulaWorks).toEqual([]);
+			expect(r.questions.some((q) => q.startsWith('The WULA application number is not given (page 1)'))).toBe(true);
+		});
+
+		it('leaves it out of a team scenario that records none, and prints one that does', () => {
+			expect(withWula([dam, crop], undefined, undefined, 'team').identity.application!.wula).toBeNull();
+			expect(withWula([dam, crop], WULA, undefined, 'team').identity.application!.wula?.number).toBe('WU/2026/0042');
+		});
+
+		it('doesn’t count a baseline assumption as untied', () => {
+			const r = withWula([{ ...dam, works: 'W1' }, crop], { number: 'WU/1', works: [WULA.works[0]!] }, ['proposal', 'baseline']);
+			expect(r.identity.application!.wula).toMatchObject({ untiedProposals: [], unmodelled: [] });
+		});
+	});
+
+	describe('the mitigation alternatives on page 1 (evidence-26, 298_scenario_alternatives)', () => {
+		// "Smaller dam": the same works at a third of the capacity, run on the same baseline.
+		const smaller: ModelInput = {
+			...app,
+			model: { ...app.model, nodes: app.model.nodes.map((n) => (n.id === 'F2' ? { ...n, damCapacityM3: 0.5e6 } : n)) }
+		};
+		const smallerOut = runModel(smaller);
+		const altScenario = (over: Partial<EvidenceScenarioInput> = {}): EvidenceScenarioInput => ({
+			...input().application!.scenario,
+			id: 'scn-small',
+			name: 'Farm two, smaller dam',
+			status: 'draft',
+			ops: [{ op: 'node.set', nodeId: 'F2', field: 'damCapacityM3', value: 0.5e6 }] as never,
+			opsSha256: 'small-sha',
+			classified: ['proposal'],
+			...over
+		});
+		const alt = (label: string, over: Partial<EvidenceScenarioInput> = {}, run: Partial<EvidenceRunInput> = {}, paired: EvidenceEnsembleInput[] = []) => ({
+			label,
+			run: { ...stored('small', smaller, smallerOut, { createdAt: '2026-09-04T00:00:00.000Z', ...run }), scenario: altScenario(over) },
+			paired,
+			verified: true
+		});
+		const cell = (r: ReturnType<typeof evidenceReport>, id: string, i = 0) => r.rows.find((x) => x.id === id)!.alternatives![i]!;
+
+		it('cites none by default: no column, and no cells on the rows (an older document’s shape)', () => {
+			expect(r.alternatives).toEqual([]);
+			for (const row of r.rows) expect(row).not.toHaveProperty('alternatives');
+		});
+
+		it('sets a labelled alternative beside the application on every row, with its own change against the baseline', () => {
+			const rr = evidenceReport(input({ alternatives: [alt('Smaller dam')] }));
+			expect(rr.alternatives).toHaveLength(1);
+			expect(rr.alternatives![0]).toMatchObject({
+				label: 'Smaller dam',
+				runId: 'small',
+				scenarioId: 'scn-small',
+				scenarioName: 'Farm two, smaller dam',
+				opsSha256: 'small-sha',
+				proposals: 1,
+				assumptions: 0,
+				pairedId: null,
+				notAssessed: null
+			});
+			expect(rr.alternatives![0]!.ops).toEqual([{ index: 0, class: 'proposal', op: { op: 'node.set', nodeId: 'F2', field: 'damCapacityM3', value: 0.5e6 } }]);
+			for (const row of rr.rows) expect(row.alternatives, row.id).toHaveLength(1);
+			const days = cell(rr, 'ewrDays');
+			expect(days.value).toBe(smallerOut.summary.catchment.ewrDaysNotMet);
+			expect(days.change!.run).toBe(smallerOut.summary.catchment.ewrDaysNotMet - baseOut.summary.catchment.ewrDaysNotMet);
+			// No paired ensemble on the alternative's run: the cell says so, never borrows the application's band.
+			expect(days.change!.band).toBeNull();
+			expect(days.change!.bandNote).toBe(NO_BAND.noPaired);
+			// The application's own column is unchanged by citing one.
+			expect(rr.rows.map(({ alternatives: _x, ...row }) => row)).toEqual(r.rows);
+			const reserve = cell(rr, 'reserve');
+			expect(reserve.value! / 100).toBeCloseTo(smallerOut.summary.ewrAssurance![0]!.overall.rate!, 12);
+			// The works rows are read at the application's works, so the two are set side by side.
+			expect(rr.rows.filter((x) => x.id === 'ewrBelowWorks').every((x) => x.alternatives!.length === 1)).toBe(true);
+			// The combined row is the application's with the others, never an alternative's.
+			expect(cell(rr, 'otherApplications')).toEqual({ value: null, change: null, notAssessed: ALTERNATIVE_NOT_COMBINED, note: null });
+		});
+
+		it('bands an alternative’s change by its own paired ensemble on the cited one', () => {
+			const altPaired = ens({ id: 'p-small', runId: 'small', baselineId: 'e1', summary: null, paired: summarisePaired(ensemble, runPairedEnsemble(smaller, ensemble), { own: ['F2'] }) });
+			const rr = evidenceReport(input({ alternatives: [alt('Smaller dam', {}, {}, [altPaired])] }));
+			expect(rr.alternatives![0]!.pairedId).toBe('p-small');
+			const days = cell(rr, 'ewrDays');
+			expect(days.change!.band).toEqual(altPaired.paired!.ewrDaysNotMet);
+			// A paired ensemble on another baseline ensemble isn't cited (positive control: the one above is).
+			const other = evidenceReport(input({ alternatives: [alt('Smaller dam', {}, {}, [{ ...altPaired, baselineId: 'e-other' }])] }));
+			expect(other.alternatives![0]!.pairedId).toBeNull();
+		});
+
+		it('reads at most ALTERNATIVES_MAX, in the application’s order', () => {
+			const rr = evidenceReport(input({ alternatives: ['A', 'B', 'C', 'D'].map((l) => alt(l)) }));
+			expect(ALTERNATIVES_MAX).toBe(3);
+			expect(rr.alternatives!.map((x) => x.label)).toEqual(['A', 'B', 'C']);
+			for (const row of rr.rows) expect(row.alternatives).toHaveLength(3);
+		});
+
+		it('doesn’t assess one on another baseline, and says so', () => {
+			const rr = evidenceReport(input({ alternatives: [alt('Elsewhere', { baseRunId: 'other-base' })] }));
+			expect(rr.alternatives![0]!.notAssessed).toBe(ALTERNATIVE_OTHER_BASELINE);
+			for (const row of rr.rows) expect(row.alternatives![0]).toEqual({ value: null, change: null, notAssessed: ALTERNATIVE_OTHER_BASELINE, note: null });
+			expect(rr.questions.some((q) => q.startsWith('Alternative “Elsewhere”: Not assessed'))).toBe(true);
+		});
+
+		it('prints no figure from an alternative whose run doesn’t verify (077)', () => {
+			const rr = evidenceReport(input({ alternatives: [{ ...alt('Forged'), verified: false }] }));
+			expect(rr.alternatives![0]!.notAssessed).toBe(ALTERNATIVE_UNVERIFIED);
+			for (const row of rr.rows) expect(row.alternatives![0]).toEqual({ value: null, change: null, notAssessed: ALTERNATIVE_UNVERIFIED, note: null });
+		});
+
+		it('asks about an alternative that changes a baseline assumption or ran on another engine, and not about a clean one', () => {
+			const clean = evidenceReport(input({ alternatives: [alt('Smaller dam')] }));
+			expect(clean.questions.filter((q) => q.startsWith('Alternative'))).toEqual([]);
+			const rr = evidenceReport(input({ alternatives: [alt('Wetter', { classified: ['baseline'] }, { engineVersion: '1.29.0' })] }));
+			expect(rr.alternatives![0]!.assumptions).toBe(1);
+			expect(rr.questions.some((q) => q.startsWith('Alternative “Wetter” changes a baseline assumption (A.2)'))).toBe(true);
+			expect(rr.questions.some((q) => q.startsWith('Alternative “Wetter” ran on engine 1.29.0, the application on 1.30.0'))).toBe(true);
+		});
+
+		it('lists another unit whose supply only an alternative moves, with the application’s value beside it', () => {
+			// An "application" that changes nothing, cited with an alternative whose run takes 5 points of Farm one's supply.
+			const i = input();
+			const still = { ...i, application: { ...stored('still', base, baseOut), scenario: i.application!.scenario }, ensembles: { baseline: i.ensembles.baseline, paired: [] } };
+			const plain = evidenceReport(still);
+			expect(plain.rows.filter((x) => x.id === 'userSupply').map((x) => x.subject)).toEqual([null]);
+			const takes = { ...baseOut, summary: { ...baseOut.summary, farms: baseOut.summary.farms.map((f) => (f.nodeId === 'F1' ? { ...f, fractionSupplied: f.fractionSupplied - 0.05 } : f)) } };
+			const rr = evidenceReport({ ...still, alternatives: [{ label: 'Takes', run: { ...stored('takes', base, takes), scenario: altScenario() }, paired: [], verified: true }] });
+			const row = rr.rows.find((x) => x.id === 'userSupply' && x.subject === 'Farm one')!;
+			expect(row.application).toBeCloseTo(row.baseline!, 12);
+			expect(row.change!.run).toBeCloseTo(0, 12);
+			expect(row.note).toMatch(/an alternative moves it/);
+			expect(row.alternatives![0]!.change!.run).toBeCloseTo(-5, 9);
+			// The application's "no other unit moved" row stays, and the alternative's cell on it is its own.
+			expect(rr.rows.filter((x) => x.id === 'userSupply').map((x) => x.subject)).toEqual([null, 'Farm one']);
+			expect(rr.rows.find((x) => x.id === 'userSupply' && x.subject === null)!.alternatives![0]!.note).toMatch(/^1 other unit’s supply changed/);
+		});
+
+		it('cites none for baseline evidence', () => {
+			const rr = evidenceReport(input({ application: null, alternatives: [alt('Smaller dam')] }));
+			expect(rr.alternatives).toEqual([]);
+			for (const row of rr.rows) expect(row).not.toHaveProperty('alternatives');
+		});
+
+		it('reaches the errata of an alternative’s engine', () => {
+			const e: Erratum = { id: 'ER-999', keyedOn: 'run', firstAffected: '0.1.0', fixedIn: '0.2.0', severity: 'high', appliesWhen: 'always', summary: 'Invented', source: 'test' };
+			const errata = [...ENGINE_ERRATA, e];
+			const plain = evidenceReport(input({ liability: { ...input().liability, errata } }));
+			expect(plain.verification.errata.map((x) => x.id)).not.toContain('ER-999');
+			const rr = evidenceReport(input({ liability: { ...input().liability, errata }, alternatives: [alt('Old', {}, { engineVersion: '0.1.5' })] }));
+			expect(rr.verification.errata.map((x) => x.id)).toContain('ER-999');
+		});
 	});
 
 	it('lists every input series with its hash, and every warning verbatim', () => {
@@ -1039,7 +1227,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-25');
+		expect(got.version).toBe('evidence-26');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1686,6 +1874,74 @@ describe('page 1’s combined row: every application together (evidence-11, find
 	it('is deterministic: the same input gives the same document', () => {
 		expect(canonicalJson(evidenceReport(input({ combined: combined() })))).toBe(canonicalJson(evidenceReport(input({ combined: combined() }))));
 	});
+
+	it('lists each dam the assessment worked a yield out for, with its direction together (evidence-26); none from an assessment before them', () => {
+		const dam = (metric: 'dam_firm_yield' | 'dam_reliability', baseline: number, combinedV: number) => ({
+			metric,
+			siteNodeId: 'F1',
+			site: 'Farm one',
+			isOutlet: false,
+			unit: metric === 'dam_firm_yield' ? 'm³/year' : 'fraction',
+			higherIsWorse: false,
+			baseline,
+			singles: [baseline, combinedV],
+			combined: combinedV,
+			singleChanges: [0, combinedV - baseline],
+			sumOfSingles: combinedV - baseline,
+			combinedChange: combinedV - baseline,
+			interaction: 0
+		});
+		const withDams = (y: number, r: number, onVolumes = false): EvidenceAssessmentInput => ({
+			...assessment,
+			report: { ...cumulative, rows: [...cumulative.rows, dam('dam_firm_yield', 100_000, y), dam('dam_reliability', 0.9, r)], dams: { nodeIds: ['F1'], onVolumes } }
+		});
+		const read = (a: EvidenceAssessmentInput) => evidenceReport(input({ combined: combined({ assessment: a }) })).cumulative.combined!.dams;
+		const [d] = read(withDams(80_000, 0.8, true))!;
+		expect(d).toEqual({
+			nodeId: 'F1',
+			name: 'Farm one',
+			firmYield: { baseline: 100_000, combined: 80_000, change: -20_000, sumOfSingles: -20_000, interaction: 0 },
+			reliability: { baseline: 0.9, combined: 0.8, change: 0.8 - 0.9, sumOfSingles: 0.8 - 0.9, interaction: 0 },
+			verdict: { firmYield: 'lower', reliability: 'lower' },
+			onVolumes: true
+		});
+		// Within the yield search's own tolerance (0.1 %): unchanged.
+		expect(read(withDams(100_050, 0.95))![0]!.verdict).toEqual({ firmYield: 'unchanged', reliability: 'higher' });
+		expect(read(withDams(120_000, 0.9))![0]!.verdict).toEqual({ firmYield: 'higher', reliability: 'unchanged' });
+		// An assessment made before the dam rows, and a row not assessed, carry none.
+		expect(read(assessment)).toEqual([]);
+		expect(evidenceReport(input({ combined: combined({ assessment: withDams(80_000, 0.8), conflicts: ['x'] }) })).cumulative.combined!.dams).toEqual([]);
+	});
+
+	it('evidence-26: adds the assessment’s background at full allocation as its own labelled row set, the baseline’s figures and page 1’s row unchanged', () => {
+		// Any other table stands in for the background's run: what is checked is where each figure goes.
+		const bgReport = cumulativeImpact(
+			{ summary: otherOut.summary, ...window },
+			[
+				{ id: 'scn', name: 'Farm two dam', summary: togetherOut.summary, ...window },
+				{ id: 'scn-2', name: 'Farm one dam', summary: otherOut.summary, ...window }
+			],
+			{ summary: togetherOut.summary, ...window }
+		);
+		const background = { label: 'Existing authorised use (full allocation)', runLabel: 'At full allocation', report: bgReport };
+		const plain = evidenceReport(input({ combined: combined() }));
+		const r = evidenceReport(input({ combined: combined({ assessment: { ...assessment, background } }) }));
+		const c = r.cumulative.combined!;
+		const outlet = bgReport.rows.find((x) => x.metric === 'ewr_days_not_met' && x.isOutlet)!;
+		expect(c.background).toEqual({
+			label: background.label,
+			runLabel: 'At full allocation',
+			ewrDays: { baseline: outlet.baseline, combined: outlet.combined, change: outlet.combinedChange, sumOfSingles: outlet.sumOfSingles, interaction: outlet.interaction },
+			reserveMonths: expect.objectContaining({ baseline: expect.any(Number) })
+		});
+		// Never in the baseline's place: its measures, the applications' changes and page 1's row are the baseline's.
+		expect(c.ewrDays).toEqual(plain.cumulative.combined!.ewrDays);
+		expect(c.applications).toEqual(plain.cumulative.combined!.applications);
+		expect(r.rows.at(-1)).toEqual(plain.rows.at(-1));
+		// Without one, or when not assessed, there is none.
+		expect(plain.cumulative.combined!.background).toBeNull();
+		expect(evidenceReport(input({ combined: combined({ assessment: { ...assessment, background }, conflicts: ['x'] }) })).cumulative.combined!.background).toBeNull();
+	});
 });
 
 describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', () => {
@@ -1698,7 +1954,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-25');
+		expect(r.version).toBe('evidence-26');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1754,7 +2010,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-25');
+		expect(r.version).toBe('evidence-26');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1977,7 +2233,7 @@ describe('calibration zones (evidence-22, issue #555; periods and parameter sour
 
 	it('lists every zone upstream first, the site’s own zone last, with its parameters, fit and statistics', () => {
 		const r = evidenceReport(input({ application: null, baseline: stored('zb', zin, zout) }));
-		expect(r.version).toBe('evidence-25');
+		expect(r.version).toBe('evidence-26');
 		expect(r.calibrationZones).toEqual([
 			{
 				nodeId: 'S',
@@ -2018,7 +2274,7 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 
 	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
 		const r = evidenceReport(input({ futureYield: found }));
-		expect(r.version).toBe('evidence-25');
+		expect(r.version).toBe('evidence-26');
 		const s = r.futureYield!;
 		expect(s).toMatchObject({ status: 'ok', createdAt: found.createdAt, createdBy: 'Analyst', complete: true, fewModels: true, models: ['SYN-A', 'SYN-B', 'SYN-C'] });
 		if (s.status !== 'ok') throw new Error('unreachable');

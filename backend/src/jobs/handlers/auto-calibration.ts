@@ -29,7 +29,7 @@ import {
 import { ApiError } from '../../http/errors.js';
 import { executeRun, trimRuns } from '../../runs/execute.js';
 import { runModelInput } from '../../runs/uncertainty.js';
-import { JobError, JobRelease, LeaseLostError } from '../errors.js';
+import { JobError, JobRelease, LeaseLostError, unexpectedFailure } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const autoCalibrationHandler = defineHandler({
@@ -64,7 +64,8 @@ export const autoCalibrationHandler = defineHandler({
 		} catch (err) {
 			if (err instanceof CalibrationRefused) throw new JobError(`the calibration rules can't run: ${err.message}`, { retry: false });
 			if (err instanceof ApiError || err instanceof JobError || err instanceof JobRelease || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
-			throw new JobError(`the automated calibration failed: ${(err as Error).message}`, { retry: false });
+			// Not an error of ours: fixed words stored, the detail logged (jobs/errors.ts unexpectedFailure).
+			throw unexpectedFailure(err, 'the automated calibration failed', job);
 		}
 	}
 });

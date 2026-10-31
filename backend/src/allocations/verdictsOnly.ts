@@ -139,6 +139,23 @@ export function authorisedVerdicts<T>(board: T): T {
 	return rest as T;
 }
 
+/**
+ * § 4's combined dams (evidence-26, `cumulative.combined.dams`) as a viewer
+ * kept from the registered volumes reads them: a dam whose yields rest on
+ * them (`onVolumes`: some run capped use at, or scaled demand to, the
+ * volumes), or every dam when `all` (a report on such a run), keeps its
+ * direction (`verdict`) and loses its firm yield and assurance figures,
+ * marked `withheld`, as the Yield panel withholds a yield on such a run's
+ * points (#523 I, round 5). Anything else comes back as it is.
+ */
+export function combinedDamVerdicts<T>(cumulative: T, all: boolean): T {
+	if (!isObj(cumulative) || !isObj(cumulative.combined) || !Array.isArray(cumulative.combined.dams)) return cumulative;
+	const dams = (cumulative.combined.dams as unknown[]).map((d) =>
+		isObj(d) && (all || d.onVolumes !== false) ? { ...pick(d, ['nodeId', 'name', 'verdict', 'onVolumes']), firmYield: null, reliability: null, withheld: true } : d
+	);
+	return { ...cumulative, combined: { ...cumulative.combined, dams } } as T;
+}
+
 /** A member's metrics (MemberMetrics) that are EWR counts and rates. */
 const METRIC_VERDICTS = ['ewrDaysNotMet', 'ewrDaysNotMetByMonth', 'reserveRate', 'noFlowDays', 'ewrSiteDaysNotMet'] as const;
 /** An ensemble's bands (EnsembleBands) that are EWR counts and rates; the rest null or empty. */
@@ -172,7 +189,7 @@ export function ensembleVerdicts<T>(v: T): T {
 }
 
 /** The evidence report's page-1 rows that are counts or verdicts. */
-const ROW_VERDICTS: ReadonlySet<string> = new Set(['reserve', 'ewrDays', 'noFlowDays', 'ewrBelowWorks', 'otherApplications']);
+export const ROW_VERDICTS: ReadonlySet<string> = new Set(['reserve', 'ewrDays', 'noFlowDays', 'ewrBelowWorks', 'otherApplications']);
 /** Its flags that say nothing of a unit's figure or a flow. */
 const FLAG_VERDICTS: ReadonlySet<string> = new Set(['assumptions', 'reference', 'ewrZero', 'noReserve', 'gated', 'noRule', 'noCalibration', 'noFit', 'chirps', 'dataQuality', 'notEndorsed']);
 /** An EWR site's section (EvidenceSite) as verdicts: the months met, no delivered share, natural or flow figure. */
@@ -203,6 +220,8 @@ const REPORT_VERDICTS: Record<string, (v: unknown) => unknown> = {
 	assumptionsChanged: (v) => v,
 	issuable: (v) => v,
 	ops: (v) => v,
+	// The mitigation alternatives (evidence-26): labels, runs and ops, as `ops`; their cells go with the rows kept.
+	alternatives: (v) => v,
 	rules: (v) => v,
 	credibility: (v) => v,
 	localityMap: (v) => v,
@@ -213,7 +232,8 @@ const REPORT_VERDICTS: Record<string, (v: unknown) => unknown> = {
 	byMonth: (v) => v,
 	worstMonths: (v) => v,
 	improvingMonths: (v) => v,
-	cumulative: (v) => v,
+	// Its counts as they are; each dam's yield and assurance as its direction only (evidence-26).
+	cumulative: (v) => combinedDamVerdicts(v, true),
 	rows: (v) => (Array.isArray(v) ? v.filter((r) => isObj(r) && ROW_VERDICTS.has(r.id as string)) : []),
 	flags: (v) => (Array.isArray(v) ? v.filter((f) => isObj(f) && FLAG_VERDICTS.has(f.id as string)) : []),
 	// Each month met or not, never the share delivered: share × the base run's requirement (which the viewer reads in

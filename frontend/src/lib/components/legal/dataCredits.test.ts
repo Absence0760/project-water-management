@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEAFRICA_STATEMENT, WATERBODIES_CITATION, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
-import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION } from '@water-management/engine';
+import { AGERA5_CITATION, copernicusAgera5Notice, copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, NASA_POWER_ET0_CREDIT } from '@water-management/engine';
 import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
 
@@ -93,6 +93,18 @@ describe('the data credits', () => {
 		expect(byId('imerg').statements[0]).toMatch(/^Huffman, G\.J\..* accessed \d{4}-\d{2}-\d{2}, doi:10\.5067\/GPM\/IMERGDL\/DAY\/07\.$/);
 		expect(byId('ecmwf-ens').statements).toEqual([ECMWF_CREDIT]);
 		expect(maps).toContain(`"${ECMWF_CREDIT}"`);
+	});
+
+	it('credit the copy’s reference ET products with the engine’s notices, as docs/maps.md and docs/data-sources.md quote them (issue #604 R5-E)', () => {
+		const maps = doc('maps.md');
+		const sources = doc('data-sources.md');
+		const byId = (id: string) => DATA_CREDITS.find((c) => c.id === id)!;
+		expect(byId('agera-et').statements).toEqual([copernicusAgera5Notice(new Date().getUTCFullYear())]);
+		expect(byId('agera-et').citation).toBe(AGERA5_CITATION);
+		expect(sources).toContain(`"${AGERA5_CITATION}"`);
+		expect(byId('nasa-power').statements).toEqual([NASA_POWER_ET0_CREDIT]);
+		expect(maps).toContain(`"${NASA_POWER_ET0_CREDIT}"`);
+		expect(sources).toContain(`"${NASA_POWER_ET0_CREDIT}"`);
 	});
 
 	it('say what the map’s own notices say: the relief’s attribution and a delineated polygon’s notice', () => {

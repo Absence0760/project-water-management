@@ -16,6 +16,7 @@ import {
 	zeroRainLines,
 	flowGapFillLines,
 	forecastLines,
+	et0CreditLines,
 	gapRainLines,
 	rainSourceCsvLines,
 	accumulationLines,
@@ -2046,5 +2047,27 @@ describe('gapRainLines (engine ≥ 1.101.0, issue #604 R4-E)', () => {
 			'the ECMWF ENS forecast on some days, the rest written over (ECMWF open data, CC BY 4.0)'
 		]);
 		expect([...forecastLines(forecast, 'other', false)].join('\n')).not.toContain('ECMWF');
+	});
+});
+
+describe('et0CreditLines (issue #604 R5-E)', () => {
+	const info = { used: true, dailyDays: 40, fallbackDays: 325, invalidDays: 0, first: '2026-08-01', last: '2026-09-09' };
+
+	it('says how much of the run read the daily reference ET and credits each product it read, word for word', () => {
+		const rows = et0CreditLines(info, runRainCredits({ et0Products: ['power_et0', 'agera5_et0'] }, '2026-10-30')).map((l) => splitCsv(l, ',')[0]!.cells);
+		expect(rows[0]).toEqual(['Daily reference evapotranspiration']);
+		expect(rows[1]).toEqual(['Days from the daily series', '40']);
+		expect(rows[2]).toEqual(['First and last such day', '2026-08-01 … 2026-09-09']);
+		expect(rows).toContainEqual(['Credit: AgERA5 reference evapotranspiration', copernicusEra5lNotice(2026)]);
+		expect(rows.filter((r) => r[0] === 'Credit: AgERA5 reference evapotranspiration')).toHaveLength(2);
+		expect(rows.at(-1)![0]).toBe('Credit: NASA POWER reference evapotranspiration');
+		expect(rows.at(-1)!.join(',')).toBe(
+			'Credit: NASA POWER reference evapotranspiration,NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; FAO-56 Penman-Monteith reference evapotranspiration computed by us from its daily meteorology'
+		);
+	});
+
+	it('is empty when the run owes no reference ET credit (none recorded, or only rain products)', () => {
+		expect(et0CreditLines(info, [])).toEqual([]);
+		expect(et0CreditLines(undefined, runRainCredits({ et0Products: [] }, '2026-10-30'))).toEqual([]);
 	});
 });

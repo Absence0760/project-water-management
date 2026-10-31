@@ -24,6 +24,7 @@ import {
 	forecastColumn,
 	MAX_JSON_EXPORT_BYTES,
 	provenanceValue,
+	seriesCredits,
 	withResultComments,
 	withRunComments,
 	type DailyColumn,
@@ -83,12 +84,15 @@ interface RunRow {
 	forecastRainSource: string | null;
 	/** Any of a forecast run's forecast days was an ECMWF feed's (runs/execute.ts forecastRainEcmwf): ECMWF's credit is owed. */
 	forecastRainEcmwf: boolean;
+	/** The reference ET products GR4J read on some run day (runs/execute.ts storeRun, issue #604 R5-E): their credits are owed. Raw jsonb; engine et0ProductsOf reads it. */
+	et0Products: unknown;
 }
 
 /**
  * The credits a run's catchment values owe (issue #604 R4-E): ERA5-Land's and
- * IMERG Late's when the run read them, ECMWF's for its ECMWF forecast. The
- * day the data were read: the run's creation day.
+ * IMERG Late's when the run read them, ECMWF's for its ECMWF forecast,
+ * AgERA5's and NASA POWER's for the reference ET GR4J read (R5-E). The day
+ * the data were read: the run's creation day.
  */
 const runCredits = (run: RunRow) => runRainCredits(run, new Date(run.createdAt).toISOString().slice(0, 10));
 
@@ -102,7 +106,8 @@ async function loadRun(db: Db, projectId: string, runId: string): Promise<RunRow
 			notes, notes_updated_at AS "notesUpdatedAt",
 			(SELECT display_name FROM app_user WHERE id = notes_updated_by) AS "notesUpdatedBy",
 			inputs->>'forecastRainSource' AS "forecastRainSource",
-			inputs->'forecastRainEcmwf' = 'true'::jsonb IS TRUE AS "forecastRainEcmwf"
+			inputs->'forecastRainEcmwf' = 'true'::jsonb IS TRUE AS "forecastRainEcmwf",
+			inputs->'et0Products' AS "et0Products"
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
@@ -274,7 +279,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const parts = [run.label || 'run', scope, 'daily'];
 			return csvDownload(
 				c,
-				// The catchment's file holds the rain columns, so it credits their sources (issue #604 R4-E).
+				// The catchment's file holds the rain columns and the runoff GR4J made from the reference ET, so it credits their sources (issue #604 R4-E, R5-E).
 				() => withRunComments(run.legacy, provenance(run, dam), withWithheldNote(withheld, dailyCsvLines(run.startDate, columns, range)), q.nodeId ? [] : runCredits(run)),
 				exportFilename(name, parts, 'csv', timeZone),
 				csvTooLarge(NARROW)
@@ -353,6 +358,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 					// An ECMWF forecast's credit in the forecast block (issue #604 R4-E).
 					forecastRainSource: run.forecastRainSource,
 					forecastRainEcmwf: run.forecastRainEcmwf,
+					// The reference ET products' credits (issue #604 R5-E).
+					et0Products: run.et0Products,
 					// The drought restriction rule's dams, units and EWR site by name (engine ≥ 1.54.0).
 					...(run.summary.droughtRestriction ? { nodeNames: await loadNodeNames(db, id) } : {})
 				},
@@ -394,8 +401,9 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const lines = () => dailyCsvLines(s.startDate, columns, range);
 			return csvDownload(
 				c,
-				// Catchment rain's run columns (rain used, its source) take the gap-filling products' values: credited (issue #604 R4-E).
-				() => (reading ? withRunComments(reading.run.legacy, provenance(reading.run), withChangedNote(reading.changed, lines()), reading.columns.inputKey === 'rain_catchment_mm' ? runCredits(reading.run) : []) : lines()),
+				// Catchment rain's run columns (rain used, its source) take the gap-filling products' values: credited (issue #604 R4-E);
+				// the daily reference ET its products' (R5-E).
+				() => (reading ? withRunComments(reading.run.legacy, provenance(reading.run), withChangedNote(reading.changed, lines()), seriesCredits(reading.columns.inputKey, runCredits(reading.run))) : lines()),
 				exportFilename(name, [s.name ? `${s.kind}-${s.name}` : s.kind], 'csv', timeZone),
 				csvTooLarge(NARROW)
 			);

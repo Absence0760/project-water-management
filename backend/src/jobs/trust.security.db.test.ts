@@ -19,6 +19,8 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { buildPackBundle } from '@water-management/engine';
+import { packBundleFixture } from '@water-management/engine/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { sent } = vi.hoisted(() => ({ sent: [] as Record<string, unknown>[] }));
@@ -27,8 +29,10 @@ vi.mock('./transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
-import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { bundleHash } from '../evidence/bundle.js';
+import { packBundleKey, putPackBundle } from '../reports/storage.js';
 import { FIXTURE_CELL } from '../feeds/fixtures.js';
 import { rank, type Role } from '../projects/access.js';
 import { handlers } from './handlers/index.js';
@@ -39,7 +43,7 @@ import { runTick } from './runner.js';
 type User = Awaited<ReturnType<typeof signUp>>;
 
 const cleanup: string[] = [];
-/** Projects holding an issued evidence pack: the schema keeps them (112), so their pending jobs are retired instead. */
+/** Projects holding an issued evidence pack (112) or a decided scenario (161_licence_record): the schema keeps them, so their pending jobs are retired instead. */
 const kept = new Set<string>();
 beforeEach(() => {
 	vi.stubEnv('FEED_FETCHER', 'sqs');
@@ -225,6 +229,35 @@ async function issuedPack(projectId: string, runId: string, userId: string): Pro
 }
 
 /**
+ * An issued pack whose stored bundle is the engine's synthetic pack (its own
+ * manifest, the pack's id in it), planted as issuedPack plants one, with the
+ * bundle in the packs bucket: its re-run fans out to part jobs (302).
+ */
+async function issuedPackWithBundle(projectId: string, runId: string, userId: string): Promise<string> {
+	kept.add(projectId);
+	const packId = randomUUID();
+	const input = packBundleFixture(bundleHash);
+	const built = await buildPackBundle({ ...input, manifest: { ...input.manifest, pack: { ...input.manifest.pack, id: packId } } }, bundleHash);
+	const key = packBundleKey(projectId, packId, built.sha256);
+	await putPackBundle(key, built.bytes, built.sha256);
+	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+	await client.connect();
+	try {
+		await client.query('BEGIN');
+		await client.query('SET LOCAL session_replication_role = replica');
+		await client.query(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, status, manifest, manifest_sha256, report_version, engine_version, created_by, issued_at, issued_by, bundle_key, bundle_sha256)
+			 VALUES ($1, $2, $3, 1, 'issued', '{}', $4, 'evidence-26', 'x', $5, now(), $5, $6, $7)`,
+			[packId, projectId, runId, built.index.pack.manifestSha256, userId, key, built.sha256]
+		);
+		await client.query('COMMIT');
+	} finally {
+		await client.end();
+	}
+	return packId;
+}
+
+/**
  * An issued pack of an application the project's owner made themselves
  * (so they are its party, app_applicant_pack_meta), planted as issuedPack
  * plants one: the applicant's copy (165_applicant_copy) needs a party.
@@ -261,6 +294,26 @@ async function issuedApplicationPack(projectId: string, runId: string, userId: s
 }
 
 const CROSS: Partial<Record<JobKind, CrossCase>> = {
+	scenario_run: {
+		// 293: a team scenario of B's decided by its owner, acting for the authority, with a licence on other terms than its ops.
+		async queue(owner, b) {
+			await actForAuthority(owner, b.projectId, owner.id);
+			const sc = await owner.call('POST', `/projects/${b.projectId}/scenarios`, { name: 'licensed', baseRunId: b.runId, ops: [{ op: 'node.set', nodeId: b.farmId, field: 'damCapacityM3', value: 100_000 }], ownedNodeIds: [b.farmId] });
+			expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+			const sid = sc.body.scenario.id as string;
+			expect((await owner.call('POST', `/projects/${b.projectId}/scenarios/${sid}/submit`, {})).status).toBe(200);
+			const res = await owner.call('POST', `/projects/${b.projectId}/scenarios/${sid}/decide`, {
+				...DECISION,
+				outcome: 'licence_issued',
+				granted: { ops: [{ op: 'node.set', nodeId: b.farmId, field: 'damCapacityM3', value: 90_000 }] }
+			});
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			// A decided scenario is a record the schema keeps (161_licence_record), so B stays; its pending jobs are retired instead.
+			kept.add(b.projectId);
+			return { jobId: res.body.scenario.licensedRunJob.id, ref: sid };
+		},
+		effect: async (sid) => (await asOwner('SELECT count(*)::int AS n FROM model_run WHERE scenario_id = $1', [sid]))[0].n
+	},
 	delineate: {
 		// B's click handed to the worker (191), against the committed synthetic DEM (its valley's dam wall): B's job proposes it.
 		async queue(owner, b) {
@@ -334,6 +387,23 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 		},
 		effect: async (id) => (await asOwner('SELECT outcome FROM pack_reproduction WHERE pack_id = $1', [id])).map((r) => r.outcome)
 	},
+	pack_reproduce_part: {
+		// B's issued pack with a real bundle, and B's re-run of it fanned out (302): one of its part jobs, the baseline run, its siblings waiting.
+		async queue(owner, b) {
+			const packId = await issuedPackWithBundle(b.projectId, b.runId, owner.id);
+			const { job: parent } = await enqueue(owner, b.projectId, 'pack_reproduce', { packId });
+			await runTick({ feeds: false, reports: false, alerts: false, projectIds: [b.projectId], maxJobs: 1 });
+			expect(await jobRow(parent.id)).toMatchObject({ status: 'done' });
+			const [p] = await asOwner(
+				`SELECT p.id, p.job_id FROM pack_reproduce_part p JOIN pack_reproduce_gathering g ON g.id = p.gathering_id WHERE g.pack_id = $1 AND p.part->>'kind' = 'run:baseline'`,
+				[packId]
+			);
+			expect(p, 'a baseline part job').toBeTruthy();
+			await asOwner(`UPDATE job SET run_after = now() + interval '1 day' WHERE kind = 'pack_reproduce_part' AND project_id = $1 AND id <> $2`, [b.projectId, p.job_id]);
+			return { jobId: p.job_id, ref: p.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status FROM pack_reproduce_part WHERE id = $1', [id]))[0].status
+	},
 	sweep: {
 		async queue(owner, b) {
 			const res = await owner.call('POST', `/projects/${b.projectId}/sweeps`, { name: 's', baseRunId: b.runId, members: [{ name: 'm', ops: [{ op: 'demand.scale', factor: 0.9 }] }] });
@@ -357,6 +427,21 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			return { jobId: res.body.jobId, ref: res.body.assessment.id };
 		},
 		effect: async (id) => (await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0].status
+	},
+	assessment_yield: {
+		// B's assessment of two scenarios touching its farm dam (297): its own job run alone, so its yield jobs wait queued; one of them.
+		async queue(owner, b) {
+			const { jobId: parent, ref: assessmentId } = await CROSS.assessment!.queue(owner, b);
+			await asOwner(`UPDATE job SET run_after = now() - interval '1 minute' WHERE id = $1`, [parent]);
+			await runTick({ feeds: false, reports: false, alerts: false, projectIds: [b.projectId], maxJobs: 1 });
+			expect(await jobRow(parent)).toMatchObject({ status: 'done' });
+			const [y] = await asOwner(`SELECT id, job_id FROM assessment_yield WHERE assessment_id = $1 AND run = 'baseline'`, [assessmentId]);
+			expect(y, 'a baseline yield job').toBeTruthy();
+			// Only the one under test may run when B's turn comes: its siblings wait.
+			await asOwner(`UPDATE job SET run_after = now() + interval '1 day' WHERE kind = 'assessment_yield' AND project_id = $1 AND id <> $2`, [b.projectId, y.job_id]);
+			return { jobId: y.job_id, ref: y.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status, yield_m3_year FROM assessment_yield WHERE id = $1', [id]))[0]
 	},
 	auto_calibration: {
 		// A run of B's calibration rules: a quick search, so B's own job fits its one case.

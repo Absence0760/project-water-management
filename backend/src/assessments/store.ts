@@ -6,23 +6,25 @@
 import { randomUUID } from 'node:crypto';
 import {
 	combineScenarios,
+	cumulativeDamRows,
 	cumulativeImpact,
 	ENGINE_VERSION,
+	resolveAllocationMode,
 	runModelChecked,
-	type CombineScenario,
-	type CumulativeReport,
+	touchedDams,
 	type ModelInput,
 	type RunSummary,
-	type ScenarioConflict,
-	type ScenarioOp
+	type ScenarioConflict
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { LeaseLostError } from '../jobs/errors.js';
 import { enqueueJob, type JobMeta, type JobStatus } from '../jobs/queue.js';
-import { applicationMask } from '../scenarios/applicant.js';
 import { checkScenario, countedOps, loadBaseInput, loadScenario, type ScenarioOrigin, type ScenarioRow } from '../scenarios/execute.js';
+import { assessBackground, loadBackground, type AssessmentBackground, type AssessmentReport } from './background.js';
+import { combineEntry, loadMembers, memberEntry, type MemberRow } from './members.js';
 import { ASSESSMENTS_KEPT, type CreateAssessmentBody } from './schema.js';
+import { fanOutYields, stoppedYieldsSql, type YieldRun } from './yields.js';
 
 export type AssessmentStatus = 'pending' | 'complete' | 'refused' | 'failed';
 export type AssessmentMemberStatus = 'pending' | 'done' | 'problems' | 'failed';
@@ -47,13 +49,24 @@ export interface AssessmentRow {
 	name: string;
 	baseRunId: string;
 	baseRun: { id: string; label: string; createdAt: string };
+	/** The optional background at full allocation (295, background.ts); null when none was asked for. */
+	backgroundRunId: string | null;
+	backgroundRun: { id: string; label: string; createdAt: string } | null;
 	status: AssessmentStatus;
 	/** Why it was refused or failed: the conflicts and ops that don't apply, or the engine's message. */
 	problems: string[];
-	/** The cumulative report (engine CumulativeReport); only on GET …/assessments/:aid, and only when complete. */
-	report?: CumulativeReport | null;
+	/**
+	 * The cumulative report (engine CumulativeReport), with the background's table beside it when one was asked
+	 * for (`background`); only on GET …/assessments/:aid, and only when complete.
+	 */
+	report?: AssessmentReport | null;
 	engineVersion: string | null;
 	job: { id: string; status: JobStatus; error: string | null; progress: number | null } | null;
+	/**
+	 * The dams' firm-yield jobs (297, yields.ts): how many are back of how many were queued; null when it
+	 * queued none (no dam touched, or not that far yet). The assessment stays pending until they are all back.
+	 */
+	yields: { done: number; total: number } | null;
 	createdBy: string | null;
 	createdAt: string;
 	completedAt: string | null;
@@ -73,19 +86,21 @@ const memberFields = `jsonb_build_object('id', m.id, 'position', m.position, 'sc
 	'startDate', m.start_date, 'endDate', m.end_date)`;
 
 const assessmentSelect = (withReport: boolean) => `SELECT a.id, a.name, a.base_run_id AS "baseRunId",
-	jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) AS "baseRun",
-	a.status, a.problems${withReport ? ', a.report' : ''}, a.engine_version AS "engineVersion",
+	jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) AS "baseRun", a.background_run_id AS "backgroundRunId",
+	(SELECT jsonb_build_object('id', b.id, 'label', b.label, 'createdAt', b.created_at) FROM model_run b WHERE b.id = a.background_run_id) AS "backgroundRun",
+	CASE WHEN st.problems IS NULL THEN a.status ELSE 'failed' END AS status, COALESCE(st.problems, a.problems) AS problems${withReport ? ', a.report' : ''},
+	a.engine_version AS "engineVersion",
 	CASE WHEN j.id IS NULL THEN NULL ELSE jsonb_build_object('id', j.id, 'status', j.status, 'error', j.last_error, 'progress', j.progress) END AS job,
+	CASE WHEN yc.total = 0 THEN NULL ELSE jsonb_build_object('done', yc.done, 'total', yc.total) END AS yields,
 	u.display_name AS "createdBy", a.created_at AS "createdAt", a.completed_at AS "completedAt",
 	(SELECT COALESCE(jsonb_agg(${memberFields} ORDER BY m.position), '[]'::jsonb)
 	 FROM assessment_member m WHERE m.assessment_id = a.id) AS members
 	FROM assessment a JOIN model_run r ON r.id = a.base_run_id
-	LEFT JOIN job j ON j.id = a.job_id LEFT JOIN app_user u ON u.id = a.created_by`;
-
-/** What combineScenarios takes for one scenario: an application's ops judged under its applicant's mask, as its own runs are (checkScenario). */
-function combineEntry(base: ModelInput, s: Pick<ScenarioRow, 'id' | 'name' | 'ops' | 'origin' | 'ownedNodeIds'>): CombineScenario {
-	return { id: s.id, name: s.name, ops: s.ops, ...(s.origin === 'applicant' ? { mask: applicationMask(base, s.ownedNodeIds) } : {}) };
-}
+	LEFT JOIN job j ON j.id = a.job_id LEFT JOIN app_user u ON u.id = a.created_by
+	-- A pending assessment one of whose firm-yield jobs stopped without its yield reads as failed, saying which (297, yields.ts):
+	-- never left pending when no sibling job is left to record it.
+	LEFT JOIN LATERAL (SELECT jsonb_agg(s.problem ORDER BY s.o1, s.o2, s.o3) AS problems FROM (${stoppedYieldsSql('a.id')}) s WHERE a.status = 'pending') st ON true
+	LEFT JOIN LATERAL (SELECT count(*)::int AS total, (count(*) FILTER (WHERE y.status = 'done'))::int AS done FROM assessment_yield y WHERE y.assessment_id = a.id) yc ON true`;
 
 /** Each scenario alone, then all together (combineScenarios), on `base`: what refuses an assessment. Pure given the base. */
 export function checkCombination(base: ModelInput, scenarios: readonly Pick<ScenarioRow, 'id' | 'name' | 'ops' | 'origin' | 'ownedNodeIds'>[]): AssessmentCheck {
@@ -121,8 +136,20 @@ async function loadRequest(db: Db, projectId: string, ids: readonly string[]): P
 	return { scenarios: scenarios.map((s) => ({ ...s, ...countedOps(s) })), baseRunId, base: await loadBaseInput(db, projectId, baseRunId) };
 }
 
+/** The baseline's check, and the background's (295) when there is one: its conflicts and problems prefixed so they read as the background's. */
+function withBackgroundCheck(check: AssessmentCheck, background: AssessmentCheck | null): AssessmentCheck {
+	if (!background || background.ok) return check;
+	const at = (p: string) => `At full allocation: ${p}`;
+	return {
+		ok: false,
+		conflicts: [...check.conflicts, ...background.conflicts.map((c) => ({ ...c, message: at(c.message) }))],
+		problems: [...check.problems, ...background.problems.map(at)]
+	};
+}
+
 /**
- * Check that the scenarios combine and, unless `dryRun`, write the
+ * Check that the scenarios combine (on the background too, when one is
+ * asked for: background.ts loadBackground) and, unless `dryRun`, write the
  * assessment, its members and its job as the transaction's user (an editor,
  * RLS), keeping the project's newest ASSESSMENTS_KEPT. Refused (422, the
  * conflicts and problems in `details`) when they don't combine: never a run
@@ -135,7 +162,8 @@ export async function createAssessment(
 	body: CreateAssessmentBody
 ): Promise<{ check: AssessmentCheck; assessment: AssessmentRow | null; job: JobMeta | null }> {
 	const { scenarios, baseRunId, base } = await loadRequest(db, projectId, body.scenarioIds);
-	const check = checkCombination(base, scenarios);
+	const bg = body.backgroundRunId ? await loadBackground(db, projectId, baseRunId, body.backgroundRunId) : null;
+	const check = withBackgroundCheck(checkCombination(base, scenarios), bg && checkCombination(bg.input, scenarios));
 	if (!check.ok) {
 		const n = check.conflicts.length;
 		throw new ApiError(
@@ -147,7 +175,14 @@ export async function createAssessment(
 	if (body.dryRun) return { check, assessment: null, job: null };
 	const assessmentId = randomUUID();
 	const { job } = await enqueueJob(db, { projectId, kind: 'assessment', payload: { assessmentId }, maxAttempts: 2 });
-	await db.query('INSERT INTO assessment (id, project_id, base_run_id, job_id, name) VALUES ($1, $2, $3, $4, $5)', [assessmentId, projectId, baseRunId, job.id, body.name]);
+	await db.query('INSERT INTO assessment (id, project_id, base_run_id, job_id, name, background_run_id) VALUES ($1, $2, $3, $4, $5, $6)', [
+		assessmentId,
+		projectId,
+		baseRunId,
+		job.id,
+		body.name,
+		bg?.run.id ?? null
+	]);
 	// The guard copies each scenario's name, origin, ops and own nodes; these columns are placeholders it overwrites.
 	await db.query(
 		`INSERT INTO assessment_member (assessment_id, project_id, scenario_id, position, name, origin, ops, ops_sha256)
@@ -174,23 +209,28 @@ export async function getAssessment(db: Db, projectId: string, assessmentId: str
 	return rows[0] ?? null;
 }
 
-/** Queued or running assessment jobs the user has, in any project they can still see. */
+/**
+ * The user's assessments still in flight, in any project they can still see: each one whose own job, or any of
+ * its dams' firm-yield jobs (297), is queued, running or waiting to retry. So the cap bounds the yield jobs too:
+ * at most ASSESSMENT_JOBS_PER_USER assessments' worth (each at most the engine's CUMULATIVE_YIELD_SEARCHES_MAX).
+ */
 export async function pendingAssessmentJobs(db: Db): Promise<number> {
 	// One request at a time per user (the lock is held to commit), so a burst can't all pass the cap together.
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('assessment_job_cap:' || app_current_user_id()::text, 0))`);
 	const { rows } = await db.query<{ n: number }>(
-		`SELECT count(*)::int AS n FROM job WHERE kind = 'assessment' AND acting_user_id = app_current_user_id() AND status IN ('queued', 'running', 'failed')`
+		`SELECT count(DISTINCT payload->>'assessmentId')::int AS n FROM job
+		 WHERE kind IN ('assessment', 'assessment_yield') AND acting_user_id = app_current_user_id() AND status IN ('queued', 'running', 'failed')`
 	);
 	return rows[0]?.n ?? 0;
 }
 
-interface MemberRow {
-	id: string;
-	scenarioId: string | null;
-	name: string;
-	origin: ScenarioOrigin;
-	ops: ScenarioOp[];
-	ownedNodeIds: string[];
+/** The dams the members' ops touch (engine touchedDams), on their combination; none when they don't combine. */
+function damsTouched(base: ModelInput, members: readonly MemberRow[]): ReturnType<typeof touchedDams> {
+	const together = combineScenarios(
+		base,
+		members.map((m) => combineEntry(base, memberEntry(m)))
+	);
+	return together.input ? touchedDams(base, members, together.input) : { dams: [], left: [] };
 }
 
 /** The engine on one input: its output, or its own words (plain text, never DB text). */
@@ -209,26 +249,30 @@ function run(input: ModelInput): { ok: true; out: ReturnType<typeof runModelChec
  * (combineScenarios, checked again: the base run is stored, so it can't have
  * changed, but the check is the rule), with the current engine for all of
  * them, so every column of the report is one engine's; then the cumulative
- * report. A member whose ops don't apply alone stores its problems and the
- * assessment is refused; an engine refusal fails it. `progress` is called
- * after each run (0–100); a false answer (the lease was lost) stops it with
- * nothing stored. Returns false when there was nothing to do.
+ * report, and for each dam the applications touch (touchedDams, at most
+ * cumulativeYieldDamsMax) its assurance of supply on each run and its firm
+ * yield: two more rows per dam and `report.dams`. The firm yields are
+ * searched by jobs of their own (yields.ts fanOutYields, 297), one per dam
+ * and run, which complete the assessment once they are all back; with no dam
+ * touched it completes here. A member whose ops don't apply alone stores its
+ * problems and the assessment is refused; an engine refusal fails it.
+ * `progress` is called after each run (0–100); a false answer (the lease was
+ * lost) stops it with nothing stored. Returns false when there was nothing to do.
  */
 export async function computeAssessment(db: Db, projectId: string, assessmentId: string, progress: (pct: number) => Promise<boolean>): Promise<boolean> {
-	const { rows } = await db.query<{ baseRunId: string; status: AssessmentStatus }>('SELECT base_run_id AS "baseRunId", status FROM assessment WHERE project_id = $1 AND id = $2', [
-		projectId,
-		assessmentId
-	]);
+	const { rows } = await db.query<{ baseRunId: string; backgroundRunId: string | null; status: AssessmentStatus }>(
+		'SELECT base_run_id AS "baseRunId", background_run_id AS "backgroundRunId", status FROM assessment WHERE project_id = $1 AND id = $2',
+		[projectId, assessmentId]
+	);
 	const a = rows[0];
 	if (!a || a.status !== 'pending') return false;
 	// A base run that can no longer be rebuilt fails the job (an ApiError: no retry); the assessment stays pending.
 	const base = await loadBaseInput(db, projectId, a.baseRunId);
-	const { rows: members } = await db.query<MemberRow>(
-		`SELECT id, scenario_id AS "scenarioId", name, origin, ops, owned_node_ids::text[] AS "ownedNodeIds"
-		 FROM assessment_member WHERE assessment_id = $1 ORDER BY position`,
-		[assessmentId]
-	);
-	const total = members.length + 2;
+	const members = await loadMembers(db, assessmentId);
+	// The dams the applications touch (scenario/cumulativeYield.ts), from the combination (pure, no model run).
+	const touched = damsTouched(base, members);
+	// With a background (295), the same runs again on it. The dams' firm yields are their own jobs' (297).
+	const total = (members.length + 2) * (1 + (a.backgroundRunId ? 1 : 0));
 	let done = 0;
 	const step = async () => {
 		if (!(await progress((100 * ++done) / total))) throw new LeaseLostError();
@@ -238,11 +282,11 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 
 	const baseline = run(base);
 	await step();
-	const singles: { id: string; name: string; summary: RunSummary; startDate: string; endDate: string }[] = [];
+	const singles: { id: string; name: string; position: number; summary: RunSummary; startDate: string; endDate: string; input: ModelInput }[] = [];
 	const memberProblems: string[] = [];
 	let failed = !baseline.ok ? [`the baseline: ${baseline.message}`] : [];
 	for (const m of members) {
-		const entry = { id: m.scenarioId ?? m.id, name: m.name, ops: m.ops, origin: m.origin, ownedNodeIds: m.ownedNodeIds };
+		const entry = memberEntry(m);
 		const check = checkScenario(base, entry);
 		if (check.problems.length) {
 			// The assessors' words (164): only editors read an assessment.
@@ -257,7 +301,7 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 					r.out.startDate,
 					r.out.endDate
 				]);
-				singles.push({ id: entry.id, name: m.name, summary: r.out.summary, startDate: r.out.startDate, endDate: r.out.endDate });
+				singles.push({ id: entry.id, name: m.name, position: m.position, summary: r.out.summary, startDate: r.out.startDate, endDate: r.out.endDate, input: check.input });
 			} else {
 				await db.query(`UPDATE assessment_member SET status = 'failed', problems = $2 WHERE id = $1`, [m.id, JSON.stringify([r.message])]);
 				failed = [...failed, `"${m.name}" alone: ${r.message}`];
@@ -275,7 +319,7 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 	}
 	const combined = combineScenarios(
 		base,
-		members.map((m) => combineEntry(base, { id: m.scenarioId ?? m.id, name: m.name, ops: m.ops, origin: m.origin, ownedNodeIds: m.ownedNodeIds }))
+		members.map((m) => combineEntry(base, memberEntry(m)))
 	);
 	if (!combined.input) {
 		await finish('refused', [...combined.conflicts.map((c) => c.message), ...combined.problems]);
@@ -292,9 +336,64 @@ export async function computeAssessment(db: Db, projectId: string, assessmentId:
 		singles,
 		{ summary: together.out.summary, startDate: together.out.startDate, endDate: together.out.endDate }
 	);
+	const { dams, left } = touched;
+	if (dams.length) {
+		// Yield and reliability per dam, on every run (followups.md § Cumulative impact): the reliability rows now, the
+		// firm-yield rows empty until the dams' own jobs are back (yields.ts gatherAssessment fills them).
+		const none = { yields: dams.map(() => null) };
+		report.rows.push(
+			...cumulativeDamRows(
+				dams,
+				{ summary: baseline.out.summary, ...none },
+				singles.map((s) => ({ summary: s.summary, ...none })),
+				{ summary: together.out.summary, ...none }
+			)
+		);
+		// A run that caps use at, or scales demand to, the registered volumes: its yields rest on them (#523 I).
+		const capped = [base, ...singles.map((s) => s.input), combined.input].some((i) => ['cap', 'fullAllocation'].includes(resolveAllocationMode(i.settings.allocationMode, [])));
+		report.dams = { nodeIds: dams.map((d) => d.nodeId), onVolumes: capped };
+	}
+	// The background at full allocation (295): its own row set beside the baseline's, never in its place. No dam yields.
+	let background: AssessmentBackground | null = null;
+	if (a.backgroundRunId) {
+		const bg = await assessBackground(db, projectId, a.baseRunId, a.backgroundRunId, members.map(memberEntry), step);
+		if (!bg.ok) {
+			await finish(bg.status, bg.problems);
+			return true;
+		}
+		background = bg.background;
+	}
+	const stored: AssessmentReport = background ? { ...report, background } : report;
+	if (dams.length) {
+		const leftWarning = left.length
+			? `The applications touch ${dams.length + left.length} dams; with ${members.length} applications an assessment works out a firm yield for ${dams.length} of them (by name), so ${left.map((d) => `"${d.name}"`).join(', ')} ${left.length === 1 ? 'has' : 'have'} no yield rows: run its yield from the Yield panel.`
+			: null;
+		const runs: YieldRun[] = [
+			{ run: 'baseline', memberPosition: null, label: 'The baseline', input: base },
+			...singles.map((s): YieldRun => ({ run: 'single', memberPosition: s.position, label: `"${s.name}" alone`, input: s.input })),
+			{ run: 'combined', memberPosition: null, label: 'All together', input: combined.input }
+		];
+		await fanOutYields(
+			db,
+			projectId,
+			assessmentId,
+			{
+				engineVersion: ENGINE_VERSION,
+				report: stored,
+				combinedSummary: together.out.summary,
+				startDate: together.out.startDate,
+				endDate: together.out.endDate,
+				dams,
+				members: singles.map((s) => s.position),
+				leftWarning
+			},
+			runs
+		);
+		return true;
+	}
 	await db.query(
 		`UPDATE assessment SET status = 'complete', report = $2, combined_summary = $3, start_date = $4, end_date = $5, engine_version = $6 WHERE id = $1`,
-		[assessmentId, JSON.stringify(report), JSON.stringify(together.out.summary), together.out.startDate, together.out.endDate, ENGINE_VERSION]
+		[assessmentId, JSON.stringify(stored), JSON.stringify(together.out.summary), together.out.startDate, together.out.endDate, ENGINE_VERSION]
 	);
 	return true;
 }

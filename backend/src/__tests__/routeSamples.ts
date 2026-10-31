@@ -82,6 +82,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/scenarios/:sid/questions': () => ({ body: { problem: 0, line: 'op 1 (node.set): ladder' } }),
 	'POST /projects/:id/application-questions/:qid/answer': () => ({ body: { answer: 'Ladder answer' } }),
 	'DELETE /projects/:id/scenarios/:sid/members/:userId': (c) => ({ params: { userId: c.contributor.id } }),
+	// No alternatives: the list the route replaces may be empty (298).
+	'PUT /projects/:id/scenarios/:sid/alternatives': () => ({ body: { alternatives: [] } }),
 	'POST /projects/:id/runs/:runId/signoffs': () => ({
 		body: {
 			fullName: 'Ladder Signer',
@@ -114,6 +116,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'GET /projects/:id/yield/jobs': (c) => ({ query: { nodeId: c.farmId } }),
 	'POST /projects/:id/sweeps': (c) => ({ body: { name: 'Ladder sweep', baseRunId: c.runId, members: levels('name') } }),
 	'POST /projects/:id/assessments': (c) => ({ body: { name: `Ladder assessment ${crypto.randomUUID()}`, scenarioIds: [c.ids.sid!, c.ids.sid2!] } }),
+	'GET /projects/:id/assessments/backgrounds': (c) => ({ query: { baseRunId: c.runId } }),
 	'POST /projects/:id/outlooks': (c) => ({ body: { name: 'Ladder outlook', baseRunId: c.runId, levels: levels('label') } }),
 	'POST /projects/:id/outlooks/:outlookId/publish': () => ({ body: { levelId: '0' } }),
 	'POST /projects/:id/feeds': () => ({ body: { source: 'dws', config: { station: 'X0H001' } } }),

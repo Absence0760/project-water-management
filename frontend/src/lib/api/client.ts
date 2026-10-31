@@ -20,6 +20,7 @@ import type {
 	RecordCoverage,
 	ProjectModel,
 	ScenarioOp,
+	WulaWork,
 	ProjectSettings,
 	RainStationMeta,
 	SeriesMeta
@@ -106,6 +107,7 @@ import type {
 	PublicationPatch,
 	PublishRequest,
 	RunPublication,
+	RestrictionDecision,
 	Role,
 	Run,
 	RunCompareResponse,
@@ -127,6 +129,8 @@ import type {
 	AppealRequest,
 	ScenarioStatus,
 	ScenarioWithCheck,
+	ScenarioAlternative,
+	AlternativeCandidate,
 	ShareLink,
 	ShareSeries,
 	ShareSeriesKey,
@@ -151,6 +155,7 @@ import type {
 	Sweep,
 	SweepRequest,
 	Assessment,
+	AssessmentBackgroundRun,
 	AssessmentCheck,
 	AssessmentRequest,
 	Outlook,
@@ -957,7 +962,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			endorse: (id: string, pubId: string, note: string) =>
 				request<{ publication: PublicationMeta }>('POST', `${p(id)}/publication/${enc(pubId)}/endorse`, { note }).then((r) => r.publication),
 			/** One run's publication and the changes since the one before (viewer; the printable report). */
-			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`)
+			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`),
+			/** Every restriction decision, newest first, a page at a time (viewer; the Restriction log page). `before`: the last page's `next`. */
+			log: (id: string, before?: string | null) =>
+				request<{ items: RestrictionDecision[]; next: string | null }>('GET', `${p(id)}/restriction-log${before ? `?before=${encodeURIComponent(before)}` : ''}`),
+			/** The whole restriction log as a CSV download (viewer; a plain link: the cookie goes with it). */
+			logCsvUrl: (id: string) => `${base}${p(id)}/restriction-log/export.csv`
 		},
 		shareLinks: {
 			/** The project's baseline links, newest first, revoked and expired ones included (owner). */
@@ -1114,6 +1124,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					/** Where written objections go and by when, as the notice gives them (166): a draft application's only; null clears. */
 					objectionAddress?: string | null;
 					objectionClosingDate?: string | null;
+					/** The WULA reference (294): any scenario's, while a draft; null clears the number, [] the works. */
+					wulaNumber?: string | null;
+					wulaWorks?: WulaWork[];
 					ops?: ScenarioOp[];
 					ownedNodeIds?: string[];
 					status?: ScenarioStatus;
@@ -1150,6 +1163,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
 			/** Record what followed the decision (228): an appeal lodged, upheld, set aside or varied. */
 			appeal: (id: string, sid: string, body: AppealRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/appeals`, body),
+			/** The mitigation alternatives a scenario cites (298), and the runs the caller may cite (none unless they may change it). */
+			alternatives: (id: string, sid: string) =>
+				request<{ alternatives: ScenarioAlternative[]; candidates: AlternativeCandidate[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/alternatives`),
+			/** Replace them (at most ALTERNATIVES_MAX, in page-1 order): whoever may change the scenario, while it is a draft. */
+			setAlternatives: (id: string, sid: string, alternatives: { runId: string; label: string }[]) =>
+				request<{ alternatives: ScenarioAlternative[]; candidates: AlternativeCandidate[] }>('PUT', `${p(id)}/scenarios/${enc(sid)}/alternatives`, { alternatives }),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>
 				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),
@@ -1466,7 +1485,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ check: AssessmentCheck }>('POST', `${p(id)}/assessments`, { ...body, dryRun: true }).then((r) => r.check),
 			create: (id: string, body: Omit<AssessmentRequest, 'dryRun'>) => request<{ assessment: Assessment; jobId: string; job: JobMeta }>('POST', `${p(id)}/assessments`, body),
 			list: (id: string) => request<{ assessments: Assessment[] }>('GET', `${p(id)}/assessments`).then((r) => r.assessments),
-			get: (id: string, assessmentId: string) => request<{ assessment: Assessment }>('GET', `${p(id)}/assessments/${enc(assessmentId)}`).then((r) => r.assessment)
+			get: (id: string, assessmentId: string) => request<{ assessment: Assessment }>('GET', `${p(id)}/assessments/${enc(assessmentId)}`).then((r) => r.assessment),
+			/** The runs that can be the background at full allocation of an assessment on `baseRunId` (295), newest first. */
+			backgrounds: (id: string, baseRunId: string) =>
+				request<{ runs: AssessmentBackgroundRun[] }>('GET', `${p(id)}/assessments/backgrounds?baseRunId=${enc(baseRunId)}`).then((r) => r.runs)
 		},
 		/**
 		 * Automated calibration run by the server (docs/api.md § Automated

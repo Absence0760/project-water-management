@@ -76,8 +76,125 @@ describe('toShareScenario', () => {
 		expect(out.run?.volumes?.farms).toEqual({ count: 5, demandM3Day: 900, suppliedM3Day: 800, belowTarget: 1 });
 		expect(out.comments).toEqual([{ body: 'Please protect the river', author: 'An NGO', createdAt: '2026-09-29T11:00:00Z', editedAt: null }]);
 		expect(Object.keys(out.scenario).sort()).toEqual(
-			['classified', 'decidedAt', 'decisionNote', 'description', 'id', 'name', 'opNames', 'ops', 'opsSha256', 'origin', 'outcome', 'ownedNodeIds', 'status', 'submittedAt'].sort()
+			[
+				'classified',
+				'decidedAt',
+				'decisionEvents',
+				'decisionNote',
+				'description',
+				'grantedTerms',
+				'id',
+				'licence',
+				'name',
+				'opNames',
+				'ops',
+				'opsSha256',
+				'origin',
+				'outcome',
+				'ownedNodeIds',
+				'status',
+				'submittedAt',
+				'withheldOps',
+				'wula'
+			].sort()
 		);
+	});
+
+	// 291: the licence's terms and what followed the decision, field by field.
+	const volume = (nodeId: string, v = 424242) => ({ op: 'allocation.set', allocation: { id: 'a1', nodeId, waterSource: 'surface', volumeM3PerYear: v } });
+	const terms = (ops: unknown[]) => ({
+		ops,
+		opsSha256: 'b'.repeat(64),
+		opNames: [
+			{ id: OWN, name: 'My Farm' },
+			{ id: OTHER, name: 'Neighbour Farm' }
+		],
+		conditions: 'Release 5 %',
+		asApplied: false,
+		withheldOps: 0,
+		recordedBy: 'Jane Holder'
+	});
+	const decided = (extra: Record<string, unknown>) =>
+		row({ scenario: { ...row().scenario, status: 'decided', decidedAt: '2026-10-01T10:00:00Z', outcome: 'licence_issued', ...extra } });
+
+	it('passes the granted terms, each event and the standing, without another unit’s volume, name or who recorded an event', () => {
+		const out = toShareScenario(
+			decided({
+				grantedTerms: terms([{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 110000 }, volume(OTHER), volume(OWN, 7)]),
+				decisionEvents: [
+					{ position: 1, kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-02', reference: 'WT 1', note: 'n', terms: terms([]), id: OTHER, recordedBy: 'Jane Holder', recordedAt: 'x' },
+					{ position: 2, kind: 'varied', forum: 'court', eventDate: '2026-10-08', reference: '', note: '', terms: terms([volume(OTHER)]) },
+					{ position: 3, kind: 'overturned', forum: 'court', eventDate: '2026-10-09' }
+				],
+				licence: { inForce: true, from: 'event', eventId: OTHER, eventPosition: 2, appealPending: false, terms: terms([volume(OTHER)]) }
+			}),
+			verified
+		);
+		const sc = out.scenario;
+		expect(sc.grantedTerms).toEqual({
+			ops: [{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 110000 }, volume(OWN, 7)],
+			opsSha256: 'b'.repeat(64),
+			opNames: [{ id: OWN, name: 'My Farm' }],
+			conditions: 'Release 5 %',
+			asApplied: false,
+			withheldOps: 1
+		});
+		// A lodged event carries no terms whatever the row says; an unknown kind is dropped.
+		expect(sc.decisionEvents).toEqual([
+			{ position: 1, kind: 'lodged', forum: 'water_tribunal', eventDate: '2026-10-02', reference: 'WT 1', note: 'n', terms: null },
+			{ position: 2, kind: 'varied', forum: 'court', eventDate: '2026-10-08', reference: '', note: '', terms: { ops: [], opsSha256: 'b'.repeat(64), opNames: [{ id: OWN, name: 'My Farm' }], conditions: 'Release 5 %', asApplied: false, withheldOps: 1 } }
+		]);
+		expect(sc.licence).toEqual({ inForce: true, from: 'event', eventPosition: 2, appealPending: false });
+		const text = JSON.stringify(out);
+		for (const leak of [...LEAKS, '424242']) expect(text, leak).not.toContain(leak);
+	});
+
+	it('leaves another unit’s registered volume out of the applied ops too, with their classes', () => {
+		const out = toShareScenario(
+			row({
+				scenario: { ...row().scenario, ops: [volume(OTHER), { op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 120000 }] },
+				runs: [candidate('aa', ['baseline', 'proposal'])]
+			}),
+			verified
+		);
+		expect(out.scenario.ops).toEqual([{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 120000 }]);
+		expect(out.scenario.classified).toEqual(['proposal']);
+		expect(out.scenario.withheldOps).toBe(1);
+		expect(JSON.stringify(out)).not.toContain('424242');
+	});
+
+	it('shows no terms, events or standing on a submitted application, whatever the row says', () => {
+		const out = toShareScenario(row({ scenario: { ...row().scenario, grantedTerms: terms([]), decisionEvents: [{ position: 1, kind: 'lodged', forum: 'court', eventDate: '2026-10-02' }], licence: { inForce: true } } }), verified);
+		expect(out.scenario).toMatchObject({ grantedTerms: null, decisionEvents: [], licence: null, withheldOps: 0 });
+	});
+
+	// 300: the WULA reference (294), submitted or decided, field by field.
+	it('passes the WULA number and the works as applied for, each { ref, text } only; null when there is neither', () => {
+		const works = [
+			{ ref: 'W1', text: 'Raise the dam wall by 2 m', recordedBy: 'Jane Holder' },
+			{ ref: 'W2', text: 'A pipeline' },
+			{ ref: 'W3', text: 7 },
+			{ ref: 'x'.repeat(21), text: 'too long a ref' }
+		];
+		const out = toShareScenario(
+			row({ scenario: { ...row().scenario, ops: [{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 120000, works: 'W1' }], wula: { number: 'WU-1', works, extra: OTHER } } }),
+			verified
+		);
+		expect(out.scenario.wula).toEqual({
+			number: 'WU-1',
+			works: [
+				{ ref: 'W1', text: 'Raise the dam wall by 2 m' },
+				{ ref: 'W2', text: 'A pipeline' }
+			]
+		});
+		// Each op keeps the works it models.
+		expect(out.scenario.ops).toEqual([{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 120000, works: 'W1' }]);
+		expect(JSON.stringify(out)).not.toContain('Jane Holder');
+		// On a decided one too; a number alone; none at all.
+		expect(toShareScenario(decided({ wula: { number: 'WU-2', works: [] } }), verified).scenario.wula).toEqual({ number: 'WU-2', works: [] });
+		expect(toShareScenario(row(), verified).scenario.wula).toBeNull();
+		expect(toShareScenario(row({ scenario: { ...row().scenario, wula: { number: null, works: [] } } }), verified).scenario.wula).toBeNull();
+		expect(toShareScenario(row({ scenario: { ...row().scenario, wula: 'WU-3' } }), verified).scenario.wula).toBeNull();
 	});
 
 	it('drops every volume, a site deficit included, below the k rule', () => {

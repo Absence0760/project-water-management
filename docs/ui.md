@@ -875,7 +875,7 @@ the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections, in this order: **Review**
-(Project, Applications, History), **Build the model** (Network, Map, Crops &
+(Project, Applications, History, and the Restriction log while it is open), **Build the model** (Network, Map, Crops &
 demand, Transfers, Data, Model settings, Calibration) and **Outcomes** (Summary,
 EWR, Hydrological units, Runs & results, Dams, Compare runs,
 Scenarios, Allocations). The operator chose this order on 2026-10-05 (before
@@ -958,6 +958,7 @@ shown sets nothing for a later Back or link.
 | Project | `project` | `details`, `members`, `sharing` | `lib/components/project/` ([§ Project](#project)) |
 | Applications | `applications` | | `lib/components/scenarios/ApplicationsTab.svelte` |
 | History | `history` | `changes` | `lib/components/history/` |
+| Restriction log | `restrictions` | `restriction-log`, `decisions` | `lib/components/restrictions/` ([§ Restriction log](#restriction-log-tabrestrictions)) |
 
 **Tabs by role** (`lib/workspace/tabs.ts`, issue #6). One pure function,
 `visibleTabs(role, prefs, rendered)`, decides which tabs the sections list shows and
@@ -2570,7 +2571,11 @@ pill (`portfolio.spec.ts` pins the withheld row); with the published restriction
 under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
 without a publication, where the dam already says *Not published*), **Data**
 (the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
-the figures*, the drought badge below, the feeds' health), **Last run** (its age, then the date or
+the figures*, the drought badge below, the feeds' health: "2 feeds OK",
+"1 of 3 feeds failing or stale", and a feed waiting on our late rain copy
+(the feed panel's **Copy behind**) named apart, "1 of 2 feeds waiting for
+our rain copy", never as failing nor as a Needs attention reason, since no
+catchment can fix it), **Last run** (its age, then the date or
 when it was published) and **Alerts** (the alerts firing now, "None" or a
 "2 firing" badge, from `alertsFiring`, [§ Alerts](#alerts)). A
 project where your role is farmer or applicant has no figures ("Not shown
@@ -3691,6 +3696,19 @@ itself.
   doesn't use it (engine ≥ 1.68.0, model.md §2.7 row O). Setting Upstream
   inflow to dam below 100 % makes it available again; the stored value is
   kept.
+- **The map's Siting beside Upstream inflow to dam** (one-node form,
+  Routing). When a dam drawn as its outline on the Map is linked to the
+  unit, a line under **Upstream inflow to dam** says what its card's
+  **Siting** is ("On the map, its dam “Weir pool” is marked on the river.";
+  not said, or each outline when there are several), read from `GET
+  …/map/linked-nodes` (`MappedNodes.dams`). The share is edited here by
+  hand, so it can drift from the Siting Start or Divide proposed it from: a
+  warning (`alert-warning`, in the field's description, never a block)
+  says so when the share is plainly the other kind, an off-channel dam at
+  100 % or a dam on the river at 0 %. Kept conservative (`fields.ts`
+  `damSitingHint`): no warning for a share in between (a unit can lump
+  several dams), when the unit's outlines aren't all marked alike, or with
+  no dam (capacity under 1 m³). maps.md § Start from the map.
 - **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
   one-node form, farms, under **River to dam** in Routing: **Set River to dam
   by month** opens twelve m³/s fields (started from the one value, with
@@ -6810,8 +6828,12 @@ editors run one now and read the map's proposals, viewers read.
   which units that would refuse), an optional **Start date** (checked
   against the product's first day; without one the feeds read from it), a
   sentence of what the button does, and the button itself, named by what it
-  does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**
-  (from each unit's `action`), in the panel's action row with Close. When
+  does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**,
+  **Re-read the record** / **Set up 3 feeds** when a unit's parcel was
+  redrawn after its feed fetched (its `replace` action, 296: the sentence
+  says the record is read again over the new cells, runs use the old one
+  until it is complete, and days entered by hand stay) (from each unit's
+  `action`; `unitRain.ts unitRainAction`), in the panel's action row with Close. When
   the new feeds would pass the project's feed cap (the proposal's `maxFeeds`, 60; the catchment's
   included) a warning says so plainly, with the room left, before the button
   is pressed (`feedLimitNote`; the server refuses it, `feed_limit`). With
@@ -8328,7 +8350,21 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     null, and the correction switched off comes back if ticked again before
     saving). On, it shows a "Factor in every month" input (fills all twelve;
     blank when the months differ), a "Derived from" select (Independent MAP,
-    Rain gauges, Fitted to the flow record, each with its hint), the twelve
+    Rain gauges, Fitted to the flow record, each with its hint), for an
+    editor a closed **Work it out from a MAP** fold
+    (`settings/ArealMapHelper.svelte`, sums in `settings/arealFromMap.ts`,
+    the rain read by `settings/arealForcing.ts`, a lazy import): the
+    catchment's MAP (mm) and where it comes from (required), **Read the
+    rain** (`GET …/model-input` with the form's unsaved settings and model,
+    prepared by the engine as a run would, forecast tail cut: catchment rain
+    ?? corrected CHIRPS ?? forecast, before the correction, the rain of the
+    units that fall back to the catchment's), then the mean over its
+    complete water years, MAP ÷ mean = the factor to three decimals, and the
+    source note it would write, all shown before anything changes. A factor
+    outside 0.25–4 is refused (check the MAP's units), one outside 0.5–2
+    flagged; a catchment on a rainfall station says the run doesn't apply
+    the correction. **Use × k** fills the factor in every month, Independent
+    MAP and the note; the save bar saves it. Then the twelve
     monthly factors (0.25–4, Oct … Sep) and a required Source. A factor out
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
@@ -9877,7 +9913,7 @@ read it before.
   ("today 15:06 · 1979–2024", or "23 Sep 2026 15:06 · …" before
   yesterday, `fmtWhen`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
-  base, **Can’t be re-run** (was *Inputs not stored*, #586 E14) for a run
+  base, Alternative (a run a submitted scenario cites as a mitigation alternative, 298), **Can’t be re-run** (was *Inputs not stored*, #586 E14) for a run
   from before stored inputs, which can't be re-run from them, **May be affected** for a run whose engine (or
   its fit's) had a known bug, its errata ids in the tooltip (the header
   badge says it in words), Workbook comparison; `runs/runTags.ts`). Each
@@ -9963,7 +9999,9 @@ read it before.
   responsible authority**, which evidence reports on it say on page 1;
   163_licensing_authority), and a member acting for the authority gets
   **Endorse as the responsible authority** with an optional note, once
-  (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. The farm
+  (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. Under the
+  notice, while something is published, **Restriction log** links to every restriction decision
+  ([§ Restriction log](#restriction-log-tabrestrictions)), not only the 12 publications kept here. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Summary" region, under a visible **Summary** heading that
   matches the side index, #586 D4): it opens with one or two plain
@@ -11523,10 +11561,12 @@ closing, and **Discard edits** puts it back. **Edits to record**
   separately). **Changes** with **Add a change** (and Undo, **Edit in the
   model tables**) is the first, the editor's main job; **Application
   details** (`application-details`) is the second: the proposer's units,
-  the applicant's statement and the rebase, each a `common/Fold.svelte` whose
+  the WULA reference, the mitigation alternatives, the applicant's statement and the rebase, each a `common/Fold.svelte` whose
   closed line says its value with the app's fold chevron before it ("Proposer: none
   ticked" or up to two names and "and N more", `scenarios/details.ts`
-  `proposerSummary`; "Statement: 0 of 3 answered"; "Based on Calibrated
+  `proposerSummary`; "WULA: Not given" or "WU/2026/0042 · 1 works applied
+  for" (`scenarios/wula.ts`); "Alternatives: None cited" or their labels
+  (`scenarios/alternatives.ts`); "Statement: 0 of 3 answered"; "Based on Calibrated
   baseline" with **Rebase…**), **Change** (an editor) or **Show** (a
   reader) at its end and **Hide** while open. Each starts closed, and again
   on another scenario. `e2e/tests/scenario-editor-layout.spec.ts` pins Add
@@ -11565,6 +11605,33 @@ closing, and **Discard edits** puts it back. **Edits to record**
   hydrological unit**, **Remove a hydrological unit**, **Move what a
   hydrological unit drains into**, **Insert a hydrological unit on a
   reach**, the picker **Hydrological unit**.)
+- **WULA reference** (`WulaReference.svelte`, every scenario, 294_wula_reference;
+  [scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)):
+  the water-use licence application's number and the works as applied for
+  (a ref and the works in words per row, **Add works**), edited by whoever
+  may change the scenario while it is a draft and frozen once submitted.
+  With works listed, each change in the list of changes has a **Models**
+  select (the works it models, or *No works named*); read only, a tagged
+  change shows "Models W1". The check's warnings against it show in an info
+  box under the list (`scenario-wula-warnings`), never blocking the run or
+  the submission. The workspace stays English, so these strings aren't
+  translated.
+- **Alternatives** (`MitigationAlternatives.svelte`, every scenario,
+  298_scenario_alternatives; [scenarios.md § Mitigation
+  alternatives](./scenarios.md#mitigation-alternatives)): the mitigation
+  alternatives it cites, closed line "Alternatives: None cited" or the
+  labels joined by " · " (`scenarios/alternatives.ts`). **Cite
+  alternatives** (**Change the alternatives** once one is cited) opens a
+  row per alternative, at most 3: **Run** (a select of the caller's own
+  other scenarios' runs on the same base run, "scenario — run label", from
+  `GET …/alternatives`) and **Label**, **Remove**, **Add an alternative**;
+  **Save the alternatives** sends the whole list after checking each has a
+  run and a label and no run is picked twice (an empty row is dropped).
+  With no such run, a hint says to make a scenario per option and run it.
+  Whoever may change the scenario edits it while a draft; frozen once
+  submitted (`alternatives-frozen`); read only, an ordered list of label and
+  run. A half-saved list asks before the scenario is left. English, as the
+  workspace is.
 - **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
   application's too; the **Statement** fold): the evidence report's fixed Appendix C prompts
   (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and
@@ -11612,7 +11679,9 @@ closing, and **Discard edits** puts it back. **Edits to record**
   run's Record group, § Runs & results).
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is
   based on is tagged **Scenario base** and has no ✕ (it is cited: kept, no
-  delete or unpin, `RunMeta.citedBy`). The runs list reloads after a
+  delete or unpin, `RunMeta.citedBy`). A run a submitted scenario cites as
+  a mitigation alternative (298) is tagged **Alternative** ("A mitigation
+  alternative of "…"") and has no ✕ either. The runs list reloads after a
   scenario is created, rebased or deleted, so the tag follows.
 - **Compare page.** When either side is a scenario run, a **Scenario
   overrides** section above "Inputs that differ" lists that run's ops as it
@@ -12010,6 +12079,14 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   an appeal open, "nothing changes until it is decided"; `licence.ts`
   `licenceLine`), and for an assessor while a licence is in force **Run the
   licensed terms** (the run the evidence report's other applications read).
+  When the decision or a variation queued that run in the background
+  (293_scenario_run_job), the block says so there instead (`licence.ts`
+  `licensedRunState`): "Queued…" or "Running…" with the button hidden, the
+  scenario read again every 4 s until the job ends; after a failure the
+  button is back beside why; a finished job says nothing more, and the
+  tab reads the run list again then (`licensedRunFinished`, in
+  `ScenariosTab.svelte` `changed`, as after a rebase), so its run shows
+  without a reload.
 - **Appeals** (228_decision_events, #523 G4), under the decision: the
   events in order ("Appeal lodged: Water Tribunal, 2 Oct 2026", its
   reference, who recorded it and when, its note, a variation's terms), or
@@ -12023,6 +12100,12 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   variation (the same editor as the decision's, starting from the terms in
   force) and a note; a hint under the choice says what it does to the
   licence ("Lodging an appeal changes nothing until it is decided …").
+  The free text a share link prints (the licence conditions, the case
+  reference and the note here, the decision's reasons) each has one hint
+  under it, always shown (a warning, not an explanation): "Shown on the
+  application's public share link: don't include personal information,
+  such as a name." (`licence.ts` `PUBLIC_RECORD_HINT`; security.md §
+  Scenario links).
   The applicant and everyone who reads the application see the events; only
   the authority's members record them. `applications.spec.ts` decides with
   changed terms, lodges an appeal and records it set aside, then reads it
@@ -12160,12 +12243,17 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   not together (two new dams given one name) are listed too.
 - **The result** (the newest assessment, or one picked under **Assessment**):
   while it runs, *Queued* or *Running each application alone and all
-  together… N %* (followed every 1.5 s); a refused or failed one says why,
-  line by line. Complete: one matrix, rows = each measure at each EWR site
+  together… N %*, then, while its dams' firm-yield jobs come back (297),
+  *Working out the firm yield of each dam the applications touch (n of m)…*
+  with its share as the bar (followed every 1.5 s); a refused or failed one
+  says why, line by line (a firm-yield job that stopped names the run and
+  the dam). Complete: one matrix, rows = each measure at each EWR site
   (the outlet first) and for the catchment (days the EWR is not met, mean
   EWR shortfall, Reserve months met and deficit at each rule-table site,
   mean flow at the outlet, supplied to existing users and their share of
-  demand met), columns = **Baseline**, each application **alone**, **All
+  demand met; then, for each dam the applications touch, **Firm yield of the
+  dam** and **Assurance of supply at the dam**, with a short note on both,
+  `assess-dams-note`), columns = **Baseline**, each application **alone**, **All
   together** (each with its change from the baseline under it, coloured
   worse or better) and **Interaction** (together less the sum of the
   separate changes; its plain-words reading is the cell's title and is read
@@ -12178,12 +12266,28 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   answered yet*, kept for the authority's written reasons. The CSV carries
   them too, after a blank line: *Application, Asked, The applicant read,
   In its own words, Answer, Answered*.
+- **Also against existing authorised use (optional)** (295, WP-3.10;
+  `CumulativeBackground.svelte`): once an application is ticked, a select
+  lists the full-allocation scenario runs of its base run (`GET
+  …/assessments/backgrounds`), *No: the baseline only* first and chosen by
+  default; shown only when there is one. Picked, the check and the
+  assessment take it too, and the result line says *and at full allocation
+  on …*. The complete result keeps the matrix as it is and adds, under it, a
+  second table headed **Existing authorised use (full allocation)**: the
+  run it is on and why it is separate (the table above stays the
+  hydrologist's baseline), columns **Baseline** (the hydrologist's value of
+  the same measure), **At full allocation** (with its change from the
+  baseline), each application **alone** and **All together** on it (each
+  with its change from the background) and **Interaction**. The CSV adds it
+  after a blank line. For a reader kept from the volumes only its EWR days
+  and Reserve months rows, with a note saying why.
 - Workspace English, like the rest of the assessors' tab.
 
 e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
 conflicting pair refused with both changes named, a pair that combines run
 by a worker tick into the matrix, the CSV, Back to the list; axe light and
-dark).
+dark; and a pair assessed against a full-allocation background, its own
+labelled table under an unchanged matrix).
 
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
@@ -12338,6 +12442,63 @@ after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: he
 deep link, the filters' URL and Back, pagination, a restore picking itself,
 empty states, a viewer, the phone layout, `?tab=changes`, axe at desktop
 light and dark and phone).
+
+## Restriction log (`?tab=restrictions`)
+
+The WUA persona's log of restriction decisions (docs/followups.md): which
+restriction the water user association published to farmers, when, by whom
+and on which run, for its members and the responsible authority.
+`restrictions/RestrictionLogTab.svelte` loads `GET …/restriction-log`
+([api.md § Publication](./api.md#publication)); each decision is
+`restrictions/RestrictionLogList.svelte`, its wording `restrictions/log.ts`.
+
+- **Where it is:** linked-only (`tabs.ts` `LINKED_ONLY`, as Compare runs:
+  the sidebar has no spare row, `app-sidebar.spec.ts`). It opens from
+  **Restriction log** under the notice on the Publication panel (Runs &
+  results) and shows under **Review**, after History, while open. Core
+  group: owners, editors and viewers (a member acting for the responsible
+  authority included); the API refuses farmers (`403`) and applicants, who
+  read the notice in force on their own pages.
+- **Header:** the context line says what is in force ("In force: Restricted
+  · 25 %, since 4 Mar 2026 by Ann") or "Nothing published yet"; the actions
+  are **Download CSV** (once there is a decision: `GET
+  …/restriction-log/export.csv`, the whole log in one file whatever pages
+  are loaded, for handing to the responsible authority; a plain link, so the
+  cookie goes with it) and **Publication**, which goes to the panel
+  (`?tab=runs#res-publication`).
+- **Print:** the page prints as a plain list in the light theme
+  (`printTheme.ts` on `beforeprint`): the app frame, the phone nav, the
+  header's buttons, How this page works, Assistant and Show older decisions
+  are left off; a line under the heading says when it was printed and how
+  many decisions, and, while older ones aren't loaded, that the CSV holds the
+  whole log. Each decision stays whole on one page, the level pills keep
+  their colours, and **Open the run** becomes "run 0b1f6c1e".
+- **The list** ("Restriction decisions", newest first, an `ol`): every
+  publication and every notice change that sent the restriction or the next
+  date. A change to the staff note alone isn't a restriction decision and
+  shows only in History. Each decision: the day and time (`time`), a heading
+  ("Published a run", "Published an automatic run", "Changed the restriction
+  and next publication date"), the level as a pill in words ("Restricted · 25
+  %", "Advisory", "No restriction"; the colour repeats it), **In force** on
+  the newest decision of the current publication, who made it ("By …"; the
+  name then, "Deleted user" after an account deletion, "the automatic run"
+  for an auto run's own publish), **Open the run** (that run's Publication
+  panel, `?tab=runs&run=<id>#res-publication`) while the run is kept, else
+  "run 0b1f6c1e no longer kept", the notice in each language it was written
+  in (`dl`, each text with its `lang`), then the season, the number of
+  hydrological units, the next publication date and the staff note
+  ("farmers don't see it"). A decision recorded before the decision log
+  widened (issue #119) says it kept the level only. Under 36 rem the day
+  sits above the decision.
+- **Paging:** 50 at a time; **Show older decisions** (44 px) loads the next
+  page; a failure says so beside it and keeps what is shown.
+- **Empty:** "No restriction decisions yet." and how the first one is made,
+  linking to the Publication panel.
+- **Why a page of its own:** the Publication panel's history holds the 12
+  publications `run_publication` keeps (`run_publication_cap`); this log reads
+  the decision log's audit events, kept for the life of the project, so no
+  decision drops off. History's `&kind=publication` holds the same events,
+  with each unit's figures, among every other change.
 
 ## Assistant
 
@@ -12662,7 +12823,7 @@ baseline card links to the published run's report (**Report**, beside
   `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
   doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
   `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
-  uploaded forecast (the Rain data credits still credit ECMWF when any
+  uploaded forecast (the Data credits still credit ECMWF when any
   forecast day was an ECMWF feed's, `forecastRainEcmwf`); a **Read this first** box above the summary sentence
   (`report/sections.ts` `readFirst`, the engine's `REPORT_READ_FIRST`): the
   disclaimer's key points with the Disclaimer's section number, then who
@@ -12934,7 +13095,15 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     interaction in its note; no band; *Not assessed* naming each conflict
     when they conflict, or saying none of exactly them is assessed yet;
     *None* when there are none the reader can see; an older pack prints its
-    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then, on an
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n";
+    after the application's columns, one per **mitigation alternative** the
+    application cites (`evidence-26`, 298_scenario_alternatives,
+    `report/evidence/alternatives.ts`): headed by its label and *Alternative
+    n: "its scenario"*, each cell its value and its change against the
+    baseline, worded as the Change cell is, or why it isn't assessed (the
+    combined row's *Not assessed for an alternative*), and a note under the
+    table (`evidence-alternatives-note`); Appendix A.2 lists each one's run
+    and changes (`evidence-a2-alternative`); then, on an
     application report, **Against full authorised use** (`evidence-14`,
     licensing build item 8; `report/evidence/authorised.ts`): the same
     board over the baseline and the application both run with every holder
@@ -14514,8 +14683,23 @@ signed in or out, for someone outside the project, on a phone first.
   itself, so not shown). Then **What the application changes**: each change
   in words, the applicant's own unit by name and any other as "another
   hydrological unit", marked *Proposal* or, in red, *Baseline assumption*
-  (with a line saying what that means), and the description. In the right
-  column: the decision's reasons (once decided), **The catchment's totals**
+  (with a line saying what that means), "Not shown: *n* changes setting
+  another hydrological unit's registered volume" when any is left out
+  (291), and the description; each change modelling WULA works says
+  **Works *ref*** beside it, and when the applicant gave a WULA reference
+  (294, on the link since 300) **The water-use licence application**
+  follows (`share-scenario-wula`): "Application number: *number*" and
+  "The works applied for, in the applicant's words", each ref with its
+  works. In the right column: **The decision** (once
+  decided; 291): where the licence stands ("The licence stands on the terms
+  it was granted on", "… varied to on appeal (*forum*, *date*)", "The
+  decision was set aside on appeal …", "No licence was issued", and "An
+  appeal is lodged with the *forum*: nothing changes until it is decided"
+  while one is open), the decision's reasons, **The terms granted** (with
+  a licence issued: "As applied for" or each change in the same words,
+  and the conditions), and **After the decision**, each appeal event
+  ("Appeal lodged: Water Tribunal, 2 Oct 2026", its reference and note,
+  and a variation's terms in the same form); **The catchment's totals**
   (flow out, water supplied, units short of 95 % of demand, baseline and
   application; only at five or more units), **Public comments** (oldest
   first, author and date, *edited*), and **About this page**. The comments

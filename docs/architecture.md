@@ -73,7 +73,7 @@ origin**, so the session cookie is first-party.
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. Subpath exports: `/calendar` (only the pure date helpers, `src/calendar.ts`, for code that must not pull in the model, such as the fetcher Lambda) and `/testing`. |
 | `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner, and loads the map's allowed reference datasets from the private reference bucket (`geo/referenceLoad.ts`, `load-reference.yml`, [deployment.md § Reference datasets](./deployment.md#reference-datasets)), and runs the fixed, named read-only production checks (`checks/readOnlyChecks.ts`, a `{ check }` event, [deployment.md § Read-only production checks](./deployment.md#read-only-production-checks)). `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). In Lambda, the API, worker and migrate entry points first read their secrets (session key, `DATABASE_URL`, …) from their own Secrets Manager secret, once per cold start, never from environment variables (`src/config/runtimeSecrets.ts`, [security.md § Runtime secrets](./security.md#runtime-secrets)); locally they come from `.env.development`. |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
-| `frontend` | `@water-management/frontend` | SvelteKit 3 (Svelte 5) as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront serves `index.html` for extension-less paths so deep links work (`spa_rewrite`; a missing file gets a 404 page, infra/README.md). A client navigation commits only once the new page's stylesheets have loaded (root layout `onNavigate`, `lib/nav/stylesheets.ts`), since SvelteKit + Vite can otherwise render it before its CSS. Back and Forward return the window to where it was on that entry, held while the page builds again (`lib/nav/backScroll.ts` on `lib/nav/scrollHold.ts`, the one scroll hold the `#anchor` landings share and yield to it), since SvelteKit 3 skips that for `reset: false` steps. The root layout frames a signed-in person's pages in `lib/components/layout/AppShell.svelte` (a sidebar from 900 px, a slim bar on phones; a page adds its own navigation through `layout/sidebar.svelte.ts`); the farmer view and the sign-in pages have their own frames ([ui.md § App shell](./ui.md#app-shell-and-account-menu)). |
+| `frontend` | `@water-management/frontend` | SvelteKit 3 (Svelte 5) as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront serves `index.html` for extension-less paths so deep links work (`spa_rewrite`; a missing file gets a 404 page, infra/README.md). A client navigation commits only once the new page's stylesheets have loaded: Vite's preload helper (8.3.4 and later) holds every call for a chunk until its CSS arrives, so SvelteKit's second loader call waits too (help.spec.ts pins it with a slowed stylesheet; [upstream/sveltekit-css-before-render.md](./upstream/sveltekit-css-before-render.md)). Back and Forward return the window to where it was on that entry, held while the page builds again (`lib/nav/backScroll.ts` on `lib/nav/scrollHold.ts`, the one scroll hold the `#anchor` landings share and yield to it), since SvelteKit 3 skips that for `reset: false` steps. The root layout frames a signed-in person's pages in `lib/components/layout/AppShell.svelte` (a sidebar from 900 px, a slim bar on phones; a page adds its own navigation through `layout/sidebar.svelte.ts`); the farmer view and the sign-in pages have their own frames ([ui.md § App shell](./ui.md#app-shell-and-account-menu)). |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801` (a worktree gets its own slot: `e2e/support/env.ts`); CI runs them as 14 shards. |
 | `scripts/wbt-import` | none (Python 3.14 + openpyxl) | Reads a b023 `.xlsm` into `project.json` and regression fixtures, written under `data/` (gitignored). |
 | `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL, the migrate Lambda and the job worker Lambda (all in a VPC; the worker's SQS queue, DLQ and 5-minute schedule in `jobs.tf`), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, the map's tiles bucket (served at `/tiles/*`) and private reference bucket (`map_data.tf`), budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
@@ -724,7 +724,18 @@ the data copy's NEX-GDDP-CMIP6 aggregates, [evidence-pack.md § Future
 yield](./evidence-pack.md#future-yield)), and the Scenarios tab's
 `climate_factors` (`jobs/handlers/climate-factors.ts`, the same reading of
 the copy, stored as the catchment's change factor table, [scenarios.md §
-Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)); step 2's
+Future climate](./scenarios.md#future-climate-issue-621-slice-5-282_climate_factors)), and an
+issued licence's `scenario_run` (`jobs/handlers/scenario-run.ts`, 293: the
+run of its licensed terms that the evidence report's § 4 reads, queued by
+`…/decide` and `…/appeals` when the terms in force differ from the ops
+applied for, [scenarios.md § Applications](./scenarios.md#applications-wp-33)), and a
+cumulative assessment's `assessment_yield` (`jobs/handlers/assessment-yield.ts`,
+297: one dam's firm yield on one of its runs, fanned out by the `assessment`
+job and gathered by the last one back; a dead one fails the assessment
+through its handler's `onDead`, which the runner calls as the acting user
+once a job is dead, or, for a death no hook sees, the tick's sweep after its
+jobs (301 `app_fail_stopped_assessments`), [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311)); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
@@ -788,7 +799,13 @@ alerts plug in as a further kind.
   the job is `dead` and logs `job_dead`, which alarms in production, and
   queues a job_dead alert check for the project (emailing its owners when the
   project has that alert on, [§ Alert emails](#alert-emails)). The stored error is written by us
-  (`jobs/errors.ts`), never database text.
+  (`jobs/errors.ts`), never database text, and never another library's or
+  the runtime's words: a handler's catch-all (`unexpectedFailure`: the
+  assessment, firm yield, sweep, outlook, ensemble and automated
+  calibration jobs) stores fixed words ("the sweep failed") and logs the
+  detail as its name, code and stack frames. The engine's own words, which
+  name what to fix in the input, are kept where a handler catches only the
+  engine (the run, scenario run, yield and future yield jobs).
 - **A worker that dies** mid-job leaves it `running` until its lease
   (`JOB_LEASE_SECONDS`, 360) runs out; the next tick claims it again. The
   lease token fences the old worker: if it wakes up and tries to finish, it
@@ -1110,9 +1127,11 @@ row names a source, where to read it and the series it merges into:
   `checkCellsUsed`, an integer from 1 to the box's cells): an answer with
   another count than the previous fetch's is refused as a failed fetch that
   writes nothing, naming both counts. A fetch checks only its own days, so
-  that is what catches a land cell lost between fetches. Saving the box
-  again (or a new one) is the way out: a config change clears `last_meta`
-  (`data_feed_stamp`), so counting starts afresh. The card shows "3 of 4
+  that is what catches a land cell lost between fetches. Saving a new box
+  is the way out: a config change clears `last_meta` (`data_feed_stamp`),
+  so counting starts afresh; over a record the feed wrote it is another
+  area, so the owner confirms re-reading that record over it (an area
+  replacement, below). The card shows "3 of 4
   cells with data". A day with no data in any cell after another day of the
   fetch had some is reported as a corrupt or changed file, not the sea.
   `sat`'s final and preliminary products are assumed to share the sea mask:
@@ -1498,6 +1517,46 @@ row names a source, where to read it and the series it merges into:
     ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)),
     and a run warns when another series of its CHIRPS kind spans more of it
     than the one it read.
+  - **New cells re-read the record** (296_feed_area_replace, the durable fix
+    for #326 B-rain's "new cells only into an empty series"). A gridded feed's
+    days (`chirps`, `agera5_et0`) are the weighted mean of its cells, so new
+    cells (another box or list, the catchment boundary's, a unit's redrawn
+    parcel; `config.ts sameArea`: the same grid cells with the same shares of
+    the weight and the same sea-cell rule is the same area) never merge onto
+    days it wrote over its old ones. A save giving such a feed new cells while
+    its series holds days it wrote (`feed_days`) answers **409**
+    (`series_area`) unless the owner confirms (`replaceSeries: true`;
+    `routes.ts areaCheck`): `data_feed.replace_series_from` becomes
+    `area:<product/version>` (`area:` for reference ET), and
+    `replace_config_from` keeps the config its record was read over. The feed
+    starts at its first own day (a later start date is a 409
+    `series_backfill`) and backfills the record over the new cells into its
+    stage exactly as above, at the source's own pace and limits (CHIRPS a
+    120-day window a minute, or 5 s when the cell cache holds it, reading CHC
+    or our copy through the polite client, [data-sources.md](./data-sources.md);
+    reference ET a year a fetch from our copy only), while runs read the old
+    record whole. The stage records which product each reference ET day came
+    from (`feed_stage.agera5_days` / `power_days`). When caught up, the swap
+    (`series/replace.ts replaceFeedRecord`, in the ingest's transaction)
+    replaces **only the feed's own days**: a day a person wrote or edited
+    (not in `feed_days`; `hand_days`) keeps its value, as every feed merge
+    keeps it, and an old-area day the new record has no value for is
+    cleared. The feed's days become the stage's span less those, the
+    product days (`feed_agera5_days` / `feed_power_days`, 292) are rebuilt
+    from the stage's, the old values are kept as a `feed_replace` revision,
+    and `series.replaced` is logged with `area: true`. The version stays what
+    it was. Withdrawing (`replaceSeries: false`) discards the stage and puts
+    the old cells back; saving the old cells withdraws it too. So the
+    boundary's feed can take over the default series: when a catchment
+    CHIRPS feed writes the record runs read, the boundary's **Replace** gives
+    that feed the boundary's cells this way ([maps.md § Rain from the
+    boundary](./maps.md#rain-from-the-boundary)), and **Rain for each unit**
+    re-reads a unit's record after its parcel is redrawn. A version
+    replacement, by contrast, still replaces the series whole: its days are
+    all of another version. Before 296 an `agera5_et0` feed was never
+    "caught up" (its window ends yesterday; the check wanted today), so it
+    queued another fetch a minute after every one; it now stops at
+    yesterday, as CHIRPS does.
   - The replacement changes the forcing: the next run's CHIRPS factors are
     fitted on the new values, the fit record flags "forcing changed since
     fit" (its `forcing.chirpsSource` no longer matches, model.md §2.10b), and
@@ -2013,7 +2072,9 @@ EventBridge, daily
   rolling 120 days). Neither enters the cell cache: an `agera5_et0`
   feed_fetch reads both in the job (`feeds/fromMirrorEt0.ts`, at most a year
   a window, one read per year chunk), AgERA5 where its copy holds the day,
-  POWER after it, and writes `evap_et0_mm`; there is no per-feed path to the
+  POWER after it, and writes `evap_et0_mm`, recording which product wrote
+  each day (`time_series.feed_agera5_days` / `feed_power_days`, 292, for a
+  run's credits); there is no per-feed path to the
   CDS or NASA, and the fetcher refuses one. A copy with neither product
   waits without a failure (as ECMWF's). The feeds fall due on the default
   daily rule (260_feed_source_agera5_et0.sql). Both jobs are off in
@@ -2036,7 +2097,9 @@ EventBridge, daily
   old (the lag alarm's threshold: CHC publishes a month's finals during the
   next month, so a healthy copy runs up to ~56 days behind), and the
   preliminary days behind past 7 days. A fetched CHIRPS feed whose part of
-  the copy is behind shows **Copy behind** instead of OK or Stale, and the
+  the copy is behind shows **Copy behind** instead of OK or Stale (the
+  portfolio and the project list read the same copy and count it apart,
+  `feeds.copyBehind`, [api.md § Portfolio](./api.md#portfolio)), and the
   panel says how far the copy reaches ("Rain data copied to 31 Jul 2026
   (final) / 5 Oct 2026 (preliminary)"; [ui.md § Data feeds](./ui.md#data-feeds),
   [api.md § Data feeds](./api.md#data-feeds)). The operator learns it first
@@ -2920,8 +2983,11 @@ The issue also queues a `pack_reproduce` job (`jobs/handlers/pack-reproduce.ts`,
 154_pack_reproduce; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
 the worker reads the pack's reproduction bundle back from the packs bucket
 (the same `s3:GetObject` on `packs/*` it HEADs PDFs with), checks it is the
-recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
-records the outcome through `app_record_pack_reproduction`. The pack's page
+recorded bytes and checks it without re-running; then fans the re-runs out
+as `pack_reproduce_part` jobs, one per run, the headline pair, § 8, the
+combined row's assessment and background, and each dam's firm-yield search
+(302), the last one back recording the outcome (`app_finish_pack_reproduce`;
+a stopped part fails the re-run, through its onDead or the tick's sweep). The pack's page
 shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
 ## Assistant

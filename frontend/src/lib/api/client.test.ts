@@ -639,6 +639,10 @@ describe('teams client', () => {
 		expect(createApi('http://x/').farm.exportUrl('p/1', 'n 1')).toBe('http://x/projects/p%2F1/farm/n%201/export.csv');
 	});
 
+	it('publication.logCsvUrl builds the restriction log’s CSV link', () => {
+		expect(createApi('http://x/').publication.logCsvUrl('p/1')).toBe('http://x/projects/p%2F1/restriction-log/export.csv');
+	});
+
 	it('farm.view keeps the status of a refusal, so the page can tell "access removed" (403/404) from a failure', async () => {
 		await expect(createApi('', mockFetch(403, { error: 'forbidden' })).farm.view('p', 'n')).rejects.toMatchObject({ status: 403 });
 		await expect(createApi('', mockFetch(404)).farm.index('p')).rejects.toMatchObject({ status: 404 });

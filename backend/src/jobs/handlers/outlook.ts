@@ -11,7 +11,7 @@
 import { ApiError } from '../../http/errors.js';
 import { OutlookPayload } from '../../outlooks/schema.js';
 import { computeOutlook } from '../../outlooks/store.js';
-import { JobError, LeaseLostError } from '../errors.js';
+import { JobError, LeaseLostError, unexpectedFailure } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const outlookHandler = defineHandler({
@@ -23,7 +23,8 @@ export const outlookHandler = defineHandler({
 			await computeOutlook(db, job.projectId, payload.outlookId, progress);
 		} catch (err) {
 			if (err instanceof ApiError || err instanceof JobError || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
-			throw new JobError(`the outlook failed: ${(err as Error).message}`, { retry: false });
+			// Not an error of ours: fixed words stored, the detail logged (jobs/errors.ts unexpectedFailure).
+			throw unexpectedFailure(err, 'the outlook failed', job);
 		}
 	}
 });

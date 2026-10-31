@@ -4,7 +4,20 @@
 // them into the copy's arrays (ingest/c3s_seasonal.py, ingest/c3srequest.py).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { C3S_CENTRES, C3S_SEASONAL_CITATION, c3sSeasonalCredit, copernicusC3sNotice, copernicusEra5lNotice } from './rainCredits';
+import {
+	AGERA5_CITATION,
+	C3S_CENTRES,
+	C3S_SEASONAL_CITATION,
+	c3sSeasonalCredit,
+	copernicusAgera5Notice,
+	copernicusC3sNotice,
+	copernicusEra5lNotice,
+	et0ProductsOf,
+	et0ProductsRead,
+	NASA_POWER_ET0_CREDIT,
+	rainCredits,
+	runRainCredits
+} from './rainCredits';
 
 const read = (path: string) => readFileSync(new URL(`../../../../${path}`, import.meta.url), 'utf8');
 const flat = (s: string) => s.replace(/\s+/g, ' ').replace(/ ?> /g, ' ');
@@ -37,5 +50,78 @@ describe('the C3S seasonal forecast credit (issue #620)', () => {
 		expect(c3sSeasonalCredit(['kma-1'], '2027-01-01')[2]).toBe('Contributing centres: kma.');
 		expect(c3sSeasonalCredit(['toString-1'], '2027-01-01')[2]).toBe('Contributing centres: toString.');
 		expect(c3sSeasonalCredit([], '2027-01-01')).toHaveLength(2);
+	});
+});
+
+describe('the reference ET credits (issue #604 R5-E)', () => {
+	it('quote docs/data-sources.md § agera5 and § nasa-power word for word, and match what the ingest writes into the arrays', () => {
+		const sources = flat(read('docs/data-sources.md'));
+		expect(sources).toContain(copernicusAgera5Notice('[year]'));
+		expect(sources).toContain(`"${AGERA5_CITATION}"`);
+		expect(sources).toContain(`"${NASA_POWER_ET0_CREDIT}"`);
+		const agera5 = flat(read('ingest/agera5.py')).replace(/" "/g, '');
+		expect(agera5).toContain(`${copernicusAgera5Notice('[year]')} ${AGERA5_CITATION}`);
+		expect(read('ingest/nasapower.py')).toContain(`ATTRIBUTION = "${NASA_POWER_ET0_CREDIT}"`);
+	});
+
+	it('come after the rain products’, each once, with the year read in Copernicus’s line', () => {
+		const c = rainCredits({ power: true, agera5: true, era5l: true }, '2026-10-30');
+		expect(c.map((x) => x.product)).toEqual(['era5l', 'agera5_et0', 'power_et0']);
+		expect(c[1]!.lines).toEqual([copernicusAgera5Notice('2026'), AGERA5_CITATION]);
+		expect(c[2]!.lines).toEqual([NASA_POWER_ET0_CREDIT]);
+	});
+
+	it('take a stored run’s et0Products, ignoring anything else stored there', () => {
+		expect(runRainCredits({ summary: {}, et0Products: ['power_et0'] }, '2026-10-30').map((c) => c.product)).toEqual(['power_et0']);
+		expect(et0ProductsOf(['power_et0', 'x', 'agera5_et0', 'power_et0'])).toEqual(['agera5_et0', 'power_et0']);
+		for (const bad of [null, 'agera5_et0', { agera5_et0: true }, undefined]) expect(et0ProductsOf(bad)).toEqual([]);
+		expect(runRainCredits({ summary: {}, et0Products: 'agera5_et0' }, '2026-10-30')).toEqual([]);
+	});
+
+	describe('et0ProductsRead: the products the feed recorded for the days the run read', () => {
+		const used = (first: string, last: string) => ({ used: true, dailyDays: 10, first, last });
+		const feed = {
+			agera5: [['2026-01-01', '2026-09-30']] as [string, string][],
+			power: [['2026-10-05', '2026-10-25']] as [string, string][],
+			unrecorded: [] as [string, string][]
+		};
+
+		it('credits each product whose days the run read', () => {
+			expect(et0ProductsRead(feed, used('2025-01-01', '2026-10-28'))).toEqual(['agera5_et0', 'power_et0']);
+			expect(et0ProductsRead(feed, used('2025-01-01', '2026-09-30'))).toEqual(['agera5_et0']);
+			expect(et0ProductsRead(feed, used('2026-10-01', '2026-10-28'))).toEqual(['power_et0']);
+			// Each range's first and last days count.
+			expect(et0ProductsRead(feed, used('2026-09-30', '2026-10-05'))).toEqual(['agera5_et0', 'power_et0']);
+		});
+
+		it('a long pause: NASA POWER days the feed never re-read, before days AgERA5 later wrote, are credited to POWER alone', () => {
+			// AgERA5 reached 2026-09-30 at the newest fetch, but the feed paused past its re-read, so July stayed POWER's.
+			const paused = {
+				agera5: [['2026-01-01', '2026-06-30'], ['2026-08-01', '2026-09-30']] as [string, string][],
+				power: [['2026-07-01', '2026-07-31']] as [string, string][],
+				unrecorded: [] as [string, string][]
+			};
+			expect(et0ProductsRead(paused, used('2026-07-01', '2026-07-31'))).toEqual(['power_et0']);
+			expect(et0ProductsRead(paused, used('2026-07-10', '2026-08-10'))).toEqual(['agera5_et0', 'power_et0']);
+		});
+
+		it('credits nothing for run days the feed didn’t write (a person’s edit, the gap between ranges, outside the series)', () => {
+			expect(et0ProductsRead(feed, used('2026-10-01', '2026-10-04'))).toEqual([]);
+			expect(et0ProductsRead(feed, used('2024-01-01', '2025-12-31'))).toEqual([]);
+			expect(et0ProductsRead({ agera5: [], power: [], unrecorded: [] }, used('2025-01-01', '2026-10-28'))).toEqual([]);
+		});
+
+		it('credits both for a day with no recorded product (written before the record existed), and only when the run read one', () => {
+			const old = { ...feed, unrecorded: [['2025-06-01', '2025-12-31']] as [string, string][] };
+			expect(et0ProductsRead(old, used('2025-07-01', '2025-07-02'))).toEqual(['agera5_et0', 'power_et0']);
+			expect(et0ProductsRead(old, used('2026-10-10', '2026-10-12'))).toEqual(['power_et0']);
+		});
+
+		it('credits nothing when GR4J didn’t read the series, or it supplied no day, or no feed wrote it', () => {
+			expect(et0ProductsRead(feed, { used: false, dailyDays: 0, first: null, last: null })).toEqual([]);
+			expect(et0ProductsRead(feed, { used: true, dailyDays: 0, first: null, last: null })).toEqual([]);
+			expect(et0ProductsRead(feed, null)).toEqual([]);
+			expect(et0ProductsRead(null, used('2025-01-01', '2026-10-28'))).toEqual([]);
+		});
 	});
 });

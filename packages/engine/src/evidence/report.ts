@@ -26,8 +26,9 @@ import { calendarMonthOf, monthName } from '../uncertainty/ensemble';
 import type { PairedSummary } from '../uncertainty/paired';
 import { NO_FLOW_M3_DAY } from '../reserve/riverMeasures';
 import type { ScenarioOp } from '../scenario/ops';
-import type { NetworkNode, ProjectModel } from '../project';
+import type { NetworkNode, ProjectModel, RunSummary } from '../project';
 import { canonicalJson } from '../manifest';
+import type { CumulativeReport } from '../scenario/cumulative';
 import { demandSourceShares, type DemandSourceShare } from '../network/demandSources';
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
@@ -39,6 +40,7 @@ import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSecti
 import { FUTURE_YIELD_CAVEAT, futureCaveatPending, futureFactorsComplete, type FutureYieldCaveat } from './future';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
+	ALTERNATIVES_MAX,
 	EVIDENCE_REPORT_VERSION,
 	type EvidenceAllocationCounts,
 	type EvidenceAllocations,
@@ -50,10 +52,15 @@ import {
 	type EvidenceCheck,
 	type EvidenceCombined,
 	type EvidenceCombinedInput,
+	type EvidenceCombinedDam,
 	type EvidenceCombinedMeasure,
+	type EvidenceCombinedVerdict,
 	type EvidenceCumulative,
 	type EvidenceCumulativeApplication,
 	type EvidenceDemandObject,
+	type EvidenceAlternative,
+	type EvidenceAlternativeCell,
+	type EvidenceAlternativeInput,
 	type EvidenceDemandObjects,
 	type EvidenceEnsembleInput,
 	type EvidenceEnsembleRef,
@@ -66,11 +73,15 @@ import {
 	type EvidenceReport,
 	type EvidenceRow,
 	type EvidenceRunInput,
+	type EvidenceScenarioInput,
 	type EvidenceServedWhileFailing,
 	type EvidenceSite,
 	type EvidenceSiteMonth,
-	type EvidenceUser
+	type EvidenceUser,
+	type EvidenceWula
 } from './types';
+import type { OpClass } from '../scenario/overrides';
+import { NO_WULA, wulaApplies, wulaTie } from '../scenario/wula';
 
 const DAYS_PER_YEAR = 365.25;
 
@@ -450,11 +461,15 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	};
 	const licenceImpact = licenceImpactSection(b, a, input.impact);
 	if (a) rows.push(combinedRow(cumulative.combined!));
+	// The mitigation alternatives the application cites (evidence-26): a column each on every page-1 row.
+	const alternatives = a ? alternativesOf(input, rows, cited) : [];
 	// The baseline's calibration zones (evidence-22, issue #555): every zone's parameters, fit record and statistics.
 	const calibrationZones = calibrationZonesSection(b);
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
 		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : []),
+		// The alternatives' runs (evidence-26): page 1 prints their figures, so their engines' errata reach it.
+		...citedAlternatives(input).flatMap((x) => errataFor(x.run.engineVersion, input.liability.errata, fitVersion(x.run))),
 		// Each zone's own fit (evidence-22): an erratum keyed on the fit's engine reaches the units it fitted.
 		...calibrationZoneFitVersions(calibrationZones).flatMap((v) => errataFor(b.engineVersion, input.liability.errata, v)),
 		// § 8's pairs (evidence-23) ran on the engine of the day the job ran.
@@ -502,7 +517,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 						opsSha256: a.scenario.opsSha256,
 						proposals: classes.filter((c) => c === 'proposal').length,
 						assumptions: classes.filter((c) => c === 'baseline').length,
-						origin: a.scenario.origin ?? 'team'
+						origin: a.scenario.origin ?? 'team',
+						wula: evidenceWula(a.scenario, classes)
 					}
 				: null
 		},
@@ -512,8 +528,9 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		issuable: !refused && checks.every((c) => c.passed || !c.blocksIssue),
 		ops: a ? a.scenario.ops.map((op, index) => ({ index, class: classes[index] ?? 'baseline', op })) : [],
 		flags,
-		questions: questions(checks, rows, river, input, demandObjects),
+		questions: [...questions(checks, rows, river, input, demandObjects), ...alternativeQuestions(alternatives, a?.engineVersion ?? null)],
 		rows,
+		alternatives,
 		byMonth,
 		worstMonths,
 		improvingMonths,
@@ -557,6 +574,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],
+			// A.2's works as applied for (evidence-26): the applicant's words, so never on page 1 (G13).
+			wulaWorks: a ? (a.scenario.wula?.works ?? []).map((w) => ({ ...w })) : [],
 			series: [...seriesRows('baseline', b), ...(a ? seriesRows('application', a) : [])],
 			history: input.history,
 			warnings: { baseline: [...b.summary.warnings], application: a ? [...a.summary.warnings] : null },
@@ -1310,6 +1329,9 @@ function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): 
 	].map((x) => ({ ...x, ewrDays: single(ewrRow, x.scenarioId), reserveMonths: single(reserveRow, x.scenarioId) }));
 	const measure = (row: typeof ewrRow): EvidenceCombinedMeasure | null =>
 		row ? { baseline: row.baseline, combined: row.combined, change: row.combinedChange, sumOfSingles: row.sumOfSingles, interaction: row.interaction } : null;
+	// evidence-26: the assessment's background at full allocation, its own row set beside the baseline's.
+	const bg = c.assessment?.background ?? null;
+	const bgRow = (metric: 'ewr_days_not_met' | 'reserve_months_met') => bg?.report.rows.find((r) => r.metric === metric && r.isOutlet) ?? null;
 	const notAssessed = !others.length
 		? COMBINED_NONE
 		: applications.length < 2
@@ -1329,15 +1351,45 @@ function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): 
 							: COMBINED_NOT_RUN(applications.length);
 	const assessed = notAssessed === null;
 	return {
+		dams: assessed && report ? combinedDams(report) : [],
 		applications: assessed ? applications : applications.map((x) => ({ ...x, ewrDays: null, reserveMonths: null })),
 		assessment: c.assessment && assessed ? { id: c.assessment.id, name: c.assessment.name, createdAt: c.assessment.createdAt, createdBy: c.assessment.createdBy, engineVersion: c.assessment.engineVersion } : null,
 		conflicts: [...c.conflicts],
 		problems: [...c.problems],
 		ewrDays: assessed ? measure(ewrRow) : null,
 		reserveMonths: assessed ? measure(reserveRow) : null,
-		warnings: assessed ? [...(report?.warnings ?? [])] : [],
-		notAssessed
+		warnings: assessed ? [...(report?.warnings ?? []), ...(bg?.report.warnings ?? []).map((w) => `${bg!.label}: ${w}`)] : [],
+		notAssessed,
+		background: assessed && bg ? { label: bg.label, runLabel: bg.runLabel, ewrDays: measure(bgRow('ewr_days_not_met')), reserveMonths: measure(bgRow('reserve_months_met')) } : null
 	};
+}
+
+/**
+ * The assessment's dam rows (evidence-26): each dam it worked a firm yield
+ * out for, in its order. A firm yield within the search's own tolerance of
+ * the baseline's (network/yield.ts YIELD_DEFAULT_TOLERANCE, 0.1 % of the larger;
+ * not imported, so the report page doesn't load the model) is unchanged.
+ */
+const DAM_YIELD_TOLERANCE = 0.001;
+function combinedDams(report: CumulativeReport): EvidenceCombinedDam[] {
+	const ids = report.dams?.nodeIds ?? [];
+	const onVolumes = report.dams?.onVolumes ?? false;
+	const verdict = (m: EvidenceCombinedMeasure | null, tol: number): EvidenceCombinedVerdict | null => {
+		if (!m || m.change === null || m.baseline === null || m.combined === null) return null;
+		if (Math.abs(m.change) <= tol * Math.max(Math.abs(m.baseline), Math.abs(m.combined))) return 'unchanged';
+		return m.change > 0 ? 'higher' : 'lower';
+	};
+	return ids.flatMap((id) => {
+		const row = (metric: 'dam_firm_yield' | 'dam_reliability') => report.rows.find((r) => r.metric === metric && r.siteNodeId === id) ?? null;
+		const y = row('dam_firm_yield');
+		const r = row('dam_reliability');
+		if (!y && !r) return [];
+		const m = (x: typeof y): EvidenceCombinedMeasure | null =>
+			x ? { baseline: x.baseline, combined: x.combined, change: x.combinedChange, sumOfSingles: x.sumOfSingles, interaction: x.interaction } : null;
+		const firmYield = m(y);
+		const reliability = m(r);
+		return [{ nodeId: id, name: (y ?? r)!.site ?? id, firmYield, reliability, verdict: { firmYield: verdict(firmYield, DAM_YIELD_TOLERANCE), reliability: verdict(reliability, 1e-9) }, onVolumes }];
+	});
 }
 
 /** Page 1's row over every application together (application reports only). */
@@ -1362,6 +1414,194 @@ function combinedRow(c: EvidenceCombined): EvidenceRow {
 				? `${all.length} applications together: ${names.join(', ')}.${m.interaction === null ? '' : ` Interaction ${signed(fixed(m.interaction, 0))} ${Math.abs(Math.round(m.interaction)) === 1 ? 'day' : 'days'}: what they do together beyond the sum of each alone.`} Assessment “${at.name}” (${day(at.createdAt)}${at.engineVersion ? `, engine ${at.engineVersion}` : ''}).`
 				: null
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Page 1: the mitigation alternatives (evidence-26, 298_scenario_alternatives)
+// ---------------------------------------------------------------------------
+
+/** An alternative on another baseline than the report's: its whole column. */
+export const ALTERNATIVE_OTHER_BASELINE = 'Not assessed: this alternative ran on another baseline than the application, so its figures aren’t comparable; cite a run of it on the application’s baseline.';
+/** An alternative whose run's server stamp doesn't match its results (077): its whole column. */
+export const ALTERNATIVE_UNVERIFIED =
+	'Not assessed: this alternative’s run was not stored by the model run itself (its server stamp is missing or no longer matches its results); run it again and cite the new run.';
+/** Page 1's combined row, under an alternative. */
+export const ALTERNATIVE_NOT_COMBINED = 'Not assessed for an alternative: the other applications are assessed together with the application, not its alternatives.';
+/** A row the alternative's run has nothing for (works or a unit it doesn't have). */
+export const ALTERNATIVE_NO_ROW = 'Not assessed: the alternative’s run has nothing to set beside this row.';
+
+/** The alternatives the report reads: the first ALTERNATIVES_MAX, none for baseline evidence. */
+const citedAlternatives = (input: EvidenceInput): EvidenceAlternativeInput[] => (input.application ? (input.alternatives ?? []).slice(0, ALTERNATIVES_MAX) : []);
+
+const rowKey = (r: Pick<EvidenceRow, 'id' | 'subject'>) => `${r.id}\u0000${r.subject ?? ''}`;
+
+/**
+ * Each alternative's column on page 1 (evidence-26): the rows are the
+ * application's (G6: page 1's rows are fixed by the application), and each
+ * gains one cell per alternative with the alternative's value and its change
+ * against the baseline, built by the same rules as the application's own
+ * column (changeRows), banded by the alternative's own paired ensemble on the
+ * cited one when it has one. The works rows stay at the application's works,
+ * so the alternative is read at the same sites. Another unit whose supply only
+ * an alternative moves gets a row of its own, with the application's value
+ * beside it, so a mitigation that shifts the loss to a neighbour shows. Mutates
+ * `rows`; returns the alternatives as the document lists them.
+ */
+function alternativesOf(input: EvidenceInput, rows: EvidenceRow[], cited: EvidenceEnsembleInput | null): EvidenceAlternative[] {
+	const a = input.application!;
+	const b = input.baseline;
+	const list = citedAlternatives(input);
+	if (!list.length) return [];
+	const cells: Map<string, EvidenceAlternativeCell>[] = [];
+	const altUsers: EvidenceUser[][] = [];
+	const out = list.map((alt): EvidenceAlternative => {
+		const sc = alt.run.scenario;
+		const why = sc.baseRunId !== b.id ? ALTERNATIVE_OTHER_BASELINE : !alt.verified ? ALTERNATIVE_UNVERIFIED : null;
+		const onBase = why === null;
+		const pairedRow = onBase ? citedPaired(alt.paired, cited) : null;
+		const paired = pairedRow?.paired ?? null;
+		// Read at the application's works (worksRows takes the ops and classes), with the alternative's own units and figures.
+		const asApp = { ...alt.run, scenario: { ...sc, ops: a.scenario.ops, classified: a.scenario.classified } };
+		const altInput: EvidenceInput = { ...input, application: asApp };
+		const change = changeCell(altInput, cited, paired);
+		const own = new Map<string, EvidenceAlternativeCell>();
+		if (onBase) {
+			for (const r of changeRows(altInput, paired, allocationSection(b, asApp), change))
+				if (r.id !== 'userSupply' || r.subject === null) own.set(rowKey(r), { value: r.application, change: r.change, notAssessed: r.notAssessed, note: r.note });
+			altUsers.push(userRows(b, asApp, paired, change));
+		} else altUsers.push([]);
+		cells.push(own);
+		const classes = sc.classified;
+		return {
+			label: alt.label,
+			runId: alt.run.id,
+			runLabel: alt.run.label,
+			engineVersion: alt.run.engineVersion,
+			createdAt: alt.run.createdAt,
+			createdBy: alt.run.createdBy,
+			scenarioId: sc.id,
+			scenarioName: sc.name,
+			opsSha256: sc.opsSha256,
+			ops: sc.ops.map((op, index) => ({ index, class: classes[index] ?? 'baseline', op })),
+			proposals: classes.filter((c) => c === 'proposal').length,
+			assumptions: classes.filter((c) => c === 'baseline').length,
+			allocationMode: alt.run.summary.allocations?.mode ?? null,
+			pairedId: pairedRow?.id ?? null,
+			notAssessed: why
+		};
+	});
+
+	// Another unit whose supply only an alternative moves: a row of its own, the application's value beside it.
+	const appUsers = userRows(b, a, citedPaired(input.ensembles.paired, cited)?.paired ?? null, () => null);
+	const inBoth = (u: EvidenceUser) => !u.own && u.onlyIn === null && u.suppliedA !== null && u.suppliedB !== null;
+	const moved = (u: EvidenceUser) => inBoth(u) && Math.abs((u.suppliedB! - u.suppliedA!) * 100) >= 0.1;
+	const listed = new Set(rows.filter((r) => r.id === 'userSupply' && r.subject !== null).map((r) => r.subject!));
+	const extra = new Map<string, EvidenceUser>();
+	for (const us of altUsers) for (const u of us) if (moved(u) && !listed.has(u.name) && !extra.has(u.name)) extra.set(u.name, u);
+	if (extra.size) {
+		const last = rows.reduce((at, r, i) => (r.id === 'userSupply' ? i : at), -1);
+		const added = [...extra.values()]
+			.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0))
+			.map((x): EvidenceRow => {
+				const u = appUsers.find((y) => y.nodeId === x.nodeId) ?? null;
+				const fa = u?.suppliedA ?? x.suppliedA;
+				const fb = u && inBoth(u) ? u.suppliedB : null;
+				return {
+					id: 'userSupply',
+					label: 'Other users’ supply',
+					basis: 'Share of demand supplied, whole run',
+					subject: x.name,
+					unit: '% of demand',
+					higherIsWorse: false,
+					baseline: fa === null ? null : fa * 100,
+					application: fb === null ? null : fb * 100,
+					// Unbanded here: the application's band on this unit is § 4's (its own rows above carry theirs).
+					change: fa !== null && fb !== null ? { run: (fb - fa) * 100, band: null, bandNote: 'no band: listed because an alternative moves it; § 4 bands the application’s change', worse: null } : null,
+					notAssessed: null,
+					note: 'Listed because an alternative moves it by 0.1 percentage points or more.'
+				};
+			});
+		rows.splice(last + 1, 0, ...added);
+	}
+
+	for (const r of rows) {
+		r.alternatives = out.map((alt, i) => {
+			if (alt.notAssessed) return { value: null, change: null, notAssessed: alt.notAssessed, note: null };
+			if (r.id === 'otherApplications') return { value: null, change: null, notAssessed: ALTERNATIVE_NOT_COMBINED, note: null };
+			if (r.id === 'userSupply' && r.subject !== null) {
+				const u = altUsers[i]!.find((x) => x.name === r.subject && inBoth(x));
+				return u ? { value: u.suppliedB! * 100, change: u.change, notAssessed: null, note: null } : { value: null, change: null, notAssessed: ALTERNATIVE_NO_ROW, note: null };
+			}
+			const found = cells[i]!.get(rowKey(r));
+			if (found) return found;
+			// The application moved no other unit, this alternative does: they are the rows below.
+			if (r.id === 'userSupply') {
+				const n = altUsers[i]!.filter(moved).length;
+				return { value: null, change: null, notAssessed: null, note: `${n} other ${n === 1 ? 'unit’s' : 'units’'} supply changed by 0.1 percentage points or more under this alternative (listed below).` };
+			}
+			return { value: null, change: null, notAssessed: ALTERNATIVE_NO_ROW, note: null };
+		});
+	}
+	return out;
+}
+
+/** The page-1 rows an alternative's cell reads from its run's summary alone (the river at the outlet and the Reserve sites). */
+export const ALTERNATIVE_SUMMARY_ROWS: ReadonlySet<EvidenceRow['id']> = new Set<EvidenceRow['id']>(['reserve', 'ewrDays', 'shortfall', 'noFlowDays', 'outflowMar']);
+
+/**
+ * An alternative's cell on a page-1 row that reads only its run's summary and
+ * the baseline's (ALTERNATIVE_SUMMARY_ROWS), as changeRows builds it: the
+ * value and the run's own change against the baseline (the band aside, which
+ * reads ensembles). Null for any other row. The reproduction bundle checks a
+ * cited alternative's column with it (bundle.ts, `alternative:<n>`).
+ */
+export function alternativeSummaryCell(row: Pick<EvidenceRow, 'id' | 'subject'>, baseline: RunSummary, alt: RunSummary): { value: number | null; run: number | null } | null {
+	const b = { summary: baseline } as EvidenceRunInput;
+	const a = { summary: alt } as EvidenceRunInput;
+	switch (row.id) {
+		case 'reserve': {
+			const site = (baseline.ewrAssurance ?? []).find((s) => s.name === row.subject);
+			if (!site) return { value: null, run: null };
+			const ra = site.overall.rate;
+			const rb = matchSite(alt.ewrAssurance ?? [], site)?.overall.rate ?? null;
+			return { value: rb === null ? null : rb * 100, run: ra === null || rb === null ? null : (rb - ra) * 100 };
+		}
+		case 'ewrDays':
+			return { value: alt.catchment.ewrDaysNotMet, run: diff(baseline.catchment.ewrDaysNotMet, alt.catchment.ewrDaysNotMet) };
+		case 'shortfall': {
+			const sa = outletShortfallMm3(b);
+			const sb = outletShortfallMm3(a);
+			return { value: sb, run: diff(sa, sb) };
+		}
+		case 'noFlowDays': {
+			const fa = baseline.catchment.noFlow ?? null;
+			const fb = alt.catchment.noFlow ?? null;
+			return { value: fb?.days ?? null, run: fa && fb ? fb.days - fa.days : null };
+		}
+		case 'outflowMar': {
+			const oa = marMm3(baseline.catchment.meanSimulatedOutflowM3Day);
+			const ob = marMm3(alt.catchment.meanSimulatedOutflowM3Day);
+			return { value: ob, run: diff(oa, ob) };
+		}
+		default:
+			return null;
+	}
+}
+
+/** What an assessor will ask about the alternatives (evidence-26). */
+function alternativeQuestions(alts: readonly EvidenceAlternative[], applicationEngine: string | null): string[] {
+	const out: string[] = [];
+	for (const x of alts) {
+		const name = `Alternative “${x.label}”`;
+		if (x.notAssessed) out.push(`${name}: ${x.notAssessed}`);
+		if (x.assumptions)
+			out.push(
+				`${name} changes ${x.assumptions === 1 ? 'a baseline assumption' : `${x.assumptions} baseline assumptions`} (A.2): expect the assessor to ask whether its column compares like with like; keep an alternative to the applicant’s own works.`
+			);
+		if (applicationEngine && x.engineVersion !== applicationEngine)
+			out.push(`${name} ran on engine ${x.engineVersion}, the application on ${applicationEngine}: expect the assessor to ask whether the difference is the engine’s; run both again on one engine.`);
+	}
+	return out;
 }
 
 function userRows(b: EvidenceRunInput, a: EvidenceInput['application'], paired: PairedSummary | null, change: ChangeCell): EvidenceUser[] {
@@ -2069,6 +2309,19 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	if (!headlineFitRecord(input.baseline.inputs))
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');
+	const wula = input.application ? evidenceWula(input.application.scenario, input.application.scenario.classified) : null;
+	if (wula) {
+		if (wula.number === null) out.push('The WULA application number is not given (page 1): expect the assessor to ask which application this models; add it to the scenario’s WULA reference.');
+		const untied = wula.untiedProposals.length;
+		if (untied)
+			out.push(
+				`${untied} ${untied === 1 ? 'proposal models' : 'proposals model'} none of the works the WULA applies for (A.2): expect the assessor to ask what ${untied === 1 ? 'it models' : 'each models'}; name its works on the scenario, then run the application again.`
+			);
+		if (wula.unmodelled.length)
+			out.push(
+				`No change models ${wula.unmodelled.length === 1 ? 'works' : 'the works'} ${wula.unmodelled.map((r) => `“${r}”`).join(', ')} (A.2): expect the assessor to ask why the model leaves out works the WULA applies for.`
+			);
+	}
 	const unsourced = (demand?.objects ?? []).filter((o) => o.change !== 'removed' && o.source === null).length;
 	if (unsourced)
 		out.push(
@@ -2080,6 +2333,13 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
+
+/** The WULA reference as page 1 and A.2 print it (evidence-26): null for a team scenario that records none. */
+function evidenceWula(s: EvidenceScenarioInput, classes: readonly OpClass[]): EvidenceWula | null {
+	const w = s.wula ?? NO_WULA;
+	if (!wulaApplies((s.origin ?? 'team') === 'applicant', w)) return null;
+	return { number: w.number, refs: w.works.map((x) => x.ref), ...wulaTie(s.ops, classes, w.works) };
+}
 
 function seriesRows(run: 'baseline' | 'application', r: EvidenceRunInput): EvidenceReport['appendix']['series'] {
 	return Object.entries(r.inputs?.series ?? {})

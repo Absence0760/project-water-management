@@ -1,0 +1,7778 @@
+{
+	"outlet": {
+		"run": {
+			"shape": "134573dc82661b11",
+			"series": {
+				"natural_flow@": {
+					"sum": 180377213.82562986,
+					"sumSq": 100093999296263.95,
+					"weighted": 272919330.5257344
+				},
+				"simulated_outflow@": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 273697706.3242417
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow_check@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93089834.11841613
+				},
+				"observed_flow_check@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143851730.52708885
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 1974.3387665991982,
+					"sumSq": 3796.1449655961487,
+					"weighted": 2964.2109622247367
+				},
+				"production_store@": {
+					"sum": 179248.59372878616,
+					"sumSq": 32899252.36555289,
+					"weighted": 268565.7419535581
+				},
+				"routing_store@": {
+					"sum": 53688.77509020981,
+					"sumSq": 2157811.0006909766,
+					"weighted": 80522.45610373447
+				},
+				"uh_store@": {
+					"sum": 933.1769320461783,
+					"sumSq": 7837.244895655574,
+					"weighted": 1403.4845273504616
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124158039.09483619
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 270083386.5810232
+				},
+				"outflow@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 266838052.99827984
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 188571946.32946205
+				},
+				"outflow@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 184569896.26867184
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 126981484.71368413
+				},
+				"outflow@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 127690649.05498412
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 123064647.47850946
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124735145.2228301
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124799175.54051788
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 125445751.60157141
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 11096.461029180686,
+				"sumSq": 17106854.39971913,
+				"weighted": 18513.91158877212
+			}
+		},
+		"fit": {
+			"params": [
+				{
+					"x1": 431.1591900729301,
+					"x2": 0,
+					"x3": 109.08497747442271,
+					"x4": 2.0940851834721594
+				}
+			],
+			"golden": {
+				"shape": "ddc9063af604782b",
+				"numbers": [
+					431.1591900729301,
+					0,
+					109.08497747442271,
+					2.0940851834721594,
+					350,
+					0,
+					90,
+					1.7,
+					731,
+					0.934225199522821,
+					0.9219276345824581,
+					0.9521831173398153,
+					0.9779236487933517,
+					0.9890474534715671,
+					0.9854034152353223,
+					0.8771580536812699,
+					-4.117668595620761,
+					-0.5955302706489335,
+					6.084867587223132,
+					6.570322679218256,
+					731,
+					0.8487670531438641,
+					0.8163593239663474,
+					0.9326504850726922,
+					0.9155124933408524,
+					0.9657315837426257,
+					0.9442806167673268,
+					0.7346540931038467,
+					4.946382825048069,
+					21.911394875392958,
+					18.596704619361294,
+					8.810310571243535
+				]
+			}
+		}
+	},
+	"innerSite": {
+		"run": {
+			"shape": "8aa29122c89bc80f",
+			"series": {
+				"natural_flow@": {
+					"sum": 180377213.82562986,
+					"sumSq": 100093999296263.95,
+					"weighted": 272919330.5257344
+				},
+				"simulated_outflow@": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 273697706.3242417
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143489960.962787
+				},
+				"observed_flow_check@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93241463.0900933
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 1974.3387665991982,
+					"sumSq": 3796.1449655961487,
+					"weighted": 2964.2109622247367
+				},
+				"production_store@": {
+					"sum": 179248.59372878616,
+					"sumSq": 32899252.36555289,
+					"weighted": 268565.7419535581
+				},
+				"routing_store@": {
+					"sum": 53688.77509020981,
+					"sumSq": 2157811.0006909766,
+					"weighted": 80522.45610373447
+				},
+				"uh_store@": {
+					"sum": 933.1769320461783,
+					"sumSq": 7837.244895655574,
+					"weighted": 1403.4845273504616
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124158039.09483619
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 270083386.5810232
+				},
+				"outflow@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 266838052.99827984
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 188571946.32946205
+				},
+				"outflow@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 184569896.26867184
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 126981484.71368413
+				},
+				"outflow@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 127690649.05498412
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 123064647.47850946
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124735145.2228301
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124799175.54051788
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 125445751.60157141
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 11073.523657196922,
+				"sumSq": 17102547.88281429,
+				"weighted": 18516.311356306844
+			}
+		},
+		"fit": {
+			"params": [
+				{
+					"x1": 913.3544750771875,
+					"x2": 0,
+					"x3": 128.27503317662794,
+					"x4": 2.835401569818247
+				}
+			],
+			"golden": {
+				"shape": "bb9b7a233f78a7ea",
+				"numbers": [
+					913.3544750771875,
+					0,
+					128.27503317662794,
+					2.835401569818247,
+					350,
+					0,
+					90,
+					1.7,
+					731,
+					0.9151754054540353,
+					0.9224148571233437,
+					0.9166576033986589,
+					0.9797619432177532,
+					0.989238227109599,
+					0.9926057971555542,
+					0.9207343309880294,
+					-8.086038751674069,
+					-11.066685265949035,
+					-3.6877251110555287,
+					-5.610043430745911,
+					731,
+					0.5170505300062642,
+					0.4479269322899301,
+					0.7201471722346762,
+					-0.14939475318358708,
+					0.5956163799185873,
+					0.6193809577744268,
+					0.3009153961033723,
+					25.14943238567307,
+					80.55197972264271,
+					48.17453468329239,
+					7.068274654565791
+				]
+			}
+		}
+	},
+	"outletAndZones": {
+		"run": {
+			"shape": "002f27d3bc273166",
+			"series": {
+				"natural_flow@": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 239590545.4388603
+				},
+				"simulated_outflow@": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 239073329.41846153
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow_check@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93089834.11841613
+				},
+				"observed_flow_check@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143851730.52708885
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 2112.6198175539616,
+					"sumSq": 4119.77004346164,
+					"weighted": 3170.9853352307146
+				},
+				"production_store@": {
+					"sum": 273650.45435922034,
+					"sumSq": 65468611.930924855,
+					"weighted": 410081.24157480843
+				},
+				"routing_store@": {
+					"sum": 72105.36715778895,
+					"sumSq": 3807976.8390035965,
+					"weighted": 108139.5437057883
+				},
+				"uh_store@": {
+					"sum": 1230.438706364002,
+					"sumSq": 8102.760690216917,
+					"weighted": 1853.578346905272
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92763095.79503697
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 237369457.48527944
+				},
+				"outflow@G": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 236307383.6848968
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 102195620.40423831,
+					"sumSq": 22421034831415.44,
+					"weighted": 154053727.6347157
+				},
+				"outflow@S": {
+					"sum": 102195620.40423831,
+					"sumSq": 22421034831415.44,
+					"weighted": 152289627.55672273
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93669710.08178695
+				},
+				"outflow@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93114244.12273386
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92940158.48908716
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92817385.6059096
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93510710.18426763
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92765724.39413159
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 57367.52025265399,
+				"sumSq": 95748934.14091946,
+				"weighted": 87986.10059581965
+			}
+		},
+		"fit": {
+			"params": [
+				{
+					"x1": 900,
+					"x2": 0,
+					"x3": 220,
+					"x4": 3.1
+				},
+				{
+					"x1": 464.8903373619859,
+					"x2": 0,
+					"x3": 205.28534363118888,
+					"x4": 2.9812814887739223
+				},
+				{
+					"x1": 272.01031727980967,
+					"x2": 0,
+					"x3": 12.099517776469554,
+					"x4": 2.2660798685721257
+				}
+			],
+			"golden": {
+				"shape": "4cda2e37f91bc066",
+				"numbers": [
+					900,
+					0,
+					220,
+					3.1,
+					900,
+					0,
+					220,
+					3.1,
+					1461,
+					1,
+					0.9999999999999998,
+					1,
+					1,
+					1,
+					1,
+					1,
+					0,
+					0,
+					0,
+					0,
+					1461,
+					1,
+					0.9999999999999998,
+					1,
+					1,
+					1,
+					1,
+					1,
+					0,
+					0,
+					0,
+					0,
+					464.8903373619859,
+					0,
+					205.28534363118888,
+					2.9812814887739223,
+					350,
+					0,
+					90,
+					1.7,
+					1096,
+					0.9705428746717469,
+					0.9671912632227814,
+					0.9799412216662273,
+					0.9901903204193047,
+					0.9950724938198426,
+					0.9949046286918941,
+					0.939848589061185,
+					1.556489925033602,
+					-1.220072089855493,
+					-3.8287451029371926,
+					4.418253730212224,
+					1096,
+					0.9185424074283456,
+					0.9098490595738644,
+					0.9284426236349779,
+					0.943470790885742,
+					0.9747868532071033,
+					0.9886305371538423,
+					0.9336837028525529,
+					6.858558936840351,
+					10.778298938294421,
+					5.19104587211309,
+					0.45392058734486623,
+					272.01031727980967,
+					0,
+					12.099517776469554,
+					2.2660798685721257,
+					350,
+					0,
+					90,
+					1.7,
+					1461,
+					0.9455962219653855,
+					0.9377975795579706,
+					0.9542468532910625,
+					0.9741469539745926,
+					0.9839513013623963,
+					0.9911945474326902,
+					0.9587656434903598,
+					-3.792614603395313,
+					1.0296303492526875,
+					-4.787336246123551,
+					-0.007315335715196442,
+					1461,
+					0.8630340027353768,
+					0.8500867062756412,
+					0.8990995393125305,
+					0.8792132929243279,
+					0.9397838515459013,
+					0.9638279828140454,
+					0.8583798523689896,
+					-9.36444683273495,
+					-20.39994478093619,
+					-9.651792420165089,
+					5.793700161452255
+				]
+			}
+		}
+	},
+	"innerSiteAndZoneWithOrphans": {
+		"run": {
+			"shape": "c43d939c5b3c4fe9",
+			"series": {
+				"natural_flow@": {
+					"sum": 180377213.82562986,
+					"sumSq": 100093999296263.95,
+					"weighted": 272919330.5257344
+				},
+				"simulated_outflow@": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 273697706.3242417
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143489960.962787
+				},
+				"observed_flow_check@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93241463.0900933
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 1974.3387665991982,
+					"sumSq": 3796.1449655961487,
+					"weighted": 2964.2109622247367
+				},
+				"production_store@": {
+					"sum": 179248.59372878616,
+					"sumSq": 32899252.36555289,
+					"weighted": 268565.7419535581
+				},
+				"routing_store@": {
+					"sum": 53688.77509020981,
+					"sumSq": 2157811.0006909766,
+					"weighted": 80522.45610373447
+				},
+				"uh_store@": {
+					"sum": 933.1769320461783,
+					"sumSq": 7837.244895655574,
+					"weighted": 1403.4845273504616
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124158039.09483619
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 270083386.5810232
+				},
+				"outflow@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 266838052.99827984
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 188571946.32946205
+				},
+				"outflow@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 184569896.26867184
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 126981484.71368413
+				},
+				"outflow@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 127690649.05498412
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 123064647.47850946
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124735145.2228301
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124799175.54051788
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 125445751.60157141
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 31759.86799865419,
+				"sumSq": 51663257.53032926,
+				"weighted": 48722.53730855034
+			}
+		},
+		"fit": {
+			"params": [
+				{
+					"x1": 1055.115975310519,
+					"x2": 0,
+					"x3": 206.02157634858503,
+					"x4": 2.744925331270643
+				},
+				{
+					"x1": 431.1591900729301,
+					"x2": 0,
+					"x3": 109.08497747442271,
+					"x4": 2.223303644875104
+				}
+			],
+			"golden": {
+				"shape": "3cc1f617ab90b176",
+				"numbers": [
+					1055.115975310519,
+					0,
+					206.02157634858503,
+					2.744925331270643,
+					350,
+					0,
+					90,
+					1.7,
+					1096,
+					0.9387851084722051,
+					0.9354724067625267,
+					0.9531602989798208,
+					0.9884746973231655,
+					0.9948227606948872,
+					0.9968539649304478,
+					0.951500349163847,
+					-4.260940469609193,
+					-8.515384381811675,
+					-5.09819019802493,
+					-4.594065908562758,
+					1096,
+					0.2570841718928375,
+					0.19353098594373638,
+					0.5967713625536701,
+					-1.7049287130791253,
+					0.27732200819476405,
+					0.45485494807550364,
+					0.013370985011355974,
+					36.49858606505097,
+					140.3515111785747,
+					55.768510232928456,
+					17.59243648700953,
+					431.1591900729301,
+					0,
+					109.08497747442271,
+					2.223303644875104,
+					350,
+					0,
+					90,
+					1.7,
+					1096,
+					0.994848530154633,
+					0.9880677803459594,
+					0.9911162485780524,
+					0.9937529038272664,
+					0.9968362080522609,
+					0.9980423760985114,
+					0.98938957921565,
+					0.40368357855339954,
+					1.535107936571945,
+					-0.5280649597077541,
+					-3.706899804686606,
+					1096,
+					0.93353626102304,
+					0.9326133700739346,
+					0.9503709480739604,
+					0.9316875386716237,
+					0.9724446052651549,
+					0.9877276276678638,
+					0.9513355570058022,
+					4.625318102791016,
+					14.268364152149347,
+					2.746291723692933,
+					-4.065747714829819
+				]
+			}
+		}
+	},
+	"innerSiteWithRowsAtAndBelow": {
+		"run": {
+			"shape": "ba21f01a8d8f9e63",
+			"series": {
+				"natural_flow@": {
+					"sum": 180377213.82562986,
+					"sumSq": 100093999296263.95,
+					"weighted": 272919330.5257344
+				},
+				"simulated_outflow@": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 273697706.3242417
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93089834.11841613
+				},
+				"observed_flow_check@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143851730.52708885
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 1974.3387665991982,
+					"sumSq": 3796.1449655961487,
+					"weighted": 2964.2109622247367
+				},
+				"production_store@": {
+					"sum": 179248.59372878616,
+					"sumSq": 32899252.36555289,
+					"weighted": 268565.7419535581
+				},
+				"routing_store@": {
+					"sum": 53688.77509020981,
+					"sumSq": 2157811.0006909766,
+					"weighted": 80522.45610373447
+				},
+				"uh_store@": {
+					"sum": 933.1769320461783,
+					"sumSq": 7837.244895655574,
+					"weighted": 1403.4845273504616
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124158039.09483619
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 270083386.5810232
+				},
+				"outflow@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 266838052.99827984
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 188571946.32946205
+				},
+				"outflow@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 184569896.26867184
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 126981484.71368413
+				},
+				"outflow@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 127690649.05498412
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 123064647.47850946
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124735145.2228301
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124799175.54051788
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 125445751.60157141
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 20999.41962934999,
+				"sumSq": 34964336.13107423,
+				"weighted": 31734.953294666728
+			}
+		},
+		"fit": {
+			"params": [
+				{
+					"x1": 1055.115975310519,
+					"x2": 0,
+					"x3": 206.02157634858503,
+					"x4": 2.744925331270643
+				}
+			],
+			"golden": {
+				"shape": "8a3c26f09ff1a789",
+				"numbers": [
+					1055.115975310519,
+					0,
+					206.02157634858503,
+					2.744925331270643,
+					350,
+					0,
+					90,
+					1.7,
+					1461,
+					0.9395027040929352,
+					0.9372863266004484,
+					0.9553951843080009,
+					0.9886494093335064,
+					0.9947220657498466,
+					0.9965400413788081,
+					0.9499890190678763,
+					-3.9977132661859676,
+					-8.27095993322828,
+					-5.696171174972993,
+					-5.133588909899917,
+					1461,
+					0.2642566014704554,
+					0.22332329472871476,
+					0.6127328344120271,
+					-1.6121737719403804,
+					0.2768017691611455,
+					0.43493352969517507,
+					0.017916074638737067,
+					34.839507474729196,
+					139.78435660038824,
+					56.56054864942324,
+					16.36506356526391
+				]
+			}
+		}
+	},
+	"staleSite": {
+		"run": {
+			"shape": "0e776cb298f3cbdf",
+			"series": {
+				"natural_flow@": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 239590545.4388603
+				},
+				"simulated_outflow@": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 239073329.41846153
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow_check@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93089834.11841613
+				},
+				"observed_flow_check@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143851730.52708885
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 2112.6198175539616,
+					"sumSq": 4119.77004346164,
+					"weighted": 3170.9853352307146
+				},
+				"production_store@": {
+					"sum": 273650.45435922034,
+					"sumSq": 65468611.930924855,
+					"weighted": 410081.24157480843
+				},
+				"routing_store@": {
+					"sum": 72105.36715778895,
+					"sumSq": 3807976.8390035965,
+					"weighted": 108139.5437057883
+				},
+				"uh_store@": {
+					"sum": 1230.438706364002,
+					"sumSq": 8102.760690216917,
+					"weighted": 1853.578346905272
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92763095.79503697
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 237369457.48527944
+				},
+				"outflow@G": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 236307383.6848968
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 102195620.40423831,
+					"sumSq": 22421034831415.44,
+					"weighted": 154053727.6347157
+				},
+				"outflow@S": {
+					"sum": 102195620.40423831,
+					"sumSq": 22421034831415.44,
+					"weighted": 152289627.55672273
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93669710.08178695
+				},
+				"outflow@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93114244.12273386
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92940158.48908716
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92817385.6059096
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93510710.18426763
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92765724.39413159
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 41646.52672054839,
+				"sumSq": 69915538.71842527,
+				"weighted": 61233.74284118396
+			}
+		},
+		"fit": {
+			"params": [
+				{
+					"x1": 900,
+					"x2": 0,
+					"x3": 220,
+					"x4": 3.1
+				},
+				{
+					"x1": 284.88101415009464,
+					"x2": 0,
+					"x3": 90,
+					"x4": 1.846855859722299
+				}
+			],
+			"golden": {
+				"shape": "4e600280680a2a49",
+				"numbers": [
+					900,
+					0,
+					220,
+					3.1,
+					900,
+					0,
+					220,
+					3.1,
+					1461,
+					1,
+					0.9999999999999998,
+					1,
+					1,
+					1,
+					1,
+					1,
+					0,
+					0,
+					0,
+					0,
+					1461,
+					1,
+					0.9999999999999998,
+					1,
+					1,
+					1,
+					1,
+					1,
+					0,
+					0,
+					0,
+					0,
+					284.88101415009464,
+					0,
+					90,
+					1.846855859722299,
+					350,
+					0,
+					90,
+					1.7,
+					1461,
+					0.9815665625697281,
+					0.9792538120673722,
+					0.9866783316969613,
+					0.9812081866233463,
+					0.9920166581438887,
+					0.996167239816123,
+					0.9654887251174491,
+					0.4254642033618735,
+					-3.0298463080033766,
+					-0.6174782170679443,
+					4.913372657296737,
+					1461,
+					0.9218926887971168,
+					0.9151669841238255,
+					0.9318617219141917,
+					0.9554640721103999,
+					0.9795465411847825,
+					0.9892681684005039,
+					0.9320448366474037,
+					-6.437178875600504,
+					-12.997681462737818,
+					-4.151687890302464,
+					3.2302021078423215
+				]
+			}
+		}
+	},
+	"innerSiteFitted": {
+		"run": {
+			"shape": "e5b0333a03bad5f7",
+			"series": {
+				"natural_flow@": {
+					"sum": 180377213.82562986,
+					"sumSq": 100093999296263.95,
+					"weighted": 272919330.5257344
+				},
+				"simulated_outflow@": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 273697706.3242417
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143489960.962787
+				},
+				"observed_flow_check@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93241463.0900933
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 1974.3387665991982,
+					"sumSq": 3796.1449655961487,
+					"weighted": 2964.2109622247367
+				},
+				"production_store@": {
+					"sum": 179248.59372878616,
+					"sumSq": 32899252.36555289,
+					"weighted": 268565.7419535581
+				},
+				"routing_store@": {
+					"sum": 53688.77509020981,
+					"sumSq": 2157811.0006909766,
+					"weighted": 80522.45610373447
+				},
+				"uh_store@": {
+					"sum": 933.1769320461783,
+					"sumSq": 7837.244895655574,
+					"weighted": 1403.4845273504616
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124158039.09483619
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 270083386.5810232
+				},
+				"outflow@G": {
+					"sum": 180377213.8256299,
+					"sumSq": 100093999296263.97,
+					"weighted": 266838052.99827984
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 188571946.32946205
+				},
+				"outflow@S": {
+					"sum": 123830644.8473109,
+					"sumSq": 51388534426136.125,
+					"weighted": 184569896.26867184
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 126981484.71368413
+				},
+				"outflow@H": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 127690649.05498412
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 123064647.47850946
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124735145.2228301
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 124799175.54051788
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 83734135.51335892,
+					"sumSq": 24728935489424.51,
+					"weighted": 125445751.60157141
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 36902.84071846197,
+				"sumSq": 60808495.53029468,
+				"weighted": 56818.49937598416
+			}
+		},
+		"fit": {
+			"params": [
+				{
+					"x1": 1055.115975310519,
+					"x2": 0,
+					"x3": 206.02157634858503,
+					"x4": 2.744925331270643
+				},
+				{
+					"x1": 431.1591900729301,
+					"x2": 0,
+					"x3": 109.08497747442271,
+					"x4": 2.851324462897118
+				}
+			],
+			"golden": {
+				"shape": "3cc1f617ab90b176",
+				"numbers": [
+					1055.115975310519,
+					0,
+					206.02157634858503,
+					2.744925331270643,
+					350,
+					0,
+					90,
+					1.7,
+					1461,
+					0.9395027040929352,
+					0.9372863266004484,
+					0.9553951843080009,
+					0.9886494093335064,
+					0.9947220657498466,
+					0.9965400413788081,
+					0.9499890190678763,
+					-3.9977132661859676,
+					-8.27095993322828,
+					-5.696171174972993,
+					-5.133588909899917,
+					1461,
+					0.2642566014704554,
+					0.22332329472871476,
+					0.6127328344120271,
+					-1.6121737719403804,
+					0.2768017691611455,
+					0.43493352969517507,
+					0.017916074638737067,
+					34.839507474729196,
+					139.78435660038824,
+					56.56054864942324,
+					16.36506356526391,
+					431.1591900729301,
+					0,
+					109.08497747442271,
+					2.851324462897118,
+					350,
+					0,
+					90,
+					1.7,
+					1096,
+					0.9969613085391127,
+					0.9878261838463795,
+					0.9912596461761277,
+					0.9944667152156812,
+					0.9973309479211527,
+					0.998466331370834,
+					0.9910341095434574,
+					0.11577220035539733,
+					-0.08069272049008208,
+					-1.1095285405283883,
+					-3.220358699429798,
+					1096,
+					0.9456987653650657,
+					0.935460095469485,
+					0.955252584226243,
+					0.9413522601659898,
+					0.9736558399463792,
+					0.9880494807834725,
+					0.9572919190983686,
+					4.112638170151406,
+					6.505780358406196,
+					2.279646924347604,
+					-3.3526365654034893
+				]
+			}
+		}
+	},
+	"siteWithoutRecord": {
+		"run": {
+			"shape": "a9f5010604197b7b",
+			"series": {
+				"natural_flow@": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 239590545.4388603
+				},
+				"simulated_outflow@": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 239073329.41846153
+				},
+				"observed_flow@": {
+					"sum": 169663748.3509573,
+					"sumSq": 72412980375703.62,
+					"weighted": 253031182.4271071
+				},
+				"observed_flow_check@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93089834.11841613
+				},
+				"observed_flow_check@S": {
+					"sum": 95825400.45987791,
+					"sumSq": 18659087224413.203,
+					"weighted": 143851730.52708885
+				},
+				"ewr@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charged@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_natural@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_used@": {
+					"sum": 3148.566666666665,
+					"sumSq": 86504.6072,
+					"weighted": 4682.59024777007
+				},
+				"pet@": {
+					"sum": 4116.000000000032,
+					"sumSq": 14495.286985539742,
+					"weighted": 6170.728984596524
+				},
+				"aet@": {
+					"sum": 2112.6198175539616,
+					"sumSq": 4119.77004346164,
+					"weighted": 3170.9853352307146
+				},
+				"production_store@": {
+					"sum": 273650.45435922034,
+					"sumSq": 65468611.930924855,
+					"weighted": 410081.24157480843
+				},
+				"routing_store@": {
+					"sum": 72105.36715778895,
+					"sumSq": 3807976.8390035965,
+					"weighted": 108139.5437057883
+				},
+				"uh_store@": {
+					"sum": 1230.438706364002,
+					"sumSq": 8102.760690216917,
+					"weighted": 1853.578346905272
+				},
+				"rain_unit@A": {
+					"sum": 4265.800000000002,
+					"sumSq": 158786.8128,
+					"weighted": 6763.148721506443
+				},
+				"runoff_natural@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92763095.79503697
+				},
+				"rain_unit@B": {
+					"sum": 2437.5999999999995,
+					"sumSq": 51848.75520000002,
+					"weighted": 3617.6914965312208
+				},
+				"runoff_natural@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59080038.75461041
+				},
+				"rain_unit@C": {
+					"sum": 2742.300000000002,
+					"sumSq": 65621.08080000001,
+					"weighted": 4048.5674033696732
+				},
+				"runoff_natural@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26070995.714362763
+				},
+				"rain_unit@D": {
+					"sum": 3351.699999999998,
+					"sumSq": 98026.55280000005,
+					"weighted": 5057.252289395443
+				},
+				"runoff_natural@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60128253.827064395
+				},
+				"rain_final@": {
+					"sum": 3047.000000000001,
+					"sumSq": 81013.68000000001,
+					"weighted": 4477.895936570863
+				},
+				"rain_source@": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@G": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 237369457.48527944
+				},
+				"outflow@G": {
+					"sum": 158742189.38255748,
+					"sumSq": 59741540203716.125,
+					"weighted": 236307383.6848968
+				},
+				"ewr_cumulative@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@G": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@S": {
+					"sum": 102195620.40423831,
+					"sumSq": 22421034831415.44,
+					"weighted": 154053727.6347157
+				},
+				"outflow@S": {
+					"sum": 102195620.40423831,
+					"sumSq": 22421034831415.44,
+					"weighted": 152289627.55672273
+				},
+				"ewr_cumulative@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@S": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93669710.08178695
+				},
+				"outflow@H": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93114244.12273386
+				},
+				"ewr_cumulative@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@H": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26001811.644350953
+				},
+				"outflow@K": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26270811.61662772
+				},
+				"ewr_cumulative@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@K": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92940158.48908716
+				},
+				"transfer@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92817385.6059096
+				},
+				"ewr@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 93510710.18426763
+				},
+				"diverted_to_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@A": {
+					"sum": 62099111.070286185,
+					"sumSq": 7068502610402.363,
+					"weighted": 92765724.39413159
+				},
+				"dam_area@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@A": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@A": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59640635.77238847
+				},
+				"transfer@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60290040.00709125
+				},
+				"ewr@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 59493221.64455512
+				},
+				"diverted_to_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@D": {
+					"sum": 40096509.333952144,
+					"sumSq": 5026668422946.296,
+					"weighted": 60678487.446956955
+				},
+				"dam_area@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@D": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@D": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				},
+				"crop_requirement@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59125990.107532345
+				},
+				"transfer@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59159356.08610412
+				},
+				"ewr@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 58942700.8688024
+				},
+				"diverted_to_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@B": {
+					"sum": 39188346.42623027,
+					"sumSq": 4369492861796.715,
+					"weighted": 59223390.33076181
+				},
+				"dam_area@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@B": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"crop_requirement@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"supplied@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"deficit@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"inflow_upstream@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26061949.827772357
+				},
+				"transfer@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"spill@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"outflow@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25864551.258000422
+				},
+				"ewr@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_cumulative@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_shortfall_incremental@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"gross_demand@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"effective_rain@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"soil_water@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"upstream_below_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"runoff_below_dam@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 26092219.42685263
+				},
+				"diverted_to_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"interim_storage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"below_dam_not_diverted@C": {
+					"sum": 17358222.552088756,
+					"sumSq": 882274036432.6677,
+					"weighted": 25954941.859477963
+				},
+				"dam_area@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"rain_on_dam@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_evaporation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"dam_seepage@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"return_flow@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"balance_residual@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_charge_irrigation@C": {
+					"sum": 0,
+					"sumSq": 0,
+					"weighted": 0
+				},
+				"ewr_binding_site@C": {
+					"sum": null,
+					"sumSq": null,
+					"weighted": null
+				}
+			},
+			"rest": {
+				"sum": 0,
+				"sumSq": 0,
+				"weighted": 0
+			},
+			"summary": {
+				"sum": 41646.52672054839,
+				"sumSq": 69915538.71842527,
+				"weighted": 61233.74284118396
+			}
+		},
+		"fit": "refused: no observed flow record at the calibration site \"Bare gauge\": attach one to it on the Data page, or calibrate at the outlet"
+	}
+}

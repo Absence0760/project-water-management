@@ -473,3 +473,45 @@ export function returnFlowHint(returnFlow: number, e: number): string | null {
 	const pct = (v: number) => `${Math.round(v * 1000) / 10} %`;
 	return `Only ${pct(1 - e)} of the water supplied is lost at its ${pct(e)} irrigation efficiency (its crops' systems), so runs return ${pct(1 - e)}, not ${pct(returnFlow)}. Lower it to match, or check its crops' systems.`;
 }
+
+/** A dam outline linked to the unit on the map, as `GET …/map/linked-nodes` gives it (194 dam_position; null = not said). */
+export interface DamSiting {
+	name: string;
+	damPosition: 'on_channel' | 'off_channel' | null;
+}
+
+const SITING_WORD: Record<'on_channel' | 'off_channel', string> = { on_channel: 'on the river', off_channel: 'off-channel' };
+
+/**
+ * What the map says of the unit's dam beside its Upstream inflow to dam: each linked dam outline's Siting, and a warning
+ * when the share contradicts it (docs/maps.md § Start from the map, model.md §2.7 K). Start and Divide propose 0 % for an
+ * off-channel dam and 100 % for one on the river, but the share is edited here by hand, so the two can drift. A warning,
+ * never a block, and only at the share that is plainly the other kind: off-channel with 100 % (the river runs through the
+ * dam, and River to dam isn't available), or on the river with 0 % (the river passes it by). A share in between can be a
+ * unit lumping several dams, so it isn't questioned; nor is a unit whose outlines aren't all marked alike, or one with no dam.
+ * Null when no dam outline is linked to the unit.
+ */
+export function damSitingHint(dams: readonly DamSiting[], n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'pctUpstreamToDam'>): { line: string; warning: string | null } | null {
+	if (!dams.length) return null;
+	const said = (d: DamSiting) => (d.damPosition ? `marked ${SITING_WORD[d.damPosition]}` : 'not said whether on the river or off it');
+	const name = (d: DamSiting) => (d.name.trim() ? `“${d.name.trim()}”` : '(unnamed)');
+	const line =
+		dams.length === 1
+			? `On the map, its dam ${name(dams[0]!)} is ${said(dams[0]!)}${dams[0]!.damPosition ? '' : ' (its Siting on the map)'}.`
+			: `On the map, its dams: ${dams.map((d) => `${name(d)} ${said(d).replace(/^marked /, '')}`).join('; ')}.`;
+	const position = dams[0]!.damPosition;
+	if (!position || !hasDam(n) || dams.some((d) => d.damPosition !== position)) return { line, warning: null };
+	const share = n.pctUpstreamToDam;
+	const one = dams.length === 1;
+	if (position === 'off_channel' && share >= 1 - 1e-9)
+		return {
+			line,
+			warning: `The map marks ${one ? 'this dam' : 'these dams'} off-channel, but Upstream inflow to dam is 100 %: a run takes the whole river through the dam, and River to dam isn’t available. An off-channel dam takes 0 % and fills from its own runoff and River to dam. Change the share here, or the Siting on the map.`
+		};
+	if (position === 'on_channel' && share <= 1e-9)
+		return {
+			line,
+			warning: `The map marks ${one ? 'this dam' : 'these dams'} on the river, but Upstream inflow to dam is 0 %: a run passes the whole river by the dam. A dam on the river takes 100 %. Change the share here, or the Siting on the map.`
+		};
+	return { line, warning: null };
+}

@@ -28,6 +28,32 @@
 // bundle-1 bundle (a pack issued before) is checked as it was, and says the
 // headline isn't included.
 //
+// bundle-3 (docs/followups.md § Cumulative impact) adds the cumulative
+// assessment § 4's combined row reads, when the manifest cites one:
+//
+//   assessment/assessment.json            its members (ops and their hashes, origin, owned units), engine, base and background runs
+//   assessment/report.json                its stored report (the baseline's table, its dam rows, the background's beside it)
+//   assessment/background/input.json      the background run's stored input at full allocation (when it had one)
+//
+// and `assessment` to bundle.json. The check ties the stored report to the
+// manifest's combined section and re-runs it (bundleAssessment.ts): each
+// member alone and all together (combineScenarios), the dams' rows, and the
+// background's. A bundle-1 or bundle-2 bundle is checked as it was, and says
+// the combined row isn't included.
+//
+// bundle-3 also carries the mitigation alternatives page 1 sets beside the
+// application (evidence-26, 298_scenario_alternatives), each assessed one as
+// a run of its own:
+//
+//   runs/alternative-<n>/input.json     its stored input (the baseline's with its recorded ops)
+//   runs/alternative-<n>/results.json   its stored results
+//
+// <n> its place among the manifest's alternatives (1 …), and `alternatives`
+// in bundle.json. The check ties each to the manifest (its run, engine and
+// ops hash; its input the baseline's with its ops applied; its page-1 cells
+// that read the run's summary, alternativeSummaryCell: `alternative:<n>`)
+// and re-runs it (`reproduce:alternative:<n>`).
+//
 // What ties it together: manifest.json hashes to the pack's manifest hash
 // (which the public verify lookup returns); the manifest names both runs and
 // lists every input series' hash, the baseline's settings and model, the
@@ -51,13 +77,34 @@ import { LOCALITY_MAP_VERSION, localityMapSvg } from '../geo/localityMap';
 import { checkDamObservations, checkDamObservationsBySource, EVIDENCE_OBSERVED_SOURCES, EVIDENCE_OBSERVED_SOURCE_LABEL, isDamObservationsV1, DAM_OBSERVATIONS_VERSION } from './damObservations';
 import { checkFutureYield, futureFactorTableError } from './future';
 import { packManifestText, packShortCode, type PackManifest } from './pack';
+import { ALTERNATIVE_SUMMARY_ROWS, alternativeSummaryCell } from './report';
+import { applyScenario } from '../scenario/overrides';
+import { applicationMask } from '../scenario/applicant';
+import type { RunSummary } from '../project';
 import { AUTHORISED_PAIR_VERSION, authorisedPairBoard, authorisedPairInputs, freshResultsDigest, mixFromRecord, runAuthorisedPair, type AuthorisedPairRecord } from './authorisedPair';
 import type { ScenarioOp } from '../scenario/ops';
+import type { ModelOutput } from '../project';
+import type { CumulativeRow } from '../scenario/cumulative';
+import {
+	ASSESSMENT_BUNDLE_VERSION,
+	backgroundInputProblems,
+	combinedSectionProblems,
+	isDamRow,
+	replayAssessment,
+	rowDifferences,
+	type BundleAssessmentFile,
+	type BundleAssessmentReport,
+	type PackBundleAssessment,
+	type PackBundleBackgroundRun
+} from './bundleAssessment';
 
-/** Bumped whenever the bundle's layout changes; bundle.json records it. bundle-2: the headline pair's digests (#523 G2). */
-export const PACK_BUNDLE_VERSION = 'bundle-2';
+/**
+ * Bumped whenever the bundle's layout changes; bundle.json records it. bundle-2: the headline pair's digests (#523 G2).
+ * bundle-3: the combined row's cumulative assessment (assessment/, followups § Cumulative impact).
+ */
+export const PACK_BUNDLE_VERSION = 'bundle-3';
 /** The layouts checkPackBundle reads: every one ever issued, so an older pack verifies as it did. */
-export const PACK_BUNDLE_VERSIONS = ['bundle-1', 'bundle-2'] as const;
+export const PACK_BUNDLE_VERSIONS = ['bundle-1', 'bundle-2', 'bundle-3'] as const;
 export type PackBundleVersion = (typeof PACK_BUNDLE_VERSIONS)[number];
 /** Bumped whenever runResultsText's shape changes; results.json records it. */
 export const RUN_RESULTS_VERSION = 'results-1';
@@ -94,6 +141,33 @@ export interface PackBundleInput {
 	manifest: PackManifest;
 	baseline: PackBundleRun;
 	application: PackBundleRun | null;
+	/** The cumulative assessment § 4's combined row reads (bundle-3); required when the manifest cites one, absent or null otherwise. */
+	assessment?: PackBundleAssessment | null;
+	/**
+	 * The runs of the alternatives page 1 assesses (bundle-3, evidence-26): one per manifest alternative whose
+	 * column is assessed (`notAssessed` null), in the manifest's order. Absent or [] when it cites none.
+	 */
+	alternatives?: PackBundleRun[] | null;
+}
+
+/** An alternative's run in the bundle: `runs/alternative-<n>/` (bundle-3), n its place among the manifest's alternatives, from 1. */
+export const bundleAlternativeDir = (n: number) => `runs/alternative-${n}`;
+
+/** The manifest's alternatives whose column is assessed, with their place (from 1): the ones the bundle carries a run of. */
+export function assessedAlternatives(m: PackManifest): { n: number; runId: string; engineVersion: string; opsSha256: string; ops: ScenarioOp[]; label: string }[] {
+	return (m.report.alternatives ?? []).flatMap((x, i) =>
+		x.notAssessed ? [] : [{ n: i + 1, runId: x.runId, engineVersion: x.engineVersion, opsSha256: x.opsSha256, ops: x.ops.map((o) => o.op), label: x.label }]
+	);
+}
+
+/** The bundle's assessment entries (bundle-3). */
+export const BUNDLE_ASSESSMENT_FILE = 'assessment/assessment.json';
+export const BUNDLE_ASSESSMENT_REPORT = 'assessment/report.json';
+export const BUNDLE_BACKGROUND_INPUT = 'assessment/background/input.json';
+
+/** The assessment the manifest's § 4 combined row cites (evidence-11), or null. */
+export function citedAssessment(m: PackManifest): { id: string; engineVersion: string | null } | null {
+	return m.report.cumulative?.combined?.assessment ?? null;
 }
 
 /** A daily output in results.json: which one, and the SHA-256 of seriesDigest(values). */
@@ -127,6 +201,16 @@ export interface PackBundleIndex {
 	 * board, or one built before the pair was recorded. Absent from a bundle-1 bundle.
 	 */
 	headline?: { baselineResultsSha256: string; applicationResultsSha256: string } | null;
+	/**
+	 * bundle-3: the cumulative assessment § 4's combined row reads (its files under assessment/), its engine and its
+	 * background run; null when the manifest cites none. Absent from a bundle-1 or bundle-2 bundle.
+	 */
+	assessment?: { id: string; engineVersion: string | null; backgroundRunId: string | null } | null;
+	/**
+	 * bundle-3: each assessed alternative's run (its place `n` among the manifest's alternatives, from 1), its
+	 * engine and results digest; [] when the report cites none. Absent from an older bundle.
+	 */
+	alternatives?: { n: number; runId: string; engineVersion: string; resultsSha256: string }[];
 	/** Every other entry of the zip, by name, with its SHA-256. */
 	files: Record<string, string>;
 }
@@ -240,14 +324,15 @@ export const bundleSeriesPath = (valuesSha256: string) => `series/${valuesSha256
 /**
  * The credits the bundle owes for the rain it carries (issue #604 R4-E,
  * docs/data-sources.md): a run's ERA5-Land and IMERG Late inputs are in
- * series/, and an ECMWF forecast in its forecast series, so the README names
- * their sources word for word. Accessed: the baseline run's creation day.
+ * series/, and an ECMWF forecast in its forecast series, and AgERA5's and
+ * NASA POWER's reference ET in its evap_et0_mm series (R5-E), so the README
+ * names their sources word for word. Accessed: the baseline run's creation day.
  * Empty for a run on CHIRPS alone, whose README is as before.
  */
 export function bundleRainCredits(input: Pick<PackBundleInput, 'manifest' | 'baseline' | 'application'>): RainCredit[] {
 	const accessed = (input.manifest.report.identity?.baseline?.createdAt ?? '').slice(0, 10);
 	const all = [input.baseline, input.application].flatMap((r) =>
-		r ? runRainCredits({ summary: r.summary as Parameters<typeof runRainCredits>[0]['summary'], forecastRainSource: r.inputs.forecastRainSource, forecastRainEcmwf: r.inputs.forecastRainEcmwf }, accessed) : []
+		r ? runRainCredits({ summary: r.summary as Parameters<typeof runRainCredits>[0]['summary'], forecastRainSource: r.inputs.forecastRainSource, forecastRainEcmwf: r.inputs.forecastRainEcmwf, et0Products: r.inputs.et0Products }, accessed) : []
 	);
 	const out: RainCredit[] = [];
 	for (const c of all) {
@@ -308,6 +393,16 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 						: "It also classifies the observed wet days again (wet, dry, inconclusive) from the dates the manifest freezes, over the baseline run's period it records: each source under its own rule (`observations:s2`, `observations:wofs`) and the dates either saw together (`observations:days`). Those dates are Sentinel-2 (contains modified Copernicus Sentinel data, processed by Digital Earth Africa) and Digital Earth Africa WOfS (CC BY 4.0), summed inside each dam's outline; the scenes themselves aren't in the bundle."
 				]
 			: []),
+		...(index.alternatives?.length
+			? [
+					`It also checks each mitigation alternative page 1 sets beside the application (${index.alternatives.map((x) => `alternative ${x.n}, run \`${x.runId}\``).join('; ')}): its run, engine and ops hash are the manifest's, its input is the baseline's with its recorded ops, and its page-1 cells that read its run's summary (the Reserve, the EWR days and shortfall, the no-flow days, the outflow) are its stored results' (\`alternative:<n>\`); then re-runs it and compares its results digest (\`reproduce:alternative:<n>\`).`
+				]
+			: []),
+		...(index.assessment
+			? [
+					`It also runs § 4's combined row again from the cumulative assessment it cites (\`${index.assessment.id}\`, engine ${index.assessment.engineVersion ?? 'unknown'}): the baseline, each application alone (an applicant's ops under the mask its own units give it) and all of them together (\`combineScenarios\`), and checks every row of the assessment's stored report, which the manifest's combined section is read from (\`assessment\`, \`reproduce:combined\`); each dam the applications touch, its firm yield and assurance of supply on every run (\`reproduce:dams\`, when the assessment has them)${index.assessment.backgroundRunId ? "; and the same again on its background at full allocation, from the background run's stored input (`inputs:background`, `reproduce:background`)" : ''}.`
+				]
+			: []),
 		...(m.report.futureYield?.status === 'ok'
 			? ["It also runs § 8's future yield again: every pair, the baseline and the application under each climate model's monthly change factors, from the factor table the manifest freezes, and checks every case and range against the manifest (`climate:delta`). The NEX-GDDP-CMIP6 files the factors came from aren't in the bundle; the manifest names each with its SHA-256."]
 			: []),
@@ -321,6 +416,16 @@ function readme(m: PackManifest, index: Omit<PackBundleIndex, 'files'>, zipName:
 		'- `runs/<run>/input.json`: the run\'s stored inputs: settings, model, and each series\' first day, days and SHA-256.',
 		'- `runs/<run>/results.json`: the run\'s stored summary and the SHA-256 of each daily output. The results digest is the SHA-256 of its canonical text (engine `runResultsText`).',
 		'- `series/<sha256>.csv`: each input series\' values, `date,value`, a missing day empty; named by the SHA-256 of the values\' JSON array.',
+		...(index.alternatives?.length
+			? ['- `runs/alternative-<n>/input.json`, `runs/alternative-<n>/results.json`: each assessed alternative\'s stored inputs and results, as a run\'s above (<n> its place among page 1\'s alternatives).']
+			: []),
+		...(index.assessment
+			? [
+					"- `assessment/assessment.json`: the cumulative assessment § 4's combined row reads: its members in the order it ran them (each one's ops, their SHA-256, its origin and an applicant's own units), its engine, its baseline and background runs.",
+					"- `assessment/report.json`: the assessment's stored report: the baseline's table with each dam's rows, and the background's beside it.",
+					...(index.assessment.backgroundRunId ? ["- `assessment/background/input.json`: the background run's stored inputs: the baseline at full allocation (its series are the baseline's)."] : [])
+				]
+			: []),
 		...(credits.length ? ['', '## Data credits', '', 'Some input series hold rain from these sources, credited as each asks:', '', ...credits.flatMap((c) => c.lines.map((l) => `- ${c.name}: ${l}`))] : []),
 		''
 	].join('\n');
@@ -345,16 +450,14 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 	const put = (name: string, text: string) => files.set(name, enc.encode(text));
 	put('manifest.json', manifestText);
 
-	const runs: PackBundleIndex['runs'] = { baseline: null, application: null };
-	for (const name of RUNS) {
-		const run = input[name];
-		if (!run) continue;
-		put(`runs/${name}/input.json`, canonicalJson(run.inputs));
+	/** A run's input, its series and its results under `dir`; its results digest. */
+	const putRun = async (dir: string, what: string, run: PackBundleRun) => {
+		put(`${dir}/input.json`, canonicalJson(run.inputs));
 		for (const [kind, snap] of Object.entries(run.inputs.series ?? {})) {
 			if (!snap) continue;
 			const values = run.values[kind];
-			if (!values || !snap.valuesSha256) throw new Error(`the ${name} run's ${kind} series has no stored values`);
-			if ((await hash(seriesDigest(values))) !== snap.valuesSha256) throw new Error(`the ${name} run's ${kind} series fails its SHA-256 check`);
+			if (!values || !snap.valuesSha256) throw new Error(`the ${what} run's ${kind} series has no stored values`);
+			if ((await hash(seriesDigest(values))) !== snap.valuesSha256) throw new Error(`the ${what} run's ${kind} series fails its SHA-256 check`);
 			put(bundleSeriesPath(snap.valuesSha256), seriesCsv(snap.startDate, values));
 		}
 		const digest = await runResultsDigest(run, hash);
@@ -366,10 +469,56 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 			summary: asStored(run.summary),
 			series: digest.series
 		};
-		put(`runs/${name}/results.json`, canonicalJson(results));
-		runs[name] = { runId: run.runId, engineVersion: run.engineVersion, resultsSha256: digest.sha256 };
+		put(`${dir}/results.json`, canonicalJson(results));
+		return digest.sha256;
+	};
+	const runs: PackBundleIndex['runs'] = { baseline: null, application: null };
+	for (const name of RUNS) {
+		const run = input[name];
+		if (!run) continue;
+		runs[name] = { runId: run.runId, engineVersion: run.engineVersion, resultsSha256: await putRun(`runs/${name}`, name, run) };
+	}
+	// The assessed alternatives' runs (bundle-3, evidence-26): exactly the manifest's, in its order.
+	const wanted = assessedAlternatives(m);
+	const given = input.alternatives ?? [];
+	if (given.length !== wanted.length || given.some((r, i) => r.runId !== wanted[i]!.runId))
+		throw new Error(`the bundle was given alternatives ${given.map((r) => r.runId).join(', ') || 'none'}; the manifest assesses ${wanted.map((w) => w.runId).join(', ') || 'none'}`);
+	const alternatives: NonNullable<PackBundleIndex['alternatives']> = [];
+	for (const [i, run] of given.entries()) {
+		const n = wanted[i]!.n;
+		alternatives.push({ n, runId: run.runId, engineVersion: run.engineVersion, resultsSha256: await putRun(bundleAlternativeDir(n), `alternative ${n}`, run) });
 	}
 	if (input.application?.inputs.scenario) put('scenario.json', canonicalJson(input.application.inputs.scenario));
+
+	// The combined row's assessment (bundle-3): its members, its stored report, its background run's inputs.
+	const cited = citedAssessment(m);
+	const a = input.assessment ?? null;
+	if (cited && !a) throw new Error(`the manifest's combined row cites assessment ${cited.id}, and the bundle wasn't given it`);
+	if (a && a.id !== cited?.id) throw new Error(`the assessment given (${a.id}) isn't the one the manifest's combined row cites (${String(cited?.id ?? null)})`);
+	if (a) {
+		const file: BundleAssessmentFile = {
+			version: ASSESSMENT_BUNDLE_VERSION,
+			id: a.id,
+			name: a.name,
+			engineVersion: a.engineVersion,
+			baseRunId: a.baseRunId,
+			backgroundRunId: a.backgroundRunId,
+			members: a.members.map((x) => ({ id: x.id, scenarioId: x.scenarioId, name: x.name, origin: x.origin, ops: x.ops, opsSha256: x.opsSha256, ownedNodeIds: [...x.ownedNodeIds] }))
+		};
+		put(BUNDLE_ASSESSMENT_FILE, canonicalJson(file));
+		put(BUNDLE_ASSESSMENT_REPORT, canonicalJson(asStored(a.report)));
+		if ((a.background?.runId ?? null) !== a.backgroundRunId) throw new Error("the assessment's background run isn't the one given");
+		if (a.background) {
+			put(BUNDLE_BACKGROUND_INPUT, canonicalJson(a.background.inputs));
+			for (const [kind, snap] of Object.entries(a.background.inputs.series ?? {})) {
+				if (!snap) continue;
+				const values = a.background.values[kind];
+				if (!values || !snap.valuesSha256) throw new Error(`the background run's ${kind} series has no stored values`);
+				if ((await hash(seriesDigest(values))) !== snap.valuesSha256) throw new Error(`the background run's ${kind} series fails its SHA-256 check`);
+				put(bundleSeriesPath(snap.valuesSha256), seriesCsv(snap.startDate, values));
+			}
+		}
+	}
 
 	const pair = headlineRecord(m);
 	const head = {
@@ -377,7 +526,9 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 		pack: { id: m.pack.id, version: m.pack.version, manifestSha256, shortCode: packShortCode(manifestSha256) },
 		engine: { version: m.engine.version, build: m.engine.build },
 		runs,
-		headline: input.application && pair ? { baselineResultsSha256: pair.baselineResultsSha256, applicationResultsSha256: pair.applicationResultsSha256 } : null
+		headline: input.application && pair ? { baselineResultsSha256: pair.baselineResultsSha256, applicationResultsSha256: pair.applicationResultsSha256 } : null,
+		assessment: a ? { id: a.id, engineVersion: a.engineVersion, backgroundRunId: a.backgroundRunId } : null,
+		alternatives
 	} as const;
 	put('README.md', readme(m, head, `pack-${head.pack.shortCode}.zip`, bundleRainCredits(input)));
 	const names = [...files.keys()].sort();
@@ -394,7 +545,7 @@ export async function buildPackBundle(input: PackBundleInput, hash: BundleHash):
 // ---------------------------------------------------------------------------
 
 export interface BundleCheck {
-	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `headline`, `reproduce:<run>`, `reproduce:headline`, `figure:locality`, `observations:wofs` (§ 7, evidence-21), `observations:s2` and `observations:days` (§ 7, evidence-24), `climate:delta` (§ 8, evidence-23). */
+	/** `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `headline`, `reproduce:<run>`, `reproduce:headline`, `figure:locality`, `observations:wofs` (§ 7, evidence-21), `observations:s2` and `observations:days` (§ 7, evidence-24), `climate:delta` (§ 8, evidence-23), `assessment`, `inputs:background`, `reproduce:combined`, `reproduce:dams` and `reproduce:background` (§ 4's combined row, bundle-3). */
 	id: string;
 	ok: boolean;
 	detail: string;
@@ -414,12 +565,39 @@ export interface BundleCheckResult {
 	 * baseline pack or one with no headline board, null when the bundle couldn't be read that far.
 	 */
 	headline: 'checked' | 'older' | 'none' | null;
+	/**
+	 * § 4's combined row (bundle-3): `checked` when the bundle carries the assessment it cites (and, with `rerun`,
+	 * it was re-run), `older` for a bundle-1 or bundle-2 bundle of a pack whose combined row cites one, `none`
+	 * when it cites none, null when the bundle couldn't be read that far.
+	 */
+	combined: 'checked' | 'older' | 'none' | null;
+}
+
+/**
+ * A re-run the server runs as its own job (bundleParts.ts, pack_reproduce_part): one run, the headline pair,
+ * § 8's pairs, the combined row's assessment (its dams' firm yields aside), or its background.
+ */
+export type BundlePartKey = 'run:baseline' | 'run:application' | `alternative:${number}` | 'headline' | 'climate' | 'combined' | 'background';
+
+/** What the combined row's assessment looks like once checked, for the server's dam parts (bundleParts.ts). */
+export interface BundleAssessmentContext {
+	base: ModelInput;
+	file: BundleAssessmentFile;
+	report: BundleAssessmentReport;
 }
 
 export interface CheckPackBundleOptions {
 	hash: BundleHash;
 	/** Re-run each run with this engine and compare its results digest (default true). */
 	rerun?: boolean;
+	/**
+	 * Only these re-runs (the server's fan-out, bundleParts.ts); absent, every one (`pnpm reproduce:pack`). With
+	 * it, `combined` leaves the dams' firm-yield searches to their own parts: its `reproduce:dams` covers the
+	 * assurance rows and which dams, and the parts' yields are folded in after (foldPackBundleReruns).
+	 */
+	parts?: readonly BundlePartKey[];
+	/** Called with the checked assessment's inputs, when its static checks pass (the server's dam parts). */
+	onAssessment?: (ctx: BundleAssessmentContext) => void;
 	/** The manifest hash the bundle must carry (from the verify lookup, or the pack row). */
 	expectManifestSha256?: string;
 	/** Largest bundle read, unpacked (default BUNDLE_ZIP_LIMITS.maxTotalBytes). */
@@ -456,6 +634,8 @@ function differingPaths(a: unknown, b: unknown, max = 8, path = '', out: string[
 }
 
 const sameJson = (a: unknown, b: unknown) => canonicalJson(asStored(a)) === canonicalJson(asStored(b));
+/** Whether a check re-runs `part`: never with `rerun: false`, every part without `parts`, else the listed ones. */
+const wantsPart = (opts: Pick<CheckPackBundleOptions, 'rerun' | 'parts'>, part: BundlePartKey) => opts.rerun !== false && (!opts.parts || opts.parts.includes(part));
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
@@ -474,7 +654,7 @@ export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: Chec
 		// doesn't parse, a manifest or input missing a part): the bundle is
 		// malformed, a failing check like any other, never an exception.
 		checks.push({ id: 'structure', ok: false, detail: `the bundle is malformed: ${message(e)}` });
-		return { ok: false, checks, pack: null, engine: { here: ENGINE_VERSION, runs: [] }, headline: null };
+		return { ok: false, checks, pack: null, engine: { here: ENGINE_VERSION, runs: [] }, headline: null, combined: null };
 	}
 }
 
@@ -490,13 +670,16 @@ function packRefProblem(pack: unknown): string | null {
 async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundleOptions, checks: BundleCheck[]): Promise<BundleCheckResult> {
 	const { hash } = opts;
 	const add = (id: string, ok: boolean, detail: string) => (checks.push({ id, ok, detail }), ok);
+	const want = (k: BundlePartKey) => wantsPart(opts, k);
 	let headline: BundleCheckResult['headline'] = null;
+	let combined: BundleCheckResult['combined'] = null;
 	const result = (pack: BundleCheckResult['pack'], runs: string[]): BundleCheckResult => ({
 		ok: checks.length > 0 && checks.every((c) => c.ok),
 		checks,
 		pack,
 		engine: { here: ENGINE_VERSION, runs },
-		headline
+		headline,
+		combined
 	});
 
 	// The archive and its index.
@@ -509,7 +692,7 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 		if (!inArchive.has('bundle.json')) throw new Error('it has no bundle.json');
 		index = JSON.parse(dec.decode(await archive.read('bundle.json'))) as PackBundleIndex;
 		if (!(PACK_BUNDLE_VERSIONS as readonly unknown[]).includes(index.version))
-			throw new Error(`its bundle.json is version ${String(index.version)}; this code reads ${PACK_BUNDLE_VERSIONS.join(' and ')}`);
+			throw new Error(`its bundle.json is version ${String(index.version)}; this code reads ${PACK_BUNDLE_VERSIONS.slice(0, -1).join(', ')} and ${PACK_BUNDLE_VERSIONS.at(-1)}`);
 		const packProblem = packRefProblem(index.pack);
 		if (packProblem) throw new Error(packProblem);
 		if (typeof index.runs !== 'object' || index.runs === null || !index.runs.baseline) throw new Error("its bundle.json doesn't name the baseline run");
@@ -724,53 +907,34 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 		if (add(`results:${r}`, problems.length === 0, problems.join('; ') || `the stored summary is the manifest's; results digest ${sha}`)) results[r] = file;
 	}
 
-	// Re-run each run from its inputs, and compare.
+	// Re-run each run from its inputs, and compare. The baseline's fresh run is the combined row's baseline column too.
+	const freshRuns: Partial<Record<BundleRunName, ModelOutput>> = {};
 	if (opts.rerun !== false) {
 		for (const r of RUNS) {
 			const named = index.runs[r];
-			if (!named) continue;
+			if (!named || !want(`run:${r}`)) continue;
 			const input = inputs[r]?.input;
 			const stored = results[r];
 			if (!input || !stored) {
 				add(`reproduce:${r}`, false, 'not re-run: its inputs or stored results failed a check above');
 				continue;
 			}
-			let fresh;
-			try {
-				fresh = runModelChecked(structuredClone(input));
-			} catch (e) {
-				add(`reproduce:${r}`, false, `this engine (${ENGINE_VERSION}) refuses the run's input: ${message(e)}`);
-				continue;
-			}
-			const again = await runResultsDigest({ startDate: fresh.startDate, summary: fresh.summary, series: fresh.series }, hash);
-			if (again.sha256 === named.resultsSha256) {
-				add(`reproduce:${r}`, true, `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, the same`);
-				continue;
-			}
-			const why: string[] = [];
-			if (fresh.startDate !== stored.startDate) why.push(`it starts on ${fresh.startDate}, not ${stored.startDate}`);
-			const paths = differingPaths(stored.summary, fresh.summary);
-			if (paths.length) why.push(`summary differs at ${paths.join(', ')}`);
-			// An output by its key, and its node when it has one ("simulated_outflow", "dam_volume at node n1").
-			const name = (s: { nodeId: string | null; key: string }) => (s.nodeId === null ? s.key : `${s.key} at hydrological unit ${s.nodeId}`);
-			const was = new Map(stored.series.map((s) => [name(s), s.valuesSha256]));
-			const now = new Map(again.series.map((s) => [name(s), s.valuesSha256]));
-			const changed = [...was.keys()].filter((k) => now.has(k) && now.get(k) !== was.get(k));
-			const gone = [...was.keys()].filter((k) => !now.has(k));
-			const added = [...now.keys()].filter((k) => !was.has(k));
-			const some = (names: string[]) => `${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}`;
-			if (changed.length) why.push(`${changed.length === 1 ? '1 daily output differs' : `${changed.length} daily outputs differ`} (${some(changed)})`);
-			if (gone.length) why.push(`${gone.length === 1 ? '1 stored output is' : `${gone.length} stored outputs are`} not produced (${some(gone)})`);
-			if (added.length) why.push(`${added.length === 1 ? '1 output is' : `${added.length} outputs are`} not stored (${some(added)})`);
-			const engineNote = named.engineVersion !== ENGINE_VERSION ? ` The run was made with engine ${named.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
-			add(`reproduce:${r}`, false, `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, not ${named.resultsSha256}: ${why.join('; ') || 'the digests differ'}.${engineNote}`);
+			const again = await reproduceRun(input, stored, named, hash);
+			if (again.fresh) freshRuns[r] = again.fresh;
+			add(`reproduce:${r}`, again.ok, again.detail);
 		}
 	}
+
+	// The alternatives page 1 assesses (bundle-3, evidence-26): each tied to the manifest, then re-run.
+	await checkAlternatives(index, manifest, text, inputs.baseline ?? null, results.baseline ?? null, opts, add, runEngines);
 
 	// The headline board's full-allocation pair (bundle-2, #523 G2): recorded in the manifest, re-derived and re-run here.
 	if (index.runs.application) {
 		headline = await checkHeadline(index, manifest, inputs.baseline?.input ?? null, inputs.application?.snapshot.scenario ?? null, opts, add);
 	}
+
+	// § 4's combined row (bundle-3): the cumulative assessment it cites, tied to the manifest and re-run.
+	combined = await checkAssessment(index, manifest, text, inputs.baseline ?? null, freshRuns.baseline ?? null, opts, add, runEngines);
 
 	// § 8, Future yield (evidence-23): every pair run again from the factors the manifest freezes, on the bundle's own inputs.
 	const fy = manifest.report.futureYield;
@@ -778,7 +942,7 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 		const tableError = futureFactorTableError(fy.factors);
 		const named = `${fy.cases.length} case${fy.cases.length === 1 ? '' : 's'} (${fy.models.length} model${fy.models.length === 1 ? '' : 's'} × ${new Set(fy.cases.map((c) => c.ssp)).size} SSPs × ${new Set(fy.cases.map((c) => c.horizon)).size} horizons), method ${fy.method}`;
 		if (tableError) add('climate:delta', false, `the frozen factor table can't be read: ${tableError}`);
-		else if (opts.rerun === false) add('climate:delta', true, `the manifest freezes the factors of ${named}; not re-run`);
+		else if (!want('climate')) add('climate:delta', true, `the manifest freezes the factors of ${named}; not re-run`);
 		else if (!inputs.baseline?.input || !inputs.application?.input) add('climate:delta', false, 'not re-run: the baseline or application inputs failed a check above');
 		else {
 			const problems = checkFutureYield(fy, { baseline: inputs.baseline.input, application: inputs.application.input }, manifest.report.builtBy);
@@ -838,7 +1002,7 @@ async function checkHeadline(
 	}
 	const named = `full-allocation pair: baseline ${rec.baselineResultsSha256}, application ${rec.applicationResultsSha256}`;
 	add('headline', problems.length === 0, problems.join('; ') || `the manifest records the ${named}; the mix of ${rec.kinds.length} registered volume${rec.kinds.length === 1 ? '' : 's'} as at the baseline is the manifest's`);
-	if (opts.rerun === false) return 'checked';
+	if (!wantsPart(opts, 'headline')) return 'checked';
 
 	// Re-derive the pair from the bundle's inputs and re-run it.
 	const ops = scenario?.ops;
@@ -872,4 +1036,343 @@ async function checkHeadline(
 		why.length === 0 ? `re-derived and re-run with engine ${ENGINE_VERSION}: both results digests and the headline board are the same` : `re-derived and re-run with engine ${ENGINE_VERSION}: ${why.join('; ')}.${engineNote}`
 	);
 	return 'checked';
+}
+
+/** An older bundle's combined row: checked as it was, said so. */
+export const COMBINED_NOT_INCLUDED = 'combined row not included (older bundle)';
+
+/**
+ * § 4's combined row (bundle-3): the assessment it cites is the bundle's,
+ * its members' ops hash to theirs, and the manifest's combined section is
+ * what its stored report gives (`assessment`); its background run's input is
+ * the baseline at full allocation (`inputs:background`); and, with the re-run,
+ * the assessment run again on this engine gives every stored row
+ * (`reproduce:combined`, `reproduce:dams`, `reproduce:background`).
+ */
+async function checkAssessment(
+	index: PackBundleIndex,
+	manifest: PackManifest,
+	text: ReadonlyMap<string, string>,
+	baseline: { snapshot: PackBundleRun['inputs']; input: ModelInput | null; values: Record<string, (number | null)[]> } | null,
+	baselineOut: ModelOutput | null,
+	opts: CheckPackBundleOptions,
+	add: (id: string, ok: boolean, detail: string) => boolean,
+	runEngines: string[]
+): Promise<BundleCheckResult['combined']> {
+	const { hash } = opts;
+	const cited = citedAssessment(manifest);
+	if (index.version !== 'bundle-3') {
+		if (!cited) return 'none';
+		add('assessment', true, `${COMBINED_NOT_INCLUDED}: its bundle (${index.version}) predates the combined row's assessment, so § 4's combined row is not re-run`);
+		return 'older';
+	}
+	const named = index.assessment ?? null;
+	const carried = text.has(BUNDLE_ASSESSMENT_FILE) || text.has(BUNDLE_ASSESSMENT_REPORT) || text.has(BUNDLE_BACKGROUND_INPUT);
+	if (!cited) {
+		if (named || carried) add('assessment', false, "the bundle carries an assessment the manifest's combined row doesn't cite");
+		return 'none';
+	}
+	if (!named || !text.has(BUNDLE_ASSESSMENT_FILE) || !text.has(BUNDLE_ASSESSMENT_REPORT)) {
+		add('assessment', false, `the manifest's combined row cites assessment ${cited.id}, which the bundle doesn't carry`);
+		return 'checked';
+	}
+	const file = JSON.parse(text.get(BUNDLE_ASSESSMENT_FILE)!) as BundleAssessmentFile;
+	const report = JSON.parse(text.get(BUNDLE_ASSESSMENT_REPORT)!) as BundleAssessmentReport;
+	if (!Array.isArray(file.members) || !Array.isArray(report.rows) || !Array.isArray(report.scenarios)) throw new Error(`${BUNDLE_ASSESSMENT_FILE} or ${BUNDLE_ASSESSMENT_REPORT} lacks its members, rows or scenarios`);
+	if (file.engineVersion) runEngines.push(file.engineVersion);
+	const identity = manifest.report.identity;
+	const problems: string[] = [];
+	if (file.version !== ASSESSMENT_BUNDLE_VERSION) problems.push(`${BUNDLE_ASSESSMENT_FILE} is version ${String(file.version)}; this code reads ${ASSESSMENT_BUNDLE_VERSION}`);
+	if (file.id !== cited.id || named.id !== cited.id) problems.push(`it is assessment ${String(file.id)}; the manifest's combined row cites ${cited.id}`);
+	if ((file.engineVersion ?? null) !== (cited.engineVersion ?? null) || (named.engineVersion ?? null) !== (cited.engineVersion ?? null))
+		problems.push(`it ran on engine ${String(file.engineVersion)}; the manifest names ${String(cited.engineVersion)}`);
+	if (file.baseRunId !== identity.baseline.runId) problems.push(`its baseline run is ${String(file.baseRunId)}, not the pack's ${identity.baseline.runId}`);
+	const bgId = file.backgroundRunId ?? null;
+	if ((named.backgroundRunId ?? null) !== bgId || (report.background?.run?.id ?? null) !== bgId) problems.push("its background run isn't the one bundle.json and its stored report name");
+	if (!!bgId !== text.has(BUNDLE_BACKGROUND_INPUT)) problems.push(bgId ? `it has a background run and no ${BUNDLE_BACKGROUND_INPUT}` : `it has no background run and a ${BUNDLE_BACKGROUND_INPUT}`);
+	for (const m of file.members) {
+		if (m.origin !== 'team' && m.origin !== 'applicant') problems.push(`"${m.name}" has origin ${String(m.origin)}`);
+		if (!Array.isArray(m.ops) || !Array.isArray(m.ownedNodeIds)) {
+			problems.push(`"${m.name}" lacks its ops or owned units`);
+			continue;
+		}
+		const sha = await hash(canonicalJson(m.ops));
+		if (sha !== m.opsSha256) problems.push(`"${m.name}"'s ops hash to ${sha}, not the ${String(m.opsSha256)} recorded`);
+	}
+	const c = manifest.report.cumulative?.combined;
+	if (c) problems.push(...combinedSectionProblems(c, file, report));
+	const what = `assessment "${file.name}" of ${file.members.length} application${file.members.length === 1 ? '' : 's'}`;
+	const staticOk = add('assessment', problems.length === 0, problems.join('; ') || `${what}: the members' ops hash to theirs, and the manifest's combined row is what its stored report gives`);
+
+	// Its background at full allocation (295): the baseline's input with the background's ops, the baseline's series.
+	let bgInput: ModelInput | null = null;
+	if (bgId && text.has(BUNDLE_BACKGROUND_INPUT)) {
+		const snap = JSON.parse(text.get(BUNDLE_BACKGROUND_INPUT)!) as PackBundleBackgroundRun['inputs'];
+		const bp: string[] = [];
+		if (!baseline?.input) bp.push("not checked: the baseline's inputs failed a check above");
+		else {
+			const baseSeries = Object.fromEntries(Object.entries(baseline.snapshot.series ?? {}).flatMap(([k, v]) => (v ? [[k, v.valuesSha256 ?? null]] : [])));
+			bp.push(...backgroundInputProblems(baseline.input, identity.baseline.runId, snap, baseSeries));
+			const sc = snap.scenario;
+			const sha = await hash(canonicalJson(sc?.ops ?? []));
+			if (sc && sha !== sc.opsSha256) bp.push(`its ops hash to ${sha}, not the ${String(sc.opsSha256)} it records`);
+			if (!bp.length) {
+				// Its series are the baseline's (checked above), each with its own snapshot's first day and provenance.
+				const series: Record<string, DailySeries> = {};
+				for (const [kind, s] of Object.entries(snap.series ?? {})) {
+					if (!s) continue;
+					series[kind] = {
+						startDate: s.startDate,
+						values: baseline.values[kind]!,
+						...(s.provenance !== undefined ? { provenance: s.provenance } : {}),
+						...(s.origin !== undefined ? { origin: s.origin } : {}),
+						...(typeof s.seriesId === 'string' ? { seriesId: s.seriesId } : {})
+					};
+				}
+				bgInput = bundleRunInput(snap, series);
+			}
+		}
+		add('inputs:background', bp.length === 0, bp.join('; ') || "the background run's input is the baseline's at full allocation: its ops change only the mode and registered volumes, and its series are the baseline's");
+	}
+	if (staticOk && baseline?.input) opts.onAssessment?.({ base: baseline.input, file, report });
+	if (!wantsPart(opts, 'combined') && !wantsPart(opts, 'background')) return 'checked';
+	// The server's fan-out: the dams' firm yields are their own parts, folded in after (bundleParts.ts).
+	const damSearch = !opts.parts;
+
+	const engineNote =
+		file.engineVersion && file.engineVersion !== ENGINE_VERSION ? ` The assessment ran on engine ${file.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
+	const compare = (id: string, stored: readonly CumulativeRow[], fresh: readonly CumulativeRow[], extra: string[], ok: string) => {
+		const why = [...extra, ...rowDifferences(stored, fresh)];
+		add(id, why.length === 0, why.length === 0 ? ok : `re-run with engine ${ENGINE_VERSION}: ${why.slice(0, 8).join('; ')}.${engineNote}`);
+	};
+	const stillOk = staticOk && !!baseline?.input;
+	const withDams = report.dams !== undefined;
+	if (!wantsPart(opts, 'combined')) {
+		// Not this part's (the server's fan-out runs it in another job).
+	} else if (!stillOk) {
+		add('reproduce:combined', false, 'not re-run: the assessment or the baseline inputs failed a check above');
+		if (withDams) add('reproduce:dams', false, 'not re-run: the assessment or the baseline inputs failed a check above');
+	} else {
+		let fresh: ReturnType<typeof replayAssessment> | null = null;
+		try {
+			fresh = replayAssessment(baseline!.input!, file.members, { dams: withDams ? (damSearch ? true : 'reliability') : false, baseline: baselineOut });
+		} catch (e) {
+			add('reproduce:combined', false, `re-run with engine ${ENGINE_VERSION}: ${message(e)}.${engineNote}`);
+			if (withDams) add('reproduce:dams', false, `not re-run: ${message(e)}`);
+		}
+		if (fresh) {
+			const sc = sameJson(fresh.scenarios, report.scenarios) ? [] : ["the scenarios aren't the stored report's"];
+			compare(
+				'reproduce:combined',
+				report.rows.filter((r) => !isDamRow(r)),
+				fresh.rows.filter((r) => !isDamRow(r)),
+				sc,
+				`the baseline, each of the ${file.members.length} applications alone and all of them together, re-run with engine ${ENGINE_VERSION}, give every row of the stored report`
+			);
+			if (withDams) {
+				const meta = sameJson(fresh.dams ?? null, report.dams ?? null) ? [] : ["the dams touched, or whether their yields rest on the registered volumes, aren't the stored report's"];
+				// Without the searches (the server's fan-out), the assurance rows and which dams; the firm yields are folded in from their parts.
+				const rows = (r: CumulativeRow) => isDamRow(r) && (damSearch || r.metric === 'dam_reliability');
+				const n = report.dams!.nodeIds.length;
+				compare(
+					'reproduce:dams',
+					report.rows.filter(rows),
+					fresh.rows.filter(rows),
+					meta,
+					damSearch
+						? `the firm yield and assurance of supply of ${n === 1 ? 'the dam' : `each of the ${n} dams`} the applications touch, on every run, are the stored report's`
+						: `the assurance of supply of ${n === 1 ? 'the dam' : `each of the ${n} dams`} the applications touch, on every run, is the stored report's`
+				);
+			}
+		}
+	}
+	if (bgId && wantsPart(opts, 'background')) {
+		const stored = report.background?.report;
+		if (!stillOk || !bgInput || !stored) add('reproduce:background', false, "not re-run: the assessment or the background run's input failed a check above");
+		else {
+			try {
+				const fresh = replayAssessment(bgInput, file.members, { dams: false, what: 'At full allocation' });
+				compare(
+					'reproduce:background',
+					stored.rows,
+					fresh.rows,
+					sameJson(fresh.scenarios, stored.scenarios) ? [] : ["the scenarios aren't the stored background's"],
+					`the background at full allocation, each application alone and all together on it, re-run with engine ${ENGINE_VERSION}, give every row of its stored table`
+				);
+			} catch (e) {
+				add('reproduce:background', false, `re-run with engine ${ENGINE_VERSION}: ${message(e)}.${engineNote}`);
+			}
+		}
+	}
+	return 'checked';
+}
+
+/** Re-run one run from its input with this engine and compare its results digest with the stored one; never throws. */
+async function reproduceRun(
+	input: ModelInput,
+	stored: RunResultsFile,
+	named: { engineVersion: string; resultsSha256: string },
+	hash: BundleHash
+): Promise<{ ok: boolean; detail: string; fresh: ModelOutput | null }> {
+	let fresh: ModelOutput;
+	try {
+		fresh = runModelChecked(structuredClone(input));
+	} catch (e) {
+		return { ok: false, detail: `this engine (${ENGINE_VERSION}) refuses the run's input: ${message(e)}`, fresh: null };
+	}
+	const again = await runResultsDigest({ startDate: fresh.startDate, summary: fresh.summary, series: fresh.series }, hash);
+	if (again.sha256 === named.resultsSha256) return { ok: true, detail: `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, the same`, fresh };
+	const why: string[] = [];
+	if (fresh.startDate !== stored.startDate) why.push(`it starts on ${fresh.startDate}, not ${stored.startDate}`);
+	const paths = differingPaths(stored.summary, fresh.summary);
+	if (paths.length) why.push(`summary differs at ${paths.join(', ')}`);
+	// An output by its key, and its node when it has one ("simulated_outflow", "dam_volume at node n1").
+	const name = (s: { nodeId: string | null; key: string }) => (s.nodeId === null ? s.key : `${s.key} at hydrological unit ${s.nodeId}`);
+	const was = new Map(stored.series.map((s) => [name(s), s.valuesSha256]));
+	const now = new Map(again.series.map((s) => [name(s), s.valuesSha256]));
+	const changed = [...was.keys()].filter((k) => now.has(k) && now.get(k) !== was.get(k));
+	const gone = [...was.keys()].filter((k) => !now.has(k));
+	const added = [...now.keys()].filter((k) => !was.has(k));
+	const some = (names: string[]) => `${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}`;
+	if (changed.length) why.push(`${changed.length === 1 ? '1 daily output differs' : `${changed.length} daily outputs differ`} (${some(changed)})`);
+	if (gone.length) why.push(`${gone.length === 1 ? '1 stored output is' : `${gone.length} stored outputs are`} not produced (${some(gone)})`);
+	if (added.length) why.push(`${added.length === 1 ? '1 output is' : `${added.length} outputs are`} not stored (${some(added)})`);
+	const engineNote = named.engineVersion !== ENGINE_VERSION ? ` The run was made with engine ${named.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
+	return { ok: false, detail: `re-run with engine ${ENGINE_VERSION}: results digest ${again.sha256}, not ${named.resultsSha256}: ${why.join('; ') || 'the digests differ'}.${engineNote}`, fresh };
+}
+
+/** A missing cell value and a change with no run read alike: the report writes null for both. */
+const cellRun = (c: { change: { run: number | null } | null } | undefined) => c?.change?.run ?? null;
+
+/**
+ * The alternatives page 1 assesses (bundle-3, evidence-26), each as
+ * `alternative:<n>`: the bundle carries exactly the manifest's assessed
+ * alternatives' runs; each one's run, engine and ops hash are the manifest's,
+ * its ops are the ones it records and hash to it, it ran on the pack's
+ * baseline, and its input is the baseline's with those ops applied (its
+ * settings, model and each series; an applicant's under the mask its own
+ * units give it, as its run applied them); its stored results give the digest
+ * bundle.json names; and every page-1 cell that reads its run's summary
+ * (alternativeSummaryCell) is what its stored summary gives. With the re-run,
+ * `reproduce:alternative:<n>` re-runs its input and compares its digest. A
+ * bundle-1 or bundle-2 bundle carries none and adds no check.
+ */
+async function checkAlternatives(
+	index: PackBundleIndex,
+	manifest: PackManifest,
+	text: ReadonlyMap<string, string>,
+	baseline: { snapshot: PackBundleRun['inputs']; input: ModelInput | null; values: Record<string, (number | null)[]> } | null,
+	baselineResults: RunResultsFile | null,
+	opts: CheckPackBundleOptions,
+	add: (id: string, ok: boolean, detail: string) => boolean,
+	runEngines: string[]
+): Promise<void> {
+	if (index.version !== 'bundle-3') return;
+	const { hash } = opts;
+	const wanted = assessedAlternatives(manifest);
+	const named = index.alternatives ?? [];
+	const carried = [...text.keys()].filter((k) => k.startsWith('runs/alternative-'));
+	if (!wanted.length) {
+		if (named.length || carried.length) add('alternatives', false, "the bundle carries an alternative's run the manifest doesn't assess");
+		return;
+	}
+	const identity = manifest.report.identity;
+	for (const w of wanted) {
+		const id = `alternative:${w.n}`;
+		const dir = bundleAlternativeDir(w.n);
+		const entry = named.find((x) => x.n === w.n);
+		if (!entry || !text.has(`${dir}/input.json`) || !text.has(`${dir}/results.json`)) {
+			add(id, false, `page 1 assesses alternative ${w.n} (“${w.label}”), whose run the bundle doesn't carry`);
+			continue;
+		}
+		runEngines.push(entry.engineVersion);
+		const snapshot = JSON.parse(text.get(`${dir}/input.json`)!) as PackBundleRun['inputs'];
+		const stored = JSON.parse(text.get(`${dir}/results.json`)!) as RunResultsFile;
+		const problems: string[] = [];
+		if (entry.runId !== w.runId || stored.runId !== w.runId) problems.push(`its run is ${String(entry.runId)}, the manifest names ${w.runId}`);
+		if (entry.engineVersion !== w.engineVersion || stored.engineVersion !== w.engineVersion) problems.push(`its engine is ${String(entry.engineVersion)}, the manifest names ${w.engineVersion}`);
+		// Its ops: the ones the run recorded, the manifest's, hashing to the hash both name.
+		const sc = snapshot.scenario;
+		const ops = Array.isArray(sc?.ops) ? (sc!.ops as ScenarioOp[]) : null;
+		if (!sc || !ops) problems.push('its input records no scenario ops');
+		else {
+			const sha = await hash(canonicalJson(ops));
+			if (sha !== sc.opsSha256 || sha !== w.opsSha256) problems.push(`its ops hash to ${sha}; the run records ${String(sc.opsSha256)}, the manifest ${w.opsSha256}`);
+			if (!sameJson(ops, w.ops)) problems.push("its ops aren't the ones the manifest lists");
+			if ((sc as { baseRunId?: string }).baseRunId !== identity.baseline.runId) problems.push(`it ran on base run ${String((sc as { baseRunId?: string }).baseRunId)}, not the pack's baseline ${identity.baseline.runId}`);
+		}
+		// Its series, each against its hash; then its input against the baseline's with its ops applied.
+		const series: Record<string, DailySeries> = {};
+		for (const [kind, snap] of Object.entries(snapshot.series ?? {})) {
+			if (!snap) continue;
+			const csv = snap.valuesSha256 ? text.get(bundleSeriesPath(snap.valuesSha256)) : undefined;
+			if (csv === undefined) {
+				problems.push(`${kind}: no values file`);
+				continue;
+			}
+			try {
+				const parsed = parseSeriesCsv(csv);
+				if (parsed.values.length !== snap.length || (snap.length > 0 && parsed.startDate !== snap.startDate)) throw new Error(`it has ${parsed.values.length} days from ${parsed.startDate}, not ${snap.length} from ${snap.startDate}`);
+				if ((await hash(seriesDigest(parsed.values))) !== snap.valuesSha256) throw new Error('its values fail their SHA-256 check');
+				series[kind] = {
+					startDate: snap.startDate,
+					values: parsed.values,
+					...(snap.provenance !== undefined ? { provenance: snap.provenance } : {}),
+					...(snap.origin !== undefined ? { origin: snap.origin } : {}),
+					...(typeof snap.seriesId === 'string' ? { seriesId: snap.seriesId } : {})
+				};
+			} catch (e) {
+				problems.push(`${kind}: ${message(e)}`);
+			}
+		}
+		if (!baseline?.input) problems.push("its input can't be checked: the baseline's inputs failed a check above");
+		else if (ops) {
+			// As its run was made (backend checkScenario): an applicant's ops under the mask their own units give it, a
+			// team scenario's without. An alternative is the citing application's origin (298's guard), which the
+			// manifest records; its own units are in its run's record.
+			const owned = Array.isArray((sc as { ownedNodeIds?: unknown }).ownedNodeIds) ? ((sc as { ownedNodeIds: unknown[] }).ownedNodeIds.filter((x) => typeof x === 'string') as string[]) : [];
+			const masked = identity.application?.origin === 'applicant';
+			const applied = applyScenario(baseline.input, ops, masked ? { mask: applicationMask(baseline.input, owned) } : {});
+			if (applied.problems.length) problems.push(`its ops don't apply to the baseline (${applied.problems.slice(0, 3).join('; ')})`);
+			else {
+				if (!sameJson(applied.input.settings, snapshot.settings)) problems.push(`its settings aren't the baseline's with its ops applied (${differingPaths(applied.input.settings, snapshot.settings).join(', ')})`);
+				if (!sameJson(applied.input.model, snapshot.model)) problems.push(`its model isn't the baseline's with its ops applied (${differingPaths(applied.input.model, snapshot.model).join(', ')})`);
+				for (const [kind, s] of Object.entries(applied.input.series)) {
+					if (!s) continue;
+					const sha = await hash(seriesDigest(s.values.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : null))));
+					if (sha !== (snapshot.series?.[kind]?.valuesSha256 ?? null)) problems.push(`its ${kind} series isn't the baseline's with its ops applied`);
+				}
+			}
+		}
+		// Its stored results: the digest bundle.json names, and the page-1 cells that read the run's summary.
+		if (stored.version !== RUN_RESULTS_VERSION) problems.push(`results.json is version ${String(stored.version)}; this code reads ${RUN_RESULTS_VERSION}`);
+		const sha = await hash(runResultsText(stored));
+		if (sha !== entry.resultsSha256) problems.push(`its results digest is ${sha}, not the ${entry.resultsSha256} bundle.json names`);
+		const i = w.n - 1;
+		let cells = 0;
+		if (!baselineResults) problems.push("its page-1 cells can't be checked: the baseline's stored results failed a check above");
+		else
+			for (const row of manifest.report.rows) {
+				if (!ALTERNATIVE_SUMMARY_ROWS.has(row.id)) continue;
+				const cell = row.alternatives?.[i];
+				const want = alternativeSummaryCell(row, baselineResults.summary as RunSummary, stored.summary as RunSummary);
+				if (!want) continue;
+				cells++;
+				if (!sameJson(cell?.value ?? null, want.value) || !sameJson(cellRun(cell), want.run))
+					problems.push(`its ${row.id}${row.subject ? ` (${row.subject})` : ''} cell on page 1 is ${String(cell?.value ?? null)} (change ${String(cellRun(cell))}); its stored results give ${String(want.value)} (change ${String(want.run)})`);
+			}
+		const ok = add(
+			id,
+			problems.length === 0,
+			problems.join('; ') ||
+				`alternative ${w.n} (“${w.label}”): run ${w.runId} on the pack's baseline, its ops the manifest's, its input the baseline's with them applied; its ${cells} page-1 cell${cells === 1 ? '' : 's'} read from the run are its stored results'; results digest ${sha}`
+		);
+		if (!wantsPart(opts, `alternative:${w.n}`)) continue;
+		if (!ok || !Object.keys(series).length) {
+			add(`reproduce:alternative:${w.n}`, false, 'not re-run: its inputs or stored results failed a check above');
+			continue;
+		}
+		const again = await reproduceRun(bundleRunInput(snapshot, series), stored, entry, hash);
+		add(`reproduce:alternative:${w.n}`, again.ok, again.detail);
+	}
 }

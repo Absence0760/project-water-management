@@ -1,0 +1,4 @@
+{
+	"addKb": 7,
+	"why": "PR #672's UI with no entry of its own (share-link licence terms and WULA, the dam siting hint, the licensed-run panel, the evidence report's per-dam rows, the WULA editor fold): measured 2309 KB locally against 2305 KB after all of #672's own entries, but CI's build of 3c2d6987d measured 2312 KB (the base's local-to-CI gap is used up), so +7 KB, no headroom"
+}

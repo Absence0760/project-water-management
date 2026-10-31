@@ -45,7 +45,7 @@ const outcome = (id: string, over: Partial<PortfolioProject> = {}): PortfolioPro
 	lowestDamPct: null,
 	damsKnown: false,
 	figuresWithheld: false,
-	feeds: { total: 0, ok: 0, failing: 0 },
+	feeds: { total: 0, ok: 0, failing: 0, copyBehind: 0 },
 	alertsFiring: 0,
 	restriction: null,
 	drought: null,
@@ -75,13 +75,22 @@ describe('attention', () => {
 		expect(attention(outcome('i', { irrigation: irr('red', 0.5, 3) })).reasons).toEqual([{ text: 'Red: 50.0% supplied, 3 of 4 units below 95%', tone: 'danger' }]);
 	});
 
+	// Our late rain copy is no catchment's problem to fix (the feed panel doesn't warn for it either): no reason here.
+	it('a feed waiting for our late rain copy is no reason for attention; a failing one is', () => {
+		expect(attention(outcome('c', { feeds: { total: 2, ok: 1, failing: 0, copyBehind: 1 } }))).toEqual({ score: 0, reasons: [] });
+		// Positive control: a failing feed beside it is, and the words name both.
+		expect(attention(outcome('c', { feeds: { total: 2, ok: 0, failing: 1, copyBehind: 1 } })).reasons).toEqual([
+			{ text: '1 of 2 feeds failing or stale, 1 waiting for our rain copy', tone: 'warn' }
+		]);
+	});
+
 	it('says every reason in words, worst first, and links hydrological units short to the curtailment', () => {
 		const a = attention(
 			outcome('p1', {
 				irrigation: irr('red', 0.7, 2),
 				farmsShort7: 2,
 				alertsFiring: 1,
-				feeds: { total: 3, ok: 2, failing: 1 },
+				feeds: { total: 3, ok: 2, failing: 1, copyBehind: 0 },
 				behindData: true,
 				stale: true,
 				figuresUntil: '2026-09-15',

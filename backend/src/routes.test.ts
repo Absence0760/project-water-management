@@ -97,6 +97,14 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
 	});
 
+	// The restriction log (the WUA persona's log of restriction decisions): auth-gated, viewer and above (publish/restrictionLog.db.test.ts).
+	it('inventories the restriction log and its CSV export as auth-gated', () => {
+		for (const r of ['GET /projects/:id/restriction-log', 'GET /projects/:id/restriction-log/export.csv']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Evidence packs (WP-3.14), their PDF (119_pack_render) included: auth-gated like every project route; only verify is public.
 	it('inventories the evidence pack routes as auth-gated, and verify as public', () => {
 		for (const r of [
@@ -280,7 +288,8 @@ describe('route auth inventory', () => {
 
 	// Cumulative impact assessments (WP-3.11, 145_assessment): auth-gated like every project route (editors only, assessments.db.test.ts).
 	it('inventories the assessment routes as auth-gated', () => {
-		for (const r of ['POST /projects/:id/assessments', 'GET /projects/:id/assessments', 'GET /projects/:id/assessments/:aid']) {
+		// The background candidates at full allocation (295) likewise.
+		for (const r of ['POST /projects/:id/assessments', 'GET /projects/:id/assessments', 'GET /projects/:id/assessments/backgrounds', 'GET /projects/:id/assessments/:aid']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}

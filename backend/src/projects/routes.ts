@@ -34,6 +34,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
 import { insertImportReport, latestImportReport, parseImportReport } from './importReport.js';
 import { loadMyOutcomes } from '../portfolio/portfolio.js';
+import { rainCopy } from '../feeds/rainCopy.js';
 import { recordedRainUntilSql } from '../series/lastDay.js';
 
 type ProjectRow = {
@@ -278,9 +279,10 @@ export const projectRoutes = new Hono<AuthEnv>()
 		})
 	)
 	// The project list's outcome columns (issue #17): the portfolio's figures
-	// for every project you can see, one query under RLS (portfolio.ts).
+	// for every project you can see, one query under RLS (portfolio.ts). Feeds
+	// waiting on our late CHIRPS copy count as copy-behind, as the feed panel says.
 	.get('/outcomes', async (c) =>
-		withUser(c.get('userId'), async (db) => c.json({ projects: await loadMyOutcomes(db, new Date()) }))
+		withUser(c.get('userId'), async (db) => c.json({ projects: await loadMyOutcomes(db, new Date(), await rainCopy(db)) }))
 	)
 	.post('/', async (c) => {
 		const body = CreateBody.parse(await readJson(c));

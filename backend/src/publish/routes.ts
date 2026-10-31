@@ -12,6 +12,10 @@ import { rank, requireRole, UUID } from '../projects/access.js';
 import { requireStepUp } from '../auth/stepUp.js';
 import { requireActsForAuthority } from '../projects/authoritySettings.js';
 import { EndorseBody, endorsePublication, listPublications, patchPublication, PatchBody, publishRun, PublishBody } from './publish.js';
+import { csvDownload } from '../export/download.js';
+import { exportFilename } from '../export/csv.js';
+import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
+import { restrictionLog, restrictionLogAll, restrictionLogCsvLines, RestrictionLogQuery } from './restrictionLog.js';
 import { runPublication } from './runPublication.js';
 
 export const publicationRoutes = new Hono<AuthEnv>()
@@ -22,6 +26,35 @@ export const publicationRoutes = new Hono<AuthEnv>()
 			return c.json(await listPublications(db, c.req.param('id'), rank[role] >= rank.viewer));
 		})
 	)
+	// Every restriction the WUA published or changed, from the decision log (restrictionLog.ts), which outlives the
+	// 12 publications run_publication keeps. Viewer: it is the audit log, which farmers don't read (030).
+	.get('/:id/restriction-log', async (c) => {
+		const q = RestrictionLogQuery.parse(c.req.query());
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return c.json(await restrictionLog(db, id, q));
+		});
+	})
+	// The whole log as a CSV, for handing to the responsible authority (the page pages it; this doesn't). The same
+	// rule as the page: viewer and above, a farmer 403, a non-member 404 (requireRole), and RLS on audit_event.
+	.get('/:id/restriction-log/export.csv', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			// One client, one query at a time.
+			const { rows: proj } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
+			const items = await restrictionLogAll(db, id);
+			if (!items) throw new ApiError(413, 'the restriction log is too long to export in one file');
+			const lines = restrictionLogCsvLines(items);
+			return csvDownload(
+				c,
+				() => lines,
+				exportFilename(proj[0]?.name ?? 'project', ['restriction-log'], 'csv', proj[0]?.timeZone ?? DEFAULT_TIME_ZONE),
+				new ApiError(413, 'the restriction log export is too large')
+			);
+		});
+	})
 	// One run's publication and the changes since the one before (the printable report, issue #70).
 	// Viewer: the changes come from the change history, which farmers don't read.
 	.get('/:id/runs/:runId/publication', async (c) =>

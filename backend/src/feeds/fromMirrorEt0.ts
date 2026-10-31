@@ -24,7 +24,10 @@
 // cells (each feed cell's centre, with its weight), leaving out cells with no
 // value (the sea) and renormalising, to 0.01 mm. A value outside 0–30 mm/day
 // is refused as a corrupt copy. The fetch's meta counts the days from each
-// product (agera5Days, powerDays) and how far AgERA5 reached (agera5Through).
+// product (agera5Days, powerDays) and how far AgERA5 reached (agera5Through),
+// and its dayProducts names each day's product, which the ingest records
+// with the days it writes (time_series.feed_agera5_days / feed_power_days,
+// 292_feed_et0_product_days) for a run's credits (runs/execute.ts et0FeedDays).
 //
 // When the copy holds neither product yet, the copy is behind, not the feed
 // broken: nothing is written and the fetch records only that it looked, as
@@ -48,7 +51,7 @@ import { mirrorStore } from '../mirror/source.js';
 import type { MirrorStore } from '../mirror/store.js';
 import type { GridConfig } from './config.js';
 import { FeedFormatError } from './errors.js';
-import { fetchFailure, type FetchResult, type FetchWindow, gridRead } from './fetch.js';
+import { type Et0DayProduct, fetchFailure, type FetchResult, type FetchWindow, gridRead } from './fetch.js';
 import { feedSourceMode } from './http.js';
 import { ingestResult } from './ingest.js';
 import { beginFeedFetch, type FeedRow, recordFeedChecked, takeFeedFetch } from './store.js';
@@ -185,7 +188,8 @@ function dayMean(values: readonly number[], weights: readonly number[], day: str
 /**
  * The reference ET of `config`'s cells over `window` from the copy, as a
  * fetch answers: one value a day from the window's start (null where neither
- * product holds the day), AgERA5's where it has one, else NASA POWER's.
+ * product holds the day), AgERA5's where it has one, else NASA POWER's, and
+ * which of them each day's value is (dayProducts).
  */
 export async function et0FromMirror(config: GridConfig, window: FetchWindow, reader: Et0Reader): Promise<Extract<FetchResult, { ok: true }>> {
 	const { cells } = gridRead(config);
@@ -200,15 +204,18 @@ export async function et0FromMirror(config: GridConfig, window: FetchWindow, rea
 	const s = toEpochDay(window.start);
 	let agera5Days = 0;
 	let powerDays = 0;
+	const products: (Et0DayProduct | null)[] = [];
 	const values = r.agera5.map((dayA, i) => {
 		const day = fromEpochDay(s + i);
 		const a = dayMean(dayA, weights, day, 'AgERA5');
 		if (a !== null) {
 			agera5Days++;
+			products.push('agera5_et0');
 			return a;
 		}
 		const p = dayMean(r.power[i]!, weights, day, 'NASA POWER');
 		if (p !== null) powerDays++;
+		products.push(p === null ? null : 'power_et0');
 		return p;
 	});
 	// Trailing days with no value are not sent: the feed's newest day is the newest with a value.
@@ -218,7 +225,7 @@ export async function et0FromMirror(config: GridConfig, window: FetchWindow, rea
 	while (first <= last && values[first] === null) first++;
 	const meta = { days: agera5Days + powerDays, agera5Days, powerDays, ...(r.agera5Through ? { agera5Through: r.agera5Through } : {}) };
 	if (first > last) return { ok: true, startDate: null, values: [], meta };
-	return { ok: true, startDate: fromEpochDay(s + first), values: values.slice(first, last + 1), meta };
+	return { ok: true, startDate: fromEpochDay(s + first), values: values.slice(first, last + 1), meta, dayProducts: products.slice(first, last + 1) };
 }
 
 /** How a fetch from the copy ended: merged (or failed, recorded on the feed), or the copy holds no reference ET yet. */

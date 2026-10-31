@@ -6,7 +6,7 @@
 // pack without a bundle, and when it fails the job instead. The same against
 // Postgres and MinIO: evidence/packs.db.test.ts.
 import { buildPackBundle, ENGINE_VERSION, type BundleCheck } from '@water-management/engine';
-import { packBundleFixture } from '@water-management/engine/testing';
+import { assessmentPackFixture, packBundleFixture } from '@water-management/engine/testing';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -42,8 +42,20 @@ interface Recorded {
 /** A stand-in transaction: the pack row, whether an outcome is recorded for this engine, and what the handler records. */
 function fakeDb(pack: PackRow | null, recordedAlready = false) {
 	const recorded: Recorded[] = [];
+	/** The fan-out (302): each part's queued job and what app_pack_reproduce_fan_out was handed. */
+	const queued: { kind: string; payload: Record<string, string> }[] = [];
+	const fannedOut: { checks: BundleCheck[]; parts: { id: string; jobId: string; part: { kind: string; run?: string }; label: string }[] }[] = [];
 	const db = {
 		async query(sql: string, params: unknown[] = []) {
+			if (sql.includes('INSERT INTO job')) {
+				queued.push({ kind: params[1] as string, payload: JSON.parse(params[2] as string) });
+				return { rows: [{ id: `job-${queued.length}` }], rowCount: 1 };
+			}
+			if (sql.includes('FROM job j JOIN app_user')) return { rows: [{ id: params[0] }], rowCount: 1 };
+			if (sql.includes('app_pack_reproduce_fan_out')) {
+				fannedOut.push({ checks: JSON.parse(params[6] as string), parts: JSON.parse(params[7] as string) });
+				return { rows: [{}], rowCount: 1 };
+			}
 			if (sql.includes('app_record_pack_reproduction')) {
 				const [packId, outcome, engine, runEngines, bundleSha256, checks] = params as [string, string, string, string[], string | null, string];
 				recorded.push({ packId, outcome, engine, runEngines, bundleSha256, checks: JSON.parse(checks) as BundleCheck[] });
@@ -54,7 +66,7 @@ function fakeDb(pack: PackRow | null, recordedAlready = false) {
 			throw new Error(`unexpected query: ${sql}`);
 		}
 	};
-	return { db, recorded };
+	return { db, recorded, queued, fannedOut };
 }
 
 const run = (db: unknown, packId = K) =>
@@ -79,16 +91,41 @@ afterEach(() => {
 const issued = (): PackRow => ({ issued: true, manifestSha256: bundle.manifestSha256, bundleKey: `packs/${P}/${K}/${bundle.sha256}.zip`, bundleSha256: bundle.sha256 });
 
 describe('pack_reproduce', () => {
-	it('records a stored bundle that re-runs to its results as reproduced, with this engine, the runs’ engines and every check', async () => {
+	it('checks a stored bundle without re-running it and fans the re-runs out, one part job each, recording nothing yet (302)', async () => {
 		getPackBundle.mockResolvedValueOnce(bundle.bytes);
-		const { db, recorded } = fakeDb(issued());
+		const { db, recorded, queued, fannedOut } = fakeDb(issued());
 		await run(db);
 		expect(getPackBundle).toHaveBeenCalledWith(issued().bundleKey, expect.any(Number));
-		expect(recorded).toHaveLength(1);
-		const r = recorded[0]!;
-		expect(r).toMatchObject({ packId: K, outcome: 'reproduced', engine: ENGINE_VERSION, runEngines: [ENGINE_VERSION], bundleSha256: bundle.sha256 });
-		expect(r.checks.map((c) => c.id)).toEqual(['stored', 'archive', 'files', 'manifest', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'reproduce:baseline', 'reproduce:application', 'headline']);
-		expect(r.checks.every((c) => c.ok)).toBe(true);
+		expect(recorded).toEqual([]);
+		expect(fannedOut).toHaveLength(1);
+		const f = fannedOut[0]!;
+		expect(f.checks.map((c) => c.id)).toEqual(['stored', 'archive', 'files', 'manifest', 'runs', 'inputs:baseline', 'inputs:application', 'changes', 'scenario', 'results:baseline', 'results:application', 'headline']);
+		expect(f.checks.every((c) => c.ok)).toBe(true);
+		expect(f.parts.map((p) => p.part.kind)).toEqual(['run:baseline', 'run:application']);
+		// Each part's job is a pack_reproduce_part job naming this pack, the gathering and the part.
+		expect(queued.map((q) => q.kind)).toEqual(['pack_reproduce_part', 'pack_reproduce_part']);
+		expect(queued.map((q) => q.payload.partId)).toEqual(f.parts.map((p) => p.id));
+		expect(new Set(queued.map((q) => q.payload.gatheringId)).size).toBe(1);
+		expect(queued.every((q) => q.payload.packId === K)).toBe(true);
+	});
+
+	it('fans a pack whose combined row reads an assessment out to its assessment, background and one part per dam search', async () => {
+		const good = await buildPackBundle(assessmentPackFixture(hash, { background: true }), hash);
+		getPackBundle.mockResolvedValueOnce(good.bytes);
+		const { db, recorded, fannedOut } = fakeDb({ issued: true, manifestSha256: good.index.pack.manifestSha256, bundleKey: `packs/${P}/${K}/${good.sha256}.zip`, bundleSha256: good.sha256 });
+		await run(db);
+		expect(recorded).toEqual([]);
+		expect(fannedOut[0]!.parts.map((p) => (p.part.kind === 'dam' ? `dam:${p.part.run}` : p.part.kind))).toEqual([
+			'run:baseline',
+			'run:application',
+			'combined',
+			'background',
+			'dam:baseline',
+			'dam:single',
+			'dam:single',
+			'dam:combined'
+		]);
+		expect(fannedOut[0]!.parts.at(-1)!.label).toBe('the firm yield of "Farm one" (All together)');
 	});
 
 	it('records stored bytes that aren’t the recorded bundle as not reproduced, without re-running them (positive control above)', async () => {
@@ -187,6 +224,13 @@ describe('reproductionOutcome', () => {
 		expect(reproductionOutcome({ ok: false, checks: [ok('reproduce:baseline'), bad('climate:delta')], engine: { here, runs: [here] } })).toBe('not_reproduced');
 		// Another engine, but the manifest failed as well: not explained by the engine.
 		expect(reproductionOutcome({ ok: false, checks: [bad('manifest'), bad('climate:delta')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
+	});
+
+	it('counts the combined row’s re-runs (reproduce:combined, :dams, :background) as re-runs, and its assessment check not', () => {
+		const reruns = [ok('assessment'), bad('reproduce:combined'), bad('reproduce:dams'), bad('reproduce:background')];
+		expect(reproductionOutcome({ ok: false, checks: reruns, engine: { here, runs: [here, '0.0.1'] } })).toBe('other_engine');
+		expect(reproductionOutcome({ ok: false, checks: [bad('assessment'), bad('reproduce:combined')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
+		expect(reproductionOutcome({ ok: false, checks: [bad('inputs:background'), ok('reproduce:combined')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
 	});
 
 	it('not_reproduced for a failure with no checks to explain it', () => {

@@ -14,7 +14,11 @@
 //
 // A feed never splices two areas into one record: the days already in a
 // series were averaged over its old cells, so new cells go to a feed whose
-// series holds nothing yet, or to a new feed writing a separate series.
+// series holds nothing yet, or to a new feed writing a separate series, or,
+// when the owner chooses to replace the record runs read and a catchment
+// CHIRPS feed writes it, to that feed, which re-reads its whole record over
+// them into its stage and swaps it in once complete (296_feed_area_replace,
+// routes.ts areaCheck), so the boundary's rain takes over the default series.
 //
 // Nor does a new series take over unseen (issue #561): a run reads the first
 // CHIRPS series by name, so a new one is named to sort after the record runs
@@ -35,9 +39,19 @@ import { requireRole } from '../projects/access.js';
 import { boundaryCells, type BoundaryCell } from './boundaryCells.js';
 import { sameProvenance } from '@water-management/engine';
 import { SeriesStartDate } from '../series/limits.js';
-import { type BoundaryMark, CHIRPS_DAILY_PRODUCTS, CHIRPS_PRODUCT_FIRST_DAY, type ChirpsDailyProduct, FeedInput, feedProvenance, type GridConfig } from './config.js';
-import { attachSlot, conflict, feedSubject, refuseTakeOver, seriesWords, takesOver, versionCheck } from './routes.js';
-import { createFeed, getFeed, listFeeds, runSeries, type RunSeriesPick, targetSeries, updateFeed, type FeedMeta } from './store.js';
+import {
+	type BoundaryMark,
+	CHIRPS_DAILY_PRODUCTS,
+	CHIRPS_PRODUCT_FIRST_DAY,
+	type ChirpsDailyProduct,
+	chirpsProduct,
+	type FeedConfig,
+	FeedInput,
+	feedProvenance,
+	type GridConfig
+} from './config.js';
+import { areaCheck, attachSlot, conflict, feedSubject, refuseTakeOver, seriesWords, takesOver, versionCheck } from './routes.js';
+import { createFeed, feedFirstOwnDay, getFeed, listFeeds, runSeries, type RunSeriesPick, targetSeries, updateFeed, type FeedMeta } from './store.js';
 
 /** The series a boundary feed writes: CHIRPS as the reference rainfall, never the catchment rain itself (docs/model.md). */
 export const BOUNDARY_TARGET_KIND = 'rain_chirps_mm';
@@ -158,21 +172,49 @@ async function freeName(db: Db, projectId: string, feeds: readonly FeedMeta[], p
 	throw new ApiError(409, 'no free series name for the boundary’s rain: name it (targetName) so it sorts after the CHIRPS series runs read');
 }
 
+type ReplaceChoice =
+	| { available: true; targetName: string; product: ChirpsDailyProduct; startDate: string; feedId?: string; area?: true }
+	| { available: false; targetName: string; reason: string };
+
 /**
- * Whether Apply may replace the record runs read (issue #561, (b)): the feed
- * points at it and backfills it whole into a stage, swapped in once complete
- * (routes.ts versionCheck). Not while another feed writes it, nor when it
- * already holds the product and version the feed would write: the ingest
- * stages only a record of another version, and would splice into this one.
- * Null when runs read no record.
+ * Whether Apply may replace the record runs read (issue #561, (b)), and how.
+ * With no feed writing it: a new feed points at it and backfills it whole
+ * into a stage, swapped in once complete (routes.ts versionCheck); not when it
+ * already holds the product and version the feed would write, since then the
+ * feed would only fill its empty days around a person's. With a catchment
+ * CHIRPS feed writing it (296_feed_area_replace): that feed takes the
+ * boundary's cells and re-reads its whole record over them into its stage
+ * (`area`; routes.ts areaCheck), its own product unless another is asked
+ * for, which makes it a version replacement instead. A unit's feed never
+ * writes the series runs read. Null when runs read no record.
  */
-function replaceChoice(
+async function replaceChoice(
+	db: Db,
+	projectId: string,
 	pick: RunSeriesPick | null,
-	product: ChirpsDailyProduct
-): { available: true; targetName: string; product: ChirpsDailyProduct; startDate: string } | { available: false; targetName: string; reason: string } | null {
+	feeds: readonly FeedMeta[],
+	defaults: ChirpsDailyProduct,
+	asked?: ChirpsDailyProduct
+): Promise<ReplaceChoice | null> {
 	if (!pick?.firstDay) return null;
 	const targetName = pick.name;
-	if (pick.feedId) return { available: false, targetName, reason: `a feed already writes ${seriesWords(pick.name)}: change or remove that feed to replace its record` };
+	if (pick.feedId) {
+		const f = feeds.find((x) => x.id === pick.feedId);
+		if (!f || f.source !== 'chirps' || (f.config as GridConfig).unit) {
+			return { available: false, targetName, reason: `a feed other than a catchment CHIRPS feed writes ${seriesWords(pick.name)}: change or remove that feed to replace its record` };
+		}
+		const product = asked ?? chirpsProduct(f.config);
+		if (!sameProvenance(pick.provenance, feedProvenance('chirps', { product }))) {
+			// The series holds another product or version: it is replaced whole (#40c), from its first day.
+			const first = CHIRPS_PRODUCT_FIRST_DAY[product];
+			return { available: true, targetName, product, startDate: pick.firstDay < first ? first : pick.firstDay, feedId: f.id };
+		}
+		// The same product: the feed's own days, from its first one, re-read over the boundary's cells.
+		const own = (await feedFirstOwnDay(db, projectId, f.id, f.targetKind, f.targetName)) ?? pick.firstDay;
+		const first = CHIRPS_PRODUCT_FIRST_DAY[product];
+		return { available: true, targetName, product, startDate: own < first ? first : own, feedId: f.id, area: true };
+	}
+	const product = asked ?? defaults;
 	if (sameProvenance(pick.provenance, feedProvenance('chirps', { product }))) {
 		return {
 			available: false,
@@ -206,6 +248,77 @@ const ApplyBody = z
 	.strict()
 	.refine((b) => !b.replace || (b.feedId === undefined && b.targetName === undefined), { message: 'replace names its own series: send it without feedId or targetName', path: ['replace'] });
 
+/**
+ * Hold the feed's row while checking its series and saving new cells, and
+ * refuse while a fetch is out (fetch_job_id, 029): its answer was asked for
+ * with the old cells, and an ingest that read the feed before this save could
+ * still claim it after (app_take_feed_fetch waits on this lock), writing the
+ * old area's days into the series the new cells start. Once the fetch is
+ * applied, the series is no longer empty, or it never answered.
+ */
+async function holdFeed(db: Db, projectId: string, feedId: string): Promise<void> {
+	const { rows: held } = await db.query<{ fetching: boolean }>('SELECT fetch_job_id IS NOT NULL AS fetching FROM data_feed WHERE id = $1 AND project_id = $2 FOR UPDATE', [
+		feedId,
+		projectId
+	]);
+	if (held[0]?.fetching) {
+		throw new ApiError(409, 'a fetch for this feed is still out: apply the boundary’s cells once it has come back', { code: 'feed_fetching' });
+	}
+}
+
+/**
+ * Replace the record runs read through the catchment CHIRPS feed that writes
+ * it (296_feed_area_replace): the feed takes the boundary's cells, and re-reads
+ * its whole record over them (routes.ts areaCheck), or, with another product,
+ * replaces the series whole (versionCheck); either way staged and swapped in
+ * once complete.
+ */
+async function replaceThroughFeed(
+	db: Db,
+	projectId: string,
+	cur: FeedMeta,
+	b: BoundaryRow,
+	cells: readonly BoundaryCell[],
+	product: ChirpsDailyProduct,
+	startDate: string | undefined
+): Promise<{ feed: FeedMeta | null; created: false }> {
+	await holdFeed(db, projectId, cur.id);
+	const old = cur.config as GridConfig;
+	const input = FeedInput.parse({
+		source: 'chirps',
+		config: {
+			cells: configCells(cells),
+			boundary: mark(b),
+			product,
+			...(startDate !== undefined ? { startDate } : {}),
+			...(old.staleAfterDays !== undefined ? { staleAfterDays: old.staleAfterDays } : {})
+		},
+		targetKind: cur.targetKind,
+		targetName: cur.targetName,
+		schedule: cur.schedule,
+		enabled: cur.enabled,
+		replaceSeries: true
+	});
+	const version = await versionCheck(db, projectId, input, !sameProvenance(feedProvenance('chirps', input.config), cur.writes));
+	let checked = version.input;
+	let replaceFrom: string | undefined = version.replaceFrom;
+	let configFrom: FeedConfig | null = null;
+	if (replaceFrom === undefined) {
+		const area = await areaCheck(db, projectId, cur, checked, true, true);
+		checked = area.input;
+		replaceFrom = area.replaceFrom ?? undefined;
+		configFrom = area.replaceConfigFrom ?? null;
+	}
+	if (!(await updateFeed(db, projectId, cur.id, checked, replaceFrom, configFrom).catch(conflict))) throw new ApiError(404, 'not found');
+	await recordAudit(db, projectId, 'feed.configured', {
+		...feedSubject(cur.id, 'changed', checked),
+		boundary: { featureId: b.id, name: b.name },
+		cells: cells.length,
+		...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {})
+	});
+	return { feed: await getFeed(db, projectId, cur.id), created: false };
+}
+
 export const feedFromBoundaryRoutes = new Hono<AuthEnv>()
 	.get('/:id/feeds/chirps/from-boundary', async (c) =>
 		withUser(c.get('userId'), async (db) => {
@@ -233,8 +346,8 @@ export const feedFromBoundaryRoutes = new Hono<AuthEnv>()
 				apply,
 				// The CHIRPS series runs read now (the first by name), which Apply never takes over from unseen.
 				runSeries: pickWords(pick),
-				// Or replace it with the boundary's (issue #561): offered while nothing reads the boundary yet.
-				replace: current ? null : replaceChoice(pick, defaults.product),
+				// Or replace it with the boundary's (issue #561; through the feed that writes it, 296): offered while nothing reads the boundary yet.
+				replace: current ? null : await replaceChoice(db, id, pick, feeds, defaults.product),
 				canApply: role === 'owner'
 			});
 		})
@@ -253,11 +366,13 @@ export const feedFromBoundaryRoutes = new Hono<AuthEnv>()
 			const pick = await runSeries(db, id, BOUNDARY_TARGET_KIND);
 			const defaults = boundaryDefaults(pick);
 			if (body.replace) {
-				await attachSlot(db, id);
-				const product = body.product ?? defaults.product;
-				const choice = replaceChoice(pick, product);
+				const feeds = (await listFeeds(db, id)).filter((f) => f.source === 'chirps');
+				const choice = await replaceChoice(db, id, pick, feeds, defaults.product, body.product);
 				if (!choice) throw new ApiError(409, 'no CHIRPS series holds a record yet, so there is nothing to replace: attach the boundary’s feed instead', { code: 'nothing_to_replace' });
 				if (!choice.available) throw new ApiError(409, choice.reason.charAt(0).toUpperCase() + choice.reason.slice(1), { code: 'series_replace' });
+				const product = choice.product;
+				if (choice.feedId) return replaceThroughFeed(db, id, feeds.find((f) => f.id === choice.feedId)!, b, r.cells, product, body.startDate);
+				await attachSlot(db, id);
 				const input = FeedInput.parse({
 					source: 'chirps',
 					config: { cells: configCells(r.cells), boundary: mark(b), product, ...(body.startDate !== undefined ? { startDate: body.startDate } : {}) },
@@ -276,21 +391,11 @@ export const feedFromBoundaryRoutes = new Hono<AuthEnv>()
 				const cur = await getFeed(db, id, body.feedId);
 				if (!cur) throw new ApiError(404, 'not found');
 				if (cur.source !== 'chirps') throw new ApiError(409, 'only a CHIRPS daily rainfall feed reads the boundary’s cells');
-				// Hold the feed's row while checking its series and saving the new cells, and refuse while a fetch is out
-				// (fetch_job_id, 029): its answer was asked for with the old cells, and an ingest that read the feed before this
-				// save could still claim it after (app_take_feed_fetch waits on this lock), writing the old area's days into the
-				// series the new cells start. Once the fetch is applied, the series is no longer empty, or it never answered.
-				const { rows: held } = await db.query<{ fetching: boolean }>(
-					'SELECT fetch_job_id IS NOT NULL AS fetching FROM data_feed WHERE id = $1 AND project_id = $2 FOR UPDATE',
-					[cur.id, id]
-				);
-				if (held[0]?.fetching) {
-					throw new ApiError(409, 'a fetch for this feed is still out: apply the boundary’s cells once it has come back', { code: 'feed_fetching' });
-				}
+				await holdFeed(db, id, cur.id);
 				if ((await targetSeries(db, id, cur.targetKind, cur.targetName))?.filled) {
 					throw new ApiError(
 						409,
-						'the feed’s series already holds days averaged over its old cells, and a feed never splices two areas into one record: attach a new feed for the boundary instead, into a separate series',
+						'the feed’s series already holds days averaged over its old cells, and a feed never splices two areas into one record: attach a new feed for the boundary instead, into a separate series, or replace the record runs read (replace)',
 						{ code: 'series_area' }
 					);
 				}

@@ -101,12 +101,43 @@ const FIRST_DATA_GRACE_DAYS = 2;
 
 /**
  * How far behind CHC our copy's finals (`rnl`, `sat`) may run before they
- * count as late: CHC publishes month M's finals during month M+1, usually by
- * the 25th, so a healthy copy's finals end up to ~56 days back just before a
- * release. 75 is the lag alarm's threshold (infra ingest_lag_alarm_days), so
- * the panel and the alarm agree.
+ * count as late, by default: CHC publishes month M's finals during month M+1,
+ * usually by the 25th, so a healthy copy's finals end up to ~56 days back
+ * just before a release. 75 is the default of the lag alarm's threshold
+ * (infra ingest_lag_alarm_days); production passes the threshold itself to
+ * the API as COPY_FINAL_LAG_DAYS (copyFinalLagDays), so the panel and the
+ * alarm agree when the operator tunes it. Locally nothing sets it: 75.
  */
 export const COPY_FINAL_LAG_DAYS = 75;
+
+/** The bounds COPY_FINAL_LAG_DAYS may take: Terraform's own floor for the alarm (60, below which a healthy copy alarms), and ten years. */
+export const COPY_FINAL_LAG_LIMITS = { min: 60, max: 3650 } as const;
+
+/**
+ * The problem with a COPY_FINAL_LAG_DAYS value, or null when it is a whole
+ * number of days within COPY_FINAL_LAG_LIMITS (or unset: the default). The
+ * API's production check refuses to start on one (config/production.ts).
+ */
+export function copyFinalLagProblem(v: string | undefined): string | null {
+	if (v === undefined || v.trim() === '') return null;
+	const n = Number(v.trim());
+	return Number.isInteger(n) && n >= COPY_FINAL_LAG_LIMITS.min && n <= COPY_FINAL_LAG_LIMITS.max
+		? null
+		: `must be a whole number of days from ${COPY_FINAL_LAG_LIMITS.min} to ${COPY_FINAL_LAG_LIMITS.max}`;
+}
+
+/**
+ * How far behind the copy's finals may run here: COPY_FINAL_LAG_DAYS (the
+ * lag alarm's threshold, infra/lambda.tf), else COPY_FINAL_LAG_DAYS's default.
+ * A value that isn't a whole number of days in bounds throws, naming the
+ * setting: production refuses to start on one first.
+ */
+export function copyFinalLagDays(env: Record<string, string | undefined> = process.env): number {
+	const v = env.COPY_FINAL_LAG_DAYS;
+	const problem = copyFinalLagProblem(v);
+	if (problem) throw new Error(`COPY_FINAL_LAG_DAYS ${problem}`);
+	return v === undefined || v.trim() === '' ? COPY_FINAL_LAG_DAYS : Number(v.trim());
+}
 
 /**
  * How far behind the copy's preliminary `sat` days may run: CHC publishes a
@@ -155,7 +186,7 @@ const laterOf = (a: string | null, b: string | null) => (a === null ? b : b === 
  * and sat's finals: once a month's finals land its preliminary days are
  * dropped, so the finals may be the newest days the copy holds.
  */
-export function rainCopyStatus(days: CopyDays, asOf: string, sample = false): ReadCopy {
+export function rainCopyStatus(days: CopyDays, asOf: string, sample = false, finalLagDays: number = COPY_FINAL_LAG_DAYS): ReadCopy {
 	const t = toEpochDay(asOf);
 	const part = (through: string | null, lag: number): CopyPart => ({ through, behind: through === null || t - toEpochDay(through) > lag });
 	const satFinal = days.sat?.finalThrough ?? null;
@@ -165,7 +196,7 @@ export function rainCopyStatus(days: CopyDays, asOf: string, sample = false): Re
 		readable: true,
 		sample,
 		asOf,
-		final: { sat: part(satFinal, COPY_FINAL_LAG_DAYS), rnl: part(days.rnl?.finalThrough ?? null, COPY_FINAL_LAG_DAYS) },
+		final: { sat: part(satFinal, finalLagDays), rnl: part(days.rnl?.finalThrough ?? null, finalLagDays) },
 		preliminary: { through: prelim, behind: preliminary.behind }
 	};
 }

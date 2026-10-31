@@ -665,12 +665,12 @@ variable "ingest_reserved_concurrency" {
 }
 
 variable "ingest_lag_alarm_days" {
-  description = "Alarm when a mirrored product's finals end more than this many days ago (MirrorLagDays). CHC publishes month M's finals during month M+1, usually by the 25th, so a healthy copy runs up to ~56 days behind just before a release; the default 75 fires once a monthly release is about three weeks late."
+  description = "Alarm when a mirrored product's finals end more than this many days ago (MirrorLagDays). CHC publishes month M's finals during month M+1, usually by the 25th, so a healthy copy runs up to ~56 days behind just before a release; the default 75 fires once a monthly release is about three weeks late. The API gets the same number (COPY_FINAL_LAG_DAYS, lambda.tf), so the Data feeds panel marks the copy late exactly when this alarms."
   type        = number
   default     = 75
   validation {
-    condition     = var.ingest_lag_alarm_days >= 60 && floor(var.ingest_lag_alarm_days) == var.ingest_lag_alarm_days
-    error_message = "A whole number of days, at least 60, or the alarm fires on a healthy copy just before CHC's monthly release."
+    condition     = var.ingest_lag_alarm_days >= 60 && var.ingest_lag_alarm_days <= 3650 && floor(var.ingest_lag_alarm_days) == var.ingest_lag_alarm_days
+    error_message = "A whole number of days from 60 to 3650: fewer and the alarm fires on a healthy copy just before CHC's monthly release (the API refuses more, COPY_FINAL_LAG_DAYS)."
   }
 }
 

@@ -8,7 +8,7 @@ import { licenceImpactBoard, runModelChecked, type ModelInput, type ModelOutput 
 import { randomInput } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
 import { testCatchment } from '../../../packages/engine/src/outlook/testCatchment.js';
-import { ALLOCATION_SERIES_KEYS, authorisedVerdicts, boardVerdicts, ensembleVerdicts, reportVerdictsOnly, verdictsOnly, verdictsReport, verdictsSummary } from './verdictsOnly.js';
+import { ALLOCATION_SERIES_KEYS, authorisedVerdicts, boardVerdicts, combinedDamVerdicts, ensembleVerdicts, reportVerdictsOnly, verdictsOnly, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 import { redactRunAllocations } from './viewerUnits.js';
 import { sweepForViewer } from '../sweeps/routes.js';
 import type { SweepRow } from '../sweeps/store.js';
@@ -220,5 +220,46 @@ describe('an evidence report on such a run', () => {
 		const r = report('none');
 		expect(verdictsReport(r as never)).toBe(r);
 		expect(JSON.stringify(boardVerdicts(r.licenceImpact))).not.toContain(String(VOL));
+	});
+});
+
+describe('§ 4’s combined dams as that viewer reads them (evidence-26)', () => {
+	const m = (b: number, c: number) => ({ baseline: b, combined: c, change: c - b, sumOfSingles: c - b, interaction: 0 });
+	const dam = (nodeId: string, onVolumes: boolean) => ({
+		nodeId,
+		name: `Dam ${nodeId}`,
+		firmYield: m(VOL, VOL - 1000),
+		reliability: m(0.9, 0.8),
+		verdict: { firmYield: 'lower', reliability: 'lower' },
+		onVolumes
+	});
+	const cumulative = (onVolumes: boolean) => ({ applications: [], counted: 0, truncated: false, total: { ewrDays: 3, reservePp: null }, withThis: null, combined: { notAssessed: null, ewrDays: m(4, 7), dams: [dam('a', onVolumes), dam('b', false)] } });
+	const report = (mode: string, onVolumes = false) => ({
+		version: 'evidence-26',
+		cumulative: cumulative(onVolumes),
+		summaries: { baseline: { allocations: { mode } }, application: { allocations: { mode: 'none' } } }
+	});
+	const withheld = (nodeId: string) => ({ nodeId, name: `Dam ${nodeId}`, verdict: { firmYield: 'lower', reliability: 'lower' }, onVolumes: nodeId === 'a', firmYield: null, reliability: null, withheld: true });
+
+	it('on a cap or full-allocation report every dam keeps its direction and loses its yield and assurance; the EWR counts stay', () => {
+		for (const mode of ['cap', 'fullAllocation']) {
+			const out = verdictsReport(report(mode, true) as never) as unknown as ReturnType<typeof report>;
+			expect(out.cumulative.combined.dams).toEqual([withheld('a'), { ...withheld('b'), onVolumes: false }]);
+			expect(out.cumulative.combined.ewrDays).toEqual(m(4, 7));
+			expect(JSON.stringify(out.cumulative)).not.toContain(String(VOL - 1000));
+		}
+	});
+
+	it('on any other report only a dam whose yields rest on the volumes is cut (redactReportAllocations); one on compare-only runs is read in full (positive control)', () => {
+		const c = cumulative(true);
+		const out = combinedDamVerdicts(c, false);
+		expect(out.combined.dams).toEqual([withheld('a'), dam('b', false)]);
+		expect(verdictsReport(report('none') as never)).toEqual(report('none'));
+		// A dam without the flag (hand-edited, or a shape this code doesn't know) counts as resting on them.
+		const unflagged = { combined: { dams: [{ ...dam('c', false), onVolumes: undefined }] } };
+		expect((combinedDamVerdicts(unflagged, false).combined.dams[0] as { withheld?: true }).withheld).toBe(true);
+		// Nothing to cut: a report before evidence-26, or no combined section.
+		const before = { combined: { notAssessed: 'x' } };
+		expect(combinedDamVerdicts(before, true)).toBe(before);
 	});
 });

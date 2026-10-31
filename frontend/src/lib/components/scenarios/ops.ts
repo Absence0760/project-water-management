@@ -1035,6 +1035,8 @@ export interface OpItem {
 	cls: OpClass | null;
 	problem: string | null;
 	notes: string[];
+	/** The WULA works the change models (its `works` tag, 294_wula_reference); null: it names none. */
+	works: string | null;
 }
 
 /**
@@ -1057,7 +1059,8 @@ export function opItems(
 			text: describeOp(op, before?.[i] ?? null, names),
 			cls: classified?.[i] ?? null,
 			problem: s.problem === null ? null : nameIds(s.problem, names),
-			notes: s.notes.map((x) => nameIds(x, names))
+			notes: s.notes.map((x) => nameIds(x, names)),
+			works: op.works ?? null
 		};
 	});
 	return { items, other: status.other.map((x) => nameIds(x, names)) };

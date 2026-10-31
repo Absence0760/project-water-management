@@ -21,7 +21,7 @@ import type { Db } from '../db/tx.js';
 import { chirpsSource } from '../mirror/source.js';
 import { cacheOrigin } from './cellCacheStore.js';
 import { utcToday } from './fetch.js';
-import { type RainCopy, rainCopyStatus } from './health.js';
+import { copyFinalLagDays, type RainCopy, rainCopyStatus } from './health.js';
 import { mirrorCopy } from './mirrorRevision.js';
 
 type Env = Record<string, string | undefined>;
@@ -41,5 +41,6 @@ export async function rainCopy(db: Db, env: Env = process.env, now = new Date())
 		prelim: rows.prelim ? { prelimThrough: rows.prelim.prelimThrough } : null
 	};
 	const sample = origin === 'fixtures';
-	return rainCopyStatus(days, sample ? SAMPLE_COPY_MADE : utcToday(now), sample);
+	// How late the finals may be: the lag alarm's threshold in production (COPY_FINAL_LAG_DAYS, infra/lambda.tf), else 75.
+	return rainCopyStatus(days, sample ? SAMPLE_COPY_MADE : utcToday(now), sample, copyFinalLagDays(env));
 }

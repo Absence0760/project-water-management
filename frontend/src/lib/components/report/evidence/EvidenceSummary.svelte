@@ -15,6 +15,8 @@
 	import { changeText, signed, valueText, worseText } from './format';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
 	import { AUTHORISED_HEADING, MODELLED_HEADING, authorisedRow, mixLines } from './authorised';
+	import { wulaPage1 } from './wula';
+	import { alternativeCellText, alternativeHeading } from './alternatives';
 
 	let {
 		report,
@@ -49,6 +51,8 @@
 		const rest = report.rows.filter((r) => !(r.id === 'userSupply' && r.subject));
 		return { shown: [...rest, ...users.slice(0, USERS_ON_PAGE_1)], more: Math.max(0, users.length - USERS_ON_PAGE_1) };
 	});
+	/** evidence-26: the mitigation alternatives the application cites, a column each; absent before evidence-26. */
+	const alternatives = $derived(app ? (report.alternatives ?? []) : []);
 	const outlet = $derived(report.river[0] ?? null);
 	/** evidence-14: both impact bases; undefined in a pack drafted before it. */
 	const authorised = $derived(report.licenceImpactAuthorised);
@@ -100,6 +104,18 @@
 				<span class="sub">Run {fmtDate(id.application.createdAt)} by {id.application.createdBy ?? FORMER_MEMBER}</span>
 			</dd>
 		</div>
+		<!-- evidence-26 (294_wula_reference): the WULA it models; the works in words are A.2's (G13). Null on a team scenario that records none; absent before evidence-26. -->
+		{#if id.application.wula}
+			{@const w = wulaPage1(id.application.wula)}
+			<div data-testid="evidence-wula">
+				<dt>WULA</dt>
+				<dd>
+					{#if w.number}{w.number}{:else}<strong>No application number given</strong>{/if}
+					<span class="sub">{w.works}</span>
+					{#each w.tie as t, i (i)}<span class="sub">{t}</span>{/each}
+				</dd>
+			</div>
+		{/if}
 	{/if}
 	<div>
 		<dt>Engine</dt>
@@ -154,6 +170,10 @@
 					<th scope="col" class="num">Change (R2)<span class="sub">median, 5–95 %</span></th>
 					<th scope="col" class="num">Worse in</th>
 				{/if}
+				{#each alternatives as a, k (a.runId)}
+					{@const h = alternativeHeading(a, k)}
+					<th scope="col" class="num alt" data-testid="evidence-alternative-heading">{h.label}<span class="sub">{h.sub}</span><span class="sub">value · change</span></th>
+				{/each}
 			</tr>
 		</thead>
 		<tbody>
@@ -175,12 +195,25 @@
 							<td class="num" class:na={!r.change?.worse}>{worseText(r.change)}</td>
 						{/if}
 					{/if}
+					{#each alternatives as a, k (a.runId)}
+						{@const t = alternativeCellText(r, r.alternatives?.[k])}
+						{#if t.notAssessed}
+							<td class="na wrap alt">{t.notAssessed}</td>
+						{:else}
+							<td class="num alt">{t.value}{#if t.change}<span class="sub">{t.change}</span>{/if}{#if t.sub}<span class="sub">{t.sub}</span>{/if}{#if t.note}<span class="sub">{t.note}</span>{/if}</td>
+						{/if}
+					{/each}
 				</tr>
 			{/each}
 		</tbody>
 	</table>
 </div>
 {#if rows.more}<p class="small muted">{rows.more} more users’ supply changed: § 4 lists every one.</p>{/if}
+{#if alternatives.length}
+	<p class="small muted" data-testid="evidence-alternatives-note">
+		The last {alternatives.length === 1 ? 'column is a mitigation alternative' : `${alternatives.length} columns are mitigation alternatives`} the applicant weighed: each a run of another of their scenarios on this baseline, its value and its change against the baseline, banded only by its own paired ensemble. Appendix A.2 lists each one’s changes.
+	</p>
+{/if}
 <p class="small muted">{report.rules.footnote} “run:” is the nominated run’s own difference.</p>
 
 {#if app && authorised}

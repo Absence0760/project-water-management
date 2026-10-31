@@ -373,4 +373,11 @@ describe('the gap-filling product and the rain credits in the report (issue #604
 		expect(c[1]!.lines[0]).toContain('accessed 2026-10-27');
 		expect(reportRainCredits({ createdAt: '2026-10-27T09:00:00Z', forecastRainSource: 'chirps_gefs', summary: {} })).toEqual([]);
 	});
+
+	it('credits AgERA5 and NASA POWER after the rain products when GR4J read their reference ET (issue #604 R5-E)', () => {
+		const c = reportRainCredits({ createdAt: '2026-10-30T09:00:00Z', et0Products: ['agera5_et0', 'power_et0'], summary: {} });
+		expect(c.map((x) => x.name)).toEqual(['AgERA5 reference evapotranspiration', 'NASA POWER reference evapotranspiration']);
+		expect(c[0]!.lines[0]).toContain('information 2026.');
+		expect(reportRainCredits({ createdAt: '2026-10-30T09:00:00Z', et0Products: [], summary: {} })).toEqual([]);
+	});
 });

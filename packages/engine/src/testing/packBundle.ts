@@ -22,12 +22,15 @@ import {
 	type PackBundleRun
 } from '../evidence';
 import { applyScenario } from '../scenario/overrides';
+import { applicationMask } from '../scenario/applicant';
+import { replayAssessment, type BundleAssessmentMember, type BundleAssessmentReport, type PackBundleAssessment } from '../evidence/bundleAssessment';
 import type { ScenarioOp } from '../scenario/ops';
 import { localityMapSvg } from '../geo/localityMap';
-import type { EvidenceReport } from '../evidence/types';
+import type { EvidenceAlternative, EvidenceReport, EvidenceRow } from '../evidence/types';
+import { alternativeSummaryCell } from '../evidence/report';
 import { damObservationsSection, damObservationsSectionV1, type EvidenceDamObservations, type EvidenceDamObservationsAny, type EvidenceDamObservationsV1 } from '../evidence/damObservations';
 import { canonicalJson, seriesDigest } from '../manifest';
-import type { ModelInput, ModelOutput, NetworkNode } from '../project';
+import type { ModelInput, ModelOutput, NetworkNode, RunSummary } from '../project';
 import { Rng } from '../random';
 import { runModelChecked } from '../run';
 import { ENGINE_VERSION } from '../version';
@@ -192,10 +195,13 @@ export function packBundleFixture(
 		observations?: boolean | EvidenceDamObservationsAny;
 		/** § 8 (evidence-23): Farm one gets a dam, and the report the future yield of the fixture's factors (or this result, a tampered one). */
 		future?: boolean | ((r: FutureYieldResult) => FutureYieldResult);
+		/** A second farm, "Other farm" (F2), beside Farm one: hidden from an applicant owning Farm one only. */
+		otherFarm?: boolean;
 	} = {}
 ): PackBundleInput {
 	const base = packFixtureInput();
 	if (opts.future) base.model.nodes = base.model.nodes.map((n) => (n.id === 'F1' ? { ...n, ...FUTURE_FIXTURE_DAM } : n));
+	if (opts.otherFarm) base.model.nodes = [...base.model.nodes, OTHER_FARM];
 	// Two CHIRPS series, the one read the shorter (engine ≥ 1.90.0, issue #561): its runs warn, and the warning reads input.seriesChoice.
 	if (opts.seriesChoice) {
 		base.series.rain_chirps_mm = { startDate: START, values: Array.from({ length: 30 }, () => 1) };
@@ -358,4 +364,237 @@ export async function headlinePackFixture(hash: SyncHash, opts: { legacy?: boole
 	} as unknown as EvidenceReport;
 	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
 	return { manifest: JSON.parse(JSON.stringify(manifest)), baseline, application };
+}
+
+/** The assessment fixture's ids (synthetic). */
+export const ASSESSMENT_FIXTURE = {
+	id: '00000000-0000-4000-8000-0000000000b9',
+	background: '00000000-0000-4000-8000-0000000000a9',
+	thisScenario: '00000000-0000-4000-8000-0000000000c1',
+	other: '00000000-0000-4000-8000-0000000000c2'
+} as const;
+const ASSESSMENT_THIS_OPS: ScenarioOp[] = [{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2: 600_000 }];
+const ASSESSMENT_OTHER_OPS: ScenarioOp[] = [{ op: 'cropArea.set', nodeId: 'F2', cropId: 'c', areaM2: 400_000 }];
+const FULL_ALLOCATION_OPS: ScenarioOp[] = [{ op: 'settings.set', path: 'allocationMode', value: 'fullAllocation' }];
+
+/**
+ * An application pack whose § 4 combined row reads a cumulative assessment
+ * (bundle-3): Farm one (with a dam, and registered volumes) doubles its maize
+ * (this application, an applicant's, owning Farm one), Farm two grows more
+ * (another applicant's); the assessment's stored report is the engine's own
+ * re-run of it (bundleAssessment.ts replayAssessment, with Farm one's dam
+ * rows), and with `background` its full-allocation background too. The
+ * manifest's combined section is read from that report as report.ts reads it.
+ */
+export function assessmentPackFixture(hash: SyncHash, opts: { background?: boolean; dams?: number } = {}): PackBundleInput {
+	const base = packFixtureInput();
+	// With `dams` above 1, more farms with a dam (D2 …), each a little more maize in the other application: more dams touched.
+	const extra = Array.from({ length: Math.max(0, (opts.dams ?? 1) - 1) }, (_, i) => `D${i + 2}`);
+	base.model.nodes = [
+		...base.model.nodes.map((n) => (n.id === 'F1' ? { ...n, ...FUTURE_FIXTURE_DAM } : n)),
+		node({ id: 'F2', name: 'Farm two', downstreamNodeId: 'G', areaKm2: 10, sortOrder: 1 }),
+		...extra.map((id, i) => node({ id, name: `Dam farm ${id}`, downstreamNodeId: 'G', areaKm2: 5, sortOrder: 2 + i, ...FUTURE_FIXTURE_DAM }))
+	];
+	base.model.cropAreas = [...base.model.cropAreas, { nodeId: 'F2', cropId: 'c', areaM2: 200_000 }, ...extra.map((nodeId) => ({ nodeId, cropId: 'c', areaM2: 50_000 }))];
+	const otherOps: ScenarioOp[] = [...ASSESSMENT_OTHER_OPS, ...extra.map((nodeId) => ({ op: 'cropArea.set' as const, nodeId, cropId: 'c', areaM2: 80_000 }))];
+	base.model.allocations = structuredClone(HEADLINE_ALLOCATIONS);
+	const baselineOut = runModelChecked(structuredClone(base));
+	const baseline = storedRun(hash, '00000000-0000-4000-8000-0000000000a1', base, baselineOut);
+	const members: BundleAssessmentMember[] = [
+		{ id: ASSESSMENT_FIXTURE.thisScenario, scenarioId: ASSESSMENT_FIXTURE.thisScenario, name: 'Farm one maize', origin: 'applicant', ops: ASSESSMENT_THIS_OPS, opsSha256: hash(canonicalJson(ASSESSMENT_THIS_OPS)), ownedNodeIds: ['F1'] },
+		{ id: ASSESSMENT_FIXTURE.other, scenarioId: ASSESSMENT_FIXTURE.other, name: 'Farm two maize', origin: 'applicant', ops: otherOps, opsSha256: hash(canonicalJson(otherOps)), ownedNodeIds: ['F2', ...extra] }
+	];
+	const appInput = applyScenario(base, ASSESSMENT_THIS_OPS, { mask: applicationMask(base, ['F1']) }).input;
+	const application = storedRun(hash, '00000000-0000-4000-8000-0000000000a2', appInput, runModelChecked(structuredClone(appInput)), {
+		id: ASSESSMENT_FIXTURE.thisScenario,
+		baseRunId: baseline.runId,
+		ops: ASSESSMENT_THIS_OPS,
+		opsSha256: members[0]!.opsSha256
+	});
+	const report: BundleAssessmentReport = replayAssessment(base, members, { dams: true, baseline: baselineOut });
+	let background: PackBundleAssessment['background'] = null;
+	if (opts.background) {
+		const bgInput = applyScenario(base, FULL_ALLOCATION_OPS).input;
+		const bgRun = storedRun(hash, ASSESSMENT_FIXTURE.background, bgInput, runModelChecked(structuredClone(bgInput)), {
+			baseRunId: baseline.runId,
+			ops: FULL_ALLOCATION_OPS,
+			opsSha256: hash(canonicalJson(FULL_ALLOCATION_OPS))
+		});
+		background = { runId: bgRun.runId, inputs: bgRun.inputs, values: bgRun.values };
+		report.background = {
+			label: 'Existing authorised use (full allocation)',
+			run: { id: bgRun.runId, label: 'Full allocation' },
+			report: replayAssessment(bgInput, members, { dams: false, what: 'At full allocation' })
+		};
+	}
+	const stored = JSON.parse(JSON.stringify(report)) as BundleAssessmentReport;
+	const measure = (r: BundleAssessmentReport['rows'][number] | undefined) =>
+		r ? { baseline: r.baseline, combined: r.combined, change: r.combinedChange, sumOfSingles: r.sumOfSingles, interaction: r.interaction } : null;
+	const outlet = (rows: BundleAssessmentReport['rows'], metric: string) => rows.find((r) => r.metric === metric && r.isOutlet);
+	const ewr = outlet(stored.rows, 'ewr_days_not_met');
+	const reserve = outlet(stored.rows, 'reserve_months_met');
+	const engineVersion = ENGINE_VERSION;
+	const combined = {
+		applications: members.map((m, i) => ({
+			scenarioId: m.scenarioId,
+			scenarioName: m.name,
+			status: 'submitted',
+			outcome: null,
+			isThis: i === 0,
+			ewrDays: ewr?.singleChanges[i] ?? null,
+			reserveMonths: reserve?.singleChanges[i] ?? null
+		})),
+		assessment: { id: ASSESSMENT_FIXTURE.id, name: 'Both farms', createdAt: '2026-10-30T00:00:00.000Z', createdBy: 'Analyst', engineVersion },
+		conflicts: [],
+		problems: [],
+		ewrDays: measure(ewr),
+		reserveMonths: measure(reserve),
+		warnings: stored.warnings,
+		notAssessed: null,
+		dams: (stored.dams?.nodeIds ?? []).map((id) => {
+			const row = (metric: string) => stored.rows.find((r) => r.metric === metric && r.siteNodeId === id);
+			return { nodeId: id, name: row('dam_firm_yield')!.site, firmYield: measure(row('dam_firm_yield')), reliability: measure(row('dam_reliability')), verdict: { firmYield: null, reliability: null }, onVolumes: stored.dams!.onVolumes };
+		}),
+		background: stored.background
+			? { label: stored.background.label, runLabel: stored.background.run.label, ewrDays: measure(outlet(stored.background.report.rows, 'ewr_days_not_met')), reserveMonths: measure(outlet(stored.background.report.rows, 'reserve_months_met')) }
+			: null
+	};
+	const listed = (run: PackBundleRun, name: 'baseline' | 'application') =>
+		Object.entries(run.inputs.series).map(([kind, s]) => ({ run: name, kind, startDate: s!.startDate, days: s!.length, sha256: s!.valuesSha256 ?? null }));
+	const project = { id: '00000000-0000-4000-8000-0000000000f1', name: 'Catchment' };
+	const evidence = {
+		version: 'evidence-26',
+		mode: 'application',
+		builtBy: ENGINE_VERSION,
+		identity: {
+			title: 'Catchment',
+			project,
+			baseline: { runId: baseline.runId, engineVersion: baseline.engineVersion, startDate: START, endDate: END },
+			application: { runId: application.runId, engineVersion: application.engineVersion, scenarioId: ASSESSMENT_FIXTURE.thisScenario, opsSha256: members[0]!.opsSha256 }
+		},
+		issuable: true,
+		refused: false,
+		appendix: {
+			baselineInputs: baseline.inputs,
+			changes: diffInputs(baseline.inputs, application.inputs, { a: baseline.values, b: application.values }),
+			series: [...listed(baseline, 'baseline'), ...listed(application, 'application')]
+		},
+		summaries: { baseline: baseline.summary, application: application.summary },
+		cumulative: { applications: [], combined, counted: 0, truncated: false, total: { ewrDays: null, reservePp: null }, withThis: null }
+	} as unknown as EvidenceReport;
+	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report: evidence, engine: { version: ENGINE_VERSION, build: null } });
+	return {
+		manifest: JSON.parse(JSON.stringify(manifest)),
+		baseline,
+		application,
+		assessment: {
+			id: ASSESSMENT_FIXTURE.id,
+			name: 'Both farms',
+			engineVersion,
+			baseRunId: baseline.runId,
+			backgroundRunId: background?.runId ?? null,
+			members,
+			report: stored,
+			background
+		}
+	};
+}
+
+/** A second farm beside Farm one (synthetic), hidden from an applicant who owns Farm one only. */
+const OTHER_FARM: NetworkNode = node({ id: 'F2', name: 'Other farm', downstreamNodeId: 'G', areaKm2: 10, sortOrder: 1 });
+
+/** The alternatives fixture's runs (synthetic): Farm one's maize at 450 000 m² and at 500 000 m² instead of the application's 600 000. */
+export const ALTERNATIVE_FIXTURE_AREAS = [450_000, 500_000] as const;
+
+/**
+ * An application pack whose page 1 sets mitigation alternatives beside it
+ * (evidence-26, 298_scenario_alternatives; bundle-3): the default pack, and
+ * `count` (1 or 2) alternatives, each a scenario run of the baseline with its
+ * own ops (Farm one's maize at a smaller area), and page-1 rows whose
+ * alternative cells read the runs' summaries as report.ts does
+ * (alternativeSummaryCell). With `unassessed`, the last alternative's column
+ * is not assessed (another baseline), so the bundle carries no run of it.
+ */
+export function alternativesPackFixture(hash: SyncHash, opts: { count?: number; unassessed?: boolean; applicant?: boolean } = {}): PackBundleInput {
+	const p = packBundleFixture(hash, { otherFarm: opts.applicant });
+	const base = packFixtureInput();
+	if (opts.applicant) base.model.nodes = [...base.model.nodes, OTHER_FARM];
+	// An applicant's (owning Farm one): its ops apply under the mask, which hides Other farm, so naming Farm one after it applies
+	// (Other farm becomes "Other farm (2)"); without the mask it is a duplicate name and wouldn't.
+	const mask = opts.applicant ? { mask: applicationMask(base, ['F1']) } : {};
+	const runs: PackBundleRun[] = [];
+	const listed: EvidenceAlternative[] = [];
+	ALTERNATIVE_FIXTURE_AREAS.slice(0, opts.count ?? 1).forEach((areaM2, i) => {
+		const ops: ScenarioOp[] = [
+			{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2 },
+			...(opts.applicant ? [{ op: 'node.set' as const, nodeId: 'F1', field: 'name' as const, value: 'Other farm' }] : [])
+		];
+		const input = applyScenario(base, ops, mask).input;
+		const scenarioId = `00000000-0000-4000-8000-0000000000d${i + 1}`;
+		const run = storedRun(hash, `00000000-0000-4000-8000-0000000000b${i + 1}`, input, runModelChecked(structuredClone(input)), {
+			id: scenarioId,
+			baseRunId: p.baseline.runId,
+			ops,
+			opsSha256: hash(canonicalJson(ops)),
+			ownedNodeIds: ['F1']
+		});
+		const unassessed = opts.unassessed && i === (opts.count ?? 1) - 1;
+		if (!unassessed) runs.push(run);
+		listed.push({
+			label: `Smaller field ${i + 1}`,
+			runId: run.runId,
+			runLabel: '',
+			engineVersion: run.engineVersion,
+			createdAt: '2026-10-30T00:00:00.000Z',
+			createdBy: 'Applicant',
+			scenarioId,
+			scenarioName: `Smaller field ${i + 1}`,
+			opsSha256: hash(canonicalJson(ops)),
+			ops: ops.map((op, index) => ({ index, class: 'proposal' as const, op })),
+			proposals: 1,
+			assumptions: 0,
+			allocationMode: null,
+			pairedId: null,
+			notAssessed: unassessed ? 'Not assessed: this alternative ran on another baseline than the application.' : null
+		});
+	});
+	const report = structuredClone(p.manifest.report) as EvidenceReport;
+	const baseSummary = p.baseline.summary as RunSummary;
+	const appSummary = p.application!.summary as RunSummary;
+	const subjects: { id: EvidenceRow['id']; subject: string | null }[] = [
+		...(baseSummary.ewrAssurance ?? []).map((s) => ({ id: 'reserve' as const, subject: s.name })),
+		{ id: 'ewrDays', subject: null },
+		{ id: 'shortfall', subject: null },
+		{ id: 'noFlowDays', subject: null },
+		{ id: 'outflowMar', subject: null },
+		{ id: 'applicantSupply', subject: null }
+	];
+	report.alternatives = listed;
+	if (opts.applicant) report.identity = { ...report.identity, application: { ...report.identity.application!, origin: 'applicant' } };
+	report.rows = subjects.map(({ id, subject }): EvidenceRow => {
+		const app = alternativeSummaryCell({ id, subject }, baseSummary, appSummary);
+		return {
+			id,
+			label: id,
+			basis: '',
+			subject,
+			unit: '',
+			higherIsWorse: true,
+			baseline: null,
+			application: app?.value ?? null,
+			change: app ? { run: app.run, band: null, bandNote: 'no band', worse: null } : null,
+			notAssessed: null,
+			note: null,
+			alternatives: listed.map((alt) => {
+				if (alt.notAssessed) return { value: null, change: null, notAssessed: alt.notAssessed, note: null };
+				const run = runs.find((r) => r.runId === alt.runId)!;
+				// A row that reads more than the summary (the applicant's own supply): an invented value the check leaves alone.
+				const c = alternativeSummaryCell({ id, subject }, baseSummary, run.summary as RunSummary) ?? { value: 42, run: 1 };
+				return { value: c.value, change: { run: c.run, band: null, bandNote: 'no band', worse: null }, notAssessed: null, note: null };
+			})
+		};
+	});
+	const project = { id: '00000000-0000-4000-8000-0000000000f1', name: 'Catchment' };
+	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
+	return { ...p, manifest: JSON.parse(JSON.stringify(manifest)), alternatives: runs };
 }

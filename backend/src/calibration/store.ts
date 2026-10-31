@@ -26,7 +26,6 @@ import {
 	prepareAutoCase,
 	resolveCalibrationRules,
 	resolveEnsembleOptions,
-	runAutoCase,
 	sameRules,
 	sameSignOff,
 	withoutForecastTail,

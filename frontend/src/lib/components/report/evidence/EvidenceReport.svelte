@@ -51,6 +51,8 @@
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
+	import { opWorksText } from './wula';
+	import { alternativeLine } from './alternatives';
 	import { CHANGE_LABEL, sizingText } from './demandObjects';
 	import { factorText, futureRows } from './future';
 	import { sourceLabel, sourceLine } from '#lib/components/runs/demandSources.js';
@@ -94,8 +96,25 @@
 		const list = report.ops.map((o) => o.op);
 		const before = stepInputs(input, list).before;
 		const names = namesOf([base.model], list);
-		return report.ops.map((o, i) => ({ index: o.index, cls: o.class, text: describeOp(o.op, before[i] ?? null, names) }));
+		const wula = report.identity.application?.wula;
+		return report.ops.map((o, i) => ({
+			index: o.index,
+			cls: o.class,
+			text: describeOp(o.op, before[i] ?? null, names),
+			// evidence-26: which applied-for works the change models (null before evidence-26, or on a team scenario that records no WULA).
+			works: wula ? opWorksText(wula, o.index, o.op.works, o.class) : null
+		}));
 	});
+
+	// Appendix A.2's mitigation alternatives (evidence-26): each one's ops in words, against the baseline input they meet.
+	const altOps = $derived.by(() =>
+		(app ? (report.alternatives ?? []) : []).map((a) => {
+			const list = a.ops.map((o) => o.op);
+			const before = stepInputs(snapshotInput(base.model, base.settings), list).before;
+			const names = namesOf([base.model], list);
+			return { alt: a, ops: a.ops.map((o, i) => ({ index: o.index, cls: o.class, text: describeOp(o.op, before[i] ?? null, names) })) };
+		})
+	);
 
 	/** A site's FDC points for one calendar month, both runs, with each run's 5–95 % band where the report has one (ER5). */
 	function fdcPoints(key: string, month: number) {
@@ -167,6 +186,12 @@
 	const combinedStatus = (o: NonNullable<EvidenceReport['cumulative']['combined']>['applications'][number]) =>
 		o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome ?? '–'}` : (o.status ?? '–');
 	const measureText = (v: number | null | undefined, unit: string) => (v === null || v === undefined ? '–' : `${signed(v, 0)} ${unit}`);
+	// evidence-26: § 4's dams together (a firm yield in m³/year, an assurance of supply as a share), or a direction alone.
+	const damYield = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${fmtNum(v, 0)} m³/year`);
+	const damYieldChange = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${signed(v, 0)} m³/year`);
+	const damShare = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${fmtNum(v * 100, 0)} %`);
+	const damShareChange = (v: number | null | undefined) => (v === null || v === undefined ? '–' : `${signed(v * 100, 0)} pts`);
+	const damVerdict = (v: 'lower' | 'unchanged' | 'higher' | null) => (v === null ? '–' : v === 'unchanged' ? 'Unchanged' : v === 'lower' ? 'Lower' : 'Higher');
 	const use = $derived(useRows(al));
 	/** Page 1's row says why nothing is judged when every year is a part year. */
 	const useJudged = $derived(report.rows.find((r) => r.id === 'registeredUse')?.notAssessed ?? null);
@@ -637,7 +662,93 @@
 									: ''}: the baseline, each application alone and all together, run on one engine, so these changes may differ from the stored runs’ above.
 							</p>
 						{/if}
+						{#if cb.dams?.length}
+							<!-- evidence-26: each dam the applications touch, from the same assessment; directions only where a run rested on the registered volumes and this reader is kept from them. -->
+							<div class="table-wrap">
+								<table class="data compact" data-testid="evidence-combined-dams">
+									<caption class="visually-hidden">Each dam the applications touch, on the baseline and with every application together</caption>
+									<thead>
+										<tr>
+											<th scope="col">Dam</th>
+											<th scope="col" class="num">Firm yield, baseline</th>
+											<th scope="col" class="num">Together, change</th>
+											<th scope="col" class="num">Interaction</th>
+											<th scope="col" class="num">Assurance of supply, baseline</th>
+											<th scope="col" class="num">Together, change</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each cb.dams as d (d.nodeId)}
+											<tr>
+												<th scope="row">{d.name}</th>
+												{#if d.withheld}
+													<td class="num">–</td>
+													<td class="num">{damVerdict(d.verdict.firmYield)}</td>
+													<td class="num">–</td>
+													<td class="num">–</td>
+													<td class="num">{damVerdict(d.verdict.reliability)}</td>
+												{:else}
+													<td class="num">{damYield(d.firmYield?.baseline)}</td>
+													<td class="num">{damYieldChange(d.firmYield?.change)}</td>
+													<td class="num">{damYieldChange(d.firmYield?.interaction)}</td>
+													<td class="num">{damShare(d.reliability?.baseline)}</td>
+													<td class="num">{damShareChange(d.reliability?.change)}</td>
+												{/if}
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+							<p class="small" data-testid="evidence-combined-dams-note">
+								Firm yield: the largest steady draft each dam supplies on every day of the record, worked out on the baseline, each application alone
+								and all together (a constant draft, as the Yield panel’s default). Assurance of supply: the share of water years its unit’s demand was
+								met.{#if cb.dams.some((d) => d.withheld)} Where a run capped use at, or scaled demand to, the registered volumes, only the direction is given: the figures rest on volumes this reader isn’t shown.{/if}
+							</p>
+						{/if}
 						{#each cb.warnings as w (w)}<p class="na">{w}</p>{/each}
+						{#if cb.background}
+							{@const bg = cb.background}
+							<!-- evidence-26: the assessment's background at full allocation, its own rows beside the baseline's, never in their place. -->
+							<h4>{bg.label}</h4>
+							<p class="small">
+								The same applications on “{bg.runLabel || 'a run of this baseline at full allocation'}”: the baseline with every registered or licensed
+								volume taken in full, which the assessor chose for this assessment. A separate comparison: the figures above are against the baseline as
+								the hydrologist modelled it, and stay so.
+							</p>
+							<div class="table-wrap">
+								<table class="data compact" data-testid="evidence-combined-background">
+									<thead>
+										<tr>
+											<th scope="col">At the outlet</th>
+											<th scope="col" class="num">Days below {dailyName}</th>
+											<th scope="col" class="num">Reserve months met at the outlet</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<th scope="row">At full allocation<span class="sub">against the baseline</span></th>
+											<td class="num">{bg.ewrDays?.baseline ?? '–'}{bg.ewrDays?.baseline != null && cb.ewrDays?.baseline != null ? ` (${measureText(bg.ewrDays.baseline - cb.ewrDays.baseline, 'days')})` : ''}</td>
+											<td class="num">{bg.reserveMonths?.baseline ?? '–'}{bg.reserveMonths?.baseline != null && cb.reserveMonths?.baseline != null ? ` (${measureText(bg.reserveMonths.baseline - cb.reserveMonths.baseline, 'months')})` : ''}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">Sum of each alone</th>
+											<td class="num">{measureText(bg.ewrDays?.sumOfSingles, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.sumOfSingles, 'months')}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">All together</th>
+											<td class="num">{measureText(bg.ewrDays?.change, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.change, 'months')}</td>
+										</tr>
+										<tr class="total">
+											<th scope="row">Interaction<span class="sub">together, beyond the sum of each alone</span></th>
+											<td class="num">{measureText(bg.ewrDays?.interaction, 'days')}</td>
+											<td class="num">{measureText(bg.reserveMonths?.interaction, 'months')}</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						{/if}
 					{/if}
 				{/if}
 			{:else if s.id === 'allocations'}
@@ -934,13 +1045,44 @@
 				</div>
 				<h3>A.2 What the application changes</h3>
 				{#if app}
+					<!-- evidence-26 (294_wula_reference): the WULA it models and its works as applied for, in words; then each change with the works it models. -->
+					{#if id.application?.wula}
+						{@const wula = id.application.wula}
+						<div class="wula" data-testid="evidence-a2-wula">
+							<p>
+								<strong>Water-use licence application</strong>
+								{#if wula.number}{wula.number}{:else}<span class="na">number not given</span>{/if}.
+								{#if !(report.appendix.wulaWorks ?? []).length}<span class="na">No works listed.</span>{/if}
+							</p>
+							{#if (report.appendix.wulaWorks ?? []).length}
+								<dl class="wula-works">
+									{#each report.appendix.wulaWorks ?? [] as w (w.ref)}<div><dt>{w.ref}</dt><dd>{w.text}</dd></div>{/each}
+								</dl>
+							{/if}
+						</div>
+					{/if}
 					<ol class="ops" data-testid="evidence-ops">
-						{#each ops as o (o.index)}<li><span class="pill" class:pill-red={o.cls === 'baseline'}>{CLASS_LABEL[o.cls]}</span> {o.text}</li>{/each}
+						{#each ops as o (o.index)}<li>
+								<span class="pill" class:pill-red={o.cls === 'baseline'}>{CLASS_LABEL[o.cls]}</span>
+								{o.text}{#if o.works}<span class="op-works" class:op-works-none={!o.works.tied}> · {o.works.text}</span>{/if}
+							</li>{/each}
 					</ol>
 					<p class="small muted">The input diff, application against baseline (every resolved input that differs):</p>
 					<ul class="changes">
 						{#each report.appendix.changes as c, i (i)}<li>{c.text}</li>{:else}<li class="na">No input differs.</li>{/each}
 					</ul>
+					<!-- evidence-26 (298_scenario_alternatives): page 1's other columns, each with the changes its run made. -->
+					{#if altOps.length}
+						<h4>Mitigation alternatives (page 1’s other columns)</h4>
+						{#each altOps as x (x.alt.runId)}
+							<div class="alternative" data-testid="evidence-a2-alternative">
+								<p><strong>{x.alt.label}</strong>: {alternativeLine(x.alt)}.{#if x.alt.notAssessed} <span class="na">{x.alt.notAssessed}</span>{/if}</p>
+								<ol class="ops">
+									{#each x.ops as o (o.index)}<li><span class="pill" class:pill-red={o.cls === 'baseline'}>{CLASS_LABEL[o.cls]}</span> {o.text}</li>{:else}<li class="na">No changes.</li>{/each}
+								</ol>
+							</div>
+						{/each}
+					{/if}
 				{:else}
 					<p class="na">None: a baseline-evidence report has no application.</p>
 				{/if}
@@ -1213,6 +1355,33 @@
 	.ops li,
 	.changes li {
 		margin: 0.15rem 0;
+	}
+	.op-works {
+		color: var(--text-2);
+	}
+	.op-works-none {
+		color: var(--warning);
+	}
+	.wula p {
+		margin: 0.25rem 0;
+	}
+	.wula-works {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 0.15rem 0.75rem;
+		margin: 0.25rem 0 0.5rem;
+		max-width: 90ch;
+	}
+	.wula-works div {
+		display: contents;
+	}
+	.wula-works dt {
+		font-weight: 600;
+	}
+	.wula-works dd {
+		margin: 0;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 	}
 	.pill {
 		display: inline-block;

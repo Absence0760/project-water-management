@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "The mitigation alternatives (298): the editor's Alternatives fold (MitigationAlternatives.svelte, scenarios/alternatives.ts) and page 1's alternative columns and A.2 list (report/evidence/alternatives.ts); measured 2302 KB at 92d9011ab, 2304 KB with the change"
+}

@@ -55,7 +55,11 @@ export const TAB_GROUP = {
 	// Submitted applications, for the assessors to decide (WP-3.3).
 	applications: 'assess',
 	// The change log of the inputs, with restore actions a viewer can't use.
-	history: 'inputs'
+	history: 'inputs',
+	// Every restriction the WUA published and every change to its notice (the decision log, docs/ui.md § Restriction
+	// log): core, read by viewers (the CMA's member too); the API refuses farmers. LINKED_ONLY: it opens from the
+	// Publication panel.
+	restrictions: 'core'
 } as const satisfies Record<string, TabGroup>;
 
 export type TabId = keyof typeof TAB_GROUP;
@@ -83,7 +87,8 @@ export const TAB_LABELS: Record<TabId, string> = {
 	allocations: 'Allocations',
 	project: 'Project',
 	applications: 'Applications',
-	history: 'History'
+	history: 'History',
+	restrictions: 'Restriction log'
 };
 
 /** Every known tab, in workflow order. */
@@ -98,9 +103,10 @@ export const ALL_TABS = Object.keys(TAB_GROUP) as TabId[];
  * full since Calibration took its last row (app-sidebar.spec.ts). A saved
  * hidden-sections list that names it is harmless: hiddenTabs only counts tabs
  * the sidebar lists. The Map was one too (issue #288) until it got a row of
- * its own (#326 D3), and Warnings while it was new.
+ * its own (#326 D3), and Warnings while it was new. The Restriction log
+ * opens from the Publication panel (Runs & results) and shows under Review.
  */
-export const LINKED_ONLY: readonly TabId[] = ['compare'];
+export const LINKED_ONLY: readonly TabId[] = ['compare', 'restrictions'];
 
 /** The tab that can never be hidden: the project's landing page. */
 export const ALWAYS_SHOWN: TabId = 'overview';
@@ -154,7 +160,8 @@ export const TAB_ADDS_DATA: Readonly<Record<TabId, boolean>> = {
 	allocations: false,
 	project: false,
 	applications: false,
-	history: false
+	history: false,
+	restrictions: false
 };
 
 /** True when tab `id` shows Add data (TAB_ADDS_DATA); an unknown id doesn't. */
@@ -195,7 +202,8 @@ export const TAB_GUIDE: Readonly<Record<TabId, string>> = {
 	allocations: 'allocations-page',
 	project: 'project-page',
 	applications: 'applications-page',
-	history: 'history-page'
+	history: 'history-page',
+	restrictions: 'restriction-log-page'
 };
 
 /**
@@ -321,7 +329,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
  * tabs a role sees is still `visibleTabs`, and the URLs stay `?tab=<id>`.
  */
 export const NAV_SECTIONS = [
-	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
+	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history', 'restrictions'] },
 	// Calibration after Settings (issue #586): fitting the runoff parameters is the last step of building the model.
 	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
 	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }

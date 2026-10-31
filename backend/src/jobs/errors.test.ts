@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ApiError } from '../http/errors.js';
-import { describeFailure, JOB_ERROR_MAX, JobError } from './errors.js';
+import { describeFailure, JOB_ERROR_MAX, JobError, unexpectedFailure } from './errors.js';
 
 const pgError = (code: string, message: string) => Object.assign(new Error(message), { code });
 
@@ -43,5 +43,28 @@ describe('describeFailure', () => {
 		const m = describeFailure(new JobError('x'.repeat(2000))).message;
 		expect(m).toHaveLength(JOB_ERROR_MAX);
 		expect(m.endsWith('…')).toBe(true);
+	});
+});
+
+describe('unexpectedFailure', () => {
+	it('stores fixed words, never retried, and logs the detail as name, code and stack frames only', () => {
+		const lines: string[] = [];
+		const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => void lines.push(a.map(String).join(' ')));
+		const log = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => void lines.push(a.map(String).join(' ')));
+		const warn = vi.spyOn(console, 'warn').mockImplementation((...a: unknown[]) => void lines.push(a.map(String).join(' ')));
+		try {
+			const err = unexpectedFailure(new TypeError('cannot read /var/task/secret-detail.js for holder Jane'), 'the sweep failed', { id: 'j', projectId: 'p', kind: 'sweep' });
+			expect(err).toBeInstanceOf(JobError);
+			expect([err.message, err.retry]).toEqual(['the sweep failed', false]);
+			expect(describeFailure(err)).toEqual({ message: 'the sweep failed', retry: false, expected: true });
+			const logged = lines.join('\n');
+			expect(logged).toContain('job_unexpected_error');
+			expect(logged).toContain('TypeError');
+			expect(logged).not.toContain('Jane');
+		} finally {
+			spy.mockRestore();
+			log.mockRestore();
+			warn.mockRestore();
+		}
 	});
 });

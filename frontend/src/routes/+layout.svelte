@@ -1,13 +1,12 @@
 <script lang="ts">
 	import { onMount, untrack, type Snippet } from 'svelte';
-	import { goto, onNavigate } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { basePath } from '#lib/nav/base.js';
 	import { page } from '$app/state';
 	import { api, ApiError } from '#lib/api/index.js';
 	import { safeNext } from '#lib/auth/redirect.js';
 	import { watchScrollRegions } from '#lib/a11y/scrollRegions.js';
-	import { stylesheetsReady } from '#lib/nav/stylesheets.js';
 	import { isAccountPath, isFarmerOnly, provideFarmFrame } from '#lib/auth/frame.js';
 	import { loadMfaPrompt, mfaPrompt, noteMfaRefusal, promptKind, resetMfaPrompt } from '#lib/auth/mfaPrompt.svelte.js';
 	import { askForCode, freshCode } from '#lib/auth/freshCode.svelte.js';
@@ -80,10 +79,6 @@
 		sessionAsked = true;
 		untrack(checkSession);
 	});
-	// A client navigation commits only once the new page's stylesheets have
-	// loaded; otherwise SvelteKit + Vite can render it unstyled for a moment
-	// and a scroll or measurement made then is wrong ($lib/nav/stylesheets).
-	onNavigate(() => stylesheetsReady());
 	// Unsaved work (a page registers it, lib/nav/unsaved.ts) is asked about in the app's
 	// own dialog before a navigation drops it; ConfirmHost below shows every such question.
 	installLeaveGuard();

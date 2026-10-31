@@ -11,11 +11,14 @@
 // upgrade an editor re-runs it on the new engine from the same bar, and the
 // new outcome is recorded beside the old.
 // The pack has a map, so its § 1 prints the locality map (evidence-12).
+// A second test: a viewer the project keeps from each registered volume reads
+// on the pack's page that the reproduction bundle alone is withheld when only
+// a cited alternative's run carries a volume (bundle-3, `bundleWithheld`).
 //
 // Needs MinIO (`pnpm dev:s3:up`; CI starts it). Locally, without it the spec
 // is skipped and says why; in CI it never skips.
 import { createHash } from 'node:crypto';
-import { createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { addMember, createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { ageReproductionEngine } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -142,4 +145,60 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	await expect(reproduced).toContainText(`re-run with engine ${read.reproduction.engineVersion} from the stored reproduction bundle`);
 	await expect(reproduced).not.toContainText('now runs engine');
 	await expect(again).toHaveCount(0);
+});
+
+test('a viewer kept from the volumes reads that the bundle alone is withheld when only a cited alternative’s run carries one (bundle-3)', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Pack bundle withheld');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', evidenceUncertaintyRule: RULE });
+	const baseline = await createRun(page.request, project.id, 'Baseline');
+	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the withheld bundle test');
+	// The ensemble a pack cites, as the first test runs it.
+	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
+	const panel = page.getByTestId('uncertainty-panel');
+	await panel.getByRole('button', { name: 'Run…' }).click();
+	await panel.getByLabel('Parameter sets').fill('30');
+	await panel.getByLabel(/^Lowest skill kept/).fill('-10');
+	await panel.getByLabel('Worst WR2012 flag kept').selectOption('unusable');
+	await panel.getByRole('checkbox', { name: 'Check the low-flow bias' }).uncheck();
+	await panel.getByRole('button', { name: 'Run ensemble' }).click();
+	await expect(panel.getByTestId('kept')).toHaveText(/^\d+ of 31$/);
+	const farm = project.model.nodes.find((n) => n.name === 'Upper farm')!;
+	const scenarioRun = async (name: string, ops: unknown[]) => {
+		const created = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name, baseRunId: baseline, ops, ownedNodeIds: [farm.id] } });
+		expect(created.status(), await created.text()).toBe(201);
+		const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+		const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/runs`, { data: {} });
+		expect(ran.status(), await ran.text()).toBe(201);
+		return { sid, runId: ((await ran.json()) as { run: { id: string } }).run.id };
+	};
+	// The application changes no registered volume; its alternative sets one (an invented volume), so only the bundle holds it.
+	const application = await scenarioRun('Upper dam', [{ op: 'node.set', nodeId: farm.id, field: 'damCapacityM3', value: 300_000 }]);
+	const alternative = await scenarioRun('Upper dam, registered', [
+		{ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: farm.id, waterSource: 'surface', volumeM3PerYear: 4242 } }
+	]);
+	const cited = await page.request.put(`${API_URL}/projects/${project.id}/scenarios/${application.sid}/alternatives`, {
+		data: { alternatives: [{ runId: alternative.runId, label: 'With its registration' }] }
+	});
+	expect(cited.status(), await cited.text()).toBe(200);
+	// The application's paired band on the cited ensemble (a pack needs one).
+	await page.goto(`/compare?a=${project.id}:${baseline}&b=${project.id}:${application.runId}`);
+	const paired = page.getByTestId('paired-uncertainty');
+	await paired.getByRole('button', { name: 'Compute the paired band' }).click();
+	await expect(paired.getByTestId('paired-rule')).toContainText('percentiles of the difference');
+	const drafted = await page.request.post(`${API_URL}/projects/${project.id}/packs`, { data: { runId: application.runId } });
+	expect(drafted.status(), await drafted.text()).toBe(201);
+	const { pack } = (await drafted.json()) as { pack: { id: string } };
+
+	const viewer = await signIn('Withheld bundle viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(`/projects/${project.id}/packs/${pack.id}`);
+	await expect(viewer.page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(viewer.page.getByTestId('pack-bundle-withheld')).toContainText('The reproduction bundle also holds runs this page doesn’t print');
+	// The manifest isn't withheld: the pack's own runs carry no volume.
+	await expect(viewer.page.getByTestId('pack-volumes-withheld')).toHaveCount(0);
+	// The owner reads every volume: no note.
+	await page.goto(`/projects/${project.id}/packs/${pack.id}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('pack-bundle-withheld')).toHaveCount(0);
 });

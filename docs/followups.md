@@ -334,7 +334,11 @@ provenance, `ingest/verify_copy.py`):
       the next one has yielded. Trigger: before the cutover, since the copy
       must keep up for `chirps_source = "mirror"`; until then the next
       daily run after the backfill ends catches up the missed days.
-- [ ] **The portfolio counts a copy-behind feed as stale.** `portfolio.ts`
+- [x] **The portfolio counts a copy-behind feed as stale.** Done: the
+      portfolio and project-list routes pass `rainCopy(db)` into
+      `loadPortfolio`/`loadMyOutcomes`, which count such feeds in a new
+      `feeds.copyBehind` (neither ok nor failing), named apart on the Data
+      column ("1 of 2 feeds waiting for our rain copy"). `portfolio.ts`
       judges feed health without the copy (`feedHealth(f, today, tz)`), so
       a feed the panel shows as **Copy behind** counts there as failing or
       stale once its data is old. Pass the copy (`rainCopy(db)`) into
@@ -399,11 +403,15 @@ provenance, `ingest/verify_copy.py`):
             blocks (`infra/feeds.tf`), once no state still holds the
             queues, and the tftests that cover per-feed fetching
             (`cutover.tftest.hcl` and the queues' assertions elsewhere).
-- [ ] **Two thresholds in two places.** The app's
-      `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matches
+- [x] **Two thresholds in two places.** The app's
+      `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matched
       `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes
-      the alarm doesn't move the app. Pass it to the API as a variable at
-      the cutover if the operator ever tunes it.
+      the alarm didn't move the app. Done 2026-10-31: Terraform passes
+      `ingest_lag_alarm_days` to the API Lambda as the `COPY_FINAL_LAG_DAYS`
+      setting (`infra/lambda.tf`; only the API reads it), `copyFinalLagDays`
+      reads it with 75 as the local default, the API's production check
+      refuses a value outside 60–3650 whole days (the variable's validation
+      matches), and `tests/ingest.tftest.hcl` asserts the two agree.
 - [ ] **ECMWF quantile mapping is fitted on cells, applied to area means**
       (R4-C, [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens)).
       `ingest/ecmwf_qm_fit.py` pairs the ensemble mean with observed rain
@@ -443,14 +451,19 @@ provenance, `ingest/verify_copy.py`):
       **Durable fix:** offer the boundary's proposal for `agera5_et0` too
       (`feeds/fromBoundary.ts` is CHIRPS-specific in its source and target).
       **Trigger:** the first project that adds a reference ET feed.
-- [ ] **Credit AgERA5 and NASA POWER in a run's report and exports.** The
-      feed card credits them and the series is labelled by its feed, but
-      the run's data credits (`engine/liability/rainCredits.ts`) name the
-      rain products only. **Durable fix:** a credit per evaporation product
-      a run read (from the `evap_et0_mm` series' feed and its days, as
-      `forecastRainEcmwf` does for ECMWF), in the report, the workbook and
-      the data sources page. **Trigger:** before the first report or
-      evidence pack on a project with a reference ET feed.
+- [x] **Credit AgERA5 and NASA POWER in a run's report and exports
+      (2026-10-30).** Done: a run records `et0Products` from the feed's
+      days GR4J read, and the report, CSVs, workbook, evidence pack README
+      and Data sources page credit them ([data-sources.md § ERA5-Land](./data-sources.md#era5-land-r4-a), *Where the credits show*).
+- [x] **Record which product wrote each reference ET day (2026-10-30).**
+      Done: the ingest records the days each product wrote
+      (`time_series.feed_agera5_days` / `feed_power_days`,
+      292_feed_et0_product_days, kept within `feed_days` by the same
+      merges and cleared with it), and `runs/execute.ts` `et0FeedDays`
+      reads them instead of splitting at `last_meta.agera5Through`, so a
+      POWER day the feed never re-read after AgERA5's month landed is
+      credited to POWER. A day written before 292 has no product recorded
+      and credits both ([data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)).
 
 ## Observing dams (issue #604 Round 5)
 
@@ -2532,7 +2545,7 @@ headline location's group", engine-audit.md CZ1/CZ2). Slice D built:
   card; a rest unit "nearest upstream: G" (ui.md § Network, maps.md §
   Calibration zones on the map).
 - ✅ **Results, the report and the evidence pack**: the locations table, the
-  headline first, each unit's source named (`evidence-25`, each location's
+  headline first, each unit's source named (`evidence-26`, each location's
   period and every unit's source; evidence-pack.md § Calibration zones).
 - ✅ **The run comparison**: the outlet's tick, the headline, the rest rule
   and one line per unit's Parameters from; legacy snapshots read through the
@@ -4520,8 +4533,10 @@ role and not before it.
       before the fix and 40/40 after; waits under load were a few ms, and
       none reached 1 s in 1,840 tests. Unloaded click → glossary on screen:
       median 59.5 ms before, 58.9 ms after (25 runs each). Tests:
-      `stylesheets.test.ts`.
-- [ ] **Report the CSS-before-render race upstream.** A ready-to-file
+      `stylesheets.test.ts`. **Workaround removed 2026-10-30:** Vite 8.3.4
+      fixed the cause, so `stylesheets.ts` and its test went; help.spec.ts's
+      slowed-stylesheet test guards it now (see "Update Vite to 8.3.4").
+- [x] **Report the CSS-before-render race upstream.** A ready-to-file
       report (versions, cause with code references, failing trace, a fix
       for each project, our workaround) is in
       [upstream/sveltekit-css-before-render.md](./upstream/sveltekit-css-before-render.md):
@@ -4529,6 +4544,10 @@ role and not before it.
       Filing publishes to an outside project, so it's the operator's call.
       Trigger: anyone with a GitHub account and ten minutes; once fixed
       upstream, `stylesheetsReady` can go after a version bump.
+      **Not needed (2026-10-30):** Vite fixed the cause on its own in 8.3.4
+      (vitejs/vite#23662, issue #23652), so nothing was filed; the doc stays
+      as the record, and `stylesheetsReady` is gone (next entry under
+      Housekeeping, "Update Vite to 8.3.4").
 - [x] **`POST /projects/:id/runs` holds a DB connection for the whole engine
       run** (found by #41): the engine ran inside the request's
       transaction, so a long run pinned a pooled connection. Fixed: the
@@ -5102,16 +5121,21 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       boundary** proposes the CHIRPS cells the boundary covers, weighted by
       the share of each inside (exact clipping), and an owner applies it
       ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
-- [ ] **Re-read a feed's record over new cells** (WP-2.10, M; found in #326
-      B-rain): new cells (from the boundary, or a redrawn one) go only to a
-      feed whose series is empty, else to a new feed in a separate series,
-      because a feed's existing days were averaged over its old cells and it
-      never splices two areas. Durable fix: a staged same-product
-      replacement, like the version replacement of issue #40c (backfill the
-      whole record over the new cells in `feed_stage`, swap it in whole),
-      so the boundary feed can take over the default series. Trigger: a
-      hydrologist wanting the boundary's rain in an existing CHIRPS series
-      without comparing two series.
+- [x] **Re-read a feed's record over new cells** (WP-2.10, M; found in #326
+      B-rain; done 2026-10-31, `296_feed_area_replace.sql`): new cells under
+      a record a gridded feed (`chirps`, `agera5_et0`) wrote are refused
+      (409 `series_area`) unless the owner confirms an **area replacement**
+      (`replaceSeries: true`, `replace_series_from` `area:…`): the feed
+      backfills its whole record over the new cells into `feed_stage` from
+      its first own day and the ingest swaps it in once caught up, replacing
+      only its own days (a person's days and hand edits stay; the reference
+      ET product days are rebuilt from the stage), the old values kept as a
+      `feed_replace` revision; withdrawing puts the old cells back. The
+      boundary's **Replace** goes through the catchment feed that writes the
+      default series, and **Rain for each unit** re-reads a redrawn parcel's
+      record (`replace`). Also fixed: an `agera5_et0` feed was never caught
+      up, so it fetched again a minute after every fetch
+      ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 - [x] **Drawing polygons on the map** (D9 (b)): superseded by issue #326
       C1 (2026-10-01): editors draw polygons and lines, place points by
       click, and reshape them, with paste-a-shape and keyboard placement as
@@ -5349,7 +5373,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       unit's area (model.md §2.7 K and M; River to dam fills it); on the
       river, 100 %. Unmarked dams propose what they did (`damShares`
       absent). maps.md § Start from the map.
-- [ ] **Show a dam's siting beside its Upstream inflow to dam** (from the
+- [x] **Show a dam's siting beside its Upstream inflow to dam** (from the
       fix above). The map's siting reaches the model only through a Start
       or Divide tick; the Network editor's *Upstream inflow to dam* field
       (`network/fields.ts`), where the share is edited by hand, doesn't
@@ -5361,6 +5385,13 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       it. Trigger: the next change to the Network editor's dam fields or to
       `linked-nodes`, or a client model where a marked dam's typed share
       disagrees with its siting.
+      **Done (2026-10-30, branch feat/o30b-dam-siting-hint):** `GET
+      …/map/linked-nodes` returns `dams` (each linked dam outline's
+      `damPosition`); the one-node form says the Siting under *Upstream
+      inflow to dam* and warns, never blocks, on an off-channel dam at
+      100 % or one on the river at 0 % (`fields.ts` `damSitingHint`; no
+      warning in between, on outlines marked differently or unsaid, or
+      without a dam). ui.md, maps.md § Start from the map, api.md.
 - [x] **A DEM that routes a lower river elsewhere** (new in issue #390's
       gauge run). **Obsolete (issue #472, 2026-10-09):** the fix compared the
       placed area with the mapped reach's, and the mapped network no longer
@@ -5766,12 +5797,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
         own pragmatic requirement (`ewr_cumulative`), beside the outlet's
         unchanged test, in the Runs tab and the summary CSV
         ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
-- [ ] **A "from MAP" helper for the areal factor in Settings.** The factor
-      is typed; `arealFactorFromMap` (engine) needs the forcing's values,
-      which Settings doesn't load. Durable fix: a small panel that fetches
-      the rain series the run would use and fills the flat factor and the
-      source note from an entered MAP. Trigger: the hydrologist setting a
-      correction by hand in the app.
+- [x] **A "from MAP" helper for the areal factor in Settings** (done
+      2026-10-30). The factor was typed; `arealFactorFromMap` (engine) needs
+      the forcing's values, which Settings didn't load. Calibration → Flow
+      calibration → Areal rainfall correction → **Work it out from a MAP**
+      (`settings/ArealMapHelper.svelte`) reads the rain a run with the
+      form's settings would scale (`GET …/model-input`, prepared in the
+      browser), shows MAP ÷ its mean, the years and the source note, and
+      fills them on Use (ui.md, model.md §2.4g).
 
 - [x] **Rainfall station settings with no field yet** (issue #553 round 3,
       2026-10-24; narrowed by the #612 follow-up; done 2026-10-28, #612
@@ -5995,28 +6028,102 @@ Left:
       submitted, as § 4 always did. **Confirmed (operator, 2026-10-01):
       both stay as built** ([evidence-pack.md § The other applications
       together](./evidence-pack.md#the-other-applications-together)).
-- [ ] **The reproduction bundle carries the combined row's runs.** An
-      `evidence-11` pack's combined row cites an assessment, whose runs (the
-      baseline, each alone, all together, on the assessment's engine) the
-      bundle doesn't hold, so `reproduce:pack` re-runs the baseline and the
-      application but not that row. Durable fix: the bundle adds the
-      assessment's members (ops and hashes, as `scenario.json` does for the
-      application) and its stored report, and `reproduce:pack` re-runs the
-      combination with `combineScenarios` and compares the outlet rows.
-      Trigger: the first issued pack whose combined row is assessed, or an
-      assessor asking to reproduce it.
-- [ ] **Yield and reliability per dam, together.** The report covers the EWR
-      sites, the Reserve, the outlet and existing users' supply; a firm
-      yield of each dam on the combined input (WP-3.6) is not in it. Durable
-      fix: the job runs `yield` for the dams the applications touch on the
-      baseline, alone and together, and adds rows. Trigger: an assessor
-      asks for yield in a cumulative assessment.
-- [ ] **A full-allocation baseline column** (WP-3.10): the baseline run as it
-      is today; making it *existing authorised use* means assessing on a
-      full-allocation run. Durable fix: the assessment takes an optional
-      `backgroundRunId` (a full-allocation run of the same model) as the
-      baseline. Trigger: the first assessment on a catchment with WARMS
-      volumes imported.
+- [x] **The reproduction bundle carries the combined row's runs.** Done
+      (bundle layout `bundle-3`, 2026-10-30; the report stays `evidence-26`):
+      the bundle adds the assessment § 4's combined row cites
+      (`assessment/assessment.json`: its members' ops, hashes, origin and an
+      applicant's own units; `assessment/report.json`: its stored report;
+      `assessment/background/input.json`: its background run's input at full
+      allocation), and `checkPackBundle` ties the stored report to the
+      manifest's combined section (`assessment`), checks the background is
+      the baseline at full allocation (`inputs:background`), and re-runs the
+      combination as the job did (engine `evidence/bundleAssessment.ts`:
+      each member alone under its applicant's mask, `combineScenarios`,
+      `cumulativeImpact`, the dam yields, the background), each part its own
+      check (`reproduce:combined`, `reproduce:dams`, `reproduce:background`),
+      so `pnpm reproduce:pack` and the server's `pack_reproduce` both run
+      it. The applicant projection moved to the engine
+      (`scenario/applicant.ts`) so the mask is derived offline. A `bundle-1`
+      or `bundle-2` bundle checks as it did, the row *not included (older
+      bundle)*; an assessment gone by issue refuses the issue (`409`, draft
+      again). Tests: engine `bundle.test.ts` (each tampering beside its
+      control), `reproduce-pack.test.ts`, `pack-reproduce.test.ts`,
+      `evidence/bundle-assessment.db.test.ts` (the job's own assessment
+      re-run offline; a tampered member op and background input fail)
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- [x] **The server re-run's time with the combined row.** Done
+      (302_pack_reproduce_parts, 2026-10-31): `pack_reproduce` checks the
+      bundle without re-running and fans the re-runs out, one
+      `pack_reproduce_part` job each (each run, the headline pair, § 8's
+      pairs, the combined row's assessment, its background, and one
+      firm-yield search per touched dam and run, up to 160 as 297 made the
+      assessment's), the last one back folding them (engine
+      `evidence/bundleParts.ts`: the full re-run's checks, id for id) into
+      the pack's record. A stopped part fails the re-run naming it (its
+      onDead, or the tick's sweep), never left hanging, and an editor runs
+      it again; `pnpm reproduce:pack` is unchanged. Tests:
+      `bundleParts.test.ts`, `pack-reproduce-parts.db.test.ts`,
+      `pack-reproduce.test.ts`, the catalogue and the job trust sweep
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- [x] **Yield and reliability per dam, together.** Done (report format
+      `evidence-26`, 2026-10-30): the `assessment` job works out, for each
+      dam the applications touch (engine `scenario/cumulativeYield.ts`
+      `touchedDams`), its firm yield (the yield job's defaults) and its
+      unit's annual assurance of supply on the baseline, each alone and all
+      together, as two more rows per dam (`dam_firm_yield`,
+      `dam_reliability`) and `report.dams`; the Assess together matrix and
+      CSV show them, and the evidence report's § 4 lists each dam under the
+      combined table, a reader kept from the registered volumes reading only
+      each direction when a run rested on them (`combinedDamVerdicts`). In
+      the same job, not their own jobs: capped at 20 firm-yield searches an
+      assessment (`floor(20 ÷ (applications + 2))` dams), about 95 s in the
+      worst case on a 30-year, 16-node catchment
+      ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
+      Tests: `cumulativeYield.test.ts`, `evidence/report-combined.db.test.ts`
+      (touched dams get rows, the untouched one none, the yields equal the
+      Yield job's, the verdicts-only reader with its positive control),
+      `verdictsOnly.test.ts`, `viewerUnits.test.ts`, `cumulative.test.ts`,
+      e2e `assess-together.spec.ts` and `evidence-combined.spec.ts`.
+- [x] **More dams than one assessment's yield budget.** An assessment
+      worked out a firm yield for at most `floor(20 ÷ (applications + 2))`
+      of the dams the applications touch (the job's 300 s Lambda); the rest
+      were named in its warnings, with no rows. **Built (2026-10-30,
+      297_assessment_yield_jobs):** each dam × run firm-yield search is its
+      own `assessment_yield` job the `assessment` job fans out to; the last
+      one back (under a per-assessment lock) fills the report's
+      `dam_firm_yield` cells and completes it, the report's shape unchanged.
+      The cap is now `CUMULATIVE_YIELD_SEARCHES_MAX` 160 searches an
+      assessment (40 dams with two applications, 16 with eight), bounded by
+      the per-user assessment cap (2 in flight, counting its yield jobs)
+      rather than one job's time. A yield job that dies, or ends without its
+      yield, fails the assessment naming the run and dam, stored by the
+      dead job's `onDead` hook, a sibling or the tick's sweep (301, for a
+      lease run out or a user no longer an editor) and read so by the API
+      at once; an engine change in between
+      fails it too. The background at full allocation (295) still computes
+      no dam yields. Tests: `assessments/yields.db.test.ts`, the job trust
+      sweep, the catalogue, `cumulative.test.ts` (engine and frontend),
+      `e2e/tests/assess-together.spec.ts`
+      ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
+- [x] **A full-allocation baseline column** (WP-3.10). **Built
+      (2026-10-30, 295_assessment_background, report format
+      `evidence-26`):** the assessment takes an optional `backgroundRunId`,
+      a scenario run on the same base run at full allocation with no other
+      change than the mode and registered volumes (404 another project's,
+      422 a run of the model, another base, another mode, other changes or
+      no volume; the database guard holds project, base and mode). The job
+      also runs the background, each application alone and all together on
+      it, and stores that table beside the baseline's (`report.background`),
+      labelled *Existing authorised use (full allocation)*: **beside the
+      baseline, never as it**, since licences never drive the baseline
+      (operator, issue #507). Shown as a second table on Assess together,
+      in the CSV and in the evidence report's § 4; a reader kept from the
+      volumes reads its EWR days and Reserve months only (D3)
+      ([scenarios.md § Against existing authorised
+      use](./scenarios.md#against-existing-authorised-use-a-background-at-full-allocation)).
+      Tests: `assessments/background.db.test.ts`, `background.test.ts`, the
+      engine's evidence report test, `cumulative.test.ts`,
+      `assess-together.spec.ts`.
 
 ## Applicants (WP-3.3)
 
@@ -6462,7 +6569,67 @@ assume, the questions for counsel); these are the actions, with triggers.
       tests, its line in docs/api.md and its row in the route-auth inventory
       (`src/routes.test.ts`). **Trigger:** the next backend round; don't
       leave them undecided past it.
-- [ ] **Update Vite to 8.3.4 or later (issue #90, 2026-10-11).** Vite 8.3.4
+- [ ] **A client navigation to a glossary topic once never committed
+      (2026-10-30, seen once).** help.spec.ts › "a guide shows its diagrams
+      and links into the glossary" failed once at load average ~70 (other
+      sessions' suites): the click on "Fit record" fetched the topic's node
+      (`nodes/21`) and its stylesheet (both 200 in 1 ms, the `<link>`
+      inserted by Vite's helper), but the URL never changed in 5 s and the
+      page logged no error. SvelteKit pushes the URL before it runs
+      `onNavigate`, so the stall was inside `load_route` (or the navigation
+      was superseded), not in the root layout's removed `stylesheetsReady`
+      wait, which only ever ran after `load_route`. Not reproduced since:
+      that test 30/30 at 8 workers and the whole help.spec.ts 150/150 at 12.
+      **Investigated 2026-10-30 (branch `fix/o30b-help-nav-stall`): no
+      cause found, not reproduced; still open.** What the trace shows:
+      the fetches (`nodes/21`, `Xn3yN3Y.css`) start 3.5 ms after the click's
+      `performing click action`, so they come from SvelteKit's `mousedown`
+      "tap" preload (`setup_preload`), and the CSS finished (200, 0.3 ms
+      receive); the previous action was the "On this page" hash click.
+      SvelteKit pushes the URL only after `load_route` resolves
+      (`navigate`, `history.pushState`), so the stall was in `load_route`
+      (the tap preload's promise, which the click reuses via `load_cache`),
+      before the click handler reached `navigate`, or the click was never
+      delivered to the link. Ruled out by reading and by test:
+      - Vite 8.3.4's `preloadOnce`/`preload` (node_modules/vite/dist/node/
+        chunks/node.js): the `load`/`error` listeners are attached in the
+        same task as `appendChild`, so a load cannot fire before them; a
+        stylesheet already in the DOM returns `undefined` (no wait); JS
+        deps never wait; `seen[href]` is cleared on settle either way. No
+        path leaves the promise pending unless the browser never fires
+        `load`/`error`.
+      - A stylesheet that never answers does hold a navigation for good
+        (verified with `page.route('**/*.css', () => {})`: URL unchanged,
+        no error, one CSS request: the same signature), but the failure's
+        CSS answered, so that is a hazard (Vite has no cap), not this cause.
+      - Timing races, swept deterministically with `page.route` delays and
+        manual `mouse.down/up`: stylesheet, chunk and both delayed 0 to
+        200 ms (20 steps), with and without a 25 ms hover first (so the
+        hover and tap preloads both run), and after the real hash click
+        (waited for, and not): 200 of 200 navigated.
+      - Load: the exact test flow instrumented (event log of pointer and
+        click events, `pushState`, each stylesheet's `load`), CDP CPU
+        throttle 4x and 20x, 70 `yes` hogs (load average 88), 10 workers:
+        100 of 100 navigated, every run `css-load` then `pushState`.
+      - SvelteKit supersession: `navigation_token` changes only in
+        `navigate`, `popstate` and the shallow `pushState`; nothing on a
+        help page does any of them mid-click. The leave guard has nothing
+        unsaved there; the preload's error paths reject and are retried by
+        the click's own `load_route`.
+      Not ruled out: the click not reaching the link (a layout shift
+      between `mousedown` and `mouseup` makes the click land on a common
+      ancestor, which still leaves the tap preload's fetches and no error;
+      the hash click's `holdAnchor` is released only on `pointerdown`), or a
+      browser that never fired `load` for the link. Neither shows in the
+      trace (it records no page events). **Durable fix:** unchanged, wait
+      for a second sighting. **Trigger:** a second sighting of an e2e
+      click-navigation that never commits; capture it with the event log
+      above (pointer and click targets with `scrollY`, `pushState`, each
+      `<link>`'s load/error) and the trace: that tells a missed click from a
+      pending stylesheet or `load_route`. If it is the stylesheet, file the
+      missing cap on vitejs/vite (a timeout or a `link.sheet` check in
+      `preloadOnce`) and guard on our side with a real signal.
+- [x] **Update Vite to 8.3.4 or later (issue #90, 2026-10-11).** Vite 8.3.4
       (#23662, fixing vitejs/vite#23652) makes every caller of the preload
       helper wait for an in-flight stylesheet, which fixes the
       CSS-before-render race in docs/upstream/sveltekit-css-before-render.md
@@ -6471,6 +6638,23 @@ assume, the questions for counsel); these are the actions, with triggers.
       brings it). Then decide whether the root layout's `onNavigate(() =>
       stylesheetsReady())` workaround stays (it is cheap and also guards a
       slow link) or goes, and update the upstream doc either way.
+      **Done (2026-10-30): the workaround went.** `frontend/package.json`
+      pins `vite` 8.3.4, and the installed preload helper (`preloadOnce` in
+      `vite/dist/node/chunks/node.js`) hands every later caller the
+      in-flight stylesheet promise. SvelteKit finishes `load_route` before it
+      runs `onNavigate`, so the route's CSS has already arrived by then and
+      the workaround added nothing, slow links included (Vite waits however
+      long the CSS takes; the 10 s cap never applied there). Evidence, every
+      `.css` response held 1.5 s and the glossary entry's
+      `scroll-margin-top` read as it entered the DOM: styled 5/5 with and
+      without the workaround (render ~1.56 s after the click); the helper
+      patched back to its pre-8.3.4 memo, unstyled 5/5 (~45 ms).
+      `help.spec.ts` green both ways. Removed `lib/nav/stylesheets.ts`, its
+      test and the layout's `onNavigate`; help.spec.ts's "a client
+      navigation waits for a slow stylesheet before showing the page" pins
+      the behaviour (fails 5/5 against the pre-8.3.4 helper).
+      [upstream/sveltekit-css-before-render.md](./upstream/sveltekit-css-before-render.md)
+      records it.
 - [x] **Playwright 1.64 (Dependabot #529, left out of #537, 2026-10-12).**
       #529 moved only the renderer image (`backend/renderer.Dockerfile`, both
       FROM lines) to `v1.64.0-noble`. With the npm packages still on 1.63 the
@@ -6556,13 +6740,17 @@ assume, the questions for counsel); these are the actions, with triggers.
       test points it at a temp directory holding a copy of the committed
       file, plus a case for a `.env.development.local` that wins.
 
-- [ ] **Run the full suites once GitHub Actions is back** (it has been off
+- [x] **Run the full suites once GitHub Actions is back** (it has been off
       since 2026-09-24, billing). Work since then was verified with targeted
       tests only; the email-first sign-up (2026-09-27) changed the shared
       test helpers every DB and e2e test uses (`backend/src/__tests__/helpers.ts`
       `signUp`, `e2e/support/api.ts` `register`). Trigger: Actions
       re-enabled, or before the first release: run `test:backend:db` and
       the 14 e2e shards (or both suites locally, not beside each other).
+      **Done:** Actions came back 2026-09-28, and `.github/workflows/ci.yml`
+      runs `test:backend:db` and the 14 e2e shards on every push to `main`
+      and every PR; checked 2026-10-30, the latest `main` run (b0265f76e)
+      passed all of them.
 
 - [ ] **Make the deploy role's sops-key grant opt-in upstream** (issue #126
       § IAM). The templates `project-baseline` module's key policy lets the
@@ -6575,14 +6763,18 @@ assume, the questions for counsel); these are the actions, with triggers.
       the first `terraform apply`, or the next baseline change, whichever
       comes first; then re-run the baseline stage and check the key policy.
 
-- `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
+- [x] `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
   guard now fails any `SECURITY DEFINER` function executable by a role other
   than the owner and `water_app`. The in-flight `025_share_links.sql` branch
   may add such functions; when it merges, run `pnpm test:backend:db` and make
   sure its functions revoke `PUBLIC` (the owner's default privileges already
   close them if 028 has applied first, but a database migrated in file order
   applies 025 before 028's default-privilege change, so 025 needs its own
-  `REVOKE`).
+  `REVOKE`). **Done:** 025 merged, and 028's step 1 walks `pg_proc` and revokes
+  `PUBLIC` from every `SECURITY DEFINER` function already there, so 025's
+  `app_share_view` / `app_share_series` are closed whichever order they ran
+  in (028's header names them); the catalogue guard passes on `main`'s CI
+  (checked 2026-10-30).
 
 - [x] **Split the help content chunk** (done 2026-09-26). `lib/help/
       content.ts` (every entry, one module) was the largest page chunk at
@@ -6679,18 +6871,55 @@ Left, from the design and the persona review (§11), each with its trigger.
       built (CR-28, engine 1.19.0, `summary.calibration.wr2012Fit`) and the
       calibration record shows it. Fixed in the same change: the line now
       prints *Not assessed* only when `wr2012Fit` is null.
-- [ ] **Applied-for works against the modelled ones** (licensing
-      authority). Nothing ties the scenario's ops to what the WULA applies
-      for. Durable fix: a WULA reference field on the scenario (application
-      number, the works as applied for), printed on page 1 and Appendix A.2,
-      and a check that each proposal op names the works it models. Trigger:
-      before the pilot.
-- [ ] **Labelled mitigation alternatives** (licence applicant). The report
-      shows one application; applicants must show the mitigation they
-      weighed. Durable fix: an application may cite other scenario runs on
-      the same baseline as labelled alternatives ("smaller dam", "winter
-      abstraction only"), each a page-1 column with its paired change.
-      Trigger: before the pilot, or the first applicant asks.
+- [x] **Applied-for works against the modelled ones** (licensing
+      authority). Built (294_wula_reference, report `evidence-26`): the
+      scenario's WULA reference (its number and the works as applied for,
+      each with a ref), frozen once submitted; each op names the works it
+      models (its `works` tag, hashed with the ops); the check warns of a
+      proposal tied to no listed works, a tag the list lacks and works no
+      change models; page 1 prints the number, the works' refs and the tie,
+      A.2 the works in words and each change's works
+      ([scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
+- [x] **The WULA reference on the share link** (licensing authority, public
+      participation). A submitted application's share link
+      (`app_share_scenario`, 115/291) didn't print the WULA's number or its
+      works. **Built (2026-10-30):** 300_share_wula adds
+      `wula: { number, works }` to the link's `scenario` object for a
+      submitted or decided application, and the share page prints it under
+      the changes with each change's **Works *ref***; the works' words are
+      the applicant's own, as the description already shown. Its 4 new
+      `share.scenario` strings are on the Afrikaans sheet, untranslated
+      until the i18n agents run (`pnpm gen:i18n:export af …`). Tests:
+      `share/scenario-share-licence.db.test.ts`, `share/links.test.ts`,
+      `share/scenario.test.ts`, `e2e/tests/scenario-share.spec.ts`
+      ([scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
+- [x] **Labelled mitigation alternatives** (licence applicant). Built
+      (298_scenario_alternatives, report `evidence-26`): an application (or a
+      team scenario) cites up to three runs of its owner's other scenarios on
+      the same base run, each labelled ("smaller dam", "winter abstraction
+      only"), frozen with the ops on submission; page 1 sets each beside the
+      application, a column with its value and change against the baseline
+      (paired by its own ensemble when it has one), and A.2 lists its
+      changes; the runs, ops and hashes are in the manifest
+      ([scenarios.md § Mitigation alternatives](./scenarios.md#mitigation-alternatives),
+      [evidence-pack.md § Mitigation alternatives](./evidence-pack.md#mitigation-alternatives)).
+- [x] **The alternatives' runs in the reproduction bundle** (licensing
+      authority). Done (bundle `bundle-3`, still unreleased, extended;
+      2026-10-31): the bundle carries each alternative page 1 assesses
+      (`runs/alternative-<n>/`: its stored input and results, `alternatives`
+      in `bundle.json`), and `checkPackBundle` ties each to the manifest (run,
+      engine, ops and hash; its input the baseline's with its ops applied; its
+      page-1 cells that read its run's summary, engine
+      `alternativeSummaryCell`: `alternative:<n>`) and re-runs it
+      (`reproduce:alternative:<n>`), so `pnpm reproduce:pack` and the server
+      (one `pack_reproduce_part` each, 302) both do. A `bundle-1`/`bundle-2`
+      bundle checks as it did. The bundle download is refused to a viewer
+      kept from the volumes when an alternative's run, the assessment's
+      background or a member op carries one (`packBundleVolumesWithheld`).
+      Tests: engine `bundle.test.ts`, `bundleParts.test.ts`,
+      `reproduce-pack.test.ts`, `packs.db.test.ts`,
+      `pack-reproduce-parts.db.test.ts`
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - [x] **EWR rows below each storage or abstraction op** (environmentalist).
       Built (engine 1.33.0, report `evidence-4`): for each proposal op that
       builds or raises storage or abstraction at a node, a page-1 row at the
@@ -7312,10 +7541,15 @@ own. Loop in the CISO or security analyst before acting on any of them.
       event on Active alerts (ui.md § Alerts), and a mail of it sent
       meanwhile says the same (`mail.alert.ewr.outOfDate`). The farm page
       and the farmer alert pages show no EWR event (staff only).
-- [ ] **A log of restriction decisions** (WUA persona): which restriction
-      the WUA published, when, and by whom, for members and the CMA. The
-      publication history holds it; a page that lists it doesn't exist.
-      Trigger: a WUA asks, or Step 3's licensing evidence needs it.
+- [x] **A log of restriction decisions** (WUA persona, 2026-10-30): which
+      restriction the WUA published, when, and by whom, for members and the
+      CMA. The Restriction log (`?tab=restrictions`, linked from the
+      Publication panel; `GET /projects/:id/restriction-log`) lists every
+      publication and notice change from the decision log's audit events,
+      which outlive the 12 publications `run_publication` keeps, so no
+      migration was needed. Viewers and above, as the audit log is; farmers
+      read the notice in force on their farm page ([ui.md § Restriction
+      log](./ui.md#restriction-log-tabrestrictions)).
 - [x] **One guard for views over a run's stored series** (2026-10-03).
       `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`) lists every
       reader of a run's stored series (the frontend's `api.runs.series`, the
@@ -7453,14 +7687,19 @@ events after a decision, append-only (228_decision_events). Left open:
       the evidence report's outcome words, through counsel as D14 was.
       Trigger: the pilot authority's first lapsed application, or counsel's D14
       review.
-- [ ] **Share links don't print the terms.** A decided application's
+- [x] **Share links don't print the terms.** A decided application's
       read-only share link (`app_share_scenario`, 115) shows the outcome and
       note but not the granted terms or the appeal events. (§ 4 of the
       evidence report now says a licence's run applied its licensed terms,
       `terms: 'licensed'`, `evidence-20`.) Durable fix: add the terms and
       events to the share projection. Trigger: a pilot reader of a share
-      link asking which terms were granted.
-- [ ] **The licensed-terms run isn't made for the assessor.** An issued
+      link asking which terms were granted. Done (291_share_licence_terms):
+      `app_share_scenario` adds the granted terms, the events (never who
+      recorded them) and the licence's standing, and the share page prints
+      them in The decision card; another unit's registered volume is left
+      out of every list of ops on a link, applied ops included, by the SQL
+      function itself (`app_share_kept`), the API filtering again.
+- [x] **The licensed-terms run isn't made for the assessor.** An issued
       licence whose granted terms differ from the ops applied for, or one
       varied on appeal, counts in § 4's table only once someone runs its
       licensed terms (**Run the licensed terms**). Since `evidence-20` the
@@ -7474,6 +7713,13 @@ events after a decision, append-only (228_decision_events). Left open:
       a `varied` appeal event. Trigger: a pilot assessor's report showing the
       line, or a second report-request feature that needs a scenario run off
       the request path.
+      Built (293_scenario_run_job): `…/decide` with changed terms and an
+      appeal event that leaves terms in force with no run (a variation)
+      queue a `scenario_run` job (`scenarios/licensedRun.ts`,
+      `jobs/handlers/scenario-run.ts`) that stores the run as the deciding
+      member, one pending per scenario and at most 5 per member; the
+      Application panel shows it where the button is, and the button still
+      works ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
 
 ## Map edits and the values taken from the map (issue #646 items 4 and 5, 2026-10-28)
 

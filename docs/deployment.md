@@ -1596,7 +1596,8 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
     today (UTC) and the product's manifest `finalThrough`, with
     `cloudwatch:PutMetricData`. The alarm fires when the lag passes
     `ingest_lag_alarm_days` (75: a healthy copy runs up to ~56 days behind
-    just before CHC's monthly release) on two days running, **and when no
+    just before CHC's monthly release; a whole number from 60 to 3650, and
+    the API gets the same number, below) on two days running, **and when no
     datapoint arrives for two days** (`treat_missing_data = "breaching"`): a
     job that stopped running, or fails before it measures, alarms too.
   - `mirror-backfill-failed` (essential tier): an execution of the
@@ -1685,9 +1686,12 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   runs from `mirror_copy` (the worker's tick records each manifest there
   when it changes) and marks a CHIRPS feed
   **Copy behind** when its part of the copy is late: a final product more
-  than 75 days old (the same threshold as `ingest_lag_alarm_days`'s
-  default; the app's is `COPY_FINAL_LAG_DAYS` in `feeds/health.ts`, so
-  change both together) or the preliminary days more than 7. The feed
+  than `ingest_lag_alarm_days` days old (Terraform passes the alarm's
+  threshold to the API as `COPY_FINAL_LAG_DAYS`, `infra/lambda.tf`, so a
+  prod tfvars that tunes the alarm moves the panel with it; unset, as
+  locally, it is 75, `feeds/health.ts`; the API refuses to start on a value
+  that isn't a whole number of days from 60 to 3650) or the preliminary
+  days more than 7. The feed
   itself counts no failure and needs nothing; the operator's signal is the
   alarm. A manifest the tick can't read or record logs
   `mirror_revision_failed` with the error's class and leaves the last
@@ -3239,12 +3243,18 @@ queues, and kept in a bucket of its own (infra/packs.tf):
 - **The re-run** (154_pack_reproduce). Issuing also queues a
   `pack_reproduce` job: the worker reads the pack's bundle
   (`packs/<project>/<pack>/<sha256>.zip`) back with that same
-  `s3:GetObject` grant, re-runs both runs from it and records the outcome
+  `s3:GetObject` grant, checks it and fans the re-runs out as
+  `pack_reproduce_part` jobs (302), each reading the bundle again: a run,
+  the headline pair, § 8's pairs, the combined row's assessment or its
+  background (its applications + 2 runs, about 17 s on a 30-year, 16-node
+  catchment) or one dam's firm-yield search (about 5.6 s), each well inside
+  the worker's 300 s, so the up to 160 searches of an assessed combined row
+  never share one job. The last part back records the outcome
   (`pack_reproduced` in the worker's log, `warn` unless it reproduced, with
-  the failed checks' ids and how long it took). It runs the engine twice in
-  the worker (each run as long as it took in the API), well inside the
-  worker's 300 s; 3 attempts when the bucket can't be read, then the pack
-  page says the re-run couldn't be done. No infrastructure of its own.
+  the failed checks' ids, the parts and how long since the fan-out;
+  `pack_reproduce_fanned_out` when it fans out). 3 attempts when the bucket
+  can't be read (2 a part), then the pack page says the re-run couldn't be
+  done, naming the part. No infrastructure of its own.
 - **The bucket**: `water-management-packs-<account>`, private (public access
   blocked, bucket-owner objects), SSE-S3, TLS only, **versioned with Object
   Lock**: every object is retained from its upload for `pack_retention_days`

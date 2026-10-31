@@ -53,6 +53,8 @@ appendFileSync(process.env.FAKE_TF_LOG, JSON.stringify({
 if (args[0] === 'init') { mkdirSync(cwd + '/.terraform', { recursive: true }); writeFileSync(cwd + '/.terraform/stub.zip', String(process.pid)); }
 if (process.env.FAKE_TF_SLEEP_ON === args[0]) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.FAKE_TF_SLEEP_MS));
 if (process.env.FAKE_TF_FAIL_ON === args[0]) process.exit(3);
+if (process.env.FAKE_TF_FAIL_FILTER && args.includes('-filter=' + process.env.FAKE_TF_FAIL_FILTER)) { console.log('FAKE FAIL ' + process.env.FAKE_TF_FAIL_FILTER); process.exit(1); }
+if (args[0] === 'test') console.log('FAKE RAN ' + (args[1] ?? 'all'));
 `,
 	);
 	chmodSync(join(bin, 'terraform'), 0o755);
@@ -180,4 +182,58 @@ test('two runs at once each get their own copy and .terraform/', async () => {
 	assert.equal(dirs.size, 2);
 	assert.equal(existsSync(join(ctx.repo, 'infra', '.terraform')), false);
 	assert.deepEqual(readdirSync(ctx.tmp), []);
+});
+
+// More than one test file: each runs in its own copy, all at once (CI's 10-minute job outgrew one file at a time).
+const withFiles = (ctx, names) => {
+	for (const n of names) writeFileSync(join(ctx.repo, 'infra', 'tests', `${n}.tftest.hcl`), `run "${n}" {}\n`);
+};
+
+test('with several test files and no arguments, runs each file once in its own copy, every output printed', () => {
+	const ctx = setup();
+	withFiles(ctx, ['b', 'c']);
+	const r = runSync(ctx, { CHECK_INFRA_JOBS: '3' });
+	assert.equal(r.status, 0, r.stderr);
+	const tests = calls(ctx).filter((x) => x.args[0] === 'test');
+	assert.deepEqual(tests.map((x) => x.args[1]).sort(), ['-filter=tests/a.tftest.hcl', '-filter=tests/b.tftest.hcl', '-filter=tests/c.tftest.hcl']);
+	const validate = calls(ctx).find((x) => x.args[0] === 'validate');
+	assert.equal(new Set(tests.map((x) => x.cwd)).size, 3);
+	for (const x of tests) {
+		assert.ok(x.cwd.startsWith(ctx.tmp), x.cwd);
+		assert.notEqual(x.cwd, validate.cwd);
+		assert.equal(x.override, STALE_OVERRIDE);
+	}
+	for (const f of ['a', 'b', 'c']) assert.match(r.stdout, new RegExp(`FAKE RAN -filter=tests/${f}.tftest.hcl`));
+	assert.match(r.stdout, /all 3 test files passed/);
+	assert.deepEqual(readdirSync(ctx.tmp), []);
+});
+
+test('one failing file fails the run, the others still run and every output prints', () => {
+	const ctx = setup();
+	withFiles(ctx, ['b', 'c']);
+	const r = runSync(ctx, { CHECK_INFRA_JOBS: '3', FAKE_TF_FAIL_FILTER: 'tests/b.tftest.hcl' });
+	assert.equal(r.status, 1);
+	assert.match(r.stdout, /FAKE FAIL tests\/b.tftest.hcl/);
+	assert.match(r.stdout, /FAKE RAN -filter=tests\/a.tftest.hcl/);
+	assert.match(r.stdout, /FAKE RAN -filter=tests\/c.tftest.hcl/);
+	assert.match(r.stderr, /tests\/b.tftest.hcl failed/);
+	assert.match(r.stderr, /1 of 3 test files failed/);
+	assert.deepEqual(readdirSync(ctx.tmp), []);
+});
+
+test('runs the files at the same time', () => {
+	const ctx = setup();
+	withFiles(ctx, ['b', 'c']);
+	const t0 = Date.now();
+	const r = runSync(ctx, { CHECK_INFRA_JOBS: '3', FAKE_TF_SLEEP_ON: 'test', FAKE_TF_SLEEP_MS: '1500' });
+	assert.equal(r.status, 0, r.stderr);
+	// One at a time would take 4.5 s of sleeping alone.
+	assert.ok(Date.now() - t0 < 4000, `took ${Date.now() - t0} ms`);
+});
+
+test('CHECK_INFRA_JOBS=1 and an explicit filter keep the single terraform test', () => {
+	const ctx = setup();
+	withFiles(ctx, ['b']);
+	assert.equal(runSync(ctx, { CHECK_INFRA_JOBS: '1' }).status, 0);
+	assert.deepEqual(calls(ctx).filter((x) => x.args[0] === 'test').map((x) => x.args), [['test']]);
 });

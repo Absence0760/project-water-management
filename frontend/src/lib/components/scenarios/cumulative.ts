@@ -3,7 +3,7 @@
 // can be picked together, the report's rows as the matrix shows them, and its
 // CSV. Pure, so it is unit-tested without a component.
 import { CUMULATIVE_METRIC_LABEL, type CumulativeReport, type CumulativeRow } from '@water-management/engine';
-import type { Assessment, AssessorQuestion, Scenario } from '#lib/api/types.js';
+import type { Assessment, AssessmentBackground, AssessorQuestion, Scenario } from '#lib/api/types.js';
 import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 
 /** Applications an assessor can assess together: submitted or decided (a draft is the applicant's, a withdrawn one is off the table). */
@@ -72,13 +72,25 @@ function cell(v: string | number | null): string {
 }
 
 /**
+ * The hydrologist's baseline value of a background row's measure at its site
+ * (295): the background is shown beside the baseline, so each of its rows
+ * says how far full allocation moves it. Null when the baseline's table has
+ * no such row or no value.
+ */
+export function baselineOf(report: Pick<CumulativeReport, 'rows'>, r: Pick<CumulativeRow, 'metric' | 'siteNodeId' | 'isOutlet'>): number | null {
+	return report.rows.find((x) => x.metric === r.metric && x.siteNodeId === r.siteNodeId && x.isOutlet === r.isOutlet)?.baseline ?? null;
+}
+
+/**
  * The report as CSV: one line per row, the raw numbers (the matrix rounds),
- * each application alone and all together. With questions, a blank line and
+ * each application alone and all together. With a background at full
+ * allocation (295), a blank line, its label and run, and its own table, the
+ * background in the baseline's column. With questions, a blank line and
  * then the applicants' "Ask the assessors why" questions on these
  * applications, one line each with the answer (issue #523 G7: the
  * applications' record for the authority's s42 written reasons).
  */
-export function assessmentCsv(report: CumulativeReport, questions: readonly AssessorQuestion[] = []): string {
+export function assessmentCsv(report: CumulativeReport & { background?: AssessmentBackground }, questions: readonly AssessorQuestion[] = []): string {
 	const names = report.scenarios.map((s) => s.name);
 	const head = [
 		'Measure',
@@ -96,7 +108,32 @@ export function assessmentCsv(report: CumulativeReport, questions: readonly Asse
 		const { measure, site } = rowLabel(r);
 		return [measure, site, r.unit, r.baseline, ...r.singles, r.combined, ...r.singleChanges, r.sumOfSingles, r.combinedChange, r.interaction];
 	});
-	const table = [head, ...lines];
+	const table: (string | number | null)[][] = [head, ...lines];
+	const bg = report.background;
+	if (bg) {
+		const bgNames = bg.report.scenarios.map((s) => s.name);
+		table.push(
+			[],
+			[`${bg.label}: ${bg.run.label || bg.run.scenarioName || 'background run'}`, 'A separate comparison: the baseline above stays the hydrologist’s run'],
+			[
+				'Measure',
+				'Site',
+				'Unit',
+				'Baseline',
+				'Background (full allocation)',
+				...bgNames.map((n) => `${n} alone`),
+				'All together',
+				...bgNames.map((n) => `Change: ${n} alone`),
+				'Sum of changes alone',
+				'Change together',
+				'Interaction (together − sum)'
+			]
+		);
+		for (const r of bg.report.rows) {
+			const { measure, site } = rowLabel(r);
+			table.push([measure, site, r.unit, baselineOf(report, r), r.baseline, ...r.singles, r.combined, ...r.singleChanges, r.sumOfSingles, r.combinedChange, r.interaction]);
+		}
+	}
 	if (questions.length) {
 		table.push([], ['Application', 'Asked', 'The applicant read', 'In its own words', 'Answer', 'Answered']);
 		for (const q of questions) table.push([q.scenarioName, q.askedAt, q.problem, q.assessorText, q.answer, q.answeredAt]);
@@ -106,11 +143,17 @@ export function assessmentCsv(report: CumulativeReport, questions: readonly Asse
 
 export type AssessmentState = { kind: 'complete' } | { kind: 'pending'; text: string; progress: number | null } | { kind: 'stopped'; text: string; lines: string[] };
 
-/** Where an assessment stands, from its own status and its job's (a refused or failed one says why, line by line). */
-export function assessmentState(a: Pick<Assessment, 'status' | 'job' | 'problems'>): AssessmentState {
+/**
+ * Where an assessment stands, from its own status, its job's and its dams' firm-yield jobs' (297: its job done,
+ * the yields still coming back); a refused or failed one says why, line by line.
+ */
+export function assessmentState(a: Pick<Assessment, 'status' | 'job' | 'problems' | 'yields'>): AssessmentState {
 	if (a.status === 'complete') return { kind: 'complete' };
 	if (a.status === 'refused') return { kind: 'stopped', text: 'These applications no longer combine on their baseline:', lines: a.problems };
 	if (a.status === 'failed') return { kind: 'stopped', text: 'The model could not run this assessment:', lines: a.problems };
+	const y = a.yields;
+	if (y && y.total > 0 && a.job?.status === 'done')
+		return { kind: 'pending', text: `Working out the firm yield of each dam the applications touch (${y.done} of ${y.total})…`, progress: Math.round((100 * y.done) / y.total) };
 	const j = a.job;
 	if (!j) return { kind: 'stopped', text: 'This assessment did not finish, and its job has been cleared. Start a new one.', lines: [] };
 	if (j.status === 'dead') return { kind: 'stopped', text: `This assessment could not run${j.error ? `: ${j.error}` : '.'}`, lines: [] };

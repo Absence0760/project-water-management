@@ -222,7 +222,9 @@
 	/** Kept from each farm's registered volume (D3, #523 G1): no bundle, and a manifest that isn't the hashed one, so neither downloads. */
 	const withheld = $derived(detail?.volumesWithheld ?? false);
 	/** The bundle's download (the API redirects to a signed GET); an issued pack has one. */
-	const bundleUrl = $derived(pack?.bundleSha256 && !withheld ? api.packs.bundleUrl(projectId, pack.id) : null);
+	/** The bundle alone may be refused (bundle-3: an alternative's or the background's run carries a volume the pack's own runs don't). */
+	const bundleWithheld = $derived(withheld || (detail?.bundleWithheld ?? false));
+	const bundleUrl = $derived(pack?.bundleSha256 && !bundleWithheld ? api.packs.bundleUrl(projectId, pack.id) : null);
 	$effect(() => {
 		if (!detail || detail.volumesWithheld) {
 			manifestUrl = null;
@@ -319,6 +321,11 @@
 					The manifest and the reproduction bundle hold each farm’s registered volume, which this project shows to its editors and owners only, so they don’t
 					download here, and Appendix A.1 and the run summaries below leave those volumes out. An editor or owner can give you both; the hashes above and the verify
 					page check them.
+				</p>
+			{:else if bundleWithheld}
+				<p class="alert alert-info small" role="note" data-testid="pack-bundle-withheld">
+					The reproduction bundle also holds runs this page doesn’t print (an alternative’s, or the assessment’s background), with each farm’s registered volume,
+					which this project shows to its editors and owners only, so it doesn’t download here. An editor or owner can give it to you; the hash above checks it.
 				</p>
 			{/if}
 			{#if detail.errataFoundSince.length}

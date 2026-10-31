@@ -76,6 +76,17 @@ describe('unitRainAction', () => {
 		expect(both.words).toBe('Creates 2 CHIRPS feeds for the units without one, and gives 1 empty feed the cells of their parcels as they are now, and the product.');
 	});
 
+	it('says a redrawn parcel’s feed re-reads its whole record over the new cells (296)', () => {
+		const one = unitRainAction(proposal([unit({ feedId: 'a', action: 'replace' })]))!;
+		expect(one.label).toBe('Re-read the record');
+		expect(one.words).toBe('The feed of a unit whose parcel changed reads its whole record again over the new cells, and runs use the old record until it is complete; days you entered stay as they are.');
+		expect(unitRainAction(proposal([unit({ feedId: 'a', action: 'replace' }), unit({ nodeId: 'u2', feedId: 'b', action: 'replace' })]))!.label).toBe('Re-read 2 records');
+		const mixed = unitRainAction(proposal([unit({ feedId: 'a', action: 'replace' }), unit({ nodeId: 'u2' })]))!;
+		expect(mixed.label).toBe('Set up 2 feeds');
+		expect(mixed.words).toMatch(/^Creates or updates 1 other feed\. The feed of a unit whose parcel changed reads its whole record again/);
+		expect(unitRainUpToDate(proposal([unit({ feedId: 'a', action: 'replace' })]))).toBe(false);
+	});
+
 	it('offers nothing when every unit’s feed already reads its parcel, and says it is up to date', () => {
 		const p = proposal([unit({ feedId: 'a', action: 'none' }), unit({ nodeId: 'u2', feedId: 'b', action: 'none' })]);
 		expect(unitRainAction(p)).toBeNull();
@@ -137,6 +148,9 @@ describe('appliedWords', () => {
 		expect(appliedWords({ created: 3, updated: 1 })).toBe('Created 3 feeds and updated 1 feed. They run on the next schedule, or now with “Run now” on each feed.');
 		expect(appliedWords({ created: 0, updated: 2 })).toMatch(/^Updated 2 feeds\./);
 		expect(appliedWords({ created: 0, updated: 0 })).toBe('Nothing to change: every unit’s feed already reads its parcel.');
+		expect(appliedWords({ created: 0, updated: 3, replaced: 2 })).toBe(
+			'Updated 1 feed and started re-reading 2 records over the new cells. They run on the next schedule, or now with “Run now” on each feed.'
+		);
 		expect(appliedWords({ created: 1, updated: 0, skipped: [{ nodeId: 'x', name: 'X', reason: 'no parcel' }, { nodeId: 'y', name: 'Y', reason: 'no parcel' }] })).toMatch(/^Created 1 feed\. .* 2 units left out: see below\.$/);
 	});
 });

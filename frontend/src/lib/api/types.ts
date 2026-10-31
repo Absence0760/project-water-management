@@ -46,6 +46,7 @@ import type {
 	RunSummary,
 	ScenarioConflict,
 	ScenarioOp,
+	WulaReference,
 	SeasonalOutlook,
 	ClimateIndexId,
 	ClimateOutlook,
@@ -575,7 +576,11 @@ export interface PortfolioProject {
 	/** Lowest farm dam on figuresUntil, 0–1; null with no dams or when unknown (damsKnown). */
 	lowestDamPct: { nodeName: string; pct: number } | null;
 	damsKnown: boolean;
-	feeds: { total: number; ok: number; failing: number };
+	/**
+	 * Data feeds: `failing` counts failing and stale ones; `copyBehind` the CHIRPS feeds waiting on our late rain
+	 * copy (the feed panel's Copy behind), counted in neither. Absent from a backend older than the field.
+	 */
+	feeds: { total: number; ok: number; failing: number; copyBehind?: number };
 	/** Alerts firing now (WP-2.13); 0 when none, or when the catchment has no alert switched on. */
 	alertsFiring: number;
 	restriction: { level: 'none' | 'advisory' | 'restricted'; pct: number | null } | null;
@@ -868,11 +873,12 @@ export type ReproductionDifference =
 /**
  * One citation of a run (RunMeta.citedBy). For a publication, `name` is the
  * day it was published (YYYY-MM-DD, UTC); for a sign-off (WP-3.13), the
- * signer's name; for an evidence pack (WP-3.14, 112), `version N`.
+ * signer's name; for an evidence pack (WP-3.14, 112), `version N`; for a
+ * mitigation alternative (298), the name of the scenario past draft that cites it.
  * Assessments will add a kind.
  */
 export interface RunCitation {
-	kind: 'publication' | 'scenario' | 'signoff' | 'pack';
+	kind: 'publication' | 'scenario' | 'signoff' | 'pack' | 'alternative';
 	id: string;
 	name: string;
 }
@@ -988,6 +994,8 @@ export interface Run extends RunMeta {
 	forecastRainSource?: ForecastRainSource | null;
 	/** GET …/runs/:runId: any forecast day held an ECMWF ENS feed's value (backend runs/execute.ts forecastRainEcmwf), so ECMWF's credit is owed even when `forecastRainSource` is 'other'. */
 	forecastRainEcmwf?: boolean;
+	/** GET …/runs/:runId: the reference ET products GR4J read on some run day (backend runs/execute.ts storeRun, issue #604 R5-E), so their credits are owed; [] when none. */
+	et0Products?: ('agera5_et0' | 'power_et0')[];
 	/**
 	 * Its server stamp still matches its rows (GET …/runs/:runId only;
 	 * docs/security.md § Run stamps): false for a run written past the model
@@ -1144,6 +1152,11 @@ export interface Scenario {
 	 */
 	objectionAddress: string | null;
 	objectionClosingDate: string | null;
+	/**
+	 * The water-use licence application it models (294_wula_reference): its number (null: not given) and the works
+	 * as applied for, each a ref an op's `works` tag names. Set while a draft, frozen once submitted.
+	 */
+	wula: WulaReference;
 	baseRunId: string;
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -1196,6 +1209,12 @@ export interface Scenario {
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * The newest background run of its licensed terms (293_scenario_run_job): queued when a licence is issued on other
+	 * terms than those applied for, or varied on appeal. null when none or the reader can't read the project's jobs
+	 * (an applicant); absent from an older API.
+	 */
+	licensedRunJob?: JobMeta | null;
 	/** Runs of this scenario still stored, and the newest. */
 	runCount: number;
 	lastRun: { id: string; label: string; createdAt: string } | null;
@@ -1442,6 +1461,12 @@ export interface ScenarioCheck {
 	 * contributor's name no unit). Absent from an older server; empty for a base from 220 on.
 	 */
 	baseEwrRules?: string[];
+	/**
+	 * The WULA reference's warnings (294, engine wulaWarnings): no number, no works, a proposal tied to no listed
+	 * works, a tag the list lacks, works no change models. Never a block. Every application's; a team scenario's
+	 * once it records a reference. Absent from an older server.
+	 */
+	wulaWarnings?: string[];
 }
 
 /** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */
@@ -1487,7 +1512,26 @@ export interface ScenarioWithCheck {
 	 * absent from an older API.
 	 */
 	unverifiedRunIds?: string[] | null;
+	/** The mitigation alternatives it cites (298), for whoever reads it; absent from an older API. */
+	alternatives?: ScenarioAlternative[];
 }
+
+/** A mitigation alternative a scenario cites (298_scenario_alternatives): a labelled run of another of its owner's scenarios on its base run. */
+export interface ScenarioAlternative {
+	/** 0-based, page 1's column order. */
+	position: number;
+	label: string;
+	runId: string;
+	/** The run's scenario and its name (as the run recorded it once the scenario is gone). */
+	scenarioId: string;
+	scenarioName: string;
+	runLabel: string;
+	engineVersion: string;
+	runCreatedAt: string;
+}
+
+/** A run the caller may cite as an alternative: one of their own other scenarios' runs on the scenario's base run (298). */
+export type AlternativeCandidate = Omit<ScenarioAlternative, 'position' | 'label'>;
 
 const RANK: Record<Role, number> = { farmer: -2, contributor: -1, viewer: 0, editor: 1, owner: 2 };
 
@@ -1548,6 +1592,35 @@ export interface Publication extends Omit<PublicationMeta, 'restriction'> {
 	catchmentView: CatchmentView & { engineVersion: string; runoffModel: string; calibration: { nse: number | null; pbias: number | null; kge: number | null } | null };
 	updatedAt: string | null;
 	updatedBy: string | null;
+}
+
+/**
+ * One restriction decision (GET …/restriction-log, backend publish/restrictionLog.ts): a publication, or a change to
+ * the notice of the publication then current, read from the decision log, which outlives the 12 publications kept.
+ */
+export interface RestrictionDecision {
+	id: string;
+	kind: 'published' | 'notice_changed';
+	at: string;
+	/** Who made it, by their name then ('Deleted user' once that account is gone); null when no one is named. */
+	by: string | null;
+	/** An auto run published by itself. */
+	auto: boolean;
+	publicationId: string | null;
+	runId: string | null;
+	/** level null: an unknown level; notice null: an event older than the decision log (issue #119), which kept no text. */
+	restriction: { level: RestrictionLevel | null; pct: number | null; notice: NoticeText | null };
+	/** undefined when the event kept none (older than the decision log). */
+	nextExpectedOn?: string | null;
+	note?: string;
+	/** A notice change: which parts were sent ('restriction', 'nextExpectedOn', 'note'). */
+	fields?: string[];
+	farms: number | null;
+	season: { from: string; to: string; dataUntil: string | null } | null;
+	/** The publication is the current one. */
+	current: boolean;
+	/** The run is still kept (runs are trimmed by the run cap). */
+	runKept: boolean;
 }
 
 /**
@@ -1800,6 +1873,20 @@ export interface ShareScenario {
 		opNames: { id: string; name: string }[];
 		/** Each op's class as its latest run applied it; null without a run. */
 		classified: ('proposal' | 'baseline')[] | null;
+		/** How many ops set a registered volume on another unit and are left out (#523 G1); 0 when none. */
+		withheldOps: number;
+		/** With a licence issued (227, 291): the terms it was granted on; null otherwise. */
+		grantedTerms: SharedTerms | null;
+		/** What followed the decision (228, 291): appeals and their outcomes, oldest first. */
+		decisionEvents: SharedDecisionEvent[];
+		/** Whether the licence stands now, and from what; null until decided with an outcome. */
+		licence: SharedLicence | null;
+		/**
+		 * The water-use licence application it models (294, on the link since 300): its number and the works as
+		 * applied for, in the applicant's own words; null when neither was given. Each op's `works` names a ref here.
+		 * Absent from an older API.
+		 */
+		wula?: SharedWula | null;
 	};
 	/** ready: both runs verify; none: not run on its current ops; unverified: a stamp fails, so no result. */
 	results: 'ready' | 'none' | 'unverified';
@@ -1809,6 +1896,41 @@ export interface ShareScenario {
 	comments: SharedComment[];
 	/** Where written objections go, when the applicant gave it (166). */
 	objection: ShareObjection | null;
+}
+
+/** A licence's terms on a share page (backend share/links.ts SharedTerms): own nodes' names only, another unit's volume left out. */
+export interface SharedTerms {
+	ops: ScenarioOp[];
+	opsSha256: string;
+	opNames: { id: string; name: string }[];
+	conditions: string;
+	asApplied: boolean;
+	withheldOps: number;
+}
+
+/** An event after the decision on a share page (backend share/links.ts SharedDecisionEvent): never who recorded it. */
+export interface SharedDecisionEvent {
+	position: number;
+	kind: DecisionEventKind;
+	forum: DecisionEventForum;
+	eventDate: string;
+	reference: string;
+	note: string;
+	terms: SharedTerms | null;
+}
+
+/** Whether a shared application's licence stands (backend share/links.ts SharedLicence): the event by position. */
+/** The WULA reference as a share link shows it (294, 300). */
+export interface SharedWula {
+	number: string | null;
+	works: { ref: string; text: string }[];
+}
+
+export interface SharedLicence {
+	inForce: boolean;
+	from: 'decision' | 'event';
+	eventPosition: number | null;
+	appealPending: boolean;
 }
 
 /** A public comment as a share page shows it. */
@@ -2187,6 +2309,12 @@ export interface PackDetail {
 	 * refused (403 `pack_volumes_withheld`).
 	 */
 	volumesWithheld: boolean;
+	/**
+	 * The reproduction bundle is refused this caller (403 `pack_volumes_withheld`): as `volumesWithheld`, or
+	 * because a run only the bundle holds (an alternative's, the cited assessment's background) carries a
+	 * registered volume (bundle-3).
+	 */
+	bundleWithheld: boolean;
 	signoffs: Signoff[];
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
@@ -2675,19 +2803,50 @@ export interface AssessmentMember {
 	endDate: string | null;
 }
 
+/** A run that can be an assessment's background at full allocation (295, GET …/assessments/backgrounds). */
+export interface AssessmentBackgroundRun {
+	id: string;
+	label: string;
+	scenarioName: string | null;
+	createdAt: string;
+}
+
+/**
+ * An assessment's background at full allocation (295, WP-3.10; backend
+ * assessments/background.ts): the same table with every registered or
+ * licensed volume taken in full in the baseline's column. A separate,
+ * labelled comparison; never the baseline.
+ */
+export interface AssessmentBackground {
+	label: string;
+	run: AssessmentBackgroundRun;
+	report: CumulativeReport;
+	/** For a reader kept from the registered volumes: only the EWR days and Reserve months rows are left. */
+	verdictsOnly?: true;
+}
+
 /** A cumulative impact assessment (roadmap WP-3.11, docs/api.md § Assessments). */
 export interface Assessment {
 	id: string;
 	name: string;
 	baseRunId: string;
 	baseRun: { id: string; label: string; createdAt: string };
+	/** The optional background at full allocation it was also assessed on (295); null for none. Absent from an older API. */
+	backgroundRunId?: string | null;
+	backgroundRun?: { id: string; label: string; createdAt: string } | null;
 	/** refused: the scenarios no longer combine (`problems`); failed: the engine refused an input. */
 	status: 'pending' | 'complete' | 'refused' | 'failed';
 	problems: string[];
-	/** Only on GET …/assessments/:aid, and only when complete. */
-	report?: CumulativeReport | null;
+	/** Only on GET …/assessments/:aid, and only when complete; with the background's table beside it when it had one. */
+	report?: (CumulativeReport & { background?: AssessmentBackground }) | null;
 	engineVersion: string | null;
 	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	/**
+	 * The dams' firm-yield jobs (297): how many are back of how many its job queued; null when it queued none.
+	 * It stays pending until they are all back; one that stops fails it (`problems` names the dam and run).
+	 * Absent from an older API.
+	 */
+	yields?: { done: number; total: number } | null;
 	createdBy: string | null;
 	createdAt: string;
 	completedAt: string | null;
@@ -2704,6 +2863,8 @@ export interface Assessment {
 export interface AssessmentRequest {
 	name: string;
 	scenarioIds: string[];
+	/** Optional background at full allocation (295): a scenario run on the same baseline at full allocation. */
+	backgroundRunId?: string;
 	/** Only check that the scenarios combine; write nothing. */
 	dryRun?: boolean;
 }
@@ -3041,6 +3202,16 @@ export interface MapAcceptances {
 /** GET …/map/linked-nodes: the nodes at least one feature is linked to, each once (no geometry). */
 export interface MapLinkedNodes {
 	nodeIds: string[];
+	/** Each dam drawn as its outline and linked to a node, with its siting (194; null = not said), by node then name. */
+	dams: LinkedDam[];
+}
+
+/** A linked dam outline's siting on the map, for the hint beside Upstream inflow to dam (network/fields.ts damSitingHint). */
+export interface LinkedDam {
+	nodeId: string;
+	featureId: string;
+	name: string;
+	damPosition: DamPosition | null;
 }
 
 /**
@@ -4176,8 +4347,12 @@ export interface UnitRainProposalUnit {
 	feedId: string | null;
 	/** Days that series holds (0 before the first fetch). */
 	seriesDays: number;
-	/** What POST does for it: make its feed, give its (still empty) feed these cells or this product, or nothing (it reads them already). */
-	action: 'create' | 'update' | 'none';
+	/**
+	 * What POST does for it: make its feed, give its (still empty) feed these cells or this product, give its feed these
+	 * cells and re-read its whole record over them (`replace`: the series holds days; backend 296_feed_area_replace), or
+	 * nothing (it reads them already).
+	 */
+	action: 'create' | 'update' | 'replace' | 'none';
 }
 
 /** GET …/feeds/chirps/from-units: every land unit's proposal, and the units it can't propose for. */
@@ -4205,7 +4380,10 @@ export interface UnitRainApplyBody {
 /** POST …/feeds/chirps/from-units answer: the feeds made and changed, one per unit. */
 export interface UnitRainApplyResult {
 	created: number;
+	/** Every feed changed, the ones re-reading their record included. */
 	updated: number;
+	/** Of those, the feeds re-reading their whole record over the new cells (296). */
+	replaced?: number;
 	feeds: { nodeId: string; feedId: string }[];
 	/** The units left out (refused, or with no parcel), and why. */
 	skipped?: { nodeId: string; name: string; reason: string }[];

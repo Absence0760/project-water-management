@@ -988,6 +988,8 @@ Migration `024_scenarios.sql`
   evidence report's fixed Appendix C prompts, written with the description
   by whoever may change the scenario and printed in Appendix C, each answered
   or *Not given* ([design/evidence-report.md § 4.3](./design/evidence-report.md)).
+  `wula_number`, `wula_works` (294) are the water-use licence application it
+  models ([§ The WULA reference](#the-wula-reference)).
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
   only. Deleting a scenario leaves its runs scenario runs: `from_scenario`
   (188) stays true from the snapshot's `inputs.scenario`, so a run of a
@@ -1187,6 +1189,45 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   `cumulative.test.ts` checks the arithmetic on real runs, an empty scenario
   changing nothing, existing users excluding an added farm, and the
   Reserve rows.
+- **Yield and reliability per dam** (`scenario/cumulativeYield.ts`,
+  WP-3.6 inside WP-3.11; followups § Cumulative impact). For each **dam the
+  applications touch**, two more rows: `dam_firm_yield` (m³/year, the firm
+  yield with the yield job's defaults: a constant draft, assurance 1,
+  tolerance 0.1 %; `network/yield.ts` `firmYield`) and `dam_reliability`
+  (the dam's unit's annual assurance of supply, water years met ÷ water
+  years, §2.11a; `null` on a record without a whole water year), across
+  the same columns with the same change and interaction arithmetic.
+  *Touched* (`touchedDams`, with combine.ts `scenarioNodeIds`): a node an
+  op names as scenarioConflicts reads it (writes, adds, removes, plants on,
+  scales the demand of, adds or moves a unit below, a transfer's ends),
+  kept when it is a unit with land and a dam above 0 m³ in the baseline or
+  the combination; sorted by name. A dam only some runs have (one an
+  application adds) is `null` in the others, so its changes are not
+  assessed. **Each search is its own job** (297_assessment_yield_jobs,
+  `assessments/yields.ts`): the `assessment` job builds the report with the
+  `dam_firm_yield` cells empty, keeps it in `assessment.gathering` and
+  queues one `assessment_yield` job per dam and run that has the dam; the
+  last one back fills the cells (`cumulativeDamRow`, the same arithmetic)
+  and completes the assessment, so the report's shape is unchanged.
+  **Cost cap:** at most `CUMULATIVE_YIELD_SEARCHES_MAX` (160) searches an
+  assessment, so `floor(160 ÷ (applications + 2))` dams (40 with two
+  applications, 16 with eight); the rest are named in the report's
+  `warnings` (run them from the Yield panel). The bound is the work one
+  assessment may queue, not one job's time: measured on
+  `yield.perf.test.ts`'s 30-year, 16-node catchment (M3 Pro), a search
+  about 3.9 s and the run that prepares it 1.7 s, so at most about 15
+  minutes of worker time an assessment, and at most 2 assessments in
+  flight per user (an assessment counts while any of its jobs is pending).
+  The worker takes up to 25 jobs a tick, so a full fan-out spans several
+  5-minute ticks. On the DB tests' 120-day fixture an assessment with six
+  dams (24 yield jobs) completes in one tick in well under a second. `report.dams = { nodeIds, onVolumes }` names
+  the dams and says whether a run capped use at, or scaled demand to, the
+  registered volumes (a viewer kept from them reads only each direction:
+  [evidence-pack.md § The other applications together](./evidence-pack.md#the-other-applications-together)).
+  Pure, `runModel` unchanged, so `ENGINE_VERSION` is too.
+  `cumulativeYield.test.ts`: which dams are touched (an untouched dam and a
+  touched unit without a dam are not), the cap, each yield equal to
+  `firmYield` on the same input, a dam only one run has.
 
 ### Backend
 
@@ -1205,11 +1246,46 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
 - The job (as the editor who asked, under RLS) runs the baseline, each
   member alone and all together on **the current engine**, so every column
   is one engine's (the published run's stored summary may be an older
-  engine's), then stores `cumulativeImpact`'s report. It checks the
+  engine's), then stores `cumulativeImpact`'s report, or, when the
+  applications touch a dam, fans its firm yields out (above): each
+  `assessment_yield` job rebuilds its run's input from the stored base run
+  and copied ops, searches, stores its yield on its row and gathers under a
+  per-assessment advisory lock, so of two finishing at once the second sees
+  the first's row. **Never left hanging:** a yield job that dies (its
+  attempts spent, its user no longer an editor, the worker stopping past
+  its lease) or ends without its yield fails the assessment with one line
+  naming the run and dam (`"The baseline: the firm yield of "Upper farm"
+  didn't finish (…)"`): the dead job's own `onDead` hook (the worker calls
+  it as the acting user once the job is dead, `jobs/runner.ts`) gathers and
+  stores the assessment as `failed`, and so does the next sibling to gather.
+  The two deaths no hook can record, the claim killing a job whose lease
+  ran out with no attempts left (`app_claim_jobs`, in SQL) and a job whose
+  user is no longer an editor (who can't write the assessment), are
+  recorded by the tick's sweep after its jobs (301,
+  `app_fail_stopped_assessments`, the worker only), so no row stays
+  pending; between a death and that sweep the API already reads the
+  assessment as `failed` (`stoppedYieldsSql`). A
+  yield job on another engine than the runs' (a deploy in between) fails it
+  too, rather than mix two engines in one report, and so does a gather
+  that finds fewer yield rows than were queued (`gathering.expectedYields`;
+  no editor may delete one, the rows go only with the assessment). A yield
+  job's own failure is stored as *the firm yield failed* (the detail is
+  logged, never served). The optional background
+  (295) works out no dam yields and is computed by the `assessment` job as
+  before. It checks the
   combination again and marks the assessment `refused` if it no longer
   holds. No `model_run` rows: like a sweep, an assessment never counts
   against the 20-run cap. Editors only (RLS and the routes).
-- Tests: `assessments.db.test.ts` (two applications end to end, the single
+- Tests: `yields.db.test.ts` (six dams with two applications, more than
+  the old one-job budget of five, all with firm-yield rows equal to the
+  engine's; the pending state with `yields`; a dead yield job failing the
+  assessment as read and as recorded, and the last one dying storing it
+  failed through its `onDead`, or through the tick's sweep when its lease
+  ran out or its user is no longer an editor (301), the sweep leaving one
+  with live yield jobs alone and refusing a signed-in caller; the engine changing; the per-user cap
+  counting an assessment with yields out; the purge; RLS and the insert
+  guard); `jobs/trust.security.db.test.ts` (the kind's role re-check and a
+  cross-project payload); `assessments.db.test.ts` (two applications end to end, the single
   equal to the application's own run and the baseline to the published
   run, the interaction, a conflicting pair refused with nothing written,
   the dry run, drafts and other bases refused, RLS with a positive control,
@@ -1229,11 +1305,60 @@ assessed together ([evidence-pack.md § The other applications
 together](./evidence-pack.md#the-other-applications-together)). Tests:
 `evidence/report-combined.db.test.ts`.
 
+### Against existing authorised use: a background at full allocation
+
+The baseline column is the hydrologist's run, and stays so: **licences never
+drive the baseline** (the operator's rule, issue #507,
+[allocations.md § The allocation mode](./allocations.md#the-allocation-mode-engine--1180)).
+Assessing against *existing authorised use* (NWA s27(1)(a), s29(1)(a)(iii):
+every holder taking what they are registered or licensed for) is a separate
+comparison the assessor opts into, never a replacement (WP-3.10, migration
+`295_assessment_background.sql`, backend `assessments/background.ts`):
+
+- **The background is a run the assessor picks.** `POST …/assessments`
+  takes an optional `backgroundRunId`: a scenario run on the **same base
+  run** as the applications whose input ran at **full allocation**
+  (`settings.set allocationMode fullAllocation`), with no change but the
+  mode and registered volumes (`allocation.set` / `allocation.remove`, the
+  assumptions about authorised use), and at least one registered volume that
+  takes. Another project's run, or none, is 404; a run of the model, a
+  scenario run on another base, at another mode or with any other change is
+  422, as is a baseline with no volumes; the database's
+  `assessment_background_guard` holds the project, base and mode rules too.
+  The combination is checked on the background as well, its conflicts and
+  problems prefixed *At full allocation*. `GET …/assessments/backgrounds?baseRunId=`
+  lists the runs that qualify; Assess together offers them under *Also
+  against existing authorised use (optional)*.
+- **Its own row set.** The job runs the baseline's table exactly as without a
+  background, then the background, each application alone on it and all
+  together on it (the same applicant masks), with the current engine, and
+  stores that table beside the baseline's as `report.background`
+  (`{ label: 'Existing authorised use (full allocation)', run, report }`):
+  the background in the baseline's column, changes and the interaction
+  against the background. Twice the runs (up to 2 × (8 + 2)). The screen
+  shows it as a second, labelled table under the matrix, with each measure's
+  baseline value beside it, and the CSV as a second table.
+- **Who reads it.** An assessment is an editor's, and an editor reads every
+  volume (decision D3). A reader kept from the volumes (a report render
+  queued without them, 218) gets its EWR days and Reserve months rows only
+  (`backgroundVerdicts`, `verdictsOnly: true`), as for any full-allocation
+  run ([allocations.md § Who sees what](./allocations.md#who-sees-what)).
+- **The evidence report** (`evidence-26`) adds its outlet days and Reserve
+  months to § 4's combined table as its own rows when the assessment it
+  reads has one; page 1's row and the baseline's figures are unchanged
+  ([evidence-pack.md § The other applications
+  together](./evidence-pack.md#the-other-applications-together)).
+- Tests: `assessments/background.db.test.ts` (the table beside an unchanged
+  baseline's, the background column the full-allocation run's, every refusal
+  in the API and the database, a viewer reading none and a reader kept from
+  the volumes the verdicts only, with the assessor as positive control),
+  `background.test.ts`, the engine's evidence report test, the frontend's
+  `cumulative.test.ts`, and `e2e/tests/assess-together.spec.ts`.
+
 ### Not yet
 
 - **Yield and reliability per dam** together (WP-3.6's yield on the combined
-  input), and a **full-allocation background** (WP-3.10) as the baseline
-  column, are not in the report yet ([followups.md](./followups.md)).
+  input) is not in the report yet ([followups.md](./followups.md)).
 
 ## UI
 
@@ -1524,7 +1649,9 @@ scenario is `'team'`, and behaves exactly as above).
   `app_published_run_input` / `app_published_run_series`) and never returns
   it. An unpublished run answers `404`, as if it didn't exist.
 - **What the applicant sees of it** (`GET …/scenarios/:sid/base`,
-  `backend/src/scenarios/applicant.ts`): the settings, their own farms (their
+  engine `scenario/applicant.ts`, which `backend/src/scenarios/applicant.ts`
+  re-exports, so a pack's reproduction bundle derives the same mask offline):
+  the settings, their own farms (their
   farm links) and every gauge in full; every other node by its kind and
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
   its values blanked but for the bed losses in the reach below it (engine ≥
@@ -1669,6 +1796,19 @@ scenario is `'team'`, and behaves exactly as above).
   exists (and again after a variation), § 4 names the licence among those
   with no run of their licensed terms (`evidence-20`) rather than leaving it
   out ([evidence-pack.md § The responsible authority](./evidence-pack.md#the-responsible-authority)).
+  That run is made for the assessor (293_scenario_run_job): recording a
+  licence issued on other terms than the ops applied for, or an appeal event
+  after which the terms in force have no run on the base (a variation),
+  queues a `scenario_run` job (`scenarios/licensedRun.ts`,
+  `jobs/handlers/scenario-run.ts`) that stores the run as the member who
+  recorded it, exactly as **Run the licensed terms** does. It reads the terms
+  in force when it runs, so a variation recorded while it waited is the one
+  run, and it does nothing when the licence was set aside meanwhile or a run
+  of the terms already exists (the button pressed first). One pending per
+  scenario, at most 5 per member; past that nothing is queued and the button
+  still runs it. The Application panel shows the job where the button is
+  (queued or running hides the button; a failure gives it back, with why) and
+  reads the scenario again every few seconds until it finishes.
   **What followed the decision** (228_decision_events, #523 G4): a member
   acting for the authority records, append-only, an appeal lodged (the Water
   Tribunal, s148, or a court) and then its outcome in that forum, upheld,
@@ -1818,6 +1958,107 @@ scenario is `'team'`, and behaves exactly as above).
   `application: true` and no name until the application is decided (every
   viewer reads the project's history).
 
+### The WULA reference
+
+`294_wula_reference`; engine `packages/engine/src/scenario/wula.ts`;
+[api.md § Scenarios](./api.md), [data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql),
+[evidence-pack.md § The WULA reference](./evidence-pack.md#the-wula-reference).
+The licensing authority's question (followups.md, "Applied-for works against
+the modelled ones"): is the change modelled the one the water-use licence
+application (WULA) applies for?
+
+- **What it records.** The WULA's number, as the authority gave it, and the
+  works as applied for: a list of `{ ref, text }`, `ref` a short label
+  ("W1", or the WULA's own item number), `text` the works in words. Any
+  scenario may carry one: an application, or a team scenario an editor
+  models for an applicant. Application details → *WULA* in the editor.
+- **Who.** Whoever may change the scenario writes it (an editor on a team
+  scenario, only the applicant on an application), **while it is a draft**:
+  submitted, it is frozen with the ops (`scenario_wula_frozen`, as the
+  notice's objection details, 166), and a withdrawn application reopened as a
+  draft takes changes again. A decision can't change it either. Whoever
+  reads the scenario reads it (its RLS: the applicant and those they share it
+  with; the assessors once submitted; viewers once decided).
+- **Each op names its works.** Any op may carry `works`, the `ref` of the
+  works it models (engine `OpWorksTag`, kept by `validateScenarioOps`;
+  `applyScenario` never reads it). It is part of the op, so it is hashed into
+  `ops_sha256`, recorded with every run and frozen with the ops; the editor
+  ties a change to its works from the list of changes (*Models* select, an
+  edit of the ops like any other, so Undo takes it back).
+- **The check warns, never blocks** (`check.wulaWarnings`, engine
+  `wulaWarnings`): no number given; no works listed (one line, while any op
+  is a proposal); `op N (kind): a proposal tied to none of the works the WULA
+  applies for` (no tag, or a tag the list lacks); `op N (kind): names works
+  "X", which the WULA reference doesn't list` (any class); `Works "W2" is
+  applied for, but no change models it`. Every application is held to it,
+  even before it records a reference; a team scenario only once it records
+  one, since an editor's what-if needn't model a WULA. A baseline assumption
+  is never "untied": it isn't the applicant's works. These are warnings, not
+  problems: a change can model applied-for works without the tag, and an
+  untied proposal still runs and submits. The assessor reads the tie on the
+  evidence report (page 1 and A.2, `evidence-26`).
+- **On the share link** (300_share_wula, `app_share_scenario`): a submitted or
+  decided application's link carries `scenario.wula = { number, works: [{
+  ref, text }] }` (`null` when neither was given), and the share page prints
+  it under the changes as **The water-use licence application** (the
+  number, then each works' ref and words), each change with **Works
+  *ref*** beside it from its op's `works` tag. The works' words are the
+  applicant's own, as the scenario's name and description the link already
+  shows; frozen once submitted, so what the link shows is what was
+  submitted. A tag goes with its op, so a withheld op (another unit's
+  registered volume, `app_share_kept`) takes its tag with it.
+
+### Mitigation alternatives
+
+`298_scenario_alternatives`; backend `scenarios/alternatives.ts`;
+[api.md § Scenarios](./api.md), [data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql),
+[evidence-pack.md § Mitigation alternatives](./evidence-pack.md#mitigation-alternatives).
+The licence applicant's question (followups.md, "Labelled mitigation
+alternatives"): the report showed one application, but an applicant must
+show the mitigation they weighed.
+
+- **What it records.** Up to three (`ALTERNATIVES_MAX`) runs the scenario
+  cites, in order, each with a label of 1–80 characters ("smaller dam",
+  "winter abstraction only"). It cites a **run**, not a scenario: a run's
+  ops and results never change, so the citation is the alternative as it
+  was weighed. Application details → *Alternatives* in the editor.
+- **Which runs.** A run of another of the caller's own scenarios, of the
+  same origin (an application's: the same applicant's; a team scenario's:
+  another team scenario), on the scenario's own base run.
+  `GET …/alternatives` lists those (`candidates`, newest first) to whoever
+  may change the scenario and no one else; `PUT …/alternatives` refuses any
+  other run with one `422` (another applicant's, the scenario's own, one on
+  another base run or project, or none), so no answer says another
+  applicant's run exists, and `scenario_alternative_guard` refuses it in
+  the table too.
+- **Who, and when.** Whoever may change the scenario replaces the list (an
+  editor on a team scenario, only the applicant on an application, never a
+  consultant it is shared with), **while it is a draft**: submitted, it is
+  frozen with the ops (the route's `409`, the guard's `restrict_violation`
+  on a delete); withdrawn it stays frozen, reopened as a draft it takes
+  changes again. A rebase drops the citations on the old base
+  (`scenario_alternative_rebase`), so every alternative is on the
+  scenario's base. Whoever reads the scenario reads the list.
+- **Kept and readable with it.** A draft's runs are its parties' alone, and
+  an alternative usually stays a draft, so a run a scenario **past draft**
+  cites is readable by whoever reads that scenario (the assessors once
+  submitted, viewers once decided; `app_alternative_run_readable` in
+  `model_run_select`, `app_hidden_scenario_runs`, `app_run_digest` and the
+  allocation-holder definers), and kept: no trim, no delete
+  (`model_run_cited`), and its scenario can't be deleted (`409`). Nothing
+  else of the applicant's drafts becomes readable. A draft's citations keep
+  nothing, so a draft's cited run the applicant's cap trims drops out of the
+  list (cite the newest), and deleting an account's drafts isn't held up by
+  them. The Runs tab tags a kept one *Alternative*.
+- **On the evidence report.** Page 1 sets each beside the application, a
+  column with its value and its change against the baseline on every row,
+  and A.2 lists its changes ([evidence-pack.md § Mitigation
+  alternatives](./evidence-pack.md#mitigation-alternatives)).
+- **The log.** `scenario.changed` with `fields: ['alternatives']` and the
+  count; an application's carries no name, as above.
+- **Not on the share link or the applicant's copy of a pack**: both read
+  allowlisted fields only.
+
 ### Sharing and comments (WP-3.15)
 
 `115_scenario_share_notes.sql`; [api.md § Share](./api.md#share),
@@ -1834,6 +2075,11 @@ links](./security.md#share-links).
   scenario's ops name every farm, so it is refused), the EWR at each site on the
   baseline beside the application, and the catchment's totals only at five
   or more farm holders. Results show only when both runs' stamps verify.
+  Once decided it also prints where the licence stands, the terms it was
+  granted on with their conditions, and each appeal event after the
+  decision with a variation's terms (291; never who recorded an event). A
+  change that sets another unit's registered volume is left out of every
+  list of changes there, with a line saying how many.
   The link is dead while the application is withdrawn or back to draft.
 - **Comments.** A scenario's notes have three audiences beside `team`:
   `assessors`, `parties` (the assessors and the applicant's party) and

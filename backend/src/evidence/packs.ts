@@ -38,7 +38,7 @@ import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { allocationUnitsHidden, countsOthersYears, redactReportAllocations } from '../allocations/viewerUnits.js';
-import { authorisedVerdicts, boardVerdicts, reportVerdictsOnly } from '../allocations/verdictsOnly.js';
+import { authorisedVerdicts, boardVerdicts, combinedDamVerdicts, reportVerdictsOnly } from '../allocations/verdictsOnly.js';
 import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
@@ -210,7 +210,9 @@ async function packStatementFor(
  * manifest names, without a fit.
  */
 async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManifest): Promise<PackErratum[]> {
-	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : [])];
+	// The mitigation alternatives' runs too (evidence-26): page 1 prints their figures, so their errata reach the pack.
+	const alternatives = (manifest.report.alternatives ?? []).filter((x) => typeof x?.runId === 'string');
+	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : []), ...alternatives.map((x) => x.runId)];
 	const { rows } = await db.query<{ id: string; engineVersion: string; fitEngineVersion: string | null }>(
 		`SELECT id, engine_version AS "engineVersion", run_fit_engine_version(inputs, summary) AS "fitEngineVersion" FROM model_run WHERE id = ANY($1::uuid[])`,
 		[ids]
@@ -218,7 +220,8 @@ async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManife
 	const identity = manifest.report.identity;
 	const named: Record<string, string | undefined> = {
 		[pack.baselineRunId]: identity.baseline.engineVersion,
-		...(pack.scenarioRunId ? { [pack.scenarioRunId]: identity.application?.engineVersion } : {})
+		...(pack.scenarioRunId ? { [pack.scenarioRunId]: identity.application?.engineVersion } : {}),
+		...Object.fromEntries(alternatives.map((x) => [x.runId, x.engineVersion]))
 	};
 	const runs: PackRunEngines[] = ids.flatMap((id) => {
 		const r = rows.find((x) => x.id === id);
@@ -386,6 +389,45 @@ export async function packVolumesWithheld(db: Db, projectId: string, pack: Pick<
 		[projectId, ids]
 	);
 	return rows[0]!.seen < ids.length || rows[0]!.volumes;
+}
+
+/**
+ * Whether the caller is kept from a pack's reproduction bundle (D3, #523 G1):
+ * as packVolumesWithheld, and also when a run only the bundle holds carries a
+ * registered volume (bundle-3): an alternative page 1 assesses (evidence-26),
+ * the cited assessment's background run, or a member op that sets a volume.
+ * An assessment the caller can no longer read counts as carrying them.
+ */
+export async function packBundleVolumesWithheld(db: Db, projectId: string, pack: Pick<PackMeta, 'id' | 'baselineRunId' | 'scenarioRunId'>, role: Role): Promise<boolean> {
+	if (await packVolumesWithheld(db, projectId, pack, role)) return true;
+	if (!(await allocationUnitsHidden(db, projectId, role))) return false;
+	const { rows } = await db.query<{ alternatives: string[] | null; assessmentId: string | null }>(
+		`SELECT (SELECT array_agg(x->>'runId') FROM jsonb_array_elements(CASE WHEN jsonb_typeof(manifest->'report'->'alternatives') = 'array' THEN manifest->'report'->'alternatives' ELSE '[]' END) x
+				WHERE x->>'notAssessed' IS NULL) AS alternatives,
+			manifest->'report'->'cumulative'->'combined'->'assessment'->>'id' AS "assessmentId"
+		 FROM evidence_pack WHERE project_id = $1 AND id = $2`,
+		[projectId, pack.id]
+	);
+	const ids = [...(rows[0]?.alternatives ?? [])];
+	const assessmentId = rows[0]?.assessmentId ?? null;
+	if (assessmentId) {
+		const { rows: a } = await db.query<{ background: string | null; setsVolume: boolean }>(
+			`SELECT a.background_run_id AS background,
+				EXISTS (SELECT 1 FROM assessment_member m, jsonb_array_elements(m.ops) o WHERE m.assessment_id = a.id AND o->>'op' = 'allocation.set') AS "setsVolume"
+			 FROM assessment a WHERE a.project_id = $1 AND a.id = $2`,
+			[projectId, assessmentId]
+		);
+		if (!a[0] || a[0].setsVolume) return true;
+		if (a[0].background) ids.push(a[0].background);
+	}
+	if (!ids.length) return false;
+	const { rows: runs } = await db.query<{ seen: number; volumes: boolean }>(
+		`SELECT count(*)::int AS seen,
+			coalesce(bool_or(CASE WHEN jsonb_typeof(inputs->'model'->'allocations') = 'array' THEN jsonb_array_length(inputs->'model'->'allocations') > 0 ELSE false END), false) AS volumes
+		 FROM model_run WHERE project_id = $1 AND id = ANY($2::uuid[])`,
+		[projectId, ids]
+	);
+	return runs[0]!.seen < new Set(ids).size || runs[0]!.volumes;
 }
 
 /**
@@ -561,12 +603,23 @@ export const packRoutes = new Hono<AuthEnv>()
 					manifest: scope
 						? { ...manifest, report: redactReportAllocations(manifest.report, scope.own) }
 						: (await allocationUnitsHidden(db, id, role))
-							? { ...manifest, report: { ...manifest.report, licenceImpact: boardVerdicts(manifest.report.licenceImpact), licenceImpactAuthorised: authorisedVerdicts(manifest.report.licenceImpactAuthorised) } }
+							? {
+									...manifest,
+									report: {
+										...manifest.report,
+										licenceImpact: boardVerdicts(manifest.report.licenceImpact),
+										licenceImpactAuthorised: authorisedVerdicts(manifest.report.licenceImpactAuthorised),
+										// A combined dam's yield on a run resting on the registered volumes: its direction only (evidence-26).
+										cumulative: combinedDamVerdicts(manifest.report.cumulative, false)
+									}
+								}
 							: manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
 					// The manifest above is redacted (it no longer hashes to manifestSha256), and the bundle is refused (#523 G1).
 					volumesWithheld: withheld,
+					// bundle-3: the bundle also holds runs the pack's own two don't (an alternative's, the assessment's background), so it may be refused alone.
+					bundleWithheld: withheld || (await packBundleVolumesWithheld(db, id, pack, role)),
 					// Errata that apply to its runs now and that the manifest didn't record (132): shown beside the pack, never printed in it.
 					errataFoundSince,
 					signoffs,
@@ -798,7 +851,7 @@ export const packRoutes = new Hono<AuthEnv>()
 				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
 				// Its runs' inputs and results, every farm's volume in them (#523 G1): redacting would break its hash, so refused.
-				if (await packVolumesWithheld(db, id, pack, role)) throw volumesWithheld('the reproduction bundle holds each farm’s registered volume');
+				if (await packBundleVolumesWithheld(db, id, pack, role)) throw volumesWithheld('the reproduction bundle holds each farm’s registered volume');
 				const { rows } = await db.query<{ key: string | null }>('SELECT bundle_key AS key FROM evidence_pack WHERE project_id = $1 AND id = $2', [id, packId]);
 				return { pack, key: rows[0]?.key ?? null };
 			},

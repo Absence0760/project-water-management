@@ -47,8 +47,11 @@ import {
 import { loadApplicantResults, newestApplicationRun } from './results.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
 import { IN_APP_CHECK } from './questions.js';
+import { queueLicensedRun } from './licensedRun.js';
+import { wakeWorker } from '../jobs/wake.js';
+import { alternativeCandidates, AlternativesBody, loadAlternatives, replaceAlternatives } from './alternatives.js';
 import { AppealBody, CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
-import type { ScenarioOp } from '@water-management/engine';
+import { wulaWarnings, type ScenarioOp } from '@water-management/engine';
 
 /**
  * What the editor shows beside the ops: which applied, which don't, and how
@@ -80,11 +83,16 @@ async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) 
 	// runs/stamp.ts), for the assessors: its decision waits until none remain.
 	// null for a team scenario and for anyone below editor.
 	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
+	// The mitigation alternatives it cites (298), for whoever reads it.
+	const alternatives = await loadAlternatives(db, projectId, s.id);
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario, check: checkWithout(checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), drop), checkError: null, unverifiedRunIds };
+		const check = checkWithout(checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), drop);
+		// The WULA reference's warnings (294, engine wulaWarnings): over the ops as the caller reads them, so their op numbers match the list's. Never a block.
+		const wulaLines = wulaWarnings(scenario.ops, check.classified, scenario.wula, { application: isApplication(s) });
+		return { scenario, check: { ...check, wulaWarnings: wulaLines }, checkError: null, unverifiedRunIds, alternatives };
 	} catch (err) {
-		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
+		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds, alternatives };
 		throw err;
 	}
 }
@@ -109,6 +117,8 @@ const duplicateName = (application: boolean) => (err: unknown): never => {
 const PG_RESTRICT = '23001';
 const signedKept = () =>
 	new ApiError(409, 'this scenario has a signed-off run or an evidence pack, so it is kept: the run stays the scenario run that was signed or packed');
+const alternativeKept = () =>
+	new ApiError(409, 'a submitted scenario cites a run of this one as a mitigation alternative, so it is kept: the alternative stays what was submitted');
 const commentsKept = () => new ApiError(409, 'this application drew public comments, so it is kept: they are the record of its public participation');
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned hydrological units and base run can't change`);
 const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
@@ -350,6 +360,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				if (body.objectionAddress !== undefined) set.push(['objection_address', body.objectionAddress]);
 				if (body.objectionClosingDate !== undefined) set.push(['objection_closing_date', body.objectionClosingDate]);
 			}
+			// The WULA reference (294): any scenario's, frozen once it is submitted (scenario_wula_frozen).
+			if (body.wulaNumber !== undefined || body.wulaWorks !== undefined) {
+				if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario's WULA reference is frozen; withdraw it to change it`);
+				if (body.wulaNumber !== undefined) set.push(['wula_number', body.wulaNumber]);
+				if (body.wulaWorks !== undefined) set.push(['wula_works', JSON.stringify(body.wulaWorks)]);
+			}
 			if (ops !== undefined)
 				set.push(
 					['ops', JSON.stringify(ops)],
@@ -375,6 +391,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				monitoring: s.monitoring,
 				objectionAddress: s.objectionAddress,
 				objectionClosingDate: s.objectionClosingDate,
+				wulaNumber: s.wula.number,
+				wulaWorks: JSON.stringify(s.wula.works),
 				ops: s.opsSha256,
 				owned_node_ids: [...s.ownedNodeIds].sort().join(','),
 				status: s.status
@@ -387,6 +405,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				monitoring: body.monitoring,
 				objectionAddress: body.objectionAddress,
 				objectionClosingDate: body.objectionClosingDate,
+				wulaNumber: body.wulaNumber,
+				wulaWorks: body.wulaWorks !== undefined ? JSON.stringify(body.wulaWorks) : undefined,
 				ops: ops !== undefined ? opsSha256(ops) : undefined,
 				owned_node_ids: owned !== undefined ? [...owned].sort().join(',') : undefined,
 				status: body.status
@@ -416,6 +436,14 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// trigger (072) refuses the DELETE too, whoever runs it, and sees the
 			// sign-offs a contributor can't read; its restrict_violation is the same 409.
 			// An evidence pack of the scenario likewise (112_evidence_pack): the same trigger refuses it.
+			// A run of it that a frozen scenario cites as a mitigation alternative (298) is kept with its scenario: the
+			// scenario_alternative_guard refuses the cascade too, whoever runs it.
+			const cited = await db.query(
+				`SELECT 1 FROM scenario_alternative sa JOIN scenario c ON c.id = sa.scenario_id
+				 WHERE sa.project_id = $1 AND sa.alternative_scenario_id = $2 AND c.status <> 'draft' LIMIT 1`,
+				[id, sid]
+			);
+			if (cited.rowCount) throw alternativeKept();
 			const signed = await db.query(
 				`SELECT 1 FROM signoff so JOIN model_run r ON r.id = so.run_id WHERE r.scenario_id = $1
 				 UNION ALL SELECT 1 FROM evidence_pack ep WHERE ep.scenario_id = $1 LIMIT 1`,
@@ -426,7 +454,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const { rows: commented } = await db.query<{ yes: boolean }>('SELECT app_scenario_has_public_comments($1, $2) AS yes', [id, sid]);
 			if (commented[0]?.yes) throw commentsKept();
 			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]).then(mustChange, (err: { code?: string; message?: string }) => {
-				throw err.code === PG_RESTRICT ? (err.message?.includes('public comments') ? commentsKept() : signedKept()) : err;
+				throw err.code === PG_RESTRICT
+					? err.message?.includes('public comments')
+						? commentsKept()
+						: err.message?.includes('alternatives are frozen')
+							? alternativeKept()
+							: signedKept()
+					: err;
 			});
 			await recordAudit(db, id, 'scenario.deleted', subject(s));
 			return c.body(null, 204);
@@ -493,6 +527,33 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s, await hiddenHolders(db, s)), role) });
 		});
 	})
+	// --- the mitigation alternatives (298_scenario_alternatives) -----------------------
+	// The list, and the runs the caller may cite (only whoever may change it gets any).
+	.get('/:id/scenarios/:sid/alternatives', async (c) => {
+		const { id, sid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'contributor');
+			const s = await loadScenario(db, id, scenarioId(sid));
+			return c.json({ alternatives: await loadAlternatives(db, id, s.id), candidates: await alternativeCandidates(db, id, s.id) });
+		});
+	})
+	// Replace the list: whoever may change the scenario, while it is a draft (frozen with the ops once submitted).
+	.put('/:id/scenarios/:sid/alternatives', async (c) => {
+		const { id, sid } = c.req.param();
+		const body = AlternativesBody.parse(await readJson(c));
+		return withUser(c.get('userId'), async (db) => {
+			const role = await requireRole(db, id, 'contributor');
+			assertCanChange(await loadScenario(db, id, scenarioId(sid)), role, c.get('userId'));
+			// Held against a concurrent submit (its FOR UPDATE waits), so the status read here is the one the rows go in under.
+			const s = await loadScenario(db, id, sid, true);
+			if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario's alternatives are frozen; withdraw it to change them`);
+			const before = await loadAlternatives(db, id, s.id);
+			const alternatives = await replaceAlternatives(db, id, s.id, body.alternatives);
+			const key = (l: readonly { runId: string; label: string }[]) => JSON.stringify(l.map((x) => [x.runId, x.label]));
+			if (key(before) !== key(alternatives)) await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['alternatives'], alternatives: alternatives.length }));
+			return c.json({ alternatives, candidates: await alternativeCandidates(db, id, s.id) });
+		});
+	})
 	// --- the submission workflow (WP-3.3) ---------------------------------------------
 	// Submit: freezes the ops (their hash is the one the assessor decides on).
 	// Only a scenario whose every op applies to its base may be submitted.
@@ -549,7 +610,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	.post('/:id/scenarios/:sid/decide', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = DecideBody.parse(await readJson(c, { optional: true }));
-		return withUser(c.get('userId'), async (db) => {
+		const out = await withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
 			// Recording the decision needs two-step sign-in (auth/stepUp.ts).
 			await requireStepUp(db);
@@ -594,8 +655,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					true
 				)
 			);
-			return c.json(await withCheck(db, id, decided, role));
+			// Granted on other terms than those applied for: their run is queued, so § 4 counts the licence without anyone pressing the button (293).
+			const queued = await queueLicensedRun(db, id, decided);
+			return { view: await withCheck(db, id, queued ? await loadScenario(db, id, sid) : decided, role), queued };
 		});
+		if (out.queued?.created) await wakeWorker(out.queued.job.id);
+		return c.json(out.view);
 	})
 	// Record what followed the decision (228_decision_events): an appeal lodged
 	// with the Water Tribunal or a court, then upheld, set aside or varied (new
@@ -604,7 +669,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	.post('/:id/scenarios/:sid/appeals', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = AppealBody.parse(await readJson(c, { optional: true }));
-		return withUser(c.get('userId'), async (db) => {
+		const out = await withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
 			await requireStepUp(db);
 			await requireActsForAuthority(db, id);
@@ -645,8 +710,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				'scenario.appeal_recorded',
 				subject(s, { eventId: rows[0]!.id, kind: body.kind, forum: body.forum, eventDate: body.eventDate, ...(terms ? { opsSha256: terms.opsSha256 } : {}) }, true)
 			);
-			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role), 201);
+			// Varied (or any event that leaves terms in force with no run of them): their run is queued, as on the decision (293).
+			const recorded = await loadScenario(db, id, sid);
+			const queued = await queueLicensedRun(db, id, recorded);
+			return { view: await withCheck(db, id, queued ? await loadScenario(db, id, sid) : recorded, role), queued };
 		});
+		if (out.queued?.created) await wakeWorker(out.queued.job.id);
+		return c.json(out.view, 201);
 	})
 	// --- sharing an application with a consultant or client (scenario_member) ----------
 	// Whom its owner may share it with (app_share_candidates, 049): for an

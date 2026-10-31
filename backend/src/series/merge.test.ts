@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '@water-management/engine';
-import { changedDays, feedDays, keepHandDays, mergeDaily, releaseDays, sameDaily, subtractRuns, unionRuns } from './merge.js';
+import { changedDays, feedDays, feedProductDays, intersectRuns, keepHandDays, mergeDaily, releaseDays, sameDaily, subtractRuns, unionRuns } from './merge.js';
 
 describe('mergeDaily', () => {
 	it('appends the next days', () => {
@@ -64,6 +64,42 @@ describe('day runs (time_series.feed_days)', () => {
 		expect(subtractRuns([[0, 10], [20, 30]], [[5, 25]])).toEqual([[0, 5], [25, 30]]);
 		expect(subtractRuns([[0, 10]], [[0, 10]])).toEqual([]);
 		expect(subtractRuns([[0, 10]], [[10, 12]])).toEqual([[0, 10]]);
+	});
+});
+
+describe('feedProductDays: which reference ET product wrote each feed day (292)', () => {
+	const d = (iso: string) => toEpochDay(iso);
+	it('intersect keeps the days both hold', () => {
+		expect(intersectRuns([[0, 10], [20, 30]], [[5, 25]])).toEqual([[5, 10], [20, 25]]);
+		expect(intersectRuns([[0, 10]], [])).toEqual([]);
+	});
+	it('a feed’s write records each day’s product, re-records a day it rewrites, and keeps the rest', () => {
+		// Held: 01–04 POWER's. The feed rewrites 03–05 from AgERA5 (03, 04) and POWER (05).
+		const held = { agera5: [], power: [[d('2026-01-01'), d('2026-01-05')]] as [number, number][] };
+		const owned: [number, number][] = [[d('2026-01-01'), d('2026-01-06')]];
+		const wrote: [number, number][] = [[d('2026-01-03'), d('2026-01-06')]];
+		expect(feedProductDays(held, owned, { wrote, start: '2026-01-03', dayProducts: ['agera5_et0', 'agera5_et0', 'power_et0'] })).toEqual({
+			agera5: [[d('2026-01-03'), d('2026-01-05')]],
+			power: [
+				[d('2026-01-01'), d('2026-01-03')],
+				[d('2026-01-05'), d('2026-01-06')]
+			]
+		});
+	});
+	it('a day the feed rewrites with no product named loses its old one (unknown: the credit owes both); a day it kept is not recorded', () => {
+		const held = { agera5: [[d('2026-01-01'), d('2026-01-03')]] as [number, number][], power: [] };
+		const owned: [number, number][] = [[d('2026-01-01'), d('2026-01-03')]];
+		expect(feedProductDays(held, owned, { wrote: [[d('2026-01-02'), d('2026-01-03')]], start: '2026-01-01' })).toEqual({ agera5: [[d('2026-01-01'), d('2026-01-02')]], power: [] });
+		// 01 named but not written (a person's value there was kept): no record for it.
+		expect(feedProductDays({ agera5: [], power: [] }, [[d('2026-01-02'), d('2026-01-03')]], { wrote: [[d('2026-01-02'), d('2026-01-03')]], start: '2026-01-01', dayProducts: ['power_et0', 'agera5_et0'] })).toEqual({
+			agera5: [[d('2026-01-02'), d('2026-01-03')]],
+			power: []
+		});
+	});
+	it('a person’s write: only the days the feed still holds keep their product', () => {
+		const held = { agera5: [[d('2026-01-01'), d('2026-01-11')]] as [number, number][], power: [[d('2026-01-11'), d('2026-01-21')]] as [number, number][] };
+		expect(feedProductDays(held, [[d('2026-01-01'), d('2026-01-05')]])).toEqual({ agera5: [[d('2026-01-01'), d('2026-01-05')]], power: [] });
+		expect(feedProductDays(held, [])).toEqual({ agera5: [], power: [] });
 	});
 });
 

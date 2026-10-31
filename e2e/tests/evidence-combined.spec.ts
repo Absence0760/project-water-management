@@ -3,7 +3,8 @@
 // submitted applications on the nominated baseline that combine (a dam and a
 // river pump on one farm), assessed together (a scoped worker tick); the
 // report of the dam's run reads that assessment on page 1 and in § 4's
-// combined table, each alone, the sum, all together and the interaction.
+// combined table, each alone, the sum, all together and the interaction, and
+// the dam they touch with its firm yield (evidence-26).
 // evidence-report.spec.ts has the conflicting pair (not assessed, the
 // conflict named). Synthetic catchment, invented names.
 import type { Page } from '@playwright/test';
@@ -56,5 +57,10 @@ test('the evidence report reads the applications on its baseline together from t
 	await expect(combined.getByRole('row', { name: /^All together/ }).getByRole('cell').nth(1)).toHaveText(/^([+−]\d+|0) days$/);
 	await expect(page.getByTestId('evidence-combined-source')).toContainText('From the cumulative assessment “Dam and pump”');
 	await expect(page.getByTestId('evidence-combined-na')).toHaveCount(0);
+	// evidence-26: the dam both touch, its firm yield on the baseline and the change together; the untouched Lower farm dam isn't listed.
+	const dams = page.getByTestId('evidence-combined-dams');
+	await expect(dams.getByRole('rowheader')).toHaveText(['Upper farm']);
+	await expect(dams.getByRole('row', { name: /^Upper farm/ }).getByRole('cell').first()).toHaveText(/^[\d\u202f ,]+ m³\/year$/);
+	await expect(page.getByTestId('evidence-combined-dams-note')).toContainText('Firm yield: the largest steady draft');
 	await expectNoViolations(page);
 });

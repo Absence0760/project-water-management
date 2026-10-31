@@ -8,10 +8,13 @@
 	// together, and the interaction (together less the sum of the separate
 	// changes), with a CSV of the raw numbers and the applicants' "Ask the
 	// assessors why" questions with their answers (issue #523 G7). Editors only (the tab is the
-	// assessors'; the API refuses anyone else).
+	// assessors'; the API refuses anyone else). Optionally also against existing authorised use: a
+	// full-allocation run of the same baseline as the background (295), shown as its own table
+	// (CumulativeBackground.svelte), never in the baseline's place.
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
-	import { api, assessmentCheckOf, type Assessment, type AssessmentCheck, type Scenario } from '#lib/api/index.js';
+	import { api, assessmentCheckOf, type Assessment, type AssessmentBackgroundRun, type AssessmentCheck, type Scenario } from '#lib/api/index.js';
+	import CumulativeBackground from './CumulativeBackground.svelte';
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { saveBlob } from '#lib/export/download.js';
 	import { fmtDate } from '#lib/format/number.js';
@@ -53,6 +56,32 @@
 	const shown = $derived(current ? assessmentState(current) : null);
 	const report = $derived(current?.status === 'complete' ? (current.report ?? null) : null);
 	const canRun = $derived(picked.length >= 2 && name.trim().length > 0 && !busy);
+
+	// The background at full allocation (295): the full-allocation runs of the picked applications' baseline.
+	let backgrounds = $state<AssessmentBackgroundRun[]>([]);
+	let backgroundRunId = $state('');
+	const pickedBase = $derived(applications.find((a) => picked.includes(a.id))?.baseRunId ?? null);
+	$effect(() => {
+		const base = pickedBase;
+		untrack(() => loadBackgrounds(base));
+	});
+	async function loadBackgrounds(base: string | null) {
+		if (!base) {
+			backgrounds = [];
+			backgroundRunId = '';
+			return;
+		}
+		try {
+			const runs = await api.assessments.backgrounds(projectId, base);
+			if (!live || base !== pickedBase) return;
+			backgrounds = runs;
+			if (!runs.some((r) => r.id === backgroundRunId)) backgroundRunId = '';
+		} catch {
+			// No list, no choice: the assessment is still made on the baseline.
+			if (live) backgrounds = [];
+		}
+	}
+	const withBackground = () => (backgroundRunId ? { backgroundRunId } : {});
 
 	function toggle(id: string, on: boolean) {
 		picked = on ? [...picked, id] : picked.filter((x) => x !== id);
@@ -105,7 +134,7 @@
 		busy = true;
 		actionError = null;
 		try {
-			check = await api.assessments.check(projectId, { name: name.trim() || 'Check', scenarioIds: picked });
+			check = await api.assessments.check(projectId, { name: name.trim() || 'Check', scenarioIds: picked, ...withBackground() });
 		} catch (e) {
 			check = assessmentCheckOf(e);
 			if (!check) actionError = msg(e);
@@ -120,7 +149,7 @@
 		busy = true;
 		actionError = null;
 		try {
-			const res = await api.assessments.create(projectId, { name: name.trim(), scenarioIds: picked });
+			const res = await api.assessments.create(projectId, { name: name.trim(), scenarioIds: picked, ...withBackground() });
 			check = null;
 			list = [res.assessment, ...(list ?? [])];
 			await open(res.assessment.id);
@@ -179,6 +208,21 @@
 			<label for="assess-name">Name</label>
 			<input id="assess-name" type="text" maxlength="200" bind:value={name} placeholder="e.g. Upper reach applications, 2026" />
 		</div>
+		{#if backgrounds.length}
+			<div class="field">
+				<label for="assess-background">Also against existing authorised use (optional)</label>
+				<select id="assess-background" bind:value={backgroundRunId} onchange={() => (check = null)}>
+					<option value="">No: the baseline only</option>
+					{#each backgrounds as b (b.id)}
+						<option value={b.id}>{b.label || b.scenarioName || 'Run'}{b.scenarioName && b.label ? ` (${b.scenarioName})` : ''} · {fmtDate(b.createdAt, true)}</option>
+					{/each}
+				</select>
+				<span class="muted small">
+					A run of this baseline at full allocation, every registered or licensed volume taken in full. Shown as its own table; the baseline stays the
+					hydrologist’s.
+				</span>
+			</div>
+		{/if}
 		<div class="actions">
 			<button type="button" class="btn" disabled={picked.length < 2 || busy} onclick={runCheck}>Check they combine</button>
 			<button type="submit" class="btn primary" disabled={!canRun}>Assess together</button>
@@ -232,7 +276,7 @@
 		{#if current && shown}
 			<div class="result" data-testid="assess-result" data-state={shown.kind}>
 				<p class="muted small">
-					On {current.baseRun.label || 'the baseline'}: {current.members.map((m) => m.name).join(', ')}{current.createdBy ? ` · by ${current.createdBy}` : ''}{current.engineVersion
+					On {current.baseRun.label || 'the baseline'}{current.backgroundRun ? `, and at full allocation on ${current.backgroundRun.label || 'its background run'}` : ''}: {current.members.map((m) => m.name).join(', ')}{current.createdBy ? ` · by ${current.createdBy}` : ''}{current.engineVersion
 						? ` · engine ${current.engineVersion}`
 						: ''}
 				</p>
@@ -247,6 +291,13 @@
 						<strong>Interaction</strong> is the change with every application together, less the changes each makes alone added up. Zero means
 						their effects simply add; a change shown as worse means together they do more harm than their separate effects suggest.
 					</p>
+					{#if report.dams?.nodeIds.length}
+						<p class="small" data-testid="assess-dams-note">
+							For each dam the applications touch: its <strong>firm yield</strong>, the largest steady draft it supplies on every day of the record
+							(as the Yield panel works it out, constant over the year), and the <strong>assurance of supply</strong> of its unit, the share of water
+							years whose demand it met. “–” where a run has no such dam or no whole water year.
+						</p>
+					{/if}
 					<div class="table-wrap">
 						<table class="data matrix">
 							<caption class="visually-hidden">Each measure on the baseline, each application alone, all together, and the interaction</caption>
@@ -286,6 +337,9 @@
 							</tbody>
 						</table>
 					</div>
+					{#if report.background}
+						<CumulativeBackground {report} fullAllocation={report.background} />
+					{/if}
 					{#if current.questions?.length}
 						<!-- Issue #523 G7: the applicants' questions on these applications and the answers, the record for the s42 written reasons; in the CSV too. -->
 						<details class="questions" data-testid="assess-questions">

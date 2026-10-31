@@ -4,8 +4,10 @@
 // through the same save path as any other (storeRun), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type CreditedEt0Product, et0ProductsOf, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp, type WulaReference } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
+import type { JobMeta } from '../jobs/queue.js';
+import { LICENSED_RUN_JOB_SQL } from './licensedRun.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
 import { applicationMask } from './applicant.js';
@@ -36,6 +38,8 @@ export interface ScenarioRow {
 	/** Where and by when written objections go, as the application's notice gives them (166_public_participation); null: not given. */
 	objectionAddress: string | null;
 	objectionClosingDate: string | null;
+	/** The water-use licence application it models (294_wula_reference): its number (null: not given) and the works as applied for. Frozen once submitted. */
+	wula: WulaReference;
 	baseRunId: string;
 	/** The base run's label and date, for the "Based on run X" banner (label '' and createdAt null if the caller can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -85,6 +89,13 @@ export interface ScenarioRow {
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * The newest background run of its licensed terms (293_scenario_run_job,
+	 * scenarios/licensedRun.ts), queued when a licence was issued on other
+	 * terms than those applied for or varied on appeal; null when none, or the
+	 * reader can't read the project's jobs (a contributor).
+	 */
+	licensedRunJob: JobMeta | null;
 	/** Runs of this scenario still stored, and the newest one. */
 	runCount: number;
 	lastRun: { id: string; label: string; createdAt: string } | null;
@@ -110,7 +121,8 @@ const termsJson = (ops: string, sha: string, names: string, conditions: string) 
 
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
 	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring,
-	s.objection_address AS "objectionAddress", to_char(s.objection_closing_date, 'YYYY-MM-DD') AS "objectionClosingDate", s.base_run_id AS "baseRunId",
+	s.objection_address AS "objectionAddress", to_char(s.objection_closing_date, 'YYYY-MM-DD') AS "objectionClosingDate",
+	jsonb_build_object('number', s.wula_number, 'works', s.wula_works) AS wula, s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
 	s.ops, s.ops_sha256 AS "opsSha256",
 	CASE WHEN s.origin = 'applicant' AND app_is_contributor(s.project_id) THEN app_application_own_nodes(s.id) ELSE s.owned_node_ids END AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
@@ -128,6 +140,7 @@ export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
 	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)
 	 FROM scenario_member m JOIN app_user mu ON mu.id = m.user_id WHERE m.scenario_id = s.id) AS members,
 	s.created_at AS "createdAt", s.updated_at AS "updatedAt",
+	${LICENSED_RUN_JOB_SQL} AS "licensedRunJob",
 	(SELECT count(*)::int FROM app_scenario_run_meta(s.project_id, s.id)) AS "runCount",
 	(SELECT jsonb_build_object('id', r.id, 'label', r.label, 'createdAt', r.created_at) FROM app_scenario_run_meta(s.project_id, s.id) r
 	 ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS "lastRun"
@@ -300,7 +313,16 @@ export async function prepareScenarioRun(
 		},
 		privateLabel: scenario.origin === 'applicant'
 	};
+	// The base run's reference ET credits (issue #604 R5-E): the scenario reads the same series values.
+	const et0 = await baseEt0Products(db, projectId, scenario.baseRunId);
+	if (et0.length) run.et0Products = et0;
 	return { run, check, scenario };
+}
+
+/** A base run's `et0Products` (runs/execute.ts storeRun), the known ones only; none when the run isn't visible or recorded none. */
+async function baseEt0Products(db: Db, projectId: string, runId: string): Promise<CreditedEt0Product[]> {
+	const { rows } = await db.query<{ p: unknown }>(`SELECT inputs->'et0Products' AS p FROM model_run WHERE project_id = $1 AND id = $2`, [projectId, runId]);
+	return et0ProductsOf(rows[0]?.p);
 }
 
 /**

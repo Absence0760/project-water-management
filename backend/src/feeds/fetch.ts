@@ -236,6 +236,10 @@ const FetchMeta = z
 	.refine((m) => Object.keys(m).length <= 20)
 	.refine((m) => Buffer.byteLength(JSON.stringify(m)) <= FEED_META_MAX_BYTES, `meta is over ${FEED_META_MAX_BYTES} bytes`);
 
+/** The products an `agera5_et0` feed reads a day from (feeds/fromMirrorEt0.ts; engine CreditedEt0Product). */
+export const ET0_DAY_PRODUCTS = ['agera5_et0', 'power_et0'] as const;
+export type Et0DayProduct = (typeof ET0_DAY_PRODUCTS)[number];
+
 /** The fetcher's answer: days to merge (nulls are gaps, never erasures), or a failure. */
 export const FetchResult = z.discriminatedUnion('ok', [
 	z
@@ -245,10 +249,18 @@ export const FetchResult = z.discriminatedUnion('ok', [
 			startDate: SeriesStartDate.nullable(),
 			values: z.array(z.number().finite().nonnegative().nullable()).max(MAX_SERIES_VALUES),
 			/** What the source said about the data, for the status panel. Small and flat. */
-			meta: FetchMeta
+			meta: FetchMeta,
+			/**
+			 * Which product supplied each day of `values` (null where it has none):
+			 * an `agera5_et0` feed's answer only (feeds/fromMirrorEt0.ts), recorded
+			 * with the days it writes for the run's credits (292_feed_et0_product_days).
+			 */
+			dayProducts: z.array(z.enum(ET0_DAY_PRODUCTS).nullable()).max(MAX_SERIES_VALUES).optional()
 		})
 		.strict()
-		.refine((r) => (r.startDate === null) === (r.values.length === 0), 'startDate goes with values'),
+		.refine((r) => (r.startDate === null) === (r.values.length === 0), 'startDate goes with values')
+		.refine((r) => r.dayProducts === undefined || r.dayProducts.length === r.values.length, 'a product for each day')
+		.refine((r) => r.dayProducts === undefined || r.dayProducts.every((p, i) => (p === null) === (r.values[i] === null)), 'a product for each value, none for a gap'),
 	z.object({ ok: z.literal(false), error: StoredText(FEED_ERROR_MAX).min(1) }).strict()
 ]);
 export type FetchResult = z.output<typeof FetchResult>;

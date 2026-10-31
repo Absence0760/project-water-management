@@ -75,9 +75,9 @@ erDiagram
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`); out of the catchment (migration 224, engine ≥ 1.86.0, [model.md §2.6](./model.md#26-transfers-transfers)): `to_node_id` NULL, a dam rule only (CHECK `transfer_external_from_dam`; every existing row names a unit; a farmer sees such a rule from a linked farm through `transfer_select_farmer`'s `from_node_id` arm) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. So may catchment or CHIRPS rain: the land unit whose own rain it is (209, [Unit rain series](#unit-rain-series-209_unit_rain_seriessql)); none = the catchment's. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45); engine 1.104.0 adds `evap_et0_mm`, a daily FAO-56 reference ET record that GR4J reads as its PE under a monthly PE row, model.md §2.4a *Daily reference ET*; neither with a migration, since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. It also stores, with no `series_id`, what it read from the shared cell cache rather than a stored series: the reference cell's CHIRPS, and (engine 1.101.0, `settings.gapRain`) ERA5-Land as `rain_era5l_mm` and IMERG Late as one `rain_imerg_late_mm~<version>` per version, so `loadRunInput` reproduces them. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name, in the name's byte order whatever the database's collation ([Which series a run reads](#which-series-a-run-reads)) | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb` (the engine's `RunSummary`; from engine 1.105.0 it carries `drought`, the drought badge's headline that the project list and team portfolio read in their one query, issue #620, [model.md §2.15b](./model.md#215b-drought-badge-spi-and-spei-issue-620); a key in the jsonb, so no migration, and a run from before has none), plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model, and once that scenario is deleted), `from_scenario` (188), true for a run a scenario made whether or not the scenario still exists, and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
-| `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
+| `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129), and the WULA it models `wula_number`, `wula_works` (294); its mitigation alternatives are `scenario_alternative` rows (298); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
-| `assessment` | A cumulative impact assessment (145, WP-3.11): several scenarios on one base run, each alone and all together, run as one `assessment` job; `status` (`pending` / `complete` / `refused` / `failed`), `problems`, `report` (the `CumulativeReport`); editors only; see [Assessments](#assessments-145_assessmentsql) | none |
+| `assessment` | A cumulative impact assessment (145, WP-3.11): several scenarios on one base run, each alone and all together, run as one `assessment` job; optionally also on a full-allocation background run (`background_run_id`, 295); `status` (`pending` / `complete` / `refused` / `failed`), `problems`, `report` (the `CumulativeReport`); editors only; see [Assessments](#assessments-145_assessmentsql) | none |
 | `assessment_member` | One scenario of an assessment (145): its `name`, `origin`, `ops` and own nodes copied from the scenario at insert, then once its run alone (`summary`) or its `problems` | none |
 | `scenario_sweep` | A scenario sweep (062, issue #53 R2): a base run × named op sets, run as one `sweep` job; `base_run_id`, `job_id`, `name`, `status` (`pending` / `complete`), `engine_version`; see [Scenario sweeps](#scenario-sweeps-062_scenario_sweepssql) | none (the workbook is copied by hand for each what-if) |
 | `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
@@ -686,7 +686,16 @@ forecast day is still an ECMWF ENS feed's (its `feed_days` overlap the
 forecast days), even with a day edited by hand: not a model input, only
 the flag ECMWF's CC BY credit reads (engine `runRainCredits`: the report,
 the CSVs, the workbook and an evidence pack's bundle).
-The engine reads it too (§2.4h's forecast days), so a reproduction, a
+Any run may also hold `et0Products` (`agera5_et0`, `power_et0`; issue #604
+R5-E, `runs/execute.ts` `et0FeedDays` and `runEt0Products`): the reference ET
+products whose values GR4J read on some run day, from the `agera5_et0`
+feed's `feed_days` in the `evap_et0_mm` series (read with the input) within
+the run's `summary.et0Daily` first..last, by the product recorded for each
+day (`feed_agera5_days` / `feed_power_days`, 292, [§ Feed days](#feed-days-031_feed_dayssql);
+both for a day with none recorded); a
+scenario run takes its base run's when it read the series too. Like
+`forecastRainEcmwf`, only the credits read it (engine `runRainCredits`).
+The engine reads `forecastRainSource` too (§2.4h's forecast days), so a reproduction, a
 scenario on the run and an evidence pack's re-run carry it. A
 run of a project with two or more CHIRPS series at the outlet or at a land
 unit also holds `seriesChoice` (engine ≥ 1.90.0, issue #561, `runs/execute.ts`
@@ -994,7 +1003,8 @@ the result change?", and put back any earlier version.
   `fields` sent and the whole notice as it then stands. So the record of
   what was announced, and from which figures, outlives the 12 publications
   `run_publication` keeps and the run itself; events from before it hold
-  only the level, % and farm count), `outlook.published/unpublished`
+  only the level, % and farm count; `GET …/restriction-log` lists them as
+  the Restriction log, `publish/restrictionLog.ts`), `outlook.published/unpublished`
   (106, issue #53 R5: the publication and outlook ids, the level, the
   season and the number of farms), `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
@@ -1351,7 +1361,43 @@ run's stored input (above), never the live model.
   `objection_closing_date`: where and by when written objections go, as the
   application's notice gives them (GN R267 reg 17(4)(b)(vi)–(vii)); an
   application's only (`scenario_objection_application`), and frozen once it
-  is submitted (`scenario_objection_frozen`, its own trigger).
+  is submitted (`scenario_objection_frozen`, its own trigger). Since
+  `294_wula_reference`, `wula_number` (NULL until given; trimmed, 1–100) and
+  `wula_works jsonb` (`[]` until given; `[{ ref, text }]`, at most 50, `ref`
+  trimmed 1–20 and unique, `text` trimmed 1–1 000, nothing else: `CHECK
+  (app_wula_works_ok(wula_works))`, an `IMMUTABLE` function with a pinned
+  `search_path`): the water-use licence application the scenario models, on
+  any scenario. Each op names the works it models by its `ref` (the op's
+  `works` key, inside `ops`, so hashed into `ops_sha256`). No new policy or
+  grant (045's scenario policies and 024's table-level grant cover them), no
+  foreign key; frozen once the scenario isn't a draft
+  (`scenario_wula_frozen`, its own trigger, as 166's).
+- **`scenario_alternative`** (298_scenario_alternatives, [scenarios.md
+  § Mitigation alternatives](./scenarios.md#mitigation-alternatives)): the
+  mitigation alternatives a scenario cites, one row each: `scenario_id` (the
+  citing one), `run_id` (the cited run, `→ model_run ON DELETE CASCADE`),
+  `alternative_scenario_id` (that run's scenario, `ON DELETE CASCADE`),
+  `position` 0–2 (`UNIQUE (scenario_id, position)`: at most three), `label`
+  (trimmed, 1–80), `UNIQUE (scenario_id, run_id)`; `assert_same_project` on
+  all three references and a covering index on each foreign key. Never
+  updated: replaced (delete, insert), and only while the citing scenario is
+  a draft. `scenario_alternative_guard` (`SECURITY DEFINER`, since an
+  applicant reads no run row) refuses an `UPDATE`, a change once the citing
+  scenario isn't a draft (`check_violation`, or `restrict_violation` on a
+  delete, which fails the cited scenario's own deletion too), and a run that
+  isn't one of `alternative_scenario_id`'s, of the same origin and (an
+  application's) owner, on the citing scenario's base run.
+  `scenario_alternative_rebase` drops those on another base when a draft is
+  rebased. RLS: read with the citing scenario (`app_scenario_readable`),
+  inserted and deleted by whoever may change it (scenario_update's rule); no
+  `UPDATE` grant. `app_scenario_alternatives` and
+  `app_scenario_alternative_candidates` (`SECURITY DEFINER`, each checking
+  the caller first) list them, and the runs the caller may cite. A run a
+  scenario past draft cites is readable with that scenario
+  (`app_alternative_run_readable`, a branch of `model_run_select`,
+  `app_hidden_scenario_runs`, `app_run_digest`, `app_run_allocation_holders`
+  and `_kinds`), and kept (`model_run_cited`; also while the citing scenario
+  has an evidence pack); a draft's citation keeps nothing.
 - **`NO ACTION`, not the plan's `RESTRICT`**, on `base_run_id`: checked at the
   end of the statement, so deleting a whole project (which cascades to both
   `model_run` and `scenario`) still works, as for `run_nomination`. Any other
@@ -1718,9 +1764,32 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   pack that was issued, and the bundle the pack records (`no_bundle` only
   for a pack without one; `23514` otherwise); a second outcome for the same
   engine changes nothing and returns false.
+- **In parts (302_pack_reproduce_parts.sql).** `job.kind` accepts
+  `pack_reproduce_part` (2 attempts). **`pack_reproduce_gathering`**: one
+  re-run in parts (`pack_id` → `evidence_pack`, cascade, indexed with
+  `created_at`; `project_id`, `job_id` → its `pack_reproduce` job, SET
+  NULL; each indexed; `pack_reproduce_gathering_same_project` on insert):
+  `engine_version`, `run_engines`, `bundle_sha256`, `checks` (before any
+  re-run), `status` `gathering` / `recorded` / `failed` with `problems`
+  (one line per stopped part). **`pack_reproduce_part`**: one part
+  (`gathering_id` → it, cascade, unique with `position`; `job_id` → its
+  job, SET NULL, unique; `project_id` indexed): `part` (engine
+  `BundleRerunPart`), `label`, `status` `pending` / `done`, `result`
+  (engine `BundlePartResult`). Both: RLS read by whoever reads the pack,
+  `water_app` `SELECT` only (catalogue `READ_ONLY`). Writers, `SECURITY
+  DEFINER`, `water_app` only: `app_pack_reproduce_fan_out` (from the
+  caller's running `pack_reproduce` job of an issued pack, the bundle it
+  records, each part's queued job the caller's, naming that part),
+  `app_pack_reproduce_part_done` (once, from the part's own running job),
+  `app_finish_pack_reproduce` (from a running part job of the gathering,
+  every part done: inserts `pack_reproduction` as above, once per engine),
+  `app_fail_pack_reproduce` (an editor: failed on its stopped parts, which
+  `pack_reproduce_stopped_parts` lists from the job table) and
+  `app_fail_stopped_pack_reproductions` (the tick, the worker only).
 - Guards: `evidence/packs.db.test.ts` (queued at issue, recorded as
   reproduced, a stored bundle replaced by other bytes recorded as not
-  reproduced, the writer's refusals), `jobs/handlers/pack-reproduce.test.ts`,
+  reproduced, the writer's refusals), `evidence/pack-reproduce-parts.db.test.ts`
+  (the parts, a dead part, the 302 writers' refusals), `jobs/handlers/pack-reproduce.test.ts`,
   `jobs/trust.security.db.test.ts` (a `pack_reproduce` job naming another
   project's pack touches nothing of it), the catalogue.
 
@@ -2978,8 +3047,21 @@ Read-only links to the current publication for people outside the project
     scenario link whose application is `submitted` or `decided`, one row of
     `project_name, scenario (allowlisted jsonb: ids, name, description,
     origin, status, decision, ops and hash, owned node ids, the op names of
-    the owned nodes only), base_run, base_stamp, base_digest, runs,
-    comments`. `runs` are the newest 5 runs whose snapshot records the
+    the owned nodes only; since 291 the granted terms with a licence issued
+    (`app_share_terms`: ops, hash, the owned nodes' names among
+    granted_op_names, conditions, as applied), the `decision_event` rows
+    (position, kind, forum, date, reference, note, a variation's terms;
+    never `recorded_by` or `recorded_at`, the newest 100) and
+    `app_scenario_licence`'s standing with its event by position; since
+    300_share_wula the WULA reference, `wula: { number, works: [{ ref, text
+    }] }` or NULL when neither was given, from 294's `scenario.wula_number`
+    and `wula_works`),
+    base_run, base_stamp, base_digest, runs, comments`. Since 291 every
+    list of ops in it (the scenario's, the granted terms', a variation's)
+    and each run's classes leave out an `allocation.set` on a unit that
+    isn't the application's own (`app_share_kept`), with `withheldOps`
+    counting them; each hash stays the full list's. `app_share_terms` and
+    `app_share_kept` are callable only by the schema owner. `runs` are the newest 5 runs whose snapshot records the
     scenario's current ops hash and base, each with its projection
     (app_share_run_projection: dates, engine version, EWR days not met, each
     EWR site's compliance with the outlet unnamed; volumes only at 5 or more
@@ -3728,7 +3810,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6). Every kind has a handler since WP-2.13 added `alert_eval` ([§ Alerts](#alerts-051_alertssql)) |
+| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6), with later kinds each added by its migration's CHECK (the list: `jobs/registry.ts` `JOB_KINDS`; the newest, `scenario_run`, 293_scenario_run_job: the run of an issued licence's terms in force when they differ from the ops applied for, queued by `…/decide` and `…/appeals` with `payload { scenarioId }` and the dedupe key `scenario_run:<scenarioId>`, [scenarios.md § Applications](./scenarios.md#applications-wp-33)); and `assessment_yield`, 297_assessment_yield_jobs: one dam's firm yield on one run of a cumulative assessment, `payload { assessmentId, yieldId }`, queued by the `assessment` job, [§ Assessments](#assessments-145_assessmentsql)). Every kind has a handler since WP-2.13 added `alert_eval` ([§ Alerts](#alerts-051_alertssql)) |
 | `payload` | A JSON object, ≤ 256 KB (fits an SQS message). Validated by the kind's handler when it runs, as untrusted input |
 | `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running`; a running one that fails while a newer one with its key is pending is `dead` at once (the newer one does the work; `jobs/runner.ts` `recordFailure`). A second enqueue gets the pending job back, so the key must name only jobs the enqueuer can read: a kind a contributor can queue (`yield`, `applicant_pack_render`) keys every pending job per user, which `jobs/contributorKinds.ts` lists and `jobs/contributorKinds.db.test.ts` holds to the insert policies; a collision with a job the caller can't read is `409 job_collision` (`JobCollisionError`, issue #386) |
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
@@ -4024,13 +4106,15 @@ evidence: an editor may delete one; the API keeps the newest 20 per project.
 | --- | --- |
 | `project_id` | The project |
 | `base_run_id` | The run every member's scenario is based on. `ON DELETE CASCADE`. Never a scenario or forecast run (`assessment_guard`) |
+| `background_run_id` | Optional (295, WP-3.10): the background at full allocation the members are also assessed on, a separate table beside the baseline's (`report.background`), never the baseline. A scenario run of this project on `base_run_id` whose stored `settings.allocationMode` is `fullAllocation` (`assessment_background_guard`, BEFORE INSERT; the API also refuses any change but the mode and registered volumes). Fixed at insert (no `UPDATE` grant). `ON DELETE CASCADE`, as `base_run_id`: an assessment never loses the background it was asked for. Covered by `assessment_background_run_idx` |
 | `job_id` | The `assessment` job (`ON DELETE SET NULL` when the 30-day purge deletes it) |
 | `name` | 1–200 characters |
-| `status` | `pending`, `complete`, `refused` (the scenarios no longer combine, or one doesn't apply alone) or `failed` (the engine refused an input) |
+| `status` | `pending`, `complete`, `refused` (the scenarios no longer combine, or one doesn't apply alone) or `failed` (the engine refused an input, the engine changed while its yields were out, or a firm-yield job stopped without its yield: 297) |
 | `problems` | Why it was refused or failed (non-empty exactly then) |
-| `report`, `combined_summary`, `start_date`, `end_date` | The engine's `CumulativeReport`, and the combined run's summary and window, when `complete` |
+| `report`, `combined_summary`, `start_date`, `end_date` | The engine's `CumulativeReport` (with `background`, the background's own table, when `background_run_id` is set: 295), and the combined run's summary and window, when `complete` |
 | `engine_version`, `completed_at` | Set when it leaves `pending` |
 | `created_by`, `created_at` | Stamped by the insert trigger; `created_by` is `ON DELETE SET NULL` |
+| `gathering` | 297: the report waiting for its dams' firm yields (the dam rows' yields empty), the combined summary and window, the dams, the members' positions, the engine and the warning naming dams past the cap, written once by the `assessment` job (as whoever asked) while `pending` and cleared as it leaves `pending` (`assessment_gathering_guard`, BEFORE INSERT forces it NULL; CHECK: only while `pending`). Never served by the API |
 
 `assessment_member`:
 
@@ -4051,6 +4135,49 @@ evidence: an editor may delete one; the API keeps the newest 20 per project.
   keys' own `SET NULL`s (the job purge, an account deletion, a team scenario
   deleted) pass, and water_app can't write those columns.
 - `job.kind` accepts `assessment`.
+
+`assessment_yield` (297_assessment_yield_jobs): one firm-yield search of an
+assessment, a dam the applications touch on one of its runs, each worked
+out by its own `assessment_yield` job and gathered into the report by the
+last one back (`assessments/yields.ts`). A dam a run lacks has no row (its
+cell is `null`).
+
+| Column | Holds |
+| --- | --- |
+| `assessment_id`, `project_id` | Its assessment (`ON DELETE CASCADE`) and project |
+| `job_id` | Its `assessment_yield` job (`ON DELETE SET NULL` when the 30-day purge deletes it; a still-pending row without one reads as stopped). `UNIQUE` |
+| `run`, `member_position` | `baseline`, `single` (with the member's position, 0–7) or `combined` |
+| `dam_position`, `node_id`, `dam_name` | The dam's place in `report.dams.nodeIds` (0–159: at most the engine's `CUMULATIVE_YIELD_SEARCHES_MAX`), its unit and name. `UNIQUE (assessment_id, run, member_position, dam_position) NULLS NOT DISTINCT` |
+| `run_label` | How warnings and problems name the run (`The baseline`, `"<name>" alone`, `All together`) |
+| `status`, `yield_m3_year`, `warning`, `finished_at` | `pending`, then `done` once: the firm yield (m³/year), or null with the search's warning |
+
+- `assessment_yield_guard` (BEFORE INSERT): the assessment is this
+  project's, `pending` and the inserter's own (`created_by`); a `single`
+  names one of its members; the job is an `assessment_yield` job of the
+  project whose payload names this row and assessment; it starts `pending`.
+  `assessment_yield_outcome`: `pending` → `done` once, by whoever asked,
+  only on the outcome columns (so the purge's `SET NULL` passes).
+- **RLS: editors only**, as the assessment. Grants: `SELECT, INSERT`,
+  `UPDATE` of the outcome columns; **no DELETE** (policy or grant): a row
+  goes only with its assessment, by the cascade, so no editor can drop a
+  pending yield of another's gathering. As a second line, the gather fails
+  the assessment when it finds fewer rows than it queued
+  (`gathering.expectedYields`). No farmer reads it; no personal data.
+- `job.kind` accepts `assessment_yield`.
+- **301_assessment_yield_stopped:** `app_fail_stopped_assessments()`
+  (`SECURITY DEFINER`, the worker only: `alert_worker_context`, no user or
+  API key; `EXECUTE` revoked from `PUBLIC`, granted to water_app, which the
+  tick runs as) fails every pending assessment that is gathering and has a
+  stopped yield (a pending row whose job is dead, done without storing it,
+  or purged), its `problems` the lines of `assessment_stopped_yields(id)`
+  (owner only; the same lines as the backend's `stoppedYieldsSql`) and its
+  `gathering` cleared. The tick calls it after its jobs.
+  `assessment_complete` (from 145) and `assessment_gathering_guard` (from
+  297) take one exception to "only whoever asked"
+  (`assessment_fails_on_stopped_yields`, never NULL): an update that fails,
+  never completes, a pending gathering assessment whose problems are exactly
+  those lines, with its gathering's engine, no report and its gathering
+  cleared.
 
 ### Seasonal outlooks (063_seasonal_outlook.sql)
 
@@ -4543,7 +4670,8 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
 | `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69); `last_meta.filesChecked` / `recheckDaysRead` / `revisionXmin` (CHIRPS) the re-check of cached finals, § Re-checking cached finals (210); `last_meta.gapEra5l` / `gapImergLate` (the CHIRPS feed whose cells the runs read, while `settings.gapRain` asks for the product) what that fetch's fill made of it, `ok`, `not_ready` or `failed:<format\|unavailable\|refused>`, merged in after the ingest by `app_record_gap_fill` (254_feed_gap_fill_outcome; only the running feed_fetch job of that feed, queued as the caller; never an error's text) |
-| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
+| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage. Since 296 (`296_feed_area_replace.sql`) it may also be `area:<product/version>` (`area:` for a source with no version, `agera5_et0`): the owner confirmed re-reading the feed's whole record over its new cells, staged the same way; the swap replaces only the feed's own days (`feed_days`) and keeps a person's, with the product days (292) rebuilt from the stage ([architecture.md § Data feeds](./architecture.md#data-feeds)) |
+| `replace_config_from` | With an area confirmation only (`CHECK`; 296): the config the series' record was read over, which withdrawing the replacement (`replaceSeries: false`) puts back. `data_feed_stamp` clears it with any confirmation that isn't an area one, and `app_feed_replace_done` once the swap is in |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
@@ -4610,8 +4738,12 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     directly).
   - **`feed_stage`** (032): one row per feed with a confirmed replacement
     being backfilled: `start_date` + `values` (≤ 60 000, the new record so
-    far), the `product` / `product_version` it will be labelled, the
-    `replace_from` it was confirmed against, `updated_at` (when it last grew:
+    far), the `product` / `product_version` it will be labelled (both NULL,
+    since 296, for a source with no version: an `agera5_et0` area
+    replacement), the `replace_from` it was confirmed against,
+    `agera5_days` / `power_days` (296: which reference ET product each staged
+    day came from, swapped in as the series' `feed_agera5_days` /
+    `feed_power_days`), `updated_at` (when it last grew:
     a day without growth is `rebuild-stalled`). Cascades with the feed and
     the project. RLS: SELECT viewers; INSERT / UPDATE / DELETE editors, for a
     feed of the same project (the ingest writes it as the feed's acting user;
@@ -5281,7 +5413,8 @@ step 5). Nothing here feeds the engine.
 
 Which days of a series its feed wrote, so a feed replaces only those and
 never an uploaded or imported value (#30, [architecture.md § Data
-feeds](./architecture.md#data-feeds)). Two columns on `time_series`:
+feeds](./architecture.md#data-feeds)). Two columns on `time_series`, and
+two more for a reference ET feed's products (292, below):
 
 | Column | Holds |
 | --- | --- |
@@ -5303,7 +5436,26 @@ feeds](./architecture.md#data-feeds)). Two columns on `time_series`:
   its old series when it is re-targeted. A project copy or import writes new
   rows without them.
 - **No backfill**: days written before `031` are nobody's, so feeds keep them.
-- Tests: `series/merge.test.ts` (the day-run arithmetic and `feedDays`),
+- **An area replacement's swap (296_feed_area_replace)** sets `feed_days`
+  to the staged record's span less the days a person wrote or edited (which
+  keep their values), and the product days below to the stage's on those
+  days (`series/replace.ts replaceFeedRecord`); `hand_days` and the API
+  keys' days (`series_key_days`) are kept, unlike a whole replace.
+- **Which product wrote each day (292_feed_et0_product_days)**: an
+  `agera5_et0` feed writes AgERA5's value or NASA POWER's
+  (`feeds/fromMirrorEt0.ts`; its answer's `dayProducts` names each day's),
+  and two more `datemultirange` columns record which, for a run's credits
+  (`runs/execute.ts` `et0FeedDays`, [data-sources.md § ERA5-Land](./data-sources.md#era5-land-r4-a),
+  *Where the credits show*). `feed_agera5_days` and `feed_power_days` are
+  subsets of `feed_days` (`CHECK`: only with a `feed_id`): the ingest's
+  merge (`mergeSeries` `dayProducts`, `feedProductDays`) records the product
+  of every day it writes and forgets the old one of a day it rewrites
+  without one; every merge keeps only the days still in `feed_days`; a
+  replace clears both, and the `time_series_feed_days` trigger clears them
+  with `feed_days`. A feed day in neither was written before 292 (no
+  backfill): the credit owes both products for it. Readers intersect with
+  `feed_days` anyway, so a stray day can't be credited.
+- Tests: `series/merge.test.ts` (the day-run arithmetic, `feedDays` and `feedProductDays`),
   `feeds/feeds.db.test.ts` (user values kept; final replaces preliminary and
   a re-fetch revises; a user's merge or PUT wins afterwards, under skewed
   time zones; removing and re-targeting release; the composite key).

@@ -29,7 +29,7 @@ import type { RunDrought } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { appliedThresholds } from '../teams/settings.js';
 import { localDate } from '../projects/timeZone.js';
-import { feedHealth, type HealthInput } from '../feeds/health.js';
+import { feedHealth, type HealthInput, type RainCopy } from '../feeds/health.js';
 import type { FeedConfig, FeedSource } from '../feeds/config.js';
 import type { RecentShortfall } from '../publish/recent.js';
 import { ageDays, EWR_THRESHOLDS, ewrFigure, irrigationFigure, isStale, UNIT_SUPPLY_TARGET, type EwrFigure, type EwrThresholds, type IrrigationFigure } from './status.js';
@@ -82,8 +82,13 @@ export interface PortfolioProject {
 	lowestDamPct: { nodeName: string; pct: number } | null;
 	/** Whether dam levels are known at all (a publication exists). */
 	damsKnown: boolean;
-	/** Data feeds: how many, how many healthy, how many failing or stale (feeds/health.ts). */
-	feeds: { total: number; ok: number; failing: number };
+	/**
+	 * Data feeds: how many, how many healthy, how many failing or stale, and how
+	 * many wait on our CHIRPS copy (feeds/health.ts `copy-behind`: the feed is
+	 * fine, the copy is late), which count as neither ok nor failing, as the feed
+	 * panel shows them.
+	 */
+	feeds: { total: number; ok: number; failing: number; copyBehind: number };
 	/** Alerts firing now (alert_event state 'firing', WP-2.13): 0 when none, or when the project has no alert switched on. */
 	alertsFiring: number;
 	/** The current publication's restriction; null when nothing is published. */
@@ -247,8 +252,13 @@ const MY_OUTCOMES_SQL = portfolioSql(MY_PROJECTS);
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
-/** One row, its ages counted to `now` in the project's own time zone. */
-export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrThresholds = EWR_THRESHOLDS): PortfolioProject {
+/**
+ * One row, its ages counted to `now` in the project's own time zone. `copy`:
+ * our CHIRPS copy's state (feeds/rainCopy.ts, null while CHC is read
+ * directly), so a feed waiting on a late copy counts as copy-behind, as the
+ * feed panel shows it, not as stale.
+ */
+export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrThresholds = EWR_THRESHOLDS, copy: RainCopy | null = null): PortfolioProject {
 	const timeZone = r.time_zone;
 	const today = localDate(now, timeZone);
 	const published = r.published_at !== null;
@@ -271,10 +281,12 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 	});
 	let ok = 0;
 	let failing = 0;
+	let copyBehind = 0;
 	for (const f of r.feeds) {
-		const h = feedHealth(f, today, timeZone);
+		const h = feedHealth(f, today, timeZone, copy);
 		if (h.state === 'ok') ok++;
 		else if (h.state === 'failing' || h.state === 'stale') failing++;
+		else if (h.state === 'copy-behind') copyBehind++;
 	}
 	return {
 		id: r.id,
@@ -300,7 +312,7 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 		figuresWithheld,
 		lowestDamPct: published && !figuresWithheld && r.dam_name !== null && r.dam_pct !== null ? { nodeName: r.dam_name, pct: r.dam_pct } : null,
 		damsKnown: published,
-		feeds: { total: r.feeds.length, ok, failing },
+		feeds: { total: r.feeds.length, ok, failing, copyBehind },
 		alertsFiring: r.alerts_firing,
 		restriction: published && r.restriction_level ? { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct) } : null,
 		drought: source !== null ? (r.drought ?? null) : null
@@ -309,12 +321,13 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 
 /**
  * Every catchment of the team the user may see (RLS), in one query, each EWR
- * status judged by `thresholds` (the team's, teams/settings.ts). The caller
- * checks team membership first.
+ * status judged by `thresholds` (the team's, teams/settings.ts), each
+ * feed's health judged against `copy` (the caller's rainCopy(db); null while
+ * CHC is read directly). The caller checks team membership first.
  */
-export async function loadPortfolio(db: Db, teamId: string, now: Date, thresholds: EwrThresholds = EWR_THRESHOLDS): Promise<PortfolioProject[]> {
+export async function loadPortfolio(db: Db, teamId: string, now: Date, thresholds: EwrThresholds = EWR_THRESHOLDS, copy: RainCopy | null = null): Promise<PortfolioProject[]> {
 	const { rows } = await db.query<PortfolioRow>(PORTFOLIO_SQL, [teamId]);
-	return rows.map((r) => toPortfolioProject(r, now, thresholds));
+	return rows.map((r) => toPortfolioProject(r, now, thresholds, copy));
 }
 
 /**
@@ -323,12 +336,13 @@ export async function loadPortfolio(db: Db, teamId: string, now: Date, threshold
  * Each status is judged by its own team's thresholds, or the defaults for a
  * personal project and for a project shared from a team the user isn't in
  * (they can't read that team's settings; its portfolio isn't theirs to see).
- * Farmers' and applicants' projects are left out, as on the portfolio.
+ * Farmers' and applicants' projects are left out, as on the portfolio. `copy`
+ * as for loadPortfolio.
  */
-export async function loadMyOutcomes(db: Db, now: Date): Promise<PortfolioProject[]> {
+export async function loadMyOutcomes(db: Db, now: Date, copy: RainCopy | null = null): Promise<PortfolioProject[]> {
 	const { rows } = await db.query<PortfolioRow>(MY_OUTCOMES_SQL);
 	return rows.map((r) => {
 		const { source: _source, ...cutoffs } = appliedThresholds(r.team_settings);
-		return toPortfolioProject(r, now, cutoffs);
+		return toPortfolioProject(r, now, cutoffs, copy);
 	});
 }

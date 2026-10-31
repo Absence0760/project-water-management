@@ -7,6 +7,13 @@
 import { DECISION_EVENT_FORUM_LABEL, DECISION_EVENT_LABEL, type DecisionEvent, type DecisionEventForum, type DecisionEventKind, type LicenceTerms, type Scenario } from '#lib/api/types.js';
 import { fmtDay } from '#lib/format/number.js';
 
+/**
+ * Under each free text a share link prints (a licence's conditions, an
+ * event's reference and note, the decision's reasons): a public record that
+ * must never hold personal information (docs/security.md § Scenario links).
+ */
+export const PUBLIC_RECORD_HINT = 'Shown on the application’s public share link: don’t include personal information, such as a name.';
+
 /** "Water Tribunal, 5 Oct 2026": where and when an event happened. */
 export const eventWhere = (e: Pick<DecisionEvent, 'forum' | 'eventDate'>) => `${DECISION_EVENT_FORUM_LABEL[e.forum]}, ${fmtDay(e.eventDate)}`;
 
@@ -58,3 +65,48 @@ export function earliestEventDate(s: Pick<Scenario, 'decisionEvents' | 'decision
 
 /** An event's heading: "Appeal lodged: Water Tribunal, 2 Oct 2026". */
 export const eventHeading = (e: DecisionEvent) => `${DECISION_EVENT_LABEL[e.kind]}: ${eventWhere(e)}`;
+
+/**
+ * The background run of a licence's terms (293_scenario_run_job), where the
+ * **Run the licensed terms** button is: what it is doing, whether to look
+ * again soon (`busy`), and whether the button shows. While the job waits or
+ * runs the button is hidden (pressing it would make the same run twice).
+ * After a failure the button is back, with why. A finished job, or a failed
+ * one some run of the scenario has followed, says nothing. null: nothing to
+ * say (no licence in force, or no job).
+ */
+export function licensedRunState(
+	s: Pick<Scenario, 'licence' | 'grantedTerms' | 'decisionEvents' | 'licensedRunJob' | 'lastRun'>
+): { text: string; busy: boolean; showButton: boolean } | null {
+	const job = s.licensedRunJob;
+	if (!licensedTerms(s) || !job) return null;
+	const why = job.error ? `: ${job.error}` : '';
+	switch (job.status) {
+		case 'queued':
+			return { text: 'Queued: the licensed terms run in the background, so the evidence report counts this licence. Nothing to press.', busy: true, showButton: false };
+		case 'running':
+			return { text: 'Running the licensed terms in the background…', busy: true, showButton: false };
+		case 'failed':
+			return { text: `The background run of the licensed terms failed and will try again${why}.`, busy: true, showButton: true };
+		case 'dead': {
+			const ranSince = s.lastRun && job.finishedAt && Date.parse(s.lastRun.createdAt) > Date.parse(job.finishedAt);
+			return ranSince ? null : { text: `The background run of the licensed terms failed${why}. Run them here.`, busy: false, showButton: true };
+		}
+		case 'done':
+			return null;
+	}
+}
+
+/**
+ * The background run of the licensed terms (293) finished between two reads
+ * of a scenario: the job read before was waiting, running or retrying, and
+ * the same job reads `done` now. Its run is then stored, so the run list is
+ * read again (ScenariosTab `changed`, as after a rebase). A job first seen
+ * done (an old one, or a page opened after it ran) asks for nothing: the list
+ * read then already had its run.
+ */
+export function licensedRunFinished(before: Pick<Scenario, 'licensedRunJob'>, after: Pick<Scenario, 'licensedRunJob'>): boolean {
+	const was = before.licensedRunJob;
+	const now = after.licensedRunJob;
+	return !!was && !!now && was.id === now.id && was.status !== 'done' && was.status !== 'dead' && now.status === 'done';
+}

@@ -3,11 +3,23 @@
 // token is 32 random bytes, base64url, stored as SHA-256 (auth/tokens.ts, the
 // emailed tokens' format), and travels in the URL's fragment so it never
 // reaches a server log.
-import { ENGINE_ERRATA, packShortCode, type CatchmentSite, type Erratum, type NoticeText, type RestrictionLevel } from '@water-management/engine';
+import {
+	ENGINE_ERRATA,
+	packShortCode,
+	WULA_NUMBER_MAX,
+	WULA_WORK_REF_MAX,
+	WULA_WORK_TEXT_MAX,
+	WULA_WORKS_MAX,
+	type CatchmentSite,
+	type Erratum,
+	type NoticeText,
+	type RestrictionLevel
+} from '@water-management/engine';
 import { z } from 'zod';
 import { errataFoundSince } from '../evidence/errata.js';
 import type { PackVerification } from '../evidence/packs.js';
 import { UUID } from '../projects/access.js';
+import { withheldAllocationOps, withoutPositions } from '../allocations/viewerUnits.js';
 
 /** Longest label, in characters (025_share_links.sql CHECK). */
 export const SHARE_LABEL_MAX = 100;
@@ -322,6 +334,20 @@ export interface ShareScenario {
 		opNames: { id: string; name: string }[];
 		/** Each op's class as its latest run applied it (a baseline assumption shows in red); null without a run. */
 		classified: ('proposal' | 'baseline')[] | null;
+		/** How many ops set a registered volume on another unit and are left out (withheldAllocationOps, #523 G1); 0 when none. */
+		withheldOps: number;
+		/** With a licence issued (227): the terms it was granted on; null otherwise. */
+		grantedTerms: SharedTerms | null;
+		/** What followed the decision (228): appeals lodged and their outcomes, oldest first. */
+		decisionEvents: SharedDecisionEvent[];
+		/** Whether the licence stands now and from what (app_scenario_licence, 228); null until decided with an outcome. */
+		licence: SharedLicence | null;
+		/**
+		 * The water-use licence application it models (294, shown since 300_share_wula): its number and the works as applied
+		 * for, in the applicant's own words as its name and description; null when neither was given. Each op's
+		 * `works` tag names one of these refs.
+		 */
+		wula: SharedWula | null;
 	};
 	/**
 	 * `ready`: both runs, stored by the backend (their stamps verify).
@@ -335,6 +361,110 @@ export interface ShareScenario {
 	comments: SharedComment[];
 	/** The notice's objection address and closing date, when the applicant gave them (166); set by the route. */
 	objection: ShareObjection | null;
+}
+
+/** A licence's terms as a link shows them (227, 291): own nodes' names only, another unit's registered volume left out. */
+export interface SharedTerms {
+	/** engine ScenarioOp[], as stored but for the withheld ones: rendered as text, never as markup. */
+	ops: unknown[];
+	opsSha256: string;
+	opNames: { id: string; name: string }[];
+	conditions: string;
+	/** The ops applied for, unchanged (the same hash). */
+	asApplied: boolean;
+	/** How many ops set a registered volume on another unit and are left out; 0 when none. */
+	withheldOps: number;
+}
+
+export const DECISION_EVENT_KINDS = ['lodged', 'upheld', 'set_aside', 'varied'] as const;
+export const DECISION_EVENT_FORUMS = ['water_tribunal', 'court'] as const;
+
+/** The WULA reference as a link shows it (294, 300): the number, and each works' ref and words. */
+export interface SharedWula {
+	number: string | null;
+	works: { ref: string; text: string }[];
+}
+
+/** One event after the decision as a link shows it (228, 291): never who recorded it. */
+export interface SharedDecisionEvent {
+	position: number;
+	kind: (typeof DECISION_EVENT_KINDS)[number];
+	forum: (typeof DECISION_EVENT_FORUMS)[number];
+	eventDate: string;
+	reference: string;
+	note: string;
+	/** A variation's terms; null on every other kind. */
+	terms: SharedTerms | null;
+}
+
+/** app_scenario_licence's standing as a link shows it (291): the event by its position, never its id. */
+export interface SharedLicence {
+	inForce: boolean;
+	from: 'decision' | 'event';
+	eventPosition: number | null;
+	appealPending: boolean;
+}
+
+/** Granted or varied terms, field by field; `own`: the application's own nodes. */
+function toSharedTerms(v: unknown, own: ReadonlySet<string>): SharedTerms | null {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+	const t = v as Record<string, unknown>;
+	const all = arr(t.ops);
+	// The database already leaves them out (291 app_share_kept) and counts them; this is the second line.
+	const drop = withheldAllocationOps(all as Parameters<typeof withheldAllocationOps>[0], [...own]);
+	return {
+		ops: withoutPositions(all, drop),
+		opsSha256: str(t.opsSha256) ?? '',
+		opNames: ownNames(t.opNames, own),
+		conditions: str(t.conditions) ?? '',
+		asApplied: t.asApplied === true,
+		withheldOps: (num(t.withheldOps) ?? 0) + drop.size
+	};
+}
+
+/** Op names of the application's own nodes only (the database already filters). */
+function ownNames(v: unknown, own: ReadonlySet<string>): { id: string; name: string }[] {
+	return arr(v)
+		.map(obj)
+		.filter((x) => typeof x.id === 'string' && typeof x.name === 'string' && own.has(x.id))
+		.map((x) => ({ id: x.id as string, name: x.name as string }));
+}
+
+function toSharedEvent(v: unknown, own: ReadonlySet<string>): SharedDecisionEvent | null {
+	const e = obj(v);
+	const kind = DECISION_EVENT_KINDS.find((k) => k === e.kind);
+	const forum = DECISION_EVENT_FORUMS.find((f) => f === e.forum);
+	const position = num(e.position);
+	if (!kind || !forum || position === null) return null;
+	return {
+		position,
+		kind,
+		forum,
+		eventDate: str(e.eventDate) ?? '',
+		reference: str(e.reference) ?? '',
+		note: str(e.note) ?? '',
+		terms: kind === 'varied' ? toSharedTerms(e.terms, own) : null
+	};
+}
+
+/** The WULA reference, field by field, within 294's limits; null when it holds nothing. */
+function toSharedWula(v: unknown): SharedWula | null {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+	const w = v as Record<string, unknown>;
+	const number = str(w.number);
+	const works = arr(w.works)
+		.map(obj)
+		.filter((x) => typeof x.ref === 'string' && typeof x.text === 'string' && x.ref.length <= WULA_WORK_REF_MAX && x.text.length <= WULA_WORK_TEXT_MAX)
+		.slice(0, WULA_WORKS_MAX)
+		.map((x) => ({ ref: x.ref as string, text: x.text as string }));
+	const n = number && number.length <= WULA_NUMBER_MAX ? number : null;
+	return n === null && !works.length ? null : { number: n, works };
+}
+
+function toSharedLicence(v: unknown): SharedLicence | null {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+	const l = v as Record<string, unknown>;
+	return { inForce: l.inForce === true, from: l.from === 'event' ? 'event' : 'decision', eventPosition: num(l.eventPosition), appealPending: l.appealPending === true };
 }
 
 /** What app_share_scenario returns (one row, or none). */
@@ -401,14 +531,19 @@ export function toSharedRun(raw: Record<string, unknown>): SharedRun {
  */
 export function toShareScenario(r: ShareScenarioRow, verify: (digest: Buffer | null, stamp: Buffer | null) => boolean): ShareScenario {
 	const s = r.scenario;
-	const ops = arr(s.ops);
+	const allOps = arr(s.ops);
 	const owned = arr(s.ownedNodeIds).filter((x): x is string => typeof x === 'string');
 	const ownSet = new Set(owned);
+	// Another unit's registered volume never reaches a link (as a viewer kept from each farm's volume, #523 G1).
+	// The database already leaves those ops (and their runs' classes) out and counts them (291 app_share_kept);
+	// this is the second line, should a row ever carry one.
+	const drop = withheldAllocationOps(allOps as Parameters<typeof withheldAllocationOps>[0], owned);
+	const ops = withoutPositions(allOps, drop);
 	// The newest candidate the backend stored (its stamp verifies): a newer row written past the API can't displace it.
 	const candidates = arr(r.runs).map(obj);
 	const chosen = candidates.find((c) => verify(hex(c.digest), hex(c.stamp))) ?? null;
 	const results: ShareScenario['results'] = !candidates.length ? 'none' : chosen && verify(r.base_digest, r.base_stamp) ? 'ready' : 'unverified';
-	const classes = chosen && Array.isArray(chosen.classified) && chosen.classified.length === ops.length ? chosen.classified : null;
+	const classes = chosen && Array.isArray(chosen.classified) && chosen.classified.length === allOps.length ? withoutPositions(chosen.classified as unknown[], drop) : null;
 	const run = results === 'ready' && chosen ? toSharedRun(obj(chosen.projection)) : null;
 	let base = results === 'ready' && r.base_run ? toSharedRun(r.base_run) : null;
 	// Volumes on both or neither: the base's alone beside a hidden run's would say nothing new, but keep the pair honest.
@@ -431,10 +566,19 @@ export function toShareScenario(r: ShareScenarioRow, verify: (digest: Buffer | n
 			// Only from a run whose stamp verifies: a forged run can't relabel a baseline assumption a proposal.
 			classified: classes ? classes.map((c) => (c === 'proposal' ? 'proposal' : 'baseline')) : null,
 			// Own nodes only, again: the database already filters.
-			opNames: arr(s.opNames)
-				.map(obj)
-				.filter((x) => typeof x.id === 'string' && typeof x.name === 'string' && ownSet.has(x.id))
-				.map((x) => ({ id: x.id as string, name: x.name as string }))
+			opNames: ownNames(s.opNames, ownSet),
+			withheldOps: (num(s.withheldOps) ?? 0) + drop.size,
+			// 291: the licence's terms, what followed the decision and where it stands, field by field.
+			grantedTerms: s.status === 'decided' && s.outcome === 'licence_issued' ? toSharedTerms(s.grantedTerms, ownSet) : null,
+			decisionEvents:
+				s.status === 'decided'
+					? arr(s.decisionEvents)
+							.map((e) => toSharedEvent(e, ownSet))
+							.filter((e): e is SharedDecisionEvent => e !== null)
+					: [],
+			licence: s.status === 'decided' ? toSharedLicence(s.licence) : null,
+			// 300: the WULA reference (294), submitted or decided.
+			wula: toSharedWula(s.wula)
 		},
 		results,
 		base,

@@ -6,12 +6,17 @@
 	// what it changes (a baseline assumption flagged), the catchment's totals
 	// when the API sends them, and the comments posted for public
 	// participation (./ShareComments.svelte: anyone signed in comments through
-	// the link, with no role in the project, 166_public_participation). Every
+	// the link, with no role in the project, 166_public_participation). A
+	// decided one adds where its licence stands, the terms it was granted on
+	// and what followed the decision (appeals, 291). The water-use licence
+	// application it models, when given (its number and the works as applied
+	// for, 294), sits under its changes, each change naming the works it
+	// models. Every
 	// word is in ./scenario.ts, ./ShareComments.svelte or t() here.
 	import { resolve } from '$app/paths';
-	import type { ShareScenario } from '#lib/api/types.js';
+	import type { SharedTerms, ShareScenario } from '#lib/api/types.js';
 	import { t } from '#lib/i18n/locale.svelte.js';
-	import { changeRows, daysLine, ewrRows, resultsNote, statusLine, volumeRows } from './scenario';
+	import { changeRows, daysLine, eventHeading, ewrRows, licenceLine, resultsNote, statusLine, termsRows, volumeRows, withheldLine } from './scenario';
 	import ShareComments from './ShareComments.svelte';
 	import { shareCaveat } from './share';
 
@@ -23,7 +28,38 @@
 	const changes = $derived(changeRows(view.scenario));
 	const volumes = $derived(view.base && view.run ? volumeRows(view.base, view.run) : []);
 	const note = $derived(resultsNote(view.results));
+	const withheld = $derived(withheldLine(sc.withheldOps));
+	const standing = $derived(licenceLine(sc));
 </script>
+
+{#snippet terms(heading: string, tm: SharedTerms, testid: string)}
+	<div class="terms" data-testid={testid}>
+		<h3>{heading}</h3>
+		{#if tm.asApplied}
+			<p>{t('As applied for: the same changes as the application.')}</p>
+		{:else}
+			{@const rows = termsRows(tm, sc.ownedNodeIds)}
+			{#if rows.length}
+				<ul class="changes">
+					{#each rows as c, i (i)}
+						<li class={c.cls}>
+							<span class="cls">{c.label}</span>
+							<span class="what">{c.text}</span>
+							{#if c.works}<span class="works">{t('Works {ref}', { ref: c.works })}</span>{/if}
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p>{t('No changes.')}</p>
+			{/if}
+		{/if}
+		{#if withheldLine(tm.withheldOps)}<p class="fine">{withheldLine(tm.withheldOps)}</p>{/if}
+		{#if tm.conditions}
+			<p class="fine">{t('Conditions')}</p>
+			<p class="desc">{tm.conditions}</p>
+		{/if}
+	</div>
+{/snippet}
 
 <div class="head">
 	<h1>{sc.name}</h1>
@@ -68,6 +104,7 @@
 						<li class={c.cls}>
 							<span class="cls">{c.label}</span>
 							<span class="what">{c.text}</span>
+							{#if c.works}<span class="works">{t('Works {ref}', { ref: c.works })}</span>{/if}
 						</li>
 					{/each}
 				</ul>
@@ -77,15 +114,50 @@
 			{:else}
 				<p>{t('No changes.')}</p>
 			{/if}
+			{#if withheld}<p class="fine">{withheld}</p>{/if}
 			{#if sc.description}<p class="desc">{sc.description}</p>{/if}
+			{#if sc.wula}
+				<div data-testid="share-scenario-wula">
+					<h3>{t('The water-use licence application')}</h3>
+					{#if sc.wula.number}<p>{t('Application number: {number}', { number: sc.wula.number })}</p>{/if}
+					{#if sc.wula.works.length}
+						<p class="fine">{t('The works applied for, in the applicant’s words')}</p>
+						<dl class="works-list">
+							{#each sc.wula.works as w (w.ref)}
+								<dt>{w.ref}</dt>
+								<dd class="desc">{w.text}</dd>
+							{/each}
+						</dl>
+					{/if}
+				</div>
+			{/if}
 		</section>
 	</div>
 
 	<div class="col">
-		{#if sc.status === 'decided' && sc.decisionNote}
-			<section class="card" aria-labelledby="decision-h">
+		{#if sc.status === 'decided' && (sc.decisionNote || standing || sc.grantedTerms || sc.decisionEvents.length)}
+			<section class="card" aria-labelledby="decision-h" data-testid="share-scenario-decision">
 				<h2 id="decision-h">{t('The decision')}</h2>
-				<p class="desc">{sc.decisionNote}</p>
+				{#if standing}<p class="standing" data-testid="share-scenario-licence">{standing}</p>{/if}
+				{#if sc.decisionNote}<p class="desc">{sc.decisionNote}</p>{/if}
+				{#if sc.grantedTerms}
+					{@render terms(t('The terms granted'), sc.grantedTerms, 'share-scenario-granted')}
+				{/if}
+				{#if sc.decisionEvents.length}
+					<h3>{t('After the decision')}</h3>
+					<ol class="events" data-testid="share-scenario-events">
+						{#each sc.decisionEvents as e (e.position)}
+							<li>
+								<p class="place">{eventHeading(e)}</p>
+								{#if e.reference}<p class="fine">{t('Reference: {reference}', { reference: e.reference })}</p>{/if}
+								{#if e.note}<p class="desc">{e.note}</p>{/if}
+								{#if e.terms}
+									{@render terms(t('The terms it was varied to'), e.terms, 'share-scenario-varied')}
+								{/if}
+							</li>
+						{/each}
+					</ol>
+				{/if}
 			</section>
 		{/if}
 
@@ -193,6 +265,33 @@
 	}
 	.what {
 		overflow-wrap: anywhere;
+	}
+	.works {
+		font-size: 13px;
+		color: var(--text-2);
+	}
+	.works-list dt {
+		font-weight: 600;
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+	h3 {
+		font-size: 15px;
+		margin: 12px 0 6px;
+	}
+	.standing {
+		font-weight: 600;
+	}
+	.events {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 10px;
+	}
+	.events > li {
+		border-left: 4px solid var(--border-strong);
+		padding: 4px 0 4px 10px;
 	}
 	.flag {
 		color: var(--danger);

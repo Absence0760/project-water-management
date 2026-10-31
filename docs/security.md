@@ -1406,7 +1406,35 @@ differences:
   projection, D2), each op's class; for the base run and its newest run of
   the current ops, dates, engine version, EWR days not met and each EWR
   site's Reserve compliance (the outlet unnamed); and the public comments
-  with their authors' display names. Flow volumes, farm totals and site
+  with their authors' display names. Since 291, once decided: the licence's
+  granted terms (ops and hash, own nodes' names only, the conditions in
+  words, a public record as the decision note is), what followed the
+  decision (`decision_event`: kind, forum, date, reference, note, a
+  variation's terms; never who recorded it or when) and the licence's
+  standing (`app_scenario_licence`, its event by position, not id); and,
+  submitted or decided, the WULA reference (294, shown since 300_share_wula): its
+  number and the works as applied for, `{ ref, text }`, in the applicant's
+  own words, as the scenario's name and description already are (the
+  applicant's own text about their own application, frozen once
+  submitted), with each op's `works` tag (a ref of that list) inside the
+  ops, which goes with a withheld op. Every
+  `allocation.set` on a unit that isn't the application's own is left out
+  of the ops, every run's per-op classes and every terms' ops by
+  `app_share_scenario` itself (291, `app_share_kept`, as for a viewer kept
+  from each farm's volume, #523 G1), with a count (`withheldOps`): a
+  registered volume never leaves through a link, whichever code serves the
+  function's output. `toShareScenario` filters again
+  (`withheldAllocationOps`) as a second line. Each `opsSha256` stays the
+  hash of the full list, withheld ops included (a hash reveals no volume),
+  so it identifies the application or the decision but doesn't verify the
+  ops a link shows when any were left out; the page doesn't print it. The free text a link reader now sees (the
+  conditions, and each event's reference and note, beside the decision
+  note) is a public record: whoever records a decision must never put
+  personal information in it, such as an appellant's name; the schema
+  caps only its length (228). The applicant's own text on the link (the
+  name, description and the WULA works' words) is theirs to write as for
+  the application itself, which a link makes public by design: it is
+  submitted to be read in a comment period. Flow volumes, farm totals and site
   deficits only at 5 or more farm holders (the k rule above). Never a farm's
   row or figures, a member list, an e-mail, an allocation or its holder
   (`user_display`), or a `parties` / `assessors` / `team` note.
@@ -1469,7 +1497,11 @@ differences:
   token; the string scan for other farms' names and ids, members, e-mails,
   the holder and non-public notes; unverified results hidden; the k rule),
   `share/links.test.ts` (the TypeScript allowlist against a row with
-  planted extras) and `routes.test.ts` (`POST /share/scenario` public).
+  planted extras, the terms and events included) and `routes.test.ts` (`POST /share/scenario` public);
+  `share/scenario-share-licence.db.test.ts` (291: none while submitted;
+  the granted terms, events and standing once decided; another unit's
+  volume, its name and who recorded an event never shown, each with the
+  assessor's read as control; `app_share_terms` refused to water_app).
 
 ## API keys
 
@@ -2249,11 +2281,22 @@ In short:
   there, even for someone who edits both (the handler scopes every read by
   the job's project; `app_begin_feed_fetch` and the `yield_result` guard
   check it again in the database). The per-user caps on queued
-  sweeps, outlooks, yield calculations and cumulative assessments (2 each)
+  sweeps, outlooks, yield calculations and cumulative assessments (2 each;
+  an assessment counts while its job or any of its dams' firm-yield jobs,
+  `assessment_yield` (297), is pending, so the cap also bounds those, at most
+  the engine's `CUMULATIVE_YIELD_SEARCHES_MAX` (160) an assessment; the
+  tick's `app_fail_stopped_assessments` (301) runs for the worker only, and
+  the one exception it uses in the assessment's complete-once guards fails,
+  never completes, and only on a yield the job table shows stopped)
   are counted under a per-user advisory lock, so a concurrent burst can't
   pass them, and the database refuses a sweep member, assessment member or
   outlook level past the API's cap
-  (`jobs/costCaps.security.db.test.ts`).
+  (`jobs/costCaps.security.db.test.ts`). An issued licence's background run
+  of its terms (`scenario_run`, 293) is one engine run, queued only by a
+  decision or appeal event recorded with two-step sign-in by a member acting
+  for the authority, one pending per scenario and at most 5 per member under
+  the same kind of lock; past the cap nothing is queued and the decision
+  still stands (`scenarios/licensedRun.db.test.ts`).
   **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
   `SECURITY DEFINER app_enqueue_rerun`, which touches only that project's
@@ -2411,7 +2454,41 @@ In short:
     decided. The project's log names an application only once it is decided.
     Notes on its runs, sign-offs of them and yields of it or its runs follow
     it too (045 rewrote `note_select`, `signoff_select` and
-    `yield_result_select`, which had checked the project role only).
+    `yield_result_select`, which had checked the project role only). One
+    exception, the applicant's own choice: a run their application cites as
+    a mitigation alternative (298_scenario_alternatives) is readable with
+    that application once it is past draft (`app_alternative_run_readable`,
+    in `model_run_select`, `app_hidden_scenario_runs`, `app_run_digest` and
+    the allocation-holder definers), never before and nothing else of the
+    alternative's scenario; an alternative is only ever the applicant's own
+    scenario's run on the application's base run, checked by the route
+    against `app_scenario_alternative_candidates` and by
+    `scenario_alternative_guard` in the table, with one refusal for any
+    other run so none is shown to exist
+    (`scenarios/alternatives.db.test.ts`).
+    Who that is, exactly: **everyone who can read the citing application**
+    once it is past draft, under the run rules that already apply to its own
+    runs. That is its assessors (editors and up) once submitted, viewers once
+    decided, and its co-applicants: whoever the applicant shared it with
+    reads the cited run's row, series and digest as they read the
+    application's own runs, which for a contributor is none of the row (046:
+    no contributor reads a run row, not even their own) and only the
+    own-unit and allowlisted series their application's runs give them; a
+    shared member of viewer role or above reads it in full. The editors
+    who read it may then write its note and its pin, as on any run they read
+    (`model_run_update`, 007/015: editor and up, the column grants limit an
+    update to `notes` and `pinned`), as they already may on the
+    application's own runs once submitted. That is deliberate: neither is
+    part of the run's digest, so neither touches its server stamp, the
+    report prints no alternative's note, and a pin only keeps a run that
+    `model_run_cited` already keeps from trim and delete while the
+    application is past draft. A pin set then outlives a withdraw and
+    reopen (the run stays kept until an editor unpins it), as on the
+    application's own runs. The test reads each opened path (the run, its
+    series by the route and in the table, its digest, its holder keys and
+    kinds) for a cited run and an uncited draft, as an editor, a viewer
+    before the decision, the consultant it is shared with and the applicant,
+    so reverting any one of 298's branches fails it.
   - **Tables added alongside it** (sign-offs, notes, allocations, API keys,
     yields and jobs, dam curves, boreholes) were audited at the merge: a
     contributor reads only their own linked farm's farm-scoped rows (as a
@@ -2608,7 +2685,9 @@ In short:
   `app_run_digest` answers only for a run the caller reads or has just
   stored. Where a run is judged, it must verify: a sign-off refuses one that
   doesn't (`409`, code `run_unverified`), and so does an application's
-  decision while any of its runs doesn't. `GET …/runs/:runId` says
+  decision while any of its runs doesn't; the evidence report prints no
+  figure from a mitigation alternative whose run doesn't (298, its column
+  *Not assessed*). `GET …/runs/:runId` says
   `verified`, and the assessors see an application's unverified runs
   (`unverifiedRunIds`, a warning in its panel). Editor-made runs are stamped
   too (the same path, and an editor can write run rows directly just as
@@ -3862,7 +3941,7 @@ PDF someone else asked for kept the person as a recipient
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
-| A farm's season figures in each publication, and the notice as announced (the season decision log, issue #119): staff-only, never a farmer's or applicant's to read | `audit_event` (`publication.published` `perFarm`, `publication.notice_changed`) | For the life of the project, as the rest of the audit log | Stay (the farm's, not the person's; no account is named in them); left out of the publisher's data export | Deleted |
+| A farm's season figures in each publication, and the notice as announced (the season decision log, issue #119): staff-only, never a farmer's or applicant's to read; the Restriction log (`GET …/restriction-log` and its CSV, `…/restriction-log/export.csv`, viewers and above) shows the notices and who published them, never `perFarm` | `audit_event` (`publication.published` `perFarm`, `publication.notice_changed`) | For the life of the project, as the rest of the audit log | Stay (the farm's, not the person's; no account is named in them); left out of the publisher's data export | Deleted |
 | Notes: body, author | `note` | For the life of the project. A deleted note's text: 90 days, then erased by the tick (`app_purge_deleted_notes`, 158; the `note.deleted` event stays); on a submitted application or an issued pack, kept hidden with the licence record (s14(6)(b)) | Author cleared; body stays | Deleted |
 | Public comments through a share link (166): the author, the link it came through, whether they agreed to give their name and email to the applicant for the I&AP register (GN R267 reg 18); the applicant's download of them (the reg 19 record, with the emails agreed to) | `note` (`share_link_id`, `register_consent`); the applicant's own copy once downloaded | As notes; the applicant keeps their copy for their register (reg 18: while the application is considered and two years after a licence is granted), as its responsible party | Author cleared; body stays (as notes); a copy already downloaded is the applicant's | Deleted |
 | A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note: erased with a deleted note after 90 days (cascade), kept with a licence record's note | Who edited cleared; texts stay, as the note's body does | Deleted |
@@ -4635,6 +4714,12 @@ nothing else.
   written by `app_record_pack_reproduction` from a *running*
   `pack_reproduce` job of that pack as its acting user, for the bundle the
   pack records, once per engine, so no member can mark a pack reproduced.
+  A re-run in parts (302) is recorded the same way by
+  `app_finish_pack_reproduce`, from a *running* `pack_reproduce_part` job
+  of that re-run, every part stored by its own running job
+  (`app_pack_reproduce_part_done`) and the parts fanned out only from the
+  pack's running `pack_reproduce` job (`app_pack_reproduce_fan_out`);
+  `water_app` only reads `pack_reproduce_gathering` and `pack_reproduce_part`.
   It is never on verify: the app's own claim, not something the hash covers.
   The bundle's is `app_record_pack_bundle` (122_pack_bundle): the caller
   must be an editor of the project and the pack issued by the caller *in

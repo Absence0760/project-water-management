@@ -11,16 +11,25 @@
 // Deliberately no import from lib/components/map: those pages must not pull
 // the map's code into their bundle. The fetch is passed in
 // (`api.map.linkedNodes`), so this module needs no $env.
-import type { MapLinkedNodes } from '#lib/api/types.js';
+// The same read carries each linked dam outline's siting (on the river,
+// off-channel or not said), which the Network editor shows beside Upstream
+// inflow to dam (network/fields.ts damSitingHint).
+import type { LinkedDam, MapLinkedNodes } from '#lib/api/types.js';
 import { overlayHref } from './overlays';
 
 /** The Map tab with this node selected. */
 export const mapNodeHref = (nodeId: string) => overlayHref('map', 'node', nodeId);
 
-const cache = new Map<string, Set<string>>();
+/** A project's linked nodes, and its linked dam outlines by node. */
+export interface MappedSet {
+	ids: Set<string>;
+	dams: Map<string, LinkedDam[]>;
+}
+
+const cache = new Map<string, MappedSet>();
 
 /** The last set fetched for this project in this session, for the first frame; undefined before any. */
-export const cachedMappedNodes = (projectId: string): Set<string> | undefined => cache.get(projectId);
+export const cachedMappedNodes = (projectId: string): MappedSet | undefined => cache.get(projectId);
 
 /** The nodes with a linked feature in a project (`api.map.linkedNodes`). */
 export type ListLinkedNodes = (projectId: string) => Promise<MapLinkedNodes>;
@@ -30,10 +39,18 @@ export type ListLinkedNodes = (projectId: string) => Promise<MapLinkedNodes>;
  * Rejects when the list can't be read; the caller then shows no link (the
  * link is a shortcut, and the Map tab itself still opens from the Network).
  */
-export async function loadMappedNodes(projectId: string, list: ListLinkedNodes): Promise<Set<string>> {
-	const ids = new Set((await list(projectId)).nodeIds);
-	cache.set(projectId, ids);
-	return ids;
+export async function loadMappedNodes(projectId: string, list: ListLinkedNodes): Promise<MappedSet> {
+	const res = await list(projectId);
+	const dams = new Map<string, LinkedDam[]>();
+	// An API released before `dams` (the web and backend ship separately) sends none.
+	for (const d of res.dams ?? []) {
+		const at = dams.get(d.nodeId);
+		if (at) at.push(d);
+		else dams.set(d.nodeId, [d]);
+	}
+	const set = { ids: new Set(res.nodeIds), dams };
+	cache.set(projectId, set);
+	return set;
 }
 
 /** Test seam: forget every cached set. */

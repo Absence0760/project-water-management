@@ -189,7 +189,14 @@ export interface BoundaryProposal {
 	/** The CHIRPS series runs read now; null when there is none. */
 	runSeries: RunSeriesWords | null;
 	/** Replacing that record with the boundary's instead (a staged full backfill): null when runs read no record, or nothing is left to apply. */
-	replace: null | { available: true; targetName: string; product: ChirpsProduct; startDate: string } | { available: false; targetName: string; reason: string };
+	/**
+	 * Replace the record runs read: a new feed into it, or (`feedId`) through the catchment feed that writes it, which
+	 * takes the boundary's cells and re-reads its own record over them (`area`: same product; backend 296_feed_area_replace).
+	 */
+	replace:
+		| null
+		| { available: true; targetName: string; product: ChirpsProduct; startDate: string; feedId?: string; area?: true }
+		| { available: false; targetName: string; reason: string };
 	canApply: boolean;
 }
 
@@ -422,8 +429,12 @@ export function versionClash(
 	return sameProvenance(holds, writes) ? null : { holds: provenanceLabel(holds), writes: provenanceLabel(writes) };
 }
 
-/** A listed feed whose target holds another version: what to tell the owner, or null. */
+/** A listed feed whose target holds another version, or that is re-reading its record over new cells: what to tell the owner, or null. */
 export function conflictMessage(f: Pick<FeedMeta, 'versionConflict' | 'series' | 'writes' | 'replaceFrom' | 'rebuilding'>): string | null {
+	// An area replacement (backend 296_feed_area_replace): replaceFrom is `area:` and what the feed writes.
+	if (f.replaceFrom?.startsWith('area:')) {
+		return 'Re-reading the record over new cells: the feed backfills its days over its new cells from its start date, then they replace its own days in the series. Until then runs use the series as it is; days you entered stay as they are.';
+	}
 	if (!f.versionConflict || !f.writes) return null;
 	const holds = provenanceLabel(f.series?.provenance);
 	const writes = provenanceLabel(f.writes);
@@ -723,6 +734,18 @@ export function applyWords(
 	const a = p.apply;
 	if (a.action === 'none') return 'A CHIRPS feed already reads this boundary: nothing to apply.';
 	const record = p.runSeries?.firstDay ? p.runSeries : null;
+	if (choice.replace && p.replace?.available && record && p.replace.area) {
+		return (
+			`Apply gives the CHIRPS feed that writes ${seriesWords(record.name)} the boundary’s cells: it reads its whole record again over them from ${fmtDay(p.replace.startDate)} into a stage, ` +
+			'and runs keep reading the old values until the new record is complete, then its own days take their place (days you entered stay as they are; the old values stay in the series’ history).'
+		);
+	}
+	if (choice.replace && p.replace?.available && record && p.replace.feedId) {
+		return (
+			`Apply gives the CHIRPS feed that writes ${seriesWords(record.name)} the boundary’s cells (${choice.product}): it reads the whole record again from ${fmtDay(p.replace.startDate)} into a stage, ` +
+			'and runs keep reading the old values until the new record is complete, then it takes their place whole (the old values stay in the series’ history).'
+		);
+	}
 	if (choice.replace && p.replace?.available && record) {
 		return (
 			`Apply attaches a CHIRPS feed (${choice.product}) that replaces ${seriesWords(record.name)} with the boundary’s rain: it reads the whole record again from ${fmtDay(p.replace.startDate)} into a stage, ` +

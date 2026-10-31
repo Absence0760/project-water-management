@@ -43,6 +43,12 @@ describe('unitDataRows', () => {
 		expect(rows[2]).toMatchObject({ map: { kind: 'none', reason: 'outside the grid' }, rain: { kind: 'none', reason: 'no boundary or parcel on the map' } });
 	});
 
+	it('offers a redrawn parcel’s feed re-reading its record (replace, 296)', () => {
+		const r = rain(true);
+		r.units[1] = { ...r.units[1]!, action: 'replace' };
+		expect(unitDataRows(order, map, r)[1]!.rain).toMatchObject({ kind: 'offer', action: 'replace', owner: true });
+	});
+
 	it('a proposal that failed to load says so on every unit', () => {
 		const rows = unitDataRows(order, null, rain(true), { map: 'the MAP proposal couldn’t be read', rain: '' });
 		expect(rows[0]!.map).toEqual({ kind: 'none', reason: 'the MAP proposal couldn’t be read' });

@@ -287,7 +287,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-25');
+		expect(manifest.report.version).toBe('evidence-26');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -1334,6 +1334,50 @@ describe.skipIf(!minio)('an application pack’s bundle', () => {
 	});
 });
 
+describe.skipIf(!minio)('an application pack with a mitigation alternative (bundle-3, evidence-26)', () => {
+	it('issues it with the alternative’s run in its bundle, which reproduces offline and on the server (one part for the alternative)', async () => {
+		vi.stubEnv('REPORT_RENDERER', 'sqs');
+		vi.stubEnv('RENDER_REQUESTS_QUEUE_URL', 'memory://render-requests');
+		try {
+			const runId = await scenarioRun('Upper dam, weighed', [{ op: 'node.set', nodeId: '', field: 'damCapacityM3', value: 400_000 }]);
+			const [{ scenario_id: sid }] = await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [runId]);
+			// The alternative: a smaller dam, run on the same baseline, cited by the application, labelled.
+			const alt = await owner.call('POST', `${at()}/scenarios`, { name: 'Upper dam, smaller', baseRunId: baseRun, ops: [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 200_000 }], ownedNodeIds: [farmId] });
+			expect(alt.status, JSON.stringify(alt.body)).toBe(201);
+			const altRun = await owner.call('POST', `${at()}/scenarios/${alt.body.scenario.id}/runs`, {});
+			expect(altRun.status, JSON.stringify(altRun.body)).toBe(201);
+			const cite = await owner.call('PUT', `${at()}/scenarios/${sid}/alternatives`, { alternatives: [{ runId: altRun.body.run.id, label: 'Smaller dam' }] });
+			expect(cite.status, JSON.stringify(cite.body)).toBe(200);
+
+			const p = await draft(editor, runId);
+			await sign(editor, p.id);
+			const res = await issue(editor, p.id);
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			const { bytes } = await downloadBundle(editor, p.id);
+			const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
+			const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
+			expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
+			expect(checked.checks.map((k) => k.id)).toEqual(expect.arrayContaining(['alternative:1', 'reproduce:alternative:1']));
+			expect(checked.checks.find((k) => k.id === 'alternative:1')!.detail).toContain(altRun.body.run.id);
+
+			// The server's re-run: its parts, the alternative's among them, gathered into the record.
+			await runTick({ feeds: false, reports: false, alerts: false });
+			await runTick({ feeds: false, reports: false, alerts: false });
+			const kinds = await asOwner(
+				`SELECT p.part->>'kind' AS kind FROM pack_reproduce_part p JOIN pack_reproduce_gathering g ON g.id = p.gathering_id WHERE g.pack_id = $1 ORDER BY p.position`,
+				[p.id]
+			);
+			expect(kinds.map((k) => k.kind)).toContain('alternative:1');
+			const { reproduction } = (await editor.call('GET', packPath(p.id))).body;
+			expect(reproduction.status, JSON.stringify(reproduction.checks.filter((c: { ok: boolean }) => !c.ok))).toBe('reproduced');
+			expect(reproduction.checks.map((c: { id: string }) => c.id)).toEqual(expect.arrayContaining(['alternative:1', 'reproduce:alternative:1']));
+		} finally {
+			vi.unstubAllEnvs();
+			sent.length = 0;
+		}
+	}, 300_000);
+});
+
 describe('the runs a pack cites', () => {
 	it('keeps them through the storage cap, and the run DELETE names the pack', async () => {
 		const cited = await asOwner('SELECT model_run_cited($1) AS b, model_run_cited($2) AS a, model_run_cited($3) AS s', [baseRun, appRun, seedRun]);
@@ -1429,7 +1473,8 @@ describe.skipIf(!minio)('deleting a project with packs', () => {
 		const other = await smallProject('Other');
 		const byRun = await owner.call('POST', `${at()}/packs`, { runId: other.runId });
 		expect(byRun.status).toBe(404);
-		const issued = (await asOwner(`SELECT id FROM evidence_pack WHERE project_id = $1 AND status = 'issued' LIMIT 1`, [projectId]))[0]!.id as string;
+		// The project's issued baseline pack (a new version of it is drafted on baseRun below; an application pack's is another application's).
+		const issued = (await asOwner(`SELECT id FROM evidence_pack WHERE project_id = $1 AND status = 'issued' AND scenario_id IS NULL LIMIT 1`, [projectId]))[0]!.id as string;
 		await asOwner(`UPDATE evidence_pack SET status = 'withdrawn', status_reason = 'x' WHERE id = $1`, [other.packId]);
 		const byPack = await owner.call('POST', `${at()}/packs`, { runId: baseRun, supersedesId: other.packId });
 		expect(byPack.status).toBe(404);
@@ -1639,6 +1684,25 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		expect((await editor.call('GET', `${packPath(pack)}/bundle`)).status).toBe(409);
 	});
 
+	it('refuses the bundle of a pack whose cited alternative’s run carries a volume though neither of its own runs does (bundle-3: the bundle holds that run too)', async () => {
+		const plain = await teamScenario('G1 plain dam on Upper', baseRun, [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 120_000 }]);
+		const voluminous = await teamScenario('G1 alternative with a volume', baseRun, [
+			{ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: farmId, waterSource: 'surface', volumeM3PerYear: 4343 } }
+		]);
+		const cite = (runId: string, notAssessed: string | null) => (r: PackManifest['report']) =>
+			({ ...r, alternatives: [{ label: 'With a volume', runId, runLabel: '', engineVersion: ENGINE_VERSION, createdAt: '', createdBy: null, scenarioId: '', scenarioName: '', opsSha256: '', ops: [], proposals: 0, assumptions: 0, allocationMode: null, pairedId: null, notAssessed }] }) as PackManifest['report'];
+		const pack = await plant('evidence-26', { scenario: plain, edit: cite(voluminous.runId, null) });
+		withheld(await viewer.call('GET', `${packPath(pack)}/bundle`));
+		// The page says so: the bundle alone is withheld, the manifest isn't.
+		expect((await viewer.call('GET', packPath(pack))).body).toMatchObject({ volumesWithheld: false, bundleWithheld: true });
+		expect((await editor.call('GET', packPath(pack))).body).toMatchObject({ volumesWithheld: false, bundleWithheld: false });
+		// The pack's own runs carry none: its manifest isn't withheld for that viewer (only the bundle holds the alternative's inputs).
+		expect(await withUser(viewer.id, (db) => packVolumesWithheld(db, projectId, { baselineRunId: baseRun, scenarioRunId: plain.runId }, 'viewer'))).toBe(false);
+		// Positive control: an alternative page 1 doesn't assess carries no run in the bundle, so the viewer passes the check (a draft: 409).
+		const unassessed = await plant('evidence-26', { scenario: plain, edit: cite(voluminous.runId, 'Not assessed: another baseline.') });
+		expect((await viewer.call('GET', `${packPath(unassessed)}/bundle`)).status).toBe(409);
+	});
+
 	it('counts a run the viewer can’t read as carrying volumes (fail closed)', async () => {
 		const asViewer = (scenarioRunId: string | null) =>
 			withUser(viewer.id, (db) => packVolumesWithheld(db, projectId, { baselineRunId: baseRun, scenarioRunId }, 'viewer'));
@@ -1807,7 +1871,7 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 		const [row] = await asOwner('SELECT manifest, manifest_sha256 FROM evidence_pack WHERE id = $1', [p.id]);
 		const manifest = row!.manifest as PackManifest;
 		const obs = manifest.report.damObservations as EvidenceDamObservations;
-		expect(manifest.report.version).toBe('evidence-25');
+		expect(manifest.report.version).toBe('evidence-26');
 		expect(obs).toMatchObject({ version: 'dam-obs-2', startDate: manifest.report.identity.baseline.startDate, endDate: manifest.report.identity.baseline.endDate });
 		expect(obs.sources.map((x) => [x.source, x.citation])).toEqual([
 			['s2', 'Contains modified Copernicus Sentinel data 2019, processed by Digital Earth Africa'],
@@ -1906,4 +1970,79 @@ describe.skipIf(!minio)('an applicant’s application pack with observed wet day
 			expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
 		}
 	});
+});
+
+describe.skipIf(!minio)('an applicant’s application pack citing the applicant’s own alternative, whose ops their mask changes (bundle-3, evidence-26)', () => {
+	let applicant: User;
+	let base: string;
+	let appRunId: string;
+	let altRunId: string;
+	const lower = node('Lower', null);
+
+	beforeAll(async () => {
+		applicant = await signUp('PkMaskApplicant');
+		expect((await owner.call('POST', `${at()}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		expect((await owner.call('PUT', `${at()}/farmers/${applicant.id}`, { nodeIds: [farmId] })).status).toBe(200);
+		// A second farm the applicant doesn't own: the mask hides it ("Farm 1"), and its name with it.
+		const model = (await owner.call('GET', `${at()}/model`)).body;
+		const outlet = model.nodes.find((n: { kind: string }) => n.kind === 'gauge');
+		const farm = { ...lower, id: crypto.randomUUID(), kind: 'farm', downstreamNodeId: outlet.id, sortOrder: 2 };
+		expect((await owner.call('PUT', `${at()}/model`, { ...model, nodes: [...model.nodes, farm] })).status).toBe(200);
+		base = await newRun('Baseline with Lower');
+		expect((await owner.call('POST', `${at()}/evidence`, { runId: base, reason: 'Calibrated baseline, with Lower' })).status).toBe(201);
+		const cited = await ensemble(base, { request: declaredRuleRequest(RULE) });
+		expect((await owner.call('POST', `${at()}/publication`, { runId: base })).status).toBe(201);
+		const scenario = async (name: string, ops: unknown[]) => {
+			const created = await applicant.call('POST', `${at()}/scenarios`, { name, baseRunId: base, ops });
+			expect(created.status, JSON.stringify(created.body)).toBe(201);
+			const sid = created.body.scenario.id as string;
+			const ran = await applicant.call('POST', `${at()}/scenarios/${sid}/runs`, {});
+			expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+			return { sid, runId: ran.body.run.id as string };
+		};
+		const app = await scenario('Upper dam, applied for', [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 300_000 }]);
+		// The alternative renames the applicant's own farm to the hidden farm's real name: under the mask (what the
+		// applicant's ops always meet) it applies, and the hidden one becomes "Lower (2)"; without it, a duplicate name.
+		const alt = await scenario('Upper dam, smaller', [
+			{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 150_000 },
+			{ op: 'node.set', nodeId: farmId, field: 'name', value: 'Lower' }
+		]);
+		appRunId = app.runId;
+		altRunId = alt.runId;
+		const cite = await applicant.call('PUT', `${at()}/scenarios/${app.sid}/alternatives`, { alternatives: [{ runId: alt.runId, label: 'Smaller dam' }] });
+		expect(cite.status, JSON.stringify(cite.body)).toBe(200);
+		expect((await applicant.call('POST', `${at()}/scenarios/${app.sid}/submit`, {})).status).toBe(200);
+		const baseEnsemble = (await owner.call('GET', `${runPath(base)}/uncertainty/${cited}`)).body.ensemble;
+		await ensemble(app.runId, { baselineId: cited }, { options: baseEnsemble.options, header: baseEnsemble.result.header, members: baseEnsemble.result.members });
+	}, 600_000);
+
+	it('the alternative’s run is the masked one (the hidden farm renamed, not a refused op)', async () => {
+		const [row] = await asOwner(`SELECT inputs->'model'->'nodes' AS nodes FROM model_run WHERE id = $1`, [altRunId]);
+		expect((row!.nodes as { name: string }[]).map((n) => n.name).sort()).toEqual(['Lower', 'Lower (2)', 'Outlet']);
+	});
+
+	it('issues it, and the bundle reproduces the alternative offline and on the server', async () => {
+		vi.stubEnv('REPORT_RENDERER', 'sqs');
+		vi.stubEnv('RENDER_REQUESTS_QUEUE_URL', 'memory://render-requests');
+		try {
+			const p = await draft(editor, appRunId);
+			const [m] = await asOwner('SELECT manifest FROM evidence_pack WHERE id = $1', [p.id]);
+			expect((m!.manifest as PackManifest).report.alternatives!.map((a) => [a.runId, a.notAssessed])).toEqual([[altRunId, null]]);
+			await sign(editor, p.id);
+			const res = await issue(editor, p.id);
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			const { bytes } = await downloadBundle(editor, p.id);
+			const hash = (d: string | Uint8Array) => createHash('sha256').update(d).digest('hex');
+			const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
+			expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
+			expect(checked.checks.map((k) => k.id)).toEqual(expect.arrayContaining(['alternative:1', 'reproduce:alternative:1']));
+			await runTick({ feeds: false, reports: false, alerts: false });
+			await runTick({ feeds: false, reports: false, alerts: false });
+			const { reproduction } = (await editor.call('GET', packPath(p.id))).body;
+			expect(reproduction.status, JSON.stringify(reproduction.checks.filter((c: { ok: boolean }) => !c.ok))).toBe('reproduced');
+		} finally {
+			vi.unstubAllEnvs();
+			sent.length = 0;
+		}
+	}, 300_000);
 });

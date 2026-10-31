@@ -5,7 +5,9 @@
 // ops; without one it says why (not assessed yet, under way); a conflict
 // makes it not assessed with the conflict named, never a silent merge. Only
 // an assessment on the baseline run's engine is read (operator decision,
-// 2026-10-01), so the row's baseline figure is the report's own.
+// 2026-10-01), so the row's baseline figure is the report's own. From
+// evidence-26 § 4 also carries each dam the applications touch: its firm
+// yield and assurance of supply from the assessment's dam rows.
 // Synthetic catchment: invented names and values.
 import { randomUUID } from 'node:crypto';
 import { COMBINED_CONFLICT, COMBINED_NOT_RUN, COMBINED_PENDING, type CumulativeReport, ENGINE_VERSION, type EvidenceReport } from '@water-management/engine';
@@ -13,7 +15,8 @@ import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { monthly, node, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
-import { staleAssessment } from './report.js';
+import { withUser } from '../db/tx.js';
+import { buildEvidenceReport, staleAssessment } from './report.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -90,7 +93,7 @@ beforeAll(async () => {
 describe('the evidence report’s combined row (evidence-11, C26)', () => {
 	it('says the applications have not been assessed together until an assessment of exactly them exists', async () => {
 		const r = await reportOf(assessor, runA);
-		expect(r.version).toBe('evidence-25');
+		expect(r.version).toBe('evidence-26');
 		const c = r.cumulative.combined!;
 		expect(c.applications.map((x) => [x.scenarioName, x.isThis])).toEqual([
 			['Raise Rooikloof', true],
@@ -184,5 +187,115 @@ describe('the evidence report’s combined row (evidence-11, C26)', () => {
 		} finally {
 			expect((await owner.call('POST', `${P()}/scenarios/${clash}/withdraw`, {})).status).toBeLessThan(300);
 		}
+	});
+});
+
+describe('yield and reliability per dam, together (evidence-26; followups § Cumulative impact)', () => {
+	const assessmentOf = async (name: string) => {
+		const list = (await assessor.call('GET', `${P()}/assessments`)).body.assessments as { id: string; name: string; status: string }[];
+		const a = list.find((x) => x.name === name && x.status === 'complete')!;
+		return (await assessor.call('GET', `${P()}/assessments/${a.id}`)).body.assessment as { report: CumulativeReport };
+	};
+	const firmYieldOf = async (target: { runId?: string; scenarioId?: string }, nodeId: string) => {
+		const res = await assessor.call('POST', `${P()}/yield`, { nodeId, kind: 'firm', ...target });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		await tick();
+		const q = new URLSearchParams({ nodeId, ...(target as Record<string, string>) });
+		const got = (await assessor.call('GET', `${P()}/yield?${q}`)).body.results as { points: { point: { yieldM3Year: number } } }[];
+		return got[0]!.points.point.yieldM3Year;
+	};
+
+	it('the job adds rows for each dam the applications touch, none for an untouched dam, and the firm yields are the Yield job’s', async () => {
+		const res = await assessor.call('POST', `${P()}/assessments`, { name: 'Yields', scenarioIds: [appA, appB] });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		await tick();
+		const { report } = await assessmentOf('Yields');
+		// A raises Rooikloof's dam, B plants on Kalkoenkrans (a unit with a dam too); Bergvliet's dam is no one's business.
+		expect(report.dams).toEqual({ nodeIds: [kalkoenkrans.id, rooikloof.id], onVolumes: false });
+		const damRows = report.rows.filter((r) => r.metric === 'dam_firm_yield' || r.metric === 'dam_reliability');
+		expect(damRows.map((r) => [r.metric, r.site, r.siteNodeId, r.unit])).toEqual([
+			['dam_firm_yield', 'Kalkoenkrans', kalkoenkrans.id, 'm³/year'],
+			['dam_reliability', 'Kalkoenkrans', kalkoenkrans.id, 'fraction'],
+			['dam_firm_yield', 'Rooikloof', rooikloof.id, 'm³/year'],
+			['dam_reliability', 'Rooikloof', rooikloof.id, 'fraction']
+		]);
+		expect(report.rows.some((r) => r.siteNodeId === bergvliet.id)).toBe(false);
+		for (const r of damRows.filter((x) => x.metric === 'dam_firm_yield')) {
+			expect(r.baseline).not.toBeNull();
+			expect(r.combined).not.toBeNull();
+			expect(r.interaction).toBeCloseTo(r.combinedChange! - r.sumOfSingles!, 6);
+		}
+		// The assurance of supply counts whole water years, and this record (120 days) has none: not assessed, never 0.
+		for (const r of damRows.filter((x) => x.metric === 'dam_reliability')) expect([r.baseline, r.combined, r.interaction]).toEqual([null, null, null]);
+		// Cross-checks against the Yield job: the baseline column on the published run, A's column on A's scenario.
+		const rooi = damRows[2]!;
+		expect(rooi.baseline).toBe(await firmYieldOf({ runId: published }, rooikloof.id));
+		const order = report.scenarios.map((s) => s.id);
+		expect(rooi.singles[order.indexOf(appA)]).toBe(await firmYieldOf({ scenarioId: appA }, rooikloof.id));
+		// Raising Rooikloof's dam yields no less there.
+		expect(rooi.singles[order.indexOf(appA)]!).toBeGreaterThanOrEqual(rooi.baseline!);
+
+		// The report's § 4 reads the newest complete assessment of exactly these: these dams, figures and directions.
+		const c = (await reportOf(assessor, runA)).cumulative.combined!;
+		expect(c.assessment?.name).toBe('Yields');
+		expect(c.dams!.map((d) => [d.name, d.onVolumes, d.withheld])).toEqual([
+			['Kalkoenkrans', false, undefined],
+			['Rooikloof', false, undefined]
+		]);
+		const d = c.dams![1]!;
+		expect(d.firmYield).toEqual({ baseline: rooi.baseline, combined: rooi.combined, change: rooi.combinedChange, sumOfSingles: rooi.sumOfSingles, interaction: rooi.interaction });
+		const tol = 0.001 * Math.max(rooi.baseline!, rooi.combined!);
+		expect(d.verdict.firmYield).toBe(Math.abs(rooi.combinedChange!) <= tol ? 'unchanged' : rooi.combinedChange! > 0 ? 'higher' : 'lower');
+	});
+
+	it('a reader kept from the registered volumes reads a dam whose yields rest on them as its direction only; the assessor reads the figures (positive control)', async () => {
+		const asHidden = () => withUser(assessor.id, (db) => buildEvidenceReport(db, projectId, runA, { othersVolumesHidden: true }));
+		// On compare-only runs nothing rests on the volumes: that reader reads the figures too.
+		const plain = (await asHidden()).cumulative.combined!.dams!;
+		expect(plain.map((d) => [d.name, d.withheld, d.firmYield === null])).toEqual([
+			['Kalkoenkrans', undefined, false],
+			['Rooikloof', undefined, false]
+		]);
+		// As if a run of the assessment had capped use at the volumes (an application's allocation mode): the schema owner marks it.
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query('SET LOCAL session_replication_role = replica');
+			await client.query(`UPDATE assessment SET report = jsonb_set(report, '{dams,onVolumes}', 'true') WHERE project_id = $1 AND name = 'Yields'`, [projectId]);
+			await client.query('COMMIT');
+		} finally {
+			await client.end();
+		}
+		const hidden = (await asHidden()).cumulative.combined!.dams!;
+		expect(hidden.map((d) => [d.name, d.withheld, d.firmYield, d.reliability, d.onVolumes])).toEqual([
+			['Kalkoenkrans', true, null, null, true],
+			['Rooikloof', true, null, null, true]
+		]);
+		for (const d of hidden) expect(['lower', 'unchanged', 'higher']).toContain(d.verdict.firmYield);
+		const full = (await reportOf(assessor, runA)).cumulative.combined!.dams!;
+		expect(full.map((d) => [d.withheld, d.firmYield === null, d.onVolumes])).toEqual([
+			[undefined, false, true],
+			[undefined, false, true]
+		]);
+		expect(full.map((d) => d.verdict)).toEqual(hidden.map((d) => d.verdict));
+	});
+
+	it('an assessment made before them reads with no dams (an older report has none)', async () => {
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		const { report } = await assessmentOf('Yields');
+		const { dams: _dams, ...older } = report;
+		try {
+			await client.query('BEGIN');
+			await client.query('SET LOCAL session_replication_role = replica');
+			await client.query(`UPDATE assessment SET report = $2 WHERE project_id = $1 AND name = 'Yields'`, [projectId, JSON.stringify({ ...older, rows: older.rows.filter((r) => !r.metric.startsWith('dam_')) })]);
+			await client.query('COMMIT');
+		} finally {
+			await client.end();
+		}
+		const c = (await reportOf(assessor, runA)).cumulative.combined!;
+		expect(c.notAssessed).toBeNull();
+		expect(c.dams).toEqual([]);
 	});
 });

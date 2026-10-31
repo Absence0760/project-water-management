@@ -107,7 +107,7 @@ describe('a dam-raise scenario', () => {
 			runCount: 0,
 			lastRun: null
 		});
-		expect(res.body.check).toEqual({ applied: [{ index: 0, op: damRaise(c.farm.id, 120_000), notes: [expect.stringMatching(/^dam area when full \d+ → \d+ m² along the dam's own area–volume relation/)] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [] });
+		expect(res.body.check).toEqual({ applied: [{ index: 0, op: damRaise(c.farm.id, 120_000), notes: [expect.stringMatching(/^dam area when full \d+ → \d+ m² along the dam's own area–volume relation/)] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [], wulaWarnings: [] });
 		// The farm made the proposer's own: the same op is a proposal.
 		const owned = await owner.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ownedNodeIds: [c.farm.id] });
 		expect(owned.status).toBe(200);
@@ -208,7 +208,7 @@ describe('scenario ops', () => {
 
 		// A named farm that isn't the author's is another party's: baseline, until it is theirs.
 		const checked = await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`);
-		expect(checked.body.check).toEqual({ applied: [{ index: 0, op: halve, notes: [] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [] });
+		expect(checked.body.check).toEqual({ applied: [{ index: 0, op: halve, notes: [] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [], wulaWarnings: [] });
 		expect(checked.body.scenario.opNames).toEqual([{ id: c.farm.id, name: 'Rooikloof' }]);
 		const owned = await u.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ownedNodeIds: [c.farm.id] });
 		expect(owned.status).toBe(200);
@@ -258,7 +258,7 @@ describe('scenario ops', () => {
 		const everyone: ScenarioOp = { op: 'demand.scale', factor: 0.85 };
 		const sid = await create(u, c.projectId, { name: 'Everyone at 85 %', baseRunId: base, ops: [everyone], ownedNodeIds: [c.farm.id, c.other.id] });
 		const res = await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`);
-		expect(res.body.check).toEqual({ applied: [{ index: 0, op: everyone, notes: ['2 farm(s) scaled'] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [] });
+		expect(res.body.check).toEqual({ applied: [{ index: 0, op: everyone, notes: ['2 farm(s) scaled'] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [], wulaWarnings: [] });
 		// Positive control: the same scale naming both owned farms is a proposal.
 		const named: ScenarioOp = { op: 'demand.scale', factor: 0.85, nodeIds: [c.farm.id, c.other.id] };
 		const sid2 = await create(u, c.projectId, { name: 'Both named at 85 %', baseRunId: base, ops: [named], ownedNodeIds: [c.farm.id, c.other.id] });

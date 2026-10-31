@@ -9,6 +9,7 @@
 	import type { ModelInput, ScenarioOp } from '@water-management/engine';
 	import OpForm from './OpForm.svelte';
 	import OpList from './OpList.svelte';
+	import { PUBLIC_RECORD_HINT } from './licence';
 	import { opItems, stepInputs } from './ops';
 
 	let {
@@ -77,7 +78,9 @@
 	{/if}
 	<div class="field">
 		<label for="{idPrefix}-conditions">Licence conditions <span class="muted">(as the licence words them; optional)</span></label>
-		<textarea id="{idPrefix}-conditions" rows="3" maxlength="4000" bind:value={conditions} {disabled}></textarea>
+		<textarea id="{idPrefix}-conditions" rows="3" maxlength="4000" bind:value={conditions} {disabled} aria-describedby="{idPrefix}-conditions-help"></textarea>
+		<!-- A warning, not an explanation: always shown (ui-playbook § 2 "One short line under a field"). -->
+		<p id="{idPrefix}-conditions-help" class="hint">{PUBLIC_RECORD_HINT}</p>
 	</div>
 </fieldset>
 

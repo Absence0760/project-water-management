@@ -17,7 +17,7 @@
 	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { pctText } from '#lib/model/systems.js';
 	import type { FarmPlanting } from '#lib/components/crops/farmDrawer.js';
-	import { damHints, fieldScale, hasDam, isPct, NODE_FIELDS, returnFlowHint, setNodeField, splitFields, unusedLine, type NodeField } from './fields';
+	import { damHints, damSitingHint, fieldScale, hasDam, isPct, NODE_FIELDS, returnFlowHint, setNodeField, splitFields, unusedLine, type DamSiting, type NodeField } from './fields';
 	import { fieldsLine, sectionSummary } from './nodeSummary';
 	import { sheetFolds } from './sheetFolds.svelte';
 	import { fieldShows, nodeSections, SECTION_TITLE, sectionId } from './nodeSections';
@@ -55,6 +55,7 @@
 		farmersNote = null,
 		previewHref = null,
 		mapHref = null,
+		damSiting = [],
 		planting = null,
 		plantedHref = null,
 		efficiency = null,
@@ -94,6 +95,8 @@
 		previewHref?: string | null;
 		/** This node on the Map tab (issue #326 A2); null when no map feature is linked to it. */
 		mapHref?: string | null;
+		/** The dam outlines linked to this unit on the map, with their Siting (`GET …/map/linked-nodes`), for the hint beside Upstream inflow to dam. */
+		damSiting?: DamSiting[];
 		/** A unit's planted areas (Crops), for the Irrigation section's pointer to them; null for other nodes. */
 		planting?: FarmPlanting | null;
 		/** The unit's efficiency as a run takes it: its crops' irrigation systems blended (engine ≥ 1.72.0); farms only. */
@@ -174,6 +177,8 @@
 		drought: 'Drought: supplemental while the dam is below the trigger'
 	};
 	const hints = $derived(damHints(node));
+	/** The map's Siting beside Upstream inflow to dam, and a warning when the share contradicts it (fields.ts damSitingHint). */
+	const siting = $derived(node.kind === 'farm' ? damSitingHint(damSiting, node) : null);
 	// History's unit filter takes units (farms); another node's link filters by its name alone.
 	const unit = $derived(node.kind === 'farm' ? node.id : null);
 	/** The EWR site flag (engine ≥ 1.5.0): shown on a gauge, and on any node that has it off so it can be put right. */
@@ -278,7 +283,8 @@
 
 	{#snippet numField(f: NodeField, unusedId: string | null)}
 		{@const runs = f.derived && ownEfficiency && efficiency !== null && Math.abs(efficiency - (node.irrigationEfficiency ?? 0)) > 0.0005}
-		{@const describedBy = [unusedId, `${id(f.key)}-h`, runs ? `${id(f.key)}-run` : null].filter(Boolean).join(' ')}
+		{@const sited = f.key === 'pctUpstreamToDam' ? siting : null}
+		{@const describedBy = [unusedId, `${id(f.key)}-h`, runs ? `${id(f.key)}-run` : null, sited ? `${id(f.key)}-siting` : null, sited?.warning ? `${id(f.key)}-siting-warn` : null].filter(Boolean).join(' ')}
 		<div class="field">
 			{#if f.derived && !ownEfficiency}
 				<!-- Every crop here is on a system (engine ≥ 1.72.0): the efficiency is theirs blended, text, not an input. -->
@@ -309,6 +315,11 @@
 				<span class="hint explain" id="{id(f.key)}-h">{f.help}</span>
 			{/if}
 			{#if runs}<span class="hint" id="{id(f.key)}-run">With its crops' systems, a run uses {pctText(efficiency!)}.</span>{/if}
+			{#if sited}
+				<!-- The map's Siting, always shown (a state line, not an explanation); a warning, never a block, when the share contradicts it. -->
+				<span class="hint" id="{id(f.key)}-siting" data-testid="node-dam-siting">{sited.line}</span>
+				{#if sited.warning}<span class="alert alert-warning small" role="status" id="{id(f.key)}-siting-warn" data-testid="node-dam-siting-warning">{sited.warning}</span>{/if}
+			{/if}
 			{#if f.key === 'returnFlowFraction' && efficiency !== null}
 				{@const over = returnFlowHint(node.returnFlowFraction, efficiency)}
 				{#if over}<span class="alert alert-warning small" role="status" data-testid="return-flow-over">{over}</span>{/if}

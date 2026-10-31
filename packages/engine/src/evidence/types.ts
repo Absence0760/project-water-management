@@ -16,6 +16,7 @@ import type { AllocationLimitBound, DemandMonthlyUnit, DemandObjectCategory, Dem
 import type { CumulativeReport } from '../scenario/cumulative';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
+import type { WulaReference, WulaTie, WulaWork } from '../scenario/wula';
 import type { Band } from '../uncertainty/bands';
 import type { EnsembleSummary } from '../uncertainty/ensemble';
 import type { LicenceImpact } from '../views/licenceImpact';
@@ -201,8 +202,41 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * the rule for units outside every location, or the catchment parameters,
  * from summary.unitRain.paramSource). A pack drafted before keeps its
  * document, without them.
+ * evidence-26 (followups § Cumulative impact, yield per dam): § 4's *All of
+ * them together* adds each dam the applications touch (`cumulative.combined.dams`):
+ * its firm yield and its unit's assurance of supply on the baseline and all
+ * together, with the change, the sum of each alone and the interaction, from
+ * the cumulative assessment's dam rows; a reader kept from the registered
+ * volumes gets each direction only when a run rested on them. A pack drafted
+ * before keeps its document, without them.
+ * Also evidence-26 (WP-3.10, followups § Cumulative impact): § 4's combined
+ * table, when the assessment it reads was also run on a background at full
+ * allocation (295, backend assessments/background.ts), adds that row set
+ * beside the baseline's (`cumulative.combined.background`): the background's
+ * outlet days and Reserve months, each application's sum alone and all of
+ * them together on it, and the interaction. Labelled existing authorised use,
+ * never the baseline: the baseline's figures and page 1's row are unchanged
+ * (licences never drive the baseline, issue #507). Counts only, so a reader
+ * kept from the volumes reads it as it is (D3). A pack drafted before keeps
+ * its document, without it.
+ * Also evidence-26 (294_wula_reference, docs/followups.md "Applied-for works against
+ * the modelled ones"): page 1 and Appendix A.2 print the water-use licence
+ * application the scenario models (`identity.application.wula`: its number and
+ * the works as applied for), and A.2 says which works each change models (the
+ * op's `works` tag), which proposals model none of them and which works no
+ * change models; questions ask about either. Null for a team scenario that
+ * records no reference. A pack drafted before keeps its document, without it.
+ * Also evidence-26 (298_scenario_alternatives, docs/followups.md "Labelled mitigation
+ * alternatives"): page 1 sets the alternatives the application cites beside it
+ * (`alternatives`, at most ALTERNATIVES_MAX): each a labelled run of another of
+ * the applicant's own scenarios on the same baseline, its run, ops and hash
+ * frozen with the report, and on every page-1 row a column of its own
+ * (`EvidenceRow.alternatives`): its value and its change against the baseline,
+ * paired when the alternative's run has a paired ensemble on the cited one.
+ * The combined row isn't assessed for an alternative. A pack drafted before
+ * keeps its document, without them.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-25';
+export const EVIDENCE_REPORT_VERSION = 'evidence-26';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -260,6 +294,8 @@ export interface EvidenceScenarioInput {
 	description: string;
 	/** The answers to Appendix C's fixed prompts (129_scenario_statement); '' = not given. Appendix C only (G13). */
 	prompts: ApplicantPrompts;
+	/** The WULA the scenario models (294_wula_reference), as the scenario holds it now; absent reads as none. */
+	wula?: WulaReference;
 	/** draft | submitted | withdrawn | decided; null once the scenario is deleted. */
 	status: string | null;
 	/** Display name of the scenario's owner; null when unknown. */
@@ -397,6 +433,20 @@ export interface EvidenceAssessmentInput {
 	engineVersion: string | null;
 	/** Its stored report (engine cumulativeImpact). */
 	report: CumulativeReport;
+	/**
+	 * Its background at full allocation, when it was run on one (evidence-26): the same table with the
+	 * full-allocation run in the baseline's column. Absent or null otherwise.
+	 */
+	background?: EvidenceAssessmentBackgroundInput | null;
+}
+
+/** An assessment's background at full allocation as the report reads it (evidence-26). */
+export interface EvidenceAssessmentBackgroundInput {
+	/** What it is, in words (backend BACKGROUND_LABEL): existing authorised use, never the baseline. */
+	label: string;
+	/** The background run's label, as the assessment recorded it. */
+	runLabel: string;
+	report: CumulativeReport;
 }
 
 /**
@@ -472,10 +522,37 @@ export interface EvidenceInput {
 	/** The project's traced dams with their WOfS and Sentinel-2 rows in the baseline's period (dam_observation, under the reader's RLS), for the observed wet days (evidence-21; Sentinel-2 from evidence-24); absent or [] = none. */
 	damObservations?: EvidenceDamObservationInput[] | null;
 	/**
+	 * The mitigation alternatives the application cites (298_scenario_alternatives, evidence-26), in the
+	 * application's order; at most ALTERNATIVES_MAX are read. Absent, null or [] = none (and always none for
+	 * baseline evidence).
+	 */
+	alternatives?: EvidenceAlternativeInput[] | null;
+	/**
 	 * § 8's stored result for these two runs (280 future_yield, under the reader's RLS; evidence-23):
 	 * `{ notRun: true }` when FUTURE_YIELD is on and none matches; absent or null when it is off, or for baseline evidence.
 	 */
 	futureYield?: EvidenceFutureYieldInput | null;
+}
+
+/** Most alternatives an application cites, so page 1 stays readable (298_scenario_alternatives caps it too). */
+export const ALTERNATIVES_MAX = 3;
+
+/**
+ * One mitigation alternative the application cites (evidence-26, 298_scenario_alternatives): a run of
+ * another of the applicant's own scenarios on the same baseline, with the label the applicant gave it.
+ */
+export interface EvidenceAlternativeInput {
+	/** The applicant's label ("smaller dam", "winter abstraction only"), 1–80 characters. */
+	label: string;
+	/** The alternative's run, with its scenario as the run recorded it (inputs.scenario). */
+	run: EvidenceRunInput & { scenario: EvidenceScenarioInput };
+	/** Every paired ensemble on the alternative's run, as `ensembles.paired` holds the application's. */
+	paired: EvidenceEnsembleInput[];
+	/**
+	 * The run's server stamp matches its results (077, backend runs/stamp.ts): an applicant may write their own
+	 * application's run rows, so a column is printed only from a run the model run itself stored.
+	 */
+	verified: boolean;
 }
 
 /** What the backend found for § 8 (evidence-23). */
@@ -600,6 +677,46 @@ export interface EvidenceRow {
 	notAssessed: string | null;
 	/** A second reading beside the value (outflow as % of natural MAR). */
 	note: string | null;
+	/**
+	 * evidence-26: one cell per alternative the report cites (`EvidenceReport.alternatives`, same order):
+	 * its value and change against the baseline. Absent on a baseline report, a report citing none and a
+	 * pack drafted before.
+	 */
+	alternatives?: EvidenceAlternativeCell[];
+}
+
+/** A page-1 row's value under one alternative (evidence-26). */
+export interface EvidenceAlternativeCell {
+	/** The alternative's value; null when it has none (`notAssessed` says why when it is a reason, not an absence). */
+	value: number | null;
+	/** Alternative − baseline, banded when the alternative's run has a paired ensemble on the cited one. */
+	change: EvidenceChange | null;
+	notAssessed: string | null;
+	note: string | null;
+}
+
+/** A mitigation alternative as page 1 and A.2 print it (evidence-26, 298_scenario_alternatives). */
+export interface EvidenceAlternative {
+	/** The applicant's label for it. */
+	label: string;
+	runId: string;
+	runLabel: string;
+	engineVersion: string;
+	createdAt: string;
+	createdBy: string | null;
+	scenarioId: string;
+	scenarioName: string;
+	opsSha256: string;
+	/** Its ops, each with its class, as its run recorded them (A.2). */
+	ops: { index: number; class: OpClass; op: ScenarioOp }[];
+	proposals: number;
+	assumptions: number;
+	/** The run's allocation mode (summary.allocations.mode); null when it records none. */
+	allocationMode: AllocationMode | null;
+	/** The paired ensemble its change cells are banded by; null when none (each cell says why). */
+	pairedId: string | null;
+	/** Why its column isn't assessed at all (another baseline, an unverified run); null when it is. */
+	notAssessed: string | null;
 }
 
 /** A calendar month's paired change in days below the EWR (D-U9), water-year order. */
@@ -926,6 +1043,53 @@ export interface EvidenceCombined {
 	warnings: string[];
 	/** Why there is no combined figure, in words; null when there is one. */
 	notAssessed: string | null;
+	/**
+	 * evidence-26: each dam the applications touch, its firm yield and its
+	 * unit's assurance of supply on the baseline and all together, from the
+	 * assessment (scenario/cumulativeYield.ts). Empty when not assessed or the
+	 * assessment worked none out (one made before, or no dam touched). Absent
+	 * from a document before evidence-26.
+	 */
+	dams?: EvidenceCombinedDam[];
+	/**
+	 * The same measures on the assessment's background at full allocation (evidence-26), beside the
+	 * baseline's, never in their place; null when it has none or isn't read. Absent from a pack drafted before.
+	 */
+	background?: EvidenceCombinedBackground | null;
+}
+
+/** Which way a measure moved, all together against the baseline: what a viewer kept from the registered volumes reads (evidence-26). */
+export type EvidenceCombinedVerdict = 'lower' | 'unchanged' | 'higher';
+
+/** One dam the applications touch, across the combination (evidence-26). */
+export interface EvidenceCombinedDam {
+	nodeId: string;
+	name: string;
+	/** Firm yield, m³/year (the yield job's defaults); null when withheld (`withheld`). */
+	firmYield: EvidenceCombinedMeasure | null;
+	/** Its unit's annual assurance of supply, 0–1; null when withheld. */
+	reliability: EvidenceCombinedMeasure | null;
+	/** The direction of each, all together against the baseline; null when a run lacks the dam or its figure. */
+	verdict: { firmYield: EvidenceCombinedVerdict | null; reliability: EvidenceCombinedVerdict | null };
+	/** Some run the yields came from capped use at, or scaled demand to, the registered volumes (CumulativeReport.dams.onVolumes). */
+	onVolumes: boolean;
+	/** The figures left out for a reader kept from the registered volumes: the verdicts stay (D3, #523 I). */
+	withheld?: true;
+}
+
+/**
+ * § 4's row set against existing authorised use (evidence-26, WP-3.10): the
+ * assessment's run of the baseline at full allocation (every registered or
+ * licensed volume taken in full), each application alone and all together on
+ * it. Each measure's `baseline` is the background's own value. Days and
+ * months only: verdicts and counts, which D3 gives every reader of a
+ * full-allocation run.
+ */
+export interface EvidenceCombinedBackground {
+	label: string;
+	runLabel: string;
+	ewrDays: EvidenceCombinedMeasure | null;
+	reserveMonths: EvidenceCombinedMeasure | null;
 }
 
 /** One water year of a unit's use from one water source, both runs (§ 5). */
@@ -1104,6 +1268,17 @@ export interface EvidenceLicenceImpact {
 	result: { status: 'ok'; impact: LicenceImpact } | { status: 'unavailable'; reason: EvidenceLicenceImpactUnavailable; detail: string | null };
 }
 
+/**
+ * The WULA reference as page 1 prints it (evidence-26): the number, the works'
+ * refs, and how the run's recorded ops meet them (scenario/wula.ts wulaTie;
+ * 0-based op indices, as `ops[].index`). The works in words are A.2's
+ * (`appendix.wulaWorks`): page 1 holds none of the applicant's own words (G13).
+ */
+export interface EvidenceWula extends WulaTie {
+	number: string | null;
+	refs: string[];
+}
+
 export interface EvidenceReport {
 	version: typeof EVIDENCE_REPORT_VERSION;
 	mode: EvidenceMode;
@@ -1147,6 +1322,11 @@ export interface EvidenceReport {
 			assumptions: number;
 			/** An applicant's application or the team's scenario (evidence-17); absent from an older pack's document. */
 			origin?: 'team' | 'applicant';
+			/**
+			 * The water-use licence application it models (evidence-26, page 1 and A.2): null for a team scenario
+			 * that records no reference; absent from a pack drafted before evidence-26.
+			 */
+			wula?: EvidenceWula | null;
 		} | null;
 	};
 	checks: EvidenceCheck[];
@@ -1163,6 +1343,12 @@ export interface EvidenceReport {
 	questions: string[];
 	/** Page 1's change table, fixed rows (G6). */
 	rows: EvidenceRow[];
+	/**
+	 * The mitigation alternatives page 1 sets beside the application (evidence-26): one column each, in the
+	 * application's order. [] for baseline evidence and an application that cites none; absent from a pack
+	 * drafted before.
+	 */
+	alternatives?: EvidenceAlternative[];
 	/** The paired change in days below the outlet EWR, by calendar month (D-U9); null without a paired band or for baseline evidence. */
 	byMonth: EvidenceMonthChange[] | null;
 	/** The three months with the largest paired median increase, and any month that improves. */
@@ -1236,6 +1422,12 @@ export interface EvidenceReport {
 		baselineInputs: RunInputsSnapshot;
 		/** The full input diff, application against baseline (A.2). */
 		changes: InputChange[];
+		/**
+		 * The works as the WULA applies for them, in words (evidence-26, A.2; 294_wula_reference): what each
+		 * op's `works` tag names. Empty for baseline evidence and when none are listed; absent from a pack
+		 * drafted before evidence-26.
+		 */
+		wulaWorks?: WulaWork[];
 		/** Each input series of each run: kind, first day, days and SHA-256 (A.3). */
 		series: { run: 'baseline' | 'application'; kind: string; startDate: string; days: number; sha256: string | null }[];
 		history: EvidenceInput['history'];

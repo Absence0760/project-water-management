@@ -1060,11 +1060,12 @@ boundary itself rather than over a box around it.
   which only this route writes; the History says "Set up the CHIRPS feed …
   from the catchment boundary “…” (N cells)".
 - **No splicing.** A feed's existing days were averaged over its old cells,
-  so new cells never go to a feed whose series already holds a record (409),
-  nor while a fetch for that feed is still out (409 `feed_fetching`): its
-  answer was asked for with the old cells, so the save waits for it.
-  The proposal then attaches a new feed into a separate series to compare
-  beside the old one. Switch the old feed off once satisfied.
+  so new cells never merge onto them: Apply gives them only to a feed whose
+  series holds no days yet (409 `series_area` otherwise), never while a fetch
+  for that feed is still out (409 `feed_fetching`: its answer was asked for
+  with the old cells, so the save waits for it). The proposal attaches a new
+  feed into a separate series to compare beside the old one, or **replaces**
+  the record (below), which re-reads it whole over the boundary's cells.
 - **Beside the record runs read** (issue #561). A run reads the first CHIRPS
   series by name ([data-model.md § Which series a run
   reads](./data-model.md#which-series-a-run-reads)), so a new series that
@@ -1086,9 +1087,16 @@ boundary itself rather than over a box around it.
     record as a confirmed replacement, backfills the whole record from its
     first day into a stage (`feed_stage`), and swaps it in once complete, as
     [architecture.md § Data feeds](./architecture.md#data-feeds) describes;
-    runs keep reading the old values until then. Not offered while another
-    feed writes the record, or when it already holds the product and version
-    the feed would write (the ingest would add to it rather than replace it);
+    runs keep reading the old values until then. When a catchment CHIRPS feed
+    already writes the record (the usual default series), that feed takes
+    the boundary's cells (no second feed) and re-reads its own days over them
+    from its first one (`replace.area`, 296_feed_area_replace), keeping the
+    days a person entered; with another product, or while the record is of
+    another version, it replaces the series whole instead. So the boundary's
+    rain takes over the default series without comparing two. Not offered
+    while a unit's feed or another source writes the record, or when no feed
+    writes it and it already holds the product and version the feed would
+    write (a new feed would only fill its empty days around a person's);
   - a run whose CHIRPS series spans less of it than another CHIRPS series
     warns, naming both ([model.md § Which CHIRPS series the run
     reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
@@ -1158,11 +1166,17 @@ comes from its own rain (Per unit, the only method from engine 1.109.0)
   eight weeks old ([model.md §2.4h *Why `rnl`*](./model.md#reference-gauge-engine--1800-issue-500)).
   A catchment feed still defaults to `sat`. One History entry names
   every unit set up.
-- **No splicing.** As for the boundary: a unit's feed takes new cells (its
-  parcel was redrawn) or another product only while its series holds no days;
-  after that the unit is refused, saying why, and its feed is left alone. A
-  parcel redrawn to the same cells changes nothing the feed averages, so it
-  needs nothing.
+- **No splicing.** As for the boundary: a unit's feed takes another product
+  only while its series holds no days; after that the unit is refused, saying
+  why, and its feed is left alone. New cells (its parcel was redrawn) go to
+  an empty feed as an `update`, and to a feed that has fetched as a
+  `replace` (296_feed_area_replace): the feed takes the new cells and re-reads
+  its whole record over them into its stage, swapped in once complete, so a
+  run reads the old record whole until then and never one spliced from two
+  areas ([architecture.md § Data feeds](./architecture.md#data-feeds)). A
+  start date after the feed's first own day is refused (409
+  `series_backfill`). A parcel redrawn to the same cells changes nothing the
+  feed averages, so it needs nothing.
 - **Limits.** A unit reads at most 100 cells in 25 rows (one feed's limit), and
   a project has at most 20 feeds, catchment feeds included: a model with more
   units than that needs some units' rain set by hand.
@@ -2073,7 +2087,10 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   effective, both less their pans, [§ Pans and the effective area](#pans-and-the-effective-area)). Both are proposed as ticks on the
   unit's card in Start and Divide (`damShares`; Divide beside the node's
   values now); an unmarked dam proposes only the old *all of its own runoff
-  reaches the dam* tick. The name
+  reaches the dam* tick. Once ticked, the share is edited by hand on the
+  Network, so the unit's form shows the map's Siting under *Upstream inflow
+  to dam* and warns when the share is plainly the other kind (off-channel at
+  100 %, on the river at 0 %; ui.md, `GET …/map/linked-nodes` `dams`). The name
   follows DWS practice: a dam registration (form DW762, section 21(b))
   distinguishes off-channel storage, naming the watercourse it would drain
   to, and DWS's own off-channel storage (OCS) dams are filled from a river
@@ -3123,6 +3140,8 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | ERA5-Land daily precipitation (0.1°, `era5l` in our rain data copy): fills catchment-rain gaps where Model settings → Rain gaps chooses it, and Data → Rain products side by side (issue #604 R4-E) | ECMWF for the Copernicus Climate Change Service (C3S) | **CC BY 4.0** ("CC-BY licence" on the CDS dataset page, [reanalysis-era5-land](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land), read 2026-10-27) | "Contains modified Copernicus Climate Change Service information [year]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains." and the dataset citation (data-sources.md § ERA5-Land), wherever its values show: the Data sources and credits page, the Data tab's products and per-day preview, a run's results, report and exports, and an evidence pack's bundle | ERA5-Land hourly, daily totals | about 5 days behind, consolidated two months later | allowed (built; off in production until the operator's CDS key) |
 | IMERG Late Run V07 daily (0.1°, `imerg_late` in our copy, a version per day): fills the recent days of the catchment rain where Rain gaps chooses it (issue #604 R4-E) | NASA GES DISC (GPM) | CC0 by NASA's data use guidance; CC BY 4.0 on the AWS Open Data registry ([Earthdata data use guidance](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance), read 2026-10-27); credited as CC BY asks | the collection citation (data-sources.md § imerg), with its version, wherever its values show, as ERA5-Land's | V07 (V08 due) | about 14 h after the day; the copy keeps 30 days | allowed (built; off in production until the operator's Earthdata token) |
 | ECMWF open data, the ENS 15-day precipitation forecast (0.1°, `ecmwf/<issue>`): an `ecmwf_ens` forecast feed (issue #604 R4-C) | European Centre for Medium-Range Weather Forecasts | **CC BY 4.0** and the ECMWF Terms of Use ([open data](https://www.ecmwf.int/en/forecasts/datasets/open-data), read 2026-10-27) | "ECMWF open data, CC BY 4.0", on the feed's line, a forecast run's report and summary, its exports and an evidence pack's bundle | IFS ENS 00 UTC | one issue a day | allowed (built; the copy's job off in production until `ecmwf_enabled`) |
+| AgERA5 v2.0 daily FAO-56 reference evapotranspiration (0.1°, `agera5_et0` in our copy): an `agera5_et0` reference ET feed, which GR4J reads under a monthly PE row (issue #604 R5-E) | ECMWF for the Copernicus Climate Change Service (C3S); Boogaard et al. (2020), CDS dataset `sis-agrometeorological-indicators` | **CC BY 4.0** ("CC-BY licence" on the CDS dataset page, read 2026-10-27) | Copernicus's notice (ERA5-Land's words) and the dataset citation (data-sources.md § agera5), on the feed's line, the Data sources and credits page, and a run's report, exports and evidence pack bundle when GR4J read its values | v2.0 | daily, about a week behind (assumed until the first live run) | allowed (built; the copy's job off in production until `agera5_enabled`) |
+| NASA POWER daily meteorology (0.5°), our FAO-56 reference ET from it (`power_et0` in our copy): the newest days of an `agera5_et0` feed, before AgERA5's month lands (issue #604 R5-E) | NASA Langley Research Center, POWER Project | **CC BY 4.0** (POWER's own summary, [llms.txt](https://power.larc.nasa.gov/llms.txt), read 2026-10-27) | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; FAO-56 Penman-Monteith reference evapotranspiration computed by us from its daily meteorology" (data-sources.md § nasa-power), where AgERA5's shows | – | daily, 2 to 7 days behind | allowed (built; off in production until `power_et0_enabled`) |
 | List of Registered Dams (the register of dams) | DWS Dam Safety Office ([publications page](https://www.dws.gov.za/DSO/Publications.aspx)) | None stated on the page or in its "Explanation and Legend for List of Registered Dams" PDF (read 2026-10-01). DWS's data terms elsewhere (the NIWIS pages): copyright stays with DWS, data "may not be sold to third parties", use "restricted to use for academic, research or personal purposes" | "Department of Water and Sanitation" as the copyright proprietor (the NIWIS terms) | July 2025 (XLS, no coordinates) and October 2024 (XLS) | A few times a year, irregular | **Blocked: licence unconfirmed** (and DWS's general data terms are non-commercial). Built against the synthetic fixture; ask DWS for written permission before a client deployment loads it |
 | HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Integrated Catchment - Water Balance Tool] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Integrated Catchment - Water Balance Tool], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", on the Data sources and credits page (`/data-sources#hydrorivers`, 2026-10-02), and a short credit on the map's attribution control linking to it while its reaches are drawn; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted); both conditions met**: the Exhibit B statement is on `/data-sources` (2026-10-02), and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone copying or distribution of the data, no reverse engineering, the licensors' ownership and no warranty; 2026-10-03, pre-counsel, [legal-status.md](./legal-status.md)). Loaded locally from the operator's download; never committed |
 | DWS 1:500 000 rivers (`rivs500k`, Resource Quality Information Services; from the 1994 CDNGI 1:500 000 coverage) | DWS, `https://www.dws.gov.za/iwqs/gis_data/river/rivs500k.aspx` | **Unconfirmed.** Read 2026-10-01: the page and its description (`rivs500txt.html`) answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) shows the coverage offered "as is … for display or modelling", a research mirror listing it with "No License Provided", and DWS's wording on its river reports that they "may be reproduced only for non-commercial purposes and only after appropriate authorisation"; DWS's general data terms (NIWIS) are non-commercial too | "Department of Water and Sanitation" | the operator's download | none (a 1994 coverage, revised by RQIS) | **Blocked: licence unconfirmed** (and DWS's published terms are non-commercial). HydroRIVERS is used instead. To unblock: DWS's written permission for commercial reuse, recorded here with the date |

@@ -4,7 +4,7 @@
 import type { RunMeta } from '#lib/api/index.js';
 import { fmtDay } from '#lib/format/number.js';
 
-export type RunTagId = 'latest' | 'auto' | 'forecast' | 'published' | 'evidence' | 'formerEvidence' | 'pinned' | 'scenario' | 'scenarioBase' | 'noInputs' | 'signedOff' | 'errata' | 'legacy';
+export type RunTagId = 'latest' | 'auto' | 'forecast' | 'published' | 'evidence' | 'formerEvidence' | 'pinned' | 'scenario' | 'scenarioBase' | 'alternative' | 'noInputs' | 'signedOff' | 'errata' | 'legacy';
 
 export interface RunTag {
 	id: RunTagId;
@@ -25,6 +25,7 @@ export const TAG_MEANINGS: Record<RunTagId, string> = {
 	pinned: 'Pinned: newer runs never push it out, and it can’t be deleted until it is unpinned.',
 	scenario: 'Made by a scenario: its changes applied to its base run.',
 	scenarioBase: 'The base of a scenario: kept for good while the scenario exists, so it can’t be deleted or unpinned.',
+	alternative: 'A mitigation alternative a submitted scenario cites (Application details → Alternatives): kept with it, so it can’t be deleted.',
 	noInputs: 'Made before runs stored their input series, so it can’t be re-run from them, only compared by hash.',
 	signedOff: 'Signed off (see its report). Kept for good: it can’t be deleted.',
 	errata: 'May be affected by a known engine bug, which changes results only under its conditions. See the run’s validation statement, and re-run on the current engine to compare.',
@@ -42,6 +43,7 @@ export function runTags(
 	const add = (id: RunTagId, label: string, tone: RunTag['tone'] = 'plain', detail: string | null = null) => tags.push({ id, label, tone, detail });
 	const bases = (r.citedBy ?? []).filter((c) => c.kind === 'scenario').map((c) => c.name);
 	const signers = (r.citedBy ?? []).filter((c) => c.kind === 'signoff').map((c) => c.name);
+	const citing = (r.citedBy ?? []).filter((c) => c.kind === 'alternative').map((c) => c.name);
 	if (r.id === ctx.latestId) add('latest', 'latest');
 	if (r.trigger === 'auto') add('auto', 'Auto');
 	if (r.trigger === 'forecast') add('forecast', 'Forecast', 'warn', r.forecastFrom ? `Forecast days from ${fmtDay(r.forecastFrom)}.` : null);
@@ -51,6 +53,7 @@ export function runTags(
 	if (r.pinned) add('pinned', 'Pinned');
 	if (r.scenarioName) add('scenario', 'Scenario', 'plain', `Made by the scenario “${r.scenarioName}”.`);
 	if (bases.length) add('scenarioBase', 'Scenario base', 'plain', `The base of ${quoted(bases)}.`);
+	if (citing.length) add('alternative', 'Alternative', 'plain', `A mitigation alternative of ${quoted(citing)}.`);
 	if (r.reproducible === false) add('noInputs', 'Can’t be re-run');
 	if (signers.length) add('signedOff', 'Signed off', 'owner', `Signed off by ${signers.join(', ')}.`);
 	if (r.errata?.length) add('errata', 'May be affected', 'warn', `${r.errata.length === 1 ? 'A known engine bug' : `${r.errata.length} known engine bugs`}: ${r.errata.join(', ')}.`);
