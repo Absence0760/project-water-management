@@ -1770,6 +1770,8 @@ describe('page 1’s combined row: every application together (evidence-11, find
 		// An assessment made before the dam rows, and a row not assessed, carry none.
 		expect(read(assessment)).toEqual([]);
 		expect(evidenceReport(input({ combined: combined({ assessment: withDams(80_000, 0.8), conflicts: ['x'] }) })).cumulative.combined!.dams).toEqual([]);
+	});
+
 	it('evidence-26: adds the assessment’s background at full allocation as its own labelled row set, the baseline’s figures and page 1’s row unchanged', () => {
 		// Any other table stands in for the background's run: what is checked is where each figure goes.
 		const bgReport = cumulativeImpact(
