@@ -98,9 +98,11 @@ describe('route auth inventory', () => {
 	});
 
 	// The restriction log (the WUA persona's log of restriction decisions): auth-gated, viewer and above (publish/restrictionLog.db.test.ts).
-	it('inventories the restriction log route as auth-gated', () => {
-		expect(routes).toContain('GET /projects/:id/restriction-log');
-		expect(PUBLIC.has('GET /projects/:id/restriction-log')).toBe(false);
+	it('inventories the restriction log and its CSV export as auth-gated', () => {
+		for (const r of ['GET /projects/:id/restriction-log', 'GET /projects/:id/restriction-log/export.csv']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
 	});
 
 	// Evidence packs (WP-3.14), their PDF (119_pack_render) included: auth-gated like every project route; only verify is public.

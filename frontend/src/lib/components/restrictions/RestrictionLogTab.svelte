@@ -4,13 +4,16 @@
 	// newest first, with when, by whom and on which run, for the members and the responsible authority. Read from the
 	// decision log (GET …/restriction-log), which outlives the 12 publications the Publication panel's history keeps.
 	// A reading page: it scrolls, 50 decisions at a time. Viewers and above, as the decision log is; farmers read the
-	// notice on their farm page.
+	// notice on their farm page. Download CSV (GET …/restriction-log/export.csv) is the whole log in one file, for
+	// handing to the responsible authority; the page prints as a plain list (light theme, the workspace's controls
+	// left off, a line saying what the paper holds).
 	import { untrack } from 'svelte';
 	import { api, type RestrictionDecision } from '#lib/api/index.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
+	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import RestrictionLogList from './RestrictionLogList.svelte';
-	import { logContext } from './log';
+	import { logContext, printedNote } from './log';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -55,10 +58,24 @@
 	});
 
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
+
+	// When the page was printed, for the printed line: set as printing begins.
+	let printedAt = $state(new Date());
 </script>
 
+<svelte:window
+	onbeforeprint={() => {
+		printedAt = new Date();
+		forceLightForPrint();
+	}}
+	onafterprint={() => restoreThemeAfterPrint()}
+/>
+
 {#snippet headerContext()}<span data-testid="restriction-log-context">{logContext(loading ? null : items)}</span>{/snippet}
-{#snippet headerActions()}<a class="btn" href="?tab=runs#res-publication">Publication</a>{/snippet}
+{#snippet headerActions()}
+	{#if items?.length}<a class="btn" href={api.publication.logCsvUrl(projectId)} download data-testid="restriction-log-csv">Download CSV</a>{/if}
+	<a class="btn" href="?tab=runs#res-publication">Publication</a>
+{/snippet}
 
 <section class="panel" aria-labelledby="restriction-log-h" data-testid="restriction-log">
 	<div class="panel-head">
@@ -80,6 +97,7 @@
 				</p>
 			</div>
 		{:else}
+			<p class="print-only" data-testid="restriction-log-printed">{printedNote(items.length, !!next, printedAt)}</p>
 			<RestrictionLogList {items} />
 			{#if next || moreError}
 				<div class="more">
@@ -138,5 +156,31 @@
 		max-width: 65ch;
 		margin: 0 auto;
 		color: var(--text-2);
+	}
+	.print-only {
+		display: none;
+	}
+	/* Paper (docs/ui.md § Restriction log): the list and what it is, not the workspace's controls. The app frame hides
+	   itself (AppShell); the section header keeps its title and context line, and the tab's own buttons go. */
+	@media print {
+		.print-only {
+			display: block;
+			margin: 0 0 0.5rem;
+			font-size: 9pt;
+		}
+		.more {
+			display: none;
+		}
+		.panel {
+			border: 0;
+			box-shadow: none;
+			padding: 0;
+		}
+		:global(main.page:has([data-testid='restriction-log']) .tab-row),
+		:global(main.page:has([data-testid='restriction-log']) [data-testid='header-actions']),
+		:global(main.page:has([data-testid='restriction-log']) [data-testid='section-guide']),
+		:global(main.page:has([data-testid='restriction-log']) [data-testid='header-assist']) {
+			display: none !important;
+		}
 	}
 </style>

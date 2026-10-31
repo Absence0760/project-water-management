@@ -403,7 +403,14 @@
 			{#if areal}
 				<!-- Its own chunk (issue #521): most projects leave the correction off. -->
 				<Lazy load={loadArealRain}>
-					{#snippet children(ArealRainBody)}<ArealRainBody bind:value={s.arealRain} {arealError} {readonly} />{/snippet}
+					{#snippet children(ArealRainBody)}<ArealRainBody
+							bind:value={s.arealRain}
+							{arealError}
+							{readonly}
+							projectId={project.id}
+							settings={() => $state.snapshot(s) as unknown as ProjectSettings}
+							model={() => (editor?.dirty ? editor.snapshot() : undefined)}
+						/>{/snippet}
 				</Lazy>
 			{/if}
 		</fieldset>

@@ -5788,12 +5788,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
         own pragmatic requirement (`ewr_cumulative`), beside the outlet's
         unchanged test, in the Runs tab and the summary CSV
         ([model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)).
-- [ ] **A "from MAP" helper for the areal factor in Settings.** The factor
-      is typed; `arealFactorFromMap` (engine) needs the forcing's values,
-      which Settings doesn't load. Durable fix: a small panel that fetches
-      the rain series the run would use and fills the flat factor and the
-      source note from an entered MAP. Trigger: the hydrologist setting a
-      correction by hand in the app.
+- [x] **A "from MAP" helper for the areal factor in Settings** (done
+      2026-10-30). The factor was typed; `arealFactorFromMap` (engine) needs
+      the forcing's values, which Settings didn't load. Calibration → Flow
+      calibration → Areal rainfall correction → **Work it out from a MAP**
+      (`settings/ArealMapHelper.svelte`) reads the rain a run with the
+      form's settings would scale (`GET …/model-input`, prepared in the
+      browser), shows MAP ÷ its mean, the years and the source note, and
+      fills them on Use (ui.md, model.md §2.4g).
 
 - [x] **Rainfall station settings with no field yet** (issue #553 round 3,
       2026-10-24; narrowed by the #612 follow-up; done 2026-10-28, #612

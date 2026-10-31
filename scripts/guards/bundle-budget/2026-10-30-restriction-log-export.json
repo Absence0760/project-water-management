@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The Restriction log's Download CSV link and print stylesheet (printTheme on beforeprint, print-only lines): measured locally +0.55 KB gz over the areal-map-helper commit (2810481 -> 2811032 bytes); rounded up to 1."
+}

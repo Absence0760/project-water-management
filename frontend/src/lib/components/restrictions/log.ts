@@ -77,3 +77,13 @@ export function runHref(d: RestrictionDecision): string | null {
 
 /** A run's id in short, as the runs list names an unlabelled run's id: its first 8 characters. */
 export const shortId = (id: string): string => id.slice(0, 8);
+
+/**
+ * The printed page's line under the heading (print only): what the paper holds. With older decisions not loaded,
+ * it says the paper stops there and the CSV holds the whole log.
+ */
+export function printedNote(shown: number, more: boolean, printedAt: Date = new Date()): string {
+	const what = shown === 1 ? '1 decision' : `${shown} decisions`;
+	const when = `Printed ${fmtDate(printedAt.toISOString(), true)}: ${what}, newest first.`;
+	return more ? `${when} Older decisions weren’t loaded: Download CSV holds the whole log.` : when;
+}

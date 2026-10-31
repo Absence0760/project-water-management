@@ -29,7 +29,9 @@
 				<p class="by">
 					By {decisionBy(d)} ·
 					{#if href}
-						<a {href}>Open the run<span class="visually-hidden"> of {fmtDate(d.at, true)}</span></a>
+						<a {href} class="screen-only">Open the run<span class="visually-hidden"> of {fmtDate(d.at, true)}</span></a>
+						<!-- Paper can't follow a link: the run by its short id. -->
+						<span class="print-only">run {shortId(d.runId!)}</span>
 					{:else if d.runId}
 						<span class="muted" title={d.runId}>run {shortId(d.runId)} no longer kept</span>
 					{:else}
@@ -170,6 +172,26 @@
 		background: var(--accent-soft);
 		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 		color: var(--text);
+	}
+	.print-only {
+		display: none;
+	}
+	/* Paper: each decision whole on one page, the pills in their colours, the run by its id. */
+	@media print {
+		.decision {
+			break-inside: avoid;
+			grid-template-columns: 8.5rem minmax(0, 1fr);
+		}
+		.pill {
+			print-color-adjust: exact;
+			-webkit-print-color-adjust: exact;
+		}
+		.screen-only {
+			display: none;
+		}
+		.print-only {
+			display: inline;
+		}
 	}
 	/* A phone: the day above the decision, the notice's language above its words. */
 	@container decisions (max-width: 36rem) {

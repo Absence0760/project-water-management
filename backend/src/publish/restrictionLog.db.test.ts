@@ -4,7 +4,7 @@
 // tested at both layers: the route (viewer and above) and RLS on audit_event,
 // each "cannot see" beside a positive control.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { PUBLICATION_HISTORY_MAX } from './publish.js';
 
@@ -25,6 +25,12 @@ const outlet = node('Weir', null);
 const farms = [node('Unit One', outlet.id), node('Unit Two', outlet.id)];
 const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
 const log = (u: User, query = '') => u.call('GET', `/projects/${projectId}/restriction-log${query}`);
+const csv = async (u: User) => {
+	const r = await app.request(`/projects/${projectId}/restriction-log/export.csv`, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' } });
+	return { status: r.status, text: await r.text(), type: r.headers.get('content-type'), disposition: r.headers.get('content-disposition') };
+};
+/** A CSV body's records (no quoted line breaks in this test's cells), BOM and terminator dropped. */
+const records = (text: string) => text.replace(/^\uFEFF/, '').split('\r\n').filter(Boolean);
 const run = async (u: User) => {
 	const res = await u.call('POST', `/projects/${projectId}/runs`, { label: 'r' });
 	expect(res.status).toBe(201);
@@ -162,6 +168,69 @@ describe('the restriction log', () => {
 			next = res.body.next;
 		} while (next);
 		expect(seen).toEqual(all);
+	});
+
+	it('exports every decision as a CSV, the same rows the page pages through, with the notice per language and the staff note, never a unit’s figures', async () => {
+		const all = (await log(viewer, '?limit=100')).body.items as { id: string; runId: string | null }[];
+		const res = await csv(viewer);
+		expect(res.status).toBe(200);
+		expect(res.type).toBe('text/csv; charset=utf-8');
+		expect(res.disposition).toMatch(/^attachment; filename="restriction-log_restriction-log_\d{4}-\d{2}-\d{2}\.csv"$/);
+		const [head, ...rows] = records(res.text);
+		expect(head).toBe(
+			'decided_at_utc,decision,changed,by,automatic,level,restriction_pct,in_force,notice_en,notice_af,notice_recorded,next_expected_on,season_from,season_to,data_until,hydrological_units,staff_note,run_id,run_kept,publication_id'
+		);
+		// One row per decision, the whole log in one file (the page's 50 at a time aside), newest first.
+		expect(rows).toHaveLength(all.length);
+		expect(rows.map((r) => r.split(',').at(-3))).toEqual(all.map((d) => d.runId ?? ''));
+		const cols = head!.split(',');
+		const cell = (r: string, name: string) => r.split(',')[cols.indexOf(name)];
+		// The newest: the second publication, in force.
+		expect(cell(rows[0]!, 'decision')).toBe('published');
+		expect(cell(rows[0]!, 'by')).toBe('Rlowner');
+		expect(cell(rows[0]!, 'level')).toBe('none');
+		expect(cell(rows[0]!, 'in_force')).toBe('yes');
+		expect(cell(rows[0]!, 'publication_id')).toBe(pub2);
+		expect(rows.slice(1).every((r) => cell(r, 'in_force') === 'no')).toBe(true);
+		const changed = rows[1]!;
+		expect(['decision', 'changed', 'by', 'automatic', 'level', 'restriction_pct', 'notice_en', 'notice_af', 'notice_recorded', 'next_expected_on'].map((n) => cell(changed, n))).toEqual([
+			'notice_changed',
+			'restriction',
+			'Rleditor',
+			'no',
+			'restricted',
+			'25',
+			'Cut by a quarter.',
+			'',
+			'yes',
+			'2023-03-01'
+		]);
+		const first = rows[2]!;
+		expect(cell(first, 'notice_en')).toBe('Please save water.');
+		expect(cell(first, 'notice_af')).toBe('Spaar asseblief water.');
+		expect(cell(first, 'staff_note')).toBe('Dam levels low');
+		expect(cell(first, 'hydrological_units')).toBe('2');
+		expect(cell(first, 'run_kept')).toBe('yes');
+		expect(cell(first, 'season_from')).toMatch(/^\d{4}-10-01$/);
+		// The older event that kept only the level says so; nothing per unit anywhere.
+		expect(cell(rows.at(-1)!, 'notice_recorded')).toBe('no');
+		expect(res.text).not.toMatch(/perFarm|Unit One|Unit Two/);
+	});
+
+	it('exports to viewers and above only: a farmer gets 403, a non-member 404, and RLS gives neither an event', async () => {
+		// Positive controls: the owner, an editor and a viewer get the same file.
+		const mine = (await csv(viewer)).text;
+		for (const u of [owner, editor]) {
+			const res = await csv(u);
+			expect(res.status, u.email).toBe(200);
+			expect(records(res.text).slice(1), u.email).toEqual(records(mine).slice(1));
+		}
+		const f = await csv(farmer);
+		expect(f.status).toBe(403);
+		expect(f.text).not.toContain('Please save water.');
+		const s = await csv(stranger);
+		expect(s.status).toBe(404);
+		expect(s.text).not.toContain('Please save water.');
 	});
 
 	it('refuses a malformed cursor or limit with 400', async () => {

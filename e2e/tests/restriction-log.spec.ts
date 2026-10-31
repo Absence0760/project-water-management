@@ -4,6 +4,7 @@
 // In force; a note-only change isn't one. More than a page loads with Show older decisions. A viewer reads the same
 // list; a non-member's request is refused. Empty: says how the first one is made. Axe at 1440 and 390, light and dark.
 // Synthetic data only.
+import { readFile } from 'node:fs/promises';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -68,6 +69,31 @@ test('the Restriction log lists every restriction decision, opened from the Publ
 	await page.goto(`/projects/${project.id}?tab=restrictions`);
 	await expect(decisions(page)).toHaveCount(50);
 	await expect(decisions(page).first().getByTestId('restriction-level')).toHaveText('Advisory · 50 %');
+
+	// Download CSV: the whole log in one file, not the page's 50, newest first, the notice per language.
+	const download = page.waitForEvent('download');
+	await sectionHeader(page).getByTestId('restriction-log-csv').click();
+	const file = await download;
+	expect(file.suggestedFilename()).toMatch(/^restriction-log_restriction-log_\d{4}-\d{2}-\d{2}\.csv$/);
+	const rows = (await readFile((await file.path())!, 'utf8')).replace(/^\uFEFF/, '').split('\r\n').filter(Boolean);
+	expect(rows[0]).toMatch(/^decided_at_utc,decision,changed,by,automatic,level,restriction_pct,in_force,notice_en,notice_af,/);
+	expect(rows).toHaveLength(53);
+	expect(rows[1]).toContain(',notice_changed,restriction,');
+	expect(rows[1]).toContain(',advisory,50,yes,');
+	expect(rows[52]).toContain(',published,,');
+	expect(rows[52]).toContain(',Irrigate at night only.,Besproei net snags.,yes,2031-01-15,');
+
+	// On paper: the list and a line saying what it holds; the workspace's buttons and Show older decisions left off.
+	await page.emulateMedia({ media: 'print' });
+	await expect(page.getByTestId('restriction-log-printed')).toHaveText(/^Printed .*: 50 decisions, newest first\. Older decisions weren’t loaded: Download CSV holds the whole log\.$/);
+	await expect(sectionHeader(page).getByTestId('header-actions')).toBeHidden();
+	await expect(page.getByTestId('restriction-log-more')).toBeHidden();
+	await expect(decisions(page).first()).toBeVisible();
+	await expect(decisions(page).first().getByRole('link', { name: /^Open the run/ })).toBeHidden();
+	await expect(decisions(page).first()).toContainText(`run ${runId.slice(0, 8)}`);
+	await page.emulateMedia({ media: 'screen' });
+	await expect(page.getByTestId('restriction-log-printed')).toBeHidden();
+
 	await page.getByTestId('restriction-log-more').click();
 	await expect(decisions(page)).toHaveCount(52);
 	await expect(decisions(page).last().getByRole('heading', { level: 3 })).toHaveText('Published a run');
@@ -89,6 +115,7 @@ test('the Restriction log lists every restriction decision, opened from the Publ
 	// Someone outside the project is refused.
 	const stranger = await signIn('Restriction log stranger');
 	expect((await stranger.page.request.get(`${API_URL}/projects/${project.id}/restriction-log`)).status()).toBe(404);
+	expect((await stranger.page.request.get(`${API_URL}/projects/${project.id}/restriction-log/export.csv`)).status()).toBe(404);
 });
 
 test('the Restriction log says how the first decision is made while nothing is published', async ({ page, owner }) => {
@@ -97,6 +124,8 @@ test('the Restriction log says how the first decision is made while nothing is p
 	await page.goto(`/projects/${project.id}?tab=restrictions`);
 	await expect(page.getByTestId('restriction-log-empty')).toHaveText('No restriction decisions yet.');
 	await expect(sectionHeader(page).getByTestId('restriction-log-context')).toHaveText('Nothing published yet');
+	// Nothing to download yet.
+	await expect(sectionHeader(page).getByTestId('restriction-log-csv')).toHaveCount(0);
 	await expect(page.getByTestId('restriction-log').getByRole('link', { name: 'Publication panel' })).toHaveAttribute('href', '?tab=runs#res-publication');
 	await expectNoViolations(page);
 });

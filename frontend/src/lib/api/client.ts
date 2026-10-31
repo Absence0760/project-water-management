@@ -963,7 +963,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`),
 			/** Every restriction decision, newest first, a page at a time (viewer; the Restriction log page). `before`: the last page's `next`. */
 			log: (id: string, before?: string | null) =>
-				request<{ items: RestrictionDecision[]; next: string | null }>('GET', `${p(id)}/restriction-log${before ? `?before=${encodeURIComponent(before)}` : ''}`)
+				request<{ items: RestrictionDecision[]; next: string | null }>('GET', `${p(id)}/restriction-log${before ? `?before=${encodeURIComponent(before)}` : ''}`),
+			/** The whole restriction log as a CSV download (viewer; a plain link: the cookie goes with it). */
+			logCsvUrl: (id: string) => `${base}${p(id)}/restriction-log/export.csv`
 		},
 		shareLinks: {
 			/** The project's baseline links, newest first, revoked and expired ones included (owner). */
