@@ -2963,6 +2963,10 @@ sequenceDiagram
   turn ends when the model answers in text, or with an `error` event past
   the hop cap, the output cap, the turn's `ASSISTANT_TURN_SECONDS`, or a
   provider failure. A client that goes away aborts the provider's call.
+  Text a hop streams after a tool call starts a new paragraph: the
+  orchestrator sends a blank line first (`textJoin`) unless the text so far
+  already ends in one, so words before a tool call and the answer after it
+  never run together on the page or in what the page sends back next turn.
 - **Reserved, then charged** (`usage.ts`, 264_assistant_reservation): in
   the transaction that checked the role, before the stream starts, the
   message is counted and the turn's budget reserved: the least of
@@ -3037,7 +3041,7 @@ sequenceDiagram
 
 ### Assistant tools
 
-The assistant (issue #610) answers from the project's own data through six
+The assistant (issue #610) answers from the project's own data through seven
 read-only tools, `backend/src/assistant/tools/` (`READ_TOOLS` in
 `readTools.ts`; the orchestrator adds `propose_settings`). Each validates the
 model's arguments with zod (its JSON Schema is made from the same schema,
@@ -3050,11 +3054,30 @@ argument, a missing run or node, or a withheld series:
 | Tool | Reads | Kept small by |
 | --- | --- | --- |
 | `get_run_summary` | `readRun`: the catchment's figures, warnings, `summary.calibration`, plausibility, data quality (also allocations, water balance on request); the run's id, dates and kind, never its label, notes or maker | 30 warnings, short arrays, 4 significant digits |
-| `get_settings` | the run's snapshot as it ran, or the project's merged over the engine's defaults (`mergeSettings`), model inputs only, picked by name (`MODEL_INPUT`), the calibration rules' sign-off as signed and its date, never the signer; each setting's kind beside it (`kinds`, `settingKinds.ts`) | `keys` picks top-level settings |
+| `get_settings` | the run's snapshot as it ran, or the project's merged over the engine's defaults (`mergeSettings`), model inputs only, picked by name (`MODEL_INPUT`), the calibration rules' sign-off as signed and its date, never the signer; each setting's kind beside it (`kinds`, `settingKinds.ts`) and its name in the app's words (`labels`: the engine's `settingLabels`, the run comparison's input-diff labels by path, `rainSource` → "Rain-source periods", `gr4j.x1` → "GR4J production store X1"), which the system prompt tells the model to use instead of keys | `keys` picks top-level settings |
 | `get_network` | the run's model snapshot (or the project's model): each node's kind, drainage, area, dam (with its release rule), crops, a unit's operating rules where set (hands-off flow, supply rule, river pump, borehole rule), the transfers with their ids and rules, and the units, dams and gauges above each gauge | fields picked by name |
 | `get_series` | `readSeries`: one series of a node or the catchment | monthly means (latest 120 months), water-year means, or up to 92 days |
 | `get_gauge_fit` | the calibration site's `summary.calibration`; at another gauge, `calibrationStats` on its `outflow` and `observed_flow_check` over the run's calibration window and exclusions | the scores and a few annual volumes |
 | `search_help` | `helpIndex.json`, no database | 8 hits, 700-character snippets |
+| `get_run_readiness` | whether the model can run now, from the same check as the Run model button (the engine's `runReady.ts`: `runBlockers`, `unitsOnCatchmentRain`, `hasForecastRain`) on the project's saved model, settings and series kinds (never their values): the blockers in the button's words, the notes that only warn (units on the catchment rain), whether a forecast run is available, whether the caller may start one (editor), and a fixed line on what a run does not need (calibration site, observed flow, the EWR, A-pan, dams); the system prompt points every "can I run / what's missing" question at it | 20 units named in a note, the rest counted |
+
+**Ids are named before the model reads them** (`tools/names.ts`
+`withIdNames`, wrapping every tool, `propose_settings` included). Settings,
+warnings and network rows refer to nodes, transfers and series by id
+(`calibrationSiteNodeId`, a zone's `nodeId`, `rainStations.units` keyed by
+node id, "gauge node <id>" in a warning), and the model used to quote them.
+Each result is walked once: a known id becomes what it is in the app's
+words ("the gauge 'Outlet weir'", "the hydrological unit 'Upper'", "the
+transfer 'Upper → Outlet'", "the series 'Weir record'"), as a value, an
+object key or inside a sentence; an id in a node field that matches no node
+reads "a node that no longer exists". A field named `id` stays, beside its
+own name, as what a tool takes for an argument (the tools take names too),
+and the system prompt says never to quote ids. The names come from what the
+tool's transaction already reads as the caller, under RLS: the project's
+nodes, transfers and series, and the nodes of the conversation's run (a node
+since deleted keeps its name there); names only, never values. The input
+diff names the calibration site by its gauge too (engine `compare.ts`), so
+a proposal card no longer shows "gauge node <id>".
 
 The run reads the tools share with the run routes live in `runs/read.ts`
 (`readRun`, `readSeries`, `readSeriesBulk`, `readDay`, `readModelInput`),

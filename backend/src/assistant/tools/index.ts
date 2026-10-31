@@ -3,6 +3,7 @@
 // (proposeSettings.ts). Each runs inside withUser(…, { readOnly: true }).
 import type { AssistantTool } from '../types.js';
 import { READ_TOOLS } from './readTools.js';
+import { withIdNames } from './names.js';
 import { proposeSettingsTool } from './proposeSettings.js';
 
-export const ASSISTANT_TOOLS: readonly AssistantTool[] = [...READ_TOOLS, proposeSettingsTool];
+export const ASSISTANT_TOOLS: readonly AssistantTool[] = [...READ_TOOLS, withIdNames(proposeSettingsTool)];

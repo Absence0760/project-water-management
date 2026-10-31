@@ -1056,6 +1056,16 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('names the calibration site by its gauge, never its node id (issue #610)', () => {
+		const id = '11111111-1111-4111-8111-111111111111';
+		const nodes = [node('g', 'Outlet', { kind: 'gauge', downstreamNodeId: null, damCapacityM3: 0 }), node(id, 'Weir', { kind: 'gauge', downstreamNodeId: 'g', damCapacityM3: 0, areaKm2: 0 })];
+		const at = (over: Record<string, unknown>) => snapshot({ model: { ...snapshot().model, nodes }, settings: { ...defaultProjectSettings(), calibrateAtOutlet: true, ...over } as never });
+		const line = texts(at({}), at({ calibrationSiteNodeId: id })).find((x) => x.startsWith('Headline calibration location'));
+		expect(line).toBe('Headline calibration location: automatic → Weir');
+		expect(line).not.toContain(id);
+	});
+
+
 	it('describes settings: scalars, calibration, monthly tables and unknown keys', () => {
 		// Two legacy runs, so the legacy model's own calibration settings count too.
 		const a = legacySnapshot();

@@ -6,10 +6,13 @@
 // farmer's name or email.
 import type { AssistantTool } from '../types.js';
 import { gaugeFitTool } from './gaugeFit.js';
+import { withIdNames } from './names.js';
 import { networkTool } from './network.js';
+import { readinessTool } from './readiness.js';
 import { runSummaryTool } from './runSummary.js';
 import { searchHelpTool } from './searchHelp.js';
 import { seriesTool } from './series.js';
 import { settingsTool } from './settings.js';
 
-export const READ_TOOLS: readonly AssistantTool[] = [runSummaryTool, settingsTool, networkTool, seriesTool, gaugeFitTool, searchHelpTool];
+/** Each with its result's ids named (names.ts) before the model reads it. */
+export const READ_TOOLS: readonly AssistantTool[] = [runSummaryTool, settingsTool, networkTool, seriesTool, gaugeFitTool, searchHelpTool, readinessTool].map(withIdNames);

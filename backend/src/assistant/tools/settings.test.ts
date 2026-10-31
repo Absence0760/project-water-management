@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { mergeSettings } from '../../projects/settings.js';
 import { SETTING_KINDS } from '../settingKinds.js';
 import { NOT_PROPOSED } from './proposeSettings.js';
-import { MODEL_INPUT, NOT_MODEL_INPUT, settingsView } from './settings.js';
+import { labelsFor, MODEL_INPUT, NOT_MODEL_INPUT, settingsView } from './settings.js';
 
 describe('settingsView', () => {
 	const stored = { gr4j: { x1: 300 }, responsibleAuthority: { name: 'Some CMA', kind: 'cma', office: 'An office' }, autoRun: { enabled: true }, calibrationStart: '2010-10-01' };
@@ -17,7 +17,12 @@ describe('settingsView', () => {
 	});
 
 	it("a run's snapshot as it is, and only the keys asked for, naming the unknown ones", () => {
-		expect(settingsView(stored, ['calibrationStart', 'noSuchKey'], false)).toEqual({ settings: { calibrationStart: '2010-10-01' }, kinds: { calibrationStart: 'input' }, unknownKeys: ['noSuchKey'] });
+		expect(settingsView(stored, ['calibrationStart', 'noSuchKey'], false)).toEqual({
+			settings: { calibrationStart: '2010-10-01' },
+			labels: { calibrationStart: 'Calibration window start' },
+			kinds: { calibrationStart: 'input' },
+			unknownKeys: ['noSuchKey']
+		});
 		expect(settingsView({ runoffModel: 'legacy' }, undefined, false).settings).toEqual({ runoffModel: 'legacy' });
 	});
 
@@ -52,6 +57,28 @@ describe('settingsView', () => {
 		expect(kinds).toMatchObject({ calibrateAtOutlet: 'input', calibrationRest: 'calibrated' });
 		expect(kinds.unitParamsFrom).toBeUndefined();
 		expect(NOT_PROPOSED.unitParamsFrom).toMatch(/judgement/);
+	});
+
+	it('names each setting as the app does, so an answer never quotes a key (the 2026-10-30 production test)', () => {
+		const { labels } = settingsView({}, undefined, true);
+		// The keys the production answer quoted, each with the app's name.
+		expect(labels).toMatchObject({
+			rainSource: 'Rain-source periods',
+			apanMm: 'A-pan evaporation',
+			calibrationSiteNodeId: 'Headline calibration location',
+			simulationStart: 'Simulation start',
+			reportStart: 'Curtailment report start',
+			gr4j: 'GR4J parameters',
+			'gr4j.x1': 'GR4J production store X1'
+		});
+		// No label is the key itself.
+		for (const [k, label] of Object.entries(labels)) expect(label, k).not.toBe(k);
+	});
+
+	it('has a name for every model input, so a setting added later gets one before it is sent', () => {
+		const all = Object.fromEntries(MODEL_INPUT.map((k) => [k, null]));
+		const labels = labelsFor(all);
+		expect(MODEL_INPUT.filter((k) => !labels[k])).toEqual([]);
 	});
 
 	it('lists every key of the engine’s settings as a model input or not one', () => {

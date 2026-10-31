@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "The combined 2026-10-30 draft's calibration estimate and split (engine calibrate.ts, auto.ts, dds.ts, which the browser bundles for fits) and #671's AnswerText from main: measured 2290 KB locally against the 2285 KB ceiling after merging origin/main @ b0265f76e (+5 KB, CI measured 2289 before the merge). Headroom ~1 KB."
+}

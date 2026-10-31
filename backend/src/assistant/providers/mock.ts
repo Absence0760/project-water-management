@@ -44,12 +44,25 @@
 //    `stats.nse` / `kge` / `pbias`. With no gauge in the network it answers
 //    "I found no gauge in this project's network."
 //
-// 3. Anything else: "I can answer questions about this project's model and
+// 3. "run" with "need", "missing" or "ready" (issue #610, the 2026-10-30
+//    production test): says "Let me check what a run needs." and calls
+//    get_run_readiness {} in the same step (text before a tool call, as a
+//    model does), then answers in the sheet's formatting (readinessAnswer):
+//
+//      **Before a run**
+//      - <each blocker>          (or "- Nothing: the model can run now.")
+//
+//      <each note, a paragraph>
+//
+//      **Not needed to start a run:** <the tool's notRequired>
+//
+// 4. Anything else: "I can answer questions about this project's model and
 //    results, and propose settings to try. Ask about a gauge, a dam or the fit."
 //
 // Usage is reported as characters ÷ 4, rounded up: input over the system
 // prompt and every message, output over the text and the tool calls.
 import type { AssistantConfig } from '../config.js';
+import { nodeWords } from '../tools/names.js';
 import { TOOL_NAMES, type AssistantProvider, type ProviderEvent, type ProviderRequest, type ToolCall, type TurnMessage } from '../types.js';
 
 /** What propose_settings is called with: GR4J's X4 (days, bounds 0.5–10), a change a save accepts. */
@@ -134,7 +147,7 @@ const gaugeOf = (network: unknown) => nodesOf(network).find((n) => n.kind === 'g
 function unitAbove(network: unknown, gauge: NetNode): NetNode | undefined {
 	const nodes = nodesOf(network);
 	const dam = gauge.above?.dams?.[0];
-	return (typeof dam?.id === 'string' ? nodes.find((n) => n.id === dam.id) : undefined) ?? nodes.find((n) => n.kind === 'farm' && n.drainsInto === gauge.id);
+	return (typeof dam?.id === 'string' ? nodes.find((n) => n.id === dam.id) : undefined) ?? nodes.find((n) => n.kind === 'farm' && (n.drainsInto === gauge.id || n.drainsInto === nodeWords(gauge)));
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -163,7 +176,23 @@ export function gaugeAnswer(network: unknown, series: readonly Result[], fit: un
 	].join('\n');
 }
 
-type Step = { call: { name: string; arguments: Record<string, unknown> } } | { text: string };
+/** The answer for the readiness question, from get_run_readiness's result (format in the header). */
+export function readinessAnswer(readiness: unknown): string {
+	if (!isObj(readiness)) return 'I could not check what a run needs.';
+	const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+	const blockers = strings(readiness.blockers);
+	return [
+		'**Before a run**',
+		...(blockers.length ? blockers.map((b) => `- ${b}`) : ['- Nothing: the model can run now.']),
+		...strings(readiness.notes).map((n) => `\n${n}`),
+		'',
+		`**Not needed to start a run:** ${typeof readiness.notRequired === 'string' ? readiness.notRequired : ''}`
+	].join('\n');
+}
+
+export const MOCK_READINESS_INTRO = 'Let me check what a run needs.';
+
+type Step = { call: { name: string; arguments: Record<string, unknown> }; before?: string } | { text: string };
 
 function nextStep(messages: TurnMessage[]): { step: Step; index: number } {
 	const { question, results, step: index } = resultsThisTurn(messages);
@@ -211,6 +240,11 @@ function nextStep(messages: TurnMessage[]): { step: Step; index: number } {
 		if (gauge && !fit) return call(TOOL_NAMES.gaugeFit, { node: gauge.id });
 		return { index, step: { text: gaugeAnswer(net.data, series, fit?.ok ? fit.data : null) } };
 	}
+	if (question.includes('run') && (question.includes('need') || question.includes('missing') || question.includes('ready'))) {
+		const r = results.get(TOOL_NAMES.runReadiness)?.[0];
+		if (!r) return { index, step: { call: { name: TOOL_NAMES.runReadiness, arguments: {} }, before: MOCK_READINESS_INTRO } };
+		return { index, step: { text: r.ok ? readinessAnswer(r.data) : `I could not check what a run needs: ${r.error ?? 'the tool failed'}` } };
+	}
 	return { index, step: { text: MOCK_IDLE_ANSWER } };
 }
 
@@ -226,8 +260,9 @@ export function mockProvider(_cfg?: AssistantConfig): AssistantProvider {
 			const inputTokens = Math.ceil(chars(req) / 4);
 			if ('call' in step) {
 				const call: ToolCall = { id: `mock-${index + 1}`, name: step.call.name, arguments: step.call.arguments };
+				if (step.before) yield { type: 'text', delta: step.before };
 				yield { type: 'tool_call', call };
-				yield { type: 'usage', inputTokens, outputTokens: Math.ceil(JSON.stringify(call).length / 4) };
+				yield { type: 'usage', inputTokens, outputTokens: Math.ceil((JSON.stringify(call).length + (step.before?.length ?? 0)) / 4) };
 				return;
 			}
 			// Streamed a line at a time, as a model streams deltas.

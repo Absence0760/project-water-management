@@ -4155,7 +4155,12 @@ line; a `: keepalive` comment comes every `ASSISTANT_KEEPALIVE_SECONDS` (15)
 while the turn is quiet, so CloudFront's 35 s origin read timeout never
 trips:
 
-- `{ type: 'text', delta }`: the next piece of the answer.
+- `{ type: 'text', delta }`: the next piece of the answer. After a tool
+  call the next text starts a new paragraph (a `\n\n` delta comes first
+  unless the text already ends in a blank line). The text is the model's,
+  in the small Markdown subset the system prompt allows (paragraphs, `- `
+  and `1. ` lists, `**bold**`); a client renders it as text, never as HTML
+  (docs/ui.md § Assistant).
 - `{ type: 'tool', name, label, status: 'start' | 'done' | 'error' }`: a read
   the model asked for (`label` for the panel, e.g. "Reading the run
   summary"); `error` when it was refused, failed, or names no tool.

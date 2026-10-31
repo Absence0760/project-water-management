@@ -12394,8 +12394,24 @@ with read-only tools over the project's data. It never changes anything.
   ignored, and a chunk may end anywhere). Each tool the assistant reads the
   project with shows as a line ("Reading the run summary"): a ring while it
   runs, filled when it's done, red if it failed (named so for a screen
-  reader too). The text follows as it comes, as plain text with line breaks
-  kept, never `{@html}` or markdown. A polite status line says when the
+  reader too). The text follows as it comes, with a small part of Markdown
+  shown (`AnswerText.svelte`, from `answerText.ts` `parseAnswer`):
+  paragraphs (a blank line apart; a single line break kept as one),
+  bullet (`- `, `* `, `+ `) and numbered lists (`1. `, starting where the
+  answer starts it), and `**bold**`. A heading (`#` … `######`) shows as a
+  bold line, a horizontal rule (`---`) as a break (it ends a list, where a
+  blank line between items doesn't), `` `code` `` and
+  `*italics*` as code and italics, a fenced block as preformatted text;
+  anything else (a table, a link, HTML) shows as written. The system prompt
+  names that subset, so the model keeps to it. The text is parsed into a
+  tree of strings and every string renders as a text node, never `{@html}`,
+  and no link is ever made. While the answer streams it is parsed again
+  with each delta: an unclosed `**` or backtick on the last line runs to the
+  end as bold or code, and a last line that is only the start of a marker
+  (`#`, `-`, `1.`) waits for the next delta, so no stray mark flashes up.
+  Words the model writes before a tool call and the answer after it are two
+  paragraphs (the server's break, api.md § Assistant). A past chat keeps the
+  raw text and shows it the same way when reopened. A polite status line says when the
   answer is finished, without reading the words out as they arrive.
   **Stop** aborts the fetch and keeps what came so far. An answer that ends
   early says so.

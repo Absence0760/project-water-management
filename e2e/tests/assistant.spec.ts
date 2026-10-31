@@ -8,10 +8,11 @@
 // section, after How this page works on the title's line, at every width. The
 // sheet's layout: the question box pinned to its foot with the examples right
 // above it, the disclaimer's first line in view and the rest folded, one way
-// out (the ✕), at 1440×960 and on a phone.
+// out (the ✕), at 1440×960 and on a phone. What a run needs: the Run model
+// button's own check (get_run_readiness), shown as paragraphs, a list and bold.
 // Invented data only.
 import type { Page } from '@playwright/test';
-import { createRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { ask, assistantButton, assistantSheet, openAssistant } from '../support/assistant.ts';
@@ -63,6 +64,27 @@ test('answers why the simulated flow at a gauge doesn’t respond to rainfall, f
 	await expect(sheet.getByTestId('assistant-answer')).toHaveCount(1);
 	await sheet.getByRole('button', { name: 'New conversation' }).click();
 	await expect(sheet.getByTestId('assistant-answer')).toHaveCount(0);
+});
+
+test('answers what a run needs from the Run model button’s own check, formatted as paragraphs, a list and bold (the 2026-10-30 production test)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Assistant empty farm');
+	await page.goto(`/projects/${project.id}`);
+	const sheet = await openAssistant(page);
+	const answer = await ask(sheet, 'What do I need before I can run the model?');
+	const tool = answer.getByTestId('assistant-tool');
+	await expect(tool).toHaveText([/^Checking what a run needs/]);
+	await expect(tool).toHaveAttribute('data-tool', 'get_run_readiness');
+	const text = answer.getByTestId('assistant-text');
+	// The words before the tool call and the answer after it are two paragraphs, not one run-on line.
+	await expect(text.locator('p').first()).toHaveText('Let me check what a run needs.');
+	await expect(text.locator('strong').first()).toHaveText('Before a run');
+	// The blockers are the Run model button's own (engine runReady.ts), a list, its marks gone.
+	await expect(text.locator('li')).toHaveText(['A run needs a network.', 'A run needs a rainfall series.']);
+	await expect(text).not.toContainText('**');
+	await expect(text).not.toContainText('- A run');
+	await expect(text).toContainText('Not needed to start a run: Nothing else stops a run from starting.');
+	await expectNoViolations(page);
 });
 
 test('with the assistant off the header has no Assistant button (control: on, it has)', async ({ page, owner }) => {

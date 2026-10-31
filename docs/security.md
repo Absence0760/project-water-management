@@ -4475,6 +4475,9 @@ sends project data to a model. What goes, and what keeps it bounded:
   `ASSISTANT_MAX_TOOL_RESULT_CHARS`. A tool's or provider's error text never
   reaches the model, the client or the log: fixed words go back, and the log
   gets only the error's name and frames (`safeError`).
+  Ids in a result are replaced by the names they stand for before the model
+  reads it (`tools/names.ts`), from the names the caller's own transaction
+  can read; no value is read for it.
 - **Prompt injection.** Text in the project (a node name, a note) can reach
   the model through a tool result. It can't widen what the assistant does:
   every tool reads, as the caller, under RLS, and `propose_settings` only
@@ -4483,6 +4486,14 @@ sends project data to a model. What goes, and what keeps it bounded:
   title is built by the server from the changes it accepted, never the
   model's words, so injected text can't make the card claim a change it
   doesn't make.
+- **What reaches the page.** An answer is the model's text, which a tool
+  result's project text can steer, so the panel treats it as untrusted: it
+  parses a small Markdown subset (paragraphs, lists, bold; `answerText.ts`)
+  into a tree of strings and renders each as a Svelte text node, never
+  `{@html}` (`rawHtml.test.ts`) and never a link, so HTML, entities or a
+  `javascript:` URL in an answer show as written (`answerText.test.ts`,
+  `AssistantPanel.test.ts`). The parser matches each mark with one forward
+  search, so a long or hostile answer can't make it backtrack.
 - **Nothing kept.** No transcript, prompt or answer is stored or logged; the
   server keeps only token and message counts (`assistant_usage`,
   `assistant_rate`, 262), and a running turn's reservation

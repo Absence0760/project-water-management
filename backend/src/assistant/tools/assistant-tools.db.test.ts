@@ -88,7 +88,8 @@ describe('the read-only tools', () => {
 					[TOOL_NAMES.network, {}],
 					[TOOL_NAMES.series, { node: 'Middle weir', key: 'outflow' }],
 					[TOOL_NAMES.gaugeFit, { node: weir.id }],
-					[TOOL_NAMES.searchHelp, { query: 'dam' }]
+					[TOOL_NAMES.searchHelp, { query: 'dam' }],
+					[TOOL_NAMES.runReadiness, {}]
 				];
 				const out: ToolResult[] = [];
 				for (const [name, args] of calls) out.push(await tool(name).run(ctx, args));
@@ -131,6 +132,63 @@ describe('the read-only tools', () => {
 		expect(await as(viewer, TOOL_NAMES.runSummary, {}, crypto.randomUUID())).toEqual({ ok: false, error: 'not found' });
 		const r = await as(viewer, TOOL_NAMES.series, { node: 'Nowhere', key: 'outflow' });
 		expect(r.ok === false && r.error).toMatch(/no node "Nowhere"/);
+	});
+});
+
+describe('get_run_readiness (the 2026-10-30 production test)', () => {
+	it('gives an empty project its blockers, and none to a runnable one, with who may start it', async () => {
+		const empty = (await owner.call('POST', '/projects', { name: 'Assistant empty' })).body.project.id as string;
+		const r = await withUser(owner.id, (db) => tool(TOOL_NAMES.runReadiness).run({ db, userId: owner.id, projectId: empty, runId: null }, {}), { readOnly: true });
+		expect(data(r)).toMatchObject({ canStart: false, blockers: ['A run needs a network.', 'A run needs a rainfall series.'], hasRun: false });
+		// Positive control: the tools' project runs (it has run), for the viewer and the owner alike; only the owner may start one.
+		const viewed = data(await as(viewer, TOOL_NAMES.runReadiness, {}));
+		expect(viewed).toMatchObject({ canStart: true, blockers: [], hasRun: true });
+		expect(viewed.youCanStartIt).toMatch(/^no: /);
+		expect(data(await as(owner, TOOL_NAMES.runReadiness, {})).youCanStartIt).toMatch(/^yes: /);
+	});
+
+	it('respects project access: a stranger and a farmer are refused, in words', async () => {
+		expect(await as(stranger, TOOL_NAMES.runReadiness, {})).toEqual({ ok: false, error: 'not found' });
+		expect(await as(farmer, TOOL_NAMES.runReadiness, {})).toEqual({ ok: false, error: 'requires viewer role' });
+	});
+});
+
+describe('ids named in the output (the 2026-10-30 production test)', () => {
+	/** Every string anywhere in `v` that is a bare id, except a field named `id` (a tool argument, beside its name). */
+	const bareIds = (v: unknown, key = ''): string[] => {
+		if (typeof v === 'string') return key !== 'id' && /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(v) ? [`${key}: ${v}`] : [];
+		if (Array.isArray(v)) return v.flatMap((x) => bareIds(x, key));
+		if (v && typeof v === 'object') return Object.entries(v).flatMap(([k, x]) => [...bareIds(k, 'a key'), ...bareIds(x, k)]);
+		return [];
+	};
+
+	it('names the calibration site, the transfers and the nodes they reference, and says when a node is gone', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Assistant names' })).body.project.id as string;
+		const at = `/projects/${pid}`;
+		const out = node('Outlet', null);
+		const gauge = { ...node('Named weir', out.id), kind: 'gauge', damCapacityM3: 0 };
+		const up = node('Top farm', gauge.id, { damCapacityM3: 20_000 });
+		const transfer = { id: crypto.randomUUID(), fromNodeId: up.id, toNodeId: out.id, months: [1, 2, 3], maxRateM3s: 0.01, dailyCapM3: 0, minStoragePct: 0, enabled: true, priority: 0 };
+		expect((await owner.call('PUT', `${at}/model`, { nodes: [out, gauge, up], crops: [], cropAreas: [], transfers: [transfer] })).status).toBe(200);
+		const rec = (await owner.call('PUT', `${at}/series`, { kind: 'flow_observed_m3s', name: 'Named record', unit: 'm3/s', startDate: '2021-10-01', values: [1, 2, 3] })).body.id as string;
+		expect((await owner.call('PATCH', `${at}/series/${rec}`, { siteNodeId: gauge.id })).status).toBe(200);
+		const station = (await owner.call('PUT', `${at}/series`, { kind: 'rain_catchment_mm', name: 'Named station', unit: 'mm', startDate: '2021-10-01', values: [1, 0, 2] })).body.id as string;
+		const patched = await owner.call('PATCH', at, { settings: { calibrationSiteNodeId: gauge.id, rainStations: { units: { [up.id]: { stationId: station } } } } });
+		expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+		// A reference to a node since deleted, planted (the app's checks refuse one on a save).
+		await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{calibrationZones}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify([{ nodeId: crypto.randomUUID(), enabled: false }])]);
+		const run = (name: string, args: unknown) => withUser(owner.id, (db) => tool(name).run({ db, userId: owner.id, projectId: pid, runId: null }, args), { readOnly: true });
+
+		const settings = data(await run(TOOL_NAMES.settings, { source: 'project', keys: ['calibrationSiteNodeId', 'rainStations', 'calibrationZones'] }));
+		expect(settings.settings).toMatchObject({
+			calibrationSiteNodeId: "the gauge 'Named weir'",
+			rainStations: { units: { "the hydrological unit 'Top farm'": { stationId: "the series 'Named station'" } } },
+			calibrationZones: [{ nodeId: 'a node that no longer exists' }]
+		});
+		const network = data(await run(TOOL_NAMES.network, { source: 'project' }));
+		expect(network.transfers).toEqual([expect.objectContaining({ id: transfer.id, from: 'Top farm', to: 'Outlet' })]);
+		expect(network.nodes).toContainEqual(expect.objectContaining({ id: up.id, name: 'Top farm', drainsInto: "the gauge 'Named weir'" }));
+		for (const [name, result] of [['settings', settings], ['network', network]] as const) expect(bareIds(result), name).toEqual([]);
 	});
 });
 

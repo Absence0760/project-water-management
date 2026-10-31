@@ -3,6 +3,9 @@
 	opened from the section header's Assistant button. A question goes to the
 	server with the conversation so far; the answer streams in, with a line for
 	each tool the assistant reads the project with ("Reading the run summary").
+	The answer's text shows paragraphs, lists and bold (AnswerText.svelte,
+	parsed into elements, never {@html}); past chats keep the raw text and show
+	it the same way.
 	A recommended change is a card: the server's title (built from the changes
 	it accepted, issue #640), each change's engine diff lines with its reason,
 	and, for an editor, Apply (the page's onapply). A recalibration or a
@@ -20,6 +23,7 @@
 <script lang="ts">
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
+	import AnswerText from './AnswerText.svelte';
 	import { tick } from 'svelte';
 	import type { AssistantProposal } from '#lib/api/types.js';
 	import { fmtDay, fmtPct, fmtWhen } from '#lib/format/number.js';
@@ -395,7 +399,7 @@
 			</ul>
 		{/if}
 		{#if t.text}
-			<div class="text" data-testid="assistant-text">{t.text}</div>
+			<AnswerText text={t.text} streaming={last && chat.busy} />
 		{:else if last && chat.busy}
 			<p class="muted thinking">Thinking…</p>
 		{/if}
@@ -615,10 +619,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-	}
-	.text {
-		white-space: pre-wrap;
-		line-height: 1.55;
 	}
 	.tools {
 		display: flex;

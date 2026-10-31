@@ -9,6 +9,7 @@
 // outlook and outcome set-ups are left out (they are no model input, and the
 // authority's office is not the assistant's business), and the calibration
 // rules' sign-off keeps its date but not the name typed to sign it.
+import { settingLabels } from '@water-management/engine';
 import { z } from 'zod';
 import { mergeSettings } from '../../projects/settings.js';
 import { SETTING_KINDS, type SettingKind } from '../settingKinds.js';
@@ -84,6 +85,22 @@ export const NOT_MODEL_INPUT = ['autoRun', 'outcomes', 'outlook', 'responsibleAu
 
 const SENT: ReadonlySet<string> = new Set(MODEL_INPUT);
 
+/** Each setting's name in the app's words, by path (engine compare.ts settingLabels: the input diff's labels). */
+const LABELS = settingLabels();
+
+/**
+ * The app's name for each setting sent, and for each part of one it words part by part (`gr4j.x1`), so the model
+ * names settings as Model settings and the run comparison do, never by their keys (issue #610).
+ */
+export function labelsFor(settings: Record<string, unknown>): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const [k, v] of Object.entries(settings)) {
+		if (LABELS[k]) out[k] = LABELS[k];
+		if (v && typeof v === 'object' && !Array.isArray(v)) for (const sub of Object.keys(v)) if (LABELS[`${k}.${sub}`]) out[`${k}.${sub}`] = LABELS[`${k}.${sub}`]!;
+	}
+	return out;
+}
+
 /** The calibration rules without the name typed to sign them off: whether they are signed, and on which day. */
 function rulesView(rules: unknown): unknown {
 	if (!rules || typeof rules !== 'object') return rules;
@@ -110,7 +127,7 @@ export function settingsView(
 	stored: unknown,
 	keys: readonly string[] | undefined,
 	merge: boolean
-): { settings: Record<string, unknown>; kinds: Record<string, SettingKind>; unknownKeys?: string[] } {
+): { settings: Record<string, unknown>; labels: Record<string, string>; kinds: Record<string, SettingKind>; unknownKeys?: string[] } {
 	const all = merge ? (mergeSettings(stored) as unknown as Record<string, unknown>) : stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
 	const merged = Object.fromEntries(Object.entries(all).filter(([k]) => SENT.has(k)));
 	if ('calibrationRules' in merged) merged.calibrationRules = rulesView(merged.calibrationRules);
@@ -119,13 +136,13 @@ export function settingsView(
 	const unknownKeys = pickKeys.filter((k) => !(k in merged));
 	// Each setting's kind (settingKinds.ts), so what a goal may change is data the model reads beside the values.
 	const kinds = Object.fromEntries(Object.keys(settings).flatMap((k) => (SETTING_KINDS[k] ? [[k, SETTING_KINDS[k]]] : []))) as Record<string, SettingKind>;
-	return { settings, kinds, ...(unknownKeys.length ? { unknownKeys } : {}) };
+	return { settings, labels: labelsFor(settings), kinds, ...(unknownKeys.length ? { unknownKeys } : {}) };
 }
 
 export const settingsTool: AssistantTool = {
 	spec: specOf(
 		TOOL_NAMES.settings,
-		"The model settings: the runoff model and its parameters (gr4j), the simulation, report and calibration windows, the calibration locations (the outlet's, the top-level calibration settings ticked by calibrateAtOutlet, and the gauges' rows of calibrationZones, each fitted on its own record with its own window and X1–X4; calibrationSiteNodeId the headline location, null = auto; calibrationRest what the units with no ticked location downstream take; unitParamsFrom a unit given another location's parameters), rain gap filling, evaporation, the EWR and the drought restriction. The run's own by default (as it ran), or the project's as saved now (merged over the engine's defaults). `kinds` says what each setting is: 'calibrated' (fitted to observed flow, or forcing that trades off against the fit: changed only to improve the fit, never an outcome), 'input' (the catchment and its data), 'assessment' (what results are judged against) or 'management' (how water is managed). The network's operating rules (get_network) are management too.",
+		"The model settings: the runoff model and its parameters (gr4j), the simulation, report and calibration windows, the calibration locations (the outlet's, the top-level calibration settings ticked by calibrateAtOutlet, and the gauges' rows of calibrationZones, each fitted on its own record with its own window and X1–X4; calibrationSiteNodeId the headline location, null = auto; calibrationRest what the units with no ticked location downstream take; unitParamsFrom a unit given another location's parameters), rain gap filling, evaporation, the EWR and the drought restriction. The run's own by default (as it ran), or the project's as saved now (merged over the engine's defaults). `kinds` says what each setting is: 'calibrated' (fitted to observed flow, or forcing that trades off against the fit: changed only to improve the fit, never an outcome), 'input' (the catchment and its data), 'assessment' (what results are judged against) or 'management' (how water is managed). The network's operating rules (get_network) are management too. `labels` is each setting's name as the app shows it (Model settings, the run comparison): name settings by these in answers, never by their keys, which are only for tool arguments.",
 		Args
 	),
 	label: 'Reading the settings',
