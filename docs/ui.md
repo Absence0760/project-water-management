@@ -11930,6 +11930,11 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   an appeal open, "nothing changes until it is decided"; `licence.ts`
   `licenceLine`), and for an assessor while a licence is in force **Run the
   licensed terms** (the run the evidence report's other applications read).
+  When the decision or a variation queued that run in the background
+  (293_scenario_run_job), the block says so there instead (`licence.ts`
+  `licensedRunState`): "Queued…" or "Running…" with the button hidden, the
+  scenario read again every 4 s until the job ends; after a failure the
+  button is back beside why; a finished job says nothing more.
 - **Appeals** (228_decision_events, #523 G4), under the decision: the
   events in order ("Appeal lodged: Water Tribunal, 2 Oct 2026", its
   reference, who recorded it and when, its note, a variation's terms), or

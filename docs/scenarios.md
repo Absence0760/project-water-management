@@ -1650,6 +1650,19 @@ scenario is `'team'`, and behaves exactly as above).
   exists (and again after a variation), § 4 names the licence among those
   with no run of their licensed terms (`evidence-20`) rather than leaving it
   out ([evidence-pack.md § The responsible authority](./evidence-pack.md#the-responsible-authority)).
+  That run is made for the assessor (293_scenario_run_job): recording a
+  licence issued on other terms than the ops applied for, or an appeal event
+  after which the terms in force have no run on the base (a variation),
+  queues a `scenario_run` job (`scenarios/licensedRun.ts`,
+  `jobs/handlers/scenario-run.ts`) that stores the run as the member who
+  recorded it, exactly as **Run the licensed terms** does. It reads the terms
+  in force when it runs, so a variation recorded while it waited is the one
+  run, and it does nothing when the licence was set aside meanwhile or a run
+  of the terms already exists (the button pressed first). One pending per
+  scenario, at most 5 per member; past that nothing is queued and the button
+  still runs it. The Application panel shows the job where the button is
+  (queued or running hides the button; a failure gives it back, with why) and
+  reads the scenario again every few seconds until it finishes.
   **What followed the decision** (228_decision_events, #523 G4): a member
   acting for the authority records, append-only, an appeal lodged (the Water
   Tribunal, s148, or a court) and then its outcome in that forum, upheld,

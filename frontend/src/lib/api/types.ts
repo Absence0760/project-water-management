@@ -1202,6 +1202,12 @@ export interface Scenario {
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * The newest background run of its licensed terms (293_scenario_run_job): queued when a licence is issued on other
+	 * terms than those applied for, or varied on appeal. null when none or the reader can't read the project's jobs
+	 * (an applicant); absent from an older API.
+	 */
+	licensedRunJob?: JobMeta | null;
 	/** Runs of this scenario still stored, and the newest. */
 	runCount: number;
 	lastRun: { id: string; label: string; createdAt: string } | null;

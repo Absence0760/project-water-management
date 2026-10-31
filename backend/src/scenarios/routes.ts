@@ -47,6 +47,8 @@ import {
 import { loadApplicantResults, newestApplicationRun } from './results.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
 import { IN_APP_CHECK } from './questions.js';
+import { queueLicensedRun } from './licensedRun.js';
+import { wakeWorker } from '../jobs/wake.js';
 import { AppealBody, CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
 import type { ScenarioOp } from '@water-management/engine';
 
@@ -549,7 +551,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	.post('/:id/scenarios/:sid/decide', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = DecideBody.parse(await readJson(c, { optional: true }));
-		return withUser(c.get('userId'), async (db) => {
+		const out = await withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
 			// Recording the decision needs two-step sign-in (auth/stepUp.ts).
 			await requireStepUp(db);
@@ -594,8 +596,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 					true
 				)
 			);
-			return c.json(await withCheck(db, id, decided, role));
+			// Granted on other terms than those applied for: their run is queued, so § 4 counts the licence without anyone pressing the button (293).
+			const queued = await queueLicensedRun(db, id, decided);
+			return { view: await withCheck(db, id, queued ? await loadScenario(db, id, sid) : decided, role), queued };
 		});
+		if (out.queued?.created) await wakeWorker(out.queued.job.id);
+		return c.json(out.view);
 	})
 	// Record what followed the decision (228_decision_events): an appeal lodged
 	// with the Water Tribunal or a court, then upheld, set aside or varied (new
@@ -604,7 +610,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 	.post('/:id/scenarios/:sid/appeals', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = AppealBody.parse(await readJson(c, { optional: true }));
-		return withUser(c.get('userId'), async (db) => {
+		const out = await withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
 			await requireStepUp(db);
 			await requireActsForAuthority(db, id);
@@ -645,8 +651,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				'scenario.appeal_recorded',
 				subject(s, { eventId: rows[0]!.id, kind: body.kind, forum: body.forum, eventDate: body.eventDate, ...(terms ? { opsSha256: terms.opsSha256 } : {}) }, true)
 			);
-			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role), 201);
+			// Varied (or any event that leaves terms in force with no run of them): their run is queued, as on the decision (293).
+			const recorded = await loadScenario(db, id, sid);
+			const queued = await queueLicensedRun(db, id, recorded);
+			return { view: await withCheck(db, id, queued ? await loadScenario(db, id, sid) : recorded, role), queued };
 		});
+		if (out.queued?.created) await wakeWorker(out.queued.job.id);
+		return c.json(out.view, 201);
 	})
 	// --- sharing an application with a consultant or client (scenario_member) ----------
 	// Whom its owner may share it with (app_share_candidates, 049): for an
