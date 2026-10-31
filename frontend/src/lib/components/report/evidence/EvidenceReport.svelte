@@ -50,6 +50,7 @@
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
+	import { opWorksText } from './wula';
 	import { CHANGE_LABEL, sizingText } from './demandObjects';
 	import { factorText, futureRows } from './future';
 	import { sourceLabel, sourceLine } from '#lib/components/runs/demandSources.js';
@@ -93,7 +94,14 @@
 		const list = report.ops.map((o) => o.op);
 		const before = stepInputs(input, list).before;
 		const names = namesOf([base.model], list);
-		return report.ops.map((o, i) => ({ index: o.index, cls: o.class, text: describeOp(o.op, before[i] ?? null, names) }));
+		const wula = report.identity.application?.wula;
+		return report.ops.map((o, i) => ({
+			index: o.index,
+			cls: o.class,
+			text: describeOp(o.op, before[i] ?? null, names),
+			// evidence-25: which applied-for works the change models (null before evidence-25, or on a team scenario that records no WULA).
+			works: wula ? opWorksText(wula, o.index, o.op.works, o.class) : null
+		}));
 	});
 
 	/** A site's FDC points for one calendar month, both runs, with each run's 5–95 % band where the report has one (ER5). */
@@ -930,8 +938,27 @@
 				</div>
 				<h3>A.2 What the application changes</h3>
 				{#if app}
+					<!-- evidence-25 (294_wula_reference): the WULA it models and its works as applied for, in words; then each change with the works it models. -->
+					{#if id.application?.wula}
+						{@const wula = id.application.wula}
+						<div class="wula" data-testid="evidence-a2-wula">
+							<p>
+								<strong>Water-use licence application</strong>
+								{#if wula.number}{wula.number}{:else}<span class="na">number not given</span>{/if}.
+								{#if !(report.appendix.wulaWorks ?? []).length}<span class="na">No works listed.</span>{/if}
+							</p>
+							{#if (report.appendix.wulaWorks ?? []).length}
+								<dl class="wula-works">
+									{#each report.appendix.wulaWorks ?? [] as w (w.ref)}<div><dt>{w.ref}</dt><dd>{w.text}</dd></div>{/each}
+								</dl>
+							{/if}
+						</div>
+					{/if}
 					<ol class="ops" data-testid="evidence-ops">
-						{#each ops as o (o.index)}<li><span class="pill" class:pill-red={o.cls === 'baseline'}>{CLASS_LABEL[o.cls]}</span> {o.text}</li>{/each}
+						{#each ops as o (o.index)}<li>
+								<span class="pill" class:pill-red={o.cls === 'baseline'}>{CLASS_LABEL[o.cls]}</span>
+								{o.text}{#if o.works}<span class="op-works" class:op-works-none={!o.works.tied}> · {o.works.text}</span>{/if}
+							</li>{/each}
 					</ol>
 					<p class="small muted">The input diff, application against baseline (every resolved input that differs):</p>
 					<ul class="changes">
@@ -1209,6 +1236,33 @@
 	.ops li,
 	.changes li {
 		margin: 0.15rem 0;
+	}
+	.op-works {
+		color: var(--text-2);
+	}
+	.op-works-none {
+		color: var(--warning);
+	}
+	.wula p {
+		margin: 0.25rem 0;
+	}
+	.wula-works {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 0.15rem 0.75rem;
+		margin: 0.25rem 0 0.5rem;
+		max-width: 90ch;
+	}
+	.wula-works div {
+		display: contents;
+	}
+	.wula-works dt {
+		font-weight: 600;
+	}
+	.wula-works dd {
+		margin: 0;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
 	}
 	.pill {
 		display: inline-block;

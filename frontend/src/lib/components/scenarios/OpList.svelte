@@ -7,6 +7,7 @@
 	// editor (with a remove button per op) and the compare page's Scenario
 	// overrides section (read only).
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import type { WulaWork } from '@water-management/engine';
 	import { CLASS_LABEL, type OpItem } from './ops';
 
 	let {
@@ -14,6 +15,8 @@
 		other = [],
 		label,
 		onremove,
+		works = [],
+		onworks,
 		disabled = false
 	}: {
 		items: OpItem[];
@@ -23,6 +26,10 @@
 		label: string;
 		/** Offer a remove button per op (an editor on a draft). */
 		onremove?: (index: number) => void;
+		/** The scenario's WULA works (294): what each change's works select offers. */
+		works?: readonly WulaWork[];
+		/** Offer a works select per change (an editor on a draft with works listed): tie change `index` to `ref`, or to none. */
+		onworks?: (index: number, ref: string | null) => void;
 		disabled?: boolean;
 	} = $props();
 
@@ -47,6 +54,24 @@
 				<div class="body">
 					<span class="text">{it.text}</span>
 					{#if it.cls}<span class="tag" class:tag-baseline={it.cls === 'baseline'}>{CLASS_LABEL[it.cls]}</span>{/if}
+					{#if onworks && works.length}
+						<!-- The works it models (294_wula_reference): one of the WULA's, or none. -->
+						<label class="works">
+							<span>Models</span>
+							<select
+								aria-label="Works change {i + 1} models"
+								value={it.works ?? ''}
+								{disabled}
+								onchange={(e) => onworks(i, e.currentTarget.value === '' ? null : e.currentTarget.value)}
+							>
+								<option value="">No works named</option>
+								{#each works as w (w.ref)}<option value={w.ref}>{w.ref}</option>{/each}
+								{#if it.works && !works.some((w) => w.ref === it.works)}<option value={it.works}>{it.works} (not listed)</option>{/if}
+							</select>
+						</label>
+					{:else if it.works}
+						<span class="tag tag-works" data-testid="op-works">Models {it.works}</span>
+					{/if}
 					{#if it.problem}<span class="problem"><strong>Doesn't apply:</strong> {it.problem}</span>{/if}
 					{#each it.notes as note, j (j)}<span class="note">{note}</span>{/each}
 				</div>
@@ -135,6 +160,21 @@
 	.tag-baseline {
 		background: var(--danger-soft);
 		color: var(--danger);
+	}
+	.tag-works {
+		background: var(--surface-2);
+		color: var(--text);
+		font-weight: 500;
+	}
+	.works {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.3rem;
+		font-size: var(--font-xs);
+		color: var(--text-2);
+	}
+	.works select {
+		font-size: var(--font-xs);
 	}
 	.problem,
 	.note {

@@ -37,6 +37,8 @@
 	import ScenarioCompare from './ScenarioCompare.svelte';
 	import ApplicantResults from './ApplicantResults.svelte';
 	import ScenarioStatement from './ScenarioStatement.svelte';
+	import WulaReference from './WulaReference.svelte';
+	import { tagOp } from './wula';
 	import AskAssessors from './AskAssessors.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import { proposerSummary } from './details';
@@ -219,6 +221,8 @@
 	 */
 	const busy = $derived(saving || overrideDirty || running);
 	const removeAt = (i: number) => saveOps(s.ops.filter((_, j) => j !== i), `Change ${i + 1} removed.`);
+	/** Tie change i to one of the WULA's works, or to none (294_wula_reference): an edit of the ops like any other, so undo takes it back. */
+	const setWorks = (i: number, ref: string | null) => saveOps(tagOp(s.ops, i, ref), ref === null ? `Change ${i + 1} names no works.` : `Change ${i + 1} models ${ref}.`);
 	async function undo() {
 		const prev = past[past.length - 1];
 		if (!prev) return;
@@ -510,9 +514,26 @@
 			</p>
 		{/if}
 		{#if s.ops.length}
-			<OpList items={list.items} other={list.other} label="Changes in {s.name}" onremove={editable ? removeAt : undefined} disabled={busy} />
+			<OpList
+				items={list.items}
+				other={list.other}
+				label="Changes in {s.name}"
+				onremove={editable ? removeAt : undefined}
+				works={s.wula.works}
+				onworks={editable ? setWorks : undefined}
+				disabled={busy}
+			/>
 		{:else}
 			<p class="muted">No changes yet. {editable ? 'Add one below, or edit the model tables: raise a dam, plant a crop, add a transfer…' : ''}</p>
+		{/if}
+		{#if data.check?.wulaWarnings?.length}
+			<!-- 294_wula_reference: the changes against the works the WULA applies for. A warning, never a block. -->
+			<div class="alert alert-info" role="status" data-testid="scenario-wula-warnings">
+				Against the WULA reference:
+				<ul>
+					{#each data.check.wulaWarnings as w, i (i)}<li>{w}</li>{/each}
+				</ul>
+			</div>
 		{/if}
 		{#if editable && effective}
 			{#if overriding}
@@ -554,6 +575,11 @@
 				</fieldset>
 			</Fold>
 		{/if}
+
+		<!-- The WULA it models (294_wula_reference): frozen with the changes once submitted. -->
+		{#key s.id}
+			<WulaReference scenarioName={s.name} wula={s.wula} {editable} frozen={canChange && s.status !== 'draft'} {saving} onsave={(p) => patch(p)} />
+		{/key}
 
 		<!-- Appendix C's fixed prompts (129_scenario_statement): changed on the description's terms, so not frozen by a submission. -->
 		{#key s.id}

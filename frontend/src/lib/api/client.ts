@@ -20,6 +20,7 @@ import type {
 	RecordCoverage,
 	ProjectModel,
 	ScenarioOp,
+	WulaWork,
 	ProjectSettings,
 	RainStationMeta,
 	SeriesMeta
@@ -1114,6 +1115,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					/** Where written objections go and by when, as the notice gives them (166): a draft application's only; null clears. */
 					objectionAddress?: string | null;
 					objectionClosingDate?: string | null;
+					/** The WULA reference (294): any scenario's, while a draft; null clears the number, [] the works. */
+					wulaNumber?: string | null;
+					wulaWorks?: WulaWork[];
 					ops?: ScenarioOp[];
 					ownedNodeIds?: string[];
 					status?: ScenarioStatus;

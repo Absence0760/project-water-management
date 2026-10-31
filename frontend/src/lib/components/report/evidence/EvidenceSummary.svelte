@@ -15,6 +15,7 @@
 	import { changeText, signed, valueText, worseText } from './format';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
 	import { AUTHORISED_HEADING, MODELLED_HEADING, authorisedRow, mixLines } from './authorised';
+	import { wulaPage1 } from './wula';
 
 	let {
 		report,
@@ -100,6 +101,18 @@
 				<span class="sub">Run {fmtDate(id.application.createdAt)} by {id.application.createdBy ?? FORMER_MEMBER}</span>
 			</dd>
 		</div>
+		<!-- evidence-25 (294_wula_reference): the WULA it models; the works in words are A.2's (G13). Null on a team scenario that records none; absent before evidence-25. -->
+		{#if id.application.wula}
+			{@const w = wulaPage1(id.application.wula)}
+			<div data-testid="evidence-wula">
+				<dt>WULA</dt>
+				<dd>
+					{#if w.number}{w.number}{:else}<strong>No application number given</strong>{/if}
+					<span class="sub">{w.works}</span>
+					{#each w.tie as t, i (i)}<span class="sub">{t}</span>{/each}
+				</dd>
+			</div>
+		{/if}
 	{/if}
 	<div>
 		<dt>Engine</dt>
