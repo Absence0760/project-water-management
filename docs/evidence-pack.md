@@ -79,7 +79,10 @@ under each climate model's monthly change factors (report format
 [§ Future yield](#future-yield)); and § 7 counting Sentinel-2 beside WOfS,
 each source and the dates either saw together (report format
 `evidence-24`, issue #624 step 7, 2026-10-29; [§ Observed wet
-days](#observed-wet-days)). What is left is
+days](#observed-wet-days)); and § 4's combined table adding the assessment's
+background at full allocation as its own rows, when it has one (report format
+`evidence-25`, WP-3.10, 2026-10-30, 295_assessment_background; [§ The other
+applications together](#the-other-applications-together)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -333,6 +336,23 @@ based on this baseline (`cumulative.combined`; engine
   application** once it is submitted, as § 4 always counted it: the s27
   question is the cumulative effect of every proposed use on the baseline,
   whoever proposed it.
+- **Against existing authorised use, beside the baseline** (report format
+  `evidence-25`, WP-3.10). When the assessment the row reads was also run on
+  a background at full allocation (an assessor's choice, 295,
+  [scenarios.md § Against existing authorised
+  use](./scenarios.md#against-existing-authorised-use-a-background-at-full-allocation)),
+  § 4's combined table is followed by that background's own rows
+  (`cumulative.combined.background`: its label *Existing authorised use (full
+  allocation)*, the run's label, and at the outlet its days below the
+  pragmatic EWR and Reserve months met, against the baseline's, with the sum
+  of each application alone, all together and the interaction on it). The
+  baseline's figures and page 1's row are unchanged: licences never drive
+  the baseline (issue #507), so the background is never read in its place.
+  Days and months only, the verdicts and counts D3 gives every reader of a
+  full-allocation run, so a reader kept from the volumes reads them as they
+  are; a viewer finds no assessment, so no background either. A pack drafted
+  before `evidence-25` keeps its document without them; one drafted after
+  from an assessment without a background has `background: null`.
 
 § 4 still lists each other application with its own run's change, without
 the old sum, and prints the combined table (each alone, the sum, all

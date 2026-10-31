@@ -293,6 +293,15 @@ compare-only run bit-identical with and without volumes
 (`packages/engine/src/allocations/baseline.test.ts`). The full authorised use
 impact base of an application's evidence report runs its own full-allocation
 pair beside the baseline (licensing build item 8), a separate analysis too.
+So does a cumulative assessment against existing authorised use (WP-3.10,
+295): the assessor may pick a full-allocation scenario run of the same
+baseline as its **background**, which the job assesses the applications on
+as a second table labelled *Existing authorised use (full allocation)*,
+beside the baseline's and never in its place; without one the assessment is
+the baseline's alone. A reader kept from the volumes reads that table's EWR
+days and Reserve months only, as below
+([scenarios.md § Against existing authorised
+use](./scenarios.md#against-existing-authorised-use-a-background-at-full-allocation)).
 
 - **Compare only** (the baseline's mode, and the default): nothing; every run
   with volumes carries the comparison's whole-year figures in its summary.
