@@ -16,8 +16,11 @@
 // warning and can't be decided; a run with a baseline assumption shows the
 // applicant the published baseline's river beside nothing of theirs but the
 // EWR (issue #523 G9 (d)); the applicant gives the WULA reference and ties
-// the change to its works, which the submission freezes (294_wula_reference). Axe on
-// both views, light and dark. Synthetic data only.
+// the change to its works, which the submission freezes (294_wula_reference);
+// the applicant cites a smaller dam as a mitigation alternative, which the
+// submission freezes too and the assessor reads as its own column on the
+// evidence report's page 1 (298_scenario_alternatives). Axe on both views,
+// light and dark. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { AUTHORITY, seedApplicantProject, submitApplication } from '../support/applications.ts';
@@ -239,6 +242,69 @@ test('an application whose run was changed behind the API shows the assessor a w
 	await decide.getByLabel('Date of the decision letter').fill('2026-09-30');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('No').check();
 	await expect(decide.getByRole('button', { name: 'Record the authority’s decision' })).toBeDisabled();
+});
+
+test('an applicant cites a smaller dam as a mitigation alternative, frozen on submission, and the assessor reads it beside the application on page 1', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Alternatives applicant');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications alternatives', applicant.user);
+	const P = `${API_URL}/projects/${project.id}`;
+	const req = applicant.context.request;
+	/** One of the applicant's scenarios on the published baseline, run once; its id and the run's. */
+	const scenario = async (name: string, dam: number) => {
+		const made = await req.post(`${P}/scenarios`, { data: { name, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: dam }] } });
+		expect(made.status(), await made.text()).toBe(201);
+		const sid = (await made.json()).scenario.id as string;
+		const ran = await req.post(`${P}/scenarios/${sid}/runs`, { data: { label: name } });
+		expect(ran.status(), await ran.text()).toBe(201);
+		return { sid, runId: (await ran.json()).run.id as string };
+	};
+	const app = await scenario(NAME, 200_000);
+	await scenario('Upper farm dam, smaller', 170_000);
+
+	const a = applicant.page;
+	await a.goto(`/projects/${project.id}`);
+	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
+	await expect(a.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
+	await openDetails(a, 'scenario-alternatives');
+	const fold = a.getByTestId('scenario-alternatives');
+	await expect(fold.getByTestId('alternatives-summary')).toHaveText('None cited');
+	await fold.getByRole('button', { name: 'Cite alternatives' }).click();
+	const first = fold.getByRole('group', { name: 'Alternative 1' });
+	// Their own other scenario's run is offered, never the application's own.
+	await expect(first.getByLabel('Run').getByRole('option', { name: /^Upper farm dam, smaller — / })).toHaveCount(1);
+	await expect(first.getByLabel('Run').getByRole('option', { name: new RegExp(`^${NAME} — `) })).toHaveCount(0);
+	// A label is asked for before anything is sent.
+	await first.getByLabel('Run').selectOption({ label: 'Upper farm dam, smaller — Upper farm dam, smaller' });
+	await fold.getByRole('button', { name: 'Save the alternatives' }).click();
+	await expect(fold.getByRole('alert')).toContainText('Alternative 1 needs a label');
+	await first.getByLabel('Label').fill('Smaller dam');
+	await expectNoViolations(a);
+	await fold.getByRole('button', { name: 'Save the alternatives' }).click();
+	await expect(fold.getByTestId('alternatives-summary')).toHaveText('Smaller dam');
+	await expect(fold.getByTestId('alternatives-list')).toContainText('Smaller dam Upper farm dam, smaller — Upper farm dam, smaller');
+
+	// Submitted, the alternatives are frozen with the changes.
+	await a.getByRole('button', { name: 'Submit to the assessors' }).click();
+	await answerConfirm(a, true, `Submit “${NAME}” to the assessors?`);
+	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
+	await expect(fold.getByRole('button', { name: 'Change the alternatives' })).toHaveCount(0);
+	await expect(fold.getByTestId('alternatives-frozen')).toBeVisible();
+
+	// The assessor's evidence report (on the nominated baseline): page 1 sets the alternative beside the application, and A.2 lists its change.
+	expect((await page.request.post(`${P}/evidence`, { data: { runId, reason: 'Calibrated baseline' } })).status()).toBe(201);
+	await page.goto(`/projects/${project.id}/report?run=${app.runId}&evidence`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	const table = page.getByTestId('evidence-change-table');
+	await expect(table.getByTestId('evidence-alternative-heading')).toHaveText(/^Smaller damAlternative 1: “Upper farm dam, smaller”/);
+	const days = table.getByRole('row', { name: /^Days below the EWR/ }).first();
+	await expect(days.getByRole('cell')).toHaveCount(5);
+	await expect(days.getByRole('cell').last()).toContainText(/days/);
+	await expect(table.getByRole('row', { name: /^This and the other applications on this baseline, together/ }).getByRole('cell').last()).toHaveText(/^Not assessed for an alternative/);
+	await expect(page.getByTestId('evidence-alternatives-note')).toContainText('The last column is a mitigation alternative');
+	const a2 = page.getByTestId('evidence-a2-alternative');
+	await expect(a2).toContainText('Smaller dam: “Upper farm dam, smaller”, run “Upper farm dam, smaller”');
+	await expect(a2.getByRole('listitem')).toContainText('170');
 });
 
 test('a run with a baseline assumption shows the applicant the published baseline’s river beside nothing of theirs but the EWR', async ({ page, owner, signIn }) => {

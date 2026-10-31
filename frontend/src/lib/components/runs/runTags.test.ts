@@ -15,6 +15,12 @@ describe('runTags (#586 D18)', () => {
 		expect(tags.find((t) => t.id === 'scenarioBase')!.detail).toBe('The base of “Raise”.');
 		expect(tags.find((t) => t.id === 'errata')!.detail).toBe('2 known engine bugs: E1, E2.');
 	});
+	it('tags a run a submitted scenario cites as a mitigation alternative (298)', () => {
+		const tag = runTags({ ...run, id: 'r2', citedBy: [{ kind: 'alternative', id: 's', name: 'Farm two dam' }] }, ctx).find((t) => t.id === 'alternative')!;
+		expect(tag.label).toBe('Alternative');
+		expect(tag.detail).toBe('A mitigation alternative of “Farm two dam”.');
+		expect(runTags({ ...run, id: 'r2' }, ctx).some((t) => t.id === 'alternative')).toBe(false);
+	});
 	it('keys each tag a shown row carries once, in the meanings’ order', () => {
 		const rows = [runTags({ ...run, pinned: true }, ctx), runTags({ ...run, id: 'r2', pinned: true, trigger: 'auto' }, ctx)];
 		expect(tagKey(rows)).toEqual([

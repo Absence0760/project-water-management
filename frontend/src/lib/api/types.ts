@@ -873,11 +873,12 @@ export type ReproductionDifference =
 /**
  * One citation of a run (RunMeta.citedBy). For a publication, `name` is the
  * day it was published (YYYY-MM-DD, UTC); for a sign-off (WP-3.13), the
- * signer's name; for an evidence pack (WP-3.14, 112), `version N`.
+ * signer's name; for an evidence pack (WP-3.14, 112), `version N`; for a
+ * mitigation alternative (298), the name of the scenario past draft that cites it.
  * Assessments will add a kind.
  */
 export interface RunCitation {
-	kind: 'publication' | 'scenario' | 'signoff' | 'pack';
+	kind: 'publication' | 'scenario' | 'signoff' | 'pack' | 'alternative';
 	id: string;
 	name: string;
 }
@@ -1511,7 +1512,26 @@ export interface ScenarioWithCheck {
 	 * absent from an older API.
 	 */
 	unverifiedRunIds?: string[] | null;
+	/** The mitigation alternatives it cites (298), for whoever reads it; absent from an older API. */
+	alternatives?: ScenarioAlternative[];
 }
+
+/** A mitigation alternative a scenario cites (298_scenario_alternatives): a labelled run of another of its owner's scenarios on its base run. */
+export interface ScenarioAlternative {
+	/** 0-based, page 1's column order. */
+	position: number;
+	label: string;
+	runId: string;
+	/** The run's scenario and its name (as the run recorded it once the scenario is gone). */
+	scenarioId: string;
+	scenarioName: string;
+	runLabel: string;
+	engineVersion: string;
+	runCreatedAt: string;
+}
+
+/** A run the caller may cite as an alternative: one of their own other scenarios' runs on the scenario's base run (298). */
+export type AlternativeCandidate = Omit<ScenarioAlternative, 'position' | 'label'>;
 
 const RANK: Record<Role, number> = { farmer: -2, contributor: -1, viewer: 0, editor: 1, owner: 2 };
 
