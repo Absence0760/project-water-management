@@ -11943,6 +11943,12 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   variation (the same editor as the decision's, starting from the terms in
   force) and a note; a hint under the choice says what it does to the
   licence ("Lodging an appeal changes nothing until it is decided …").
+  The free text a share link prints (the licence conditions, the case
+  reference and the note here, the decision's reasons) each has one hint
+  under it, always shown (a warning, not an explanation): "Shown on the
+  application's public share link: don't include personal information,
+  such as a name." (`licence.ts` `PUBLIC_RECORD_HINT`; security.md §
+  Scenario links).
   The applicant and everyone who reads the application see the events; only
   the authority's members record them. `applications.spec.ts` decides with
   changed terms, lodges an appeal and records it set aside, then reads it

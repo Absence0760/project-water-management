@@ -1413,12 +1413,15 @@ differences:
   variation's terms; never who recorded it or when) and the licence's
   standing (`app_scenario_licence`, its event by position, not id). Every
   `allocation.set` on a unit that isn't the application's own is left out
-  of the ops and every terms' ops in `toShareScenario`
-  (`withheldAllocationOps`, as for a viewer kept from each farm's volume,
-  #523 G1), with a count: a registered volume never leaves through a
-  link. The SQL still returns those ops, as it did for `ops` before 291,
-  so `toShareScenario` is the only code that may serve
-  `app_share_scenario`'s output. The free text a link reader now sees (the
+  of the ops, every run's per-op classes and every terms' ops by
+  `app_share_scenario` itself (291, `app_share_kept`, as for a viewer kept
+  from each farm's volume, #523 G1), with a count (`withheldOps`): a
+  registered volume never leaves through a link, whichever code serves the
+  function's output. `toShareScenario` filters again
+  (`withheldAllocationOps`) as a second line. Each `opsSha256` stays the
+  hash of the full list, withheld ops included (a hash reveals no volume),
+  so it identifies the application or the decision but doesn't verify the
+  ops a link shows when any were left out; the page doesn't print it. The free text a link reader now sees (the
   conditions, and each event's reference and note, beside the decision
   note) is a public record: whoever records a decision must never put
   personal information in it, such as an appellant's name; the schema

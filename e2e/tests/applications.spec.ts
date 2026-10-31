@@ -9,7 +9,8 @@
 // in the Applications tab and records the authority's decision, with the
 // licence's granted terms (a smaller dam than applied for, and its conditions;
 // 227_licence_terms), then an appeal lodged with the Water Tribunal and the
-// decision set aside (228_decision_events), which the applicant reads; an
+// decision set aside (228_decision_events), which the applicant reads (each
+// free text a share link prints says it's public: no personal information); an
 // application whose run was changed behind the API (its server stamp no
 // longer matches, docs/security.md § Run stamps) shows the assessor a
 // warning and can't be decided; a run with a baseline assumption shows the
@@ -25,6 +26,8 @@ import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
 const NAME = 'Raise the Upper farm dam';
+// Under each free text a share link prints (frontend scenarios/licence.ts PUBLIC_RECORD_HINT).
+const PUBLIC_RECORD = 'Shown on the application’s public share link: don’t include personal information, such as a name.';
 
 test('an applicant submits an application on the published baseline, and the assessor decides it', async ({ page, owner, signIn }) => {
 	void owner;
@@ -113,6 +116,8 @@ test('an applicant submits an application on the published baseline, and the ass
 	await decide.getByLabel('Licence or file reference').fill('WU-SYN-001');
 	await decide.getByRole('group', { name: 'Written reasons received?' }).getByLabel('Yes').check();
 	await decide.getByLabel('Note: the authority’s reasons').fill('Enough is left for the Reserve at a smaller dam.');
+	// The free text a share link prints is a public record (security.md § Scenario links): each field says so.
+	await expect(decide.getByLabel('Note: the authority’s reasons')).toHaveAccessibleDescription(`${PUBLIC_RECORD} The applicant can make a share link too.`);
 	// The granted terms (227): less than applied for. They start from the changes applied for; the assessor replaces the dam size.
 	const terms = decide.getByTestId('decide-terms');
 	await terms.getByLabel('With changes').check();
@@ -128,6 +133,7 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(granted.getByRole('listitem')).toHaveCount(1);
 	await expect(granted.getByRole('listitem')).toContainText('180 000');
 	await terms.getByLabel(/^Licence conditions/).fill('Release 5 % of inflow in dry months.');
+	await expect(terms.getByLabel(/^Licence conditions/)).toHaveAccessibleDescription(PUBLIC_RECORD);
 	await record.click();
 	const decision = page.getByTestId('application-decision');
 	await expect(decision).toContainText('Licence issued (see its conditions): the decision of Synthetic catchment management agency, dated 30 Sep 2026.');
@@ -148,6 +154,8 @@ test('an applicant submits an application on the published baseline, and the ass
 	await appeal.getByLabel('Where').selectOption({ label: 'Water Tribunal (National Water Act s148)' });
 	await appeal.getByLabel('Date lodged').fill('2026-10-02');
 	await appeal.getByLabel(/^Case reference/).fill('WT 12/2026');
+	await expect(appeal.getByLabel(/^Case reference/)).toHaveAccessibleDescription(PUBLIC_RECORD);
+	await expect(appeal.getByLabel(/^Note/)).toHaveAccessibleDescription(PUBLIC_RECORD);
 	await appeal.getByRole('button', { name: 'Record it' }).click();
 	await expect(appeals.getByTestId('application-appeal-event')).toHaveCount(1);
 	await expect(appeals.getByTestId('application-appeal-event')).toContainText('Appeal lodged: Water Tribunal, 2 Oct 2026');
@@ -161,6 +169,7 @@ test('an applicant submits an application on the published baseline, and the ass
 	await expect(appeal.getByLabel('Where')).toHaveValue('Water Tribunal');
 	// A variation records new terms, in the same editor as the decision's (axe over the decided panel with it open).
 	await appeal.getByLabel('Decision varied').check();
+	await expect(appeal.getByTestId('appeal-terms').getByLabel(/^Licence conditions/)).toHaveAccessibleDescription(PUBLIC_RECORD);
 	await expect(appeal.getByTestId('appeal-terms').getByRole('list', { name: 'Granted changes' }).getByRole('listitem')).toContainText('180\u202f000');
 	await expectNoViolations(page);
 	await appeal.getByLabel('Decision set aside').check();

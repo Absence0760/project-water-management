@@ -2983,8 +2983,12 @@ Read-only links to the current publication for people outside the project
     (position, kind, forum, date, reference, note, a variation's terms;
     never `recorded_by` or `recorded_at`, the newest 100) and
     `app_scenario_licence`'s standing with its event by position),
-    base_run, base_stamp, base_digest, runs, comments`. `app_share_terms`
-    is callable only by the schema owner. `runs` are the newest 5 runs whose snapshot records the
+    base_run, base_stamp, base_digest, runs, comments`. Since 291 every
+    list of ops in it (the scenario's, the granted terms', a variation's)
+    and each run's classes leave out an `allocation.set` on a unit that
+    isn't the application's own (`app_share_kept`), with `withheldOps`
+    counting them; each hash stays the full list's. `app_share_terms` and
+    `app_share_kept` are callable only by the schema owner. `runs` are the newest 5 runs whose snapshot records the
     scenario's current ops hash and base, each with its projection
     (app_share_run_projection: dates, engine version, EWR days not met, each
     EWR site's compliance with the outlet unnamed; volumes only at 5 or more

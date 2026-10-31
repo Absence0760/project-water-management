@@ -387,6 +387,7 @@ function toSharedTerms(v: unknown, own: ReadonlySet<string>): SharedTerms | null
 	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
 	const t = v as Record<string, unknown>;
 	const all = arr(t.ops);
+	// The database already leaves them out (291 app_share_kept) and counts them; this is the second line.
 	const drop = withheldAllocationOps(all as Parameters<typeof withheldAllocationOps>[0], [...own]);
 	return {
 		ops: withoutPositions(all, drop),
@@ -394,7 +395,7 @@ function toSharedTerms(v: unknown, own: ReadonlySet<string>): SharedTerms | null
 		opNames: ownNames(t.opNames, own),
 		conditions: str(t.conditions) ?? '',
 		asApplied: t.asApplied === true,
-		withheldOps: drop.size
+		withheldOps: (num(t.withheldOps) ?? 0) + drop.size
 	};
 }
 
@@ -497,6 +498,8 @@ export function toShareScenario(r: ShareScenarioRow, verify: (digest: Buffer | n
 	const owned = arr(s.ownedNodeIds).filter((x): x is string => typeof x === 'string');
 	const ownSet = new Set(owned);
 	// Another unit's registered volume never reaches a link (as a viewer kept from each farm's volume, #523 G1).
+	// The database already leaves those ops (and their runs' classes) out and counts them (291 app_share_kept);
+	// this is the second line, should a row ever carry one.
 	const drop = withheldAllocationOps(allOps as Parameters<typeof withheldAllocationOps>[0], owned);
 	const ops = withoutPositions(allOps, drop);
 	// The newest candidate the backend stored (its stamp verifies): a newer row written past the API can't displace it.
@@ -527,7 +530,7 @@ export function toShareScenario(r: ShareScenarioRow, verify: (digest: Buffer | n
 			classified: classes ? classes.map((c) => (c === 'proposal' ? 'proposal' : 'baseline')) : null,
 			// Own nodes only, again: the database already filters.
 			opNames: ownNames(s.opNames, ownSet),
-			withheldOps: drop.size,
+			withheldOps: (num(s.withheldOps) ?? 0) + drop.size,
 			// 291: the licence's terms, what followed the decision and where it stands, field by field.
 			grantedTerms: s.status === 'decided' && s.outcome === 'licence_issued' ? toSharedTerms(s.grantedTerms, ownSet) : null,
 			decisionEvents:

@@ -32,7 +32,7 @@
 	import type { ModelInput, ScenarioOp } from '@water-management/engine';
 	import LicenceTermsEditor from './LicenceTermsEditor.svelte';
 	import LicenceTermsView from './LicenceTermsView.svelte';
-	import { earliestEventDate, eventHeading, licenceLine, licensedTerms, nextEvents } from './licence';
+	import { earliestEventDate, eventHeading, licenceLine, licensedTerms, nextEvents, PUBLIC_RECORD_HINT } from './licence';
 	import {
 		api,
 		DECISION_EVENT_FORUM_LABEL,
@@ -485,7 +485,8 @@
 							</div>
 							<div class="field grow">
 								<label for="appeal-ref">Case reference <span class="muted">(optional)</span></label>
-								<input id="appeal-ref" type="text" maxlength="200" bind:value={appealReference} />
+								<input id="appeal-ref" type="text" maxlength="200" bind:value={appealReference} aria-describedby="appeal-ref-help" />
+								<p id="appeal-ref-help" class="hint">{PUBLIC_RECORD_HINT}</p>
 							</div>
 						</div>
 						{#if appealKind === 'varied'}
@@ -503,7 +504,8 @@
 						{/if}
 						<div class="field">
 							<label for="appeal-note">Note <span class="muted">(optional)</span></label>
-							<textarea id="appeal-note" rows="2" maxlength="4000" bind:value={appealNote}></textarea>
+							<textarea id="appeal-note" rows="2" maxlength="4000" bind:value={appealNote} aria-describedby="appeal-note-help"></textarea>
+							<p id="appeal-note-help" class="hint">{PUBLIC_RECORD_HINT}</p>
 						</div>
 						<div class="actions">
 							<button type="button" class="btn btn-primary" disabled={busy || locked || !appealKind || !appealForum || !appealDate} onclick={recordAppeal}
@@ -641,7 +643,7 @@
 			<div class="field">
 				<label for="decide-note">Note: the authority’s reasons</label>
 				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons} aria-describedby="decide-note-help"></textarea>
-				<p id="decide-note-help" class="hint">Shown on the application’s read-only share links, which the applicant can make too.</p>
+				<p id="decide-note-help" class="hint">{PUBLIC_RECORD_HINT} The applicant can make a share link too.</p>
 			</div>
 			<button type="button" class="btn btn-primary" disabled={busy || locked || !outcome || !decisionDate || !reasonsReceived || unverifiedRuns > 0} onclick={decide}
 				>Record the authority’s decision</button
