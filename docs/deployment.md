@@ -3052,10 +3052,12 @@ run on the job queue, with the rendering done outside the VPC (infra/reports.tf)
   API).
 - **Renderer Lambda** (`backend/src/lambda-renderer.ts`, handler
   `lambda-renderer.handler`): a **container image** built from
-  `backend/renderer.Dockerfile` (Playwright's image `v1.63.0-noble`, the
+  `backend/renderer.Dockerfile` (Playwright's image `v1.64.1-noble`, the
   Chromium e2e uses, pinned by digest, plus the Lambda runtime interface
   client and playwright-core, installed with `npm ci` from the lockfile in
-  `backend/renderer-deps/`; moving Playwright means the tag and digest there,
+  `backend/renderer-deps/`, whose `overrides` lift the runtime client's
+  build-time glob and minimatch past two advisories no upstream range
+  reaches yet (the Dockerfile's header says when to drop them); moving Playwright means the tag and digest there,
   that package.json and backend's, and a refreshed lock, and `pnpm
   check:pins` fails until all of them agree with e2e's `@playwright/test`;
   its build stage's apt packages are pinned to exact versions from one

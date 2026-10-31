@@ -31,6 +31,12 @@
 # a digest left on the old version fails `pnpm check:renderer-image`
 # (infra/scripts/smoke-renderer-image.sh) whenever the new version brings a
 # new Chromium build, which the image then lacks. CI runs both on every PR.
+# renderer-deps/package.json's `overrides` lift glob to 14.0.3 and minimatch
+# to 11.0.3 (GHSA-3g3m-2fjr-6pw4, GHSA-g3hv-75wg-m249): aws-lambda-ric's
+# node-gyp → make-fetch-happen → cacache asks for glob ^10, and even the
+# newest cacache asks only for ^13, both affected. cacache calls just
+# `glob()`, which glob 14 keeps. Drop the overrides once cacache's own range
+# reaches a fixed glob; on a move of aws-lambda-ric, check they still apply.
 
 FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea AS deps
 # aws-lambda-ric compiles a native addon at install (its preinstall and
