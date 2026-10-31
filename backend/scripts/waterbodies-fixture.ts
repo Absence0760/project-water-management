@@ -20,7 +20,6 @@
 //
 //   pnpm gen:waterbodies-fixture
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { buildExamples } from './examples/catchments.js';
 import { sandspruitMap } from './examples/map.js';
 import type { Position } from '../src/geo/geojson.js';
