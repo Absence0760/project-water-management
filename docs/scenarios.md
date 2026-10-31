@@ -1168,6 +1168,36 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   `cumulative.test.ts` checks the arithmetic on real runs, an empty scenario
   changing nothing, existing users excluding an added farm, and the
   Reserve rows.
+- **Yield and reliability per dam** (`scenario/cumulativeYield.ts`,
+  WP-3.6 inside WP-3.11; followups § Cumulative impact). For each **dam the
+  applications touch**, two more rows: `dam_firm_yield` (m³/year, the firm
+  yield with the yield job's defaults: a constant draft, assurance 1,
+  tolerance 0.1 %; `network/yield.ts` `firmYield`) and `dam_reliability`
+  (the dam's unit's annual assurance of supply, water years met ÷ water
+  years, §2.11a; `null` on a record without a whole water year), across
+  the same columns with the same change and interaction arithmetic.
+  *Touched* (`touchedDams`, with combine.ts `scenarioNodeIds`): a node an
+  op names as scenarioConflicts reads it (writes, adds, removes, plants on,
+  scales the demand of, adds or moves a unit below, a transfer's ends),
+  kept when it is a unit with land and a dam above 0 m³ in the baseline or
+  the combination; sorted by name. A dam only some runs have (one an
+  application adds) is `null` in the others, so its changes are not
+  assessed. **Cost cap:** at most `CUMULATIVE_YIELD_SEARCHES_MAX` (20)
+  firm-yield searches an assessment, so `floor(20 ÷ (applications + 2))`
+  dams (5 with two applications, 2 with eight); the rest are named in the
+  report's `warnings` (run them from the Yield panel). Measured on
+  `yield.perf.test.ts`'s 30-year, 16-node catchment (M3 Pro): a search
+  about 3.9 s, a run 1.7 s, so the worst case (8 applications, 2 dams:
+  10 runs and 20 searches) is about 95 s inside the job's 300 s Lambda and
+  360 s lease; on the DB tests' 120-day fixture the whole assessment with
+  two dams takes under 0.1 s. `report.dams = { nodeIds, onVolumes }` names
+  the dams and says whether a run capped use at, or scaled demand to, the
+  registered volumes (a viewer kept from them reads only each direction:
+  [evidence-pack.md § The other applications together](./evidence-pack.md#the-other-applications-together)).
+  Pure, `runModel` unchanged, so `ENGINE_VERSION` is too.
+  `cumulativeYield.test.ts`: which dams are touched (an untouched dam and a
+  touched unit without a dam are not), the cap, each yield equal to
+  `firmYield` on the same input, a dam only one run has.
 
 ### Backend
 

@@ -79,7 +79,10 @@ under each climate model's monthly change factors (report format
 [§ Future yield](#future-yield)); and § 7 counting Sentinel-2 beside WOfS,
 each source and the dates either saw together (report format
 `evidence-24`, issue #624 step 7, 2026-10-29; [§ Observed wet
-days](#observed-wet-days)). What is left is
+days](#observed-wet-days)); and § 4's dams the applications touch, each
+dam's firm yield and assurance of supply together (report format
+`evidence-25`, 2026-10-30; [§ The other applications
+together](#the-other-applications-together)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -342,6 +345,29 @@ hashes to its recorded hash, since nothing rebuilds it (`packs.db.test.ts`
 pins it). The reproduction bundle doesn't carry the assessment's runs yet,
 so `reproduce:pack` re-runs the baseline and the application but not the
 combined row ([followups.md § Cumulative impact](./followups.md#cumulative-impact-wp-311)).
+
+**Yield and reliability per dam** (report format `evidence-25`, 2026-10-30).
+Under the combined table, *All of them together* lists each dam the
+applications touch (`cumulative.combined.dams`, engine `combinedDams`,
+`evidence-combined-dams`): its firm yield (m³/year) on the baseline, the
+change with every application together and the interaction, and its unit's
+annual assurance of supply on the baseline and the change, read from the same
+assessment's dam rows ([scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311): at most
+`floor(20 ÷ (applications + 2))` dams; the rest are in the assessment's
+warnings, which § 4 prints). Each dam also carries the **direction** of
+each measure together against the baseline (`verdict`: `lower`,
+`unchanged` within the yield search's 0.1 % tolerance, or `higher`).
+**Privacy (D3, #523 I):** a firm yield on a run that caps use at, or
+scales demand to, the registered volumes rests on them, as the Yield
+panel's points do. So a reader kept from the volumes reads a dam whose
+assessment had such a run (`onVolumes`) as its direction only, figures
+`null` and `withheld: true` (`combinedDamVerdicts`: in
+`redactReportAllocations`, the live report and an issued pack alike), and
+on a report on such a run every dam so (`verdictsReport`); a dam whose
+runs never touched the volumes is read in full. An assessment made before
+the dam rows gives an empty list, and a pack drafted before `evidence-25`
+keeps its document, without them.
 
 ## The locality map
 

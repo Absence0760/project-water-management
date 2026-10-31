@@ -12085,7 +12085,9 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   (the outlet first) and for the catchment (days the EWR is not met, mean
   EWR shortfall, Reserve months met and deficit at each rule-table site,
   mean flow at the outlet, supplied to existing users and their share of
-  demand met), columns = **Baseline**, each application **alone**, **All
+  demand met; then, for each dam the applications touch, **Firm yield of the
+  dam** and **Assurance of supply at the dam**, with a short note on both,
+  `assess-dams-note`), columns = **Baseline**, each application **alone**, **All
   together** (each with its change from the baseline under it, coloured
   worse or better) and **Interaction** (together less the sum of the
   separate changes; its plain-words reading is the cell's title and is read

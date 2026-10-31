@@ -5980,12 +5980,34 @@ Left:
       combination with `combineScenarios` and compares the outlet rows.
       Trigger: the first issued pack whose combined row is assessed, or an
       assessor asking to reproduce it.
-- [ ] **Yield and reliability per dam, together.** The report covers the EWR
-      sites, the Reserve, the outlet and existing users' supply; a firm
-      yield of each dam on the combined input (WP-3.6) is not in it. Durable
-      fix: the job runs `yield` for the dams the applications touch on the
-      baseline, alone and together, and adds rows. Trigger: an assessor
-      asks for yield in a cumulative assessment.
+- [x] **Yield and reliability per dam, together.** Done (report format
+      `evidence-25`, 2026-10-30): the `assessment` job works out, for each
+      dam the applications touch (engine `scenario/cumulativeYield.ts`
+      `touchedDams`), its firm yield (the yield job's defaults) and its
+      unit's annual assurance of supply on the baseline, each alone and all
+      together, as two more rows per dam (`dam_firm_yield`,
+      `dam_reliability`) and `report.dams`; the Assess together matrix and
+      CSV show them, and the evidence report's § 4 lists each dam under the
+      combined table, a reader kept from the registered volumes reading only
+      each direction when a run rested on them (`combinedDamVerdicts`). In
+      the same job, not their own jobs: capped at 20 firm-yield searches an
+      assessment (`floor(20 ÷ (applications + 2))` dams), about 95 s in the
+      worst case on a 30-year, 16-node catchment
+      ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
+      Tests: `cumulativeYield.test.ts`, `evidence/report-combined.db.test.ts`
+      (touched dams get rows, the untouched one none, the yields equal the
+      Yield job's, the verdicts-only reader with its positive control),
+      `verdictsOnly.test.ts`, `viewerUnits.test.ts`, `cumulative.test.ts`,
+      e2e `assess-together.spec.ts` and `evidence-combined.spec.ts`.
+- [ ] **More dams than one assessment's yield budget.** An assessment works
+      out a firm yield for at most `floor(20 ÷ (applications + 2))` of the
+      dams the applications touch (the job's 300 s Lambda); the rest are
+      named in its warnings, with no rows. Durable fix: each dam × run
+      search becomes its own `yield`-style job the assessment fans out to and
+      gathers (the assessment completing when they have), so the count is
+      bounded by the per-user job caps instead of one job's time. Trigger:
+      an assessment that names a dam in that warning which the assessor
+      needs in the report.
 - [ ] **A full-allocation baseline column** (WP-3.10): the baseline run as it
       is today; making it *existing authorised use* means assessing on a
       full-allocation run. Durable fix: the assessment takes an optional
