@@ -6448,14 +6448,55 @@ assume, the questions for counsel); these are the actions, with triggers.
       was superseded), not in the root layout's removed `stylesheetsReady`
       wait, which only ever ran after `load_route`. Not reproduced since:
       that test 30/30 at 8 workers and the whole help.spec.ts 150/150 at 12.
-      Suspects: since Vite 8.3.4 every loader call waits for its CSS, so a
-      stylesheet whose `load`/`error` never fires would now hold a
-      navigation for good (before, only the unawaited warm-up waited); or a
-      hover preload's fork racing the click. **Durable fix:** find which;
-      if it is the stylesheet wait, file it on vitejs/vite (a cap or a
-      `sheet` check in `preloadOnce`). **Trigger:** a second sighting of an
-      e2e click-navigation that never commits (keep its trace), in CI or
-      locally.
+      **Investigated 2026-10-30 (branch `fix/o30b-help-nav-stall`): no
+      cause found, not reproduced; still open.** What the trace shows:
+      the fetches (`nodes/21`, `Xn3yN3Y.css`) start 3.5 ms after the click's
+      `performing click action`, so they come from SvelteKit's `mousedown`
+      "tap" preload (`setup_preload`), and the CSS finished (200, 0.3 ms
+      receive); the previous action was the "On this page" hash click.
+      SvelteKit pushes the URL only after `load_route` resolves
+      (`navigate`, `history.pushState`), so the stall was in `load_route`
+      (the tap preload's promise, which the click reuses via `load_cache`),
+      before the click handler reached `navigate`, or the click was never
+      delivered to the link. Ruled out by reading and by test:
+      - Vite 8.3.4's `preloadOnce`/`preload` (node_modules/vite/dist/node/
+        chunks/node.js): the `load`/`error` listeners are attached in the
+        same task as `appendChild`, so a load cannot fire before them; a
+        stylesheet already in the DOM returns `undefined` (no wait); JS
+        deps never wait; `seen[href]` is cleared on settle either way. No
+        path leaves the promise pending unless the browser never fires
+        `load`/`error`.
+      - A stylesheet that never answers does hold a navigation for good
+        (verified with `page.route('**/*.css', () => {})`: URL unchanged,
+        no error, one CSS request: the same signature), but the failure's
+        CSS answered, so that is a hazard (Vite has no cap), not this cause.
+      - Timing races, swept deterministically with `page.route` delays and
+        manual `mouse.down/up`: stylesheet, chunk and both delayed 0 to
+        200 ms (20 steps), with and without a 25 ms hover first (so the
+        hover and tap preloads both run), and after the real hash click
+        (waited for, and not): 200 of 200 navigated.
+      - Load: the exact test flow instrumented (event log of pointer and
+        click events, `pushState`, each stylesheet's `load`), CDP CPU
+        throttle 4x and 20x, 70 `yes` hogs (load average 88), 10 workers:
+        100 of 100 navigated, every run `css-load` then `pushState`.
+      - SvelteKit supersession: `navigation_token` changes only in
+        `navigate`, `popstate` and the shallow `pushState`; nothing on a
+        help page does any of them mid-click. The leave guard has nothing
+        unsaved there; the preload's error paths reject and are retried by
+        the click's own `load_route`.
+      Not ruled out: the click not reaching the link (a layout shift
+      between `mousedown` and `mouseup` makes the click land on a common
+      ancestor, which still leaves the tap preload's fetches and no error;
+      the hash click's `holdAnchor` is released only on `pointerdown`), or a
+      browser that never fired `load` for the link. Neither shows in the
+      trace (it records no page events). **Durable fix:** unchanged, wait
+      for a second sighting. **Trigger:** a second sighting of an e2e
+      click-navigation that never commits; capture it with the event log
+      above (pointer and click targets with `scrollY`, `pushState`, each
+      `<link>`'s load/error) and the trace: that tells a missed click from a
+      pending stylesheet or `load_route`. If it is the stylesheet, file the
+      missing cap on vitejs/vite (a timeout or a `link.sheet` check in
+      `preloadOnce`) and guard on our side with a real signal.
 - [x] **Update Vite to 8.3.4 or later (issue #90, 2026-10-11).** Vite 8.3.4
       (#23662, fixing vitejs/vite#23652) makes every caller of the preload
       helper wait for an in-flight stylesheet, which fixes the
