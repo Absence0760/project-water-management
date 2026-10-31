@@ -147,7 +147,9 @@ const SWEEP: Record<string, () => string[]> = {
 	'/projects/:id/runs/:runId/export/summary.csv': () => [`/projects/${projectId}/runs/${runId}/export/summary.csv`],
 	'/projects/:id/series/:seriesId/export.csv': () => [`/projects/${projectId}/series/${seriesId}/export.csv`],
 	'/projects/:id/allocations/export.csv': () => [`/projects/${projectId}/allocations/export.csv`],
-	'/projects/:id/farm/:nodeId/export.csv': () => [farm, plain].map((n) => `/projects/${projectId}/farm/${n.id}/export.csv`)
+	'/projects/:id/farm/:nodeId/export.csv': () => [farm, plain].map((n) => `/projects/${projectId}/farm/${n.id}/export.csv`),
+	// The publication above is its one decision, by the owner (EVIL.author).
+	'/projects/:id/restriction-log/export.csv': () => [`/projects/${projectId}/restriction-log/export.csv`]
 };
 
 async function download(path: string): Promise<string> {

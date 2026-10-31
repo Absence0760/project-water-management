@@ -375,6 +375,16 @@ const WRITE_ROUTES: Entry[] = [
 			return r;
 		}
 	},
+	// The mitigation alternatives (298): another scenario's run on the same base run, cited with a label.
+	{
+		route: `PUT ${P}/scenarios/:sid/alternatives`,
+		records: ['scenario.changed'],
+		call: async (c) => {
+			const other = (await c.owner.call('POST', `${at(c)}/scenarios`, { name: 'Guard alternative', baseRunId: c.runId, ops: [] })).body.scenario.id;
+			const runId = (await c.owner.call('POST', `${at(c)}/scenarios/${other}/runs`, {})).body.run.id;
+			return c.owner.call('PUT', `${at(c)}/scenarios/${c.scenarioId}/alternatives`, { alternatives: [{ runId, label: 'Guard smaller dam' }] });
+		}
+	},
 	{
 		route: `POST ${P}/runs/:runId/signoffs`,
 		records: ['signoff.created'],

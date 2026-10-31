@@ -25,7 +25,7 @@ import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { assessorQuestionsOf } from '../scenarios/questions.js';
 import { backgroundVerdicts, listBackgroundRuns } from './background.js';
-import { ASSESSMENT_JOBS_PER_USER, CreateAssessmentBody } from './schema.js';
+import { ASSESSMENT_JOBS_PER_USER, BackgroundsQuery, CreateAssessmentBody } from './schema.js';
 import { createAssessment, getAssessment, listAssessments, pendingAssessmentJobs } from './store.js';
 
 export const assessmentRoutes = new Hono<AuthEnv>()
@@ -52,8 +52,7 @@ export const assessmentRoutes = new Hono<AuthEnv>()
 	)
 	// Before /:aid, which would take "backgrounds" for an id.
 	.get('/:id/assessments/backgrounds', async (c) => {
-		const baseRunId = c.req.query('baseRunId') ?? '';
-		if (!UUID.test(baseRunId)) throw new ApiError(400, 'baseRunId must be a run id');
+		const { baseRunId } = BackgroundsQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'editor');
 			return c.json({ runs: await listBackgroundRuns(db, c.req.param('id'), baseRunId) });

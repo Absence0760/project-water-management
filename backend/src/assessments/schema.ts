@@ -2,6 +2,7 @@
 // § Cumulative impact, docs/api.md § Assessments): the request body and the
 // job's payload.
 import { z } from 'zod';
+import { UUID } from '../projects/access.js';
 
 /** Fewest scenarios an assessment takes: one alone is the scenario's own run. */
 export const ASSESSMENT_SCENARIOS_MIN = 2;
@@ -42,3 +43,6 @@ export type CreateAssessmentBody = z.infer<typeof CreateAssessmentBody>;
 
 /** The `assessment` job's payload: which assessment to compute (its members are in the table). */
 export const AssessmentPayload = z.object({ assessmentId: z.string().uuid() }).strict();
+
+/** GET …/assessments/backgrounds: the base run whose runs at full allocation can be the background. */
+export const BackgroundsQuery = z.object({ baseRunId: z.string().regex(UUID, 'baseRunId must be a run id') });
