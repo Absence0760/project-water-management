@@ -257,6 +257,40 @@ export const GridConfig = z
 /** The weighted cells a grid feed reads: its own list, or its box's cells. */
 export const gridCells = (config: GridConfig): WeightedCell[] => (config.bbox ? bboxCells(config.bbox) : config.cells!);
 
+/**
+ * The sources whose series is a record a feed builds up day by day over its
+ * cells, so new cells must never be spliced onto it (296_feed_area_replace):
+ * CHIRPS and the reference ET feed. A forecast replaces itself each issue,
+ * and DWS reads a station, not cells.
+ */
+export const AREA_SOURCES: readonly FeedSource[] = ['chirps', 'agera5_et0'];
+
+/** A grid config's area as the mean sees it: each 0.05° grid cell read, with its share of the weight, in grid order. */
+function areaKey(c: GridConfig): string {
+	const by = new Map<string, number>();
+	let total = 0;
+	for (const w of gridCells(c)) {
+		const key = `${Math.floor(w.lat / CHIRPS_CELL_DEG + EDGE_EPS)},${Math.floor(w.lon / CHIRPS_CELL_DEG + EDGE_EPS)}`;
+		const weight = w.weight ?? 1;
+		by.set(key, (by.get(key) ?? 0) + weight);
+		total += weight;
+	}
+	const cells = [...by].map(([k, w]) => `${k}:${(w / total).toFixed(9)}`).sort();
+	return `${c.skipNoData ? 'skip' : 'all'}|${cells.join(';')}`;
+}
+
+/**
+ * Whether two grid configs average the same area: the same grid cells with
+ * the same shares of the weight (a cell listed twice, or weights scaled
+ * alike, is the same mean), and the same sea-cell rule. The boundary or unit
+ * mark, the product and the dates don't change the area.
+ */
+export const sameArea = (a: GridConfig, b: GridConfig): boolean => areaKey(a) === areaKey(b);
+
+/** data_feed.replace_series_from for an area replacement (296): `area:` and what the feed writes (`area:CHIRPS sat/3.0`; `area:` with no version). */
+export const AREA_REPLACE_PREFIX = 'area:';
+export const isAreaReplace = (replaceFrom: string | null | undefined): boolean => !!replaceFrom && replaceFrom.startsWith(AREA_REPLACE_PREFIX);
+
 /** DWS: a station code, e.g. X0H000 (letter, digit, letter, three digits; synthetic here). */
 export const DWS_STATION = /^[A-Z]\d[A-Z]\d{3}$/;
 /**

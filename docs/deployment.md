@@ -1596,7 +1596,8 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
     today (UTC) and the product's manifest `finalThrough`, with
     `cloudwatch:PutMetricData`. The alarm fires when the lag passes
     `ingest_lag_alarm_days` (75: a healthy copy runs up to ~56 days behind
-    just before CHC's monthly release) on two days running, **and when no
+    just before CHC's monthly release; a whole number from 60 to 3650, and
+    the API gets the same number, below) on two days running, **and when no
     datapoint arrives for two days** (`treat_missing_data = "breaching"`): a
     job that stopped running, or fails before it measures, alarms too.
   - `mirror-backfill-failed` (essential tier): an execution of the
@@ -1682,9 +1683,12 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
   runs from `mirror_copy` (the worker's tick records each manifest there
   when it changes) and marks a CHIRPS feed
   **Copy behind** when its part of the copy is late: a final product more
-  than 75 days old (the same threshold as `ingest_lag_alarm_days`'s
-  default; the app's is `COPY_FINAL_LAG_DAYS` in `feeds/health.ts`, so
-  change both together) or the preliminary days more than 7. The feed
+  than `ingest_lag_alarm_days` days old (Terraform passes the alarm's
+  threshold to the API as `COPY_FINAL_LAG_DAYS`, `infra/lambda.tf`, so a
+  prod tfvars that tunes the alarm moves the panel with it; unset, as
+  locally, it is 75, `feeds/health.ts`; the API refuses to start on a value
+  that isn't a whole number of days from 60 to 3650) or the preliminary
+  days more than 7. The feed
   itself counts no failure and needs nothing; the operator's signal is the
   alarm. A manifest the tick can't read or record logs
   `mirror_revision_failed` with the error's class and leaves the last

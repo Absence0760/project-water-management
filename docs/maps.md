@@ -1060,11 +1060,12 @@ boundary itself rather than over a box around it.
   which only this route writes; the History says "Set up the CHIRPS feed …
   from the catchment boundary “…” (N cells)".
 - **No splicing.** A feed's existing days were averaged over its old cells,
-  so new cells never go to a feed whose series already holds a record (409),
-  nor while a fetch for that feed is still out (409 `feed_fetching`): its
-  answer was asked for with the old cells, so the save waits for it.
-  The proposal then attaches a new feed into a separate series to compare
-  beside the old one. Switch the old feed off once satisfied.
+  so new cells never merge onto them: Apply gives them only to a feed whose
+  series holds no days yet (409 `series_area` otherwise), never while a fetch
+  for that feed is still out (409 `feed_fetching`: its answer was asked for
+  with the old cells, so the save waits for it). The proposal attaches a new
+  feed into a separate series to compare beside the old one, or **replaces**
+  the record (below), which re-reads it whole over the boundary's cells.
 - **Beside the record runs read** (issue #561). A run reads the first CHIRPS
   series by name ([data-model.md § Which series a run
   reads](./data-model.md#which-series-a-run-reads)), so a new series that
@@ -1086,9 +1087,16 @@ boundary itself rather than over a box around it.
     record as a confirmed replacement, backfills the whole record from its
     first day into a stage (`feed_stage`), and swaps it in once complete, as
     [architecture.md § Data feeds](./architecture.md#data-feeds) describes;
-    runs keep reading the old values until then. Not offered while another
-    feed writes the record, or when it already holds the product and version
-    the feed would write (the ingest would add to it rather than replace it);
+    runs keep reading the old values until then. When a catchment CHIRPS feed
+    already writes the record (the usual default series), that feed takes
+    the boundary's cells (no second feed) and re-reads its own days over them
+    from its first one (`replace.area`, 296_feed_area_replace), keeping the
+    days a person entered; with another product, or while the record is of
+    another version, it replaces the series whole instead. So the boundary's
+    rain takes over the default series without comparing two. Not offered
+    while a unit's feed or another source writes the record, or when no feed
+    writes it and it already holds the product and version the feed would
+    write (a new feed would only fill its empty days around a person's);
   - a run whose CHIRPS series spans less of it than another CHIRPS series
     warns, naming both ([model.md § Which CHIRPS series the run
     reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
@@ -1158,11 +1166,17 @@ comes from its own rain (Per unit, the only method from engine 1.109.0)
   eight weeks old ([model.md §2.4h *Why `rnl`*](./model.md#reference-gauge-engine--1800-issue-500)).
   A catchment feed still defaults to `sat`. One History entry names
   every unit set up.
-- **No splicing.** As for the boundary: a unit's feed takes new cells (its
-  parcel was redrawn) or another product only while its series holds no days;
-  after that the unit is refused, saying why, and its feed is left alone. A
-  parcel redrawn to the same cells changes nothing the feed averages, so it
-  needs nothing.
+- **No splicing.** As for the boundary: a unit's feed takes another product
+  only while its series holds no days; after that the unit is refused, saying
+  why, and its feed is left alone. New cells (its parcel was redrawn) go to
+  an empty feed as an `update`, and to a feed that has fetched as a
+  `replace` (296_feed_area_replace): the feed takes the new cells and re-reads
+  its whole record over them into its stage, swapped in once complete, so a
+  run reads the old record whole until then and never one spliced from two
+  areas ([architecture.md § Data feeds](./architecture.md#data-feeds)). A
+  start date after the feed's first own day is refused (409
+  `series_backfill`). A parcel redrawn to the same cells changes nothing the
+  feed averages, so it needs nothing.
 - **Limits.** A unit reads at most 100 cells in 25 rows (one feed's limit), and
   a project has at most 20 feeds, catchment feeds included: a model with more
   units than that needs some units' rain set by hand.

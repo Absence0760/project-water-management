@@ -14,7 +14,9 @@ import {
 	feedSourceText,
 	feedStaleAfterDays,
 	gridCells,
+	isAreaReplace,
 	isForecastSource,
+	sameArea,
 	SOURCES
 } from './config.js';
 
@@ -258,5 +260,31 @@ describe('GridConfig with a bounding box', () => {
 			path: ['config', 'bbox'],
 			message: expect.stringMatching(/at most 100 of the 0\.05° grid cells in at most 25 rows \(about 0\.5° × 0\.5°.*this one covers 400 cells in 20 rows/)
 		});
+	});
+});
+
+describe('sameArea and the area confirmation (296_feed_area_replace)', () => {
+	const box = { south: -20.2, west: 25.1, north: -20.1, east: 25.2 };
+	it('compares the cells and weights, or the box and its sea rule; never the marks, product or dates', () => {
+		const a = { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] };
+		expect(sameArea(a, { ...a, product: 'rnl', startDate: '2001-01-01', staleAfterDays: 3 })).toBe(true);
+		// The mean is the same over one cell whatever its weight, and over a cell listed twice.
+		expect(sameArea(a, { cells: [{ lat: -20.12, lon: 25.17, weight: 2 }] })).toBe(true);
+		expect(sameArea(a, { cells: [a.cells[0]!, a.cells[0]!] })).toBe(true);
+		// Two cells: their shares of the weight matter.
+		const two = { cells: [a.cells[0]!, { lat: -20.12, lon: 25.22, weight: 1 }] };
+		expect(sameArea(two, { cells: [a.cells[0]!, { lat: -20.12, lon: 25.22, weight: 3 }] })).toBe(false);
+		expect(sameArea(two, { cells: [{ ...a.cells[0]!, weight: 2 }, { lat: -20.12, lon: 25.22, weight: 2 }] })).toBe(true);
+		expect(sameArea(a, { cells: [{ lat: -20.12, lon: 25.22, weight: 1 }] })).toBe(false);
+		expect(sameArea({ bbox: box }, { bbox: box, skipNoData: false })).toBe(true);
+		expect(sameArea({ bbox: box }, { bbox: box, skipNoData: true })).toBe(false);
+		expect(sameArea({ bbox: box }, a)).toBe(false);
+	});
+	it('tells an area confirmation from a version one', () => {
+		expect(isAreaReplace('area:CHIRPS sat/3.0')).toBe(true);
+		expect(isAreaReplace('area:')).toBe(true);
+		expect(isAreaReplace('CHIRPS/2.0')).toBe(false);
+		expect(isAreaReplace('')).toBe(false);
+		expect(isAreaReplace(null)).toBe(false);
 	});
 });

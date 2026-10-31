@@ -69,7 +69,17 @@ export const sortUnitRows = (rows: readonly UnitRainRow[]): UnitRainRow[] =>
 export function unitRainAction(p: Pick<UnitRainProposal, 'units'>): { label: string; words: string } | null {
 	const make = p.units.filter((u) => u.action === 'create').length;
 	const update = p.units.filter((u) => u.action === 'update').length;
-	if (!make && !update) return null;
+	const replace = p.units.filter((u) => u.action === 'replace').length;
+	if (!make && !update && !replace) return null;
+	if (replace) {
+		// A redrawn parcel under a feed that has fetched: its record is read again over the new cells, never spliced (296).
+		const others = make + update;
+		const reread = `${replace === 1 ? 'The feed of a unit whose parcel changed reads its whole record' : `${fmtNum(replace)} units’ feeds whose parcels changed read their whole records`} again over the new cells, and runs use the old ${replace === 1 ? 'record' : 'records'} until ${replace === 1 ? 'it is' : 'they are'} complete; days you entered stay as they are.`;
+		return {
+			label: others ? `Set up ${plural(make + update + replace, 'feed')}` : replace === 1 ? 'Re-read the record' : `Re-read ${fmtNum(replace)} records`,
+			words: others ? `Creates or updates ${plural(others, 'other feed')}. ${reread}` : reread
+		};
+	}
 	if (!update) return { label: make === 1 ? 'Create the feed' : `Create ${fmtNum(make)} feeds`, words: `Creates ${plural(make, 'CHIRPS feed')}, one into each unit’s own rain series.` };
 	if (!make)
 		return {
@@ -100,8 +110,13 @@ export function unitRainBody(product: UnitRainProduct, startDate: string, nodeId
 }
 
 /** "Created 3 feeds and updated 1 feed. …" from the POST's answer, with how many units it left out. */
-export function appliedWords(r: Pick<UnitRainApplyResult, 'created' | 'updated' | 'skipped'>): string {
-	const parts = [r.created ? `created ${plural(r.created, 'feed')}` : null, r.updated ? `updated ${plural(r.updated, 'feed')}` : null].filter(Boolean);
+export function appliedWords(r: Pick<UnitRainApplyResult, 'created' | 'updated' | 'replaced' | 'skipped'>): string {
+	const updated = r.updated - (r.replaced ?? 0);
+	const parts = [
+		r.created ? `created ${plural(r.created, 'feed')}` : null,
+		updated ? `updated ${plural(updated, 'feed')}` : null,
+		r.replaced ? `started re-reading ${plural(r.replaced, 'record')} over the new cells` : null
+	].filter(Boolean);
 	const skipped = r.skipped?.length ? ` ${plural(r.skipped.length, 'unit')} left out: see below.` : '';
 	if (!parts.length) return `Nothing to change: every unit’s feed already reads its parcel.${skipped}`;
 	const s = parts.join(' and ');

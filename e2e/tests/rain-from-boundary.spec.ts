@@ -10,7 +10,8 @@
 // removed afterwards, so the shared example stays as seeded. On a project of
 // its own whose runs read a CHIRPS record (issue #561), the proposal names the
 // record, keeps it for runs (the new series sorts after it, read from the
-// record's first day with rnl), and replaces it only when the owner chooses.
+// record's first day with rnl), and replaces it only when the owner chooses,
+// through the catchment feed that writes it when one does (296).
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL, WEB_URL } from '../support/env.ts';
@@ -161,7 +162,7 @@ test('beside a CHIRPS record runs read: the proposal names it and keeps it for r
 	expect(feeds).toEqual([expect.objectContaining({ targetName: `${RECORD} (boundary)`, config: expect.objectContaining({ product: 'rnl', startDate: '1995-01-01' }) })]);
 });
 
-test('a record another feed writes can’t be replaced: the choice is off and says why, and keeping it still applies (issue #561)', async ({ page, owner }) => {
+test('a record another catchment feed writes is replaced through that feed: the choice says so, and Apply gives it the boundary’s cells (issue #561, 296)', async ({ page, owner }) => {
 	void owner;
 	const RECORD = 'Rainfall CHIRPS';
 	const { id } = await createProject(page.request, 'Boundary rain, record fed');
@@ -179,10 +180,17 @@ test('a record another feed writes can’t be replaced: the choice is off and sa
 
 	const proposal = page.getByRole('region', { name: 'Rain from the catchment boundary' });
 	const replace = proposal.getByRole('radio', { name: `Replace “${RECORD}” with the boundary’s rain, once its whole record is read` });
-	await expect(replace).toBeDisabled();
-	await expect(replace).toHaveAccessibleDescription(`Can’t replace it: a feed already writes “${RECORD}”: change or remove that feed to replace its record.`);
+	await expect(replace).toBeEnabled();
 	await expect(proposal.getByRole('radio', { name: new RegExp(`^Keep “${RECORD}” for runs`) })).toBeChecked();
 	await expectNoViolations(page);
+	// The record is of an unrecorded version: the feed that writes it takes the boundary's cells and replaces it whole.
+	await replace.check();
+	await expect(proposal.getByTestId('boundary-rain-apply-words')).toHaveText(
+		`Apply gives the CHIRPS feed that writes “${RECORD}” the boundary’s cells (rnl): it reads the whole record again from 1 Jan 1995 into a stage, and runs keep reading the old values until the new record is complete, then it takes their place whole (the old values stay in the series’ history).`
+	);
 	await proposal.getByTestId('boundary-rain-apply').click();
-	await expect(proposal.getByTestId('boundary-rain-done')).toContainText('the CHIRPS feed now reads');
+	await expect(proposal.getByTestId('boundary-rain-done')).toContainText(`to replace “${RECORD}”`);
+	// No second feed: the one that writes the record now reads the boundary's cells.
+	const { feeds } = (await (await page.request.get(`${API_URL}/projects/${id}/feeds`)).json()) as { feeds: { id: string; targetName: string; config: { boundary?: unknown } }[] };
+	expect(feeds).toEqual([expect.objectContaining({ id: (await fed.json()).feed.id, targetName: RECORD, config: expect.objectContaining({ boundary: expect.anything() }) })]);
 });

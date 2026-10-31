@@ -1081,6 +1081,43 @@ run "rejects_a_lag_alarm_that_fires_on_a_healthy_copy" {
   expect_failures = [var.ingest_lag_alarm_days]
 }
 
+run "the_api_judges_the_copy_by_the_lag_alarms_threshold" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["COPY_FINAL_LAG_DAYS"] == tostring(var.ingest_lag_alarm_days) && var.ingest_lag_alarm_days == 75
+    error_message = "The API marks the copy's finals late at the lag alarm's own threshold (COPY_FINAL_LAG_DAYS = ingest_lag_alarm_days, 75 by default), so the Data feeds panel and the alarm agree."
+  }
+}
+
+run "a_tuned_lag_alarm_moves_the_api_with_it" {
+  command = plan
+
+  variables {
+    ingest_image_tag      = "0.7.0-0123456789ab"
+    ingest_lag_alarm_days = 90
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["COPY_FINAL_LAG_DAYS"] == "90" &&
+      length(aws_cloudwatch_metric_alarm.mirror_lag) > 0 &&
+      alltrue([for a in aws_cloudwatch_metric_alarm.mirror_lag : a.threshold == 90])
+    )
+    error_message = "A prod tfvars that tunes ingest_lag_alarm_days moves the API's COPY_FINAL_LAG_DAYS and the lag alarms together."
+  }
+}
+
+run "rejects_a_lag_alarm_the_api_would_refuse" {
+  command = plan
+
+  variables {
+    ingest_lag_alarm_days = 3651
+  }
+
+  expect_failures = [var.ingest_lag_alarm_days]
+}
+
 run "rejects_more_than_two_ingest_runs" {
   command = plan
 

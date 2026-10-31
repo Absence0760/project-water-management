@@ -199,6 +199,11 @@ resource "aws_lambda_function" "backend" {
       # when the feeds read it. The API reads the copy's days from the
       # mirror_copy rows the worker records; it never reaches the copy itself.
       CHIRPS_SOURCE = var.chirps_source
+      # How many days behind the copy's finals may run before the Data feeds
+      # panel and the portfolio mark it late (backend feeds/health.ts
+      # copyFinalLagDays): the lag alarm's own threshold (ingest.tf), so the
+      # two agree when the operator tunes it. Only the API reads it.
+      COPY_FINAL_LAG_DAYS = tostring(var.ingest_lag_alarm_days)
       # Whether the observed ET pass runs (issue #623, et_observations.tf): the
       # same as the worker's (jobs.tf). The API runs no tick; it reads this
       # only so a unit's ET panel can say the check is off on this site rather

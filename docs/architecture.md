@@ -1121,9 +1121,11 @@ row names a source, where to read it and the series it merges into:
   `checkCellsUsed`, an integer from 1 to the box's cells): an answer with
   another count than the previous fetch's is refused as a failed fetch that
   writes nothing, naming both counts. A fetch checks only its own days, so
-  that is what catches a land cell lost between fetches. Saving the box
-  again (or a new one) is the way out: a config change clears `last_meta`
-  (`data_feed_stamp`), so counting starts afresh. The card shows "3 of 4
+  that is what catches a land cell lost between fetches. Saving a new box
+  is the way out: a config change clears `last_meta` (`data_feed_stamp`),
+  so counting starts afresh; over a record the feed wrote it is another
+  area, so the owner confirms re-reading that record over it (an area
+  replacement, below). The card shows "3 of 4
   cells with data". A day with no data in any cell after another day of the
   fetch had some is reported as a corrupt or changed file, not the sea.
   `sat`'s final and preliminary products are assumed to share the sea mask:
@@ -1509,6 +1511,46 @@ row names a source, where to read it and the series it merges into:
     ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)),
     and a run warns when another series of its CHIRPS kind spans more of it
     than the one it read.
+  - **New cells re-read the record** (296_feed_area_replace, the durable fix
+    for #326 B-rain's "new cells only into an empty series"). A gridded feed's
+    days (`chirps`, `agera5_et0`) are the weighted mean of its cells, so new
+    cells (another box or list, the catchment boundary's, a unit's redrawn
+    parcel; `config.ts sameArea`: the same grid cells with the same shares of
+    the weight and the same sea-cell rule is the same area) never merge onto
+    days it wrote over its old ones. A save giving such a feed new cells while
+    its series holds days it wrote (`feed_days`) answers **409**
+    (`series_area`) unless the owner confirms (`replaceSeries: true`;
+    `routes.ts areaCheck`): `data_feed.replace_series_from` becomes
+    `area:<product/version>` (`area:` for reference ET), and
+    `replace_config_from` keeps the config its record was read over. The feed
+    starts at its first own day (a later start date is a 409
+    `series_backfill`) and backfills the record over the new cells into its
+    stage exactly as above, at the source's own pace and limits (CHIRPS a
+    120-day window a minute, or 5 s when the cell cache holds it, reading CHC
+    or our copy through the polite client, [data-sources.md](./data-sources.md);
+    reference ET a year a fetch from our copy only), while runs read the old
+    record whole. The stage records which product each reference ET day came
+    from (`feed_stage.agera5_days` / `power_days`). When caught up, the swap
+    (`series/replace.ts replaceFeedRecord`, in the ingest's transaction)
+    replaces **only the feed's own days**: a day a person wrote or edited
+    (not in `feed_days`; `hand_days`) keeps its value, as every feed merge
+    keeps it, and an old-area day the new record has no value for is
+    cleared. The feed's days become the stage's span less those, the
+    product days (`feed_agera5_days` / `feed_power_days`, 292) are rebuilt
+    from the stage's, the old values are kept as a `feed_replace` revision,
+    and `series.replaced` is logged with `area: true`. The version stays what
+    it was. Withdrawing (`replaceSeries: false`) discards the stage and puts
+    the old cells back; saving the old cells withdraws it too. So the
+    boundary's feed can take over the default series: when a catchment
+    CHIRPS feed writes the record runs read, the boundary's **Replace** gives
+    that feed the boundary's cells this way ([maps.md § Rain from the
+    boundary](./maps.md#rain-from-the-boundary)), and **Rain for each unit**
+    re-reads a unit's record after its parcel is redrawn. A version
+    replacement, by contrast, still replaces the series whole: its days are
+    all of another version. Before 296 an `agera5_et0` feed was never
+    "caught up" (its window ends yesterday; the check wanted today), so it
+    queued another fetch a minute after every one; it now stops at
+    yesterday, as CHIRPS does.
   - The replacement changes the forcing: the next run's CHIRPS factors are
     fitted on the new values, the fit record flags "forcing changed since
     fit" (its `forcing.chirpsSource` no longer matches, model.md §2.10b), and

@@ -4644,7 +4644,8 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
 | `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69); `last_meta.filesChecked` / `recheckDaysRead` / `revisionXmin` (CHIRPS) the re-check of cached finals, § Re-checking cached finals (210); `last_meta.gapEra5l` / `gapImergLate` (the CHIRPS feed whose cells the runs read, while `settings.gapRain` asks for the product) what that fetch's fill made of it, `ok`, `not_ready` or `failed:<format\|unavailable\|refused>`, merged in after the ingest by `app_record_gap_fill` (254_feed_gap_fill_outcome; only the running feed_fetch job of that feed, queued as the caller; never an error's text) |
-| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
+| `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage. Since 296 (`296_feed_area_replace.sql`) it may also be `area:<product/version>` (`area:` for a source with no version, `agera5_et0`): the owner confirmed re-reading the feed's whole record over its new cells, staged the same way; the swap replaces only the feed's own days (`feed_days`) and keeps a person's, with the product days (292) rebuilt from the stage ([architecture.md § Data feeds](./architecture.md#data-feeds)) |
+| `replace_config_from` | With an area confirmation only (`CHECK`; 296): the config the series' record was read over, which withdrawing the replacement (`replaceSeries: false`) puts back. `data_feed_stamp` clears it with any confirmation that isn't an area one, and `app_feed_replace_done` once the swap is in |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
 - **RLS**: SELECT for viewers; INSERT / UPDATE / DELETE for owners, with the
@@ -4711,8 +4712,12 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     directly).
   - **`feed_stage`** (032): one row per feed with a confirmed replacement
     being backfilled: `start_date` + `values` (≤ 60 000, the new record so
-    far), the `product` / `product_version` it will be labelled, the
-    `replace_from` it was confirmed against, `updated_at` (when it last grew:
+    far), the `product` / `product_version` it will be labelled (both NULL,
+    since 296, for a source with no version: an `agera5_et0` area
+    replacement), the `replace_from` it was confirmed against,
+    `agera5_days` / `power_days` (296: which reference ET product each staged
+    day came from, swapped in as the series' `feed_agera5_days` /
+    `feed_power_days`), `updated_at` (when it last grew:
     a day without growth is `rebuild-stalled`). Cascades with the feed and
     the project. RLS: SELECT viewers; INSERT / UPDATE / DELETE editors, for a
     feed of the same project (the ingest writes it as the feed's acting user;
@@ -5405,6 +5410,11 @@ two more for a reference ET feed's products (292, below):
   its old series when it is re-targeted. A project copy or import writes new
   rows without them.
 - **No backfill**: days written before `031` are nobody's, so feeds keep them.
+- **An area replacement's swap (296_feed_area_replace)** sets `feed_days`
+  to the staged record's span less the days a person wrote or edited (which
+  keep their values), and the product days below to the stage's on those
+  days (`series/replace.ts replaceFeedRecord`); `hand_days` and the API
+  keys' days (`series_key_days`) are kept, unlike a whole replace.
 - **Which product wrote each day (292_feed_et0_product_days)**: an
   `agera5_et0` feed writes AgERA5's value or NASA POWER's
   (`feeds/fromMirrorEt0.ts`; its answer's `dayProducts` names each day's),

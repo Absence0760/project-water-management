@@ -21,9 +21,12 @@
 // modeller's call (Use this area on the Map tab).
 //
 // As with the boundary's feed, a feed never splices two areas or two products
-// into one record: an existing unit feed takes new cells (or another product)
-// only while its series holds nothing yet. A unit whose polygon changed after
-// its feed has fetched is refused, saying so; its feed is left as it is.
+// into one record: an existing unit feed takes another product only while its
+// series holds nothing yet, and new cells either then or by re-reading its
+// whole record over them (`replace`, 296_feed_area_replace): a unit whose
+// polygon changed after its feed has fetched gets the new cells, the feed
+// backfills its record over them into its stage, and the ingest swaps it in
+// once complete, so a run reads the old record whole until then.
 import { compareSeriesNames } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -39,7 +42,7 @@ import { assertRoomForSeries } from '../series/merge.js';
 import { SeriesStartDate } from '../series/limits.js';
 import { boundaryCells, type BoundaryCell } from './boundaryCells.js';
 import { CHIRPS_DAILY_PRODUCTS, CHIRPS_PRODUCT_FIRST_DAY, chirpsProduct, type ChirpsDailyProduct, FeedInput, type GridConfig, type UnitMark } from './config.js';
-import { conflict, MAX_FEEDS } from './routes.js';
+import { areaCheck, conflict, MAX_FEEDS } from './routes.js';
 import { createFeed, listFeeds, updateFeed, type FeedMeta } from './store.js';
 
 /** The series a unit's feed writes: its own CHIRPS (the reference rainfall), sited at the unit. */
@@ -82,7 +85,7 @@ interface UnitSeries {
 }
 
 /** What POST would do for a unit. */
-type UnitAction = 'create' | 'update' | 'none';
+type UnitAction = 'create' | 'update' | 'replace' | 'none';
 
 export interface UnitProposal {
 	nodeId: string;
@@ -92,7 +95,10 @@ export interface UnitProposal {
 	cells: UnitCell[];
 	feedId: string | null;
 	seriesDays: number;
-	/** create: no feed yet; update: its feed takes these cells or this product (its series is empty); none: it already reads them. */
+	/**
+	 * create: no feed yet; update: its feed takes these cells or this product (its series is empty); replace: its feed
+	 * takes these cells and re-reads its whole record over them (its series holds days, 296); none: it already reads them.
+	 */
 	action: UnitAction;
 }
 
@@ -209,14 +215,12 @@ async function plan(db: Db, projectId: string, asked?: ChirpsDailyProduct): Prom
 			// The feed's series holds a record (it has fetched): new cells or another product would splice it.
 			const filled = feed.series?.filled ?? false;
 			if (reads) action = 'none';
-			else if (filled) {
+			else if (filled && chirpsProduct(feed.config) !== product) {
 				refuse(
-					chirpsProduct(feed.config) !== product
-						? `its feed’s series already holds CHIRPS ${chirpsProduct(feed.config)} days, and a feed never splices two products into one record: change the product of its feed on its own (Data → Data feeds) to replace the record`
-						: 'its parcel changed after its feed began fetching, and a feed never splices two areas into one record: remove the unit’s feed, and its series, to start it again with the new cells'
+					`its feed’s series already holds CHIRPS ${chirpsProduct(feed.config)} days, and a feed never splices two products into one record: change the product of its feed on its own (Data → Data feeds) to replace the record`
 				);
 				continue;
-			} else action = 'update';
+			} else action = filled ? 'replace' : 'update';
 			// A product change renames the (empty) series to say what it will hold.
 			targetName = action === 'update' && chirpsProduct(feed.config) !== product ? targetName : feed.targetName;
 		} else if (own && own.days > 0) {
@@ -303,7 +307,7 @@ export const feedFromUnitsRoutes = new Hono<AuthEnv>()
 				});
 			}
 			const feeds: { nodeId: string; feedId: string }[] = [];
-			const changed: { nodeId: string; name: string; feedId: string; action: 'created' | 'updated'; cells: number }[] = [];
+			const changed: { nodeId: string; name: string; feedId: string; action: 'created' | 'updated' | 'replaced'; cells: number }[] = [];
 			for (const u of chosen) {
 				const d = p.detail.get(u.nodeId)!;
 				if (u.action === 'none') {
@@ -311,7 +315,7 @@ export const feedFromUnitsRoutes = new Hono<AuthEnv>()
 					continue;
 				}
 				const config = { cells: u.cells.map(({ lat, lon, weight }) => ({ lat, lon, weight })), unit: d.mark, product, startDate };
-				if (u.action === 'update') {
+				if (u.action === 'update' || u.action === 'replace') {
 					const cur = d.feed!;
 					// As the boundary's Apply: hold the feed's row, and refuse while a fetch is out, whose answer was asked for
 					// with the old cells (fetch_job_id, 029; app_take_feed_fetch waits on this lock).
@@ -329,7 +333,7 @@ export const feedFromUnitsRoutes = new Hono<AuthEnv>()
 					}
 					const old = cur.config as GridConfig;
 					if (d.targetName !== cur.targetName) await placeSeries(db, id, u.nodeId, d.targetName, startDate, d.series?.name === cur.targetName ? d.series.id : null);
-					const input = FeedInput.parse({
+					let input = FeedInput.parse({
 						source: 'chirps',
 						config: { ...config, ...(old.staleAfterDays !== undefined ? { staleAfterDays: old.staleAfterDays } : {}) },
 						targetKind: UNIT_TARGET_KIND,
@@ -337,9 +341,13 @@ export const feedFromUnitsRoutes = new Hono<AuthEnv>()
 						schedule: cur.schedule,
 						enabled: cur.enabled
 					});
-					if (!(await updateFeed(db, id, cur.id, input).catch(conflict))) throw new ApiError(404, 'not found');
+					// New cells under a record (296): its whole record re-read over them, staged and swapped in once complete.
+					// The start date must reach its first own day (a later one is a 409 series_backfill, routes.ts areaCheck).
+					const area = u.action === 'replace' ? await areaCheck(db, id, cur, input, true, true) : { input };
+					input = area.input;
+					if (!(await updateFeed(db, id, cur.id, input, area.replaceFrom, area.replaceConfigFrom ?? null).catch(conflict))) throw new ApiError(404, 'not found');
 					feeds.push({ nodeId: u.nodeId, feedId: cur.id });
-					changed.push({ nodeId: u.nodeId, name: u.name, feedId: cur.id, action: 'updated', cells: u.cells.length });
+					changed.push({ nodeId: u.nodeId, name: u.name, feedId: cur.id, action: u.action === 'replace' ? 'replaced' : 'updated', cells: u.cells.length });
 					continue;
 				}
 				await placeSeries(db, id, u.nodeId, d.targetName, startDate, null);
@@ -349,12 +357,14 @@ export const feedFromUnitsRoutes = new Hono<AuthEnv>()
 				changed.push({ nodeId: u.nodeId, name: u.name, feedId: fid, action: 'created', cells: u.cells.length });
 			}
 			const created = changed.filter((x) => x.action === 'created').length;
+			// updated counts the feeds re-reading their record too; replaced, those alone (296).
 			const updated = changed.length - created;
+			const replaced = changed.filter((x) => x.action === 'replaced').length;
 			// One History entry for the whole action, naming each unit it set up.
 			if (changed.length) await recordAudit(db, id, 'feed.configured', { action: 'units', source: 'chirps', targetKind: UNIT_TARGET_KIND, product, startDate, created, updated, units: changed });
 			// The units left out (refused, or with no polygon) say why, so the caller sees what wasn't done.
 			const skipped = body.nodeIds ? [] : [...p.refused, ...p.withoutPolygon.map((u) => ({ ...u, reason: 'the unit has no polygon on the map' }))];
-			return { created, updated, feeds, skipped };
+			return { created, updated, replaced, feeds, skipped };
 		});
 		return c.json(out);
 	});

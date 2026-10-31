@@ -12,24 +12,43 @@ import { enqueueJob } from '../jobs/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { recordAudit } from '../history/record.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { compareSeriesNames, dayText, provenanceLabel, sameProvenance } from '@water-management/engine';
+import { compareSeriesNames, dayText, provenanceKey, provenanceLabel, sameProvenance } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import {
+	AREA_REPLACE_PREFIX,
+	AREA_SOURCES,
 	CHIRPS_DAILY_PRODUCTS,
 	CHIRPS_PRODUCT_FIRST_DAY,
 	chirpsProduct,
 	FEED_SCHEDULES,
 	FEED_SOURCES,
 	FeedInput,
+	type FeedConfig,
 	FeedPatch,
 	feedProvenance,
 	type GridConfig,
+	isAreaReplace,
+	sameArea,
 	SOURCES
 } from './config.js';
 import { feedSourceMode } from './http.js';
 import { rainCopy } from './rainCopy.js';
 import { gapRainProducts, viewWindowQuery } from './gapRainView.js';
-import { createFeed, deleteFeed, getFeed, listFeeds, replaceKey, type RunSeriesPick, runSeries, seriesAccepts, targetSeries, updateFeed } from './store.js';
+import {
+	createFeed,
+	deleteFeed,
+	type FeedMeta,
+	feedFirstOwnDay,
+	getFeed,
+	listFeeds,
+	replaceConfigFrom,
+	replaceKey,
+	type RunSeriesPick,
+	runSeries,
+	seriesAccepts,
+	targetSeries,
+	updateFeed
+} from './store.js';
 
 /**
  * At most this many feeds per project: a server-side bound on one project's
@@ -121,6 +140,78 @@ export async function versionCheck(db: Db, projectId: string, input: FeedInput, 
 		`the series holds ${provenanceLabel(series!.provenance)} rainfall and this feed writes ${provenanceLabel(writes)}: merging them would splice two versions into one record. Confirm replacing the series (its values are kept in the history), or point the feed at another series`,
 		{ code: 'series_version', holds: series!.provenance, writes }
 	);
+}
+
+/**
+ * The area check when a saved feed's cells change (296_feed_area_replace).
+ * A gridded feed's days (CHIRPS, reference ET: AREA_SOURCES) are the mean of
+ * its cells, so new cells never merge onto days the feed wrote over its old
+ * ones: while the feed holds days of its series (feed_days, 031), a new area
+ * is refused (409 `series_area`) unless the owner confirms (`confirm`, the
+ * request's replaceSeries) re-reading the feed's **whole** record over the new
+ * cells. The confirmation is `area:<what the feed writes>`; the feed starts
+ * at its first own day (the product's first day at the earliest; a later start
+ * date is a 409 `series_backfill`), backfills into its stage and is swapped
+ * in once caught up (feeds/ingest.ts), and the config its record was read
+ * over is kept (`replaceConfigFrom`) for a withdrawal to put back.
+ *
+ * `confirm === false` withdraws a pending area replacement: the old cells come
+ * back (unless the save names a config, which must then be the old area). A
+ * save that puts the old cells back withdraws it too, and one that leaves the
+ * pending cells as they are keeps it.
+ *
+ * `replaceFrom`: undefined keeps the feed's confirmation, a string is a new
+ * one, null withdraws it. Only for a feed staying on its source and series:
+ * a re-target or a new source is not an area change.
+ */
+export async function areaCheck(
+	db: Db,
+	projectId: string,
+	cur: Pick<FeedMeta, 'id' | 'source' | 'config' | 'targetKind' | 'targetName' | 'replaceFrom'>,
+	input: FeedInput,
+	confirm: boolean | undefined,
+	configGiven: boolean
+): Promise<{ input: FeedInput; replaceFrom?: string | null; replaceConfigFrom?: FeedConfig | null }> {
+	if (!AREA_SOURCES.includes(input.source) || input.source !== cur.source || input.targetKind !== cur.targetKind || input.targetName !== cur.targetName) {
+		return { input };
+	}
+	const pending = isAreaReplace(cur.replaceFrom);
+	// The cells the series' record was read over: the pending replacement's starting config, else the feed's own.
+	const record = ((pending ? await replaceConfigFrom(db, projectId, cur.id) : null) ?? cur.config) as GridConfig;
+	const refuse = () => {
+		throw new ApiError(
+			409,
+			'the feed’s series holds days averaged over its old cells, and a feed never splices two areas into one record: confirm re-reading its whole record over the new cells (replaceSeries; runs use the series as it is until the new record is complete), or attach a new feed into a separate series',
+			{ code: 'series_area' }
+		);
+	};
+	if (confirm === false && pending) {
+		const back = configGiven ? input : { ...input, config: record };
+		if (!sameArea(back.config as GridConfig, record) && (await feedFirstOwnDay(db, projectId, cur.id, cur.targetKind, cur.targetName)) !== null) refuse();
+		return { input: back, replaceFrom: null };
+	}
+	const config = input.config as GridConfig;
+	if (sameArea(config, record)) return pending ? { input, replaceFrom: null } : { input };
+	// The pending replacement's own cells, saved again: it carries on.
+	if (pending && confirm === undefined && sameArea(config, cur.config as GridConfig)) return { input };
+	const own = await feedFirstOwnDay(db, projectId, cur.id, cur.targetKind, cur.targetName);
+	// Nothing of the feed's own to splice onto (a person's days are kept, as every merge keeps them).
+	if (own === null) return pending ? { input, replaceFrom: null } : { input };
+	if (!confirm) refuse();
+	const first = input.source === 'chirps' ? CHIRPS_PRODUCT_FIRST_DAY[chirpsProduct(config)] : null;
+	const need = first !== null && own < first ? first : own;
+	if (config.startDate !== undefined && config.startDate > need) {
+		throw new ApiError(
+			409,
+			`re-reading the record over new cells backfills all of the feed’s days: its first is ${dayText(own)}, so the feed’s start date must be ${dayText(need)} or earlier (or left empty)`,
+			{ code: 'series_backfill', firstDay: own }
+		);
+	}
+	return {
+		input: { ...input, config: { ...config, startDate: config.startDate ?? need } },
+		replaceFrom: AREA_REPLACE_PREFIX + provenanceKey(feedProvenance(input.source, input.config)),
+		replaceConfigFrom: record
+	};
 }
 
 /** A series name in a message: quoted, or "the series without a name" for the default one (''). */
@@ -272,13 +363,26 @@ export const feedRoutes = new Hono<AuthEnv>()
 				!sameProvenance(feedProvenance(input.source, input.config), cur.writes);
 			// A re-target to a new series that would sort ahead of the record runs read (issue #561).
 			if (input.targetKind !== cur.targetKind || input.targetName !== cur.targetName) await refuseTakeOver(db, id, input);
-			const { input: checked, replaceFrom } = await versionCheck(db, id, input, changed);
+			const version = await versionCheck(db, id, input, changed);
+			let checked = version.input;
+			let replaceFrom = version.replaceFrom;
 			// replaceSeries: false withdraws a pending replacement (the trigger discards its stage); absent keeps it.
-			const replace = patch.replaceSeries === false ? null : replaceFrom;
-			if (!(await updateFeed(db, id, fid, checked, replace).catch(conflict))) throw new ApiError(404, 'not found');
+			let replace: string | null | undefined = patch.replaceSeries === false ? null : replaceFrom;
+			let configFrom: FeedConfig | null = null;
+			// New cells under a record the feed wrote over its old ones (296): refused, or its whole record re-read.
+			if (replaceFrom === undefined) {
+				const area = await areaCheck(db, id, cur, checked, patch.replaceSeries, patch.config !== undefined);
+				checked = area.input;
+				if (area.replaceFrom !== undefined) {
+					replace = area.replaceFrom;
+					replaceFrom = area.replaceFrom ?? undefined;
+					configFrom = area.replaceConfigFrom ?? null;
+				}
+			}
+			if (!(await updateFeed(db, id, fid, checked, replace, configFrom).catch(conflict))) throw new ApiError(404, 'not found');
 			// Logged even when the settings come back unchanged: every save makes the saver the
 			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
-			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
+			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', checked), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
 			return getFeed(db, id, fid, new Date(), await rainCopy(db));
 		});
 		return c.json({ feed });

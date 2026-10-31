@@ -134,7 +134,7 @@
 								{#if r.rain.kind === 'offer' && r.rain.owner}
 									<label class="check">
 										<input type="checkbox" bind:checked={ticks[r.nodeId]!.rain} data-testid="start-units-tick-rain" />
-										<span>{r.rain.action === 'create' ? 'A new feed' : 'Its feed, new cells'}: {r.rain.cellsText}</span>
+										<span>{r.rain.action === 'create' ? 'A new feed' : r.rain.action === 'replace' ? 'Its feed, new cells, its record read again' : 'Its feed, new cells'}: {r.rain.cellsText}</span>
 									</label>
 								{:else if r.rain.kind === 'offer'}
 									<span class="small">{r.rain.cellsText} (an owner sets the feed up)</span>
