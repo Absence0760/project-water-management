@@ -66,6 +66,8 @@ export interface Gathering {
 	members: number[];
 	/** The warning naming the touched dams past the cap, added after the yields' own. */
 	leftWarning: string | null;
+	/** How many yield rows fanOutYields queued: the gather fails the assessment when it finds fewer (a row removed). */
+	expectedYields: number;
 }
 
 /**
@@ -86,22 +88,27 @@ export const stoppedYieldsSql = (ref: string) => `SELECT format('%s: the firm yi
  * keep `gathering` until they are back; then gather, which completes at once
  * when there was nothing to queue. Returns how many were queued.
  */
-export async function fanOutYields(db: Db, projectId: string, assessmentId: string, gathering: Gathering, runs: readonly YieldRun[]): Promise<number> {
-	await db.query('UPDATE assessment SET gathering = $2 WHERE id = $1', [assessmentId, JSON.stringify(gathering)]);
+export async function fanOutYields(
+	db: Db,
+	projectId: string,
+	assessmentId: string,
+	gathering: Omit<Gathering, 'expectedYields'>,
+	runs: readonly YieldRun[]
+): Promise<number> {
+	// A dam only some runs have (one an application adds) is null in the others: nothing to search.
+	const searches = runs.flatMap((r) => [...gathering.dams.entries()].filter(([, dam]) => isCumulativeDam(r.input, dam.nodeId)).map(([position, dam]) => ({ r, position, dam })));
+	const kept: Gathering = { ...gathering, expectedYields: searches.length };
+	await db.query('UPDATE assessment SET gathering = $2 WHERE id = $1', [assessmentId, JSON.stringify(kept)]);
 	let queued = 0;
-	for (const r of runs) {
-		for (const [position, dam] of gathering.dams.entries()) {
-			// A dam only some runs have (one an application adds) is null in the others: nothing to search.
-			if (!isCumulativeDam(r.input, dam.nodeId)) continue;
-			const yieldId = randomUUID();
-			const { job } = await enqueueJob(db, { projectId, kind: 'assessment_yield', payload: { assessmentId, yieldId }, maxAttempts: ASSESSMENT_YIELD_ATTEMPTS });
-			await db.query(
-				`INSERT INTO assessment_yield (id, assessment_id, project_id, job_id, run, member_position, dam_position, node_id, dam_name, run_label)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-				[yieldId, assessmentId, projectId, job.id, r.run, r.memberPosition, position, dam.nodeId, dam.name, r.label]
-			);
-			queued++;
-		}
+	for (const { r, position, dam } of searches) {
+		const yieldId = randomUUID();
+		const { job } = await enqueueJob(db, { projectId, kind: 'assessment_yield', payload: { assessmentId, yieldId }, maxAttempts: ASSESSMENT_YIELD_ATTEMPTS });
+		await db.query(
+			`INSERT INTO assessment_yield (id, assessment_id, project_id, job_id, run, member_position, dam_position, node_id, dam_name, run_label)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			[yieldId, assessmentId, projectId, job.id, r.run, r.memberPosition, position, dam.nodeId, dam.name, r.label]
+		);
+		queued++;
 	}
 	await gatherAssessment(db, projectId, assessmentId);
 	return queued;
@@ -220,6 +227,12 @@ export async function gatherAssessment(db: Db, projectId: string, assessmentId: 
 		 ORDER BY CASE run WHEN 'baseline' THEN 0 WHEN 'single' THEN 1 ELSE 2 END, member_position, dam_position`,
 		[assessmentId]
 	);
+	// Fewer rows than were queued: one was removed (water_app can't since 297 dropped DELETE; this is the second line).
+	// Never complete with that dam's yield silently null.
+	if (rows.length !== g.expectedYields)
+		return fail([
+			`The firm yields are incomplete: ${g.expectedYields - rows.length} of the ${g.expectedYields} queued were removed before they were gathered; assess them together again.`
+		]);
 	if (rows.some((r) => r.status === 'pending')) return;
 	const value = (run: RunKind, position: number | null, dam: number) =>
 		rows.find((r) => r.run === run && r.memberPosition === position && r.damPosition === dam)?.yieldM3Year ?? null;

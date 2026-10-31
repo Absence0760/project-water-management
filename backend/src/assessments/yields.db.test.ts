@@ -11,12 +11,22 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { damFirmYields, ENGINE_VERSION } from '@water-management/engine';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+
+// A search that throws something of its own (a path, a value): switched on by one test, through the real handler.
+const { boom } = vi.hoisted(() => ({ boom: { on: false } }));
+vi.mock('./yields.js', async (orig) => {
+	const m = await orig<typeof import('./yields.js')>();
+	return {
+		...m,
+		computeAssessmentYield: async (...a: Parameters<typeof m.computeAssessmentYield>) => {
+			if (boom.on) throw new Error('out of memory at /var/task/secret-detail.js');
+			return m.computeAssessmentYield(...a);
+		}
+	};
+});
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
-import { JobError } from '../jobs/errors.js';
-import { assessmentYieldHandler } from '../jobs/handlers/assessment-yield.js';
-import { handlers } from '../jobs/handlers/index.js';
 import { runTick } from '../jobs/runner.js';
 import { loadBaseInput } from '../scenarios/execute.js';
 import { ASSESSMENT_JOBS_PER_USER } from './schema.js';
@@ -138,7 +148,39 @@ describe('the assessment fans its dams’ firm yields out to jobs and gathers th
 		// The tick: the first sibling (or the sweep) records it; the rest find it finished and store nothing more.
 		await tick();
 		expect((await asOwner('SELECT status, problems, gathering, report FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });
-		expect(await get(id)).toMatchObject({ status: 'failed', problems: [line] });
+		const served = await get(id);
+		expect(served).toMatchObject({ status: 'failed', problems: [line] });
+		expect(JSON.stringify(served)).not.toContain('secret-detail');
+	});
+
+	it('a yield row removed before the gather fails the assessment instead of completing it without that dam (297)', async () => {
+		const { id } = await assess('A row removed');
+		await tick(1);
+		// Past every grant (water_app has no DELETE since 297): the second line still holds.
+		const [gone] = await yieldJobs(id);
+		await asOwner('DELETE FROM assessment_yield WHERE id = $1', [gone!.id]);
+		await asOwner(`UPDATE job SET status = 'done', finished_at = now() WHERE id = $1`, [gone!.job_id]);
+		await tick();
+		expect(await stored(id)).toEqual({
+			status: 'failed',
+			problems: ['The firm yields are incomplete: 1 of the 24 queued were removed before they were gathered; assess them together again.'],
+			gathering: null,
+			report: null
+		});
+	});
+
+	it('no editor deletes a yield row, its author neither (positive control: deleting the assessment takes its rows by the cascade)', async () => {
+		const { id } = await assess('Rows stay');
+		await tick(1);
+		const rows = await yieldJobs(id);
+		expect(rows.length).toBe(24);
+		// The owner, an editor of the project who didn't ask, and the assessor who did: no DELETE on the table.
+		for (const u of [owner, assessor]) await expect(rowsAs(u, 'DELETE FROM assessment_yield WHERE id = $1', [rows[0]!.id])).rejects.toThrow(/permission denied/);
+		expect((await asOwner('SELECT count(*)::int AS n FROM assessment_yield WHERE assessment_id = $1', [id]))[0]).toEqual({ n: 24 });
+		expect(await rowsAs(assessor, 'DELETE FROM assessment WHERE id = $1 RETURNING id', [id])).toHaveLength(1);
+		expect((await asOwner('SELECT count(*)::int AS n FROM assessment_yield WHERE assessment_id = $1', [id]))[0]).toEqual({ n: 0 });
+		// Its yield jobs find nothing to do.
+		await tick();
 	});
 
 	/** An assessment whose yield jobs are all back but `victim`'s (the combined run's Fonteinkloof), which waits. */
@@ -211,22 +253,19 @@ describe('the assessment fans its dams’ firm yields out to jobs and gathers th
 		await tick();
 		expect((await asOwner(`SELECT count(*)::int AS n FROM assessment_yield WHERE assessment_id = $1 AND status = 'pending'`, [id]))[0]).toEqual({ n: 1 });
 		expect((await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'pending' });
-		// Then it fails past retrying (its search throws), as the real handler's onDead sees it: dead.
+		// Then its search throws an error of its own, past retrying: the real handler stores its fixed words, never the detail.
 		await asOwner(`UPDATE job SET run_after = now() - interval '1 second' WHERE id = $1`, [victim.job_id]);
-		const failing = {
-			...handlers,
-			assessment_yield: {
-				...assessmentYieldHandler,
-				run: async () => {
-					throw new JobError('the search ran out of memory', { retry: false });
-				}
-			}
-		};
-		const r = await runTick({ feeds: false, reports: false, alerts: false, projectIds: [projectId], handlers: failing });
-		expect((await asOwner('SELECT status FROM job WHERE id = $1', [victim.job_id]))[0]).toEqual({ status: 'dead' });
+		boom.on = true;
+		let r;
+		try {
+			r = await tick();
+		} finally {
+			boom.on = false;
+		}
+		expect((await asOwner('SELECT status, last_error FROM job WHERE id = $1', [victim.job_id]))[0]).toEqual({ status: 'dead', last_error: 'the firm yield failed' });
 		// Its onDead recorded it, before the tick's sweep (301) had anything left to do.
 		expect(r.assessmentsFailed).toBe(0);
-		const line = 'All together: the firm yield of "Fonteinkloof" didn\'t finish (the search ran out of memory)';
+		const line = 'All together: the firm yield of "Fonteinkloof" didn\'t finish (the firm yield failed)';
 		// The row itself, not only as the API reads it.
 		expect((await asOwner('SELECT status, problems, gathering, report FROM assessment WHERE id = $1', [id]))[0]).toEqual({ status: 'failed', problems: [line], gathering: null, report: null });
 		expect(await get(id)).toMatchObject({ status: 'failed', problems: [line] });

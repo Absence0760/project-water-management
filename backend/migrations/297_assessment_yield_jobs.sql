@@ -25,7 +25,10 @@
 --    by whoever asked, while pending, and cleared when it completes
 --    (assessment_gathering_guard; never read by the API).
 --  * `assessment_yield`: one firm-yield search of an assessment, with RLS
---    (editors, as assessment), grants, covering indexes, a guard on insert
+--    (editors read; whoever asked writes, through the guards), grants (no
+--    DELETE: a row goes only with its assessment, by the cascade, so no
+--    editor can drop a pending yield from another's gathering), covering
+--    indexes, a guard on insert
 --    (its assessment's project, still pending and the inserter's own; its job
 --    an `assessment_yield` job of the project naming this row) and an
 --    outcome-once guard. No personal data: dam names and numbers.
@@ -186,8 +189,8 @@ CREATE POLICY assessment_yield_insert ON assessment_yield FOR INSERT WITH CHECK 
 CREATE POLICY assessment_yield_update ON assessment_yield FOR UPDATE
 	USING (app_has_role(project_id, 'editor') AND status = 'pending')
 	WITH CHECK (app_has_role(project_id, 'editor'));
-CREATE POLICY assessment_yield_delete ON assessment_yield FOR DELETE USING (app_has_role(project_id, 'editor'));
+-- No DELETE policy or grant: a row goes only with its assessment (ON DELETE CASCADE needs neither).
 
-GRANT SELECT, INSERT, DELETE ON assessment_yield TO water_app;
+GRANT SELECT, INSERT ON assessment_yield TO water_app;
 -- The outcome only: the assessment, run, dam and job are fixed at insert.
 GRANT UPDATE (status, yield_m3_year, warning, finished_at) ON assessment_yield TO water_app;

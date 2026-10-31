@@ -4134,9 +4134,12 @@ cell is `null`).
   project whose payload names this row and assessment; it starts `pending`.
   `assessment_yield_outcome`: `pending` → `done` once, by whoever asked,
   only on the outcome columns (so the purge's `SET NULL` passes).
-- **RLS: editors only**, as the assessment. Grants: `SELECT, INSERT,
-  DELETE`, `UPDATE` of the outcome columns. No farmer reads it; no personal
-  data.
+- **RLS: editors only**, as the assessment. Grants: `SELECT, INSERT`,
+  `UPDATE` of the outcome columns; **no DELETE** (policy or grant): a row
+  goes only with its assessment, by the cascade, so no editor can drop a
+  pending yield of another's gathering. As a second line, the gather fails
+  the assessment when it finds fewer rows than it queued
+  (`gathering.expectedYields`). No farmer reads it; no personal data.
 - `job.kind` accepts `assessment_yield`.
 - **301_assessment_yield_stopped:** `app_fail_stopped_assessments()`
   (`SECURITY DEFINER`, the worker only: `alert_worker_context`, no user or

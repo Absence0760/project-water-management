@@ -1266,7 +1266,11 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   pending; between a death and that sweep the API already reads the
   assessment as `failed` (`stoppedYieldsSql`). A
   yield job on another engine than the runs' (a deploy in between) fails it
-  too, rather than mix two engines in one report. The optional background
+  too, rather than mix two engines in one report, and so does a gather
+  that finds fewer yield rows than were queued (`gathering.expectedYields`;
+  no editor may delete one, the rows go only with the assessment). A yield
+  job's own failure is stored as *the firm yield failed* (the detail is
+  logged, never served). The optional background
   (295) works out no dam yields and is computed by the `assessment` job as
   before. It checks the
   combination again and marks the assessment `refused` if it no longer
