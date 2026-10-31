@@ -5303,7 +5303,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       unit's area (model.md §2.7 K and M; River to dam fills it); on the
       river, 100 %. Unmarked dams propose what they did (`damShares`
       absent). maps.md § Start from the map.
-- [ ] **Show a dam's siting beside its Upstream inflow to dam** (from the
+- [x] **Show a dam's siting beside its Upstream inflow to dam** (from the
       fix above). The map's siting reaches the model only through a Start
       or Divide tick; the Network editor's *Upstream inflow to dam* field
       (`network/fields.ts`), where the share is edited by hand, doesn't
@@ -5315,6 +5315,13 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       it. Trigger: the next change to the Network editor's dam fields or to
       `linked-nodes`, or a client model where a marked dam's typed share
       disagrees with its siting.
+      **Done (2026-10-30, branch feat/o30b-dam-siting-hint):** `GET
+      …/map/linked-nodes` returns `dams` (each linked dam outline's
+      `damPosition`); the one-node form says the Siting under *Upstream
+      inflow to dam* and warns, never blocks, on an off-channel dam at
+      100 % or one on the river at 0 % (`fields.ts` `damSitingHint`; no
+      warning in between, on outlines marked differently or unsaid, or
+      without a dam). ui.md, maps.md § Start from the map, api.md.
 - [x] **A DEM that routes a lower river elsewhere** (new in issue #390's
       gauge run). **Obsolete (issue #472, 2026-10-09):** the fix compared the
       placed area with the mapped reach's, and the mapped network no longer

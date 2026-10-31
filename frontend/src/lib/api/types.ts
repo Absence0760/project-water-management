@@ -3080,6 +3080,16 @@ export interface MapAcceptances {
 /** GET …/map/linked-nodes: the nodes at least one feature is linked to, each once (no geometry). */
 export interface MapLinkedNodes {
 	nodeIds: string[];
+	/** Each dam drawn as its outline and linked to a node, with its siting (194; null = not said), by node then name. */
+	dams: LinkedDam[];
+}
+
+/** A linked dam outline's siting on the map, for the hint beside Upstream inflow to dam (network/fields.ts damSitingHint). */
+export interface LinkedDam {
+	nodeId: string;
+	featureId: string;
+	name: string;
+	damPosition: DamPosition | null;
 }
 
 /**

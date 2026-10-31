@@ -3671,6 +3671,19 @@ itself.
   doesn't use it (engine ≥ 1.68.0, model.md §2.7 row O). Setting Upstream
   inflow to dam below 100 % makes it available again; the stored value is
   kept.
+- **The map's Siting beside Upstream inflow to dam** (one-node form,
+  Routing). When a dam drawn as its outline on the Map is linked to the
+  unit, a line under **Upstream inflow to dam** says what its card's
+  **Siting** is ("On the map, its dam “Weir pool” is marked on the river.";
+  not said, or each outline when there are several), read from `GET
+  …/map/linked-nodes` (`MappedNodes.dams`). The share is edited here by
+  hand, so it can drift from the Siting Start or Divide proposed it from: a
+  warning (`alert-warning`, in the field's description, never a block)
+  says so when the share is plainly the other kind, an off-channel dam at
+  100 % or a dam on the river at 0 %. Kept conservative (`fields.ts`
+  `damSitingHint`): no warning for a share in between (a unit can lump
+  several dams), when the unit's outlines aren't all marked alike, or with
+  no dam (capacity under 1 m³). maps.md § Start from the map.
 - **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
   one-node form, farms, under **River to dam** in Routing: **Set River to dam
   by month** opens twelve m³/s fields (started from the one value, with

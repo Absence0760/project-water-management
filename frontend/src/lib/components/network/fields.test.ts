@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newNetworkNode } from '@water-management/engine';
-import { cardLabel, damHints, fieldScale, fieldUnused, fmtVolume, GROUPS, hasDam, hasDamDevelopment, isVolume, NODE_FIELDS, splitFields, TABLE_FIELDS, unusedLine, unusedReason } from './fields';
+import { cardLabel, damHints, damSitingHint, fieldScale, fieldUnused, fmtVolume, GROUPS, hasDam, hasDamDevelopment, isVolume, NODE_FIELDS, splitFields, TABLE_FIELDS, unusedLine, unusedReason } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -216,5 +216,42 @@ describe('splitFields', () => {
 		const reach = NODE_FIELDS.find((f) => f.key === 'reachLossMaxM3Day')!;
 		expect(unusedReason(reach, vlei)).toBe('noLoss');
 		expect(fieldUnused(reach, vlei)).toBe('Not used: no bed losses (the share is 0 %). Enter a share to cap it.');
+	});
+});
+
+describe('damSitingHint: the map’s Siting beside Upstream inflow to dam', () => {
+	const unit = (pct: number, damCapacityM3 = 50_000) => ({ kind: 'farm' as const, damCapacityM3, pctUpstreamToDam: pct });
+	const off = { name: 'Storage', damPosition: 'off_channel' as const };
+	const on = { name: 'Weir pool', damPosition: 'on_channel' as const };
+	const unsaid = { name: 'Old dam', damPosition: null };
+
+	it('says nothing with no dam outline linked on the map', () => {
+		expect(damSitingHint([], unit(1))).toBeNull();
+	});
+
+	it('names one dam’s Siting, and points at the map when it isn’t said', () => {
+		expect(damSitingHint([off], unit(0))).toEqual({ line: 'On the map, its dam “Storage” is marked off-channel.', warning: null });
+		expect(damSitingHint([on], unit(1))).toEqual({ line: 'On the map, its dam “Weir pool” is marked on the river.', warning: null });
+		expect(damSitingHint([unsaid], unit(1))!.line).toBe('On the map, its dam “Old dam” is not said whether on the river or off it (its Siting on the map).');
+		expect(damSitingHint([{ name: ' ', damPosition: 'off_channel' }], unit(0))!.line).toBe('On the map, its dam (unnamed) is marked off-channel.');
+	});
+
+	it('warns on an off-channel dam typed back to 100 %, and on a dam on the river at 0 %', () => {
+		expect(damSitingHint([off], unit(1))!.warning).toMatch(/^The map marks this dam off-channel, but Upstream inflow to dam is 100 %/);
+		expect(damSitingHint([on], unit(0))!.warning).toMatch(/^The map marks this dam on the river, but Upstream inflow to dam is 0 %/);
+		expect(damSitingHint([off, { ...off, name: 'Second' }], unit(1))!.warning).toMatch(/^The map marks these dams off-channel/);
+	});
+
+	it('stays conservative: no warning in between, on mixed or unsaid outlines, or with no dam', () => {
+		// A share in between can lump several dams.
+		expect(damSitingHint([off], unit(0.4))!.warning).toBeNull();
+		expect(damSitingHint([on], unit(0.999))!.warning).toBeNull();
+		expect(damSitingHint([off], unit(0.001))!.warning).toBeNull();
+		// Outlines not all marked alike: an unsaid one may be the other kind.
+		expect(damSitingHint([off, unsaid], unit(1))!.warning).toBeNull();
+		expect(damSitingHint([off, on], unit(1))).toEqual({ line: 'On the map, its dams: “Storage” off-channel; “Weir pool” on the river.', warning: null });
+		expect(damSitingHint([unsaid], unit(0))!.warning).toBeNull();
+		// No dam in the model (under 1 m³): the share does nothing.
+		expect(damSitingHint([off], unit(1, 0))!.warning).toBeNull();
 	});
 });
