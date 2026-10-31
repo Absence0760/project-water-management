@@ -422,6 +422,39 @@ test('old links to a term (/help#term, the one-page /help/glossary#term) go on t
 	await expect(page.getByRole('article', { name: /^NSE/ })).toBeInViewport();
 });
 
+// A client navigation must not paint a page before its own stylesheet has
+// loaded (docs/upstream/sveltekit-css-before-render.md). SvelteKit calls each
+// node's loader twice; since Vite 8.3.4 the second call waits for the CSS the
+// first one is loading, so a slow stylesheet holds the navigation. With the
+// pre-8.3.4 helper this saw the glossary entry unstyled (scroll-margin-top
+// 0px) on every run.
+test('a client navigation waits for a slow stylesheet before showing the page', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help/glossary');
+	await expect(page.getByRole('heading', { level: 1, name: 'Glossary' })).toBeVisible();
+	// Every stylesheet from now on (the topic page's included) arrives 1.5 s late.
+	await page.route('**/*.css', async (route) => {
+		await new Promise((r) => setTimeout(r, 1_500));
+		await route.continue();
+	});
+	// The entry's scroll-margin-top as it first enters the DOM: 0px means it
+	// rendered before the topic page's CSS.
+	await page.evaluate(() => {
+		const w = window as unknown as { firstEntryMargin?: string };
+		new MutationObserver((_, obs) => {
+			const entry = document.querySelector('main article');
+			if (!entry) return;
+			w.firstEntryMargin = getComputedStyle(entry).scrollMarginTop;
+			obs.disconnect();
+		}).observe(document.body, { childList: true, subtree: true });
+	});
+	await page.getByRole('main').getByRole('heading', { level: 2 }).first().getByRole('link').click();
+	await expect(page.getByRole('main').getByRole('article').first()).toBeVisible();
+	const margin = await page.evaluate(() => (window as unknown as { firstEntryMargin?: string }).firstEntryMargin);
+	expect(margin).toBeDefined();
+	expect(margin).not.toBe('0px');
+});
+
 test('an unknown glossary topic says so and links to every topic', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/help/glossary/no-such-topic');
