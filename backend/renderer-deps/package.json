@@ -9,5 +9,9 @@
 	},
 	"allowScripts": {
 		"aws-lambda-ric@4.0.2": true
+	},
+	"overrides": {
+		"glob": "14.0.3",
+		"minimatch": "11.0.3"
 	}
 }
