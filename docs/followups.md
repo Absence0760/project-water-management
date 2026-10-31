@@ -7482,7 +7482,8 @@ events after a decision, append-only (228_decision_events). Left open:
       `app_share_scenario` adds the granted terms, the events (never who
       recorded them) and the licence's standing, and the share page prints
       them in The decision card; another unit's registered volume is left
-      out of every list of ops on a link, applied ops included.
+      out of every list of ops on a link, applied ops included, by the SQL
+      function itself (`app_share_kept`), the API filtering again.
 - [ ] **The licensed-terms run isn't made for the assessor.** An issued
       licence whose granted terms differ from the ops applied for, or one
       varied on appeal, counts in § 4's table only once someone runs its

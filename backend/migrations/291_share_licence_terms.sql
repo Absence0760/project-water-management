@@ -28,14 +28,40 @@
 --                  repeated: they are grantedTerms or the event's.
 --
 -- A registered volume on another unit (an `allocation.set` op whose unit
--- isn't the application's own) is left out of every list of ops by the API
--- (share/links.ts, withheldAllocationOps), as for a viewer kept from each
--- farm's volume (#523 G1).
+-- isn't the application's own) is left out of every list of ops here, in the
+-- function, as for a viewer kept from each farm's volume (#523 G1): the
+-- application's ops, the granted terms' and each variation's, and each
+-- candidate run's `classified` at the same positions. Each list says how many
+-- it left out (`withheldOps`). The API (share/links.ts, withheldAllocationOps)
+-- filters again as a second line; no caller has to. Each opsSha256 stays the
+-- stored hash of the full list (the run's and the decision's identity), so it
+-- doesn't verify the ops the link shows when any were left out.
 --
 -- Changes (each from its latest definition):
 --   app_share_scenario   from 115_scenario_share_notes.sql (unchanged since):
---                        the three keys above; everything else as it was.
+--                        the three keys above, `withheldOps`, and its ops and
+--                        each run's `classified` without the withheld ones;
+--                        everything else as it was.
+--   app_share_kept       new helper, not callable by water_app.
 --   app_share_terms      new helper, not callable by water_app.
+
+-- `p_list`'s elements at the positions where `p_ops` holds no withheld op
+-- (an `allocation.set` whose unit isn't among `p_owned`), in order: a list of
+-- ops filtered by itself, or a run's per-op classes by the ops. A `p_list`
+-- that isn't an array comes back as it is. Called only from the share
+-- functions here; not callable by water_app.
+CREATE FUNCTION app_share_kept(p_list jsonb, p_ops jsonb, p_owned text[]) RETURNS jsonb
+	LANGUAGE sql IMMUTABLE SET search_path = public
+	AS $$
+	SELECT CASE WHEN jsonb_typeof(p_list) IS DISTINCT FROM 'array' THEN p_list ELSE coalesce((
+		SELECT jsonb_agg(x.v ORDER BY x.o)
+		FROM jsonb_array_elements(p_list) WITH ORDINALITY x(v, o)
+		LEFT JOIN jsonb_array_elements(CASE WHEN jsonb_typeof(p_ops) = 'array' THEN p_ops ELSE '[]'::jsonb END) WITH ORDINALITY op(v, o) ON op.o = x.o
+		WHERE NOT (op.v->>'op' = 'allocation.set' AND (op.v->'allocation'->>'nodeId' = ANY (coalesce(p_owned, '{}'))) IS NOT TRUE)
+			OR op.v IS NULL
+	), '[]'::jsonb) END
+	$$;
+REVOKE ALL ON FUNCTION app_share_kept(jsonb, jsonb, text[]) FROM PUBLIC, water_app;
 
 -- One set of licence terms as a link shows it (module comment). Called only
 -- from app_share_scenario; not callable by water_app.
@@ -43,7 +69,10 @@ CREATE FUNCTION app_share_terms(p_ops jsonb, p_sha text, p_names jsonb, p_condit
 	LANGUAGE sql IMMUTABLE SET search_path = public
 	AS $$
 	SELECT CASE WHEN p_ops IS NULL THEN NULL ELSE jsonb_build_object(
-		'ops', p_ops,
+		-- Another unit's registered volume left out (module comment); the hash is the full list's.
+		'ops', app_share_kept(p_ops, p_ops, p_owned),
+		'withheldOps', jsonb_array_length(CASE WHEN jsonb_typeof(p_ops) = 'array' THEN p_ops ELSE '[]'::jsonb END)
+			- jsonb_array_length(CASE WHEN jsonb_typeof(p_ops) = 'array' THEN app_share_kept(p_ops, p_ops, p_owned) ELSE '[]'::jsonb END),
 		'opsSha256', p_sha,
 		'opNames', coalesce((
 			SELECT jsonb_agg(x.v ORDER BY x.o)
@@ -114,7 +143,10 @@ CREATE OR REPLACE FUNCTION app_share_scenario(p_hash bytea)
 					'decidedAt', s.decided_at,
 					'outcome', s.outcome,
 					'decisionNote', s.decision_note,
-					'ops', s.ops,
+					-- 291: another unit's registered volume left out, and how many (module comment);
+					-- the hash stays the full list's.
+					'ops', app_share_kept(s.ops, s.ops, s.owned_node_ids::text[]),
+					'withheldOps', jsonb_array_length(s.ops) - jsonb_array_length(app_share_kept(s.ops, s.ops, s.owned_node_ids::text[])),
 					'opsSha256', s.ops_sha256,
 					'ownedNodeIds', to_jsonb(s.owned_node_ids),
 					'opNames', coalesce((
@@ -170,8 +202,9 @@ CREATE OR REPLACE FUNCTION app_share_scenario(p_hash bytea)
 								FROM jsonb_array_elements(CASE WHEN jsonb_typeof(r.inputs->'scenario'->'classified') = 'array' THEN r.inputs->'scenario'->'classified' ELSE '[]'::jsonb END) cl
 							), true) AND jsonb_typeof(r.inputs->'scenario'->'classified') = 'array'
 								AND jsonb_array_length(r.inputs->'scenario'->'classified') = jsonb_array_length(s.ops)),
-							-- Each op's class as this run applied it (proposal | baseline).
-							'classified', r.inputs->'scenario'->'classified',
+							-- Each op's class as this run applied it (proposal | baseline), at the
+							-- positions of the ops the link shows (291).
+							'classified', app_share_kept(r.inputs->'scenario'->'classified', s.ops, s.owned_node_ids::text[]),
 							'stamp', encode(r.stamp, 'hex'),
 							'digest', encode(app_run_digest_body(r.id), 'hex')
 						) AS j

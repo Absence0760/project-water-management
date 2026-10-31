@@ -9,9 +9,13 @@
 //     volume never leaves through the link), the own unit's change shown;
 //   - each appeal event with its forum, date, reference, note and a
 //     variation's terms, never who recorded it (an assessor reads that);
-//   - app_share_terms isn't callable by water_app.
+//   - app_share_terms isn't callable by water_app;
+//   - app_share_scenario itself, called as the share path calls it, leaves
+//     another unit's `allocation.set` out of every list of ops (its own,
+//     the granted terms', a variation's) and counts it, the applicant's own
+//     unit's shown: no caller has to filter (291 app_share_kept).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { actForAuthority, anon, DECISION, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, asOwner, DECISION, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { parseToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
 
@@ -33,6 +37,7 @@ const CANARY = 987_654;
 const P = () => `/projects/${projectId}`;
 const dam = (nodeId: string, value: number) => ({ op: 'node.set', nodeId, field: 'damCapacityM3', value });
 const neighbourVolume = { op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: neighbour.id, waterSource: 'surface', volumeM3PerYear: CANARY } };
+const ownVolume = (v: number) => ({ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: own.id, waterSource: 'surface', volumeM3PerYear: v } });
 const tokenOf = (url: string) => new URLSearchParams(new URL(url).hash.slice(1)).get('t')!;
 const open = async () => {
 	const res = await anon('POST', '/share/scenario', { token });
@@ -141,6 +146,76 @@ describe("a decided application's link: the licence's terms and what followed (2
 		expect(events).toHaveLength(2);
 		for (const e of events) expect(Object.keys(e).sort()).toEqual(['eventDate', 'forum', 'kind', 'note', 'position', 'reference', 'terms']);
 		const code = await withUser(applicant.id, (db) => db.query(`SELECT app_share_terms('[]'::jsonb, NULL, '[]'::jsonb, '', NULL, '{}')`)).then(
+			() => 'ran',
+			(e: { code?: string }) => e.code
+		);
+		expect(code).toBe('42501');
+	});
+
+	it('leaves another unit’s registered volume out of every list of ops in the SQL itself, the own unit’s shown', async () => {
+		const OWN_VOLUME = 123_456;
+		const mine = ownVolume(OWN_VOLUME);
+		const created = await applicant.call('POST', `${P()}/scenarios`, { name: 'Register my volume', baseRunId: published, ops: [mine, neighbourVolume, dam(own.id, 140_000)] });
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const id = created.body.scenario.id as string;
+		expect((await applicant.call('POST', `${P()}/scenarios/${id}/submit`, {})).status).toBe(200);
+		const decided = await assessor.call('POST', `${P()}/scenarios/${id}/decide`, {
+			...DECISION,
+			outcome: 'licence_issued',
+			note: 'Issued.',
+			granted: { ops: [mine, neighbourVolume], conditions: '' }
+		});
+		expect(decided.status, JSON.stringify(decided.body)).toBe(200);
+		const lodged = await assessor.call('POST', `${P()}/scenarios/${id}/appeals`, { kind: 'lodged', forum: 'court', eventDate: '2026-10-05' });
+		expect(lodged.status, JSON.stringify(lodged.body)).toBe(201);
+		const varied = await assessor.call('POST', `${P()}/scenarios/${id}/appeals`, { kind: 'varied', forum: 'court', eventDate: '2026-10-09', terms: { ops: [neighbourVolume, mine], conditions: '' } });
+		expect(varied.status, JSON.stringify(varied.body)).toBe(201);
+		const made = await applicant.call('POST', `${P()}/share-links`, { label: 'SQL', expiresInDays: 30, targetKind: 'scenario', targetId: id });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+
+		// As the share path calls it: water_app, through withUser.
+		const hash = parseToken(tokenOf(made.body.link.url));
+		const rows = await withUser(applicant.id, async (db) => (await db.query<{ scenario: Record<string, unknown> }>('SELECT scenario FROM app_share_scenario($1)', [hash])).rows);
+		expect(rows).toHaveLength(1);
+		const sc = rows[0]!.scenario as {
+			ops: unknown[];
+			withheldOps: number;
+			grantedTerms: { ops: unknown[]; withheldOps: number };
+			decisionEvents: { terms: { ops: unknown[]; withheldOps: number } | null }[];
+		};
+		const lists = [sc.ops, sc.grantedTerms.ops, ...sc.decisionEvents.filter((e) => e.terms).map((e) => e.terms!.ops)];
+		expect(lists).toHaveLength(3);
+		for (const ops of lists) {
+			// None of another unit's allocation.set, in any list.
+			const others = (ops as { op: string; allocation?: { nodeId?: string } }[]).filter((o) => o.op === 'allocation.set' && o.allocation?.nodeId !== own.id);
+			expect(others).toEqual([]);
+			// Positive control: the applicant's own unit's allocation.set stays.
+			expect(ops).toContainEqual(mine);
+		}
+		expect(sc.ops).toEqual([mine, dam(own.id, 140_000)]);
+		expect(sc.withheldOps).toBe(1);
+		expect(sc.grantedTerms).toMatchObject({ ops: [mine], withheldOps: 1 });
+		expect(sc.decisionEvents[1]!.terms).toMatchObject({ ops: [mine], withheldOps: 1 });
+		const text = JSON.stringify(rows[0]);
+		expect(text).not.toContain(String(CANARY));
+		expect(text).toContain(String(OWN_VOLUME));
+
+		// The API's answer agrees (its second line drops nothing more, and the counts aren't doubled).
+		const v = (await anon('POST', '/share/scenario', { token: tokenOf(made.body.link.url) })).body;
+		expect(v.scenario).toMatchObject({ ops: [mine, dam(own.id, 140_000)], withheldOps: 1, grantedTerms: { ops: [mine], withheldOps: 1 } });
+		expect(v.scenario.decisionEvents[1].terms).toMatchObject({ ops: [mine], withheldOps: 1 });
+	});
+
+	it('keeps a run’s per-op classes at the positions of the ops shown (app_share_kept, as the schema owner)', async () => {
+		const ops = [ownVolume(1), neighbourVolume, dam(own.id, 1), { op: 'allocation.set', allocation: { id: 'x', waterSource: 'surface', volumeM3PerYear: 2 } }];
+		const [r] = await asOwner('SELECT app_share_kept($1::jsonb, $2::jsonb, $3::text[]) AS kept, app_share_kept(NULL, $2::jsonb, $3::text[]) AS none', [
+			JSON.stringify(['a', 'b', 'c', 'd']),
+			JSON.stringify(ops),
+			[own.id]
+		]);
+		// Another unit's and a unit-less allocation.set dropped; the own unit's and every other op kept.
+		expect(r).toEqual({ kept: ['a', 'c'], none: null });
+		const code = await withUser(applicant.id, (db) => db.query(`SELECT app_share_kept('[]'::jsonb, '[]'::jsonb, '{}')`)).then(
 			() => 'ran',
 			(e: { code?: string }) => e.code
 		);

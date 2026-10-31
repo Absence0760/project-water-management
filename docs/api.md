@@ -3579,7 +3579,10 @@ never a farm's row, name or id.
   `allocation.set` on a unit that isn't the application's own (it carries a
   registered volume) is left out of `ops`, `classified` and every terms'
   `ops`, as for a viewer kept from each farm's volume (#523 G1), with
-  `withheldOps` saying how many. A decided application (291, issue #523
+  `withheldOps` saying how many (the database function leaves them out,
+  291, and the API again). Each `opsSha256` is the stored hash of the full
+  list, withheld ops included, so it doesn't verify the shown `ops` when
+  `withheldOps` isn't 0. A decided application (291, issue #523
   G3/G4) adds `grantedTerms` with a licence issued
   (`{ ops, opsSha256, opNames, conditions, asApplied, withheldOps }`, own
   nodes' names only; else `null`), `decisionEvents` (what followed the
