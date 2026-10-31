@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { COPY_FINAL_LAG_DAYS, COPY_PRELIM_LAG_DAYS, type CopyDays, copyBehind, feedHealth, type HealthInput, rainCopyStatus } from './health.js';
+import { lagDays } from '../config/production.js';
+import { COPY_FINAL_LAG_DAYS, COPY_PRELIM_LAG_DAYS, type CopyDays, copyBehind, copyFinalLagDays, copyFinalLagProblem, feedHealth, type HealthInput, rainCopyStatus } from './health.js';
 
 const base: HealthInput = {
 	source: 'chirps',
@@ -172,6 +173,29 @@ describe('rainCopyStatus', () => {
 		const at = (asOf: string) => rainCopyStatus(days('2026-07-31', '2026-07-31', '2026-10-10'), asOf);
 		expect(at('2026-10-14')).toMatchObject({ readable: true, asOf: '2026-10-14', final: { sat: { through: '2026-07-31', behind: false }, rnl: { through: '2026-07-31', behind: false } } });
 		expect(at('2026-10-15')).toMatchObject({ final: { sat: { behind: true }, rnl: { behind: true } } });
+	});
+
+	it('the finals’ lag follows COPY_FINAL_LAG_DAYS, the lag alarm’s threshold Terraform passes the API, and is 75 with none set', () => {
+		expect(copyFinalLagDays({})).toBe(75);
+		expect(copyFinalLagDays({ COPY_FINAL_LAG_DAYS: '  ' })).toBe(75);
+		expect(copyFinalLagDays({ COPY_FINAL_LAG_DAYS: '90' })).toBe(90);
+		expect(copyFinalLagDays({ COPY_FINAL_LAG_DAYS: ' 60 ' })).toBe(60);
+		// Tuned to 90: 2026-07-31 is on time to 2026-10-29 and late the day after.
+		const at = (asOf: string) => rainCopyStatus(days('2026-07-31', '2026-07-31', '2026-10-25'), asOf, false, copyFinalLagDays({ COPY_FINAL_LAG_DAYS: '90' }));
+		expect(at('2026-10-29').final).toEqual({ sat: { through: '2026-07-31', behind: false }, rnl: { through: '2026-07-31', behind: false } });
+		expect(at('2026-10-30').final.sat.behind).toBe(true);
+	});
+
+	it('refuses a lag that isn’t a whole number of days from 60 to 3650, as the API’s production check does', () => {
+		for (const bad of ['59', '3651', '75.5', 'seventy', '-75', '1e2x']) {
+			expect(copyFinalLagProblem(bad), bad).toBe('must be a whole number of days from 60 to 3650');
+			expect(() => copyFinalLagDays({ COPY_FINAL_LAG_DAYS: bad })).toThrow(/^COPY_FINAL_LAG_DAYS must be a whole number of days from 60 to 3650$/);
+			expect(lagDays(bad), bad).not.toBeNull();
+		}
+		for (const good of ['60', '75', '3650']) {
+			expect(copyFinalLagProblem(good)).toBeNull();
+			expect(lagDays(good)).toBeNull();
+		}
 	});
 
 	it('preliminary days are on time up to COPY_PRELIM_LAG_DAYS (7) back, and behind one day past it', () => {

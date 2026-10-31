@@ -403,11 +403,15 @@ provenance, `ingest/verify_copy.py`):
             blocks (`infra/feeds.tf`), once no state still holds the
             queues, and the tftests that cover per-feed fetching
             (`cutover.tftest.hcl` and the queues' assertions elsewhere).
-- [ ] **Two thresholds in two places.** The app's
-      `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matches
+- [x] **Two thresholds in two places.** The app's
+      `COPY_FINAL_LAG_DAYS` (75, `feeds/health.ts`) matched
       `ingest_lag_alarm_days`'s default by hand; a prod tfvars that changes
-      the alarm doesn't move the app. Pass it to the API as a variable at
-      the cutover if the operator ever tunes it.
+      the alarm didn't move the app. Done 2026-10-31: Terraform passes
+      `ingest_lag_alarm_days` to the API Lambda as the `COPY_FINAL_LAG_DAYS`
+      setting (`infra/lambda.tf`; only the API reads it), `copyFinalLagDays`
+      reads it with 75 as the local default, the API's production check
+      refuses a value outside 60–3650 whole days (the variable's validation
+      matches), and `tests/ingest.tftest.hcl` asserts the two agree.
 - [ ] **ECMWF quantile mapping is fitted on cells, applied to area means**
       (R4-C, [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-ens)).
       `ingest/ecmwf_qm_fit.py` pairs the ensemble mean with observed rain

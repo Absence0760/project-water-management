@@ -5197,8 +5197,9 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   `CopyPart = { through, behind }`. `through` is the manifest's
   `finalThrough` (`sat`, `rnl`) or `prelimThrough` (the `prelim` product),
   null when the copy holds none. `behind`: `through` is null, or more than 75
-  days before `asOf` for a final part (`COPY_FINAL_LAG_DAYS`, the lag
-  alarm's threshold) or 7 for the preliminary days (`COPY_PRELIM_LAG_DAYS`,
+  days before `asOf` for a final part (75 by default; in production the lag
+  alarm's threshold, `ingest_lag_alarm_days`, passed to the API as the
+  `COPY_FINAL_LAG_DAYS` setting) or 7 for the preliminary days (`COPY_PRELIM_LAG_DAYS`,
   judged by the later of `prelimThrough` and `sat`'s `finalThrough`, since a
   month's preliminary days are dropped once its finals land). `asOf` is
   today (UTC); `sample: true` is the committed sample copy

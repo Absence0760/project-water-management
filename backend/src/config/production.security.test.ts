@@ -85,6 +85,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOBS_QUEUE_URL: SQS('jobs'),
 		FEED_SOURCE: 'live',
 		CHIRPS_SOURCE: 'chc',
+		COPY_FINAL_LAG_DAYS: '75',
 		ET_OBSERVATIONS: 'off',
 		FUTURE_YIELD: 'off',
 		STORAGE: 's3',

@@ -171,6 +171,16 @@ const poolSize: Check = (v) => {
 
 const unset: Check = (v) => (set(v) ? 'must not be set in production' : null);
 
+/**
+ * The copy's finals lag (COPY_FINAL_LAG_DAYS, feeds/health.ts copyFinalLagProblem, whose bounds these repeat: this
+ * module imports nothing): a whole number of days from 60 (Terraform's floor for ingest_lag_alarm_days) to 3650.
+ */
+export const lagDays: Check = (v) => {
+	if (!set(v)) return 'is not set';
+	const n = Number(v.trim());
+	return Number.isInteger(n) && n >= 60 && n <= 3650 ? null : 'must be a whole number of days from 60 to 3650';
+};
+
 /** The delineation DEM (delineation/dem.ts): empty (off) or an S3 object; never a local file or host, which a Lambda doesn't have. */
 const demUrl: Check = (v) => {
 	if (!set(v)) return null;
@@ -384,6 +394,10 @@ export const SETTINGS: Record<string, Setting> = {
 	CHIRPS_SOURCE: {
 		why: 'Which CHIRPS a feed fetch reads (mirror/source.ts, issue #604): chc, CHC’s files through the fetcher, or mirror, our copy read in the worker’s own fetch job (feeds/fromMirror.ts). The API reads it too, only to know whether the Data feeds panel reports the copy (feeds/rainCopy.ts, from the mirror_copy rows the worker records; the API never reaches the copy). Unset follows FEED_SOURCE (chc when live, which production checks), so unset is today’s production behaviour: a release that reads it can go out before the terraform apply that sets it (from var.chirps_source, infra/jobs.tf, infra/lambda.tf) without refusing to start. A value set is checked.',
 		checks: { api: optional(oneOf('chc', 'mirror')), worker: optional(oneOf('chc', 'mirror')) }
+	},
+	COPY_FINAL_LAG_DAYS: {
+		why: 'How many days behind our copy’s CHIRPS finals may run before the Data feeds panel and the portfolio mark it late (feeds/health.ts copyFinalLagDays, read by the API’s feeds/rainCopy.ts): Terraform passes the lag alarm’s own threshold (var.ingest_lag_alarm_days, infra/lambda.tf), so the panel and the alarm agree when the operator tunes it. Unset is the default, 75, the alarm’s default, so a release can go out before the apply that sets it. Only the API calls rainCopy; the worker and the assistant bundle the module but never read it there. A value set is checked.',
+		checks: { api: optional(lagDays) }
 	},
 	MIRROR_URL: {
 		why: 'Where our copy of CHIRPS lives (mirror/source.ts mirrorUrl): s3://<the mirror bucket> (infra/ingest.tf). Unset off Lambda is the committed synthetic copy, which a live process refuses. The worker needs it when CHIRPS_SOURCE=mirror; the ingest Lambdas (the fetcher’s daily ingest, issue #604 R2-B) write it, and Terraform sets it on the fetcher always (infra/feeds.tf), so the fetcher must name the bucket.',
