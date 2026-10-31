@@ -2,11 +2,21 @@
 // project saved before them (a calibration site, null = the outlet, plus #555's
 // zones) runs and fits as engine 1.109.0 did, to the bit. Each case's run
 // series, headline and zone statistics, and each fit step's units, parameters
-// and scores are hashed and pinned to what engine 1.109.0 gave on the same
-// input (the digests below were made by running this file against 1.109.0:
-// LEGACY_PRINT=1 prints them). Through normalizeCalibrationLocations, the
+// and scores are pinned to what engine 1.109.0 gave on the same input
+// (fixtures/locations-legacy.golden.json, made by running this file against
+// 1.109.0 with GOLDEN_WRITE=1). Through normalizeCalibrationLocations, the
 // raw legacy settings and the normalised ones give the same outputs too.
-import { createHash } from 'node:crypto';
+//
+// Not a hash of every bit: V8's libm (pow, exp, tanh, ...) gives last-bit
+// different floats on macOS arm64 and on Linux x64, which GR4J's pow and
+// tanh feed through every store, so a sha256 of the JSON passed on CI and
+// failed on a Mac with the behaviour unchanged (testing.md § Golden
+// fingerprints). The pins are testing/golden.ts' moments of each series
+// and its reportGolden of each fit, at a relative 1e-9: platform noise is
+// about 1e-13, a changed day's rain or a moved fit step is 1e-7 or more.
+// The fitted parameters are compared to the bit, as prior-calibrate.test.ts
+// does: the search takes the same path on both platforms.
+import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
 import { gaugeSeriesKey, type ModelInput, type NetworkNode } from '../project';
@@ -17,6 +27,7 @@ import { calibrateStepwise } from './stepwise';
 import { newCalibrationZone, type CalibrationZone } from './zones';
 import { normalizeCalibrationLocations, normalizedInput, withHeadlineParams } from './locations';
 import { calibrationZoneFlags, calibrationZonesSection, headlineFitRecord } from '../evidence/calibrationZones';
+import { goldenDiff, goldenFingerprint, reportDiff, reportGolden, type GoldenFingerprint, type ReportGolden } from '../testing/golden';
 import { sameOutput } from '../testing/invariants';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
@@ -133,60 +144,65 @@ const CASES: Record<string, Partial<ModelInput['settings']>> = {
 	siteWithoutRecord: { calibrationSiteNodeId: 'K', fitRecord: fitAt('K', null) as never, calibrationZones: [zone('H', { gr4j: TRUTH_H })] as never }
 };
 
-const sha = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0, 16);
+/** A fit's pin: its parameters to the bit and its report golden, or a refusal's message. */
+type FitPin = { params: unknown; golden: ReportGolden } | string;
+interface Pin {
+	run: GoldenFingerprint;
+	fit: FitPin;
+}
 
-function runDigest(input: ModelInput): string {
+/** What the fixture file holds: a series with a NaN day (ewr_binding_site) has NaN moments, which JSON keeps as null. */
+const viaJson = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+
+/** Every series by its own moments, and the headline and zone statistics as the summary. */
+function runPin(input: ModelInput): GoldenFingerprint {
 	const out = runModel(input);
-	return sha({
-		series: out.series.map((s) => [s.nodeId, s.key, s.values]),
-		calibration: out.summary.calibration,
-		zones: out.summary.calibrationZones ?? []
-	});
+	return goldenFingerprint(out, /./, { calibration: out.summary.calibration, zones: out.summary.calibrationZones ?? [] });
 }
 
 /** Each step's site, parameters and scores, in fit order (a refusal by its message). */
-function fitDigest(input: ModelInput): string {
+function fitPin(input: ModelInput): FitPin {
 	try {
 		const r = calibrateStepwise(input, { budget: 40, validate: false, seed: 5 });
-		return sha(r.steps.map((s) => [s.report.siteNodeId ?? null, s.report.params, s.report.startParams, s.report.fit.scores, s.report.before.scores, s.report.marPenalty ?? null]));
+		return {
+			params: r.steps.map((s) => s.report.params),
+			golden: reportGolden(r.steps.map((s) => [s.report.siteNodeId ?? null, s.report.params, s.report.startParams, s.report.fit.scores, s.report.before.scores, s.report.marPenalty ?? null]))
+		};
 	} catch (e) {
 		return `refused: ${(e as Error).message}`;
 	}
 }
 
+function fitDiff(got: FitPin, want: FitPin): string[] {
+	if (typeof got === 'string' || typeof want === 'string') return got === want ? [] : [`${JSON.stringify(got)} ≠ ${JSON.stringify(want)}`];
+	return JSON.stringify(got.params) === JSON.stringify(want.params) ? reportDiff(got.golden, want.golden) : [`params ${JSON.stringify(got.params)} ≠ ${JSON.stringify(want.params)}`];
+}
+
 /**
- * What engine 1.109.0 gave: this file's digests run with LEGACY_PRINT=1 at commit 3aa2338af (engine 1.109.0; 1.108.0 at
- * eccb44252 gives the same). The pins first committed here matched no engine; these were re-made from 3aa2338af and
- * today's engine reproduces them to the bit. staleSite's fit is the one exception: 1.110.0's documented change (CZ2).
+ * What engine 1.109.0 gave, per case: this file run against 3aa2338af (engine 1.109.0; 1.108.0 at eccb44252 gives the
+ * same) with GOLDEN_WRITE=1, on macOS arm64, and checked on Linux x64 (Node 24) where it also passes. Rewrite only
+ * for a change that is meant to move a legacy project. staleSite's fit is the one exception, taken from 1.110.0:
+ * its documented change (CZ2).
  */
-const PINNED: Record<string, { run: string; fit: string }> = {
-	outlet: { run: '04f377abba1b9802', fit: 'a563008fdf790900' },
-	innerSite: { run: '7e83ac890b89a3f7', fit: '67590ca366c29e01' },
-	outletAndZones: { run: 'bb7bffc9a8bbde55', fit: '4f181804a51880aa' },
-	innerSiteAndZoneWithOrphans: { run: '6ea6ed2942ffa9db', fit: 'ec134f3cd8a7fef4' },
-	innerSiteWithRowsAtAndBelow: { run: '137edd394da639c6', fit: '973af68bbfee1ce1' },
-	// The one intended change: engine 1.109.0 refused the fit at a stale site ("the calibration site is no longer in
-	// the model"); since 1.110.0 the stale site is read as the outlet, so the fit scores there as the run always did
-	// (docs/model.md §2.10n, engine-audit.md CZ2). The run is 1.109.0's, as outletAndZones without S.
-	staleSite: { run: 'c4c07da39ef9d4d0', fit: 'ebfa1aea7f61fb85' },
-	innerSiteFitted: { run: '17644a2c2070b99a', fit: '6bfcaecea2def897' },
-	siteWithoutRecord: {
-		run: 'b013d4cbcbe7da3a',
-		fit: 'refused: no observed flow record at the calibration site "Bare gauge": attach one to it on the Data page, or calibrate at the outlet'
-	}
-};
+const PINNED_FILE = new URL('../../fixtures/locations-legacy.golden.json', import.meta.url);
+const PINNED: Record<string, Pin> = process.env.GOLDEN_WRITE ? {} : JSON.parse(readFileSync(PINNED_FILE, 'utf8'));
+// The one intended change: engine 1.109.0 refused the fit at a stale site ("the calibration site is no longer in
+// the model"); since 1.110.0 the stale site is read as the outlet, so the fit scores there as the run always did
+// (docs/model.md §2.10n, engine-audit.md CZ2). The run is 1.109.0's, as outletAndZones without S.
 
 describe('legacy calibration settings run and fit as engine 1.109.0 did', () => {
 	const base = network();
 	for (const [name, over] of Object.entries(CASES)) {
 		it(name, { timeout: 60_000 }, () => {
 			const input = { ...base, settings: { ...base.settings, ...over } } as ModelInput;
-			const got = { run: runDigest(input), fit: fitDigest(input) };
-			if (process.env.LEGACY_PRINT) {
-				console.log(`LEGACY ${name} ${JSON.stringify(got)}`);
+			const got: Pin = { run: runPin(input), fit: fitPin(input) };
+			if (process.env.GOLDEN_WRITE) {
+				PINNED[name] = got;
+				writeFileSync(PINNED_FILE, `${JSON.stringify(PINNED, null, '\t')}\n`);
 				return;
 			}
-			expect(got).toEqual(PINNED[name]);
+			expect(goldenDiff(viaJson(got.run), PINNED[name]!.run), `${name} run`).toEqual([]);
+			expect(fitDiff(got.fit, PINNED[name]!.fit), `${name} fit`).toEqual([]);
 		});
 	}
 
@@ -227,7 +243,7 @@ describe('legacy calibration settings run and fit as engine 1.109.0 did', () => 
 			expect(norm.settings).not.toBe(input.settings);
 			expect(norm.settings.calibrateAtOutlet).toBe(false);
 			expect(sameOutput(runModel(input), runModel(norm)), name).toBe(true);
-			expect(fitDigest(norm), name).toBe(PINNED[name]!.fit);
+			expect(fitDiff(fitPin(norm), PINNED[name]!.fit), name).toEqual([]);
 		}
 	});
 });
