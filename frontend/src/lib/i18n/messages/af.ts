@@ -1401,6 +1401,12 @@ export const af: Catalogue = {
 	'c68155f0': '’n Bewyspakket vir ’n lisensieaansoek: die modelresultate wat ’n aansoeker by ’n aansoek om ’n watergebruiklisensie aanheg, onderteken deur ’n geregistreerde professionele persoon en vasgelê sodra dit uitgereik is. Hierdie bladsy wys ’n deel daarvan, leesalleen, en noem geen hidrologiese eenheid nie.',
 	// This link works until it expires or is withdrawn. If the pack is withdrawn or replaced, the link says so instead of showing its figures.
 	'60872763': 'Hierdie skakel werk totdat dit verval of ingetrek word. As die pakket teruggetrek of vervang word, sê die skakel dit in plaas daarvan om sy syfers te wys.',
+	// As applied for: the same changes as the application.
+	'fe74a332': 'Soos aangevra: dieselfde veranderinge as in die aansoek.',
+	// No changes.
+	'23de827f': 'Geen veranderinge nie.',
+	// Conditions
+	'51cba6d7': 'Voorwaardes',
 	// An application in {project}, shared read-only
 	'47a825ae': '’n Aansoek in {project}, leesalleen gedeel',
 	// Months the Reserve is met at each EWR site: the published baseline beside this application.
@@ -1409,10 +1415,16 @@ export const af: Catalogue = {
 	'590d8af3': 'Wat die aansoek verander',
 	// A baseline assumption changes the shared baseline itself, not only the applicant’s own proposal.
 	'5f76a417': '’n Basislynaanname verander die gedeelde basislyn self, nie net die aansoeker se eie voorstel nie.',
-	// No changes.
-	'23de827f': 'Geen veranderinge nie.',
 	// The decision
 	'479ef2ba': 'Die besluit',
+	// The terms granted
+	'beb39194': 'Die toegestane bepalings',
+	// After the decision
+	'8ec95a30': 'Ná die besluit',
+	// Reference: {reference}
+	'b04c1979': 'Verwysing: {reference}',
+	// The terms it was varied to
+	'32c65a9f': 'Die gewysigde bepalings',
 	// The catchment’s totals
 	'd14cdcfe': 'Die opvanggebied se totale',
 	// An application to use water in this catchment, modelled on its published baseline. It is read-only, and it names no other hydrological unit.
@@ -1533,6 +1545,36 @@ export const af: Catalogue = {
 	'947893bf': 'Voorstel',
 	// Baseline assumption
 	'067b4d39': 'Basislynaanname',
+	// change / changes
+	'f4dd043a': { one: 'verandering', other: 'veranderinge' },
+	// Not shown: {changes} setting another hydrological unit’s registered volume. A share link shows no registered volume but the applicant’s own.
+	'18fc1a61': 'Nie gewys nie: {changes} wat ’n ander hidrologiese eenheid se geregistreerde volume stel. ’n Deelskakel wys geen geregistreerde volume nie, behalwe die aansoeker s’n.',
+	// Appeal lodged
+	'048437e3': 'Appèl aangeteken',
+	// Decision upheld
+	'4286b183': 'Besluit bekragtig',
+	// Decision set aside
+	'0881bebf': 'Besluit tersyde gestel',
+	// Decision varied
+	'2ef997f8': 'Besluit gewysig',
+	// Water Tribunal
+	'0792b90b': 'Watertribunaal',
+	// Court
+	'e1b61bc8': 'Hof',
+	// {event}: {forum}, {date}
+	'437f95a8': '{event}: {forum}, {date}',
+	// {forum}, {date}
+	'84b0f722': '{forum}, {date}',
+	// The licence stands on the terms it was varied to on appeal ({where}).
+	'fbc956ef': 'Die lisensie geld volgens die bepalings soos op appèl gewysig ({where}).',
+	// The licence stands on the terms it was granted on.
+	'939c4e0d': 'Die lisensie geld volgens die bepalings soos toegestaan.',
+	// The decision was set aside on appeal ({where}): no licence stands.
+	'0e819f46': 'Die besluit is op appèl tersyde gestel ({where}): geen lisensie geld nie.',
+	// No licence was issued.
+	'c40321b5': 'Geen lisensie is uitgereik nie.',
+	// An appeal is lodged with the {forum}: nothing changes until it is decided.
+	'99074b37': '’n Appèl is by die {forum} aangeteken: niks verander voordat daaroor beslis is nie.',
 	// {unit}: {field} set to {value}
 	'527b5d2b': '{unit}: {field} op {value} gestel',
 	// A new hydrological unit or site, “{name}”
