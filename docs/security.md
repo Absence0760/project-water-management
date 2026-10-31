@@ -2466,6 +2466,29 @@ In short:
     `scenario_alternative_guard` in the table, with one refusal for any
     other run so none is shown to exist
     (`scenarios/alternatives.db.test.ts`).
+    Who that is, exactly: **everyone who can read the citing application**
+    once it is past draft, under the run rules that already apply to its own
+    runs. That is its assessors (editors and up) once submitted, viewers once
+    decided, and its co-applicants: whoever the applicant shared it with
+    reads the cited run's row, series and digest as they read the
+    application's own runs, which for a contributor is none of the row (046:
+    no contributor reads a run row, not even their own) and only the
+    own-unit and allowlisted series their application's runs give them; a
+    shared member of viewer role or above reads it in full. The editors
+    who read it may then write its note and its pin, as on any run they read
+    (`model_run_update`, 007/015: editor and up, the column grants limit an
+    update to `notes` and `pinned`), as they already may on the
+    application's own runs once submitted. That is deliberate: neither is
+    part of the run's digest, so neither touches its server stamp, the
+    report prints no alternative's note, and a pin only keeps a run that
+    `model_run_cited` already keeps from trim and delete while the
+    application is past draft. A pin set then outlives a withdraw and
+    reopen (the run stays kept until an editor unpins it), as on the
+    application's own runs. The test reads each opened path (the run, its
+    series by the route and in the table, its digest, its holder keys and
+    kinds) for a cited run and an uncited draft, as an editor, a viewer
+    before the decision, the consultant it is shared with and the applicant,
+    so reverting any one of 298's branches fails it.
   - **Tables added alongside it** (sign-offs, notes, allocations, API keys,
     yields and jobs, dam curves, boreholes) were audited at the merge: a
     contributor reads only their own linked farm's farm-scoped rows (as a
