@@ -70,6 +70,14 @@ interface World {
 	/** A finished `assessment` job, and a pending assessment on runId (145, WP-3.11). */
 	assessmentJobId: string;
 	assessmentId: string;
+	/**
+	 * A full-allocation scenario run on runId, made through the API (295): what an assessment may take as its
+	 * background. Its scenario sets the mode and one registered volume on the farm, so a volume takes.
+	 */
+	backgroundRunId: string;
+	/** A firm-yield row id of assessmentId to be (297), and its `assessment_yield` job, whose payload names both. */
+	assessmentYieldId: string;
+	assessmentYieldJobId: string;
 	outlookId: string;
 	/** A complete outlook with one level, "0", and its current publication to farmers (106). */
 	completeOutlookId: string;
@@ -149,12 +157,27 @@ async function world(name: string): Promise<World> {
 	const editor = await signUp(`Editor${name.replace(/\W/g, '')}`);
 	expect((await dual.call('POST', `/projects/${projectId}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
 
+	// The background at full allocation an assessment may take (295): a run of a team scenario through the API.
+	const full = await dual.call('POST', `/projects/${projectId}/scenarios`, {
+		name: 'At full allocation',
+		baseRunId: runId,
+		ops: [
+			{ op: 'settings.set', path: 'allocationMode', value: 'fullAllocation' },
+			{ op: 'allocation.set', allocation: { id: randomUUID(), nodeId: farm.id, waterSource: 'surface', volumeM3PerYear: 50_000 } }
+		]
+	});
+	expect(full.status, JSON.stringify(full.body)).toBe(201);
+	const fullRun = await dual.call('POST', `/projects/${projectId}/scenarios/${full.body.scenario.id}/runs`, {});
+	expect(fullRun.status, JSON.stringify(fullRun.body)).toBe(201);
+	const backgroundRunId = fullRun.body.run.id as string;
+
 	const [rev] = await asOwner('SELECT max(id)::text AS id FROM model_revision WHERE project_id = $1', [projectId]);
 	const [series] = await asOwner(
 		`SELECT series_id AS id, sha256, kind, to_char(start_date, 'YYYY-MM-DD') AS "startDate" FROM run_input_series WHERE run_id = $1 AND series_id IS NOT NULL LIMIT 1`,
 		[runId]
 	);
 	const u = dual.id;
+	const assessmentYieldId = randomUUID();
 	const ids = await arrange(async (q) => {
 		const one = async (sql: string, params: unknown[]) => (await q(`${sql} RETURNING id::text`, params))[0]!.id as string;
 		const job = (kind: string) => one(`INSERT INTO job (project_id, kind, payload, status, finished_at, acting_user_id) VALUES ($1, $2, '{}', 'done', now(), $3)`, [projectId, kind, u]);
@@ -258,6 +281,18 @@ async function world(name: string): Promise<World> {
 		apiKeyId: key.body.key.id,
 		editorId: editor.id,
 		series: series as World['series'],
+		backgroundRunId,
+		assessmentYieldId,
+		// Its payload names the assessment and the row to be, as fanOutYields queues one (assessment_yield_guard checks both).
+		assessmentYieldJobId: (
+			await arrange((q) =>
+				q(
+					`INSERT INTO job (project_id, kind, payload, status, finished_at, acting_user_id)
+					 VALUES ($1, 'assessment_yield', jsonb_build_object('assessmentId', $2::text, 'yieldId', $3::text), 'done', now(), $4) RETURNING id::text`,
+					[projectId, ids.assessmentId, assessmentYieldId, u]
+				)
+			)
+		)[0]!.id as string,
 		...ids,
 		...packs
 	};
@@ -699,6 +734,26 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.assessmentJobId,
 		insert: (h, ref) => [`INSERT INTO assessment (project_id, base_run_id, name, job_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, h.runId, ref]]
 	},
+	// 295: assessment_background_guard refuses a run of another project (and anything but this baseline at full allocation).
+	'assessment.background_run_id': {
+		ref: (w) => w.backgroundRunId,
+		insert: (h, ref) => [`INSERT INTO assessment (project_id, base_run_id, name, background_run_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, h.runId, ref]]
+	},
+	// 297: assessment_yield_guard refuses another project's assessment, and a job that isn't this project's assessment_yield job naming the row.
+	'assessment_yield.assessment_id': {
+		ref: (w) => w.assessmentId,
+		insert: (h, ref) => [
+			`INSERT INTO assessment_yield (id, assessment_id, project_id, job_id, run, dam_position, node_id, dam_name, run_label) VALUES ($1, $2, $3, $4, 'baseline', 0, 'n', 'Dam', 'The baseline')`,
+			[h.assessmentYieldId, ref, h.projectId, h.assessmentYieldJobId]
+		]
+	},
+	'assessment_yield.job_id': {
+		ref: (w) => w.assessmentYieldJobId,
+		insert: (h, ref) => [
+			`INSERT INTO assessment_yield (id, assessment_id, project_id, job_id, run, dam_position, node_id, dam_name, run_label) VALUES ($1, $2, $3, $4, 'baseline', 0, 'n', 'Dam', 'The baseline')`,
+			[h.assessmentYieldId, h.assessmentId, h.projectId, ref]
+		]
+	},
 	'assessment_member.assessment_id': {
 		ref: (w) => w.assessmentId,
 		insert: (h, ref) => [
@@ -1117,6 +1172,14 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	// Both scenarios of the other project: loadScenario reads within the project (404), and assessment_member_guard refuses one too.
 	'POST /projects/:id/assessments scenarioIds': (h, r) =>
 		dual.call('POST', `/projects/${h.projectId}/assessments`, { name: `A ${randomUUID()}`, scenarioIds: [r.scenarioId, r.submittedApplicationId] }),
+	// 295: loadBackground reads the run within the project (404), and assessment_background_guard refuses one too.
+	'POST /projects/:id/assessments backgroundRunId': async (h, r) => {
+		// The per-user cap (2 in flight) counts the assessments the other cases queued: settle them so it doesn't answer first.
+		await asOwner(`UPDATE job SET status = 'done', finished_at = now() WHERE kind IN ('assessment', 'assessment_yield') AND project_id = ANY($1) AND status <> 'done'`, [
+			[A.projectId, B.projectId]
+		]);
+		return dual.call('POST', `/projects/${h.projectId}/assessments`, { name: `A ${randomUUID()}`, scenarioIds: [h.scenarioId, h.submittedApplicationId], backgroundRunId: r.backgroundRunId });
+	},
 	'POST /projects/:id/yield runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: r.runId, kind: 'firm' }),
 	'POST /projects/:id/yield nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: r.farmId, runId: h.run2Id, kind: 'firm' }),
 	'POST /projects/:id/notes runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a run', runId: r.runId }),
@@ -1335,6 +1398,12 @@ const FIELDS: Record<string, string[] | string> = {
 	'calibration/schema.ts:uncertaintyId': 'a job payload: jobs/trust.security.db.test.ts',
 	'sweeps/schema.ts:sweepId': 'a job payload: jobs/trust.security.db.test.ts',
 	'assessments/schema.ts:assessmentId': 'a job payload: jobs/trust.security.db.test.ts',
+	'assessments/schema.ts:backgroundRunId': ['POST /projects/:id/assessments backgroundRunId'],
+	// 297: computeAssessmentYield reads the row WHERE id = yieldId AND assessment_id = assessmentId AND project_id = the job's AND job_id = the job.
+	'assessments/yields.ts:assessmentId': 'a job payload: jobs/trust.security.db.test.ts (assessment_yield’s cross-project case)',
+	'assessments/yields.ts:yieldId': 'a job payload: jobs/trust.security.db.test.ts (assessment_yield’s cross-project case)',
+	// 293: needingRun loads the scenario within the job's project (loadScenario: 404 → nothing to do).
+	'scenarios/licensedRun.ts:scenarioId': 'a job payload: jobs/trust.security.db.test.ts (scenario_run’s cross-project case)',
 	'yield/routes.ts:runId': ['POST /projects/:id/yield runId'],
 	'yield/routes.ts:scenarioId': 'a read filter within the project',
 	'yield/routes.ts:nodeId': 'a read filter within the project',
