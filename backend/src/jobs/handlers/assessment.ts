@@ -13,7 +13,7 @@
 import { AssessmentPayload } from '../../assessments/schema.js';
 import { computeAssessment } from '../../assessments/store.js';
 import { ApiError } from '../../http/errors.js';
-import { JobError, LeaseLostError } from '../errors.js';
+import { JobError, LeaseLostError, unexpectedFailure } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const assessmentHandler = defineHandler({
@@ -25,7 +25,8 @@ export const assessmentHandler = defineHandler({
 			await computeAssessment(db, job.projectId, payload.assessmentId, progress);
 		} catch (err) {
 			if (err instanceof ApiError || err instanceof JobError || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
-			throw new JobError(`the assessment failed: ${(err as Error).message}`, { retry: false });
+			// Not an error of ours: fixed words stored, the detail logged (jobs/errors.ts unexpectedFailure).
+			throw unexpectedFailure(err, 'the assessment failed', job);
 		}
 	}
 });

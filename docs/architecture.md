@@ -799,7 +799,13 @@ alerts plug in as a further kind.
   the job is `dead` and logs `job_dead`, which alarms in production, and
   queues a job_dead alert check for the project (emailing its owners when the
   project has that alert on, [§ Alert emails](#alert-emails)). The stored error is written by us
-  (`jobs/errors.ts`), never database text.
+  (`jobs/errors.ts`), never database text, and never another library's or
+  the runtime's words: a handler's catch-all (`unexpectedFailure`: the
+  assessment, firm yield, sweep, outlook, ensemble and automated
+  calibration jobs) stores fixed words ("the sweep failed") and logs the
+  detail as its name, code and stack frames. The engine's own words, which
+  name what to fix in the input, are kept where a handler catches only the
+  engine (the run, scenario run, yield and future yield jobs).
 - **A worker that dies** mid-job leaves it `running` until its lease
   (`JOB_LEASE_SECONDS`, 360) runs out; the next tick claims it again. The
   lease token fences the old worker: if it wakes up and tries to finish, it

@@ -4,6 +4,8 @@
 // can name tables, columns and constraint internals.
 import { ZodError } from 'zod';
 import { ApiError } from '../http/errors.js';
+import { logEvent } from '../logging/logEvent.js';
+import { safeError, stackFrames } from '../logging/safeError.js';
 
 /** The longest stored error (016_jobs.sql CHECK). */
 export const JOB_ERROR_MAX = 500;
@@ -42,6 +44,19 @@ export class LeaseLostError extends Error {
 	constructor() {
 		super('lease lost');
 	}
+}
+
+/**
+ * A handler's catch-all for an error it didn't author (a library's, a
+ * runtime's): the stored message is `words`, fixed, since an error's text can
+ * carry a path, a value or someone's data and the stored one reaches the API
+ * (GET …/jobs, an assessment's problems); the detail goes to the server log
+ * only, as its name, code and stack frames (logging/safeError.ts). Not
+ * retried: the handlers that use it found nothing another attempt changes.
+ */
+export function unexpectedFailure(err: unknown, words: string, job: { id: string; projectId: string; kind: string }): JobError {
+	logEvent('error', { event: 'job_unexpected_error', jobId: job.id, projectId: job.projectId, kind: job.kind, ...safeError(err), at: stackFrames(err) });
+	return new JobError(words, { retry: false });
 }
 
 /** SQLSTATE classes worth another attempt: connection loss, serialisation, deadlock, shutdown, resources. */

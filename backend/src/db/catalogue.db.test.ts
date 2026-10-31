@@ -155,9 +155,11 @@ const APPEND_ONLY = new Set([
  * publication is ended, not deleted; the newest 12 are kept by its cap
  * trigger (106_outlook_triggers_publication.sql). An account's security
  * event is append-only, so a thief can't erase that they turned two-step
- * sign-in off (150_mfa.sql).
+ * sign-in off (150_mfa.sql). An assessment's firm-yield row goes only with
+ * its assessment (the cascade): an editor deleting a pending one would let
+ * the gather complete without that dam's yield (297_assessment_yield_jobs.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication', 'account_security_event']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication', 'account_security_event', 'assessment_yield']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per

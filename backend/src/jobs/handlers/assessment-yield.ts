@@ -15,7 +15,7 @@
 // it so in any case (yields.ts stoppedYieldsSql), for a death no hook sees.
 import { computeAssessmentYield, AssessmentYieldPayload, gatherAssessment } from '../../assessments/yields.js';
 import { ApiError } from '../../http/errors.js';
-import { JobError, LeaseLostError } from '../errors.js';
+import { JobError, LeaseLostError, unexpectedFailure } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const assessmentYieldHandler = defineHandler({
@@ -26,7 +26,8 @@ export const assessmentYieldHandler = defineHandler({
 			await computeAssessmentYield(db, job, payload);
 		} catch (err) {
 			if (err instanceof ApiError || err instanceof JobError || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
-			throw new JobError(`the firm yield failed: ${(err as Error).message}`, { retry: false });
+			// Not an error of ours: fixed words stored (they reach the assessment's problems), the detail logged (unexpectedFailure).
+			throw unexpectedFailure(err, 'the firm yield failed', job);
 		}
 	},
 	// Dead, its row still pending: fail the assessment now, the line naming the run and dam, not left to a sibling.
