@@ -1403,6 +1403,8 @@ export const af: Catalogue = {
 	'60872763': 'Hierdie skakel werk totdat dit verval of ingetrek word. As die pakket teruggetrek of vervang word, sê die skakel dit in plaas daarvan om sy syfers te wys.',
 	// As applied for: the same changes as the application.
 	'fe74a332': 'Soos aangevra: dieselfde veranderinge as in die aansoek.',
+	// Works {ref}
+	'176d90f0': 'Werke {ref}',
 	// No changes.
 	'23de827f': 'Geen veranderinge nie.',
 	// Conditions
@@ -1415,6 +1417,12 @@ export const af: Catalogue = {
 	'590d8af3': 'Wat die aansoek verander',
 	// A baseline assumption changes the shared baseline itself, not only the applicant’s own proposal.
 	'5f76a417': '’n Basislynaanname verander die gedeelde basislyn self, nie net die aansoeker se eie voorstel nie.',
+	// The water-use licence application
+	'0d2a1498': 'Die aansoek om ’n watergebruiklisensie',
+	// Application number: {number}
+	'2005d1af': 'Aansoeknommer: {number}',
+	// The works applied for, in the applicant’s words
+	'bc6d9c37': 'Die werke waarvoor aansoek gedoen is, in die aansoeker se woorde',
 	// The decision
 	'479ef2ba': 'Die besluit',
 	// The terms granted
