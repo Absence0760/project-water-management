@@ -1418,6 +1418,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'sweeps/schema.ts:sweepId': 'a job payload: jobs/trust.security.db.test.ts',
 	'assessments/schema.ts:assessmentId': 'a job payload: jobs/trust.security.db.test.ts',
 	'assessments/schema.ts:backgroundRunId': ['POST /projects/:id/assessments backgroundRunId'],
+	// 295: GET …/assessments/backgrounds?baseRunId= compares the id as text with runs' stored inputs.scenario.baseRunId, among runs WHERE project_id = the route's.
+	'assessments/schema.ts:baseRunId': 'a read filter within the project (listBackgroundRuns), never a row looked up by id: another project’s run id lists nothing',
 	// 297: computeAssessmentYield reads the row WHERE id = yieldId AND assessment_id = assessmentId AND project_id = the job's AND job_id = the job.
 	'assessments/yields.ts:assessmentId': 'a job payload: jobs/trust.security.db.test.ts (assessment_yield’s cross-project case)',
 	'assessments/yields.ts:yieldId': 'a job payload: jobs/trust.security.db.test.ts (assessment_yield’s cross-project case)',
