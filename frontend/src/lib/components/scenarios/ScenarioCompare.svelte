@@ -21,6 +21,7 @@
 	import HeadlineDeltas from '#lib/components/compare/HeadlineDeltas.svelte';
 	import ValidationPanel from '#lib/components/liability/ValidationPanel.svelte';
 	import { fmtDate } from '#lib/format/number.js';
+	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 
 	const loadOverlay = () => import('#lib/components/compare/CompareOverlay.svelte');
 
@@ -120,7 +121,7 @@
 					</Lazy>
 				</section>
 				<div class="validation">
-					<ValidationPanel summary={data.b.run.summary} engineVersion={data.b.run.engineVersion} legacy={data.b.run.legacy} fitEngineVersion={data.b.run.settings?.fitRecord?.engineVersion ?? null} />
+					<ValidationPanel summary={data.b.run.summary} engineVersion={data.b.run.engineVersion} legacy={data.b.run.legacy} fitEngineVersion={runHeadlineSettings(data.b.run)?.fitRecord?.engineVersion ?? null} />
 				</div>
 			{/if}
 		</LoadState>

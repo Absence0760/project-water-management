@@ -290,6 +290,22 @@ describe('summary sheet', () => {
 		s.unitRain.units.push({ ...unit, nodeId: 'u3', name: 'Station unit', mapMm: 860, rule: 'station', rainKey: 'rain_station_mm#s1', factor: 1.154, factorSource: 'gaugeMap', gaugeMapFactor: 1.154, gaugeMapOwnFactor: 1.154, gaugeMapClamped: true, chirps: null });
 		expect([...summaryCsvLines(meta, s)].find((l) => l.startsWith('Station unit,'))).toMatch(/^Station unit,10,860,invented isohyet,its rainfall station × unit MAP ÷ station MAP,rain_station_mm#s1,1\.154,unit MAP ÷ station MAP,yes,no,/);
 		expect(lines.filter((l) => l === '').length).toBe(21);
+		// No "Parameters from" column on a run that applied no gauge location (as every run before engine 1.110.0).
+		expect(lines[at + 3]).not.toContain('Parameters from');
+
+		// Engine 1.110.0 (issue #659): each unit's parameter source, by its location's name.
+		s.unitRain.units.pop();
+		const p = (nodeId: string | null, kind: 'gauge' | 'outlet' | 'default', name: string, extra = {}) => ({ nodeId, name, kind, units: [], params: { x1: 1, x2: 0, x3: 1, x4: 1 }, fitted: true, ...extra });
+		s.unitRain.units.push({ ...unit, nodeId: 'u3', name: 'Rest unit', mapMm: null, mapSource: null, rule: 'catchment', rainKey: null, factor: null, factorSource: 'catchment', chirps: null });
+		s.unitRain.units.push({ ...unit, nodeId: 'u4', name: 'Default unit', mapMm: null, mapSource: null, rule: 'catchment', rainKey: null, factor: null, factorSource: 'catchment', chirps: null });
+		s.unitRain.zones = [p('g1', 'gauge', 'Upper weir'), p(null, 'outlet', 'Outflow gauge', { headline: true }), p(null, 'default', 'Catchment parameters')];
+		s.unitRain.paramSource = { u1: { from: 'g1', how: 'zone' }, u2: { from: 'g1', how: 'assigned' }, u3: { from: null, how: 'rest' }, u4: { from: null, how: 'default' } };
+		const located = [...summaryCsvLines(meta, s)];
+		expect(located[at + 3]).toMatch(/,Runoff coefficient,Parameters from$/);
+		expect(located[at + 4]).toMatch(/,0\.1,Upper weir \(its own zone\)$/);
+		expect(located[at + 5]).toMatch(/,Upper weir \(assigned\)$/);
+		expect(located[at + 6]).toMatch(/,Outflow gauge \(no location downstream\)$/);
+		expect(located[at + 7]).toMatch(/,Catchment parameters$/);
 	});
 
 	it('writes the reference gauge’s monthly factors after the units, where the fit read and why, and each unit’s k_unit on them (issue #500)', () => {
@@ -566,13 +582,32 @@ describe('summary sheet', () => {
 		expect(withSite[site + 3]).toBe('Whole record,100,40,5,10,45,80,11.1111111111,0.9,45,50');
 	});
 
-	it('names the calibration site when the statistics were scored at a gauge (engine ≥ 1.41.0)', () => {
+	it('names the headline location when the statistics were scored at a gauge (engine ≥ 1.41.0)', () => {
 		const s = structuredClone(summary);
 		s.calibration!.siteNodeId = 'g1';
 		s.calibration!.siteName = 'Middle weir';
 		const lines = [...summaryCsvLines(meta, s)];
-		expect(lines).toContain('Scored at the gauge (calibration site),Middle weir');
+		expect(lines).toContain('Scored at the gauge,Middle weir');
 		expect(lines.some((l) => l.startsWith('siteName,'))).toBe(false);
+	});
+
+	it('writes every other ticked calibration location’s statistics after the headline’s (engine 1.110.0, issue #659)', () => {
+		const s = structuredClone(summary);
+		expect([...summaryCsvLines(meta, s)].some((l) => l.startsWith('Calibration at another location'))).toBe(false);
+		s.calibrationZones = [
+			{ ...s.calibration!, siteNodeId: 'g1', siteName: 'Middle weir', nse: 0.55 },
+			{ ...s.calibration!, siteNodeId: 'o1', siteName: 'Outflow gauge', nse: 0.66 }
+		];
+		const lines = [...summaryCsvLines(meta, s)];
+		const head = lines.indexOf('Calibration (outflow gauge vs observed)');
+		const g = lines.indexOf('Calibration at another location: Middle weir');
+		const o = lines.indexOf('Calibration at another location: Outflow gauge');
+		expect(head).toBeGreaterThan(0);
+		expect(g).toBeGreaterThan(head);
+		expect(o).toBeGreaterThan(g);
+		expect(lines.slice(g, o)).toContain('NSE,0.55');
+		expect(lines.slice(g, o)).toContain('Scored at the gauge,Middle weir');
+		expect(lines.slice(o)).toContain('NSE,0.66');
 	});
 });
 
@@ -1945,10 +1980,12 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		const lines = [...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: { days: 120, nse: 0.62, kge: null, pbias: -4.5 } }] })];
 		expect(lines).toContain('Fit check (out of sample),Record,logger,Days,120,NSE,0.62,KGE,,PBIAS (%),-4.5');
 		expect([...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: null }] })]).toContain('Fit check (out of sample),Not computed: no day of the record outside the excluded periods');
-		// At the calibration site the run is fitted to the record: in sample, and said so.
+		// At a calibration location the run is fitted to the record: in sample, and said so; every location's, not only the headline's.
 		const atSite = [...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: { days: 120, nse: 0.9, kge: 0.8, pbias: 1 } }] }, 'g1')];
-		expect(atSite).toContain('Fit check (in sample at the calibration site),Record,logger,Days,120,NSE,0.9,KGE,0.8,PBIAS (%),1');
+		expect(atSite).toContain('Fit check (in sample at a calibration location),Record,logger,Days,120,NSE,0.9,KGE,0.8,PBIAS (%),1');
 		expect(atSite.some((l) => l.startsWith('Fit check (out of sample)'))).toBe(false);
+		const atOther = [...plausibilityLines({ ...checks, gauges: [{ ...gauge, fit: { days: 120, nse: 0.9, kge: 0.8, pbias: 1 } }] }, ['h0', 'g1'])];
+		expect(atOther.some((l) => l.startsWith('Fit check (in sample at a calibration location)'))).toBe(true);
 	});
 
 	it('says what is missing, and is part of the summary sheet', () => {

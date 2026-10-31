@@ -29,7 +29,7 @@ export type WarningGroup = 'note' | 'check';
 export interface WarningCodeInfo {
 	/**
 	 * The settings panel that changes what the warning reports, by its anchor id (frontend settings/sections.ts:
-	 * `set-…` on Model settings or Calibration, `set-unit-rain` inside Model selection for flow generation); null when the fix is on the
+	 * `set-…` on Model settings or Calibration, `set-unit-rain` inside Flow generation); null when the fix is on the
 	 * Data page (load or rename a series), or for a `map.` code on the Map, not a setting.
 	 */
 	setting: string | null;
@@ -81,7 +81,7 @@ export const WARNING_CODES = {
 	'rain.chirpsShadowed': { setting: null, group: 'check' },
 
 	// Rain stations (runoff/stationForcing.ts, runoff/stationRecord.ts): params { station, … }. The station's own
-	// lists are under Model selection for flow generation; its zero-run and accumulation handling follows the catchment's Rain gaps.
+	// lists are under Flow generation; its zero-run and accumulation handling follows the catchment's Rain gaps.
 	'rain.station.noRecord': { setting: 'set-share', group: 'check' },
 	'rain.station.unreliableInvalid': { setting: 'set-share', group: 'check' },
 	'rain.station.unreliable': { setting: 'set-share', group: 'check' },
@@ -115,17 +115,24 @@ export const WARNING_CODES = {
 	'calibration.site.unusable': { setting: 'set-record', group: 'check' },
 	'calibration.site.noRecord': { setting: 'set-record', group: 'check' },
 	// Calibration zones (calibrate/zones.ts, engine 1.106.0, issue #555): a stored row that can't be read (params
-	// { node?, reason? }), zones ticked under Fragmentation ({ gauges }), a ticked row that can't define a zone
+	// { node?, reason? }), a ticked row that can't define a zone
 	// ({ node, reason }), a zone not fitted yet ({ node, name }), and the parts that read only the site's zone
 	// ({ units, zones }).
 	'calibration.zone.notList': { setting: 'set-record', group: 'check' },
 	'calibration.zone.noGauge': { setting: 'set-record', group: 'check' },
 	'calibration.zone.duplicate': { setting: 'set-record', group: 'check' },
 	'calibration.zone.badParams': { setting: 'set-record', group: 'check' },
-	'calibration.zone.needsPerUnit': { setting: 'set-share', group: 'check' },
 	'calibration.zone.unusable': { setting: 'set-record', group: 'check' },
 	'calibration.zone.unfitted': { setting: 'set-fit', group: 'check' },
-	'calibration.zone.siteOnlyElsewhere': { setting: 'set-record', group: 'note' }
+	'calibration.zone.siteOnlyElsewhere': { setting: 'set-record', group: 'note' },
+	// Calibration locations (calibrate/locations.ts, engine 1.110.0, issue #659): a unit's Parameters from naming no
+	// ticked location ({ unit, target }), units outside every location given the nearest one upstream ({ units, node,
+	// name }), none ticked though gauges have records ({ records }), and a headline pointer that isn't ticked
+	// ({ site, name? }).
+	'calibration.zone.assignStale': { setting: 'set-record', group: 'check' },
+	'calibration.zone.restNearest': { setting: 'set-record', group: 'note' },
+	'calibration.zone.noneTicked': { setting: 'set-record', group: 'check' },
+	'calibration.site.notTicked': { setting: 'set-record', group: 'check' }
 } as const satisfies Record<string, WarningCodeInfo>;
 
 export type WarningCode = keyof typeof WARNING_CODES;

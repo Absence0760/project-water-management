@@ -25,10 +25,12 @@
 // the same seed and options reproduce the ensemble exactly (./verify.ts checks it).
 import { dayText, fromEpochDay, toEpochDay, waterYearIndex, waterYearOf, type Monthly } from '../calendar';
 import { prepareCalibration } from '../calibrate/calibrate';
+import { headlineCalibrationSettings, normalizedInput, withHeadlineParams, withLocationFlowKind } from '../calibrate/locations';
+import type { Gr4jParams } from '../runoff/params';
 import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
 import { fitScores } from '../calibrate/objective';
-import { calibrationRecordsAt, parseUnitRainSeriesKey, unitRainSeriesKey, type CalibrationFlowKind, type DailySeries, type ModelInput, type ModelOutput } from '../project';
+import { calibrationRecordsAt, parseUnitRainSeriesKey, resolveUnitRain, unitRainSeriesKey, type CalibrationFlowKind, type DailySeries, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
 import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
@@ -216,14 +218,13 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	// and its CHIRPS level. Its own gauge is gone, so its days fall to the next link of its rule. A unit the base run levels by
 	// the catchment's §2.4b factors (level 'bias') reads them here too: the member turns the correction off, as its catchment
 	// CHIRPS already carries it, so the unit's CHIRPS carries the base run's factors the same way, day by day.
-	const recipes =
-		run.settings.unitRain?.mode === 'perUnit'
-			? unitRainRecipes(
-					{ settings: run.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: run.chirpsCorrection, stations: run.stations?.context ?? null, stationInputs: input.stations ?? null },
-					[],
-					run.settings.unitRain.pinned ?? undefined
-				)
-			: null;
+	// Per unit is the only method (engine ≥ 1.109.0): prepareRun's settings always hold it (resolveUnitRain).
+	const ur = run.settings.unitRain ?? resolveUnitRain(null, []);
+	const recipes = unitRainRecipes(
+		{ settings: run.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: run.chirpsCorrection, stations: run.stations?.context ?? null, stationInputs: input.stations ?? null },
+		[],
+		ur.pinned ?? undefined
+	);
 	for (const r of recipes ?? []) {
 		if (r.chirps?.source !== 'bias') continue;
 		const key = unitRainSeriesKey('rain_chirps_mm', r.nodeId);
@@ -248,18 +249,15 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	}
 	// The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h): the member has no gauge to fit them on, so it pins the
 	// base input's, as its catchment CHIRPS carries the base's §2.4b factors.
-	const refGauge = run.settings.unitRain?.mode === 'perUnit' ? run.settings.unitRain.reference?.gauge : undefined;
-	const ref = referenceFit(run.settings.unitRain, input.series, input.model.nodes, [], refGauge ? referenceGaugeRecord(run.settings, input.series, refGauge, run.stations?.plan ? run.stations.context : null) : undefined);
-	const unitRain =
-		run.settings.unitRain?.mode === 'perUnit'
-			? {
-					...run.settings.unitRain,
-					...(ref && run.settings.unitRain.reference ? { reference: { ...run.settings.unitRain.reference, pinnedFactors: ref.months.map((m) => m.factor) } } : {}),
-					...(recipes ? { pinned: recipes } : {})
-				}
-			: null;
+	const refGauge = ur.reference?.gauge;
+	const ref = referenceFit(ur, input.series, input.model.nodes, [], refGauge ? referenceGaugeRecord(run.settings, input.series, refGauge, run.stations?.plan ? run.stations.context : null) : undefined);
+	const unitRain = {
+		...ur,
+		...(ref && ur.reference ? { reference: { ...ur.reference, pinnedFactors: ref.months.map((m) => m.factor) } } : {}),
+		...(recipes ? { pinned: recipes } : {})
+	};
 	return {
-		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, gapRain: null, ...(unitRain ? { unitRain } : {}), ...(rainStations ? { rainStations } : {}) }, series },
+		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, gapRain: null, unitRain, ...(rainStations ? { rainStations } : {}) }, series },
 		reason: null
 	};
 }
@@ -269,15 +267,19 @@ const isNum = (v: unknown, lo: number, hi: number): v is number => typeof v === 
 
 /** The observed records with enough scored days to judge a member on (≥ 30, as calibration needs), primary first. */
 function usableRecords(input: ModelInput, run: PreparedRun, model: RunoffModelId): CalibrationFlowKind[] {
-	// The records at the calibration site (engine ≥ 1.41.0): the outlet's, or an inner gauge's.
-	const kinds = calibrationRecordsAt(input.series, run.settings.calibrationSiteNodeId);
+	// The records at the headline location (engine 1.110.0, issue #659; the calibration site's from 1.41.0): the
+	// outlet's, or an inner gauge's.
+	const hs = headlineCalibrationSettings(run.settings, input.model.nodes);
+	const site = hs.calibrationSiteNodeId ?? null;
+	const kinds = calibrationRecordsAt(input.series, site);
 	// The record calibration fits first (pickObservedKind's choice): the one asked for, else the gauge, else the logger.
-	const wanted = run.settings.calibrationFlowKind;
+	const wanted = hs.calibrationFlowKind;
 	const primary = wanted && kinds.includes(wanted) ? wanted : kinds[0];
 	kinds.sort((a, b) => (a === primary ? -1 : b === primary ? 1 : 0));
+	const norm = normalizedInput(input);
 	return kinds.filter((k) => {
 		try {
-			prepareCalibration({ ...input, settings: { ...input.settings, calibrationFlowKind: k } }, [], model);
+			prepareCalibration(withLocationFlowKind(norm, site, k), [], model);
 			return true;
 		} catch {
 			return false;
@@ -306,7 +308,9 @@ export function resolveEnsembleOptions(input: ModelInput, req: EnsembleRequest =
 	if (!isInt(seed, 0, 2 ** 31 - 1)) throw new Error('seed must be a whole number from 0 to 2147483647');
 	// The fit's own box and objective, when the project's parameters come from a fit of this model: the ensemble then asks how
 	// uncertain *that* fit is. Otherwise Perrin et al.'s typical ranges: the wide bounds keep too few members at a few hundred.
-	const fit = settings.fitRecord && settings.fitRecord.model === model ? settings.fitRecord : null;
+	// The headline location's fit (engine 1.110.0): the parameters the ensemble varies are its group's.
+	const headlineFit = headlineCalibrationSettings(settings, input.model.nodes).fitRecord;
+	const fit = headlineFit && headlineFit.model === model ? headlineFit : null;
 	// A fit held to the regional prior's box (bounds 'prior', issue #622) has no box of the ensemble's kinds: the
 	// ensemble samples Perrin's typical ranges then, and says so (sampling the prior's box is docs/followups.md's).
 	const fitBounds = fit?.bounds === 'prior' ? undefined : fit?.bounds;
@@ -440,9 +444,11 @@ export interface EnsembleContext {
 	panRow: readonly number[];
 	records: Map<CalibrationFlowKind, RecordDays>;
 	/**
-	 * Where the records are and members are scored (engine ≥ 1.41.0,
-	 * settings.calibrationSiteNodeId): null = the outlet's simulated outflow,
-	 * else that gauge's outflow. Absent on a context from before: the outlet.
+	 * Where the records are and members are scored, and whose parameters and
+	 * record a member sets: the headline location (engine 1.110.0, issue #659;
+	 * the calibration site from 1.41.0). null = the outlet's location (its
+	 * simulated outflow, settings.gr4j), else that gauge's (its outflow, its
+	 * row of settings.calibrationZones). Absent on a context from before: the outlet.
 	 */
 	siteNodeId?: string | null;
 	/** Day indices of each water-year month (0 = Oct). */
@@ -458,6 +464,7 @@ export interface EnsembleContext {
  */
 export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOptions, scoring = true): EnsembleContext {
 	const run = prepareRun(input);
+	const site = headlineCalibrationSettings(run.settings, input.model.nodes).calibrationSiteNodeId ?? null;
 	const { settings, days, startDate } = run;
 	if (options.model === 'gr4j' && !hasPotentialEvaporation(settings, hasDailyApanValue(run.aligned('evap_apan_mm')), hasDailyEt0Value(run.aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	// Pin the window, so the CHIRPS-only source (without the station series) covers the same days.
@@ -469,11 +476,11 @@ export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOpti
 		if (!c.input) throw new Error(`the CHIRPS-only rain source is not available: ${c.reason}`);
 		chirps = pin(c.input);
 	}
-	const startParams = prepareCalibrationParams(base, options.model);
+	const startParams = prepareCalibrationParams(base, options.model, site);
 	const records = new Map<CalibrationFlowKind, RecordDays>();
 	let split = -1;
 	if (scoring) {
-		const probs = options.records.map((k) => ({ k, pb: prepareCalibration({ ...base, settings: { ...base.settings, calibrationFlowKind: k } }, [], options.model) }));
+		const probs = options.records.map((k) => ({ k, pb: prepareCalibration(withLocationFlowKind(normalizedInput(base), site, k), [], options.model) }));
 		const primary = probs[0]!.pb.scoredDays;
 		split = primary[Math.floor(primary.length / 2)]!;
 		const d0 = run.start;
@@ -506,7 +513,7 @@ export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOpti
 		chirps,
 		panRow: settings.panCoefficient,
 		records,
-		siteNodeId: settings.calibrationSiteNodeId ?? null,
+		siteNodeId: site,
 		monthDays: monthDays.map((d) => Int32Array.from(d)),
 		waterYears: [...byYear.values()],
 		wr2012Band,
@@ -514,11 +521,12 @@ export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOpti
 	};
 }
 
-/** The project's parameters for a model (member 0), as calibration reads them. */
-function prepareCalibrationParams(input: ModelInput, model: RunoffModelId): ParamSet {
+/** The project's parameters for a model (member 0), as calibration reads them: the headline location's (`site`). */
+function prepareCalibrationParams(input: ModelInput, model: RunoffModelId, site: string | null): ParamSet {
 	const run = prepareRun(input);
 	const specs = CALIBRATION_PARAMS[model];
-	const src = (model === 'gr4j' ? run.settings.gr4j : run.settings.calibration) as unknown as Record<string, number>;
+	const gr4j = site === null ? run.settings.gr4j : { ...run.settings.gr4j, ...(run.settings.calibrationZones?.find((z) => z.nodeId === site)?.gr4j ?? {}) };
+	const src = (model === 'gr4j' ? gr4j : run.settings.calibration) as unknown as Record<string, number>;
 	return Object.fromEntries(specs.map((s) => [s.key, typeof src[s.key] === 'number' && Number.isFinite(src[s.key]) ? src[s.key]! : s.default]));
 }
 
@@ -526,10 +534,15 @@ function prepareCalibrationParams(input: ModelInput, model: RunoffModelId): Para
 export function memberInput(ctx: EnsembleContext, m: EnsembleMember): ModelInput {
 	const src = m.rain === 'chirps' ? ctx.chirps : ctx.base;
 	if (!src) throw new Error('the CHIRPS-only rain source is not available for this project');
-	const s = src.settings as Record<string, unknown>;
-	const settings: Record<string, unknown> = { ...s, runoffModel: ctx.options.model, calibrationFlowKind: m.record };
-	if (ctx.options.model === 'gr4j') settings.gr4j = { ...((s.gr4j as object) ?? {}), ...m.params };
-	else settings.calibration = { ...((s.calibration as object) ?? {}), ...m.params };
+	const site = ctx.siteNodeId ?? null;
+	// The headline location's record and parameters (engine 1.110.0): a gauge's row, or the top level for the outlet.
+	// The flow kind on the normalised settings; the parameters through withHeadlineParams, which reads the stored shape.
+	const withKind = (i: ModelInput) => withLocationFlowKind(normalizedInput(i), site, m.record);
+	const base: ModelInput = { ...src, settings: { ...src.settings, runoffModel: ctx.options.model } };
+	const at: ModelInput = ctx.options.model === 'gr4j' ? withKind(withHeadlineParams(base, site, m.params as unknown as Gr4jParams)) : withKind(base);
+	const s = at.settings as Record<string, unknown>;
+	const settings: Record<string, unknown> = { ...s };
+	if (ctx.options.model !== 'gr4j') settings.calibration = { ...((s.calibration as object) ?? {}), ...m.params };
 	if (m.panOffset !== 0) settings.panCoefficient = shiftPan(ctx.panRow, m.panOffset);
 	// Settings, model and series only, on purpose: a member runs on history (no forecast days, so no forecastRainSource to
 	// carry) and its warnings aren't shown, so seriesChoice has nothing to do. A forecast ensemble would have to carry them.

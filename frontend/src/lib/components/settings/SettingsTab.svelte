@@ -12,7 +12,7 @@
 	const loadEwrDailySource = () => import('./EwrDailySourceFields.svelte');
 	// Rain for each unit (settings.unitRain, issue #482): out of the tab's chunk, for the same reason; its areal body its own.
 	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
-	// Model selection for flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
+	// Flow generation → Per unit's station table (issue #553 round 3): in the same chunk, drawn whenever Per unit is chosen.
 	const loadFlowGenUnits = () => loadSections().then((m) => ({ default: m.FlowGenerationUnits }));
 	// … and the catchment's station (issue #612 follow-up), in the same chunk, drawn under both methods.
 	const loadFlowGenCatchment = () => loadSections().then((m) => ({ default: m.FlowGenerationCatchment }));
@@ -34,7 +34,6 @@
 	import { settingTarget } from '#lib/components/notes/notes.js';
 	import {
 		fitFlowMethod,
-		flowMethodOf as fitMethodOf,
 		LAKE_FACTOR_PRESETS,
 		lakeFactorPresetFill,
 		lakeFactorPresetNamed,
@@ -43,9 +42,9 @@
 		QM_MIN_WET_DAYS,
 		QM_WET_DAY_MM_MAX,
 		QM_WET_DAY_MM_MIN,
-		type UnitRainSettings,
 		type SeriesMeta,
 		type ModelInput,
+		type ProjectSettings,
 		defaultProjectSettings,
 		resolveCatchmentAreaKm2
 	} from '@water-management/engine';
@@ -57,6 +56,7 @@
 	import { fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
+	import { headlineView } from '#lib/calibration/zones.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { dataQualityError } from './dataQuality';
 	import DataQualitySection from './DataQualitySection.svelte';
@@ -79,8 +79,7 @@
 	import Fold from '#lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { apanSourceNote, withLakeMonthly } from './peInput';
-	import { withUnitRain } from './unitRain';
-	import { FLOW_METHODS, flowMethodOf, methodLabel, stationOptions, unitsOnCatchmentRain, type FlowGenerationMethod } from './flowGeneration';
+	import { FLOW_METHOD, stationOptions, unitsOnCatchmentRain } from './flowGeneration';
 	import { calibrationHref } from '#lib/components/calibration/links.js';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
@@ -116,7 +115,7 @@
 		seriesKinds?: string[] | null;
 		/** The catchment rain series a run reads, whose station MAP Rain for each unit reads (issue #553): null = none, undefined = not loaded. */
 		catchmentRain?: CatchmentStation | null;
-		/** The project's catchment rain series, the rainfall stations Model selection for flow generation → Per unit assigns (issue #553); undefined = not loaded. */
+		/** The project's catchment rain series, the rainfall stations Flow generation → Per unit assigns (issue #553); undefined = not loaded. */
 		rainSeries?: (Pick<SeriesMeta, 'id' | 'name' | 'kind' | 'station'> & { siteNodeId?: string | null })[];
 		/** The project's rain records, each one's unreliable periods on Flagged rain (issue #611, recordPeriods.ts rainRecordOptions); null = not loaded. */
 		rainRecords?: RecordOption[] | null;
@@ -134,27 +133,12 @@
 
 	const cal = $derived(s.calibration);
 	const dateError = $derived(periodError(s));
-	// Model selection for flow generation (issue #553 round 3): the radio is settings.unitRain on or off, as the checkbox it replaced was, so
-	// no stored project changes. The one switched off is kept until saved, so switching back brings it back as it was.
-	const flowMethod = $derived(flowMethodOf(s.unitRain));
 	const stations = $derived(rainSeries ? stationOptions(rainSeries) : undefined);
-	// The land units on the catchment rain (issue #615): their share follows their area, under both methods.
+	// The land units on the catchment rain (issue #615, rule 4 of §2.4h): their share follows their area.
 	const onCatchmentRain = $derived(rainSeries ? unitsOnCatchmentRain(editor?.model.nodes ?? [], s, rainSeries) : []);
 	const NAMES_SHOWN = 6;
 	const namesOf = (units: readonly { name: string }[]) =>
 		units.length > NAMES_SHOWN ? `${units.slice(0, NAMES_SHOWN).map((u) => u.name || 'unnamed').join(', ')} and ${units.length - NAMES_SHOWN} more` : units.map((u) => u.name || 'unnamed').join(', ');
-	function setFlowMethod(m: FlowGenerationMethod) {
-		if (m === flowMethod) return;
-		if (m === 'fragmentation') {
-			// The Per unit setup stays (issue #615): Fragmentation's EWR shares run on it, so only the mode changes.
-			if (s.unitRain) draft.kept.unitRain = $state.snapshot(s.unitRain);
-			s.unitRain = withUnitRain(false, s.unitRain);
-		} else {
-			// A stored `catchment` setting (its gauge MAP, its period) comes back on too.
-			const last = (draft.kept.unitRain as UnitRainSettings | null | undefined) ?? s.unitRain ?? null;
-			s.unitRain = withUnitRain(true, last);
-		}
-	}
 	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); the threshold it was switched off with is kept until saved.
 	function setGapMapOn(on: boolean) {
 		if (!on && s.chirpsQuantileMap) draft.lastGapMap = { ...s.chirpsQuantileMap };
@@ -238,13 +222,12 @@
 	);
 
 	/**
-	 * The fit's method when the parameters were fitted under the other one: "parameters not fitted for this method"
-	 * (the engine's fitRecordStatus methodChanged, which reads only these two).
+	 * The parameters were fitted under Fragmentation, retired in engine 1.109.0 (issue #658): "parameters not fitted for
+	 * this method" (the engine's fitRecordStatus methodChanged).
 	 */
-	const fitMismatch = $derived.by(() => {
-		const m = s.fitRecord ? fitFlowMethod(s.fitRecord) : null;
-		return m !== null && m !== fitMethodOf(s.unitRain) ? m : null;
-	});
+	// The headline location's fit (issue #659): a legacy inner site's record is in its row once the Calibration page reads it.
+	const headFit = $derived(headlineView(s as unknown as ProjectSettings, editor?.model.nodes).fitRecord);
+	const fitMismatch = $derived(!!headFit && fitFlowMethod(headFit) === 'fragmentation');
 	// Rain gaps at its defaults: one line that opens its three cards (rain.ts).
 	const rainAtDefaults = $derived(rainGapsAtDefaults(s));
 	// Each panel's line of what it is set to now (summaries.ts).
@@ -293,12 +276,12 @@
 	     and the hidden text stays its description for screen readers. Remembered on this device. -->
 	<ExplainSwitch />
 
-	<!-- Model selection for flow generation (issue #553 round 3; "Flow generation" until issue #614) ------------->
+	<!-- Flow generation (issue #553 round 3; "Model selection for flow generation" from issue #614 until issue #658, when the choice went) ------------->
 	<!-- First on the page (issue #614: the client's main modelling choice, above the EWR the results are judged by).
-	     How natural flow is made: one choice, Fragmentation or Per unit (settings.unitRain off or `perUnit`, docs/model.md
-	     §2.4h, §2.5), with each method's settings under it. Its id stays set-share, so the links to the flow share and the
+	     How natural flow is made: Per unit, the only method since issue #658 (settings.unitRain `perUnit`, docs/model.md
+	     §2.4h, §2.5), with its settings under it. Its id stays set-share, so the links to the flow share and the
 	     panel's notes (settingTarget('share')) still land here. The lead card (data-lead): an accent frame and a tinted
-     head, and the two methods as choice cards, so the main modelling choice stands out (issue #614). -->
+	     head, so the main modelling setup stands out (issue #614). -->
 	<section class="panel lead" id="set-share" aria-labelledby="share-h" data-lead>
 		<div class="panel-head">
 			<h2 id="share-h">{FLOW_GENERATION_HEADING}</h2>
@@ -311,41 +294,21 @@
 		<p class="hint" data-testid="flowgen-where">
 			The runoff model’s parameters are fitted on Calibration, under <a href={calibrationHref(null, 'set-flow')}>Flow calibration</a>.
 		</p>
-		<fieldset class="plain flowgen-method" data-testid="flowgen-method" aria-describedby="st-flowgen-h">
-			<legend>How natural flow is made <HelpTip key="settings.unitRain" /></legend>
-			<!-- Each method a choice card: its name, then what it does in plain words, always shown (its name alone said
-			     nothing). The radio stays a radio; its label covers the card, so a click anywhere on it picks it. -->
-			<div class="radios">
-				{#each FLOW_METHODS as m (m.value)}
-					<span class="opt">
-						<label class="check">
-							<input type="radio" name="st-flowgen" value={m.value} checked={flowMethod === m.value} disabled={readonly} onchange={() => setFlowMethod(m.value)} aria-describedby="st-flowgen-{m.value}" />
-							{m.label}
-						</label>
-						<span class="opt-what" id="st-flowgen-{m.value}" data-testid="flowgen-what">{m.short}</span>
-					</span>
-				{/each}
-			</div>
-			<span class="hint explain" id="st-flowgen-h">
-				{FLOW_METHODS.find((m) => m.value === flowMethod)?.help} GR4J’s parameters depend on the rain they were fitted on, so switching method needs a refit.
-			</span>
-		</fieldset>
+		<!-- Per unit is the only method (issue #658: Fragmentation, one GR4J run on the catchment rain split between the units,
+		     is retired; engine 1.109.0). What it does in plain words, always shown. -->
+		<div class="flowgen-method" data-testid="flowgen-method">
+			<p class="flowgen-name"><strong>{FLOW_METHOD.label}</strong> <HelpTip key="settings.unitRain" />: <span data-testid="flowgen-what">{FLOW_METHOD.short}</span>.</p>
+			<p class="hint explain" id="st-flowgen-h">{FLOW_METHOD.help}</p>
+		</div>
 		{#if fitMismatch}
-			<!-- A state line, not an explanation (it stays when the explanations are off): the fit is the other method's. -->
+			<!-- A state line, not an explanation (it stays when the explanations are off): the fit is the retired method's. -->
 			<p class="alert alert-warning" role="status" data-testid="flowgen-refit">
-				Parameters not fitted for this method: the GR4J parameters were fitted under {methodLabel(fitMismatch)}. <a href="?tab=calibration#set-fit">Fit the parameters</a>
+				Parameters not fitted for this method: the GR4J parameters were fitted under Fragmentation, which is retired. <a href="?tab=calibration#set-fit">Fit the parameters</a>
 				again on Calibration before relying on the results.
 			</p>
 		{/if}
-		<!-- The Per unit setup (issue #615): under Per unit it makes each unit's runoff; under Fragmentation it makes only each
-		     unit's natural MAR share of the EWR (docs/model.md §2.5b), so it shows under both. -->
-		{#if flowMethod === 'fragmentation'}
-			<p class="hint" role="note" data-testid="flowgen-share-setup">
-				Under Fragmentation the setup below sets only how the EWR is split: GR4J also runs once on each unit’s own rain, for each unit’s natural MAR share, and the catchment’s one run still makes the flow.
-			</p>
-		{/if}
-		<!-- The catchment's rainfall station (settings.rainStations.catchment, issue #612 follow-up): the catchment rain under
-		     either method (GR4J's one run under Fragmentation; demand and the dams always), so it shows under both. -->
+		<!-- The catchment's rainfall station (settings.rainStations.catchment, issue #612 follow-up): the catchment rain that
+		     demand and the dams read, and the units on the catchment rain (rule 4). -->
 		<div class="sub-card" data-testid="flowgen-catchment-card">
 			<h3 class="sub first">The catchment’s rainfall station <HelpTip key="catchment-rain-station" /></h3>
 			<Lazy load={loadFlowGenCatchment}>
@@ -378,12 +341,12 @@
 		</div>
 		<div class="sub-card" data-testid="flowgen-share-card">
 			<h3 class="sub first">Flow share and the EWR split</h3>
-			<!-- One share per unit, its natural MAR share, under both methods (issues #615, #616; docs/model.md §2.5, §2.5b):
-			     it splits the EWR, the land-cover low-flow threshold and the priority users' demand, and under Fragmentation
-			     GR4J's one run's flow too. The area, Hi/Lo MAP and specific methods are gone (#616), so nothing here is set. -->
+			<!-- One share per unit, its natural MAR share (issues #615, #616; docs/model.md §2.5, §2.5b): it splits the EWR, the
+			     land-cover low-flow threshold and the priority users' demand. The area, Hi/Lo MAP and specific methods are gone
+			     (#616), so nothing here is set. -->
 			<!-- A state line, not an explanation: it stays when the explanations are off, as the areal rain note does. -->
 			<p class="hint" role="note" data-testid="ewr-split-hint">
-				Each unit’s share is its natural MAR: its own GR4J runoff over the run’s complete water years ÷ the units’ total{flowMethod === 'perUnit' ? '' : ', from the runs on each unit’s own rain above'}. It splits the EWR, the land cover’s low-flow threshold and the priority users’ demand between the units. The run’s summary lists each unit’s share, and the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>’s In use column the latest run’s.
+				Each unit’s share is its natural MAR: its own GR4J runoff over the run’s complete water years ÷ the units’ total. It splits the EWR, the land cover’s low-flow threshold and the priority users’ demand between the units. The run’s summary lists each unit’s share, and the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>’s In use column the latest run’s.
 			</p>
 			{#if onCatchmentRain.length}
 				<p class="hint" role="note" data-testid="ewr-split-catchment-rain">
@@ -391,15 +354,9 @@
 					{namesOf(onCatchmentRain)}.
 				</p>
 			{/if}
-			{#if flowMethod === 'perUnit'}
-				<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
-					Each unit makes its own runoff, so the shares don’t split the flow.
-				</p>
-			{:else}
-				<p class="hint explain" data-testid="share-hint" data-unit-rain="off">
-					GR4J runs once on the catchment rain, and the units’ shares split its flow between them. To give each unit its own runoff, choose Per unit above.
-				</p>
-			{/if}
+			<p class="hint" role="note" data-testid="share-hint" data-unit-rain="on">
+				Each unit makes its own runoff, so the shares don’t split the flow.
+			</p>
 		</div>
 	</section>
 
@@ -1091,7 +1048,7 @@
 		align-items: center;
 		min-height: 36px;
 	}
-	/* The page's lead card (issue #614): Model selection for flow generation, the main modelling choice, framed in
+	/* The page's lead card (issue #614): Flow generation, the main modelling choice, framed in
 	   the accent with its head tinted, so it reads as the page's first decision rather than one panel among many.
 	   Tokens only (--accent, --accent-soft carry their dark values). The head spans the panel's padding. */
 	.panel.lead {
@@ -1108,68 +1065,11 @@
 	.panel.lead > .panel-head + .summary {
 		margin-top: 0;
 	}
-	/* Its two methods as choice cards (issue #614), side by side where they fit and one under the other on a phone:
-	   each name, then what it does under it, lined up with the name's words (past the radio's box, its margins and
-	   the gap). The picked card takes the accent. */
-	.radios {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-		gap: 0.5rem;
-		margin-top: 0.25rem;
+	.flowgen-method {
+		margin: 0.25rem 0 0;
 	}
-	.opt {
-		position: relative;
-		/* The lifted radio's z-index orders only inside its card (ui-playbook § 4, stretched links). */
-		isolation: isolate;
-		display: block;
-		padding: 0.35rem 0.75rem 0.6rem;
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius);
-		background: var(--surface);
-	}
-	.opt:has(input:checked) {
-		border-color: var(--accent);
-		box-shadow: inset 0 0 0 1px var(--accent);
-		background: var(--accent-soft);
-	}
-	/* An editor's card says it is one target: the pointer, and a stronger outline on hover (a viewer's radios are disabled). */
-	.opt:has(input:enabled) {
-		cursor: pointer;
-	}
-	.opt:has(input:enabled):hover:not(:has(input:checked)) {
-		border-color: var(--border-input);
-	}
-	/* One focus ring, the card's, clear of the picked card's accent frame. */
-	.opt:has(input:focus-visible) {
-		outline: 2px solid var(--focus);
-		outline-offset: 3px;
-	}
-	.opt input:focus-visible {
-		outline: none;
-	}
-	.opt > .check {
-		font-weight: 600;
-	}
-	/* The label covers the card, so the card is one target; the radio stays above that cover, so a click or a
-	   pointer on the radio itself reaches it directly. The cost, as with a card's stretched link (ui-playbook § 4):
-	   the method's words can't be selected. Don't move them into the label to fix that: they would join the
-	   radio's name, which is the method's name alone (its words are its description, aria-describedby). */
-	.opt > .check::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		border-radius: inherit;
-	}
-	.opt > .check > input {
-		position: relative;
-		z-index: 1;
-	}
-	.opt-what {
-		display: block;
-		padding-left: calc(21px + 0.4rem);
-		margin-top: -0.35rem;
-		color: var(--text-2);
-		font-size: var(--font-sm);
+	.flowgen-method > p {
+		margin: 0;
 	}
 	.flowgen-method + .alert {
 		margin-top: 0.5rem;

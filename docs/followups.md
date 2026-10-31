@@ -1113,7 +1113,11 @@ runs and accumulations are real) can't be decided without the client.
       fingerprint the share runs ran on; null with no land unit, absent
       under Per unit), the run summary the same (`summary.shareRain`), and
       `fitRecordStatus` sets `shareRainChanged` (and with it
-      `forcingChanged`) when it moves.
+      `forcingChanged`) when it moves. **Superseded in engine 1.109.0 (issue #658,
+      engine-audit.md FM2):** Fragmentation is retired, so a Fragmentation
+      fit reads "Parameters not fitted for this method" and
+      `shareRainChanged` is gone; `forcing.shareRain` stays readable on
+      older fit records.
 - [ ] **The client regression suite's deviation list after FM1 (issue
       #615, engine-audit.md FM1).** The suite feeds the workbook's own
       natural flow, without the units' runoff, so its shares fall back to
@@ -2522,6 +2526,52 @@ Still open:
   shares to the start parameters' for the whole stepwise fit, or iterate the
   steps once more. Trigger: a client catchment with an EWR charge above a
   ticked gauge.
+
+### Calibration locations (issue #659)
+
+Issue #659 made every gauge with a record, and the outlet, a calibration
+location of its own (engine 1.110.0, model.md §2.10n; CZ1 now reads "the
+headline location's group", engine-audit.md CZ1/CZ2). Slice D built:
+
+- ✅ **Parameters from** (option 2, "similar units"):
+  `calibration/UnitParamsTable.svelte` with the engine's own resolution and
+  the fit plan's live refusal (ui.md § Settings & calibration).
+- ✅ **A borrowed unit on the Network and the Map**: its donor's colour,
+  ringed on the Network, "borrowed from G" in its label, the key and the
+  card; a rest unit "nearest upstream: G" (ui.md § Network, maps.md §
+  Calibration zones on the map).
+- ✅ **Results, the report and the evidence pack**: the locations table, the
+  headline first, each unit's source named (`evidence-25`, each location's
+  period and every unit's source; evidence-pack.md § Calibration zones).
+- ✅ **The run comparison**: the outlet's tick, the headline, the rest rule
+  and one line per unit's Parameters from; legacy snapshots read through the
+  normaliser, so a migrated project compares as unchanged
+  (run-comparison.md).
+- ✅ **A scenario's calibration window, record and X1–X4** write into the
+  headline location's row when it is a gauge (scenarios.md).
+
+Still open:
+
+- **The stepwise loop exists twice**: the engine's `calibrateStepwise` and the
+  browser's `calibration/runner.ts` `startStepwiseFit`. Both take the order
+  from `locationFitPlan`, so there is one order rule, but the loop itself
+  (apply a step, fix its parameters, go on) is written twice. Durable fix: a
+  step iterator in the engine that the worker drives. Trigger: the first bug
+  that is in one loop and not the other, or a change to how a step's result
+  carries into the next.
+- **The Map draws no outline for a borrowed unit's area**: its donor's colour,
+  with "Borrowed from G" on its own line in the key and in the card. The
+  Network rings it. Durable fix: a dashed line layer in `mapStyle.ts` keyed on
+  a `marker` property `overlayData` passes from `zoneFills`. Trigger: a
+  hydrologist reading the map alone (the key closed) misses a borrowed unit.
+- **The fit's refusal doesn't point at a row.** Parameters from shows
+  `locationFitPlan`'s refusal (a borrowing cycle, a location left with no
+  unit draining through it) above the table, naming the locations but not
+  which units' choices to change. Durable fix: the engine's plan returns the
+  units involved (the borrowed units of the locations on the cycle, or of the
+  emptied group) beside the message, and the table marks those rows
+  `aria-invalid`. Trigger: a catchment with more than a handful of borrowed
+  units, where finding the culprits by hand is slow.
 
 ## Verification
 

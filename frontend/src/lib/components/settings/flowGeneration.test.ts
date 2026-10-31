@@ -1,4 +1,4 @@
-// Settings → Model selection for flow generation (flowGeneration.ts, issue #553 round 3): the
+// Settings → Flow generation (flowGeneration.ts, issue #553 round 3): the
 // method from settings.unitRain, the Per unit table's rows and their writes
 // into settings.rainStations (a fit made under the other method is the
 // engine's FitRecordStatus.methodChanged, tested in stationForcing.test.ts). The
@@ -12,9 +12,7 @@ import {
 	assignmentLine,
 	catchmentMapFormError,
 	catchmentMapReadout,
-	FLOW_METHODS,
-	flowMethodOf,
-	methodLabel,
+	FLOW_METHOD,
 	landUnits,
 	namesLine,
 	patchAdd,
@@ -48,32 +46,17 @@ const S = station('s', 600);
 const T = station('t', 500, true);
 const U = station('u', null);
 
-describe('the method', () => {
-	it('is Per unit for perUnit and Fragmentation otherwise, as runs read settings.unitRain', () => {
-		expect([undefined, null, { mode: 'catchment' }, { mode: 'perUnit' }, { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'x' }].map(flowMethodOf)).toEqual([
-			'fragmentation',
-			'fragmentation',
-			'fragmentation',
-			'perUnit',
-			'perUnit'
-		]);
-	});
-});
-
-describe('the methods’ words (issue #586 E14)', () => {
-	it('keep the names the engine’s messages use, each with plain words of what it does, no model jargon', () => {
-		// The fit record and the engine's "fitted under …" message name the methods by these.
-		expect(FLOW_METHODS.map((m) => m.label)).toEqual(['Fragmentation', 'Per unit']);
-		expect(methodLabel('perUnit')).toBe('Per unit');
-		for (const m of FLOW_METHODS) {
-			expect(m.short.length, m.value).toBeGreaterThan(0);
-			// Short enough to sit on the name's line at 1440, and lower case after it.
-			expect(m.short.length, m.value).toBeLessThanOrEqual(70);
-			expect(m.short, m.value).toMatch(/^[a-z]/);
-			// Plain words: no model or method name in them (GR4J, the other method's name).
-			expect(m.short, m.value).not.toMatch(/GR4J|Fragmentation|Per unit/);
-		}
-		expect(new Set(FLOW_METHODS.map((m) => m.short)).size).toBe(FLOW_METHODS.length);
+describe('the method’s words (issue #586 E14, issue #658)', () => {
+	it('names Per unit, the only method, with plain words of what it does, no model jargon', () => {
+		expect(FLOW_METHOD.label).toBe('Per unit');
+		// Short enough to sit on the name's line at 1440, and lower case after it.
+		expect(FLOW_METHOD.short.length).toBeGreaterThan(0);
+		expect(FLOW_METHOD.short.length).toBeLessThanOrEqual(70);
+		expect(FLOW_METHOD.short).toMatch(/^[a-z]/);
+		expect(FLOW_METHOD.short).not.toMatch(/GR4J|Fragmentation|Per unit/);
+		// No choice left: the help never offers the retired method.
+		expect(FLOW_METHOD.help).not.toMatch(/Fragmentation/);
+		expect(FLOW_METHOD.help).toMatch(/Run readiness/);
 	});
 });
 

@@ -77,7 +77,7 @@ describe('readFarmSpec', () => {
 		expect(notesFor('Pitman')).toEqual([flowShareMethodNote('Pitman')]);
 		// The Python's text (extract_project.py flow_share_method_note), which the parity test compares.
 		expect(flowShareMethodNote('Hi/Lo')).toBe(
-			"[Farm spec] the workbook's fragmentation method 'Hi/Lo' is not used: the app splits the flow by each unit's natural MAR (docs/model.md §2.5)"
+			"[Farm spec] the workbook's fragmentation method 'Hi/Lo' is not used: each unit makes its own runoff on its own rain (docs/model.md §2.4h)"
 		);
 	});
 

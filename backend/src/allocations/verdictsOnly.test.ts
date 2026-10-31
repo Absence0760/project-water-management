@@ -223,7 +223,7 @@ describe('an evidence report on such a run', () => {
 	});
 });
 
-describe('§ 4’s combined dams as that viewer reads them (evidence-25)', () => {
+describe('§ 4’s combined dams as that viewer reads them (evidence-26)', () => {
 	const m = (b: number, c: number) => ({ baseline: b, combined: c, change: c - b, sumOfSingles: c - b, interaction: 0 });
 	const dam = (nodeId: string, onVolumes: boolean) => ({
 		nodeId,
@@ -235,7 +235,7 @@ describe('§ 4’s combined dams as that viewer reads them (evidence-25)', () =>
 	});
 	const cumulative = (onVolumes: boolean) => ({ applications: [], counted: 0, truncated: false, total: { ewrDays: 3, reservePp: null }, withThis: null, combined: { notAssessed: null, ewrDays: m(4, 7), dams: [dam('a', onVolumes), dam('b', false)] } });
 	const report = (mode: string, onVolumes = false) => ({
-		version: 'evidence-25',
+		version: 'evidence-26',
 		cumulative: cumulative(onVolumes),
 		summaries: { baseline: { allocations: { mode } }, application: { allocations: { mode: 'none' } } }
 	});
@@ -258,7 +258,7 @@ describe('§ 4’s combined dams as that viewer reads them (evidence-25)', () =>
 		// A dam without the flag (hand-edited, or a shape this code doesn't know) counts as resting on them.
 		const unflagged = { combined: { dams: [{ ...dam('c', false), onVolumes: undefined }] } };
 		expect((combinedDamVerdicts(unflagged, false).combined.dams[0] as { withheld?: true }).withheld).toBe(true);
-		// Nothing to cut: a report before evidence-25, or no combined section.
+		// Nothing to cut: a report before evidence-26, or no combined section.
 		const before = { combined: { notAssessed: 'x' } };
 		expect(combinedDamVerdicts(before, true)).toBe(before);
 	});

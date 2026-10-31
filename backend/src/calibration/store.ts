@@ -3,10 +3,13 @@
 //
 // A run of the project's calibration rules is planned from the live model
 // input (the water years the rules leave out, the cases in order), stored
-// with the rules and the input's hash, and fitted one case per
-// `auto_calibration` job (jobs/handlers/auto-calibration.ts), each queueing
-// the next as the same user, so no job runs longer than one fit. The last
-// case picks the fit to keep. Every score is the server's own, so a stored
+// with the rules and the input's hash, and fitted by a chain of
+// `auto_calibration` jobs (jobs/handlers/auto-calibration.ts), each queueing
+// the next as the same user, so one runs at a time. A case's fit is cut into
+// pieces across jobs (fitNextCase: its optimisations run in order, the one
+// under way paused by the clock and resumed by the next job from its stored
+// state, `work`), so no job runs longer than AUTO_JOB_SECONDS_MAX and the
+// result is the unbroken fit's. The last case picks the fit to keep. Every score is the server's own, so a stored
 // report is no client's claim, and the only way to put an automated fit in
 // the settings is applyCalibration, which builds the fit record here.
 import { createHash, randomUUID } from 'node:crypto';
@@ -16,13 +19,14 @@ import {
 	et0FitWindow,
 	fitScoredThrough,
 	finishAutoCalibration,
+	locationCalibrationSettings,
 	calibrationSeriesKey,
 	fitRecordFromReport,
 	planAutoCalibration,
+	prepareAutoCase,
 	resolveCalibrationRules,
 	resolveEnsembleOptions,
 	runAutoCase,
-	runModel,
 	sameRules,
 	sameSignOff,
 	withoutForecastTail,
@@ -33,14 +37,17 @@ import {
 	type CalibrationRules,
 	type ModelInput,
 	type DailySeries,
+	type DdsState,
 	type Et0DailyFingerprint,
+	type FitOutcome,
 	type ProjectSettings
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { beginSettingsChange, recordModelRevision } from '../history/record.js';
 import { enqueueJob, type JobMeta, type JobStatus } from '../jobs/queue.js';
-import { LeaseLostError } from '../jobs/errors.js';
+import { JobRelease, LeaseLostError } from '../jobs/errors.js';
+import { logEvent } from '../logging/logEvent.js';
 import { mergeSettings, patchSettings } from '../projects/settings.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
 
@@ -49,7 +56,18 @@ function et0Fingerprint(series: DailySeries | undefined, through: string): Et0Da
 	const w = series ? et0FitWindow(series, through) : null;
 	return w ? { startDate: w.startDate, length: w.values.length, valuesSha256: seriesHash(w.values), through } : null;
 }
-import { AUTO_CALIBRATIONS_KEPT, AUTO_CASE_SECONDS_MAX } from './schema.js';
+import {
+	calibrationSeconds,
+	caseJobs,
+	evaluationSeconds,
+	FINISH_EVALUATIONS,
+	finishSeconds,
+	modelSize,
+	pieceOverheadSeconds,
+	wallClock,
+	type Clock
+} from './estimate.js';
+import { AUTO_CALIBRATIONS_KEPT, AUTO_JOB_SECONDS_MAX, AUTO_RUN_SECONDS_MAX } from './schema.js';
 
 export type AutoCalibrationStatus = 'running' | 'complete' | 'failed';
 export type AutoCalibrationTrigger = 'manual' | 'new_data';
@@ -83,7 +101,9 @@ export interface AutoCalibrationRow {
 	chosen: number | null;
 	error: string | null;
 	engineVersion: string;
-	/** The job fitting the next case (null once the purge removed it). */
+	/** The case under way when its fit has started: the model runs its fit has made and makes in all, over its jobs. */
+	work: { done: number; total: number } | null;
+	/** The job fitting the next piece (null once the purge removed it). */
 	job: { id: string; status: JobStatus; error: string | null; progress: number | null } | null;
 	createdBy: string | null;
 	createdAt: string;
@@ -109,7 +129,7 @@ const brief = (c: AutoCase): CaseBrief => ({
 	params: c.report ? Object.fromEntries(c.report.free.map((k) => [k, c.report!.params[k]!])) : null
 });
 
-const SELECT = `SELECT a.id, a."trigger", a.status, a.rules_revision AS "rulesRevision", a.rules, a.plan, a.cases, a.report, a.chosen, a.error,
+const SELECT = `SELECT a.id, a."trigger", a.status, a.rules_revision AS "rulesRevision", a.rules, a.plan, a.cases, a.report, a.chosen, a.error, a.work,
 	a.engine_version AS "engineVersion",
 	CASE WHEN j.id IS NULL THEN NULL ELSE jsonb_build_object('id', j.id, 'status', j.status, 'error', j.last_error, 'progress', j.progress) END AS job,
 	cu.display_name AS "createdBy", a.created_at AS "createdAt", a.completed_at AS "completedAt",
@@ -125,11 +145,15 @@ export interface StoredReport {
 	reasons: string[][];
 }
 
-type StoredRow = Omit<AutoCalibrationRow, 'cases'> & { cases: AutoCase[] };
+type StoredRow = Omit<AutoCalibrationRow, 'cases' | 'work'> & { cases: AutoCase[]; work: CaseWork | null };
 /** The fitted cases with the finished report's verdicts. */
 const judged = (cases: AutoCase[], report: StoredReport | null): AutoCase[] =>
 	report ? cases.map((c, i) => ({ ...c, eligible: report.eligible[i] ?? false, reasons: report.reasons[i] ?? c.reasons })) : cases;
-const toRow = (r: StoredRow): AutoCalibrationRow => ({ ...r, cases: judged(r.cases, r.report).map(brief) });
+const toRow = (r: StoredRow): AutoCalibrationRow => ({
+	...r,
+	cases: judged(r.cases, r.report).map(brief),
+	work: r.status === 'running' && r.work && r.work.case === r.cases.length ? { done: r.work.done, total: r.work.total } : null
+});
 
 /** The model input a run of the rules fits: the live input without the forecast tail, as every fit and ordinary run (runs/execute.ts). */
 export async function calibrationInput(db: Db, projectId: string): Promise<ModelInput> {
@@ -143,29 +167,35 @@ export const inputSha256 = (input: ModelInput): string => createHash('sha256').u
 export class CalibrationRefused extends Error {}
 
 /**
- * The plan for a run of the rules on this input, with nothing held open
- * while it computes. One case's time is estimated from a full model run
- * (the shortest of three: a fit's evaluations stop at the last scored day, so
- * this errs long) × the model runs one case makes; above
- * AUTO_CASE_SECONDS_MAX the rules are refused before anything is queued.
+ * The plan for a run of the rules on this input. Its time on the job worker
+ * is estimated from the model's size × the model runs it makes (./estimate.ts:
+ * no clock, so the same project and rules always get the same answer however
+ * busy the server is). A case's fit runs over as many jobs as it needs, so
+ * the rules are refused only for what can't be cut: a case's last step
+ * (scoring the fit, then a run with it) past one job's `maxSeconds`
+ * (AUTO_JOB_SECONDS_MAX), or the whole run past `maxRunSeconds`
+ * (AUTO_RUN_SECONDS_MAX). Either is refused before anything is queued.
  */
-export function planCalibration(input: ModelInput, maxSeconds = AUTO_CASE_SECONDS_MAX): AutoCalibrationPlan {
+export function planCalibration(input: ModelInput, maxSeconds = AUTO_JOB_SECONDS_MAX, maxRunSeconds = AUTO_RUN_SECONDS_MAX): AutoCalibrationPlan {
 	let plan: AutoCalibrationPlan;
+	let size: ReturnType<typeof modelSize>;
 	try {
 		plan = planAutoCalibration(input);
+		size = modelSize(input);
 	} catch (err) {
 		throw new CalibrationRefused((err as Error).message);
 	}
-	let fastest = Infinity;
-	for (let i = 0; i < 3; i++) {
-		const t0 = performance.now();
-		runModel(input);
-		fastest = Math.min(fastest, performance.now() - t0);
-	}
-	const seconds = (plan.caseEvaluations * fastest) / 1000;
-	if (seconds > maxSeconds) {
+	const step = pieceOverheadSeconds(size) + finishSeconds(plan, size);
+	if (step > maxSeconds) {
 		throw new CalibrationRefused(
-			`each fit would take about ${Math.ceil(seconds / 60)} minutes (${plan.caseEvaluations} model runs), more than a background job may run (${maxSeconds / 60} minutes): lower the model runs per fit or the starts in the calibration rules`
+			`the model is too large to calibrate on the server: the last step of each fit (scoring it, ${plan.rules.run.starts + FINISH_EVALUATIONS} model runs, then a run with it) would take up to about ${Math.ceil(step / 60)} minutes there, more than a background job may run (${maxSeconds / 60} minutes): lower the starts in the calibration rules or shorten the simulation period`
+		);
+	}
+	const total = calibrationSeconds(plan, size, maxSeconds);
+	if (total > maxRunSeconds) {
+		const n = plan.cases.length;
+		throw new CalibrationRefused(
+			`the rules would take up to about ${Math.ceil(total / 3600)} hours on the server (${n} fit${n === 1 ? '' : 's'} of ${plan.caseEvaluations} model runs each), more than a run of the rules may take (${maxRunSeconds / 3600} hours): lower the model runs per fit, the starts or the fits in the calibration rules`
 		);
 	}
 	return plan;
@@ -240,47 +270,193 @@ interface Working {
 	rules: CalibrationRules;
 	plan: AutoCalibrationPlan;
 	cases: AutoCase[];
+	work: CaseWork | null;
 	inputSha256: string;
+	engineVersion: string;
 }
 
 /**
- * The job's work: fit the next case of a running calibration, as the user it
+ * Where the case under way stands between two of its jobs (290_auto_calibration_work):
+ * the optimisations of its fit finished, in order, and the search of the next
+ * one paused where the last job stopped (the engine's DDS state). `done` and
+ * `total` are the fit's model runs so far and in all, for the page; `jobs`
+ * the jobs it has taken.
+ */
+interface CaseWork {
+	case: number;
+	fits: FitOutcome[];
+	search: DdsState | null;
+	done: number;
+	total: number;
+	jobs: number;
+}
+
+/**
+ * Model runs a job may make, at most (tests narrow it to cut a small fit into
+ * several jobs; the clock cuts it in production), and how soon a job claimed
+ * late in the worker's tick hands itself back instead of starting.
+ */
+export const calibrationPieces = { maxEvaluations: Infinity, minSeconds: 30 };
+/** A job handed back for too little time left in the tick runs again after this (past the tick). */
+export const RELEASE_DELAY_SECONDS = 120;
+/** A case may take this many times the jobs estimated (and a few more) before the run is stopped: the worker would be far slower than the estimate. */
+const JOBS_SLACK = 3;
+const JOBS_EXTRA = 4;
+
+export interface FitOptions {
+	/** The clock the job's time is kept by (ms); tests pass their own. */
+	now?: Clock;
+	/** The longest the job may run (AUTO_JOB_SECONDS_MAX). */
+	maxSeconds?: number;
+	/** When the worker must be done (epoch ms, JobContext.deadline): the job stops sooner when that is sooner. */
+	deadline?: number | null;
+}
+
+/**
+ * The job's work: fit the next piece of a running calibration, as the user it
  * runs as, in the job's transaction (the engine is synchronous, as for
  * `yield`). The input must still hash as it did when the rules were planned,
  * or the run fails, saying so (the next new data or a new request runs them
- * again). After the case, the next case's job is queued; after the last, the
- * kept fit is picked and the run completed, and applied at once when new data
- * queued it and the rules say `apply` and are signed off. Returns what
- * happened; false when there was nothing to do.
+ * again).
+ *
+ * A piece goes on with the case under way (or starts the next): it runs the
+ * fit's optimisations in order, from where the stored `work` left off, until
+ * the job's time (`maxSeconds`, or less before the worker's `deadline`) would
+ * be passed by one more model run, by the clock. It then pauses the search
+ * where it stands, stores it and queues the next piece as the same user. A
+ * paused search resumes exactly (calibrate/dds.ts), so the case is the one an
+ * unbroken fit gives, however the clock cut it. Once every optimisation has
+ * run, the case is built (its report, the run with the fit, the filters) when
+ * its estimate fits the time left, else in the next job, and appended; after
+ * the last case the kept fit is picked and the run completed (applied at once
+ * when new data queued it and the rules say `apply` and are signed off).
+ *
+ * Every job makes at least one model run or builds a case, so a run ends. A
+ * case taking far more jobs than estimated (the worker far slower than the
+ * estimate) stops the run, saying so. A job claimed with less than
+ * calibrationPieces.minSeconds left before the deadline is handed back
+ * (JobRelease, its attempt given back). Returns what happened; false when
+ * there was nothing to do.
  */
-export async function fitNextCase(db: Db, projectId: string, id: string, progress: (pct: number) => Promise<boolean>): Promise<'next' | 'complete' | 'failed' | false> {
+export async function fitNextCase(
+	db: Db,
+	projectId: string,
+	id: string,
+	progress: (pct: number) => Promise<boolean>,
+	o: FitOptions = {}
+): Promise<'next' | 'complete' | 'failed' | false> {
+	const now = o.now ?? wallClock;
+	const t0 = now();
+	const maxMs = (o.maxSeconds ?? AUTO_JOB_SECONDS_MAX) * 1000;
+	const availableMs = o.deadline ? Math.min(maxMs, o.deadline - Date.now() - 5_000) : maxMs;
+	const elapsed = () => now() - t0;
+	const fail = async (error: string) => {
+		await db.query(`UPDATE auto_calibration SET status = 'failed', error = $2, work = NULL WHERE id = $1`, [id, error]);
+		return 'failed' as const;
+	};
 	const { rows } = await db.query<Working>(
-		`SELECT id, status, "trigger", rules, plan, cases, input_sha256 AS "inputSha256" FROM auto_calibration WHERE project_id = $1 AND id = $2 FOR UPDATE`,
+		`SELECT id, status, "trigger", rules, plan, cases, work, input_sha256 AS "inputSha256", engine_version AS "engineVersion"
+		 FROM auto_calibration WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 		[projectId, id]
 	);
 	const w = rows[0];
 	if (!w || w.status !== 'running') return false;
 	const input = await calibrationInput(db, projectId);
-	if (inputSha256(input) !== w.inputSha256) {
-		await db.query(`UPDATE auto_calibration SET status = 'failed', error = $2 WHERE id = $1`, [
-			id,
-			'the project’s data or settings changed while the rules ran, so the fits would not compare: run them again'
-		]);
-		return 'failed';
-	}
+	if (inputSha256(input) !== w.inputSha256) return fail('the project’s data or settings changed while the rules ran, so the fits would not compare: run them again');
+	// A release between two jobs: the fits so far (and a paused search) are another engine's, so the run would mix two.
+	if (w.engineVersion !== ENGINE_VERSION)
+		return fail(`the server’s model engine changed while the rules ran (${w.engineVersion} to ${ENGINE_VERSION}), so the fits would not compare: run them again`);
 	const i = w.cases.length;
-	const fitted = runAutoCase(input, w.plan, i);
-	await db.query(`UPDATE auto_calibration SET cases = cases || jsonb_build_array($2::jsonb) WHERE id = $1`, [id, JSON.stringify(fitted)]);
-	if (!(await progress((100 * (i + 1)) / w.plan.cases.length))) throw new LeaseLostError();
-	if (i + 1 < w.plan.cases.length) {
-		const { job } = await enqueueJob(db, { projectId, kind: 'auto_calibration', payload: { calibrationId: id }, maxAttempts: 2 });
-		await db.query('UPDATE auto_calibration SET job_id = $2 WHERE id = $1', [id, job.id]);
+	const size = modelSize(input);
+	const evalMs = evaluationSeconds(size) * 1000;
+	const finishMs = finishSeconds(w.plan, size) * 1000;
+	const job = prepareAutoCase(input, w.plan, i);
+	let fitted: AutoCase | null = null;
+	let work: CaseWork | null = null;
+	let ran = 0;
+	let finished = false;
+	if (!('finish' in job)) fitted = job; // The fit can't start: the case says why, as in the browser.
+	else {
+		work = w.work && w.work.case === i ? w.work : { case: i, fits: [], search: null, done: 0, total: job.count * job.budget, jobs: 0 };
+		const allDone = work.fits.length === job.count;
+		// Claimed late in the worker's tick: hand it back for the next tick rather than start a sliver of work.
+		if (availableMs < maxMs && availableMs - elapsed() < Math.max(calibrationPieces.minSeconds * 1000, allDone ? finishMs : evalMs))
+			throw new JobRelease('too little time left in this tick', RELEASE_DELAY_SECONDS);
+		const maxJobs = JOBS_SLACK * caseJobs(w.plan, size, maxMs / 1000) + JOBS_EXTRA;
+		if (++work.jobs > maxJobs) {
+			return fail(
+				`a fit took more background jobs than estimated (${maxJobs}), so the server is far slower than the estimate: lower the model runs per fit or the starts in the calibration rules, and run them again`
+			);
+		}
+		const quota = calibrationPieces.maxEvaluations;
+		// One more model run would pass the job's time, or its quota: pause there.
+		const full = () => ran >= quota || elapsed() + evalMs > availableMs;
+		try {
+			while (work.fits.length < job.count) {
+				if (ran > 0 && full()) break;
+				const from = work.search?.evaluations ?? 0;
+				const before = ran;
+				const r = job.fit(work.fits.length, {
+					...(work.search ? { resume: work.search } : {}),
+					pause: (n) => {
+						ran = before + (n - from);
+						return full();
+					}
+				});
+				if ('paused' in r) {
+					ran = before + (r.paused.evaluations - from);
+					work.search = r.paused;
+					break;
+				}
+				ran = before + (r.done.evaluations - from);
+				work.fits.push(r.done);
+				work.search = null;
+			}
+			work.done = work.fits.reduce((m, f) => m + f.evaluations, 0) + (work.search?.evaluations ?? 0);
+			// Every optimisation run: build the case now if its last step fits the time left (or nothing else ran), else next job.
+			if (work.fits.length === job.count && (ran === 0 || elapsed() + finishMs <= availableMs)) {
+				finished = true;
+				fitted = job.finish(work.fits);
+			}
+		} catch (err) {
+			if (err instanceof JobRelease || err instanceof LeaseLostError) throw err;
+			// A fit that throws fails this case only, as in the browser.
+			fitted = job.failed(err);
+		}
+	}
+	logEvent('info', {
+		event: 'auto_calibration_piece',
+		calibrationId: id,
+		case: i,
+		job: work?.jobs ?? 1,
+		evaluations: ran,
+		estimatedSeconds: Math.round(pieceOverheadSeconds(size) + (ran * evalMs + (finished ? finishMs : 0)) / 1000),
+		seconds: Math.round(elapsed() / 1000),
+		finished: fitted !== null
+	});
+	const n = w.plan.cases.length;
+	if (!fitted) {
+		await db.query('UPDATE auto_calibration SET work = $2 WHERE id = $1', [id, JSON.stringify(work)]);
+		if (!(await progress((100 * (i + work!.done / work!.total)) / n))) throw new LeaseLostError();
+		await queueNext(db, projectId, id);
+		return 'next';
+	}
+	await db.query(`UPDATE auto_calibration SET cases = cases || jsonb_build_array($2::jsonb), work = NULL WHERE id = $1`, [id, JSON.stringify(fitted)]);
+	if (!(await progress((100 * (i + 1)) / n))) throw new LeaseLostError();
+	if (i + 1 < n) {
+		await queueNext(db, projectId, id);
 		return 'next';
 	}
 	const report = finishAutoCalibration(w.plan, [...w.cases, fitted]);
 	const stored: StoredReport = { chosen: report.chosen, notes: report.notes, eligible: report.cases.map((c) => c.eligible), reasons: report.cases.map((c) => c.reasons) };
 	await db.query(`UPDATE auto_calibration SET status = 'complete', report = $2, chosen = $3 WHERE id = $1`, [id, JSON.stringify(stored), report.chosen]);
 	return 'complete';
+}
+
+/** Queue the run's next piece as the same user (the transaction's), one at a time: the chain is the only way it goes on. */
+async function queueNext(db: Db, projectId: string, id: string): Promise<void> {
+	const { job } = await enqueueJob(db, { projectId, kind: 'auto_calibration', payload: { calibrationId: id }, maxAttempts: 2 });
+	await db.query('UPDATE auto_calibration SET job_id = $2 WHERE id = $1', [id, job.id]);
 }
 
 interface Applicable {
@@ -329,7 +505,13 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 	const { rows: p } = await db.query<{ settings: unknown }>('SELECT settings FROM project WHERE id = $1', [projectId]);
 	const current = mergeSettings(p[0]!.settings);
 	const pan = kept.pan.values ? { panCoefficient: [...kept.pan.values], panCoefficientSource: `${kept.pan.label} preset (automated calibration)` } : {};
-	const fitSettings = { ...current, ...pan } as ProjectSettings;
+	// The fit is the headline location's (engine 1.110.0, issue #659): a gauge's goes into its row, the outlet's (or, with no
+	// gauge location, the catchment's) into the top level, as the rules varied them (calibrate/auto.ts withHeadlineParams).
+	// Its record reads that location's window, exclusions and quality flags.
+	const at = kept.report.zoneUnits ? (kept.report.zoneNodeId ?? null) : null;
+	if (at !== null && !(current.calibrationZones ?? []).some((z) => z.nodeId === at))
+		throw new ApiError(409, 'the calibration location the rules fitted is no longer in the settings: run them again');
+	const fitSettings = locationCalibrationSettings({ ...current, ...pan } as ProjectSettings, at);
 	const report: AutoCalibrationReport = finishAutoCalibration(a.plan, a.cases);
 	const flowKind = kept.report.flowKind as CalibrationFlowKind;
 	// The fitted record: the outlet's, or the calibration site's gauge record (engine ≥ 1.41.0).
@@ -349,8 +531,14 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 		...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin ?? null } : {}),
 		auto: autoFitRecordOf({ ...report, chosen: a.chosen })
 	});
-	const gr4j = { ...current.gr4j, ...Object.fromEntries(kept.report.free.map((k) => [k, kept.report!.params[k]!])) };
-	const next = patchSettings(p[0]!.settings, { gr4j, ...pan, fitRecord: record } as Record<string, unknown>);
+	const fitted4 = Object.fromEntries(kept.report.free.map((k) => [k, kept.report!.params[k]!]));
+	let patch: Record<string, unknown>;
+	if (at === null) patch = { gr4j: { ...current.gr4j, ...fitted4 }, ...pan, fitRecord: record };
+	else {
+		const rows = current.calibrationZones ?? [];
+		patch = { calibrationZones: rows.map((z) => (z.nodeId === at ? { ...z, gr4j: { ...(z.gr4j ?? pick4(current.gr4j)), ...fitted4 }, fitRecord: record } : z)), ...pan };
+	}
+	const next = patchSettings(p[0]!.settings, patch);
 	await db.query('UPDATE project SET settings = $2, updated_at = now() WHERE id = $1', [projectId, JSON.stringify(next)]);
 	await recordModelRevision(db, projectId, {
 		source: 'settings_patch',
@@ -360,6 +548,9 @@ export async function applyCalibration(db: Db, projectId: string, id: string): P
 	await db.query('UPDATE auto_calibration SET applied_at = now() WHERE id = $1', [id]);
 	return next;
 }
+
+/** GR4J's X1–X4 of a parameter set (a row holds those four only). */
+const pick4 = (g: ProjectSettings['gr4j']) => ({ x1: g.x1, x2: g.x2, x3: g.x3, x4: g.x4 });
 
 /**
  * Start the uncertainty ensemble around the applied fit on its run, for the

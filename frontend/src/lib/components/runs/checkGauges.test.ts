@@ -1,5 +1,6 @@
 import { CHECK_GAUGE_FLOW_KEY, type DailySeries } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
+import { scoredGaugeIds } from './modelQuality';
 import { checkFdc, checkHydrograph, checksOnlyGauges, gaugeStatsLine, gaugeStatsText, recordHref } from './checkGauges';
 
 const g = (nodeId: string, flowKind: 'flow_observed_m3s' | 'flow_logger_m3s' = 'flow_observed_m3s') => ({ nodeId, name: `Weir ${nodeId}`, flowKind });
@@ -13,24 +14,31 @@ describe('checksOnlyGauges', () => {
 			{ key: 'outflow', nodeId: 'b' },
 			{ key: 'observed_flow', nodeId: 's' }
 		];
-		expect(checksOnlyGauges([g('a'), g('b', 'flow_logger_m3s'), g('s')], refs, 's')).toEqual([
+		expect(checksOnlyGauges([g('a'), g('b', 'flow_logger_m3s'), g('s')], refs, new Set(['s']))).toEqual([
 			{ nodeId: 'a', name: 'Weir a', flowKind: 'flow_observed_m3s', stored: true },
 			{ nodeId: 'b', name: 'Weir b', flowKind: 'flow_logger_m3s', stored: false }
 		]);
 		// The page's node order, not the checks' node-id order; a node it doesn't know goes last.
 		const order = new Map([['b', 1], ['s', 2], ['a', 3]]);
-		expect(checksOnlyGauges([g('a'), g('z'), g('b')], refs, 's', order).map((x) => x.nodeId)).toEqual(['b', 'a', 'z']);
+		expect(checksOnlyGauges([g('a'), g('z'), g('b')], refs, new Set(['s']), order).map((x) => x.nodeId)).toEqual(['b', 'a', 'z']);
 	});
 
 	it('carries the summary’s fit, and leaves it out for a run made before it', () => {
 		const fit = { days: 3, nse: 0.5, kge: 0.6, pbias: 1 };
-		const [a, b] = checksOnlyGauges([{ ...g('a'), fit }, g('b')], [], null);
+		const [a, b] = checksOnlyGauges([{ ...g('a'), fit }, g('b')], [], new Set());
 		expect(a!.fit).toEqual(fit);
 		expect('fit' in b!).toBe(false);
 	});
 
+	it('leaves out every gauge the run scores as a calibration location, the headline’s and the others’ (issue #659)', () => {
+		const scored = scoredGaugeIds({ calibration: { siteNodeId: 's' }, calibrationZones: [{ siteNodeId: 'b' }, { siteNodeId: null }] });
+		expect([...scored].sort()).toEqual(['b', 's']);
+		expect(checksOnlyGauges([g('a'), g('b'), g('s')], [], scored).map((x) => x.nodeId)).toEqual(['a']);
+		expect(scoredGaugeIds({ calibration: null })).toEqual(new Set());
+	});
+
 	it('is empty for a run without gauge checks', () => {
-		expect(checksOnlyGauges(undefined, [], null)).toEqual([]);
+		expect(checksOnlyGauges(undefined, [], new Set())).toEqual([]);
 	});
 });
 

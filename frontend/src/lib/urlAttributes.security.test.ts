@@ -145,6 +145,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
 	recordLink: { why: 'GaugeCheckFlows: its recordHref prop, runs/checkGauges.ts recordHref: the literal "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/runs/GaugeCheckFlows.svelte'] },
+	measuredAtHref: { why: 'calibration/unplaced.ts measuredAtHref: the literal "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart" (issue #659)', in: ['lib/components/settings/CalibrationSettings.svelte'] },
 	dataHref: { why: 'CalibrationWindowFields prop: CalibrationSettings passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
 	'missing.panel.link.href': { why: 'CalibrationResults: the line for a linked Model quality panel the run doesn\'t have, a literal "?tab=…" constant (runs/missingPanel.ts NEEDS, issue #586 Round 3)', in: ['lib/components/calibration/CalibrationResults.svelte'] },
 	'missingLink.panel.link.href': { why: 'RunsTab: the line for a linked panel the run doesn\'t have, a literal "?tab=…" constant (runs/missingPanel.ts NEEDS, issue #586)', in: ['lib/components/runs/RunsTab.svelte'] },

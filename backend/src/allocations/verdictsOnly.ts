@@ -140,7 +140,7 @@ export function authorisedVerdicts<T>(board: T): T {
 }
 
 /**
- * § 4's combined dams (evidence-25, `cumulative.combined.dams`) as a viewer
+ * § 4's combined dams (evidence-26, `cumulative.combined.dams`) as a viewer
  * kept from the registered volumes reads them: a dam whose yields rest on
  * them (`onVolumes`: some run capped use at, or scaled demand to, the
  * volumes), or every dam when `all` (a report on such a run), keeps its
@@ -230,7 +230,7 @@ const REPORT_VERDICTS: Record<string, (v: unknown) => unknown> = {
 	byMonth: (v) => v,
 	worstMonths: (v) => v,
 	improvingMonths: (v) => v,
-	// Its counts as they are; each dam's yield and assurance as its direction only (evidence-25).
+	// Its counts as they are; each dam's yield and assurance as its direction only (evidence-26).
 	cumulative: (v) => combinedDamVerdicts(v, true),
 	rows: (v) => (Array.isArray(v) ? v.filter((r) => isObj(r) && ROW_VERDICTS.has(r.id as string)) : []),
 	flags: (v) => (Array.isArray(v) ? v.filter((f) => isObj(f) && FLAG_VERDICTS.has(f.id as string)) : []),

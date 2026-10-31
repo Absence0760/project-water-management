@@ -2,7 +2,7 @@
 // menu is a sticky column grouped by task (common/SectionNav's rail), with a find box that narrows it to
 // the panels and the settings inside them and jumps to the setting itself; narrower, the bar's Find button
 // opens the same box. Each panel says its current values under its heading, and the explanations under
-// the fields wait behind a switch. The Scored at choice is the Calibration record's, on Calibration (issue #586
+// the fields wait behind a switch. The outlet’s calibration window is the Calibration record’s, on Calibration (issue #586
 // round 3). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putSeries, updateSettings } from '../support/api.ts';
@@ -95,7 +95,7 @@ test('the index moves with the arrow keys, and a panel with a Save blocker is ma
 	await openSettings(page, project.id);
 	const menu = settingsMenu(page);
 	// The first link is the panel that heads the page (issue #614), the judge panel's next (issue #586 R4-B).
-	const first = menu.getByRole('link', { name: 'Model selection for flow generation', exact: true });
+	const first = menu.getByRole('link', { name: 'Flow generation', exact: true });
 	await first.focus();
 	await page.keyboard.press('ArrowDown');
 	await expect(menu.getByRole('link', { name: 'EWR the results are judged by', exact: true })).toBeFocused();
@@ -151,10 +151,10 @@ test('each panel says its current values under its heading; the explanations sho
 	await expect(page.locator('#st-erf-h')).toBeHidden();
 });
 
-test('the Scored at choice says where a gauge’s record is placed, with a link to it on the Data tab', async ({ page, owner }) => {
+test('the outlet’s calibration window says where a gauge’s record is placed, with a link to it on the Data tab', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
-	const project = await createProject(page.request, 'Settings scored at');
+	const project = await createProject(page.request, 'Settings gauge record how');
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2020-01-01', values: [1.2, 1.1, 1.0] });
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()) as { series: { id: string; kind: string }[] };
 	const series = list.series.find((x) => x.kind === 'flow_observed_m3s')!;
@@ -163,7 +163,7 @@ test('the Scored at choice says where a gauge’s record is placed, with a link 
 	await showExplanations(page);
 	const how = page.getByTestId('calibration-site-how');
 	await expect(how).toContainText(
-		"To score at a gauge inside the network, set its flow record's Measured at in Series details on the Data tab (the gauge has to be in the network, above the outlet)."
+		"To calibrate at a gauge inside the network too, set its flow record's Measured at in Series details on the Data tab (the gauge has to be in the network, above the outlet)."
 	);
 	await how.getByRole('link', { name: 'Data tab' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=series&series=${series.id}#data-chart$`));

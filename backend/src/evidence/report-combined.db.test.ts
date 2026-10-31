@@ -6,7 +6,7 @@
 // makes it not assessed with the conflict named, never a silent merge. Only
 // an assessment on the baseline run's engine is read (operator decision,
 // 2026-10-01), so the row's baseline figure is the report's own. From
-// evidence-25 § 4 also carries each dam the applications touch: its firm
+// evidence-26 § 4 also carries each dam the applications touch: its firm
 // yield and assurance of supply from the assessment's dam rows.
 // Synthetic catchment: invented names and values.
 import { randomUUID } from 'node:crypto';
@@ -93,7 +93,7 @@ beforeAll(async () => {
 describe('the evidence report’s combined row (evidence-11, C26)', () => {
 	it('says the applications have not been assessed together until an assessment of exactly them exists', async () => {
 		const r = await reportOf(assessor, runA);
-		expect(r.version).toBe('evidence-25');
+		expect(r.version).toBe('evidence-26');
 		const c = r.cumulative.combined!;
 		expect(c.applications.map((x) => [x.scenarioName, x.isThis])).toEqual([
 			['Raise Rooikloof', true],
@@ -190,7 +190,7 @@ describe('the evidence report’s combined row (evidence-11, C26)', () => {
 	});
 });
 
-describe('yield and reliability per dam, together (evidence-25; followups § Cumulative impact)', () => {
+describe('yield and reliability per dam, together (evidence-26; followups § Cumulative impact)', () => {
 	const assessmentOf = async (name: string) => {
 		const list = (await assessor.call('GET', `${P()}/assessments`)).body.assessments as { id: string; name: string; status: string }[];
 		const a = list.find((x) => x.name === name && x.status === 'complete')!;

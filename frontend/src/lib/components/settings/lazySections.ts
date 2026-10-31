@@ -1,5 +1,5 @@
 // The Settings tab's lazy sections that draw on every visit, one chunk (SettingsTab.svelte's loaders; issue
-// #521): Rain gaps' two cards, the quality flags and gap filling, rain for each unit and Model selection for flow generation's station
+// #521): Rain gaps' two cards, the quality flags and gap filling, rain for each unit and Flow generation's station
 // table (issue #553) and the catchment's station (issue #612), evaporation from the map,
 // and the evidence rule. Each was a chunk of its own to keep the tab under its ceiling,
 // but they all load together whenever the tab opens, so one chunk costs one request and less gzip overhead.

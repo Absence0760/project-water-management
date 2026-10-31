@@ -36,7 +36,7 @@ import { licenceImpactSection } from './impact';
 import { authorisedUnavailable } from './authorised';
 import { localitySection } from './locality';
 import { damObservationsSection } from './damObservations';
-import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection } from './calibrationZones';
+import { calibrationZoneFitVersions, calibrationZoneFlags, calibrationZonesSection, headlineFitRecord } from './calibrationZones';
 import { FUTURE_YIELD_CAVEAT, futureCaveatPending, futureFactorsComplete, type FutureYieldCaveat } from './future';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
@@ -110,8 +110,8 @@ export function declaredRuleOf(run: Pick<EvidenceRunInput, 'inputs'>): DeclaredU
 	return v !== undefined && v !== null && declaredRuleError(v) === null ? (v as DeclaredUncertaintyRule) : null;
 }
 
-const fitVersion = (run: EvidenceRunInput): string | null =>
-	((run.inputs?.settings as { fitRecord?: { engineVersion?: unknown } | null } | undefined)?.fitRecord?.engineVersion as string | undefined) ?? null;
+// The headline location's fit record (engine 1.110.0, issue #659): a gauge's row, or the top level.
+const fitVersion = (run: EvidenceRunInput): string | null => ((headlineFitRecord(run.inputs) as { engineVersion?: unknown } | null)?.engineVersion as string | undefined) ?? null;
 
 /**
  * The ensemble the report cites (G4): the **first** complete, unpaired
@@ -1345,7 +1345,7 @@ function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): 
 }
 
 /**
- * The assessment's dam rows (evidence-25): each dam it worked a firm yield
+ * The assessment's dam rows (evidence-26): each dam it worked a firm yield
  * out for, in its order. A firm yield within the search's own tolerance of
  * the baseline's (network/yield.ts YIELD_DEFAULT_TOLERANCE, 0.1 % of the larger;
  * not imported, so the report page doesn't load the model) is unchanged.
@@ -2068,7 +2068,7 @@ function evidenceFlags(
 	const judged = b.summary.plausibility?.naturalised?.judgedYears ?? 0;
 	if (failed.length) add('plausibility', 'caution', `Plausibility check 1 fails in ${failed.length} of ${judged} water years (natural flow below observed plus abstraction).`, 'Natural flow is too low in those years.');
 	if (!b.summary.calibration || !b.summary.calibration.days) add('noCalibration', 'caution', 'Not assessed: the baseline has no observed flow in its calibration window, so its fit is untested.');
-	const fit = (b.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord;
+	const fit = headlineFitRecord(b.inputs);
 	if (!fit) add('noFit', 'caution', 'Validation not assessed: the runoff parameters don’t come from a stored automatic fit.', 'The scores are in-sample only.');
 	// A calibration zone above the site with no stored fit (evidence-22, issue #555).
 	for (const z of calibrationZoneFlags(calibrationZonesSection(b))) add(z.key, 'caution', z.text, z.why);
@@ -2098,7 +2098,7 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	const noRec = river.filter((s) => s.category === null).map((s) => s.name);
 	if (noRec.length)
 		out.push(`The recommended ecological category (REC) is not given at ${noRec.join(', ')}: expect the assessor to ask which Reserve determination applies (ER-D2); enter it on the rule table (Model settings → Reserve rule tables).`);
-	if (!(input.baseline.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord)
+	if (!headlineFitRecord(input.baseline.inputs))
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');
 	const unsourced = (demand?.objects ?? []).filter((o) => o.change !== 'removed' && o.source === null).length;

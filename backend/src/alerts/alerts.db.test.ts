@@ -14,7 +14,7 @@ import { runTick } from '../jobs/runner.js';
 import { outbox, type Mail } from '../mail/transport.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { evaluateAlerts } from './evaluate.js';
-import { DIGEST_CLAIM_LINES, DIGEST_MAX_LINES, sendAlerts } from './send.js';
+import { DIGEST_CLAIM_LINES, DIGEST_MAX_LINES, RULE_OFF, sendAlerts } from './send.js';
 
 // The feeds this file makes are switched off when it ends (db-setup.ts).
 disableFeedsAfterFile();
@@ -630,6 +630,42 @@ describe('scheduled checks: data going stale, failing feeds', () => {
 	});
 });
 
+describe('scheduled checks: an EWR forecast going out of date (287)', () => {
+	it('the tick checks a project whose only alert is the EWR forecast one, so a firing alert clears once its forecast’s days have passed (positive control: none while it is off)', async () => {
+		const { id: pid, runId } = await makeProject(owner, 'Forecast passes');
+		const setForecast = (to: string) =>
+			asOwner(`UPDATE model_run SET trigger = 'forecast', summary = jsonb_set(summary, '{forecast}', $2::jsonb) WHERE id = $1`, [
+				runId,
+				JSON.stringify({ from: '2026-01-01', to, days: 14, outletEwrDaysAtRisk: 5, perFarm: [] })
+			]);
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold, created_by) VALUES ($1, 'ewr_forecast_fail', 3, $2) RETURNING id`, [pid, owner.id]);
+		await setForecast('2999-12-31');
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		const state = async () => (await asOwner(`SELECT state FROM alert_event WHERE rule_id = $1`, [rule.id])).map((r) => r.state);
+		expect(await state()).toEqual(['firing']);
+		// No forecast run since (the forecast feed stopped), and its days have passed.
+		await setForecast('2026-01-14');
+		const since = (await asOwner('SELECT now() AS t'))[0].t;
+		const schedule = () => withoutUser(async (db) => (await db.query("SELECT app_alert_schedule(NULL, interval '0', 1000)")).rows);
+		const queued = async () => (await asOwner(`SELECT project_id FROM job WHERE kind = 'alert_eval' AND status = 'queued' AND created_at >= $1`, [since])).map((r) => r.project_id);
+		// The tick's call checks every project with a scheduled kind on; others' checks aren't this test's.
+		const dropOthers = () => asOwner(`DELETE FROM job WHERE kind = 'alert_eval' AND status = 'queued' AND created_at >= $1 AND project_id <> $2`, [since, pid]);
+		// Positive control: switched off, it isn't checked.
+		await asOwner('UPDATE alert_rule SET enabled = false WHERE id = $1', [rule.id]);
+		await schedule();
+		expect(await queued()).not.toContain(pid);
+		await dropOthers();
+		await asOwner('UPDATE alert_rule SET enabled = true WHERE id = $1', [rule.id]);
+		await schedule();
+		expect(await queued()).toContain(pid);
+		await dropOthers();
+		await tick();
+		expect(await state()).toEqual(['cleared']);
+		await settlePendingNotices(pid);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+});
+
 describe('per-feed staleness levels (057 feed_id)', () => {
 	/** A feed whose newest day is `ago` days old (as the schema owner: the feed's health is not what's under test). */
 	const feed = async (pid: string, source: 'dws' | 'chirps', name: string, ago: number, enabled = true) =>
@@ -1091,5 +1127,87 @@ describe('a failed send is logged without personal data', () => {
 		// Positive control: with the secret back, the same delivery goes.
 		expect((await sendAlerts()).sent).toBe(1);
 		await reset();
+	});
+});
+
+describe('a firing event follows its figure, and stops with its rule', () => {
+	/** A bare catchment the owner alone runs, with data feeds failing `failures` times in a row. */
+	async function failing(name: string, failures: number[]) {
+		const pid = (await owner.call('POST', '/projects', { name })).body.project.id as string;
+		const feeds: string[] = [];
+		for (const [i, n] of failures.entries())
+			feeds.push(
+				(
+					await asOwner(
+						`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by, last_attempt_at, last_success_at, last_data_date, consecutive_failures)
+						 VALUES ($1, 'dws', '{"station":"X0H000"}', 'flow_observed_m3s', $2, $3, $3, now(), now(), $4::date, $5) RETURNING id`,
+						[pid, `gauge ${i + 1}`, owner.id, localToday(), n]
+					)
+				)[0].id as string
+			);
+		return { pid, feeds };
+	}
+	const failingRule = (pid: string, enabled: boolean) => rules(owner, [{ kind: 'feed_failing', threshold: 3, enabled }], pid);
+	const firing = (pid: string) => asOwner(`SELECT id, value, detail FROM alert_event WHERE project_id = $1 AND state = 'firing'`, [pid]);
+	const mailsAbout = (name: string) => mailsTo(owner).filter((m) => m.subject.endsWith(`— ${name}`));
+
+	it('keeps a firing event’s detail current when the figure stays the same: a second feed failing below the worst one is listed', async () => {
+		const { pid, feeds } = await failing('Follow detail', [5, 0]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		const [first] = await firing(pid);
+		expect(first.detail.feeds.map((f: { label: string }) => f.label)).toEqual(['DWS gauge flow (gauge 1)']);
+		// The worst stays at 5, so the value doesn't move; the list does.
+		await asOwner('UPDATE data_feed SET consecutive_failures = 2 WHERE id = $1', [feeds[1]]);
+		expect(await withUser(owner.id, (db) => evaluateAlerts(db, pid))).toMatchObject({ opened: 0, cleared: 0 });
+		const [now] = await firing(pid);
+		expect(now.id).toBe(first.id);
+		expect(now.value).toBe(5);
+		expect(now.detail.feeds).toEqual([
+			{ label: 'DWS gauge flow (gauge 1)', failures: 5 },
+			{ label: 'DWS gauge flow (gauge 2)', failures: 2 }
+		]);
+		await settlePendingNotices(pid);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+
+	it('switching every rule off clears what was firing at once, though no check is queued (positive control: on, it fires)', async () => {
+		const { pid } = await failing('Off clears', [5]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		expect(await firing(pid)).toHaveLength(1);
+		expect((await owner.call('GET', `/projects/${pid}/alert-events`)).body.events).toHaveLength(1);
+		await asOwner(`DELETE FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid]);
+		expect((await failingRule(pid, false)).status).toBe(200);
+		// Alerts are opt-in: with every rule off no check is queued, so the save itself clears.
+		expect(await asOwner(`SELECT 1 FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid])).toEqual([]);
+		expect(await firing(pid)).toEqual([]);
+		expect((await owner.call('GET', `/projects/${pid}/alert-events`)).body.events).toEqual([]);
+		const listed = (await owner.call('GET', `/projects/${pid}/alert-rules`)).body.rules.find((r: { kind: string }) => r.kind === 'feed_failing');
+		expect(listed).toMatchObject({ enabled: false, firing: false });
+		await settlePendingNotices(pid);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+
+	it('a mail still waiting when its rule is switched off is not sent (positive control: switched back on, the next crossing is)', async () => {
+		const name = 'Off mutes';
+		const { pid, feeds } = await failing(name, [5]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		const [e] = await firing(pid);
+		expect(await asOwner(`SELECT status FROM alert_delivery WHERE event_id = $1 AND user_id = $2`, [e.id, owner.id])).toEqual([{ status: 'pending' }]);
+		expect((await failingRule(pid, false)).status).toBe(200);
+		await sendAlerts();
+		expect(mailsAbout(name)).toEqual([]);
+		expect(await asOwner(`SELECT status, reason FROM alert_delivery WHERE event_id = $1 AND user_id = $2`, [e.id, owner.id])).toEqual([
+			{ status: 'skipped', reason: RULE_OFF }
+		]);
+		// Back on: the figure is still past the line, so a new event opens and its mail goes.
+		await asOwner(`UPDATE data_feed SET consecutive_failures = 6 WHERE id = $1`, [feeds[0]]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		await sendAlerts();
+		expect(mailsAbout(name).map((m) => m.subject)).toEqual([`Data feed failing — ${name}`]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 });

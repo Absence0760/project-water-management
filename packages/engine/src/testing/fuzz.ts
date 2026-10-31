@@ -437,6 +437,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	if (opts.baseflow) addBaseflow(new Rng(seed ^ 0x3a8f05c5), nodes);
 	// Dam rules out of the catchment (engine 1.86.0, issue #523 B5), from their own stream, only when asked for.
 	if (opts.externalTransfers) addExternalTransfers(new Rng(seed ^ 0x47b1e2d9), nodes, transfers);
+	// Calibration locations (engine 1.110.0, issue #659), from their own stream, last of all.
+	addCalibrationLocations(new Rng(seed ^ 0x6f4a3c21), nodes, settings);
 	return {
 		settings,
 		model: {
@@ -1387,4 +1389,33 @@ export function withUnitRain(input: ModelInput, seed: number): ModelInput {
 		}
 	}
 	return input;
+}
+
+/**
+ * Calibration locations (engine 1.110.0, issue #659, docs/model.md §2.10n) in
+ * a fifth of the networks with a gauge inside them: a row for each such gauge,
+ * most ticked, each with its own X1–X4 (now and then none, not fitted yet), the
+ * outlet ticked or not, one of the three rest rules, now and then a headline
+ * pointer, and now and then one land unit taking a gauge's parameters.
+ */
+function addCalibrationLocations(rng: Rng, nodes: NetworkNode[], settings: ModelInput['settings']): void {
+	const inner = nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null).map((n) => n.id);
+	if (!inner.length || !rng.bool(0.2)) return;
+	const rows = inner.map((nodeId) => ({
+		nodeId,
+		enabled: rng.bool(0.8),
+		calibrationStart: null,
+		calibrationEnd: null,
+		calibrationFlowKind: null,
+		calibrationExclusions: [],
+		qualityFlags: null,
+		gr4j: rng.bool(0.15) ? null : { x1: rng.float(50, 1500), x2: rng.bool(0.7) ? 0 : rng.float(-2, 1), x3: rng.float(10, 400), x4: rng.float(0.6, 5) },
+		fitRecord: null
+	}));
+	settings.calibrationZones = rows as never;
+	settings.calibrateAtOutlet = rng.bool(0.5);
+	settings.calibrationRest = rng.pick(['nearest', 'headline', 'default'] as const);
+	if (rng.bool(0.3)) settings.calibrationSiteNodeId = rng.pick(inner);
+	const units = nodes.filter((n) => n.kind === 'farm' && n.areaKm2 > 0);
+	if (units.length && rng.bool(0.5)) settings.unitParamsFrom = { [rng.pick(units).id]: rng.pick(inner) };
 }

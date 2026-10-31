@@ -9,7 +9,7 @@ import { prepareRun, type PreparedRun } from '../prepare';
 import type { ModelInput, StationAreaForcing } from '../project';
 import { forecastTail } from '../forecastTail';
 import { alignReadings, STATION_DAY_SOURCE, stationContext, stationPatchUsability, type StationPatchUsability } from './stationForcing';
-import { UNIT_RAIN_SOURCE, unitRainForcing, unitRainOn } from './unitRain';
+import { UNIT_RAIN_SOURCE, unitRainForcing } from './unitRain';
 
 /** Where a day's rain came from: the station (× the MAP ratio), a patch station (× its MAP ratio, engine ≥ 1.105.0), the area's corrected CHIRPS, the next fallback, or none (dry). */
 export type StationRainDaySource = 'station' | 'patch' | 'chirps' | 'fallback' | 'none';
@@ -29,8 +29,7 @@ export interface StationAreaRain {
 /**
  * The rain used of the catchment (`nodeId` null) or of a land unit under its
  * station, over the run window `input` gives; null when that area has no
- * station in this input (no assignment, its station has no record, or, for a
- * unit, per-unit rain is off).
+ * station in this input (no assignment, or its station has no record).
  */
 export function stationAreaRain(input: ModelInput, nodeId: string | null): StationAreaRain | null {
 	const prep = prepareRun(input);
@@ -55,7 +54,6 @@ export function stationAreaRain(input: ModelInput, nodeId: string | null): Stati
 		}
 		return { startDate: prep.startDate, rainMm, source, ...patchDays(forcing, patchIndex), forcing: structuredClone(forcing), warnings };
 	}
-	if (!unitRainOn(prep.settings)) return null;
 	const built = unitRainForcing(
 		{
 			settings: prep.settings,
@@ -97,7 +95,7 @@ function patchDays(forcing: StationAreaForcing, index: readonly number[]): Pick<
  * Whether each of the input's stations can patch a main station's gaps
  * (issue #612, stationPatchUsability) over the run's history `input` gives
  * (the run window less its forecast tail, forecastTail: a tail day is never
- * patched), for Settings → Model selection for flow generation (a unit's
+ * patched), for Settings → Flow generation (a unit's
  * station or the catchment's): station id → its usability. The records are
  * the run's checked ones; `scaleToMap` the assignment's.
  */

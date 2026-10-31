@@ -1474,8 +1474,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		/**
 		 * Automated calibration run by the server (docs/api.md § Automated
-		 * calibration, issue #153): a run of the saved calibration rules, one
-		 * background job per fit. Follow a running one with get(); apply() writes
+		 * calibration, issue #153): a run of the saved calibration rules, in
+		 * background jobs (a fit over as many as it needs). Follow a running one with get(); apply() writes
 		 * the kept fit into the settings (with its record), makes a run with it
 		 * and, when the rules say so, queues the ensemble around it.
 		 */

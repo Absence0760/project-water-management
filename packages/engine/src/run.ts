@@ -45,7 +45,7 @@ import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIE
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { baseflowOf, BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, hasBaseflow } from './network/baseflow';
 import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
-import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, areaShares, fillPlanShares, type EwrSplitInfo, type EwrSplitPlan, type EwrSplitUnit, type PinnedEwrSplit } from './network/ewrSplit';
+import { ewrSplitDays, ewrSplitNote, ewrSplitPeriod, areaShares, fillPlanShares, type EwrSplitInfo, type EwrSplitPlan, type PinnedEwrSplit } from './network/ewrSplit';
 import { EXTERNAL_TO, shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
@@ -55,7 +55,7 @@ import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
 import { calibrationSiteError } from './calibrate/site';
-import { zoneCalibrationSettings } from './calibrate/zones';
+import { calibrationLocationError, headlineCalibrationSettings, locationCalibrationSettings, outletNode } from './calibrate/locations';
 import { calibrationStats } from './network/stats';
 import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology';
 import { cmpStr } from './order';
@@ -373,8 +373,6 @@ function runNetworkIn(
 		...(capturing ? { captureAt: captureAt! } : {}),
 		// Each land unit's own runoff as its local inflow (engine ≥ 1.78.0, §2.4h).
 		...(nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {}),
-		// Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b): the units' own runoff, for the shares only.
-		...(nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {}),
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
 		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {}),
 		// The daily outlet EWR's scale factor (engine ≥ 1.77.0): the capture run's, as its other record-wide figures.
@@ -492,16 +490,21 @@ function runNetworkIn(
 			push(null, c.code.key, c.code.label, '', f.code);
 		}
 	}
-	// The calibration site (engine ≥ 1.41.0, settings.calibrationSiteNodeId): a gauge inside the network whose
-	// record the run's calibration statistics score. Its record is that node's `observed_flow` series (and the
-	// other record, when it has both), beside the node's own `outflow`. An unusable site warns and the run scores the outlet.
-	const calSite = runCalibrationSite(input, settings.calibrationSiteNodeId ?? null, topo.outflow, warnings);
+	// The headline calibration location (engine 1.110.0, issue #659, ./calibrate/locations.ts; before it the calibration
+	// site, engine ≥ 1.41.0): every reader of "the site" reads its settings (headlineCalibrationSettings). At a gauge
+	// inside the network the run's calibration statistics score that node's `observed_flow` series (and the other
+	// record, when it has both), beside the node's own `outflow`. A headline gauge the run can't use warns and the run
+	// scores the outlet, on the outlet's (top-level) settings.
+	const headlineSettings = headlineCalibrationSettings(settings, nodes);
+	const calSite = runCalibrationSite(input, headlineSettings.calibrationSiteNodeId ?? null, topo.outflow, warnings);
+	/** The settings the scored record is read by: the headline gauge's, else the outlet's (the top level). */
+	const scoredSettings = calSite ? headlineSettings : settings;
 	let calKind = observedKind;
 	let calObserved = observedM3s;
 	let calSim = simOutflow;
 	if (calSite) {
 		const kinds = calibrationRecordsAt(series, calSite.nodeId);
-		const wanted = settings.calibrationFlowKind;
+		const wanted = scoredSettings.calibrationFlowKind;
 		calKind = wanted && kinds.includes(wanted) ? wanted : kinds[0]!;
 		const at = (k: CalibrationFlowKind) => alignFlow(series[calibrationSeriesKey(k, calSite.nodeId)], start, days);
 		calObserved = at(calKind);
@@ -512,7 +515,7 @@ function runNetworkIn(
 		if (other) push(calSite.nodeId, 'observed_flow_other', OBSERVED_SERIES_LABEL[other], 'm³/day', toDay(at(other)));
 	}
 	// The kind the gauges' checks read (gaugeCheckKind, engine-audit.md G2): the scored kind, else the kind asked for.
-	const gaugeKind = calKind ?? settings.calibrationFlowKind ?? null;
+	const gaugeKind = calKind ?? scoredSettings.calibrationFlowKind ?? null;
 	// Every other gauge inside the network with a record of its own (engine ≥ 1.90.0, issue #554, docs/model.md
 	// §2.10k): the record its plausibility checks read (plausibility/index.ts gaugeChecks), beside the gauge's `outflow`, for its checks-only hydrograph.
 	for (const [i, node] of nodes.map((n, i) => [i, n] as const).sort(([, a], [, b]) => cmpStr(a.id, b.id))) {
@@ -548,7 +551,7 @@ function runNetworkIn(
 			series: record,
 			start,
 			days,
-			settings,
+			settings: scoredSettings,
 			siteNodeId: siteId,
 			flowFill,
 			...(noHistory ? { suspect: false } : {})
@@ -897,7 +900,8 @@ function runNetworkIn(
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgCropRequirementM3Day: avgCrop,
 			// Its one share as applied (engine ≥ 1.105.0, §2.5, ./network/ewrSplit.ts): its natural MAR share, which splits the
-			// flow under Fragmentation, the EWR, the land-cover threshold and the senior users' claims; both fields say it.
+			// EWR, the land-cover threshold and the senior users' claims (and, engines 1.105.0 – 1.108.x, the flow under
+			// Fragmentation); both fields say it.
 			flowShare: plan.nodes[i]!.share,
 			ewrShare: plan.nodes[i]!.share,
 			// Positive volume: the farm's average EWR charge (audit Q17; [Shortfalls] col R, sign flipped).
@@ -1023,25 +1027,50 @@ function runNetworkIn(
 		? {
 				...calibrationStats(calSim, calScored, {
 					startDate,
-					windowStart: settings.calibrationStart,
-					windowEnd: settings.calibrationEnd,
-					exclusions: exclusionRanges(settings.calibrationExclusions)
+					windowStart: scoredSettings.calibrationStart,
+					windowEnd: scoredSettings.calibrationEnd,
+					exclusions: exclusionRanges(scoredSettings.calibrationExclusions)
 				}),
 				flowKind: calKind,
 				simulatedKey: 'simulated_outflow' as const,
 				...(calSite ? { siteNodeId: calSite.nodeId, siteName: nodes[calSite.node]!.name } : {}),
-				fitStatus: calibrationFitStatus(settings, calKind, calSite?.nodeId ?? null)
+				// A headline gauge the run can't score falls back to the outlet's record, but its units ran on the headline's
+				// fitted parameters: the fit status is judged on the headline's fit record and parameters (as before 1.110.0).
+				fitStatus: calibrationFitStatus(
+					!calSite && headlineSettings.calibrationSiteNodeId != null ? { ...settings, fitRecord: headlineSettings.fitRecord, gr4j: headlineSettings.gr4j } : scoredSettings,
+					calKind,
+					calSite?.nodeId ?? null
+				)
 			}
 		: null;
-	// Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n): its record against its
-	// simulated outflow on the zone's own window and exclusions, each in or out of sample by the zone's own fit record.
-	const calibrationZones = zoneCalibrationStats(nf.unitRain?.zones, settings, series, start, days, sim.nodes, nodes, startDate);
+	// Calibration statistics at every other ticked location (issue #555; issue #659, docs/model.md §2.10n): its record
+	// against its simulated outflow on its own window and exclusions, each in or out of sample by its own fit record.
+	// The outlet's, when ticked and not the headline, reads the outlet record as summary.calibration would.
+	const outletScored = observedKind ? withoutPeriodHighs(observedM3s, lowFlowPeriods, observedKind, start, flowFill?.[observedKind]?.code) : null;
+	const calibrationZones = zoneCalibrationStats(nf.unitRain?.zones, settings, series, start, days, sim.nodes, nodes, startDate, {
+		scoredAtOutlet: !calSite,
+		kind: observedKind,
+		observed: outletScored,
+		simulated: simOutflow
+	});
+	// No location ticked (engine 1.110.0, issue #659) though records could calibrate: allowed, every unit on settings.gr4j.
+	if (settings.calibrateAtOutlet === false && !(settings.calibrationZones ?? []).some((z) => z.enabled && !calibrationLocationError(nodes, z.nodeId))) {
+		const records = (observedKind ? 1 : 0) + nodes.filter((n, i) => n.kind === 'gauge' && i !== topo.outflow && calibrationRecordsAt(series, n.id).length > 0).length;
+		if (records)
+			warnings.push(
+				warn(
+					'calibration.zone.noneTicked',
+					{ records },
+					`No calibration location is ticked, though ${records} flow record${records === 1 ? '' : 's'} could calibrate the model: every land unit runs on the catchment's GR4J parameters (Calibration → Calibration record)`
+				)
+			);
+	}
 	if (!calKind) warnings.push(warn('calibration.noObserved', {}, 'no observed flow series: calibration statistics not computed'));
 	else if (calibration && calibration.days === 0) {
 		warnings.push(
 			calibration.excludedDays
 				? warn('calibration.allExcluded', { days: calibration.excludedDays }, 'every observed day inside the calibration window falls in a calibration exclusion')
-				: settings.calibrationStart || settings.calibrationEnd
+				: scoredSettings.calibrationStart || scoredSettings.calibrationEnd
 					? warn('calibration.noValuesInWindow', { kind: calKind }, 'observed flow has no values inside the calibration window')
 					: warn('calibration.noValuesInPeriod', { kind: calKind }, 'observed flow has no values inside the simulation period')
 		);
@@ -1132,7 +1161,14 @@ function runNetworkIn(
 		// The scored record (engine ≥ 1.55.0): the hydrological signatures follow the calibration site.
 		scored:
 			calKind && scoredFlowFlags
-				? { kind: calKind, observedM3s: calScored, simulatedM3Day: calSim, flags: scoredFlowFlags, site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null }
+				? {
+						kind: calKind,
+						observedM3s: calScored,
+						simulatedM3Day: calSim,
+						flags: scoredFlowFlags,
+						site: calSite ? { nodeId: calSite.nodeId, name: nodes[calSite.node]!.name } : null,
+						exclusions: exclusionRanges(scoredSettings.calibrationExclusions)
+					}
 				: null
 	});
 	if (checked) warnings.push(...checked.warnings);
@@ -1303,8 +1339,6 @@ function runNetworkIn(
 			curtailment,
 			ewrCompliance: compliance,
 			ewrSplit: built.ewrSplit.info,
-			// The forcing Fragmentation's share runs ran on (engine ≥ 1.105.0, issue #616), for its fit's provenance.
-			...(nf.shareRain !== undefined ? { shareRain: nf.shareRain } : {}),
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
 			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
@@ -1375,6 +1409,8 @@ function runPlausibility(r: {
 		simulatedM3Day: ArrayLike<number>;
 		flags: Uint8Array;
 		site: { nodeId: string; name: string } | null;
+		/** The scored location's exclusions (the headline's, engine 1.110.0); absent = the top level's. */
+		exclusions?: readonly { start: string; end: string }[];
 	} | null;
 }) {
 	const { input, settings, start, days, plan, sim } = r;
@@ -1382,10 +1418,13 @@ function runPlausibility(r: {
 	const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
 	// A reading above a low-flow period's threshold (engine ≥ 1.90.0, issue #557) misleads the checks as it would the scores.
 	for (const kind of CALIBRATION_FLOW_KINDS) if (series[kind]) observed[kind] = withoutPeriodHighs(r.aligned(kind), settings.qualityFlags.lowFlowPeriods, kind, start, r.flowFill?.[kind]?.code);
-	const excluded = new Uint8Array(days);
-	for (const x of exclusionRanges(settings.calibrationExclusions)) {
-		for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) excluded[t] = 1;
-	}
+	const maskOf = (ranges: readonly { start: string; end: string }[]) => {
+		const m = new Uint8Array(days);
+		for (const x of ranges) for (let t = Math.max(0, toEpochDay(x.start) - start); t <= Math.min(days - 1, toEpochDay(x.end) - start); t++) m[t] = 1;
+		return m;
+	};
+	// The outlet records' checks read the top level's exclusions; the scored record's segments its own location's.
+	const excluded = maskOf(exclusionRanges(settings.calibrationExclusions));
 	const nodes = input.model.nodes;
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 	/** Σ over the farms in `among` (every node when null) of their dams' storage gain + evaporation − rain on them, per day. */
@@ -1417,6 +1456,7 @@ function runPlausibility(r: {
 	// classes the run stores as `observed_flow_quality` (at a calibration site without a gauged range or gap fill).
 	const sc = r.scored;
 	const scoredFlagged = sc ? flaggedDayMask(sc.flags) : null;
+	const scoredExcluded = sc?.exclusions ? maskOf(sc.exclusions) : excluded;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -1448,7 +1488,7 @@ function runPlausibility(r: {
 					site: sc.site,
 					observedM3s: sc.observedM3s,
 					simulatedM3Day: sc.simulatedM3Day,
-					segmentMask: scoredFlagged ? Uint8Array.from(excluded, (v, t) => (v || scoredFlagged[t] ? 1 : 0)) : excluded
+					segmentMask: scoredFlagged ? Uint8Array.from(scoredExcluded, (v, t) => (v || scoredFlagged[t] ? 1 : 0)) : scoredExcluded
 				}
 			: null
 	});
@@ -1485,11 +1525,14 @@ function runCalibrationSite(input: ModelInput, siteNodeId: string | null, outflo
 }
 
 /**
- * Calibration statistics at each calibration zone's gauge (issue #555, docs/model.md §2.10n), upstream first as
- * summary.unitRain.zones lists them (the site's own zone is `calibration`, so it is left out here): the gauge's
- * record (the row's, else its first) against its simulated outflow, on the zone's own window and exclusions, with
- * `fitStatus` by the zone's own fit record and parameters (zoneCalibrationSettings), so each site is in or out of
- * sample on its own. A zone whose gauge has no record is left out. [] when the run applied no zone.
+ * Calibration statistics at every ticked location but the headline (issue #555; engine 1.110.0, issue #659,
+ * docs/model.md §2.10n), in summary.unitRain.zones' order (the headline's is `calibration`, so it is left out here):
+ * a gauge's record (the row's, else its first) against its simulated outflow, on the location's own window and
+ * exclusions, with `fitStatus` by its own fit record and parameters (locationCalibrationSettings), so each is in or
+ * out of sample on its own. The outlet's location, when ticked and not the headline, scores the outlet record
+ * (`outlet`, its low-flow periods applied as summary.calibration's) on the top-level settings, with the outlet node's
+ * id as `siteNodeId`; it is left out when the run's statistics already fell back to the outlet. A location without a
+ * record is left out. [] when the run applied no gauge location.
  */
 function zoneCalibrationStats(
 	zones: readonly UnitRainZoneSummary[] | undefined,
@@ -1499,15 +1542,35 @@ function zoneCalibrationStats(
 	days: number,
 	results: readonly NodeResult[],
 	nodes: readonly NetworkNode[],
-	startDate: string
+	startDate: string,
+	outlet: { scoredAtOutlet: boolean; kind: CalibrationFlowKind | null; observed: (number | null)[] | null; simulated: ArrayLike<number> }
 ): CalibrationStats[] {
 	const out: CalibrationStats[] = [];
 	for (const z of zones ?? []) {
-		if (z.nodeId === null) continue;
+		if (z.headline || z.kind === 'default') continue;
+		if (z.nodeId === null) {
+			// Before engine 1.110.0 (no `kind`) the null entry was the calibration site's own zone, never listed here.
+			const o = outletNode(nodes);
+			if (z.kind !== 'outlet' || outlet.scoredAtOutlet || !outlet.kind || !outlet.observed || !o) continue;
+			out.push({
+				...calibrationStats(outlet.simulated, outlet.observed, {
+					startDate,
+					windowStart: settings.calibrationStart,
+					windowEnd: settings.calibrationEnd,
+					exclusions: exclusionRanges(settings.calibrationExclusions)
+				}),
+				flowKind: outlet.kind,
+				simulatedKey: 'simulated_outflow',
+				siteNodeId: o.id,
+				siteName: o.name,
+				fitStatus: calibrationFitStatus(locationCalibrationSettings(settings, null), outlet.kind, null)
+			});
+			continue;
+		}
 		const node = nodes.findIndex((n) => n.id === z.nodeId);
 		const kinds = calibrationRecordsAt(series, z.nodeId);
 		if (node < 0 || !kinds.length) continue;
-		const zs = zoneCalibrationSettings(settings, z.nodeId);
+		const zs = locationCalibrationSettings(settings, z.nodeId);
 		const kind = zs.calibrationFlowKind && kinds.includes(zs.calibrationFlowKind) ? zs.calibrationFlowKind : kinds[0]!;
 		out.push({
 			...calibrationStats(results[node]!.outflow, alignFlow(series[calibrationSeriesKey(kind, z.nodeId)], start, days), {
@@ -1643,12 +1706,6 @@ export function buildNetworkPlan(
 		 * is 0. The arrays are the plan's own, so a calibration can refill them.
 		 */
 		unitRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
-		/**
-		 * Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b): each land unit's natural runoff from the share runs
-		 * (runoff/simulate.ts ewrShareRunoff), and the units of those on the catchment rain. Ignored with unitRunoff.
-		 */
-		shareRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
-		shareCatchmentRain?: readonly EwrSplitUnit[];
 		/**
 		 * The EWR split's period and shares (engine ≥ 1.94.0; every run from 1.105.0): the capture run's, as its other
 		 * record-wide figures. null: a resumed run whose capture run pinned none, which keeps the flow share.
@@ -1955,18 +2012,17 @@ export function buildNetworkPlan(
 		},
 		scaledObjects: (i, k) => (factored(nodes[i]!) && objectsBy.has(nodes[i]!.id) ? objectsOf(nodes[i]!, { scale: k }) : undefined)
 	});
-	// Each unit's one share (engine ≥ 1.105.0, ./network/ewrSplit.ts, §2.5 and §2.5b): its natural MAR share, from Per
-	// unit's own runoff or Fragmentation's share runs, set on the plan's farms. It splits the flow under Fragmentation,
-	// the EWR and the land-cover threshold (all read at simulation time) and the senior users' claims, made from it here.
-	const shareRunoffOf = unitRunoffOf.size ? unitRunoffOf : new Map((warm.shareRunoff ?? []).map((u) => [u.nodeId, u.runoffM3Day]));
-	const ewrSplit = planUnitShares(plan, nodes, shareRunoffOf, unitRunoffOf.size ? 'unitRain' : 'shareRuns', unitRunoffOf.size ? [] : (warm.shareCatchmentRain ?? []), start, historyDays, warm.ewrSplit);
+	// Each unit's one share (engine ≥ 1.105.0, ./network/ewrSplit.ts, §2.5 and §2.5b): its natural MAR share, from its
+	// own runoff (Per unit, the only method since 1.109.0), set on the plan's farms. It splits the EWR and the land-cover
+	// threshold (both read at simulation time) and the senior users' claims, made from it here.
+	const ewrSplit = planUnitShares(plan, nodes, unitRunoffOf, start, historyDays, warm.ewrSplit);
 	// The daily outlet EWR reads the natural flow at the outlet, which crosses the units by their shares when a reach
 	// loses (naturalAtOutlet): filled once the shares are set.
 	let outletEwr: OutletEwrPlan | undefined;
 	if (ewrSource) {
 		for (const note of ewrDailySourceNotes(ewrSource)) warnings.push(`daily EWR at the outlet: ${note}`);
-		// The area the natural flow was made on (the calibration override, else the units' areas), so the tables and
-		// the flow they're read against are on one area.
+		// The area the natural flow was made on (the land units' areas; the calibration override only with no land unit,
+		// engine ≥ 1.109.0), so the tables and the flow they're read against are on one area.
 		const areaKm2 = resolveCatchmentAreaKm2(settings.calibration, { ...input, model });
 		outletEwr = { source: ewrSource, info: fillPlanOutletEwr(plan, topo.outflow, natural, ewrSource, areaKm2, historyDays, days, warm.outletEwr) };
 	}
@@ -2005,16 +2061,13 @@ export interface PlannedEwrSplit {
 
 /**
  * Set the plan's farms' shares (§2.5, §2.5b): a resumed run's pinned shares; else each land unit's natural MAR over
- * the complete water years of the historical days, from its own runoff (Per unit's local runoff, or Fragmentation's
- * share runs); the area shares with no runoff over the period, with natural flow supplied without the units' runoff
+ * the complete water years of the historical days, from its own runoff (Per unit's local runoff); the area shares with no runoff over the period, with natural flow supplied without the units' runoff
  * (runModelWith), or on a resumed run whose snapshot pinned none; every share 0 without a land unit.
  */
 function planUnitShares(
 	plan: NetworkPlan,
 	nodes: readonly NetworkNode[],
 	runoffOf: ReadonlyMap<string, Float64Array>,
-	from: 'unitRain' | 'shareRuns',
-	catchmentRain: readonly EwrSplitUnit[],
 	start: number | undefined,
 	historyDays: number,
 	pinned: PinnedEwrSplit | null | undefined
@@ -2057,8 +2110,7 @@ function planUnitShares(
 		applied: filled.applied,
 		...(filled.applied === 'area' ? { why: 'noRunoff' as const } : {}),
 		period,
-		runoffFrom: from,
-		...(catchmentRain.length ? { catchmentRain: catchmentRain.map((u) => ({ ...u })) } : {})
+		runoffFrom: 'unitRain'
 	};
 	const pin: PinnedEwrSplit = { period, shares: [...filled.shares].map(([nodeId, share]) => ({ nodeId, share })), info };
 	return { info, refill, pin, shares: filled.shares };
@@ -2076,7 +2128,7 @@ export function ewrSplitPinOf(input: ModelInput): PinnedEwrSplit | null {
 	const read = run.series !== input.series ? { ...input, series: run.series } : input;
 	const nf = naturalFlowFor(settings.runoffModel)(read, { settings, startDate, days, aligned, historyDays, chirpsCorrection: run.chirpsCorrection, stations: run.stations?.context ?? null });
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
-	const warm = nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : nf.shareRunoff ? { shareRunoff: nf.shareRunoff, shareCatchmentRain: nf.shareCatchmentRain ?? [] } : {};
+	const warm = nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {};
 	return buildNetworkPlan(read, settings, days, month, aligned, natural, [], start, warm, historyDays).ewrSplit.pin ?? null;
 }
 

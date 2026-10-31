@@ -5,10 +5,14 @@
 // server to check; here the server computes every member itself, so there is
 // nothing to check, and completes the row once, as the result route does.
 //
-// A run is timed first: an ensemble estimated past ENSEMBLE_SECONDS_MAX is
-// refused (dead, saying so) rather than cut off by the worker's timeout; it
-// can still be run from the Runs tab in the browser.
-import { ENGINE_VERSION, runEnsemble, runModel, summariseEnsemble, type ResolvedEnsembleOptions } from '@water-management/engine';
+// The ensemble's time on the worker is estimated first, from the model's
+// size × the members (calibration/estimate.ts: no clock, so a busy server
+// gives the same answer as an idle one); one estimated past
+// ENSEMBLE_SECONDS_MAX is refused (dead, saying so) rather than cut off by the
+// worker's timeout, and one that runs past it anyway is stopped, saying so.
+// Either can still be run from the Runs tab in the browser.
+import { ENGINE_VERSION, runEnsemble, summariseEnsemble, type ResolvedEnsembleOptions } from '@water-management/engine';
+import { ensembleSeconds, modelSize, wallClock } from '../../calibration/estimate.js';
 import { ENSEMBLE_SECONDS_MAX, UncertaintyPayload } from '../../calibration/schema.js';
 import { ApiError } from '../../http/errors.js';
 import { runModelInput } from '../../runs/uncertainty.js';
@@ -31,15 +35,19 @@ export const uncertaintyHandler = defineHandler({
 		if (row.engineVersion !== ENGINE_VERSION) throw new JobError(`this ensemble was started on engine ${row.engineVersion}; start a new one`, { retry: false });
 		try {
 			const input = await runModelInput(db, job.projectId, row.runId);
-			const t0 = performance.now();
-			runModel(input);
-			const seconds = ((performance.now() - t0) * row.options.members) / 1000;
+			const seconds = ensembleSeconds(row.options.members, modelSize(input));
 			if (seconds > ENSEMBLE_SECONDS_MAX)
 				throw new JobError(
-					`the ensemble would take about ${Math.ceil(seconds / 60)} minutes on the server, more than a background job may run: run it from the Runs tab instead`,
+					`the ensemble would take up to about ${Math.ceil(seconds / 60)} minutes on the server, more than a background job may run: run it from the Runs tab instead`,
 					{ retry: false }
 				);
-			const result = runEnsemble(input, row.options);
+			const t0 = wallClock();
+			const result = runEnsemble(input, row.options, { onProgress: () => wallClock() - t0 > ENSEMBLE_SECONDS_MAX * 1000 });
+			if (result.cancelled)
+				throw new JobError(
+					`the ensemble ran past the ${ENSEMBLE_SECONDS_MAX / 60} minutes a background job may run, longer than it was estimated to take: run it from the Runs tab instead`,
+					{ retry: false }
+				);
 			const summary = summariseEnsemble({ options: row.options, header: result.header, members: result.members, coverage: result.coverage });
 			if (!(await progress(100))) throw new LeaseLostError();
 			await db.query(`UPDATE run_uncertainty SET status = 'complete', accepted = $2, summary = $3, result = $4 WHERE id = $1 AND status = 'started'`, [

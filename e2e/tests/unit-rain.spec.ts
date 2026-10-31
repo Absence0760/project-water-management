@@ -9,7 +9,7 @@
 //   is left to change. An editor opens it from the head's Rain from the map
 //   and sees the proposal with no button. The panel passes axe.
 // - A unit's form takes its MAP and asks for its source before Save.
-// - Settings → Model selection for flow generation's Per unit switches it on (issue #553 round 3), its Units without a station reads the
+// - Settings → Flow generation is Per unit with no switch (issue #658), its Units without a station reads the
 //   gauge's MAP from the catchment rain station (issue #553; set in Series details,
 //   flow-share-hint.spec.ts), and keeps it after a reload; its link opens
 //   the Data feeds panel (?rain=units). A viewer reads it, read-only.
@@ -146,15 +146,13 @@ test('a unit’s MAP takes its source before Save, and is kept', async ({ page, 
 	await expect(page.getByTestId('unit-map')).toHaveCount(0);
 });
 
-test('Settings switches rain for each unit on, reads the gauge’s MAP from the catchment rain station, and keeps it', async ({ page, owner }) => {
+test('Settings shows rain for each unit with no switch, reads the gauge’s MAP from the catchment rain station, and keeps it', async ({ page, owner }) => {
 	void owner;
 	const id = await seed(page.request, 'Unit rain settings');
 	await openSettings(page, id);
 	const group = page.getByTestId('unit-rain-settings');
-	const sw = page.locator('#set-share').getByRole('radio', { name: 'Per unit' });
-	const off = page.locator('#set-share').getByRole('radio', { name: 'Fragmentation' });
-	await expect(sw).not.toBeChecked();
-	await sw.check();
+	// Per unit is the only method (issue #658): no switch, its fields shown from the start.
+	await expect(page.locator('#set-share').getByRole('radio')).toHaveCount(0);
 	await expect(group.getByTestId('unit-rain-coverage')).toContainText('0 of 2 units with land have a MAP.');
 	await expect(group.getByLabel('First year')).toHaveValue('1991');
 	await expect(group.getByLabel('Last year')).toHaveValue('2020');
@@ -166,18 +164,14 @@ test('Settings switches rain for each unit on, reads the gauge’s MAP from the 
 	await group.getByLabel('First year').fill('2018');
 	await group.getByLabel('First year').blur();
 	await expect(group.getByTestId('unit-rain-period-note')).toContainText('3 years: the MAP factor wants at least 10 complete years');
-	// Switched off and on again before saving, it comes back as it was. Fragmentation keeps the setup on show: its EWR
-	// shares run on it (issue #615).
-	await off.check();
-	await expect(group.getByLabel('First year')).toHaveValue('2018');
-	await sw.check();
-	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await expectNoViolations(page, { include: '[data-testid="unit-rain-settings"]' });
 	await saveSettings(page);
 	await expect(page.getByTestId('summary-share')).toContainText('Per unit');
+	// Saved as Per unit: every write of the setting is `perUnit`.
+	const stored = (await (await page.request.get(`${API_URL}/projects/${id}`)).json()) as { project: { settings: { unitRain?: unknown } } };
+	expect(stored.project.settings.unitRain).toEqual({ mode: 'perUnit', mapPeriod: { start: '2018-01-01', end: '2020-12-31' } });
 
 	await page.reload();
-	await expect(sw).toBeChecked();
 	await expect(group.getByLabel('First year')).toHaveValue('2018');
 	await expect(group.getByLabel('Last year')).toHaveValue('2020');
 });
@@ -187,10 +181,8 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	const id = await seed(page.request, 'Unit rain link');
 	await openSettings(page, id);
 	const group = page.getByTestId('unit-rain-settings');
-	await page.locator('#set-share').getByRole('radio', { name: 'Per unit' }).check();
 	await expect(group.getByTestId('unit-rain-without-map')).toContainText('Without a MAP: Upper farm, Lower farm.');
 	await expect(group.getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', /^\?tab=network&edit=[^&]+&section=area$/);
-	await saveSettings(page);
 	await group.getByRole('link', { name: 'Data feeds → Rain for each unit' }).click();
 	// Data feeds is on the Data page (issue #586): the link goes there, with the proposal open.
 	await expect(page).toHaveURL(/\?tab=series&rain=units#data-feeds$/);
@@ -199,10 +191,10 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	const viewer = await signIn('Unit rain viewer');
 	await addMember(page.request, id, viewer.user.email, 'viewer');
 	await openSettings(viewer.page, id);
-	const seen = viewer.page.locator('#set-share').getByRole('radio', { name: 'Per unit' });
-	await expect(seen).toBeChecked();
-	await expect(seen).toBeDisabled();
-	await expect(viewer.page.getByTestId('unit-rain-settings')).toBeVisible();
+	const seen = viewer.page.getByTestId('unit-rain-settings');
+	await expect(seen).toBeVisible();
+	// NumberInput keeps a viewer's field focusable and read-only rather than disabled.
+	await expect(seen.getByLabel('First year')).not.toBeEditable();
 	// Data feeds' proposals are for editors: a viewer has no button to open them, and the link opens nothing.
 	await viewer.page.goto(`/projects/${id}?tab=series&rain=units#data-feeds`);
 	const viewerFeeds = viewer.page.getByRole('region', { name: 'Data feeds' });

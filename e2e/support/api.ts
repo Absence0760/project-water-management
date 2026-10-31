@@ -187,6 +187,15 @@ export interface Model {
 	irrigationSystems?: { id: string; name: string; efficiency: number; preset?: string | null }[];
 }
 
+/**
+ * Settings that calibrate at one inner gauge alone, as its headline (issue #659): what "scored at" that gauge meant
+ * before engine 1.110.0 (the outlet unticked, the gauge's row ticked, the headline pointer on it).
+ */
+export function calibratedAtGauge(nodeId: string): Record<string, unknown> {
+	const row = { nodeId, enabled: true, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, calibrationExclusions: [], qualityFlags: null, gr4j: null, fitRecord: null };
+	return { calibrateAtOutlet: false, calibrationZones: [row], calibrationSiteNodeId: nodeId };
+}
+
 export function node(name: string, kind: 'farm' | 'gauge', downstreamNodeId: string | null, sortOrder: number, extra: Record<string, unknown> = {}) {
 	return {
 		id: crypto.randomUUID(),

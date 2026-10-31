@@ -69,6 +69,7 @@ export const TITLE_MAX = 180;
  */
 export const NOT_PROPOSED: Readonly<Record<string, string>> = {
 	fitRecord: 'a fit record is written by running a calibration (the Calibration page), not proposed',
+	unitParamsFrom: 'which units take a gauge’s parameters (Parameters from) is the hydrologist’s judgement of which units are alike, not proposed',
 	calibrationRules: 'the calibration rules carry a person’s sign-off, so a person edits them on the Calibration page',
 	evidenceUncertaintyRule: 'the evidence uncertainty rule is a declaration a person makes for an evidence report',
 	responsibleAuthority: 'who decides the project’s applications is the owner’s choice, not a modelling setting',

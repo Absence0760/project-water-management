@@ -28,7 +28,8 @@ import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
 import { calibrationSiteIndex } from './site';
-import { zoneCompleteWaterYears, resolveZones, zoneCalibrationSettings, zoneCoverageNotes, zoneParamsOf, zoneSiteName } from './zones';
+import { zoneCompleteWaterYears, zoneCoverageNotes } from './zones';
+import { headlineLocation, locationCalibrationSettings, locationName, locationParamsOf, resolveLocations, type LocationKey } from './locations';
 import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
@@ -36,14 +37,14 @@ import type { RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { hasDailyEt0Value } from '../evaporation/et0Daily';
-import { catchmentRainUnits, resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
-import { shareForcingSettings, simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
+import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
 import { rainStationSummary } from '../runoff/stationForcing';
 import { catchmentStationFingerprint, type CatchmentStationFingerprint } from '../runoff/stationFingerprint';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
-import { dds } from './dds';
+import { dds, type DdsState } from './dds';
 import { CALIBRATION_PARAMS, MAX_STARTS, type FitBounds, type ParamSet } from './params';
 import { calibrationPriorError, priorBox, priorPenalty, sameTarget, type CalibrationPrior, type ParamPriors, type PriorFitResult, type PriorParam } from './prior';
 import { excludedDayMask, exclusionRanges } from './provenance';
@@ -130,13 +131,16 @@ export interface CalibrateOptions {
 	/** Progress after every model run; return true to cancel (the best so far is returned). */
 	onProgress?: (p: CalibrationProgress) => boolean | void;
 	/**
-	 * The calibration zone to fit (engine 1.106.0, issue #555, ./zones.ts,
-	 * docs/model.md §2.10n): a ticked row of settings.calibrationZones, by its
-	 * gauge. Only that zone's land units take the candidate parameters; every
-	 * other unit keeps its zone's (the site's zone: settings.gr4j), and the fit
-	 * reads the zone's site, window, exclusions, record and quality flags
-	 * (zoneCalibrationSettings). Absent or null = the calibration site's own
-	 * zone (with no ticked zone, every unit: every engine before).
+	 * The calibration location to fit (engine 1.106.0, issue #555; engine
+	 * 1.110.0, issue #659; ./locations.ts, docs/model.md §2.10n): a ticked
+	 * gauge's row of settings.calibrationZones by its node id, or null for the
+	 * outlet's location (the top-level settings). Only that location's group
+	 * (its own, borrowed and rest units) takes the candidate parameters; every
+	 * other unit keeps its group's, and the fit reads the location's site,
+	 * window, exclusions, record and quality flags
+	 * (locationCalibrationSettings). Absent = the headline location
+	 * (headlineLocation; with no gauge location, every unit takes the
+	 * candidate: every engine before).
 	 */
 	zone?: string | null;
 	/**
@@ -261,10 +265,12 @@ export interface CalibrationReport {
 	siteNodeId?: string | null;
 	/** The stored series fitted to (engine ≥ 1.102.0, CalibrationProblem.flowSeriesId); absent when the input didn't say. */
 	flowSeriesId?: string;
-	/** The calibration zone fitted (engine 1.106.0, issue #555): its gauge, null = the site's own zone; absent without zones. */
+	/** The calibration location fitted (engine 1.106.0, issue #555): its gauge, null = the outlet's location (before 1.110.0: the site's own zone); absent without a gauge location. */
 	zoneNodeId?: string | null;
-	/** The land units the fitted parameters are for (engine 1.106.0); absent without zones (every unit). */
+	/** The land units the fitted parameters are for (engine 1.106.0); absent without a gauge location (every unit). */
 	zoneUnits?: string[];
+	/** The units among `zoneUnits` borrowed from elsewhere (settings.unitParamsFrom, engine 1.110.0); absent when none. */
+	zoneBorrowed?: string[];
 	simulatedKey: 'simulated_outflow';
 	fit: ScoredPeriod;
 	/** The project's current parameters scored on the same days. */
@@ -295,7 +301,7 @@ export interface CalibrationReport {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing the fit ran under (engine ≥ 1.78.0, docs/model.md §2.4h); absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
-	/** Under Fragmentation, the forcing its share runs ran on (engine ≥ 1.105.0, issue #616); null without a land unit, absent under Per unit. */
+	/** Under Fragmentation (engines 1.105.0 to 1.108.x, issue #616), the forcing its share runs ran on; null without a land unit. No engine since writes it. */
 	shareRain?: UnitRainFingerprint | null;
 	/** The catchment's rainfall station the fit's rain read (engine ≥ 1.91.0, docs/model.md §2.4i); absent without one. */
 	catchmentStation?: CatchmentStationFingerprint | null;
@@ -355,10 +361,14 @@ export interface CalibrationProblem {
 	flowKind: string;
 	/** Where the record is and the simulated flow is taken (engine ≥ 1.41.0): null = the outlet, else the gauge's node id. */
 	siteNodeId: string | null;
-	/** The calibration zone fitted (engine 1.106.0, CalibrateOptions.zone): its gauge, null = the site's own zone; absent without zones. */
+	/** The calibration location fitted (engine 1.106.0, CalibrateOptions.zone): its gauge, null = the outlet's location; absent without a gauge location. */
 	zoneNodeId?: string | null;
-	/** The land units whose parameters the candidates move (engine 1.106.0); absent without zones (every unit). */
+	/** The land units whose parameters the candidates move (engine 1.106.0); absent without a gauge location (every unit). */
 	zoneUnits?: string[];
+	/** The units among `zoneUnits` borrowed from elsewhere (engine 1.110.0); absent when none. */
+	zoneBorrowed?: string[];
+	/** The location fitted is the headline (engine 1.110.0): the WR2012 MAR penalty applies at it only. */
+	headline?: boolean;
 	/** The stored series the fitted record is (DailySeries.seriesId, engine ≥ 1.102.0): whose kept checks change the scored days. Null when the input doesn't say. */
 	flowSeriesId: string | null;
 	/** The calibration records at the site, in CALIBRATION_FLOW_KINDS order: the fitted one and any for independent validation. */
@@ -405,11 +415,6 @@ export interface CalibrationProblem {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The per-unit forcing (engine ≥ 1.78.0, settings.unitRain `perUnit`), for fit provenance; absent under catchment rain. */
 	unitRain?: UnitRainFingerprint | null;
-	/**
-	 * Under Fragmentation, the forcing its share runs ran on (engine ≥ 1.105.0, issue #616: the units' shares split the
-	 * flow each candidate is scored on), for fit provenance; null without a land unit, absent under Per unit.
-	 */
-	shareRain?: UnitRainFingerprint | null;
 	/** The catchment's rainfall station (engine ≥ 1.91.0, §2.4i), for fit provenance; absent without one. */
 	catchmentStation?: CatchmentStationFingerprint | null;
 	/**
@@ -443,26 +448,27 @@ export interface RecordProblem {
 }
 
 /** Build the calibration problem for a project. Throws when there is nothing to calibrate against. */
-export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId, zoneNodeId: string | null = null): CalibrationProblem {
+export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = [], model?: RunoffModelId, zone?: LocationKey): CalibrationProblem {
 	const run = prepareRun(input);
 	// The fit reads a record's own missing periods as gaps, as the run does (engine ≥ 1.102.0, ../recordPeriods.ts).
 	if (run.series !== input.series) input = { ...input, series: run.series };
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
-	// Calibration zones (engine 1.106.0, issue #555, ./zones.ts): the zones the run applies, and the settings this fit
-	// reads its site, window, exclusions, record, quality flags and start from (the zone's, or the project's for the
-	// site's own zone). No ticked zone: `zones` is null and every unit takes the candidate, as before.
+	// Calibration locations (engine 1.110.0, issue #659, ./locations.ts): the groups the run applies, and the settings
+	// this fit reads its site, window, exclusions, record, quality flags and start from (the location's: a gauge's row,
+	// or the top level for the outlet). No gauge location: `locs` is null and every unit takes the candidate, as before.
 	const baseParams = resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings);
-	const zones = resolveZones(input.model.nodes, settings, baseParams, warnings);
-	if (zoneNodeId !== null) {
-		if (!zones) throw new Error('calibration zones need Per unit flow generation and a ticked, usable gauge: there is no zone to fit');
-		if (!zones.zones.some((z) => z.nodeId === zoneNodeId)) throw new Error(`no ticked calibration zone at gauge node ${zoneNodeId}`);
-	}
-	const cs = zoneCalibrationSettings(settings, zoneNodeId);
+	const locs = resolveLocations(input.model.nodes, settings, baseParams, warnings);
+	const headline = headlineLocation(input.model.nodes, settings);
+	const zoneNodeId: LocationKey = zone === undefined ? headline : zone;
+	const loc = locs?.locations.find((l) => l.key === zoneNodeId);
+	if (zoneNodeId !== null && !loc) throw new Error(`no ticked calibration location at gauge node ${zoneNodeId}`);
+	if (zoneNodeId === null && locs && !loc) throw new Error('the outlet is not a ticked calibration location: tick Calibrate here at the outlet, or fit a gauge');
+	const cs = locationCalibrationSettings(settings, zoneNodeId);
 	const modelId = model ?? settings.runoffModel;
 	// Refused as runModel refuses it (runoff/simulate.ts).
 	if (!hasPotentialEvaporation(settings, hasDailyApanValue(aligned('evap_apan_mm')), hasDailyEt0Value(aligned('evap_et0_mm')))) throw new Error(GR4J_NO_PET);
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
-	// A zone's start: its row's parameters (in bounds, sanitizeCalibrationZones) over the catchment's, already warned of.
+	// A gauge location's start: its row's parameters (in bounds, sanitizeCalibrationZones) over the catchment's, already warned of.
 	const startParams: ParamSet = zoneNodeId === null ? { ...baseParams } : { ...resolveParams<Gr4jParams>(GR4J_PARAMS, cs.gr4j, 'GR4J', []) };
 	const natural = new Float64Array(days);
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
@@ -475,17 +481,6 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		settings.unitRain?.pinned ?? undefined
 	);
 	const unitBuffers = perUnit ? perUnit.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
-	// Fragmentation's EWR shares (engine ≥ 1.105.0, §2.5b, runoff/simulate.ts ewrShareRunoff): the same per-unit runs on
-	// the Per unit forcing, into buffers the plan's EWR split reads, refilled for each candidate (its parameters move
-	// the shares). Their warnings are Per unit's, not the fit's.
-	const shareForcing = perUnit
-		? null
-		: unitRainForcing(
-				{ settings: shareForcingSettings(settings), series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays, forecastRainSource: input.forecastRainSource ?? null, stations: run.stations?.context ?? null, stationInputs: input.stations ?? null },
-				[],
-				settings.unitRain?.pinned ?? undefined
-			);
-	const shareBuffers = shareForcing ? shareForcing.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
 	const { plan, topo, outletEwr, ewrSplit } = buildNetworkPlan(
 		input,
 		settings,
@@ -495,7 +490,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		natural,
 		warnings,
 		start,
-		unitBuffers ? { unitRunoff: unitBuffers } : shareBuffers ? { shareRunoff: shareBuffers, shareCatchmentRain: catchmentRainUnits(shareForcing!.units) } : {},
+		unitBuffers ? { unitRunoff: unitBuffers } : {},
 		historyDays
 	);
 
@@ -561,8 +556,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		if (perUnit) {
 			// The same products and the same node-id order as the run's (runoff/simulate.ts unitNaturalFlow), so a scored
 			// day's flow is runModel's to the bit.
-			// Under calibration zones only the fitted zone's units take the candidate; the rest keep their zone's.
-			const paramsOf = zoneParamsOf(zones, baseParams, { zone: zoneNodeId, free: p as unknown as Gr4jParams });
+			// Under calibration locations only the fitted location's group takes the candidate; the rest keep their group's.
+			const paramsOf = locationParamsOf(locs, baseParams, { key: zoneNodeId, free: p as unknown as Gr4jParams });
 			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays, ...(paramsOf ? { paramsOf } : {}) });
 			natural.fill(0, 0, n);
 			perUnit.units.forEach((u, k) => {
@@ -577,15 +572,6 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		}
 		const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n, cycleDays: historyDays });
 		for (let t = 0; t < n; t++) natural[t] = tr.qMm[t]! * toM3;
-		if (shareForcing) {
-			// The share runs, as ewrShareRunoff makes them (the products in the same order), so the shares are runModel's to the bit.
-			const traces = simulateUnits(shareForcing.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays });
-			shareForcing.units.forEach((u, k) => {
-				const q = traces[k]!.qMm;
-				const buf = shareBuffers![k]!.runoffM3Day;
-				for (let t = 0; t < n; t++) buf[t] = q[t]! * u.areaKm2 * MM_KM2_TO_M3;
-			});
-		}
 	};
 	/** The series a record is scored against, simulated for days 0 … n − 1. */
 	// Land cover (WP-1.35) reads the whole run's natural flow (its low-flow
@@ -605,9 +591,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		const runoffTo = splitRefill ? Math.max(n, splitRefill.days.to) : n;
 		return (p: ParamSet): Float64Array => {
 			runoff(p, runoffTo);
-			// The unit shares follow each candidate's units' runoff (Per unit's, or Fragmentation's share runs), as a run on
-			// it would: the flow under Fragmentation, the EWR and the land-cover threshold read them as the network runs,
-			// and the senior users' claims are made again from them (engine 1.105.0, issue #616).
+			// The unit shares follow each candidate's units' runoff, as a run on it would: the EWR and the land-cover
+			// threshold read them as the network runs, and the senior users' claims are made again from them (engine
+			// 1.105.0, issue #616).
 			refillShares?.();
 			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would: after
 			// the shares, which the natural flow crosses the units by when a reach loses.
@@ -625,7 +611,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		startParams,
 		flowKind: kind,
 		siteNodeId,
-		...(zones ? { zoneNodeId, zoneUnits: zoneNodeId === null ? [...zones.primaryUnits] : [...zones.zones.find((z) => z.nodeId === zoneNodeId)!.units] } : {}),
+		...(loc ? { zoneNodeId, zoneUnits: [...loc.units], ...(loc.borrowed.length ? { zoneBorrowed: [...loc.borrowed] } : {}) } : {}),
+		headline: zoneNodeId === headline,
 		flowSeriesId: siteSeries[kind]?.seriesId ?? null,
 		records: CALIBRATION_FLOW_KINDS.filter((k) => !!siteSeries[k]),
 		observed,
@@ -648,8 +635,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		natural,
 		// On natural flow, never the outflow: WR2012 flows are naturalised. They are net of WRSM's Bedloss
 		// too, so with bed losses on (engine ≥ 1.76.0) on the natural flow at the outlet net of them.
-		// A zone above the site moves only its own units' flow, so the catchment's WR2012 MAR is no target for it.
-		marPenalty: zoneNodeId !== null ? null : netOfReachLosses(
+		// Only the headline's group stands for the catchment (engine 1.110.0, engine-audit.md CZ2): another location moves
+		// only its own group's flow, so the catchment's WR2012 MAR is no target for it.
+		marPenalty: zoneNodeId !== headline ? null : netOfReachLosses(
 			wr2012Penalty(
 				settings.wr2012,
 				startDate,
@@ -666,7 +654,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
-		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : { shareRain: shareForcing ? unitRainFingerprint(shareForcingSettings(settings).unitRain, shareForcing.recipes) : null }),
+		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : {}),
 		...(run.stations?.catchment ? { catchmentStation: catchmentStationFingerprint(rainStationSummary(run.stations.context, run.stations.catchment, [], run.stations.plan?.map ?? null)) } : {}),
 		rain: arealRainOn(usedRain, areal, month),
 		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
@@ -693,13 +681,19 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 export const siteNote = (name: string): string =>
 	`Scored at the gauge "${name}": its record against the simulated flow there. The gauged ranges and gap filling in Calibration → Calibration record are the outlet records', so none applies to this record. A run scores its calibration statistics here too; the outlet's EWR test stays the outlet's.`;
 
-/** A fit of a calibration zone above the site (engine 1.106.0, issue #555): what it moves and what it leaves. */
-export const zoneNote = (name: string, units: number): string =>
-	`Fitted the calibration zone at the gauge "${name}": the parameters of its ${units} land unit${units === 1 ? '' : 's'} only, on that gauge's record against the simulated flow there, with every zone above it at its own parameters. The gauged ranges, gap filling and WR2012 MAR penalty are the outlet's, so none applies to this record; the run's calibration statistics stay at the calibration site.`;
+const unitsText = (units: number, borrowed = 0) => `${units} land unit${units === 1 ? '' : 's'}${borrowed ? ` (${borrowed} of them borrowed from elsewhere, Parameters from)` : ''}`;
 
-/** A fit of the site's own zone when zones above it apply (engine 1.106.0). */
-export const siteZoneNote = (units: number): string =>
-	`Fitted the calibration site's own zone: the parameters of its ${units} land unit${units === 1 ? '' : 's'}, with the units in the calibration zones above it at their zones' parameters.`;
+/** A fit of a gauge location that isn't the headline (engine 1.106.0, issue #555; 1.110.0, issue #659): what it moves and what it leaves. */
+export const zoneNote = (name: string, units: number, borrowed = 0): string =>
+	`Fitted the calibration location at the gauge "${name}": the parameters of its group's ${unitsText(units, borrowed)} only, on that gauge's record against the simulated flow there, with every location fitted before it at its own parameters. The gauged ranges, gap filling and WR2012 MAR penalty are the outlet's, so none applies to this record; the run's headline statistics stay at the headline location.`;
+
+/** A fit of the outlet's location when it isn't the headline (engine 1.110.0, issue #659). */
+export const outletLocationNote = (units: number, borrowed = 0): string =>
+	`Fitted the outlet's location: the parameters of its group's ${unitsText(units, borrowed)}, with every location fitted before it at its own parameters. The WR2012 MAR penalty applies at the headline location only, so not here.`;
+
+/** A fit of the headline's group when other locations apply (engine 1.106.0; 1.110.0: any location can be the headline). */
+export const siteZoneNote = (units: number, borrowed = 0): string =>
+	`Fitted the headline location's group: the parameters of its ${unitsText(units, borrowed)}, with the units of every other calibration location at their own parameters.`;
 
 /** Observed and simulated values on the given days. */
 function pair(obs: Float64Array, sim: Float64Array, idx: Int32Array): [Float64Array, Float64Array] {
@@ -768,6 +762,23 @@ interface FitResult {
 	cancelled: boolean;
 }
 
+/**
+ * One optimisation of a calibration as it ended, JSON-safe, so a server job
+ * can store it and a later one finish the report from it
+ * (prepareCalibrationFits): `loss` null is a loss of +∞ (no finite
+ * evaluation). The in-process calibrate() goes through the same form, so the
+ * two can't differ.
+ */
+export interface FitOutcome {
+	params: ParamSet;
+	loss: number | null;
+	evaluations: number;
+	cancelled: boolean;
+}
+
+const toOutcome = (r: FitResult): FitOutcome => ({ params: r.params, loss: Number.isFinite(r.loss) ? r.loss : null, evaluations: r.evaluations, cancelled: r.cancelled });
+const fromOutcome = (o: FitOutcome): FitResult => ({ params: o.params, loss: o.loss ?? Infinity, evaluations: o.evaluations, cancelled: o.cancelled });
+
 /** Seed of start `i` (0-based) of a fit seeded `seed`: start 0 is the seed itself, so one start reproduces a single-start fit. */
 export const startSeed = (seed: number, i: number): number => (seed + i * 1_000_003) % 2 ** 31;
 
@@ -835,8 +846,9 @@ function fit(
 	penalty: Wr2012Penalty | null = null,
 	bounds: FitBounds = 'wide',
 	start?: { start: number; starts: number },
-	prior: FitPrior | null = null
-): FitResult {
+	prior: FitPrior | null = null,
+	step: FitStepOptions = {}
+): FitResult | { paused: DdsState } {
 	const specs = free.map((k) => CALIBRATION_PARAMS[pb.model].find((s) => s.key === k)!);
 	const p: ParamSet = { ...pb.startParams };
 	const obs = new Float64Array(idx.length);
@@ -866,9 +878,12 @@ function fit(
 			budget,
 			seed,
 			x0: specs.map((s) => pb.startParams[s.key]!),
-			onEvaluation: (n, f) => onProgress?.({ stage, ...start, evaluations: n, budget, best: 1 - f }) === true
+			onEvaluation: (n, f) => onProgress?.({ stage, ...start, evaluations: n, budget, best: 1 - f }) === true,
+			...(step.resume ? { resume: step.resume } : {}),
+			...(step.pause ? { pause: step.pause } : {})
 		}
 	);
+	if (res.paused) return { paused: res.state };
 	const params: ParamSet = { ...pb.startParams };
 	specs.forEach((s, j) => (params[s.key] = res.x[j]!));
 	return { params, loss: res.f, evaluations: res.evaluations, cancelled: res.stopped };
@@ -1047,38 +1062,190 @@ export function priorNotes(p: CalibrationPrior, bounded: boolean, free: readonly
 	return out;
 }
 
-/** Calibrate a runoff model's parameters against the project's observed flow. */
-export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): CalibrationReport {
+/** How one optimisation of a fit may be paused and resumed (prepareCalibrationFits). */
+export interface FitStepOptions {
+	/** Go on from a paused optimisation's state. */
+	resume?: DdsState;
+	/** Asked after every model run: true pauses the optimisation there, to go on later from its state. */
+	pause?: (evaluations: number) => boolean;
+}
+
+/** One optimisation of a fit: what it fits to (`idx`), from which seed, and with or without the WR2012 penalty. */
+interface FitTask {
+	stage: CalibrationStage;
+	seed: number;
+	idx: Int32Array;
+	penalty: boolean;
+	start?: { start: number; starts: number };
+}
+
+/** The dry → wet test's water years, ranked once before any fit (calibrate's differential split-sample). */
+interface DsstSetup {
+	notes: string[];
+	/** Null when the record has too few water years to test. */
+	split: { dry: { year: number; idx: number[]; mean: number }[]; wet: { year: number; idx: number[]; mean: number }[]; di: Int32Array; wi: Int32Array; rankedBy: DsstRanking } | null;
+	years: number;
+}
+
+/** Everything a fit fixes before its first model run: the problem, the search and the optimisations in order. */
+interface CalibrationSetup {
+	objective: ObjectiveId;
+	bounds: FitBounds;
+	budget: number;
+	seed: number;
+	starts: number;
+	pb: CalibrationProblem;
+	specs: (typeof CALIBRATION_PARAMS)['gr4j'];
+	free: string[];
+	prior: FitPrior | null;
+	penalty: Wr2012Penalty | null;
+	all: Int32Array;
+	split: { a: Int32Array; b: Int32Array } | null;
+	dsst: DsstSetup | null;
+	/** The optimisations in the order calibrate() runs them: the starts, then split, dry → wet and unpenalised as they apply. */
+	tasks: FitTask[];
+	/** Index in `tasks` of each validation optimisation, or -1. */
+	at: { split: number; dsst: number; unpenalised: number };
+}
+
+function setupCalibration(input: ModelInput, opts: CalibrateOptions): CalibrationSetup {
 	const objective = opts.objective ?? 'kgePrime';
 	const bounds = opts.bounds ?? 'wide';
 	const budget = Math.max(10, Math.floor(opts.budget ?? 1500));
 	const seed = opts.seed ?? 1;
 	const starts = Math.min(MAX_STARTS, Math.max(1, Math.floor(opts.starts ?? 1)));
-	const pb = prepareCalibration(input, opts.exclusions, opts.model, opts.zone ?? null);
+	const pb = prepareCalibration(input, opts.exclusions, opts.model, opts.zone);
 	const specs = CALIBRATION_PARAMS[pb.model];
 	const free = opts.free ?? specs.filter((s) => !s.fixedByDefault).map((s) => s.key);
 	if (free.length === 0) throw new Error('no parameters to calibrate');
 	const unknown = free.filter((k) => !specs.some((s) => s.key === k));
 	if (unknown.length) throw new Error(`not a calibratable ${pb.model} parameter: ${unknown.join(', ')}`);
 	const prior = fitPriorOf(opts.prior, bounds, free, pb);
+	const penalty = pb.marPenalty;
+	const all = pb.scoredDays;
+	const validate = opts.validate !== false;
+
+	// The whole record from each start; the lowest loss is kept (CR-2).
+	const tasks: FitTask[] = [];
+	for (let i = 0; i < starts; i++) tasks.push({ stage: 'full', seed: startSeed(seed, i), idx: all, penalty: true, ...(starts > 1 ? { start: { start: i + 1, starts } } : {}) });
+	const at = { split: -1, dsst: -1, unpenalised: -1 };
+	let split: CalibrationSetup['split'] = null;
+	let dsst: DsstSetup | null = null;
+	if (validate) {
+		// Split-sample: first half of the observed days vs the second.
+		const half = Math.floor(all.length / 2);
+		split = { a: all.slice(0, half), b: all.slice(half) };
+		at.split = tasks.push({ stage: 'split', seed: seed + 1, idx: split.a, penalty: true }) - 1;
+		dsst = dsstSetup(pb, opts);
+		if (dsst.split) at.dsst = tasks.push({ stage: 'dsst', seed: seed + 2, idx: dsst.split.di, penalty: true }) - 1;
+	}
+	// The same fit without the penalty, so its effect is visible.
+	if (penalty) at.unpenalised = tasks.push({ stage: 'unpenalised', seed, idx: all, penalty: false }) - 1;
+	return { objective, bounds, budget, seed, starts, pb, specs, free, prior, penalty, all, split, dsst, tasks, at };
+}
+
+/**
+ * Differential split-sample: driest half of the water years vs the wettest,
+ * ranked by the reference gauge when it covers them (a regional index, never
+ * scored), else by the fitted record's own flow.
+ */
+function dsstSetup(pb: CalibrationProblem, opts: CalibrateOptions): DsstSetup {
+	const notes: string[] = [];
+	const years = waterYears(pb, MIN_DAYS_PER_YEAR);
+	const want: DsstRanking = opts.rankYearsBy ?? (pb.reference ? 'reference' : 'observed');
+	let rankedBy: DsstRanking = 'observed';
+	let rankOf = new Map(years.map((y) => [y.year, y.mean]));
+	if (want === 'reference' && years.length >= 4) {
+		if (!pb.reference) {
+			notes.push('The project has no reference gauge, so the dry → wet test ranks water years by their own observed flow.');
+		} else {
+			const ref = referenceYearMeans(pb.reference, pb.startDate, MIN_DAYS_PER_YEAR);
+			const missing = years.filter((y) => !ref.has(y.year)).map((y) => y.year);
+			if (missing.length) {
+				notes.push(
+					`The reference gauge has fewer than ${MIN_DAYS_PER_YEAR} days in ${missing.length} of the ${years.length} water years the dry → wet test uses ` +
+						`(${missing.map((y) => `WY ${waterYearLabel(y)}`).join(', ')}), so it ranks them by their own observed flow instead.`
+				);
+			} else {
+				rankOf = ref;
+				rankedBy = 'reference';
+			}
+		}
+	}
+	years.sort((x, y) => rankOf.get(x.year)! - rankOf.get(y.year)!);
+	if (years.length < 4) return { notes, split: null, years: years.length };
+	const k = Math.floor(years.length / 2);
+	const dry = years.slice(0, k);
+	const wet = years.slice(years.length - k);
+	const idxOf = (ys: typeof years) => Int32Array.from(ys.flatMap((y) => y.idx).sort((p, q) => p - q));
+	return { notes, split: { dry, wet, di: idxOf(dry), wi: idxOf(wet), rankedBy }, years: years.length };
+}
+
+/** Run optimisation `k` of a set-up fit, or pause it (`step.pause`) and say where it stands. */
+function runFitTask(c: CalibrationSetup, k: number, onProgress: CalibrateOptions['onProgress'], step: FitStepOptions = {}): FitResult | { paused: DdsState } {
+	const t = c.tasks[k];
+	if (!t) throw new Error(`the fit has no optimisation ${k + 1}`);
+	return fit(c.pb, t.idx, c.free, c.objective, c.budget, t.seed, t.stage, onProgress, t.penalty ? c.penalty : null, c.bounds, t.start, c.prior, step);
+}
+
+/** Calibrate a runoff model's parameters against the project's observed flow. */
+export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): CalibrationReport {
+	const c = setupCalibration(input, opts);
+	// Through the stored form, as a server job's optimisations are (prepareCalibrationFits), so the two can't differ.
+	return calibrationReport(input, opts, c, (k) => toOutcome(runFitTask(c, k, opts.onProgress) as FitResult));
+}
+
+/**
+ * A calibration whose optimisations are run one at a time, each pausable, so
+ * a server can spread one fit over several background jobs (docs/model.md
+ * §2.10j, backend calibration/store.ts): `fit(k)` runs optimisation k (or
+ * pauses it, handing back its state to resume from), and `report` builds the
+ * report from every optimisation's outcome. The report is calibrate()'s with
+ * the same input and options, to the bit, however the optimisations were
+ * paused and resumed and in however many jobs (calibrate.test.ts pins it).
+ * No progress and no cancel: a job that stops simply doesn't store its work.
+ */
+export interface CalibrationFits {
+	/** Optimisations the fit makes, in order (the starts, then the validation fits, then the one without the WR2012 penalty). */
+	readonly count: number;
+	/** Model runs each optimisation makes. */
+	readonly budget: number;
+	fit(k: number, step?: FitStepOptions): { done: FitOutcome } | { paused: DdsState };
+	report(outcomes: readonly FitOutcome[]): CalibrationReport;
+}
+
+/** Set up a fit to run in steps (CalibrationFits). Throws where calibrate() would, before any model run. */
+export function prepareCalibrationFits(input: ModelInput, opts: Omit<CalibrateOptions, 'onProgress'> = {}): CalibrationFits {
+	const c = setupCalibration(input, opts);
+	return {
+		count: c.tasks.length,
+		budget: c.budget,
+		fit(k, step = {}) {
+			const r = runFitTask(c, k, undefined, step);
+			return 'paused' in r ? r : { done: toOutcome(r) };
+		},
+		report(outcomes) {
+			if (outcomes.length !== c.tasks.length) throw new Error(`the fit has ${c.tasks.length} optimisations, not ${outcomes.length}`);
+			return calibrationReport(input, opts, c, (k) => outcomes[k]!);
+		}
+	};
+}
+
+/** The report from a set-up fit, taking each optimisation's outcome from `fitAt` in calibrate()'s order (it stops at a cancel). */
+function calibrationReport(input: ModelInput, opts: CalibrateOptions, c: CalibrationSetup, fitAt: (k: number) => FitOutcome): CalibrationReport {
+	const { objective, bounds, budget, seed, starts, pb, specs, free, prior, penalty, all } = c;
 	let evaluations = 0;
 	let cancelled = false;
-	const penalty = pb.marPenalty;
-	const fitOnce = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true, start?: { start: number; starts: number }) => {
-		const r = fit(pb, idx, free, objective, budget, s, stage, opts.onProgress, withPenalty ? penalty : null, bounds, start, prior);
+	const take = (k: number) => {
+		const r = fromOutcome(fitAt(k));
 		evaluations += r.evaluations;
 		cancelled ||= r.cancelled;
 		return r;
 	};
-	const run = (idx: Int32Array, stage: CalibrationStage, s: number, withPenalty = true) => fitOnce(idx, stage, s, withPenalty).params;
 
-	const all = pb.scoredDays;
 	// The whole record from each start; the lowest loss is kept (CR-2).
 	const fulls: { seed: number; r: FitResult }[] = [];
-	for (let i = 0; i < starts && !cancelled; i++) {
-		const s = startSeed(seed, i);
-		fulls.push({ seed: s, r: fitOnce(all, 'full', s, true, starts > 1 ? { start: i + 1, starts } : undefined) });
-	}
+	for (let i = 0; i < starts && !cancelled; i++) fulls.push({ seed: c.tasks[i]!.seed, r: take(i) });
 	const kept = fulls.reduce((b, x) => (x.r.loss < b.r.loss ? x : b), fulls[0]!);
 	const params = kept.r.params;
 	const startResults: StartResult[] = fulls.map((x) => ({
@@ -1093,54 +1260,24 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	let splitSample: ValidationTest | null = null;
 	let differential: DifferentialTest | null = null;
 
-	if (opts.validate !== false && !cancelled) {
+	if (c.split && !cancelled) {
 		// Split-sample: first half of the observed days vs the second.
-		const half = Math.floor(all.length / 2);
-		const a = all.slice(0, half);
-		const b = all.slice(half);
-		const p1 = run(a, 'split', seed + 1);
+		const { a, b } = c.split;
+		const p1 = take(c.at.split).params;
 		splitSample = { params: p1, calibration: scored(pb, p1, a), validation: scored(pb, p1, b, pb, false, a) };
 	}
-	if (opts.validate !== false && !cancelled) {
-		// Differential split-sample: driest half of the water years vs the wettest,
-		// ranked by the reference gauge when it covers them (a regional index,
-		// never scored), else by the fitted record's own flow.
-		const years = waterYears(pb, MIN_DAYS_PER_YEAR);
-		const want: DsstRanking = opts.rankYearsBy ?? (pb.reference ? 'reference' : 'observed');
-		let rankedBy: DsstRanking = 'observed';
-		let rankOf = new Map(years.map((y) => [y.year, y.mean]));
-		if (want === 'reference' && years.length >= 4) {
-			if (!pb.reference) {
-				notes.push('The project has no reference gauge, so the dry → wet test ranks water years by their own observed flow.');
-			} else {
-				const ref = referenceYearMeans(pb.reference, pb.startDate, MIN_DAYS_PER_YEAR);
-				const missing = years.filter((y) => !ref.has(y.year)).map((y) => y.year);
-				if (missing.length) {
-					notes.push(
-						`The reference gauge has fewer than ${MIN_DAYS_PER_YEAR} days in ${missing.length} of the ${years.length} water years the dry → wet test uses ` +
-							`(${missing.map((y) => `WY ${waterYearLabel(y)}`).join(', ')}), so it ranks them by their own observed flow instead.`
-					);
-				} else {
-					rankOf = ref;
-					rankedBy = 'reference';
-				}
-			}
-		}
-		years.sort((x, y) => rankOf.get(x.year)! - rankOf.get(y.year)!);
-		if (years.length < 4) {
+	if (c.dsst && !cancelled) {
+		// Differential split-sample: driest half of the water years vs the wettest (dsstSetup).
+		notes.push(...c.dsst.notes);
+		if (!c.dsst.split) {
 			notes.push(
-				`The record has ${years.length} water year${years.length === 1 ? '' : 's'} with at least ${MIN_DAYS_PER_YEAR} observed days, too few to fit on dry years and test on wet ones. ` +
+				`The record has ${c.dsst.years} water year${c.dsst.years === 1 ? '' : 's'} with at least ${MIN_DAYS_PER_YEAR} observed days, too few to fit on dry years and test on wet ones. ` +
 					'How the model behaves in wet years is weakly constrained.'
 			);
 		} else {
-			const k = Math.floor(years.length / 2);
-			const dry = years.slice(0, k);
-			const wet = years.slice(years.length - k);
-			const idxOf = (ys: typeof years) => Int32Array.from(ys.flatMap((y) => y.idx).sort((p, q) => p - q));
-			const di = idxOf(dry);
-			const wi = idxOf(wet);
-			const pd = run(di, 'dsst', seed + 2);
-			const meanOf = (ys: typeof years) => ys.reduce((s, y) => s + y.mean * y.idx.length, 0) / ys.reduce((s, y) => s + y.idx.length, 0);
+			const { dry, wet, di, wi, rankedBy } = c.dsst.split;
+			const pd = take(c.at.dsst).params;
+			const meanOf = (ys: typeof dry) => ys.reduce((s, y) => s + y.mean * y.idx.length, 0) / ys.reduce((s, y) => s + y.idx.length, 0);
 			const ratio = meanOf(wet) / meanOf(dry);
 			differential = {
 				params: pd,
@@ -1201,7 +1338,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		let unpenalised: MarPenaltyResult['unpenalised'] = null;
 		if (!cancelled) {
 			// The same fit without the penalty, so its effect is visible.
-			const p0 = run(all, 'unpenalised', seed, false);
+			const p0 = take(c.at.unpenalised).params;
 			unpenalised = { params: p0, fit: scored(pb, p0, all), marRatio: ratio(p0) };
 		}
 		marPenalty = {
@@ -1227,12 +1364,17 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			!!prior && prior.weight > 0
 		)
 	);
-	if (pb.zoneNodeId != null) notes.push(zoneNote(input.model.nodes.find((n) => n.id === pb.zoneNodeId)?.name ?? pb.zoneNodeId, pb.zoneUnits?.length ?? 0));
-	else if (pb.siteNodeId !== null) notes.push(siteNote(input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId));
-	if (pb.zoneNodeId === null && pb.zoneUnits) notes.push(siteZoneNote(pb.zoneUnits.length));
-	// Under calibration zones each step warns of a short record or no dry year at its gauge (issue #555).
+	const borrowed = pb.zoneBorrowed?.length ?? 0;
+	if (pb.zoneUnits && pb.headline === false) {
+		if (pb.zoneNodeId != null) notes.push(zoneNote(locationName(input.model.nodes, pb.zoneNodeId), pb.zoneUnits.length, borrowed));
+		else notes.push(outletLocationNote(pb.zoneUnits.length, borrowed));
+	} else {
+		if (pb.siteNodeId !== null) notes.push(siteNote(locationName(input.model.nodes, pb.siteNodeId)));
+		if (pb.zoneUnits) notes.push(siteZoneNote(pb.zoneUnits.length, borrowed));
+	}
+	// Under calibration locations each step warns of a short record or no dry year at its gauge (issue #555).
 	if (pb.zoneUnits) {
-		const at = pb.siteNodeId === null ? zoneSiteName(input.model.nodes, null) : (input.model.nodes.find((n) => n.id === pb.siteNodeId)?.name ?? pb.siteNodeId);
+		const at = locationName(input.model.nodes, pb.siteNodeId);
 		notes.push(...zoneCoverageNotes(at, zoneCompleteWaterYears(pb.startDate, pb.allDays ?? all).length, differential !== null));
 	}
 	if (opts.prior) notes.push(...priorNotes(opts.prior, bounds === 'prior', free));
@@ -1256,7 +1398,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
 		siteNodeId: pb.siteNodeId,
-		...(pb.zoneUnits ? { zoneNodeId: pb.zoneNodeId ?? null, zoneUnits: [...pb.zoneUnits] } : {}),
+		...(pb.zoneUnits ? { zoneNodeId: pb.zoneNodeId ?? null, zoneUnits: [...pb.zoneUnits], ...(pb.zoneBorrowed?.length ? { zoneBorrowed: [...pb.zoneBorrowed] } : {}) } : {}),
 		...(pb.flowSeriesId ? { flowSeriesId: pb.flowSeriesId } : {}),
 		simulatedKey: 'simulated_outflow',
 		fit: fitClean,
@@ -1282,7 +1424,6 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
 		...(pb.unitRain ? { unitRain: pb.unitRain } : {}),
-		...(pb.shareRain !== undefined ? { shareRain: pb.shareRain } : {}),
 		...(pb.catchmentStation ? { catchmentStation: pb.catchmentStation } : {}),
 		dayQuality: pb.dayQuality ?? null,
 		fitAllDays,

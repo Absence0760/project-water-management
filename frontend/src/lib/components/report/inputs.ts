@@ -35,9 +35,11 @@ const RUNOFF_MODEL: Record<StoredRunoffModelId, string> = { gr4j: 'GR4J', legacy
 
 /**
  * The settings a reader needs to know the run by, as label → value. `run.summary`, when given, says what the
- * run applied where that can differ from what the settings asked for (summary.ewrSplit).
+ * run applied where that can differ from what the settings asked for (summary.ewrSplit). `headline`: the settings
+ * read at the run's headline calibration location (calibration/zones.ts runHeadlineSettings), whose window and
+ * record the calibration rows name; the settings themselves when not given.
  */
-export function settingsRows(s: RunSettings, run: { startDate: string; endDate: string; summary?: { ewrSplit?: EwrSplitInfo } | null }): [string, string][] {
+export function settingsRows(s: RunSettings, run: { startDate: string; endDate: string; summary?: { ewrSplit?: EwrSplitInfo } | null }, headline: RunSettings = s): [string, string][] {
 	const rows: [string, string][] = [
 		['Simulated period', `${run.startDate} – ${run.endDate}`],
 		['Runoff model', RUNOFF_MODEL[s.runoffModel]]
@@ -73,8 +75,9 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		}
 	}
 	rows.push(
-		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],
-		['Calibration record', s.calibrationFlowKind ? (FLOW_KIND_LABEL[s.calibrationFlowKind] ?? s.calibrationFlowKind) : 'observed gauge flow, else logger'],
+		// The headline location's (issue #659: `headline`, the run's settings read at it), as its statistics are.
+		['Calibration window', describeWindow(headline.calibrationStart, headline.calibrationEnd)],
+		['Calibration record', headline.calibrationFlowKind ? (FLOW_KIND_LABEL[headline.calibrationFlowKind] ?? headline.calibrationFlowKind) : 'observed gauge flow, else logger'],
 		['Reporting window (curtailment)', describeWindow(s.reportStart, s.reportEnd)],
 		[
 			'CHIRPS bias correction',

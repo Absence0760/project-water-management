@@ -201,7 +201,7 @@
 		const runNodes = id && latestRun?.id === id ? detailCache.get(id)?.run.model?.nodes : undefined;
 		return new Map([...damChanges(runNodes as { id: string }[] | undefined, nodes)].map(([nodeId, c]) => [nodeId, { text: c.text, capacity: !!c.capacity }]));
 	});
-	// Calibration zones (issue #555): from the model as edited and the saved settings, no run needed; null = none applies.
+	// Calibration locations' groups (issues #555, #659): from the model as edited and the saved settings, no run needed; null = one parameter set.
 	const zones = $derived(zoneGroups(nodes, settings));
 	const colouring = $derived.by((): Colouring | null => {
 		if (colourBy === 'none' || !farms.length) return null;

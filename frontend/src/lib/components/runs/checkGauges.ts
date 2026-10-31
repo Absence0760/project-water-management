@@ -37,19 +37,19 @@ export interface CheckGauge {
  * The run's checks-only gauges, in the network's order (`order`, the page's
  * node order; the plausibility checks' node-id order is meaningless to a
  * reader): each gauge they checked (a gauge inside the network with its own
- * record), less the calibration site (`siteId`, the run summary's
- * `calibration.siteNodeId`, as the page's menu reads it), whose record is
- * its `observed_flow` and which keeps its own chart.
+ * record), less the ones the run scores (`scored`, scoredGaugeIds: the
+ * headline location's and every other ticked location's), whose records are
+ * calibration scores, not checks.
  */
 export function checksOnlyGauges(
 	gauges: readonly Pick<GaugePlausibility, 'nodeId' | 'name' | 'flowKind' | 'fit'>[] | undefined,
 	refs: readonly RefLike[],
-	siteId: string | null | undefined,
+	scored: ReadonlySet<string>,
 	order: ReadonlyMap<string, number> = new Map()
 ): CheckGauge[] {
 	const rank = (id: string) => order.get(id) ?? Number.MAX_SAFE_INTEGER;
 	return (gauges ?? [])
-		.filter((g) => g.nodeId !== (siteId ?? null))
+		.filter((g) => !scored.has(g.nodeId))
 		.map((g) => ({
 			nodeId: g.nodeId,
 			name: g.name,

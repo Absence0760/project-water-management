@@ -179,6 +179,16 @@ describe('reproductionOutcome', () => {
 		expect(reproductionOutcome({ ok: false, checks: [bad('files'), bad('reproduce:baseline')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
 	});
 
+	it('counts § 8’s pairs run again (climate:delta) and the headline pair as re-runs', () => {
+		// On another engine, a pack with § 8 and a headline board differs in every re-run: another engine, not a fault.
+		const reruns = [ok('files'), bad('reproduce:baseline'), bad('reproduce:application'), bad('reproduce:headline'), bad('climate:delta')];
+		expect(reproductionOutcome({ ok: false, checks: reruns, engine: { here, runs: ['0.0.1'] } })).toBe('other_engine');
+		// On the runs' own engine, § 8 differing is a real failure.
+		expect(reproductionOutcome({ ok: false, checks: [ok('reproduce:baseline'), bad('climate:delta')], engine: { here, runs: [here] } })).toBe('not_reproduced');
+		// Another engine, but the manifest failed as well: not explained by the engine.
+		expect(reproductionOutcome({ ok: false, checks: [bad('manifest'), bad('climate:delta')], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
+	});
+
 	it('not_reproduced for a failure with no checks to explain it', () => {
 		expect(reproductionOutcome({ ok: false, checks: [], engine: { here, runs: ['0.0.1'] } })).toBe('not_reproduced');
 	});

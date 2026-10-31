@@ -97,13 +97,15 @@ import {
 	WARNING_KEPT_ID,
 	WARNING_KEPT_ID_MAX,
 	WARNING_KEPT_NOTE_MAX,
-	WARNINGS_KEPT_MAX
+	WARNINGS_KEPT_MAX,
+	CALIBRATION_RESTS,
+	type CalibrationRest
 } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { AutoRunPatch } from '../runs/autoRun.js';
-import { checkCalibrationSite, checkCalibrationZones } from './calibrationSite.js';
+import { checkCalibrationLocations } from './calibrationSite.js';
 import { baselineSettingsEwrRefusal } from './ewrRules.js';
 import { checkOutcomeSite, OutcomesPatch, resolveOutcomes } from './outcomeSettings.js';
 import { OutlookPatch } from './outlookSettings.js';
@@ -173,8 +175,10 @@ export function ewrOutletTableError(ewrRules: unknown, outletIds: readonly strin
  * Stored settings for a copy whose nodes got fresh ids (POST /projects/:id/copy,
  * `ids` old → new): each EWR rule table's site (engine ≥ 0.21.0) and the
  * outcome matrix's site (settings.outcomes.siteNodeId, issue #53 R4) follow
- * their node, as do the calibration site (settings.calibrationSiteNodeId,
- * engine ≥ 1.41.0) and the site its fit record was scored at. A site not in the map (already dangling) is left as it was, so
+ * their node, as do the headline location's pointer (settings.calibrationSiteNodeId,
+ * engine ≥ 1.41.0) and the site its fit record was scored at, each calibration location's row,
+ * each unit's Parameters from (both its unit and its location, issue #659) and the regional
+ * prior's targets. A site not in the map (already dangling) is left as it was, so
  * the copy's runs warn about it as the original's do. Anything else is
  * unchanged.
  */
@@ -211,6 +215,7 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 	}
 	// The rainfall stations' units (issue #553): the units given a station and the unit each station stands in.
 	if (isObj(s.rainStations)) s.rainStations = remapRainStations(s.rainStations, ids);
+	// The headline location's pointer (engine ≥ 1.41.0 the calibration site; since 1.110.0, issue #659, the headline).
 	if (typeof s.calibrationSiteNodeId === 'string' && ids.has(s.calibrationSiteNodeId)) s.calibrationSiteNodeId = ids.get(s.calibrationSiteNodeId);
 	if (isObj(s.fitRecord)) s.fitRecord = remapFitRecordNodes(s.fitRecord, ids);
 	// The calibration zones (issue #555): each row's gauge, and its fit record's site and zone.
@@ -223,7 +228,28 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 			return out;
 		});
 	}
+	// Each land unit's Parameters from (engine 1.110.0, issue #659): the unit and the location it takes them from.
+	if (isObj(s.unitParamsFrom)) {
+		s.unitParamsFrom = Object.fromEntries(
+			Object.entries(s.unitParamsFrom).map(([u, t]) => [ids.get(u) ?? u, typeof t === 'string' && ids.has(t) ? ids.get(t) : t])
+		);
+	}
+	// The regional-prior start records' targets (issue #622): the location's gauge and its units.
+	if (Array.isArray(s.gr4jPrior)) {
+		s.gr4jPrior = s.gr4jPrior.map((r: unknown) => {
+			if (!isObj(r) || !isObj(r.provenance) || !isObj(r.provenance.target)) return r;
+			return { ...r, provenance: { ...r.provenance, target: remapTarget(r.provenance.target, ids) } };
+		});
+	}
 	return s;
+}
+
+/** A prior target's gauge and units ({ zoneNodeId, units }), following their nodes. */
+function remapTarget(t: Json, ids: ReadonlyMap<string, string>): Json {
+	const out = { ...t };
+	if (typeof out.zoneNodeId === 'string' && ids.has(out.zoneNodeId)) out.zoneNodeId = ids.get(out.zoneNodeId);
+	if (Array.isArray(out.units)) out.units = out.units.map((u: unknown) => (typeof u === 'string' && ids.has(u) ? ids.get(u) : u));
+	return out;
 }
 
 /** A fit record's site, and its zone's gauge and units (issue #555), following their nodes. */
@@ -232,8 +258,11 @@ function remapFitRecordNodes(r: Json, ids: ReadonlyMap<string, string>): Json {
 	if (typeof out.siteNodeId === 'string' && ids.has(out.siteNodeId)) out.siteNodeId = ids.get(out.siteNodeId);
 	if (isObj(out.zone)) {
 		const z = { ...out.zone };
+		const map = (list: unknown[]) => list.map((u: unknown) => (typeof u === 'string' && ids.has(u) ? ids.get(u) : u));
 		if (typeof z.nodeId === 'string' && ids.has(z.nodeId)) z.nodeId = ids.get(z.nodeId);
-		if (Array.isArray(z.units)) z.units = z.units.map((u: unknown) => (typeof u === 'string' && ids.has(u) ? ids.get(u) : u));
+		if (Array.isArray(z.units)) z.units = map(z.units);
+		// The units borrowed into the location's group (engine 1.110.0, issue #659).
+		if (Array.isArray(z.borrowed)) z.borrowed = map(z.borrowed);
 		out.zone = z;
 	}
 	return out;
@@ -253,8 +282,10 @@ function remapFitRecordNodes(r: Json, ids: ReadonlyMap<string, string>): Json {
  * are one set, entered together. And the rainfall stations' assignments
  * (issue #553): a unit left out of a save is unassigned, not kept. And each
  * flow record's missing periods (issue #611): a record left out has none.
+ * And the units' Parameters from (issue #659): a unit left out takes its own
+ * zone's.
  */
-export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing']);
+export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing', 'unitParamsFrom']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -312,7 +343,7 @@ export function patchSettings(stored: unknown, patch: Json): ProjectSettings {
 }
 
 /** A calibration zone row with its fit record's `editedParams` recomputed against the zone's parameters (the catchment's where it has none). */
-function resolveZoneFitRecord(gr4j: unknown, z: unknown): unknown {
+export function resolveZoneFitRecord(gr4j: unknown, z: unknown): unknown {
 	if (!isObj(z) || !isObj(z.fitRecord)) return z;
 	const params = { ...(isObj(gr4j) ? gr4j : {}), ...(isObj(z.gr4j) ? z.gr4j : {}) };
 	return { ...z, fitRecord: resolveFitRecord({ gr4j: params, fitRecord: z.fitRecord } as unknown as Partial<ProjectSettings> & Json) };
@@ -327,11 +358,19 @@ function resolveZoneFitRecord(gr4j: unknown, z: unknown): unknown {
  * save produces.
  */
 export function autoFitRecordError(stored: ProjectSettings, next: ProjectSettings): string | null {
-	const rec = next.fitRecord;
-	if (!rec?.auto) return null;
-	const was = stored.fitRecord;
-	if (was && was.fittedAt === rec.fittedAt && was.seed === rec.seed && canonicalJson(was.auto ?? null) === canonicalJson(rec.auto)) return null;
-	return 'an automated fit is applied by the server from its own run of the calibration rules (POST /projects/:id/auto-calibrations/:calibrationId/apply), never written directly';
+	const refused =
+		'an automated fit is applied by the server from its own run of the calibration rules (POST /projects/:id/auto-calibrations/:calibrationId/apply), never written directly';
+	if (!sameAuto(stored.fitRecord, next.fitRecord)) return refused;
+	// A headline gauge's automated fit lives in its row (engine 1.110.0, issue #659): the same rule, row by row.
+	const wasRows = new Map((stored.calibrationZones ?? []).map((z) => [z.nodeId, z.fitRecord]));
+	for (const z of next.calibrationZones ?? []) if (!sameAuto(wasRows.get(z.nodeId), z.fitRecord)) return refused;
+	return null;
+}
+
+/** Whether `rec` is no automated fit, or the stored one as it was. */
+function sameAuto(was: ProjectSettings['fitRecord'] | undefined, rec: ProjectSettings['fitRecord'] | undefined): boolean {
+	if (!rec?.auto) return true;
+	return !!was && was.fittedAt === rec.fittedAt && was.seed === rec.seed && canonicalJson(was.auto ?? null) === canonicalJson(rec.auto);
 }
 
 /**
@@ -356,9 +395,15 @@ function autoRecordMismatch(rec: NonNullable<ProjectSettings['fitRecord']>, rule
 
 /** Why an imported project's automated fit record doesn't match the file's own calibration rules, or null. */
 export function importedAutoFitError(settings: Record<string, unknown>): string | null {
-	const rec = settings.fitRecord as ProjectSettings['fitRecord'] | undefined;
-	if (!rec?.auto) return null;
-	return autoRecordMismatch(rec, resolveCalibrationRules(settings.calibrationRules, []), 'file’s');
+	const rules = resolveCalibrationRules(settings.calibrationRules, []);
+	// The top level's, and (engine 1.110.0, issue #659) a headline gauge's row's.
+	const rows = Array.isArray(settings.calibrationZones) ? (settings.calibrationZones as { fitRecord?: ProjectSettings['fitRecord'] }[]) : [];
+	for (const rec of [settings.fitRecord as ProjectSettings['fitRecord'] | undefined, ...rows.map((z) => z?.fitRecord)]) {
+		if (!rec?.auto) continue;
+		const err = autoRecordMismatch(rec, rules, 'file’s');
+		if (err) return err;
+	}
+	return null;
 }
 
 const monthly = z.array(z.number().finite()).length(12);
@@ -708,9 +753,11 @@ const ArealRain = z
 	.strict();
 
 /**
- * settings.unitRain (issue #482, docs/model.md §2.4h): whether each land unit
- * runs GR4J on its own rain (`perUnit`) or the catchment's (`catchment`,
- * like absent or null), the catchment gauge's own MAP with its source, the
+ * settings.unitRain (issue #482, docs/model.md §2.4h): each land unit runs
+ * GR4J on its own rain (`perUnit`, the only flow generation method since
+ * engine 1.109.0, issue #658: the retired `catchment`, Fragmentation, is
+ * still read, as an older export or client may send it, and stored as
+ * `perUnit`, as the engine runs it), the catchment gauge's own MAP with its source, the
  * period a unit's CHIRPS MAP factor is computed over (null/absent = 1991–2020),
  * and the reference gauge and unit whose monthly factors level every unit's
  * CHIRPS (engine ≥ 1.80.0, issue #500; null/absent = none).
@@ -731,7 +778,8 @@ export const UnitRain = z
 	.superRefine((v, ctx) => {
 		const err = unitRainError(v);
 		if (err) ctx.addIssue({ code: 'custom', message: `unit rain: ${err}` });
-	});
+	})
+	.transform((v) => ({ ...v, mode: 'perUnit' as const }));
 
 /**
  * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23, docs/model.md §2.4b
@@ -1155,7 +1203,8 @@ export const FitRecord = z
 					.optional(),
 				// Engine ≥ 1.20.0 (issue #66): the data-quality rain-check limits the fit ran under. Optional, as above; absent = the defaults.
 				rainChecks: RainChecks.strict().optional(),
-				// Engine ≥ 1.78.0 (issue #482): runoff from each unit's own rain, recorded only when on. Optional, as above; absent = catchment rain.
+				// Engine ≥ 1.78.0 (issue #482): runoff from each unit's own rain. Optional, as above; absent = a Fragmentation fit
+				// (before engine 1.109.0) or, from 1.109.0, a model with no land unit (catchment rain).
 				unitRain: z
 					.unknown()
 					.superRefine((v, ctx) => {
@@ -1163,8 +1212,8 @@ export const FitRecord = z
 						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
 					})
 					.optional(),
-				// Engine ≥ 1.105.0 (issue #616): under Fragmentation, the Per unit forcing the unit shares ran on (null with no
-				// land unit). Optional, as above; absent = a Per unit fit (`unitRain` is it) or one made before.
+				// Engines 1.105.0 – 1.108.x (issue #616): under Fragmentation, retired in 1.109.0 (issue #658), the Per unit forcing
+				// the unit shares ran on (null with no land unit). Kept so an older fit record still saves; no engine since writes it.
 				shareRain: z
 					.unknown()
 					.superRefine((v, ctx) => {
@@ -1199,20 +1248,29 @@ export const FitRecord = z
 		// Engine ≥ 1.25.0 (issue #153): set when automated calibration picked the fit. Optional: absent on a fit a person chose.
 		auto: AutoFitRecord.optional(),
 		// Engine 1.106.0 (issue #555): the calibration zone the fit was one step of; absent on a fit made without zones.
+		// Engine 1.110.0 (issue #659): `borrowed`, the units of its group borrowed from elsewhere (settings.unitParamsFrom).
 		zone: z
-			.object({ nodeId: z.string().min(1).max(100).nullable(), units: z.array(z.string().min(1).max(100)).max(5000) })
+			.object({
+				nodeId: z.string().min(1).max(100).nullable(),
+				units: z.array(z.string().min(1).max(100)).max(5000),
+				borrowed: z.array(z.string().min(1).max(100)).max(5000).optional()
+			})
 			.strict()
 			.optional()
 	})
 	.strict();
 
 /**
- * One row of settings.calibrationZones (engine 1.106.0, issue #555, engine
- * calibrate/zones.ts, docs/model.md §2.10n): a gauge inside the network that
- * calibrates the land units draining to it on its own record, with its own
+ * One row of settings.calibrationZones (engine 1.106.0, issue #555; a
+ * calibration location since 1.110.0, issue #659, engine
+ * calibrate/locations.ts, docs/model.md §2.10n): a gauge inside the network
+ * that calibrates its group of land units on its own record, with its own
  * window, exclusions, record, quality flags, GR4J parameters and fit record.
- * The route checks the gauges (calibrationSite.ts checkCalibrationZones). A
- * zone's fit is the browser's stepwise fit, never an automated one.
+ * The route checks the gauges (calibrationSite.ts checkCalibrationLocations).
+ * Its fit is the browser's stepwise fit, or, when it is the headline
+ * location, an automated one the server applied (calibration/store.ts
+ * applyCalibration), which a save may only carry back as stored
+ * (autoFitRecordError).
  */
 const CalibrationZone = z
 	.object({
@@ -1237,7 +1295,7 @@ const CalibrationZone = z
 			.strict()
 			.nullable(),
 		gr4j: z.object({ x1: bounded('x1'), x2: bounded('x2'), x3: bounded('x3'), x4: bounded('x4') }).strict().nullable(),
-		fitRecord: FitRecord.refine((r) => r.auto === undefined, 'a calibration zone’s fit is the stepwise fit, never an automated one').nullable()
+		fitRecord: FitRecord.nullable()
 	})
 	.strict();
 /** settings.calibrationZones: the whole list, replaced on a save; a gauge at most once. */
@@ -1251,6 +1309,9 @@ export const CalibrationZones = z
 			seen.add(z.nodeId);
 		}
 	});
+
+/** At most this many units' Parameters from: the model's node cap (model/validate.ts). */
+export const UNIT_PARAMS_FROM_MAX = 500;
 
 /**
  * Validates the known fields and drops any other key (zod's default strip),
@@ -1373,10 +1434,23 @@ export const SettingsPatch = z
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable(),
-		// Where calibration scores (engine ≥ 1.41.0): null = the outlet, else an inner gauge with a record (checked by the route).
+		// The headline calibration location (engine 1.110.0, issue #659; the calibration site since 1.41.0): null = auto, else a
+		// ticked gauge's node, or the outlet's with the outlet ticked (checked by the route, calibrationSite.ts).
 		calibrationSiteNodeId: z.string().uuid().nullable(),
-		// Calibration zones (engine 1.106.0, issue #555): the whole list (an array, so a patch replaces it); the route checks the gauges.
+		// The calibration locations at the gauges (engine 1.106.0, issue #555; 1.110.0, issue #659): the whole list (an array, so a
+		// patch replaces it); the route checks the gauges.
 		calibrationZones: CalibrationZones,
+		// Calibrate here at the outlet (engine 1.110.0, issue #659): the outlet's location is the top-level calibration settings.
+		calibrateAtOutlet: z.boolean(),
+		// What the units with no ticked location downstream take (engine 1.110.0, issue #659): the nearest location upstream on
+		// their river, the headline's parameters, or the catchment's (gr4j).
+		calibrationRest: z.enum(CALIBRATION_RESTS as [CalibrationRest, ...CalibrationRest[]]),
+		// Each land unit's Parameters from (engine 1.110.0, issue #659): unit → location (a gauge with a row, or the outlet's
+		// node); a unit left out takes its own zone's. Replaced whole; null = none. The route checks the nodes.
+		unitParamsFrom: z
+			.record(z.string().uuid(), z.string().uuid())
+			.refine((m) => Object.keys(m).length <= UNIT_PARAMS_FROM_MAX, `at most ${UNIT_PARAMS_FROM_MAX} units’ parameter sources`)
+			.nullable(),
 		calibrationExclusions: ExclusionList,
 		// One flow record's missing periods (engine ≥ 1.102.0, issue #611): replaced whole, null = none. The route checks the records.
 		flowMissing: FlowMissing.nullable(),
@@ -1453,7 +1527,7 @@ export async function checkedSettingsPatch(
 	const dqError = patch.dataQuality ? dataQualityPatchError(settings) : null;
 	if (dqError) throw new ApiError(400, dqError);
 	// An automated fit is the server's to write (issue #153): a save only carries the stored one back.
-	const autoError = patch.fitRecord !== undefined ? autoFitRecordError(mergeSettings(stored), settings) : null;
+	const autoError = patch.fitRecord !== undefined || patch.calibrationZones !== undefined ? autoFitRecordError(mergeSettings(stored), settings) : null;
 	if (autoError) throw new ApiError(409, autoError);
 	// A new sign-off of the calibration rules is dated by the server, and it and a withdrawal are audited with the account (issue #153).
 	// Dated on the project's calendar (its time zone), as `today` is: UTC's date is a day behind around local midnight.
@@ -1478,11 +1552,8 @@ export async function checkedSettingsPatch(
 	if (patch.rainStations) await checkRainStations(db, projectId, patch.rainStations, (stored as { rainStations?: unknown } | null)?.rainStations);
 	// One flow record's missing periods (engine ≥ 1.102.0, issue #611): each named record a flow record of this project.
 	if (patch.flowMissing) await checkFlowMissing(db, projectId, patch.flowMissing, (stored as { flowMissing?: unknown } | null)?.flowMissing);
-	// The calibration site (engine ≥ 1.41.0): a change to a gauge is checked against the network and its records.
-	const calSite = patch.calibrationSiteNodeId;
-	if (typeof calSite === 'string' && calSite !== (stored as { calibrationSiteNodeId?: unknown } | null)?.calibrationSiteNodeId) await checkCalibrationSite(db, projectId, calSite);
-	// The calibration zones (engine 1.106.0, issue #555): each new row's gauge, and every ticked row against the site.
-	if (patch.calibrationZones !== undefined || patch.calibrationSiteNodeId !== undefined)
-		await checkCalibrationZones(db, projectId, settings.calibrationZones ?? [], (stored as { calibrationZones?: unknown } | null)?.calibrationZones, settings.calibrationSiteNodeId ?? null);
+	// The calibration locations (engine 1.110.0, issue #659): each new row's gauge, the rows and the headline pointer against the
+	// network, and each unit's Parameters from.
+	await checkCalibrationLocations(db, projectId, patch, settings, stored);
 	return { settings, signOff };
 }

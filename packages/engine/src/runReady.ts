@@ -37,7 +37,7 @@ export const landUnits = <N extends LandUnitNode>(nodes: readonly N[]): N[] => n
 /**
  * The land units that run on the catchment rain (rule 4 of docs/model.md §2.4h), in the model's order: no rainfall
  * station, no rain gauge or CHIRPS series of their own, and no MAP to scale the catchment gauge by (or no gauge MAP).
- * Their share (the flow under Fragmentation, the EWR) follows their area under both methods (issue #615, §2.5b), so Run readiness and the Flow generation
+ * Their share of the EWR follows their area (issue #615, §2.5b), so Run readiness and the Flow generation
  * panel name them. A note, never a blocker. Read from the setup, as the editor sees it: the run decides from the records themselves, so a
  * series with no reading, or a CHIRPS that totals 0 mm, still falls to the catchment rain there and the run says so.
  */

@@ -1,5 +1,5 @@
-// Settings → Model selection for flow generation → Per unit → Units without a station (settings.unitRain, issue
-// #482): the switch, the gauge MAP, the MAP period in whole years, and the
+// Settings → Flow generation → Units without a station (settings.unitRain, issue
+// #482): the Per unit setting, the gauge MAP, the MAP period in whole years, and the
 // check that blocks Save, which must agree with the API's (engine
 // unitRainError). The form itself: UnitRainFields.test.ts and
 // e2e/tests/unit-rain.spec.ts.
@@ -12,35 +12,20 @@ import {
 	mapPeriodYears,
 	unitMapCoverage,
 	unitRainFormError,
-	unitRainOn,
 	unitRainProblem,
 	withMapPeriodYears,
 	withReferenceGauge,
 	withReferenceUnit,
-	withUnitRain
+	perUnitSetting
 } from './unitRain';
 
-describe('withUnitRain', () => {
-	it('switches on per unit with nothing else set, or back to what was switched off, and off to catchment keeping the setup', () => {
-		expect(withUnitRain(true)).toEqual({ mode: 'perUnit' });
+describe('perUnitSetting', () => {
+	it('stores Per unit whatever was stored (issue #658): nothing, or the retired catchment, keeping the setup', () => {
+		expect(perUnitSetting(null)).toEqual({ mode: 'perUnit' });
+		expect(perUnitSetting(undefined)).toEqual({ mode: 'perUnit' });
+		expect(perUnitSetting({ mode: 'catchment', gaugeMapMm: 500, gaugeMapSource: 's' })).toEqual({ mode: 'perUnit', gaugeMapMm: 500, gaugeMapSource: 's' });
 		const before: UnitRainSettings = { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'gauge record', mapPeriod: { start: '1991-01-01', end: '2010-12-31' } };
-		const back = withUnitRain(true, before)!;
-		expect(back).toEqual(before);
-		expect(back.mapPeriod).not.toBe(before.mapPeriod);
-		expect(withUnitRain(true, { mode: 'catchment', gaugeMapMm: 500, gaugeMapSource: 's' })).toEqual({ mode: 'perUnit', gaugeMapMm: 500, gaugeMapSource: 's' });
-		// Off keeps the Per unit setup (issue #615): Fragmentation's EWR shares run on it. With none, null as before.
-		const off = withUnitRain(false, before)!;
-		expect(off).toEqual({ ...before, mode: 'catchment' });
-		expect(off.mapPeriod).not.toBe(before.mapPeriod);
-		expect(withUnitRain(false)).toBeNull();
-		expect(withUnitRain(true, off)).toEqual(before);
-	});
-
-	it('counts only perUnit as on', () => {
-		expect(unitRainOn(null)).toBe(false);
-		expect(unitRainOn(undefined)).toBe(false);
-		expect(unitRainOn({ mode: 'catchment' })).toBe(false);
-		expect(unitRainOn({ mode: 'perUnit' })).toBe(true);
+		expect(perUnitSetting(before)).toEqual(before);
 	});
 });
 
@@ -97,7 +82,7 @@ describe('unitRainProblem', () => {
 		expect(unitRainProblem({ mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: '  ' })?.field).toBe('gaugeSource');
 		expect(unitRainProblem({ mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'x'.repeat(601) })?.message).toMatch(/at most 600 characters; it has 601/);
 		expect(unitRainProblem(withMapPeriodYears({ mode: 'perUnit' }, 2015, 2001))).toEqual({ field: 'period', message: 'The MAP period’s first year must not be after its last.' });
-		// Under Fragmentation too (issue #615): the EWR shares run on the setup, so its fields are checked the same way.
+		// A stored `catchment` (Fragmentation's, retired in issue #658) reads as Per unit, so its fields are checked the same way.
 		expect(unitRainProblem(withMapPeriodYears({ mode: 'catchment' }, 2015, 2001))?.field).toBe('period');
 		expect(unitRainProblem({ mode: 'catchment', reference: { gauge: 'rain_catchment_mm', unitId: '' } })?.field).toBe('reference');
 	});

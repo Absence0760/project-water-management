@@ -323,6 +323,67 @@ describe('POST /projects/import', () => {
 		expect(res.body.project.settings.fitRecord.editedParams).toEqual(['x1']);
 	});
 
+	it('imports a file from before calibration locations in their shape: an inner site into its ticked row with its fit, the outlet ticked only with a record (issue #659)', async () => {
+		const u = await signUp('Locfile');
+		const doc = syntheticDoc('Located import');
+		const [outlet, farm] = doc.model.nodes as { id: string; downstreamNodeId: string | null }[];
+		const weir = node('Weir', outlet!.id, { kind: 'gauge', areaKm2: 0 });
+		farm!.downstreamNodeId = weir.id;
+		doc.model.nodes.push(weir as never);
+		const rain = doc.series[0]!.values as number[];
+		(doc.series as unknown[]).push({ kind: 'flow_observed_m3s', name: 'Weir', unit: 'm3/s', startDate: '2022-01-01', values: rain.map(() => 0.01), siteNodeId: weir.id });
+		const period = { start: '2022-01-01', end: '2022-01-30', waterYears: [2021], scores: { days: 30, kgePrime: 0.7 } };
+		const fitRecord = {
+			fittedAt: '2026-09-24T10:00:00.000Z',
+			engineVersion: '1.108.0',
+			model: 'gr4j',
+			objective: 'kgePrime',
+			bounds: 'wide',
+			seed: 1,
+			budget: 300,
+			evaluations: 900,
+			cancelled: false,
+			free: ['x1', 'x3'],
+			params: { x1: 500, x2: 0, x3: 60, x4: 1.7 },
+			startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
+			flowKind: 'flow_observed_m3s',
+			siteNodeId: weir.id,
+			simulatedKey: 'simulated_outflow',
+			calibrationStart: null,
+			calibrationEnd: null,
+			exclusions: [],
+			validate: false,
+			validationRecord: null,
+			fit: period,
+			before: period,
+			splitSample: null,
+			differential: null,
+			independentRecord: null,
+			notes: [],
+			editedParams: []
+		};
+		const legacy = { apanMm: monthly(150), calibrationSiteNodeId: weir.id, calibrationStart: '2022-01-05', gr4j: { x1: 900, x2: 0, x3: 60, x4: 1.7 }, fitRecord };
+		const res = await importFile(u, { ...doc, settings: legacy });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		const s = res.body.project.settings;
+		const nodes = (await u.call('GET', `/projects/${res.body.project.id}/model`)).body.nodes as { id: string; name: string }[];
+		const newWeir = nodes.find((n) => n.name === 'Weir')!.id;
+		expect(s).toMatchObject({ calibrateAtOutlet: false, calibrationRest: 'headline', calibrationSiteNodeId: newWeir, fitRecord: null });
+		expect(s.calibrationZones).toHaveLength(1);
+		expect(s.calibrationZones[0]).toMatchObject({ nodeId: newWeir, enabled: true, calibrationStart: '2022-01-05', gr4j: { x1: 900, x2: 0, x3: 60, x4: 1.7 } });
+		// The moved fit follows the weir's fresh id, and its hand-edit list is recomputed against the row's parameters.
+		expect(s.calibrationZones[0].fitRecord).toMatchObject({ siteNodeId: newWeir, editedParams: ['x1'] });
+
+		// A file with no outlet record: its outlet isn't ticked, and the units no gauge claims keep the catchment parameters.
+		const bare = syntheticDoc('No outlet record');
+		bare.series = bare.series.filter((x) => x.kind !== 'flow_observed_m3s');
+		const none = await importFile(u, bare);
+		expect(none.status).toBe(201);
+		expect(none.body.project.settings).toMatchObject({ calibrateAtOutlet: false, calibrationRest: 'default', calibrationSiteNodeId: null });
+		// Positive control: with one, it is.
+		expect((await importFile(u, syntheticDoc('With outlet record'))).body.project.settings).toMatchObject({ calibrateAtOutlet: true, calibrationRest: 'headline' });
+	});
+
 	it('imports an export from before engine 1.0.0: the legacy calibration keys are dropped, a legacy model is refused with the reason', async () => {
 		const u = await signUp('Oldfile');
 		const calibration = { a: 0.1, b: 1.3, summerMonths: [1, 2], recessionFactors: [0.9, 0.95], rainThresholdMm: 3, catchmentAreaKm2: null };

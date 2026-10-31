@@ -48,6 +48,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
+	import { headlineView } from '#lib/calibration/zones.js';
 	import { chirpsSourceOf, observedOriginsOf } from '#lib/series/provenance.js';
 	import { api, ApiError, hasRole, type Project, type ProjectSummary, type RunMeta } from '#lib/api/index.js';
 	import { session } from '#lib/auth/session.svelte.js';
@@ -541,7 +542,8 @@
 			details.load(p);
 			settings.load(p.settings);
 			// Fit automatically's Search choices start from the last fit's (issue #554), once per project.
-			fit.searchFrom(p.settings.fitRecord);
+			// The headline location's fit (issue #659): a gauge's is in its row.
+			fit.searchFrom(headlineView(p.settings, m.nodes).fitRecord);
 			series = sl;
 			setRuns(rl);
 		} catch (e) {

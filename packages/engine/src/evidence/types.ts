@@ -194,7 +194,14 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * reproduce:pack checks each source (`observations:s2`, `observations:wofs`)
  * and the dates together (`observations:days`). A pack drafted before keeps
  * its document and its `dam-obs-1` section, still checked as it was.
- * evidence-25 (followups § Cumulative impact, yield per dam): § 4's *All of
+ * evidence-25 (issue #659, calibration locations): each calibration location in
+ * `calibrationZones` carries its period (`window`, a gauge row's or the
+ * outlet's top-level window) and its land units with where each one's GR4J
+ * parameters come from (`members`: its own zone, borrowed by Parameters from,
+ * the rule for units outside every location, or the catchment parameters,
+ * from summary.unitRain.paramSource). A pack drafted before keeps its
+ * document, without them.
+ * evidence-26 (followups § Cumulative impact, yield per dam): § 4's *All of
  * them together* adds each dam the applications touch (`cumulative.combined.dams`):
  * its firm yield and its unit's assurance of supply on the baseline and all
  * together, with the change, the sum of each alone and the interaction, from
@@ -202,7 +209,7 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * volumes gets each direction only when a run rested on them. A pack drafted
  * before keeps its document, without them.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-25';
+export const EVIDENCE_REPORT_VERSION = 'evidence-26';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -927,19 +934,19 @@ export interface EvidenceCombined {
 	/** Why there is no combined figure, in words; null when there is one. */
 	notAssessed: string | null;
 	/**
-	 * evidence-25: each dam the applications touch, its firm yield and its
+	 * evidence-26: each dam the applications touch, its firm yield and its
 	 * unit's assurance of supply on the baseline and all together, from the
 	 * assessment (scenario/cumulativeYield.ts). Empty when not assessed or the
 	 * assessment worked none out (one made before, or no dam touched). Absent
-	 * from a document before evidence-25.
+	 * from a document before evidence-26.
 	 */
 	dams?: EvidenceCombinedDam[];
 }
 
-/** Which way a measure moved, all together against the baseline: what a viewer kept from the registered volumes reads (evidence-25). */
+/** Which way a measure moved, all together against the baseline: what a viewer kept from the registered volumes reads (evidence-26). */
 export type EvidenceCombinedVerdict = 'lower' | 'unchanged' | 'higher';
 
-/** One dam the applications touch, across the combination (evidence-25). */
+/** One dam the applications touch, across the combination (evidence-26). */
 export interface EvidenceCombinedDam {
 	nodeId: string;
 	name: string;

@@ -1,9 +1,11 @@
-// `auto_calibration`: fit the next case of a run of the calibration rules
-// (issue #153, 108_auto_calibration.sql, calibration/store.ts fitNextCase),
-// as the editor it runs as, under RLS; or, queued by new data
-// (app_enqueue_auto_calibration, settings.calibrationRules.after.onNewData),
-// plan a new run and queue its first case. One case per job, so no job runs
-// longer than one fit (calibration/schema.ts AUTO_CASE_SECONDS_MAX).
+// `auto_calibration`: fit the next piece of a run of the calibration rules
+// (issue #153, 108_auto_calibration.sql, 290_auto_calibration_work.sql,
+// calibration/store.ts fitNextCase), as the editor it runs as, under RLS; or,
+// queued by new data (app_enqueue_auto_calibration,
+// settings.calibrationRules.after.onNewData), plan a new run and queue its
+// first piece. A case's fit runs over as many jobs as it needs, each queueing
+// the next, so no job runs longer than calibration/schema.ts
+// AUTO_JOB_SECONDS_MAX (or past the worker's deadline) and one runs at a time.
 //
 // When the last case of a run that new data queued completes, and the rules
 // say `apply` and are signed off, the kept fit is applied in the same
@@ -27,13 +29,13 @@ import {
 import { ApiError } from '../../http/errors.js';
 import { executeRun, trimRuns } from '../../runs/execute.js';
 import { runModelInput } from '../../runs/uncertainty.js';
-import { JobError, LeaseLostError } from '../errors.js';
+import { JobError, JobRelease, LeaseLostError } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const autoCalibrationHandler = defineHandler({
 	role: 'editor',
 	payload: AutoCalibrationPayload,
-	async run({ db, job, payload, progress }) {
+	async run({ db, job, payload, progress, deadline }) {
 		try {
 			if (payload.start) {
 				const input = await calibrationInput(db, job.projectId);
@@ -44,7 +46,7 @@ export const autoCalibrationHandler = defineHandler({
 				await insertCalibration(db, job.projectId, { trigger: 'new_data', rules, plan, inputSha256: inputSha256(input) });
 				return;
 			}
-			const done = await fitNextCase(db, job.projectId, payload.calibrationId!, progress);
+			const done = await fitNextCase(db, job.projectId, payload.calibrationId!, progress, { deadline });
 			if (done !== 'complete') return;
 			const row = await getCalibration(db, job.projectId, payload.calibrationId!);
 			if (!row || row.trigger !== 'new_data' || row.chosen === null || row.rules.after.onNewData !== 'apply' || !row.rules.signedOff) return;
@@ -61,7 +63,7 @@ export const autoCalibrationHandler = defineHandler({
 			else await recordAppliedRun(db, row.id, run.id);
 		} catch (err) {
 			if (err instanceof CalibrationRefused) throw new JobError(`the calibration rules can't run: ${err.message}`, { retry: false });
-			if (err instanceof ApiError || err instanceof JobError || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
+			if (err instanceof ApiError || err instanceof JobError || err instanceof JobRelease || err instanceof LeaseLostError || (err as { code?: string }).code) throw err;
 			throw new JobError(`the automated calibration failed: ${(err as Error).message}`, { retry: false });
 		}
 	}

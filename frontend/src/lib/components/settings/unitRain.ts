@@ -1,5 +1,5 @@
-// Settings → Model selection for flow generation → Per unit → Units without a station (settings.unitRain, issue
-// #482, docs/model.md §2.4h, docs/ui.md § Model settings): the switch,
+// Settings → Flow generation → Units without a station (settings.unitRain, issue
+// #482, docs/model.md §2.4h, docs/ui.md § Model settings): the Per unit setting (the only method, issue #658),
 // the catchment gauge's MAP as a read-out (the station's since issue #553), the MAP period in whole years, the
 // reference gauge and unit (issue #500), and the check that blocks Save. The engine's unitRainError is the API's rule;
 // this says the same problems in the form's words.
@@ -46,20 +46,13 @@ export const UNIT_MAP_FIRST_YEAR = 1981;
 export { UNIT_MAP_MIN_YEARS };
 
 /**
- * Switch rain for each unit on (from `previous`, the setting the form had
- * before it was switched off, else per unit with no gauge MAP and the default
- * period) or off: `catchment`, keeping `previous`'s Per unit setup (its MAP
- * period and reference gauge), which Fragmentation's EWR shares run on (issue
- * #615, docs/model.md §2.5b); null without one (absent, null and a bare
- * `catchment` run the same).
+ * The setting as Per unit stores it (issue #658: Per unit is the only flow generation method, so every write is
+ * `perUnit`): `v`'s gauge MAP, MAP period and reference gauge, its mode `perUnit`. A project that never set it, or an
+ * older one still holding Fragmentation's `catchment`, reads as Per unit's defaults.
  */
-export function withUnitRain(on: boolean, previous?: UnitRainSettings | null): UnitRainSettings | null {
-	if (!on) return previous ? { ...previous, mode: 'catchment', ...(previous.mapPeriod ? { mapPeriod: { ...previous.mapPeriod } } : {}) } : null;
-	if (previous) return { ...previous, mode: 'perUnit', ...(previous.mapPeriod ? { mapPeriod: { ...previous.mapPeriod } } : {}) };
-	return { mode: 'perUnit' };
+export function perUnitSetting(v: UnitRainSettings | null | undefined): UnitRainSettings {
+	return v ? { ...v, mode: 'perUnit' } : { mode: 'perUnit' };
 }
-
-export const unitRainOn = (v: UnitRainSettings | null | undefined): v is UnitRainSettings => v?.mode === 'perUnit';
 
 /** The MAP period as whole calendar years (the engine counts complete years inside it), from the stored dates or the default. */
 export function mapPeriodYears(v: Partial<UnitRainSettings> | null | undefined): { from: number; to: number } {
@@ -105,8 +98,8 @@ export const stationHref = (series: Pick<SeriesMeta, 'id'>) => `?tab=series&seri
 
 /** The first problem, as the form shows it (and blocks Save on), and the field it is in; null when it can be saved. */
 export function unitRainProblem(v: UnitRainSettings | null | undefined): { field: 'gaugeMap' | 'gaugeSource' | 'period' | 'reference'; message: string } | null {
-	// Checked under both methods (issue #615): Fragmentation's EWR shares run on the Per unit setup too.
 	if (!v) return null;
+	// A stored `catchment` (Fragmentation's, retired in issue #658) reads as Per unit; anything else is no mode at all.
 	if (v.mode !== 'perUnit' && v.mode !== 'catchment') {
 		const e = unitRainError(v);
 		return e ? { field: 'period', message: `Rain for each unit can’t be saved: ${e}.` } : null;

@@ -5,7 +5,7 @@
 // Viewers read; editors restore. Farmers get 403 (requireRole 'viewer'), and
 // RLS shows them nothing either way (D4).
 import { isUnitRainKind, siteProblem, type SiteNode } from '../series/site.js';
-import { cleanModelNames, diffInputs, upgradeLegacyModel, type InputChange, type RainStationMeta, type RunInputsSnapshot } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, cleanModelNames, diffInputs, upgradeLegacyModel, type InputChange, type RainStationMeta, type RunInputsSnapshot } from '@water-management/engine';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
@@ -13,6 +13,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
+import { hasOutletRecord, locatedSettings } from '../projects/calibrationSite.js';
 import { normaliseBaselineAllocationMode } from '../projects/settings.js';
 import { normaliseBaselineEwrRules } from '../projects/ewrRules.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -251,8 +252,11 @@ async function restoreInputs(
 	const problems = modelProblems(parsed.data);
 	if (problems.length) throw new ApiError(409, "this version can't be restored: its model doesn't pass today's checks", problems);
 	const change = await beginModelChange(db, projectId);
+	// One from before calibration locations (engine 1.110.0, issue #659) goes back in their shape, as 289 moved the stored rows:
+	// its series aren't restored, so the outlet is ticked when the project has an outlet record now.
+	const located = locatedSettings((target.settings ?? {}) as Record<string, unknown>, parsed.data.nodes, await hasOutletRecord(db, projectId));
 	// A revision or a run's inputs from before 213 may cap or fully allocate: the baseline compares only (issue #507), and the restore's reason says so.
-	const settings: Record<string, unknown> = { ...((target.settings ?? {}) as Record<string, unknown>) };
+	const settings: Record<string, unknown> = { ...located };
 	const allocModeNote = normaliseBaselineAllocationMode(settings);
 	// One from before 220, or a scenario run's, may keep water for the EWR: the baseline assesses it only (issue #523 B4).
 	const { model, note: ewrNote } = normaliseBaselineEwrRules(parsed.data, settings);
@@ -349,8 +353,12 @@ export const historyRoutes = new Hono<AuthEnv>()
 					Object.entries(now.series).map(([k, v]) => [k, { startDate: v.startDate, length: v.values.length, valuesSha256: seriesHash(v.values), provenance: v.provenance ?? null }])
 				)
 			};
-			// The run's settings carry its resolved fit record; compare like with like.
-			const { fitRecord: _a, ...runSettings } = (run.inputs.settings ?? {}) as Record<string, unknown>;
+			// A run from before calibration locations (engine 1.110.0, issue #659) compared in their shape, as 289 moved the
+			// project's: its outlet ticked when it read an outlet record. The run's settings carry its resolved fit record; compare
+			// like with like.
+			const runOutletRecord = CALIBRATION_FLOW_KINDS.some((k) => run.inputs.series?.[k] !== undefined);
+			const runLocated = locatedSettings((run.inputs.settings ?? {}) as Record<string, unknown>, run.inputs.model?.nodes ?? [], runOutletRecord);
+			const { fitRecord: _a, ...runSettings } = runLocated;
 			const { fitRecord: _b, ...nowSettings } = current.settings as Record<string, unknown>;
 			const changes = diffInputs(
 				{ ...run.inputs, settings: runSettings as RunInputsSnapshot['settings'], model: upgradeLegacyModel(run.inputs.model ?? {}) as RunInputsSnapshot['model'] },

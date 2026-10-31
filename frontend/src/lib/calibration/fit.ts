@@ -49,8 +49,8 @@ export interface FitRequest {
 	starts: number;
 	/** A second observed record to validate the fit against; undefined = none. */
 	validationRecord?: CalibrationFlowKind;
-	/** The calibration zone this step fits (engine CalibrateOptions.zone, issue #555); undefined = the site's own zone. */
-	zone?: string;
+	/** The calibration location this step fits (engine CalibrateOptions.zone): a gauge's node id, null = the outlet's location, undefined = the headline (engine 1.110.0, issue #659). */
+	zone?: string | null;
 	/** The regional prior built for this fit's target (engine CalibrateOptions.prior, issue #622); undefined = none. */
 	prior?: CalibrationPrior;
 }

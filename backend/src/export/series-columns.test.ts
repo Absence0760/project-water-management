@@ -45,6 +45,21 @@ describe('seriesExportColumns', () => {
 		]);
 	});
 
+	it('a gauge’s record: its calibration location’s own exclusions (issue #659); none for a gauge that is no location', () => {
+		const row = { nodeId: 'g1', enabled: false, calibrationStart: null, calibrationEnd: null, calibrationFlowKind: null, qualityFlags: null, gr4j: null, fitRecord: null };
+		const st = settings({
+			calibrationExclusions: [{ start: '2024-01-01', end: '2024-01-01', reason: 'the outlet’s' }],
+			calibrationZones: [{ ...row, calibrationExclusions: [{ start: '2024-01-03', end: '2024-01-03', reason: 'gauge washed out' }] }]
+		});
+		const lines = csv({ ...flow, siteNodeId: 'g1' }, st, null);
+		expect(lines[0]).toContain('Excluded from calibration (reason)');
+		expect(lines[1]).toBe('2024-01-01,0.5,,43200,');
+		expect(lines[3]).toBe('2024-01-03,2,,172800,gauge washed out');
+		// Positive control: the outlet's record reads the top level's.
+		expect(csv(flow, st, null)[1]).toBe('2024-01-01,0.5,,43200,the outlet’s');
+		expect(csv({ ...flow, siteNodeId: 'g2' }, st, null)[0]).not.toContain('Excluded from calibration');
+	});
+
 	it('a record’s own missing periods (issue #611), by its series id: a column only when it has any; positive control: another record’s leave it out', () => {
 		const id = 'f0000000-0000-4000-8000-000000000001';
 		const st = settings({ flowMissing: { [id]: [{ start: '2024-01-02', end: '2024-01-02', reason: 'weir silted up' }] } });

@@ -149,7 +149,7 @@ describe('settingsNavGroups', () => {
 		// The lead group, with no name: the model selection for flow generation first (issue #614), then the judge panel
 		// (issue #586 R4-B: it had no link, so Find a setting couldn't find it), each by its heading.
 		expect(groups[0]!.sections).toEqual([
-			{ id: 'set-share', label: 'Model selection for flow generation' },
+			{ id: 'set-share', label: 'Flow generation' },
 			{ id: 'set-judge', label: 'EWR the results are judged by' }
 		]);
 		expect(groups[1]!.sections.map((s) => s.label)).toEqual(['Simulation period', 'Rain gaps', 'Data quality']);

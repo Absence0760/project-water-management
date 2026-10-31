@@ -35,7 +35,7 @@ const unit = (id: string, areaKm2: number, mapMm: number, downstreamNodeId = 'G'
  * Units A (10 km², MAP 900) above G1, an EWR site, above the outlet G, with B (6, 600), C (3, 750) and D (1.5, 600)
  * straight into G. A and B share station S (MAP 600); C and D take their §2.4h rule (C its own CHIRPS × its MAP, D,
  * with no record of its own and no gauge MAP, the catchment rain: rule 4). A irrigates, so G1 can fall short.
- * `perUnit` false is Fragmentation with the same Per unit setup kept (unitRain `catchment`).
+ * `perUnit` false is the retired Fragmentation's setting (unitRain `catchment`), which runs Per unit since engine 1.109.0.
  */
 function catchment(settings: Partial<ProjectSettings> = {}, perUnit = true): ModelInput {
 	return {
@@ -122,7 +122,7 @@ describe('the split helpers', () => {
 	});
 });
 
-describe('the same split under both flow generation methods (issue #615)', () => {
+describe('the split by each unit’s own runoff (issue #615; Per unit only since #658)', () => {
 	it('splits the EWR by each unit’s own natural runoff over the complete water years, adding up to 1', () => {
 		const out = runModel(catchment());
 		expect(out.summary.ewrSplit).toEqual({ applied: 'naturalMar', period: PERIOD, runoffFrom: 'unitRain' });
@@ -143,54 +143,30 @@ describe('the same split under both flow generation methods (issue #615)', () =>
 		expect(checkEwrSplit(catchment(), out)).toBeNull();
 	});
 
-	it('Fragmentation gives every unit the same share as Per unit, to the bit, and splits the catchment run’s flow by it (issue #616)', () => {
+	it('the retired Fragmentation setting runs Per unit to the bit: each unit’s own runoff, the same shares (issue #658)', () => {
 		const per = runModel(catchment());
 		const frag = runModel(catchment({}, false));
-		for (const id of UNITS) expect(farm(frag, id).ewrShare, id).toBe(farm(per, id).ewrShare);
-		for (const id of UNITS) expect(farm(frag, id).flowShare, id).toBe(farm(frag, id).ewrShare);
-		expect(frag.summary.ewrSplit).toEqual({ applied: 'naturalMar', period: PERIOD, runoffFrom: 'shareRuns', catchmentRain: [{ nodeId: 'D', name: 'Unit D' }] });
-		// The flow is Fragmentation's: no unit runoff columns, the catchment's one run, split by the natural MAR shares.
-		expect(col(frag, UNIT_RAIN_SERIES.runoff.key, 'A')).toBeUndefined();
-		expect(frag.summary.unitRain).toBeUndefined();
-		const natural = col(frag, 'natural_flow')!;
-		const runoff = UNITS.map((id) => col(frag, 'runoff', id)!);
-		UNITS.forEach((id, k) => {
-			for (let t = 0; t < frag.days; t++) expect(runoff[k]![t], `${id} day ${t}`).toBe(natural[t]! * farm(frag, id).flowShare!);
-		});
-		// Σ runoff over the units is the natural flow every day (the shares add up to 1).
-		for (let t = 0; t < frag.days; t++) {
-			let sum = 0;
-			for (const r of runoff) sum += r[t]!;
-			expect(Math.abs(sum - natural[t]!), `day ${t}`).toBeLessThanOrEqual(1e-9 * Math.max(1, natural[t]!));
-		}
-		// The share runs' forcing is recorded for a Fragmentation fit's provenance; Per unit's is its own unitRain.
-		expect(frag.summary.shareRain?.units.map((u) => u.nodeId)).toEqual(UNITS);
-		expect(per.summary.shareRain).toBeUndefined();
-		// One note, naming the unit on the catchment rain, not a warning per unit, and none of the Per unit forcing's own warnings.
-		const notes = frag.summary.warnings.filter((w) => w.includes('natural MAR'));
-		expect(notes).toHaveLength(1);
-		expect(notes[0]).toMatch(/^the flow and the EWR are split between the units by each unit’s natural MAR over the 5 complete water years 1 Oct 2015 – 30 Sep 2020: .*for these shares only/);
-		expect(notes[0]).toMatch(/"Unit D" has no rain of its own .* its share follows its area/);
-		expect(frag.summary.warnings.some((w) => w.startsWith('unit rain:'))).toBe(false);
-		expect(checkEwrSplit(catchment({}, false), frag)).toBeNull();
+		expect(JSON.stringify(frag)).toBe(JSON.stringify(per));
+		expect(frag.summary.ewrSplit).toEqual({ applied: 'naturalMar', period: PERIOD, runoffFrom: 'unitRain' });
+		expect(frag.summary.shareRain).toBeUndefined();
 	});
 
 	it('units that all run on the catchment rain take their area shares', () => {
 		// No station, no MAP, no CHIRPS of their own: every unit is on rule 4, so each makes the same runoff per km².
-		const x = catchment({ rainStations: null }, false);
+		const x = catchment({ rainStations: null });
 		for (const n of x.model.nodes) n.mapMm = null;
 		delete x.series['rain_chirps_mm@A'];
 		delete x.series['rain_chirps_mm@B'];
 		delete x.series['rain_chirps_mm@C'];
 		const out = runModel(x);
 		expect(out.summary.ewrSplit?.applied).toBe('naturalMar');
-		expect(out.summary.ewrSplit?.catchmentRain?.map((u) => u.nodeId)).toEqual(UNITS);
+		expect(out.summary.unitRain!.units.map((u) => u.rule)).toEqual(['catchment', 'catchment', 'catchment', 'catchment']);
 		const area: Record<string, number> = { A: 10, B: 6, C: 3, D: 1.5 };
 		for (const id of UNITS) expect(Math.abs(farm(out, id).ewrShare! - area[id]! / 20.5), id).toBeLessThan(1e-12);
 		expect(checkEwrSplit(x, out)).toBeNull();
 	});
 
-	it('Σ Y over the units is the outlet EWR every day, under both methods', () => {
+	it('Σ Y over the units is the outlet EWR every day, the retired setting too', () => {
 		for (const perUnit of [true, false]) {
 			const out = runModel(catchment({}, perUnit));
 			const ewr = col(out, 'ewr')!;
@@ -226,7 +202,7 @@ describe('the same split under both flow generation methods (issue #615)', () =>
 		}
 	});
 
-	it('holds every invariant, and a resumed run and a forecast tail keep the historical split, under both methods', () => {
+	it('holds every invariant, and a resumed run and a forecast tail keep the historical split, the retired setting too', () => {
 		for (const perUnit of [true, false]) {
 			expect(checkAll(catchment({}, perUnit)), `perUnit ${perUnit}`).toBeNull();
 			for (const k of [0, 400, 1500]) expect(checkResume(catchment({}, perUnit), k), `perUnit ${perUnit} resume at ${k}`).toBeNull();
@@ -234,7 +210,7 @@ describe('the same split under both flow generation methods (issue #615)', () =>
 		}
 	});
 
-	it('calibration refills each candidate’s shares from its own runoff, so a scored day is runModel’s to the bit, under both methods', () => {
+	it('calibration refills each candidate’s shares from its own runoff, so a scored day is runModel’s to the bit, the retired setting too', () => {
 		for (const perUnit of [true, false]) {
 			const x = catchment({}, perUnit);
 			const a = x.model.nodes.find((n) => n.id === 'A')!;
@@ -252,15 +228,15 @@ describe('the same split under both flow generation methods (issue #615)', () =>
 
 	it('with no runoff over the period the area shares split the flow and the EWR; a snapshot pins that; the other fallbacks', () => {
 		// The plan as calibration first builds it, on units that made no runoff (GR4J always makes some from its stores).
-		const x = catchment({}, false);
+		const x = catchment();
 		const prep = prepareRun(x);
 		const zeros = () => UNITS.map((nodeId) => ({ nodeId, runoffM3Day: new Float64Array(prep.days) }));
 		const plan = (warm: Parameters<typeof buildNetworkPlan>[8] = {}) =>
-			buildNetworkPlan(x, prep.settings, prep.days, prep.month, prep.aligned, new Float64Array(prep.days), [], prep.start, { shareRunoff: zeros(), ...warm }, prep.days);
+			buildNetworkPlan(x, prep.settings, prep.days, prep.month, prep.aligned, new Float64Array(prep.days), [], prep.start, { unitRunoff: zeros(), ...warm }, prep.days);
 		const byArea = [10 / 20.5, 6 / 20.5, 3 / 20.5, 1.5 / 20.5];
 		const shares = (p: ReturnType<typeof plan>) => p.plan.nodes.flatMap((n) => (n.kind === 'farm' ? [n.share] : []));
 		const fresh = plan();
-		expect(fresh.ewrSplit.info).toEqual({ applied: 'area', why: 'noRunoff', period: PERIOD, runoffFrom: 'shareRuns' });
+		expect(fresh.ewrSplit.info).toEqual({ applied: 'area', why: 'noRunoff', period: PERIOD, runoffFrom: 'unitRain' });
 		expect(shares(fresh)).toEqual(byArea);
 		expect(ewrSplitNote(fresh.ewrSplit.info)).toMatch(/the flow and the EWR are split between the units by their area/);
 		// Resumed from that snapshot: the same shares and record, marked pinned.
@@ -283,7 +259,7 @@ describe('the same split under both flow generation methods (issue #615)', () =>
 	});
 
 	it('a model with no unit area gives every unit a share of 0, says so, and passes the check', () => {
-		const x = catchment({ calibration: { rainThresholdMm: 0, catchmentAreaKm2: 20 } as never }, false);
+		const x = catchment({ calibration: { rainThresholdMm: 0, catchmentAreaKm2: 20 } as never });
 		for (const n of x.model.nodes) n.areaKm2 = 0;
 		const out = runModel(x);
 		expect(out.summary.ewrSplit).toEqual({ applied: 'area', why: 'noLandUnit', period: PERIOD });
@@ -354,21 +330,8 @@ describe('the invariant check', () => {
 		expect(broken((o) => (o.summary.ewrSplit!.period = { ...o.summary.ewrSplit!.period!, start: '2015-01-01' }))).toMatch(/isn't the run's complete water years/);
 		expect(broken((o) => (o.summary.ewrSplit = { applied: 'flowShare', why: 'noLandUnit' }))).toMatch(/flow share/);
 		expect(broken((o) => (o.summary.ewrSplit = { applied: 'area', why: 'noLandUnit' }))).toMatch(/no land unit/);
-		// Fragmentation: the units on the catchment rain must stand in the ratio of their areas.
-		const fx = catchment({}, false);
-		const frag = runModel(fx);
-		expect(
-			broken(
-				(o) => {
-					o.summary.ewrSplit!.catchmentRain = [
-						{ nodeId: 'D', name: 'Unit D' },
-						{ nodeId: 'A', name: 'Unit A' }
-					];
-				},
-				fx,
-				frag
-			)
-		).toMatch(/per km²/);
+		// A split from Fragmentation's share runs (engines 1.105.0 – 1.108.x) is no run of this engine's.
+		expect(broken((o) => (o.summary.ewrSplit!.runoffFrom = 'shareRuns'))).toMatch(/no longer makes/);
 		// An older run's record (a retired method) is skipped.
 		expect(broken((o) => (o.summary.ewrSplit = { method: 'naturalMar', applied: 'flowShare', why: 'catchmentRain' }))).toBeNull();
 	});

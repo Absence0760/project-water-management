@@ -8,7 +8,9 @@ import { Rng } from '../random';
 import { runModel } from '../run';
 import type { Gr4jParams } from '../runoff/params';
 import { ENGINE_VERSION } from '../version';
-import { autoCalibrate } from './auto';
+import { autoCalibrate, planAutoCalibration, prepareAutoCase, runAutoCase } from './auto';
+import type { FitOutcome } from './calibrate';
+import type { DdsState } from './dds';
 import { autoFitRecordOf } from './provenance';
 import { defaultCalibrationRules, type CalibrationRules } from './rulesSettings';
 
@@ -185,5 +187,46 @@ describe('autoCalibrate', () => {
 		expect(rec.chosen).toBe(r.chosen);
 		expect(rec.cases).toHaveLength(2);
 		expect(rec.cases[r.chosen!]).toMatchObject({ eligible: true, reasons: [], bounds: r.cases[r.chosen!]!.bounds, params: r.cases[r.chosen!]!.report!.params });
+	});
+});
+
+describe('a case fitted in steps (prepareAutoCase), as the server’s jobs fit it', () => {
+	it('gives runAutoCase’s case to the bit, its fit paused and resumed across fresh set-ups', () => {
+		const input = synthetic(TRUTH, { run: { seed: 5, starts: 2, budget: 60 }, cases: { bounds: ['wide', 'typical'], objectives: ['kgePrime'] } });
+		const plan = JSON.parse(JSON.stringify(planAutoCalibration(input)));
+		for (let i = 0; i < plan.cases.length; i++) {
+			const outcomes: FitOutcome[] = [];
+			let state: DdsState | null = null;
+			let job = prepareAutoCase(input, plan, i);
+			if (!('finish' in job)) throw new Error(`case ${i} could not start: ${job.error}`);
+			while (outcomes.length < job.count) {
+				const from: number = state?.evaluations ?? 0;
+				const r = job.fit(outcomes.length, { ...(state ? { resume: state } : {}), pause: (n) => n - from >= 17 });
+				if ('paused' in r) state = JSON.parse(JSON.stringify(r.paused));
+				else {
+					outcomes.push(JSON.parse(JSON.stringify(r.done)));
+					state = null;
+				}
+				// The next piece is another job: a fresh set-up.
+				const next = prepareAutoCase(input, plan, i);
+				if (!('finish' in next)) throw new Error('the set-up changed');
+				job = next;
+			}
+			expect(job.finish(outcomes)).toEqual(runAutoCase(input, plan, i));
+		}
+	});
+
+	it('says why a case can’t start, as runAutoCase does, and a failed fit as a case with its error', () => {
+		const input = synthetic(TRUTH);
+		const plan = planAutoCalibration(input);
+		// The plan from before the record went: the fit can't set up.
+		const gone = { ...input, series: { rain_catchment_mm: input.series.rain_catchment_mm! } };
+		const c = prepareAutoCase(gone, plan, 0);
+		expect('finish' in c).toBe(false);
+		expect(c).toEqual(runAutoCase(gone, plan, 0));
+		expect((c as { error: string }).error).toMatch(/^the fit failed: /);
+		const job = prepareAutoCase(input, plan, 0);
+		if (!('finish' in job)) throw new Error('expected a case to fit');
+		expect(job.failed(new Error('boom'))).toMatchObject({ report: null, error: 'the fit failed: boom', score: null, eligible: false });
 	});
 });

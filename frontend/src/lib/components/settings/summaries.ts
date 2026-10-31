@@ -48,14 +48,25 @@ export interface CalibrationSummaryInput {
 	unitAreaKm2: number;
 	/** The PE GR4J runs on in a year (mm). */
 	peAnnualMm: number;
-	/** The calibration site's name when it isn't the outlet. */
-	siteName?: string | null;
+	/**
+	 * The ticked calibration locations by name (issue #659), and the headline's name when there are several; null
+	 * while the network isn't known.
+	 */
+	locations?: { names: string[]; headline: string | null; /** The outlet is one of them (settings.calibrateAtOutlet). */ outlet: boolean } | null;
 }
 
 /**
  * The lines of the four panels on the Calibration page, Flow calibration, Calibration record, Fit the parameters and
  * the WR2012 check (CalibrationSettings.svelte, issue #586 round 3).
  */
+/** "Calibrated at Weir, Outlet · headline Weir" (past three, "Calibrated at 4 locations"), or that none is; null while not known. */
+function locationsText(l: CalibrationSummaryInput['locations']): string | null {
+	if (!l) return null;
+	if (!l.names.length) return 'No location calibrated';
+	const where = l.names.length > 3 ? `${fmtNum(l.names.length)} locations` : l.names.join(', ');
+	return `Calibrated at ${where}${l.headline ? ` · headline ${l.headline}` : ''}`;
+}
+
 export function calibrationSummaries(i: CalibrationSummaryInput): Partial<Record<SettingsSectionId, string>> {
 	const s = i.s;
 	const exclusions = s.calibrationExclusions?.length ?? 0;
@@ -72,13 +83,19 @@ export function calibrationSummaries(i: CalibrationSummaryInput): Partial<Record
 			.filter(Boolean)
 			.join(' · '),
 		'set-record': [
-			span ?? 'The whole flow record',
-			i.siteName ? `at ${i.siteName}` : 'at the outlet',
-			exclusions ? `${plural(exclusions, 'period')} left out` : null,
-			// Engine ≥ 1.90.0 (issue #557): named only when set.
-			s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
-			// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
-			s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
+			locationsText(i.locations),
+			// The outlet location's window (the top level's) and what it leaves out, said as the outlet's (issue #659); not
+			// named when the outlet isn't a location, as no fit uses them.
+			...(!i.locations || i.locations.outlet
+				? [
+						i.locations ? `outlet: ${span ?? 'the whole flow record'}` : (span ?? 'The whole flow record'),
+						exclusions ? `${plural(exclusions, 'period')} left out` : null,
+						// Engine ≥ 1.90.0 (issue #557): named only when set.
+						s.qualityFlags?.lowFlowPeriods?.length ? `low flows only in ${plural(s.qualityFlags.lowFlowPeriods.length, 'period')}` : null,
+						// Engine ≥ 1.81.0 (issue #507 item 2): named only when set.
+						s.qualityFlags?.zeroFlowMonths?.length ? `river stops ${zeroFlowMonthsText(s.qualityFlags.zeroFlowMonths)}` : null
+					]
+				: [])
 		]
 			.filter(Boolean)
 			.join(' · '),
@@ -121,19 +138,18 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
-		// Model selection for flow generation (issue #553 round 3): the method, the units on a station (the Per unit setup,
-		// which Fragmentation's shares read too, issue #615), and what each unit's natural MAR share splits (one share per
-		// unit since the flow-share methods went, issue #616).
+		// Flow generation (issue #553 round 3): the method (Per unit, the only one since issue #658), the
+		// units on a station, and what each unit's natural MAR share splits (one share per unit since the flow-share methods
+		// went, issue #616).
 		'set-share': [
-			s.unitRain?.mode === 'perUnit' ? 'Per unit' : 'Fragmentation',
+			'Per unit',
 			// The catchment's station (issue #612 follow-up): said only when set, since most projects run on the rain series.
 			s.rainStations?.catchment ? 'catchment rain from a station' : null,
 			(() => {
 				const n = Object.keys(s.rainStations?.units ?? {}).length;
-				// Under Fragmentation said only when a unit has one: a new project has none and needs no word of it.
-				return n ? `${plural(n, 'unit')} on a rainfall station` : s.unitRain?.mode === 'perUnit' ? 'no unit on a rainfall station' : null;
+				return n ? `${plural(n, 'unit')} on a rainfall station` : 'no unit on a rainfall station';
 			})(),
-			s.unitRain?.mode === 'perUnit' ? 'EWR by each unit’s natural MAR' : 'flow and EWR by each unit’s natural MAR'
+			'EWR by each unit’s natural MAR'
 		]
 			.filter(Boolean)
 			.join(' · '),

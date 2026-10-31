@@ -6,7 +6,7 @@
 import type { MapFeature, RunMeta } from '#lib/api/types.js';
 import { fmtDate } from '#lib/format/number.js';
 import { BAND_TOKEN, BAND_WORD, DEFAULT_MAP_MEASURE, MAP_MEASURES, MEASURE_LEGEND, type MapBand, type MapMeasure, type MapRunChoice, type MapStatus } from './mapStatus';
-import { zoneName, type ZoneGroup } from '#lib/calibration/zoneGroups.js';
+import { unitZoneText, zoneKeyEntries, type ZoneGroup } from '#lib/calibration/zoneGroups.js';
 
 /**
  * What the map's areas are coloured by: a measure (a run's), `zone` (each unit's calibration zone, the settings',
@@ -142,24 +142,27 @@ export function featureResult(
 	return units.get(f.nodeId) ?? ewr.get(f.nodeId) ?? { band: 'none', label: 'No figure for what it stands for', measure: null };
 }
 
-// --- calibration zones on the map (issue #555, docs/maps.md § Calibration zones) ---
+// --- calibration zones on the map (issue #555; locations, issue #659; docs/maps.md § Calibration zones) ---
 
-/** One zone in the legend: its words, how many units it holds, and its colour token. */
+/** One entry of the legend: its words, how many units it holds, its colour token, and whether it is a group's borrowed units. */
 export interface ZoneLegendRow {
 	key: string;
 	text: string;
 	count: number;
+	/** How many of them the rest rule placed, in words; '' = none. */
+	note: string;
 	token: string;
+	marker: boolean;
 }
 
-/** The legend's rows while the map shows calibration zones: each zone upstream first, the site's last. */
+/** The legend's rows while the map shows calibration zones: each group upstream first, the headline's last, each group's borrowed units after it. */
 export function zoneLegendRows(groups: readonly ZoneGroup[]): ZoneLegendRow[] {
-	return groups.map((g) => ({ key: g.nodeId ?? 'site', text: zoneName(g), count: g.units.length, token: g.token }));
+	return zoneKeyEntries(groups);
 }
 
 /**
- * The fills while the map shows calibration zones: each area linked to a land unit takes its zone's resolved colour
- * (`colour`, by token), every other area the "no figure" colour, as for a measure (resultFills).
+ * The fills while the map shows calibration zones: each area linked to a land unit takes its group's resolved colour
+ * (`colour`, by token; a borrowed unit its donor's), every other area the "no figure" colour, as for a measure (resultFills).
  */
 export function zoneFills(
 	features: readonly Pick<MapFeature, 'id' | 'kind' | 'nodeId' | 'geometry'>[],
@@ -177,10 +180,15 @@ export function zoneFills(
 	return resultFills(features, filled, none);
 }
 
-/** A feature's calibration zone for its card or table row: its unit's zone in words, or why it has none (null: boundary or river). */
+/**
+ * A feature's calibration zone for its card or table row: its unit's group in words ("Weir zone", "borrowed from
+ * Weir", "nearest upstream: Weir"), or why it has none (null: boundary or river).
+ */
 export function featureZone(f: Pick<MapFeature, 'kind' | 'nodeId' | 'geometry'>, byUnit: ReadonlyMap<string, ZoneGroup>): string | null {
 	if (f.kind === 'catchment_boundary' || f.kind === 'river') return null;
 	if (!f.nodeId) return 'Not linked to a unit';
 	const g = byUnit.get(f.nodeId);
-	return g ? zoneName(g) : 'In no zone (not a land unit)';
+	if (!g) return 'In no zone (not a land unit)';
+	const text = unitZoneText(g, f.nodeId);
+	return text.charAt(0).toUpperCase() + text.slice(1);
 }

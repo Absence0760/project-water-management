@@ -23,7 +23,7 @@
 		readonly = false,
 		seriesKinds = null,
 		flowKind = null,
-		siteName = null
+		outletTicked = true
 	}: {
 		list: LowFlowPeriod[];
 		error?: string | null;
@@ -32,8 +32,8 @@
 		seriesKinds?: string[] | null;
 		/** settings.calibrationFlowKind: a new row starts on the record calibrated against. */
 		flowKind?: CalibrationFlowKind | null;
-		/** The calibration site's name when it is a gauge inside the network, where the periods don't apply. */
-		siteName?: string | null;
+		/** The outlet is a ticked calibration location (settings.calibrateAtOutlet, issue #659): else no fit uses the periods. */
+		outletTicked?: boolean;
 	} = $props();
 
 	const uid = $props.id();
@@ -68,9 +68,10 @@
 		For a period in which a record's high flows are wrong but its low flows are good. Inside the dates, a reading above the threshold is left out of Fit
 		automatically, the run's statistics, its EWR test on the record and the plausibility checks; readings at or below it are scored as usual.
 	</p>
-	{#if siteName && list.length}
+	{#if !outletTicked && list.length}
 		<p class="note" data-testid="low-flow-site-note">
-			These periods apply to the outlet’s records. Calibration is scored at {siteName}, so they are not used until it is scored at the outlet again.
+			These periods apply to the outlet’s records. The outlet isn’t a calibration location (Calibrate here is unticked), so no fit uses them; the run’s
+			checks of the outlet’s record still do.
 		</p>
 	{/if}
 	{#if list.length}

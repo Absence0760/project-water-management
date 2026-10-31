@@ -1748,7 +1748,9 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   own context, and nobody else. When the mail is built, the worker opens a
   transaction **as the recipient** (`withUser`) and asks
   `app_alert_my_mode` again: a member removed after the event, or who
-  turned the alert off, gets nothing (the delivery is `skipped` with why).
+  turned the alert off, gets nothing (the delivery is `skipped` with why);
+  nor does anyone once an editor has switched the event's rule off
+  (`alerts/send.ts` `RULE_OFF`).
 - **A farmer's mail names only their own farm.** The mail is built as the
   recipient under RLS: the event (`alert_event` RLS: a farmer sees their own
   farms' events and the notice events), the farm's name (`node` RLS) and the
@@ -4687,7 +4689,8 @@ nothing else.
   sign-off whose statement (`pack-signoff-1`) names the pack's manifest hash;
   the route requires a sign-off of the *current* statement, and the trigger
   refuses an issue with no sign-off at all. A sign-off of a pack is made only
-  on a draft (`signoff_pack_draft`). The statement kinds can't be mixed: a
+  on a draft (`signoff_pack_draft`, which locks the pack row `FOR SHARE`, so
+  one sent during an issue waits for it and is refused, 288). The statement kinds can't be mixed: a
   `pack-` version signs a pack and any other a run (`signoff_statement_target`).
 - **The hash survives storage.** The server hashes the manifest's RFC 8785
   text when it drafts, re-reads it from `jsonb` and hashes it again (a

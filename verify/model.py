@@ -564,19 +564,34 @@ class Gr4j:
 GR4J_BOUNDS = {"x1": (10, 3000), "x2": (-5, 3), "x3": (1, 1000), "x4": (0.5, 10)}
 
 
-def zone_params(settings: dict, nodes: list[dict], units: list[dict]) -> dict[str, dict]:
-    """§2.10n (engine 1.106.0, issue #555): each land unit in a usable ticked
-    calibration zone -> that zone's X1–X4 (the row's gr4j, else the
-    catchment's). A ticked row is usable when its node is a gauge inside the
-    network, not the calibration site and not on the site's path to the
-    outlet. A unit belongs to the first usable ticked gauge on its path
-    downstream; a unit reaching none (the site's zone) is not in the result.
+def location_params(settings: dict, nodes: list[dict], units: list[dict]) -> dict[str, dict]:
+    """§2.10n (engine 1.110.0, issue #659; zones from 1.106.0, issue #555),
+    from the docs: each land unit in a gauge location's group -> that
+    location's X1–X4 (the row's gr4j inside the bounds, else the catchment's).
+    A unit on the outlet's location or on settings.gr4j is not in the result
+    (it runs on the catchment's gr4j).
+
+    The locations: the outlet when calibrateAtOutlet is true, and each ticked
+    row (first of a gauge) whose node is a gauge inside the network (not the
+    outlet). Settings without a boolean calibrateAtOutlet are from before
+    1.110.0: an inner-gauge site G becomes G's ticked row on the catchment's
+    X1–X4, every ticked row at or below G is unticked, the outlet is not a
+    location, the rest rule is 'headline' and G the headline; any other site
+    (the outlet, or a stale one) makes the outlet a location. With no gauge
+    location every unit runs on gr4j.
+
+    A unit's group: its unitParamsFrom target when that is a location (the
+    outlet's node id for the outlet); else the first location on its path
+    downstream; else the rest rule (calibrationRest, absent = 'headline'):
+    'nearest', walking its path down, at the first node with a location
+    upstream (or at) it, the one fewest hops up, then name, then id;
+    'headline', the headline (the calibrationSiteNodeId pointer when it is a
+    location, else the outlet when ticked, else the gauge location with the
+    most land-unit area above it, then name, then id); 'default', gr4j.
     Per unit only: the caller asks only then."""
-    rows = settings.get("calibrationZones")
-    if not isinstance(rows, list):
-        return {}
     by_id = {n["id"]: n for n in nodes}
-    site = settings.get("calibrationSiteNodeId")
+    g = settings["gr4j"]
+    outlet = next((n["id"] for n in nodes if n.get("downstreamNodeId") is None), None)
 
     def down(i):
         out, seen = [], set()
@@ -586,25 +601,99 @@ def zone_params(settings: dict, nodes: list[dict], units: list[dict]) -> dict[st
             i = (by_id.get(i) or {}).get("downstreamNodeId")
         return out
 
-    below_site = set(down(site)) if site in by_id else set()
-    usable: dict[str, dict] = {}
-    seen_rows = set()
+    def inner_gauge(i):
+        n = by_id.get(i)
+        return n is not None and n["kind"] == "gauge" and n.get("downstreamNodeId") is not None
+
+    raw = settings.get("calibrationZones")
+    rows = [dict(z) for z in raw if isinstance(z, dict) and isinstance(z.get("nodeId"), str)] if isinstance(raw, list) else []
+    first: list[dict] = []
+    seen_rows: set = set()
     for z in rows:
-        if not isinstance(z, dict) or not isinstance(z.get("nodeId"), str) or z["nodeId"] in seen_rows:
-            continue
-        seen_rows.add(z["nodeId"])
-        n = by_id.get(z["nodeId"])
-        if z.get("enabled") is not True or not n or n["kind"] != "gauge" or n.get("downstreamNodeId") is None or z["nodeId"] in below_site:
+        if z["nodeId"] not in seen_rows:
+            seen_rows.add(z["nodeId"])
+            first.append(z)
+    rows = first
+    at_outlet = settings.get("calibrateAtOutlet")
+    pointer = settings.get("calibrationSiteNodeId")
+    rest = settings.get("calibrationRest")
+    if not isinstance(at_outlet, bool):
+        # Settings from before calibration locations.
+        rest = "headline"
+        if isinstance(pointer, str) and inner_gauge(pointer):
+            below = set(down(pointer))
+            rows = [({**z, "enabled": False} if z.get("enabled") is True and z["nodeId"] in below else z) for z in rows if z["nodeId"] != pointer]
+            rows.append({"nodeId": pointer, "enabled": True, "gr4j": {k: g[k] for k in GR4J_BOUNDS}})
+            at_outlet = False
+        else:
+            pointer = None
+            at_outlet = True
+    if rest not in ("nearest", "headline", "default"):
+        rest = "headline"
+    if outlet is None:
+        at_outlet = False
+
+    params: dict[str, dict] = {}
+    for z in rows:
+        if z.get("enabled") is not True or not inner_gauge(z["nodeId"]):
             continue
         p = z.get("gr4j")
         ok = isinstance(p, dict) and all(isinstance(p.get(k), (int, float)) and lo <= p[k] <= hi for k, (lo, hi) in GR4J_BOUNDS.items())
-        usable[z["nodeId"]] = {k: p[k] for k in GR4J_BOUNDS} if ok else settings["gr4j"]
+        params[z["nodeId"]] = {k: p[k] for k in GR4J_BOUNDS} if ok else g
+    if not params:
+        return {}
+    OUT = "\0outlet"
+    locs = list(params) + ([OUT] if at_outlet else [])
+    node_of = lambda k: outlet if k == OUT else k
+    name_of = lambda k: by_id[node_of(k)]["name"]
+    land = sorted((u for u in units), key=lambda u: u["id"])
+
+    def area_above(i):
+        return sum(float(u["areaKm2"]) for u in land if i in down(u["id"]))
+
+    if pointer in params:
+        headline = pointer
+    elif at_outlet:
+        headline = OUT
+    else:
+        headline = sorted(params, key=lambda k: (-area_above(k), name_of(k), k))[0]
+
+    def own(u):
+        # The unit itself counts (an outlet that is a farm is its own outlet location).
+        for i in down(u):
+            if i in params:
+                return i
+            if at_outlet and i == outlet:
+                return OUT
+        return None
+
+    def nearest(u):
+        for x in down(u):
+            best = None
+            for k in locs:
+                path = down(node_of(k))
+                if x in path:
+                    key = (path.index(x), name_of(k), node_of(k))
+                    if best is None or key < best[0]:
+                        best = (key, k)
+            if best:
+                return best[1]
+        return None
+
+    assign = settings.get("unitParamsFrom") if isinstance(settings.get("unitParamsFrom"), dict) else {}
     out: dict[str, dict] = {}
-    for u in units:
-        for i in down(u["id"])[1:]:
-            if i in usable:
-                out[u["id"]] = usable[i]
-                break
+    for u in land:
+        t = assign.get(u["id"])
+        if isinstance(t, str) and t in params:
+            group = t
+        elif isinstance(t, str) and at_outlet and t == outlet:
+            group = OUT
+        else:
+            group = own(u["id"])
+            if group is None:
+                group = headline if rest == "headline" else nearest(u["id"]) if rest == "nearest" else None
+        if group is not None and group != OUT:
+            out[u["id"]] = params[group]
     return out
 
 
@@ -1552,9 +1641,11 @@ def run(doc: dict) -> dict:
     if no_pet:
         raise Refused("GR4J_NO_PET")
     farms = [x for x in model["nodes"] if x["kind"] == "farm"]
-    ur = settings.get("unitRain")
-    per_unit = isinstance(ur, dict) and ur.get("mode") == "perUnit"
-    # §2.4h: under per-unit rain each land unit (a farm with an area above 0) runs GR4J on its own rain.
+    # §2.4h: Per unit is the only flow generation method (engine >= 1.109.0, issue #658). An absent or null setting,
+    # and the retired {mode: "catchment"} (Fragmentation), run Per unit, keeping the rest of the stored setting.
+    ur = dict(settings.get("unitRain") or {}) if isinstance(settings.get("unitRain") or {}, dict) else {}
+    ur["mode"] = "perUnit"
+    per_unit = True
     units = sorted((f for f in farms if (f.get("areaKm2") or 0) > 0), key=lambda x: x["id"]) if per_unit else []
     if not units:
         # No land unit: GR4J runs on the catchment rain, as without the setting (probe unit-rain-no-land-unit).
@@ -1568,7 +1659,6 @@ def run(doc: dict) -> dict:
     if not area_km2 > 0:
         raise Refused("catchment area is 0")
     local: dict[str, list[float]] | None = None
-    share_local: dict[str, list[float]] | None = None
     if not per_unit:
         model_g = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
         for k in range(int(g.get("warmupDays", 365))):
@@ -1584,31 +1674,13 @@ def run(doc: dict) -> dict:
             uhs.append(model_g.uh_store())
             exch.append(r["exchange"])
         rain_gr4j = p_used
-        # §2.5, §2.5b (engine >= 1.105.0, issues #615, #616): Fragmentation's unit shares come from GR4J once per land
-        # unit on the Per unit forcing (settings.unitRain with its mode set to perUnit), with the same parameters, PE and
-        # warm-up, for the shares only; the catchment's one run above makes the flow they split. Its diagnostics stay out
-        # (Per unit's).
-        land = sorted((f for f in farms if (f.get("areaKm2") or 0) > 0), key=lambda x: x["id"])
-        if land:
-            sur = dict(ur) if isinstance(ur, dict) else {}
-            sur["mode"] = "perUnit"
-            sforcing = unit_rain_forcing(sur, settings, series, rain, days, finals, sources, p_used, land, doc.get("forecastRainSource"), copy.deepcopy(diag), st)
-            share_local = {}
-            for u in land:
-                a = float(u["areaKm2"])
-                pu = sforcing[u["id"]]
-                gu = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
-                for k in range(int(g.get("warmupDays", 365))):
-                    i = k % hist if hist > 0 else 0
-                    gu.step(pu[i], pet[i])
-                share_local[u["id"]] = [gu.step(pu[i], pet[i])["q"] * a * 1000 for i in range(n)]
     else:
         forcing = unit_rain_forcing(ur, settings, series, rain, days, finals, sources, p_used, units, doc.get("forecastRainSource"), diag, st)
         local = {}
         acc = {k: [0.0] * n for k in ("rain", "aet", "prod", "rout", "uh", "exch")}
         natural = [0.0] * n
-        # §2.10n (engine 1.106.0, issue #555): each land unit on its calibration zone's X1–X4.
-        zone_p = zone_params(settings, model["nodes"], units)
+        # §2.10n (engine 1.110.0, issue #659): each land unit on its calibration location's X1–X4.
+        zone_p = location_params(settings, model["nodes"], units)
         diag["zone_units"] = diag.get("zone_units", 0) + len(zone_p)
         for u in units:
             a = float(u["areaKm2"])
@@ -1641,8 +1713,8 @@ def run(doc: dict) -> dict:
     put(None, "routing_store", rout)
     put(None, "uh_store", uhs)
     put(None, "natural_flow", natural)
-    # §2.10n: the exchange series is written when the catchment's X2, or any applied zone's, is not 0.
-    if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in zone_params(settings, model["nodes"], units).values())):
+    # §2.10n: the exchange series is written when the catchment's X2, or any applied location's, is not 0.
+    if g["x2"] != 0 or (per_unit and any(p["x2"] != 0 for p in location_params(settings, model["nodes"], units).values())):
         put(None, "exchange", exch)
     if rain["chirps"] and rain["bias_on"] and any(f is not None for f in rain["fit_factors"][1:]):
         put(None, "chirps_factor", [NAN if rain["fit_factors"][cal_month(o)] is None else rain["fit_factors"][cal_month(o)] for o in days])
@@ -1658,7 +1730,8 @@ def run(doc: dict) -> dict:
     # §2.5, §2.5b (engine >= 1.105.0, issues #615, #616): each unit's one share, its natural MAR share: its own runoff
     # (Per unit's, or Fragmentation's share runs) over the complete water years of the historical days (else all of
     # them) / the units' total, a negative day counting 0. No runoff over the period: the area shares. No land unit:
-    # every share 0. It splits the flow under Fragmentation, the EWR and the senior users' claims (§2.7c). The area,
+    # every share 0. It splits the EWR and the senior users' claims (§2.7c); Fragmentation, whose flow it split too, is
+    # retired (engine >= 1.109.0). The area,
     # Hi/Lo MAP and specific flow shares (settings.flowShareMethod) are retired and ignored, as settings.ewrSplit is.
     shares = {x["id"]: 0.0 for x in farms}
     # The area shares: each land unit's area / the land units' total (the fallback with no runoff over the period).
@@ -1667,7 +1740,7 @@ def run(doc: dict) -> dict:
     for fid in sorted(area_share):
         atot += area_share[fid]
     area_share = {fid: (a / atot if atot > 0 else 0.0) for fid, a in area_share.items()}
-    split_src = local if local is not None else share_local
+    split_src = local
     if split_src is not None:
         full = [i for i in range(hist) if water_year(days[i]) != water_year(days[0]) or _dt.date.fromordinal(days[0]).strftime("%m-%d") == "10-01"]
         full = [i for i in full if water_year(days[i]) != water_year(days[hist - 1]) or _dt.date.fromordinal(days[hist - 1]).strftime("%m-%d") == "09-30"]

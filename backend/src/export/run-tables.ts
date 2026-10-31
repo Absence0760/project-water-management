@@ -270,9 +270,10 @@ const CALIBRATION_ROWS: Record<string, string> = {
 	volumeErrorPct: 'Volume error (%, + = model too wet)',
 	flowKind: 'Observed record scored',
 	simulatedKey: 'Simulated series scored',
-	// Engine ≥ 1.41.0: scored at a gauge inside the network (settings.calibrationSiteNodeId); absent at the outlet.
-	siteName: 'Scored at the gauge (calibration site)',
-	siteNodeId: 'Calibration site node id'
+	// Engine ≥ 1.41.0: scored at a gauge inside the network; absent at the outlet. Since 1.110.0 (issue #659) the headline
+	// location's gauge, and in each other location's block (summary.calibrationZones) that location's (the outlet's node too).
+	siteName: 'Scored at the gauge',
+	siteNodeId: 'Gauge node id'
 };
 
 type Cell = string | number | null;
@@ -439,7 +440,9 @@ const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
  * 1.19.0), then the first and last of those again at each gauge node with a
  * record of its own (engine ≥ 1.4.0). Unrounded.
  */
-export function* plausibilityLines(p: RunSummary['plausibility'], siteNodeId: string | null = null): Generator<string> {
+export function* plausibilityLines(p: RunSummary['plausibility'], siteNodeIds: string | null | readonly string[] = null): Generator<string> {
+	// The gauges the run is fitted at: the headline's, and (engine 1.110.0, issue #659) every other ticked location's.
+	const fittedAt = new Set(siteNodeIds === null ? [] : typeof siteNodeIds === 'string' ? [siteNodeIds] : siteNodeIds);
 	yield csvRow(['Plausibility checks']);
 	if (p === undefined) {
 		yield csvRow(['Run made before engine 0.25.0: no plausibility checks']);
@@ -467,8 +470,8 @@ export function* plausibilityLines(p: RunSummary['plausibility'], siteNodeId: st
 		yield '';
 		yield csvRow([`At gauge ${g.name}`, 'Share of the catchment natural flow above it (%)', pct(g.naturalShare) as Cell]);
 		// The record's fit against the simulated flow there (engine ≥ 1.90.0, issue #554): a check, never the calibration
-		// score. Out of sample except at the calibration site, whose record the run is fitted to (every read day, its window too).
-		const fitLabel = g.nodeId === siteNodeId ? 'Fit check (in sample at the calibration site)' : 'Fit check (out of sample)';
+		// score. Out of sample except at a calibration location, whose record the run is fitted to (every read day, its window too).
+		const fitLabel = fittedAt.has(g.nodeId) ? 'Fit check (in sample at a calibration location)' : 'Fit check (out of sample)';
 		if (g.fit === undefined) yield csvRow([fitLabel, 'Run made before engine 1.90.0: not computed']);
 		else if (g.fit === null) yield csvRow([fitLabel, 'Not computed: no day of the record outside the excluded periods']);
 		else yield csvRow([fitLabel, 'Record', RECORD_TEXT[g.flowKind], 'Days', g.fit.days, 'NSE', g.fit.nse, 'KGE', g.fit.kge, 'PBIAS (%)', g.fit.pbias]);
@@ -1053,6 +1056,24 @@ const CELL_REASON_TEXT: Record<NonNullable<UnitRainSummary['reference']>['cellRe
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** The per-unit rain block (engine ≥ 1.78.0): the setting, then one row per land unit. */
+const PARAM_SOURCE_HOW = { zone: 'its own zone', assigned: 'assigned', rest: 'no location downstream', default: '' } as const;
+
+/**
+ * A unit's "Parameters from" (engine 1.110.0, issue #659): the location whose
+ * GR4J parameters it ran on and how it came to (its own zone, assigned by
+ * Parameters from, or the rest rule), or the catchment parameters.
+ */
+export function paramSourceText(u: Pick<UnitRainSummary, 'zones' | 'paramSource'>): (unitId: string) => string {
+	const zones = u.zones ?? [];
+	const nameOf = (from: string | null) => (from === null ? zones.find((z) => z.kind === 'outlet') : zones.find((z) => z.nodeId === from))?.name ?? from ?? 'the outlet';
+	return (id) => {
+		const p = u.paramSource?.[id];
+		if (!p) return '';
+		if (p.how === 'default') return 'Catchment parameters';
+		return `${nameOf(p.from)} (${PARAM_SOURCE_HOW[p.how]})`;
+	};
+}
+
 function* unitRainLines(u: UnitRainSummary): Generator<string> {
 	yield csvRow(["Runoff from each unit's own rain (docs/model.md §2.4h)"]);
 	yield csvRow(['Gauge MAP (mm)', u.gaugeMapMm, u.gaugeMapSource ?? '']);
@@ -1080,8 +1101,11 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 		'Actual evaporation (mm)',
 		'Runoff (mm)',
 		'Runoff (m³)',
-		'Runoff coefficient'
+		'Runoff coefficient',
+		// Engine 1.110.0 (issue #659): where each unit's GR4J parameters came from; only on a run that applied a gauge location.
+		...(u.paramSource ? ['Parameters from'] : [])
 	]);
+	const from = u.paramSource ? paramSourceText(u) : null;
 	for (const x of u.units) {
 		const map = x.chirps?.source === 'map' ? x.chirps : null;
 		const ref = x.chirps?.source === 'reference' ? x.chirps : null;
@@ -1122,7 +1146,8 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 			x.aetMm,
 			x.flowMm,
 			x.runoffM3,
-			x.runoffCoefficient
+			x.runoffCoefficient,
+			...(from ? [from(x.nodeId)] : [])
 		]);
 	}
 	// The reference gauge's monthly factors (engine ≥ 1.80.0, issue #500), one row per calendar month.
@@ -1394,7 +1419,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield* doubleMassLines(summary.dataQuality ? summary.dataQuality.doubleMass : undefined);
 	yield '';
 
-	yield* plausibilityLines(summary.plausibility, summary.calibration?.siteNodeId ?? null);
+	yield* plausibilityLines(summary.plausibility, [summary.calibration, ...(summary.calibrationZones ?? [])].flatMap((c) => (c?.siteNodeId ? [c.siteNodeId] : [])));
 	yield '';
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);
@@ -1409,6 +1434,15 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield csvRow(['No observed flow series — calibration not computed']);
 	}
 	yield '';
+	// Every other ticked calibration location (engine 1.110.0, issue #659; the zones of #555): its record against the simulated
+	// outflow at it, on its own window and exclusions, in or out of sample by its own fit. The block above is the headline's.
+	for (const z of summary.calibrationZones ?? []) {
+		yield csvRow([`Calibration at another location: ${z.siteName ?? z.siteNodeId ?? 'the outlet'}`]);
+		const { wr2012Fit: _zw, ...scalars } = z;
+		for (const row of labelledRows(scalars as unknown as Record<string, unknown>, CALIBRATION_ROWS)) yield csvRow(row);
+		yield* calibrationDetailLines(z);
+		yield '';
+	}
 
 	if (meta.flowDuration !== undefined) {
 		yield* flowDurationLines(meta.flowDuration);

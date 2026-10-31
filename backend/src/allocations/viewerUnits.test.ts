@@ -178,11 +178,11 @@ describe('redactReportAllocations (issue #523 G1)', () => {
 		expect(redactReportAllocations({ ...report, summaries: { ...report.summaries, application: null } }).summaries.application).toBeNull();
 	});
 
-	it('cuts § 4’s combined dam whose yields rest on the registered volumes to its direction, on compare-only runs too; the other dam stays (evidence-25)', () => {
+	it('cuts § 4’s combined dam whose yields rest on the registered volumes to its direction, on compare-only runs too; the other dam stays (evidence-26)', () => {
 		const m = { baseline: 50_000, combined: 40_000, change: -10_000, sumOfSingles: -10_000, interaction: 0 };
 		const dam = (nodeId: string, onVolumes: boolean) => ({ nodeId, name: nodeId, firmYield: m, reliability: m, verdict: { firmYield: 'lower', reliability: 'lower' }, onVolumes });
 		const report = {
-			version: 'evidence-25',
+			version: 'evidence-26',
 			cumulative: { combined: { notAssessed: null, dams: [dam('capped', true), dam('plain', false)] } },
 			appendix: { baselineInputs: null },
 			summaries: { baseline: null, application: null }

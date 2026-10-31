@@ -110,7 +110,7 @@ export interface PinnedStatistics {
 export interface ModelState {
 	/**
 	 * The runoff model's state. Under per-unit rain (engine ≥ 1.78.0,
-	 * settings.unitRain `perUnit`, docs/model.md §2.4h) `state` is empty and
+	 * docs/model.md §2.4h; every run with a land unit from 1.109.0) `state` is empty and
 	 * `units` holds each land unit's GR4J state, with each unit's rule and
 	 * factors (`unitRecipes`) pinned as the CHIRPS bias factors are.
 	 */

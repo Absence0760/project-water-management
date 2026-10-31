@@ -160,6 +160,32 @@ describe('model revisions', () => {
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/changes-since`)).body.changes).toEqual([]);
 	});
 
+	it('reads and restores a run from before calibration locations in their shape, as 289 moved the project’s (issue #659)', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'History locations' })).body.project.id as string;
+		// A network of its own (node and crop ids are global).
+		const o = node('Outlet', null);
+		const weir = node('Weir', o.id, { kind: 'gauge', areaKm2: 0 });
+		const up = node('Up farm', weir.id);
+		const fresh = { nodes: [o, weir, up], crops: [], cropAreas: [], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, fresh)).status).toBe(200);
+		// What 289 gives a project with no outlet record and the site at the outlet.
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150), calibrateAtOutlet: false, calibrationRest: 'default' } })).status).toBe(200);
+		const rain = Array.from({ length: 60 }, (_, i) => (i % 7 === 0 ? 20 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-01-01', values: rain })).status).toBe(200);
+		const runId = (await owner.call('POST', `/projects/${pid}/runs`, { label: 'Old run' })).body.run.id as string;
+		// The run as an engine before 1.110.0 stored it: no calibration location keys.
+		await asOwner(`UPDATE model_run SET inputs = jsonb_set(inputs, '{settings}', (inputs->'settings') - 'calibrateAtOutlet' - 'calibrationRest') WHERE id = $1`, [runId]);
+		const since = await owner.call('GET', `/projects/${pid}/runs/${runId}/changes-since`);
+		expect(since.status).toBe(200);
+		expect(since.body.changes).toEqual([]);
+		// Positive control: a real change to them is a change.
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { calibrationRest: 'nearest' } })).status).toBe(200);
+		expect((await owner.call('GET', `/projects/${pid}/runs/${runId}/changes-since`)).body.changes).not.toEqual([]);
+		const res = await owner.call('POST', `/projects/${pid}/runs/${runId}/restore-inputs`, {});
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect((await owner.call('GET', `/projects/${pid}`)).body.project.settings).toMatchObject({ calibrateAtOutlet: false, calibrationRest: 'default', calibrationSiteNodeId: null });
+	});
+
 	it('starts an imported project with its imported state', async () => {
 		const doc = { format: 'water-management.project', version: 1, name: 'Imported', description: '', settings: {}, model: baseModel(), series: [] };
 		const res = await editor.call('POST', '/projects/import', doc);

@@ -667,7 +667,7 @@ English only: its readers are licensing assessors, like the methods page's.
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
 `/verify-email`, `/alerts/unsubscribe` and `/alerts/feedback` share one frame,
-`lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
+`lib/components/layout/AuthCard.svelte` (translated, § Language): the
 brand panel with the catchment drawing on the left (55 %), the form on the
 right, 440 px wide. They are forms, not dashboards: each fits a 1280 × 800
 window with no page scroll, in every state (the longest is the sign-up form
@@ -779,6 +779,19 @@ under a dead-invitation warning).
   *Forgot password?* and legal links (issue #51; `layout/authTextFloor.test.ts`
   scans the styles, `auth-pages.spec.ts` measures every visible text in
   English and Afrikaans).
+- **Theme.** The brand panel follows the app's theme like every other
+  surface (the OS preference, and `data-theme="light"` on `<html>` over a
+  dark OS): light mode is a pale cyan ground (`--accent-soft`) with the
+  heading in `--text`, the bullets in `--text-2` and the kicker and bullet
+  dots in `--accent`, the landing hero's colours; the drawing's farms and
+  gauges in `--brand-node` and its rivers, dams and outlet in `--accent`.
+  Dark mode keeps the navy panel (`--brand-panel`, white heading, the
+  drawing in `--brand-node` and `--brand-outlet`). Every colour is an
+  app.css token: AuthCard sets the `--scene-*` properties the drawing
+  reads. Text passes 4.5:1 and the drawing's rivers, farms and outlet 3:1
+  against the panel in both themes (`auth-layout.spec.ts` measures them).
+  A soft patch of the panel's ground sits behind the copy, so on a short
+  window (1280 × 800, Afrikaans) the bullets never sit on a river or farm.
 - **Motion.** The panel's drawing (`CatchmentScene.svelte`) moves for under
   5 s after the page opens, then holds still (WCAG 2.2.2), and not at all
   under reduced motion.
@@ -1485,7 +1498,7 @@ same way on every screen:
   no site) with station details (`SeriesMeta.station`,
   239_rain_stations.sql). A catchment may have several, by name, and each can
   serve one or more hydrological units. The kind's hint says so, and that
-  until Settings has a Flow generation section (now Model selection for flow generation) runs read catchment rainfall
+  until Settings has a Flow generation section runs read catchment rainfall
   as today (the first catchment rain series by name, which may be a
   station); *Rainfall — catchment*'s hint points to the station kind. For a
   new station the form asks for a **Station name** (required), and in *The
@@ -3272,19 +3285,30 @@ itself.
     (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
     (added since) hatched. Label: "82% supplied".
-  - **Calibration zone** (issue #555, offered whenever a calibration zone
-    applies, with or without a run: a gauge ticked in Calibrate at several
-    gauges under Per unit flow generation; `farmColour.ts` `zoneColouring`,
-    zones from `calibration/zoneGroups.ts`): each land unit in its zone's
+  - **Calibration zone** (issue #555; calibration locations, issue #659;
+    offered whenever more than one parameter set applies, with or without a
+    run: a ticked calibration location's group beside another's or beside
+    units on the catchment parameters; `farmColour.ts` `zoneColouring`,
+    groups from `calibration/zoneGroups.ts`): each land unit in its group's
     colour (the crop palette's tokens in order, `ZONE_TOKENS`, upstream first,
-    the calibration site's zone last), from the model as edited and the saved
-    settings by the engine's own rule (`resolveZones`), so it is what the next
-    run applies, not a run's (no "unsaved changes" line). Label: "Middle weir
-    zone", "Outflow gauge zone (calibration site)", ", not fitted yet" while
-    the zone's units take the catchment's parameters; a farm with no land area
-    is dashed, "no land area, in no zone". The key (**Colour: calibration
-    zone**) lists each zone with its unit count. Under Fragmentation, or with
-    no usable ticked gauge, the option isn't offered.
+    the headline location's last, then the units on the catchment parameters
+    in the next colour), from the model as edited and the saved settings by the
+    engine's own rule (`resolveLocations`), so it is what the next run
+    applies, not a run's (no "unsaved changes" line). Label: "Middle weir
+    zone", "Outflow gauge zone (outlet, headline)", "Catchment parameters (no
+    location)", ", not fitted yet" while a location's units take the
+    catchment's parameters. A unit given another location's parameters by
+    **Parameters from** takes its donor's colour inside a dotted ring in the
+    drawing's ink (`data-marker="borrowed"`) and reads "borrowed from Upper
+    weir"; a unit with no ticked location downstream reads what the rule for
+    such units gave it ("nearest upstream: Middle weir", "the headline's:
+    …"). A farm with no land area is dashed, "no land area, in no zone". The
+    key (**Colour: calibration zone**) lists each group with its own units
+    ("Middle weir zone: 2 units, 1 placed by nearest upstream"), then each group's
+    borrowed units on their own ringed line ("Borrowed from Upper weir: 1
+    unit"), and the caption mentions the ring only when a unit is borrowed.
+    With one parameter set (no usable ticked gauge, or one group holding
+    every unit) the option isn't offered.
   - **Dam level, end of latest run** (offered with a run and a dam): each
     dam's storage on the run's last day, from the run summary's dam figures
     (engine ≥ 1.2.0, issue #55, `damLevelsFromSummary`), or for an older run
@@ -3429,7 +3453,7 @@ itself.
   unit's Catchment area section, after the areas, an optional **MAP**
   (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
   a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only under Model settings' Model selection for flow generation, Per unit, where **MAP from the
+  read only under Model settings' Flow generation, where **MAP from the
   grid** can fill it and its source from a loaded MAP grid for every unit
   at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
@@ -4113,18 +4137,24 @@ map" card) stays the schematic; this is the geography.
   is never the only way to read a colour. Loading and a failed load (with
   Retry) show beside the pickers; dam level loads the run's dam levels as the
   Network does. The page fits 1440×960 with thirty units and the legend.
-- **Calibration zone** on the map (issue #555, `measure=zone`; maps.md §
-  Calibration zones on the map): offered in **Colour areas by** whenever a
-  calibration zone applies, with or without a run (with no run the picker
-  offers only it and Kind, and the no-run line stays). Each area linked to a
-  land unit takes its zone's colour (the Network's, read from the theme), every
+- **Calibration zone** on the map (issue #555, `measure=zone`; calibration
+  locations, issue #659; maps.md § Calibration zones on the map): offered in
+  **Colour areas by** whenever more than one parameter set applies, with or
+  without a run (with no run the picker offers only it and Kind, and the
+  no-run line stays). Each area linked to a land unit takes its group's colour
+  (the Network's, read from the theme; a borrowed unit its donor's), every
   other area "No figure"'s; the Run picker hides, since no run is read. A line
-  says where the zones come from, the legend (**Calibration zone**,
+  says where the groups come from, the legend (**Calibration zone**,
   `MapZoneKey.svelte`, its own chunk, loaded only while zones show, which keeps
-  the Map tab's chunk under its 60 KB ceiling) lists each
-  zone in words with its unit count, the picked feature's card adds
-  **Calibration zone** ("Middle weir zone"; "Not linked to a unit"; "In no
-  zone (not a land unit)") and Every feature a **Calibration zone** column.
+  the Map tab's chunk under its 60 KB ceiling) lists each group in words with
+  its unit count ("Upper weir zone (2 units, 1 placed by nearest upstream)"), and each
+  group's borrowed units on their own line with the donor's swatch ("Borrowed
+  from Upper weir (1 unit)", `data-marker="borrowed"`); the picked feature's
+  card adds **Calibration zone** ("Middle weir zone"; "Borrowed from Upper
+  weir"; "Nearest upstream: Middle weir"; "Not linked to a unit"; "In no zone
+  (not a land unit)") and Every feature a **Calibration zone** column. The
+  areas themselves carry no outline for a borrowed unit: the key and the card
+  say it.
 - **The picked feature's card** (the side column's Details): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Siting** for
@@ -5958,10 +5988,10 @@ with the table the data needs).
   Past three areas a station's line counts the units (*Rain for the
   catchment and 30 units.*).
   - **Derived rows.** With a station for the catchment, *Catchment
-    rainfall* opens with **Average catchment rainfall** (Fragmentation's
-    rain), and *Hydrological units* has one row per land unit: every one
-    when units have rain of their own (per-unit rain on, or a unit
-    assigned a station), else those a series is measured at. Each says
+    rainfall* opens with **Average catchment rainfall** (the catchment rain demand,
+    the dams and a rule-4 unit read), and *Hydrological units* has one row
+    per land unit: every one when units have rain of their own (each unit
+    makes its own runoff, Per unit), else those a series is measured at. Each says
     its MAP and, in one sentence, what its rain is made of with the
     settings as saved (`areaSentence`, the engine's `stationRatio`):
     *Bergwater × 1.16 (unit MAP 863.1 mm ÷ station MAP 745.0 mm); gaps
@@ -6155,7 +6185,7 @@ which shows under the fields: *Say where the station's MAP comes from …*,
 *A station's coordinates need both a latitude and a longitude, or
 neither.*). It says *Saved the station.*, or *Not saved: &lt;reason&gt;*.
 Viewers read the MAP with its source and where it stands, or *Not
-recorded*. Settings → Model selection for flow generation, Per unit, reads the run's catchment rain
+recorded*. Settings → Flow generation reads the run's catchment rain
 station's MAP from here, and History says *Recorded … as a rainfall
 station: MAP 745 mm (…)*, *Changed the rainfall station details of …* or
 *Cleared …*. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
@@ -6211,10 +6241,13 @@ gauge is badged *Gauge record (checks only)*: the run checks it against the
 simulated flow there (Runs & results → Plausibility checks), and it is never
 the outlet's record, whatever its name (the outlet's EWR test, the *What the
 model uses* badges and the setup checklist read only the outlet's; a gauge EWR
-site's own EWR test reads its record, engine ≥ 1.41.0). When Calibration → Calibration record → *Scored at* picks its
-gauge (engine ≥ 1.41.0), it is badged *Gauge record (calibration site)*
-instead: Fit automatically and a run's calibration statistics score it ([model.md
-§2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)). A record whose gauge has left the model says
+site's own EWR test reads its record, engine ≥ 1.41.0). When its gauge is
+a ticked calibration location (Calibration → Calibration record → *Calibrate
+here*, issue #659), it is badged *Gauge record (calibration location)*
+instead: Fit automatically fits its gauge's parameters on it and a run scores it ([model.md
+§2.10n](./model.md)). A flow record not placed in the network (its gauge
+gone, a node that isn't a gauge inside the network, or a second outlet record
+of a kind) says so in Series details under **Calibration**. A record whose gauge has left the model says
 so, until it is moved. **Source and unit** (issue #66, 107,
 [data-model.md](./data-model.md#series-source-and-unit-107_series_sourcesql)):
 Series details' **Source** (editors edit it, *Source*, saved on change,
@@ -6618,7 +6651,7 @@ editors run one now and read the map's proposals, viewers read.
   Getting started step and the Start sheet's data step
   (`?tab=series&rain=boundary#data-feeds`, and **Observed flow**
   `?tab=series&feed=dws#data-feeds`, which opens the DWS gauge's card with
-  the nearest gauging stations for an owner), Model settings' Rain for each unit line (Model selection for flow generation)
+  the nearest gauging stations for an owner), Model settings' Rain for each unit line (Flow generation)
   (`?tab=series&rain=units#data-feeds`) and Runs & results' stub for a run
   with no forecast (`res-forecast`, `runs/missingPanel.ts`). Each lands
   through `landOnAnchor` (`help/anchor.ts`): once the lazy panel's heading
@@ -7102,7 +7135,7 @@ other sections.
   `settings/sections.ts`, helpers in `ewr/headline.ts`; issue #444: the client
   asked where to choose which EWR to use, at the top). Named **Judge results
   by** until issue #586 R4-B (finding E14: judged by what?). The second panel
-  of the form, right under **Model selection for flow generation** (it was
+  of the form, right under **Flow generation** (it was
   the first until issue #614, which put the model input above it: the judge
   choice only reads results), and the side index's second link, in the lead
   group with no name above Data & rain, so Find a setting finds it ("judged"; it had no
@@ -7152,7 +7185,7 @@ other sections.
   from the Calibration page, § Calibration) land on
   that group once the tab's chunk has drawn it, held while the page settles
   (`holdAnchor`), with focus on its heading. The panels and cards that are
-  lazy chunks (`settings/lazySections.ts`: Rain gaps' cards, Model selection for flow generation's
+  lazy chunks (`settings/lazySections.ts`: Rain gaps' cards, Flow generation's
   station table, the evidence rule; on Calibration, Evaporation from the map)
   are waited for, then their heading (`landOnAnchor`, help/anchor.ts;
   a card's h4, as Units without a station's in its legend, counts), until the
@@ -7193,7 +7226,7 @@ other sections.
   own, moved to the Data page (`?tab=series#data-feeds`) and the Project page
   (`?tab=project#project-api-keys` and `#project-report-schedules`, [§
   Project](#project)) in issue #586 round 1; nothing follows the form now.
-  Model selection for flow generation (`#set-share`) heads the form above
+  Flow generation (`#set-share`) heads the form above
   them all, the client's main modelling choice (issue #614), with EWR the
   results are judged by (`#set-judge`, issue #444) right under it, the
   menu's first two links in a group with no name (issue #586 R4-B). The
@@ -7329,7 +7362,7 @@ other sections.
   shortened to the menu's words; the summary line under each says the rest);
   inside the long ones each sub-group is an `h3` in the order shown (in its
   fieldset's legend where it has one), so heading navigation reaches them:
-  under Model selection for flow generation its cards (Per unit: Each unit's rainfall station,
+  under Flow generation its cards (Per unit: Each unit's rainfall station,
   then the Flow share card; Units without a station an `h4` in its legend,
   issue #553); under Rain gaps its three cards, Gap-filling product (issue
   #604), CHIRPS gap filling and Flagged rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
@@ -7538,61 +7571,48 @@ two.
   have different fields, and it is the second list with water-year fields
   (the CHIRPS fit period is the first), short of the third caller that
   would justify a shared editor.
-- **Model selection for flow generation** (`#set-share`, issue #553 round 3;
-  [model.md §2.4h, §2.4i, §2.5](./model.md)): how natural flow is made, one
-  choice. Named **Flow generation** until issue #614, the Runoff group's one
-  panel, after Reporting; since then the **first panel** on the page, above
+- **Flow generation** (`#set-share`, issue #553 round 3;
+  [model.md §2.4h, §2.4i, §2.5](./model.md)): how natural flow is made.
+  Named **Flow generation** until issue #614, then **Model selection for
+  flow generation** while it held the Fragmentation / Per unit radio, and
+  Flow generation again from issue #658 (engine 1.109.0), when Per unit
+  became the only method. Since #614 the **first panel** on the page, above
   EWR the results are judged by, in the lead group with no name, at the
-  client's asking (the heading is their wording, in the app's sentence case;
-  their capitals were for emphasis, which the card's styling gives). It is
-  the page's **lead card** (`.panel.lead`, `data-lead`): a 2 px `--accent`
-  frame and its head tinted `--accent-soft`, both tokens with dark values,
-  and its two methods are **choice cards**, side by side where two 18rem
-  cards fit and one under the other on a phone, the picked one in the
-  accent (`:has(input:checked)`), each a radio still (`name="st-flowgen"`,
-  arrow keys move the pick) whose label covers the card, so a click anywhere
-  on it picks it. The explanations switch sits above it, since it has
-  explanations too. The engine's warnings name it "Model settings → Model
-  selection for flow generation"; an older run's "Model settings → Flow
-  generation" and "Settings → Flow generation" still link to it ([model.md §
-  Where a warning sends the reader](./model.md)). It replaced the Flow share panel and the
-  "Runoff from each unit's own rain" checkbox, which the operator found read as
-  two separate settings (2026-10-23). Under its line of values, a line that
-  stays with the explanations off says where the runoff model's parameters
-  are: "The runoff model’s parameters are fitted on Calibration, under Flow
-  calibration." (`flowgen-where`, linking to `?tab=calibration#set-flow`), so
-  the panel isn't taken for Calibration's Flow calibration (issue #586 E14).
-  A radio pair, **How natural flow is made** ("Method" until E14), each
-  method's name with what it does in plain words under it, in its card,
-  always shown and its radio's description (`FLOW_METHODS` `short`,
-  `flowGeneration.ts`; the words lined up with the name, past the radio):
-  **Fragmentation**, "one runoff run on the catchment rain, split between the
-  units" (the default: `settings.unitRain` null, absent or `catchment`; GR4J
-  once on the catchment rain, its flow split by each unit's natural MAR
-  share) or **Per
-  unit**, "a runoff run for each unit with land, on its own rain" (`{ mode:
-  'perUnit' }`: GR4J on each land unit's own rain). The names stay: the fit
-  record and the engine's "fitted under …" message use them. The radio writes the same `settings.unitRain` the checkbox did, so no
-  stored project changes and no migration was needed; switching to
-  Fragmentation keeps the Per unit setting (`draft.kept.unitRain`) until the
-  form is saved, and the stations assigned stay stored, so Per unit brings
-  them back; from issue #615 Fragmentation keeps the rest of the Per unit
-  setting too (`{ …, mode: 'catchment' }`) and reads it for the EWR shares. When the form's parameters come from a fit made under
-  the other method (`fitMethodMismatch`, the engine's `fitFlowMethod`: a fit
-  whose forcing records per-unit rain ran Per unit), an alert under the radio
-  says "Parameters not fitted for this method: the GR4J parameters were
-  fitted under Fragmentation. Fit the parameters again …", linking to
-  `#set-fit`, and the fit record lists the same caveat (`methodChanged`,
-  `fitRecordCaveats`); choosing the fit's method again clears it. The
-  summary line names the method ("Fragmentation · flow and EWR by each
-  unit's natural MAR", "Per unit · 2 units on a rainfall station · EWR by
-  each unit's natural MAR"; `summaries.ts`).
+  client's asking. It is the page's **lead card** (`.panel.lead`,
+  `data-lead`): a 2 px `--accent` frame and its head tinted
+  `--accent-soft`, both tokens with dark values. The explanations switch
+  sits above it, since it has explanations too. The engine's warnings name
+  it "Model settings → Flow generation"; an older run's "Model settings →
+  Model selection for flow generation" and "Settings → Flow generation"
+  still link to it ([model.md § Where a warning sends the reader](./model.md)).
+  It replaced the Flow share panel and the "Runoff from each unit's own
+  rain" checkbox (2026-10-23). Under its line of values, a line that stays
+  with the explanations off says where the runoff model's parameters are:
+  "The runoff model’s parameters are fitted on Calibration, under Flow
+  calibration." (`flowgen-where`, linking to `?tab=calibration#set-flow`),
+  so the panel isn't taken for Calibration's Flow calibration (issue #586
+  E14). Then the method, with nothing to choose (`flowgen-method`,
+  `FLOW_METHOD` in `flowGeneration.ts`): **Per unit**, "a runoff run for
+  each unit with land, on its own rain", and, as an explanation, what a unit
+  runs on (its station, else its own gauge, the catchment gauge scaled to
+  its MAP or its own CHIRPS; a unit with none of these runs on the catchment
+  rain and Run readiness lists it, a provisional call, issue #658; demand
+  and the dams keep the catchment rain). The Fragmentation / Per unit radio
+  (`st-flowgen`) is gone; every save writes `settings.unitRain` with `mode:
+  'perUnit'`. When the form's parameters come from a fit made under
+  Fragmentation (`fitMethodMismatch`, the engine's `fitFlowMethod`: a fit
+  from an engine before 1.109.0 whose forcing records no per-unit rain), an
+  alert says "Parameters not fitted for this method: the GR4J parameters
+  were fitted under Fragmentation, which is retired. Fit the parameters
+  again …" (`flowgen-refit`), linking to `#set-fit`, and the fit record
+  lists the same caveat (`methodChanged`, `fitRecordCaveats`); a new fit
+  clears it. The summary line names the method ("Per unit · 2 units on a
+  rainfall station · EWR by each unit's natural MAR"; `summaries.ts`).
   - **The catchment's rainfall station**, a card above the units' (issue
     #612 follow-up, `settings/FlowGenerationCatchment.svelte`, helpers in
     `settings/catchmentRainStation.ts`; `settings.rainStations.catchment`,
-    [model.md §2.4i](./model.md)), under both methods, since the catchment
-    rain is what GR4J runs on under Fragmentation and what demand and the
-    dams read under either: **Station** (*No station: the catchment rain
+    [model.md §2.4i](./model.md)): the catchment rain is what demand, the
+    dams and a unit on the catchment rain (rule 4) read: **Station** (*No station: the catchment rain
     series, as before stations*, the default, or one of the project's
     stations; a deleted one says so in red), then, with a station, **Then
     patch gaps from** (the same pull-downs and fill counts as a unit's,
@@ -7622,7 +7642,7 @@ two.
     `rain-patch-priority.spec.ts` covers the station, with a forecast tail;
     `catchment-rain-map.spec.ts` the MAP: entered, saved, scaling a run's
     station rain, and cleared.
-  - **Per unit** shows two cards. **Each unit's rainfall station**
+  - Then two cards. **Each unit's rainfall station**
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
     helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
     [model.md §2.4i](./model.md)): a line ("1 of 2 units with land have a
@@ -7669,14 +7689,6 @@ two.
     stacks into a block with its fields labelled, so nothing scrolls sideways
     (`flow-generation.spec.ts` at 390 px). Then **Units without a station**
     ([§ Calibration](#calibration), in Flow calibration's description) and, for editors, MAP from the grid.
-  - **Under Fragmentation too** (issue #615, model.md §2.5b), both cards
-    above show, under a line saying the setup there sets only how the EWR
-    is split ("GR4J also runs once on each unit's own rain, for each unit's
-    natural MAR share, and the catchment's one run still makes the flow.",
-    `flowgen-share-setup`). Switching to Fragmentation keeps the Per unit
-    setup (`settings.unitRain` becomes `{ …, mode: 'catchment' }`, not
-    null), so a unit's station, the MAP period and the reference gauge carry
-    over both ways; a project that never set one shows the defaults.
   - **Flow share and the EWR split**, a card with nothing to set. First a
     state line (shown with the explanations off, `ewr-split-hint`): "Each
     unit's share is its natural MAR: its own GR4J runoff over the run's
@@ -7685,8 +7697,7 @@ two.
     and the priority users' demand between the units. The run's summary
     lists each unit's share, and the hydrological unit table's In use
     column the latest run's." (the table linked, `grid=nodes`). There is no
-    choice: every unit has one share, the same under both methods
-    ([model.md §2.5](./model.md)). The **Flow share method** select (by
+    choice: every unit has one share ([model.md §2.5](./model.md)). The **Flow share method** select (by
     area, high/low MAP split, manual) and the **High/low MAP split**
     fieldset are gone in engine 1.105.0 (issue #616), as
     `settings.ewrSplit` (1.94.0 – 1.104.x) went in issue #615. Then, when
@@ -7694,16 +7705,11 @@ two.
     series of its own, and no MAP with a gauge MAP; `unitsOnCatchmentRain`,
     an estimate from the setup, as the run decides from the records), a line
     naming them, up to six and a count: they run on the catchment rain, so
-    their share follows their area (`ewr-split-catchment-rain`). The
-    line after it follows the method: Fragmentation, "GR4J runs once on the
-    catchment rain, and the units' shares split its flow between them. To
-    give each unit its own runoff, choose Per unit above." (an explanation);
-    Per unit, "Each unit makes its own runoff, so the shares don't split the
-    flow." (a state line; `e2e/tests/flow-share-hint.spec.ts`). The panel's
-    summary line ends "EWR by each unit's natural MAR" (Per unit) or "flow
-    and EWR by each unit's natural MAR" (Fragmentation), after the units on
-    a rainfall station (under Fragmentation only when there are some;
-    `e2e/tests/ewr-split.spec.ts`).
+    their share follows their area (`ewr-split-catchment-rain`). Then a
+    state line: "Each unit makes its own runoff, so the shares don't split
+    the flow." (`share-hint`; `e2e/tests/flow-share-hint.spec.ts`). The
+    panel's summary line ends "EWR by each unit's natural MAR", after the
+    units on a rainfall station (`e2e/tests/ewr-split.spec.ts`).
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
@@ -8278,8 +8284,8 @@ dialog (`settings/MonthlyPasteDialog.svelte`) and fills only its own row:
 Flow calibration's pan coefficients here (**Paste monthly pan
 coefficients**), Demand's A-pan on Model settings (**Paste monthly A-pan
 evaporation**). Their links to Model settings' panels say so ("Demand, on
-Model settings"; the areal rainfall note: "When Model selection for flow generation on Model
-settings runs each unit on its own rain (Per unit)…", issue #586 E14), and Flow
+Model settings"; the areal rainfall note: "Flow generation on Model
+settings runs each unit on its own rain…", issue #586 E14), and Flow
 calibration's line points at *How the shown run fits* for NSE and PBIAS.
 
 - **Flow calibration** (rain → natural flow, `#set-flow`). **Layout (issue
@@ -8291,7 +8297,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   line is one line here (cut with an ellipsis; the whole text is its link's
   name and title), so a changed field's cell is as tall as its neighbours'.
   **Rain into GR4J**: the areal rainfall correction, one switch while off
-  (rain for each unit and the MAP-grid proposal moved to Model selection for flow generation →
+  (rain for each unit and the MAP-grid proposal moved to Flow generation →
   Per unit, issue #553).
   **GR4J potential evaporation**: the choice, the annual figure and the
   monthly row; under the pan row, **Fill or edit the row: preset, FAO-56
@@ -8345,15 +8351,15 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
     under ("Areal rainfall correction"), and the report's inputs table
-    shows it. Under Model selection for flow generation's Per unit, a note under it (shown even with
-    the explanations off, linking to Model selection for flow generation) says it applies only to the units that fall back
+    shows it. Under Flow generation, a note under it (shown even with
+    the explanations off, linking to Flow generation) says it applies only to the units that fall back
     to the catchment rain, and the report's inputs table adds a "Rain for
     each unit (GR4J rain)" row (`report/inputs.ts`).
     **Units without a station** (`settings.unitRain`, issue #482,
     `settings/UnitRainFields.svelte`, its own chunk, helpers in
     `settings/unitRain.ts`; [model.md §2.4h](./model.md)) was this card's
     "Rain for each unit" until issue #553 round 3 moved it, without its
-    checkbox, to Model selection for flow generation → Per unit (below): what a land unit with no
+    checkbox, to Flow generation (below): what a land unit with no
     rainfall station runs on, the rule from before stations. A line says how many units with
     land have a MAP ("1 of 2 units with land has a MAP."), with a link that
     opens Data feeds' Rain for each unit on the Data page
@@ -8389,7 +8395,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     reference unit the model no longer has with land says so under the
     field (runs ignore the reference until another is picked). The Settings
     tab checks it itself (`unitRainFormError`), so Save is blocked before the
-    chunk has loaded; the problem is listed against Model selection for flow generation.
+    chunk has loaded; the problem is listed against Flow generation.
     Under Per unit, editors also get **MAP from the grid**
     (`settings/UnitMapProposal.svelte`, its own chunk, helpers in
     `settings/unitMapProposal.ts`; `GET`/`POST …/map/unit-map`, [maps.md § MAP
@@ -8497,8 +8503,10 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     the Map; a boundary the grid can't stand for (no value inside, under
     half covered) says why. Synthetic data carries the "Synthetic test data"
     warning. With more than one grid loaded, a **Grid** picker.
-- **Calibration record** (`#set-record`). **Layout (issue #521):** the
-  window's From and To, *Scored at* and *Compare with* on one row, then the
+- **Calibration record** (`#set-record`). **Layout (issue #659; #521):**
+  first the **Calibration locations** table (below), then any flow record
+  not placed in the network, then **At the outlet: <outlet name>** (an h4):
+  the outlet location's window's From and To and *Compare with* on one row, then the
   exclusions with **Exclude a water year** / **Exclude a date range** in the
   list's header row (`common/PeriodList.svelte`; an excluded water year's
   hint gives its days day first, "WY 2021/22: 1 Oct 2021 – 30 Sep 2022",
@@ -8512,33 +8520,25 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   ranges are a table, one row per record (Record, Highest gauging, Lowest
   gauging, Source); the day rules sit two to a row with the first column
   wider, so "Censor: only ask the model to reach the highest gauging
-  (default)" shows whole. The window's, the site's, the quality flags', the
+  (default)" shows whole. The window's, the quality flags', the
   river-stop months' and the gap-filling scoring paragraphs are `.explain`.
-  The fields: the calibration window and flow
-  series (`calibration/CalibrationWindowFields.svelte`), with, when the
-  model has a gauge above the outlet with a flow record attached (or a site
-  is already set), **Scored at** (engine ≥ 1.41.0, `settings.calibrationSiteNodeId`,
-  model.md §2.10k): *The outlet* or each such gauge by name (engine
-  `calibrationSites`; a gauge without a record is not offered, and a stored
-  site that has lost its gauge or record shows as *A gauge no longer in the
-  model, or with no record*). Its hint says the fit then scores the simulated
-  flow at that gauge against its record, that the gauged ranges and gap
-  filling are the outlet records', and that a run's statistics are scored
-  there too while the outlet's EWR test stays the outlet's, and links to the
-  project's first flow record on the Data tab
-  (`?tab=series&series=<id>#data-chart`), whose Series details' **Measured
-  at** places it (issue #464). With no gauge record yet (and a flow record to
-  place), an editor sees that line in its stead: "Scored at the outlet. To
-  score at a gauge inside the network, set its flow record's Measured at in
-  Series details on the Data tab (the gauge has to be in the network, above
-  the outlet)", so the choice is findable before it exists. A stored site
-  whose gauge has left the model or has no record attached any more gets a
-  warning under the select (runs score the outlet's record and warn, and Fit
-  automatically refuses the site). The site's records decide *Compare with*'s choices, Fit
-  automatically's validation record and whether a fit can start (a project
-  whose only record is at the site can fit); the fit record's *Fitted to*
-  names the gauge ("Gauge record at the gauge “Middle weir”") and says when
-  the site has changed since the fit. And the
+  The panel's line starts with the ticked locations ("Calibrated at
+  Outflow gauge, Middle weir · headline Middle weir", or "No location
+  calibrated", `settings/summaries.ts`).
+  The outlet's fields: the calibration window and flow series
+  (`calibration/CalibrationWindowFields.svelte`; there is no *Scored at*
+  any more, issue #659: where calibration fits is the locations table's).
+  With no gauge record yet (and a flow record to place), an editor sees
+  "To calibrate at a gauge inside the network too, set its flow record's
+  Measured at in Series details on the Data tab (the gauge has to be in the
+  network, above the outlet)", linking to the project's first flow record
+  (`?tab=series&series=<id>#data-chart`), so the gauge locations are
+  findable before they exist. These are the outlet records' settings (the
+  top level, model.md §2.10n): the gauged ranges, gap filling, missing and
+  low-flow periods are theirs alone. The headline location's records decide
+  Fit automatically's validation record and whether a fit can start; the
+  fit record's *Fitted to* names a gauge ("Gauge record at the gauge
+  “Middle weir”"). And the
   **calibration exclusions** (`calibration/CalibrationExclusions.svelte`):
   "Exclude a water year" and "Exclude a date range" add a row, each with a
   required **Reason**. A water year shows the dates it covers ("WY 2015/16:
@@ -8567,7 +8567,9 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   at or below it are scored. A blank reason or source, a reversed
   range, a threshold not above 0 or the same record and range twice shows
   an alert and blocks Save (the save bar links here); the section's summary
-  line adds "low flows only in N periods". Under them, **Quality flags for Fit
+  line adds "low flows only in N periods". With the outlet unticked as a
+  calibration location, a note says no fit uses them, though the run's
+  checks of the outlet's record still do. Under them, **Quality flags for Fit
   automatically** (`settings/QualityFlagsFields.svelte`, helpers in
   `settings/qualityFlags.ts`; engine ≥ 1.22.0, CR-18/19, model.md §2.10h): for
   each calibration record the project has (both when not known), its
@@ -8603,32 +8605,91 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   the run's statistics). Each number is held inside its
   bounds by its field, so the section never blocks Save. The fit record
   below lists the fitted record's source and its gap filling.
-    Last, when the model has a gauge above the outlet with a flow record,
-  **Calibrate at several gauges** (engine 1.106.0, issue #555,
-  `calibration/CalibrationZonesTable.svelte`, its own chunk,
-  `lib/calibration/zones.ts`, `settings.calibrationZones`, [model.md
-  §2.10n](./model.md)): a table of the calibration site (the outlet, or
-  *Scored at*'s gauge, its **Calibrate here** always ticked and disabled:
-  its window is the fields above) and every other such gauge, each with
-  **Calibrate here: <gauge>**, its **Record** coverage in complete water
-  years spanned (gaps not counted; "(too short)" under 2, from the series
-  list) and its zone's **Parameters** ("Not fitted yet: its units run on the
-  parameters above" until a fit applies some). A first tick adds the gauge's
-  row; an untick keeps it (its window and parameters stay for the next
-  tick). Under each gauge with a row, a fold (`<gauge>:` and its window,
-  exclusions and suspect-day rule) with its own **From** / **To**,
-  **Record**, **Suspect days** (*As the calibration site's quality flags*,
-  *Left out of the fit* or *Scored*), exclusions and fit record line. A
-  reversed window or a bad exclusion blocks Save, named by its gauge
-  ("Calibration zone at Middle weir: …"), through the window's own blocker.
-  Under Fragmentation the ticks are disabled and a note says calibrating at
-  several gauges needs Per unit flow generation, linking to Model selection
-  for flow generation; with a gauge ticked under Per unit, "Fit
-  automatically fits N zones, upstream first." The legend and the fit's
-  *Steps, upstream first* carry the *Calibration zones* help tip (help
-  article `calibration-zones`); the fieldset is `#fld-cal-zones`, where the
-  Warnings page's fix for a `calibration.zone.*` warning lands. Not yet
-  (issue #555's next round): the zones on the Network tab and the Map.
+  **Calibration locations** (engine 1.110.0, issue #659; several gauges
+  since #555; `calibration/CalibrationLocationsTable.svelte`, its own chunk,
+  `lib/calibration/zones.ts`, [model.md §2.10n](./model.md)), first in the
+  panel whenever the outlet has a flow record or a gauge inside the
+  network has one: a table of every place calibration can fit on, none
+  special and none required. The outlet's row first (*<name> (outlet)*,
+  `settings.calibrateAtOutlet`), then each gauge with a record by name
+  (`settings.calibrationZones`), then any ticked row whose gauge has left
+  the model or lost its record (*Can’t be fitted: …*, so it can be
+  unticked). A new project is created with the outlet ticked before it has
+  a record: its row shows *Can’t be fitted: no flow record at the outlet
+  yet. Add one on Data, or untick it.*, and the fit card refuses its step
+  before starting ("The outlet has no flow record yet, so its step can’t be
+  fitted: …"). The regional prior asks for the outlet's own zone as
+  `zone=outlet` and for the headline with no zone. Each row has **Calibrate here: <location>**, a **Headline**
+  radio, its **Record** coverage in complete water years spanned (gaps not
+  counted; "(too short)" under 2, from the series list) and its
+  **Parameters** (the outlet's are the catchment parameters, GR4J
+  parameters above; a gauge's "Not fitted yet: its units run on the
+  catchment parameters" until a fit applies some). A first tick adds a
+  gauge's row; an untick keeps it (its window and parameters stay for the
+  next tick). Under the table, **Pick the headline automatically** (the
+  same radio group; the auto row's radio reads *Auto*): the headline
+  (`settings.calibrationSiteNodeId`, null = auto) is the location whose
+  statistics a run reports and that the uncertainty ensemble and the
+  automated calibration vary; auto is the outlet when it is ticked, else
+  the ticked gauge with the largest area above it. Unticking the picked
+  headline puts it back to auto. A line says "Fit automatically fits N
+  locations. Headline: <name> (picked automatically: …)". With none ticked,
+  a warning (`data-testid="calibration-none"`): "No location is calibrated:
+  every unit runs on the catchment parameters (GR4J parameters, above).
+  Tick Calibrate here at a location to fit it." Then **Units with no
+  ticked location downstream take** (`settings.calibrationRest`): *The
+  nearest ticked location upstream on their river* (new projects), *The
+  headline location's parameters* (what a project from before 1.110.0
+  reads), or *The catchment parameters*, with how many land units it
+  reaches now. Then the per-unit **Parameters from** table (below). Under each
+  gauge with a row, a fold (`<gauge>:` and its window, exclusions and
+  suspect-day rule) with its own **From** / **To**, **Record**, **Suspect
+  days** (*As the outlet's quality flags*, *Left out of the fit* or
+  *Scored*), exclusions and fit record line. A reversed window or a bad
+  exclusion blocks Save, named by its gauge ("Calibration location at
+  Middle weir: …"), through the window's own blocker. The legend and the
+  fit's *Steps, in dependency order* carry the help tip (help article
+  `calibration-zones`, *Calibration locations*); the fieldset is
+  `#fld-cal-zones`, where the Warnings page's fix for a `calibration.zone.*`
+  warning lands. Settings saved before engine 1.110.0 are read on this page
+  in the locations shape (`zones.ts` `normalizedLocations`, the engine's
+  `normalizeCalibrationLocations`; settingsDraft `adopt`, on the saved copy
+  and the form alike, so it isn't an edit): an inner calibration site is its
+  ticked row and the picked headline, the outlet unticked.
+    Inside the locations, once a location is ticked, **Parameters from**
+  (issue #659 option 2, `calibration/UnitParamsTable.svelte`, its own chunk
+  lazily imported by the locations table, rows from
+  `lib/calibration/unitParams.ts`, `settings.unitParamsFrom`; model.md
+  §2.10n), with the *Calibration locations* help tip: a fold ("No unit
+  borrows another location’s parameters", or the borrowers by name, "Side
+  farm from Upper weir", up to three, else "4 units borrow …"; its action
+  *Choose per unit*; open while any unit borrows or the fit would refuse)
+  holding a table of every land unit (a stale choice first, then the
+  borrowed units, then the rest, each by name) with a select **Parameters
+  from: <unit>** (*Its own zone (Middle weir)*, or for a unit with no ticked
+  location downstream the rule that places it, *Nearest upstream (Middle
+  weir)*, *The headline’s (…)* or *The catchment parameters (no location)*;
+  then every other ticked location, gauges by name, the outlet as "Outflow
+  gauge (outlet)"; the rule's own location too, which pins the unit there)
+  and under it **Runs on:**, what the next run gives it by the engine's own
+  rule ("Upper weir (borrowed)", "Middle weir (nearest upstream)", "The
+  catchment parameters"), as the select's description. Two columns, so it
+  fits a phone. A choice of a location no longer ticked stays, marked
+  invalid, with a line saying a choice reading "(not a ticked location)"
+  needs changing. Above the fieldset, a live region gives the fit's refusal
+  of the choices as they stand (the engine's `locationFitPlan`: a borrowing
+  cycle naming both gauges, or a location left with no unit draining
+  through it), e.g. "Fit automatically can’t run: the units above "Upper
+  weir" borrow …"; any other exception is a bug and throws. Save isn't
+  blocked by it (a run needs no fit); Fit automatically is.
+    **Flow records not placed in the network** (`lib/calibration/unplaced.ts`):
+  a flow record whose Measured at names a gauge no longer in the model or a
+  node that isn't a gauge inside the network, or a second outlet record of
+  a kind (a run reads only the first by name), can't be calibrated on. A
+  warning lists each by name, linking to its Series details on Data
+  (`?tab=series&series=<id>#data-chart`) with why and "Set its Measured at
+  to a gauge inside the network"; Series details says the same under
+  **Calibration** (`data-testid="series-unplaced"`).
 - **Regional prior** (`#set-prior`, `calibration/RegionalPriorPanel.svelte`,
   its own chunk, the first card under Fit the parameters; issue #622,
   model.md §2.10m) shows GR4J's parameter ranges from donor basins for the
@@ -8791,25 +8852,31 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     stored until Save. The result stays shown, its button then reading
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
-  - **The stepwise fit** (engine 1.106.0, issue #555, model.md §2.10n):
-    with a gauge ticked under *Calibrate at several gauges* (Per unit only),
-    **Fit automatically** fits one step per zone, upstream first, then the
-    calibration site, each in its own worker run with the choices above
-    (`lib/calibration/runner.ts` `startStepwiseFit`, the plan from the engine's
-    `zoneFitPlan`, which refuses a zone, or a site, with no land unit, shown
-    as the fit's error). The progress line starts "Step 1 of 2 (an upstream
-    zone)", and the bar spans every step. The result opens with **Steps,
-    upstream first** (`data-testid="fit-steps"`): one row per step (*1.
-    Upstream zone* / *2. Calibration site*, where it was scored, its land
-    units, its fitted parameters, and the objective's fit, split-sample and
-    dry → wet validation scores), each earlier step's notes in a closed
-    *Notes on step N* (the short-record and no-dry-year warnings among them),
-    then the calibration site's step in full under **Step N: the
-    calibration site**. **Apply to form** writes every step: the site's
-    parameters and fit record as before, and each zone's parameters and fit
-    record (`FitRecord.zone`) into its row. Not yet: automated calibration
-    and the uncertainty ensemble per zone (they fit or perturb the site's
-    zone alone).
+  - **The fit's plan and steps** (engine 1.110.0, issue #659; #555,
+    model.md §2.10n): the card reads the plan from the form and the network
+    as they stand (`zones.ts` `fitPlanOf`, the engine's `locationFitPlan`).
+    With no location ticked it says so and Fit automatically is disabled;
+    a location whose group has no unit draining through it, or units
+    borrowing each other's parameters in a circle, shows the engine's
+    refusal (`data-testid="fit-plan-error"`) before any worker starts. With
+    two or more locations an ordered list gives the order ("Middle weir",
+    "Outflow gauge (headline), after Middle weir"). **Fit automatically**
+    fits one step per ticked location in dependency order, each in its own
+    worker run with the choices above (`lib/calibration/runner.ts`
+    `startStepwiseFit`, every step's parameters written where the engine
+    reads them, `withLocationParams`). The progress line starts "Step 1 of
+    2 (<location>)", and the bar spans every step. The result opens with
+    **Steps, in dependency order** (`data-testid="fit-steps"`): one row per
+    step (*1. Location* / *2. Headline*, the location, **After** (the
+    locations it waited for), its land units with how many are borrowed,
+    its fitted parameters, and the objective's fit, split-sample and dry →
+    wet validation scores), each other step's notes in a closed *Notes on
+    step N*, then the headline's step in full under **Step N: <name>, the
+    headline** (the report the card shows is the headline's, whichever step
+    it was). **Apply to form** writes every step: the outlet's parameters
+    and fit record into the top-level settings, each gauge's into its row
+    (`FitRecord.zone`). The card's fit record fold below is the headline's
+    (*Fit record at <gauge>, the headline* when it is a gauge).
     At the card's foot (issue #521), **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`), in a fold whose line is the
     record's first ("Fit record: GR4J fit of 24 Sep 2026 10:05 UTC",
@@ -9607,7 +9674,13 @@ read it before.
      **Show only the first 3 things to check**, so the results reach the
      first screen, issue #521; the report lists them all; each item starts with
      a capital, `warningItem`, though some engine warnings start lower case,
-     #586 round 2), then, collapsed,
+     #586 round 2; the engine's one warning per unit with no rain of its own,
+     engine-audit.md FM3, reads as one item when two or more units have it,
+     `groupUnitsOnCatchmentRain`: "Unit rain: 58 units have no rain of their
+     own …, so they run on the catchment rain: "Farm 1", … "Farm 5", and 53
+     more (Rain for each unit names them all)", at the first one's place, the units in name order, so
+     a project on catchment rain alone doesn't fold every other warning away;
+     the Warnings page keeps each unit's own warning), then, collapsed,
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). A warning with a stable code (`summary.warningCodes`, engine
@@ -9656,20 +9729,27 @@ read it before.
      runoff model's (mm); a run with the optional terms, too wide for any
      column, scrolls inside its box with the water year held at its left edge,
      as on a phone).
-     **Calibration zones** (issue #555, `calibration/ZoneCalibrationTable.svelte`,
-     rows from `calibration/zoneStats.ts` `runZoneRows`), under the statistics
-     when the run applied calibration zones: one row per zone, upstream first
-     and the calibration site's zone last, with its land units, the GR4J
-     parameters they ran on ("(the catchment’s: not fitted yet)" for a zone
-     with none of its own), the run's NSE, KGE, PBIAS and days at its own gauge
-     on its own window (`summary.calibrationZones`, model.md §2.10n; the site's
-     row is the run's statistics above) and **Scores are**: in sample
-     ("in-sample") only when that zone's own parameters were fitted on those
-     days, else why not ("parameters not from an automatic fit", "fitted on
-     other days", "parameters edited since the fit"), each zone by its own fit
-     record. A gauge with no record in its window reads "no record in its
-     window". The printable report's Calibration section shows the same
-     table.
+     **Calibration locations** (issue #555; issue #659,
+     `calibration/ZoneCalibrationTable.svelte`, rows from
+     `calibration/zoneStats.ts` `runZoneRows`), under the statistics when the
+     run applied more than one parameter set: one row per group, the headline
+     location first ("Headline · outlet" or "Headline · gauge", its row the
+     run's statistics above), then every other location ("Gauge", "Outlet")
+     upstream first, then the units on the catchment parameters ("No
+     location", not scored). Each row has its land units, naming those that
+     take its parameters other than as its own zone ("Borrowed: Side farm ·
+     Outside every location: Lower farm", from `summary.unitRain.paramSource`),
+     the GR4J parameters they ran on ("(the catchment’s: not fitted yet)" for
+     a location with none of its own), the run's NSE, KGE, PBIAS and days at
+     that location on its own window (`summary.calibrationZones`, the
+     outlet's by its node id; model.md §2.10n) and **Scores are**: in sample
+     ("in-sample") only when that location's own parameters were fitted on
+     those days, else why not ("parameters not from an automatic fit",
+     "fitted on other days", "parameters edited since the fit"), each by its
+     own fit record. A location with no record in its window reads "no record
+     in its window". A run from before engine 1.110.0 reads its calibration
+     site's zone as the headline. The printable report's Calibration section
+     shows the same table.
      The **calibration check** (issue #444, `calibration/CalibrationCheck.svelte`,
      sums in `calibration/calibrationCheck.ts`), inside `#res-calibration`
      under the statistics, where a hydrologist calibrating reads the fit, so it
@@ -9716,7 +9796,7 @@ read it before.
      `#res-gauges`, `runs/GaugeCheckFlows.svelte`, pure parts in
      `runs/checkGauges.ts`), under the flow-duration curve: for every gauge
      inside the network with its own flow record that the run doesn't score
-     (the plausibility checks' gauges less the calibration site), "Flow at
+     (the plausibility checks' gauges less the ones the run scores as calibration locations), "Flow at
      &lt;gauge&gt; (checks only): simulated and observed", its record against
      the simulated `outflow` there (the run's `observed_flow_check` at the
      node, engine ≥ 1.90.0, model.md §2.10k), in the page's flow unit with a
@@ -9734,9 +9814,10 @@ read it before.
      gauges**, and only the gauges shown load their series; a failed load
      says so with **Try again**.
      A record 30× the simulated flow (a unit error at upload) reads at a
-     glance as a gap between the lines and a PBIAS near 97 %. A gauge
-     scored instead, made the calibration site in Calibration → Calibration
-     record → Scored at, moves to the calibration site's chart above. A run
+     glance as a gap between the lines and a PBIAS near 97 %. A gauge the
+     run scores as a calibration location (ticked in Calibration →
+     Calibration record, the headline's or another's, issue #659) isn't
+     listed: its record is a calibration score, not a check. A run
      made before engine 1.90.0 says once, naming the gauges, that it was
      made before gauge records were charted and to run the model again. The side index
      has a line for it; on the bar the **Flow duration** link stands for it.
@@ -11574,7 +11655,18 @@ by someone who hid it, it shows in the sidebar in its place, as any hidden
 section does. The page is `aria-busy` while the volumes or the run's
 comparison are loading (the comparison lands above the rest of the page and
 moves it); `e2e/support/allocations.ts` `openAllocations` waits for it to
-clear.
+clear. Picking another run drops the last run's figures at once and shows
+*Loading…* until the picked run's land, so no figure sits under another
+run's name; a volume or band change reloads the same run's comparison with
+its figures still shown. A comparison that fails says so with **Try again**,
+on the viewer's totals card too (`AllocationTotals`'s error state). A
+delete, an import's removal or the viewers' switch that fails shows its
+error in red (`role="alert"`), and the switch goes back to what is saved.
+Deleting a volume puts the focus on the Delete of the row now in its place
+in the same list (the Registered volumes table or the picked unit's
+volumes), else that list's heading; removing an import, on the next
+import's **Remove this import**, else the Registered volumes heading
+(`focusAfterRemove`; `e2e/tests/allocations-states.spec.ts`).
 
 **What a viewer sees** (decision D3, 162). Until an owner switches viewers
 on, a viewer gets one card instead of the page below, *Registered water use
@@ -11690,7 +11782,9 @@ to look into first** (`foldList` from `common/fold.ts`, so six rows show
 whole). A `unit=` link to a unit further down keeps its rows (both sources)
 after the five, so a shared link shows its row on the first screen.
 
-**The picked hydrological unit** (`unit=`, else the first row) sits beside the list: its
+**The picked hydrological unit** (`unit=`, else the first row; a `unit=` the run's list
+doesn't have shows the first row with a note, "That hydrological unit isn't in this
+run, so this shows …", as a deleted `run=` does) sits beside the list: its
 name with links to it **On the Network** and in **Hydrological units**; a bar per
 water year and source under the caption "Modelled use per water year
 (October–September), m³" (modelled use, amber above registered, green within
@@ -11733,7 +11827,10 @@ registered* / *No use*), named with its figures for a screen reader; a click
 opens its comparison above (`unit=`) and scrolls to it. Above the map a
 **Water source** choice (Surface water, the default; Groundwater; Both
 together, total use ÷ total registered) and a **Water year** picker (the
-mean of the whole water years, or one; part years are never offered). Under
+mean of the whole water years, or one; part years are never offered). Both
+are in the URL (`mapSource=groundwater|both`, `mapYear=<first year>`, the
+defaults left out), so a reload or a shared link keeps them; each choice is
+a step Back returns from, and **Hide the map** drops them with `map`. Under
 it the **Key** names every band in words with a swatch and how many units
 are in it, and says the bands are fixed for the map, apart from the
 comparison's ±10 % band; then **Hydrological units with no area on the
@@ -12517,7 +12614,7 @@ March") is kept against what it is about.
     (the run notes stay the modeller's one explanation; these are comments
     from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
-    gaps, Calibration record, Fit the parameters, WR2012 check, Model selection for flow generation (keyed `share`, its Flow share name before issue #553, Flow generation before issue #614), EWR, Reserve rule
+    gaps, Calibration record, Fit the parameters, WR2012 check, Flow generation (keyed `share`, its Flow share name before issue #553, Flow generation from issue #614 to #658), EWR, Reserve rule
     tables, Drought restrictions, Reporting, Simulation period, Data quality,
     Outcome matrix, Seasonal outlook, Evidence, Automatic runs), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`),
     always last in the head, after the panel's own action (**Propose from the
@@ -12992,13 +13089,17 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     it but who, when and its rule, since the browser stores an ensemble only
     when every set has run), the baseline's bands (R1), the paired bands
     (R2) and the printed rules.
-  - **3 Model and data**: calibration record, then, when the baseline ran
-    with calibration zones (`evidence-22`, issue #555), **Calibration zones**:
-    the run's zone table plus each zone's fit (its description, edited
-    parameters, in-sample, split-sample and dry → wet scores on its own
-    objective; "No stored fit: not validated" for a zone with none; from the
-    document's `calibrationZones`, `zoneStats.ts` `evidenceZoneRows`), then
-    validation (`FitProvenance`, or
+  - **3 Model and data**: calibration record (the headline location's
+    window, `zones.ts` `runHeadlineSettings`, issue #659), then, when the baseline
+    ran with calibration zones (`evidence-22`, issue #555), **Calibration
+    locations**: the run's location table plus, from `evidence-25` (issue
+    #659), each location's **Period** and every unit by where its parameters
+    come from ("Own zone: Top farm · Borrowed: Side farm"), and each
+    location's fit (its description, edited parameters, in-sample,
+    split-sample and dry → wet scores on its own objective; "No stored fit:
+    not validated" for a location with none; from the document's
+    `calibrationZones`, `zoneStats.ts` `evidenceZoneRows`), then
+    validation (the headline location's fit record, `FitProvenance`, or
     *Not assessed* without a stored fit), WR2012, the validation statement,
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
@@ -13215,14 +13316,17 @@ their own application's in [their own view](#the-applicants-pack-view).
   the API (the frozen report may be issued, both runs still carry the
   server's stamp, signed under the current pack statement), each ticked or
   with what to do; an issued pack's issue stamp; a superseded pack's link to
-  the newer version; a withdrawn pack's reason, marked as shown publicly. A
+  the newer version; a withdrawn pack's reason, marked as shown publicly
+  (for a draft withdrawn before issue, which has no verify page, marked as
+  the members' only, and the page prints no verify line or **Verify page**
+  for it: `packVerifyRef` needs an issue date). A
   red alert when the stored manifest no longer matches its hash. For an
   editor: **Issue pack** (enabled once every line is ticked; a confirm says
   the verify page then answers publicly with the signers' names), **Delete
   draft** (an unsigned draft only), **New version…** of an issued pack (a
   new draft from the same run's report, superseding it once issued),
   **Withdraw…** (a dialog asking for a reason, 1–1 000 characters, that says
-  the reason is public). The server holds every rule and its refusal is
+  the reason is public, or for a draft that it stays with the members). The server holds every rule and its refusal is
   shown with the ways out it names.
 - **Sign-off** is Appendix B.2's, against the pack statement: **Sign off this
   evidence pack…** opens the run's sign-off dialog with the pack's version,
@@ -14253,10 +14357,13 @@ the catalogue, [§ Language](#language)); both unit-tested.
   days, a feed's past its own usual delay, defaulting by source, a series'
   with no new reading past yesterday's, 2 by default; a feed's failures in
   a row, dead jobs in 24 hours, units short in the last 7 days; range-checked in the form and by the
-  API; while staleness alerts are on for anything, an unsaved feed's or
+  API, the form checking only a rule that is on: one switched off keeps the
+  level it was saved with when its box holds an empty or out-of-range one,
+  `alerts.ts` `ruleChanges`, so that box can't refuse the save; while staleness alerts are on for anything, an unsaved feed's or
   series' rule shows as on, since the next evaluation switches it on and
   Save writes every row), a
-  *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
+  *Firing* mark (switching a rule off and saving clears it at once, and its
+  waiting mails aren't sent), and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing. Under the rules, **Was it
   useful?** (`alerts/AlertFeedbackSummary.svelte`, 151, issue #74): what
   people answered to "Was this alert useful?" over the last year, one line

@@ -29,12 +29,20 @@ import { defineHandler } from '../registry.js';
 
 export const PackReproducePayload = z.object({ packId: z.string().uuid() }).strict();
 
+/**
+ * Whether a check re-runs the model with this engine: each run and the
+ * headline pair (`reproduce:<run>`, `reproduce:headline`), and § 8's future
+ * yield, every pair run again from the frozen factors (`climate:delta`,
+ * evidence-23). On another engine than the runs' these are expected to differ.
+ */
+export const isRerunCheck = (id: string) => id.startsWith('reproduce:') || id === 'climate:delta';
+
 /** What the outcome is called on the pack, from the engine's checks. */
 export function reproductionOutcome(r: Pick<BundleCheckResult, 'ok' | 'checks' | 'engine'>): Exclude<PackReproductionOutcome, 'no_bundle'> {
 	if (r.ok) return 'reproduced';
 	// Only the re-runs differ, and some run was made with another engine than this one: expected to differ, not evidence of a fault.
 	const failed = r.checks.filter((c) => !c.ok);
-	const onlyReruns = failed.length > 0 && failed.every((c) => c.id.startsWith('reproduce:'));
+	const onlyReruns = failed.length > 0 && failed.every((c) => isRerunCheck(c.id));
 	if (onlyReruns && r.engine.runs.some((v) => v !== r.engine.here)) return 'other_engine';
 	return 'not_reproduced';
 }

@@ -62,7 +62,8 @@ describe('a member from the snapshot', () => {
 	it('outlookSeasonInput carries only the season: the analogue’s rain and A-pan from the decision date, the season’s window', () => {
 		const m = outlookSeasonInput(input, base, SEASON, a, scale(0.85));
 		expect(m.problems).toEqual([]);
-		expect(Object.keys(m.input.series).sort()).toEqual(['evap_apan_mm', 'rain_forecast_mm']);
+		// The catchment's season and each land unit's own (Per unit, the only method since engine 1.109.0).
+		expect(Object.keys(m.input.series).sort()).toEqual(['evap_apan_mm', 'rain_forecast_mm', 'rain_forecast_mm@a', 'rain_forecast_mm@b']);
 		const full = outlookMemberInput(input, base, SEASON, a, scale(0.85)).input;
 		const from = toEpochDay(SEASON.decisionDate) - toEpochDay(full.series.rain_forecast_mm!.startDate);
 		expect(m.input.series.rain_forecast_mm).toEqual({ startDate: SEASON.decisionDate, values: full.series.rain_forecast_mm!.values.slice(from) });

@@ -58,7 +58,7 @@ Source workbooks (kept locally outside the repo, in the private source repo, nev
 ```mermaid
 flowchart LR
   R[Daily rain<br/>catchment / CHIRPS / forecast] --> NF[Natural flow<br/>Flow data sheet]
-  NF --> FR[Fragmentation<br/>share per farm]
+  NF --> FR[Unit shares<br/>natural MAR share per farm]
   R --> ID[Net irrigation demand<br/>per farm]
   C[Crops × A-pan × areas] --> ID
   FR --> FB[Farm balance<br/>per farm, calc order]
@@ -114,7 +114,7 @@ exports round for display.
 | Sheet | Holds | App equivalent |
 | --- | --- | --- |
 | `[Network]` | Elements (Farm or Gauge), upstream elements (up to 7), "Has transfer?", the one **outflow gauge**. The rows must be in calculation order (upstream first). Bifurcation is not allowed. | `node` rows; `downstream_node_id` gives the tree, and the engine works out the calculation order |
-| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns (`areaKm2`, the total). The high- and low-MAP areas and the fragmentation method are read and not used: from engine 1.105.0 (issue #616) the flow is split by each unit's natural MAR (§2.5), and the importer notes the method it skipped. The return flow % r becomes `irrigationEfficiency` 1 − r and `returnFlowFraction` r, all the losses returning (N1); the min % is not imported (Q5) |
+| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns (`areaKm2`, the total). The high- and low-MAP areas and the fragmentation method are read and not used: from engine 1.105.0 (issue #616) each unit's share is its natural MAR share (§2.5), and from 1.109.0 (issue #658) each unit makes its own runoff (§2.4h; the import stores no `unitRain`, which runs Per unit's defaults), and the importer notes the method it skipped. The return flow % r becomes `irrigationEfficiency` 1 − r and `returnFlowFraction` r, all the losses returning (N1); the min % is not imported (Q5) |
 | `[Crop demand]` | WR90 A-pan evaporation by month, effective-rainfall %, crop factors by month | `settings.apanMm`, `settings.effectiveRainFraction`, `crop` |
 | `[Farm demand]` | Crop area (m²) per farm per crop, days per month (Feb = 28.25 by default) | `crop_area`, `settings.februaryDays` |
 | `[Transfers]` | Hand-written transfer formulas, plus per-transfer parameters (from, to, months, max m³/s, min dam %) | `transfer` rows (structured rules) |
@@ -679,7 +679,8 @@ keeps that record.
   below `settings.calibration.rainThresholdMm` counts as 0 (§2.3).
 - **`settings.calibration`** keeps only `rainThresholdMm` and
   `catchmentAreaKm2` (the area rain falls on, null = the sum of the farm
-  areas). The legacy model's keys (`RETIRED_CALIBRATION_KEYS`: `a`, `b`, the
+  areas; from engine 1.109.0 used only by a model with no land unit: with
+  one, the area is the land units' sum and the run warns, §2.4h). The legacy model's keys (`RETIRED_CALIBRATION_KEYS`: `a`, `b`, the
   season factors, summer months and winter thresholds, the initial base flow,
   the reset ratio, the shift-peak indices, the amplitude, `DaysMax` and the
   recession tables) are dropped when settings are read, and migration 064
@@ -1035,7 +1036,8 @@ setting, so run comparison reads it as legacy.
   beside the model picker, and a fit is refused the same way.
 - **No catchment area, no run.** GR4J's flow is millimetres over the
   catchment, turned into m³ with the catchment area
-  (`calibration.catchmentAreaKm2`, else the sum of the farms' areas). When
+  (the land units' areas summed; with no land unit,
+  `calibration.catchmentAreaKm2`, else the sum of the farms' areas). When
   that is 0 (every farm without an area and no override) there is nothing to
   turn it into, so `runModel` refuses the run with *catchment area is 0 —
   give the farms an area (km²) or set calibration.catchmentAreaKm2*. (Found
@@ -1066,7 +1068,8 @@ setting, so run comparison reads it as legacy.
 8. **Direct flow:** Qd = max(0, Q1 + F).
 9. **Flow:** Q = Qr + Qd, in mm over the catchment. Natural flow (m³/day) =
    Q × area (km²) × 1000, over the catchment area
-   (`calibration.catchmentAreaKm2`, else the sum of the farm areas).
+   (each land unit's own run over its own area, summed, §2.4h; with no land
+   unit, `calibration.catchmentAreaKm2`, else the sum of the farm areas).
 
 **Fluxes recorded:**
 
@@ -1450,7 +1453,7 @@ and the series explorer:
 | `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, and (engine ≥ 1.101.0, [Gap-filling product](#gap-filling-product-engine--11010-issue-604-r4-b)) 5 ERA5-Land, 6 IMERG Late. Output with rain-source periods from engine 0.30.0, and in every run with rain from engine 1.27.0 (`rainSourceCodes`: without periods, the same pick as `rain_final`), so a series download can say where each day's rain used came from | NaN when no source has a value |
 | `rain_era5l` (engine ≥ 1.101.0) | ERA5-Land as read, before its correction, on every day it has a value ([Gap-filling product](#gap-filling-product-engine--11010-issue-604-r4-b)). Only output when `settings.gapRain` reads ERA5-Land and the run has it | NaN |
 | `rain_imerg_late` (engine ≥ 1.101.0) | IMERG Late as read, the newest version with the day, on every day it has a value, not only the days it filled. Only output with `imergLate` and IMERG rain in the run; `summary.gapRain.segments` says which version filled which day | NaN |
-| `rain_areal` (engine ≥ 1.13.0) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J runs on, and what the catchment's water balance reads. Only output when the settings have an areal rainfall correction | NaN where `rain_final` is |
+| `rain_areal` (engines 1.13.0 – 1.108.x) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J ran on under Fragmentation, and what the catchment's water balance read. Only output when the settings had an areal rainfall correction and the run had no unit runoff; from 1.109.0 (Per unit only, issue #658) a run with a land unit doesn't write it (the units' `rain_used` is GR4J's rain) | NaN where `rain_final` is |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
@@ -2509,10 +2512,13 @@ monthly rainfall distribution).
 corrected CHIRPS, else forecast, §2.4a) × the factor of its water-year month.
 It is applied after every other rain step (zero-rain runs, accumulations,
 rain-source periods, the CHIRPS correction), so it scales the finished
-series. GR4J's `rain_used` shows the corrected rain, and a run with a
-correction adds the column **`rain_areal`** (rain_final × the month's factor,
-NaN where rain_final is) beside `rain_final`, which stays the rain before
-the correction. `summary.runoff.arealRain` records the correction with
+series. Under Per unit (the only method since engine 1.109.0, §2.4h) it
+applies to the units on the catchment rain (rule 4) only: a unit's own
+record or MAP already sets its level. GR4J's `rain_used` (the units' rain,
+area-weighted) shows the corrected rain; `rain_final` stays the rain before
+the correction. Engines 1.13.0 – 1.108.x also wrote **`rain_areal`**
+(rain_final × the month's factor, NaN where rain_final is) for a run on the
+catchment rain; from 1.109.0 only a model with no land unit runs that way. `summary.runoff.arealRain` records the correction with
 `rainBeforeMm`, the rain over the run before it (`summary.runoff.rainMm` is
 after).
 
@@ -2560,27 +2566,51 @@ calibration → **Areal rainfall correction** edits it (ui.md).
 ### 2.4h Runoff from each unit's own rain (engine ≥ 1.78.0, issue #482)
 
 `settings.unitRain` (`UnitRainSettings` in `packages/engine/src/project.ts`;
-the forcing in `packages/engine/src/runoff/unitRain.ts`). Absent, null or
-`{ mode: 'catchment' }` (the default) = GR4J runs once on the catchment rain
-and each unit gets natural × share (§2.5), exactly as before: a test runs
-every example catchment and random networks both ways, unit records in the
-input or not, and compares the output to the bit. An unusable setting
-(`unitRainError`) runs the catchment rain with a warning.
+the forcing in `packages/engine/src/runoff/unitRain.ts`). **Per unit is the
+only flow generation method since engine 1.109.0** (issue #658): every land
+unit runs GR4J on its own rain, and the natural flow is the units' runoff
+summed. Engines 1.78.0 to 1.108.x also had **Fragmentation** (`unitRain`
+absent, null or `{ mode: 'catchment' }`, the default): GR4J once on the
+catchment rain, its flow split between the units by share (§2.5). The client
+asked for it to go (issue #658). From 1.109.0 an absent, null or `catchment`
+setting runs Per unit, keeping the rest of a stored setting (its gauge MAP,
+MAP period and reference gauge; `resolveUnitRain`), and an unusable one
+(`unitRainError`) runs Per unit's defaults (no gauge MAP, the default MAP
+period, no reference) with a warning. Migration 286 moved every stored
+project to `{ mode: 'perUnit', … }` and wrote a `settings.flow_method_reset`
+History event ([data-model.md](./data-model.md)); the API stores a
+`catchment` it is sent as `perUnit`, and the run builder writes `{ mode:
+'perUnit', … }` into every run's inputs (`runs/execute.ts`
+`stationGaugeMap`). A test runs `catchment`, null and absent against
+`perUnit` on random networks with unit records and compares the output to
+the bit; the Per unit golden cases (`unitRain.golden.test.ts`) stayed
+unchanged across 1.109.0.
+
+**A unit with nothing of its own** (no station, gauge, MAP or CHIRPS) runs
+on the catchment rain (rule 4 below), as it did under Fragmentation, and the
+run warns naming it; Run readiness lists it before a run, rather than
+blocking the run. This is a provisional call (issue #658): the alternative,
+refusing the run until every unit has rain of its own, would stop projects
+the migration moved until the hydrologist set each unit up.
 
 **In Settings** (issue #553 round 3, [ui.md § Settings &
-calibration](./ui.md)) this is the **Model selection for flow generation** method (the
-panel was named Flow generation until issue #614, which put it first on
-Model settings):
-**Fragmentation** is `unitRain` absent, null or `catchment`; **Per unit** is
-`perUnit`. The radio writes the same setting the earlier "Runoff from each
-unit's own rain" checkbox did, so the move changed no stored project and no
-run. Under Per unit each land unit takes its rainfall station if
-`settings.rainStations.units` assigns one (§2.4i), else the chain below
-(*Units without a station* in Settings). A fit records the method it ran
-under (its forcing has `unitRain` only under Per unit), and a fit made under
-the other method reads "Parameters not fitted for this method" in Settings
-and on the fit record (`fitFlowMethod`, `FitRecordStatus.methodChanged`):
-GR4J's parameters were fitted to other rain, so refit.
+calibration](./ui.md)) the panel is **Flow generation** (named Model
+selection for flow generation from issue #614 to #658, while it held the
+Fragmentation / Per unit radio). Each land unit takes its rainfall station
+if `settings.rainStations.units` assigns one (§2.4i), else the chain below
+(*Units without a station* in Settings). A fit records the forcing it ran
+under (`forcing.unitRain`). A fit from an engine before 1.109.0 without it
+ran under Fragmentation and reads "Parameters not fitted for this method:
+the fit ran under Fragmentation …" in Settings and on the fit record
+(`fitFlowMethod`, `FitRecordStatus.methodChanged`): GR4J's parameters were
+fitted to other rain, so refit. From 1.109.0 a fit without it is Per unit on
+a model with no land unit.
+
+**The catchment area.** GR4J runs on the land units' areas summed:
+`calibration.catchmentAreaKm2` is ignored whenever the model has a land unit,
+with a warning when it differs by more than 1 % (`resolveCatchmentAreaKm2`).
+It applies only to a model with no land unit (below). Under Fragmentation it
+was the area of the catchment's one run.
 
 **Why.** The glossary has always given a hydrological unit "its own area,
 MAP and rain gauge" (§7), but GR4J ran once for the catchment and split the
@@ -2913,8 +2943,9 @@ should say which surface it came from, so the period can be traced.
 
 **A reference unit that isn't a land unit** (no such node, a gauge or a
 farm without an area) can't have a cell: the run warns and levels each
-unit's CHIRPS as without a reference. Per-unit rain off (`mode:
-'catchment'`) ignores the reference.
+unit's CHIRPS as without a reference. A reference stored with the retired
+`mode: 'catchment'` applies from engine 1.109.0, which runs it as Per unit
+(before, Fragmentation ignored it).
 
 **Output.** `summary.unitRain.reference` (`UnitRainReferenceFit`, only when
 the setting has a usable reference): `{ gauge, unitId, unitName, mapMm (the
@@ -2954,8 +2985,9 @@ WR2012 check and a Reserve rule table read it routed down the reaches net
 of the natural losses, §2.6b). Each unit's one share, its natural MAR share
 (§2.5, §2.5b, engine ≥ 1.105.0), comes from this runoff: it splits the EWR,
 sets the land cover's low-flow threshold (`Q75 × share`, §2.5a) and the
-senior users' claims (§2.7c); under Fragmentation it comes from GR4J runs on
-this forcing made for the shares only, and also splits the flow. The catchment area is the land units' areas summed:
+senior users' claims (§2.7c); under the retired Fragmentation (1.105.0 –
+1.108.x) it came from GR4J runs on this forcing made for the shares only,
+and also split the flow. The catchment area is the land units' areas summed:
 `calibration.catchmentAreaKm2` is ignored, with a warning when it differs
 by more than 1 % (`resolveCatchmentAreaKm2`). With no land unit at all (no
 farm has an area), the setting can't apply: GR4J runs on the catchment rain
@@ -3062,8 +3094,9 @@ them on the member's record cut at the decision date, so its history runs
 at the levels its season was made at and its season is the snapshot
 member's to the bit. `verify/` (the independent cross-check) models
 this section from the text above, in random and dense networks and the
-probes `unit-rain-rules`, `unit-rain-forecast-warmup`, `unit-rain-map-period`
-and `unit-rain-no-land-unit`; the outlook's engine-only inputs (a unit's
+probes `unit-rain-rules`, `unit-rain-forecast-warmup`, `unit-rain-map-period`,
+`unit-rain-no-land-unit` and `fragmentation-retired-unset` (a project that
+never set `unitRain`, engine 1.109.0); the outlook's engine-only inputs (a unit's
 `rain_forecast_mm@<unit>`, `settings.unitRain.pinned`) are outside it, with
 forecast mode.
 
@@ -3096,9 +3129,8 @@ for each unit](./maps.md#map-for-each-unit).
 - the run window still follows the catchment's rain series (§2.1), so a
   project needs a catchment series or a set simulation period;
 - each unit's share (the EWR split, the land cover's low-flow threshold,
-  the senior users' claims and, under Fragmentation, the flow) is its
-  natural MAR share under both methods (§2.5, §2.5b, engine ≥ 1.105.0, its
-  period provisional, engine-audit.md ES1, U1, FM1);
+  the senior users' claims) is its natural MAR share (§2.5, §2.5b, engine
+  ≥ 1.105.0, its period provisional, engine-audit.md ES1, U1, FM1, FM2);
 - the reference fit reads the checked catchment rain over its whole record,
   including the days a §2.4e rain-source period sets from an alternate
   series or the reanalysis fallback: the fit then compares that series, not
@@ -3138,11 +3170,12 @@ the station's own 0.05° cell, when the backend has it, is
 **The setting.**
 
 - `catchment`: `{ stationId, scaleToMap?, correctAgainst?, patch? }` or null, the
-  station of Fragmentation's average catchment rainfall (the one GR4J run,
+  station of the catchment rain (what demand, the dams and a unit on rule 4
+  read; under Fragmentation, engines before 1.109.0, also the one GR4J run,
   §2.4a, §2.5);
-- `units`: land unit id → the same assignment, read under per-unit
-  rain (`settings.unitRain` `perUnit`, §2.4h) and, under Fragmentation, by
-  the share runs that make the units' natural MAR shares (§2.5b);
+- `units`: land unit id → the same assignment, each unit's own rain
+  (§2.4h; under Fragmentation, engines 1.105.0 – 1.108.x, read only by the
+  share runs that made the units' natural MAR shares, §2.5b);
 - `scaleToMap` defaults to true and covers every station of the
   assignment, its main station and its patch stations alike;
   `correctAgainst` (the station whose rain, at the area's MAP, the area's
@@ -3189,7 +3222,7 @@ An assignment without a station id is dropped with a warning
 `MAP_MM_MIN`–`MAP_MM_MAX`), which falls back to the units' mean.
 
 **Where it is set** (issue #553 round 3, [ui.md § Settings &
-calibration](./ui.md)): Settings → Model selection for flow generation, with Per unit chosen,
+calibration](./ui.md)): Model settings → Flow generation
 lists every land unit with its **Station** (the project's stations, or *No
 station*, which keeps the unit on §2.4h's chain; satellite rain is never an
 option, CHIRPS only fills gaps), **Then patch gaps from** (`patch`, issue
@@ -3205,11 +3238,10 @@ coordinates, the unit it **Stands in** (`sites`). Ticking units sets one
 station and one patching priority for all of them. The form stores
 defaults as none (scaling on, the unit's own station, the patching
 priority [CHIRPS]), and an emptied setting as null, so assigning a station
-and taking it away again stores what was there. Under Fragmentation `units` stays stored and only the share runs read it (§2.5b).
+and taking it away again stores what was there.
 `catchment` is set above the units' table under **The catchment's
 rainfall station** (issue #612 follow-up, `settings/FlowGenerationCatchment.svelte`,
-shown under both methods: the catchment rain is GR4J's under Fragmentation
-and demand's and the dams' under either): **Station** (*No station* keeps
+the catchment rain is demand's, the dams' and a rule-4 unit's): **Station** (*No station* keeps
 the catchment rain series), **Then patch gaps from**, **Scale to catchment
 MAP** and **Gaps: CHIRPS corrected against**, with the units' controls and
 stored defaults (`settings/PatchChain.svelte` is the patching priority's
@@ -3465,7 +3497,7 @@ view and a run of the same input can't disagree. Settings reads each
 station's usability from the same code over the stored model input
 (`stationPatchChoices`).
 
-### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
+### 2.5 Unit shares (`[Fragmented flow]`, `[Fragmented EWR]`)
 
 Each land unit (a farm with an area) has one **share** (`share[f]`, 0–1) of
 the catchment: its **natural MAR share**, the unit's own GR4J natural runoff
@@ -3474,23 +3506,28 @@ out). There is no method to choose (engine 1.105.0, issue #616). The shares
 add up to 1 by construction, a farm with no area has 0, and the one share
 sets everything a unit's share sets:
 
-- **The flow under Fragmentation**: `runoff[f][t] = naturalFlow[t] × share[f]`,
-  so the units' runoff adds up to the catchment's natural flow every day
-  (workbook: `× frag[f]`, `ROUND(…, 0)`; the engine doesn't round). The
-  catchment's one GR4J run makes the natural flow; the share runs of §2.5b
-  make only the shares. Under Per unit (§2.4h, engine ≥ 1.78.0) a land
-  unit's runoff is its own GR4J runoff instead, and the share does the rest
-  below. Settings → Model selection for flow generation says which.
 - **The EWR**: `ewr[f][t] = outlet EWR[t] × share[f]` (§2.5b; workbook:
-  `pragmaticEwr[month(t)] × frag[f]`, `ROUND(…, 0)`), under both methods.
-- **The land cover's low-flow threshold**: `q = share × Q75` (§2.5a), under
-  both methods.
-- **The senior users' claims** (§2.7c), under both methods.
+  `pragmaticEwr[month(t)] × frag[f]`, `ROUND(…, 0)`).
+- **The land cover's low-flow threshold**: `q = share × Q75` (§2.5a).
+- **The senior users' claims** (§2.7c).
 
-So under Fragmentation the EWR and the flow are split by the same shares,
-and at any unit or EWR site the requirement ÷ the natural flow reaching it is
-the outlet's ratio. The fallbacks (the area shares, or every share 0 with no
+A land unit's runoff is its own GR4J runoff (§2.4h): the share no longer
+splits the flow. The fallbacks (the area shares, or every share 0 with no
 land unit) are §2.5b's.
+
+**Fragmentation, engines 1.105.0 – 1.108.x.** The flow generation method
+Fragmentation (§2.4h) ran GR4J once on the catchment rain and split its flow
+by the same shares: `runoff[f][t] = naturalFlow[t] × share[f]` (workbook:
+`× frag[f]`, `ROUND(…, 0)`; the engine didn't round), so the units' runoff
+added up to the natural flow every day and at any unit or EWR site the
+requirement ÷ the natural flow reaching it was the outlet's ratio. GR4J also
+ran once per land unit on the Per unit forcing, for the shares only (§2.5b).
+Engine 1.109.0 retired it (issue #658, [engine-audit.md](./engine-audit.md)
+FM2): a stored Fragmentation setting runs Per unit. An older run keeps its
+record (`ewrSplit.runoffFrom` `shareRuns`, `catchmentRain`, `summary.shareRain`)
+and reads as it ran. A natural flow supplied without the units' runoff
+(`runModelWith`, the workbook regression suite) is still split by the area
+shares.
 
 **Before engine 1.105.0** the flow share was chosen in `[Farm spec]`
 (`settings.flowShareMethod`):
@@ -3579,11 +3616,11 @@ in mm/yr over its condensed area, the figure Le Maitre et al. compare
 (≈ 97 mm/yr nationally).
 
 **Each day**, per farm with land cover (network/landcover.ts), with I0 = its
-natural runoff (natural flow × share; under Per unit its own GR4J runoff) and
+natural runoff (its own GR4J runoff, §2.4h; natural flow × share without the units' runoff, and under Fragmentation before engine 1.109.0) and
 q = share × the catchment's natural flow exceeded on 75 % of the run's days
 (its low-flow threshold; from engine 1.28.0 of its historical days, so a
 forecast tail doesn't move it, §2.4f). The share is the unit's natural MAR
-share under both methods from engine 1.105.0 (§2.5, issue #616; before, its
+share from engine 1.105.0 (§2.5, issue #616; before, its
 flow share, engine-audit.md U1):
 
 ```
@@ -3634,10 +3671,10 @@ close to, but not exactly, `MAR_u` (low-flow days lose `LOW_u`).
 Each unit's EWR requirement `Y` is the outlet's EWR (the pragmatic EWR, or
 the daily EWR of §2.9f) × the unit's **EWR share**; an EWR site's requirement
 `Z` adds up the shares above it (§2.7). The EWR is split **one way only, by
-each unit's natural MAR**, under both flow generation methods (the client,
-issue #615; decisions in issue #619). From issue #616 the same share is the
-unit's only share: it also splits the flow under Fragmentation, sets the
-land cover's low-flow threshold and the senior users' claims (§2.5):
+each unit's natural MAR** (the client, issue #615; decisions in issue #619).
+From issue #616 the same share is the unit's only share: it also sets the
+land cover's low-flow threshold and the senior users' claims (§2.5), and,
+under the retired Fragmentation (engines 1.105.0 – 1.108.x), split the flow:
 
     EWR share[f] = MAR_f ÷ Σ MAR_u
 
@@ -3656,29 +3693,31 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   asked. Shares taken from the accumulated MAR would count headwater runoff
   once for every unit below it, add up to more than 1 and ask the units for
   more EWR than the outlet needs.
-- **Per unit** (`settings.unitRain` `perUnit`): the units' own GR4J runs,
-  the runoff they feed the network (the `runoff_natural` column).
-- **Fragmentation** (engine-audit.md FM1): the run also runs GR4J once per
+- **Where the runoff comes from.** The units' own GR4J runs (Per unit, the
+  only method since engine 1.109.0, §2.4h), the runoff they feed the
+  network (the `runoff_natural` column).
+- **Fragmentation** (engines 1.105.0 – 1.108.x, engine-audit.md FM1;
+  retired in 1.109.0, FM2): the run also ran GR4J once per
   land unit on the **Per unit forcing** (§2.4h's chain and the units'
   rainfall stations, §2.4i, with the MAP period and reference gauge kept in
-  `settings.unitRain`, whose mode is `catchment`), with the run's one
+  `settings.unitRain`, whose mode was `catchment`), with the run's one
   parameter set, PE and warm-up, **for the shares only**. The catchment's
-  one GR4J run makes the flow, split by these shares (§2.5, engine 1.105.0,
-  issue #616). These runs' daily series are not
-  output, and their forcing warnings stay out of the run (Per unit gives
-  them). The shares are the same, to the bit, as a Per unit run's on the
-  same inputs. Cost: on the 12-unit synthetic catchment of `run.perf.test.ts` a
+  one GR4J run made the flow, split by these shares (§2.5, engine 1.105.0,
+  issue #616). These runs' daily series were not
+  output, and their forcing warnings stayed out of the run. The shares were
+  the same, to the bit, as a Per unit run's on the same inputs. Cost: on the 12-unit synthetic catchment of `run.perf.test.ts` a
   Fragmentation run took a median 283 ms (140 ms before) and a calibration
   evaluation 91 ms (29 ms; it now also runs the units to the MAR period's
   end), inside the 1 s and 200 ms budgets (2026-10-28, a dev laptop).
 - **Units on the catchment rain.** A land unit with no rain of its own (no
   station, no gauge or CHIRPS series of its own, no MAP with a gauge MAP)
   runs on the catchment forcing (§2.4h rule 4), so its natural MAR is in
-  proportion to its area. Under Fragmentation the run lists those units by
-  name in its one note on the split (`ewrSplit.catchmentRain`), and Run
-  readiness and Model settings → Model selection for flow generation name
-  them; the run is never refused for them. With every unit on rule 4 the
-  shares are the area shares (to 1e-12).
+  proportion to its area. The run's forcing warns naming each one (§2.4h),
+  and Run readiness and Model settings → Flow generation name them; the run
+  is never refused for them (a provisional call, issue #658). With every unit
+  on rule 4 the shares are the area shares (to 1e-12). (A Fragmentation run,
+  1.105.0 – 1.108.x, listed them in its one note on the split,
+  `ewrSplit.catchmentRain`.)
 - **The MAR period** (provisional, engine-audit.md ES1): the run's complete
   water years (1 October to 30 September, every day inside the run),
   historical days only, never a forecast tail's (§2.4f); a run without one
@@ -3699,12 +3738,10 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   (§2.7h, `handsOffEwr`) and the drought restriction's EWR trigger at a
   gauge (§2.7i) all read the split EWR. At the outlet the trigger reads the
   whole EWR, and the outlet's own `Z` is the shares' sum × the EWR, the
-  whole EWR. From engine 1.105.0 (issue #616) the flow under Fragmentation
-  (`I`), the senior users' claims and the land cover's low-flow threshold
-  use the same share, so the requirement ÷ the natural flow reaching an
-  inner EWR site or a hands-off EWR flow is the outlet's ratio. (With #615
-  alone, never released, Fragmentation split the EWR and the flow by
-  different shares, issue #619's sequencing.)
+  whole EWR. From engine 1.105.0 (issue #616) the senior users' claims and
+  the land cover's low-flow threshold use the same share (and, until
+  1.109.0, the flow under Fragmentation, `I`, so the requirement ÷ the
+  natural flow reaching an inner EWR site was the outlet's ratio there).
 - **Resumed runs, outlooks and calibration.** A run resumed from a snapshot
   (a seasonal outlook's members, §2.15) takes the capture run's period,
   shares and record, so it splits its EWR as the uninterrupted run did; a
@@ -3713,18 +3750,19 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   on the history cut at the decision date. One resumed from a snapshot that
   pinned none takes the area shares (`why: 'resumed'`; a snapshot refuses
   another engine version, so this is a fallback only). Calibration refills
-  each candidate's shares from that candidate's own unit runoff, Per unit's
-  or Fragmentation's share runs, over the same period, and the senior
+  each candidate's shares from that candidate's own unit runoff over the
+  same period, and the senior
   users' claims made from them (`refillShares`), then the daily outlet EWR,
   so a scored day is the run's to the bit (§2.10). Scenarios, firm yield, sensitivity and the
   uncertainty ensemble each run `runModel`, so each works its shares out
   from its own inputs.
 - **The record.** `RunSummary.ewrSplit` holds the split applied, why it
   fell back, the period (`{ start, end, waterYears }`, `waterYears` 0 for
-  the whole run), where the runoff came from (`runoffFrom`: `unitRain` or
-  `shareRuns`) and the units on the catchment rain; each
+  the whole run) and where the runoff came from (`runoffFrom`: `unitRain`;
+  `shareRuns`, with the units on the catchment rain, on a Fragmentation run
+  of 1.105.0 – 1.108.x); each
   `FarmSummary.ewrShare` is the share applied, and from engine 1.105.0
-  (issue #616) its `flowShare` is the same share. A run notes the split (one run warning) only when there is something to say: a fallback, or units a Fragmentation run put on the catchment rain; a clean split is in the summary alone. The summary CSV
+  (issue #616) its `flowShare` is the same share. A run notes the split (one run warning) only when there is something to say: a fallback (or, resumed from an older Fragmentation run's snapshot, the units it put on the catchment rain); a clean split is in the summary alone. The summary CSV
   writes one `Natural MAR share (%)` column for a run from 1.105.0 (an older
   run keeps `Flow share (%)` and `EWR share (%)`) under an `EWR split
   between units by` line, and the report's
@@ -3740,14 +3778,16 @@ where `MAR_f` is the unit's natural runoff summed over the **MAR period**.
   keeps its record, with the method it asked for (`ewrSplit.method`).
 - **Checks** (`checkEwrSplit`, in the invariant tests): every unit's flow
   share and EWR share are the same; its `Y` is the outlet EWR × that share
-  every day; under Fragmentation its runoff + land-cover reduction is the
-  natural flow × that share every day; with no land unit every share is 0;
-  otherwise the shares add up to 1, a farm without area has 0, the area split is the area shares, Per
-  unit's shares are recomputed from the run's own `runoff_natural` columns
-  over the recorded period, and Fragmentation's units on the catchment rain
-  have equal shares per km². `verify/` writes the split from this section
-  (`model.py`, probes `ewr-split-station-units`, `ewr-split-short-run` and
-  `ewr-split-fragmentation`).
+  every day; without the units' runoff (no land unit, `runModelWith`) its
+  runoff + land-cover reduction is the natural flow × that share every day;
+  with no land unit every share is 0; otherwise the shares add up to 1, a
+  farm without area has 0, the area split is the area shares, and the shares
+  are recomputed from the run's own `runoff_natural` columns over the
+  recorded period. A split from Fragmentation's share runs (`runoffFrom`
+  `shareRuns`) is no run of engine 1.109.0's and fails. `verify/` writes the
+  split from this section (`model.py`, probes `ewr-split-station-units`,
+  `ewr-split-short-run`, and `ewr-split-fragmentation`, the retired setting
+  on the same network, which runs Per unit).
 
 ### 2.6 Transfers (`[Transfers]`)
 
@@ -7097,13 +7137,13 @@ at). Only the actionable warnings are coded so far:
 | Rain gaps elsewhere | `rain.sourcePeriod` (§2.4e), `rain.missingDays` (W2), `rain.none`, `rain.chirpsShadowed` | dates, `days` | `set-rain`; the last two the Data page |
 | Rain stations (§2.4i) | `rain.station.noRecord`, `.unreliable`, `.unreliableInvalid`; `rain.station.zeroRun.*`, `rain.station.accumulation.*` | `station`, … | `set-share`; the checks `set-rain` |
 | A unit's own gauge (§2.4h) | `rain.unitGauge.zeroRun.*`, `rain.unitGauge.accumulation.*`, `rain.unitGauge.unreliable`; `rain.unit.catchmentFallback` | `unit`, … | `set-rain`; the fallback `set-unit-rain` |
-| Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord` | `kind`, `site`, … | `set-record` (no values in the period: `set-period`) |
-| Calibration zones (§2.10n) | `calibration.zone.notList`, `.noGauge`, `.duplicate`, `.badParams`, `.needsPerUnit`, `.unusable`, `.unfitted`; `.siteOnlyElsewhere` (a note) | `node`, `reason`, `name`, `gauges`; `units`, `zones` | `set-record` (Per unit needed: `set-share`; not fitted: `set-fit`) |
+| Calibration (§2.10, §2.10k) | `calibration.noObserved`, `.allExcluded`, `.noValuesInWindow`, `.noValuesInPeriod`, `.windowReversed`, `.flowKindMissing`, `.defaultGaugePick`, `.site.unusable`, `.site.noRecord`, `.site.notTicked` (engine 1.110.0: the headline pointer isn't a ticked location) | `kind`, `site`, `name`, … | `set-record` (no values in the period: `set-period`) |
+| Calibration locations (§2.10n) | `calibration.zone.notList`, `.noGauge`, `.duplicate`, `.badParams`, `.unusable`, `.unfitted`, `.assignStale`, `.noneTicked`; `.siteOnlyElsewhere`, `.restNearest` (notes) | `node`, `reason`, `name`, `gauges`; `units`, `zones`; `unit`, `target`; `records` | `set-record` (not fitted: `set-fit`) |
 | The map (issue #646 F6, `mapAreas.ts`) | `map.areaFromEarlierOutline`: a unit's area is from an earlier outline of its polygon on the map (`ModelInput.mapAreas`, set by the backend's `runs/execute.ts` `staleMapAreas`; only this warning reads it, and the run's stored input keeps it for a reproduction). Not for a unit whose area in the run isn't the model's (a scenario set it) | `unit`, `modelKm2`, `mapKm2` | none: the Map's Checks (the Warnings page links there) |
 
 Not coded on purpose: the EWR-split note and the retired flow-share method's
 note (issues #615 and #616 reworded them; the area-fragmentation, High/Low-MAP
-and `areaMismatches` warnings are gone from engine 1.105.0), and every
+and `areaMismatches` warnings are gone from engine 1.105.0; `calibration.zone.needsPerUnit`, zones ticked under Fragmentation, from 1.109.0), and every
 settings-validation warning. An uncoded warning is in `warnings` only.
 The texts travel through the engine as plain strings, so `warn(code,
 params, text)` returns the text for the usual `warnings.push` and records
@@ -7137,6 +7177,11 @@ Flow generation" (1.98.0 to 1.102.0) and "Settings → Flow generation"
 (before 1.98.0) and links them to the panel, and `warningInCurrentWords`
 reads both as the new name. Only words changed: no figure moves, but a
 1.102.0 run made again at 1.103.0 has another results digest.
+
+**Flow generation again (engine ≥ 1.109.0, issue #658).** With Per unit the
+only method there is nothing left to select, so the panel is **Flow
+generation** again, and `FORMER_PANELS.share` is `['Model selection for flow
+generation']`: an older run's warnings that named it so still find it.
 
 **Dam figures in the farm summary (engine ≥ 1.2.0, issue #55).** Each farm
 with a dam (capacity ≥ 1 m³) carries its storage figures in `RunSummary.farms`
@@ -8033,9 +8078,10 @@ multiplied by s, the user's choice:
   run's historical days × 365.25 ÷ 10⁶. Historical days: a forecast tail
   never moves it (as the Reserve's curves, K1); without a tail, every day.
 - `'area'`: s = the modelled area ÷ `tableAreaKm2`, where the modelled area
-  (km²) is the area the natural flow is made on: `calibration.catchmentAreaKm2`
-  when set, else the units' areas summed (in node-id order), so the table and
-  the flow it is read against are on one area.
+  (km²) is the area the natural flow is made on: the land units' areas
+  summed (in node-id order; from engine 1.109.0 whatever
+  `calibration.catchmentAreaKm2` says, which only a model with no land unit
+  reads), so the table and the flow it is read against are on one area.
 
 **The default scaling is the area ratio** (the client's hydrologist,
 2026-10-10, issue #90 B2; the MAR ratio before): a new source
@@ -8702,14 +8748,12 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   GR4J fit made under `pe.kind: 'pan'` with the settings still on `'pan'`:
   under a monthly PE the series doesn't reach GR4J. A record made before 0.38.0, or a caller that doesn't
   know the series (a run stored before `valuesSha256`), compares nothing.
-  **The share runs' forcing (engine ≥ 1.105.0, issue #616, §2.5).** Under
-  Fragmentation each unit's natural MAR share splits the flow the fit was
-  scored on, so the forcing also records `shareRain`: the Per unit setup's
-  fingerprint the share runs ran on (null with no land unit; absent under
-  Per unit, where `unitRain` is it). A change to the Per unit setup's gauge
-  MAP, MAP period, reference gauge or a unit's station (or, when a run says
-  what it is now, a unit's rule, record or factors) sets `shareRainChanged`,
-  and with it `forcingChanged`. A record made before it compares nothing.
+  **The share runs' forcing (engines 1.105.0 – 1.108.x, issue #616, §2.5).**
+  A Fragmentation fit's forcing records `shareRain`, the Per unit setup's
+  fingerprint its share runs ran on; the API still reads it. From 1.109.0
+  (issue #658) such a fit is "not fitted for this method"
+  (`methodChanged`, §2.4h), which says it all, so `shareRainChanged` is
+  gone, and no fit writes `shareRain`.
 - **Cost.** Each candidate is a full model run, so 1 500 runs per fit and
   three fits (full, split, dry → wet) mean several thousand model runs.
   `onProgress` reports every run and returns true to cancel, which
@@ -10539,15 +10583,59 @@ If no fit passes, **none is kept**, and each fit lists why (`selectCase` in
 /projects/:id/auto-calibrations`) plans a run from the **saved** settings
 only: the water years the rules leave out and the cases in order, stored in
 an `auto_calibration` row (108_auto_calibration.sql) with the rules, their
-revision and a SHA-256 of the model input. Each case is then one
-`auto_calibration` background job, which fits it, stores it and queues the
-next, so no job runs longer than one fit; the last picks the fit to keep. A
-case job that finds the input changed since the plan fails the run, saying
-so, since fits on other data wouldn't compare. Before anything is queued, one
-case's time is estimated from a model run × the model runs a case makes, and
-rules estimated past 4 minutes a fit (the job worker's limit, with room) are
-refused, asking for a smaller search. The page won't start while the form
-has unsaved rule edits. Every score is the server's own.
+revision and a SHA-256 of the model input. The cases are then fitted by a
+chain of `auto_calibration` background jobs, each queueing the next as the
+same user, so one runs at a time; the last picks the fit to keep. A job that
+finds the input changed since the plan, or the server's engine version
+changed (a release between two jobs), fails the run, saying so, since fits on
+other data or by another engine wouldn't compare. The page won't start while the form has unsaved
+rule edits. Every score is the server's own.
+
+*A fit over several jobs* (290_auto_calibration_work.sql). One fit of the
+default rules (5 starts and the two validation fits, 1 500 model runs each)
+on a fifteen-year catchment is far longer than a job may run (4 minutes on
+the worker, under its 5-minute timeout), so each case's fit is cut into
+pieces. A fit is a list of separate optimisations (each start, the
+split-sample fit, the dry → wet fit, and the fit without the WR2012 penalty
+when it is on), each a DDS search from its own seed. A job runs them in
+order until one more model run would pass its time (or the worker's own
+deadline, when sooner), by the clock, and pauses the search under way there.
+DDS is resumable: its whole state between two model runs is the best point,
+its loss, the runs spent and the generator's 32-bit state (`DdsState`,
+`calibrate/dds.ts`), so the job stores that and the finished optimisations'
+outcomes in the row's `work`, and the next job goes on from them as if the
+search had never stopped. Once every optimisation has run, a job builds the
+case from their outcomes (the report: every start scored, the validation
+tests, the notes; then the run with the fit, the filters and the held-out
+score), the same code the browser's calibration runs (`prepareCalibrationFits`,
+`prepareAutoCase`). So the stored case is, to the bit, what an unbroken fit
+with the same seed gives: the clock decides where the work is cut, never the
+result (`calibrate.test.ts`, `auto.test.ts`, and end to end
+`calibration.db.test.ts`). Each job makes at least one model run or builds a
+case, so a run ends; a job claimed with under 30 seconds left in the worker's
+tick is handed back for the next tick, its attempt given back.
+
+*What is refused.* Before anything is queued, the work is estimated from the
+model's size (the run's days, its nodes, the units with an area and the GR4J
+warm-up) × the model runs it makes, reading no clock
+(`calibration/estimate.ts`), so the same project and rules always get the
+same answer. Its constants are an upper envelope of fit evaluations measured
+on 92 networks (the largest 0.75 of it), carried to an arm64 Lambda at
+1 024 MB by a factor of 4, so it errs long. Only what can't be cut is refused
+by a job's 4 minutes: a fit's last step (scoring it, starts + 12 model runs,
+then a run with it), which on any catchment the app models is seconds. A
+whole run estimated past **6 hours** of worker time is refused too, asking
+for a smaller search: it holds the person's one run and a worker for that
+long. The default rules on the fifteen-year Kleinberg example are estimated
+at about 51 minutes a fit (14 jobs at the estimate's pace, under 2 hours for
+both fits); the worker is likely about 2.5× faster than the estimate (about
+85 ms a model run against its 290 ms), so about 8 jobs and 30 minutes of
+compute for the run; at one job per 5-minute tick of the worker, about 40
+minutes from start to report. A worker far
+slower than estimated (a fit taking more than 3 × its estimated jobs + 4)
+stops the run, saying so, rather than run on. Each job logs its estimate
+beside its time (`auto_calibration_piece`), which is what to re-derive the
+factor from.
 
 **Applied by the server.** *Apply and save the kept fit* (`POST
 …/auto-calibrations/:cid/apply`) writes the kept case's parameters (and, for
@@ -10611,6 +10699,17 @@ can calibrate there instead: `settings.calibrationSiteNodeId` names the gauge
 node, and null (the default, every engine before) is the outlet, so a project
 that never sets it fits exactly as before.
 
+**Since engine 1.110.0 (issue #659, §2.10n) there is no special site.** Every
+gauge with a record, and the outlet, is a *calibration location*, each with
+its own window, record, exclusions and parameters, and none is required.
+`calibrationSiteNodeId` is now the optional **headline** pointer: the
+location whose statistics are `summary.calibration` and which the uncertainty
+ensemble and automated calibration act on (null = auto, §2.10n). What this
+section says of "the site" holds for the headline location; everything a
+gauge location reads is as below. Settings from before are read so that the
+old site becomes the headline, and run and fit to the bit
+(`normalizeCalibrationLocations`, §2.10n).
+
 **What changes at a gauge** (`calibrate/calibrate.ts` `prepareCalibration`,
 `calibrate/site.ts`):
 
@@ -10656,7 +10755,12 @@ API checks a new site when it is saved (api.md § Projects); a stored site
 that later loses its node or record blocks no save. Every run then warns
 (`Calibration site: …`, `runCalibrationSite` in `run.ts`) and scores its
 statistics at the outlet until the site is changed, and Settings says the same
-under *Scored at*.
+under *Scored at*. From engine 1.110.0 a stale site in settings from before
+calibration locations is read as the outlet (`normalizeCalibrationLocations`,
+with the same warning), so a fit scores there too, where engines before
+refused it; a headline gauge without a record still warns
+(`calibration.site.noRecord`) and the run's statistics fall back to the
+outlet's record on the outlet's (top-level) settings.
 
 **The run's statistics follow the site.** `runModel` scores
 `RunSummary.calibration` (§2.10) where calibration does: at a usable site,
@@ -10727,139 +10831,218 @@ table's monthly requirement is not used here, as at the outlet. A project
 without such a site has no key. The summary CSV writes each site's table
 after the outlet's.
 
-### 2.10n Calibration zones: calibrating at several gauges (engine 1.106.0, issue #555)
+### 2.10n Calibration locations: calibrating at every gauge (engine 1.106.0, issue #555; engine 1.110.0, issue #659)
 
-Not in the workbook. §2.10k fits the catchment's one GR4J parameter set at
-one site. Under Per unit flow generation (§2.4h) each land unit runs its own
-GR4J, so a gauge inside the network with a long enough record can calibrate
-**the units upstream of it on its own record**, and the outlet the rest.
+Not in the workbook, which has one parameter set. Each land unit runs its own
+GR4J (Per unit, §2.4h), so every gauge with a record, and the outlet, can
+calibrate the units it stands for on its own record. These are the
+**calibration locations**: equals, each with its own *Calibrate here* tick,
+window, record, exclusions, quality flags, GR4J X1–X4 and fit record, and
+none of them is required (engine 1.110.0; from 1.106.0 to 1.109.x the
+"calibration zones" were an add-on above one special calibration site).
+Code: `packages/engine/src/calibrate/locations.ts`; the row type and its
+sanitiser stay in `calibrate/zones.ts`. The rules marked *provisional* below
+are recorded in engine-audit.md **CZ2**, pending the client's hydrologist.
 
-**The setting.** `settings.calibrationZones` (`CalibrationZone` in
-`packages/engine/src/calibrate/zones.ts`): one row per gauge, `{ nodeId,
-enabled, calibrationStart, calibrationEnd, calibrationFlowKind,
-calibrationExclusions, qualityFlags, gr4j, fitRecord }`. `enabled` is the
-row's *Calibrate here* tick; `qualityFlags` is `{ suspect, zeroFlowMonths? }`
-or null for the catchment's (a gauge's record has no gauged range or gap fill,
-§2.10k, so those flags don't apply); `gr4j` is the zone's X1–X4 (each inside
-the bounds calibration searches) or null, not fitted yet. The **calibration
-site's own zone** (the outlet's, or *Scored at*'s gauge, §2.10k) keeps the
-settings it always had: `calibrationSiteNodeId`, the calibration window,
-`calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j` and
-`fitRecord`. Absent, `[]` (what migration 270 stored in every project) or no
-ticked row is exactly every engine before: one parameter set, to the bit (an
-invariant test runs and fits every example catchment both ways under both
-methods, `backend/src/model/examples.zones.test.ts`).
+**The settings.**
+- **A gauge's location** is its row of `settings.calibrationZones`
+  (`CalibrationZone`): `{ nodeId, enabled, calibrationStart, calibrationEnd,
+  calibrationFlowKind, calibrationExclusions, qualityFlags, gr4j, fitRecord }`.
+  `enabled` is *Calibrate here*; `qualityFlags` is `{ suspect,
+  zeroFlowMonths? }` or null for the catchment's (a gauge's record has no
+  gauged range or gap fill, §2.10k); `gr4j` is its X1–X4 (inside the bounds
+  calibration searches) or null, not fitted yet. A row may be any gauge
+  inside the network (not the outlet node); the "at or below the site" rule
+  of 1.106.0 is gone.
+- **The outlet's location** is the top-level keys (`calibrationStart/End`,
+  `calibrationFlowKind`, `calibrationExclusions`, `qualityFlags`, `gr4j`,
+  `fitRecord`), ticked by **`calibrateAtOutlet`**. They stay on the catchment
+  because the outlet's record is the one with gauged ranges, gap filling,
+  missing periods and low-flow periods, which the outlet EWR test, recession
+  and plausibility read from the top level. The asymmetry is storage only.
+- **`gr4j`** is the catchment parameters: the outlet location's when it is
+  ticked, and otherwise what a ticked gauge not fitted yet, and any unit in
+  no location's group, runs on.
+- **`calibrationSiteNodeId`** is the optional **headline** pointer: a ticked
+  gauge whose statistics are `summary.calibration` and which the uncertainty
+  ensemble, automated calibration and the evidence pack's regional-prior line
+  act on. null = **auto** (*provisional*): the outlet when it is ticked, else
+  the ticked gauge with the largest land-unit area above it, then name, then
+  id. A pointer that isn't a ticked location warns
+  (`calibration.site.notTicked`) and auto is used. Every reader of "the site"
+  goes through one function, `headlineCalibrationSettings` (the headline's
+  settings: its node as `calibrationSiteNodeId`, its window, record,
+  exclusions, flags, parameters and fit record); readers of the outlet
+  *record* (ratings, gap fill, low-flow periods, the outlet EWR test) keep
+  reading the top level.
+- **`unitParamsFrom`** (`{ unitId: locationNodeId }`, the issue's option 2,
+  "similar units"): a land unit runs on the named location's parameters even
+  when it isn't upstream of it. The target is a gauge's node id or the
+  outlet node's id.
+- **`calibrationRest`**: what a unit with no ticked location downstream takes
+  (below the lowest ticked gauge, or on an ungauged branch, when the outlet
+  isn't ticked). `'nearest'` (*provisional*, what a new project is written
+  with): the nearest ticked location upstream on its river: walking the
+  unit's path down, at the first node with a ticked location upstream of it,
+  the one with the fewest hops from that node, then name, then id
+  (spatial-proximity regionalisation along the river, the best-performing
+  donor method in large comparisons: Oudin et al. 2008, *Water Resources
+  Research* 44, W03413; Parajka et al. 2013, *HESS* 17, 1783–1795).
+  `'headline'`: the headline's parameters (what "the rest" took before
+  1.110.0). `'default'`: `gr4j`. **Absent = `'headline'`**, so legacy
+  settings and old runs are read as before; neither key is in
+  `defaultProjectSettings()`, so a merge never turns a legacy snapshot into
+  `'nearest'`.
 
-**The zones.** A ticked row is usable when its node is a gauge inside the
-network (not the outlet), is not the calibration site and is not below it
-(on the site's path to the outlet); an unusable ticked row warns
-(`Calibration zone: …`) and is left out. Each land unit (a farm with an area,
-§2.4h) belongs to the **first usable ticked gauge on its path downstream**
-(the unit itself excluded); a unit that reaches none is in the site's zone.
-So a ticked gauge's zone is the land units draining to it that aren't in a
-ticked zone further upstream, unticking a gauge merges its units into the
-next ticked gauge downstream, and the site's zone is the rest. Each unit runs
-GR4J with its zone's X1–X4 (the row's `gr4j`, else, with a warning that the
-zone has no parameters of its own yet, the catchment's `gr4j`); the warm-up
-(`gr4j.warmupDays`), PE and forcing are the catchment's, as under §2.4h. The
+**Each unit's group** (`resolveLocations`), in order:
+1. `unitParamsFrom[unit]` when it names a usable ticked location
+   (**borrowed**); a target that is gone or unticked warns
+   (`calibration.zone.assignStale`) and falls through;
+2. else its **own zone**: the first usable ticked location on its path
+   downstream from the unit itself (the outlet counts when ticked, so a land
+   unit that is the outlet node belongs to the outlet's location);
+3. else the **rest** rule. With no ticked location at all every unit runs on
+   `gr4j`: allowed, the run goes on, and a run with flow records says no
+   location is ticked (`calibration.zone.noneTicked`).
+
+A location's group is its own-zone units not borrowed away, the units
+borrowed to it and the rest units sent to it; each unit runs GR4J with its
+group's X1–X4 (the row's `gr4j`, else, with a warning that the location has
+no parameters of its own yet, the catchment's `gr4j`); the warm-up
+(`gr4j.warmupDays`), PE and forcing are the catchment's, as under §2.4h.
+`'nearest'` sending units to a location notes it
+(`calibration.zone.restNearest`). An unusable ticked row (gone, not a gauge,
+the outlet node) warns (`calibration.zone.unusable`) and is left out. The
 groundwater exchange series is written when the catchment's X2, or that of
-any zone with land units, is not 0. `summary.runoff.params` stays the
-calibration site's zone's parameters (the catchment's stores are the units'
-area-weighted means, so the run's runoff self-check caps the production store
-at the units' area-weighted X1); each zone's are in `summary.unitRain.zones`.
-While the uncertainty ensemble and automated calibration don't yet read the
-zones, every run that applies one warns that they vary only the site's
-parameters (`Calibration zones: N land units ran on …`).
+any location with land units, is not 0. `summary.runoff.params` stays
+`gr4j` (the catchment's stores are the units' area-weighted means, so the
+run's runoff self-check caps the production store at the units'
+area-weighted X1). While the uncertainty ensemble and automated calibration
+act on the headline's group only, every run with another location's group
+warns so (`Calibration zones: N land units ran on …`).
 
-**Only under Per unit.** Under Fragmentation one GR4J runs for the whole
-catchment (§2.5), so zones can't have their own parameters: ticked rows warn
-(`Calibration zones: … need Per unit flow generation`) and the run is the
-one-parameter-set run. Fragmentation's share runs (§2.5b) keep the
-catchment's parameters.
+**Settings from before 1.110.0** (no boolean `calibrateAtOutlet`) are read
+by `normalizeCalibrationLocations` (in `mergeSettings` whenever the nodes are
+known, so every run, fit, old run, revision, scenario base and imported
+`project.json` reads them alike):
+- a site at an inner gauge `G`: the top-level window, flow kind, exclusions,
+  `{ suspect, zeroFlowMonths }` and X1–X4 become `G`'s ticked row (replacing
+  a row `G` had), the fit record moves into it (top-level `fitRecord` null),
+  every ticked row at or below `G` is unticked (engines before left them out
+  as unusable), `calibrateAtOutlet` false, `calibrationRest` `'headline'`,
+  and `G` stays the headline pointer. The top level keeps its values (the
+  outlet record's settings);
+- otherwise (the outlet, or a stale site, which engines before scored at the
+  outlet): the pointer null, `calibrateAtOutlet` true and `calibrationRest`
+  `'headline'`. The SQL migration (backend, slice B of issue #659, pending) passes whether an outlet
+  record exists, and without one writes `calibrateAtOutlet` false and
+  `'default'`, which runs the same (the leftover units took `gr4j` either
+  way) but lets the fit fit the gauges instead of refusing at an outlet with
+  no record.
 
-**The run summary.** `summary.unitRain.zones` (only when zones applied):
-each usable zone upstream first, then the site's own zone (`nodeId` null),
-each `{ nodeId, name, units, params, fitted }`.
+A legacy project runs and fits exactly as engine 1.109.0 did, to the bit
+(`calibrate/locations.legacy.test.ts` pins 1.109.0's digests for an outlet
+site, an inner site, zones under each, rows at and below the site, and a
+stale site). The one intended difference: a stale site, which 1.109.0's fit
+refused, is fitted at the outlet as the run always scored it.
 
-**Statistics at each zone's gauge** (`summary.calibrationZones`, issue #555
-round 4, `run.ts` `zoneCalibrationStats`): for each zone above the site, in
-the same order, the run's calibration statistics (§2.10k's
-`CalibrationStats`) of its gauge's record (the row's record, else the
-gauge's first) against the gauge's simulated outflow, on the row's window
-and exclusions, with `siteNodeId`, `siteName` and `fitStatus` computed on the
-zone's own settings (`zoneCalibrationSettings`: its parameters, fit record,
-window, exclusions and record), so each site is in sample only when its own
-zone's parameters were fitted on those days. The site's own zone is
-`summary.calibration`, as before. A zone whose gauge has no record is left
-out; absent when no zone applied. Statistics only: no other output changes,
-so a run without zones is unchanged to the bit. A gauge's own low-flow
-periods and quality flags are not applied here, as at a gauge site (§2.10k).
+**The run summary.** `summary.unitRain.zones` (when a gauge location
+applied): each location's group, upstream first and the headline last, then
+the units on `gr4j` (`kind` `'default'`) when any, each `{ nodeId, name,
+units, params, fitted, kind, headline?, borrowed, rest }`; `nodeId` null is
+the top-level parameters (the outlet's location, or `'default'`).
+`summary.unitRain.paramSource` gives each unit `{ from, how }` (`how`:
+`zone`, `assigned`, `rest` or `default`). `summary.calibration` is the
+headline's statistics; **`summary.calibrationZones`** every other ticked
+location's (`run.ts` `zoneCalibrationStats`): a gauge's record (the row's,
+else its first) against its simulated outflow on its own window and
+exclusions, or for the outlet location the outlet record (its low-flow
+periods applied, as `summary.calibration` at the outlet) on the top-level
+settings, with the outlet node's id as `siteNodeId`; each with `fitStatus`
+by its own fit record (`locationCalibrationSettings`). A location without a
+record is left out. The scored record's quality column, the plausibility
+signatures' recession segments and its exclusions follow the headline.
 
-**Comparison, report and evidence pack.** The run comparison words each zone
-(`calibrationZoneChanges`: added, removed, or what changed among its
-parameters, window, record, exclusions, quality flags and fit record) and sets each zone
-gauge's statistics side by side (`comparison.calibrationZones`;
-run-comparison.md). The report's and the Calibration page's **Calibration
-zones** table lists each zone's units, parameters and scores (ui.md § Runs
-& results), and the evidence report (`evidence-22`) every zone's
+**Comparison, report and evidence pack.** The run comparison words each row
+(`calibrationZoneChanges`) and sets each location's statistics side by side
+(`comparison.calibrationZones`; run-comparison.md). The report's and the
+Calibration page's tables list each location's units, parameters and scores
+(ui.md § Runs & results), and the evidence report every location's
 parameters, fit record and scores (evidence-pack.md § Calibration zones).
-The Network and the Map colour each unit by its zone (ui.md § Network,
+The Network and the Map colour each unit by its group (ui.md § Network,
 maps.md § Calibration zones on the map).
 
-**The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`). Zones are
-fitted in network order, **upstream first**: a zone with more ticked gauges
-below it comes first (so one whose gauge drains through another ticked gauge
-is always before it), then by name, then id, and the site's own zone is
-last. Each step is a whole
-`calibrate()` (§2.10b) with the same objective, bounds, budget, starts, seed
-and validation:
-
-1. A zone step (`CalibrateOptions.zone`) fits **only that zone's units'**
-   parameters: every other unit keeps its zone's. It scores the zone's gauge
-   (its record against the gauge's simulated outflow, as §2.10k scores a
-   gauge site), on the row's window, exclusions, record and quality flags
-   (`zoneCalibrationSettings`). Only the units above the gauge and the dams,
-   abstractions, transfers and losses above it reach the score; units below
-   or beside it can't move it. The WR2012 MAR penalty is off for a zone step
-   (it targets the whole catchment's natural MAR).
-2. Its fitted parameters are then fixed for every step below it, so its
-   simulated outflow is routed down with them.
-3. The site's own zone is fitted last, on the site's settings, with every
-   zone above it at its fitted parameters.
+**The stepwise fit** (`calibrate/stepwise.ts` `calibrateStepwise`,
+`locations.ts` `locationFitPlan`). The steps are the usable ticked
+locations, fitted in **dependency order**: `deps(L)` is the group of every
+land unit draining to `L`'s node (every unit for the outlet), but `L`'s own
+and the `gr4j` units'. That covers "upstream first" (a location's upstream
+zones drain to it) and the issue's rule that a location is fitted after
+every location whose parameters a unit above it borrows. Kahn's sort; among
+the ready steps the headline goes last, then the one with more ticked
+locations (but the headline) below it first, then name, then id, so a
+legacy project's order is engine 1.109.0's, and a ticked outlet, which every
+group drains to, is always last. Each step is a whole `calibrate()` (§2.10b)
+with the same objective, bounds, budget, starts, seed and validation:
+1. A step (`CalibrateOptions.zone`: a gauge's node id, null for the outlet's
+   location, absent for the headline) moves **every unit in the location's
+   group** with the candidate parameters, borrowed and rest units included
+   (*provisional*): it is one parameter set, so the borrowed units move with
+   it, which reproduces the old site zone's fit to the bit. Every other unit
+   keeps its group's. It scores the location's record against its simulated
+   outflow (§2.10k) on its own window, exclusions, record and quality flags
+   (`locationCalibrationSettings`). Borrowed units beside the gauge can't
+   reach its score by routing, only through the whole-catchment couplings
+   below; with none of those, a gauge's fit is the same to the bit with or
+   without units borrowing from it (`locations.test.ts`).
+2. **The WR2012 MAR penalty applies at the headline step only**
+   (*provisional*): the headline's group is the one meant to stand for the
+   catchment, and another location's group moves only its own share of the
+   natural MAR.
+3. Its fitted parameters are then fixed for every later step.
 
 Each step has its own scores, split-sample and dry → wet tests, notes and fit
-record (`FitRecord.zone`: `{ nodeId, units }`, `nodeId` null for the site's
-zone). The steps are applied as one result (`applyStepwise`): the site's
-zone's parameters and fit record into `gr4j` and `fitRecord`, each zone's into
-its row. A cancelled step stops the fit and nothing is applied. With no
-ticked zone the stepwise fit is one step, `calibrate()` itself.
+record (`FitRecord.zone`: `{ nodeId, units, borrowed? }`, `nodeId` null for
+the outlet's location; a record the conversion moved into a row, with no
+`zone` or a `zone` naming null, is that row's: `fitRecordZone`;
+`fitGroupChanged` says a fit is stale once its group's units or borrowing
+changed). The steps are applied as one result (`applyStepwise`): the outlet
+location's parameters and fit record into `gr4j` and `fitRecord`, each
+gauge's into its row. A cancelled step stops the fit and nothing is applied.
 
-While a zone above the site is being fitted, the units below it run on their
-current parameters (not yet refitted), and the units' natural MAR shares
-(§2.5b) follow every unit's runoff, so a zone's step score can differ from
+While a location is being fitted, the units of the locations after it run on
+their current parameters (not yet refitted), and the units' natural MAR
+shares (§2.5b) follow every unit's runoff, so a step's score can differ from
 a run made after every step is applied wherever something above the gauge
-reads the units' shares or the whole catchment's natural flow (an EWR charge,
-curtailment, a hands-off flow, the senior users' claims, land cover's
-low-flow threshold).
+reads the units' shares or the whole catchment's natural flow (an EWR
+charge, curtailment, a hands-off flow, the senior users' claims, land
+cover's low-flow threshold). These are also the only ways a borrowed unit
+beside a gauge reaches that gauge's score.
 
-**Refusals and warnings.** The fit refuses when a ticked zone has no land
-unit above its gauge, when every land unit is in a zone above the site, or
-when the site is a gauge inside the network and none of its own zone's units
-drains through it (they all join the river beside it, so its step's score
-couldn't move with the parameters it fits) (`zoneFitError`). Each step under zones notes when its record has fewer than
-2 complete water years (95 % of a water year's days observed, outside the
-exclusions) or no dry → wet test (no dry year to fit on), the representativeness
-and dry → wet notes beside it (`zoneCoverageNotes`). The API refuses a new
-row whose gauge isn't a gauge inside the network with a flow record, a
-gauge listed twice, and a ticked row that is the site or below it (api.md §
-Projects). Each zone warning a run gives has a stable code
-(`calibration.zone.*`, § Run warning codes in §2.8), so the Warnings page
-links it to the table (`?field=fld-cal-zones`), to Fit the parameters, or to
-Model selection for flow generation.
+**Refusals and notes.** The plan refuses, before any step runs: no ticked
+location ("no calibration location is ticked"); a location whose group has
+no land unit, or none draining through it (all borrowed, or beside it), so
+its fit could not move its own score (this covers the issue's "own zone has
+no units left"); and a **cycle** of borrowing ("the units above *G* borrow
+*H*'s parameters and the units above *H* borrow *G*'s, so neither can be
+fitted first: change one unit's Parameters from"). A cycle is not refused on
+save, since a run doesn't care. Each step notes when its record has fewer
+than 2 complete water years (95 % of a water year's days observed, outside
+the exclusions) or no dry → wet test (`zoneCoverageNotes`), and what it
+fitted (its group's units, how many borrowed). The API checks the rows, the
+headline pointer and `unitParamsFrom` on save (`calibrationLocationsError`,
+`unitParamsFromError`; api.md § Projects). Each warning a run gives has a
+stable code (`calibration.zone.*`, `calibration.site.*`, § Run warning codes
+in §2.8).
+
+The uncertainty ensemble and automated calibration vary the headline's
+parameters (`withHeadlineParams`); for settings from before 1.110.0 the
+top-level `gr4j` moves with them too, since there the site's parameters were
+`gr4j`, which every ticked row not fitted yet ran on as well.
 
 **Not yet** (docs/followups.md § Calibration zones): automated calibration
-and the uncertainty ensemble per zone (both still fit or perturb the site's
-zone's parameters alone).
+and the uncertainty ensemble per location (both act on the headline's group
+alone), and suggesting similar units (manual only).
 
 ### 2.10l Modelled vs observed dam area (app, issue #604 R5-B)
 
@@ -12611,8 +12794,8 @@ checks the method reproduces the base run).
   bias-corrected (forecast rain is never corrected again, §2.4b);
 - the daily A-pan, when the project has one, the analogue's values on the
   same days (a day without one takes the season month's mean, §2.3a);
-- under runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0), each land
-  unit's season in `rain_forecast_mm@<unit>`: the base run's `rain_unit` on
+- each land unit's season (§2.4h, engine ≥ 1.78.0; every project with a land
+  unit from 1.109.0, Per unit being the only method) in `rain_forecast_mm@<unit>`: the base run's `rain_unit` on
   the analogue's days, so the unit runs its season on its own forcing;
 - the run window pinned to the base run's start and the season end,
   rain-source periods clipped to the history (§2.4e), and
@@ -14064,8 +14247,8 @@ step when a definition changes.
 | **Fallback-rain year** | A water year where more than half the rain, or more than half the days, came from CHIRPS, forecast, spread or blank days instead of a catchment station reading (§2.10d). |
 | **Dry season** | Here: the six consecutive calendar months with the lowest mean flow (§2.10d). |
 | **Low-flow duration curve** | The flow duration curve of the dry-season days only; Q90 is the flow equalled or exceeded 90 % of them. |
-| **Fragmentation** | Splitting the catchment's flow and EWR into per-unit shares; from engine 1.105.0 (issue #616) each unit's one share is its natural MAR share (§2.5). Also the name of the flow generation method that runs GR4J once for the catchment and splits its flow this way (§2.4h). |
-| **Natural MAR share** | A unit's own natural runoff over the MAR period ÷ all the land units' (§2.5b). It splits the flow under Fragmentation, the EWR, the land cover's low-flow threshold and the senior users' claims (engine ≥ 1.105.0). |
+| **Fragmentation** | Splitting the catchment's flow and EWR into per-unit shares; from engine 1.105.0 (issue #616) each unit's one share is its natural MAR share (§2.5). Also the name of the flow generation method that ran GR4J once for the catchment and split its flow this way, retired in engine 1.109.0 (issue #658): every unit now makes its own runoff (§2.4h). |
+| **Natural MAR share** | A unit's own natural runoff over the MAR period ÷ all the land units' (§2.5b). It splits the EWR, the land cover's low-flow threshold and the senior users' claims (engine ≥ 1.105.0; and the flow under Fragmentation until 1.109.0). |
 | **EWR** | Environmental Water Requirement: the flow that must stay in the river for the ecosystem. |
 | **IFR / Reserve** | Instream Flow Requirement or Ecological Reserve, the South African legal terms for the EWR. |
 | **Desktop Reserve Model** ("Desktop Version 2") | Software that produces monthly EWR tables by percentile and ecological category (e.g. by ecological category and regional hydrological type). |

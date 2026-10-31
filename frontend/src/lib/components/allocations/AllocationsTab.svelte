@@ -31,6 +31,7 @@
 	// the page's settings draft takes the change in (onProjectChange). Farmers
 	// never reach the workspace.
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { focusAfterRemove } from '#lib/a11y/focusAfterRemove.js';
 	import { tick, untrack } from 'svelte';
 	import { hashId, focusAnchor, holdAnchor } from '#lib/help/anchor.js';
 	import { goto } from '$app/navigation';
@@ -103,6 +104,12 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
+	/** A delete, an import's removal or the viewers' switch that failed: an error, not a notice (the last action's outcome either way). */
+	let actionError = $state<string | null>(null);
+	function failed(err: unknown) {
+		notice = null;
+		actionError = msg(err);
+	}
 	async function load() {
 		loading = true;
 		error = null;
@@ -144,6 +151,7 @@
 	/** Bumped on every change so the comparison reloads. */
 	let version = $state(0);
 	async function changed(message?: string) {
+		actionError = null;
 		if (message) notice = message;
 		await load();
 		version++;
@@ -175,7 +183,18 @@
 	let cLoading = $state(false);
 	let cError = $state<string | null>(null);
 	let wanted = '';
+	/** Forget what the page shows for another run: the page names the run picked, so its figures mustn't stay under that name while it loads (or once it failed). */
+	function clearComparison() {
+		comparison = null;
+		yearTotals = null;
+		yearTotalsWithheld = false;
+		runMode = 'none';
+		capYears = [];
+		capForecast = false;
+	}
 	async function loadComparison(id: string) {
+		// The same run again (a volume or the band changed) keeps its figures on screen until the new ones land.
+		if (id !== wanted) clearComparison();
 		wanted = id;
 		cLoading = true;
 		cError = null;
@@ -191,8 +210,7 @@
 			}
 		} catch (e) {
 			if (wanted === id) {
-				comparison = null;
-				capYears = [];
+				clearComparison();
 				cError = msg(e);
 			}
 		} finally {
@@ -209,8 +227,11 @@
 	const units = $derived(comparison ? unitRows(comparison) : []);
 
 	// --- the picked unit (`unit=`), else the first on the list ---
-	const pickedId = $derived(pickUnit(units, url.searchParams.get('unit')));
+	const unitParam = $derived(url.searchParams.get('unit'));
+	const pickedId = $derived(pickUnit(units, unitParam));
 	const pickedName = $derived(units.find((u) => u.nodeId === pickedId)?.name ?? '');
+	/** `unit=` names a unit that isn't on this run's list (removed since, or not in this run): the first is shown, and said, as `gone` for a run. */
+	const unitGone = $derived(!!unitParam && !!comparison && units.length > 0 && unitParam !== pickedId);
 	const pickedYears = $derived(rows.filter((r) => r.nodeId === pickedId));
 	const pickedStorage = $derived(comparison?.nodes.find((n) => n.nodeId === pickedId)?.storage ?? null);
 	// The dam against its registered storage (s21b), in words (issue #72).
@@ -301,7 +322,15 @@
 	});
 	const openSheet = (name: string, value: string) => goto(withParam(url, name, value), { reset: false });
 
-	async function remove(a: Allocation) {
+	// Where a Delete sits: the Registered volumes table or the picked unit's volumes. After the delete the same list's
+	// next Delete takes the focus, else its heading (ui-playbook § "A delete puts the focus on what took the row's place").
+	const DELETE_IN = {
+		table: { selector: '#alloc-vol-table button[data-alloc-delete]', fallback: 'alloc-list-h' },
+		unit: { selector: '#alloc-unit-vols button[data-alloc-delete]', fallback: 'alloc-unit-h' }
+	} as const;
+	async function remove(a: Allocation, from: keyof typeof DELETE_IN) {
+		const { selector, fallback } = DELETE_IN[from];
+		const at = [...document.querySelectorAll<HTMLElement>(selector)].findIndex((b) => b.dataset.allocDelete === a.id);
 		const ok = await confirmDialog({
 			title: a.waterUse === '21b' ? 'Delete this registered storage?' : 'Delete this registered volume?',
 			message: `Delete the registered ${a.waterUse === '21b' ? 'storage' : 'volume'} ${a.registrationNo || ''} (${a.waterUse === '21b' ? `${fmtNum(a.storageM3)} m³` : `${fmtNum(a.volumeM3PerYear)} m³/a`})?`,
@@ -312,12 +341,14 @@
 		try {
 			await api.allocations.remove(projectId, a.id);
 			await changed();
+			await focusAfterRemove(at, selector, fallback);
 		} catch (err) {
-			notice = msg(err);
+			failed(err);
 		}
 	}
 
 	async function undoImport(id: string, fileName: string, n: number) {
+		const at = [...document.querySelectorAll<HTMLElement>('#alloc-sources button[data-source-remove]')].findIndex((b) => b.dataset.sourceRemove === id);
 		const ok = await confirmDialog({
 			title: 'Remove this import?',
 			message: `Remove the import of ${fileName} and its ${n} registered volume${n === 1 ? '' : 's'}?`,
@@ -328,8 +359,9 @@
 		try {
 			await api.allocations.removeSource(projectId, id);
 			await changed(`Removed the import of ${fileName}.`);
+			await focusAfterRemove(at, '#alloc-sources button[data-source-remove]', 'alloc-list-h');
 		} catch (err) {
-			notice = msg(err);
+			failed(err);
 		}
 	}
 
@@ -360,13 +392,16 @@
 	}
 
 	let unitsSaving = $state(false);
-	async function setViewerUnits(on: boolean) {
+	async function setViewerUnits(box: HTMLInputElement) {
+		const on = box.checked;
 		unitsSaving = true;
 		try {
 			await api.allocations.setViewerUnits(projectId, on);
 			await changed(on ? 'Viewers now see each farm’s registered volumes.' : 'Viewers now see registered volumes as totals only.');
 		} catch (err) {
-			notice = msg(err);
+			// Not saved: the box goes back to what is saved (its `checked` is one-way, and the saved value didn't change, so nothing redraws it).
+			box.checked = data?.viewerUnits ?? !on;
+			failed(err);
 		} finally {
 			unitsSaving = false;
 		}
@@ -403,10 +438,12 @@
      and moves it down when it lands, so assistive tech and the e2e helper (support/allocations.ts) wait for it. -->
 <div class="allocations" bind:clientWidth={pageW} aria-busy={loading || cLoading} data-testid="allocations-page">
 	{#if gone}<p class="alert alert-info" role="note">That run no longer exists, so this compares the {defaultRun?.published ? 'published' : 'newest'} run.</p>{/if}
+	{#if unitGone && !data?.unitsHidden}<p class="alert alert-info" role="note">That hydrological unit isn’t in this run, so this shows {pickedName}.</p>{/if}
 	{#if notice}<p class="alert alert-info slim" role="status">{notice}</p>{/if}
+	{#if actionError}<p class="alert alert-error slim" role="alert">{actionError}</p>{/if}
 
 	{#if data?.unitsHidden}
-		<AllocationTotals totals={data.totals} years={yearTotals} yearsWithheld={yearTotalsWithheld} runLabel={run ? run.label || 'Untitled run' : null} loading={cLoading} />
+		<AllocationTotals totals={data.totals} years={yearTotals} yearsWithheld={yearTotalsWithheld} runLabel={run ? run.label || 'Untitled run' : null} loading={cLoading} error={cError} retry={run ? () => loadComparison(run.id) : undefined} />
 	{:else}
 	{#if !run}
 		<section class="panel" aria-labelledby="alloc-compare-h" data-testid="allocation-compare">
@@ -515,7 +552,7 @@
 									{/if}
 									<h3 class="sub-h">Registered volumes for this hydrological unit</h3>
 									{#if pickedVolumes.length}
-										<ul class="vols">
+										<ul class="vols" id="alloc-unit-vols">
 											{#each pickedVolumes as a (a.id)}
 												<li>
 													<span class="vol-main"
@@ -527,7 +564,7 @@
 													{#if canEdit}
 														<span class="vol-actions">
 															<button type="button" class="btn btn-sm btn-ghost" onclick={() => openSheet('volume', a.id)} aria-label="Change {a.registrationNo || 'this volume'}">Change</button>
-															<button type="button" class="btn btn-sm btn-ghost" onclick={() => remove(a)} aria-label="Delete {a.registrationNo || 'this volume'}">Delete</button>
+															<button type="button" class="btn btn-sm btn-ghost" data-alloc-delete={a.id} onclick={() => remove(a, 'unit')} aria-label="Delete {a.registrationNo || 'this volume'}">Delete</button>
 														</span>
 													{/if}
 												</li>
@@ -598,7 +635,7 @@
 										{#if canEdit}
 											<td class="row-actions">
 												<button type="button" class="btn btn-sm btn-ghost" onclick={() => openSheet('volume', a.id)} aria-label="Change {a.registrationNo || 'this volume'}">Change</button>
-												<button type="button" class="btn btn-sm btn-ghost" onclick={() => remove(a)} aria-label="Delete {a.registrationNo || 'this volume'}">Delete</button>
+												<button type="button" class="btn btn-sm btn-ghost" data-alloc-delete={a.id} onclick={() => remove(a, 'table')} aria-label="Delete {a.registrationNo || 'this volume'}">Delete</button>
 											</td>
 										{/if}
 									</tr>
@@ -619,13 +656,13 @@
 
 				{#if data.sources.length}
 					<h3 class="sub-h">Imported files <HelpTip key="warms-import" label="About importing registered volumes" /></h3>
-					<ul class="sources">
+					<ul class="sources" id="alloc-sources">
 						{#each data.sources as s (s.id)}
 							<li>
 								<span><strong>{s.fileName}</strong> · {s.rows} row{s.rows === 1 ? '' : 's'} · {fmtDate(s.importedAt, true)}{s.importedBy ? ` by ${s.importedBy}` : ''}</span>
 								<span class="mono small" title="SHA-256 of the file">{s.sha256}</span>
 								{#if s.reference}<span class="small muted">{s.reference}</span>{/if}
-								{#if canEdit}<button type="button" class="btn btn-sm btn-ghost" onclick={() => undoImport(s.id, s.fileName, s.rows)}>Remove this import</button>{/if}
+								{#if canEdit}<button type="button" class="btn btn-sm btn-ghost" data-source-remove={s.id} onclick={() => undoImport(s.id, s.fileName, s.rows)}>Remove this import</button>{/if}
 							</li>
 						{/each}
 					</ul>
@@ -724,7 +761,7 @@
 				<section class="panel" aria-labelledby="alloc-viewers-h" data-testid="allocation-viewer-units">
 					<h2 id="alloc-viewers-h">What viewers see <HelpTip key="allocation-viewer-access" label="About what viewers see" /></h2>
 					<label class="check">
-						<input type="checkbox" checked={data.viewerUnits} disabled={unitsSaving} onchange={(e) => setViewerUnits(e.currentTarget.checked)} />
+						<input type="checkbox" checked={data.viewerUnits} disabled={unitsSaving} onchange={(e) => setViewerUnits(e.currentTarget)} />
 						Viewers see each farm’s registered volumes
 					</label>
 					<p class="small muted">{VIEWER_UNITS_NOTE} Names of registered users are never shown to viewers.</p>

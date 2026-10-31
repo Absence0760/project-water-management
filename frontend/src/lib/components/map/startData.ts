@@ -115,18 +115,14 @@ export function startDataItems(s: DataInput): DataItem[] {
 	});
 
 	const set = s.settings;
-	const perUnitMode = set?.unitRain?.mode === 'perUnit';
+	// Per unit is the only method (issue #658): nothing to choose, only said.
 	items.push({
 		id: 'method',
 		title: 'How natural flow is made',
 		status: set ? 'done' : 'unknown',
-		detail: !set
-			? 'Reading the settings…'
-			: perUnitMode
-				? 'Per unit: GR4J runs on each unit’s own rain.'
-				: 'Fragmentation (the default): GR4J runs once on the catchment rain, split by the units’ shares. Choose Per unit for each unit’s own runoff.',
+		detail: !set ? 'Reading the settings…' : 'Per unit: GR4J runs on each unit’s own rain.',
 		href: '?tab=settings#set-share',
-		where: 'Model settings → Model selection for flow generation'
+		where: 'Model settings → Flow generation'
 	});
 
 	const rainStatus: DataStatus = !s.hasBoundary ? 'todo' : s.rain === 'current' ? 'done' : s.rain === 'changed' ? 'partial' : s.rain === 'none' ? 'todo' : 'unknown';
@@ -168,7 +164,7 @@ export function startDataItems(s: DataInput): DataItem[] {
 					? 'Not set: the units’ area-weighted mean MAP stands in. Needed only when a rainfall station forces the catchment.'
 					: 'Not set, and not every unit has a MAP to stand in. Needed only when a rainfall station forces the catchment.',
 		href: '?tab=settings#set-share',
-		where: 'Model settings → Model selection for flow generation → The catchment’s rainfall station',
+		where: 'Model settings → Flow generation → The catchment’s rainfall station',
 		optional: true
 	});
 
@@ -209,7 +205,7 @@ export function startDataItems(s: DataInput): DataItem[] {
 					? `${someOf(withMap.length, land.length)} have a MAP. The MAP grid proposes each unit’s over its boundary.`
 					: 'No unit has a MAP yet: the MAP grid proposes each unit’s over its boundary.',
 		href: '?tab=settings#set-unit-map',
-		where: 'Model settings → Model selection for flow generation → MAP from the grid'
+		where: 'Model settings → Flow generation → MAP from the grid'
 	});
 
 	// The A-pan (issue #646 item 5): the monthly row, or a daily A-pan series read instead. Without either, crop demand and

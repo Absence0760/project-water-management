@@ -1,4 +1,4 @@
-// Model settings → Model selection for flow generation → Per unit: a unit's patching priority (issue #612, docs/ui.md §
+// Model settings → Flow generation → Per unit: a unit's patching priority (issue #612, docs/ui.md §
 // Model settings, docs/model.md §2.4i). On the sample model with three invented rainfall stations: Ridge (MAP 600 mm,
 // a 10-day gap), Vlei (MAP 500 mm, a reading on every day) and Short (a record that starts after Ridge's gap).
 // - A unit given Ridge starts with the corrected CHIRPS alone. Add a source adds Vlei (it can help); Up moves it first.

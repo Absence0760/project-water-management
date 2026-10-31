@@ -11,7 +11,8 @@ import { GR4J_NO_PET } from '../runoff/pet';
 import { runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { randomInput } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
-import { calibrate, prepareCalibration, startSeed, startsNotes, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
+import { calibrate, prepareCalibration, prepareCalibrationFits, startSeed, startsNotes, validationNotes, type CalibrateOptions, type DifferentialTest, type FitOutcome, type ValidationTest } from './calibrate';
+import type { DdsState } from './dds';
 import { MAX_STARTS } from './params';
 import { BOOTSTRAP_LEVEL, BOOTSTRAP_RESAMPLES, CLIMATOLOGY_HALF_WINDOW } from './bootstrap';
 import { fitScores } from './objective';
@@ -146,14 +147,18 @@ describe('prepareCalibration scores what runModel produces', () => {
 describe('calibrate', () => {
 	it('recovers known GR4J parameters from noise-free flow (X1, X3 within 10 %, X4 within 0.2 days)', () => {
 		const truth = { x1: 420, x2: 0, x3: 85, x4: 2.3 };
-		const report = calibrate(synthetic(truth), { budget: 5000, seed: 1, validate: false });
+		// 2 500 model runs, not 5 000: across seeds 1–12 both stay inside these
+		// tolerances with the same margins (worst X3 3.0 % vs 3.3 %, X4 0.099 vs
+		// 0.101 days, KGE' 0.9936 vs 0.9966), at half the time; 5 000 ran 176 s on
+		// a slow CI runner against the 120 s hang guard (run 41083075763).
+		const report = calibrate(synthetic(truth), { budget: 2500, seed: 1, validate: false });
 		expect(Math.abs(report.params.x1! / truth.x1 - 1)).toBeLessThan(0.1);
 		expect(Math.abs(report.params.x3! / truth.x3 - 1)).toBeLessThan(0.1);
 		expect(Math.abs(report.params.x4! - truth.x4)).toBeLessThan(0.2);
 		expect(report.params.x2).toBe(0);
 		expect(report.fit.scores.kgePrime!).toBeGreaterThan(0.99);
 		expect(report.before.scores.kgePrime!).toBeLessThan(report.fit.scores.kgePrime!);
-		expect(report.evaluations).toBe(5000);
+		expect(report.evaluations).toBe(2500);
 	}, 120_000);
 
 	it('fitted parameters, applied to the project, pass every run invariant', () => {
@@ -767,4 +772,58 @@ describe('calibrate reads the per-day quality flags (CR-18/19, engine ≥ 1.22.0
 		expect(days.length).toBeGreaterThan(0);
 		expect(days.some((t) => flow[t]! < lo)).toBe(false);
 	}, 30_000);
+});
+
+describe('a fit in steps (prepareCalibrationFits), as server jobs run it', () => {
+	/**
+	 * Every optimisation in pieces of `every` model runs, each piece on a fresh
+	 * set-up (a new job) with the outcomes and the paused state through JSON
+	 * (the database), then the report from the outcomes.
+	 */
+	function inSteps(input: ModelInput, opts: Omit<CalibrateOptions, 'onProgress'>, every: number) {
+		const json = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+		const outcomes: FitOutcome[] = [];
+		let state: DdsState | null = null;
+		let jobs = 0;
+		for (;;) {
+			const fits = prepareCalibrationFits(json(input), opts);
+			jobs++;
+			if (outcomes.length === fits.count) return { report: fits.report(json(outcomes)), jobs };
+			const from: number = state?.evaluations ?? 0;
+			const r = fits.fit(outcomes.length, { ...(state ? { resume: state } : {}), pause: (n) => n - from >= every });
+			if ('paused' in r) state = json(r.paused);
+			else {
+				outcomes.push(json(r.done));
+				state = null;
+			}
+		}
+	}
+
+	it('gives calibrate()’s report to the bit: every start, the split and dry → wet fits, the scores and notes', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 8);
+		const opts = { budget: 40, starts: 3, seed: 11 } as const;
+		const whole = calibrate(input, opts);
+		expect(whole.startResults).toHaveLength(3);
+		expect(whole.splitSample).not.toBeNull();
+		expect(whole.differential).not.toBeNull();
+		const fits = prepareCalibrationFits(input, opts);
+		// Three starts, the split-sample fit and the dry → wet fit.
+		expect({ count: fits.count, budget: fits.budget }).toEqual({ count: 5, budget: 40 });
+		for (const every of [7, 40]) {
+			const { report, jobs } = inSteps(input, opts, every);
+			expect(report).toEqual(whole);
+			// ceil(40 / every) pieces per optimisation, and the job that builds the report.
+			expect(jobs).toBe(5 * Math.ceil(40 / every) + 1);
+		}
+	});
+
+	it('gives calibrate()’s report without validation, and refuses outcomes that aren’t the fit’s', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 3);
+		const opts = { budget: 30, starts: 2, seed: 4, validate: false } as const;
+		expect(inSteps(input, opts, 11).report).toEqual(calibrate(input, opts));
+		const fits = prepareCalibrationFits(input, opts);
+		expect(fits.count).toBe(2);
+		expect(() => fits.report([])).toThrow('the fit has 2 optimisations, not 0');
+		expect(() => fits.fit(2)).toThrow('the fit has no optimisation 3');
+	});
 });

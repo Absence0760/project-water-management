@@ -6,10 +6,15 @@
 //
 // Each shard file is one call, fuzzShard(i, SHARDS): it takes every
 // seed in its contiguous slice of the range, so the shards together cover
-// exactly the seeds the single test did. FUZZ_CASES / FUZZ_SEED /
-// FUZZ_MAX_FAILURES work as before (a soak: FUZZ_CASES=20000 pnpm test).
+// exactly the seeds the single test did. Inside a shard the slice is cut
+// into tests of CHUNK seeds (chunkRanges), run one after another in the
+// shard's worker: one 100-seed test took ~15 s alone but 120 s+ on a slow CI
+// runner (run 41083075763), so each test now holds a quarter of the work
+// and stays well inside its hang guard, the seeds unchanged. FUZZ_CASES /
+// FUZZ_SEED work as before (a soak: FUZZ_CASES=20000 pnpm test);
+// FUZZ_MAX_FAILURES caps the failures reported by each test.
 //
-// Each shard's timeout is a hang guard, not a budget: FUZZ_MS_PER_CASE per
+// Each test's timeout is a hang guard, not a budget: FUZZ_MS_PER_CASE per
 // case (default 600, ~3x a case alone), at least 2 minutes. A release soak
 // (scripts/release/engine-build.mjs) raises it to RELEASE_MS_PER_CASE: a slow
 // CI runner once took ~0.4 s a case, timing out three 400-case shards with
@@ -19,6 +24,8 @@ import { randomInput, shrink } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
 
 export const SHARDS = 4;
+/** Seeds per vitest test inside a shard (a quarter of a default 100-seed shard). */
+export const CHUNK = 25;
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const CASES = Number(env.FUZZ_CASES ?? 400);
@@ -46,23 +53,36 @@ export function shardRange(i: number, n: number, cases = CASES, seed0 = SEED0): 
 	return [seed0 + (i - 1) * per, Math.min(seed0 + cases, seed0 + i * per)];
 }
 
+/** Seeds [from, to) cut into consecutive [a, b) pieces of at most `size`, covering it exactly once. */
+export function chunkRanges(from: number, to: number, size = CHUNK): Array<[number, number]> {
+	const step = Math.max(1, Math.floor(size));
+	const out: Array<[number, number]> = [];
+	for (let a = from; a < to; a += step) out.push([a, Math.min(to, a + step)]);
+	return out;
+}
+
 export function fuzzShard(i: number, n = SHARDS): void {
-	const [from, to] = shardRange(i, n);
+	const [first, last] = shardRange(i, n);
+	const parts = chunkRanges(first, last);
 	describe('engine invariants on random networks', () => {
-		it(`seeds ${from}–${to - 1} of ${CASES} from ${SEED0}, GR4J runoff (shard ${i} of ${n})`, () => {
-			const failures: string[] = [];
-			for (let seed = from; seed < to && failures.length < MAX_FAILURES; seed++) {
-				const input = randomInput(seed);
-				const bad = checkAll(input, seed);
-				if (!bad) continue;
-				const rule = ruleOf(bad);
-				const small = shrink(input, (x) => {
-					const b = checkAll(x, seed);
-					return b !== null && ruleOf(b) === rule;
-				});
-				failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
-			}
-			expect(failures.join('\n\n')).toBe('');
-		}, shardTimeoutMs(to - from)); // a fraction of a second a case alone; a hang guard (see the top), the release's far looser
+		parts.forEach(([from, to], k) => fuzzChunk(from, to, `shard ${i} of ${n}, part ${k + 1} of ${parts.length}`));
 	});
+}
+
+function fuzzChunk(from: number, to: number, label: string): void {
+	it(`seeds ${from}–${to - 1} of ${CASES} from ${SEED0}, GR4J runoff (${label})`, () => {
+		const failures: string[] = [];
+		for (let seed = from; seed < to && failures.length < MAX_FAILURES; seed++) {
+			const input = randomInput(seed);
+			const bad = checkAll(input, seed);
+			if (!bad) continue;
+			const rule = ruleOf(bad);
+			const small = shrink(input, (x) => {
+				const b = checkAll(x, seed);
+				return b !== null && ruleOf(b) === rule;
+			});
+			failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
+		}
+		expect(failures.join('\n\n')).toBe('');
+	}, shardTimeoutMs(to - from)); // a fraction of a second a case alone; a hang guard (see the top), the release's far looser
 }

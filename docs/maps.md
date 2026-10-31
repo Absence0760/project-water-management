@@ -952,37 +952,45 @@ the legend). What the page shows is in [ui.md § Map](./ui.md#map-tabmap).
 
 ## Calibration zones on the map
 
-Issue #555 (model.md §2.10n): when a calibration zone applies (a gauge
-ticked in Calibrate at several gauges, under Per unit flow generation),
-**Colour areas by** offers **Calibration zone** (`measure=zone`), with or
-without a run. It is the settings', not a run's: the zones come from the
-model as edited and the project's saved settings by the engine's own rule
-(`resolveZones`, through `frontend/src/lib/calibration/zoneGroups.ts`), the
-same groups and colours the Network colours by, so the map shows what the
+Issue #555, calibration locations since issue #659 (model.md §2.10n): when
+more than one parameter set applies (a ticked calibration location's group
+beside another's, or beside units on the catchment parameters), **Colour
+areas by** offers **Calibration zone** (`measure=zone`), with or without a
+run. It is the settings', not a run's: the groups come from the model as
+edited and the project's saved settings by the engine's own rule
+(`resolveLocations`, through `frontend/src/lib/calibration/zoneGroups.ts`),
+the same groups and colours the Network colours by, so the map shows what the
 next run applies.
 
 - **No new route.** The settings come with the project (`MapTab`'s
   `settings`), the units' parcels with the features already loaded; a parcel
-  reaches its zone through `map_feature.node_id`.
+  reaches its group through `map_feature.node_id`.
 - **Colours** (`mapResults.ts` `zoneFills`): each area linked to a land unit
-  takes its zone's colour token, the crop palette's in order
+  takes its group's colour token, the crop palette's in order
   (`ZONE_TOKENS`, `--series-1`, `--series-2`, `--series-3`, `--series-5`, …;
-  upstream first, the calibration site's zone last), read from `<html>`'s
-  computed style and again on a theme switch (`MapResults.zoneColours`), as
-  the bands are. Every other area (not linked, a gauge, a water user, a farm
+  upstream first, the headline location's last, then the next token for the
+  units on the catchment parameters, never "No figure"'s grey), read from `<html>`'s computed style and
+  again on a theme switch (`MapResults.zoneColours`), as the bands are. A unit
+  given another location's parameters by **Parameters from** takes its
+  donor's colour. Every other area (not linked, a gauge, a water user, a farm
   with no land area) takes "No figure"'s colour (`resultFills`). Past nine
-  zones the colours repeat; the name beside each is what tells them apart.
-- **Words.** The legend lists each zone ("Middle weir zone (1 unit)",
-  "Outflow gauge zone (calibration site)", ", not fitted yet"), the card
-  adds **Calibration zone** and Every feature a **Calibration zone** column
-  (`featureZone`), so a colour is never the only cue; the outline and the
-  words carry WCAG 1.4.1 and 1.4.11, as for results.
-- **Not offered** under Fragmentation, or when no ticked gauge is usable
-  (the run would apply none). A `measure=zone` link then shows the kinds.
+  locations the colours repeat; the name beside each is what tells them apart.
+- **Words.** The legend lists each group ("Middle weir zone (1 unit)",
+  "Outflow gauge zone (outlet, headline) (2 units, 1 placed by nearest upstream)", ",
+  not fitted yet") and, on its own line with the donor's swatch, each group's
+  borrowed units ("Borrowed from Upper weir (1 unit)"); the card adds
+  **Calibration zone** ("Borrowed from Upper weir", "Nearest upstream: Middle
+  weir") and Every feature a **Calibration zone** column (`featureZone`), so a
+  colour is never the only cue; the outline and the words carry WCAG 1.4.1
+  and 1.4.11, as for results. The areas carry no outline of their own for a
+  borrowed unit (the Network rings it); the key and the card say it.
+- **Not offered** with one parameter set (no usable ticked gauge, or one group
+  holding every unit). A `measure=zone` link then shows the kinds.
 
 `mapResults.test.ts` (the options, the fills, the words),
-`calibration/zoneGroups.test.ts`, and `e2e/tests/calibration-zones-views.spec.ts`
-(the legend's colours read from the palette tokens, no pixels read).
+`calibration/zoneGroups.test.ts`, `e2e/tests/calibration-zones-views.spec.ts`
+(the legend's colours read from the palette tokens, no pixels read) and
+`e2e/tests/calibration-borrow.spec.ts` (a borrowed unit's line and colour).
 
 ## In an evidence pack
 
@@ -1114,8 +1122,8 @@ The rain feed's licence (CHIRPS) is in [§ Sources](#sources).
 ## Rain for each unit
 
 Issue #482 part B: a CHIRPS rain series of its own for every hydrological
-unit, averaged over the unit's own polygon, so that under
-`settings.unitRain` `perUnit` each unit's runoff comes from its own rain
+unit, averaged over the unit's own polygon, so that each unit's runoff
+comes from its own rain (Per unit, the only method from engine 1.109.0)
 ([model.md §2.4h](./model.md)).
 
 - **Which units.** Land units only: farm nodes with an area above 0 (gauges
@@ -2975,7 +2983,7 @@ the points show without their values), then the grid's source line.
 
 ## MAP for each unit
 
-Settings → Model selection for flow generation, under Per unit, **MAP from the grid** (issue #482
+Settings → Flow generation, **MAP from the grid** (issue #482
 follow-up; `geo/unitMap.ts`, `geo/unitMapRoutes.ts`): each land unit's mean
 annual precipitation from one of the loaded MAP grids ([§ MAP
 grid](#map-grid)), proposed beside what its form holds, and written to the

@@ -195,6 +195,12 @@ describe('entering allocations by hand', () => {
 		expect((await editor.call('POST', `/projects/${projectId}/allocations`, { ...base, nodeId: outlet.id })).status).toBe(400);
 		expect((await editor.call('POST', `/projects/${projectId}/allocations`, { ...base, validFrom: '2021-01-01', validTo: '2020-01-01' })).status).toBe(400);
 		expect((await editor.call('POST', `/projects/${projectId}/allocations`, { ...base, volumeM3PerYear: -1 })).status).toBe(400);
+		// The column's CHECK allows 100 characters (038): 101 is a 400 from the schema, not the database's 500.
+		const long = await editor.call('POST', `/projects/${projectId}/allocations`, { ...base, registrationNo: 'R'.repeat(100) });
+		expect(long.status, JSON.stringify(long.body)).toBe(201);
+		expect((await editor.call('POST', `/projects/${projectId}/allocations`, { ...base, registrationNo: 'R'.repeat(101) })).status).toBe(400);
+		expect((await editor.call('PATCH', `/projects/${projectId}/allocations/${long.body.allocation.id}`, { registrationNo: 'R'.repeat(101) })).status).toBe(400);
+		expect((await editor.call('DELETE', `/projects/${projectId}/allocations/${long.body.allocation.id}`)).status).toBe(204);
 		expect((await viewer.call('POST', `/projects/${projectId}/allocations`, base)).status).toBe(403);
 		expect((await farmer.call('GET', `/projects/${projectId}/allocations`)).status).toBe(403);
 		expect((await stranger.call('GET', `/projects/${projectId}/allocations`)).status).toBe(404);

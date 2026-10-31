@@ -226,17 +226,15 @@ export function roleBadge(
 		inUse: ReadonlySet<string>;
 		gaugeInUse: ReadonlySet<string>;
 		gaugeIds: ReadonlySet<string>;
-		calibrationSite: string | null;
+		/** The gauges that are ticked calibration locations (issue #659): a fit is made on their records. */
+		calibrationGauges: ReadonlySet<string>;
 		/** The land units a rain series can be measured at (209_unit_rain_series): node id → name (issue #553). */
 		units?: ReadonlyMap<string, string>;
-		/** Per-unit rain is on (settings.unitRain `perUnit`): a unit's own rain is read for it. */
-		unitRainOn?: boolean;
 		/**
 		 * Where each rainfall station's rain goes, by series id (groups.ts stationUses, issue #553): the areas a run
-		 * reads it for, as their rain or their CHIRPS correction, and the units it is assigned to while per-unit rain
-		 * is off. The row's "Rain for …" line reads the same, so the two never disagree (issue #589).
+		 * reads it for, as their rain or their CHIRPS correction. The row's "Rain for …" line reads the same, so the two never disagree (issue #589).
 		 */
-		stationUses?: ReadonlyMap<string, { rainFor: readonly string[]; corrects: readonly string[]; idle?: readonly string[] }>;
+		stationUses?: ReadonlyMap<string, { rainFor: readonly string[]; corrects: readonly string[] }>;
 		/** settings.rainStations.catchment's station id: when it is one of the project's stations, it is the catchment rain, not the catchment rain series read by name (docs/model.md §2.4i). */
 		catchmentStationId?: string | null;
 	}
@@ -245,10 +243,9 @@ export function roleBadge(
 	if (!role) return null;
 	const unused = !ctx.inUse.has(s.id) && !ctx.gaugeInUse.has(s.id);
 	const kindRead = (k: string) => ctx.list.some((x) => x.kind === k && ctx.inUse.has(x.id));
-	// A unit's own rain (its CHIRPS feed, a migration-209 gauge): read for that unit under per-unit rain, not a gauge record.
+	// A unit's own rain (its CHIRPS feed, a migration-209 gauge): read for that unit (Per unit, the only method), not a gauge record.
 	const unit = s.siteNodeId ? ctx.units?.get(s.siteNodeId) : undefined;
-	if (unit !== undefined)
-		return ctx.unitRainOn ? { label: `${unit}’s own rain`, unused: false, why: null } : { label: 'Not used: per-unit rain is off', unused: true, why: null };
+	if (unit !== undefined) return { label: `${unit}’s own rain`, unused: false, why: null };
 	// A rainfall station (catchment rain at no site, issue #553): the catchment rain a run reads by name keeps its role;
 	// any other is read only for the areas settings.rainStations assigns it, as a run reads them (stationUses), and
 	// says so in station terms, never as a second catchment rain series (issue #589). Its row's line names the areas.
@@ -260,7 +257,6 @@ export function roleBadge(
 		if (ctx.inUse.has(s.id) && !catchmentStation) return { label: role.role, unused: false, why: null };
 		const uses = ctx.stationUses?.get(s.id);
 		if (uses && (uses.rainFor.length > 0 || uses.corrects.length > 0)) return { label: 'Rainfall station', unused: false, why: null };
-		if (uses?.idle?.length) return { label: 'Not used: per-unit rain is off', unused: true, why: null };
 		if (ctx.inUse.has(s.id)) return { label: 'Not used: the catchment runs on its station', unused: true, why: null };
 		return { label: 'Not used: no area is assigned to it', unused: true, why: null };
 	}
@@ -269,9 +265,9 @@ export function roleBadge(
 			return ctx.gaugeIds.has(s.siteNodeId)
 				? { label: 'Not used (another record of this kind is at this gauge)', unused, why: null }
 				: { label: 'Not used: its gauge is no longer in the model', unused, why: null };
-		return s.siteNodeId === ctx.calibrationSite
-			? { label: 'Gauge record (calibration site)', unused, why: 'Checked against the simulated flow at its gauge, and calibration scores it there; the EWR test uses the outlet’s records.' }
-			: { label: 'Gauge record (checks only)', unused, why: 'Checked against the simulated flow at its gauge; calibration scores it only if Calibration → Calibration record picks this gauge.' };
+		return ctx.calibrationGauges.has(s.siteNodeId)
+			? { label: 'Gauge record (calibration location)', unused, why: 'Checked against the simulated flow at its gauge, and its gauge’s parameters are fitted on it; the EWR test uses the outlet’s records.' }
+			: { label: 'Gauge record (checks only)', unused, why: 'Checked against the simulated flow at its gauge; a fit uses it only once Calibrate here is ticked for this gauge in Calibration → Calibration record.' };
 	}
 	if (ctx.inUse.has(s.id) || s.kind === 'flow_reference_m3s') return { label: role.role, unused, why: null };
 	if (s.kind === 'flow_logger_m3s' && !kindRead(s.kind)) return { label: 'Calibration if chosen in settings', unused, why: null };

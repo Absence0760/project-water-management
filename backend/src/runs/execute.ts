@@ -186,18 +186,22 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 }
 
 /**
- * settings.unitRain with the catchment rain station's MAP and its source as
- * its gauge MAP (issue #553): the station wins over the settings, so a run
- * reads the MAP stored with the series it reads. 239 copied each project's
- * gaugeMapMm / gaugeMapSource onto that series, so a run is bit-identical
- * across it. Only a stored unitRain object takes it (absent or null is
- * catchment rain, where no gauge MAP plays a part, and the input stays as it
- * was); without a station MAP the setting is returned as it is (the same
- * object).
+ * settings.unitRain as a run reads it (issue #658): always Per unit, the only
+ * flow generation method since engine 1.109.0, so the run's stored inputs say
+ * what it ran (the run comparison reads them); absent, null or the retired
+ * `catchment` become `{ mode: 'perUnit' }` with the rest kept. With the
+ * catchment rain station's MAP (issue #553) that MAP and its source are its
+ * gauge MAP: the station wins over the settings, so a run reads the MAP stored
+ * with the series it reads (239 copied each project's gaugeMapMm /
+ * gaugeMapSource onto that series, so a run is bit-identical across it).
+ * Without a station MAP the setting keeps its own (or none). A value that isn't
+ * an object at all is returned as it is, for the engine to warn of.
  */
 export function stationGaugeMap(unitRain: unknown, station: { mapMm: number | null; mapSource: string | null } | null): unknown {
-	if (!station || station.mapMm === null || unitRain === null || typeof unitRain !== 'object' || Array.isArray(unitRain)) return unitRain;
-	return { ...(unitRain as Record<string, unknown>), gaugeMapMm: station.mapMm, gaugeMapSource: station.mapSource };
+	if (unitRain !== null && unitRain !== undefined && (typeof unitRain !== 'object' || Array.isArray(unitRain))) return unitRain;
+	const stored = (unitRain ?? {}) as Record<string, unknown>;
+	const gauge = station && station.mapMm !== null ? { gaugeMapMm: station.mapMm, gaugeMapSource: station.mapSource } : {};
+	return { ...stored, mode: 'perUnit', ...gauge };
 }
 
 /**

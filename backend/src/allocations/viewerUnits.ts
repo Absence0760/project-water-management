@@ -455,7 +455,7 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 		...(lia ? { licenceImpactAuthorised: authorisedVerdicts((({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia)) } : {}),
 		...('licenceImpact' in report ? { licenceImpact: boardVerdicts((report as { licenceImpact?: unknown }).licenceImpact) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
-		// A combined dam's yield on a run that rests on the registered volumes: its direction only (evidence-25).
+		// A combined dam's yield on a run that rests on the registered volumes: its direction only (evidence-26).
 		...('cumulative' in report ? { cumulative: combinedDamVerdicts((report as { cumulative?: unknown }).cumulative, false) } : {}),
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
 		...(Array.isArray((report.allocations as EvidenceAllocations | undefined)?.units)

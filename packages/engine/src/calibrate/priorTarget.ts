@@ -46,12 +46,14 @@ export interface PriorTargetInfo extends PriorTargetRef {
 const waterYearDays = (wy: number) => toEpochDay(`${wy + 1}-10-01`) - toEpochDay(`${wy}-10-01`);
 
 /**
- * The prior's target for a fit of `zoneNodeId` (null = the calibration site's
- * own zone, or with no zone the catchment). Throws when the project has no
- * calibration zone at that gauge.
+ * The prior's target for a fit of the location `zone` (a gauge's node id,
+ * null = the outlet's location, undefined = the headline; engine 1.110.0,
+ * issue #659): its group's land units, or with no gauge location the
+ * catchment. Throws when the project has no ticked location there.
  */
-export function priorTargetOf(input: ModelInput, zoneNodeId: string | null): PriorTargetInfo {
+export function priorTargetOf(input: ModelInput, zone?: string | null): PriorTargetInfo {
 	const plan = zoneFitPlan(input);
+	const zoneNodeId = zone === undefined ? (plan?.find((s) => s.headline)?.zoneNodeId ?? null) : zone;
 	let units: string[] | null = null;
 	let areaKm2: number;
 	const run = prepareRun(input);

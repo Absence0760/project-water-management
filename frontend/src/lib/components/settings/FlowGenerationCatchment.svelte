@@ -1,7 +1,7 @@
 <!--
-	Settings → Model selection for flow generation → The catchment's rainfall station (issue #612 follow-up, docs/ui.md
+	Settings → Flow generation → The catchment's rainfall station (issue #612 follow-up, docs/ui.md
 	§ Model settings, docs/model.md §2.4i): settings.rainStations.catchment, the station whose rain is the catchment
-	rain (GR4J's one run under Fragmentation; demand and the dams under either method), and its patching priority
+	rain (demand and the dams, and GR4J for a unit with no rain of its own or one scaled from the gauge), and its patching priority
 	(PatchChain.svelte, as a unit's, with each station's fill of the main station's gaps over the run's history or why
 	it can't help, patchChoices.ts), whether its rain is scaled to the catchment MAP, and the station the catchment's
 	CHIRPS is corrected against. "No station" keeps the catchment rain series, as before stations, so a project from
@@ -192,7 +192,7 @@
 			<p class="hint" role="note" data-testid="flowgen-catchment-patch-unknown">How many gaps each station fills shows once the project has rain to run on.</p>
 		{/if}
 		<span class="hint explain" id="{uid}-h">
-			The catchment rain is what GR4J runs on under Fragmentation, and what demand and the dams read under either method. With a station, its days
+			The catchment rain is what demand and the dams read, and what GR4J runs on for a unit scaled from the catchment gauge or with no rain of its own. With a station, its days
 			are its rain × catchment MAP ÷ station MAP, and its gaps and unreliable days take the
 			first source in the patching priority with a reading, as a unit’s do. A station’s fill count covers the run’s days before any forecast:
 			forecast days are never patched. Without a station the catchment rain series runs as before stations.

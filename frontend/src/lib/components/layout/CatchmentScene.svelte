@@ -130,10 +130,12 @@
 		width: 100%;
 		height: 100%;
 	}
+	/* Colours come from the panel it sits in (AuthCard's --scene-* tokens, which
+	   follow the theme). */
 	.contour {
 		fill: none;
-		stroke: #d9e6f2;
-		stroke-opacity: 0.09;
+		stroke: var(--scene-line);
+		stroke-opacity: var(--scene-contour-opacity);
 		stroke-width: 1.2;
 	}
 	.contours {
@@ -144,8 +146,8 @@
 	}
 	.bed {
 		fill: none;
-		stroke: #d9e6f2;
-		stroke-opacity: 0.28;
+		stroke: var(--scene-bed);
+		stroke-opacity: var(--scene-bed-opacity);
 		stroke-width: 3;
 		stroke-linecap: round;
 	}
@@ -154,7 +156,7 @@
 	}
 	.flow {
 		fill: none;
-		stroke: #36c6e0;
+		stroke: var(--scene-glint);
 		stroke-width: 2.2;
 		stroke-linecap: round;
 		stroke-dasharray: 3 19;
@@ -164,32 +166,32 @@
 		stroke-width: 3;
 	}
 	.farm {
-		fill: #d9e6f2;
+		fill: var(--scene-line);
 	}
 	.dam {
-		fill: #36c6e0;
+		fill: var(--scene-water);
 		fill-opacity: 0.28;
-		stroke: #36c6e0;
-		stroke-opacity: 0.55;
+		stroke: var(--scene-water);
+		stroke-opacity: var(--scene-ring-opacity);
 		stroke-width: 1.5;
 	}
 	.gauge {
-		fill: #102a43;
-		stroke: #d9e6f2;
+		fill: var(--scene-ground);
+		stroke: var(--scene-line);
 		stroke-width: 2;
 	}
 	.ring {
 		fill: none;
-		stroke: #36c6e0;
+		stroke: var(--scene-water);
 		stroke-width: 2.5;
-		stroke-opacity: 0.6;
+		stroke-opacity: var(--scene-ring-opacity);
 	}
 	.core {
-		fill: #36c6e0;
+		fill: var(--scene-water);
 	}
 	.ripple {
 		fill: none;
-		stroke: #36c6e0;
+		stroke: var(--scene-water);
 		stroke-width: 2;
 		transform-box: fill-box;
 		transform-origin: center;

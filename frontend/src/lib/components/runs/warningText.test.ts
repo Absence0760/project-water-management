@@ -24,11 +24,16 @@ describe('warningParts (issue #586, D19)', () => {
 			{ text: 'pick a gauge in ' },
 			{ text: 'Settings → Calibration record', href: '?tab=calibration&run=r%201#set-record' }
 		]);
-		// Flow generation became Model selection for flow generation (engine 1.103.0, issue #614): its old name still links.
+		// Flow generation was "Model selection for flow generation" from engine 1.103.0 (issue #614) until issue #658 renamed it back: both names link.
 		expect(warningParts('Parameters not fitted for this method (Model settings → Flow generation: Fragmentation).', href)).toEqual([
 			{ text: 'Parameters not fitted for this method (' },
 			{ text: 'Model settings → Flow generation', href: '?tab=settings#set-share' },
 			{ text: ': Fragmentation).' }
+		]);
+		expect(warningParts('see Model settings → Model selection for flow generation.', href)).toEqual([
+			{ text: 'see ' },
+			{ text: 'Model settings → Model selection for flow generation', href: '?tab=settings#set-share' },
+			{ text: '.' }
 		]);
 	});
 

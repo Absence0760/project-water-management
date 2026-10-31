@@ -22,7 +22,7 @@ import { anySaveBar, isProjectPatch, openCalibration, openSettings, saveSettings
  * last. settings/sections.ts lists them; SettingsTab.svelte sets the ids.
  */
 const PANELS: [id: string, heading: string][] = [
-	['set-share', 'Model selection for flow generation'],
+	['set-share', 'Flow generation'],
 	['set-judge', 'EWR the results are judged by'],
 	['set-period', 'Simulation period'],
 	['set-rain', 'Rain gaps'],
@@ -61,8 +61,7 @@ const CAL_PANELS: [id: string, heading: string][] = [
 
 /**
  * The anchors inside a Model settings panel: the Per unit setup's Units without a station and MAP from the grid, cards
- * of Model selection for flow generation under either method (issue #615: Fragmentation's EWR shares run on that setup
- * too). Run warnings link to #set-unit-rain (warnings/fixes.ts), so they keep the set- prefix but aren't panels.
+ * of Flow generation (Per unit, its only method since issue #658). Run warnings link to #set-unit-rain (warnings/fixes.ts), so they keep the set- prefix but aren't panels.
  */
 const SETTINGS_INNER: [id: string, heading: string, panel: string][] = [
 	['set-unit-rain', 'Units without a station', 'set-share'],
@@ -81,7 +80,7 @@ const INDEX: [group: string | null, links: [label: string, id: string][]][] = [
 	[
 		null,
 		[
-			['Model selection for flow generation', 'set-share'],
+			['Flow generation', 'set-share'],
 			['EWR the results are judged by', 'set-judge']
 		]
 	],
@@ -135,8 +134,8 @@ test('the panels, their anchors and the side index, in page order', async ({ pag
 	const project = await createProject(page.request, 'Settings pins order');
 	await openSettings(page, project.id);
 
-	// Every #set-* anchor on the page, in order: the panels, with Model selection for flow generation's two inner
-	// anchors inside it (under Fragmentation, the default, too), none of Calibration's.
+	// Every #set-* anchor on the page, in order: the panels, with Flow generation's two inner
+	// anchors inside it (on a project that never set settings.unitRain too), none of Calibration's.
 	await expect(panelHeading(page, 'set-auto')).toHaveText('Automatic runs', { useInnerText: true });
 	for (const [id, heading, panel] of SETTINGS_INNER) await expect(page.locator(`#${panel} #${id}`).locator('h2, h3, h4').first()).toHaveText(heading, { useInnerText: true });
 	const ids = PANELS.map(([id]) => id);
@@ -153,7 +152,7 @@ test('the panels, their anchors and the side index, in page order', async ({ pag
 		above = y;
 	}
 	// The model selection leads (issue #614): the form's first heading is its own, and its panel the page's first.
-	await expect(page.locator('.settings-form h2').first()).toHaveText('Model selection for flow generation', { useInnerText: true });
+	await expect(page.locator('.settings-form h2').first()).toHaveText('Flow generation', { useInnerText: true });
 	await expect(page.locator('.settings-form .panel').first()).toHaveId('set-share');
 	// Nothing follows the form now: no panels that save on their own, and no line saying they do.
 	await expect(page.getByText(/save as you change them/)).toHaveCount(0);
@@ -209,7 +208,7 @@ test('Calibration’s Set up the fit: the settings panels and their anchors, in 
 	await expect(page.locator('#cal-setup .settings-form.explain-scope')).toHaveCount(1);
 });
 
-test('in Per unit flow generation, the units’ rain and MAP from the grid are cards of Model selection for flow generation', async ({ page, owner }) => {
+test('in Per unit flow generation, the units’ rain and MAP from the grid are cards of Flow generation', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Settings pins per unit');
@@ -323,16 +322,18 @@ test('a load of #set-unit-rain lands on its card’s heading, an h4 in its legen
 test('a viewer sees which radio option is chosen: the read-only form keeps a radio’s mark (issue #586)', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await createProject(page.request, 'Settings pins viewer radio');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	const viewer = await signIn('Settings radio viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	const v = viewer.page;
-	await openSettings(v, project.id);
-	const method = v.getByTestId('flowgen-method');
-	const chosen = method.getByRole('radio', { name: 'Fragmentation', exact: true });
+	// Flow generation's method radio went with Fragmentation (issue #658): GR4J's PE source on Calibration is the form's radio pair.
+	await openCalibration(v, project.id);
+	const pe = v.getByTestId('gr4j-pe');
+	const chosen = pe.getByRole('radio', { name: 'Pan coefficient × A-pan', exact: true });
 	await expect(chosen).toBeChecked();
 	await expect(chosen).toBeDisabled();
 	// Drawn as a radio (the read-only rule for text fields once took its circle away: appearance none, no border).
-	for (const radio of await method.getByRole('radio').all()) {
+	for (const radio of await pe.getByRole('radio').all()) {
 		await expect(radio).toBeVisible();
 		expect(await radio.evaluate((el) => getComputedStyle(el).appearance)).not.toBe('none');
 		const box = (await radio.boundingBox())!;

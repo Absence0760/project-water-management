@@ -198,19 +198,20 @@ describe('forecast mode', () => {
 // --- areal rainfall correction (§2.4g) ----------------------------------------
 
 describe('areal rainfall correction', () => {
-	it('GR4J rain = rain_final × the water-year month’s factor; rain_final unchanged; rain_areal added; totals before/after recorded', () => {
+	it('GR4J rain = rain_final × the water-year month’s factor; rain_final unchanged; totals before/after recorded (a unit on the catchment rain)', () => {
 		const days = span('2021-09-25', '2021-10-06'); // September → October, across the water-year boundary
 		const rain = days.map((_, i) => 2 + i);
 		const factors = [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.5]; // Oct × 2, Sep × 0.5
 		const out = runModel(catchment({ rain_catchment_mm: { startDate: '2021-09-25', values: rain } }, { arealRain: { factors, method: 'map', source: 'invented MAP 800 mm' } }));
 		const used = col(out, 'rain_used')!;
 		const fin = col(out, 'rain_final')!;
-		const ar = col(out, 'rain_areal')!;
+		// Per unit (engine ≥ 1.109.0): the unit has no rain of its own (rule 4), so it runs on the catchment's × the factor;
+		// GR4J's rain is the units' (rain_used), so there is no catchment rain_areal column.
+		expect(col(out, 'rain_areal')).toBeUndefined();
 		for (let t = 0; t < days.length; t++) {
 			const k = monthOf(days[t]!) === 10 ? 2 : 0.5;
 			expect(used[t]).toBeCloseTo(rain[t]! * k, 12);
 			expect(fin[t]).toBe(rain[t]);
-			expect(ar[t]).toBeCloseTo(rain[t]! * k, 12);
 		}
 		const b = out.summary.runoff!;
 		expect(b.rainMm).toBeCloseTo(used.reduce((s, v) => s + v, 0), 9);

@@ -1,4 +1,4 @@
-// Settings → Model selection for flow generation → The catchment's rainfall station (FlowGenerationCatchment.svelte,
+// Settings → Flow generation → The catchment's rainfall station (FlowGenerationCatchment.svelte,
 // issue #612 follow-up), rendered with Svelte's server renderer: no station by default (the catchment rain series),
 // a station's patching priority (CHIRPS by default), its scaling, its correcting station, a deleted station named,
 // the catchment MAP field with the ratio it gives, the no-stations note, and a viewer's disabled fields. The browser flow is pinned by

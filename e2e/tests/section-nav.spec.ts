@@ -15,7 +15,7 @@ import { openSupply, seedSupplyProject } from '../support/supply.ts';
 
 const SETTINGS_LINKS = [
 	// The lead group (issue #614): the model selection, then the judge panel (issue #586 R4-B).
-	'Model selection for flow generation',
+	'Flow generation',
 	'EWR the results are judged by',
 	'Simulation period',
 	'Rain gaps',
@@ -34,7 +34,7 @@ const SETTINGS_LINKS = [
 ];
 /** The side index's groups at 1440 px (issue #468): every panel, under its task. */
 const SETTINGS_RAIL: [string | null, string[]][] = [
-	[null, ['Model selection for flow generation', 'EWR the results are judged by']],
+	[null, ['Flow generation', 'EWR the results are judged by']],
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
 	['Demand & supply', ['Demand', 'Drought restrictions', 'Reporting']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],

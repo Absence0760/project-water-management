@@ -1,10 +1,9 @@
 // Rainfall stations and what Flow share splits (issue #553; docs/ui.md §
 // Model settings, § Data; docs/model.md §2.4h, §2.5). On the sample
 // model and its catchment rain series (synthetic):
-// - Settings → Model selection for flow generation's flow-share line follows the method:
-//   Fragmentation, the units' shares split GR4J's one run's flow; Per unit,
-//   they don't split the flow (issue #553 round 3; one natural MAR share per
-//   unit, issues #615, #616).
+// - Settings → Flow generation's flow-share line says the shares don't split
+//   the flow: each unit makes its own runoff (Per unit, the only method since
+//   issue #658; one natural MAR share per unit, issues #615, #616).
 // - Units without a station reads the gauge's MAP from the catchment rain station:
 //   an older project's settings gaugeMapMm until the station has one, then
 //   the station's. Its link opens the series in Series details, where an
@@ -13,25 +12,18 @@
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openSettings, saveSettings, showExplanations } from '../support/settings.ts';
+import { openSettings, showExplanations } from '../support/settings.ts';
 
-test('Model selection for flow generation’s flow share says what it splits, by the method, and stays as a state line under Per unit', async ({ page, owner }) => {
+test('Flow generation’s flow share says it doesn’t split the flow, and stays as a state line', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Flow share hint');
 	await openSettings(page, project.id);
 	await showExplanations(page);
 	const share = page.locator('#set-share');
 	const hint = share.getByTestId('share-hint');
-	await expect(hint).toHaveAttribute('data-unit-rain', 'off');
-	await expect(hint).toHaveText('GR4J runs once on the catchment rain, and the units’ shares split its flow between them. To give each unit its own runoff, choose Per unit above.');
-
-	// Per unit (unsaved is enough: the line reads the form), it says the flow is no longer split.
-	await share.getByRole('radio', { name: 'Per unit' }).check();
+	// A project that never set settings.unitRain is Per unit (issue #658): no choice to make first.
 	await expect(hint).toHaveAttribute('data-unit-rain', 'on');
 	await expect(hint).toHaveText('Each unit makes its own runoff, so the shares don’t split the flow.');
-	await saveSettings(page);
-	await page.reload();
-	await expect(hint).toHaveAttribute('data-unit-rain', 'on');
 	// A state line: it stays with the explanations off.
 	await page.getByRole('checkbox', { name: 'Explain each setting under its field' }).uncheck();
 	await expect(hint).toBeVisible();

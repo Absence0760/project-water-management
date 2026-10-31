@@ -214,12 +214,12 @@ describe('the run builder takes the station’s MAP as the gauge MAP (runs/execu
 	const unitRain = (i: ModelInput) => (i.settings as unknown as { unitRain?: Record<string, unknown> | null }).unitRain;
 	const input = (u: User, pid: string) => withUser(u.id, (db) => loadModelInput(db, pid));
 
-	it('station over settings; settings as before without one; nothing added for a project without unitRain', async () => {
+	it('station over settings; settings as before without one; a project without unitRain runs Per unit with the station’s MAP', async () => {
 		const u = await signUp('StnRun');
 		const q = await stationProject(u, 'Station run');
-		// No unitRain: a station's MAP adds none (the input is as before).
+		// No unitRain: Per unit all the same (issue #658), with the station's MAP as its gauge MAP.
 		expect((await patch(u, q.id, q.catchment.id, { station: { mapMm: 650, mapSource: 'Synthetic station' } })).status).toBe(200);
-		expect(unitRain(await input(u, q.id))).toBeUndefined();
+		expect(unitRain(await input(u, q.id))).toEqual({ mode: 'perUnit', gaugeMapMm: 650, gaugeMapSource: 'Synthetic station' });
 		// unitRain with its own gauge MAP: the station's wins, with its source.
 		const settings = { mode: 'perUnit', gaugeMapMm: 700, gaugeMapSource: 'Synthetic settings gauge' };
 		expect((await u.call('PATCH', `/projects/${q.id}`, { settings: { unitRain: settings } })).status).toBe(200);

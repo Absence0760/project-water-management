@@ -74,9 +74,14 @@ describe('the verify reference', () => {
 	});
 
 	it('gives no reference for a draft (no verify page answers), and one for every issued status', () => {
+		const issuedAt = '2026-09-29T08:00:00.000Z';
 		expect(packVerifyRef(pack(), 'https://wm.example', '')).toBeNull();
 		for (const status of ['issued', 'superseded', 'withdrawn'] as const)
-			expect(packVerifyRef(pack({ status }), 'https://wm.example', '')).toEqual({ sha256: HASH, code: 'ab12-cd34-ef56', url: 'https://wm.example/verify/ab12-cd34-ef56' });
+			expect(packVerifyRef(pack({ status, issuedAt }), 'https://wm.example', '')).toEqual({ sha256: HASH, code: 'ab12-cd34-ef56', url: 'https://wm.example/verify/ab12-cd34-ef56' });
+	});
+
+	it('gives no reference for a draft withdrawn before it was issued: verify answers it 404, as a draft', () => {
+		expect(packVerifyRef(pack({ status: 'withdrawn', issuedAt: null }), 'https://wm.example', '')).toBeNull();
 	});
 
 	it('prints the full hash, the code and the link on one line', () => {
