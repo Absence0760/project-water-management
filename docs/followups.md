@@ -6839,12 +6839,26 @@ Left, from the design and the persona review (§11), each with its trigger.
       application, and the share page prints it (farmer-facing: its labels go
       through the i18n agents). Trigger: once 291's change to
       `app_share_scenario` has landed, before the pilot.
-- [ ] **Labelled mitigation alternatives** (licence applicant). The report
-      shows one application; applicants must show the mitigation they
-      weighed. Durable fix: an application may cite other scenario runs on
-      the same baseline as labelled alternatives ("smaller dam", "winter
-      abstraction only"), each a page-1 column with its paired change.
-      Trigger: before the pilot, or the first applicant asks.
+- [x] **Labelled mitigation alternatives** (licence applicant). Built
+      (298_scenario_alternatives, report `evidence-26`): an application (or a
+      team scenario) cites up to three runs of its owner's other scenarios on
+      the same base run, each labelled ("smaller dam", "winter abstraction
+      only"), frozen with the ops on submission; page 1 sets each beside the
+      application, a column with its value and change against the baseline
+      (paired by its own ensemble when it has one), and A.2 lists its
+      changes; the runs, ops and hashes are in the manifest
+      ([scenarios.md § Mitigation alternatives](./scenarios.md#mitigation-alternatives),
+      [evidence-pack.md § Mitigation alternatives](./evidence-pack.md#mitigation-alternatives)).
+- [ ] **The alternatives' runs in the reproduction bundle** (licensing
+      authority). An evidence pack's manifest freezes each mitigation
+      alternative's run id, engine, ops hash and page-1 cells, but the
+      reproduction bundle carries only the baseline and the application, so
+      `reproduce:pack` can't re-run an alternative's column. Durable fix: the
+      bundle adds each alternative's input (the baseline's with its recorded
+      ops, as the application's) and results digest, and `reproduce:pack`
+      re-runs and checks each (a new bundle version). Left out of 298 because
+      the bundle was changing in parallel (feat/o30b-r3-bundle-assessment).
+      Trigger: once that lands, or the first issued pack cites an alternative.
 - [x] **EWR rows below each storage or abstraction op** (environmentalist).
       Built (engine 1.33.0, report `evidence-4`): for each proposal op that
       builds or raises storage or abstraction at a node, a page-1 row at the

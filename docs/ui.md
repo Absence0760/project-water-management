@@ -9895,7 +9895,7 @@ read it before.
   ("today 15:06 · 1979–2024", or "23 Sep 2026 15:06 · …" before
   yesterday, `fmtWhen`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
-  base, **Can’t be re-run** (was *Inputs not stored*, #586 E14) for a run
+  base, Alternative (a run a submitted scenario cites as a mitigation alternative, 298), **Can’t be re-run** (was *Inputs not stored*, #586 E14) for a run
   from before stored inputs, which can't be re-run from them, **May be affected** for a run whose engine (or
   its fit's) had a known bug, its errata ids in the tooltip (the header
   badge says it in words), Workbook comparison; `runs/runTags.ts`). Each
@@ -11543,11 +11543,12 @@ closing, and **Discard edits** puts it back. **Edits to record**
   separately). **Changes** with **Add a change** (and Undo, **Edit in the
   model tables**) is the first, the editor's main job; **Application
   details** (`application-details`) is the second: the proposer's units,
-  the WULA reference, the applicant's statement and the rebase, each a `common/Fold.svelte` whose
+  the WULA reference, the mitigation alternatives, the applicant's statement and the rebase, each a `common/Fold.svelte` whose
   closed line says its value with the app's fold chevron before it ("Proposer: none
   ticked" or up to two names and "and N more", `scenarios/details.ts`
   `proposerSummary`; "WULA: Not given" or "WU/2026/0042 · 1 works applied
-  for" (`scenarios/wula.ts`); "Statement: 0 of 3 answered"; "Based on Calibrated
+  for" (`scenarios/wula.ts`); "Alternatives: None cited" or their labels
+  (`scenarios/alternatives.ts`); "Statement: 0 of 3 answered"; "Based on Calibrated
   baseline" with **Rebase…**), **Change** (an editor) or **Show** (a
   reader) at its end and **Hide** while open. Each starts closed, and again
   on another scenario. `e2e/tests/scenario-editor-layout.spec.ts` pins Add
@@ -11597,6 +11598,22 @@ closing, and **Discard edits** puts it back. **Edits to record**
   box under the list (`scenario-wula-warnings`), never blocking the run or
   the submission. The workspace stays English, so these strings aren't
   translated.
+- **Alternatives** (`MitigationAlternatives.svelte`, every scenario,
+  298_scenario_alternatives; [scenarios.md § Mitigation
+  alternatives](./scenarios.md#mitigation-alternatives)): the mitigation
+  alternatives it cites, closed line "Alternatives: None cited" or the
+  labels joined by " · " (`scenarios/alternatives.ts`). **Cite
+  alternatives** (**Change the alternatives** once one is cited) opens a
+  row per alternative, at most 3: **Run** (a select of the caller's own
+  other scenarios' runs on the same base run, "scenario — run label", from
+  `GET …/alternatives`) and **Label**, **Remove**, **Add an alternative**;
+  **Save the alternatives** sends the whole list after checking each has a
+  run and a label and no run is picked twice (an empty row is dropped).
+  With no such run, a hint says to make a scenario per option and run it.
+  Whoever may change the scenario edits it while a draft; frozen once
+  submitted (`alternatives-frozen`); read only, an ordered list of label and
+  run. A half-saved list asks before the scenario is left. English, as the
+  workspace is.
 - **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
   application's too; the **Statement** fold): the evidence report's fixed Appendix C prompts
   (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and
@@ -11644,7 +11661,9 @@ closing, and **Discard edits** puts it back. **Edits to record**
   run's Record group, § Runs & results).
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is
   based on is tagged **Scenario base** and has no ✕ (it is cited: kept, no
-  delete or unpin, `RunMeta.citedBy`). The runs list reloads after a
+  delete or unpin, `RunMeta.citedBy`). A run a submitted scenario cites as
+  a mitigation alternative (298) is tagged **Alternative** ("A mitigation
+  alternative of "…"") and has no ✕ either. The runs list reloads after a
   scenario is created, rebased or deleted, so the tag follows.
 - **Compare page.** When either side is a scenario run, a **Scenario
   overrides** section above "Inputs that differ" lists that run's ops as it
@@ -13044,7 +13063,15 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     interaction in its note; no band; *Not assessed* naming each conflict
     when they conflict, or saying none of exactly them is assessed yet;
     *None* when there are none the reader can see; an older pack prints its
-    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then, on an
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n";
+    after the application's columns, one per **mitigation alternative** the
+    application cites (`evidence-26`, 298_scenario_alternatives,
+    `report/evidence/alternatives.ts`): headed by its label and *Alternative
+    n: "its scenario"*, each cell its value and its change against the
+    baseline, worded as the Change cell is, or why it isn't assessed (the
+    combined row's *Not assessed for an alternative*), and a note under the
+    table (`evidence-alternatives-note`); Appendix A.2 lists each one's run
+    and changes (`evidence-a2-alternative`); then, on an
     application report, **Against full authorised use** (`evidence-14`,
     licensing build item 8; `report/evidence/authorised.ts`): the same
     board over the baseline and the application both run with every holder
