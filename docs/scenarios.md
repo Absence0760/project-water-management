@@ -969,6 +969,8 @@ Migration `024_scenarios.sql`
   evidence report's fixed Appendix C prompts, written with the description
   by whoever may change the scenario and printed in Appendix C, each answered
   or *Not given* ([design/evidence-report.md § 4.3](./design/evidence-report.md)).
+  `wula_number`, `wula_works` (294) are the water-use licence application it
+  models ([§ The WULA reference](#the-wula-reference)).
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
   only. Deleting a scenario leaves its runs scenario runs: `from_scenario`
   (188) stays true from the snapshot's `inputs.scenario`, so a run of a
@@ -1798,6 +1800,49 @@ scenario is `'team'`, and behaves exactly as above).
   reopened / decided / shared / unshared / deleted` and `run.created` carry
   `application: true` and no name until the application is decided (every
   viewer reads the project's history).
+
+### The WULA reference
+
+`294_wula_reference`; engine `packages/engine/src/scenario/wula.ts`;
+[api.md § Scenarios](./api.md), [data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql),
+[evidence-pack.md § The WULA reference](./evidence-pack.md#the-wula-reference).
+The licensing authority's question (followups.md, "Applied-for works against
+the modelled ones"): is the change modelled the one the water-use licence
+application (WULA) applies for?
+
+- **What it records.** The WULA's number, as the authority gave it, and the
+  works as applied for: a list of `{ ref, text }`, `ref` a short label
+  ("W1", or the WULA's own item number), `text` the works in words. Any
+  scenario may carry one: an application, or a team scenario an editor
+  models for an applicant. Application details → *WULA* in the editor.
+- **Who.** Whoever may change the scenario writes it (an editor on a team
+  scenario, only the applicant on an application), **while it is a draft**:
+  submitted, it is frozen with the ops (`scenario_wula_frozen`, as the
+  notice's objection details, 166), and a withdrawn application reopened as a
+  draft takes changes again. A decision can't change it either. Whoever
+  reads the scenario reads it (its RLS: the applicant and those they share it
+  with; the assessors once submitted; viewers once decided).
+- **Each op names its works.** Any op may carry `works`, the `ref` of the
+  works it models (engine `OpWorksTag`, kept by `validateScenarioOps`;
+  `applyScenario` never reads it). It is part of the op, so it is hashed into
+  `ops_sha256`, recorded with every run and frozen with the ops; the editor
+  ties a change to its works from the list of changes (*Models* select, an
+  edit of the ops like any other, so Undo takes it back).
+- **The check warns, never blocks** (`check.wulaWarnings`, engine
+  `wulaWarnings`): no number given; no works listed (one line, while any op
+  is a proposal); `op N (kind): a proposal tied to none of the works the WULA
+  applies for` (no tag, or a tag the list lacks); `op N (kind): names works
+  "X", which the WULA reference doesn't list` (any class); `Works "W2" is
+  applied for, but no change models it`. Every application is held to it,
+  even before it records a reference; a team scenario only once it records
+  one, since an editor's what-if needn't model a WULA. A baseline assumption
+  is never "untied": it isn't the applicant's works. These are warnings, not
+  problems: a change can model applied-for works without the tag, and an
+  untied proposal still runs and submits. The assessor reads the tie on the
+  evidence report (page 1 and A.2, `evidence-25`).
+- **Not on the share link.** `app_share_scenario` (115/291) doesn't give the
+  reference; whether a public reader should see the WULA's number is open
+  ([followups.md](./followups.md)).
 
 ### Sharing and comments (WP-3.15)
 

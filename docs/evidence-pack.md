@@ -79,7 +79,10 @@ under each climate model's monthly change factors (report format
 [§ Future yield](#future-yield)); and § 7 counting Sentinel-2 beside WOfS,
 each source and the dates either saw together (report format
 `evidence-24`, issue #624 step 7, 2026-10-29; [§ Observed wet
-days](#observed-wet-days)). What is left is
+days](#observed-wet-days)); and page 1 and Appendix A.2 printing the
+water-use licence application the scenario models and which of its works
+each change models (report format `evidence-25`, 294_wula_reference,
+2026-10-30; [§ The WULA reference](#the-wula-reference)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -791,6 +794,38 @@ Tests: `evidence/calibrationZones.test.ts` (the fit's scores, the errata
 versions, the flag), `evidence/report.test.ts` (a zoned baseline's section,
 upstream first, its gauge scored on its own record, and null with one
 parameter set), the evidence DB tests (`evidence-22`).
+
+## The WULA reference
+
+Report format `evidence-25` (294_wula_reference;
+[scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
+The report prints the water-use licence application (WULA) the scenario
+models, so the assessor can tell whether the change modelled is the one
+applied for:
+
+- **Page 1** (`identity.application.wula`): the WULA's number (or *No
+  application number given*), the refs of the works as applied for, and how
+  the run's recorded changes meet them: how many proposals model none of the
+  works, and which works no change models. Not the works in words: those are
+  the applicant's, and page 1 holds none of the applicant's own words (G13).
+  `null` for a team scenario that records no reference; every application
+  has one, empty or not.
+- **Appendix A.2** (`appendix.wulaWorks`): the number again and the works in
+  words, then each change with the works it models (its `works` tag, read
+  from the ops the run recorded), *Names "X", which the WULA doesn't list*,
+  or, for a proposal, *Models none of the works applied for*.
+- **Questions**: a missing number, proposals tied to no works and works no
+  change models each add an assessor's question. None stops issue: the tie
+  is the applicant's statement of what models what, not a check of the
+  model.
+
+The tie reads the **run's recorded ops** (a tag added to the scenario after
+the run shows on the next run, which is why the question says to run the
+application again); the number and the works are the scenario's as it holds
+them now, which is the submitted reference once it is submitted
+(`scenario_wula_frozen`). The report is hashed into the pack's manifest, so
+a pack drafted before `evidence-25` keeps its document without either, and
+its page says nothing of a WULA.
 
 ## The responsible authority
 
