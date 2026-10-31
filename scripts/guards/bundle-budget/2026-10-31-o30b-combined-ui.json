@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "PR #672's UI with no entry of its own (share-link licence terms and WULA, the dam siting hint, the licensed-run panel, the evidence report's per-dam rows, the WULA editor fold): measured 2309 KB total against 2305 KB after all of #672's own entries, so +4 KB grown, +5 with 1 KB headroom"
+}
