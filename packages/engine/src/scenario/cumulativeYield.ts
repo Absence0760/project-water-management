@@ -13,16 +13,19 @@ import type { ScenarioOp } from './ops';
 import { CUMULATIVE_HIGHER_IS_WORSE, CUMULATIVE_METRIC_UNIT, type CumulativeRow } from './cumulative';
 
 /**
- * Most firm-yield searches one assessment runs: each dam costs one per run
- * (the baseline, each application alone, all together), so it takes
- * floor(this ÷ (applications + 2)) dams: 5 with two applications, 2 with
- * eight. Measured on the 30-year, 16-node catchment of yield.perf.test.ts
- * (M3 Pro): a search about 3.9 s, a run 1.7 s, so 20 searches and 10 runs
- * about 95 s, inside the job's 300 s Lambda and 360 s lease with room for a
- * slower CPU. The rest are named in the report's warnings, never silently
- * dropped.
+ * Most firm-yield searches one assessment fans out to: each dam costs one per
+ * run (the baseline, each application alone, all together), so it takes
+ * floor(this ÷ (applications + 2)) dams: 40 with two applications, 16 with
+ * eight. Each search is its own `assessment_yield` job (backend
+ * assessments/yields.ts, 297_assessment_yield_jobs), so the bound is no
+ * longer one job's 300 s Lambda but the work one assessment may queue: about
+ * 5.6 s a search (a run to prepare it, 1.7 s, and the search, 3.9 s, on the
+ * 30-year, 16-node catchment of yield.perf.test.ts, M3 Pro), so at most
+ * about 15 minutes of worker time, with at most ASSESSMENT_JOBS_PER_USER
+ * (2) assessments in flight per user. The rest are named in the report's
+ * warnings, never silently dropped.
  */
-export const CUMULATIVE_YIELD_SEARCHES_MAX = 20;
+export const CUMULATIVE_YIELD_SEARCHES_MAX = 160;
 
 /** Most dams an assessment of `scenarios` applications works out a yield for (at least 1). */
 export const cumulativeYieldDamsMax = (scenarios: number): number => Math.max(1, Math.floor(CUMULATIVE_YIELD_SEARCHES_MAX / (scenarios + 2)));
@@ -33,7 +36,8 @@ export interface CumulativeDam {
 	name: string;
 }
 
-const isDam = (input: ModelInput, id: string) => {
+/** Whether `id` is a unit with land and a dam above 0 m³ in `input`: what has a firm yield in the assessment. */
+export const isCumulativeDam = (input: ModelInput, id: string): boolean => {
 	const n = input.model.nodes.find((x) => x.id === id);
 	return !!n && n.kind === 'farm' && n.damCapacityM3 > 0;
 };
@@ -60,7 +64,7 @@ export function touchedDams(
 	const ids = new Set<string>();
 	for (const s of scenarios) for (const id of scenarioNodeIds(base, s.ops)) ids.add(id);
 	const all = [...ids]
-		.filter((id) => isDam(base, id) || isDam(combined, id))
+		.filter((id) => isCumulativeDam(base, id) || isCumulativeDam(combined, id))
 		.map((nodeId) => ({ nodeId, name: nameIn([combined, base], nodeId) }))
 		.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0));
 	const max = cumulativeYieldDamsMax(scenarios.length);
@@ -75,7 +79,7 @@ export interface DamYields {
 
 /** The firm yield of each of `dams` on one input: the problem built once, one search per dam it has. */
 export function damFirmYields(input: ModelInput, dams: readonly CumulativeDam[], what: string): DamYields {
-	const present = dams.map((d) => isDam(input, d.nodeId));
+	const present = dams.map((d) => isCumulativeDam(input, d.nodeId));
 	if (!present.some(Boolean)) return { yields: dams.map(() => null), warnings: [] };
 	let problem: ReturnType<typeof prepareYield>;
 	try {
@@ -114,35 +118,46 @@ const assuranceOf = (s: RunSummary, nodeId: string) => fin(s.supplyAssurance?.re
  * unit, `site` its name.
  */
 export function cumulativeDamRows(dams: readonly CumulativeDam[], baseline: CumulativeDamRun, singles: readonly CumulativeDamRun[], combined: CumulativeDamRun): CumulativeRow[] {
-	return dams.flatMap((d, i) =>
-		(
-			[
-				['dam_firm_yield', (r: CumulativeDamRun) => fin(r.yields[i])],
-				['dam_reliability', (r: CumulativeDamRun) => assuranceOf(r.summary, d.nodeId)]
-			] as const
-		).map(([metric, get]): CumulativeRow => {
-			const b = get(baseline);
-			const one = singles.map(get);
-			const c = get(combined);
-			const change = (v: number | null) => (v === null || b === null ? null : v - b);
-			const singleChanges = one.map(change);
-			const sumOfSingles = singleChanges.some((v) => v === null) ? null : singleChanges.reduce<number>((t, v) => t + v!, 0);
-			const combinedChange = change(c);
-			return {
-				metric,
-				siteNodeId: d.nodeId,
-				site: d.name,
-				isOutlet: false,
-				unit: CUMULATIVE_METRIC_UNIT[metric],
-				higherIsWorse: CUMULATIVE_HIGHER_IS_WORSE[metric],
-				baseline: b,
-				singles: one,
-				combined: c,
-				singleChanges,
-				sumOfSingles,
-				combinedChange,
-				interaction: combinedChange === null || sumOfSingles === null ? null : combinedChange - sumOfSingles
-			};
-		})
-	);
+	return dams.flatMap((d, i) => [
+		cumulativeDamRow('dam_firm_yield', d, fin(baseline.yields[i]), singles.map((s) => fin(s.yields[i])), fin(combined.yields[i])),
+		cumulativeDamRow('dam_reliability', d, assuranceOf(baseline.summary, d.nodeId), singles.map((s) => assuranceOf(s.summary, d.nodeId)), assuranceOf(combined.summary, d.nodeId))
+	]);
+}
+
+/**
+ * One dam row from its values on the baseline, each single and the
+ * combination, with cumulativeImpact's change, sum and interaction: what
+ * cumulativeDamRows builds each row from, and what an assessment whose firm
+ * yields came back from separate jobs fills its `dam_firm_yield` rows with
+ * (backend assessments/yields.ts).
+ */
+export function cumulativeDamRow(
+	metric: 'dam_firm_yield' | 'dam_reliability',
+	dam: CumulativeDam,
+	baseline: number | null,
+	singles: readonly (number | null)[],
+	combined: number | null
+): CumulativeRow {
+	const b = fin(baseline);
+	const one = singles.map(fin);
+	const c = fin(combined);
+	const change = (v: number | null) => (v === null || b === null ? null : v - b);
+	const singleChanges = one.map(change);
+	const sumOfSingles = singleChanges.some((v) => v === null) ? null : singleChanges.reduce<number>((t, v) => t + v!, 0);
+	const combinedChange = change(c);
+	return {
+		metric,
+		siteNodeId: dam.nodeId,
+		site: dam.name,
+		isOutlet: false,
+		unit: CUMULATIVE_METRIC_UNIT[metric],
+		higherIsWorse: CUMULATIVE_HIGHER_IS_WORSE[metric],
+		baseline: b,
+		singles: one,
+		combined: c,
+		singleChanges,
+		sumOfSingles,
+		combinedChange,
+		interaction: combinedChange === null || sumOfSingles === null ? null : combinedChange - sumOfSingles
+	};
 }

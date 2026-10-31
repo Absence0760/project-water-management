@@ -41,6 +41,7 @@ const summary = (r: TickResult) =>
 		? `erratum notices: ${r.erratumNotices.queued} queued, ${r.erratumNotices.sent} sent, ${r.erratumNotices.skipped} skipped, ${r.erratumNotices.failed} failed; `
 		: '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
+	(r.assessmentsFailed ? `assessments failed on stopped yields: ${r.assessmentsFailed}; ` : '') +
 	`${r.stats.due} due, ${r.stats.running} running`;
 
 if (process.argv.includes('--once')) {

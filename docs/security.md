@@ -1411,7 +1411,13 @@ differences:
   words, a public record as the decision note is), what followed the
   decision (`decision_event`: kind, forum, date, reference, note, a
   variation's terms; never who recorded it or when) and the licence's
-  standing (`app_scenario_licence`, its event by position, not id). Every
+  standing (`app_scenario_licence`, its event by position, not id); and,
+  submitted or decided, the WULA reference (294, shown since 300_share_wula): its
+  number and the works as applied for, `{ ref, text }`, in the applicant's
+  own words, as the scenario's name and description already are (the
+  applicant's own text about their own application, frozen once
+  submitted), with each op's `works` tag (a ref of that list) inside the
+  ops, which goes with a withheld op. Every
   `allocation.set` on a unit that isn't the application's own is left out
   of the ops, every run's per-op classes and every terms' ops by
   `app_share_scenario` itself (291, `app_share_kept`, as for a viewer kept
@@ -1425,7 +1431,10 @@ differences:
   conditions, and each event's reference and note, beside the decision
   note) is a public record: whoever records a decision must never put
   personal information in it, such as an appellant's name; the schema
-  caps only its length (228). Flow volumes, farm totals and site
+  caps only its length (228). The applicant's own text on the link (the
+  name, description and the WULA works' words) is theirs to write as for
+  the application itself, which a link makes public by design: it is
+  submitted to be read in a comment period. Flow volumes, farm totals and site
   deficits only at 5 or more farm holders (the k rule above). Never a farm's
   row or figures, a member list, an e-mail, an allocation or its holder
   (`user_display`), or a `parties` / `assessors` / `team` note.
@@ -2272,7 +2281,13 @@ In short:
   there, even for someone who edits both (the handler scopes every read by
   the job's project; `app_begin_feed_fetch` and the `yield_result` guard
   check it again in the database). The per-user caps on queued
-  sweeps, outlooks, yield calculations and cumulative assessments (2 each)
+  sweeps, outlooks, yield calculations and cumulative assessments (2 each;
+  an assessment counts while its job or any of its dams' firm-yield jobs,
+  `assessment_yield` (297), is pending, so the cap also bounds those, at most
+  the engine's `CUMULATIVE_YIELD_SEARCHES_MAX` (160) an assessment; the
+  tick's `app_fail_stopped_assessments` (301) runs for the worker only, and
+  the one exception it uses in the assessment's complete-once guards fails,
+  never completes, and only on a yield the job table shows stopped)
   are counted under a per-user advisory lock, so a concurrent burst can't
   pass them, and the database refuses a sweep member, assessment member or
   outlook level past the API's cap

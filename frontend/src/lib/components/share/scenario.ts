@@ -78,6 +78,8 @@ export interface ChangeRow {
 	/** "Proposal" or "Baseline assumption". */
 	label: string;
 	text: string;
+	/** The WULA works it models (the op's `works` tag, 294), or null. */
+	works: string | null;
 }
 
 /**
@@ -103,7 +105,8 @@ function opRows(ops: readonly ScenarioOp[], opNames: readonly { id: string; name
 	const unit = (id: string | null | undefined) => (id && names.get(id)) || t('another hydrological unit');
 	return ops.map((op, i) => {
 		const cls: OpClass = classified && classified.length === ops.length ? classified[i]! : classifyOp(op, [...owned]);
-		return { cls, label: cls === 'proposal' ? t('Proposal') : t('Baseline assumption'), text: describe(op, unit) };
+		const works = typeof op.works === 'string' && op.works ? op.works : null;
+		return { cls, label: cls === 'proposal' ? t('Proposal') : t('Baseline assumption'), text: describe(op, unit), works };
 	});
 }
 

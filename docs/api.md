@@ -3630,7 +3630,7 @@ never a farm's row, name or id.
   its first forecast day (190): the monthly means and the last 365 days are
   the record's, never forecast rain read as the river's flow.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
-  `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified, withheldOps, grantedTerms, decisionEvents, licence }, results, base, run, comments }`.
+  `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified, withheldOps, grantedTerms, decisionEvents, licence, wula }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
   or back to draft: `404`, until it is submitted again). `opNames` names the
   scenario's own nodes only; `classified` is each op's class (`proposal` |
@@ -3650,7 +3650,11 @@ never a farm's row, name or id.
   `terms` in `grantedTerms`' shape on `varied` only; never who recorded it)
   and `licence` (`{ inForce, from: 'decision' | 'event', eventPosition, appealPending }`,
   `app_scenario_licence`'s standing, the event by its position; `null` until
-  decided with an outcome). A submitted one has `null`, `[]` and `null`. `base` and
+  decided with an outcome). A submitted one has `null`, `[]` and `null`.
+  `wula` (300_share_wula, from 294's reference; submitted or decided): `{ number:
+  string | null, works: [{ ref, text }] }`, the WULA's number and the
+  works as applied for in the applicant's words, or `null` when neither was
+  given; each op's `works` tag (inside `ops`) names one of those refs. `base` and
   `run` are the base run and the scenario's newest run of its current ops
   whose stamp verifies (of its newest five),
   each `{ engineVersion, startDate, endDate, createdAt, ewrDaysNotMet, ewrFractionDaysNotMet, volumes, ewrSites }`:
@@ -4833,13 +4837,19 @@ submitted applications, which neither contributors nor viewers read.
   conflicts and problems prefixed *At full allocation*), dry run included.
   It never replaces the baseline (licences never drive the baseline, issue
   #507): the job adds a second table (`report.background`).
-- **At most 2 assessment jobs queued or running per user** (`429`; a dry run
-  doesn't count). A job gets 2 attempts. A project keeps its newest **20**
+- **At most 2 assessments in flight per user** (`429`; a dry run doesn't
+  count): one is in flight while its `assessment` job, or any of its dams'
+  `assessment_yield` jobs (297), is queued, running or waiting to retry. A
+  job gets 2 attempts. A project keeps its newest **20**
   assessments; one goes with its base run.
 - `Assessment = { id, name, baseRunId, baseRun: { id, label, createdAt },
   backgroundRunId, backgroundRun: { id, label, createdAt } | null, status,
-  problems, report?, engineVersion, job, createdBy, createdAt, completedAt,
-  members: AssessmentMember[] }`. `status`: `pending`, then
+  problems, report?, engineVersion, job, yields, createdBy, createdAt,
+  completedAt, members: AssessmentMember[] }`. `yields: { done, total } |
+  null` (297): the dams' firm-yield jobs back of those its job queued, one
+  per dam the applications touch and run that has it; `null` when it queued
+  none. An assessment stays `pending` after its `job` is `done` until they
+  are all back. `status`: `pending`, then
   `complete` (`report` is the engine's `CumulativeReport`, with
   `background: { label: 'Existing authorised use (full allocation)', run:
   { id, label, scenarioName, createdAt }, report: CumulativeReport,
@@ -4849,8 +4859,11 @@ submitted applications, which neither contributors nor viewers read.
   `ewr_days_not_met` and `reserve_months_met` rows, `verdictsOnly: true`,
   D3), `refused` (the
   job found the scenarios no longer combine, or one doesn't apply alone;
-  `problems` says why) or `failed` (the engine refused an input). `job` as
-  for a sweep.
+  `problems` says why) or `failed` (the engine refused an input, the
+  engine changed while its yields were out, or a firm-yield job stopped
+  without its yield: `"The baseline: the firm yield of "Upper farm" didn't
+  finish (<the job's error>)"`, one line each; read as `failed` at once,
+  even before a sibling job records it). `job` as for a sweep.
 - `AssessmentMember = { id, position, scenarioId, name, origin, opsSha256,
   opCount, status, problems, startDate, endDate }`: the scenario's ops are
   **copied** when the assessment is written (by the database, never from the
@@ -4864,7 +4877,7 @@ submitted applications, which neither contributors nor viewers read.
   singleChanges[], sumOfSingles, combinedChange, interaction }`, a missing
   value `null` ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)
   lists the measures). For each dam the applications touch (at most
-  `floor(20 ÷ (applications + 2))`; the rest named in `warnings`), two
+  `floor(160 ÷ (applications + 2))`, each firm yield its own job, 297; the rest named in `warnings`), two
   more rows with `siteNodeId` the dam's unit and `site` its name:
   `dam_firm_yield` (`m³/year`) and `dam_reliability` (`fraction`, the
   unit's annual assurance of supply), and `dams: { nodeIds, onVolumes }`

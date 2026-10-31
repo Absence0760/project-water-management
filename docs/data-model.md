@@ -3003,7 +3003,10 @@ Read-only links to the current publication for people outside the project
     granted_op_names, conditions, as applied), the `decision_event` rows
     (position, kind, forum, date, reference, note, a variation's terms;
     never `recorded_by` or `recorded_at`, the newest 100) and
-    `app_scenario_licence`'s standing with its event by position),
+    `app_scenario_licence`'s standing with its event by position; since
+    300_share_wula the WULA reference, `wula: { number, works: [{ ref, text
+    }] }` or NULL when neither was given, from 294's `scenario.wula_number`
+    and `wula_works`),
     base_run, base_stamp, base_digest, runs, comments`. Since 291 every
     list of ops in it (the scenario's, the granted terms', a variation's)
     and each run's classes leave out an `allocation.set` on a unit that
@@ -3758,7 +3761,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6), with later kinds each added by its migration's CHECK (the list: `jobs/registry.ts` `JOB_KINDS`; the newest, `scenario_run`, 293_scenario_run_job: the run of an issued licence's terms in force when they differ from the ops applied for, queued by `…/decide` and `…/appeals` with `payload { scenarioId }` and the dedupe key `scenario_run:<scenarioId>`, [scenarios.md § Applications](./scenarios.md#applications-wp-33)). Every kind has a handler since WP-2.13 added `alert_eval` ([§ Alerts](#alerts-051_alertssql)) |
+| `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6), with later kinds each added by its migration's CHECK (the list: `jobs/registry.ts` `JOB_KINDS`; the newest, `scenario_run`, 293_scenario_run_job: the run of an issued licence's terms in force when they differ from the ops applied for, queued by `…/decide` and `…/appeals` with `payload { scenarioId }` and the dedupe key `scenario_run:<scenarioId>`, [scenarios.md § Applications](./scenarios.md#applications-wp-33)); and `assessment_yield`, 297_assessment_yield_jobs: one dam's firm yield on one run of a cumulative assessment, `payload { assessmentId, yieldId }`, queued by the `assessment` job, [§ Assessments](#assessments-145_assessmentsql)). Every kind has a handler since WP-2.13 added `alert_eval` ([§ Alerts](#alerts-051_alertssql)) |
 | `payload` | A JSON object, ≤ 256 KB (fits an SQS message). Validated by the kind's handler when it runs, as untrusted input |
 | `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running`; a running one that fails while a newer one with its key is pending is `dead` at once (the newer one does the work; `jobs/runner.ts` `recordFailure`). A second enqueue gets the pending job back, so the key must name only jobs the enqueuer can read: a kind a contributor can queue (`yield`, `applicant_pack_render`) keys every pending job per user, which `jobs/contributorKinds.ts` lists and `jobs/contributorKinds.db.test.ts` holds to the insert policies; a collision with a job the caller can't read is `409 job_collision` (`JobCollisionError`, issue #386) |
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
@@ -4057,11 +4060,12 @@ evidence: an editor may delete one; the API keeps the newest 20 per project.
 | `background_run_id` | Optional (295, WP-3.10): the background at full allocation the members are also assessed on, a separate table beside the baseline's (`report.background`), never the baseline. A scenario run of this project on `base_run_id` whose stored `settings.allocationMode` is `fullAllocation` (`assessment_background_guard`, BEFORE INSERT; the API also refuses any change but the mode and registered volumes). Fixed at insert (no `UPDATE` grant). `ON DELETE CASCADE`, as `base_run_id`: an assessment never loses the background it was asked for. Covered by `assessment_background_run_idx` |
 | `job_id` | The `assessment` job (`ON DELETE SET NULL` when the 30-day purge deletes it) |
 | `name` | 1–200 characters |
-| `status` | `pending`, `complete`, `refused` (the scenarios no longer combine, or one doesn't apply alone) or `failed` (the engine refused an input) |
+| `status` | `pending`, `complete`, `refused` (the scenarios no longer combine, or one doesn't apply alone) or `failed` (the engine refused an input, the engine changed while its yields were out, or a firm-yield job stopped without its yield: 297) |
 | `problems` | Why it was refused or failed (non-empty exactly then) |
 | `report`, `combined_summary`, `start_date`, `end_date` | The engine's `CumulativeReport` (with `background`, the background's own table, when `background_run_id` is set: 295), and the combined run's summary and window, when `complete` |
 | `engine_version`, `completed_at` | Set when it leaves `pending` |
 | `created_by`, `created_at` | Stamped by the insert trigger; `created_by` is `ON DELETE SET NULL` |
+| `gathering` | 297: the report waiting for its dams' firm yields (the dam rows' yields empty), the combined summary and window, the dams, the members' positions, the engine and the warning naming dams past the cap, written once by the `assessment` job (as whoever asked) while `pending` and cleared as it leaves `pending` (`assessment_gathering_guard`, BEFORE INSERT forces it NULL; CHECK: only while `pending`). Never served by the API |
 
 `assessment_member`:
 
@@ -4082,6 +4086,46 @@ evidence: an editor may delete one; the API keeps the newest 20 per project.
   keys' own `SET NULL`s (the job purge, an account deletion, a team scenario
   deleted) pass, and water_app can't write those columns.
 - `job.kind` accepts `assessment`.
+
+`assessment_yield` (297_assessment_yield_jobs): one firm-yield search of an
+assessment, a dam the applications touch on one of its runs, each worked
+out by its own `assessment_yield` job and gathered into the report by the
+last one back (`assessments/yields.ts`). A dam a run lacks has no row (its
+cell is `null`).
+
+| Column | Holds |
+| --- | --- |
+| `assessment_id`, `project_id` | Its assessment (`ON DELETE CASCADE`) and project |
+| `job_id` | Its `assessment_yield` job (`ON DELETE SET NULL` when the 30-day purge deletes it; a still-pending row without one reads as stopped). `UNIQUE` |
+| `run`, `member_position` | `baseline`, `single` (with the member's position, 0–7) or `combined` |
+| `dam_position`, `node_id`, `dam_name` | The dam's place in `report.dams.nodeIds` (0–159: at most the engine's `CUMULATIVE_YIELD_SEARCHES_MAX`), its unit and name. `UNIQUE (assessment_id, run, member_position, dam_position) NULLS NOT DISTINCT` |
+| `run_label` | How warnings and problems name the run (`The baseline`, `"<name>" alone`, `All together`) |
+| `status`, `yield_m3_year`, `warning`, `finished_at` | `pending`, then `done` once: the firm yield (m³/year), or null with the search's warning |
+
+- `assessment_yield_guard` (BEFORE INSERT): the assessment is this
+  project's, `pending` and the inserter's own (`created_by`); a `single`
+  names one of its members; the job is an `assessment_yield` job of the
+  project whose payload names this row and assessment; it starts `pending`.
+  `assessment_yield_outcome`: `pending` → `done` once, by whoever asked,
+  only on the outcome columns (so the purge's `SET NULL` passes).
+- **RLS: editors only**, as the assessment. Grants: `SELECT, INSERT,
+  DELETE`, `UPDATE` of the outcome columns. No farmer reads it; no personal
+  data.
+- `job.kind` accepts `assessment_yield`.
+- **301_assessment_yield_stopped:** `app_fail_stopped_assessments()`
+  (`SECURITY DEFINER`, the worker only: `alert_worker_context`, no user or
+  API key; `EXECUTE` revoked from `PUBLIC`, granted to water_app, which the
+  tick runs as) fails every pending assessment that is gathering and has a
+  stopped yield (a pending row whose job is dead, done without storing it,
+  or purged), its `problems` the lines of `assessment_stopped_yields(id)`
+  (owner only; the same lines as the backend's `stoppedYieldsSql`) and its
+  `gathering` cleared. The tick calls it after its jobs.
+  `assessment_complete` (from 145) and `assessment_gathering_guard` (from
+  297) take one exception to "only whoever asked"
+  (`assessment_fails_on_stopped_yields`, never NULL): an update that fails,
+  never completes, a pending gathering assessment whose problems are exactly
+  those lines, with its gathering's engine, no report and its gathering
+  cleared.
 
 ### Seasonal outlooks (063_seasonal_outlook.sql)
 

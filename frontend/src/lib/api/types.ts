@@ -1861,6 +1861,12 @@ export interface ShareScenario {
 		decisionEvents: SharedDecisionEvent[];
 		/** Whether the licence stands now, and from what; null until decided with an outcome. */
 		licence: SharedLicence | null;
+		/**
+		 * The water-use licence application it models (294, on the link since 300): its number and the works as
+		 * applied for, in the applicant's own words; null when neither was given. Each op's `works` names a ref here.
+		 * Absent from an older API.
+		 */
+		wula?: SharedWula | null;
 	};
 	/** ready: both runs verify; none: not run on its current ops; unverified: a stamp fails, so no result. */
 	results: 'ready' | 'none' | 'unverified';
@@ -1894,6 +1900,12 @@ export interface SharedDecisionEvent {
 }
 
 /** Whether a shared application's licence stands (backend share/links.ts SharedLicence): the event by position. */
+/** The WULA reference as a share link shows it (294, 300). */
+export interface SharedWula {
+	number: string | null;
+	works: { ref: string; text: string }[];
+}
+
 export interface SharedLicence {
 	inForce: boolean;
 	from: 'decision' | 'event';
@@ -2803,6 +2815,12 @@ export interface Assessment {
 	report?: (CumulativeReport & { background?: AssessmentBackground }) | null;
 	engineVersion: string | null;
 	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	/**
+	 * The dams' firm-yield jobs (297): how many are back of how many its job queued; null when it queued none.
+	 * It stays pending until they are all back; one that stops fails it (`problems` names the dam and run).
+	 * Absent from an older API.
+	 */
+	yields?: { done: number; total: number } | null;
 	createdBy: string | null;
 	createdAt: string;
 	completedAt: string | null;

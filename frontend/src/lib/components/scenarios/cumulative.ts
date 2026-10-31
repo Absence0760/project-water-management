@@ -143,11 +143,17 @@ export function assessmentCsv(report: CumulativeReport & { background?: Assessme
 
 export type AssessmentState = { kind: 'complete' } | { kind: 'pending'; text: string; progress: number | null } | { kind: 'stopped'; text: string; lines: string[] };
 
-/** Where an assessment stands, from its own status and its job's (a refused or failed one says why, line by line). */
-export function assessmentState(a: Pick<Assessment, 'status' | 'job' | 'problems'>): AssessmentState {
+/**
+ * Where an assessment stands, from its own status, its job's and its dams' firm-yield jobs' (297: its job done,
+ * the yields still coming back); a refused or failed one says why, line by line.
+ */
+export function assessmentState(a: Pick<Assessment, 'status' | 'job' | 'problems' | 'yields'>): AssessmentState {
 	if (a.status === 'complete') return { kind: 'complete' };
 	if (a.status === 'refused') return { kind: 'stopped', text: 'These applications no longer combine on their baseline:', lines: a.problems };
 	if (a.status === 'failed') return { kind: 'stopped', text: 'The model could not run this assessment:', lines: a.problems };
+	const y = a.yields;
+	if (y && y.total > 0 && a.job?.status === 'done')
+		return { kind: 'pending', text: `Working out the firm yield of each dam the applications touch (${y.done} of ${y.total})…`, progress: Math.round((100 * y.done) / y.total) };
 	const j = a.job;
 	if (!j) return { kind: 'stopped', text: 'This assessment did not finish, and its job has been cleared. Start a new one.', lines: [] };
 	if (j.status === 'dead') return { kind: 'stopped', text: `This assessment could not run${j.error ? `: ${j.error}` : '.'}`, lines: [] };

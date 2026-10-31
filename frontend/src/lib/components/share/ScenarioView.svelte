@@ -8,7 +8,10 @@
 	// participation (./ShareComments.svelte: anyone signed in comments through
 	// the link, with no role in the project, 166_public_participation). A
 	// decided one adds where its licence stands, the terms it was granted on
-	// and what followed the decision (appeals, 291). Every
+	// and what followed the decision (appeals, 291). The water-use licence
+	// application it models, when given (its number and the works as applied
+	// for, 294), sits under its changes, each change naming the works it
+	// models. Every
 	// word is in ./scenario.ts, ./ShareComments.svelte or t() here.
 	import { resolve } from '$app/paths';
 	import type { SharedTerms, ShareScenario } from '#lib/api/types.js';
@@ -42,6 +45,7 @@
 						<li class={c.cls}>
 							<span class="cls">{c.label}</span>
 							<span class="what">{c.text}</span>
+							{#if c.works}<span class="works">{t('Works {ref}', { ref: c.works })}</span>{/if}
 						</li>
 					{/each}
 				</ul>
@@ -100,6 +104,7 @@
 						<li class={c.cls}>
 							<span class="cls">{c.label}</span>
 							<span class="what">{c.text}</span>
+							{#if c.works}<span class="works">{t('Works {ref}', { ref: c.works })}</span>{/if}
 						</li>
 					{/each}
 				</ul>
@@ -111,6 +116,21 @@
 			{/if}
 			{#if withheld}<p class="fine">{withheld}</p>{/if}
 			{#if sc.description}<p class="desc">{sc.description}</p>{/if}
+			{#if sc.wula}
+				<div data-testid="share-scenario-wula">
+					<h3>{t('The water-use licence application')}</h3>
+					{#if sc.wula.number}<p>{t('Application number: {number}', { number: sc.wula.number })}</p>{/if}
+					{#if sc.wula.works.length}
+						<p class="fine">{t('The works applied for, in the applicant’s words')}</p>
+						<dl class="works-list">
+							{#each sc.wula.works as w (w.ref)}
+								<dt>{w.ref}</dt>
+								<dd class="desc">{w.text}</dd>
+							{/each}
+						</dl>
+					{/if}
+				</div>
+			{/if}
 		</section>
 	</div>
 
@@ -244,6 +264,15 @@
 		border-color: var(--danger);
 	}
 	.what {
+		overflow-wrap: anywhere;
+	}
+	.works {
+		font-size: 13px;
+		color: var(--text-2);
+	}
+	.works-list dt {
+		font-weight: 600;
+		color: var(--text);
 		overflow-wrap: anywhere;
 	}
 	h3 {

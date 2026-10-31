@@ -3,7 +3,18 @@
 // token is 32 random bytes, base64url, stored as SHA-256 (auth/tokens.ts, the
 // emailed tokens' format), and travels in the URL's fragment so it never
 // reaches a server log.
-import { ENGINE_ERRATA, packShortCode, type CatchmentSite, type Erratum, type NoticeText, type RestrictionLevel } from '@water-management/engine';
+import {
+	ENGINE_ERRATA,
+	packShortCode,
+	WULA_NUMBER_MAX,
+	WULA_WORK_REF_MAX,
+	WULA_WORK_TEXT_MAX,
+	WULA_WORKS_MAX,
+	type CatchmentSite,
+	type Erratum,
+	type NoticeText,
+	type RestrictionLevel
+} from '@water-management/engine';
 import { z } from 'zod';
 import { errataFoundSince } from '../evidence/errata.js';
 import type { PackVerification } from '../evidence/packs.js';
@@ -331,6 +342,12 @@ export interface ShareScenario {
 		decisionEvents: SharedDecisionEvent[];
 		/** Whether the licence stands now and from what (app_scenario_licence, 228); null until decided with an outcome. */
 		licence: SharedLicence | null;
+		/**
+		 * The water-use licence application it models (294, shown since 300_share_wula): its number and the works as applied
+		 * for, in the applicant's own words as its name and description; null when neither was given. Each op's
+		 * `works` tag names one of these refs.
+		 */
+		wula: SharedWula | null;
 	};
 	/**
 	 * `ready`: both runs, stored by the backend (their stamps verify).
@@ -361,6 +378,12 @@ export interface SharedTerms {
 
 export const DECISION_EVENT_KINDS = ['lodged', 'upheld', 'set_aside', 'varied'] as const;
 export const DECISION_EVENT_FORUMS = ['water_tribunal', 'court'] as const;
+
+/** The WULA reference as a link shows it (294, 300): the number, and each works' ref and words. */
+export interface SharedWula {
+	number: string | null;
+	works: { ref: string; text: string }[];
+}
 
 /** One event after the decision as a link shows it (228, 291): never who recorded it. */
 export interface SharedDecisionEvent {
@@ -422,6 +445,20 @@ function toSharedEvent(v: unknown, own: ReadonlySet<string>): SharedDecisionEven
 		note: str(e.note) ?? '',
 		terms: kind === 'varied' ? toSharedTerms(e.terms, own) : null
 	};
+}
+
+/** The WULA reference, field by field, within 294's limits; null when it holds nothing. */
+function toSharedWula(v: unknown): SharedWula | null {
+	if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+	const w = v as Record<string, unknown>;
+	const number = str(w.number);
+	const works = arr(w.works)
+		.map(obj)
+		.filter((x) => typeof x.ref === 'string' && typeof x.text === 'string' && x.ref.length <= WULA_WORK_REF_MAX && x.text.length <= WULA_WORK_TEXT_MAX)
+		.slice(0, WULA_WORKS_MAX)
+		.map((x) => ({ ref: x.ref as string, text: x.text as string }));
+	const n = number && number.length <= WULA_NUMBER_MAX ? number : null;
+	return n === null && !works.length ? null : { number: n, works };
 }
 
 function toSharedLicence(v: unknown): SharedLicence | null {
@@ -539,7 +576,9 @@ export function toShareScenario(r: ShareScenarioRow, verify: (digest: Buffer | n
 							.map((e) => toSharedEvent(e, ownSet))
 							.filter((e): e is SharedDecisionEvent => e !== null)
 					: [],
-			licence: s.status === 'decided' ? toSharedLicence(s.licence) : null
+			licence: s.status === 'decided' ? toSharedLicence(s.licence) : null,
+			// 300: the WULA reference (294), submitted or decided.
+			wula: toSharedWula(s.wula)
 		},
 		results,
 		base,

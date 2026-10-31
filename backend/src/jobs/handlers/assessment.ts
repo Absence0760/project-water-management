@@ -5,9 +5,11 @@
 // with the job's `done`, so a retry after a crash never stores a member twice.
 //
 // The engine runs inside the job's transaction, as for `sweep`: at most
-// ASSESSMENT_SCENARIOS_MAX + 2 runs, and for the dams the applications touch
-// at most CUMULATIVE_YIELD_SEARCHES_MAX firm-yield searches (engine
-// scenario/cumulativeYield.ts; about 95 s on a 30-year, 16-node catchment).
+// ASSESSMENT_SCENARIOS_MAX + 2 runs (twice with a background). The firm
+// yields of the dams the applications touch are not searched here: it
+// queues one `assessment_yield` job per dam and run (at most the engine's
+// CUMULATIVE_YIELD_SEARCHES_MAX; assessments/yields.ts, 297), which complete
+// the assessment once they are all back.
 import { AssessmentPayload } from '../../assessments/schema.js';
 import { computeAssessment } from '../../assessments/store.js';
 import { ApiError } from '../../http/errors.js';

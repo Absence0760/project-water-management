@@ -12220,8 +12220,11 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   not together (two new dams given one name) are listed too.
 - **The result** (the newest assessment, or one picked under **Assessment**):
   while it runs, *Queued* or *Running each application alone and all
-  together… N %* (followed every 1.5 s); a refused or failed one says why,
-  line by line. Complete: one matrix, rows = each measure at each EWR site
+  together… N %*, then, while its dams' firm-yield jobs come back (297),
+  *Working out the firm yield of each dam the applications touch (n of m)…*
+  with its share as the bar (followed every 1.5 s); a refused or failed one
+  says why, line by line (a firm-yield job that stopped names the run and
+  the dam). Complete: one matrix, rows = each measure at each EWR site
   (the outlet first) and for the catchment (days the EWR is not met, mean
   EWR shortfall, Reserve months met and deficit at each rule-table site,
   mean flow at the outlet, supplied to existing users and their share of
@@ -14651,7 +14654,12 @@ signed in or out, for someone outside the project, on a phone first.
   hydrological unit", marked *Proposal* or, in red, *Baseline assumption*
   (with a line saying what that means), "Not shown: *n* changes setting
   another hydrological unit's registered volume" when any is left out
-  (291), and the description. In the right column: **The decision** (once
+  (291), and the description; each change modelling WULA works says
+  **Works *ref*** beside it, and when the applicant gave a WULA reference
+  (294, on the link since 300) **The water-use licence application**
+  follows (`share-scenario-wula`): "Application number: *number*" and
+  "The works applied for, in the applicant's words", each ref with its
+  works. In the right column: **The decision** (once
   decided; 291): where the licence stands ("The licence stands on the terms
   it was granted on", "… varied to on appeal (*forum*, *date*)", "The
   decision was set aside on appeal …", "No licence was issued", and "An

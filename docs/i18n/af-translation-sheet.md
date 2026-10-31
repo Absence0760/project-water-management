@@ -18,4 +18,17 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+4 strings: 4 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### share.scenario
+
+Shared application: a page anyone with a link to one water-use licence application can open without signing in (an NGO, a catchment forum). Its effect on the river’s ecological reserve (the EWR) at each site against the published baseline, what it changes (a “baseline assumption” changes the shared model itself, not only the applicant’s own proposal), and the public comments. Never names another hydrological unit. Technical names inside {field}, {path} and {kind} stay as they are.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `176d90f0` | Works {ref} | Keep: {ref} |  |
+| `0d2a1498` | The water-use licence application |  |  |
+| `2005d1af` | Application number: {number} | Keep: {number} |  |
+| `bc6d9c37` | The works applied for, in the applicant’s words |  |  |

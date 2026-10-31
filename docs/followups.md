@@ -6073,15 +6073,27 @@ Left:
       Yield job's, the verdicts-only reader with its positive control),
       `verdictsOnly.test.ts`, `viewerUnits.test.ts`, `cumulative.test.ts`,
       e2e `assess-together.spec.ts` and `evidence-combined.spec.ts`.
-- [ ] **More dams than one assessment's yield budget.** An assessment works
-      out a firm yield for at most `floor(20 ÷ (applications + 2))` of the
-      dams the applications touch (the job's 300 s Lambda); the rest are
-      named in its warnings, with no rows. Durable fix: each dam × run
-      search becomes its own `yield`-style job the assessment fans out to and
-      gathers (the assessment completing when they have), so the count is
-      bounded by the per-user job caps instead of one job's time. Trigger:
-      an assessment that names a dam in that warning which the assessor
-      needs in the report.
+- [x] **More dams than one assessment's yield budget.** An assessment
+      worked out a firm yield for at most `floor(20 ÷ (applications + 2))`
+      of the dams the applications touch (the job's 300 s Lambda); the rest
+      were named in its warnings, with no rows. **Built (2026-10-30,
+      297_assessment_yield_jobs):** each dam × run firm-yield search is its
+      own `assessment_yield` job the `assessment` job fans out to; the last
+      one back (under a per-assessment lock) fills the report's
+      `dam_firm_yield` cells and completes it, the report's shape unchanged.
+      The cap is now `CUMULATIVE_YIELD_SEARCHES_MAX` 160 searches an
+      assessment (40 dams with two applications, 16 with eight), bounded by
+      the per-user assessment cap (2 in flight, counting its yield jobs)
+      rather than one job's time. A yield job that dies, or ends without its
+      yield, fails the assessment naming the run and dam, stored by the
+      dead job's `onDead` hook, a sibling or the tick's sweep (301, for a
+      lease run out or a user no longer an editor) and read so by the API
+      at once; an engine change in between
+      fails it too. The background at full allocation (295) still computes
+      no dam yields. Tests: `assessments/yields.db.test.ts`, the job trust
+      sweep, the catalogue, `cumulative.test.ts` (engine and frontend),
+      `e2e/tests/assess-together.spec.ts`
+      ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
 - [x] **A full-allocation baseline column** (WP-3.10). **Built
       (2026-10-30, 295_assessment_background, report format
       `evidence-26`):** the assessment takes an optional `backgroundRunId`,
@@ -6857,15 +6869,19 @@ Left, from the design and the persona review (§11), each with its trigger.
       change models; page 1 prints the number, the works' refs and the tie,
       A.2 the works in words and each change's works
       ([scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
-- [ ] **The WULA reference on the share link** (licensing authority, public
+- [x] **The WULA reference on the share link** (licensing authority, public
       participation). A submitted application's share link
-      (`app_share_scenario`, 115/291) doesn't print the WULA's number or its
-      works, though a public reader matching the app's record to the
-      authority's notice would want the number. Durable fix: a new migration
-      adds `wula: { number, works }` to the link's `scenario` object for an
-      application, and the share page prints it (farmer-facing: its labels go
-      through the i18n agents). Trigger: once 291's change to
-      `app_share_scenario` has landed, before the pilot.
+      (`app_share_scenario`, 115/291) didn't print the WULA's number or its
+      works. **Built (2026-10-30):** 300_share_wula adds
+      `wula: { number, works }` to the link's `scenario` object for a
+      submitted or decided application, and the share page prints it under
+      the changes with each change's **Works *ref***; the works' words are
+      the applicant's own, as the description already shown. Its 4 new
+      `share.scenario` strings are on the Afrikaans sheet, untranslated
+      until the i18n agents run (`pnpm gen:i18n:export af …`). Tests:
+      `share/scenario-share-licence.db.test.ts`, `share/links.test.ts`,
+      `share/scenario.test.ts`, `e2e/tests/scenario-share.spec.ts`
+      ([scenarios.md § The WULA reference](./scenarios.md#the-wula-reference)).
 - [ ] **Labelled mitigation alternatives** (licence applicant). The report
       shows one application; applicants must show the mitigation they
       weighed. Durable fix: an application may cite other scenario runs on

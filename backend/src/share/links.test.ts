@@ -94,7 +94,8 @@ describe('toShareScenario', () => {
 				'ownedNodeIds',
 				'status',
 				'submittedAt',
-				'withheldOps'
+				'withheldOps',
+				'wula'
 			].sort()
 		);
 	});
@@ -165,6 +166,35 @@ describe('toShareScenario', () => {
 	it('shows no terms, events or standing on a submitted application, whatever the row says', () => {
 		const out = toShareScenario(row({ scenario: { ...row().scenario, grantedTerms: terms([]), decisionEvents: [{ position: 1, kind: 'lodged', forum: 'court', eventDate: '2026-10-02' }], licence: { inForce: true } } }), verified);
 		expect(out.scenario).toMatchObject({ grantedTerms: null, decisionEvents: [], licence: null, withheldOps: 0 });
+	});
+
+	// 300: the WULA reference (294), submitted or decided, field by field.
+	it('passes the WULA number and the works as applied for, each { ref, text } only; null when there is neither', () => {
+		const works = [
+			{ ref: 'W1', text: 'Raise the dam wall by 2 m', recordedBy: 'Jane Holder' },
+			{ ref: 'W2', text: 'A pipeline' },
+			{ ref: 'W3', text: 7 },
+			{ ref: 'x'.repeat(21), text: 'too long a ref' }
+		];
+		const out = toShareScenario(
+			row({ scenario: { ...row().scenario, ops: [{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 120000, works: 'W1' }], wula: { number: 'WU-1', works, extra: OTHER } } }),
+			verified
+		);
+		expect(out.scenario.wula).toEqual({
+			number: 'WU-1',
+			works: [
+				{ ref: 'W1', text: 'Raise the dam wall by 2 m' },
+				{ ref: 'W2', text: 'A pipeline' }
+			]
+		});
+		// Each op keeps the works it models.
+		expect(out.scenario.ops).toEqual([{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 120000, works: 'W1' }]);
+		expect(JSON.stringify(out)).not.toContain('Jane Holder');
+		// On a decided one too; a number alone; none at all.
+		expect(toShareScenario(decided({ wula: { number: 'WU-2', works: [] } }), verified).scenario.wula).toEqual({ number: 'WU-2', works: [] });
+		expect(toShareScenario(row(), verified).scenario.wula).toBeNull();
+		expect(toShareScenario(row({ scenario: { ...row().scenario, wula: { number: null, works: [] } } }), verified).scenario.wula).toBeNull();
+		expect(toShareScenario(row({ scenario: { ...row().scenario, wula: 'WU-3' } }), verified).scenario.wula).toBeNull();
 	});
 
 	it('drops every volume, a site deficit included, below the k rule', () => {

@@ -21,7 +21,7 @@ import type { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
 
-/** Every kind the job table accepts (016_jobs.sql CHECK; 040_yield added `yield`, 062_scenario_sweeps `sweep`, 063_seasonal_outlook `outlook`, 108_auto_calibration `auto_calibration` and `uncertainty`, 119_pack_render `pack_render`, 145_assessment `assessment`, 154_pack_reproduce `pack_reproduce`, 165_applicant_copy `applicant_pack_render`, 191_delineation_request `delineate`, 280_future_yield `future_yield`, 282_climate_factors `climate_factors`, 293_scenario_run_job `scenario_run`). */
+/** Every kind the job table accepts (016_jobs.sql CHECK; 040_yield added `yield`, 062_scenario_sweeps `sweep`, 063_seasonal_outlook `outlook`, 108_auto_calibration `auto_calibration` and `uncertainty`, 119_pack_render `pack_render`, 145_assessment `assessment`, 154_pack_reproduce `pack_reproduce`, 165_applicant_copy `applicant_pack_render`, 191_delineation_request `delineate`, 280_future_yield `future_yield`, 282_climate_factors `climate_factors`, 293_scenario_run_job `scenario_run`, 297_assessment_yield_jobs `assessment_yield`). */
 export const JOB_KINDS = [
 	'feed_fetch',
 	'feed_ingest',
@@ -40,7 +40,8 @@ export const JOB_KINDS = [
 	'delineate',
 	'future_yield',
 	'climate_factors',
-	'scenario_run'
+	'scenario_run',
+	'assessment_yield'
 ] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
@@ -96,6 +97,14 @@ export interface JobHandler<P = unknown> {
 	 * it would hold the transaction open.
 	 */
 	run(ctx: JobContext<P>): Promise<void>;
+	/**
+	 * Called once the job is dead (its attempts spent, or a failure no retry can fix), in a new transaction as the
+	 * acting user, with the stored payload as `payload` parsed (skipped when it doesn't parse): for a kind whose
+	 * death leaves something else waiting on it, to record that (`assessment_yield` fails its assessment, 297).
+	 * Best effort: a throw is logged, never recorded on the job. Not called for a job the claim killed after its
+	 * lease ran out with no attempts left (app_claim_jobs, in SQL), nor for one superseded by a newer job.
+	 */
+	onDead?(ctx: { db: Db; job: Readonly<ClaimedJob>; payload: P }): Promise<void>;
 }
 
 export type HandlerRegistry = Partial<Record<JobKind, JobHandler<any>>>;

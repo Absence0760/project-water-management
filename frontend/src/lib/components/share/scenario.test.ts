@@ -89,6 +89,16 @@ describe('changeRows', () => {
 		expect(rows[1]!.label).toBe('Baseline assumption');
 	});
 
+	it('names the WULA works each change models (its `works` tag, 294), and none for a change without one', () => {
+		const ops: ScenarioOp[] = [
+			{ op: 'node.set', nodeId: OWN, field: 'damCapacityM3', value: 120000, works: 'W1' },
+			{ op: 'node.set', nodeId: OWN, field: 'divertCapacityM3Day', value: 900 }
+		];
+		expect(changeRows(scenario({ ops, classified: null })).map((r) => r.works)).toEqual(['W1', null]);
+		// The granted terms' changes too.
+		expect(termsRows({ ops: ops.slice(0, 1), opsSha256: '', opNames: [], conditions: '', asApplied: false, withheldOps: 0 }, [OWN]).map((r) => r.works)).toEqual(['W1']);
+	});
+
 	it('words the later ops (engine ≥ 1.35.0), naming only the applicant’s own unit', () => {
 		const ops: ScenarioOp[] = [
 			{ op: 'node.move', nodeId: OWN, downstreamNodeId: 'n-other' },
