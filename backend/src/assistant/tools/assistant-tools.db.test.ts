@@ -5,7 +5,7 @@
 // series of a cap run; the owner reads them all (positive control). A gauge's
 // fit is the engine's calibrationStats on its stored outflow and record.
 // Synthetic data only.
-import { calibrationStats } from '@water-management/engine';
+import { calibrationStats, newCalibrationZone } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../../__tests__/helpers.js';
 import { withUser } from '../../db/tx.js';
@@ -173,17 +173,17 @@ describe('ids named in the output (the 2026-10-30 production test)', () => {
 		const rec = (await owner.call('PUT', `${at}/series`, { kind: 'flow_observed_m3s', name: 'Named record', unit: 'm3/s', startDate: '2021-10-01', values: [1, 2, 3] })).body.id as string;
 		expect((await owner.call('PATCH', `${at}/series/${rec}`, { siteNodeId: gauge.id })).status).toBe(200);
 		const station = (await owner.call('PUT', `${at}/series`, { kind: 'rain_catchment_mm', name: 'Named station', unit: 'mm', startDate: '2021-10-01', values: [1, 0, 2] })).body.id as string;
-		const patched = await owner.call('PATCH', at, { settings: { calibrationSiteNodeId: gauge.id, rainStations: { units: { [up.id]: { stationId: station } } } } });
+		const patched = await owner.call('PATCH', at, { settings: { calibrationZones: [{ ...newCalibrationZone(gauge.id), enabled: true }], calibrationSiteNodeId: gauge.id, rainStations: { units: { [up.id]: { stationId: station } } } } });
 		expect(patched.status, JSON.stringify(patched.body)).toBe(200);
-		// A reference to a node since deleted, planted (the app's checks refuse one on a save).
-		await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{calibrationZones}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify([{ nodeId: crypto.randomUUID(), enabled: false }])]);
+		// A reference to a node since deleted, planted beside the ticked gauge (the app's checks refuse one on a save).
+		await asOwner(`UPDATE project SET settings = jsonb_set(settings, '{calibrationZones}', $2::jsonb) WHERE id = $1`, [pid, JSON.stringify([{ ...newCalibrationZone(gauge.id), enabled: true }, { nodeId: crypto.randomUUID(), enabled: false }])]);
 		const run = (name: string, args: unknown) => withUser(owner.id, (db) => tool(name).run({ db, userId: owner.id, projectId: pid, runId: null }, args), { readOnly: true });
 
 		const settings = data(await run(TOOL_NAMES.settings, { source: 'project', keys: ['calibrationSiteNodeId', 'rainStations', 'calibrationZones'] }));
 		expect(settings.settings).toMatchObject({
 			calibrationSiteNodeId: "the gauge 'Named weir'",
 			rainStations: { units: { "the hydrological unit 'Top farm'": { stationId: "the series 'Named station'" } } },
-			calibrationZones: [{ nodeId: 'a node that no longer exists' }]
+			calibrationZones: [{ nodeId: "the gauge 'Named weir'" }, { nodeId: 'a node that no longer exists' }]
 		});
 		const network = data(await run(TOOL_NAMES.network, { source: 'project' }));
 		expect(network.transfers).toEqual([expect.objectContaining({ id: transfer.id, from: 'Top farm', to: 'Outlet' })]);
