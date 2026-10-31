@@ -6843,7 +6843,7 @@ Left, from the design and the persona review (§11), each with its trigger.
 - [x] **The WULA reference on the share link** (licensing authority, public
       participation). A submitted application's share link
       (`app_share_scenario`, 115/291) didn't print the WULA's number or its
-      works. **Built (2026-10-30):** 291 (unreleased, edited in place) adds
+      works. **Built (2026-10-30):** 300_share_wula adds
       `wula: { number, works }` to the link's `scenario` object for a
       submitted or decided application, and the share page prints it under
       the changes with each change's **Works *ref***; the works' words are

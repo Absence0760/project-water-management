@@ -3003,10 +3003,10 @@ Read-only links to the current publication for people outside the project
     granted_op_names, conditions, as applied), the `decision_event` rows
     (position, kind, forum, date, reference, note, a variation's terms;
     never `recorded_by` or `recorded_at`, the newest 100) and
-    `app_scenario_licence`'s standing with its event by position, and the
-    WULA reference, `wula: { number, works: [{ ref, text }] }` or NULL when
-    neither was given: 294's `scenario.wula_number` and `wula_works`, bound
-    when the PL/pgSQL body runs),
+    `app_scenario_licence`'s standing with its event by position; since
+    300_share_wula the WULA reference, `wula: { number, works: [{ ref, text
+    }] }` or NULL when neither was given, from 294's `scenario.wula_number`
+    and `wula_works`),
     base_run, base_stamp, base_digest, runs, comments`. Since 291 every
     list of ops in it (the scenario's, the granted terms', a variation's)
     and each run's classes leave out an `allocation.set` on a unit that

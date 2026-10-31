@@ -343,7 +343,7 @@ export interface ShareScenario {
 		/** Whether the licence stands now and from what (app_scenario_licence, 228); null until decided with an outcome. */
 		licence: SharedLicence | null;
 		/**
-		 * The water-use licence application it models (294, shown since 291): its number and the works as applied
+		 * The water-use licence application it models (294, shown since 300_share_wula): its number and the works as applied
 		 * for, in the applicant's own words as its name and description; null when neither was given. Each op's
 		 * `works` tag names one of these refs.
 		 */
@@ -379,7 +379,7 @@ export interface SharedTerms {
 export const DECISION_EVENT_KINDS = ['lodged', 'upheld', 'set_aside', 'varied'] as const;
 export const DECISION_EVENT_FORUMS = ['water_tribunal', 'court'] as const;
 
-/** The WULA reference as a link shows it (294, 291): the number, and each works' ref and words. */
+/** The WULA reference as a link shows it (294, 300): the number, and each works' ref and words. */
 export interface SharedWula {
 	number: string | null;
 	works: { ref: string; text: string }[];
@@ -577,7 +577,7 @@ export function toShareScenario(r: ShareScenarioRow, verify: (digest: Buffer | n
 							.filter((e): e is SharedDecisionEvent => e !== null)
 					: [],
 			licence: s.status === 'decided' ? toSharedLicence(s.licence) : null,
-			// 291: the WULA reference (294), submitted or decided.
+			// 300: the WULA reference (294), submitted or decided.
 			wula: toSharedWula(s.wula)
 		},
 		results,

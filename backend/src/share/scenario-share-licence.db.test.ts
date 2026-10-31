@@ -1,6 +1,7 @@
 // A decided application's share link prints the licence's granted terms and
 // what followed the decision (291_share_licence_terms; 227_licence_terms,
-// 228_decision_events; issue #523 G3/G4; docs/security.md § Scenario links).
+// 228_decision_events; issue #523 G3/G4; docs/security.md § Scenario links),
+// and the WULA reference it models (300_share_wula; 294_wula_reference).
 // Every "cannot see" has its positive control (CLAUDE.md rule 5):
 //
 //   - a submitted application's link shows no terms, events or standing; once

@@ -1862,7 +1862,7 @@ export interface ShareScenario {
 		/** Whether the licence stands now, and from what; null until decided with an outcome. */
 		licence: SharedLicence | null;
 		/**
-		 * The water-use licence application it models (294, on the link since 291): its number and the works as
+		 * The water-use licence application it models (294, on the link since 300): its number and the works as
 		 * applied for, in the applicant's own words; null when neither was given. Each op's `works` names a ref here.
 		 * Absent from an older API.
 		 */
@@ -1900,7 +1900,7 @@ export interface SharedDecisionEvent {
 }
 
 /** Whether a shared application's licence stands (backend share/links.ts SharedLicence): the event by position. */
-/** The WULA reference as a share link shows it (294, 291). */
+/** The WULA reference as a share link shows it (294, 300). */
 export interface SharedWula {
 	number: string | null;
 	works: { ref: string; text: string }[];

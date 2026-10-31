@@ -6,12 +6,10 @@
 -- Until now app_share_scenario (115) gave a decided application's outcome and
 -- the assessor's note, but not the terms a licence was issued on (227) nor
 -- the appeals lodged against the decision and their outcomes (228), so a
--- reader couldn't tell what was granted or whether it still stands; nor the
--- water-use licence application (WULA) it models (294), so a reader couldn't
--- match it to the authority's notice.
+-- reader couldn't tell what was granted or whether it still stands.
 --
 -- Expand only. app_share_scenario keeps its signature and its columns; the
--- `scenario` object gains four keys, each from an allowlist as before:
+-- `scenario` object gains three keys, each from an allowlist as before:
 --
 --   grantedTerms   with a licence issued (227): the granted ops and their
 --                  hash, the names of the application's own nodes among
@@ -28,17 +26,6 @@
 --                  from the decision or an event (by its position, not its
 --                  id), and whether an appeal is open. Its terms are not
 --                  repeated: they are grantedTerms or the event's.
---   wula           the WULA reference (294: scenario.wula_number and
---                  wula_works), submitted or decided: its number and the
---                  works as applied for ({ ref, text }), frozen once
---                  submitted (scenario_wula_frozen). NULL when neither was
---                  given. The works' text is the applicant's own words, as
---                  the scenario's name and description the link already
---                  shows. Each op's `works` tag (a ref of that list) reaches
---                  the link inside the ops, and goes with a withheld op.
---                  The columns are 294's: this body is PL/pgSQL, bound when
---                  it runs (`s` is a record), and nothing calls it between
---                  291 and 294 in a migration run.
 --
 -- A registered volume on another unit (an `allocation.set` op whose unit
 -- isn't the application's own) is left out of every list of ops here, in the
@@ -52,7 +39,7 @@
 --
 -- Changes (each from its latest definition):
 --   app_share_scenario   from 115_scenario_share_notes.sql (unchanged since):
---                        the four keys above, `withheldOps`, and its ops and
+--                        the three keys above, `withheldOps`, and its ops and
 --                        each run's `classified` without the withheld ones;
 --                        everything else as it was.
 --   app_share_kept       new helper, not callable by water_app.
@@ -189,14 +176,6 @@ CREATE OR REPLACE FUNCTION app_share_scenario(p_hash bytea)
 							LIMIT 100
 						) e
 					), '[]'::jsonb),
-					-- 291: the WULA reference (294), when one was given: its number and the works as applied for.
-					'wula', CASE WHEN s.wula_number IS NULL AND jsonb_array_length(s.wula_works) = 0 THEN NULL ELSE jsonb_build_object(
-						'number', s.wula_number,
-						'works', coalesce((
-							SELECT jsonb_agg(jsonb_build_object('ref', w.v->>'ref', 'text', w.v->>'text') ORDER BY w.o)
-							FROM jsonb_array_elements(s.wula_works) WITH ORDINALITY w(v, o)
-						), '[]'::jsonb)
-					) END,
 					-- 291: whether the licence stands now, and from what (app_scenario_licence, 228).
 					'licence', CASE WHEN v_licence IS NULL THEN NULL ELSE jsonb_build_object(
 						'inForce', coalesce((v_licence->>'inForce')::boolean, false),

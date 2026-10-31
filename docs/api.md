@@ -3650,7 +3650,7 @@ never a farm's row, name or id.
   and `licence` (`{ inForce, from: 'decision' | 'event', eventPosition, appealPending }`,
   `app_scenario_licence`'s standing, the event by its position; `null` until
   decided with an outcome). A submitted one has `null`, `[]` and `null`.
-  `wula` (291, from 294's reference; submitted or decided): `{ number:
+  `wula` (300_share_wula, from 294's reference; submitted or decided): `{ number:
   string | null, works: [{ ref, text }] }`, the WULA's number and the
   works as applied for in the applicant's words, or `null` when neither was
   given; each op's `works` tag (inside `ops`) names one of those refs. `base` and

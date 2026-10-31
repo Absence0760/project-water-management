@@ -1981,7 +1981,7 @@ application (WULA) applies for?
   problems: a change can model applied-for works without the tag, and an
   untied proposal still runs and submits. The assessor reads the tie on the
   evidence report (page 1 and A.2, `evidence-26`).
-- **On the share link** (291, `app_share_scenario`): a submitted or
+- **On the share link** (300_share_wula, `app_share_scenario`): a submitted or
   decided application's link carries `scenario.wula = { number, works: [{
   ref, text }] }` (`null` when neither was given), and the share page prints
   it under the changes as **The water-use licence application** (the

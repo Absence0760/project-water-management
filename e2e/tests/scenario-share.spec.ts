@@ -12,7 +12,7 @@
 // (with the warning shown). A decided application's link prints where the
 // licence stands, the terms it was granted on and the appeals after it
 // (291_share_licence_terms); a submitted one's prints the water-use licence
-// application it models (294's reference, on the link since 291): the number,
+// application it models (294's reference, on the link since 300_share_wula): the number,
 // the works as applied for and each change's works. Invented names only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -57,7 +57,7 @@ async function seed(page: Page, applicant: Page, applicantEmail: string, applica
 	const ran = await applicant.request.post(`${at}/${sid}/runs`, { data: {} });
 	expect(ran.status(), await ran.text()).toBe(201);
 	// Where written objections go, as the notice gives them (166): printed beside the warning on the share page.
-	// And the WULA it models (294), its works tied to the change: on the link since 291.
+	// And the WULA it models (294), its works tied to the change: on the link since 300.
 	const notice = await applicant.request.patch(`${at}/${sid}`, {
 		data: { objectionAddress: NOTICE_ADDRESS, objectionClosingDate: '2026-12-01', wulaNumber: WULA_NUMBER, wulaWorks: [{ ref: 'W1', text: WORKS }] }
 	});

@@ -1412,7 +1412,7 @@ differences:
   decision (`decision_event`: kind, forum, date, reference, note, a
   variation's terms; never who recorded it or when) and the licence's
   standing (`app_scenario_licence`, its event by position, not id); and,
-  submitted or decided, the WULA reference (294, shown since 291): its
+  submitted or decided, the WULA reference (294, shown since 300_share_wula): its
   number and the works as applied for, `{ ref, text }`, in the applicant's
   own words, as the scenario's name and description already are (the
   applicant's own text about their own application, frozen once

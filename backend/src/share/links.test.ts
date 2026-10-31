@@ -168,7 +168,7 @@ describe('toShareScenario', () => {
 		expect(out.scenario).toMatchObject({ grantedTerms: null, decisionEvents: [], licence: null, withheldOps: 0 });
 	});
 
-	// 291: the WULA reference (294), submitted or decided, field by field.
+	// 300: the WULA reference (294), submitted or decided, field by field.
 	it('passes the WULA number and the works as applied for, each { ref, text } only; null when there is neither', () => {
 		const works = [
 			{ ref: 'W1', text: 'Raise the dam wall by 2 m', recordedBy: 'Jane Holder' },
