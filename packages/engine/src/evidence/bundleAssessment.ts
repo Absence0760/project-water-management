@@ -119,7 +119,11 @@ const runOf = (input: ModelInput, what: string): ModelOutput => {
  * has it already. Throws, in words, when an op doesn't apply or the engine
  * refuses a run: the stored report says it applied and ran.
  */
-export function replayAssessment(base: ModelInput, members: readonly BundleAssessmentMember[], opts: { dams: boolean; baseline?: ModelOutput | null; what?: string }): CumulativeReport {
+export function replayAssessment(
+	base: ModelInput,
+	members: readonly BundleAssessmentMember[],
+	opts: { dams: boolean | 'reliability'; baseline?: ModelOutput | null; what?: string }
+): CumulativeReport {
 	const at = opts.what ? `${opts.what}, ` : '';
 	const baseline = opts.baseline ?? runOf(base, `${at}the baseline`);
 	const singles = members.map((m) => {
@@ -140,7 +144,9 @@ export function replayAssessment(base: ModelInput, members: readonly BundleAsses
 	if (opts.dams) {
 		const { dams } = touchedDams(base, members, combined.input);
 		if (dams.length) {
+			// 'reliability': the rows and which dams, the firm yields left empty (each its own search, bundleParts.ts).
 			const yields = (input: ModelInput, summary: ModelOutput['summary'], what: string) => {
+				if (opts.dams === 'reliability') return { summary, yields: dams.map(() => null) };
 				const y = damFirmYields(input, dams, what);
 				report.warnings.push(...y.warnings);
 				return { summary, yields: y.yields };
@@ -252,4 +258,22 @@ export function backgroundInputProblems(base: ModelInput, baselineRunId: string,
 	const mine = Object.fromEntries(Object.entries(bg.series ?? {}).flatMap(([k, s]) => (s ? [[k, s.valuesSha256 ?? null]] : [])));
 	if (!same(mine, baseSeries)) problems.push("its input series aren't the baseline's");
 	return problems;
+}
+
+/** Which run of an assessment: the baseline, one member alone (its place in the members), or all of them together. */
+export type AssessmentRunRef = { run: 'baseline' } | { run: 'single'; memberPosition: number } | { run: 'combined' };
+
+/** A run's input as replayAssessment builds it (and the assessment job did). Throws, in words, when it can't be built. */
+export function assessmentRunInput(base: ModelInput, members: readonly BundleAssessmentMember[], ref: AssessmentRunRef): ModelInput {
+	if (ref.run === 'baseline') return base;
+	if (ref.run === 'single') {
+		const m = members[ref.memberPosition];
+		if (!m) throw new Error(`the assessment has no application at ${ref.memberPosition}`);
+		const r = applyScenario(base, m.ops, maskOf(base, m));
+		if (r.problems.length) throw new Error(`"${m.name}" alone: its ops don't apply (${r.problems.slice(0, 3).join('; ')})`);
+		return r.input;
+	}
+	const combined = combineScenarios(base, members.map((m) => ({ id: m.id, name: m.name, ops: m.ops, ...maskOf(base, m) })));
+	if (!combined.input) throw new Error(`they don't combine (${[...combined.conflicts.map((c) => c.message), ...combined.problems].slice(0, 3).join('; ')})`);
+	return combined.input;
 }

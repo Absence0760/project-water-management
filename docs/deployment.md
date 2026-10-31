@@ -3224,16 +3224,18 @@ queues, and kept in a bucket of its own (infra/packs.tf):
 - **The re-run** (154_pack_reproduce). Issuing also queues a
   `pack_reproduce` job: the worker reads the pack's bundle
   (`packs/<project>/<pack>/<sha256>.zip`) back with that same
-  `s3:GetObject` grant, re-runs both runs from it and records the outcome
+  `s3:GetObject` grant, checks it and fans the re-runs out as
+  `pack_reproduce_part` jobs (302), each reading the bundle again: a run,
+  the headline pair, § 8's pairs, the combined row's assessment or its
+  background (its applications + 2 runs, about 17 s on a 30-year, 16-node
+  catchment) or one dam's firm-yield search (about 5.6 s), each well inside
+  the worker's 300 s, so the up to 160 searches of an assessed combined row
+  never share one job. The last part back records the outcome
   (`pack_reproduced` in the worker's log, `warn` unless it reproduced, with
-  the failed checks' ids and how long it took). It runs the engine twice in
-  the worker (each run as long as it took in the API), well inside the
-  worker's 300 s, plus the headline pair, § 8's pairs and, from `bundle-3`,
-  the cumulative assessment behind § 4's combined row (up to about 95 s
-  for its runs and dam yields, more with a background: the time is
-  watched in the log's duration, followups.md "The server re-run's time
-  with the combined row"); 3 attempts when the bucket can't be read, then the pack
-  page says the re-run couldn't be done. No infrastructure of its own.
+  the failed checks' ids, the parts and how long since the fan-out;
+  `pack_reproduce_fanned_out` when it fans out). 3 attempts when the bucket
+  can't be read (2 a part), then the pack page says the re-run couldn't be
+  done, naming the part. No infrastructure of its own.
 - **The bucket**: `water-management-packs-<account>`, private (public access
   blocked, bucket-owner objects), SSE-S3, TLS only, **versioned with Object
   Lock**: every object is retained from its upload for `pack_retention_days`

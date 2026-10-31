@@ -4714,6 +4714,12 @@ nothing else.
   written by `app_record_pack_reproduction` from a *running*
   `pack_reproduce` job of that pack as its acting user, for the bundle the
   pack records, once per engine, so no member can mark a pack reproduced.
+  A re-run in parts (302) is recorded the same way by
+  `app_finish_pack_reproduce`, from a *running* `pack_reproduce_part` job
+  of that re-run, every part stored by its own running job
+  (`app_pack_reproduce_part_done`) and the parts fanned out only from the
+  pack's running `pack_reproduce` job (`app_pack_reproduce_fan_out`);
+  `water_app` only reads `pack_reproduce_gathering` and `pack_reproduce_part`.
   It is never on verify: the app's own claim, not something the hash covers.
   The bundle's is `app_record_pack_bundle` (122_pack_bundle): the caller
   must be an editor of the project and the pack issued by the caller *in

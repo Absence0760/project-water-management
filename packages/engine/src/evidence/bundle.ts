@@ -513,10 +513,31 @@ export interface BundleCheckResult {
 	combined: 'checked' | 'older' | 'none' | null;
 }
 
+/**
+ * A re-run the server runs as its own job (bundleParts.ts, pack_reproduce_part): one run, the headline pair,
+ * § 8's pairs, the combined row's assessment (its dams' firm yields aside), or its background.
+ */
+export type BundlePartKey = 'run:baseline' | 'run:application' | 'headline' | 'climate' | 'combined' | 'background';
+
+/** What the combined row's assessment looks like once checked, for the server's dam parts (bundleParts.ts). */
+export interface BundleAssessmentContext {
+	base: ModelInput;
+	file: BundleAssessmentFile;
+	report: BundleAssessmentReport;
+}
+
 export interface CheckPackBundleOptions {
 	hash: BundleHash;
 	/** Re-run each run with this engine and compare its results digest (default true). */
 	rerun?: boolean;
+	/**
+	 * Only these re-runs (the server's fan-out, bundleParts.ts); absent, every one (`pnpm reproduce:pack`). With
+	 * it, `combined` leaves the dams' firm-yield searches to their own parts: its `reproduce:dams` covers the
+	 * assurance rows and which dams, and the parts' yields are folded in after (foldPackBundleReruns).
+	 */
+	parts?: readonly BundlePartKey[];
+	/** Called with the checked assessment's inputs, when its static checks pass (the server's dam parts). */
+	onAssessment?: (ctx: BundleAssessmentContext) => void;
 	/** The manifest hash the bundle must carry (from the verify lookup, or the pack row). */
 	expectManifestSha256?: string;
 	/** Largest bundle read, unpacked (default BUNDLE_ZIP_LIMITS.maxTotalBytes). */
@@ -553,6 +574,8 @@ function differingPaths(a: unknown, b: unknown, max = 8, path = '', out: string[
 }
 
 const sameJson = (a: unknown, b: unknown) => canonicalJson(asStored(a)) === canonicalJson(asStored(b));
+/** Whether a check re-runs `part`: never with `rerun: false`, every part without `parts`, else the listed ones. */
+const wantsPart = (opts: Pick<CheckPackBundleOptions, 'rerun' | 'parts'>, part: BundlePartKey) => opts.rerun !== false && (!opts.parts || opts.parts.includes(part));
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
@@ -587,6 +610,7 @@ function packRefProblem(pack: unknown): string | null {
 async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundleOptions, checks: BundleCheck[]): Promise<BundleCheckResult> {
 	const { hash } = opts;
 	const add = (id: string, ok: boolean, detail: string) => (checks.push({ id, ok, detail }), ok);
+	const want = (k: BundlePartKey) => wantsPart(opts, k);
 	let headline: BundleCheckResult['headline'] = null;
 	let combined: BundleCheckResult['combined'] = null;
 	const result = (pack: BundleCheckResult['pack'], runs: string[]): BundleCheckResult => ({
@@ -828,7 +852,7 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 	if (opts.rerun !== false) {
 		for (const r of RUNS) {
 			const named = index.runs[r];
-			if (!named) continue;
+			if (!named || !want(`run:${r}`)) continue;
 			const input = inputs[r]?.input;
 			const stored = results[r];
 			if (!input || !stored) {
@@ -882,7 +906,7 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 		const tableError = futureFactorTableError(fy.factors);
 		const named = `${fy.cases.length} case${fy.cases.length === 1 ? '' : 's'} (${fy.models.length} model${fy.models.length === 1 ? '' : 's'} × ${new Set(fy.cases.map((c) => c.ssp)).size} SSPs × ${new Set(fy.cases.map((c) => c.horizon)).size} horizons), method ${fy.method}`;
 		if (tableError) add('climate:delta', false, `the frozen factor table can't be read: ${tableError}`);
-		else if (opts.rerun === false) add('climate:delta', true, `the manifest freezes the factors of ${named}; not re-run`);
+		else if (!want('climate')) add('climate:delta', true, `the manifest freezes the factors of ${named}; not re-run`);
 		else if (!inputs.baseline?.input || !inputs.application?.input) add('climate:delta', false, 'not re-run: the baseline or application inputs failed a check above');
 		else {
 			const problems = checkFutureYield(fy, { baseline: inputs.baseline.input, application: inputs.application.input }, manifest.report.builtBy);
@@ -942,7 +966,7 @@ async function checkHeadline(
 	}
 	const named = `full-allocation pair: baseline ${rec.baselineResultsSha256}, application ${rec.applicationResultsSha256}`;
 	add('headline', problems.length === 0, problems.join('; ') || `the manifest records the ${named}; the mix of ${rec.kinds.length} registered volume${rec.kinds.length === 1 ? '' : 's'} as at the baseline is the manifest's`);
-	if (opts.rerun === false) return 'checked';
+	if (!wantsPart(opts, 'headline')) return 'checked';
 
 	// Re-derive the pair from the bundle's inputs and re-run it.
 	const ops = scenario?.ops;
@@ -1074,7 +1098,10 @@ async function checkAssessment(
 		}
 		add('inputs:background', bp.length === 0, bp.join('; ') || "the background run's input is the baseline's at full allocation: its ops change only the mode and registered volumes, and its series are the baseline's");
 	}
-	if (opts.rerun === false) return 'checked';
+	if (staticOk && baseline?.input) opts.onAssessment?.({ base: baseline.input, file, report });
+	if (!wantsPart(opts, 'combined') && !wantsPart(opts, 'background')) return 'checked';
+	// The server's fan-out: the dams' firm yields are their own parts, folded in after (bundleParts.ts).
+	const damSearch = !opts.parts;
 
 	const engineNote =
 		file.engineVersion && file.engineVersion !== ENGINE_VERSION ? ` The assessment ran on engine ${file.engineVersion}; this is ${ENGINE_VERSION}: check out that engine (README.md).` : '';
@@ -1084,13 +1111,15 @@ async function checkAssessment(
 	};
 	const stillOk = staticOk && !!baseline?.input;
 	const withDams = report.dams !== undefined;
-	if (!stillOk) {
+	if (!wantsPart(opts, 'combined')) {
+		// Not this part's (the server's fan-out runs it in another job).
+	} else if (!stillOk) {
 		add('reproduce:combined', false, 'not re-run: the assessment or the baseline inputs failed a check above');
 		if (withDams) add('reproduce:dams', false, 'not re-run: the assessment or the baseline inputs failed a check above');
 	} else {
 		let fresh: ReturnType<typeof replayAssessment> | null = null;
 		try {
-			fresh = replayAssessment(baseline!.input!, file.members, { dams: withDams, baseline: baselineOut });
+			fresh = replayAssessment(baseline!.input!, file.members, { dams: withDams ? (damSearch ? true : 'reliability') : false, baseline: baselineOut });
 		} catch (e) {
 			add('reproduce:combined', false, `re-run with engine ${ENGINE_VERSION}: ${message(e)}.${engineNote}`);
 			if (withDams) add('reproduce:dams', false, `not re-run: ${message(e)}`);
@@ -1106,17 +1135,22 @@ async function checkAssessment(
 			);
 			if (withDams) {
 				const meta = sameJson(fresh.dams ?? null, report.dams ?? null) ? [] : ["the dams touched, or whether their yields rest on the registered volumes, aren't the stored report's"];
+				// Without the searches (the server's fan-out), the assurance rows and which dams; the firm yields are folded in from their parts.
+				const rows = (r: CumulativeRow) => isDamRow(r) && (damSearch || r.metric === 'dam_reliability');
+				const n = report.dams!.nodeIds.length;
 				compare(
 					'reproduce:dams',
-					report.rows.filter(isDamRow),
-					fresh.rows.filter(isDamRow),
+					report.rows.filter(rows),
+					fresh.rows.filter(rows),
 					meta,
-					`the firm yield and assurance of supply of ${report.dams!.nodeIds.length === 1 ? 'the dam' : `each of the ${report.dams!.nodeIds.length} dams`} the applications touch, on every run, are the stored report's`
+					damSearch
+						? `the firm yield and assurance of supply of ${n === 1 ? 'the dam' : `each of the ${n} dams`} the applications touch, on every run, are the stored report's`
+						: `the assurance of supply of ${n === 1 ? 'the dam' : `each of the ${n} dams`} the applications touch, on every run, is the stored report's`
 				);
 			}
 		}
 	}
-	if (bgId) {
+	if (bgId && wantsPart(opts, 'background')) {
 		const stored = report.background?.report;
 		if (!stillOk || !bgInput || !stored) add('reproduce:background', false, "not re-run: the assessment or the background run's input failed a check above");
 		else {

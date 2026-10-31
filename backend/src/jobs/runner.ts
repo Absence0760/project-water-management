@@ -232,6 +232,8 @@ export interface TickResult {
 	 * it (301 app_fail_stopped_assessments): a lease run out with no attempts left, or its user no longer an editor.
 	 */
 	assessmentsFailed: number;
+	/** Pack re-runs failed on a part job that stopped without its result where no hook could record it (302 app_fail_stopped_pack_reproductions). */
+	packReproductionsFailed: number;
 	/** The queue after the tick. */
 	stats: QueueStats;
 	/** Data feeds queued by this tick (absent when feeds were off). */
@@ -282,6 +284,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		lost: 0,
 		released: 0,
 		assessmentsFailed: 0,
+		packReproductionsFailed: 0,
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
 		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
 		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
@@ -335,6 +338,10 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	// neither its onDead nor a sibling could record it is stored as failed (301). Global, like the purges.
 	result.assessmentsFailed = await withoutUser(
 		async (db) => (await db.query<{ n: number }>('SELECT app_fail_stopped_assessments() AS n')).rows[0]?.n ?? 0
+	);
+	// Likewise a pack's server re-run whose part job stopped without its result (302).
+	result.packReproductionsFailed = await withoutUser(
+		async (db) => (await db.query<{ n: number }>('SELECT app_fail_stopped_pack_reproductions() AS n')).rows[0]?.n ?? 0
 	);
 	// After the jobs, so every delivery an alert_eval queued is sent once it committed.
 	result.alerts = { scheduled: alertsScheduled, purged: alertsPurged, ...(await sendAlerts()) };

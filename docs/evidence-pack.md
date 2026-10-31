@@ -1660,11 +1660,25 @@ per pack, 3 attempts). The worker runs it as that editor, under RLS:
    `bundle_key` (`getPackBundle`, checksum mode on) and hashes it against the
    pack's `bundle_sha256`, as an assessor checks the download against
    verify's `bundleSha256`. That is the `stored` check.
-2. It runs the engine's `checkPackBundle` with the re-run and the pack's
-   manifest hash as `--expect`: what `pnpm reproduce:pack --expect <hash>`
-   prints, check for check.
-3. It records the outcome through `app_record_pack_reproduction` in the
-   job's transaction: `reproduced` (every check passed), `not_reproduced`
+2. It checks the bundle without re-running it, with the pack's manifest
+   hash as `--expect` (engine `planPackBundleReruns`, `evidence/bundleParts.ts`).
+   A check that fails is the outcome now (step 4, from this job).
+3. Otherwise the re-runs go out as **parts, each its own
+   `pack_reproduce_part` job** (302_pack_reproduce_parts,
+   `backend/src/evidence/packReproduceParts.ts`), so no pack runs past one
+   job's 300 s: each run, the headline pair, § 8's pairs, the combined row's
+   assessment (its runs and dams' assurance), its background, and one
+   firm-yield search per touched dam and run (up to 160, as the assessment
+   job fans its own out, 297). Each part's job, as the same editor, reads the
+   bundle again, checks its hash against the one the re-run was planned on,
+   runs its part (`rerunPackBundlePart`) and stores what it found; the last
+   one back folds them (`foldPackBundleReruns`: the dams' yields gathered
+   into one `reproduce:dams` row by row) into what `pnpm reproduce:pack
+   --expect <hash>` prints, check for check, and records it. The CLI is
+   unchanged: it re-runs everything in one process, with no time limit.
+4. The outcome is recorded through `app_record_pack_reproduction` (a check
+   that failed before any re-run) or `app_finish_pack_reproduce` (the parts'
+   outcome), each only from the pack's own running job: `reproduced` (every check passed), `not_reproduced`
    (any check failed: the stored bytes, a file, the manifest, the inputs,
    the stored results or a re-run), `other_engine` (only the re-runs
    differ, and a run was made with another engine version than the one the
@@ -1680,7 +1694,18 @@ per pack, 3 attempts). The worker runs it as that editor, under RLS:
 
 A bundle that doesn't reproduce is an outcome, recorded, and the job is
 done; only what another attempt can fix (the store unreachable) fails the
-job, which retries and then gives up. The pack's page says what it found, in
+job, which retries and then gives up. **A part never leaves the re-run
+hanging**: one whose job stopped without its result (dead, done without
+it, or purged) fails the re-run, naming the part and why ("the firm yield
+of "Dam" (All together) didn't finish (…)"), through the dead job's
+onDead, or the job tick's sweep for a death no hook sees (a lease run out
+with no attempts left, a user no longer an editor:
+`app_fail_stopped_pack_reproductions`); the page reads it so at once in any
+case. A failed re-run is not an outcome (a worker that timed out is no
+evidence that the bundle doesn't reproduce, and an outcome stands once per
+engine): the bar says the re-run couldn't be done, with why, and an editor
+runs it again. A part on another engine than the re-run was planned on (a
+deploy mid-way) stops the same way, so one record never mixes two. The pack's page says what it found, in
 its bar (never printed): reproduced, with the engine and date; not
 reproduced, with each failed check; another engine; still re-running; or
 that the re-run couldn't be done, with why (`reproduction` on
@@ -1689,7 +1714,13 @@ It is **not on verify**: it is the app's own claim about its own stored
 bytes, not something the pack's hash covers, and an assessor repeats it
 with the bundle rather than trusting it. Tests:
 `jobs/handlers/pack-reproduce.test.ts` (each outcome, against a real bundle
-of the engine's synthetic pack), `evidence/packs.db.test.ts` (queued at
+of the engine's synthetic pack, and the fan-out's parts),
+engine `evidence/bundleParts.test.ts` (the parts folded give the full
+re-run's checks; six dams, 24 searches; a tampered stored yield),
+`evidence/pack-reproduce-parts.db.test.ts` (six dams' 24 search jobs
+reproduce; a tampered yield doesn't; a dead part failed by the sweep and by
+onDead, with a re-run allowed after; the 302 functions' refusals),
+`evidence/packs.db.test.ts` (queued at
 issue, recorded as reproduced; a stored bundle replaced by other bytes
 recorded as not reproduced; the writer's refusals), and the pack PDF e2e
 (`e2e/tests/evidence-pack-pdf.spec.ts`, the page showing it).

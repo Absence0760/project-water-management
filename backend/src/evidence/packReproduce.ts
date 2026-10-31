@@ -8,6 +8,7 @@ import { type BundleCheck, ENGINE_VERSION } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
+import { stoppedPartsSql } from './packReproduceParts.js';
 
 /** One pending re-run per pack. */
 export const packReproduceDedupeKey = (packId: string) => `pack_reproduce:${packId}`;
@@ -73,6 +74,22 @@ async function pendingReproduce(db: Db, projectId: string, packId: string): Prom
 	return rows[0]?.id ?? null;
 }
 
+/** The pack's newest re-run in parts (302), with its stopped parts' lines while it is still gathering. */
+async function newestGathering(
+	db: Db,
+	projectId: string,
+	packId: string
+): Promise<{ id: string; jobId: string | null; status: 'gathering' | 'recorded' | 'failed'; problems: string[] | null; finishedAt: Date | null; stopped: string[] } | null> {
+	const { rows } = await db.query<{ id: string; jobId: string | null; status: 'gathering' | 'recorded' | 'failed'; problems: string[] | null; finishedAt: Date | null; stopped: string[] | null }>(
+		`SELECT g.id, g.job_id AS "jobId", g.status, g.problems, g.finished_at AS "finishedAt",
+			CASE WHEN g.status = 'gathering' THEN (SELECT jsonb_agg(s.problem ORDER BY s.position) FROM (${stoppedPartsSql('g.id')}) s) END AS stopped
+		 FROM pack_reproduce_gathering g WHERE g.project_id = $1 AND g.pack_id = $2 ORDER BY g.created_at DESC, g.id DESC LIMIT 1`,
+		[projectId, packId]
+	);
+	const g = rows[0];
+	return g ? { ...g, stopped: g.stopped ?? [] } : null;
+}
+
 /** Whether an outcome is recorded for the pack on this server's engine. */
 async function recordedHere(db: Db, projectId: string, packId: string): Promise<boolean> {
 	const { rows } = await db.query<{ here: boolean }>(
@@ -100,10 +117,17 @@ export async function packReproductionState(db: Db, projectId: string, packId: s
 		[projectId, packId]
 	);
 	const job = jobs[0];
-	const pending = job !== undefined && ['queued', 'running', 'failed'].includes(job.status);
+	// Its parts still out (302), none of them stopped: still checking.
+	const g = await newestGathering(db, projectId, packId);
+	const gathering = g?.status === 'gathering' && g.stopped.length === 0;
+	const pending = (job !== undefined && ['queued', 'running', 'failed'].includes(job.status)) || gathering;
 	const canRerun = issued && !pending && !(await recordedHere(db, projectId, packId));
 	if (pending) return { ...none(canRerun), status: 'checking' };
 	if (job?.status === 'dead' && (!done || job.createdAt > done.checkedAt)) return { ...none(canRerun), status: 'failed', error: job.error };
+	// A part stopped without its result (failed, or not yet swept): the re-run couldn't be done, saying which.
+	const stoppedLines = g?.status === 'failed' ? (g.problems ?? []) : g?.status === 'gathering' ? g.stopped : [];
+	if (g && stoppedLines.length && (!done || !g.finishedAt || g.finishedAt > done.checkedAt))
+		return { ...none(canRerun), status: 'failed', error: stoppedLines.join('; ') };
 	if (done)
 		return {
 			status: done.outcome,
@@ -130,6 +154,9 @@ export async function requestPackReproduce(db: Db, projectId: string, packId: st
 	if (!issued) throw new ApiError(409, 'a pack that was never issued is not re-run');
 	const pending = await pendingReproduce(db, projectId, packId);
 	if (pending) return { jobId: pending, created: false };
+	// Its parts still out (302): that re-run is the pending one.
+	const g = await newestGathering(db, projectId, packId);
+	if (g?.status === 'gathering' && g.stopped.length === 0 && g.jobId) return { jobId: g.jobId, created: false };
 	if (await recordedHere(db, projectId, packId))
 		throw new ApiError(409, `this pack’s re-run on engine ${ENGINE_VERSION} is recorded already, and it stands; a newer engine may re-run it again`);
 	return queuePackReproduce(db, projectId, packId);

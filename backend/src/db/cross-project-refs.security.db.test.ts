@@ -405,6 +405,22 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		reason: 'water_app writes none of it (SELECT only); app_record_pack_reproduction, SECURITY DEFINER, copies the project from the pack (154), and pack_reproduction_same_project checks it',
 		premise: 'not writable'
 	},
+	'pack_reproduce_gathering.pack_id': {
+		reason: 'water_app writes none of it (SELECT only); app_pack_reproduce_fan_out, SECURITY DEFINER, copies the project from the pack (302), and pack_reproduce_gathering_same_project checks it',
+		premise: 'not writable'
+	},
+	'pack_reproduce_gathering.job_id': {
+		reason: 'water_app writes none of it (SELECT only); app_pack_reproduce_fan_out takes only the caller’s own running pack_reproduce job of the pack, in the pack’s project (302)',
+		premise: 'not writable'
+	},
+	'pack_reproduce_part.gathering_id': {
+		reason: 'water_app writes none of it (SELECT only); app_pack_reproduce_fan_out inserts each part with the gathering it just made and that gathering’s project (302)',
+		premise: 'not writable'
+	},
+	'pack_reproduce_part.job_id': {
+		reason: 'water_app writes none of it (SELECT only); app_pack_reproduce_fan_out takes only a queued pack_reproduce_part job of the pack’s project, the caller’s, whose payload names that part (302)',
+		premise: 'not writable'
+	},
 	'dam_observation_load_mark.feature_id': {
 		reason: 'no project_id of its own: the worker’s record of the WOfS pass file it last loaded for that dam feature (key = feature_id), owner-only, water_app has no grant; written only by app_dam_load_mark_write from the worker’s session with no user (261)',
 		premise: 'no project_id'
@@ -1340,6 +1356,9 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/delineate.ts:requestId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'evidence/packReproduceParts.ts:packId': 'a job payload (302): jobs/trust.security.db.test.ts holds it to its job’s project',
+	'evidence/packReproduceParts.ts:gatheringId': 'a job payload (302): jobs/trust.security.db.test.ts holds it to its job’s project',
+	'evidence/packReproduceParts.ts:partId': 'a job payload (302): jobs/trust.security.db.test.ts holds it to its job’s project',
 	'jobs/handlers/applicant-pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',

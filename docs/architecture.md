@@ -2978,8 +2978,11 @@ The issue also queues a `pack_reproduce` job (`jobs/handlers/pack-reproduce.ts`,
 154_pack_reproduce; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
 the worker reads the pack's reproduction bundle back from the packs bucket
 (the same `s3:GetObject` on `packs/*` it HEADs PDFs with), checks it is the
-recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
-records the outcome through `app_record_pack_reproduction`. The pack's page
+recorded bytes and checks it without re-running; then fans the re-runs out
+as `pack_reproduce_part` jobs, one per run, the headline pair, § 8, the
+combined row's assessment and background, and each dam's firm-yield search
+(302), the last one back recording the outcome (`app_finish_pack_reproduce`;
+a stopped part fails the re-run, through its onDead or the tick's sweep). The pack's page
 shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
 ## Assistant

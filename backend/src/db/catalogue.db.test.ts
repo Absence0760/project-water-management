@@ -216,6 +216,10 @@ const READ_ONLY = new Set([
 	'erratum_sweep',
 	'quaternary_reference',
 	'pack_reproduction',
+	// A pack's server re-run in parts (302): written only by the pack_reproduce and pack_reproduce_part jobs through
+	// 302's SECURITY DEFINER functions, each from the caller's own running job of it.
+	'pack_reproduce_gathering',
+	'pack_reproduce_part',
 	'gauge_station_reference',
 	'evaporation_station_reference',
 	'dam_register_reference',
@@ -445,7 +449,9 @@ const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger:
 	'seasonal_outlook.job_id': { updateTrigger: true, purgeTest: 'src/outlooks/outlooks.db.test.ts' },
 	'yield_result.job_id': { updateTrigger: false },
 	'future_yield.job_id': { updateTrigger: false },
-	'climate_factors.job_id': { updateTrigger: false }
+	'climate_factors.job_id': { updateTrigger: false },
+	'pack_reproduce_gathering.job_id': { updateTrigger: false },
+	'pack_reproduce_part.job_id': { updateTrigger: false }
 };
 
 /**

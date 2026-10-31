@@ -19,6 +19,8 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { buildPackBundle } from '@water-management/engine';
+import { packBundleFixture } from '@water-management/engine/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { sent } = vi.hoisted(() => ({ sent: [] as Record<string, unknown>[] }));
@@ -29,6 +31,8 @@ vi.mock('./transport.js', async (orig) => ({
 
 import { actForAuthority, asOwner, DECISION, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { bundleHash } from '../evidence/bundle.js';
+import { packBundleKey, putPackBundle } from '../reports/storage.js';
 import { FIXTURE_CELL } from '../feeds/fixtures.js';
 import { rank, type Role } from '../projects/access.js';
 import { handlers } from './handlers/index.js';
@@ -225,6 +229,35 @@ async function issuedPack(projectId: string, runId: string, userId: string): Pro
 }
 
 /**
+ * An issued pack whose stored bundle is the engine's synthetic pack (its own
+ * manifest, the pack's id in it), planted as issuedPack plants one, with the
+ * bundle in the packs bucket: its re-run fans out to part jobs (302).
+ */
+async function issuedPackWithBundle(projectId: string, runId: string, userId: string): Promise<string> {
+	kept.add(projectId);
+	const packId = randomUUID();
+	const input = packBundleFixture(bundleHash);
+	const built = await buildPackBundle({ ...input, manifest: { ...input.manifest, pack: { ...input.manifest.pack, id: packId } } }, bundleHash);
+	const key = packBundleKey(projectId, packId, built.sha256);
+	await putPackBundle(key, built.bytes, built.sha256);
+	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+	await client.connect();
+	try {
+		await client.query('BEGIN');
+		await client.query('SET LOCAL session_replication_role = replica');
+		await client.query(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, status, manifest, manifest_sha256, report_version, engine_version, created_by, issued_at, issued_by, bundle_key, bundle_sha256)
+			 VALUES ($1, $2, $3, 1, 'issued', '{}', $4, 'evidence-26', 'x', $5, now(), $5, $6, $7)`,
+			[packId, projectId, runId, built.index.pack.manifestSha256, userId, key, built.sha256]
+		);
+		await client.query('COMMIT');
+	} finally {
+		await client.end();
+	}
+	return packId;
+}
+
+/**
  * An issued pack of an application the project's owner made themselves
  * (so they are its party, app_applicant_pack_meta), planted as issuedPack
  * plants one: the applicant's copy (165_applicant_copy) needs a party.
@@ -353,6 +386,23 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			return { jobId: job.id, ref: packId };
 		},
 		effect: async (id) => (await asOwner('SELECT outcome FROM pack_reproduction WHERE pack_id = $1', [id])).map((r) => r.outcome)
+	},
+	pack_reproduce_part: {
+		// B's issued pack with a real bundle, and B's re-run of it fanned out (302): one of its part jobs, the baseline run, its siblings waiting.
+		async queue(owner, b) {
+			const packId = await issuedPackWithBundle(b.projectId, b.runId, owner.id);
+			const { job: parent } = await enqueue(owner, b.projectId, 'pack_reproduce', { packId });
+			await runTick({ feeds: false, reports: false, alerts: false, projectIds: [b.projectId], maxJobs: 1 });
+			expect(await jobRow(parent.id)).toMatchObject({ status: 'done' });
+			const [p] = await asOwner(
+				`SELECT p.id, p.job_id FROM pack_reproduce_part p JOIN pack_reproduce_gathering g ON g.id = p.gathering_id WHERE g.pack_id = $1 AND p.part->>'kind' = 'run:baseline'`,
+				[packId]
+			);
+			expect(p, 'a baseline part job').toBeTruthy();
+			await asOwner(`UPDATE job SET run_after = now() + interval '1 day' WHERE kind = 'pack_reproduce_part' AND project_id = $1 AND id <> $2`, [b.projectId, p.job_id]);
+			return { jobId: p.job_id, ref: p.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status FROM pack_reproduce_part WHERE id = $1', [id]))[0].status
 	},
 	sweep: {
 		async queue(owner, b) {
