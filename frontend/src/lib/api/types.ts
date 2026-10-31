@@ -2309,6 +2309,12 @@ export interface PackDetail {
 	 * refused (403 `pack_volumes_withheld`).
 	 */
 	volumesWithheld: boolean;
+	/**
+	 * The reproduction bundle is refused this caller (403 `pack_volumes_withheld`): as `volumesWithheld`, or
+	 * because a run only the bundle holds (an alternative's, the cited assessment's background) carries a
+	 * registered volume (bundle-3).
+	 */
+	bundleWithheld: boolean;
 	signoffs: Signoff[];
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
