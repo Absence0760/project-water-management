@@ -382,19 +382,23 @@ const FULL_ALLOCATION_OPS: ScenarioOp[] = [{ op: 'settings.set', path: 'allocati
  * rows), and with `background` its full-allocation background too. The
  * manifest's combined section is read from that report as report.ts reads it.
  */
-export function assessmentPackFixture(hash: SyncHash, opts: { background?: boolean } = {}): PackBundleInput {
+export function assessmentPackFixture(hash: SyncHash, opts: { background?: boolean; dams?: number } = {}): PackBundleInput {
 	const base = packFixtureInput();
+	// With `dams` above 1, more farms with a dam (D2 …), each a little more maize in the other application: more dams touched.
+	const extra = Array.from({ length: Math.max(0, (opts.dams ?? 1) - 1) }, (_, i) => `D${i + 2}`);
 	base.model.nodes = [
 		...base.model.nodes.map((n) => (n.id === 'F1' ? { ...n, ...FUTURE_FIXTURE_DAM } : n)),
-		node({ id: 'F2', name: 'Farm two', downstreamNodeId: 'G', areaKm2: 10, sortOrder: 1 })
+		node({ id: 'F2', name: 'Farm two', downstreamNodeId: 'G', areaKm2: 10, sortOrder: 1 }),
+		...extra.map((id, i) => node({ id, name: `Dam farm ${id}`, downstreamNodeId: 'G', areaKm2: 5, sortOrder: 2 + i, ...FUTURE_FIXTURE_DAM }))
 	];
-	base.model.cropAreas = [...base.model.cropAreas, { nodeId: 'F2', cropId: 'c', areaM2: 200_000 }];
+	base.model.cropAreas = [...base.model.cropAreas, { nodeId: 'F2', cropId: 'c', areaM2: 200_000 }, ...extra.map((nodeId) => ({ nodeId, cropId: 'c', areaM2: 50_000 }))];
+	const otherOps: ScenarioOp[] = [...ASSESSMENT_OTHER_OPS, ...extra.map((nodeId) => ({ op: 'cropArea.set' as const, nodeId, cropId: 'c', areaM2: 80_000 }))];
 	base.model.allocations = structuredClone(HEADLINE_ALLOCATIONS);
 	const baselineOut = runModelChecked(structuredClone(base));
 	const baseline = storedRun(hash, '00000000-0000-4000-8000-0000000000a1', base, baselineOut);
 	const members: BundleAssessmentMember[] = [
 		{ id: ASSESSMENT_FIXTURE.thisScenario, scenarioId: ASSESSMENT_FIXTURE.thisScenario, name: 'Farm one maize', origin: 'applicant', ops: ASSESSMENT_THIS_OPS, opsSha256: hash(canonicalJson(ASSESSMENT_THIS_OPS)), ownedNodeIds: ['F1'] },
-		{ id: ASSESSMENT_FIXTURE.other, scenarioId: ASSESSMENT_FIXTURE.other, name: 'Farm two maize', origin: 'applicant', ops: ASSESSMENT_OTHER_OPS, opsSha256: hash(canonicalJson(ASSESSMENT_OTHER_OPS)), ownedNodeIds: ['F2'] }
+		{ id: ASSESSMENT_FIXTURE.other, scenarioId: ASSESSMENT_FIXTURE.other, name: 'Farm two maize', origin: 'applicant', ops: otherOps, opsSha256: hash(canonicalJson(otherOps)), ownedNodeIds: ['F2', ...extra] }
 	];
 	const appInput = applyScenario(base, ASSESSMENT_THIS_OPS, { mask: applicationMask(base, ['F1']) }).input;
 	const application = storedRun(hash, '00000000-0000-4000-8000-0000000000a2', appInput, runModelChecked(structuredClone(appInput)), {
