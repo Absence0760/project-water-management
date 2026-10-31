@@ -443,14 +443,22 @@ provenance, `ingest/verify_copy.py`):
       **Durable fix:** offer the boundary's proposal for `agera5_et0` too
       (`feeds/fromBoundary.ts` is CHIRPS-specific in its source and target).
       **Trigger:** the first project that adds a reference ET feed.
-- [ ] **Credit AgERA5 and NASA POWER in a run's report and exports.** The
-      feed card credits them and the series is labelled by its feed, but
-      the run's data credits (`engine/liability/rainCredits.ts`) name the
-      rain products only. **Durable fix:** a credit per evaporation product
-      a run read (from the `evap_et0_mm` series' feed and its days, as
-      `forecastRainEcmwf` does for ECMWF), in the report, the workbook and
-      the data sources page. **Trigger:** before the first report or
-      evidence pack on a project with a reference ET feed.
+- [x] **Credit AgERA5 and NASA POWER in a run's report and exports
+      (2026-10-30).** Done: a run records `et0Products` from the feed's
+      days GR4J read, and the report, CSVs, workbook, evidence pack README
+      and Data sources page credit them ([data-sources.md § ERA5-Land](./data-sources.md#era5-land-r4-a), *Where the credits show*).
+- [ ] **Record which product wrote each reference ET day.** A run's
+      AgERA5/NASA POWER credit splits the `agera5_et0` feed's `feed_days`
+      at the feed's latest `last_meta.agera5Through`, since the series
+      doesn't record a product per day; a POWER day the feed never re-read
+      after AgERA5's month landed (the feed paused longer than its 75-day
+      re-read) is then credited to AgERA5 alone. **Durable fix:** the
+      ingest keeps the days each product wrote (a `datemultirange` per
+      product beside `feed_days`, cleared by the same edits), and
+      `runs/execute.ts` `et0FeedDays` reads it instead of the split.
+      **Trigger:** the first `agera5_et0` feed paused (failing, or off)
+      for more than 75 days, or an evidence pack on a project whose feed
+      was.
 
 ## Observing dams (issue #604 Round 5)
 

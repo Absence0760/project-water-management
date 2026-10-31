@@ -113,4 +113,20 @@ export function FORECAST_RAIN_NOTE(from: string, source?: ForecastRainSource | n
 }
 
 // The rain data credits (issue #604 R4-E) live in ./rainCredits.ts, a module with no imports, so a page that shows only them (the public Data sources page, the map's attribution) loads nothing else: engine `@water-management/engine/credits`.
-export { copernicusEra5lNotice, type CreditedRainProduct, ECMWF_CREDIT, ERA5L_CITATION, imergCitation, type RainCredit, rainCredits, runRainCredits } from './rainCredits';
+export {
+	AGERA5_CITATION,
+	copernicusAgera5Notice,
+	copernicusEra5lNotice,
+	type CreditedEt0Product,
+	type CreditedRainProduct,
+	ECMWF_CREDIT,
+	ERA5L_CITATION,
+	type Et0FeedDays,
+	et0ProductsOf,
+	et0ProductsRead,
+	imergCitation,
+	NASA_POWER_ET0_CREDIT,
+	type RainCredit,
+	rainCredits,
+	runRainCredits
+} from './rainCredits';

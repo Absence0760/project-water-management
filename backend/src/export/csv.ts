@@ -308,3 +308,16 @@ export function dayRange(
 	if (hi < lo) return null;
 	return { offset: lo, days: hi - lo + 1 };
 }
+
+const isEt0Credit = (c: RainCredit) => c.product === 'agera5_et0' || c.product === 'power_et0';
+
+/**
+ * The credits a series download owes for the run that read it: catchment
+ * rain's run columns, its rain products'; the daily reference ET, its
+ * products' (issue #604 R5-E); any other series, none.
+ */
+export function seriesCredits(inputKey: string, credits: readonly RainCredit[]): RainCredit[] {
+	if (inputKey === 'rain_catchment_mm') return credits.filter((c) => !isEt0Credit(c));
+	if (inputKey === 'evap_et0_mm') return credits.filter(isEt0Credit);
+	return [];
+}

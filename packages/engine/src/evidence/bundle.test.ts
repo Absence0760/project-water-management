@@ -99,6 +99,11 @@ describe('buildPackBundle + checkPackBundle', () => {
 		const partly = structuredClone(input);
 		partly.application!.inputs = { ...partly.application!.inputs, forecastRainSource: 'other', forecastRainEcmwf: true };
 		expect(bundleRainCredits(partly).map((c) => c.product)).toEqual(['ecmwf_ens']);
+		// Reference ET from an AgERA5 feed (R5-E): the products the run read, each once across both runs, after the rain's.
+		const et0 = structuredClone(input);
+		et0.baseline.inputs = { ...et0.baseline.inputs, et0Products: ['agera5_et0'] };
+		et0.application!.inputs = { ...et0.application!.inputs, et0Products: ['power_et0', 'agera5_et0'] };
+		expect(bundleRainCredits(et0).map((c) => c.product)).toEqual(['agera5_et0', 'power_et0']);
 		// The fixture's report records no creation day; a real pack's is the baseline run's, whose year Copernicus's line takes.
 		withProducts.manifest = { ...withProducts.manifest, report: { ...withProducts.manifest.report, identity: { ...withProducts.manifest.report.identity, baseline: { ...withProducts.manifest.report.identity?.baseline, createdAt: '2026-10-27T08:00:00.000Z' } } } } as typeof withProducts.manifest;
 		const year = '2026';

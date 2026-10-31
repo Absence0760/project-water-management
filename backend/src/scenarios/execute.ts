@@ -4,7 +4,7 @@
 // through the same save path as any other (storeRun), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type CreditedEt0Product, et0ProductsOf, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
@@ -300,7 +300,16 @@ export async function prepareScenarioRun(
 		},
 		privateLabel: scenario.origin === 'applicant'
 	};
+	// The base run's reference ET credits (issue #604 R5-E): the scenario reads the same series values.
+	const et0 = await baseEt0Products(db, projectId, scenario.baseRunId);
+	if (et0.length) run.et0Products = et0;
 	return { run, check, scenario };
+}
+
+/** A base run's `et0Products` (runs/execute.ts storeRun), the known ones only; none when the run isn't visible or recorded none. */
+async function baseEt0Products(db: Db, projectId: string, runId: string): Promise<CreditedEt0Product[]> {
+	const { rows } = await db.query<{ p: unknown }>(`SELECT inputs->'et0Products' AS p FROM model_run WHERE project_id = $1 AND id = $2`, [projectId, runId]);
+	return et0ProductsOf(rows[0]?.p);
 }
 
 /**

@@ -240,14 +240,15 @@ export const bundleSeriesPath = (valuesSha256: string) => `series/${valuesSha256
 /**
  * The credits the bundle owes for the rain it carries (issue #604 R4-E,
  * docs/data-sources.md): a run's ERA5-Land and IMERG Late inputs are in
- * series/, and an ECMWF forecast in its forecast series, so the README names
- * their sources word for word. Accessed: the baseline run's creation day.
+ * series/, and an ECMWF forecast in its forecast series, and AgERA5's and
+ * NASA POWER's reference ET in its evap_et0_mm series (R5-E), so the README
+ * names their sources word for word. Accessed: the baseline run's creation day.
  * Empty for a run on CHIRPS alone, whose README is as before.
  */
 export function bundleRainCredits(input: Pick<PackBundleInput, 'manifest' | 'baseline' | 'application'>): RainCredit[] {
 	const accessed = (input.manifest.report.identity?.baseline?.createdAt ?? '').slice(0, 10);
 	const all = [input.baseline, input.application].flatMap((r) =>
-		r ? runRainCredits({ summary: r.summary as Parameters<typeof runRainCredits>[0]['summary'], forecastRainSource: r.inputs.forecastRainSource, forecastRainEcmwf: r.inputs.forecastRainEcmwf }, accessed) : []
+		r ? runRainCredits({ summary: r.summary as Parameters<typeof runRainCredits>[0]['summary'], forecastRainSource: r.inputs.forecastRainSource, forecastRainEcmwf: r.inputs.forecastRainEcmwf, et0Products: r.inputs.et0Products }, accessed) : []
 	);
 	const out: RainCredit[] = [];
 	for (const c of all) {

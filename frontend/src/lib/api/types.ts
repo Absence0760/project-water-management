@@ -988,6 +988,8 @@ export interface Run extends RunMeta {
 	forecastRainSource?: ForecastRainSource | null;
 	/** GET …/runs/:runId: any forecast day held an ECMWF ENS feed's value (backend runs/execute.ts forecastRainEcmwf), so ECMWF's credit is owed even when `forecastRainSource` is 'other'. */
 	forecastRainEcmwf?: boolean;
+	/** GET …/runs/:runId: the reference ET products GR4J read on some run day (backend runs/execute.ts storeRun, issue #604 R5-E), so their credits are owed; [] when none. */
+	et0Products?: ('agera5_et0' | 'power_et0')[];
 	/**
 	 * Its server stamp still matches its rows (GET …/runs/:runId only;
 	 * docs/security.md § Run stamps): false for a run written past the model

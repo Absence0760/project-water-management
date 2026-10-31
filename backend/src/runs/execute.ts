@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
 	type AllocationEntry,
+	type CreditedEt0Product,
+	type Et0FeedDays,
+	et0ProductsRead,
 	forecastRainSourceOf,
 	type ForecastRainSource,
 	forecastSplit,
@@ -501,6 +504,16 @@ export interface RunPlan {
 	forecastRainSource?: ForecastRainSource;
 	/** A forecast run whose forecast days hold an ECMWF ENS feed's values, some or all (inputs.forecastRainEcmwf, forecastRainEcmwf below): ECMWF's credit is owed. */
 	forecastRainEcmwf?: boolean;
+	/**
+	 * A run of the live model whose daily reference ET series an `agera5_et0`
+	 * feed wrote (et0FeedDays below): the days it wrote and where AgERA5's copy
+	 * reached, as they stood when the input was read. storeRun turns it into
+	 * the run's `et0Products` with the run days GR4J read (engine
+	 * et0ProductsRead), for AgERA5's and NASA POWER's credits.
+	 */
+	et0Feed?: Et0FeedDays;
+	/** A scenario run: its base run's `et0Products` (the same series values), owed when the scenario's run read the series too. */
+	et0Products?: CreditedEt0Product[];
 	/** A run of the live model: its outlet flow records a DWS feed wrote whole (#523 G8, runs/publishedRecords.ts); storeRun marks their series. */
 	publishedRecords?: PublishedRecords;
 }
@@ -534,6 +547,9 @@ export async function prepareRun(
 	if (trigger === 'forecast' && !forecastFrom) throw new NoForecastRainError();
 	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
 	const plan: RunPlan = { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds, publishedRecords };
+	// Not the model's: the credits' (AgERA5, NASA POWER; issue #604 R5-E), read with the input so a later fetch can't move them.
+	const et0Feed = await et0FeedDays(db, seriesIds.evap_et0_mm);
+	if (et0Feed) plan.et0Feed = et0Feed;
 	if (forecastFrom) {
 		plan.forecastRainSource = await forecastRainSource(db, seriesIds.rain_forecast_mm, forecastFrom);
 		// Not the model's (it reads only the source above): the credit's, owed for any day of ECMWF's values (issue #604 R4-E).
@@ -582,6 +598,32 @@ export async function forecastRainEcmwf(db: Db, seriesId: string | undefined, fr
 		[seriesId, from]
 	);
 	return rows[0]?.any === true;
+}
+
+/**
+ * The days an `agera5_et0` feed wrote into a daily reference ET series and
+ * still holds (time_series.feed_id + feed_days, 031_feed_days: a person's
+ * upload or edit releases the days it covers), as inclusive ISO ranges, and
+ * where AgERA5's copy reached at the feed's latest fetch
+ * (data_feed.last_meta.agera5Through, feeds/fromMirrorEt0.ts): the feed takes
+ * AgERA5 on every day its copy holds and NASA POWER only after it. A fetch
+ * that recorded its counts (agera5Days) without agera5Through found no
+ * AgERA5 (null); no counts at all (the config changed since) is unknown
+ * (undefined: both are credited). null when no such feed wrote the series.
+ */
+export async function et0FeedDays(db: Db, seriesId: string | undefined): Promise<Et0FeedDays | null> {
+	if (!seriesId) return null;
+	const { rows } = await db.query<{ days: [string, string][] | null; through: string | null; counted: boolean }>(
+		`SELECT (SELECT array_agg(ARRAY[lower(r)::text, (upper(r) - 1)::text] ORDER BY lower(r)) FROM unnest(s.feed_days) r) AS days,
+			CASE WHEN f.last_meta->>'agera5Through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN f.last_meta->>'agera5Through' END AS through,
+			f.last_meta ? 'agera5Days' AS counted
+		 FROM time_series s JOIN data_feed f ON f.project_id = s.project_id AND f.id = s.feed_id
+		 WHERE s.id = $1 AND f.source = 'agera5_et0'`,
+		[seriesId]
+	);
+	const r = rows[0];
+	if (!r) return null;
+	return { days: r.days ?? [], ...(r.through ? { agera5Through: r.through } : r.counted ? { agera5Through: null } : {}) };
 }
 
 /**
@@ -676,6 +718,16 @@ export function runFailure(err: Error): never {
 }
 
 /**
+ * The reference ET products a run owes credits for: from the feed's days the
+ * run read (a run of the live model), or its base run's when the scenario's
+ * run read the series on some day too.
+ */
+export function runEt0Products(plan: Pick<RunPlan, 'et0Feed' | 'et0Products'>, info: ModelOutput['summary']['et0Daily']): CreditedEt0Product[] {
+	if (plan.et0Feed) return et0ProductsRead(plan.et0Feed, info);
+	return info?.used && info.dailyDays > 0 ? [...(plan.et0Products ?? [])] : [];
+}
+
+/**
  * Persist a computed run, its outputs and its stored inputs, in the caller's
  * transaction: the one save path, for the live model (executeRun,
  * runLiveModel) and a scenario applied to its base run's input (`scenario`
@@ -696,6 +748,7 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 	const { projectId, label, input, scenario, trigger } = plan;
 	const opts = { privateLabel: plan.privateLabel };
 	const hashes = Object.fromEntries(Object.entries(input.series).map(([k, v]) => [k, seriesHash(v.values)])) as Record<string, string>;
+	const et0Products = runEt0Products(plan, output.summary.et0Daily);
 	const snapshot = {
 		// The fit record as it stands for these parameters (edits since the
 		// fit marked), so the run shows which fit and validation produced them.
@@ -723,6 +776,8 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {}),
 		// …and whether any of its forecast days held ECMWF's values: the credit's flag, not the model's.
 		...(plan.forecastRainEcmwf ? { forecastRainEcmwf: true } : {}),
+		// …and which reference ET products GR4J read on some run day (issue #604 R5-E): the credits' record, not the model's.
+		...(et0Products.length ? { et0Products } : {}),
 		// The CHIRPS series the run read and the others (engine ≥ 1.90.0, issue #561): its warning reads them, so a reproduction needs them.
 		...(input.seriesChoice ? { seriesChoice: input.seriesChoice } : {}),
 		// The rainfall stations' names and details (engine ≥ 1.91.0, issue #553): the forcing reads their MAPs, so a reproduction needs them.

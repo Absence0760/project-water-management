@@ -7,7 +7,7 @@
 // Plain text, never HTML: the page renders it as text.
 
 // From the credits' own subpath, not the engine's barrel: this module is on the public Data sources page and the map's attribution, which need nothing else of the engine.
-import { copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, imergCitation } from '@water-management/engine/credits';
+import { AGERA5_CITATION, copernicusAgera5Notice, copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, imergCitation, NASA_POWER_ET0_CREDIT } from '@water-management/engine/credits';
 import { APP_NAME } from '#lib/brand.js';
 
 /** A `YYYY-MM-DD` day in words, "1 October 2026" (UTC, so the day never shifts). */
@@ -229,6 +229,29 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licenceUrl: 'https://www.ecmwf.int/en/forecasts/datasets/open-data',
 		read: '2026-10-27',
 		statements: [ECMWF_CREDIT]
+	},
+	// The copy's reference evapotranspiration (issue #604 R5-E, docs/data-sources.md § agera5, § nasa-power): an `agera5_et0` feed takes
+	// AgERA5's value where its copy has the day and NASA POWER's after it; GR4J reads it under a monthly PE row. The engine's notices again.
+	{
+		id: 'agera-et',
+		name: 'AgERA5 daily reference evapotranspiration (v2.0)',
+		usedFor: 'The daily reference evapotranspiration an AgERA5 data feed writes, which the runoff model reads under a monthly PE row.',
+		publisher: 'ECMWF, for the Copernicus Climate Change Service (C3S)',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+		licenceUrl: 'https://cds.climate.copernicus.eu/datasets/sis-agrometeorological-indicators',
+		read: '2026-10-27',
+		statements: [copernicusAgera5Notice(new Date().getUTCFullYear())],
+		citation: AGERA5_CITATION
+	},
+	{
+		id: 'nasa-power',
+		name: 'NASA POWER daily meteorology, our reference evapotranspiration from it',
+		usedFor: 'The newest days of an AgERA5 data feed, before AgERA5 has them: FAO-56 reference evapotranspiration we compute from POWER’s daily weather.',
+		publisher: 'NASA Langley Research Center, Prediction of Worldwide Energy Resources (POWER) Project',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0), POWER’s own summary',
+		licenceUrl: 'https://power.larc.nasa.gov/llms.txt',
+		read: '2026-10-27',
+		statements: [NASA_POWER_ET0_CREDIT]
 	},
 	{
 		id: 'waas-map',

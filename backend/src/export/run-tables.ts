@@ -173,6 +173,12 @@ export interface SummaryMeta {
 	 * or uploaded over), the forecast block still credits ECMWF.
 	 */
 	forecastRainEcmwf?: boolean;
+	/**
+	 * The reference ET products GR4J read on some run day (model_run.inputs.et0Products,
+	 * runs/execute.ts storeRun; issue #604 R5-E), raw: the reference ET block
+	 * credits them (engine et0ProductsOf reads it). Absent or empty: none.
+	 */
+	et0Products?: unknown;
 }
 
 /**
@@ -785,6 +791,20 @@ const WY_CALENDAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const GAP_PRODUCT_TEXT: Record<string, string> = { chirps: 'CHIRPS', era5l: 'ERA5-Land', chirpsThenEra5l: 'CHIRPS, then ERA5-Land where CHIRPS has none' };
 
 /**
+ * The daily reference ET a run's GR4J read (engine ≥ 1.104.0, model.md §2.4a
+ * *Daily reference ET*) and the credits its products' values carry
+ * (issue #604 R5-E, docs/data-sources.md § agera5, § nasa-power), word for
+ * word. Nothing when the run owes none (no feed's values on a day it read).
+ */
+export function et0CreditLines(info: RunSummary['et0Daily'], credits: readonly RainCredit[]): string[] {
+	if (!credits.length) return [];
+	const out = [csvRow(['Daily reference evapotranspiration'])];
+	if (info?.used) out.push(csvRow(['Days from the daily series', info.dailyDays]), csvRow(['First and last such day', `${info.first ?? ''} … ${info.last ?? ''}`]));
+	for (const c of credits) for (const line of c.lines) out.push(csvRow([`Credit: ${c.name}`, line]));
+	return out;
+}
+
+/**
  * The gap-filling product (engine ≥ 1.101.0, model.md §2.4b *Gap-filling
  * product*, issue #604): the choice, each product's (and IMERG version's)
  * days, rain and fit, the runs of days each filled with the IMERG version,
@@ -1347,6 +1367,12 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	// Only on a run with a gap-filling product (engine ≥ 1.101.0, issue #604): other exports are unchanged.
 	if (summary.gapRain) {
 		yield* gapRainLines(summary.gapRain, runRainCredits({ summary }, meta.createdAt.slice(0, 10)));
+		yield '';
+	}
+	// Only on a run whose GR4J read an AgERA5 feed's reference ET (issue #604 R5-E): other exports are unchanged.
+	const et0 = et0CreditLines(summary.et0Daily, runRainCredits({ et0Products: meta.et0Products }, meta.createdAt.slice(0, 10)));
+	if (et0.length) {
+		yield* et0;
 		yield '';
 	}
 

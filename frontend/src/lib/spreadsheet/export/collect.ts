@@ -18,7 +18,7 @@ export interface ExportProgress {
 }
 
 interface RunResponse {
-	run: { summary: RunSummary; createdAt?: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; settings?: Record<string, unknown>; model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown> };
+	run: { summary: RunSummary; createdAt?: string; forecastRainSource?: string | null; forecastRainEcmwf?: boolean; et0Products?: readonly string[]; settings?: Record<string, unknown>; model?: { nodes?: { id: string; name: string }[] } & Record<string, unknown> };
 	series: { nodeId: string | null }[];
 }
 
@@ -126,7 +126,7 @@ export async function collectWorkbookInput(
 		input: {
 			summaryCsv,
 			summary: run.summary,
-			// The rain sources' credits on the first sheet (issue #604 R4-E), read on the run's day.
+			// The data sources' credits on the first sheet (issue #604 R4-E, R5-E), read on the run's day.
 			credits: runRainCredits(run, (run.createdAt ?? new Date().toISOString()).slice(0, 10)),
 			settings: run.settings,
 			model: run.model,
