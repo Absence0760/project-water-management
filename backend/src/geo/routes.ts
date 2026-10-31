@@ -2,7 +2,7 @@
 // docs/api.md § Catchment map, docs/maps.md).
 //
 //   GET    /projects/:id/map/features                   features, sources, nodes' area sources (viewer)
-//   GET    /projects/:id/map/linked-nodes               the ids of the nodes a feature is linked to (viewer)
+//   GET    /projects/:id/map/linked-nodes               the ids of the nodes a feature is linked to, and each linked dam polygon's siting (viewer)
 //   POST   /projects/:id/map/features                   place one feature: a point from the coordinates form, or a geometry (editor)
 //   PATCH  /projects/:id/map/features/:fid              rename, re-kind, link to a node, move (editor)
 //   DELETE /projects/:id/map/features/:fid              (editor); its import goes with its last feature
@@ -529,7 +529,18 @@ export const mapRoutes = new Hono<AuthEnv>()
 				'SELECT DISTINCT node_id FROM map_feature WHERE project_id = $1 AND node_id IS NOT NULL ORDER BY node_id',
 				[id]
 			);
-			return c.json({ nodeIds: rows.map((r) => r.node_id) });
+			// Each linked dam polygon's siting (194 dam_position, null = not said), for the hint beside the
+			// Network editor's Upstream inflow to dam (docs/maps.md § Start from the map). Only a polygon takes one.
+			const { rows: dams } = await db.query<{ node_id: string; id: string; name: string; dam_position: DamPosition | null }>(
+				`SELECT node_id, id, name, dam_position FROM map_feature
+				 WHERE project_id = $1 AND node_id IS NOT NULL AND kind = 'dam' AND geometry ->> 'type' IN ('Polygon', 'MultiPolygon')
+				 ORDER BY node_id, name, id`,
+				[id]
+			);
+			return c.json({
+				nodeIds: rows.map((r) => r.node_id),
+				dams: dams.map((d) => ({ nodeId: d.node_id, featureId: d.id, name: d.name, damPosition: d.dam_position }))
+			});
 		})
 	)
 	.post('/:id/map/features', async (c) => {

@@ -2065,7 +2065,10 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   effective, both less their pans, [§ Pans and the effective area](#pans-and-the-effective-area)). Both are proposed as ticks on the
   unit's card in Start and Divide (`damShares`; Divide beside the node's
   values now); an unmarked dam proposes only the old *all of its own runoff
-  reaches the dam* tick. The name
+  reaches the dam* tick. Once ticked, the share is edited by hand on the
+  Network, so the unit's form shows the map's Siting under *Upstream inflow
+  to dam* and warns when the share is plainly the other kind (off-channel at
+  100 %, on the river at 0 %; ui.md, `GET …/map/linked-nodes` `dams`). The name
   follows DWS practice: a dam registration (form DW762, section 21(b))
   distinguishes off-channel storage, naming the watercourse it would drain
   to, and DWS's own off-channel storage (OCS) dams are filled from a river

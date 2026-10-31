@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cachedMappedNodes, clearMappedNodes, loadMappedNodes, mapNodeHref } from './mapLinks';
 import { MappedNodes } from './mappedNodes.svelte';
+import type { LinkedDam } from '#lib/api/types.js';
 
-const list = (nodeIds: string[]) => async () => ({ nodeIds });
+const list = (nodeIds: string[], dams: LinkedDam[] = []) => async () => ({ nodeIds, dams });
+const dam = (nodeId: string, name: string, damPosition: LinkedDam['damPosition']): LinkedDam => ({ nodeId, featureId: `f-${name}`, name, damPosition });
 
 describe('Show on map links (issue #326 A2)', () => {
 	beforeEach(() => clearMappedNodes());
@@ -15,26 +17,26 @@ describe('Show on map links (issue #326 A2)', () => {
 
 	it('asks the lightweight linked-nodes read for the project, not the feature list', async () => {
 		const asked: string[] = [];
-		const ids = await loadMappedNodes('p1', async (p) => (asked.push(p), { nodeIds: ['n1', 'n2'] }));
+		const { ids } = await loadMappedNodes('p1', async (p) => (asked.push(p), { nodeIds: ['n1', 'n2'], dams: [] }));
 		expect(asked).toEqual(['p1']);
 		expect([...ids].sort()).toEqual(['n1', 'n2']);
-		expect((await loadMappedNodes('p2', list([]))).size).toBe(0);
+		expect((await loadMappedNodes('p2', list([]))).ids.size).toBe(0);
 	});
 
 	it('remembers the last set per project for the next page’s first frame', async () => {
 		expect(cachedMappedNodes('p1')).toBeUndefined();
 		await loadMappedNodes('p1', list(['n1']));
-		expect([...cachedMappedNodes('p1')!]).toEqual(['n1']);
+		expect([...cachedMappedNodes('p1')!.ids]).toEqual(['n1']);
 		expect(cachedMappedNodes('p2')).toBeUndefined();
 		// A later visit refreshes it: a feature unlinked on the Map tab loses its node's link.
 		await loadMappedNodes('p1', list([]));
-		expect(cachedMappedNodes('p1')!.size).toBe(0);
+		expect(cachedMappedNodes('p1')!.ids.size).toBe(0);
 	});
 
 	it('leaves the cache alone when the list can’t be read', async () => {
 		await loadMappedNodes('p1', list(['n1']));
 		await expect(loadMappedNodes('p1', () => Promise.reject(new Error('offline')))).rejects.toThrow('offline');
-		expect([...cachedMappedNodes('p1')!]).toEqual(['n1']);
+		expect([...cachedMappedNodes('p1')!.ids]).toEqual(['n1']);
 	});
 
 	it('a page starts from the cached set and shows no link before any', async () => {
@@ -58,7 +60,7 @@ describe('Show on map links (issue #326 A2)', () => {
 	});
 
 	it('follows a project switch, and drops a late answer for the earlier project', async () => {
-		type List = { nodeIds: string[] };
+		type List = { nodeIds: string[]; dams: LinkedDam[] };
 		let project = 'p1';
 		const pending: ((v: List) => void)[] = [];
 		const slow = () => new Promise<List>((r) => pending.push(r));
@@ -67,11 +69,11 @@ describe('Show on map links (issue #326 A2)', () => {
 		// The workspace switches project before p1's list arrives.
 		project = 'p2';
 		const second = m.load();
-		pending[1]!({ nodeIds: ['p2-node'] });
+		pending[1]!({ nodeIds: ['p2-node'], dams: [] });
 		await second;
 		expect(m.has('p2-node')).toBe(true);
 		// p1's answer lands late: it doesn't replace p2's set.
-		pending[0]!({ nodeIds: ['p1-node'] });
+		pending[0]!({ nodeIds: ['p1-node'], dams: [] });
 		await first;
 		expect(m.has('p2-node')).toBe(true);
 		expect(m.has('p1-node')).toBe(false);
@@ -88,9 +90,32 @@ describe('Show on map links (issue #326 A2)', () => {
 
 	it('a page without a project never asks', async () => {
 		let asked = false;
-		const m = new MappedNodes(() => '', async () => ((asked = true), { nodeIds: [] }));
+		const m = new MappedNodes(() => '', async () => ((asked = true), { nodeIds: [], dams: [] }));
 		await m.load();
 		expect(asked).toBe(false);
 		expect(m.has('n1')).toBe(false);
+	});
+
+	it('groups each node’s linked dam outlines with their siting, for its Upstream inflow to dam hint', async () => {
+		let project = 'p1';
+		const m = new MappedNodes(() => project, list(['n1', 'n2'], [dam('n1', 'Storage', 'off_channel'), dam('n1', 'Weir pool', null), dam('n2', 'River dam', 'on_channel')]));
+		expect(m.dams('n1')).toEqual([]);
+		await m.load();
+		expect(m.dams('n1').map((d) => [d.name, d.damPosition])).toEqual([
+			['Storage', 'off_channel'],
+			['Weir pool', null]
+		]);
+		expect(m.dams('n2').map((d) => d.damPosition)).toEqual(['on_channel']);
+		expect(m.dams('n3')).toEqual([]);
+		// Another project's dams never answer.
+		project = 'p2';
+		expect(m.dams('n1')).toEqual([]);
+	});
+
+	it('reads an older API with no dams as none', async () => {
+		const m = new MappedNodes(() => 'p1', async () => ({ nodeIds: ['n1'] }) as unknown as { nodeIds: string[]; dams: LinkedDam[] });
+		await m.load();
+		expect(m.has('n1')).toBe(true);
+		expect(m.dams('n1')).toEqual([]);
 	});
 });

@@ -4,12 +4,15 @@
 // `?tab=map&node=<nodeId>` for a node a map feature is linked to, and to
 // nothing for one without. A viewer gets the links too. The links only:
 // what the Map tab selects from `node=` is catchment-map.spec.ts's.
+// The same read carries a linked dam outline's Siting, which the node sheet
+// shows beside Upstream inflow to dam, warning when the share contradicts it.
 // Synthetic data only: the sample model and an invented parcel.
 import type { APIRequestContext } from '@playwright/test';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { box, showTab } from '../support/map.ts';
+import { openNodeForm } from '../support/network.ts';
 
 /** A parcel linked to one unit, and a boundary linked to none. */
 async function seedMap(request: APIRequestContext, projectId: string, nodeId: string): Promise<void> {
@@ -83,4 +86,36 @@ test('a viewer gets the links too', async ({ page, owner, signIn }) => {
 	await expect(viewer.page.getByRole('list', { name: 'Hydrological units' }).getByRole('link', { name: 'Show on map (Upper farm)' })).toHaveAttribute('href', `?tab=map&node=${p.upper}`);
 	await viewer.page.goto(`/projects/${p.id}?tab=network&node=${p.upper}`);
 	await expect(viewer.page.getByTestId('node-card-map')).toHaveAttribute('href', `?tab=map&node=${p.upper}`);
+});
+
+test('the node sheet shows a linked dam’s Siting beside Upstream inflow to dam, and warns when the share contradicts it', async ({ page, owner }) => {
+	void owner;
+	const p = await seed(page.request, 'Dam siting hint');
+	// Upper farm's dam (150 000 m³, Upstream inflow to dam 0 % in the sample) drawn as its outline and marked on the river.
+	const post = await page.request.post(`${API_URL}/projects/${p.id}/map/features`, {
+		data: { kind: 'dam', name: 'Upper weir pool', nodeId: p.upper, geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.004)] } }
+	});
+	expect(post.status()).toBe(201);
+	const damId = ((await post.json()) as { feature: { id: string } }).feature.id;
+	expect((await page.request.patch(`${API_URL}/projects/${p.id}/map/features/${damId}`, { data: { damPosition: 'on_channel' } })).status()).toBe(200);
+
+	await page.goto(`/projects/${p.id}?tab=network&edit=${p.upper}`);
+	const sheet = await openNodeForm(page);
+	const routing = sheet.getByRole('group', { name: 'Routing', exact: true });
+	const share = routing.getByLabel('Upstream inflow to dam (%)', { exact: true });
+	await expect(routing.getByTestId('node-dam-siting')).toHaveText('On the map, its dam “Upper weir pool” is marked on the river.');
+	// On the river at 0 %: a warning, in the field's description, and the field stays editable (never a block).
+	const warning = routing.getByTestId('node-dam-siting-warning');
+	await expect(warning).toHaveText(/^The map marks this dam on the river, but Upstream inflow to dam is 0 %/);
+	await expect(share).toHaveAccessibleDescription(/marked on the river\. The map marks this dam on the river/);
+	await expect(share).toBeEditable();
+	// Typed to 100 %, as the Siting says: the warning goes, the Siting stays.
+	await share.fill('100');
+	await expect(warning).toHaveCount(0);
+	await expect(routing.getByTestId('node-dam-siting')).toBeVisible();
+	// Lower farm has no dam on the map: no Siting line.
+	await page.getByLabel('Hydrological unit to edit').selectOption(p.lower);
+	await expect(page).toHaveURL(new RegExp(`edit=${p.lower}`));
+	await expect(page.getByRole('dialog')).toContainText('Lower farm');
+	await expect(page.getByTestId('node-dam-siting')).toHaveCount(0);
 });
