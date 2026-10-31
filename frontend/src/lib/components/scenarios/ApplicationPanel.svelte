@@ -32,7 +32,8 @@
 	import type { ModelInput, ScenarioOp } from '@water-management/engine';
 	import LicenceTermsEditor from './LicenceTermsEditor.svelte';
 	import LicenceTermsView from './LicenceTermsView.svelte';
-	import { earliestEventDate, eventHeading, licenceLine, licensedTerms, nextEvents } from './licence';
+	import { onDestroy } from 'svelte';
+	import { earliestEventDate, eventHeading, licenceLine, licensedRunState, licensedTerms, nextEvents } from './licence';
 	import {
 		api,
 		DECISION_EVENT_FORUM_LABEL,
@@ -227,6 +228,26 @@
 			return d;
 		});
 	}
+	// The licensed terms' background run (293_scenario_run_job), queued when the decision or a variation was recorded:
+	// its state where the button is, read again every few seconds while it waits or runs.
+	const background = $derived(licensedRunState(s));
+	let pollTimer: ReturnType<typeof setTimeout> | undefined;
+	onDestroy(() => clearTimeout(pollTimer));
+	$effect(() => {
+		clearTimeout(pollTimer);
+		if (!background?.busy) return;
+		const sid = s.id;
+		pollTimer = setTimeout(async () => {
+			try {
+				const d = await api.scenarios.get(projectId, sid);
+				if (d.scenario.id !== s.id) return;
+				if (d.scenario.licensedRunJob?.status === 'done' && s.licensedRunJob?.status !== 'done') note = 'Ran the licensed terms in the background.';
+				onchange(d);
+			} catch {
+				// A missed look: the state stays as it was shown; the page's next load reads it again.
+			}
+		}, 4000);
+	});
 	let runningLicensed = $state(false);
 	async function runLicensed() {
 		if (!onrunlicensed) return;
@@ -424,9 +445,14 @@
 			{#if standing}<p class="standing" data-testid="application-licence">{standing}</p>{/if}
 			{#if inForce && canEdit && onrunlicensed}
 				<div class="actions">
-					<button type="button" class="btn btn-sm" disabled={busy || locked || runningLicensed} onclick={runLicensed} data-testid="application-run-licensed"
-						>{runningLicensed ? 'Running…' : 'Run the licensed terms'}</button
-					>
+					{#if background}
+						<p class="small background" role="status" data-testid="application-licensed-run-job" data-status={s.licensedRunJob?.status}>{background.text}</p>
+					{/if}
+					{#if !background || background.showButton}
+						<button type="button" class="btn btn-sm" disabled={busy || locked || runningLicensed} onclick={runLicensed} data-testid="application-run-licensed"
+							>{runningLicensed ? 'Running…' : 'Run the licensed terms'}</button
+						>
+					{/if}
 					<span class="hint">The evidence report lists this licence among the other applications from a run of these terms.</span>
 				</div>
 			{/if}
@@ -839,6 +865,10 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		margin: 0.5rem 0;
+	}
+	.actions .background {
+		flex-basis: 100%;
+		margin: 0;
 	}
 	fieldset {
 		border: 0;

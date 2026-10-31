@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DecisionEvent, LicenceTerms } from '#lib/api/types.js';
-import { earliestEventDate, eventHeading, licensedTerms, licenceLine, nextEvents } from './licence';
+import type { DecisionEvent, JobMeta, LicenceTerms } from '#lib/api/types.js';
+import { earliestEventDate, eventHeading, licensedRunState, licensedTerms, licenceLine, nextEvents } from './licence';
 
 const terms = (v: number): LicenceTerms => ({
 	ops: [{ op: 'node.set', nodeId: 'n', field: 'damCapacityM3', value: v }],
@@ -76,5 +76,56 @@ describe('nextEvents and earliestEventDate', () => {
 		expect(earliestEventDate({ decisionDate: '2026-09-30', decisionEvents: [ev('e1', 'lodged', { eventDate: '2026-10-02' })] })).toBe('2026-10-02');
 		expect(earliestEventDate({ decisionDate: null, decisionEvents: [] })).toBeNull();
 		expect(eventHeading(ev('e1', 'set_aside'))).toBe('Decision set aside: Water Tribunal, 2 Oct 2026');
+	});
+});
+
+describe('licensedRunState (293_scenario_run_job)', () => {
+	const inForce = { licence: { inForce: true, from: 'decision' as const, eventId: null, appealPending: false }, grantedTerms: terms(150_000), decisionEvents: [] };
+	const job = (status: JobMeta['status'], over: Partial<JobMeta> = {}): JobMeta => ({
+		id: 'j1',
+		kind: 'scenario_run',
+		status,
+		attempts: 0,
+		maxAttempts: 2,
+		runAfter: '2026-10-30T08:00:00Z',
+		createdAt: '2026-10-30T08:00:00Z',
+		startedAt: null,
+		finishedAt: null,
+		error: null,
+		createdBy: 'Assessor',
+		progress: null,
+		...over
+	});
+
+	it('hides the button and keeps looking while the background run waits or runs', () => {
+		expect(licensedRunState({ ...inForce, licensedRunJob: job('queued'), lastRun: null })).toEqual({
+			text: 'Queued: the licensed terms run in the background, so the evidence report counts this licence. Nothing to press.',
+			busy: true,
+			showButton: false
+		});
+		expect(licensedRunState({ ...inForce, licensedRunJob: job('running'), lastRun: null })).toEqual({ text: 'Running the licensed terms in the background…', busy: true, showButton: false });
+	});
+
+	it('gives the button back, with why, once it failed; a retry still pending keeps looking', () => {
+		expect(licensedRunState({ ...inForce, licensedRunJob: job('failed', { error: 'a database error (SQLSTATE 40001)' }), lastRun: null })).toEqual({
+			text: 'The background run of the licensed terms failed and will try again: a database error (SQLSTATE 40001).',
+			busy: true,
+			showButton: true
+		});
+		const dead = job('dead', { error: "an op of this scenario doesn't apply to its base run", finishedAt: '2026-10-30T08:05:00Z' });
+		expect(licensedRunState({ ...inForce, licensedRunJob: dead, lastRun: null })).toEqual({
+			text: "The background run of the licensed terms failed: an op of this scenario doesn't apply to its base run. Run them here.",
+			busy: false,
+			showButton: true
+		});
+		// Someone ran the scenario since: the old failure says nothing more.
+		expect(licensedRunState({ ...inForce, licensedRunJob: dead, lastRun: { id: 'r', label: 'x', createdAt: '2026-10-30T09:00:00Z' } })).toBeNull();
+	});
+
+	it('says nothing once done, without a job, or with no licence in force', () => {
+		expect(licensedRunState({ ...inForce, licensedRunJob: job('done'), lastRun: null })).toBeNull();
+		expect(licensedRunState({ ...inForce, licensedRunJob: null, lastRun: null })).toBeNull();
+		expect(licensedRunState({ ...inForce, licensedRunJob: undefined, lastRun: null })).toBeNull();
+		expect(licensedRunState({ ...inForce, licence: { inForce: false, from: 'event', eventId: 'e', appealPending: false }, licensedRunJob: job('queued'), lastRun: null })).toBeNull();
 	});
 });
