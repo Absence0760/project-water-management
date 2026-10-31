@@ -4482,8 +4482,10 @@ role and not before it.
       before the fix and 40/40 after; waits under load were a few ms, and
       none reached 1 s in 1,840 tests. Unloaded click → glossary on screen:
       median 59.5 ms before, 58.9 ms after (25 runs each). Tests:
-      `stylesheets.test.ts`.
-- [ ] **Report the CSS-before-render race upstream.** A ready-to-file
+      `stylesheets.test.ts`. **Workaround removed 2026-10-30:** Vite 8.3.4
+      fixed the cause, so `stylesheets.ts` and its test went; help.spec.ts's
+      slowed-stylesheet test guards it now (see "Update Vite to 8.3.4").
+- [x] **Report the CSS-before-render race upstream.** A ready-to-file
       report (versions, cause with code references, failing trace, a fix
       for each project, our workaround) is in
       [upstream/sveltekit-css-before-render.md](./upstream/sveltekit-css-before-render.md):
@@ -4491,6 +4493,10 @@ role and not before it.
       Filing publishes to an outside project, so it's the operator's call.
       Trigger: anyone with a GitHub account and ten minutes; once fixed
       upstream, `stylesheetsReady` can go after a version bump.
+      **Not needed (2026-10-30):** Vite fixed the cause on its own in 8.3.4
+      (vitejs/vite#23662, issue #23652), so nothing was filed; the doc stays
+      as the record, and `stylesheetsReady` is gone (next entry under
+      Housekeeping, "Update Vite to 8.3.4").
 - [x] **`POST /projects/:id/runs` holds a DB connection for the whole engine
       run** (found by #41): the engine ran inside the request's
       transaction, so a long run pinned a pooled connection. Fixed: the
@@ -6431,7 +6437,26 @@ assume, the questions for counsel); these are the actions, with triggers.
       tests, its line in docs/api.md and its row in the route-auth inventory
       (`src/routes.test.ts`). **Trigger:** the next backend round; don't
       leave them undecided past it.
-- [ ] **Update Vite to 8.3.4 or later (issue #90, 2026-10-11).** Vite 8.3.4
+- [ ] **A client navigation to a glossary topic once never committed
+      (2026-10-30, seen once).** help.spec.ts › "a guide shows its diagrams
+      and links into the glossary" failed once at load average ~70 (other
+      sessions' suites): the click on "Fit record" fetched the topic's node
+      (`nodes/21`) and its stylesheet (both 200 in 1 ms, the `<link>`
+      inserted by Vite's helper), but the URL never changed in 5 s and the
+      page logged no error. SvelteKit pushes the URL before it runs
+      `onNavigate`, so the stall was inside `load_route` (or the navigation
+      was superseded), not in the root layout's removed `stylesheetsReady`
+      wait, which only ever ran after `load_route`. Not reproduced since:
+      that test 30/30 at 8 workers and the whole help.spec.ts 150/150 at 12.
+      Suspects: since Vite 8.3.4 every loader call waits for its CSS, so a
+      stylesheet whose `load`/`error` never fires would now hold a
+      navigation for good (before, only the unawaited warm-up waited); or a
+      hover preload's fork racing the click. **Durable fix:** find which;
+      if it is the stylesheet wait, file it on vitejs/vite (a cap or a
+      `sheet` check in `preloadOnce`). **Trigger:** a second sighting of an
+      e2e click-navigation that never commits (keep its trace), in CI or
+      locally.
+- [x] **Update Vite to 8.3.4 or later (issue #90, 2026-10-11).** Vite 8.3.4
       (#23662, fixing vitejs/vite#23652) makes every caller of the preload
       helper wait for an in-flight stylesheet, which fixes the
       CSS-before-render race in docs/upstream/sveltekit-css-before-render.md
@@ -6440,6 +6465,23 @@ assume, the questions for counsel); these are the actions, with triggers.
       brings it). Then decide whether the root layout's `onNavigate(() =>
       stylesheetsReady())` workaround stays (it is cheap and also guards a
       slow link) or goes, and update the upstream doc either way.
+      **Done (2026-10-30): the workaround went.** `frontend/package.json`
+      pins `vite` 8.3.4, and the installed preload helper (`preloadOnce` in
+      `vite/dist/node/chunks/node.js`) hands every later caller the
+      in-flight stylesheet promise. SvelteKit finishes `load_route` before it
+      runs `onNavigate`, so the route's CSS has already arrived by then and
+      the workaround added nothing, slow links included (Vite waits however
+      long the CSS takes; the 10 s cap never applied there). Evidence, every
+      `.css` response held 1.5 s and the glossary entry's
+      `scroll-margin-top` read as it entered the DOM: styled 5/5 with and
+      without the workaround (render ~1.56 s after the click); the helper
+      patched back to its pre-8.3.4 memo, unstyled 5/5 (~45 ms).
+      `help.spec.ts` green both ways. Removed `lib/nav/stylesheets.ts`, its
+      test and the layout's `onNavigate`; help.spec.ts's "a client
+      navigation waits for a slow stylesheet before showing the page" pins
+      the behaviour (fails 5/5 against the pre-8.3.4 helper).
+      [upstream/sveltekit-css-before-render.md](./upstream/sveltekit-css-before-render.md)
+      records it.
 - [x] **Playwright 1.64 (Dependabot #529, left out of #537, 2026-10-12).**
       #529 moved only the renderer image (`backend/renderer.Dockerfile`, both
       FROM lines) to `v1.64.0-noble`. With the npm packages still on 1.63 the
@@ -6525,13 +6567,17 @@ assume, the questions for counsel); these are the actions, with triggers.
       test points it at a temp directory holding a copy of the committed
       file, plus a case for a `.env.development.local` that wins.
 
-- [ ] **Run the full suites once GitHub Actions is back** (it has been off
+- [x] **Run the full suites once GitHub Actions is back** (it has been off
       since 2026-09-24, billing). Work since then was verified with targeted
       tests only; the email-first sign-up (2026-09-27) changed the shared
       test helpers every DB and e2e test uses (`backend/src/__tests__/helpers.ts`
       `signUp`, `e2e/support/api.ts` `register`). Trigger: Actions
       re-enabled, or before the first release: run `test:backend:db` and
       the 14 e2e shards (or both suites locally, not beside each other).
+      **Done:** Actions came back 2026-09-28, and `.github/workflows/ci.yml`
+      runs `test:backend:db` and the 14 e2e shards on every push to `main`
+      and every PR; checked 2026-10-30, the latest `main` run (b0265f76e)
+      passed all of them.
 
 - [ ] **Make the deploy role's sops-key grant opt-in upstream** (issue #126
       § IAM). The templates `project-baseline` module's key policy lets the
@@ -6544,14 +6590,18 @@ assume, the questions for counsel); these are the actions, with triggers.
       the first `terraform apply`, or the next baseline change, whichever
       comes first; then re-run the baseline stage and check the key policy.
 
-- `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
+- [x] `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
   guard now fails any `SECURITY DEFINER` function executable by a role other
   than the owner and `water_app`. The in-flight `025_share_links.sql` branch
   may add such functions; when it merges, run `pnpm test:backend:db` and make
   sure its functions revoke `PUBLIC` (the owner's default privileges already
   close them if 028 has applied first, but a database migrated in file order
   applies 025 before 028's default-privilege change, so 025 needs its own
-  `REVOKE`).
+  `REVOKE`). **Done:** 025 merged, and 028's step 1 walks `pg_proc` and revokes
+  `PUBLIC` from every `SECURITY DEFINER` function already there, so 025's
+  `app_share_view` / `app_share_series` are closed whichever order they ran
+  in (028's header names them); the catalogue guard passes on `main`'s CI
+  (checked 2026-10-30).
 
 - [x] **Split the help content chunk** (done 2026-09-26). `lib/help/
       content.ts` (every entry, one module) was the largest page chunk at
