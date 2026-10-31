@@ -1738,9 +1738,32 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   pack that was issued, and the bundle the pack records (`no_bundle` only
   for a pack without one; `23514` otherwise); a second outcome for the same
   engine changes nothing and returns false.
+- **In parts (302_pack_reproduce_parts.sql).** `job.kind` accepts
+  `pack_reproduce_part` (2 attempts). **`pack_reproduce_gathering`**: one
+  re-run in parts (`pack_id` → `evidence_pack`, cascade, indexed with
+  `created_at`; `project_id`, `job_id` → its `pack_reproduce` job, SET
+  NULL; each indexed; `pack_reproduce_gathering_same_project` on insert):
+  `engine_version`, `run_engines`, `bundle_sha256`, `checks` (before any
+  re-run), `status` `gathering` / `recorded` / `failed` with `problems`
+  (one line per stopped part). **`pack_reproduce_part`**: one part
+  (`gathering_id` → it, cascade, unique with `position`; `job_id` → its
+  job, SET NULL, unique; `project_id` indexed): `part` (engine
+  `BundleRerunPart`), `label`, `status` `pending` / `done`, `result`
+  (engine `BundlePartResult`). Both: RLS read by whoever reads the pack,
+  `water_app` `SELECT` only (catalogue `READ_ONLY`). Writers, `SECURITY
+  DEFINER`, `water_app` only: `app_pack_reproduce_fan_out` (from the
+  caller's running `pack_reproduce` job of an issued pack, the bundle it
+  records, each part's queued job the caller's, naming that part),
+  `app_pack_reproduce_part_done` (once, from the part's own running job),
+  `app_finish_pack_reproduce` (from a running part job of the gathering,
+  every part done: inserts `pack_reproduction` as above, once per engine),
+  `app_fail_pack_reproduce` (an editor: failed on its stopped parts, which
+  `pack_reproduce_stopped_parts` lists from the job table) and
+  `app_fail_stopped_pack_reproductions` (the tick, the worker only).
 - Guards: `evidence/packs.db.test.ts` (queued at issue, recorded as
   reproduced, a stored bundle replaced by other bytes recorded as not
-  reproduced, the writer's refusals), `jobs/handlers/pack-reproduce.test.ts`,
+  reproduced, the writer's refusals), `evidence/pack-reproduce-parts.db.test.ts`
+  (the parts, a dead part, the 302 writers' refusals), `jobs/handlers/pack-reproduce.test.ts`,
   `jobs/trust.security.db.test.ts` (a `pack_reproduce` job naming another
   project's pack touches nothing of it), the catalogue.
 

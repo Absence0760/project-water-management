@@ -6042,18 +6042,20 @@ Left:
       `evidence/bundle-assessment.db.test.ts` (the job's own assessment
       re-run offline; a tampered member op and background input fail)
       ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
-- [ ] **The server re-run's time with the combined row.** `pack_reproduce`
-      now re-runs a pack's cumulative assessment too (`bundle-3`): up to its
-      applications + 2 runs and 20 firm-yield searches (about 95 s worst
-      case, measured for the assessment job), as many runs again with a
-      background, on top of the two runs, the headline pair and § 8's
-      pairs, all inside the worker's 300 s Lambda. Not measured together:
-      a large catchment with § 8 and an assessed combined row with a
-      background could pass it, and the job would fail and retry without an
-      outcome. Durable fix: record each part's outcome as it finishes and
-      split the re-run into a job per part (runs, headline, § 8, combined
-      row), each with its own lease. Trigger: a `pack_reproduced` log line
-      over 200 s, or a re-run that times out.
+- [x] **The server re-run's time with the combined row.** Done
+      (302_pack_reproduce_parts, 2026-10-31): `pack_reproduce` checks the
+      bundle without re-running and fans the re-runs out, one
+      `pack_reproduce_part` job each (each run, the headline pair, § 8's
+      pairs, the combined row's assessment, its background, and one
+      firm-yield search per touched dam and run, up to 160 as 297 made the
+      assessment's), the last one back folding them (engine
+      `evidence/bundleParts.ts`: the full re-run's checks, id for id) into
+      the pack's record. A stopped part fails the re-run naming it (its
+      onDead, or the tick's sweep), never left hanging, and an editor runs
+      it again; `pnpm reproduce:pack` is unchanged. Tests:
+      `bundleParts.test.ts`, `pack-reproduce-parts.db.test.ts`,
+      `pack-reproduce.test.ts`, the catalogue and the job trust sweep
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - [x] **Yield and reliability per dam, together.** Done (report format
       `evidence-26`, 2026-10-30): the `assessment` job works out, for each
       dam the applications touch (engine `scenario/cumulativeYield.ts`

@@ -42,6 +42,7 @@ const summary = (r: TickResult) =>
 		: '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
 	(r.assessmentsFailed ? `assessments failed on stopped yields: ${r.assessmentsFailed}; ` : '') +
+	(r.packReproductionsFailed ? `pack re-runs failed on stopped parts: ${r.packReproductionsFailed}; ` : '') +
 	`${r.stats.due} due, ${r.stats.running} running`;
 
 if (process.argv.includes('--once')) {
