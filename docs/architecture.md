@@ -1747,18 +1747,26 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     `feed_fetch_failed`), and the worker's `feed_ingest` releases the
     feed's fetch and queues it again in `HOST_BUSY_RETRY_SECONDS` (120),
     the feed's health untouched. The fetcher's scheduled passes (preliminary
-    days, GEFS), with no retry but their next run, wait up to three
-    minutes (a look every 15 s, `takeHostSlotWaiting`), since a backfill
-    month holds the slot a minute or two and then pauses at least a minute,
-    and otherwise skip the run (`stopped: "host_busy"`, logged, no lag
-    datapoint that run). A backfill month raises `HostBusy`, which the state
+    days, GEFS), with no retry but their next run, reserve the next turn
+    (`reserved.json`, renewed at each look every 15 s; never over another
+    waiter's live reservation, behind which they just wait) and wait until
+    150 s before their deadline (`takeHostSlotWaiting`,
+    `HOST_SLOT_PASS_WORK_MS`), about 12 minutes of the fetcher's 15: long
+    enough to outlast one per-feed CHIRPS fetch, which holds the slot 9–12
+    minutes, while the reservation keeps the next fetch from taking the
+    freed slot first (on 2026-11-01 the old three-minute wait, with no
+    reservation, lost to back-to-back fetches and skipped the day). The
+    reservation is withdrawn once the pass holds the slot or gives up.
+    Still held at the wait's end, the pass skips the run
+    (`stopped: "host_busy"`, logged, no lag datapoint that run). A backfill month raises `HostBusy`, which the state
     machine retries every 2 minutes for an hour; a daily `rnl`/`sat` run
     ends quietly. A backfill execution keeps the slot for its whole run
     (every month the same owner, kept through the pauses, released by the
     state machine's last step; `lease.hold_host_for_backfill`), so the
     fetches defer for hours and resume after it; a backfill month waiting
     for the slot reserves the next turn (`reserved.json`), which every
-    other taker yields to (deployment.md § Backfill). A month CHC kept
+    other taker yields to (deployment.md § Backfill); a taker never yields
+    to a reservation with its own owner token. A month CHC kept
     answering 429 or 503 fails with `RetryLater`, which the state machine
     retries 15, 30, 60 and 120 minutes on; its hold lapses during those
     waits (it is kept only through the pause plus 5 minutes), so the

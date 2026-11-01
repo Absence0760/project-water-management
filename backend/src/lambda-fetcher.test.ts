@@ -20,14 +20,18 @@ vi.mock('./feeds/http.js', async (orig) => {
 });
 
 // CHC's request slot (feeds/hostSlot.ts): the real one unless a test swaps in its own slots, or shortens a pass's wait.
-const slotOverride: { slots?: import('./feeds/hostSlot.js').HostSlots; waitMs?: number } = {};
+const slotOverride: { slots?: import('./feeds/hostSlot.js').HostSlots; waitMs?: number; sleep?: (ms: number) => Promise<void> } = {};
 vi.mock('./feeds/hostSlot.js', async (orig) => {
 	const real = await orig<typeof import('./feeds/hostSlot.js')>();
 	return {
 		...real,
 		hostSlots: (url: string | undefined, o?: Parameters<typeof real.hostSlots>[1]) => slotOverride.slots ?? real.hostSlots(url, o),
 		takeHostSlotWaiting: (slots: Parameters<typeof real.takeHostSlotWaiting>[0], host: 'chc', o: Parameters<typeof real.takeHostSlotWaiting>[2]) =>
-			real.takeHostSlotWaiting(slots, host, slotOverride.waitMs === undefined ? o : { ...o, waitMs: slotOverride.waitMs })
+			real.takeHostSlotWaiting(slots, host, {
+				...o,
+				...(slotOverride.waitMs === undefined ? {} : { waitMs: slotOverride.waitMs }),
+				...(slotOverride.sleep === undefined ? {} : { sleep: slotOverride.sleep })
+			})
 	};
 });
 
@@ -61,6 +65,7 @@ afterEach(() => {
 	delete httpOverride.next;
 	delete slotOverride.slots;
 	delete slotOverride.waitMs;
+	delete slotOverride.sleep;
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 });
@@ -871,7 +876,9 @@ describe('CHC’s request slot, shared with the mirror-ingest Lambda (feeds/host
 		slotOverride.slots = {
 			take: async () => {
 				throw Object.assign(new Error('Access Denied'), { name: 'AccessDenied' });
-			}
+			},
+			reserve: async () => true,
+			withdraw: async () => {}
 		};
 		const asked = counting();
 		expect(await handler({ Records: [record('m1', gefs)] } as never)).toEqual({ batchItemFailures: [] });
@@ -901,6 +908,40 @@ describe('CHC’s request slot, shared with the mirror-ingest Lambda (feeds/host
 		expect(res).toMatchObject({ stopped: 'max_files' });
 		expect(during).toBe('fetcher:prelim');
 		expect(existsSync(join(d, KEY))).toBe(false);
+	});
+
+	it('a scheduled pass behind a long per-feed fetch reserves the next turn: the next fetch yields to it, the pass runs, its reservation goes (2026-11-01)', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+		const d = mirror('fetcher:chirps');
+		const RESERVED = join(d, 'ingest-state/hosts/chc/reserved.json');
+		let reservation: { holder?: string } | null = null;
+		let looks = 0;
+		slotOverride.sleep = async () => {
+			looks++;
+			reservation ??= JSON.parse(readFileSync(RESERVED, 'utf8'));
+			if (looks < 3) return;
+			if (looks === 3) {
+				// The crawl's fetch ends; the FIFO's next CHIRPS-GEFS fetch arrives first.
+				rmSync(join(d, KEY));
+				const asked = counting();
+				await handler({ Records: [record('m1', gefs)] } as never);
+				expect(asked.n).toBe(0);
+				delete httpOverride.next;
+			}
+		};
+		const res = await handler(DAILY_INGEST_EVENT as never);
+		expect(res).toMatchObject({ stopped: 'max_files' });
+		expect(reservation).toMatchObject({ holder: 'fetcher:prelim' });
+		expect(looks).toBe(3);
+		const lines = info.mock.calls.map(([l]) => JSON.parse(l as string));
+		expect(lines.find((l) => l.event === 'feed_fetch_deferred')).toMatchObject({ heldBy: 'fetcher:prelim', reserved: true });
+		expect(sent.map((s) => (s.message as { result: unknown }).result)).toEqual([{ ok: false, deferred: 'host_busy' }]);
+		// Slot released and reservation withdrawn: the next fetch takes it.
+		expect(existsSync(join(d, KEY))).toBe(false);
+		expect(existsSync(RESERVED)).toBe(false);
 	});
 
 	it('a scheduled pass that finds the slot held past its wait skips the run: asks nothing, logs host_busy, doesn’t fail', async () => {
