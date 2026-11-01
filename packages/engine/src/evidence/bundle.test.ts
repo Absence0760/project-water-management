@@ -737,7 +737,9 @@ describe('the combined row’s cumulative assessment (bundle-3, followups § Cum
 		});
 		const r = await checkPackBundle(older, { hash });
 		expect(failing(r)).toEqual([]);
-		expect(detail(r, 'assessment')).toMatch(new RegExp(`^${COMBINED_NOT_INCLUDED.replace(/[()]/g, '\\$&')}: its bundle \\(bundle-2\\)`));
+		// A plain prefix, not a RegExp built from the message (CodeQL alert 290).
+		const prefix = `${COMBINED_NOT_INCLUDED}: its bundle (bundle-2)`;
+		expect(detail(r, 'assessment')?.slice(0, prefix.length)).toBe(prefix);
 		expect(r.combined).toBe('older');
 		expect(ids(r)).not.toContain('reproduce:combined');
 		// A pack that cites none adds no check (control).
