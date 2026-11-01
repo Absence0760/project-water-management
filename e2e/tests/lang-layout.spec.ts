@@ -19,6 +19,19 @@ const PHONE = { width: 360, height: 740 };
 
 const LANGS = (await languages()).filter((l) => l.code !== 'en');
 
+// The farmer and account tests sign in as the seeded demo farmer. Seeding is
+// real work for whichever caller in the shard comes first (~55 s
+// on CI), so it runs here under its own budget, as every other spec that
+// uses the examples does, and never inside a test's: the 320 px headers test
+// seeded inline under a 60 s budget and timed out the first time the shard
+// packing made it that caller (CI run 41217591637, shard 3).
+test.beforeAll(async ({ playwright }) => {
+	test.setTimeout(90_000);
+	const api = await playwright.request.newContext();
+	await seedExamplesOnce(api);
+	await api.dispose();
+});
+
 for (const lang of LANGS) {
 	const words = await siteWords(lang.code);
 
@@ -54,11 +67,7 @@ for (const lang of LANGS) {
 			await checkPage(page, '/forgot-password', heading);
 		});
 
-		test('a farmer’s pages fit a phone', async ({ page, playwright }) => {
-			test.setTimeout(90_000);
-			const api = await playwright.request.newContext();
-			await seedExamplesOnce(api);
-			await api.dispose();
+		test('a farmer’s pages fit a phone', async ({ page }) => {
 			const login = await page.request.post(`${API_URL}/auth/login`, { data: FARMER1 });
 			expect(login.status(), await login.text()).toBe(200);
 			const { projects } = (await (await page.request.get(`${API_URL}/projects`)).json()) as { projects: { id: string; role: string }[] };
@@ -81,12 +90,8 @@ for (const lang of LANGS) {
 
 		// The account pages at 320 × 640 (issue #521): a button poked 11 px out of its card, each alert-email choice
 		// wrapped to 3 lines, and text sat at 10.5 to 12.6 px under the farm frame's 13 px floor.
-		test('the account pages fit 320 px: nothing out of its card, text at 13 px or more, each alert choice on one line', async ({ page, playwright }) => {
-			test.setTimeout(90_000);
+		test('the account pages fit 320 px: nothing out of its card, text at 13 px or more, each alert choice on one line', async ({ page }) => {
 			await page.setViewportSize({ width: 320, height: 640 });
-			const api = await playwright.request.newContext();
-			await seedExamplesOnce(api);
-			await api.dispose();
 			const login = await page.request.post(`${API_URL}/auth/login`, { data: FARMER1 });
 			expect(login.status(), await login.text()).toBe(200);
 			await page.goto('/account');
@@ -135,8 +140,7 @@ for (const lang of LANGS) {
 // 56 to 93 px, a third of a 320 px screen and more than the scroll padding
 // (--header-h) clears for a focused control.
 for (const code of ['en', ...LANGS.map((l) => l.code)]) {
-	test(`the headers keep one row at 320 px, ${code}`, async ({ page, playwright }) => {
-		test.setTimeout(60_000);
+	test(`the headers keep one row at 320 px, ${code}`, async ({ page }) => {
 		await page.setViewportSize({ width: 320, height: 640 });
 		await page.addInitScript((c) => localStorage.setItem('wm.locale', c), code);
 		/** The language pair's buttons all sit on one row. */
@@ -151,9 +155,6 @@ for (const code of ['en', ...LANGS.map((l) => l.code)]) {
 			await expectNoSidewaysScroll(page);
 		}
 
-		const api = await playwright.request.newContext();
-		await seedExamplesOnce(api);
-		await api.dispose();
 		const login = await page.request.post(`${API_URL}/auth/login`, { data: FARMER1 });
 		expect(login.status(), await login.text()).toBe(200);
 		const { projects } = (await (await page.request.get(`${API_URL}/projects`)).json()) as { projects: { id: string; role: string }[] };
