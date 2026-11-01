@@ -82,6 +82,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import threading
 import time
 import uuid
@@ -170,9 +171,13 @@ _CONFLICT = {"PreconditionFailed", "ConditionalRequestConflict"}
 
 # --- One small JSON object, by conditional writes ------------------------------
 # S3: If-None-Match: * to create, If-Match on the ETag to replace. A local copy
-# (dev, tests): O_EXCL to create, the content's hash as its ETag; replacing is
-# read then write there, not atomic, which locally means two dev processes at
-# worst (backend/src/feeds/hostSlot.ts FileSlots says the same).
+# (dev, tests): the content's hash as its ETag. Every write lands whole: the
+# body goes to a temporary file first, then a hard link creates the object
+# (fails if it exists) or a rename replaces it, so a reader never sees an empty
+# or half-written body (one would read as no holder and be taken over).
+# Replacing is still read then rename, not a compare-and-swap, which locally
+# means two dev processes at worst (backend/src/feeds/hostSlot.ts FileSlots
+# says the same).
 
 
 def _parse(data: bytes) -> dict:
@@ -212,18 +217,25 @@ def _put(m: zarrstore.Mirror, rel: str, body: bytes, if_match: str | None = None
             raise
     path = m.root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    if if_match is None:
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)  # owner only: nothing else on the machine reads it
-        except FileExistsError:
-            return False
-    else:
+    if if_match is not None:
         got = _read(m, rel)
         if got is None or got[1] != if_match:
             return False
-        fd = os.open(path, os.O_WRONLY | os.O_TRUNC)
-    with os.fdopen(fd, "wb") as f:
-        f.write(body)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+    fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)  # owner only: nothing else on the machine reads it
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(body)
+        if if_match is None:
+            try:
+                os.link(tmp, path)  # atomic create-if-absent, with the whole body
+            except FileExistsError:
+                return False
+        else:
+            os.replace(tmp, path)
+            return True
+    finally:
+        tmp.unlink(missing_ok=True)
     return True
 
 

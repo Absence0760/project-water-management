@@ -47,10 +47,10 @@
 // read (a missing grant, an S3 error) is ignored and logged: the slot itself
 // is what keeps CHC to one process.
 //
-// Locally the same file under a `file://` MIRROR_URL, created with O_EXCL (the
+// Locally the same file under a `file://` MIRROR_URL, written whole by a hard link (the
 // Python side's local lease). With no MIRROR_URL, or the committed synthetic
 // copy, there is no slot and every caller goes on as before.
-import { open, readFile, rm, mkdir } from 'node:fs/promises';
+import { link, readFile, rm, mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -237,7 +237,9 @@ class S3Slots implements HostSlots {
 }
 
 // The local `file://` slot, for dev and tests only. Taking a free slot is
-// atomic (open 'wx'), but taking over an expired one and releasing are read
+// atomic: the body is written to a temporary file and hard-linked into place,
+// which fails if the slot exists, so a reader never sees an empty or partial
+// body (one reads as no holder). But taking over an expired one and releasing are read
 // then remove, so two processes meeting the same expired file at the same
 // instant could both take it. Plain files offer no compare-and-swap (no flock
 // in Node, and ingest/lease.py shares this file), and locally the worst case is
@@ -255,21 +257,19 @@ class FileSlots implements HostSlots {
 		const owner = randomUUID();
 		const now = this.now();
 		for (let attempt = 0; attempt < 2; attempt++) {
-			let fh;
+			const tmp = `${path}.${owner}.tmp`;
+			// Owner only: nothing else on the machine reads it (the Python side's 0o600).
+			await writeFile(tmp, body(owner, o.holder, now, o.remainingMs), { flag: 'wx', mode: 0o600 });
 			try {
-				// Owner only: nothing else on the machine reads it (the Python side's 0o600).
-				fh = await open(path, 'wx', 0o600);
+				await link(tmp, path);
 			} catch (err) {
 				if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
 				const b = parseBody(await readFile(path, 'utf8').catch(() => ''));
 				if (expiresAt(b) > now) return { busy: busyOf(b) };
 				await rm(path, { force: true });
 				continue;
-			}
-			try {
-				await fh.writeFile(body(owner, o.holder, now, o.remainingMs));
 			} finally {
-				await fh.close();
+				await rm(tmp, { force: true });
 			}
 			const reservation = async () => {
 				try {
