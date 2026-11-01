@@ -29,8 +29,10 @@ const SEED_LOCK = 25_014;
 
 /**
  * Seed the examples unless this run already has. Seeding is real work, not
- * waiting (Kleinberg's automatic GR4J calibration and three 15-year runs):
- * callers give their beforeAll ~90 s.
+ * waiting (Kleinberg's automatic GR4J calibration and three 15-year runs,
+ * ~55 s on a CI shard): callers give their beforeAll 90 s or more. Every
+ * caller, not only the one that seeds, since which one seeds depends on how
+ * the shards are packed; seedBudget.test.ts checks it.
  */
 export async function seedExamplesOnce(request: APIRequestContext): Promise<void> {
 	await withSetupLock(SEED_LOCK, async () => {
