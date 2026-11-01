@@ -1946,7 +1946,7 @@ only the fetcher does, so start a backfill only once both carry it.
    CHC, the source register's contact) before resuming. To resume, repeat
    steps 1–2: the plan skips the months the manifest now holds.
 4. **Verify the copy** once both products are done, from the workstation
-   with read access to the mirror bucket (`aws sso login` for the prod
+   with read access to the mirror bucket (and write access to `ingest-state/hosts/chc/`, for the CHC check's request slot) (`aws sso login` for the prod
    profile first):
    `MIRROR_URL=s3://<mirror bucket> INGEST_CONTACT=<role address> ingest/dev.sh verify --out /tmp/verify-copy.md`.
    It makes `ingest/.venv-verify` from `ingest/requirements-verify.txt` on
@@ -1960,7 +1960,17 @@ only the fetcher does, so start a backfill only once both carry it.
      (~10 minutes), with the job's User-Agent. Each must be **bit-equal**
      to the copy; a different one is listed with both values. An HTTP 403
      stops the run at once (not retried): wait and write to CHC, as for the
-     backfill;
+     backfill. Before its first request it takes CHC's request slot
+     (`ingest-state/hosts/chc/lease.json`, the one the backfill, the daily
+     runs and the fetcher share, so our callers together stay at about one
+     request a second) as `verify:<user>@<host>`, keeps it renewed and
+     releases it at the end (Ctrl+C included; a killed run's expires within
+     5 minutes). So the profile needs write access to
+     `ingest-state/hosts/chc/` in the mirror bucket too. A busy slot (the
+     fetcher's crawl, a running backfill) is waited for up to `--slot-wait`
+     minutes (30); still busy, the check sends nothing to CHC and fails,
+     naming the holder: run it again later. The other two checks take no
+     slot;
    - **dynamical.org**: the whole region of `rnl` for one month per decade
      (`--month YYYY-MM` to choose) against dynamical.org's public copy on
      AWS Open Data (anonymous, no load on CHC): the land/sea mask must match

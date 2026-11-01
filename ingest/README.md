@@ -737,6 +737,24 @@ three), and `--no-network` runs only coverage:
   **Stopped**. Values must be **bit-equal**, where no data on both sides
   counts as equal. A different cell-day fails and is listed with both
   values; a missing or unreadable file fails too.
+
+  **It takes CHC's request slot first.** CHC's one request a second is
+  for all our callers together, so before its first request the check takes
+  the slot every other CHC caller takes (`ingest-state/hosts/chc/lease.json`
+  on the same copy: the S3 object for `s3://`, the file for `file://`;
+  § One process asking CHC at a time), as holder `verify:<user>@<host>`
+  (`lease.hold_host_renewed`). It has no deadline and runs ~10 minutes, or
+  longer when CHC asks for a `Retry-After`, so the slot is taken with a
+  5-minute expiry that a background thread moves forward every minute, and
+  released when the check ends, Ctrl+C included; a run killed outright frees
+  it within 5 minutes. A held slot (the fetcher's crawl, a backfill) is
+  retried every 30 seconds for up to `--slot-wait` minutes (30), with the
+  next turn reserved (`reserved.json`) as a waiting backfill does; a live
+  reservation of someone else's (a waiting backfill) is respected. Still
+  busy, the check sends no request to CHC and fails, naming the holder. The
+  coverage and dynamical checks take no slot. Writing the slot needs
+  `s3:PutObject`/`s3:DeleteObject` on `ingest-state/hosts/chc/*` in the
+  mirror bucket, besides reading the copy.
 - **dynamical**: the whole region of `rnl` for one whole month per decade
   (seeded, or `--month YYYY-MM`, repeatable), clipped to the days
   dynamical.org holds. It compares against dynamical.org's Icechunk store
@@ -812,7 +830,7 @@ They cover:
 - **Module names** (`test_module_names.py`): no module of ours (ingest/, the fixture helpers) shares a name with an installed requirement's top-level package or with the stdlib, and laid out flat as the image lays them out, `import ecmwf` is not ours and `from ecmwf.datastores import Client` resolves (with a control: an `ecmwf.py` beside them breaks it). The ECMWF job was once `ecmwf.py` and shadowed ecmwf-datastores-client's `ecmwf` package in the image, so every CDS-backed run failed in production while fixtures-mode tests, which never build the real client, passed.
 - **The reader:** a value outside 0–2000 mm fails the read and writes nothing.
 - **The fixture:** it still matches its generator.
-- **The copy's verification** (`test_verify_copy.py`): `tiffread.py` against synthetic GeoTIFFs written by the test (LZW in TIFF's early-change variant, deflate and none; one and several rows per strip; both byte orders; every pixel, no data included), with the formats it refuses. Sampling is seeded and stratified across products and years. The CHC check runs against a fake CHC serving TIFFs of a `zarrstore`-written copy: a pass at one request a second, a one-ulp mismatch failing with both values, a 404 and a 403 that stops after one request. The dynamical.org comparison runs on synthetic arrays: the units, the row flip, the mask, the tolerance and dry cells, with `main` reading the region from the copy against a fake store. The coverage check covers a gap, the first month, `finalThrough` and the lag, plus the committed fixture copy offline. Nothing touches CHC or dynamical.org.
+- **The copy's verification** (`test_verify_copy.py`): `tiffread.py` against synthetic GeoTIFFs written by the test (LZW in TIFF's early-change variant, deflate and none; one and several rows per strip; both byte orders; every pixel, no data included), with the formats it refuses. Sampling is seeded and stratified across products and years. The CHC check runs against a fake CHC serving TIFFs of a `zarrstore`-written copy: a pass at one request a second, a one-ulp mismatch failing with both values, a 404 and a 403 that stops after one request. The CHC check holds CHC's request slot (`verify:` holder) from before its first request until after its last, released after a 403 too; a busy slot means no request and a failure naming the holder (our reservation withdrawn), a slot freed while waiting is taken, and `--checks coverage,dynamical` takes none. `lease.hold_host_renewed` renews its expiry while held, notices when it was taken over (and the check stops), releases on Ctrl+C, takes over an expired slot and respects a waiting backfill's reservation. The dynamical.org comparison runs on synthetic arrays: the units, the row flip, the mask, the tolerance and dry cells, with `main` reading the region from the copy against a fake store. The coverage check covers a gap, the first month, `finalThrough` and the lag, plus the committed fixture copy offline. Nothing touches CHC or dynamical.org.
 
 CI runs them in the `ingest` job, "Bulk ingest (Python)", in
 `.github/workflows/ci.yml`, with Node and the pnpm install for the round

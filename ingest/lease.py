@@ -51,6 +51,18 @@ that dies, leaves a hold that expires on its own within the margin. While it
 holds the slot the fetcher's fetches defer and re-queue themselves, and the
 daily rnl/sat runs end quietly, as for any holder.
 
+**An operator's run keeps the slot by renewing it** (`hold_host_renewed`):
+`verify_copy.py`'s CHC check (~600 range requests at one a second, ~10
+minutes, longer when CHC asks for a Retry-After) runs on a workstation with
+no deadline, so an expiry fixed at the start would either lapse mid-check or
+lock the fetcher out for long after a killed run. Instead the slot is taken
+with a short expiry (OPERATOR_HOLD_S) that a background thread moves forward
+every OPERATOR_RENEW_S while the block runs. Leaving the block, Ctrl+C
+included, stops the thread and releases the slot; a run killed outright
+stops renewing, so the slot expires within OPERATOR_HOLD_S. Busy, it
+reserves the next turn as a backfill does and retries every
+OPERATOR_RETRY_S for up to `wait_s`, then raises HostBusy naming the holder.
+
 **The reservation** (`ingest-state/hosts/<host>/reserved.json`, the same
 JSON): the first month of an execution still has to win the slot from a
 running crawl. A backfill month that finds the slot held by someone else
@@ -70,6 +82,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 from typing import Callable
@@ -92,6 +105,12 @@ BACKFILL_HOLD_MARGIN_S = 5 * 60
 # machine's HostBusy retry interval (120 s, infra/ingest_backfill.tf), so each
 # retry renews it before it lapses.
 RESERVATION_S = 5 * 60
+# An operator's run (hold_host_renewed): the slot's expiry ahead of now, how
+# often it is moved forward (several renewals fit in one expiry, so a slow S3
+# call or two doesn't lose it), and how often a busy slot is tried again.
+OPERATOR_HOLD_S = 5 * 60
+OPERATOR_RENEW_S = 60
+OPERATOR_RETRY_S = 30
 # A Step Functions execution ARN (or a plain id locally); its last part is the execution's name.
 _EXECUTION = re.compile(r"^[A-Za-z0-9:_./-]{1,256}$")
 
@@ -390,3 +409,81 @@ def release_backfill_hold(mirror: zarrstore.Mirror, host: str, execution: str) -
     else:
         log.info("%s: no %s to release (it had expired and gone, or was another's)", holder, ls.label)
     return released
+
+
+class RenewedHold:
+    """An operator's hold on a host's slot (hold_host_renewed): `lost` names why it stopped being ours, else None."""
+
+    def __init__(self, owner: str, holder: str, label: str):
+        self.owner = owner
+        self.holder = holder
+        self.label = label
+        self.lost: str | None = None
+
+
+@contextlib.contextmanager
+def hold_host_renewed(
+    mirror: zarrstore.Mirror,
+    host: str,
+    holder: str,
+    wait_s: float = 0.0,
+    hold_s: float = OPERATOR_HOLD_S,
+    renew_s: float = OPERATOR_RENEW_S,
+    retry_s: float = OPERATOR_RETRY_S,
+    now: Callable[[], float] = time.time,
+    sleep: Callable[[float], None] = time.sleep,
+    on_wait: Callable[[str], None] | None = None,
+):
+    """Hold `host`'s slot for an open-ended run on a workstation (no deadline), renewed while the block runs.
+
+    Taken until now + hold_s, and a daemon thread moves the expiry to now +
+    hold_s every renew_s. Busy (held, or a waiting backfill reserved the
+    turn): reserve the next turn and try again every retry_s, calling
+    on_wait with the reason, for up to wait_s; then raise HostBusy. The
+    block's RenewedHold.lost is set if a renewal finds the slot no longer
+    ours (it expired and was taken over), so the caller can stop asking.
+    Released on the way out, whatever the cause (KeyboardInterrupt too)."""
+    _check_backend(mirror)
+    owner = uuid.uuid4().hex
+    ls = _Lease(host_slot_key(host), f"{host} request slot", HostBusy, hold_s, holder[:80], reservation=host_reservation_key(host), reserve=True)
+    deadline = now() + max(0.0, wait_s)
+    try:
+        while True:
+            try:
+                _acquire(mirror, ls, owner, now())
+                break
+            except HostBusy as e:
+                if now() + retry_s > deadline:
+                    raise
+                if on_wait:
+                    on_wait(f"{e}; trying again in {retry_s:.0f} s")
+                sleep(retry_s)
+    except BaseException:
+        # Giving up (or Ctrl+C while waiting): our reservation would make others wait for nothing.
+        got = _read(mirror, ls.reservation)
+        if got is not None and got[0].get("owner") == owner:
+            _delete(mirror, ls.reservation)
+        raise
+    hold = RenewedHold(owner, ls.holder, ls.label)
+    log.info("%s: took the %s", ls.holder, ls.label)
+    stop = threading.Event()
+
+    def renew():
+        while not stop.wait(renew_s):
+            try:
+                if not _renew(mirror, ls, owner, now()):
+                    hold.lost = f"the {ls.label} is no longer ours (it expired and was taken over)"
+                    return
+            except Exception:
+                # The expiry is several renewals ahead; the next one may get through.
+                log.exception("%s: could not renew the %s", ls.holder, ls.label)
+
+    t = threading.Thread(target=renew, name=f"{host}-slot-renew", daemon=True)
+    t.start()
+    try:
+        yield hold
+    finally:
+        stop.set()
+        t.join(timeout=renew_s)
+        _release(mirror, ls, owner)
+        log.info("%s: released the %s", ls.holder, ls.label)

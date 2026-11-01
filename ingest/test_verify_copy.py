@@ -10,7 +10,9 @@ import json
 import struct
 import sys
 import tempfile
+import time
 import unittest
+import unittest.mock
 import urllib.error
 import zlib
 from collections import Counter
@@ -23,6 +25,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import grid  # noqa: E402
+import lease  # noqa: E402
 import manifest  # noqa: E402
 import polite  # noqa: E402
 import tiffread  # noqa: E402
@@ -335,10 +338,11 @@ class CopyTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_main(self, *args, client=None, dynamical=None):
+    def run_main(self, *args, client=None, dynamical=None, slot_sleep=None):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = vc.main(["--mirror", self.url, "--today", "2024-04-01", "--first-month", "2024-02", *args], client=client, dynamical=dynamical)
+            code = vc.main(["--mirror", self.url, "--today", "2024-04-01", "--first-month", "2024-02", *args], client=client, dynamical=dynamical, slot_sleep=slot_sleep)
+        self.stderr = err.getvalue()
         return code, out.getvalue()
 
 
@@ -419,6 +423,145 @@ class AgainstChc(CopyTest):
         self.assertEqual(len(chc.requests), 1)  # never retried, no other cell-day tried
         self.assertIn("**Stopped:**", out)
         self.assertIn("HTTP 403", out)
+
+
+def wait_for(cond, seconds=5.0):
+    """Wait on the renewal thread's visible effect (a real signal), failing after `seconds`."""
+    end = time.monotonic() + seconds
+    while not cond():
+        if time.monotonic() > end:
+            raise AssertionError("timed out waiting for the renewal thread")
+        time.sleep(0.005)
+
+
+class ChcSlot(CopyTest):
+    """The CHC check takes CHC's one request slot (lease.py), shared with every other caller of CHC."""
+
+    def slot(self):
+        p = self.root / lease.host_slot_key("chc")
+        return json.loads(p.read_text()) if p.exists() else None
+
+    def reservation(self):
+        return (self.root / lease.host_reservation_key("chc")).exists()
+
+    def hold_elsewhere(self, holder="fetch:chirps-final"):
+        p = self.root / lease.host_slot_key("chc")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"owner": "someone-else", "expires": time.time() + 3600, "holder": holder}))
+
+    def test_taken_before_the_first_request_and_released_after(self):
+        chc = FakeChc()
+        seen = []
+        opener = lambda req, timeout=None: (seen.append(self.slot()), chc(req, timeout))[1]  # noqa: E731
+        code, out = self.run_main("--checks", "chc", "--samples", "4", client=client_for(opener))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(seen), 12)
+        self.assertTrue(all(s is not None and s["holder"].startswith("verify:") and "@" in s["holder"] for s in seen), seen[:1])
+        self.assertEqual(len({s["owner"] for s in seen}), 1)  # one hold for the whole check
+        self.assertIsNone(self.slot())  # released
+        self.assertFalse(self.reservation())
+
+    def test_a_busy_slot_sends_no_request_and_fails_naming_the_holder(self):
+        self.hold_elsewhere()
+        chc = FakeChc()
+        code, out = self.run_main("--checks", "chc", "--samples", "4", "--slot-wait", "0", client=client_for(chc))
+        self.assertEqual(code, 1)
+        self.assertEqual(chc.requests, [])
+        self.assertIn("**Stopped:**", out)
+        self.assertIn("fetch:chirps-final", out)
+        self.assertIn("no CHC request was sent", out)
+        self.assertEqual(self.slot()["owner"], "someone-else")  # left alone
+        self.assertFalse(self.reservation())  # our reservation of the next turn is withdrawn on giving up
+
+    def test_waits_for_a_busy_slot_then_takes_it(self):
+        self.hold_elsewhere()
+        chc = FakeChc()
+        slept = []
+
+        def sleep(s):
+            slept.append(s)
+            self.assertTrue(self.reservation())  # waiting, it reserved the next turn
+            self.assertEqual(chc.requests, [])
+            (self.root / lease.host_slot_key("chc")).unlink()  # the other holder finishes
+
+        code, out = self.run_main("--checks", "chc", "--samples", "4", client=client_for(chc), slot_sleep=sleep)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(slept, [lease.OPERATOR_RETRY_S])
+        self.assertEqual(len(chc.requests), 12)
+        self.assertIn("trying again", self.stderr)
+        self.assertIsNone(self.slot())
+        self.assertFalse(self.reservation())
+
+    def test_released_when_the_check_stops_on_a_403(self):
+        code, _ = self.run_main("--checks", "chc", "--samples", "4", client=client_for(FakeChc(refuse=True)))
+        self.assertEqual(code, 1)
+        self.assertIsNone(self.slot())
+
+    def test_coverage_and_dynamical_take_no_slot(self):
+        with unittest.mock.patch.object(vc.lease, "hold_host_renewed", side_effect=AssertionError("slot taken")):
+            code, out = self.run_main("--checks", "coverage,dynamical", "--month", "2024-02", dynamical=FakeDynamical())
+        self.assertEqual(code, 0, out)
+        self.assertIsNone(self.slot())
+
+    def test_a_lost_slot_stops_the_check_before_its_next_request(self):
+        chc = FakeChc()
+        res = vc.check_chc(vc.plan_samples(4, 1, SPANS), {p: vc.FinalsArray(vc.CopyStore(self.url), p) for p in vc.FINALS}, client_for(chc), lost=lambda: "taken over")
+        self.assertEqual(chc.requests, [])
+        self.assertIn("taken over", res.stopped)
+        self.assertFalse(res.ok)
+
+
+class RenewedHold(unittest.TestCase):
+    """lease.hold_host_renewed, the operator's open-ended hold on CHC's slot."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.mirror = zarrstore.Mirror.from_url(f"file://{self.root}")
+        self.path = self.root / lease.host_slot_key("chc")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def body(self):
+        return json.loads(self.path.read_text()) if self.path.exists() else None
+
+    def test_renewed_while_held_and_released_on_ctrl_c(self):
+        clock = [1000.0]
+        with self.assertRaises(KeyboardInterrupt):
+            with lease.hold_host_renewed(self.mirror, "chc", "verify:op@box", hold_s=300, renew_s=0.01, now=lambda: clock[0]) as hold:
+                self.assertEqual(self.body()["expires"], 1300.0)
+                self.assertEqual(self.body()["holder"], "verify:op@box")
+                clock[0] = 2000.0
+                wait_for(lambda: (self.body() or {}).get("expires") == 2300.0)
+                self.assertIsNone(hold.lost)
+                raise KeyboardInterrupt
+        self.assertIsNone(self.body())
+
+    def test_lost_when_taken_over(self):
+        with lease.hold_host_renewed(self.mirror, "chc", "verify:op@box", renew_s=0.01) as hold:
+            self.path.write_text(json.dumps({"owner": "other", "expires": time.time() + 600, "holder": "fetch:x"}))
+            wait_for(lambda: hold.lost is not None)
+            self.assertIn("no longer ours", hold.lost)
+        self.assertEqual(self.body()["owner"], "other")  # never releases another's
+
+    def test_an_expired_slot_is_taken_over(self):
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text(json.dumps({"owner": "dead", "expires": 1.0, "holder": "verify:killed@box"}))
+        with lease.hold_host_renewed(self.mirror, "chc", "verify:op@box") as hold:
+            self.assertEqual(self.body()["owner"], hold.owner)
+        self.assertIsNone(self.body())
+
+    def test_a_waiting_backfills_reservation_is_respected(self):
+        r = self.root / lease.host_reservation_key("chc")
+        r.parent.mkdir(parents=True)
+        r.write_text(json.dumps({"owner": "backfill:x", "expires": time.time() + 300, "holder": "ingest:backfill:x"}))
+        with self.assertRaises(lease.HostBusy) as e:
+            with lease.hold_host_renewed(self.mirror, "chc", "verify:op@box"):
+                self.fail("took a reserved slot")
+        self.assertIn("ingest:backfill:x", str(e.exception))
+        self.assertIsNone(self.body())
+        self.assertEqual(json.loads(r.read_text())["owner"], "backfill:x")
 
 
 class Coverage(unittest.TestCase):
