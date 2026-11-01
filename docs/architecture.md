@@ -1766,7 +1766,8 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     closed ("the request slot could not be taken"); CHC is never asked
     without it. With no `MIRROR_URL` (a local run, the tests) there is no
     slot and nothing changes; with a `file://` one it is the same file,
-    created with `O_EXCL`. A 403 still stops whichever run met it.
+    written whole (a temporary file hard-linked or renamed into place, so no
+    reader sees an empty body). A 403 still stops whichever run met it.
   - **One file at a time.** `CHC_CONCURRENCY` (1) is the default for every
     CHC read (`fetchChirps`, `fetchChirpsCells`, `fetchGefs`,
     `recheckChirpsFinals`); DWS is one page per fetch.

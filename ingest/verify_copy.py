@@ -18,7 +18,13 @@ with `--checks` (default: all three):
   request goes through polite.PoliteClient: one at a time, at most one a
   second, and an HTTP 403 stops the run with no retry. The values must be
   **bit-equal** (both no-data counts as equal); any other cell-day fails,
-  listed with both values.
+  listed with both values. Before its first request it takes CHC's one
+  request slot on the copy (lease.hold_host_renewed:
+  `ingest-state/hosts/chc/lease.json`, shared with the backfill, the daily
+  runs and the fetcher Lambda, holder `verify:<user>@<host>`), keeps it
+  renewed for the whole check and releases it at the end, Ctrl+C included.
+  A busy slot is waited for (`--slot-wait`, 30 minutes); still busy, the
+  check sends nothing and fails, naming the holder.
 - **dynamical**: the whole region of `rnl` for one month per decade (seeded,
   or `--month YYYY-MM`, repeatable) against dynamical.org's public Icechunk
   copy of CHIRPS v3 final (anonymous, us-west-2). Its kg m-2 s-1 is
@@ -42,13 +48,16 @@ from __future__ import annotations
 import argparse
 import calendar
 import datetime as dt
+import getpass
 import gzip
 import json
 import math
 import os
 import random
+import socket
 import struct
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -56,9 +65,11 @@ from urllib.parse import urlparse
 import numpy as np
 
 import grid
+import lease
 import manifest
 import polite
 import tiffread
+import zarrstore
 
 FINALS = ("rnl", "sat")
 # The first byMonth file of each product (backfill_plan.FIRST_MONTH).
@@ -361,11 +372,16 @@ class ChcResult:
         return self.stopped is None and not self.mismatches and not self.errors and self.checked > 0
 
 
-def check_chc(samples: list[Sample], arrays: dict[str, FinalsArray], client: polite.PoliteClient, base: str = CHC_BASE, progress=None) -> ChcResult:
+def check_chc(samples: list[Sample], arrays: dict[str, FinalsArray], client: polite.PoliteClient, base: str = CHC_BASE, progress=None, lost=None) -> ChcResult:
     """Each sample from the copy and from CHC's daily TIFF, bit for bit.
-    A 403 (polite.StopRun) or a refusal to wait (RetryLater) stops the run."""
+    A 403 (polite.StopRun) or a refusal to wait (RetryLater) stops the run,
+    and so does `lost()` answering a reason (CHC's request slot is no longer ours)."""
     res = ChcResult()
     for i, s in enumerate(samples):
+        why = lost() if lost else None
+        if why:
+            res.stopped = f"stopped asking CHC: {why}"
+            break
         if progress and i and i % 20 == 0:
             progress(f"chc: {i}/{len(samples)} cell-days, {client.requests} requests")
         copy_bits = bits_of(arrays[s.product].value(s.day, s.row, s.col))
@@ -587,7 +603,16 @@ def report(mirror_url: str, today: dt.date, coverage: list[Coverage] | None, chc
 # --- main -------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None, client: polite.PoliteClient | None = None, s3_client=None, dynamical=None) -> int:
+def slot_holder() -> str:
+    """Who holds CHC's request slot during the check, as the fetcher's deferral log and the lease file show it."""
+    try:
+        user = getpass.getuser()
+    except (KeyError, OSError):
+        user = "operator"
+    return f"verify:{user}@{socket.gethostname()}"[:80]
+
+
+def main(argv: list[str] | None = None, client: polite.PoliteClient | None = None, s3_client=None, dynamical=None, slot_sleep=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mirror", default=os.environ.get("MIRROR_URL"), help="the copy (default: $MIRROR_URL)")
     ap.add_argument("--checks", default="coverage,chc,dynamical", help="comma-separated: coverage, chc, dynamical (default: all)")
@@ -600,6 +625,7 @@ def main(argv: list[str] | None = None, client: polite.PoliteClient | None = Non
     ap.add_argument("--first-month", help="YYYY-MM every product must start at (default: rnl 1981-01, sat 2000-06)")
     ap.add_argument("--today", help="YYYY-MM-DD (default: today, UTC)")
     ap.add_argument("--chc-base", default=CHC_BASE)
+    ap.add_argument("--slot-wait", type=float, default=30, help="minutes to wait for CHC's request slot before the CHC check fails (default 30)")
     ap.add_argument("--contact", default=os.environ.get("INGEST_CONTACT"), help="the User-Agent's contact (default: $INGEST_CONTACT)")
     ap.add_argument("--out", help="write the report here instead of stdout")
     a = ap.parse_args(argv)
@@ -612,6 +638,8 @@ def main(argv: list[str] | None = None, client: polite.PoliteClient | None = Non
         ap.error("no copy: pass --mirror or set MIRROR_URL")
     if a.samples < 1:
         ap.error("--samples must be at least 1")
+    if a.slot_wait < 0:
+        ap.error("--slot-wait must not be negative")
     today = dt.date.fromisoformat(a.today) if a.today else dt.datetime.now(dt.UTC).date()
     log = lambda msg: print(f"verify_copy: {msg}", file=sys.stderr)  # noqa: E731
 
@@ -629,8 +657,18 @@ def main(argv: list[str] | None = None, client: polite.PoliteClient | None = Non
         else:
             samples = plan_samples(a.samples, a.seed, spans)
             client = client or polite.PoliteClient(contact=a.contact, min_interval=1.0)
-            log(f"chc: {len(samples)} cell-days, about {3 * len(samples)} requests at one a second")
-            chc = check_chc(samples, arrays, client, a.chc_base, progress=log)
+            # CHC's one request slot, shared with every other caller of CHC (lease.py): no request without it.
+            mirror = zarrstore.Mirror.from_url(a.mirror, s3_client=s3_client)
+            holder = slot_holder()
+            log(f"chc: taking CHC's request slot as {holder} (waiting up to {a.slot_wait:g} min)")
+            try:
+                with lease.hold_host_renewed(mirror, "chc", holder, wait_s=a.slot_wait * 60, sleep=slot_sleep or time.sleep, on_wait=lambda m: log(f"chc: {m}")) as slot:
+                    log(f"chc: {len(samples)} cell-days, about {3 * len(samples)} requests at one a second")
+                    chc = check_chc(samples, arrays, client, a.chc_base, progress=log, lost=lambda: slot.lost)
+                log("chc: released CHC's request slot")
+            except lease.HostBusy as e:
+                chc = ChcResult(stopped=f"CHC's request slot is busy after waiting {a.slot_wait:g} min, so no CHC request was sent: {e}")
+                log(f"chc: {chc.stopped}")
 
     dyn = dyn_errors = None
     if "dynamical" in checks:

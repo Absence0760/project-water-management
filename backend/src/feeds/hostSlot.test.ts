@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -191,6 +191,34 @@ describe('CHC request slot (feeds/hostSlot.ts)', () => {
 		writeFileSync(join(d, RESERVED), JSON.stringify({ owner: 'backfill:local', expires: now / 1000 + 300, holder: 'ingest:backfill:local' }));
 		expect(await slots.take('chc', { holder: 'fetcher:gefs', remainingMs: 10_000 })).toMatchObject({ busy: { holder: 'ingest:backfill:local', reserved: true } });
 		expect(existsSync(path)).toBe(false);
+	});
+
+	it('file://: a slot appears with its whole body, and leaves no temporary file', async () => {
+		const d = tmp();
+		const slots = hostSlots(pathToFileURL(`${d}/`).href, { now: () => 1_000_000 })!;
+		const path = join(d, KEY);
+		// Read the slot's file while it is being taken: never empty, never torn.
+		const seen: string[] = [];
+		let reading = true;
+		const reader = (async () => {
+			while (reading) {
+				try {
+					seen.push(readFileSync(path, 'utf8'));
+				} catch {
+					// Not there yet.
+				}
+				await new Promise((r) => setImmediate(r));
+			}
+		})();
+		for (let i = 0; i < 20; i++) {
+			const t = await slots.take('chc', { holder: 'fetcher:prelim', remainingMs: 10_000 });
+			if (!('held' in t)) throw new Error('expected the slot');
+			await t.held.release();
+		}
+		reading = false;
+		await reader;
+		for (const b of seen) expect(JSON.parse(b).holder).toBe('fetcher:prelim');
+		expect(readdirSync(dirname(path)).filter((f) => f.endsWith('.tmp'))).toEqual([]);
 	});
 });
 

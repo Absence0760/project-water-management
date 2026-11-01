@@ -587,6 +587,45 @@ class FixturesRun(unittest.TestCase):
         self.assertEqual(caught.exception.status, 404)
 
 
+class LocalLeaseWrites(unittest.TestCase):
+    """A file:// lease is written whole (lease._put): a reader never sees an empty
+    or half-written body, which would read as no holder and be taken over."""
+
+    def test_a_reader_never_sees_a_torn_body_and_no_temporary_file_is_left(self):
+        import threading
+
+        with tempfile.TemporaryDirectory() as d:
+            mirror = zarrstore.Mirror.from_url(Path(d).as_uri())
+            rel = lease.host_slot_key("chc")
+            path = Path(d) / rel
+            body = lambda i: json.dumps({"owner": "o", "expires": 1000.0 + i, "holder": "h" * 2000}).encode()
+            self.assertTrue(lease._put(mirror, rel, body(0)))
+            self.assertFalse(lease._put(mirror, rel, body(0)))  # create-if-absent: someone has it
+            torn, stop = [], threading.Event()
+
+            def read():
+                while not stop.is_set():
+                    data = path.read_bytes()
+                    try:
+                        json.loads(data)
+                    except ValueError:
+                        torn.append(data)
+
+            t = threading.Thread(target=read)
+            t.start()
+            try:
+                for i in range(1, 300):
+                    got = lease._read(mirror, rel)
+                    self.assertTrue(lease._put(mirror, rel, body(i), if_match=got[1]))
+            finally:
+                stop.set()
+                t.join()
+            self.assertEqual(torn, [])
+            self.assertEqual(json.loads(path.read_bytes())["expires"], 1299.0)
+            self.assertEqual([f.name for f in path.parent.iterdir() if f.name.endswith(".tmp")], [])
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+
 class Image(unittest.TestCase):
     def test_the_dockerfile_copies_every_module_the_handler_imports(self):
         """The image ships only the files its COPY line names: a module the
