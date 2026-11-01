@@ -528,7 +528,8 @@ class RenewedHold(unittest.TestCase):
 
     def test_renewed_while_held_and_released_on_ctrl_c(self):
         clock = [1000.0]
-        with self.assertRaises(KeyboardInterrupt):
+
+        def held_then_ctrl_c():
             with lease.hold_host_renewed(self.mirror, "chc", "verify:op@box", hold_s=300, renew_s=0.01, now=lambda: clock[0]) as hold:
                 self.assertEqual(self.body()["expires"], 1300.0)
                 self.assertEqual(self.body()["holder"], "verify:op@box")
@@ -536,6 +537,8 @@ class RenewedHold(unittest.TestCase):
                 wait_for(lambda: (self.body() or {}).get("expires") == 2300.0)
                 self.assertIsNone(hold.lost)
                 raise KeyboardInterrupt
+
+        self.assertRaises(KeyboardInterrupt, held_then_ctrl_c)
         self.assertIsNone(self.body())
 
     def test_lost_when_taken_over(self):
