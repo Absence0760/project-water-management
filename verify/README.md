@@ -446,6 +446,25 @@ whose claims the shares split, §2.7c). Mutants: the shares ignored, the retired
 taken over every day instead of the complete water years, and the flow, the
 EWR or the senior claims split by area instead of the shares.
 
+## What phase 2b covers so far
+
+Phase 2b (tracking item: docs/followups.md § Verification) adds the rest of
+the model one feature at a time, each written from its docs/model.md
+section, from its own random stream in the generator (so every other draw
+of a seed is unchanged), with probes and mutants:
+
+- **The daily A-pan record** (§2.3a, engine ≥ 0.38.0; `generate.py`
+  `add_apan_daily`, a quarter of the random networks and most dense ones):
+  on a day `evap_apan_mm` has a value ≥ 0 the crops' gross demand is
+  Σ area × crop factor × that value ÷ 1000, the dam's evaporation depth the
+  lake factor × it and, under pan coefficient × A-pan, GR4J's PE the pan
+  coefficient × it; a blank or negative day and the days outside the record
+  read the month's mean spread over the month; a monthly PE row never reads
+  it; the planting efficiencies' weights stay on the monthly means; and the
+  record counts as evaporation for `GR4J_NO_PET` (§ Findings). Probes
+  `apan-daily`, `apan-daily-monthly-pe`, `apan-daily-only` (monthly means
+  all 0), `apan-daily-no-pet` and `apan-daily-outside-run`.
+
 ## Phase 2b (not covered yet)
 
 `model.unsupported()` names each of these, and the generator never produces
@@ -468,8 +487,8 @@ docs/followups.md § Verification ("`verify/` phase 2b").
   with a part), dated demand factors (`demandFactorWindows`, the op with
   `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges
   (with a Priority user's fixed restriction %, engine 1.86.0, §2.7i);
-- rain-source periods (§2.4e), the areal rainfall correction (§2.4g), the
-  daily A-pan series (§2.3a), CHIRPS fit ranges (§2.4b), the CHIRPS quantile
+- rain-source periods (§2.4e), the areal rainfall correction (§2.4g),
+  CHIRPS fit ranges (§2.4b), the CHIRPS quantile
   map (CR-23), keep-dry periods and the keep-dry guard, listed and kept
   accumulations, non-default data-quality limits (§2.10a) and the
   outlook-only settings.
@@ -807,3 +826,18 @@ to fitted; `station-pairing-as-recorded` keeps a window-broken year refused.
 §2.4i also said a negative value is a no-data code "as in §2.4b", where
 §2.4b reads a negative catchment reading as a reading; it now says a value
 below 0 is a gap in a station's record and no CHIRPS in an area's.
+
+Phase 2b, 2026-11-01 (engine 1.110.0), one feature at a time (§ What phase
+2b covers so far), each on its probes and 12–30 random and 12–20 dense
+networks:
+
+- **The daily A-pan record** (§2.3a): agrees on every column. One point the
+  docs left open: which days and which pan coefficient "no evaporation, no
+  run" reads the record on. `runModel` counts a value above 0 on a run day
+  (a record wholly before the run is refused, probe
+  `apan-daily-outside-run`) with a pan coefficient above 0 in *any* month,
+  so a record whose values above 0 fall only in months with a coefficient of
+  0 runs on a PE of 0 every day (probe `apan-daily-no-pet`). That is the
+  settings-level check Settings shows (`hasPotentialEvaporation`), and the
+  case needs a coefficient of 0 in exactly the record's months, so it was
+  written into §2.3a as the rule rather than changed in the engine.
