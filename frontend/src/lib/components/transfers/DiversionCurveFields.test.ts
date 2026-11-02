@@ -35,7 +35,8 @@ describe('DiversionCurveFields', () => {
 			expect(html, name).toContain(`aria-label="${name}"`);
 		expect(html).toContain('data-testid="diversion-preview"');
 		expect(html).toMatch(/the canal takes\s+up to 0\.25 m³\/s/);
-		expect(html).toContain('<th scope="col">River, m³/s</th>');
+		// The header names the flow unit picked; matched whatever scoped class the component's CSS gives the cell.
+		expect(html).toMatch(/<th scope="col"(?: class="[^"]*")?>River, m³\/s<\/th>/);
 		expect(html).toContain('the canal’s capacity');
 		expect(html).toContain('the largest share');
 		expect(html).not.toContain('data-testid="diversion-preview-empty"');
