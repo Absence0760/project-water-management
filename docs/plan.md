@@ -215,9 +215,16 @@ workbook (as in 1a) with **no manual edits**.
 **Phase 1 acceptance (the demo):**
 
 - [ ] A fresh clone with `pnpm setup && pnpm dev` works with no other setup
-      ([run-locally.md](./run-locally.md)).
+      ([run-locally.md](./run-locally.md)). Checked by
+      `.github/workflows/fresh-clone.yml` (weekly and on PRs that touch setup;
+      [testing.md § Fresh clone](./testing.md#fresh-clone)); tick it once that
+      workflow's first run on `main` is green.
 - [ ] Client catchment imported: its results match the workbook, the charts and
       Shortfalls table appear, and a run finishes in under 2 s including storage.
+      The 2 s is measured by `runs/load.db.perf.test.ts` (`pnpm
+      test:backend:perf:db`) on an invented catchment of the client's size,
+      and **fails**: ~11 s on the dev laptop (2026-11-01), most of it storing
+      the run's series ([followups.md § V1 run budget](./followups.md#v1-run-budget)).
 - [ ] Projects A, B, C exist side by side. Creating D and copying C both work.
 - [ ] A second user sees nothing until they are invited. As a viewer they can't
       edit.
