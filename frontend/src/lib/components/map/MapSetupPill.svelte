@@ -115,7 +115,7 @@
 							<p class="ways">
 								{#if ondelineate}<button type="button" class="btn btn-sm btn-primary" onclick={delineate} data-testid="map-setup-delineate">Delineate from the outlet</button>{/if}
 								{#if ondrawboundary}<button type="button" class={ondelineate ? 'btn btn-sm' : 'btn btn-sm btn-primary'} onclick={draw} data-testid="map-setup-draw-boundary">Draw the boundary</button>{/if}
-								<a class="btn btn-sm" href={uploadHref}>Upload a GeoJSON file</a>
+								<a class="btn btn-sm" href={uploadHref}>Upload a map file</a>
 							</p>
 						{:else if !s.done && s.href}
 							<p class="ways"><a href={s.href} data-testid="map-setup-link-{s.id}">{s.where}</a>{#if s.more}<span aria-hidden="true">·</span><a href={s.more.href}>{s.more.text}</a>{/if}</p>

@@ -134,15 +134,15 @@ export async function openMap(page: Page, projectId: string, query = ''): Promis
 export const geoFile = (name: string, text: string) => ({ name, mimeType: 'application/geo+json', buffer: Buffer.from(text) });
 
 /**
- * The Upload GeoJSON sheet, open. The URL decides, not a look at the page: the sheet is open while the URL
+ * The Upload map file sheet, open. The URL decides, not a look at the page: the sheet is open while the URL
  * names it (`upload=1`), but it is a lazily loaded component, so it shows a moment after the URL changes.
  * Checking `isVisible()` in that moment and clicking the header's link again hit the sheet that had just
  * opened over it (a modal dialog intercepts the click), and the click timed out.
  */
 export async function openUploadSheet(page: Page): Promise<Locator> {
-	const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
+	const sheet = page.getByRole('dialog', { name: 'Upload a map file' });
 	if (new URL(page.url()).searchParams.get('upload') !== '1') {
-		await (await headerControl(page, 'link', 'Upload GeoJSON')).click();
+		await (await headerControl(page, 'link', 'Upload map file')).click();
 		await expect(page).toHaveURL(/[?&]upload=1/);
 	}
 	await expect(sheet).toBeVisible();
@@ -150,7 +150,7 @@ export async function openUploadSheet(page: Page): Promise<Locator> {
 }
 
 /**
- * Upload a file through the header's Upload GeoJSON sheet (issue #326 D2): choose it, Review, optionally
+ * Upload a file through the header's Upload map file sheet (issue #326 D2): choose it, Review, optionally
  * set every row's kind, then Import. `expectImported` waits for the notice (the sheet closes); without it
  * the review stays open (a refused file lists its problems and offers no import).
  */
@@ -159,7 +159,7 @@ export async function uploadThroughSheet(page: Page, kind: string | null, name: 
 	const another = sheet.getByRole('button', { name: 'Choose another file' });
 	// settled: the sheet is open and the caller's last step (a refused review, or none) has been awaited.
 	if (await another.isVisible()) await another.click();
-	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile(name, text));
+	await sheet.getByLabel(/^Map file/).setInputFiles(geoFile(name, text));
 	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
 	// The review: its summary always, the table only when something in the file can be imported (a refused file
 	// shows its problems once, in the alert).

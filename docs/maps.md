@@ -595,7 +595,9 @@ name.
 ## Uploads
 
 `POST /projects/:id/map/import` (and its review,
-`POST /projects/:id/map/import/preview`) takes a **GeoJSON** file's text; the server
+`POST /projects/:id/map/import/preview`) takes a **GeoJSON** file's text
+(a KML, KMZ or zipped shapefile is read into GeoJSON in the browser first,
+below: [Shapefiles and KML](#shapefiles-and-kml)); the server
 parses and checks it (`backend/src/geo/geojson.ts`), whatever the browser
 did, and refuses the whole file on any problem, listing them per feature:
 
@@ -703,10 +705,78 @@ did, and refuses the whole file on any problem, listing them per feature:
   always sends `features`). A parcel, dam or gauge named like a node of a fitting kind is linked
   to it; the editor can change the link.
 
-**Shapefiles are not read yet** (WP-3.12 plans `shpjs` and proj4 in the
-browser, with Hartebeesthoek94 Lo projections from the `.prj`); the form
-says to export the layer as GeoJSON in EPSG:4326 (QGIS: *Export → Save
-Features As*). See followups.
+### Shapefiles and KML
+
+The upload sheet also takes a **KML**, a **KMZ** and a **zipped shapefile**
+(confirmed with the client's hydrologist, 2026-11-02). The browser reads
+each into GeoJSON (`frontend/src/lib/components/map/upload/`) and sends
+that through the same preview and import, under the name the file was
+picked with, so every check and limit above applies unchanged and the
+server stays the authority. The readers load with `import()` only when such
+a file is picked, never with the Map.
+
+- **Libraries** (exact pins): `proj4` 2.22.0 (MIT), `parsedbf` 2.0.0 (MIT,
+  the `.dbf` reader `shpjs` uses) and `@tmcw/togeojson` 7.1.3
+  (BSD-2-Clause). The zip reader (`upload/zip.ts`, for its caps) and the
+  `.shp` reader (`upload/shp.ts`) are the app's own: `shpjs`, which WP-3.12
+  planned, imports the whole of proj4, and that made the shapefile chunk
+  47 KB gzipped, over the 42 KB a chunk may weigh. `upload/proj4lite.ts`
+  registers only Transverse Mercator (and its extended form), UTM, Albers,
+  Lambert conformal conic and Lambert azimuthal equal-area on proj4's core
+  (which adds longitude/latitude and Mercator): 28 KB for the whole
+  shapefile chunk. A `.prj` in any other projection is refused as
+  unreadable. The readers add about 36 KB gzipped to the total
+  (`scripts/guards/bundle-budget/2026-11-02-map-upload-kml-shapefile.json`),
+  none of it loaded until such a file is picked.
+- **Zipped shapefile** (`upload/shapefile.ts`): every `.shp` in the zip is a
+  layer (macOS's `__MACOSX/` and `._` files ignored), read as Point,
+  PolyLine, Polygon or MultiPoint (their Z and M forms too; MultiPatch is
+  refused), a polygon's clockwise rings its outer rings and each
+  anticlockwise one a hole of the smallest outer ring holding it; its `.dbf` gives the
+  properties (decoded with the `.cpg`'s code page), and a `NAME`,
+  `Description` and the like are copied to the lowercase key the server
+  reads. Each layer is **reprojected to WGS84 from its `.prj`** with proj4
+  (`upload/projection.ts`): a Hartebeesthoek94 **Lo zone** (EPSG:2046–2055,
+  GDAL's south-orientated Transverse Mercator with westing/southing axes,
+  which proj4 can't read by name, is read as plain Transverse Mercator with
+  both coordinates negated; Esri's form of the same zone needs nothing), a
+  **UTM** zone, Albers or Lambert. Refused, with a sentence saying
+  why: a zip without a `.shp` (one with a `.kml` is read as a KMZ; one with a
+  `.geojson` says to upload that), a layer with **no `.prj`** unless every
+  position is already longitude/latitude in range ("This zip has no .prj for
+  parcels.shp, so we can’t tell its coordinate system."), a `.prj` proj4
+  can't read, and a datum with **no shift to WGS84** (the old Cape datum
+  without a `TOWGS84`, which would land 200–300 m out). Hartebeesthoek94
+  itself is WGS84's ellipsoid with no shift and passes. A lone `.shp` is
+  turned away before reading: a shapefile is several files.
+- **KML / KMZ** (`upload/kml.ts`): each placemark's name, description and
+  ExtendedData (`Data` and `SimpleData`) become its properties; a
+  placemark with no shape is left out and counted. A KMZ's `doc.kml` (else
+  its shallowest `.kml`) is read.
+- **Made to fit the GeoJSON checks** (`upload/normalize.ts`): a third
+  coordinate (an altitude, a PolygonZ's z) is dropped; a MultiGeometry
+  becomes one MultiPolygon of its polygons and one MultiLineString of its
+  lines, and each of its points a Point, each keeping the placemark's
+  properties; a MultiPoint becomes its Points; positions are rounded to 7
+  decimals (about a centimetre).
+- **Caps on an untrusted file**: the picked KML, KMZ or zip at most 25 MB;
+  a zip's entries read at most 50 MB unpacked in all, each refused on its
+  declared size before it is inflated, and inflation counted as it streams
+  and stopped the moment it passes the entry's declared size (a zip that
+  lies is refused as damaged), so a zip bomb never unpacks; encrypted
+  entries, ZIP64 and methods other than stored and deflate are refused. A
+  shapefile's records are counted from the `.shp`'s record headers, and a
+  KML's placemarks from the parsed document, before either is converted:
+  over 500 is refused there. The GeoJSON made must still be at most 5 MB.
+  [security.md § Input handling](./security.md#input-handling) has the XML
+  side.
+- **Tests**: `upload/upload.test.ts` with synthetic files built byte by byte
+  (`upload/__fixtures__/build.ts`: a Lo19 layer whose areas come out within
+  0.5 % of the drawn squares, WP-3.12's acceptance; Esri Lo19 and UTM 34S
+  reference points; a two-layer WGS84 zip; no `.prj`; Cape; a lying and an
+  oversized zip entry; KML with a MultiGeometry; KMZ; a DOCTYPE), and
+  `e2e/tests/map-import-review.spec.ts`, which imports the committed KML and
+  Lo19 zip and finds their features in the map's list.
 
 ## Areas
 

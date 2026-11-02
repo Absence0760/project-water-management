@@ -231,7 +231,7 @@ export const PAGE_GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'Draw the boundary with **Draw a shape**, or **Upload GeoJSON** (WGS84). The header counts the features and gives the boundary’s area.',
+							'Draw the boundary with **Draw a shape**, or **Upload map file** (GeoJSON, KML or a zipped shapefile). The header counts the features and gives the boundary’s area.',
 							'Add dams, abstraction points and gauges with **Place a point**, and parcels with **Draw a shape**. **Snap to features** puts a corner on a neighbour’s corner or edge.',
 							'With an elevation model on the server, **Delineate** draws the terrain channels (solid lines): click one at the catchment’s outlet and the catchment above it is proposed, following the terrain, to accept or reject. The river network’s dashed lines are for reference only and can sit off the terrain channels.',
 							'A catchment over about 100 km across is worked out in the background (or tick **work it out in the background**); the map shows the proposal when it is ready. Where pans drain part of it, **Which area** lets you take the gross area (the default, as WR2012’s quaternaries are) or the effective one without them.',

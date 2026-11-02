@@ -1464,7 +1464,11 @@ must build WP-2.15 Phase B.
   check → **Propose from the map**, a point → its quaternary → the reference
   values used one by one, from a synthetic dataset in the repo and the
   operator's own DWS/WR2012 download otherwise ([maps.md](../maps.md)).
-  Left: shapefiles, the production basemap and dataset loading, the WR2012
+  Shapefiles (and KML/KMZ) landed 2026-11-02 as planned below (proj4, with
+  the app's own .shp reader and parsedbf rather than shpjs), in the
+  browser with the server re-validating ([maps.md § Shapefiles and
+  KML](../maps.md#shapefiles-and-kml)).
+  Left: the production basemap and dataset loading, the WR2012
   licence decision, contributor-owned features, feeds from the boundary
   ([followups.md § Catchment map](../followups.md#catchment-map-issue-288)).
 - **Goal.**
