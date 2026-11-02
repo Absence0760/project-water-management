@@ -221,6 +221,40 @@ What it can't see:
 - **Test helpers.** The engine's `src/testing/` and the backend's
   `src/__tests__/` are left out.
 
+## Fresh clone
+
+`.github/workflows/fresh-clone.yml` holds the V1 promise that a fresh clone
+runs with `pnpm run setup && pnpm dev` and nothing else (plan.md Phase 1
+acceptance). On a clean checkout with a cold pnpm store it runs `pnpm run setup`
+unchanged (install, Postgres, migrations, every synthetic reference import,
+Mailpit, MinIO), starts `pnpm dev`, and waits until the backend's `/health`
+on :3001 answers `{"ok":true}` and the frontend on :7777 serves the SPA shell
+and compiles the root layout; then it stops both and the containers. The one
+difference from a laptop is where the service images come from: Docker Hub's
+and ECR Public's anonymous limits refused CI's runners (issues #492, #521),
+so the job loads ci.yml's cached image tarballs (`scripts/ci/service-image.sh`)
+and points `COMPOSE_FILE` at the overrides, and every `docker compose` call in
+the scripts runs as written.
+
+It runs `pnpm run setup`, never `pnpm setup`: `setup` is one of pnpm's own
+commands (it adds pnpm to your shell profile), and pnpm runs its own command
+before a script of the same name, so a bare `pnpm setup` installs nothing
+and starts nothing. The first run of this job caught exactly that. `pnpm
+test:scripts` refuses a bare `pnpm setup` (or any other root script a pnpm
+command shadows) in a tracked doc, workflow or script.
+
+It isn't in `ci.yml` or behind `CI gate`: ci.yml's jobs already install,
+migrate and build on every PR, and a full setup from a cold store takes
+several minutes. It runs on a PR or a push to `main` that touches what setup
+and dev depend on (the root and workspace `package.json`s, the lockfile,
+`docker-compose.yml`, `dev/`, `backend/scripts/`, `backend/fixtures/`, the
+backend's dev config and server entry, the committed `.env.development`
+files, the frontend's Vite and Svelte config, the workflow itself), every
+Monday for drift no diff shows (runner image, Docker, the npm registry), and
+by hand (`gh workflow run fresh-clone.yml`). Locally, the same check is
+`pnpm run setup && pnpm dev` in a fresh clone; never run `pnpm run setup` in a
+checkout you share with other sessions.
+
 ## Engine end-to-end tests
 
 `packages/engine/src/e2e/` holds whole-run tests of the engine, one file set per

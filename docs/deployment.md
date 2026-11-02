@@ -814,7 +814,7 @@ install and no cache; opens an issue),
 `gitleaks-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
 issue when it fails), `renderer-apt-snapshot.yml` (weekly age check of the
 renderer image's apt snapshot; opens a `renderer-apt-snapshot` issue past 90
-days, § Reports), `fresh-clone.yml` (weekly `pnpm setup && pnpm dev` on a
+days, § Reports), `fresh-clone.yml` (weekly `pnpm run setup && pnpm dev` on a
 clean checkout, also on PRs that touch setup; testing.md § Fresh clone), and
 weekly runs of `security.yml` and `scorecard.yml`.
 Also present: `claude.yml` (Claude Code on issue and PR comments, for the

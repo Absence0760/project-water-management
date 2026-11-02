@@ -1,7 +1,7 @@
 // Load DE Africa Waterbodies polygons for the dam observations' match (issue
 // #604 R5; docs/maps.md § Waterbodies):
 //
-//   pnpm import:waterbodies                                              the committed synthetic set (dev, e2e; pnpm setup runs it)
+//   pnpm import:waterbodies                                              the committed synthetic set (dev, e2e; pnpm run setup runs it)
 //   pnpm import:waterbodies <file.geojson> --dataset <label> [--bbox w,s,e,n] [--source "<product, version>"]
 //
 // Runs as the schema owner (MIGRATION_DATABASE_URL), like the other reference

@@ -26,7 +26,7 @@ which now redirects there, issue #551; [docs/deployment.md](./docs/deployment.md
 Needs Node 24, pnpm 10 (Corepack) and Docker.
 
 ```bash
-pnpm setup      # install deps, start Postgres 17 (docker, :5434), run migrations, start Mailpit
+pnpm run setup  # install deps, start Postgres 17 (docker, :5434), run migrations, start Mailpit
 pnpm dev        # frontend http://localhost:7777 + API http://localhost:3001
 ```
 

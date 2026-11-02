@@ -82,7 +82,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ not started.
 
 ## Phase 1: V1 local demo 🚧
 
-**Goal:** after `git clone`, `pnpm setup`, `pnpm dev`, a person can register,
+**Goal:** after `git clone`, `pnpm run setup`, `pnpm dev`, a person can register,
 import the client catchment, run the model and look at the results. They can also create
 a second and third project (empty, or copied) side by side.
 
@@ -219,7 +219,7 @@ workbook (as in 1a) with **no manual edits**.
 
 **Phase 1 acceptance (the demo):**
 
-- [ ] A fresh clone with `pnpm setup && pnpm dev` works with no other setup
+- [ ] A fresh clone with `pnpm run setup && pnpm dev` works with no other setup
       ([run-locally.md](./run-locally.md)). Checked by
       `.github/workflows/fresh-clone.yml` (weekly and on PRs that touch setup;
       [testing.md § Fresh clone](./testing.md#fresh-clone)); tick it once that

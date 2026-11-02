@@ -85,7 +85,7 @@ Farmers, WUAs and licensing users are **not** Step 1 users (see §3).
 Already true:
 
 - engine 0.4.0 with the invariant suite, soaked over seeds 1–20000;
-- the local stack runs (`pnpm setup && pnpm dev`);
+- the local stack runs (`pnpm run setup && pnpm dev`);
 - the Terraform is written and tested plan-only;
 - release pipelines exist, and their preflight refuses to deploy.
 

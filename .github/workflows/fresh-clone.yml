@@ -1,8 +1,8 @@
 name: Fresh clone
 
 # The V1 promise (docs/plan.md Phase 1 acceptance): a fresh clone runs with
-# `pnpm setup && pnpm dev` and nothing else. This checks out a clean tree,
-# runs `pnpm setup` exactly as a developer would (install, Postgres,
+# `pnpm run setup && pnpm dev` and nothing else. This checks out a clean tree,
+# runs `pnpm run setup` exactly as a developer would (install, Postgres,
 # migrations, every synthetic reference dataset, Mailpit, MinIO), starts
 # `pnpm dev` (backend :3001, frontend :7777), checks both answer, and stops
 # them (docs/testing.md § Fresh clone).
@@ -11,7 +11,7 @@ name: Fresh clone
 # already install, migrate and build on every PR, and what only this catches
 # (a root script chain, a reference import, a dev entry point, the committed
 # .env.development files, docker-compose.yml) lives in the paths below. A
-# whole `pnpm setup` from a cold pnpm store costs several minutes, so it runs
+# whole `pnpm run setup` from a cold pnpm store costs several minutes, so it runs
 # on a PR or a push to main that touches those, weekly for the drift no path
 # shows (a runner image, Docker, compose, the npm registry), and by hand.
 on:
@@ -70,7 +70,7 @@ permissions:
 
 jobs:
   setup-and-dev:
-    name: pnpm setup && pnpm dev on a fresh clone
+    name: pnpm run setup && pnpm dev on a fresh clone
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -95,7 +95,7 @@ jobs:
       # by docker-compose.yml's pinned digests (a mirror-first pull on a miss).
       # COMPOSE_FILE adds the overrides service-image.sh writes (the loaded
       # image, `pull_policy: never`) to every `docker compose` call, so
-      # `pnpm setup` and `pnpm dev` run their own unchanged commands.
+      # `pnpm run setup` and `pnpm dev` run their own unchanged commands.
       - name: Restore the service images
         id: service-images
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -115,8 +115,8 @@ jobs:
           done
           echo "COMPOSE_FILE=$files" >> "$GITHUB_ENV"
 
-      - name: pnpm setup
-        run: pnpm setup
+      - name: pnpm run setup
+        run: pnpm run setup
 
       # `pnpm dev` in its own process group, so stopping it stops tsx watch
       # and vite with it. Each wait is on the server answering, with a ceiling
