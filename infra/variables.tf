@@ -275,6 +275,21 @@ variable "waf_tiles_rate_limit_per_ip" {
   }
 }
 
+# The elevation-model routes (waf.tf RateLimitDemPerIP): delineation, start
+# from the map, divide, sub-catchments, the DEM's channels and grid, and
+# tracing a dam each read DEM or water-occurrence tiles on the API, so they
+# cost more per request than the rest of /api/*. A busy 5 minutes of real
+# mapping by one person is ~200 of them (docs/security.md § Rate limiting).
+variable "waf_dem_rate_limit_per_ip" {
+  description = "WAF rate limit on the API's elevation-model routes (/api/projects/<id>/map/ delineation, start, divide, subcatchments, channels, dem-grid, dam-trace): requests per IP per 5-minute rolling window. One person mapping hard is ~200 in 5 minutes (the DEM grid's views while panning, the channel tiles, the clicks); 300 leaves room for that and cuts one address's uncapped DEM reads to under a third of the API's limit. Between 100 (AWS's minimum) and waf_rate_limit_per_ip (these requests count against the API's limit too)."
+  type        = number
+  default     = 300
+  validation {
+    condition     = var.waf_dem_rate_limit_per_ip >= 100 && var.waf_dem_rate_limit_per_ip <= var.waf_rate_limit_per_ip
+    error_message = "Between 100 (AWS WAF's minimum) and waf_rate_limit_per_ip (above it the API's rule is the limit and this one bounds nothing)."
+  }
+}
+
 # The egress alarm (alarms.tf cloudfront_bytes). Requests are cheap; bytes are
 # what the tiles cost ($0.110/GB at Africa's edges, $0.085 at US/EU's). A pull
 # just under the threshold from many addresses goes unseen: at 0.5 GB per

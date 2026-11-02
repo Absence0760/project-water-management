@@ -100,13 +100,13 @@ Cost:
 | RDS `db.t4g.micro` single-AZ | 15.33 | 11.70 |
 | RDS gp3 storage, 20 GiB | 3.02 | 2.30 |
 | 4 interface endpoints × 1 AZ (Secrets Manager, SES, SQS, S3; S3's also $0.01/GB processed for the DEM, water and reference reads) | 38.23 | 29.20 |
-| WAF (ACL + 5 rules; billed globally) | 10.00 | 10.00 |
+| WAF (ACL + 6 rules; billed globally) | 11.00 | 11.00 |
 | CloudWatch: 44 alarms (41 until the renderer exists; 4 more, ≈ $0.40, with `dam_observations_enabled`: the two dam pass heartbeats and the WOfS and Waterbodies recencies), logs, RDS log export | ~4.80 | ~4.30 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 | 4.10 |
 | SQS polling by the six event sources (~2.9 M receives past the free tier), ECR images, S3 (incl. the tiles and reference buckets, ~$0.10, and the data mirror's ~6 GB, ~$0.20–0.30), SES, Lambda (the migrate Lambda's 3008 MB is billed only while it migrates or loads), CloudFront | ~1.90 | ~1.60 |
-| **Total** | **≈ $77** | **≈ $63** |
+| **Total** | **≈ $78** | **≈ $64** |
 | *With the assistant:* bedrock-runtime endpoint × 1 AZ, its runtime secret, its budget (a third, $0.62), 5 essential alarms + 3 log metrics | + ≈ 10.90 (9.56 + 0.40 + 0.62 + ~0.35) | + ≈ 8.65 (7.30 + 0.40 + 0.62 + ~0.35) |
-| *Total with the assistant*, before model spend | **≈ $88** | **≈ $72** |
+| *Total with the assistant*, before model spend | **≈ $89** | **≈ $73** |
 
 The line-by-line us-east-1 breakdown is
 [infra/README.md § Cost](../infra/README.md#cost).
@@ -155,11 +155,11 @@ Cost:
 | RDS gp3 storage, 20 GiB, Multi-AZ | 6.04 | 4.60 |
 | Backups beyond the free allowance (14 days) | ~1.20 | ~1.00 |
 | 4 interface endpoints × 2 AZs | 76.45 | 58.40 |
-| WAF (ACL + 5 rules + requests) | ~10.60 | ~10.60 |
+| WAF (ACL + 6 rules + requests) | ~11.60 | ~11.60 |
 | CloudWatch alarms, logs, RDS log export | ~5.00 | ~4.50 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 | 4.10 |
 | SQS polling, ECR image, S3 (incl. the map tiles and reference buckets, ~$0.10), SES, Lambda, CloudFront | ~3.00 | ~2.50 |
-| **Total** | **≈ $166** | **≈ $133** |
+| **Total** | **≈ $167** | **≈ $134** |
 | *With the assistant:* bedrock-runtime endpoint × 2 AZs (`bedrock_endpoint_az_count = 2`), its secret, budget, 6 alarms + 3 log metrics | + ≈ 20.50 (19.11 + 0.40 + 0.62 + ~0.40) | + ≈ 16.00 (14.60 + 0.40 + 0.62 + ~0.40) |
 
 What it buys:

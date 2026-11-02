@@ -4346,8 +4346,17 @@ key there would let any read-only principal forge any user's session.
   each entry point's bundle with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
-- **WAF:** four per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
-  limit scoped to `/api/auth/*`, the API's limit (`waf_rate_limit_per_ip`,
+- **WAF:** five per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+  limit scoped to `/api/auth/*`, the elevation-model routes
+  (`waf_dem_rate_limit_per_ip`, default 300, scoped by a regex to
+  `/api/projects/<id>/map/` `delineation`, `start`, `divide`,
+  `subcatchments` and its `save`, `channels`, `dem-grid` and `dam-trace`:
+  each reads DEM or water-occurrence tiles on the API, so costs more than
+  the rest of it; collection paths only, so a waiting request's 2-second
+  polls, accept, reject, apply and discard don't count; one person mapping
+  hard is ~200 in a busy 5 minutes, mostly the DEM grid's views while
+  panning; these count against the API's limit too, and sit on top of the
+  per-account caps in the app, [§ Map uploads](#map-uploads)), the API's limit (`waf_rate_limit_per_ip`,
   default 1000 per 5 minutes) scoped to `/api/*`, the map's tiles
   (`waf_tiles_rate_limit_per_ip`, default 1000, scoped to `/tiles/*`: each
   may be a 2 MiB range, so this is the egress bound per address, with the
@@ -4360,7 +4369,8 @@ key there would let any read-only principal forge any user's session.
   blocks isn't billed by CloudFront, one it allows is), at the
   `cloudfront-requests` alarm's own default. Both API-path rules match the
   decoded, normalised, lowercased path (`infra/waf.tf`,
-  `waf_rate_rules_scope`). A renderer the WAF blocks gets a plain `403`
+  `waf_rate_rules_scope`, `waf_dem_rule`, which also checks the regex against
+  every DEM route and a list of paths it must not match). A renderer the WAF blocks gets a plain `403`
   without the API's `render_token_refused` code, so the render is retried
   with backoff rather than failed (§ Render tokens).
 - **Ambiguous paths are refused by the API** (`backend/src/http/rawPath.ts`,

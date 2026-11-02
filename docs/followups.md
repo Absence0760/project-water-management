@@ -6565,7 +6565,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       public, static credits page (no API call), and no signed-in page lists
       the loaded datasets with their metadata, so the record is the
       operator's (the load log, or SQL as the owner).
-- [ ] **A WAF rate rule scoped to the elevation-model routes (access audit,
+- [x] **A WAF rate rule scoped to the elevation-model routes (access audit,
       PR #368; operator decision 2026-10-11, issue #90: build in a later
       round).** Delineation, Start from the map, Divide and the elevation and
       water GETs read DEM or raster tiles on every call, so they cost more per
@@ -6574,7 +6574,15 @@ assume, the questions for counsel); these are the actions, with triggers.
       a lower limit than the API's, in `infra/` (plan test in
       `infra/tests/`). **Trigger:** the next infra round, or the elevation
       routes showing in the WAF's request metrics or the API's cost.
-- [ ] **An idle-in-transaction timeout on RDS (access audit, PR #368;
+      **Done 2026-11-01:** `RateLimitDemPerIP` (`infra/waf.tf`, priority 2,
+      after the auth rules), `waf_dem_rate_limit_per_ip` default 300 per 5
+      minutes (100 to `waf_rate_limit_per_ip`), a regex on the collection
+      paths `/api/projects/<id>/map/` delineation, start, divide,
+      subcatchments(/save), channels, dem-grid, dam-trace (not the polls or
+      the accept/apply/discard decisions). 300 from the UI's own pattern: one
+      person mapping hard is ~200 in a busy 5 minutes (docs/security.md).
+      Plan tests `waf_dem_rule` and the two `rejects_dem_rate_limit_*` runs.
+- [x] **An idle-in-transaction timeout on RDS (access audit, PR #368;
       operator decision 2026-10-11, issue #90: build in a later round).** A
       connection left idle inside an open transaction holds its locks and a
       pool slot until it is closed. **Durable fix:** set
@@ -6584,6 +6592,15 @@ assume, the questions for counsel); these are the actions, with triggers.
       error as an ordinary 500. **Trigger:** the next infra round, or any
       `idle in transaction` session seen in `pg_stat_activity` in
       production.
+      **Done 2026-11-01:** 20 minutes in the parameter group
+      (`infra/rds.tf`, dynamic, no reboot), computed as 5 minutes past the
+      longest database Lambda's timeout (the migrate Lambda's 900 s), since
+      only the gap between statements counts and a Lambda's transaction ends
+      with its invocation. Cluster-wide, not per role, so the schema owner's
+      sessions are covered and local dev keeps it off. `withUser` did *not*
+      surface it as a 500: the killed checked-out client's `error` event had
+      no listener and would have ended the Node process. `db/tx.ts` now
+      listens and releases the dead client (`db/tx.db.test.ts`).
 
 ## Housekeeping
 

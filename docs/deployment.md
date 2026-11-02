@@ -4337,7 +4337,12 @@ Every step is an ordinary app action by an owner unless it says "operator".
        report), raise `waf_site_rate_limit_per_ip` (the SPA's files count only
        there) or, for `/api/` blocks, `waf_rate_limit_per_ip`, and apply. One
        office or farm address is people behind one NAT: raise the limit its
-       blocks are on (the rule is in the sampled requests).
+       blocks are on (the rule is in the sampled requests). Blocks on
+       `RateLimitDemPerIP` (`/api/projects/<id>/map/dem-grid`, `channels`,
+       `delineation`, `dam-trace`, …) are people mapping: one person
+       mapping hard is ~200 in 5 minutes, so blocks from one office mean
+       several at once; raise `waf_dem_rate_limit_per_ip` (at most
+       `waf_rate_limit_per_ip`) and apply.
     6. **Afterwards:** check Cost Explorer (daily, services CloudFront and
        WAF) for what it cost, and record the incident in the operator log.
 11. **Credential stuffing / password spraying** (the `login-failed` alarm,
