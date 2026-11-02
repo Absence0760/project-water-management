@@ -9,10 +9,17 @@ import { testTimeZone } from '../../scripts/test-tz.mjs';
 //   perf — timing budgets (`*.perf.test.ts`), run serially with a
 //          median-of-several sampling so a loaded machine doesn't produce a
 //          flake (`pnpm test:perf`, root `pnpm test:engine:perf`).
+// v8 coverage slows CPU-bound code several times over (the stepwise fit at
+// every gauge, calibrate/locations.test.ts: ~70 s in CI's unit job, past its
+// 240 s hang guard under coverage, ~500 s). The unit timeouts only catch a
+// hang, so a coverage run scales them, and tests with their own guard read
+// COVERAGE_SLOWDOWN the same way (as backend/vitest.config.ts does).
+const coverageSlowdown = process.argv.includes('--coverage') ? 4 : 1;
+
 export default defineConfig({
 	test: {
-		// A skewed time zone for every project (CLAUDE.md rule 7; scripts/test-tz.mjs).
-		env: { TZ: testTimeZone() },
+		// TZ: a skewed time zone for every project (CLAUDE.md rule 7; scripts/test-tz.mjs).
+		env: { COVERAGE_SLOWDOWN: String(coverageSlowdown), TZ: testTimeZone() },
 		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
 		// gate. No thresholds, on purpose: a number to hit invites tests written
 		// for the number. Read it for what no test reaches (docs/testing.md
@@ -36,8 +43,8 @@ export default defineConfig({
 					// timeout. The fuzz and invariant tests run the engine synchronously
 					// over hundreds of random networks: ~2–10 s alone, and up to ~40 s
 					// with every file in parallel on a loaded machine, past the default
-					// 5 s. The heaviest set their own (up to 300 s).
-					testTimeout: 120_000
+					// 5 s. The heaviest set their own (up to 300 s), times COVERAGE_SLOWDOWN.
+					testTimeout: 120_000 * coverageSlowdown
 				}
 			},
 			{

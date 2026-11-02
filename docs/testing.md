@@ -205,7 +205,11 @@ backend coverage run (`--coverage`) multiplies the unit project's hang guard
 by 4, and exposes the factor as `COVERAGE_SLOWDOWN` for a test that sets its
 own: the example catchments' GR4J fit (`scripts/examples/catchments.test.ts`)
 took about 100 s of its 120 s guard under coverage, and went over it on a
-slower runner (PR #570). A
+slower runner (PR #570). The engine does the same
+(`packages/engine/vitest.config.ts`): the stepwise fit at every gauge
+(`calibrate/locations.test.ts`, twelve GR4J fits) takes about 70 s in CI's
+unit job and about 500 s under coverage, past its 240 s guard until the guard
+scaled. A
 test that records what its requests do keeps the record per request
 (`role-ladder.db.test.ts` carries it in an `AsyncLocalStorage`), so a request
 still running after its test ends can't fail the next one.
