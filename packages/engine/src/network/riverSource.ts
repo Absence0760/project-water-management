@@ -61,12 +61,20 @@ export const RIVER_TAKE_SERIES = {
 	take: { prefix: 'river_take@', label: (name: string) => `River abstraction "${name}": pumped (part of supplied)`, unit: 'm³/day' },
 	pool: { prefix: 'river_pool@', label: (name: string) => `River abstraction "${name}": pool storage (end of the day)`, unit: 'm³' },
 	/** Engine ≥ 1.66.0, only with a pump capacity: the demand its pump left unmet although the river (or its pool) had it. */
-	pumpLimited: { prefix: 'river_pump_limited@', label: (name: string) => `River abstraction "${name}": demand the pump capacity left unmet (the river or its pool had it)`, unit: 'm³/day' }
+	pumpLimited: { prefix: 'river_pump_limited@', label: (name: string) => `River abstraction "${name}": demand the pump capacity left unmet (the river or its pool had it)`, unit: 'm³/day' },
+	/**
+	 * Engine ≥ 1.111.0, on every abstraction: what it was asked for after the
+	 * drought restriction less what it pumped (take + short = its demand after
+	 * the restriction), so a reader can tell a river-side shortfall from the
+	 * dam side's (the stored object_demand@ is before the cut).
+	 */
+	short: { prefix: 'river_short@', label: (name: string) => `River abstraction "${name}": demand left unmet (after any drought restriction)`, unit: 'm³/day' }
 } as const;
 
 export const riverTakeKey = (key: string): string => `${RIVER_TAKE_SERIES.take.prefix}${key}`;
 export const riverPoolKey = (key: string): string => `${RIVER_TAKE_SERIES.pool.prefix}${key}`;
 export const riverPumpLimitedKey = (key: string): string => `${RIVER_TAKE_SERIES.pumpLimited.prefix}${key}`;
+export const riverShortKey = (key: string): string => `${RIVER_TAKE_SERIES.short.prefix}${key}`;
 
 /** Whether a river abstraction publishes its pump-limited series (engine ≥ 1.66.0): only with a pump capacity (a finite one; 0 = no pump). */
 export const hasPumpLimit = (take: Pick<PlanTake, 'pumpM3Day'>): boolean => Number.isFinite(take.pumpM3Day);

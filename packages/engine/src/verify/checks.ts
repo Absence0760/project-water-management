@@ -28,7 +28,7 @@ import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSup
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
-import { hasPumpLimit, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
+import { hasPumpLimit, riverPoolKey, riverPumpLimitedKey, riverShortKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES, userRestrictionShare } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
 import { CHECK_GAUGE_FLOW_KEY, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
@@ -163,6 +163,8 @@ interface RiverColumns {
 	pool: (number[] | null)[];
 	/** The pump-limited column (engine ≥ 1.66.0), exactly with a pump capacity; null without one. */
 	pumpLimited: (number[] | null)[];
+	/** The unmet-demand column (engine ≥ 1.111.0), on every abstraction. */
+	short: number[][];
 }
 
 /**
@@ -179,7 +181,7 @@ const LEGACY_POOL_EVAPORATION_PREFIX = 'river_pool_evaporation@';
  */
 function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): RiverColumns | string | null {
 	const river = riverSourcesOf(n, demandObjectsByNode(input.model, []).get(n.id), []).river;
-	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, LEGACY_POOL_EVAPORATION_PREFIX, RIVER_TAKE_SERIES.pumpLimited.prefix];
+	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, LEGACY_POOL_EVAPORATION_PREFIX, RIVER_TAKE_SERIES.pumpLimited.prefix, RIVER_TAKE_SERIES.short.prefix];
 	const stray = out.series.find(
 		(x) =>
 			x.nodeId === n.id &&
@@ -187,13 +189,14 @@ function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: Mo
 			!river?.takes.some(
 				(k) =>
 					x.key === riverTakeKey(k.key) ||
+					x.key === riverShortKey(k.key) ||
 					(k.pool && x.key === riverPoolKey(k.key)) ||
 					(hasPumpLimit(k) && x.key === riverPumpLimitedKey(k.key))
 			)
 	);
 	if (stray) return `${n.id}: a ${stray.key} column without the river abstraction behind it`;
 	if (!river) return null;
-	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, cropShare: river.cropShare, objOnRiver: river.objOnRiver, got: [], pool: [], pumpLimited: [] };
+	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, cropShare: river.cropShare, objOnRiver: river.objOnRiver, got: [], pool: [], pumpLimited: [], short: [] };
 	for (const k of river.takes) {
 		const g = get.get(`${n.id}|${riverTakeKey(k.key)}`);
 		const p = k.pool ? get.get(`${n.id}|${riverPoolKey(k.key)}`) : null;
@@ -201,6 +204,10 @@ function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: Mo
 		// Its pump's limit (engine ≥ 1.66.0): exactly with a pump capacity.
 		const pl = hasPumpLimit(k) ? get.get(`${n.id}|${riverPumpLimitedKey(k.key)}`) : null;
 		if (!pl && hasPumpLimit(k)) return `${n.id}: river abstraction ${k.key} has a pump capacity and no pump-limited column`;
+		// Its unmet demand (engine ≥ 1.111.0): on every abstraction.
+		const sh = get.get(`${n.id}|${riverShortKey(k.key)}`);
+		if (!sh) return `${n.id}: river abstraction ${k.key} has no unmet-demand column`;
+		cols.short.push(sh);
 		cols.got.push(g);
 		cols.pool.push(p ?? null);
 		cols.pumpLimited.push(pl ?? null);
@@ -1725,6 +1732,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					asks.push(ask);
 					const v = riv.got[a]![t]!;
 					if (v < -tol(0) || v > Math.min(ask, x.pumpM3Day) + tol(ask)) return `${where}: river abstraction ${x.key} pumped ${v}, outside [0, MIN(its demand ${ask}, pump ${x.pumpM3Day})]`;
+					// Its unmet demand (engine ≥ 1.111.0): take + short = its demand after the restriction, short ≥ 0.
+					const sh = riv.short[a]![t]!;
+					if (sh < -tol(0) || !near(v + sh, ask, ask)) return `${where}: river abstraction ${x.key} pumped ${v} and was short ${sh}, which don't add up to its demand ${ask} after the restriction`;
 					if (x.obj >= 0 && !near(objs!.supplied[x.obj]![t]!, v, v)) return `${where}: demand object ${x.key} was supplied ${objs!.supplied[x.obj]![t]}, not the ${v} its river abstraction pumped`;
 					gRivT += v;
 					fromFlow[a] = v;

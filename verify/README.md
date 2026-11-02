@@ -203,6 +203,8 @@ the ranks within one (engine ≥ 1.64.0),
   Not the pump-limited measure of engine 1.66.0 (`river_pump_limited@`): the
   model doesn't write it, so the comparison notes it as engine-only; the
   engine's own self-checks (`checkWorkings`, `checkReportTotals`) bound it.
+  Nor the unmet demand of engine 1.111.0 (`river_short@`), engine-only too:
+  `checkWorkings` holds take + short = the demand after the restriction.
 - **The crop supply table** (§2.7k, engine ≥ 1.73.0): the crops' demand
   in shares of the unit's dam side, the crops' river abstraction and another
   unit's dam; the remote share settled in the supplying unit's step before

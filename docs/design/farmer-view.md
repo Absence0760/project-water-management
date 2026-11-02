@@ -89,7 +89,7 @@ level of an outlook published, the page shows *This season* (§12, "E3: the seas
 | --- | --- | --- |
 | "86 % of what you needed" | `season.fraction` = Σ `supplied` ÷ Σ `demand` (`windowSummary`) | whole %, with the tiny-number rules (§8) |
 | "324.2 ML of 376.5 ML since 1 Oct" | `season.suppliedM3`, `season.demandM3` | the user's volume unit (§8) |
-| "Short on 16 days in Nov and Dec, all when your dam was down to its stop level" | days with `deficit` > 0 in the season, and the months they fall in | a count. For a dam farm the engine is only ever short when the dam is at its stop level (model.md §2.7, G), so "all when…" is always true for a dam farm; a farm with no dam reads "…when the river was too low to take from", and so does a unit whose dam serves none of its demands, each drawing on its own river abstraction (`season.onlyRiver`, model.md §2.7j). A unit with demands on both sides counts a short day at the stop level when the dam sat there, whichever side was short (docs/followups.md: the per-side shortfall) |
+| "Short on 16 days in Nov and Dec, all when your dam was down to its stop level" | days with `deficit` > 0 in the season, and the months they fall in | a count. For a dam farm the engine is only ever short when the dam is at its stop level (model.md §2.7, G), so "all when…" is always true for a dam farm; a farm with no dam reads "…when the river was too low to take from", and so does a unit whose dam serves none of its demands, each drawing on its own river abstraction (`season.onlyRiver`, model.md §2.7j). A unit with demands on both sides (engine ≥ 1.111.0) splits its short days by side: the river side was short when a river abstraction was (`river_short@<key>`, `season.shortDaysRiver`), the dam side when the rest of the deficit was more than noise with the dam at its stop level (`season.shortDaysAtStopLevel`), both on `season.shortDaysBoth`; the line reads "…when the river or your pump couldn't give enough", "…your dam was down to its stop level on 10 days, and the river or your pump couldn't give enough on 8 days. Both were short on 2 days." or the dam's words. A view from a run before 1.111.0 has no split and counts a short day at the stop level whenever the dam sat there |
 | "Last 30 days: >99 % · 113.3 ML of 113.8 ML" | `last30` (the same shape) | as above |
 | "Worked out by the model, not read from your meter. It assumes 75 % of the water you pump reaches the crop (sprinklers). Wrong? Tell your WUA." | the node's `irrigationEfficiency`, named by the nearest of the engine's SABI 2021 systems (`IRRIGATION_SYSTEMS`: drip 0.90 "drip"; micro 0.82 and pivot 0.85 "micro or centre pivot"; sprinkler 0.80 and 0.75 "sprinklers"; surface 0.70 "flood") | Always on the supply card (§11 F4, F22) |
 | 12-month bars, needed and received | `run_series` `demand`, `supplied`, summed by calendar month on the client | ML per month; "Show the numbers" lists all 12 months with years |
@@ -593,7 +593,10 @@ settled something this spec left open:*
   only, as §3 Q1 says. A dam farm whose demands all draw on the river
   (`season.onlyRiver`, engine ≥ 1.65.0; absent on views published before
   2026-10-02) reads as a farm with no dam: 0 days at the stop level, the
-  river's wording.*
+  river's wording. A dam unit with demands on both its dam and the river
+  (engine ≥ 1.111.0) carries `shortDaysRiver` and `shortDaysBoth`, and its
+  `shortDaysAtStopLevel` counts only the days the dam side itself was short
+  (absent on views of older runs, which read as before).*
 - *Share links are WP-2.3 phase 2, not built (followups.md).*
 
 **WP-2.6** (the view):

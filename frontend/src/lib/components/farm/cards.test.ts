@@ -236,6 +236,32 @@ describe('Water you received this season', () => {
 			'Short on 16 days in Nov and Dec, all when the river was too low to take from.'
 		);
 	});
+
+	it('says which side was short on a dam with river abstractions beside it (engine 1.111.0)', () => {
+		const f = vaalbankFixture().farm;
+		const side = (dam: number, river: number, both: number, over: Partial<typeof f> = {}) =>
+			sp(shortLine({ ...f, ...over, season: { ...f.season, shortDaysAtStopLevel: dam, shortDaysRiver: river, shortDaysBoth: both } }));
+		// The river side only.
+		expect(side(0, 16, 0)).toBe("Short on 16 days in Nov and Dec, all when the river or your pump couldn't give enough.");
+		expect(side(0, 5, 0)).toBe("Short on 16 days in Nov and Dec, 5 of them when the river or your pump couldn't give enough.");
+		expect(sp(shortLine({ ...f, season: { ...f.season, shortDays: 1, shortMonths: ['2023-11'], shortDaysAtStopLevel: 0, shortDaysRiver: 1, shortDaysBoth: 0 } }))).toBe(
+			"Short on 1 day in Nov, when the river or your pump couldn't give enough."
+		);
+		// Both sides, on different days and some together.
+		expect(side(10, 8, 0)).toBe("Short on 16 days in Nov and Dec: your dam was down to its stop level on 10 days, and the river or your pump couldn't give enough on 8 days.");
+		expect(side(10, 8, 2)).toBe(
+			"Short on 16 days in Nov and Dec: your dam was down to its stop level on 10 days, and the river or your pump couldn't give enough on 8 days. Both were short on 2 days."
+		);
+		expect(side(1, 16, 1, { damMinPct: 0 })).toBe(
+			"Short on 16 days in Nov and Dec: your dam was empty on 1 day, and the river or your pump couldn't give enough on 16 days. Both were short on 1 day."
+		);
+		// Both sides every short day.
+		expect(side(16, 16, 16)).toBe("Short on 16 days in Nov and Dec, all when your dam was down to its stop level and the river or your pump couldn't give enough.");
+		expect(side(16, 16, 16, { damMinPct: 0 })).toBe("Short on 16 days in Nov and Dec, all when your dam was empty and the river or your pump couldn't give enough.");
+		// The dam side only, with the split known: the dam's words, as on a unit all on its dam.
+		expect(side(16, 0, 0)).toBe('Short on 16 days in Nov and Dec, all when your dam was down to its stop level.');
+		expect(side(4, 0, 0)).toBe('Short on 16 days in Nov and Dec, 4 of them when your dam was down to its stop level.');
+	});
 });
 
 describe('Your dam', () => {

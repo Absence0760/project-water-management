@@ -334,6 +334,95 @@ describe('the dam’s days left follow what the dam itself gave (persona-farmer,
 		expect(farmProjection(scenario().run, 'dam').season.onlyRiver).toBeUndefined();
 	});
 
+	it('splits the short days by side on a unit with a demand on its dam and one on the river (engine 1.111.0)', () => {
+		// The dam farm's crops stay on its dam (stop level 20 %); a 2000 m³/day works beside it pumps from the river
+		// through a 1500 m³/day pump, so the river side is short every day. The crops need nothing in November and
+		// December, so then the dam, starting at its stop level with no water into it, sits there with nothing asked
+		// of it: those days are the river's alone.
+		const { input } = scenario();
+		const both = structuredClone(input);
+		Object.assign(both.model.nodes.find((n) => n.id === 'dam')!, { damInitialPct: 0.2, pctRunoffToDam: 0, pctUpstreamToDam: 0 });
+		both.model.crops = both.model.crops.map((c) => ({ ...c, cropFactor: c.cropFactor.map((v, m) => (m === 1 || m === 2 ? 0 : v)) }));
+		both.model.demandObjects = [
+			{ id: 'works', nodeId: 'dam', name: 'Works', category: 'industrial', sizing: 'monthly', monthlyM3Day: new Array(12).fill(2000), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'shared', destination: 'internal', enabled: true, note: '', waterSource: 'river', riverPumpM3Day: 1500 }
+		];
+		const d0 = Date.parse('2021-10-01T00:00:00Z');
+		const natural = Array.from({ length: 822 }, (_, t) => ([1, 2].includes(new Date(d0 + t * 86_400_000).getUTCMonth() + 1) ? 40_000 : 3_000));
+		const out = runModelWith(both, () => ({ naturalFlowM3Day: natural }));
+		const run = asRun(both, out);
+		const p = farmProjection(run, 'dam');
+		const get = (k: string) => out.series.find((s) => s.nodeId === 'dam' && s.key === k)!.values;
+		const deficit = get('deficit');
+		const short = get('river_short@works');
+		const storage = get('dam_storage');
+		const from = Math.round((Date.parse('2023-10-01T00:00:00Z') - d0) / 86_400_000);
+		let shortDays = 0;
+		let river = 0;
+		let dam = 0;
+		let both2 = 0;
+		let atStopAny = 0;
+		for (let t = from; t < 822; t++) {
+			if (!(deficit[t]! > 1e-6)) continue;
+			shortDays++;
+			const r = short[t]! > 1e-6;
+			const atStop = storage[t]! <= 200_000 * 0.2 + 1e-3;
+			const d = atStop && deficit[t]! - short[t]! > 1e-6;
+			if (atStop) atStopAny++;
+			if (r) river++;
+			if (d) dam++;
+			if (r && d) both2++;
+		}
+		expect(p.season.shortDays).toBe(shortDays);
+		expect(p.season.onlyRiver).toBeUndefined();
+		expect(p.season.shortDaysRiver).toBe(river);
+		expect(p.season.shortDaysAtStopLevel).toBe(dam);
+		expect(p.season.shortDaysBoth).toBe(both2);
+		// The case the split is for: the river side short every short day, the dam side on only some of them.
+		expect(river).toBe(shortDays);
+		expect(dam).toBeGreaterThan(0);
+		expect(dam).toBeLessThan(shortDays);
+		expect(atStopAny).toBeGreaterThan(dam);
+		// A run before 1.111.0 (no river_short@): every short day at the stop level is put down to the dam, as before.
+		const old: ProjectionRun = { ...run, series: (n, k) => (k.startsWith('river_short@') ? undefined : run.series(n, k)) };
+		const q = farmProjection(old, 'dam');
+		expect(q.season.shortDaysRiver).toBeUndefined();
+		expect(q.season.shortDaysBoth).toBeUndefined();
+		expect(q.season.shortDaysAtStopLevel).toBe(atStopAny);
+		// A unit all on its dam has no split.
+		expect(farmProjection(scenario().run, 'dam').season.shortDaysRiver).toBeUndefined();
+	});
+
+	it('does not put a drought restriction’s cut of the river side down to the dam (engine 1.111.0)', () => {
+		// The dam farm's crops are on its dam but need nothing all season; the dam sits at its stop level with no water
+		// into it. A 2000 m³/day works pumps from the river through a 600 m³/day pump, cut by half by a restriction:
+		// it asks 1000, gets 600, short 400. The deficit (against the unrestricted 2000) is 1400, but none of it is
+		// the dam side's: the dam served nothing.
+		const { input } = scenario();
+		const cut = structuredClone(input);
+		Object.assign(cut.model.nodes.find((n) => n.id === 'dam')!, { damInitialPct: 0.2, pctRunoffToDam: 0, pctUpstreamToDam: 0 });
+		cut.model.crops = cut.model.crops.map((c) => ({ ...c, cropFactor: c.cropFactor.map((v, m) => (m <= 2 ? 0 : v)) }));
+		cut.model.demandObjects = [
+			{ id: 'works', nodeId: 'dam', name: 'Works', category: 'industrial', sizing: 'monthly', monthlyM3Day: new Array(12).fill(2000), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'shared', destination: 'internal', enabled: true, note: '', waterSource: 'river', riverPumpM3Day: 600 }
+		];
+		cut.settings = { ...cut.settings, droughtRestriction: { reviewDates: ['10-01'], basis: 'own', nodeIds: ['dam'], levels: [{ belowPct: 0.5, cuts: { industrial: 0.5 } }] } };
+		const d0 = Date.parse('2021-10-01T00:00:00Z');
+		const natural = Array.from({ length: 822 }, (_, t) => ([1, 2].includes(new Date(d0 + t * 86_400_000).getUTCMonth() + 1) ? 40_000 : 3_000));
+		const out = runModelWith(cut, () => ({ naturalFlowM3Day: natural }));
+		const get = (k: string) => out.series.find((s) => s.nodeId === 'dam' && s.key === k)!.values;
+		const last = 821;
+		// The hand case on the season's last day.
+		expect(get('restricted_demand')[last]).toBeCloseTo(1000, 6);
+		expect(get('river_take@works')[last]).toBeCloseTo(600, 6);
+		expect(get('river_short@works')[last]).toBeCloseTo(400, 6);
+		expect(get('deficit')[last]).toBeCloseTo(1400, 6);
+		const p = farmProjection(asRun(cut, out), 'dam');
+		expect(p.season.onlyRiver).toBeUndefined();
+		expect(p.season.shortDays).toBeGreaterThan(0);
+		expect(p.season.shortDaysRiver).toBe(p.season.shortDays);
+		expect(p.season.shortDaysAtStopLevel).toBe(0);
+		expect(p.season.shortDaysBoth).toBe(0);
+	});
+
 	it('takes the boreholes and each river abstraction off supplied, keeps the supply rule’s pump and off-take water (the dam carries them with nothing flowing in), never below 0', () => {
 		const node = farm('u', 'out', { damCapacityM3: 1000, cropWaterSource: 'river' });
 		const stored: Record<string, number[]> = {
