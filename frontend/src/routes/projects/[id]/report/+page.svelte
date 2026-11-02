@@ -60,8 +60,7 @@
 	import { supplyColouring } from '#lib/components/network/farmColour.js';
 	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, PAIRING_NUMS, reportRainCredits, settingsRows, STATION_HEAD, STATION_NUMS, stationPairingRows, stationRows, transferRows } from '#lib/components/report/inputs.js';
-	import { reportPageRule } from '#lib/components/report/printPage.js';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
+	import { printedPage } from '#lib/components/report/printedPage.svelte.js';
 	import AssurancePanel from '#lib/components/reliability/AssurancePanel.svelte';
 	import { noticeLanguages, restrictionSummary } from '#lib/components/runs/publication.js';
 	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '#lib/components/report/sections.js';
@@ -269,31 +268,12 @@
 	const footer = $derived(project && run ? REPORT_FOOTER(project.name, runName, disclaimerSection(sections)) : undefined);
 
 	// Printing is A4, in the light theme, without the app's header (see the styles),
-	// with the running footer on every page once the footer is known (report/printPage.ts).
-	const pageRule = $derived(reportPageRule(footer));
-	let pageStyle: HTMLStyleElement | null = null;
-	$effect(() => {
-		// Read the rule first: behind `pageStyle &&` a first run (before the style exists) would
-		// never subscribe to it, and the footer, known only once the run loads, would never print.
-		const rule = pageRule;
-		if (pageStyle) pageStyle.textContent = rule;
-	});
-	$effect(() => {
-		pageStyle = document.createElement('style');
-		pageStyle.textContent = untrack(() => pageRule);
-		document.head.append(pageStyle);
-		const before = () => forceLightForPrint();
-		const after = () => restoreThemeAfterPrint();
-		addEventListener('beforeprint', before);
-		addEventListener('afterprint', after);
-		return () => {
-			pageStyle?.remove();
-			pageStyle = null;
-			removeEventListener('beforeprint', before);
-			removeEventListener('afterprint', after);
-			restoreThemeAfterPrint();
-		};
-	});
+	// with the running footer on every page once the footer is known (report/printedPage.svelte.ts).
+	// Evidence mode's page sets up its own print, with its own footer.
+	printedPage(
+		() => footer,
+		() => !evidenceMode
+	);
 </script>
 
 <svelte:head>{#if !evidenceMode}<title>{project ? `Report · ${project.name} · ` : ''}IC-WBT</title>{/if}</svelte:head>

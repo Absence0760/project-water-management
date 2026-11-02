@@ -24,6 +24,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { box } from '../support/map.ts';
+import { hasPdftotext, pdfPageTexts } from '../support/pdf.ts';
 
 const S3 = process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9002';
 /** The rule the project declares, and the ensemble the River tab runs to it (evidence-report.spec.ts). */
@@ -36,7 +37,7 @@ test.beforeAll(async () => {
 	test.skip(!up && !process.env.CI, 'needs MinIO: pnpm dev:s3:up');
 });
 
-test('issuing a pack prints its PDF once; the download is the bytes whose SHA-256 the pack and verify answer', async ({ page, owner }) => {
+test('issuing a pack prints its PDF once; the download is the bytes whose SHA-256 the pack and verify answer', async ({ page, owner }, testInfo) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Pack PDF catchment');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', evidenceUncertaintyRule: RULE });
@@ -107,6 +108,18 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
 	expect(createHash('sha256').update(pdf).digest('hex')).toBe(read.pack.pdfSha256);
 	expect(pdf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)?.length).toBe(read.pack.pdfPages);
+	// The server PDF carries the page's own footer on every page (its @page margin box; the renderer adds none):
+	// the issued stamp, the manifest hash and verify code, the disclaimer's key point, and "Page X of Y".
+	if (hasPdftotext || process.env.CI) {
+		const texts = pdfPageTexts(pdf, testInfo.outputPath('pack.pdf'));
+		expect(texts).toHaveLength(read.pack.pdfPages!);
+		texts.forEach((t, i) => {
+			expect(t).toMatch(/Issued · version 1 · /);
+			expect(t).toContain(`verify code ${pack.shortCode}`);
+			expect(t).toContain('Model estimates; see the Disclaimer');
+			expect(t).toContain(`Page ${i + 1} of ${texts.length}.`);
+		});
+	}
 
 	// What anyone holding the printed code sees: the same hash, and nothing of the server's re-run.
 	const verified = await page.request.get(`${API_URL}/verify/${pack.shortCode}`);

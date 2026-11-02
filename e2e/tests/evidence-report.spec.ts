@@ -13,6 +13,7 @@ import { plantDamObservations } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { box } from '../support/map.ts';
+import { hasPdftotext, pdfPageTexts } from '../support/pdf.ts';
 
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 /** The rule the project declares, and the ensemble the River tab runs to it. */
@@ -60,7 +61,7 @@ async function scenarioRun(page: Page, projectId: string, baseRunId: string, upp
 	return { scenarioId: scenario.id, runId: ((await ran.json()) as { run: { id: string } }).run.id };
 }
 
-test('an application on the nominated run gives the full evidence report, draft on every page', async ({ page, owner }) => {
+test('an application on the nominated run gives the full evidence report, draft on every page', async ({ page, owner }, testInfo) => {
 	void owner;
 	const { project, baseline, upper } = await seed(page, 'Evidence report');
 
@@ -225,6 +226,19 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await expect(board.locator('thead')).toHaveCSS('position', 'static');
 	const pdf = await page.pdf({ format: 'A4' });
 	expect(pdf.byteLength).toBeGreaterThan(10_000);
+	// Every printed page carries the running footer in its bottom margin (the report's @page rule):
+	// the draft stamp, the project and the disclaimer's key point, and "Page X of Y".
+	if (hasPdftotext || process.env.CI) {
+		const footer = (await page.locator('main').getAttribute('data-report-footer'))!;
+		expect(footer).toMatch(/^Draft · not issued · /);
+		const texts = pdfPageTexts(pdf, testInfo.outputPath('evidence-report.pdf'));
+		expect(texts.length).toBeGreaterThan(1);
+		texts.forEach((t, i) => {
+			expect(t).toContain(footer.split(' · ').slice(0, 3).join(' · '));
+			expect(t).toContain('Model estimates; see the Disclaimer');
+			expect(t).toContain(`Page ${i + 1} of ${texts.length}.`);
+		});
+	}
 });
 
 test('a run that isn’t the nomination is refused; a baseline-assumption application previews in red and can’t be issued', async ({ page, owner }) => {
