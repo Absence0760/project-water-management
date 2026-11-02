@@ -822,7 +822,10 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 	// in binary, not as text (db/float8Array.ts: ~95 MB of number text cost seconds both ends), and the next
 	// batch is built while the database takes this one.
 	const BATCH = 25;
-	const sent: SeriesHashes = { nodeIds: [], keys: [], sha256: [] };
+	const sent: SeriesHashes = { nodeIds: [], keys: [], sha256: [], probes: [] };
+	// The drift guard's probes (stampRun): the first constant series and the first sent one.
+	let probeConstant = -1;
+	let probeSent = -1;
 	// A constant series' hash, by value and length: a run's are mostly zeros of one length.
 	const constantSha = new Map<string, string>();
 	const sha256Of = (values: Buffer) => createHash('sha256').update(values).digest('hex');
@@ -842,10 +845,12 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 				let sha = constantSha.get(k);
 				if (sha === undefined) constantSha.set(k, (sha = sha256Of(float8ArrayParam(s.values))));
 				sent.sha256.push(sha);
+				if (probeConstant < 0) probeConstant = sent.sha256.length - 1;
 				return `${row}, array_fill(${$(c)}::float8, ARRAY[${$(s.values.length)}::int]))`;
 			}
 			const values = float8ArrayParam(s.values);
 			sent.sha256.push(sha256Of(values));
+			if (probeSent < 0) probeSent = sent.sha256.length - 1;
 			return `${row}, ${$(values)}::float8[])`;
 		});
 		return { text: `INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${rows.join(', ')}`, params };
@@ -860,6 +865,7 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 	await inFlight;
 	// Last of the run's rows: sign what was stored (077_run_stamp, runs/stamp.ts),
 	// so a run written past this path (a direct insert as water_app) is told apart.
+	sent.probes = [probeConstant, probeSent].filter((i) => i >= 0);
 	await stampRun(db, runId, sent);
 	// Every way a run is made (POST /runs, the rerun job, an import's run, a scenario run) comes through here.
 	await recordAudit(db, projectId, 'run.created', {

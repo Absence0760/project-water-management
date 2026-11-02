@@ -114,3 +114,28 @@ CREATE FUNCTION app_run_signing_digest(p_run uuid, p_node_ids uuid[], p_keys tex
 	$$;
 REVOKE ALL ON FUNCTION app_run_signing_digest(uuid, uuid[], text[], text[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_run_signing_digest(uuid, uuid[], text[], text[]) TO water_app;
+
+-- The drift guard (runs/stamp.ts stampRun): the SHA-256 of array_send of a
+-- few of the run's stored series, which the backend compares with the hashes
+-- it is about to sign. Should Postgres's array_send and the backend's binary
+-- parameter (or array_fill, for a constant series) ever stop agreeing, the
+-- signing digest would still be given and every new run would silently read
+-- as unverified; the check catches it in the storing transaction, logs
+-- `run_stamp_drift` (alarmed, infra/alarms.tf) and signs from the stored rows
+-- instead. SECURITY DEFINER for the same reason as the signing digest (an
+-- applicant can't read their own run's series, 046), with the same gate.
+CREATE FUNCTION app_run_series_sha256(p_run uuid, p_node_ids uuid[], p_keys text[])
+	RETURNS TABLE (node_id uuid, key text, sha256 text)
+	LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+	SELECT s.node_id, s.key, encode(sha256(array_send(s."values")), 'hex')
+	FROM model_run r
+	JOIN run_series s ON s.run_id = r.id
+	JOIN unnest(p_node_ids, p_keys) AS g(node_id, key) ON (g.node_id IS NULL) = (s.node_id IS NULL)
+		AND coalesce(g.node_id, '00000000-0000-0000-0000-000000000000') = coalesce(s.node_id, '00000000-0000-0000-0000-000000000000')
+		AND g.key = s.key
+	WHERE r.id = p_run AND r.stamp IS NULL AND r.created_by = app_current_user_id() AND r.created_at = now()
+	  AND cardinality(p_node_ids) = cardinality(p_keys) AND cardinality(p_keys) <= 8
+	$$;
+REVOKE ALL ON FUNCTION app_run_series_sha256(uuid, uuid[], text[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_run_series_sha256(uuid, uuid[], text[]) TO water_app;

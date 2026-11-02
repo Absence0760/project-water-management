@@ -755,6 +755,7 @@ run "metric_filters_read_json_logs" {
           aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].pattern,
         ],
         [for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern],
+        [for f in aws_cloudwatch_log_metric_filter.run_stamp_drift : f.pattern],
       ) : can(regex("^\\{ \\$\\.message\\.event = \"[a-z_]+\" \\}$", p))
     ])
     error_message = "Every log metric filter matches $.message.event (Lambda's JSON log format nests a one-object console call under message)."

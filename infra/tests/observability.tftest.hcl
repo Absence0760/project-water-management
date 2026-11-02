@@ -825,8 +825,9 @@ run "essential_alarm_tier" {
       length(aws_cloudwatch_metric_alarm.unhandled_error),
       length(aws_cloudwatch_metric_alarm.mail_send_failed),
       length(aws_cloudwatch_log_metric_filter.unhandled_error),
-    ] : n == 1]) && length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 2
-    error_message = "alarm_tier = \"essential\" must keep the 13 essential alarms and the filters that feed them."
+      length(aws_cloudwatch_metric_alarm.run_stamp_drift),
+    ] : n == 1]) && length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 2 && length(aws_cloudwatch_log_metric_filter.run_stamp_drift) == 2
+    error_message = "alarm_tier = \"essential\" must keep the 14 essential alarms and the filters that feed them."
   }
 
   assert {
@@ -856,7 +857,9 @@ run "no_alarm_tier" {
     condition = (
       length(aws_cloudwatch_metric_alarm.ses_bounce_rate) == 0 &&
       length(aws_cloudwatch_metric_alarm.lambda_errors) == 0 &&
-      length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 0
+      length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 0 &&
+      length(aws_cloudwatch_log_metric_filter.run_stamp_drift) == 0 &&
+      length(aws_cloudwatch_metric_alarm.run_stamp_drift) == 0
     )
     error_message = "alarm_tier = \"none\" must create no alarms."
   }

@@ -12,6 +12,7 @@
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
+import { logEvent } from '../logging/logEvent.js';
 
 /**
  * The stamp key: its own key, derived from the session secret by HKDF with
@@ -40,6 +41,26 @@ export interface SeriesHashes {
 	nodeIds: (string | null)[];
 	keys: string[];
 	sha256: string[];
+	/**
+	 * Indexes of the series the drift guard re-hashes as stored before signing (stampRun): storeRun names its first
+	 * constant series (built by array_fill) and its first sent one, one of each way a series is written.
+	 */
+	probes: number[];
+}
+
+/**
+ * The drift guard: the probed series' hashes as stored (app_run_series_sha256, 304) against the ones about to be
+ * signed. The indexes of the probes that disagree (or weren't found).
+ */
+async function driftedProbes(db: Db, runId: string, series: SeriesHashes): Promise<number[]> {
+	const probes = [...new Set(series.probes)].filter((i) => i >= 0 && i < series.keys.length);
+	if (!probes.length) return [];
+	const { rows } = await db.query<{ node_id: string | null; key: string; sha256: string }>(
+		'SELECT node_id, key, sha256 FROM app_run_series_sha256($1, $2::uuid[], $3::text[])',
+		[runId, probes.map((i) => series.nodeIds[i]), probes.map((i) => series.keys[i])]
+	);
+	const stored = new Map(rows.map((r) => [`${r.node_id ?? ''}\u0000${r.key}`, r.sha256]));
+	return probes.filter((i) => stored.get(`${series.nodeIds[i] ?? ''}\u0000${series.keys[i]}`) !== series.sha256[i]);
 }
 
 /**
@@ -53,8 +74,26 @@ export interface SeriesHashes {
  * the digest app_run_digest gives once the rows match what was sent; one that
  * doesn't leaves a run that never verifies, and the database answers no
  * digest at all unless every stored series has exactly one hash.
+ *
+ * Before that, the drift guard re-hashes one or two of the stored series
+ * (`series.probes`, ~1 ms). Should the stored bytes ever stop matching what
+ * was sent (a Postgres or node-postgres change, an encoder bug), every new
+ * run would otherwise read as unverified with nothing to say why. On a
+ * mismatch it logs `run_stamp_drift` (run id and series keys, no values;
+ * alarmed, infra/alarms.tf) and signs from the stored rows instead
+ * (app_run_digest, the pre-304 path): the run is kept and verifies, the
+ * operator is told, and the cost is the old 0.3 s until it is fixed. Failing
+ * the run instead would turn an encoding drift into every run failing.
  */
 export async function stampRun(db: Db, runId: string, series?: SeriesHashes): Promise<void> {
+	if (series) {
+		const given = series;
+		const drifted = await driftedProbes(db, runId, given);
+		if (drifted.length) {
+			logEvent('error', { event: 'run_stamp_drift', runId, series: drifted.map((i) => ({ nodeId: given.nodeIds[i], key: given.keys[i] })) });
+			series = undefined;
+		}
+	}
 	const { rows } = series
 		? await db.query<{ digest: Buffer | null }>('SELECT app_run_signing_digest($1, $2::uuid[], $3::text[], $4::text[]) AS digest', [
 				runId,
