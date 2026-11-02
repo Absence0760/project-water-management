@@ -1,4 +1,6 @@
 import type pg from 'pg';
+import { logEvent } from '../logging/logEvent.js';
+import { safeError } from '../logging/safeError.js';
 import { getPool } from './pool.js';
 
 export type Db = pg.PoolClient;
@@ -81,8 +83,25 @@ export async function queryWithoutUser<R extends pg.QueryResultRow>(text: string
 	return (await getPool().query<R>(text, values)).rows;
 }
 
+/**
+ * A connection that dies while checked out emits 'error' on the client, and
+ * the pool listens only while a client is idle: with no listener Node throws
+ * it and the process exits. It happens when Postgres ends the session between
+ * two statements: idle_in_transaction_session_timeout in production (FATAL
+ * 25P03, infra/rds.tf), a terminated backend, a failover. The listener keeps
+ * the error; the client is then unqueryable, so the transaction's next query
+ * (or its COMMIT) rejects, the route answers an ordinary 500, and the client
+ * is released with the error so the pool discards it.
+ */
 async function inTransaction<T>(fn: (db: Db) => Promise<T>, begin = 'BEGIN'): Promise<T> {
 	const client = await getPool().connect();
+	let lost: Error | undefined;
+	const onError = (err: Error) => {
+		lost = err;
+		// Name and SQLSTATE only (safeError): a pg message can carry row values.
+		logEvent('warn', { event: 'db_client_lost', ...safeError(err) });
+	};
+	client.on('error', onError);
 	try {
 		await client.query(begin);
 		const result = await fn(client);
@@ -92,6 +111,7 @@ async function inTransaction<T>(fn: (db: Db) => Promise<T>, begin = 'BEGIN'): Pr
 		await client.query('ROLLBACK').catch(() => {});
 		throw err;
 	} finally {
-		client.release();
+		client.removeListener('error', onError);
+		client.release(lost);
 	}
 }
