@@ -2380,8 +2380,10 @@ def run(doc: dict) -> dict:
                 u_["target"] = "direct"
         if lst:
             units[x["id"]] = lst
-            # §2.7d, §2.7g: on a day its dam has no capacity, the node's units run as on a node without a dam.
-            units_nodam[x["id"]] = [{**u_, "mode": "supplemental" if u_["mode"] == "emergency" else u_["mode"], "target": "direct"} for u_ in lst]
+            # §2.7d, §2.7g: on a day its dam has no capacity, the node's units pump direct, each in its mode's step.
+            # An emergency unit keeps its own step, after the supplemental ones, and its trigger reads an empty
+            # dam: it runs while 0 < level x the entered capacity (the dam's level at the entered scale is 0).
+            units_nodam[x["id"]] = [{**u_, "target": "direct"} for u_ in lst]
             units_dam[x["id"]] = lst
     has_bh = {x["id"] for x in nodes if x["kind"] in ("farm", "user") and (x.get("boreholeCapacityM3Day") or any(b.get("nodeId") == x["id"] for b in model.get("boreholes") or []))}
 
@@ -2407,11 +2409,11 @@ def run(doc: dict) -> dict:
         diag["dev_dams"] += 1
 
     def supply_rule(x):
-        # §2.7g: on a day its dam has no capacity a trigger runs river first, as on a unit without a dam (probe
-        # development-in-service-trigger; x["damCapacityM3"] is the day's capacity inside the day loop), while run of
-        # river on a unit with an entered dam stays river first on such a day (dense seed 8).
+        # §2.7e: a trigger on a unit with no entered dam runs river first. §2.7g: on a day an entered dam has no
+        # capacity a trigger stays a trigger (the day loop reads the empty dam's level), and run of river on a
+        # unit with an entered dam stays river first (dense seed 8).
         r = x.get("supplyRule") or "damFirst"
-        if r == "trigger" and x["damCapacityM3"] <= 0:
+        if r == "trigger" and not cap0.get(x["id"], x["damCapacityM3"]) > 0:
             return "riverFirst"
         if r == "runOfRiver" and cap0.get(x["id"], x["damCapacityM3"]) > 0:
             return "riverFirst"
@@ -2961,8 +2963,13 @@ def run(doc: dict) -> dict:
             elif rule_ == "trigger":
                 trig = x.get("supplyTriggerPct", 0.4)
                 stop = max(trig, x.get("supplyStopPct", 0.6))
-                on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap
-                hold = on and not s_prev < trig * cap
+                # §2.7g: on a day with no capacity the dam's level reads 0 against the levels at the entered
+                # capacity: the pump switches to the river under a trigger above 0 (probe
+                # development-in-service-trigger), stays on under a stop level above 0, and under a trigger of 0
+                # stays on the dam unless it was already on the river (random seed 88).
+                s_lvl, c_lvl = (s_prev, cap) if cap > 0 else (0.0, cap0[xid])
+                on = s_lvl < stop * c_lvl if on_river[xid] else s_lvl < trig * c_lvl
+                hold = on and not s_lvl < trig * c_lvl
             else:
                 on = False
             on_river[xid] = on
@@ -3011,7 +3018,7 @@ def run(doc: dict) -> dict:
                 if u_["target"] == "direct" and u_["mode"] == "supplemental":
                     GW += pump(k_, rem - Gs - Gr - GW)
             for k_, u_ in enumerate(ulist):
-                if u_["target"] == "direct" and u_["mode"] == "emergency" and s_prev < u_["level"] * cap:
+                if u_["target"] == "direct" and u_["mode"] == "emergency" and (s_prev < u_["level"] * cap if cap > 0 else 0 < u_["level"] * cap0[xid]):
                     GW += pump(k_, rem - Gs - Gr - GW)
             G = min(used_off + Gs + Gr + GW, dem)
             # The demand objects' split of G (§2.7f).

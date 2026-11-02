@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 232 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 235 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
@@ -63,7 +63,7 @@ no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
 case is `model.py`'s run plus `diff.compare` over every column and day
 (about half each; 0.1–2 s a case), while the engine runs all ~90 default
 cases in one tsx process in about 5 s. The mutation self-test is the bulk:
-232 mutants, each running the cases in order until its first disagreement
+235 mutants, each running the cases in order until its first disagreement
 (about a third of them on average), about 35 min on one core, against about
 3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
 the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
@@ -497,13 +497,14 @@ of a seed is unchanged), with probes and mutants:
   rule's reserve and the survey curve's volumes scaling with it (the
   full-supply area not); storage above the day's capacity spilled; a day
   with no capacity running as a unit without a dam (what is routed to it
-  spills, no release or pass-inflow target, dam-target boreholes direct and
-  emergency ones as supplemental, a trigger rule river first); the
+  spills, no release or pass-inflow target, dam-target boreholes direct,
+  emergency ones after the supplemental ones while the empty dam is below
+  their level, a trigger rule reading the empty dam's level); the
   `dam_capacity` column; and `abstractionFrom` on farms and users (no
   crop, object or user demand before it, the soil-water store running on,
   a full allocation fitted on the days from then). Probes
-  `development-sediment`, `-curve-none`, `-in-service`, `-in-service-trigger`, `-filled-run-of-river`, `-abstraction`, `-abstraction-gap-year`,
-  `-rate-no-survey`.
+  `development-sediment`, `-curve-none`, `-in-service`, `-in-service-emergency`, `-in-service-trigger`, `-in-service-trigger-zero`,
+  `-filled-run-of-river`, `-abstraction`, `-abstraction-gap-year`, `-rate-no-survey`.
 
 ## Phase 2b (not covered yet)
 
@@ -571,10 +572,10 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (232
-mutants; phase 2b's 40 are listed under its features in `test_verify.py`:
+`test_verify.py` breaks `model.py` one documented rule at a time (235
+mutants; phase 2b's 43 are listed under its features in `test_verify.py`:
 the daily A-pan record's 7, the demand factors by part and dated windows' 8,
-land cover's 9 and development during a run's 16). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
+land cover's 9 and development during a run's 19). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
 accumulations not spread, or tested over the whole run; raw CHIRPS; the
@@ -903,12 +904,22 @@ networks:
   exponent of 0.98 put Python's area at 75–78 m² against 71 m², the full
   area); the `dam_capacity` column is written only when k can differ from 1
   (dense seed 8: a dam in service since before the run has none); on a day
-  with no capacity a `trigger` rule runs river first, as on a unit without
-  a dam (dense seed 110: 22 237 m³ a day from the river against Python's
-  0), while run of river on a unit with an entered dam stays river first
+  with no capacity a `trigger` rule reads the empty dam's level, 0, against
+  its levels at the entered capacity, so it switches to the river under any
+  trigger above 0 (dense seed 110: 22 237 m³ a day from the river against
+  Python's 0) but never under a trigger of 0 (random seed 88: Python's
+  first reading, river first on such a day, took 2 448 m³ a day the engine
+  leaves in the river), while run of river on a unit with an entered dam stays river first
   (dense seed 8, a dam filled with sediment); and under a full allocation a water year wholly before
   `abstractionFrom` is scaled to 0 and listed with 0 m³ even when no
-  allocation is in force (dense seed 123, 20 days of September 2010). The
+  allocation is in force (dense seed 123, 20 days of September 2010). A
+  fifth point came up in CI's 200 random networks: on a day with no
+  capacity an emergency borehole keeps its own step, after the supplemental
+  ones, and its level reads the empty dam the same way, so it pumps unless
+  its level is 0 (random seed 50: a silted dam's emergency borehole, first
+  by id, took the 24 m³ a supplemental one pumps in the engine, its
+  depletion factor 0.82 against 0.51 putting 7.6 m³ a day less in the
+  river); Python had run it as supplemental, in id order. The
   last was first taken for an engine departure from §2.12a's "a year with
   none in force keeps its modelled demand"; checking whether it was one,
   the engine's `fullAllocationFactors` comment was read, which says a year

@@ -5685,11 +5685,14 @@ On a node without a dam, an emergency borehole runs as supplemental and a
 dam-target one pumps direct, each with a warning; the backend refuses both on
 save (`modelRuleIssues`, like the drought rule), as it refuses a borehole on a
 gauge.
-The same holds day by day for a dam that has no capacity that day (not in
-service yet, or filled with sediment, §2.7g): a dam-target borehole pumps
-direct in its mode's step, primary first and supplemental and emergency after
-the surface (engine ≥ 1.69.0; before, it pumped nothing until the dam
-existed). The transfer room's dam draw counts a primary one as direct on such
+On a day an entered dam has no capacity (not in service yet, or filled with
+sediment, §2.7g) a dam-target borehole pumps direct in its mode's step,
+primary first and supplemental and emergency after the surface (engine ≥
+1.69.0; before, it pumped nothing until the dam existed). An emergency
+borehole is not turned into a supplemental one that day: it keeps step 4's
+order, after every supplemental unit, and its level reads the absent dam as
+holding 0, against the level × the entered capacity, so it pumps unless its
+level is 0 (`verify/` probe `development-in-service-emergency`). The transfer room's dam draw counts a primary one as direct on such
 a day too (§2.6).
 
 **Annual caps.** Each unit's volume resets on the first day of each water
@@ -6253,9 +6256,13 @@ has its full-supply area that day, the power law's storage ratio held at 1,
 and spills the excess; the unknown-area estimate (7.2 × C^0.77, §2.7a)
 reads the entered capacity, as the full-supply area doesn't scale; a
 sediment rate without a survey date runs as the entered dam (k = 1); and on
-a day with no capacity a `trigger` supply rule runs river first, as it does
-on a unit without a dam (§2.7e), while `runOfRiver` on a unit with an
-entered dam stays river first, as it is on every other day.
+a day with no capacity a `trigger` supply rule reads the dam's level as 0
+against its trigger and stop levels at the entered capacity, so it switches
+to the river under any trigger above 0 (as on a unit without a dam, §2.7e)
+but stays on the dam under a trigger of 0 unless it was already on the
+river, while `runOfRiver` on a unit with an entered dam stays river first,
+as it is on every other day. An emergency borehole reads the empty dam the
+same way (§2.7d).
 
 **Drought restriction reviews** (§2.7i, engine ≥ 1.70.0): a dam that comes
 into service after the run's first day starts empty, and until it first

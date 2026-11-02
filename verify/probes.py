@@ -1842,9 +1842,13 @@ def development(kind: str) -> dict:
     capacity, which doesn't scale). `in-service`: a dam in service from
     1 February 2020 with a primary and an emergency dam-target borehole and a
     pass-inflow release: before it, what is routed to it spills, nothing
-    is released and the boreholes pump direct, the emergency one as
-    supplemental; `in-service-trigger`: a trigger rule on it, river first
-    until then. `filled-run-of-river`: a run-of-river unit whose dam fills
+    is released and the boreholes pump direct, the emergency one while the
+    empty dam is below its level; `in-service-emergency`: direct boreholes
+    with no dam to irrigate from before that date, a supplemental one and
+    two emergency ones sorting before it by id, so the supplemental one
+    pumps first and the emergency one at 0 % never; `in-service-trigger`:
+    a trigger rule on it, river first until then; `in-service-trigger-zero`:
+    the same at a 0 % trigger, which never switches to the river. `filled-run-of-river`: a run-of-river unit whose dam fills
     with sediment, still river first once it has no capacity. `abstraction`: a farm taking water from 1 March 2020 (its
     soil-water store running before), a domestic object on it with a floor,
     and a senior user from 1 January 2020, whose claim passes the farm above
@@ -1888,6 +1892,14 @@ def development(kind: str) -> dict:
         # A trigger rule before the dam exists runs river first (as on a unit without a dam), its pump capped.
         f_kw.update(damInServiceFrom="2020-02-01", supplyRule="trigger", supplyTriggerPct=0.4, supplyStopPct=0.7,
                     pumpCapacityM3Day=250, pctRunoffToDam=0.3)
+    elif kind == "in-service-trigger-zero":
+        # A 0 trigger reads the absent dam's level, 0, as not below it: the pump stays on the dam (random seed 88).
+        f_kw.update(damInServiceFrom="2020-02-01", supplyRule="trigger", supplyTriggerPct=0.0, supplyStopPct=0.7,
+                    pumpCapacityM3Day=250, pctRunoffToDam=0.3)
+    elif kind == "in-service-emergency":
+        # Nothing routed to the dam, so the boreholes cover the demand; before the dam exists the supplemental unit
+        # pumps first and the emergency ones after it, the one at a 0 level never (random seed 50).
+        f_kw.update(damInServiceFrom="2020-02-01", damInitialPct=0.5, pctRunoffToDam=0, streamDepletionLagDays=0)
     elif kind == "filled-run-of-river":
         # A run-of-river unit whose small dam fills with sediment in the run: still river first once it has no capacity.
         f_kw.update(damSurveyDate="2019-07-01", damSedimentPctPerYear=0.2, supplyRule="runOfRiver", damCapacityM3=3000,
@@ -1924,6 +1936,15 @@ def development(kind: str) -> dict:
              "target": "dam", "depletionFactor": 0},
         ]
         s.pop("boreholes")
+    elif kind == "in-service-emergency":
+        boreholes = [
+            {"id": "b0", "nodeId": "f", "capacityM3Day": 100, "annualCapM3": None, "mode": "emergency", "emergencyBelowPct": 0,
+             "target": "direct", "depletionFactor": 0.5},
+            {"id": "b1", "nodeId": "f", "capacityM3Day": 300, "annualCapM3": None, "mode": "emergency", "emergencyBelowPct": 0.5,
+             "target": "direct", "depletionFactor": 0.9},
+            {"id": "b2", "nodeId": "f", "capacityM3Day": 40, "annualCapM3": None, "mode": "supplemental", "target": "direct",
+             "depletionFactor": 0.1},
+        ]
     m = {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": transfers, "demandObjects": objs,
          "boreholes": boreholes, "allocations": alloc}
     return {"settings": s, "model": m, "series": {"rain_catchment_mm": {"startDate": start.isoformat(), "values": rain}}}
@@ -2194,6 +2215,8 @@ PROBES = {
     "development-curve-none": development("curve-none"),
     "development-in-service": development("in-service"),
     "development-in-service-trigger": development("in-service-trigger"),
+    "development-in-service-trigger-zero": development("in-service-trigger-zero"),
+    "development-in-service-emergency": development("in-service-emergency"),
     "development-filled-run-of-river": development("filled-run-of-river"),
     "development-abstraction": development("abstraction"),
     "development-abstraction-gap-year": development("abstraction-gap-year"),
