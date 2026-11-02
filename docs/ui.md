@@ -4649,8 +4649,9 @@ map" card) stays the schematic; this is the geography.
   Copernicus 30 m elevation model ("Hills shaded from the Copernicus 30 m
   elevation model."), or "The relief couldn’t be loaded, so the map is
   drawn without it." when the DEM can't be read. Without a DEM there is no
-  checkbox. **River network** (issue #345, `layers=rivers`, a dashed
-  cyan-blue swatch) sits between them: on, the map draws the loaded river
+  checkbox. **Rivers (HydroRIVERS)** (the River network, issue #345,
+  `layers=rivers`, a dashed cyan-blue swatch; labelled "River network"
+  until 2026-11-02) sits between them: on, the map draws the loaded river
   network around the features, dashed and wider for a higher order, and the
   box says "10 reaches around the catchment, the biggest first, from
   synthetic." (with **Synthetic test data, never real rivers.**; "(the
@@ -4665,6 +4666,20 @@ map" card) stays the schematic; this is the geography.
   map as a river, from the river network.") or "On the map as a river." and
   **Show it**. The key's Lines gain "river network" while it is on
   ([maps.md § River network](./maps.md#river-network)).
+  **DEM rivers** (`layers=channels`, a solid swatch in the terrain
+  channels' red, with a help tip; right after HydroRIVERS, so the two read
+  as a pair; an editor's, offered once their delineation check finds an
+  elevation model): on, the terrain channels Delineate draws are drawn with
+  no tool on, and the panel says what they are ("The rivers delineation
+  follows, worked out from the elevation model (the terrain channels in the
+  Key): wider for a larger area upstream. The HydroRIVERS lines can sit a
+  few hundred metres off them."), "Drawing the DEM rivers…" while tiles
+  load, "Zoom in to about 35 km across to draw the DEM rivers." past
+  0.35°, or why they couldn't be drawn (an alert with **Try again**).
+  The over-the-map pill about the channels stays Delineate's and
+  Sub-catchments' alone; the Key's "terrain channels" entry shows while
+  either draws them ([maps.md § The elevation model's
+  channels](./maps.md#the-elevation-models-channels)).
   **Area fill**, a slider at the top of the box (0–100 %, steps of 5,
   default 100 %): how strongly the polygons are filled (parcels, dams,
   other areas and the results colours, `mapStyle.ts` `fillOpacity`); the

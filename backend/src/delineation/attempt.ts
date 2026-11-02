@@ -3,7 +3,9 @@
 // attempt in the transaction that checks the caller's role, before reading the
 // DEM, and finish it whatever the outcome. Refused and failed attempts count
 // for the hour like stored ones; at most DEM_ATTEMPTS.inFlight run at once
-// per account.
+// per account. The Map's channel tiles (channelRoutes.ts) count apart, in
+// their own pool with CHANNEL_ATTEMPTS (307), so the DEM rivers layer can
+// never spend the hour a delineation needs.
 import { withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { logEvent } from '../logging/logEvent.js';
@@ -17,17 +19,34 @@ import { safeError } from '../logging/safeError.js';
  */
 export const DEM_ATTEMPTS = { perHour: 60, inFlight: 2, lease: '2 minutes' } as const;
 
-export type DemAttemptKind = 'delineation' | 'start' | 'divide';
+/**
+ * The channel tiles' own pool (307), apart from delineation's: a tile computed
+ * (not cached) is about 0.4 s to a few seconds of CPU. One person panning hard
+ * over new ground with the DEM rivers layer on asks about 30 tiles in a busy
+ * 5 minutes (at most 9 a view, each once a session); an hour of real
+ * exploring is a few dozen to a hundred new tiles. 150 an hour covers that
+ * with room, and bounds one account at a few CPU-minutes an hour; two at
+ * once covers a second tab (the layer fetches one at a time). The WAF's
+ * waf_dem_rate_limit_per_ip stays the outer bound per address.
+ */
+export const CHANNEL_ATTEMPTS = { perHour: 150, inFlight: 2, lease: '2 minutes' } as const;
+
+export type DemAttemptKind = 'delineation' | 'start' | 'divide' | 'channels';
+
+/** The refusal's `details.reason` when the channel tiles' hourly pool is spent: the Map says the DEM rivers are paused, not an error. */
+export const CHANNELS_HOURLY = 'channels_hourly';
 
 /** Begins one attempt as the transaction's user, or throws 429. Returns its id, for finishDemAttempt. */
 export async function beginDemAttempt(db: Db, kind: DemAttemptKind): Promise<string> {
-	const { rows } = await db.query<{ r: string }>('SELECT app_dem_attempt($1, $2, $3, $4::interval) AS r', [
-		kind,
-		DEM_ATTEMPTS.perHour,
-		DEM_ATTEMPTS.inFlight,
-		DEM_ATTEMPTS.lease
-	]);
+	const caps = kind === 'channels' ? CHANNEL_ATTEMPTS : DEM_ATTEMPTS;
+	const { rows } = await db.query<{ r: string }>('SELECT app_dem_attempt($1, $2, $3, $4::interval) AS r', [kind, caps.perHour, caps.inFlight, caps.lease]);
 	const r = rows[0]!.r;
+	if (kind === 'channels' && r === 'in_flight') {
+		throw new ApiError(429, `You already have ${caps.inFlight} squares of DEM rivers being worked out; wait for one to finish.`);
+	}
+	if (kind === 'channels' && r === 'hourly') {
+		throw new ApiError(429, `DEM rivers paused for this hour (${caps.perHour} new squares an hour); delineation still works.`, { reason: CHANNELS_HOURLY });
+	}
 	if (r === 'in_flight') {
 		throw new ApiError(429, `You already have ${DEM_ATTEMPTS.inFlight} elevation-model requests running; wait for one to finish.`);
 	}

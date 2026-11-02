@@ -11,16 +11,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { beginDemAttempt, DEM_ATTEMPTS, finishDemAttempt } from './attempt.js';
+import { beginDemAttempt, CHANNEL_ATTEMPTS, CHANNELS_HOURLY, DEM_ATTEMPTS, finishDemAttempt, type DemAttemptKind } from './attempt.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 const before = process.env.DEM_URL;
 
-const begin = (u: User) =>
-	withUser(u.id, (db) => beginDemAttempt(db, 'delineation')).then(
-		(id) => ({ id, status: 200 }),
+const begin = (u: User, kind: DemAttemptKind = 'delineation') =>
+	withUser(u.id, (db) => beginDemAttempt(db, kind)).then(
+		(id) => ({ id, status: 200, reason: null as unknown }),
 		(e: unknown) => {
-			if (e instanceof ApiError) return { id: null, status: e.status };
+			if (e instanceof ApiError) return { id: null, status: e.status, reason: (e.details as { reason?: unknown } | undefined)?.reason ?? null };
 			throw e;
 		}
 	);
@@ -70,6 +70,42 @@ describe('the hourly cap', () => {
 		expect((await begin(u)).status).toBe(429);
 		expect((await begin(other)).status).toBe(200);
 		await asOwner(`UPDATE dem_attempt SET started_at = now() - interval '61 minutes' WHERE user_id = $1`, [u.id]);
+		expect((await begin(u)).status).toBe(200);
+	});
+});
+
+describe('the channel tiles’ own pool (307)', () => {
+	it('past CHANNEL_ATTEMPTS.perHour, channel tiles are refused as paused, and the delineation allowance is untouched', async () => {
+		const u = await signUp('DAchannels');
+		await asOwner(
+			`INSERT INTO dem_attempt (user_id, kind, started_at, finished_at) SELECT $1, 'channels', now() - interval '30 minutes', now() - interval '30 minutes' FROM generate_series(1, $2)`,
+			[u.id, CHANNEL_ATTEMPTS.perHour]
+		);
+		const refused = await begin(u, 'channels');
+		expect(refused).toMatchObject({ status: 429, reason: CHANNELS_HOURLY });
+		// Positive control: the whole delineation hour is still there.
+		for (let i = 0; i < DEM_ATTEMPTS.perHour; i++) {
+			const r = await begin(u);
+			expect(r.status, `delineation ${i + 1}`).toBe(200);
+			await finishDemAttempt(u.id, r.id!);
+		}
+		expect((await begin(u)).status).toBe(429);
+	});
+
+	it('the other way round: a spent delineation hour leaves the channel tiles theirs', async () => {
+		const u = await signUp('DAchannels2');
+		await asOwner(
+			`INSERT INTO dem_attempt (user_id, kind, started_at, finished_at) SELECT $1, 'delineation', now() - interval '30 minutes', now() - interval '30 minutes' FROM generate_series(1, $2)`,
+			[u.id, DEM_ATTEMPTS.perHour]
+		);
+		expect((await begin(u)).status).toBe(429);
+		expect((await begin(u, 'channels')).status).toBe(200);
+	});
+
+	it('keeps the in-flight slots apart too: two channel tiles running never hold a delineation back', async () => {
+		const u = await signUp('DAchannels3');
+		for (let i = 0; i < CHANNEL_ATTEMPTS.inFlight; i++) expect((await begin(u, 'channels')).status).toBe(200);
+		expect((await begin(u, 'channels')).status).toBe(429);
 		expect((await begin(u)).status).toBe(200);
 	});
 });
