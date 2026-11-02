@@ -720,11 +720,12 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
     Email-first sign-up closes the last account-squatting gap, and is the
     recommendation if sign-up stays open.
-  - **Skewed `TZ`:** no workspace sets one today: `frontend/vitest.config.ts`,
-    `packages/engine/vitest.workspace.ts` and `backend/vitest.workspace.ts`
-    all lack it. Set `TZ=Pacific/Kiritimati` (UTC+14) in the `test` scripts, and
-    add a CI leg with `TZ=America/Adak` (UTC−10). Fix any failures at the
-    source (CLAUDE.md rule 7).
+  - **Skewed `TZ`:** (Done.) Every workspace's `vitest.config.ts` sets
+    `test.env.TZ` from `scripts/test-tz.mjs`: `Pacific/Chatham` (UTC+12:45),
+    and CI's unit job runs a second pass under `America/St_Johns` (UTC−3:30).
+    Both zones are off the whole hour and have DST, which catches more than
+    the Kiritimati/Adak pair first planned ([testing.md § Time
+    zone](../testing.md#time-zone)).
   - **Request sequencer (plan.md 1d):** list and series fetches drop
     stale responses when the project or series changes. (Done:
     `lib/api/latest.ts`, architecture.md § Stale responses.)

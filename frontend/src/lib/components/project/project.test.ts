@@ -1,11 +1,34 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PROJECT_ANCHORS, projectAnchor, projectHref } from './links';
 import { byName, foldRows, PEOPLE_SHOWN, projectContext } from './project';
 
 describe('projectContext', () => {
-	// Noon UTC, so the viewer's calendar day is the same under any TZ the tests run in.
+	// The created date is the viewer's calendar day (fmtDate), and no instant is
+	// the same day in every zone (UTC−12 to UTC+14 spans 26 hours: noon UTC is
+	// already tomorrow in Pacific/Chatham, the suite's TZ). So these cases pin
+	// a South African viewer, and the last one checks the viewer's day itself.
 	const createdAt = '2026-09-03T12:00:00Z';
+	let zone: string | undefined;
+	beforeAll(() => {
+		zone = process.env.TZ;
+		process.env.TZ = 'Africa/Johannesburg';
+	});
+	afterAll(() => {
+		process.env.TZ = zone;
+	});
+
+	it('dates the creation on the viewer’s own day, not the timestamp’s UTC one', () => {
+		const saved = process.env.TZ;
+		try {
+			process.env.TZ = 'Pacific/Chatham'; // UTC+12:45 on 3 Sep: 12:00 UTC is 00:45 on 4 Sep
+			expect(projectContext({ team: null, createdAt, timeZone: 'UTC' })).toBe('Personal project · created 4 Sep 2026 · time zone UTC');
+			process.env.TZ = 'America/St_Johns'; // UTC−2:30: 01:00 UTC on 3 Sep is still 2 Sep
+			expect(projectContext({ team: null, createdAt: '2026-09-03T01:00:00Z', timeZone: 'UTC' })).toBe('Personal project · created 2 Sep 2026 · time zone UTC');
+		} finally {
+			process.env.TZ = saved;
+		}
+	});
 
 	it('names the team, the day it was created and the time zone', () => {
 		expect(projectContext({ team: { name: 'North WUA' }, createdAt, timeZone: 'UTC' })).toBe('Team “North WUA” · created 3 Sep 2026 · time zone UTC');

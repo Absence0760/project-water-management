@@ -1,5 +1,6 @@
 import { availableParallelism } from 'node:os';
 import { defineConfig } from 'vitest/config';
+import { testTimeZone } from '../../scripts/test-tz.mjs';
 
 // Three projects:
 //   unit — correctness only, no wall-clock assertions (`pnpm test`).
@@ -10,6 +11,8 @@ import { defineConfig } from 'vitest/config';
 //          flake (`pnpm test:perf`, root `pnpm test:engine:perf`).
 export default defineConfig({
 	test: {
+		// A skewed time zone for every project (CLAUDE.md rule 7; scripts/test-tz.mjs).
+		env: { TZ: testTimeZone() },
 		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
 		// gate. No thresholds, on purpose: a number to hit invites tests written
 		// for the number. Read it for what no test reaches (docs/testing.md

@@ -93,6 +93,15 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # The vitest configs run every test in Pacific/Chatham (UTC+12:45/+13:45);
+      # this pass runs them again west of UTC, where a UTC midnight is the
+      # previous local day (CLAUDE.md rule 7; scripts/test-tz.mjs; guarded by
+      # scripts/guards/test_tz.test.mjs).
+      - name: Unit tests west of UTC
+        env:
+          TEST_TZ: America/St_Johns
+        run: pnpm test
+
       - name: Build
         run: pnpm build
 
