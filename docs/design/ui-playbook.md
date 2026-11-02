@@ -2142,6 +2142,14 @@ Interaction details that bit:
   `PublishedBaseline` have), never a sleep or a looser bound. Checks that
   can only fail for a real reason when the page grows (`scrollWidth <=
   width`) or that poll (`expect.poll`) don't need it.
+- **Read the boxes you compare in one go.** Two `boundingBox()` calls are
+  two round trips, and the page can move between them: a page loaded on a
+  `#anchor` holds the anchor at the top while the panels above it load
+  (`lib/nav/scrollHold.ts`), re-scrolling as each grows, so the Calibration
+  run line's picker and its Open in Runs & results read 78 px apart on CI
+  though they sit on one row. Compare positions with `boxesOf(a, b)`
+  (`e2e/support/reflow.ts`), which reads every box from the same layout;
+  `expectAbove` uses it.
 - **Modals make the page inert, but Playwright still sees it.** Scope
   locators to the dialog and close it before touching the page; duplicate
   names across page and modal cause strict-mode errors.

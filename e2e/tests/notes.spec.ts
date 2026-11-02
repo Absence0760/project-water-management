@@ -11,6 +11,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { acceptInvites, createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { boxesOf } from '../support/reflow.ts';
 
 test('a farm note shown to the farm reaches its farmer; a team note never does', async ({ page, owner, signIn }) => {
 	void owner;
@@ -98,7 +99,7 @@ test('a settings group and a run take notes, and the author edits and deletes th
 		await expect(lastInHead(id), id).toHaveAccessibleName(`Notes on ${group}`);
 	}
 	const reserveHead = page.locator('#set-reserve .panel-head').first();
-	const [add, notes] = [(await reserveHead.getByRole('button', { name: 'Add a rule table' }).boundingBox())!, (await reserveHead.locator('.notes-btn').boundingBox())!];
+	const [add, notes] = await boxesOf(reserveHead.getByRole('button', { name: 'Add a rule table' }), reserveHead.locator('.notes-btn'));
 	expect(add.x).toBeLessThan(notes.x);
 	// Label in Name (WCAG 2.5.3): the button shows "Notes", and its accessible name starts with it.
 	const reportingNotes = page.locator('#set-reporting .notes-btn');

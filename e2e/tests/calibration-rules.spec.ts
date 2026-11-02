@@ -8,6 +8,7 @@ import { anySaveBar, saveSettings, openFold } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { projectDay } from '../support/dates.ts';
 import { API_URL } from '../support/env.ts';
+import { boxesOf } from '../support/reflow.ts';
 
 test('the saved rules pick the fit on the server: a rule change needs saving first, and the kept fit is applied with its rules', async ({ page, owner }) => {
 	void owner;
@@ -246,7 +247,7 @@ test('with no flow record, the rules’ run says why beside it, and it and Fit a
 	await expect(why).toHaveText('There’s no observed or logger flow record to calibrate against yet. Add one on Data.');
 	await expect(run).toHaveAccessibleDescription(/^There’s no observed or logger flow record/);
 	// The reason sits straight under the button, not hundreds of pixels down.
-	const [b, w] = [(await run.boundingBox())!, (await why.boundingBox())!];
+	const [b, w] = await boxesOf(run, why);
 	expect(w.y - (b.y + b.height)).toBeLessThan(40);
 	await expect(why.getByRole('link', { name: 'Add one on Data' })).toHaveAttribute('href', '?tab=series');
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });

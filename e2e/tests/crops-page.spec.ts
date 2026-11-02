@@ -15,6 +15,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal, saveModelChanges } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { boxesOf } from '../support/reflow.ts';
 
 async function savedFactor(page: Page, projectId: string, crop: string, month: number): Promise<number> {
 	const res = await page.request.get(`${API_URL}/projects/${projectId}/model`);
@@ -318,7 +319,7 @@ test.describe('phone', () => {
 		await page.goto(`/projects/${project.id}?tab=crops`);
 		const rows = page.getByTestId('crop-row');
 		await expect(rows).toHaveCount(2);
-		const [a, b] = [(await rows.nth(0).boundingBox())!, (await rows.nth(1).boundingBox())!];
+		const [a, b] = await boxesOf(rows.nth(0), rows.nth(1));
 		expect(b.y).toBeGreaterThan(a.y + a.height - 1);
 		// Two crops fit: no Show all.
 		await expect(page.getByRole('button', { name: /^Show all/ })).toHaveCount(0);

@@ -10,7 +10,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { expectAbove, expectNoSidewaysScroll } from '../support/reflow.ts';
+import { boxesOf, expectAbove, expectNoSidewaysScroll } from '../support/reflow.ts';
 import { LONG_LABEL } from '../support/runs.ts';
 import { sectionHeader } from '../support/sectionHeader.ts';
 
@@ -92,7 +92,8 @@ test.describe('1440×960', () => {
 		const picker = page.locator('#cal-fit').getByRole('combobox', { name: 'Run', exact: true });
 		const open = page.locator('#cal-fit').getByRole('link', { name: 'Open in Runs & results' });
 		await expect(picker).toBeVisible();
-		const [pick, go] = [(await picker.boundingBox())!, (await open.boundingBox())!];
+		// Both boxes from one layout: the page re-scrolls to #cal-fit while the panels above it load (boxesOf).
+		const [pick, go] = await boxesOf(picker, open);
 		expect(Math.abs(pick.y + pick.height / 2 - (go.y + go.height / 2)), 'Open in Runs & results beside the picker').toBeLessThan(6);
 		// The details: one line, engine included, the whole name not repeated where the select shows it.
 		const line = page.getByTestId('calibration-run').locator('.run-line');

@@ -9,7 +9,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
 import { seedWhatIfs } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { layoutSettled } from '../support/reflow.ts';
+import { boxesOf, layoutSettled } from '../support/reflow.ts';
 import { openRiver, seedRiverProject } from '../support/river.ts';
 import { openSupply, seedSupplyProject } from '../support/supply.ts';
 
@@ -401,8 +401,8 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	const checks = page.getByRole('heading', { level: 2, name: 'Data checks' });
 	await expect(checks).toBeInViewport();
 	await expect(checks).toBeFocused();
-	const menuBox = (await menu.boundingBox())!;
-	expect((await checks.boundingBox())!.y).toBeGreaterThanOrEqual(menuBox.y + menuBox.height);
+	const [menuBox, checksBox] = await boxesOf(menu, checks);
+	expect(checksBox.y).toBeGreaterThanOrEqual(menuBox.y + menuBox.height);
 
 	// From 1440 px a column on the left, each link named as its panel's heading (issue #462).
 	await page.setViewportSize({ width: 1440, height: 960 });

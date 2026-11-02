@@ -13,6 +13,7 @@ import { addMember, createProject, putModel, sampleModel, updateSettings } from 
 import { answerConfirm, confirmBox } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { boxesOf } from '../support/reflow.ts';
 import { anySaveBar, isProjectPatch, openCalibration, openSettings, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 
 /**
@@ -234,8 +235,8 @@ for (const [id, heading] of PANELS) {
 		await expect(h).toHaveText(heading, { useInnerText: true });
 		await expect(h).toBeInViewport();
 		await expect(h).toBeFocused();
-		const bar = (await settingsMenu(page).boundingBox())!;
-		expect((await h.boundingBox())!.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+		const [bar, hBox] = await boxesOf(settingsMenu(page), h);
+		expect(hBox.y).toBeGreaterThanOrEqual(bar.y + bar.height);
 	});
 }
 
@@ -252,8 +253,8 @@ for (const [id, heading] of [...CAL_PANELS, ...INNER.map(([i, h]): [string, stri
 		await expect(h).toHaveText(heading, { useInnerText: true });
 		await expect(h).toBeInViewport();
 		await expect(h).toBeFocused();
-		const bar = (await page.getByRole('navigation', { name: 'Calibration sections' }).boundingBox())!;
-		expect((await h.boundingBox())!.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+		const [bar, hBox] = await boxesOf(page.getByRole('navigation', { name: 'Calibration sections' }), h);
+		expect(hBox.y).toBeGreaterThanOrEqual(bar.y + bar.height);
 	});
 }
 
