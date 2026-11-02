@@ -513,7 +513,7 @@ def main(argv=None) -> int:
     ap.add_argument("--probes", default=None,
                     help="only the probes whose name contains one of these comma-separated strings ('' for none)")
     ap.add_argument("--mutants", default=None,
-                    help="instead of the report, run test_verify.py's mutants whose description contains this text "
+                    help="instead of the report, run the mutants (mutants.py) whose description contains this text "
                     "on these cases and say which are caught (a targeted self-test)")
     ap.add_argument("--keep", type=Path, default=None, help="keep inputs and outputs here")
     ap.add_argument("--verbose", action="store_true", help="list series only the engine outputs")
@@ -528,9 +528,9 @@ def main(argv=None) -> int:
         pf = None if args.probes is None else [f for f in args.probes.split(",") if f]
         cases = build_cases(tmp, args.random, args.seed, not args.no_examples, args.dense, args.workers, pf)
         if args.mutants is not None:
-            import test_verify
+            from mutants import MUTANTS
 
-            mine = [m for m in test_verify.MUTANTS if args.mutants in m[0]]
+            mine = [m for m in MUTANTS if args.mutants in m[0]]
             edit_lists = [[tuple(e)] if isinstance(e[0], str) else list(e) for _, *e in mine]
             results = mutants_caught(cases, edit_lists, args.workers)
             missed = 0

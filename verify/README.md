@@ -39,6 +39,7 @@ returns. It imports the engine by path and the example catchments from
 | `probes.py` | Hand-built inputs, each pinning a point the docs left open (§ Findings), and a few coverage probes for rules the random networks rarely reach |
 | `diff.py` | Runs both sides on the examples, the probes and N random and dense networks and prints, per column, the largest absolute and relative difference, the known differences and a coverage count |
 | `test_verify.py` | The guard: agreement, the mutation self-test and the generator's scope |
+| `mutants.py` | The mutation self-test's mutants (`MUTANTS`), apart so `test_verify.py` and `diff.py --mutants` both read them without importing each other |
 
 ## Running it
 
@@ -573,7 +574,7 @@ empty, and no other disagreement is allowed.
 
 Agreement only means something if the cases exercise the rules. So
 `test_verify.py` breaks `model.py` one documented rule at a time (235
-mutants; phase 2b's 43 are listed under its features in `test_verify.py`:
+mutants; phase 2b's 43 are listed under its features in `mutants.py`:
 the daily A-pan record's 7, the demand factors by part and dated windows' 8,
 land cover's 9 and development during a run's 19). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
