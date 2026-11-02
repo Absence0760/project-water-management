@@ -1753,6 +1753,11 @@ these lines draw is one a click can go on, both at 1 km²).
   area at its lower end (window-local: a river entering from beyond the
   window carries less than it drains). A tile keeps the steps that start
   inside it, so tiles meet without overlapping. Simplified by half a cell.
+  No channel is drawn on the sea (a cell at 0 m or below, read before the
+  fill, `withSea`): the DEM holds the ocean as a flat at 0 m, which the
+  fill tilts by ε and D8 then followed in long straight lines out to the
+  window's edge, striping the sea off every coast. A river's line now ends
+  at the coast; the routing and the areas are unchanged.
 - **Precomputed** (`delineation/channelArchive.ts`,
   `backend/scripts/channels-build.ts`, the Map's `channelArchive.ts`). The
   same tiles, built once per DEM by the same `channelTile` with the same

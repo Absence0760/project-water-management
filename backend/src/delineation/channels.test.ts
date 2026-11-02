@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseTile } from './channelRoutes.js';
-import { channelTile, CHANNEL_TILE_DEG, tileBounds, traceChannels } from './channels.js';
+import { channelTile, CHANNEL_TILE_DEG, tileBounds, traceChannels, withSea } from './channels.js';
 import { openDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
 import { DAM_CELL, fixtureLonLat } from './fixture.js';
@@ -58,6 +58,25 @@ describe('traceChannels', () => {
 	it('draws nothing below the threshold', () => {
 		const g = grid();
 		expect(traceChannels(g.nx, g.ny, g.dir, g.acc, g.edge, 1000, () => true)).toEqual([]);
+	});
+});
+
+describe('withSea', () => {
+	it('draws no channel on the sea: the river stops at the coast, nothing crosses the water', () => {
+		const g = grid();
+		// Rows 5 and 6 are sea (0 m or below), the rest land; NaN (no data) is not sea.
+		const z = new Float64Array(g.nx * g.ny).fill(40);
+		for (let i = 5 * g.nx; i < 7 * g.nx; i++) z[i] = i % 2 ? 0 : -3;
+		z[1] = Number.NaN;
+		const stop = withSea(g.edge, z);
+		expect(stop[1]).toBe(g.edge[1]);
+		expect(g.edge[5 * g.nx + 4]).toBe(0); // the input is untouched
+		const runs = traceChannels(g.nx, g.ny, g.dir, g.acc, stop, 5, () => true);
+		expect(runs.length).toBeGreaterThan(0);
+		for (const r of runs) for (const c of r.cells) expect(Math.floor(c / g.nx)).toBeLessThan(5);
+		// Without the sea mask the river runs on across rows 5 and 6.
+		const open = traceChannels(g.nx, g.ny, g.dir, g.acc, g.edge, 5, () => true);
+		expect(open.some((r) => r.cells.some((c) => Math.floor(c / g.nx) >= 5))).toBe(true);
 	});
 });
 

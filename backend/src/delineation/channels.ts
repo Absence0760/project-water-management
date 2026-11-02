@@ -28,6 +28,8 @@ export const CHANNEL_TILE_DEG = 0.2;
 export const CHANNEL_WINDOW = 1024;
 /** The least upstream area a drawn channel has (km²): below it, cells are hillside, not channel. */
 export const CHANNEL_MIN_KM2 = 1;
+/** At or below this (m) a cell is sea: the DEM's ocean is 0 m, and no land in the region lies below sea level. */
+export const SEA_LEVEL_M = 0;
 
 export interface ChannelLine {
 	coordinates: Position[];
@@ -106,6 +108,20 @@ export function traceChannels(
 	return out;
 }
 
+/**
+ * `edge` with every sea cell marked too, so no channel is drawn on it. The
+ * DEM holds the sea as data at 0 m or below (flow.ts edgeMask), and the fill
+ * turns that flat into an ε slope D8 follows in long straight lines out to
+ * the window's edge: drawn, they striped the ocean. A river's line now ends
+ * at the coast. Only the drawing changes; the fill and the areas don't.
+ * Pure, so vitest checks it.
+ */
+export function withSea(edge: Uint8Array, z: Float64Array): Uint8Array {
+	const out = edge.slice();
+	for (let i = 0; i < out.length; i++) if (z[i]! <= SEA_LEVEL_M) out[i] = 1;
+	return out;
+}
+
 /** Route the tile's window and trace its channels. Throws DelineationRefused outside the DEM or with no data. */
 export async function channelTile(dem: Dem, tile: [number, number], opts: { window?: number; minKm2?: number } = {}): Promise<ChannelTile> {
 	const info: DemInfo = await dem.info();
@@ -127,6 +143,8 @@ export async function channelTile(dem: Dem, tile: [number, number], opts: { wind
 	const y0 = Math.floor(gy) - nCells / 2;
 	const grid = await readWindow(dem, z, here.size, x0, y0, nCells);
 	const edge = edgeMask(grid);
+	// Read before the fill, which raises the sea's flat to an ε gradient that D8 then routes across in straight lines.
+	const stop = withSea(edge, grid.z);
 	fill(grid, edge);
 	const dir = d8(grid, edge);
 	const acc = accumulate(nCells, nCells, dir);
@@ -139,7 +157,7 @@ export async function channelTile(dem: Dem, tile: [number, number], opts: { wind
 		const py = y0 + y + 0.5;
 		return px >= bx0 && px < bx1 && py >= by0 && py < by1;
 	};
-	const runs = traceChannels(nCells, nCells, dir, acc, edge, Math.max(1, Math.ceil(minKm2 / cellKm2)), inside);
+	const runs = traceChannels(nCells, nCells, dir, acc, stop, Math.max(1, Math.ceil(minKm2 / cellKm2)), inside);
 	const lines: ChannelLine[] = runs.map((r) => {
 		const pts: Pt[] = r.cells.map((c) => [(c % nCells) + 0.5, Math.floor(c / nCells) + 0.5]);
 		return { coordinates: simplifyLine(pts, 0.5).map(([x, y]) => toLonLat(x0 + x, y0 + y, W)), km2: Math.round(r.acc * cellKm2 * 100) / 100 };
