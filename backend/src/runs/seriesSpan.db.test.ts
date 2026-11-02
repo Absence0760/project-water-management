@@ -3,7 +3,7 @@
 // chirpsSeriesChoice), the series a run reads (feeds/store.ts runSeries) and a
 // feed's target (targetSeries). They read the array in one pass (unnest WITH
 // ORDINALITY) since subscripting it once a day detoasted it once a day: 6.8 s
-// of a 16 161-day record's run (docs/followups.md § V1 run budget). The days
+// of a client-sized run (docs/followups.md § V1 run budget). The days
 // counted are the ones with a value, so leading and trailing NULLs don't count
 // and a series of NULLs has none.
 import { beforeAll, describe, expect, it } from 'vitest';

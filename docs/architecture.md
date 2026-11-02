@@ -673,7 +673,8 @@ connection, and with it any locks and snapshot, for the whole run (issue
    its outputs and stored inputs, the trim and the read-back. The outputs go
    as binary arrays, constant ones built in the server, and the stamp is
    signed from the bytes sent (data-model.md § Time-series storage, 304): a
-   client-sized run (432 series of 16 161 days) stores in ~0.5 s.
+   client-sized run (400-odd series of some 16 000 days each) stores in
+   ~0.5 s.
 
 Between steps 1 and 3 the world may move:
 

@@ -309,18 +309,19 @@ The checklist for these is issue #62; the history scrub is #63.
 
 The V1 acceptance criterion "a run finishes in under 2 s including storage"
 (plan.md Phase 1) is measured by `runs/load.db.perf.test.ts` (`V1 demo
-budget`, `pnpm test:backend:perf:db`, run alone): an invented catchment of
-the client's size (13 nodes, 9 crops, 23 planted areas, one transfer, four
-daily records of 16 161 days) through `POST /projects/:id/runs`, median of 5.
+budget`, `pnpm test:backend:perf:db`, run alone): an invented catchment about
+the client's size (a dozen or so nodes, several crops on a couple of dozen
+planted areas, one transfer, four daily records of 16 000 days, about four
+and a half decades) through `POST /projects/:id/runs`, median of 5.
 It measured **11.1 s** on the dev laptop on 2026-11-01, and **1.5 s** (1.85,
-1.51, 1.52, 1.42, 1.65 s) after the fixes below. Each run stores 432 series,
+1.51, 1.52, 1.42, 1.65 s) after the fixes below. Each run stores 400-odd series,
 ~22 MB in `run_series`.
 
 - [x] Cut the storage cost (2026-11-01, 304_run_series_store_cost.sql). The
       profile split the 11.1 s differently from the first guess ("~7.5 s
       storing"): **6.8 s** was one input query, `chirpsSeriesChoice`, which
       found a series' first and last filled day by subscripting the array once
-      a day, detoasting all 16 161 days each time (now one `unnest … WITH
+      a day, detoasting the whole record each time (now one `unnest … WITH
       ORDINALITY` pass, 3 ms; the feeds' `runSeries` and `targetSeries` had
       the same pattern and the same fix). Storing was **3.7 s**: 1.2 s of
       Node formatting ~95 MB of array text, the server parsing it and

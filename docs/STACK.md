@@ -271,7 +271,7 @@ pnpm check:renderer-image   # build the report renderer's container image and sm
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
                              # check:pins also refuses any workflow `services:` image (serviceImageProblems): one is pulled from its registry on every run, which Docker Hub and ECR Public refused (issues #492, #521); CI starts docker-compose.yml's services through scripts/ci/service-image.sh, so a Dependabot compose bump moves CI with it
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
-pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
+pnpm test:guards            # node:test suites for scripts/guards, scripts/git-hooks, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~11 min on VERIFY_WORKERS=4, the default cap)
 pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Python 3.14; seconds)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)

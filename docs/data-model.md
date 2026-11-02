@@ -195,8 +195,9 @@ ORDINALITY` (fine for occasional reports).
 
 In SQL, read an array in one pass (`unnest("values") WITH ORDINALITY`), never
 by subscripting it once a day (`"values"[i]` over `generate_subscripts`):
-each subscript of a TOASTed array detoasts the whole array, so a 16 161-day
-record's first and last filled day took 6.8 s that way (a client-sized run's
+each subscript of a TOASTed array detoasts the whole array, so finding the
+first and last filled day of a daily record of some 16 000 days took 6.8 s
+that way (a client-sized run's
 CHIRPS choice, `chirpsSeriesChoice`, and the feeds' `runSeries` /
 `targetSeries`; fixed, `runs/seriesSpan.db.test.ts`).
 

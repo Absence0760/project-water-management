@@ -14,10 +14,11 @@
 // And the V1 demo's budget (docs/plan.md Phase 1 acceptance): a catchment the
 // size of the client's runs in under 2 s including storage. The client data
 // can't be committed (the repo is public), so the catchment here is invented
-// at the same shape: an outlet gauge and 12 units with dams on two
-// tributaries, 9 crops on 23 planted areas, one transfer, and four daily
-// records (rain, CHIRPS rain, gauge and logger flow) of 16 161 days, about 44
-// years. Measured through the same API call a user makes, which runs the
+// at about the same shape, never its exact figures: an outlet gauge and a
+// dozen units with dams on two tributaries, several crops on a couple of dozen
+// planted areas, one transfer, and four daily records (rain, CHIRPS rain,
+// gauge and logger flow) of 16 000 days, about four and a half decades.
+// Measured through the same API call a user makes, which runs the
 // engine and stores the run and its series before it answers.
 //
 // Its own vitest project (`perf-db`, vitest.config.ts): wall-clock budgets
@@ -141,7 +142,9 @@ describe('60-farm load checks (WP-2.16)', () => {
 	}, 600_000);
 });
 
-const V1_DAYS = 16_161; // 1981-01-01 on, the client record's length
+// A round span about as long as a client record (16 000 days from 1981-01-01
+// end in October 2024), not the record's exact length.
+const V1_DAYS = 16_000;
 const V1_START = '1981-01-01';
 const V1_BUDGET_MS = 2_000;
 const V1_RUNS = 5;
@@ -196,7 +199,7 @@ describe('V1 demo budget (plan.md Phase 1 acceptance)', () => {
 		}
 	}, 600_000);
 
-	it(`a run of a client-sized catchment (13 nodes, ${V1_DAYS} days) finishes, stored, in under ${V1_BUDGET_MS / 1000} s (median of ${V1_RUNS})`, async () => {
+	it(`a run of a client-sized catchment (a dozen units, ${V1_DAYS} days) finishes, stored, in under ${V1_BUDGET_MS / 1000} s (median of ${V1_RUNS})`, async () => {
 		const ms: number[] = [];
 		const cpu: number[] = [];
 		for (let i = 0; i < V1_RUNS; i++) {
