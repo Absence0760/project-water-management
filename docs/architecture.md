@@ -670,7 +670,10 @@ connection, and with it any locks and snapshot, for the whole run (issue
 2. **Compute**, with no transaction open. The engine is synchronous, so a
    run still occupies the Node thread. Only the database is freed.
 3. **Store**, in a new transaction: the role check again, then the run,
-   its outputs and stored inputs, the trim and the read-back.
+   its outputs and stored inputs, the trim and the read-back. The outputs go
+   as binary arrays, constant ones built in the server, and the stamp is
+   signed from the bytes sent (data-model.md § Time-series storage, 304): a
+   client-sized run (432 series of 16 161 days) stores in ~0.5 s.
 
 Between steps 1 and 3 the world may move:
 

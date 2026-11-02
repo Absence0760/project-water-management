@@ -228,8 +228,8 @@ workbook (as in 1a) with **no manual edits**.
       Shortfalls table appear, and a run finishes in under 2 s including storage.
       The 2 s is measured by `runs/load.db.perf.test.ts` (`pnpm
       test:backend:perf:db`) on an invented catchment of the client's size,
-      and **fails**: ~11 s on the dev laptop (2026-11-01), most of it storing
-      the run's series ([followups.md § V1 run budget](./followups.md#v1-run-budget)).
+      and passes: 1.5 s on the dev laptop (2026-11-01; ~11 s before the
+      fixes in [followups.md § V1 run budget](./followups.md#v1-run-budget)).
 - [x] Projects A, B, C exist side by side. Creating D and copying C both work.
       *`e2e/tests/projects.spec.ts` "several projects for one place: create,
       copy, delete"; `projects/projects.db.test.ts` (`POST …/copy`).*

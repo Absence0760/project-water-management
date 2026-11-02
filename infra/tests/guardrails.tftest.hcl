@@ -3438,6 +3438,21 @@ run "mail_failures_and_log_privacy" {
     )
     error_message = "mail_send_failed must be counted from both the API's and the worker's log group, by the exact event name trySendMail logs."
   }
+  # A run stamp that drifted from the stored bytes (304, runs/stamp.ts) pages, from either Lambda that stores runs.
+  assert {
+    condition = (
+      toset([for f in aws_cloudwatch_log_metric_filter.run_stamp_drift : f.log_group_name]) == toset([aws_cloudwatch_log_group.lambda.name, aws_cloudwatch_log_group.worker.name]) &&
+      alltrue([for f in aws_cloudwatch_log_metric_filter.run_stamp_drift :
+        f.pattern == "{ $.message.event = \"run_stamp_drift\" }" &&
+        f.metric_transformation[0].name == aws_cloudwatch_metric_alarm.run_stamp_drift[0].metric_name &&
+        f.metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.run_stamp_drift[0].namespace
+      ]) &&
+      aws_cloudwatch_metric_alarm.run_stamp_drift[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.run_stamp_drift[0].comparison_operator == "GreaterThanThreshold" &&
+      contains(aws_cloudwatch_metric_alarm.run_stamp_drift[0].alarm_actions, aws_sns_topic.alerts.arn)
+    )
+    error_message = "run_stamp_drift must be counted from the API's and the worker's log group, by the exact event name stampRun logs, and one must page the alerts topic."
+  }
   assert {
     condition = alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed :
       f.metric_transformation[0].name == aws_cloudwatch_metric_alarm.mail_send_failed[0].metric_name &&

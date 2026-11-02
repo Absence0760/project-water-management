@@ -206,7 +206,7 @@ The checklist for these is issue #62; the history scrub is #63.
       the reboot and `postapply-check.sh --rds-event-test` (infra/README.md
       § Operator steps, step 10c): the topic policy's `aws:SourceArn`
       condition can't be proven by a plan.
-- [x] **Confirm the database's KMS key before the first apply (#126,
+- [ ] **Confirm the database's KMS key before the first apply (#126,
       2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
       customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
       sharing and AWS Backup cross-account copies possible, for $1–3 a month.
@@ -218,10 +218,7 @@ The checklist for these is issue #62; the history scrub is #63.
       logging write management events (KMS not excluded) covers the region
       before the first apply**, preferably the Organization trail from the
       management account; `preapply-check.sh`'s `cloudtrail` check FAILs
-      until one does (infra/README.md § Operator steps, step 7a). — *Moot
-      since the first apply (2026-10-05): the instance exists, so the key
-      can no longer be changed, and `preapply-check.sh` (cloudtrail check
-      included) passed before that apply.*
+      until one does (infra/README.md § Operator steps, step 7a).
 - [x] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
@@ -271,7 +268,7 @@ The checklist for these is issue #62; the history scrub is #63.
       issues #1–77 on their old numbers, and `pnpm check:terms` passes on
       its tree and history (checked from a fresh mirror clone).
 
-- [x] **GitHub plan.** The repo is private on a free plan, so:
+- [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
         the release preflight refuses every release;
       - CodeQL and Scorecard fail on every push;
@@ -283,9 +280,7 @@ The checklist for these is issue #62; the history scrub is #63.
         had a CI run; #20, #60 and #61 were merged on local checks only).
 
       Make the repo public (after the history scrub above) or upgrade the plan. Then
-      make `CI gate` a required check. — *Done: the repo is public, CI runs
-      green on every push to `main`, and `main`'s branch protection requires
-      `CI gate` (checked 2026-11-01).*
+      make `CI gate` a required check.
 - [x] **Client names (WP-1.7).** The tree and the history are scrubbed
       (2026-09, `git filter-repo --replace-text`). The repo was then
       recreated from the clean history, because GitHub keeps old commits
@@ -308,23 +303,48 @@ The checklist for these is issue #62; the history scrub is #63.
 ## V1 run budget
 
 The V1 acceptance criterion "a run finishes in under 2 s including storage"
-(plan.md Phase 1) does not hold. `runs/load.db.perf.test.ts` (`V1 demo
-budget`, `pnpm test:backend:perf:db`, run alone) runs an invented catchment of
+(plan.md Phase 1) is measured by `runs/load.db.perf.test.ts` (`V1 demo
+budget`, `pnpm test:backend:perf:db`, run alone): an invented catchment of
 the client's size (13 nodes, 9 crops, 23 planted areas, one transfer, four
-daily records of 16 161 days) through `POST /projects/:id/runs` and measured
-a median of **11.1 s** (12.1, 11.1, 11.0, 11.0, 11.1 s) on the dev laptop on
-2026-11-01, Node CPU 3.4 s of it. Each run stores 432 series, ~22 MB in
-`run_series`, so about 7.5 s is Postgres taking the series
-(`runs/execute.ts` `storeRun`: batched `INSERT`s of `float8[]` parameters,
-sent as text). The test stays red; the budget is not to be loosened.
+daily records of 16 161 days) through `POST /projects/:id/runs`, median of 5.
+It measured **11.1 s** on the dev laptop on 2026-11-01, and **1.5 s** (1.85,
+1.51, 1.52, 1.42, 1.65 s) after the fixes below. Each run stores 432 series,
+~22 MB in `run_series`.
 
-- [ ] Cut the storage cost. Durable options, to measure in the perf test:
-      send the arrays in binary (`COPY … FROM STDIN BINARY`, or a bytea of
-      packed float64/float32) instead of text arrays; store fewer series per
-      run (derive the per-node series a view never asks for on read); or
-      store a run's series once as one compressed blob (S3 or `series_blob`)
-      and read slices from it. Then the engine's 3.4 s CPU (a second budget).
-      Trigger: before the client demo, or before tick of plan.md's criterion.
+- [x] Cut the storage cost (2026-11-01, 304_run_series_store_cost.sql). The
+      profile split the 11.1 s differently from the first guess ("~7.5 s
+      storing"): **6.8 s** was one input query, `chirpsSeriesChoice`, which
+      found a series' first and last filled day by subscripting the array once
+      a day, detoasting all 16 161 days each time (now one `unnest … WITH
+      ORDINALITY` pass, 3 ms; the feeds' `runSeries` and `targetSeries` had
+      the same pattern and the same fix). Storing was **3.7 s**: 1.2 s of
+      Node formatting ~95 MB of array text, the server parsing it and
+      compressing with pglz (3.4 s for the insert in all), and 0.33 s
+      stamping, 0.3 s of it `array_send` re-reading every value to hash it.
+      Now the arrays go in binary (`db/float8Array.ts`), constant series
+      (113 of 432) are built in the server with `array_fill`, the column
+      compresses with lz4, and the stamp is signed from the hashes of the
+      bytes sent (`app_run_signing_digest`, 12 ms): insert ~0.5 s, the run
+      ~1.5 s, the column, values, readers and every digest unchanged
+      (data-model.md § Time-series storage). Rejected: `COPY … BINARY`
+      (Postgres refuses `COPY FROM` into a table with RLS for a role it
+      applies to); a packed-bytea or S3 blob (WP-4.9) would change every
+      reader of `run_series`, many in SQL functions, for ~0.3 s more.
+- [ ] **The engine is now most of a run: ~0.85 s of the 1.5 s** (the run
+      itself and its self-checks, `verify/checks.ts` ~0.3 s), and the
+      measured Node CPU (~2 s, GC threads included) scales to ~3 s on the
+      API Lambda's 0.58 vCPU. The local criterion holds with ~25 % headroom;
+      a busier laptop or a bigger catchment eats it. Durable fix: profile the
+      engine's self-checks (run them once per run, not per pass, or sample
+      them) before adding more per-day work. Trigger: the V1 test's median
+      passing 1.8 s, or a Lambda run of a client-sized catchment over 3 s.
+- [ ] **Verifying a run still re-hashes its rows** (`app_run_digest`, 0.3 s
+      for a client-sized run) on every `GET …/runs/:runId`, sign-off and
+      decision. Fine for one run; a list that verified many would not be.
+      Durable fix if it's ever needed: a per-series hash kept by a trigger
+      (`BEFORE INSERT OR UPDATE`, which `water_app` can't bypass), so the
+      digest reads 432 hashes instead of 7 million values. Trigger: a route
+      that verifies more than a handful of runs at once.
 
 ## The rain data copy (issue #604)
 
@@ -343,21 +363,23 @@ provenance, `ingest/verify_copy.py`):
       `dws_source = "store"`, whose apply removes the per-feed queues
       ([deployment.md § The cutover](./deployment.md#the-cutover)). Each
       `terraform apply` with the operator's go-ahead.
-- [x] **The daily rnl and sat runs give up the day when the fetcher holds
-      CHC's slot.** Done: a daily run that finds the slot held reserves the
-      next turn (`reserved.json`, renewed every 15 s, never over another
-      waiter's live reservation) and waits inside its own 900 s run until
-      120 s before its deadline (`ingest/lease.py` `hold_host_waiting`,
-      `lambda_handler.py` `DAILY_RUN_WORK_S`), which outlasts one per-feed
-      fetch (524–707 s seen); the next fetch yields the freed slot to it. It
-      doesn't wait out a backfill execution's hold. No Terraform change (an
-      async retry or a second schedule would need one, and a 5-minute
-      reservation would lapse before a second rule fired); it ships with the
-      ingest image ([deployment.md § Backfill](./deployment.md#backfill)).
-      Left as accepted: a fetch that took the slot just before the run
-      started can still outlast the wait, and that day's run then ends
-      `busy`, the next day's catching up (finals arrive once a month, so the
-      cost is at most a day's delay of one file).
+- [ ] **The daily rnl and sat runs give up the day when the fetcher holds
+      CHC's slot.** `ingest/lambda_handler.py` ends a daily run on
+      `HostBusy` ("tomorrow's run catches up"), and per-feed CHIRPS fetches
+      go back to back while a backfill runs (each takes the slot for its 8–10
+      minutes, `feeds/hostSlot.ts`), so on 2026-10-29 both runs (02:00Z,
+      02:20Z) found it held; while the scheduler re-queued failing feeds
+      (fixed in 276_feed_fetch_out_hold) that would have been every day. A
+      per-feed backfill (unit `rnl` feeds from their start date) can still
+      hold the slot most of the day for days. Durable fix: the daily runs
+      reserve the next turn as a backfill month does (`lease.py`
+      `hold_host` taking the backfill's `reserve=True`; the fetcher already yields to a live
+      reservation, `hostSlot.ts yieldToReservation`) and are invoked again
+      ~20 minutes later (a second EventBridge schedule, or the Lambda's own
+      async retry), by which time the fetch holding the slot has ended and
+      the next one has yielded. Trigger: before the cutover, since the copy
+      must keep up for `chirps_source = "mirror"`; until then the next
+      daily run after the backfill ends catches up the missed days.
 - [x] **The portfolio counts a copy-behind feed as stale.** Done: the
       portfolio and project-list routes pass `rainCopy(db)` into
       `loadPortfolio`/`loadMyOutcomes`, which count such feeds in a new
@@ -469,15 +491,12 @@ provenance, `ingest/verify_copy.py`):
       anything else. **Trigger:** the CDS account (#618 7b–7d), then one
       `agera5_et0` backfill month and one `power_et0` run with the
       operator; fix what the reader refuses, then switch the schedules on.
-- [x] **The catchment boundary's proposal for a reference ET feed
-      (2026-11-01).** Done: Data feeds → Attach a feed → Source *AgERA5 …*
-      → Area *The catchment boundary, from the map* proposes the boundary's
-      cells on our copy's own 0.1° grid (`…/feeds/agera5_et0/from-boundary`,
-      one code path with CHIRPS's in `feeds/fromBoundary.ts`, cells cut by
-      `boundaryCells.ts ET0_GRID`), into `evap_et0_mm`, with no daily product
-      ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary),
-      *Reference ET from the boundary*). Each unit's parcel stays CHIRPS
-      only: a unit's own series is rain (209_unit_rain_series).
+- [ ] **The catchment boundary's proposal for a reference ET feed.** The
+      Data feeds form proposes the boundary's cells (and each unit's) for
+      CHIRPS only, so an `agera5_et0` feed is attached by cells or a box.
+      **Durable fix:** offer the boundary's proposal for `agera5_et0` too
+      (`feeds/fromBoundary.ts` is CHIRPS-specific in its source and target).
+      **Trigger:** the first project that adds a reference ET feed.
 - [x] **Credit AgERA5 and NASA POWER in a run's report and exports
       (2026-10-30).** Done: a run records `et0Products` from the feed's
       days GR4J read, and the report, CSVs, workbook, evidence pack README
@@ -678,7 +697,7 @@ plan stays on the issue. Found while building:
       us-west-2 (deployment.md § NEX-GDDP-CMIP6 (one-off)), records the result
       on #621, and pins each model's variant in `MODELS` and the register's
       table. Trigger: before the first `copy`, with the operator's go-ahead.
-- [x] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
+- [ ] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
       cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returns 404. Slice 4 built
       § 8 with a marked placeholder (`FUTURE_YIELD_CAVEAT.nasa` in
       `packages/engine/src/evidence/future.ts`), and its `futureYield` check
@@ -687,7 +706,6 @@ plan stays on the issue. Found while building:
       current tech note, quote its engineering-use caveat word for word in
       that constant and in data-sources.md, with the URL and the date read.
       Trigger: before `FUTURE_YIELD=on` in production.
-      **Done (2026-11-01):** § 5.1 *Recommended Use* of the NEX-GDDP-CMIP6 v2 Tech Note (May 31, 2025), quoted whole in `FUTURE_YIELD_CAVEAT.nasa` and data-sources.md § nex-gddp-cmip6, read 2026-11-01; the v1 note (now at `uploads/2024/03/`) has the same words. No `ENGINE_VERSION` bump: no run result moves.
 - [x] **§ 8 has no Run button.** The future yield is queued by
       `POST /projects/:id/runs/:runId/future-yield` (an editor); the
       evidence report's § 8 says *Not assessed* until then but offers no
@@ -2787,24 +2805,15 @@ Still open:
       input that uses it. To add, each from its model.md section, with
       random-generator coverage (dense networks too), a probe for anything
       the docs leave open and a mutant per rule
-      ([verify/README.md § Phase 2b](../verify/README.md#phase-2b-not-covered-yet)).
-      **Done (2026-11-01, engine 1.110.0):** the daily A-pan record
-      (§2.3a), demand factors by part and dated demand factors (§2.3 item
-      4a), land cover (§2.5a) and development during a run (§2.7g), each with
-      generator coverage, probes and mutants, all agreeing with `runModel`;
-      the points the docs left open were settled from its outputs and
-      written into §2.3a, §2.5a and §2.7g (no engine change); drought
-      restrictions are now refused by `unsupported()` instead of silently
-      disagreeing ([verify/README.md § What phase 2b covers so far](../verify/README.md#what-phase-2b-covers-so-far)).
-      **Left:** drought restrictions (§2.7i, with a Priority user's fixed
-      restriction %), Reserve rule tables A1–A7 (§2.9c–d), forecast mode
-      (§2.4f), calibration (§2.10, §2.10b), rain-source periods (§2.4e), the
-      areal correction (§2.4g), CHIRPS fit ranges (§2.4b), the CHIRPS
-      quantile map (CR-23), keep-dry and listed accumulations (§2.4c–d), the
-      non-default data-quality limits (§2.10a), scenario ops other than
-      `climate.delta`, the outlook-only settings and the pinned factors.
-      Suggested next slice: drought restrictions (the largest daily
-      behaviour left), then rain-source periods and CHIRPS fit ranges. **Trigger:** the
+      ([verify/README.md § Phase 2b](../verify/README.md#phase-2b-not-covered-yet)):
+      demand factors by part (`partDemandFactor`, the `demand.scale` op with
+      a part, merged in #252), dated demand factors (`demandFactorWindows`,
+      the op with `from`/`to`, engine 1.82.0, #514), drought restrictions (once #258 merges),
+      Reserve rule tables A1–A7 (§2.9c–d), forecast mode (§2.4f),
+      calibration (§2.10, §2.10b), land cover (§2.5a), time-varying
+      development (§2.7g), rain-source periods, the areal correction, the
+      daily A-pan, CHIRPS fit ranges, the CHIRPS quantile map (CR-23),
+      keep-dry and the non-default data-quality limits. **Trigger:** the
       next engine change to any of these features (its PR adds that feature
       to `verify/` first, so the change lands against an independent
       reading), #258 merging (drought restrictions), or before the first
@@ -3446,40 +3455,26 @@ yet; each lands with the work package named.
       e2e shards against the farm API and the seeded publication (1ab1896b,
       de671eb2).
 
-- [x] **A unit with demands on both its dam and the river: which side was
+- [ ] **A unit with demands on both its dam and the river: which side was
       short** (persona-farmer, round 4, 2026-10-02). Since engine 1.65.0
       (model.md §2.7j) a unit's crops or demand objects can each draw on a
-      river abstraction beside its dam, and the farm page's "Short on N days
-      …" line counted a short day "when your dam was down to its stop
-      level" whenever the dam sat there, whichever side was short. Done in
-      engine 1.111.0: every river abstraction publishes its unmet demand
-      after any drought restriction (`river_short@<key>`; take + short = the
-      cut demand, held by `checkWorkings` and a random-network invariant),
-      the farm projection loads it beside `river_take@` and counts the dam
-      side's and the river side's short days apart
-      (`season.shortDaysRiver`, `shortDaysBoth`; `shortDaysAtStopLevel` now
-      only the dam side's own), and the card gets the river reason ("…
-      when the river or your pump couldn't give enough", both sides' counts,
-      "Both were short on N days."; Afrikaans through the i18n agents). A
-      view from an older run has no split and reads as before (ui.md §
-      Farmer view).
-- [ ] **A short day on the crops' share from another unit's dam is put
-      down to this unit's dam** (engine-reviewer on PR #693, 2026-11-02;
-      predates it). The farm projection's dam-side shortfall is what is
-      left of the unit's shortfall once the river abstractions' unmet
-      demand (`river_short@`) is taken off. On a unit whose crops take a
-      share from another unit's dam (the crop supply table's remote share,
-      `remote_dam_in`, model.md §2.7k), that remainder also holds the
-      remote share's shortfall, so with this unit's dam at its stop level
-      the farm page reads "when your dam was down to its stop level" for a
-      day the other dam fell short. Durable fix: a per-side shortfall for
-      the remote share (the engine publishes what the remote share was
-      asked for after the restriction less what it got, an ENGINE_VERSION
-      bump, as `river_short@` does for the river side), the projection
-      takes it off the dam side's remainder, and the card gets a third
-      reason ("… when the other dam couldn't give enough", through the
-      i18n agents). Trigger: the client's first unit with a remote crop
-      share and a dam of its own is published to its farmer.
+      river abstraction beside its dam. The farm page's "Short on N days …"
+      line still counts a short day "when your dam was down to its stop
+      level" whenever the dam sat there, whichever side was short; a unit
+      whose demands *all* draw on the river is already right
+      (`season.onlyRiver`, the river's wording), and the dam's days left
+      already divide by the dam's own draw (`damDraw`). What's missing is a
+      per-side shortfall: the run publishes each abstraction's take
+      (`river_take@`) but not what it was asked for after a drought
+      restriction (the stored `object_demand@` is before the cut), so the
+      projection can't tell a river-side shortfall from a dam-side one
+      without guessing. Durable fix: the engine publishes each river
+      abstraction's unmet demand (`river_short@<key>`, an ENGINE_VERSION
+      bump), the projection counts the dam side's and the river side's
+      short days apart, and the card gets a river reason ("… when the
+      river or your pump couldn't give enough", through the i18n agents).
+      Trigger: the client's first unit with both a dam-side and a
+      river-side demand is published to its farmer.
 
 ## Afrikaans (WP-2.5)
 
@@ -3932,10 +3927,7 @@ role and not before it.
       `trimRuns` (one unkept forecast run kept), is never auto-published, and
       does nothing when the observed rain has overtaken the issue. Tests:
       `runs/autoRun.db.test.ts` § scheduled forecast runs.
-- [x] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
-      Done: every item below is struck through (sediment, the curve op, the
-      transfer room, the self-checks table, the lake-factor presets); the
-      sediment rate's value waits on the hydrologist under #90.
+- [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
       Still open:
@@ -4663,17 +4655,13 @@ role and not before it.
       the run's details, then its flows, each after the last; a chart wait
       failing at 6 workers again is the trigger to start the shown run's
       details beside the page's requests too.
-- [x] Optional:
-      - ~~a read-only Terraform plan role, for a real `terraform plan` in CI~~
-        **Won't do (2026-11-01):** `.github/workflows/terraform.yml`'s header
-        says there is deliberately no credentialed plan. The only role CI can
-        assume is the production-gated deploy role, so a plan would need a
-        reviewer approval on every infra push, the sops key and the private
-        infra-secrets checkout, and would still lack read permissions; a
-        second role trusted for pull requests would widen the OIDC trust for
-        little gain over the mocked-provider `terraform test` plans. The
-        real plan stays an operator step (infra/README.md § Operator steps,
-        step 8).
+- [ ] Optional:
+      - a read-only Terraform plan role, for a real `terraform plan` in CI.
+        Waits on the first deploy: there is no AWS account, state bucket or
+        OIDC provider to plan against yet (plan.md Phase 6), and the role
+        (read-only IAM + state read, trusted for pull requests without the
+        `production` environment) is an IAM decision for the operator.
+        Trigger: the account exists and `terraform apply` has run once (#108).
       - ~~a CodeQL Python leg for `scripts/wbt-import`~~ **Done (2026-09-28,
         issue #75):** `security.yml` analyses `python` too (the importer and
         the smaller Python tools), on Python 3.14.
@@ -5032,51 +5020,6 @@ from the WP:
       phone, the first ten rows until Show all), and both charts carry a
       screen-reader description counting the whole years above the band
       ([ui.md § Allocations](./ui.md#allocations-taballocations)).
-
-## Fast catchment onboarding (WP-4.10)
-
-The first slice (2026-11-01, PR feat/fast-catchment-onboarding): New
-project's **Guided, from the map** default and the empty Summary's card open
-the Map's Start sheet; the boundary step says when delineation is off; the
-data to-do list (`map/startData.ts`) carries on past the first run to the
-fit and a run with it, with the EWR and a direct link to the first unit's
-land-cover proposal ([roadmap step 4 § WP-4.10](./roadmap/step-4-platform.md#wp-410-fast-catchment-onboarding)).
-Left, from the WP:
-
-- [ ] **WR2012 file importer** (`POST /projects/:id/import/wr2012`,
-      `backend/src/onboarding/wr2012.ts`: the quaternary spreadsheet and
-      naturalised-flow file the user downloaded, values only, ≤ 10 MB;
-      MAP, area and A-pan into the settings, several quaternaries summed by
-      area; the naturalised flow into the WR2012 check as a comparison).
-      Needs the committed synthetic WR2012-shaped fixtures and the monthly →
-      daily volume test. Today the WR2012 check is proposed from the loaded
-      quaternary dataset only. Trigger: the WRC's answer on redistribution
-      (D5), or a client with WR2012 files in hand.
-- [ ] **DWS quality codes as per-value flags.** DWS feeds and the gauge
-      record store exist (`feeds/fromGaugeRecord.ts`, `pnpm import:dws`, the
-      nearest-gauges proposal); the WP's mapping of DWS quality codes into a
-      `flags` array beside each `time_series` value array (generalising
-      WP-1.32's `filled` mask) is not built. Trigger: the first real DWS
-      record with suspect codes in a calibration window.
-- [ ] **Farms from a CSV template** in the guided flow (planned-work
-      "Spreadsheet templates"): today units come from boundaries on the
-      map or typed on the Network.
-- [ ] **Org crop library and project templates** (`crop_library`,
-      `project_template`, "Save as template", `/orgs/:id/crops`,
-      `/orgs/:id/templates`). Blocked on WP-4.1 (organisations). Today crop
-      factors come from Load crop factors.
-- [ ] **First-login tour** over the synthetic example catchment (6–8
-      steps, in-house, dismissible, keyboard-accessible,
-      `app_user.settings.tour_done`). The example itself is built (#286).
-- [ ] **An ET₀ feed proposed from the boundary in the to-do list.** The
-      `agera5_et0` feed source exists (Data feeds), but the list's
-      Evaporation item links only the A-pan row and Evaporation from the
-      map; a `?feed=agera5_et0` deep link that opens the attach card on the
-      boundary would close the gap. Only GR4J under a monthly PE row reads
-      it, so it doesn't block a first run.
-- [ ] **The timed usability test** with the hydrologist (≤ 4 hours from an
-      empty project to a calibrated run on a real, uncommitted catchment):
-      the WP's acceptance. Operator to schedule.
 
 ## Catchment map (issue #288)
 
@@ -6284,7 +6227,7 @@ Applicant view and the Applications tab. Left:
       record uses them too since 233, plus `application_withdrawn`), whose
       labels may follow the pilot authority's house style. Trigger: the
       client's answers.
-- [x] **Drop 161's licence-record words (the contract step of 233).**
+- [ ] **Drop 161's licence-record words (the contract step of 233).**
       233_licence_record_outcome_words (issue #523 G9 (b)) moved
       `project.licence_outcome` to the authority's words, but
       `app_set_licence_outcome` and `PUT /projects/:id/licence-record` still
@@ -6296,12 +6239,8 @@ Applicant view and the Applications tab. Left:
       licence-record DB test's "161's words" case turns into a `400`).
       Older `licence.outcome` audit events keep their words; the timeline
       reads them. Trigger: the first `backend@` and `web@` releases that both
-      contain 233 are in production. **Done** by
-      303_contract_licence_words_acts_for: 233 first shipped in backend@0.4.0
-      and web@0.3.0 (2026-10-13); production ran backend@0.13.1 and
-      web@0.10.0 when it landed. `LEGACY_OUTCOMES` is gone and the route
-      answers `400` for the old words (`licence-record.db.test.ts`).
-- [x] **Drop `project_member.acts_for_authority` and 163's
+      contain 233 are in production.
+- [ ] **Drop `project_member.acts_for_authority` and 163's
       `project_member_authority` trigger (the contract step of 229).**
       229_authority_delegates (issue #523 G5) moved who acts for the
       responsible authority to `authority_delegate` and redefined
@@ -6316,14 +6255,7 @@ Applicant view and the Applications tab. Left:
       Trigger: the first `backend@`
       and `web@` releases that both contain 229 are in production, and
       deployment.md runbook step 18 (each authority reviews its
-      grandfathered delegates) is done. **Done** by
-      303_contract_licence_words_acts_for: 229 first shipped in backend@0.4.0
-      and web@0.3.0 (2026-10-13), and the `authority-grandfathered` check
-      found no grandfathered delegates in production that day, so step 18
-      had nothing to review. `authority.db.test.ts` checks the column,
-      trigger and function are gone; `authority-delegates.db.test.ts` still
-      replays 229's carry-over, re-adding the column inside its rolled-back
-      transaction.
+      grandfathered delegates) is done.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
@@ -6580,10 +6512,8 @@ assume, the questions for counsel); these are the actions, with triggers.
       account on old terms sees the re-acceptance notice before any page and
       accepts through `POST /auth/me/accept-terms`. The material-change email
       to existing account holders (Terms §16) is still sent by hand.
-- [x] **Self-service account deletion** and what happens to evidence an
+- [ ] **Self-service account deletion** and what happens to evidence an
       account made: #90; the privacy notice discloses the current exception.
-      Done: `DELETE /auth/me` and the Account page's dialog (143, issue
-      #112); the open #90 parts are under § POPIA and the Step 2 release.
 
 ## Infrastructure edge
 
@@ -6655,7 +6585,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       public, static credits page (no API call), and no signed-in page lists
       the loaded datasets with their metadata, so the record is the
       operator's (the load log, or SQL as the owner).
-- [x] **A WAF rate rule scoped to the elevation-model routes (access audit,
+- [ ] **A WAF rate rule scoped to the elevation-model routes (access audit,
       PR #368; operator decision 2026-10-11, issue #90: build in a later
       round).** Delineation, Start from the map, Divide and the elevation and
       water GETs read DEM or raster tiles on every call, so they cost more per
@@ -6664,15 +6594,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       a lower limit than the API's, in `infra/` (plan test in
       `infra/tests/`). **Trigger:** the next infra round, or the elevation
       routes showing in the WAF's request metrics or the API's cost.
-      **Done 2026-11-01:** `RateLimitDemPerIP` (`infra/waf.tf`, priority 2,
-      after the auth rules), `waf_dem_rate_limit_per_ip` default 300 per 5
-      minutes (100 to `waf_rate_limit_per_ip`), a regex on the collection
-      paths `/api/projects/<id>/map/` delineation, start, divide,
-      subcatchments(/save), channels, dem-grid, dam-trace (not the polls or
-      the accept/apply/discard decisions). 300 from the UI's own pattern: one
-      person mapping hard is ~200 in a busy 5 minutes (docs/security.md).
-      Plan tests `waf_dem_rule` and the two `rejects_dem_rate_limit_*` runs.
-- [x] **An idle-in-transaction timeout on RDS (access audit, PR #368;
+- [ ] **An idle-in-transaction timeout on RDS (access audit, PR #368;
       operator decision 2026-10-11, issue #90: build in a later round).** A
       connection left idle inside an open transaction holds its locks and a
       pool slot until it is closed. **Durable fix:** set
@@ -6682,15 +6604,6 @@ assume, the questions for counsel); these are the actions, with triggers.
       error as an ordinary 500. **Trigger:** the next infra round, or any
       `idle in transaction` session seen in `pg_stat_activity` in
       production.
-      **Done 2026-11-01:** 20 minutes in the parameter group
-      (`infra/rds.tf`, dynamic, no reboot), computed as 5 minutes past the
-      longest database Lambda's timeout (the migrate Lambda's 900 s), since
-      only the gap between statements counts and a Lambda's transaction ends
-      with its invocation. Cluster-wide, not per role, so the schema owner's
-      sessions are covered and local dev keeps it off. `withUser` did *not*
-      surface it as a 500: the killed checked-out client's `error` event had
-      no listener and would have ended the Node process. `db/tx.ts` now
-      listens and releases the dead client (`db/tx.db.test.ts`).
 
 ## Housekeeping
 
@@ -7523,11 +7436,9 @@ own. Loop in the CISO or security analyst before acting on any of them.
       responsible party and the operator: security measures, sub-processors
       (AWS), breach notification to the client. Who: operator + client
       legal. Trigger: before production holds client data.
-- [x] **Hosting region and transfer.** `af-south-1` keeps the data in South
+- [ ] **Hosting region and transfer.** `af-south-1` keeps the data in South
       Africa; any other region is a transfer under s72 and needs the client's
-      agreement. Trigger: the region choice in § Blocking releases. — *Done:
-      production runs in af-south-1 (live since 2026-10-05, the AWS bootstrap
-      item there), so no s72 transfer arises from hosting.*
+      agreement. Trigger: the region choice in § Blocking releases.
 - [x] **Data-subject export** ("download my data", plan.md Phase 7;
       2026-09-26). `GET /auth/me/export` and the Account page's **Download
       my data**: the account, memberships, farm links with their published
@@ -7538,10 +7449,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       account. `auth/export.ts` `USER_FK_COVERAGE` classifies every foreign
       key to `app_user` (guarded by `export.db.test.ts`). The privacy notice
       (above) must say it exists.
-- [x] **Self-service account deletion, and evidence that names its maker.**
-      Done: operator path (138) and self-service (143, issue #112), as
-      below; what still waits on #90 is named at its end and tracked in the
-      items that follow.
+- [ ] **Self-service account deletion, and evidence that names its maker.**
       **Operator path done (138, issue #112):** deleting an account keeps
       the evidence it made (project, team, run, ensemble, nomination,
       scenario, import) with the maker cleared, deletes a started ensemble

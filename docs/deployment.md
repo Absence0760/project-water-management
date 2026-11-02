@@ -713,7 +713,10 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   and the worker's log group (a saved run failing one of the engine's own
   invariant checks — docs/security.md § Infrastructure), one on
   `mail_send_failed` in the same two log groups (an account, invitation or
-  report email that failed to send, § Email), one on `unhandled_error` in
+  report email that failed to send, § Email), one on `run_stamp_drift` in
+  the same two (a stored run's bytes didn't match the hash about to be
+  signed, so it was signed the slow way; [security.md § Run
+  stamps](./security.md#run-stamps)), one on `unhandled_error` in
   the API's log group (a request answered with an unhandled 500, which the
   Lambda `Errors` metric can't see, § Runbooks), one on `login_failed` in
   the API's log group (failed sign-ins across all accounts, password spraying,
@@ -736,8 +739,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   rates, the jobs / mail-events / fetch-requests / ingest-results DLQ
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
   Lambda errors and throttles (`lambda-throttles`: the API at its reserved
-  concurrency, issue #541), `unhandled_error` and `mail_send_failed`, 13
-  alarm metrics; 16 once `ingest_image_tag` is set, with the data mirror's
+  concurrency, issue #541), `unhandled_error`, `mail_send_failed` and
+  `run_stamp_drift`, 14 alarm metrics; 17 once `ingest_image_tag` is set, with the data mirror's
   two freshness alarms and `mirror-backfill-failed` (§ The data mirror).
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the

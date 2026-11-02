@@ -625,6 +625,53 @@ resource "aws_cloudwatch_log_metric_filter" "self_check_failed_worker" {
   }
 }
 
+# --- Run stamp drift --------------------------------------------------------
+# storeRun signs each run from the hashes of the bytes it sent (304,
+# backend/src/runs/stamp.ts stampRun). Before signing it re-hashes one or two
+# of the stored series; should Postgres's array_send and the backend's binary
+# parameter (or array_fill) ever disagree, it logs
+#   {"event":"run_stamp_drift","runId":"…","series":[{"nodeId":…,"key":"spill"}]}
+# (ids and series keys only, never values) and signs from the stored rows
+# instead, so the run still verifies. Without this the only symptom would be
+# a slower run. Runs are stored by the API and the worker (re-runs, scenario
+# jobs), so both log groups feed the one metric. Essential tier: one line
+# means every new run is taking the slow path and the encoder needs fixing.
+
+resource "aws_cloudwatch_log_metric_filter" "run_stamp_drift" {
+  for_each = local.alarms_essential ? {
+    api    = aws_cloudwatch_log_group.lambda.name
+    worker = aws_cloudwatch_log_group.worker.name
+  } : {}
+  name           = "${local.project}-run-stamp-drift-${each.key}"
+  log_group_name = each.value
+  pattern        = "{ $.message.event = \"run_stamp_drift\" }"
+
+  metric_transformation {
+    name          = "RunStampDrift"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "run_stamp_drift" {
+  count               = local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-run-stamp-drift"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "RunStampDrift"
+  namespace           = "${local.project}/Application"
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "A stored run's series bytes didn't match the hash the backend was about to sign (run_stamp_drift in the API or worker log group: run id and series key). The run was signed from its stored rows and still verifies, but every new run now takes the slow path: check backend/src/db/float8Array.ts against Postgres's array_send after a Postgres or node-postgres upgrade. docs/security.md § Run stamps."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  depends_on = [aws_cloudwatch_log_metric_filter.run_stamp_drift]
+}
+
 # --- Email that failed to send ----------------------------------------------
 # trySendMail (backend/src/mail/transport.ts) never fails the request over a
 # mail error (a sign-up or forgot-password answer must not depend on it), so
