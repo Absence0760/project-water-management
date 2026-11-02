@@ -5755,7 +5755,21 @@ The card's body holds three top-aligned groups:
   below the source*, and the model check refuses it), and switches for leaving
   the EWR in the river (a scenario's, issue #523 B4: disabled while off,
   with the scenario-only note) and topping up the destination’s dam. The fields sit
-  two to a row, not one tall column.
+  two to a row, not one tall column. **Takes** has a third choice (engine ≥
+  1.113.0), *A share of the river’s flow*, a diversion curve ([model.md
+  §2.6a](./model.md)): under the off-take's fields a "Share of the river
+  diverted: a × x^b %" group (`transfers/DiversionCurveFields.svelte`) with
+  **Coefficient a**, **Exponent b**, **Largest share, %** (blank = 100),
+  **x in** (L/s, m³/s, m³/day or Ml/day; *— choose —* until picked) and
+  **x is** (*The river at the off-take* or *The natural flow there*), each
+  with its ⓘ, and a four-column table of what the rule diverts at seven
+  example river flows (0.005–10 m³/s, shown in the curve's unit): the share,
+  what is diverted, and what limits it (*the largest share*, *the curve* or
+  *the canal’s capacity*, the rule's largest rate within its daily cap),
+  read off the engine's own curve (`transfers/diversionPreview.ts`), so a
+  wrong unit shows at once. Until the curve is complete the table is a
+  prompt, and the card lists the problem the save refuses. The table stays a
+  table on a phone (its headings wrap), inside the card.
 
 Every field keeps its visible label and its ⓘ tip, and its accessible name
 starts with that label, then the rule ("From, transfer 3", "Losses on the

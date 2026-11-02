@@ -1770,10 +1770,18 @@ or `"capacity"`) and `topUpDam` (default false); a body without them is a dam
 transfer. Canal seepage back to the river (engine ≥ 1.42.0, migration 126):
 `lossReturnPct` (0–1, default 0: the losses all leave the catchment) and
 `lossReturnNodeId` (a uuid or `null`, the default: the source), the unit whose
-outflow the returned seepage joins. `PUT` refuses a river off-take that isn't
-unit to unit or whose destination drains into its source (along the river or
-through other off-takes), and a return unit that isn't the source or a farm
-downstream of it along the river. A run with off-takes stores `offtake_out` on each source,
+outflow the returned seepage joins. A river off-take sized by a diversion
+curve (engine ≥ 1.113.0, migration 308): `sizing` `"diversionCurve"` with
+`diversionCoefficient` (a number > 0), `diversionExponent` (a finite number),
+`diversionMaxPct` (above 0 to 1, or `null`, the default: 1),
+`diversionFlowUnit` (`"L/s"`, `"m3/s"`, `"m3/day"` or `"Ml/day"`) and
+`diversionFlowBasis` (`"modelled"`, `"natural"` or `null`, the default:
+modelled); each defaults to `null` and is ignored on any other sizing. `PUT`
+refuses a river off-take that isn't unit to unit or whose destination drains
+into its source (along the river or through other off-takes), a return unit
+that isn't the source or a farm downstream of it along the river, and a rule
+sized by a diversion curve without a complete curve (a coefficient, an
+exponent and a unit). A run with off-takes stores `offtake_out` on each source,
 `offtake_in`, `offtake_used` and `offtake_to_dam` on each destination, and
 each rule's `transfer_rule@<id>` (what it took, before losses), and
 `offtake_loss_return` on each unit seepage rejoins below (engine ≥ 1.42.0);
