@@ -197,8 +197,8 @@ workbook (as in 1a) with **no manual edits**.
   without saving, using the same engine. The preview worker (issue #73,
   `lib/preview/engine.worker.ts`) runs the Yield panel's instant firm yield
   and, since issue #284, **Preview** on Settings and the model save bar: the
-  last run against the same run with the unsaved edits (WP-1.17; no mini
-  hydrograph).
+  last run against the same run with the unsaved edits (WP-1.17), with a
+  mini hydrograph of the outlet's flow both ways.
 - ✅ Members panel (owner manages; anyone can leave).
 - ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
   response can't overwrite a newer one when the user switches project or

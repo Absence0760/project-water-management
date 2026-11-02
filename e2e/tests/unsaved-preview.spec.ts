@@ -4,7 +4,8 @@
 // preview worker; on Crops & demand the save bar's Preview does the same for
 // the model's edits, naming the unit whose supply moves. Nothing is saved and
 // no run is made. With no run yet, the preview says to run the model first.
-// Axe on the dialog at desktop and phone width.
+// Under the figures, the mini hydrograph (roadmap WP-1.17): the outlet's flow
+// in the last run and with the edits. Axe on the dialog at desktop and phone width.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
@@ -12,7 +13,7 @@ import { openCropGrid } from '../support/crops.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
-import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { expectAbove, expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 import { openSettings, settingsBar } from '../support/settings.ts';
 
 const preview = (page: Page) => page.getByRole('dialog', { name: /^Preview: your unsaved / });
@@ -64,6 +65,43 @@ test('Settings: the unsaved A-pan previewed against the last run, nothing saved 
 	expect(await runCount(page, project.id)).toBe(1);
 	const res = await page.request.get(`${API_URL}/projects/${project.id}`);
 	expect(((await res.json()) as { project: { settings: { apanMm: number[] } } }).project.settings.apanMm[0]).toBe(150);
+});
+
+test("the preview's mini hydrograph: the outlet's flow in the last run and with the edits, under the figures", async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Preview hydrograph');
+	await createRun(page.request, project.id, 'Base');
+	await openSettings(page, project.id);
+	for (const [m, v] of [['Oct', '450'], ['Nov', '540'], ['Dec', '660'], ['Jan', '690']] as const) {
+		await page.getByLabel(`A-pan evaporation, ${m}, mm`).fill(v);
+	}
+	await page.getByLabel('A-pan evaporation, Jan, mm').blur();
+	await page.getByRole('button', { name: 'Preview', exact: true }).click();
+
+	const dialog = preview(page);
+	await expect(dialog.getByTestId('unsaved-preview')).toHaveAttribute('data-state', 'done');
+	const panel = dialog.getByRole('region', { name: 'Flow at the outlet' });
+	await expect(panel.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	// Both runs' outflow on one chart, behind them the run's observed record, named with the unit and the run's 120 days.
+	await expect(panel.getByRole('img', { name: 'Flow at the outlet · last run vs with your edits: line chart of Observed, Last run, With your edits, in m³/day, 1 Oct 2021 to 28 Jan 2022' })).toBeVisible();
+	await expect(panel.locator('.u-legend')).toContainText('Last run (m³/day)');
+	await expect(panel.locator('.u-legend')).toContainText('With your edits (m³/day)');
+	// More evaporation leaves less water at the outlet: the edits move the flow, said in words too.
+	await expect(panel.getByTestId('unsaved-preview-hydrograph-moved')).toHaveText(/^Your edits change the flow at the outlet on [\d ]+ of 120 days\.$/);
+	await expect(panel.getByRole('group', { name: 'Preview hydrograph controls' }).getByRole('button', { name: 'Log scale' })).toHaveAttribute('aria-pressed', 'false');
+	// The figures first, the chart under them, in the reading order as well.
+	await expectAbove(dialog.getByTestId('unsaved-preview-table'), panel);
+	await expectNoViolations(page, { include: '[data-testid="unsaved-preview"]' });
+
+	// On a phone the chart fits the dialog: nothing scrolls sideways.
+	await resizeTo(page, { width: 390, height: 844 });
+	await expect(panel.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	await expectNoSidewaysScroll(page);
+	const box = (await panel.locator('figure.chart').boundingBox())!;
+	const sheet = (await dialog.boundingBox())!;
+	expect(box.x).toBeGreaterThanOrEqual(sheet.x - 0.5);
+	expect(box.x + box.width).toBeLessThanOrEqual(sheet.x + sheet.width + 0.5);
+	await expectNoViolations(page, { include: '[data-testid="unsaved-preview"]' });
 });
 
 test("Crops & demand: the save bar's Preview shows the unit whose supply the unsaved planted area moves", async ({ page, owner }) => {

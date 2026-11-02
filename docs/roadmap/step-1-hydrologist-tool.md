@@ -958,7 +958,17 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 > with only the saved → unsaved change laid over it (`lib/preview/overlay.ts`),
 > so the series can't drift from a stored run. On demand, not debounced live:
 > a run is ~0.15 s on the client catchment (`run.perf.test.ts`) and the
-> preview runs two. Not built: the mini hydrograph.
+> preview runs two.
+>
+> **Mini hydrograph built:** under the dialog's figures, **Flow at the
+> outlet** charts the catchment's simulated outflow in the last run against
+> with the edits (and the observed record when the run has one) on
+> `charts/LineChart.svelte`, opening on the last year; the worker's `effect`
+> answer carries both lines (`lib/preview/compute.ts` `previewHydrograph`),
+> so no engine change and no fetch ([ui.md § Project
+> workspace](../ui.md#project-workspace), Preview unsaved edits). WP-1.17 is
+> done as built; `buildModelInput` and the debounced live panel stay
+> departures, for the reasons above.
 
 - **Goal:** change a parameter and see its effect before saving. The engine
   already runs in the browser, fast enough on the client catchment for live preview.

@@ -1131,7 +1131,17 @@ run against with your edits with the change (`compare/Delta.svelte`, sign,
 arrow and better/worse in words): demand met, demand, shortfall, units below
 95 % supplied, mean natural flow, mean outflow at the outlet, days the EWR
 is not met, and NSE, KGE and percent bias when the run has a record to score;
-then the units whose supply moved (the ten largest changes, "and N more"),
+then **Flow at the outlet**, the mini hydrograph (roadmap WP-1.17,
+`preview/PreviewHydrograph.svelte`, `charts/LineChart.svelte` in the dialog's
+chunk, so uPlot loads only when a preview opens): the catchment's simulated
+outflow in the last run (solid) and with the edits (dashed over it), behind
+them the outlet's observed record when the run has one, in m³/day, opening on
+the last year (30 days / 1 year / All, Earlier / Later, Log scale), with a line
+saying on how many of the days both runs cover the edits move the flow
+(`preview/hydrograph.ts` `daysChanged`), or that they move it on none. The
+worker sends every day of both lines with the figures
+(`lib/preview/compute.ts` `previewHydrograph`); nothing more is fetched.
+Then the units whose supply moved (the ten largest changes, "and N more"),
 and units the edits added or removed. An edited item the run doesn't have
 (added and saved after it) is left out and named under "Not in this
 preview". With no run yet it says to run the model first; the engine's
