@@ -208,9 +208,11 @@ workbook (as in 1a) with **no manual edits**.
   signals (no `networkidle`). The first spec is the demo path: register,
   create project, import, run, chart.
 - ✅ `packageManager` is pinned (pnpm 10) in the root `package.json`.
-- 🚧 Run date-sensitive unit tests under a skewed `TZ`, so that code which
-  accidentally depends on local time fails. Some date tests set a skewed
-  `TZ` themselves; no workspace's test script sets one yet (roadmap WP-1.12).
+- ✅ Run date-sensitive unit tests under a skewed `TZ`, so that code which
+  accidentally depends on local time fails. Every vitest config sets
+  `Pacific/Chatham`, and CI runs the unit tests again under
+  `America/St_Johns` ([testing.md § Time zone](./testing.md#time-zone);
+  roadmap WP-1.12).
 
 **Phase 1 acceptance (the demo):**
 
