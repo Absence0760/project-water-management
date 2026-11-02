@@ -1948,15 +1948,23 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   for each unit, MAP for each unit, evaporation (the A-pan, and Evaporation
   from the map), the WR2012 check, observed flow (its link opens Data
   feeds on a DWS gauge with the nearest gauging stations proposed,
-  `?feed=dws`), each unit's composite dam, the cultivated area, then **Run
-  the model**. Each line has a status worked out from what the project
+  `?feed=dws`), each unit's composite dam, the cultivated area (linked to
+  the first unit with nothing planted, in its drawer, where land cover
+  proposes it), the EWR, **Run the model**, then **Calibrate, and run with
+  the fit** (WP-4.10: a first *calibrated* run is the goal, so the list
+  goes on past the first run). Each line has a status worked out from what the project
   holds now, never a stored tick: Done, Started (done for some units),
   To do, or Checking while it is read (a unit's rain is a CHIRPS feed with
   that unit's mark; its MAP `mapMm`; observed flow an outlet record, or a
   DWS feed waiting for its first fetch; a composite dam a volume above 0 on
-  each unit a dam on the map is part of; a run any run). The next one a run
+  each unit a dam on the map is part of; the EWR the pragmatic row or a
+  daily EWR from the DRM tables; a run any run; the calibration a stored
+  GR4J fit, `settings.fitRecord`, with a run newer than it, Started while
+  no run is). The next one a run
   needs is marked; the catchment's MAP, the WR2012 check, the cultivated
-  area and the units' areas are optional (a stand-in or a check). The list
+  area, the EWR and the units' areas are optional (a stand-in or a check),
+  and so is the calibration while the outlet has no observed record and
+  nothing is fitted (there is nothing to fit to). The list
   outlives the sheet: once it is closed, the Map's **Getting started** pill
   shows the same items, each with its link, and links back to the data
   step, until every item a run needs is done. An editor's lines say the
@@ -2130,7 +2138,12 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   outlets in gullies of a fraction of a km² beside their rivers; now a
   point lands only on a cell with 1 km² or more draining through it, and
   the warning names a much larger channel beside it.
-- **Without a DEM** (`DEM_URL` empty): each unit has its boundary's area
+- **Where it starts.** A project made with **New project**'s default, **Guided, from the
+  map**, opens here on the sheet's first step (`?tab=map&start=1`), and an
+  empty model's Summary offers the same (WP-4.10; [ui.md § Project
+  list](./ui.md#project-list), [§ Summary](./ui.md#summary)).
+- **Without a DEM** (`DEM_URL` empty): the boundary step says delineating
+  is off and why, and offers Draw and Upload only; each unit has its boundary's area
   and drains into the outflow gauge (the order is set on the Network); the
   rest of the catchment is the boundary less the units' boundaries (the
   whole boundary, saved as its parcel, with none), and drains into the

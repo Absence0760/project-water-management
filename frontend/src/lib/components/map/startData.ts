@@ -9,7 +9,7 @@
 // in what it has loaded.
 import type { ProjectModel, ProjectSettings } from '@water-management/engine';
 import type { MapFeature } from '#lib/api/types.js';
-import { fmtNum } from '#lib/format/number.js';
+import { fmtDay, fmtNum, localIsoDate } from '#lib/format/number.js';
 import type { RainReads } from './mapSetup';
 import type { StaleValue } from './stale';
 
@@ -19,7 +19,21 @@ import type { StaleValue } from './stale';
  */
 export const BOUNDARY_RAIN_MAX_KM2 = 2500;
 
-export type DataItemId = 'network' | 'method' | 'rain' | 'catchment-map' | 'unit-rain' | 'unit-map' | 'evaporation' | 'wr2012' | 'flow' | 'dams' | 'crops' | 'run';
+export type DataItemId =
+	| 'network'
+	| 'method'
+	| 'rain'
+	| 'catchment-map'
+	| 'unit-rain'
+	| 'unit-map'
+	| 'evaporation'
+	| 'wr2012'
+	| 'flow'
+	| 'dams'
+	| 'crops'
+	| 'ewr'
+	| 'run'
+	| 'calibrate';
 /** `done`; `partial` = started, or done for some units; `todo`; `unknown` = still loading. */
 export type DataStatus = 'done' | 'partial' | 'todo' | 'unknown';
 
@@ -54,7 +68,7 @@ export interface DataSeries {
 export interface DataInput {
 	model: Pick<ProjectModel, 'nodes' | 'cropAreas'>;
 	/** null while loading. */
-	settings: Pick<ProjectSettings, 'apanMm' | 'pe' | 'wr2012' | 'unitRain' | 'rainStations'> | null;
+	settings: Pick<ProjectSettings, 'apanMm' | 'pe' | 'wr2012' | 'unitRain' | 'rainStations' | 'ewrPragmaticM3PerDay' | 'ewrDailySource' | 'fitRecord'> | null;
 	/** null while loading (or unreadable: the items reading it stay unknown). */
 	feeds: readonly DataFeed[] | null;
 	series: readonly DataSeries[] | null;
@@ -88,7 +102,8 @@ function perUnit(k: number, m: number): DataStatus {
  * The to-do list, in the order a run reads it: the units' areas, how natural
  * flow is made, the catchment's rain and MAP, each unit's rain and MAP,
  * evaporation, the WR2012 check, observed flow, the composite dams, the
- * cultivated area, then Run the model.
+ * cultivated area, the EWR, then Run the model, and after it the fit to the
+ * observed flow and a run that uses it (WP-4.10's "first calibrated run").
  */
 export function startDataItems(s: DataInput): DataItem[] {
 	const units = s.model.nodes.filter((n) => n.kind === 'farm');
@@ -276,6 +291,7 @@ export function startDataItems(s: DataInput): DataItem[] {
 
 	const planted = new Set(s.model.cropAreas.filter((c) => c.areaM2 > 0).map((c) => c.nodeId));
 	const withCrops = land.filter((n) => planted.has(n.id)).length;
+	const firstUnplanted = land.find((n) => !planted.has(n.id)) ?? null;
 	const staleCrops = staleOf('land-cover');
 	items.push({
 		id: 'crops',
@@ -288,8 +304,25 @@ export function startDataItems(s: DataInput): DataItem[] {
 				: withCrops === land.length
 				? 'Every unit has a planted area.'
 				: `${withCrops ? `${someOf(withCrops, land.length)} have a planted area` : 'No unit has a planted area yet'}: land cover proposes each unit’s, in its drawer on Crops. Skip it if nothing is irrigated.`,
-		href: '?tab=crops',
-		where: 'Crops',
+		// The first unit still to plant opens in its drawer, where land cover proposes its cultivated area (maps.md § Cultivated area from land cover).
+		href: firstUnplanted ? `?tab=crops&farm=${encodeURIComponent(firstUnplanted.id)}` : '?tab=crops',
+		where: firstUnplanted ? `Crops → ${firstUnplanted.name || 'the unit'}’s planted areas` : 'Crops',
+		optional: true
+	});
+
+	// The pragmatic monthly EWR, or a daily EWR from the DRM tables (engine ≥ 1.77.0), as the Summary's checklist reads it.
+	const ewr = !!set && (set.ewrPragmaticM3PerDay.some((v) => v > 0) || (!!set.ewrDailySource && set.ewrDailySource.method !== 'pragmatic'));
+	items.push({
+		id: 'ewr',
+		title: 'The EWR',
+		status: !set ? 'unknown' : ewr ? 'done' : 'todo',
+		detail: !set
+			? 'Reading the settings…'
+			: ewr
+				? 'An EWR is set: the run reports the shortfalls at the outlet and charges them to the units upstream.'
+				: 'No EWR yet, so the run reports no environmental shortfalls: type the pragmatic monthly EWR, or take a daily one from the DRM tables. Determining the Reserve stays the hydrologist’s.',
+		href: '?tab=settings#set-ewr',
+		where: 'Model settings → EWR',
 		optional: true
 	});
 
@@ -300,6 +333,31 @@ export function startDataItems(s: DataInput): DataItem[] {
 		detail: s.runs === null ? 'Reading the runs…' : s.runs.length ? `${plural(s.runs.length, 'run')} so far.` : 'Run it once rainfall is in (Runs & results).',
 		href: '?tab=runs',
 		where: 'Runs & results'
+	});
+
+	// A first calibrated run (WP-4.10): GR4J fitted to the outlet's observed flow, and a run since the fit. Without an
+	// observed record there is nothing to fit to, so the item is optional (the defaults, or the regional prior, stand in).
+	const fit = set?.fitRecord ?? null;
+	const lastRun = s.runs?.length ? Math.max(...s.runs.map((r) => Date.parse(r.createdAt))) : null;
+	const fittedAt = fit ? Date.parse(fit.fittedAt) : null;
+	const fitDay = fit ? fmtDay(localIsoDate(new Date(fit.fittedAt))) : '';
+	const calibrateKnown = !!set && s.runs !== null && (fit !== null || observed !== null);
+	items.push({
+		id: 'calibrate',
+		title: 'Calibrate, and run with the fit',
+		status: !calibrateKnown ? 'unknown' : fit ? (lastRun !== null && fittedAt !== null && lastRun > fittedAt ? 'done' : 'partial') : 'todo',
+		detail: !calibrateKnown
+			? 'Reading the settings…'
+			: fit
+				? lastRun !== null && fittedAt !== null && lastRun > fittedAt
+					? `GR4J fitted on ${fitDay}, and the latest run uses the fit. The calibration’s sign-off stays the hydrologist’s.`
+					: `GR4J fitted on ${fitDay}: run the model again so the results use the fit.`
+				: observed
+					? 'GR4J still has the parameters it started with: Fit the parameters fits them to the outlet’s observed flow, and Apply to form keeps the fit with its validation. Then run again.'
+					: 'Needs an observed flow record at the outlet first (Observed flow, above). Until then GR4J runs on the parameters it has; the regional prior can start them.',
+		href: '?tab=calibration#set-fit',
+		where: 'Calibration → Fit the parameters',
+		optional: !fit && observed === false
 	});
 	return items;
 }

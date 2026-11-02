@@ -10,6 +10,7 @@ import {
 	duplicateName,
 	emptyName,
 	initialTicks,
+	NO_ELEVATION_BOUNDARY,
 	openStart,
 	openDivide,
 	choicesFor,
@@ -271,5 +272,13 @@ describe('the ticks', () => {
 		expect(applySummary(t)).toBe(
 			'The empty model gets 5 hydrological units, with 2 areas (a unit’s is its boundary on the map; low, Rest of the catchment without what drains into pans) and 3 drains-into from the proposal. Each unit’s dams and pump are linked to it, their sizes yours to enter. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.'
 		);
+	});
+});
+
+describe('the boundary step without an elevation model (WP-4.10)', () => {
+	it('says delineation is off and offers the manual ways, and what they give up', () => {
+		expect(NO_ELEVATION_BOUNDARY).toMatch(/^Delineating from the outlet is off: this server has no elevation model\./);
+		expect(NO_ELEVATION_BOUNDARY).toContain('Draw the boundary or upload it instead.');
+		expect(NO_ELEVATION_BOUNDARY).toContain('you set it on the Network');
 	});
 });

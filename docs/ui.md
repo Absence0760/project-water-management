@@ -1599,7 +1599,14 @@ put the results first; its first screen follows board A1 of the redesign
 
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
    leads, then Needs attention: there is nothing to summarise yet, so there
-   is no KPI row or supply list.
+   is no KPI row or supply list. On an empty model, for an editor shown the
+   Map, a card leads above the checklist (`overview/GuidedStart.svelte`,
+   WP-4.10): **Set the catchment up from its map**, one paragraph on the
+   guided way (the boundary, each unit's boundary, dams and gauges, the
+   proposed network, then the data to-do list to a first run and its
+   calibration), **Start from the map** (`?tab=map&start=1`, the Map's
+   Start sheet, [§ Map](#map-tabmap)) and **Or type the network in**
+   (`?tab=network`). It goes once the model has a node.
 2. **The first screen, once there is a run**: the **Latest run** KPI row
    (four cards, irrigation first: issue #558), then **Needs attention**
    with the **Active alerts** ([§ Alerts](#alerts)) under it, beside
@@ -2533,6 +2540,18 @@ stacked; the owner filter and the sort share the filter row evenly
 on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
+
+**New project** opens a dialog: **Name**, **Belongs to** (Personal or one of
+your teams), **Description** (optional) and **How to start** (WP-4.10,
+`projects/newProject.ts`), a radio of two, each with its hint under it:
+**Guided, from the map**, the default ("Put the catchment and its units on
+the map: the network is proposed, then a to-do list takes you through the
+data to a first calibrated run."), which opens the new project's Map on the
+Start sheet (`?tab=map&start=1`, [§ Map](#map-tabmap)); and **An empty
+model** ("Type the network in on the Network page. While the model is empty
+you can still start it from the map."), which opens its Summary, where the
+empty model's guided card offers the sheet again ([§ Summary](#summary)).
+Each opening of the dialog starts on the default.
 
 **No projects yet** (`projects/GetStarted.svelte`): in place of the list, a
 card says what a project is and the three steps from nothing to a run, with
@@ -4218,7 +4237,11 @@ map" card) stays the schematic; this is the geography.
   the current one `aria-current="step"`), each read from the server:
   **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
   boundary**, **Upload a GeoJSON file**; each closes the sheet into that
-  tool, and the sheet opens again once it saves; with a gauge on the map
+  tool, and the sheet opens again once it saves; without a DEM, a line under
+  them says why Delineate isn't there ("Delineating from the outlet is off:
+  this server has no elevation model. Draw the boundary or upload it
+  instead. Without one, the units’ order isn’t proposed either: you set it
+  on the Network.", `startFlow.ts` `NO_ELEVATION_BOUNDARY`, WP-4.10); with a gauge on the map
   and no boundary, "go on to the points". **The points** (units follow the
   user's boundaries, `start-16`, #523 C1; the lead says a dam or an
   abstraction point is never a unit of its own): each unit's boundary (an
@@ -4269,7 +4292,7 @@ map" card) stays the schematic; this is the geography.
   order a run reads it, each line numbered (a check once done), its title a
   link to where it is accepted, its status (Done, Started, To do,
   Checking), **Next** on the first a run still needs, "(optional)" on the
-  catchment's MAP, the WR2012 check, the cultivated area and the units'
+  catchment's MAP, the WR2012 check, the cultivated area, the EWR and the units'
   areas, and a detail line with the place in words: The units’ areas and
   order (Network), How natural flow is made (`#set-share`), Rain from the
   boundary (`?rain=boundary`), The catchment’s MAP (`#set-share`), Rain for
@@ -4280,7 +4303,19 @@ map" card) stays the schematic; this is the geography.
   on a DWS gauge with the nearest gauging stations proposed, for an
   owner), Each unit’s composite dam (Dams: its volume and the area
   draining to it yours to enter; the register a reference only),
-  Cultivated area (Crops) and **Run the model** (Runs & results). Each
+  Cultivated area (Crops; its link opens the first unit with nothing
+  planted in its drawer, `?tab=crops&farm=<id>`, where land cover proposes
+  its planted area, "Crops → Upper unit’s planted areas"; plain Crops once
+  every unit has one), The EWR (`?tab=settings#set-ewr`, optional: done once
+  the pragmatic row or a daily EWR from the DRM tables is set), **Run the
+  model** (Runs & results) and, after it, **Calibrate, and run with the
+  fit** (`?tab=calibration#set-fit`; WP-4.10's first calibrated run): To do
+  until GR4J has a stored fit (`settings.fitRecord`, which Apply to form
+  writes), Started once it has one but no run is newer than the fit ("GR4J
+  fitted on 29 Oct 2026: run the model again so the results use the fit."),
+  Done once one is; optional, saying it "Needs an observed flow record at
+  the outlet first", while the outlet has no observed flow and nothing is
+  fitted, so it never holds the list open with nothing to fit to. Each
   status is worked out from what the project holds (the settings, the feed
   list, the series list, the model, the runs), read when the Map opens and
   again after an apply here. Evaporation is done once the monthly A-pan or

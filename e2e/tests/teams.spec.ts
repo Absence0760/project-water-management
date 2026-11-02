@@ -47,6 +47,8 @@ test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	await expect(np.getByLabel('Belongs to')).toHaveValue(/.+/);
 	await expect(np.getByLabel('Belongs to').locator('option:checked')).toHaveText('Breede Hydrology');
 	await np.getByLabel('Name').fill('Upper Breede — baseline');
+	// An empty model opens on the Summary (the guided default opens the Map's Start sheet over the page).
+	await np.getByRole('radio', { name: 'An empty model' }).check();
 	await np.getByRole('button', { name: 'Create' }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Upper Breede — baseline' })).toBeVisible();
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();
