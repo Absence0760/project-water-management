@@ -42,8 +42,13 @@ fails the invocation; the backfill state machine retries that month.
 **CHC's request slot** (lease.hold_host): rnl and sat take the one slot this
 job shares with the fetcher Lambda before they ask CHC anything, so at most
 one of our processes asks CHC at a time. Held by the other side, a backfill
-month raises lease.HostBusy (the state machine retries it) and a daily run
-ends quietly with `busy` in its answer, as for a held product lease.
+month raises lease.HostBusy (the state machine retries it). A daily run,
+which has no retry but tomorrow's, waits for it (lease.hold_host_waiting):
+it reserves the next turn (ingest-state/hosts/chc/reserved.json) and looks
+again every 15 s until DAILY_RUN_WORK_S before its deadline, so it outlasts
+one per-feed fetch and the next fetch yields the freed slot to it. Still
+held then, or held by a backfill execution (hours), it ends quietly with
+`busy` in its answer, as for a held product lease.
 
 **A backfill execution's hold** (lease.hold_host_for_backfill, issue #618
 step 4): the state machine names its execution in each month's `hold`, and
@@ -96,6 +101,22 @@ ingest_file = chirps_final.ingest_file
 REGION_CELLS = chirps_final.REGION_CELLS
 
 PRODUCTS = ("rnl", "sat")
+
+#: The time a daily run keeps for its own work: it stops waiting for CHC's
+#: slot this long before its deadline (lease.hold_host_waiting). Most days the
+#: work is one conditional request for the listing (a 304) and a state write,
+#: seconds; 120 s leaves room for S3's round trips. The rest of Lambda's 900 s
+#: (infra/ingest.tf ingest_timeout_s) is spent waiting, ~760 s, which outlasts
+#: one per-feed CHIRPS fetch (524, 660 and 707 s back to back on 2026-11-01;
+#: backend/src/feeds/hostSlot.ts HOST_SLOT_PASS_WORK_MS says the same for the
+#: fetcher's passes), and the reservation keeps the next fetch from taking the
+#: freed slot first. A run that gets the slot with less than
+#: chirps_final.DOWNLOAD_RESERVE_S left still reads the listing and leaves a
+#: new month pending for the next day's run (run_monthly), a day's delay at
+#: most on the one day a month that has a file to fetch. A fetch that took
+#: the slot just before the run started (up to ~885 s) can still outlast the
+#: wait: that day's run is then busy and the next one catches up.
+DAILY_RUN_WORK_S = 120.0
 MODES = ("monthly", "backfill")
 _MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
@@ -254,8 +275,20 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
         # CHC's one request slot, shared with the fetcher Lambda (lease.hold_host),
         # taken before the product's own lease and before anything is asked; a
         # backfill execution's month keeps it through the pause after.
+        # A daily run waits for its turn (reserving it) where a backfill month,
+        # which the state machine retries, doesn't.
         if ev["hold"]:
             slot = lease.hold_host_for_backfill(mirror, "chc", run.budget.remaining_s(), ev["hold"]["execution"], ev["hold"]["pauseSeconds"])
+        elif ev["mode"] == "monthly":
+            slot = lease.hold_host_waiting(
+                mirror,
+                "chc",
+                holder=f"ingest:{product}:{ev['mode']}",
+                remaining=run.budget.remaining_s,
+                keep_s=DAILY_RUN_WORK_S,
+                **({"now": clock} if clock else {}),
+                **({"sleep": sleep} if sleep else {}),
+            )
         else:
             slot = lease.hold_host(mirror, "chc", run.budget.remaining_s(), holder=f"ingest:{product}:{ev['mode']}")
         with slot:
@@ -268,7 +301,7 @@ def handler(event, context=None, s3_client=None, opener=None, metrics=None, cloc
         if ev["mode"] == "backfill":
             raise
         if isinstance(e, lease.HostBusy):
-            log.info("%s: %s; tomorrow's run catches up", product, e)
+            log.info("%s: %s; the next daily run catches up", product, e)
         else:
             log.info("%s: %s; the run holding it does this work", product, e)
         out = {"busy": str(e), "files": [], "pending": None}
