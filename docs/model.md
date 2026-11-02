@@ -6875,10 +6875,29 @@ Units & supply's **River abstractions** table (Other uses) and the summary
 CSV's River abstractions block show each abstraction's pump, mean take,
 these two and its pool.
 
+**Unmet demand (engine ≥ 1.111.0).** Every abstraction also publishes
+`river_short@<key>` (m³/day): what it was asked for after any drought
+restriction (§2.7i, the cut demand `want_a` above) less what it pumped,
+
+```
+short_a = demand_a after the restriction − G_a        (≥ 0; G_a + short_a = demand_a after the restriction)
+```
+
+It is the river side's own shortfall, beside the unit's `deficit` (which
+stays the unrestricted demand's, so a cut shows there too, §2.7i; the
+stored `object_demand@` is before the cut, so the shortfall can't be worked
+back from it). A measure: nothing else in the run changes. The farm view
+reads it to split a dam unit's short days by side (`season.shortDaysRiver`,
+`shortDaysBoth`; ui.md § Farmer view): the river side was short on a day
+`Σ short_a` is above float noise, the dam side when `deficit − Σ short_a`
+is, with the dam at its stop level. A run before 1.111.0 has none, and its
+view keeps putting every short day at the stop level down to the dam.
+
 **Checks.** `checkBalance` closes every unit's balance with the pools'
 change, and keeps each pool within 0 … capacity;
 `checkWorkings` keeps each take within its pump's capacity and its
-demand, and the flow the abstractions took (Σ take − pool drawn + refill)
+demand, its unmet demand (engine ≥ 1.111.0) at least 0 and adding up with
+the take to that demand, and the flow the abstractions took (Σ take − pool drawn + refill)
 within the flow past the dam above what must pass, and each pump-limited
 figure (engine ≥ 1.66.0) within the take's shortfall, 0 unless its pump is
 spent, at most the flow it may take less what it took from the flow plus

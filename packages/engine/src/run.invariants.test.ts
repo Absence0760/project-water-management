@@ -588,3 +588,37 @@ describe('dam rules out of the catchment with base flow (engine 1.86.0, issue #5
 		expect(seen).toBe(8);
 	});
 });
+
+describe('a river abstraction’s unmet demand (engine 1.111.0, docs/model.md §2.7j)', () => {
+	it('random networks: every river take has its river_short@, take + short = a demand object’s demand (≤ it under a drought restriction), and the self-checks pass', () => {
+		let seen = 0;
+		let shortDays = 0;
+		for (let seed = 1; seed < 400 && seen < 12; seed++) {
+			const x = randomInput(seed, { maxDays: 200 });
+			const out = withVerification(x, runModel(x));
+			const takes = out.series.filter((s) => s.key.startsWith('river_take@'));
+			if (!takes.length) continue;
+			seen++;
+			expect(out.summary.verification?.passed, `seed ${seed}: ${JSON.stringify(out.summary.verification?.checks.filter((c) => !c.passed))}`).toBe(true);
+			const restricted = !!x.settings.droughtRestriction;
+			for (const s of takes) {
+				const key = s.key.slice('river_take@'.length);
+				const short = out.series.find((y) => y.nodeId === s.nodeId && y.key === `river_short@${key}`);
+				expect(short, `seed ${seed} ${s.nodeId} ${key}`).toBeDefined();
+				const demand = key === 'crops' ? undefined : out.series.find((y) => y.nodeId === s.nodeId && y.key === `object_demand@${key}`)!.values;
+				for (let t = 0; t < s.values.length; t++) {
+					const v = short!.values[t]!;
+					expect(v, `seed ${seed} ${key} day ${t}`).toBeGreaterThanOrEqual(0);
+					if (v > 1e-6) shortDays++;
+					if (!demand) continue;
+					const tol = 1e-6 + 1e-9 * demand[t]!;
+					if (restricted) expect(s.values[t]! + v, `seed ${seed} ${key} day ${t}`).toBeLessThanOrEqual(demand[t]! + tol);
+					else expect(Math.abs(s.values[t]! + v - demand[t]!), `seed ${seed} ${key} day ${t}`).toBeLessThanOrEqual(tol);
+				}
+			}
+		}
+		expect(seen).toBe(12);
+		// Some abstraction was short somewhere, or the property proves little.
+		expect(shortDays).toBeGreaterThan(0);
+	});
+});
