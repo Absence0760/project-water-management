@@ -1100,8 +1100,31 @@ boundary itself rather than over a box around it.
   - a run whose CHIRPS series spans less of it than another CHIRPS series
     warns, naming both ([model.md § Which CHIRPS series the run
     reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
+- **Reference ET from the boundary.** The same proposal and Apply for the
+  daily reference evapotranspiration feed (`agera5_et0`): **Attach a feed**
+  → **Source** *AgERA5 daily reference evapotranspiration* → **Area** *The
+  catchment boundary, from the map* (`BoundaryRain.svelte` with `source`
+  `agera5_et0`, heading **Reference ET from the catchment boundary**), and
+  `GET`/`POST /projects/:id/feeds/agera5_et0/from-boundary`
+  (`feeds/fromBoundary.ts ET0_BOUNDARY`, one code path with CHIRPS's). The
+  cells are cut on our copy's own grid, not CHIRPS's: AgERA5's 0.1° cells,
+  centred on x.x5° (`ingest/agera5.py`; NASA POWER's days are regridded onto
+  the same cells), over region D1 (`mirror/grid.ts MIRROR_REGION`, 10–41° E,
+  8–35.5° S), so each listed centre names the one copy cell that holds it
+  (`fromMirrorEt0.ts et0Cell`) and a boundary up to about 10,000 km² fits the
+  feed's 100 cells; a boundary reaching outside D1 is refused (409
+  `boundary_cells`). The feed writes `evap_et0_mm` (a separate series named
+  "Reference ET boundary", "… 2" … beside a record, as for CHIRPS), has no
+  daily product (a `product` is refused, 400), and reads from the record's
+  first day (1981 at the earliest) or, with no record, the last 365 days.
+  Replacing the record runs read is offered only through the catchment
+  reference ET feed that writes it, as an area replacement (its own days
+  re-read over the boundary's cells); a record no feed writes (an upload)
+  has no product version to be replaced by, so it is kept and the
+  boundary's series sits beside it. Each unit's parcel stays CHIRPS only
+  (a unit's own series is rain, 209_unit_rain_series).
 - **The weights** (`backend/src/feeds/boundaryCells.ts`, pure). Each 0.05°
-  cell gets *share of the cell inside the boundary × cos(cell-centre
+  cell (0.1° for reference ET, `ET0_GRID`) gets *share of the cell inside the boundary × cos(cell-centre
   latitude)*, the weighting `bboxCells` gives a box, so a rectangle gets
   exactly a box's cells and weights. Holes are subtracted and the parts of a
   MultiPolygon add up. The share is computed by **exact clipping**, not

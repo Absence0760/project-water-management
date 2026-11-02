@@ -448,12 +448,15 @@ provenance, `ingest/verify_copy.py`):
       anything else. **Trigger:** the CDS account (#618 7b–7d), then one
       `agera5_et0` backfill month and one `power_et0` run with the
       operator; fix what the reader refuses, then switch the schedules on.
-- [ ] **The catchment boundary's proposal for a reference ET feed.** The
-      Data feeds form proposes the boundary's cells (and each unit's) for
-      CHIRPS only, so an `agera5_et0` feed is attached by cells or a box.
-      **Durable fix:** offer the boundary's proposal for `agera5_et0` too
-      (`feeds/fromBoundary.ts` is CHIRPS-specific in its source and target).
-      **Trigger:** the first project that adds a reference ET feed.
+- [x] **The catchment boundary's proposal for a reference ET feed
+      (2026-11-01).** Done: Data feeds → Attach a feed → Source *AgERA5 …*
+      → Area *The catchment boundary, from the map* proposes the boundary's
+      cells on our copy's own 0.1° grid (`…/feeds/agera5_et0/from-boundary`,
+      one code path with CHIRPS's in `feeds/fromBoundary.ts`, cells cut by
+      `boundaryCells.ts ET0_GRID`), into `evap_et0_mm`, with no daily product
+      ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary),
+      *Reference ET from the boundary*). Each unit's parcel stays CHIRPS
+      only: a unit's own series is rain (209_unit_rain_series).
 - [x] **Credit AgERA5 and NASA POWER in a run's report and exports
       (2026-10-30).** Done: a run records `et0Products` from the feed's
       days GR4J read, and the report, CSVs, workbook, evidence pack README

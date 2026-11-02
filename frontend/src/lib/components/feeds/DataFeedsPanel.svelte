@@ -6,7 +6,8 @@
 	attach, switch off and remove feeds; editors can run one now; viewers read.
 	The add action sits in the panel's head (issue #521) and opens the card
 	above the list; the card's Area choice also holds the two proposals from
-	the map (the catchment boundary, each unit's parcel), which editors open
+	the map (the catchment boundary, for CHIRPS or the daily reference ET
+	feed; each unit's parcel, CHIRPS only), which editors open
 	from the head's "Rain from the map" to read. Helpers in ./feeds.ts.
 -->
 <script lang="ts">
@@ -94,8 +95,12 @@
 	const attention = $derived(data ? needsAttention(data.feeds) : 0);
 	/** How far our copy of the CHIRPS rain data reaches, for a project with a CHIRPS feed (issue #604); null otherwise. */
 	const copyNote = $derived(data ? rainCopyNote(data.rainCopy, data.feeds) : null);
-	/** The map's proposals: CHIRPS only, and for editors as well as owners (editors read them; an owner applies). */
-	const mapAreas = $derived(!!data?.canRun && draft.source === 'chirps');
+	/**
+	 * The map's proposals, for editors as well as owners (editors read them; an owner applies): the catchment boundary
+	 * for CHIRPS and the daily reference ET feed (agera5_et0), each unit's parcel for CHIRPS only.
+	 */
+	const mapAreas = $derived(!!data?.canRun && (draft.source === 'chirps' || draft.source === 'agera5_et0'));
+	const unitAreas = $derived(mapAreas && draft.source === 'chirps');
 	/** An editor (not an owner) opens the card only to read the map's proposals. */
 	const mapOnly = $derived(!!data && data.canRun && !data.canEdit);
 	const sourceLabel = (f: FeedMeta) => data?.sources.find((s) => s.source === f.source)?.label ?? f.source;
@@ -248,8 +253,8 @@
 
 	function pickSource(s: FeedDraft['source']) {
 		draft.source = s;
-		// The map's proposals are CHIRPS only.
-		if (s !== 'chirps') mapArea = null;
+		// The boundary's proposal is CHIRPS's and reference ET's; each unit's, CHIRPS's only.
+		if ((s !== 'chirps' && s !== 'agera5_et0') || (s !== 'chirps' && mapArea === 'units')) mapArea = null;
 		draft.targetKind = data?.sources.find((x) => x.source === s)?.kinds[0] ?? '';
 		// A problem with the other source's field (or series) no longer applies.
 		formError = formField = takeover = null;
@@ -457,7 +462,7 @@
 								{/if}
 								{#if mapAreas}
 									<option value="boundary">The catchment boundary, from the map</option>
-									<option value="units">Each unit’s parcel: a feed per unit</option>
+									{#if unitAreas}<option value="units">Each unit’s parcel: a feed per unit</option>{/if}
 								{/if}
 							</select>
 						</div>
@@ -479,8 +484,17 @@
 					</div>
 				{/if}
 				{#if mapArea === 'boundary'}
-					<!-- The rain feed from the map's catchment boundary (issue #326 B-rain): a proposal for editors, applied by an owner. -->
-					<BoundaryRain {projectId} feeds={data.feeds} focus={mapFocus} onclose={closeForm} onapplied={() => reload().then(() => undefined)} />
+					<!-- The rain (or reference ET) feed from the map's catchment boundary (issue #326 B-rain): a proposal for editors, applied by an owner. -->
+					{#key draft.source}
+						<BoundaryRain
+							{projectId}
+							feeds={data.feeds}
+							source={draft.source === 'agera5_et0' ? 'agera5_et0' : 'chirps'}
+							focus={mapFocus}
+							onclose={closeForm}
+							onapplied={() => reload().then(() => undefined)}
+						/>
+					{/key}
 				{:else if mapArea === 'units'}
 					<!-- One CHIRPS feed per land unit, from its parcel (issue #482): owners set them up, editors read. -->
 					<UnitRain {projectId} feeds={data.feeds} focus={mapFocus} onclose={closeForm} onapplied={() => reload().then(() => undefined)} />

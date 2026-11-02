@@ -1099,6 +1099,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		'/projects/:id/assessments/:aid': { status: 403, why: 'editor' },
 		'/projects/:id/assessments/backgrounds': { status: 403, why: 'editor' },
 		'/projects/:id/feeds/chirps/from-boundary': { status: 403, why: 'owner' },
+		'/projects/:id/feeds/agera5_et0/from-boundary': { status: 403, why: 'owner' },
 		'/projects/:id/feeds/chirps/from-units': { status: 403, why: 'owner' },
 		'/projects/:id/map/unit-map': { status: 403, why: 'editor' },
 		'/projects/:id/map/channels': { status: 403, why: 'editor' },
