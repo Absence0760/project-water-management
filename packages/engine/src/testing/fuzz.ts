@@ -602,16 +602,18 @@ function addOfftakes(g: Rng, nodes: NetworkNode[], transfers: Transfer[]): void 
 }
 
 /**
- * Diversion curves (engine ≥ 1.113.0, docs/model.md §2.6a): a third of the
- * river off-takes take a share of the river's flow, a · x^b percent, with an
- * exponent either side of −1 (the diverted volume falls with the flow below
- * it), a cap on the share now and then, any of the four flow units, and the
- * natural flow read now and then; now and then the curve is incomplete (the
- * run takes nothing, with a warning).
+ * Diversion curves (engine ≥ 1.113.0, docs/model.md §2.6a): half the river
+ * off-takes sized to capacity take a share of the river's flow instead, a ·
+ * x^b percent, with an exponent either side of −1 (the diverted volume falls
+ * with the flow below it), a cap on the share now and then, any of the four
+ * flow units, and the natural flow read now and then; now and then the curve
+ * is incomplete (the run takes nothing, with a warning). Rules sized to the
+ * destination's need stay so, keeping the seeds' coverage of their need,
+ * top-up and room terms (e2e/deep.offtakeFuzz.e2e.test.ts counts it).
  */
 function addDiversionCurves(g: Rng, transfers: Transfer[]): void {
 	for (const t of transfers) {
-		if (t.source !== 'river' || !g.bool(0.33)) continue;
+		if (t.source !== 'river' || t.sizing !== 'capacity' || !g.bool(0.5)) continue;
 		t.sizing = 'diversionCurve';
 		t.diversionCoefficient = g.bool(0.03) ? null : g.logFloat(0.01, 1e5);
 		t.diversionExponent = g.pick([0, g.float(-1.5, 0.5), -0.9]);

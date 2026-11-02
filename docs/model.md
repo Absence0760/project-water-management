@@ -4293,7 +4293,7 @@ questions of 2026-11-02 are in [followups.md § Hydrologist](./followups.md#hydr
 with s read at U₀ (reading the natural flow, which no series carries, to m ×
 U₀), and a source whose rules are all sized to capacity or by a curve on the
 modelled flow to taking MIN(Σ asks, the flow above the largest keep). The
-fuzz generator gives a third of its off-takes a curve (exponents either side
+fuzz generator gives half its capacity-sized off-takes a curve (exponents either side
 of −1, caps, every unit, the natural flow now and then, an incomplete curve
 now and then). Hand examples: `run.offtakeDiversion.test.ts`,
 `network/diversionCurve.test.ts`; the cross-check's probe

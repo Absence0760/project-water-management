@@ -5,7 +5,7 @@
 // hydrologist gave (2026-11-02), with invented numbers (2000 · x^−0.9 %, at
 // most 95 %, a canal of 0.25 m³/s), under each candidate flow unit, and the
 // invariants a run keeps whatever the curve. The random networks (./fuzz)
-// give a third of their off-takes a curve.
+// give half their capacity-sized off-takes a curve; e2e/deep.offtakeFuzz replays them.
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import { modelRuleProblems } from './modelRules';
