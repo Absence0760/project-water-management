@@ -127,7 +127,9 @@ export const INVENTORY = [
 	},
 	// --- SQL functions (latest definitions) --------------------------------------
 	{ path: 'sql:app_share_series', reads: 1, how: 'cut', evidence: ['pub.forecast_from'], in: 'backend/migrations/190_history_viewer_share_forecast.sql' },
-	{ path: 'sql:app_run_digest_body', reads: 1, how: 'whole', evidence: ['app_run_digest_body'], in: 'backend/migrations/115_scenario_share_notes.sql', note: 'the run’s stamp digests every stored day' }
+	{ path: 'sql:app_run_digest_body', reads: 1, how: 'whole', evidence: ['app_run_digest_body'], in: 'backend/migrations/304_run_series_store_cost.sql', note: 'the run’s stamp digests every stored day' },
+	{ path: 'sql:app_run_signing_digest', reads: 1, how: 'whole', evidence: ['app_run_signing_digest'], in: 'backend/migrations/304_run_series_store_cost.sql', note: 'the digest storeRun signs: the same canonical body, every stored series by the hash the backend gives' },
+	{ path: 'sql:app_run_series_sha256', reads: 1, how: 'whole', evidence: ['app_run_series_sha256'], in: 'backend/migrations/304_run_series_store_cost.sql', note: 'storeRun’s drift check hashes a few stored series, every day of each' }
 ];
 
 const SKIP_DIR = new Set(['node_modules', '__tests__', '__fixtures__', '.svelte-kit', 'build', 'dist']);
