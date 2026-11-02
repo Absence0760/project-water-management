@@ -86,7 +86,10 @@ describe('anthropic provider', () => {
 			{ type: 'usage', inputTokens: 120, outputTokens: 12 }
 		]);
 		expect(seen[0]!.url).toContain('/v1/messages');
-		expect(seen[0]!.headers['x-api-key']).toBe(KEY);
+		// SDK 1.x (API version 2026-10-21) sends the key as a bearer token, no longer as x-api-key.
+		expect(seen[0]!.headers.authorization).toBe(`Bearer ${KEY}`);
+		expect(seen[0]!.headers['x-api-key']).toBeUndefined();
+		expect(seen[0]!.headers['anthropic-version']).toBe('2026-10-21');
 		// Claude Sonnet 5.5 by default, with server-side refusal fallbacks.
 		expect(seen[0]!.headers['anthropic-beta']).toContain('server-side-fallback-2026-07-01');
 		expect(seen[0]!.body).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 512, stream: true, fallbacks: 'default', output_config: { effort: 'low' }, cache_control: { type: 'ephemeral' } });
