@@ -1056,6 +1056,28 @@ describe('diffInputs', () => {
 		]);
 	});
 
+	it('describes a diversion curve (engine 1.113.0): the sizing and each field of the curve that differs; none written out is no change', () => {
+		const t = { id: 't1', fromNodeId: 'f1', toNodeId: 'f2', months: [12, 1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const, sizing: 'capacity' as const };
+		const a = snapshot({ model: { ...snapshot().model, transfers: [t] } });
+		const same = structuredClone(a);
+		Object.assign(same.model.transfers[0]!, { diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null, diversionFlowUnit: null, diversionFlowBasis: null });
+		expect(texts(a, same)).toEqual([]);
+		const b = structuredClone(a);
+		Object.assign(b.model.transfers[0]!, { sizing: 'diversionCurve', diversionCoefficient: 2000, diversionExponent: -0.9, diversionMaxPct: 0.95, diversionFlowUnit: 'L/s', diversionFlowBasis: 'natural' });
+		expect(texts(a, b)).toEqual([
+			"Transfer Rooikloof → Bergwater: sized up to capacity → by a diversion curve (a share of the river's flow)",
+			// fmtValue groups thousands with a narrow space.
+			expect.stringMatching(/^Transfer Rooikloof → Bergwater: diversion curve coefficient a none → 2\s000$/),
+			'Transfer Rooikloof → Bergwater: diversion curve exponent b none → -0.9',
+			'Transfer Rooikloof → Bergwater: largest share of the flow 100% → 95%',
+			'Transfer Rooikloof → Bergwater: flow unit of the curve none → L/s',
+			'Transfer Rooikloof → Bergwater: the curve reads the modelled flow → the natural flow'
+		]);
+		const c = structuredClone(b);
+		Object.assign(c.model.transfers[0]!, { diversionFlowUnit: 'm3/s' });
+		expect(texts(b, c)).toEqual(['Transfer Rooikloof → Bergwater: flow unit of the curve L/s → m3/s']);
+	});
+
 	it('names the calibration site by its gauge, never its node id (issue #610)', () => {
 		const id = '11111111-1111-4111-8111-111111111111';
 		const nodes = [node('g', 'Outlet', { kind: 'gauge', downstreamNodeId: null, damCapacityM3: 0 }), node(id, 'Weir', { kind: 'gauge', downstreamNodeId: 'g', damCapacityM3: 0, areaKm2: 0 })];

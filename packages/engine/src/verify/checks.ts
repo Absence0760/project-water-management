@@ -20,7 +20,7 @@ import { ewrSplitDays, naturalMarShares } from '../network/ewrSplit';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, externalRuleKeys, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
-import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
+import { diversionWant, isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { reachLossDay, reachLossOf, REACH_LOSS_SERIES, SENIOR_REACH_LOSS_SERIES } from '../network/reachLoss';
 import { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, baseflowLossDay, baseflowOf } from '../network/baseflow';
 import { cmpStr } from '../order';
@@ -1054,9 +1054,12 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
  *   a farm below it), Σ v × loss × its return share = offtake_loss_return,
  *   which joins the outflow after the farm's own off-takes (so the flow the
  *   source's rules saw is outflow − offtake_loss_return + Σ v);
+ * - a rule sized by a share of the river's flow (engine ≥ 1.113.0) takes at
+ *   most that share of U₀ (its curve read at U₀; reading the natural flow,
+ *   at most its largest share of U₀);
  * - no water left in the river it could have taken: when every rule from a
- *   source is sized to capacity, Σ v ≥ MIN(Σ capacities, flow − the most any
- *   rule must leave).
+ *   source is sized to capacity or to a share of the modelled flow, Σ v ≥
+ *   MIN(Σ what they ask, flow − the most any rule must leave).
  */
 function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): string | null {
 	const byId = new Map(input.model.nodes.map((n) => [n.id, n]));
@@ -1092,12 +1095,21 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			let sum = 0;
 			let caps = 0;
 			let keepMax = 0;
+			// The flow before the off-takes, U₀: what a diversion-curve rule's share is of (engine ≥ 1.113.0).
+			const U0all = U + sumAll(mine, t);
 			for (const r of mine) {
 				const v = r.volume![t]!;
 				const cap = r.o.capM3Day[month]!;
 				if (!(v >= -tol(0)) || v > cap + tol(cap)) return `${where}: river off-take ${r.tr.id} took ${v}, outside [0, its capacity today ${cap}]`;
+				// A diversion-curve rule takes at most its share of U₀: read off its curve at U₀ when it reads the modelled
+				// flow, else (it reads the natural flow, which no series carries) at most its largest share of U₀.
+				if (r.o.sizing === 2) {
+					const fs = r.o.diversion;
+					const want = fs ? (fs.natural ? fs.maxShare * U0all : diversionWant(fs, U0all, U0all)) : 0;
+					if (v > want + tol(Math.max(want, U0all))) return `${where}: river off-take ${r.tr.id} took ${v}, more than its share of the river's flow ${U0all} (${want})`;
+				}
 				sum += v;
-				caps += cap;
+				caps += r.o.sizing === 2 ? (r.o.diversion && !r.o.diversion.natural ? Math.min(cap, diversionWant(r.o.diversion, U0all, U0all)) : 0) : cap;
 				const keep = Math.max(Zs, rt, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
 				keepMax = Math.max(keepMax, cap > 0 ? keep : 0);
 				if (v > 0 && v > Math.max(0, U + sumAll(mine, t) - keep) + tol(Math.max(U, keep))) return `${where}: river off-take ${r.tr.id} took ${v}, more than the flow above what it must leave (${keep})`;
@@ -1120,7 +1132,8 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 					return `${where}: river off-take ${r.tr.id} and the rules of its priority keeping at least its ${k} took ${above} > the flow ${U0} − ${earlier} taken first − ${k}`;
 			}
 			if (sum > 0 && U < -tol(sum)) return `${where}: the river off-takes left ${U} in the river`;
-			if (mine.every((r) => r.o.sizing === 1)) {
+			// Rules sized to capacity, or to a share of the modelled flow (engine ≥ 1.113.0: what they ask is known here).
+			if (mine.every((r) => r.o.sizing === 1 || (r.o.sizing === 2 && r.o.diversion !== null && !r.o.diversion.natural))) {
 				const floor = Math.min(caps, Math.max(0, U + sum - keepMax));
 				if (sum < floor - tol(Math.max(floor, U + sum))) return `${where}: the river off-takes took only ${sum}; their capacity and the flow allowed ${floor}`;
 			}

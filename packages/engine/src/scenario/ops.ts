@@ -38,6 +38,8 @@ import {
 	PE_SOURCE_MAX,
 	SUPPLY_RULES,
 	TRANSFER_SIZINGS,
+	DIVERSION_FLOW_BASES,
+	DIVERSION_FLOW_UNITS,
 	TRANSFER_SOURCES,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
@@ -380,7 +382,12 @@ export const TRANSFER_SET_FIELDS = [
 	'sizing',
 	'topUpDam',
 	'lossReturnPct',
-	'lossReturnNodeId'
+	'lossReturnNodeId',
+	'diversionCoefficient',
+	'diversionExponent',
+	'diversionMaxPct',
+	'diversionFlowUnit',
+	'diversionFlowBasis'
 ] as const;
 export type TransferSetField = (typeof TRANSFER_SET_FIELDS)[number];
 
@@ -405,11 +412,33 @@ const TRANSFER_FIELD_CHECKS: Record<TransferSetField, Check> = {
 	topUpDam: boolean,
 	// Engine ≥ 1.42.0: the share of the conveyance losses seeping back to the river, and the unit it rejoins below (null = the source).
 	lossReturnPct: frac,
-	lossReturnNodeId: nullable(id)
+	lossReturnNodeId: nullable(id),
+	// Engine ≥ 1.113.0: a share of the river's flow, a · x^b percent (docs/model.md §2.6a); null on any other sizing.
+	// A rule sized by it needs a complete curve, which modelRuleIssues checks on the model the ops give.
+	diversionCoefficient: nullable(range(0, Number.MAX_VALUE, { loOpen: true })),
+	diversionExponent: nullable(range(-Number.MAX_VALUE, Number.MAX_VALUE)),
+	diversionMaxPct: nullable(range(0, 1, { loOpen: true })),
+	diversionFlowUnit: nullable(oneOf(DIVERSION_FLOW_UNITS)),
+	diversionFlowBasis: nullable(oneOf(DIVERSION_FLOW_BASES))
 };
 
 /** The transfer fields a new transfer may leave out (engine ≥ 1.14.0 and 1.42.0 additions). */
-export const TRANSFER_OPTIONAL = new Set<string>(['monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam', 'lossReturnPct', 'lossReturnNodeId']);
+export const TRANSFER_OPTIONAL = new Set<string>([
+	'monthlyRateM3s',
+	'source',
+	'handsOffM3Day',
+	'handsOffEwr',
+	'lossPct',
+	'sizing',
+	'topUpDam',
+	'lossReturnPct',
+	'lossReturnNodeId',
+	'diversionCoefficient',
+	'diversionExponent',
+	'diversionMaxPct',
+	'diversionFlowUnit',
+	'diversionFlowBasis'
+]);
 
 const TRANSFER_FIELD_CHECK = checksOf(TRANSFER_FIELD_CHECKS);
 

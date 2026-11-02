@@ -2088,8 +2088,18 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if ((x.handsOffM3Day ?? null) !== (y.handsOffM3Day ?? null)) parts.push(`hands-off flow ${handsOff(x)} → ${handsOff(y)}`);
 		if (!!x.handsOffEwr !== !!y.handsOffEwr) parts.push(y.handsOffEwr ? 'now leaves the EWR in the river' : 'no longer leaves the EWR in the river');
 		if ((x.lossPct ?? 0) !== (y.lossPct ?? 0)) parts.push(`conveyance losses ${pct(x.lossPct ?? 0)} → ${pct(y.lossPct ?? 0)}`);
-		const sizing = (t: Transfer) => (t.sizing === 'capacity' ? 'up to capacity' : "to the destination's need");
+		const sizing = (t: Transfer) => (t.sizing === 'capacity' ? 'up to capacity' : t.sizing === 'diversionCurve' ? "by a diversion curve (a share of the river's flow)" : "to the destination's need");
 		if ((x.sizing ?? 'demand') !== (y.sizing ?? 'demand')) parts.push(`sized ${sizing(x)} → ${sizing(y)}`);
+		// A share of the river's flow (engine ≥ 1.113.0): its curve, each field as it differs.
+		if (x.sizing === 'diversionCurve' || y.sizing === 'diversionCurve') {
+			const num = (v: number | null | undefined) => (v === null || v === undefined ? 'none' : fmtValue(v));
+			if ((x.diversionCoefficient ?? null) !== (y.diversionCoefficient ?? null)) parts.push(`diversion curve coefficient a ${num(x.diversionCoefficient)} → ${num(y.diversionCoefficient)}`);
+			if ((x.diversionExponent ?? null) !== (y.diversionExponent ?? null)) parts.push(`diversion curve exponent b ${num(x.diversionExponent)} → ${num(y.diversionExponent)}`);
+			if ((x.diversionMaxPct ?? 1) !== (y.diversionMaxPct ?? 1)) parts.push(`largest share of the flow ${pct(x.diversionMaxPct ?? 1)} → ${pct(y.diversionMaxPct ?? 1)}`);
+			if ((x.diversionFlowUnit ?? null) !== (y.diversionFlowUnit ?? null)) parts.push(`flow unit of the curve ${x.diversionFlowUnit ?? 'none'} → ${y.diversionFlowUnit ?? 'none'}`);
+			const basis = (t: Transfer) => (t.diversionFlowBasis === 'natural' ? 'the natural flow' : 'the modelled flow');
+			if ((x.diversionFlowBasis ?? 'modelled') !== (y.diversionFlowBasis ?? 'modelled')) parts.push(`the curve reads ${basis(x)} → ${basis(y)}`);
+		}
 		if (!!x.topUpDam !== !!y.topUpDam) parts.push(y.topUpDam ? "now tops up the destination's dam" : "no longer tops up the destination's dam");
 		// Canal seepage back to the river (engine ≥ 1.42.0): the share, and where it rejoins (by name, A's in B's names).
 		if ((x.lossReturnPct ?? 0) !== (y.lossReturnPct ?? 0)) parts.push(`share of the losses seeping back to the river ${pct(x.lossReturnPct ?? 0)} → ${pct(y.lossReturnPct ?? 0)}`);
