@@ -61,7 +61,6 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { latestOnly } from '#lib/api/latest.js';
 	import { errataFoundSinceNote, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '#lib/components/packs/pack.js';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 	import { printedPage } from '#lib/components/report/printedPage.svelte.js';
 	import { pageStart } from '#lib/a11y/focusPage.js';
 	import { followRetry } from '#lib/components/common/loadState.js';
