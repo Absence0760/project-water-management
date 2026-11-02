@@ -3409,26 +3409,23 @@ yet; each lands with the work package named.
       e2e shards against the farm API and the seeded publication (1ab1896b,
       de671eb2).
 
-- [ ] **A unit with demands on both its dam and the river: which side was
+- [x] **A unit with demands on both its dam and the river: which side was
       short** (persona-farmer, round 4, 2026-10-02). Since engine 1.65.0
       (model.md §2.7j) a unit's crops or demand objects can each draw on a
-      river abstraction beside its dam. The farm page's "Short on N days …"
-      line still counts a short day "when your dam was down to its stop
-      level" whenever the dam sat there, whichever side was short; a unit
-      whose demands *all* draw on the river is already right
-      (`season.onlyRiver`, the river's wording), and the dam's days left
-      already divide by the dam's own draw (`damDraw`). What's missing is a
-      per-side shortfall: the run publishes each abstraction's take
-      (`river_take@`) but not what it was asked for after a drought
-      restriction (the stored `object_demand@` is before the cut), so the
-      projection can't tell a river-side shortfall from a dam-side one
-      without guessing. Durable fix: the engine publishes each river
-      abstraction's unmet demand (`river_short@<key>`, an ENGINE_VERSION
-      bump), the projection counts the dam side's and the river side's
-      short days apart, and the card gets a river reason ("… when the
-      river or your pump couldn't give enough", through the i18n agents).
-      Trigger: the client's first unit with both a dam-side and a
-      river-side demand is published to its farmer.
+      river abstraction beside its dam, and the farm page's "Short on N days
+      …" line counted a short day "when your dam was down to its stop
+      level" whenever the dam sat there, whichever side was short. Done in
+      engine 1.111.0: every river abstraction publishes its unmet demand
+      after any drought restriction (`river_short@<key>`; take + short = the
+      cut demand, held by `checkWorkings` and a random-network invariant),
+      the farm projection loads it beside `river_take@` and counts the dam
+      side's and the river side's short days apart
+      (`season.shortDaysRiver`, `shortDaysBoth`; `shortDaysAtStopLevel` now
+      only the dam side's own), and the card gets the river reason ("…
+      when the river or your pump couldn't give enough", both sides' counts,
+      "Both were short on N days."; Afrikaans through the i18n agents). A
+      view from an older run has no split and reads as before (ui.md §
+      Farmer view).
 
 ## Afrikaans (WP-2.5)
 

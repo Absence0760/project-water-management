@@ -14000,6 +14000,20 @@ published.
   failed load is one line asking to check the connection and reload, as the
   map card's. Nothing of a neighbour's dam reaches it (the route names the
   farm, and 249's farmer policies are the second layer).
+- **The short-days line** on the supply card (`farm/cards.ts` `shortLine`):
+  "Short on 16 days in Nov and Dec, all when your dam was down to its stop
+  level." (or "…empty" with no stop level), and on a unit with no dam, or
+  whose demands all draw on the river (`season.onlyRiver`), "…when the river
+  was too low to take from." A dam unit with demands on both its dam and a
+  river abstraction (engine ≥ 1.111.0, model.md §2.7j) says which side was
+  short, from `season.shortDaysRiver` / `shortDaysBoth`: the river side only
+  ("…all when the river or your pump couldn't give enough." / "…5 of them
+  when …"), both sides on different days ("Short on 16 days in Nov and Dec:
+  your dam was down to its stop level on 10 days, and the river or your pump
+  couldn't give enough on 8 days. Both were short on 2 days."), both every
+  day ("…all when your dam was down to its stop level and the river or your
+  pump couldn't give enough."), or the dam's words when only the dam side
+  was. A view from an older run has no split and keeps the dam's words.
 - **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
   figures are worked out by a computer model of the catchment. They are
   estimates, not measurements or instructions, and they can be wrong. Only a

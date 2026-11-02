@@ -44,7 +44,7 @@ import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../n
 import { runReturnFlow, type CropArea, type CurtailmentFarm, type CurtailmentSummary, type DemandObject, type IrrigationSystemDef, type NetworkNode, type Transfer } from '../project';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
 import { userRestrictionShare } from '../network/restriction';
-import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverTakeKey } from '../network/riverSource';
+import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverShortKey, riverTakeKey } from '../network/riverSource';
 import { modelFarmEfficiency, type CropEfficiencyInput, type CropSystemInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
 
@@ -95,8 +95,12 @@ export const PROJECTION_SERIES = {
  */
 export const NOT_FROM_DAM_SERIES = ['groundwater_used', 'remote_dam_in'] as const;
 
-/** The prefixes of the per-abstraction series a projection reads too (the loader reads `key LIKE prefix%`). */
-export const PROJECTION_SERIES_PREFIXES = [RIVER_TAKE_SERIES.take.prefix] as const;
+/**
+ * The prefixes of the per-abstraction series a projection reads too (the
+ * loader reads `key LIKE prefix%`): each river abstraction's take, and its
+ * unmet demand (engine ≥ 1.111.0), which splits the short days by side.
+ */
+export const PROJECTION_SERIES_PREFIXES = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.short.prefix] as const;
 
 /** A saved run, as the projection sees it. */
 export interface ProjectionRun {
@@ -173,6 +177,25 @@ function servesOnlyRiver(run: ProjectionRun, node: NetworkNode): boolean {
 	if (hasCrops && damServesCrops) return false;
 	if (objects.some((o) => !onRiver(o.waterSource))) return false;
 	return (hasCrops && !damServesCrops) || objects.length > 0;
+}
+
+/**
+ * Σ of a unit's river abstractions' unmet demand each day (engine ≥ 1.111.0,
+ * `river_short@<key>`, after any drought restriction), or null when the unit
+ * has none or the run doesn't publish one of them (a run before 1.111.0), so
+ * the short days can't be split by side.
+ */
+function riverShortOf(run: ProjectionRun, node: NetworkNode, days: number): Float64Array | null {
+	const keys = riverTakeKeys(run, node);
+	if (!keys.length) return null;
+	const out = new Float64Array(days);
+	for (const k of keys) {
+		const v = run.series(node.id, riverShortKey(k));
+		if (!v) return null;
+		if (v.length !== days) throw new ProjectionInputError(`the run's ${riverShortKey(k)} series has ${v.length} days, expected ${days}`);
+		for (let t = 0; t < days; t++) out[t] = out[t]! + Math.max(0, val(v[t]));
+	}
+	return out;
 }
 
 /**
@@ -838,17 +861,36 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 	// engine only lets irrigation draw above it, so a dam farm is short only there).
 	// A unit whose demands all draw on the river (§2.7j): its dam serves none of them, so a short day is never the dam's.
 	const onlyRiver = hasDam && servesOnlyRiver(run, node);
+	// A dam unit with river abstractions beside it (§2.7j, engine ≥ 1.111.0): each side's short days apart. The
+	// river side was short when an abstraction was (river_short@); the dam side when the rest of the deficit is
+	// more than noise and the dam sat at its stop level. Null on a run before 1.111.0: every short day at the stop
+	// level is put down to the dam, as before.
+	const riverShort = hasDam && !onlyRiver ? riverShortOf(run, node, days) : null;
 	const shortMonths = new Set<string>();
 	let shortDays = 0;
 	let atStop = 0;
+	let onRiverDays = 0;
+	let both = 0;
 	for (let t = sw.from; t <= sw.to; t++) {
 		if (!(deficit[t]! > NOISE_M3)) continue;
 		shortDays++;
 		shortMonths.add(fromEpochDay(d0 + t).slice(0, 7));
-		if (hasDam && !onlyRiver && capOn(t) > 0 && storage[t]! <= stopOn(t) + 1e-3) atStop++;
+		const r = riverShort ? riverShort[t]! : 0;
+		const riverSide = r > NOISE_M3;
+		const damSide = hasDam && !onlyRiver && capOn(t) > 0 && storage[t]! <= stopOn(t) + 1e-3 && (!riverShort || deficit[t]! - r > NOISE_M3);
+		if (damSide) atStop++;
+		if (riverSide) onRiverDays++;
+		if (damSide && riverSide) both++;
 	}
 	const seasonTotals = totals(demand, supplied, run.startDate, sw.fromDate, sw.toDate);
-	const season: SeasonTotals = { ...seasonTotals, shortDays, shortMonths: [...shortMonths].sort(), shortDaysAtStopLevel: atStop, ...(onlyRiver ? { onlyRiver } : {}) };
+	const season: SeasonTotals = {
+		...seasonTotals,
+		shortDays,
+		shortMonths: [...shortMonths].sort(),
+		shortDaysAtStopLevel: atStop,
+		...(onlyRiver ? { onlyRiver } : {}),
+		...(riverShort ? { shortDaysRiver: onRiverDays, shortDaysBoth: both } : {})
+	};
 	const last30 = totals(demand, supplied, run.startDate, lw.fromDate, lw.toDate);
 
 	let dam: DamState | null = null;

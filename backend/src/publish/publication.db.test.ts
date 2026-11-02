@@ -708,4 +708,27 @@ describe('a dam beside a river abstraction (round 4, persona-farmer)', () => {
 		expect(view.season.onlyRiver).toBe(true);
 		expect(view.season.shortDaysAtStopLevel).toBe(0);
 	});
+
+	it('loads each river_short@ series too, so a unit on both its dam and the river has its short days split by side (engine 1.111.0)', async () => {
+		const p = await makeProject(owner, 'Crops shared between a dam and the river');
+		const model = (await owner.call('GET', `/projects/${p}/model`)).body;
+		const [farmOne] = (await asOwner(`SELECT id FROM node WHERE project_id = $1 AND name = 'Farm One'`, [p])) as { id: string }[];
+		// Half the crops on the dam, half on their own river abstraction (a crop supply table, engine 1.73.0).
+		model.nodes = model.nodes.map((n: { id: string }) => (n.id === farmOne!.id ? { ...n, cropShareDam: 0.5, cropShareRiver: 0.5, cropRiverPumpM3Day: null } : n));
+		expect((await owner.call('PUT', `/projects/${p}/model`, model)).status).toBe(200);
+		const r = await run(owner, p);
+		expect((await publish(owner, r, {}, p)).status).toBe(201);
+		const short = (await asOwner(`SELECT "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = 'river_short@crops'`, [r, farmOne!.id])) as { values: number[] }[];
+		expect(short).toHaveLength(1);
+		const [row] = (await asOwner(
+			`SELECT f.view FROM publication_farm f JOIN run_publication p ON p.id = f.publication_id WHERE p.project_id = $1 AND p.superseded_at IS NULL AND f.view->>'nodeId' = $2`,
+			[p, farmOne!.id]
+		)) as { view: { season: { onlyRiver?: boolean; shortDays: number; shortDaysRiver?: number; shortDaysBoth?: number; shortDaysAtStopLevel: number } } }[];
+		const season = row!.view.season;
+		expect(season.onlyRiver).toBeUndefined();
+		// The split is there (absent would mean the loader missed the series): each side's days within the short days.
+		expect(typeof season.shortDaysRiver).toBe('number');
+		expect(season.shortDaysRiver!).toBeLessThanOrEqual(season.shortDays);
+		expect(season.shortDaysBoth!).toBeLessThanOrEqual(Math.min(season.shortDaysRiver!, season.shortDaysAtStopLevel));
+	});
 });
