@@ -986,24 +986,30 @@ runs and accumulations are real) can't be decided without the client.
       §2.6a *Sized by a diversion curve*).** The hydrologist's rule for one
       of the client's canals (2026-11-02) is built as a river off-take with
       `sizing: 'diversionCurve'` (y = a · x^b percent of the river, capped
-      at a largest share and the canal's capacity). Nothing is configured
-      for the client until he answers:
-      1. *The unit of x* (L/s, m³/s, m³/day or Ml/day): it changes
-         everything. In L/s the curve shapes every day and the canal never
-         fills; in m³/s or Ml/day the rule is the largest share of the river
-         up to the canal. Setting: `diversionFlowUnit` (required).
-      2. *Which flow x is*: the modelled flow at the off-take that day after
-         the upstream use (`diversionFlowBasis: 'modelled'`, the default) or
-         the natural flow there (`'natural'`).
-      3. *Where the water goes*: the destination unit (the canal's users),
-         whether what they don't use tops up a dam (`topUpDam`) or flows on,
-         and the canal's losses and how much returns (`lossPct`,
-         `lossReturnPct`, `lossReturnNodeId`).
-      4. *Its order* against other users at the same source (`priority`) and
-         downstream (the priority users' requirement is always kept), and
-         whether it leaves the EWR (`handsOffEwr`).
-      5. *A hands-off flow* below the weir (`handsOffM3Day`), and whether it
-         runs all year (its months and monthly rates).
+      at a largest share and the canal's capacity). His answers
+      (2026-11-02, second reply):
+      1. *The unit of x*: **m³/s** (`diversionFlowUnit: 'm3/s'`).
+      2. *Which flow x is*: the daily average present-day flow, after
+         abstractions upstream: **`diversionFlowBasis: 'modelled'`** (the
+         default). The canal's own unit has no irrigation.
+      3. *Where the water goes*: the canal splits 50/50, half to the
+         farmers and half to a dam in the town's unit; above the canal's
+         take the river spills on. No split field exists: model it as
+         **two curve rules from the same source**, each with a/2, m/2 and
+         half the canal (0.118 m³/s). Both read the same U₀ (the flow
+         before the source's off-takes), so together they take exactly
+         MIN(0.236 m³/s, MIN(97 %, a · x^b) × U₀). Still to ask: which
+         unit the farmers' half goes to, and the canal's losses.
+      4. *The EWR*: **none** (`handsOffEwr` off): the curve already keeps a
+         low-flow release. Its priority against other users at the source
+         is still open.
+      5. *A hands-off flow*: none, for the same reason; all year.
+      **Please confirm the unit.** In m³/s the cap binds long before the
+      curve does: a · x^b ≥ 97 % up to x ≈ 29 m³/s, while the canal fills
+      at 0.243 m³/s. So the rule is in effect "97 % of the river up to
+      0.236 m³/s" and the curve itself never acts. In L/s the curve shapes
+      every day instead (97 % up to 29 L/s, 17 % at 200 L/s) and the canal
+      never fills. Configure it once he confirms m³/s against that.
 - [ ] **The gap-filling product (engine 1.101.0, issue #604 R4-B,
       model.md §2.4b *Gap-filling product*).** Built off by default
       (`settings.gapRain` absent runs as before, to the bit). Calls made
