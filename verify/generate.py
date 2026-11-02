@@ -270,6 +270,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_demand_parts(random.Random(seed * 32452867 + 31), doc, start, days, dense)
     add_land_cover(random.Random(seed * 49979693 + 37), doc, dense)
     add_development(random.Random(seed * 67867979 + 41), doc, start, days, dense)
+    add_diversion_curves(random.Random(seed * 86028157 + 43), doc, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
@@ -840,6 +841,22 @@ def add_external_transfers(rng: random.Random, doc: dict, dense: bool = False) -
             "minStoragePct": rng.choice([0, 0.2, round(rng.uniform(0, 0.6), 2)]),
             "enabled": rng.random() > 0.1, "priority": rng.randint(0, 2),
         })
+
+
+def add_diversion_curves(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """River off-takes sized by a diversion curve (§2.6a, engine >= 1.113.0), from their own stream so the rest of a
+    network is unchanged: a third of the off-takes (two thirds dense) divert a · x^b percent of the river, b either
+    side of -1 (-0.9, a canal's shape, among them), a largest share now and then, any of the four flow units,
+    the natural flow read a quarter of the time, and now and then an incomplete curve (the rule diverts nothing)."""
+    for t in doc["model"]["transfers"]:
+        if t.get("source") != "river" or rng.random() >= (0.67 if dense else 0.33):
+            continue
+        t["sizing"] = "diversionCurve"
+        t["diversionCoefficient"] = None if rng.random() < 0.03 else rng.choice([2000, round(10 ** rng.uniform(-2, 5), 4)])
+        t["diversionExponent"] = rng.choice([0, -0.9, round(rng.uniform(-1.5, 0.5), 3)])
+        t["diversionMaxPct"] = rng.choice([None, 1, 0.95, round(rng.uniform(0.01, 1), 2)])
+        t["diversionFlowUnit"] = rng.choice(["L/s", "m3/s", "m3/day", "Ml/day"])
+        t["diversionFlowBasis"] = "natural" if rng.random() < 0.25 else rng.choice([None, "modelled"])
 
 
 def add_irrigation_systems(rng: random.Random, doc: dict, dense: bool = False) -> None:

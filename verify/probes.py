@@ -314,6 +314,53 @@ def offtake_keep_bands() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": series}
 
 
+def diversion_curve_canal() -> dict:
+    """River off-takes sized by a diversion curve (§2.6a, engine 1.113.0), a canal of the shape the client's
+    hydrologist gave (2026-11-02) with invented numbers: 2000 · x^-0.9 percent of the river, at most 95 %, a canal
+    of 0.25 m³/s, on three rivers: in L/s (a share falling from 95 % above 29.5 L/s, the canal never full), in
+    m³/s (95 % of the river up to the canal's 0.25 m³/s), and in L/s reading the natural flow, below a farm that
+    irrigates from the river, with a hands-off flow of 500 m³/day and 10 % conveyance losses. The rain rises over
+    the run, so each river runs from its low flows through the knee to past the canal. The canal heads drain to the
+    outlet; the third has crops, which a demand-sized off-take from the second river serves: the curve takes no
+    share of that need."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("a", "farm", "o", areaKm2=3),
+        _node("ca", "farm", "o"),
+        _node("b", "farm", "o", areaKm2=10),
+        _node("cb", "farm", "o"),
+        _node("u", "farm", "c", areaKm2=5, supplyRule="runOfRiver"),
+        _node("c", "farm", "o", areaKm2=5),
+        _node("cc", "farm", "o"),
+    ]
+
+    def canal(i, src, dst, unit, **kw) -> dict:
+        t = {
+            "id": i, "fromNodeId": src, "toNodeId": dst, "months": list(range(1, 13)), "maxRateM3s": 0.25,
+            "dailyCapM3": None, "minStoragePct": 0, "enabled": True, "priority": 0, "source": "river",
+            "handsOffM3Day": None, "handsOffEwr": False, "lossPct": 0, "sizing": "diversionCurve", "topUpDam": False,
+            "diversionCoefficient": 2000, "diversionExponent": -0.9, "diversionMaxPct": 0.95,
+            "diversionFlowUnit": unit, "diversionFlowBasis": "modelled",
+        }
+        t.update(kw)
+        return t
+
+    transfers = [
+        canal("ka", "a", "ca", "L/s"),
+        canal("kb", "b", "cb", "m3/s"),
+        canal("kc", "c", "cc", "L/s", diversionFlowBasis="natural", handsOffM3Day=500, lossPct=0.1),
+        # A demand-sized off-take into the same canal head: it alone splits the head's need (the curve takes no share).
+        canal("kd", "b", "cc", "L/s", sizing="demand", maxRateM3s=0.05, priority=1,
+              diversionCoefficient=None, diversionExponent=None, diversionMaxPct=None, diversionFlowUnit=None, diversionFlowBasis=None),
+    ]
+    crops, areas = _crop("u", 400000)
+    areas.append({"nodeId": "cc", "cropId": "c", "areaM2": 100000})
+    days = 160
+    series = {"rain_catchment_mm": {"startDate": "2020-01-01", "values": [round(0.25 * k, 2) for k in range(days)]}}
+    s = _settings(effectiveRainFraction=0)
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": transfers}, "series": series}
+
+
 def cap_before_licence() -> dict:
     """An allocation cap (§2.12a) on a farm whose only surface licence starts
     on 1 October 2020, the second of two water years: the first year has none
@@ -2147,6 +2194,8 @@ PROBES = {
     "junior-user": junior_user(),
     "priority-user-fixed-restriction": priority_user_fixed_restriction(),
     "offtake-keep-bands": offtake_keep_bands(),
+    # Off-takes sized by a diversion curve (engine 1.113.0).
+    "diversion-curve-canal": diversion_curve_canal(),
     "cap-before-licence": cap_before_licence(),
     "offtake-into-capped-unit": offtake_into_capped_unit(),
     "cap-licence-from-september": cap_licence_from_september(),
