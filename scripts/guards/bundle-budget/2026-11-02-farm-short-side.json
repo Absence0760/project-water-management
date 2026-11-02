@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "PR #693, which side was short on a unit with a dam and a river abstraction: the farm cards' short-side lines (farm/cards.ts) and their Afrikaans messages; measured 2 367 448 → 2 367 937 B gzip (+489 B) on main @ c3db79e2 against feat/farm-short-side @ 840c10fd, total 2312 → 2313 KB"
+}
