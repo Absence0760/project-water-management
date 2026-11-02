@@ -84,6 +84,12 @@ export interface FeedMeta {
 	 * tick). Null: switched off, no acting owner, or never scheduled (due at once).
 	 */
 	nextAttemptAt?: string | null;
+	/**
+	 * A fetch under way (backend feeds/store.ts): `running` while it runs or its
+	 * request is out at the source, `queued` while one waits (a backfill's next
+	 * window, a Run now, the schedule's). Null or absent: none.
+	 */
+	pendingFetch?: 'queued' | 'running' | null;
 }
 
 /** Why a feed is in its state (backend/src/feeds/health.ts HealthReason); days are YYYY-MM-DD, UTC. */
@@ -724,8 +730,37 @@ export function rainCopyNote(copy: RainCopy | null | undefined, feeds: readonly 
 }
 
 /** How many feeds need attention (stale or failing), for the section's warning. A feed whose copy is behind isn't counted: nothing here can fix it. */
-export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health'>[]) =>
-	feeds.filter((f) => f.health.state === 'failing' || f.health.state === 'stale').length;
+export const needsAttention = (feeds: readonly Pick<FeedMeta, 'health' | 'pendingFetch'>[]) => feeds.filter(feedNeedsAttention).length;
+
+/** Failing, or stale with no fetch under way: a stale feed that is catching up (catchingUp) is doing the work already. */
+export const feedNeedsAttention = (f: Pick<FeedMeta, 'health' | 'pendingFetch'>) =>
+	f.health.state === 'failing' || (f.health.state === 'stale' && !catchingUp(f));
+
+/** A stale feed with a fetch under way (a backfill working through its windows): its chip says Catching up, not Stale. */
+export const catchingUp = (f: Pick<FeedMeta, 'health' | 'pendingFetch'>) => f.health.state === 'stale' && !!f.pendingFetch;
+
+/** The card's chip: its health state in words, but Catching up for a stale feed whose fetch is under way. */
+export const stateLabel = (f: Pick<FeedMeta, 'health' | 'pendingFetch'>) => (catchingUp(f) ? 'Catching up' : STATE_LABELS[f.health.state]);
+
+/**
+ * The card's line for a fetch under way (pendingFetch), which is also why its
+ * Run now waits: a press would only join it. A catching-up feed says how far it
+ * has read (last_meta.through, else its newest day). Null: no fetch under way.
+ */
+export function pendingNote(f: Pick<FeedMeta, 'health' | 'pendingFetch' | 'lastMeta' | 'lastDataDate'>): string | null {
+	if (!f.pendingFetch) return null;
+	const what = f.pendingFetch === 'running' ? 'a fetch is under way' : 'a fetch is waiting to run';
+	const through = typeof f.lastMeta?.through === 'string' ? f.lastMeta.through : f.lastDataDate;
+	const after = 'Run now waits for it, and this card updates by itself.';
+	if (catchingUp(f)) return `Catching up: ${what}${through ? `, read to ${fmtDay(through)} so far` : ''}. ${after}`;
+	return `${what.charAt(0).toUpperCase()}${what.slice(1)}. ${after}`;
+}
+
+/** The section's warning for `n` (> 0) feeds that need attention, its pronouns agreeing with the count. */
+export const attentionText = (n: number) =>
+	n === 1
+		? '1 feed needs attention: its data is out of date or its last fetch failed.'
+		: `${n} feeds need attention: their data is out of date or their last fetch failed.`;
 
 /**
  * What to show for a failed call. The server's own message (already written

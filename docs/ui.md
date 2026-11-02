@@ -6740,7 +6740,8 @@ editors run one now and read the map's proposals, viewers read.
 - **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
   **Failing**, **Waiting**, **Off**, **Copy behind**; colour is never the
   only signal, and the card carries `data-state`; the chip is a badge's
-  rounded box, so a wrapped "Copy behind" on a phone stays readable), the source, the series it writes ("→ Rainfall —
+  rounded box, so a wrapped "Copy behind" on a phone stays readable; a stale feed with a fetch under way reads
+  **Catching up** instead, below), the source, the series it writes ("→ Rainfall —
   forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
   what a CHIRPS feed writes ("· CHIRPS sat v3.0"), the schedule and who it
   runs as, the health sentence ("The last fetch
@@ -6795,22 +6796,52 @@ editors run one now and read the map's proposals, viewers read.
   itself is fine and fills in the newer days once the copy catches up; there
   is nothing to do here. Newest data 5 Oct 2026." Its chip is neutral, not a
   warning colour.
-- **A warning** above the list counts the feeds that are stale or failing
-  ("1 feed needs attention: …", `role="alert"`); a feed whose copy is
-  behind isn't counted, since nothing here can fix it.
-- **Run now** (editors) queues a fetch at once and says so ("Fetch queued.
-  …"), then follows it (issue #586 Round 4, `feeds/follow.ts`): the panel
-  re-reads the list every 2 s for the first 10 s, then every 5 s, then every
-  10 s, about two minutes in all, until the feed's `lastAttemptAt` moves (a
-  result was recorded; in production when the fetcher's answer comes back).
-  Then the card updates and the live region says how it went, focus staying
-  on the button: "Fetch done: Rainfall — forecast. OK; newest data …" or
-  "Fetch failed: Rainfall — CHIRPS: <why>. It tries again after 10:13."
-  Polling stops when the panel unmounts and pauses while the page is hidden
-  (one poll at once when it shows again); a failed poll just waits for the
-  next, and never overwrites a newer list. If the two minutes run out it
+- **A fetch under way** (the list's `pendingFetch`, api.md: a backfill
+  working through its 120-day windows, a Run now, the schedule's): the card
+  carries `data-fetch="queued"` or `"running"` and a line under the health
+  sentence (`data-testid="feed-fetch"`, `pendingNote` in `feeds.ts`): "A
+  fetch is waiting to run." / "A fetch is under way.", then "Run now waits
+  for it, and this card updates by itself." A stale feed doing so is
+  catching up, not idle: its chip reads **Catching up** (neutral) instead of
+  Stale, its line says how far it has read ("Catching up: a fetch is
+  waiting to run, read to 12 Mar 1995 so far. …", from the fetch's
+  `last_meta.through`, else its newest day), and it isn't counted in the
+  warning. The schedule's "It tries again after …" is left off while a fetch
+  is under way. **Run now** waits too: `aria-disabled` (still focusable, its
+  press ignored), with that line as its description (`aria-describedby`)
+  and its tooltip, since a press would only join the fetch already waiting.
+  The panel re-reads the list on its own while any card has a fetch under
+  way (below), so a backfill's progress shows without Refresh status.
+- **A warning** above the list counts the feeds that are stale (and not
+  catching up) or failing ("1 feed needs attention: its data is out of date
+  or its last fetch failed.", "13 feeds need attention: their data is out of
+  date or their last fetch failed.", `attentionText` in `feeds.ts`,
+  `role="alert"`); a feed whose copy is behind isn't counted, since nothing
+  here can fix it. The Warnings tab counts the same feeds.
+- **Run now** (editors) queues a fetch at once. The feedback is on the card
+  that was run, not the top of the section: its line says a fetch is
+  waiting (above; "Fetch queued: it waits for the background worker, …"
+  when the server doesn't report it) and its Run now waits with it, while
+  the section's polite live region (`role="status"`, never `role="alert"`)
+  announces "Fetch queued: Rainfall — CHIRPS. Its card updates by itself
+  once the fetch has run." for screen readers only. It then follows the
+  fetch (issue #586 Round 4, `feeds/follow.ts`): the panel re-reads the list
+  every 2 s for the first 10 s, then every 5 s, then every 10 s, then every
+  30 s, five minutes in all (a fetch waiting its turn at CHC can take
+  minutes), until the feed's `lastAttemptAt` moves (a result was recorded;
+  in production when the fetcher's answer comes back). Then the card's line
+  reads "Fetch done." or "Fetch failed: the line above says why."
+  (`data-fetch="done"` / `"failed"`, until the next action or Refresh
+  status), and the live region says how it went, focus staying on the
+  button: "Fetch done: Rainfall — forecast. OK; newest data …" or "Fetch
+  failed: Rainfall — CHIRPS: <why>. It tries again after 10:13." Polling
+  stops when the panel unmounts and pauses while the page is hidden (one
+  poll at once when it shows again); a failed poll just waits for the next,
+  and never overwrites a newer list. If the five minutes run out the card
   says "The fetch is still waiting to run. Refresh status will show it once
-  it has." **Refresh status** still re-reads at any time.
+  it has." (`data-fetch="slow"`); past them the panel goes on every 30 s only
+  while the server still reports a fetch under way. **Refresh status** still
+  re-reads at any time.
   Pressed too often (6 fetches, then one every 10 minutes per feed), the
   section's error line shows the server's words, with the wait in whole
   minutes and a reminder that the feed also runs daily.

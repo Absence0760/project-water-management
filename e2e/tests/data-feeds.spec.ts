@@ -64,7 +64,7 @@ const datedIn = (span: [number, number], text: (at: number) => string) =>
 
 /**
  * Fire the panel's next follow-up poll now instead of waiting it out: after
- * Run now the panel re-reads the list on its own, at most 10 s apart
+ * Run now the panel re-reads the list on its own, 2 s apart at first
  * (frontend feeds/follow.ts FOLLOW_DELAYS_MS), until the fetch has run. The
  * page's clock must be installed (page.clock.install()) before the page loads.
  */
@@ -132,12 +132,21 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 
 	const run = feed.getByRole('button', { name: 'Run now: Rainfall — forecast' });
 	await run.click();
-	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await expect(panel.getByRole('status')).toHaveText('Fetch queued: Rainfall — forecast. Its card updates by itself once the fetch has run.');
+	// The feedback is on the card that was run: a fetch waits, and its Run now waits with it, saying why.
+	const waits = 'A fetch is waiting to run. Run now waits for it, and this card updates by itself.';
+	await expect(feed).toHaveAttribute('data-fetch', 'queued');
+	await expect(feed.getByTestId('feed-fetch')).toHaveText(waits);
+	await expect(run).toHaveAttribute('aria-disabled', 'true');
+	await expect(run).toHaveAccessibleDescription(waits);
 	const fetched = await fetchOnce(project.id);
 
 	// No Refresh status: the panel follows the queued fetch, updates the row and announces it, focus staying on Run now.
 	await nextPoll(page);
 	await expect(feed).toHaveAttribute('data-state', 'ok');
+	await expect(feed).toHaveAttribute('data-fetch', 'done');
+	await expect(feed.getByTestId('feed-fetch')).toHaveText('Fetch done.');
+	await expect(run).toHaveAttribute('aria-disabled', 'false');
 	await expect(panel.getByRole('status')).toHaveText(datedIn(fetched, (at) => `Fetch done: Rainfall — forecast. OK; newest data ${day(15, at)}, checked ${projectToday(at)}.`));
 	await expect(run).toBeFocused();
 	await expect(feed.getByText('OK', { exact: true })).toBeVisible();
@@ -211,7 +220,7 @@ test('an owner attaches a CHIRPS feed by bounding box, and it fetches the area�
 	await expect(feed).toContainText('CHIRPS daily rainfall → Rainfall — CHIRPS');
 	await expect(feed).toContainText('box -20.20, 25.10 to -20.10, 25.20 · CHIRPS sat v3.0 · daily');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
-	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await expect(panel.getByRole('status')).toContainText('Fetch queued: Rainfall — ');
 	const fetched = await fetchOnce(project.id);
 
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
@@ -296,13 +305,47 @@ test('a coastal box leaves out its sea cells when asked, and fetches the land’
 	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await expect(feed).toContainText('box -20.30, 25.30 to -20.20, 25.40, sea cells left out · daily');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — forecast' }).click();
-	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await expect(panel.getByRole('status')).toContainText('Fetch queued: Rainfall — ');
 	const fetched = await fetchOnce(project.id);
 	await panel.getByRole('button', { name: 'Refresh status' }).click();
 	await expect(feed).toHaveAttribute('data-state', 'ok');
 	await expect(feed).toContainText(datedIn(fetched, (at) => `OK; newest data ${day(15, at)}, checked ${projectToday(at)}.`));
 	// Three of its four cells are land (the ingest refuses a later fetch whose count changes).
 	await expect(feed).toContainText('· 3 of 4 cells with data');
+});
+
+test('a CHIRPS feed backfilling from our copy says it is catching up, not Stale, and its Run now waits for the next window', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Catching up');
+	// A record that starts years back: each 120-day window queues the next by itself (feeds/ingest.ts continueBackfill).
+	const start = new Date(Date.now() - 2000 * 86_400_000).toISOString().slice(0, 10);
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/feeds`, {
+		data: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }], startDate: start } }
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	await page.clock.install();
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
+	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
+	await expect(feed).toHaveAttribute('data-fetch', 'queued');
+	await fetchOnce(project.id);
+	// The panel follows the fetch it queued; once that has run, the backfill's next window is what waits.
+	await nextPoll(page);
+	await expect(feed.getByTestId('feed-fetch')).toHaveText(/^Catching up/);
+	// Its data is years old, but the next window is queued: Catching up, with how far it has read, never "Stale" as if idle.
+	await expect(feed).toHaveAttribute('data-fetch', 'queued');
+	await expect(feed).toHaveAttribute('data-state', 'stale');
+	await expect(feed.getByText('Catching up', { exact: true })).toBeVisible();
+	await expect(feed.getByText('Stale', { exact: true })).toHaveCount(0);
+	const line = /^Catching up: a fetch is waiting to run, read to \d{1,2} [A-Z][a-z]{2} \d{4} so far\. Run now waits for it, and this card updates by itself\.$/;
+	await expect(feed.getByTestId('feed-fetch')).toHaveText(line);
+	// Run now waits for it, and says why to a screen reader as well as on the card.
+	const run = feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' });
+	await expect(run).toHaveAttribute('aria-disabled', 'true');
+	await expect(run).toHaveAccessibleDescription(line);
+	// Nothing for anyone to fix: no warning above the list.
+	await expect(panel.getByTestId('feeds-attention')).toHaveCount(0);
 });
 
 test('a feed that fails shows as failing, says when it tries again, with the warning above the list', async ({ page, owner }) => {
@@ -318,7 +361,7 @@ test('a feed that fails shows as failing, says when it tries again, with the war
 	await panel.getByRole('button', { name: 'Attach feed' }).click();
 	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
-	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await expect(panel.getByRole('status')).toContainText('Fetch queued: Rainfall — ');
 	// The tick's schedule takes the feed (it was never scheduled) and the fetch fails: the
 	// scheduler's backoff, 15 min less its minute's slack (243_feed_next_attempt.sql), counts from then.
 	const fetched = await fetchOnce(project.id);
@@ -328,6 +371,8 @@ test('a feed that fails shows as failing, says when it tries again, with the war
 	const why = 'the source’s data could not be read: the grid has no data at -20.27, 25.37 (the sea, or outside the product’s coverage)';
 	await expect(panel.getByRole('status')).toHaveText(datedIn(fetched, (at) => `Fetch failed: Rainfall — CHIRPS: ${why}. ${triesAgain(at, 14)}`));
 	await expect(feed.locator('.health')).toHaveText(datedIn(fetched, (at) => `The last fetch failed: ${why}. No data yet. ${triesAgain(at, 14)}`));
+	await expect(feed).toHaveAttribute('data-fetch', 'failed');
+	await expect(feed.getByTestId('feed-fetch')).toHaveText('Fetch failed: the line above says why.');
 	await expect(panel.getByTestId('feeds-attention')).toHaveText('1 feed needs attention: its data is out of date or its last fetch failed.');
 
 	// WCAG 2.2 AA on the panel in its busiest state: a failing feed, the warning, the open form.
@@ -557,7 +602,7 @@ test('the panel works from the keyboard: focus follows the form, a bad field is 
 	const run = feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' });
 	await run.focus();
 	await page.keyboard.press('Enter');
-	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await expect(panel.getByRole('status')).toContainText('Fetch queued: Rainfall — ');
 	await expect(run).toBeFocused();
 
 	// Removing takes the feed's buttons away: focus lands on the section heading, not the page body.
@@ -585,7 +630,7 @@ test('what each role sees: editors can only run a feed, viewers only read', asyn
 	await expect(feed.getByRole('button')).toHaveText(['Run now']);
 	await expect(panel.getByRole('button', { name: 'Attach a feed' })).toHaveCount(0);
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
-	await expect(panel.getByRole('status').filter({ hasText: 'Fetch queued.' })).toBeVisible();
+	await expect(panel.getByRole('status')).toContainText('Fetch queued: Rainfall — ');
 
 	// Viewer: the list and its health, with no buttons on the feed and no form.
 	await viewer.page.goto(`/projects/${project.id}?tab=series`);

@@ -48,11 +48,15 @@
 		rainCopyNote,
 		targetHint,
 		separateName,
-		STATE_LABELS,
+		attentionText,
+		catchingUp,
+		pendingNote,
+		stateLabel,
 		takeoverOf,
 		versionClash
 	} from './feeds';
-	import { createPoller, fetchOutcome, outcomeMessage, STILL_WAITING } from './follow';
+	import { cardFetchNote, createPoller, fetchOutcome, FOLLOW_TAIL_MS, outcomeMessage, queuedMessage, STILL_WAITING, type CardFetchState } from './follow';
+	import { SvelteMap } from 'svelte/reactivity';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -64,6 +68,8 @@
 	let busy = $state<string | null>(null);
 	let refreshing = $state(false);
 	let message = $state<string | null>(null);
+	/** For screen readers only, in the section's live region: what became of a Run now, whose words show on its card. */
+	let announce = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let adding = $state(false);
 	let draft = $state<FeedDraft>(emptyDraft());
@@ -106,26 +112,45 @@
 	const sourceLabel = (f: FeedMeta) => data?.sources.find((s) => s.source === f.source)?.label ?? f.source;
 
 	/**
-	 * Fetches queued by Run now that haven't run yet: feed id → its
-	 * lastAttemptAt when the button was pressed (follow.ts fetchOutcome). Every
-	 * list that lands settles them; the poller re-reads the list until none is left.
+	 * Each card's Run now: feed id → its lastAttemptAt when the button was
+	 * pressed (follow.ts fetchOutcome), and where it stands, shown on that card
+	 * (`data-fetch`, its line) with its Run now disabled while queued. Every
+	 * list that lands settles the queued ones; the poller re-reads the list
+	 * until none is left. Done, failed and slow lines stay until the next action.
 	 */
-	const following = new Map<string, string | null>();
+	const fetches = new SvelteMap<string, { before: string | null; state: CardFetchState; created: boolean }>();
+	const queuedCount = () => [...fetches.values()].filter((x) => x.state === 'queued').length;
+	/** Run now waits while its own press is followed or the server reports a fetch under way (a backfill's next window). */
+	const runWaits = (f: FeedMeta) => fetches.get(f.id)?.state === 'queued' || !!f.pendingFetch;
+	/** The card's line: the fetch the server reports under way, else what became of this page's Run now. */
+	const fetchLine = (f: FeedMeta) => {
+		const x = fetches.get(f.id);
+		return pendingNote(f) ?? (x ? cardFetchNote(x.state, x.created) : null);
+	};
+	const serverPending = () => !!data?.feeds.some((f) => f.pendingFetch);
+	/** Drop the cards' finished lines (done, failed, slow) at the next action; queued ones are still followed. */
+	function clearFinished() {
+		for (const [id, x] of fetches) if (x.state !== 'queued') fetches.delete(id);
+	}
 
-	/** Say how each followed fetch that has now run went, in the live region; focus stays where it is. */
+	/** Mark each followed fetch that has now run on its card, and say how it went in the live region; focus stays where it is. */
 	function settle() {
-		if (!data || following.size === 0) return;
+		if (!data || queuedCount() === 0) return;
 		const said: string[] = [];
-		for (const [id, before] of following) {
-			const f = data.feeds.find((x) => x.id === id);
-			const outcome = fetchOutcome(before, f);
+		for (const [id, x] of fetches) {
+			if (x.state !== 'queued') continue;
+			const f = data.feeds.find((y) => y.id === id);
+			const outcome = fetchOutcome(x.before, f);
 			if (outcome === 'waiting') continue;
-			following.delete(id);
 			// Removed or switched off meanwhile: the row (or its absence) says so.
-			if (outcome === 'gone' || !f) continue;
+			if (outcome === 'gone' || !f) {
+				fetches.delete(id);
+				continue;
+			}
+			fetches.set(id, { ...x, state: outcome });
 			said.push(outcomeMessage(outcome, f, healthMessage(f.health), nextTryNote(f)));
 		}
-		if (said.length) message = said.join(' ');
+		if (said.length) announce = said.join(' ');
 	}
 
 	// Only the newest list request may land: an older one answering late
@@ -143,6 +168,8 @@
 			data = next;
 			loadError = null;
 			settle();
+			// A fetch under way that this page didn't start (a backfill's windows, the schedule's): follow it too.
+			if (serverPending() && !poller.active) poller.start();
 			return true;
 		} catch (e) {
 			if (mine !== seq || quiet) return false;
@@ -156,12 +183,15 @@
 	const poller = createPoller({
 		poll: async () => {
 			await reload(true);
-			return following.size > 0;
+			return queuedCount() > 0 || serverPending();
 		},
 		onGiveUp: () => {
-			following.clear();
-			message = STILL_WAITING;
+			if (queuedCount() === 0) return;
+			for (const [id, x] of fetches) if (x.state === 'queued') fetches.set(id, { ...x, state: 'slow' });
+			announce = STILL_WAITING;
 		},
+		// After the schedule, on while the server reports a fetch under way: a backfill can take an hour.
+		tailMs: FOLLOW_TAIL_MS,
 		hidden: () => document.hidden
 	});
 
@@ -177,10 +207,11 @@
 
 	async function refresh() {
 		if (refreshing || busy) return;
-		message = error = null;
+		message = error = announce = null;
+		clearFinished();
 		refreshing = true;
 		// A followed fetch that has run says so instead.
-		if ((await reload()) && !message) message = 'Status refreshed.';
+		if ((await reload()) && !announce) message = 'Status refreshed.';
 		refreshing = false;
 	}
 
@@ -346,7 +377,8 @@
 	// every card's buttons (and the form's) are aria-disabled, never live-looking
 	// buttons whose press is dropped (seen in production: 5 of 11 Switch on).
 	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove' | 'replace' | 'withdraw') {
-		if (busy) return;
+		// Its fetch is queued: the card says so, and the button waits with it.
+		if (busy || (what === 'run' && runWaits(f))) return;
 		if (
 			what === 'remove' &&
 			!(await confirmDialog({
@@ -368,14 +400,16 @@
 		)
 			return;
 		busy = f.id;
-		message = error = null;
+		message = error = announce = null;
+		clearFinished();
 		let follow = false;
 		try {
 			if (what === 'run') {
 				const before = f.lastAttemptAt;
 				const r = await feeds.runNow(f.id);
-				message = r.created ? 'Fetch queued. The status below updates once the background worker has run it.' : 'A fetch for this feed is already waiting to run.';
-				following.set(f.id, before);
+				// The words are on the card; the live region says them, naming the feed.
+				announce = queuedMessage(f, r.created);
+				fetches.set(f.id, { before, state: 'queued', created: r.created });
 				follow = true;
 			} else if (what === 'replace') {
 				await feeds.update(f.id, { replaceSeries: true });
@@ -397,7 +431,7 @@
 		// feed was switched off or removed elsewhere), so show what is there now.
 		await reload();
 		busy = null;
-		if (follow && following.size > 0) poller.start();
+		if (follow && queuedCount() > 0) poller.start();
 		// A removed feed takes its buttons with it: keep focus in the section.
 		if (what === 'remove' && !data?.feeds.some((x) => x.id === f.id)) heading?.focus();
 	}
@@ -436,7 +470,7 @@
 		<p class="muted" role="status">Loading…</p>
 	{:else}
 		<!-- Always in the page, so screen readers announce each new message. -->
-		<div role="status">{#if message}<p class="muted msg">{message}</p>{/if}</div>
+		<div role="status">{#if message}<p class="muted msg">{message}</p>{/if}{#if announce}<span class="visually-hidden">{announce}</span>{/if}</div>
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
 		{#if adding}
@@ -650,7 +684,7 @@
 
 		{#if attention}
 			<div class="alert alert-warning" role="alert" data-testid="feeds-attention">
-				{attention === 1 ? '1 feed needs' : `${attention} feeds need`} attention: its data is out of date or its last fetch failed.
+				{attentionText(attention)}
 			</div>
 		{/if}
 
@@ -658,14 +692,18 @@
 		<LoadState loading={false} empty={data.feeds.length === 0} emptyText="No feeds yet{data.canEdit ? '.' : '. An owner can attach one.'}">
 			<ul class="feeds" aria-label="Data feeds">
 				{#each data.feeds as f (f.id)}
-					<li class="feed" data-state={f.health.state}>
+					{@const line = fetchLine(f)}
+					<li class="feed" data-state={f.health.state} data-fetch={f.pendingFetch ?? fetches.get(f.id)?.state}>
 						<div class="head">
-							<span class="state state-{f.health.state}">{STATE_LABELS[f.health.state]}</span>
+							<span class="state state-{catchingUp(f) ? 'catching' : f.health.state}">{stateLabel(f)}</span>
 							<strong>{sourceLabel(f)}</strong>
 							<span class="muted">→ {describeTarget(f)}</span>
 						</div>
 						<p class="where muted small">{describePlace(f)}{describeWrites(f)} · {f.schedule}{describeRunsAs(f)}</p>
-						<p class="health">{healthMessage(f.health)}{#if nextTryNote(f)}{' '}{nextTryNote(f)}{/if}</p>
+						<!-- The schedule's next try says nothing while a fetch is already under way (the line below says so). -->
+						<p class="health">{healthMessage(f.health)}{#if nextTryNote(f) && !f.pendingFetch}{' '}{nextTryNote(f)}{/if}</p>
+						<!-- Run now's feedback, on the card that was run (the section's live region announces it). -->
+						{#if line}<p class="run-note small" id="{uid}-fetch-{f.id}" data-testid="feed-fetch">{line}</p>{/if}
 						{#if conflictMessage(f)}
 							<p class="alert alert-warning version" data-testid="feed-version-conflict">{conflictMessage(f)}</p>
 						{/if}
@@ -673,7 +711,7 @@
 						{#if data.canRun || data.canEdit}
 							<div class="act">
 								{#if data.canRun && f.enabled}
-									<button type="button" class="btn btn-sm" aria-disabled={busy !== null} aria-label="Run now: {describeTarget(f)}" onclick={() => act(f, 'run')}>Run now</button>
+									<button type="button" class="btn btn-sm" aria-disabled={busy !== null || runWaits(f)} aria-describedby={runWaits(f) && line ? `${uid}-fetch-${f.id}` : undefined} title={runWaits(f) ? line : undefined} aria-label="Run now: {describeTarget(f)}" onclick={() => act(f, 'run')}>Run now</button>
 								{/if}
 								{#if data.canEdit && f.versionConflict && f.replaceFrom === null}
 									<button type="button" class="btn btn-sm btn-danger" aria-disabled={busy !== null} aria-label="Replace the series: {describeTarget(f)}" onclick={() => act(f, 'replace')}>Replace the series</button>
@@ -745,6 +783,11 @@
 		border: 1px solid var(--border);
 		background: var(--surface-2);
 		color: var(--text-2);
+	}
+	/* Run now's feedback and a fetch under way, on the card (a catching-up chip keeps .state's neutral look). */
+	.run-note {
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.state-ok {
 		background: var(--accent-soft);

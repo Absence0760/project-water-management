@@ -31,6 +31,10 @@ import {
 	et0Note,
 	gapFillNote,
 	needsAttention,
+	attentionText,
+	catchingUp,
+	pendingNote,
+	stateLabel,
 	nextTryNote,
 	parseBbox,
 	type RainCopy,
@@ -299,6 +303,35 @@ describe('descriptions', () => {
 		// A late copy isn't the feed's to fix: no warning for it.
 		expect(needsAttention([h('copy-behind')])).toBe(0);
 		expect(STATE_LABELS['copy-behind']).toBe('Copy behind');
+	});
+
+	it('a stale feed with a fetch under way is catching up: its own chip, no warning, and a line that says how far it has read', () => {
+		const f = (state: string, pendingFetch: 'queued' | 'running' | null, lastMeta: Record<string, string | number> | null = null, lastDataDate: string | null = null) =>
+			({ health: { state, stale: state === 'stale', staleAfterDays: 62, reason: { code: 'waiting' } }, pendingFetch, lastMeta, lastDataDate }) as never;
+		const backfilling = f('stale', 'queued', { through: '1995-03-12' }, '1995-03-12');
+		expect(catchingUp(backfilling)).toBe(true);
+		expect(stateLabel(backfilling)).toBe('Catching up');
+		expect(needsAttention([backfilling])).toBe(0);
+		expect(pendingNote(backfilling)).toBe(`Catching up: a fetch is waiting to run, read to ${fmtDay('1995-03-12')} so far. Run now waits for it, and this card updates by itself.`);
+		// Out at the source, and no `through` yet: the newest day.
+		expect(pendingNote(f('stale', 'running', null, '2001-01-31'))).toBe(`Catching up: a fetch is under way, read to ${fmtDay('2001-01-31')} so far. Run now waits for it, and this card updates by itself.`);
+		expect(pendingNote(f('stale', 'running'))).toBe('Catching up: a fetch is under way. Run now waits for it, and this card updates by itself.');
+		// Not stale: a fetch waits, no progress to tell.
+		expect(pendingNote(f('failing', 'queued'))).toBe('A fetch is waiting to run. Run now waits for it, and this card updates by itself.');
+		expect(stateLabel(f('failing', 'queued'))).toBe('Failing');
+		expect(needsAttention([f('failing', 'queued')])).toBe(1);
+		// Positive control: stale with nothing under way is still Stale and counted; no line.
+		const idle = f('stale', null);
+		expect(catchingUp(idle)).toBe(false);
+		expect(stateLabel(idle)).toBe('Stale');
+		expect(needsAttention([idle])).toBe(1);
+		expect(pendingNote(idle)).toBeNull();
+	});
+
+	it('word the attention warning for one feed and for several', () => {
+		expect(attentionText(1)).toBe('1 feed needs attention: its data is out of date or its last fetch failed.');
+		expect(attentionText(13)).toBe('13 feeds need attention: their data is out of date or their last fetch failed.');
+		expect(attentionText(2)).not.toMatch(/\bits\b/);
 	});
 
 	describe('the line about our copy of the rain data (issue #604)', () => {
