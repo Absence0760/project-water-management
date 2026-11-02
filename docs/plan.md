@@ -215,13 +215,27 @@ workbook (as in 1a) with **no manual edits**.
 **Phase 1 acceptance (the demo):**
 
 - [ ] A fresh clone with `pnpm setup && pnpm dev` works with no other setup
-      ([run-locally.md](./run-locally.md)).
+      ([run-locally.md](./run-locally.md)). *Not shown by any test: no CI
+      job runs `pnpm setup` on a fresh checkout (CI installs, then each job
+      brings up its own services; e2e's global setup migrates `water_e2e`).
+      `pnpm check:env` guards the committed env files only.*
 - [ ] Client catchment imported: its results match the workbook, the charts and
       Shortfalls table appear, and a run finishes in under 2 s including storage.
-- [ ] Projects A, B, C exist side by side. Creating D and copying C both work.
-- [ ] A second user sees nothing until they are invited. As a viewer they can't
-      edit.
-- [ ] `pnpm check`, `pnpm test` and `pnpm test:backend:db` pass.
+      *Results: the client catchment regression suite (`packages/engine/src/run.test.ts`
+      § workbook regression) matches within its deviation list, locally only
+      (rule 10: it skips without `data/`). The 2 s including storage has no
+      measurement: the nearest budget is `runs/load.db.perf.test.ts`, a
+      60-farm ten-year run under 10 s.*
+- [x] Projects A, B, C exist side by side. Creating D and copying C both work.
+      *`e2e/tests/projects.spec.ts` "several projects for one place: create,
+      copy, delete"; `projects/projects.db.test.ts` (`POST …/copy`).*
+- [x] A second user sees nothing until they are invited. As a viewer they can't
+      edit. *`backend/src/isolation.db.test.ts` (another user reaches and
+      lists none of a project, with a positive control) and
+      `projects/role-ladder.db.test.ts` (a viewer gets 403 from every write).*
+- [x] `pnpm check`, `pnpm test` and `pnpm test:backend:db` pass. *CI's `test`
+      and `db-test` jobs on every push and PR, behind the required `CI gate`
+      check (`.github/workflows/ci.yml`).*
 
 ### 1e. Data ingestion (after V1)
 
@@ -230,8 +244,9 @@ satellite rainfall, forecasts) — the workbook's "New data from" and forecast
 rows exist for this.
 
 - ✅ Merge endpoint (above) — the building block for every feed.
-- ⬜ **API keys per project** (hashed, scoped to `series:write`, revocable) so a
-  logger gateway or script can push without a user session.
+- ✅ **API keys per project** (hashed, scoped to `series:write`, revocable) so a
+  logger gateway or script can push without a user session. Done (WP-2.9,
+  `039_api_keys.sql`).
 - ✅ **Scheduled fetchers** (issue #10, WP-2.10; [architecture.md § Data feeds](./architecture.md#data-feeds)):
   CHIRPS daily rainfall and the CHIRPS-GEFS forecast for grid cells over the
   catchment, and a DWS gauge's daily flow, on the job queue, with health and
@@ -840,20 +855,35 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 
 ### Product
 
-10. **Who uses it?** Only the hydrologist, or also farmers, catchment forums,
+Questions 10–14 are answered by what shipped, so they are struck.
+
+10. ~~**Who uses it?** Only the hydrologist, or also farmers, catchment forums,
     the client's staff, or government? This decides what the UI needs (a simple farmer
-    view against a full model editor) and who needs accounts.
-11. **Accounts and roles.** Who needs an account at launch, and who should be
+    view against a full model editor) and who needs accounts.~~ *Answered by
+    the product: all of them; the hydrologist's workspace, the farmer view in
+    English and Afrikaans (ui.md § Farmer view), teams and the licensing
+    authority's evidence packs.*
+11. ~~**Accounts and roles.** Who needs an account at launch, and who should be
     owner, editor or viewer per catchment? Should anyone be able to register, or
-    only by invitation?
-12. **What does the result need to look like?** Charts, the Shortfalls table, a
+    only by invitation?~~ *Answered by the product: owner, editor, viewer,
+    farmer and applicant per project (data-model.md); sign-up open since
+    2026-10-06, invite-only as the switch (security.md § Sign-up by
+    invitation).*
+12. ~~**What does the result need to look like?** Charts, the Shortfalls table, a
     downloadable Excel sheet, a PDF report for meetings? Must the output look
-    like the workbook's sheets?
-13. **Excel round-trip.** Will the hydrologist keep working in Excel, so the app
+    like the workbook's sheets?~~ *Answered by the product: the charts and
+    Shortfalls table, the `.xlsx` run export and server-side PDF reports;
+    not the workbook's sheets (architecture.md § Server-side reports).*
+13. ~~**Excel round-trip.** Will the hydrologist keep working in Excel, so the app
     has to import updated workbooks again and again? Or does the app become the
-    source of truth?
-14. **Forecast and live data.** Should forecast rain or logger data be pulled in
-    automatically, or will they be uploaded?
+    source of truth?~~ *Answered: the app is the source of truth. A b023
+    workbook is imported once; the round-trip was dropped 2026-09-30
+    (planned-work.md), and pasting from a spreadsheet covers bulk entry
+    (#285).*
+14. ~~**Forecast and live data.** Should forecast rain or logger data be pulled in
+    automatically, or will they be uploaded?~~ *Answered by the product: both;
+    scheduled CHIRPS, CHIRPS-GEFS and DWS feeds, a logger's push through a
+    project API key (WP-2.9), and uploads (architecture.md § Data feeds).*
 
 ### Decision-support outputs (2026-09-26)
 

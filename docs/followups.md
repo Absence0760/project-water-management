@@ -206,7 +206,7 @@ The checklist for these is issue #62; the history scrub is #63.
       the reboot and `postapply-check.sh --rds-event-test` (infra/README.md
       § Operator steps, step 10c): the topic policy's `aws:SourceArn`
       condition can't be proven by a plan.
-- [ ] **Confirm the database's KMS key before the first apply (#126,
+- [x] **Confirm the database's KMS key before the first apply (#126,
       2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
       customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
       sharing and AWS Backup cross-account copies possible, for $1–3 a month.
@@ -218,7 +218,10 @@ The checklist for these is issue #62; the history scrub is #63.
       logging write management events (KMS not excluded) covers the region
       before the first apply**, preferably the Organization trail from the
       management account; `preapply-check.sh`'s `cloudtrail` check FAILs
-      until one does (infra/README.md § Operator steps, step 7a).
+      until one does (infra/README.md § Operator steps, step 7a). — *Moot
+      since the first apply (2026-10-05): the instance exists, so the key
+      can no longer be changed, and `preapply-check.sh` (cloudtrail check
+      included) passed before that apply.*
 - [x] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
@@ -268,7 +271,7 @@ The checklist for these is issue #62; the history scrub is #63.
       issues #1–77 on their old numbers, and `pnpm check:terms` passes on
       its tree and history (checked from a fresh mirror clone).
 
-- [ ] **GitHub plan.** The repo is private on a free plan, so:
+- [x] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
         the release preflight refuses every release;
       - CodeQL and Scorecard fail on every push;
@@ -280,7 +283,9 @@ The checklist for these is issue #62; the history scrub is #63.
         had a CI run; #20, #60 and #61 were merged on local checks only).
 
       Make the repo public (after the history scrub above) or upgrade the plan. Then
-      make `CI gate` a required check.
+      make `CI gate` a required check. — *Done: the repo is public, CI runs
+      green on every push to `main`, and `main`'s branch protection requires
+      `CI gate` (checked 2026-11-01).*
 - [x] **Client names (WP-1.7).** The tree and the history are scrubbed
       (2026-09, `git filter-repo --replace-text`). The repo was then
       recreated from the clean history, because GitHub keeps old commits
@@ -3881,7 +3886,10 @@ role and not before it.
       `trimRuns` (one unkept forecast run kept), is never auto-published, and
       does nothing when the observed rain has overtaken the issue. Tests:
       `runs/autoRun.db.test.ts` § scheduled forecast runs.
-- [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
+- [x] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
+      Done: every item below is struck through (sediment, the curve op, the
+      transfer room, the self-checks table, the lake-factor presets); the
+      sediment rate's value waits on the hydrologist under #90.
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
       Still open:
@@ -4609,13 +4617,17 @@ role and not before it.
       the run's details, then its flows, each after the last; a chart wait
       failing at 6 workers again is the trigger to start the shown run's
       details beside the page's requests too.
-- [ ] Optional:
-      - a read-only Terraform plan role, for a real `terraform plan` in CI.
-        Waits on the first deploy: there is no AWS account, state bucket or
-        OIDC provider to plan against yet (plan.md Phase 6), and the role
-        (read-only IAM + state read, trusted for pull requests without the
-        `production` environment) is an IAM decision for the operator.
-        Trigger: the account exists and `terraform apply` has run once (#108).
+- [x] Optional:
+      - ~~a read-only Terraform plan role, for a real `terraform plan` in CI~~
+        **Won't do (2026-11-01):** `.github/workflows/terraform.yml`'s header
+        says there is deliberately no credentialed plan. The only role CI can
+        assume is the production-gated deploy role, so a plan would need a
+        reviewer approval on every infra push, the sops key and the private
+        infra-secrets checkout, and would still lack read permissions; a
+        second role trusted for pull requests would widen the OIDC trust for
+        little gain over the mocked-provider `terraform test` plans. The
+        real plan stays an operator step (infra/README.md § Operator steps,
+        step 8).
       - ~~a CodeQL Python leg for `scripts/wbt-import`~~ **Done (2026-09-28,
         issue #75):** `security.yml` analyses `python` too (the importer and
         the smaller Python tools), on Python 3.14.
@@ -6466,8 +6478,10 @@ assume, the questions for counsel); these are the actions, with triggers.
       account on old terms sees the re-acceptance notice before any page and
       accepts through `POST /auth/me/accept-terms`. The material-change email
       to existing account holders (Terms §16) is still sent by hand.
-- [ ] **Self-service account deletion** and what happens to evidence an
+- [x] **Self-service account deletion** and what happens to evidence an
       account made: #90; the privacy notice discloses the current exception.
+      Done: `DELETE /auth/me` and the Account page's dialog (143, issue
+      #112); the open #90 parts are under § POPIA and the Step 2 release.
 
 ## Infrastructure edge
 
@@ -7390,9 +7404,11 @@ own. Loop in the CISO or security analyst before acting on any of them.
       responsible party and the operator: security measures, sub-processors
       (AWS), breach notification to the client. Who: operator + client
       legal. Trigger: before production holds client data.
-- [ ] **Hosting region and transfer.** `af-south-1` keeps the data in South
+- [x] **Hosting region and transfer.** `af-south-1` keeps the data in South
       Africa; any other region is a transfer under s72 and needs the client's
-      agreement. Trigger: the region choice in § Blocking releases.
+      agreement. Trigger: the region choice in § Blocking releases. — *Done:
+      production runs in af-south-1 (live since 2026-10-05, the AWS bootstrap
+      item there), so no s72 transfer arises from hosting.*
 - [x] **Data-subject export** ("download my data", plan.md Phase 7;
       2026-09-26). `GET /auth/me/export` and the Account page's **Download
       my data**: the account, memberships, farm links with their published
@@ -7403,7 +7419,10 @@ own. Loop in the CISO or security analyst before acting on any of them.
       account. `auth/export.ts` `USER_FK_COVERAGE` classifies every foreign
       key to `app_user` (guarded by `export.db.test.ts`). The privacy notice
       (above) must say it exists.
-- [ ] **Self-service account deletion, and evidence that names its maker.**
+- [x] **Self-service account deletion, and evidence that names its maker.**
+      Done: operator path (138) and self-service (143, issue #112), as
+      below; what still waits on #90 is named at its end and tracked in the
+      items that follow.
       **Operator path done (138, issue #112):** deleting an account keeps
       the evidence it made (project, team, run, ensemble, nomination,
       scenario, import) with the maker cleared, deletes a started ensemble

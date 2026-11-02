@@ -178,11 +178,11 @@ changes each decision rather than answering from scratch
 | 1.23 | Q17 EWR attribution; Q11–Q13 curtailment policy | A | M | 1.1 answers |
 | 1.24 | H1 volume-conserving event response | A | L | 1.1 answers, 1.18 |
 | 1.25 | Engine release, recalibration, sign-off | A | M | 1.19–1.24 |
-| 1.26 | Unit preferences | B | M | 1.9 |
+| 1.26 | ~~Unit preferences~~ (dropped 2026-09-30) | B | M | 1.9 |
 | 1.27 | Run comparison: per-node overlay and leftovers | B | M | 1.11 |
 | 1.28 | Spreadsheet library and `.xlsx` export | B | M | D8, 1.10 |
 | 1.29 | Exports over 5 MB | B | S | D9 |
-| 1.30 | Spreadsheet templates for bulk entry | B | S | 1.28 |
+| 1.30 | Spreadsheet templates for bulk entry (built as paste, #285) | B | S | 1.28 |
 | 1.31 | In-browser b023 workbook import | B | L | 1.8, 1.28 |
 | 1.32 | Gap filling for input series | B | M | — |
 | 1.33 | Other water users (towns, unlisted users) | A | S | 1.1 answers |
@@ -1405,6 +1405,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.26 Unit preferences
 
+- **Status:** dropped (2026-09-30, planned-work.md). The UI already uses the
+  unit SA practice expects in each place (m³/s flow, m³/day demand, l/s +
+  m³/day curtailment, Mm³/a annual, ML on farmer pages), and uploads convert
+  on save. The plan below is kept for the record.
 - **Goal:** each user sees flows and volumes in their own units.
 - **Changes:**
   - **migration:** none. The preferences document exists since 083
@@ -1606,6 +1610,10 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.30 Spreadsheet templates for bulk entry
 
+- **Status:** built differently (#285, PR #301): a block pasted from a
+  spreadsheet fills the node table and the planted-areas grid (ui.md, "Paste
+  from a spreadsheet"), so there is no template download or file upload. The
+  plan below is kept for the record.
 - **Goal:** fill farms, crops and crop areas in a spreadsheet instead of
   typing every value by hand.
 - **Changes:**

@@ -89,7 +89,8 @@ one historical answer.
     handing data to the worker through SQS (see D4).
 - **Decisions needed before starting** (Section 11): D1 seller entity and
   payment provider, D2 prices, D3 tenancy model, D4 egress from the VPC
-  Lambdas, D5 WR2012 redistribution. D1 and D2 block WP-4.6 only; D3 blocks
+  Lambdas, D5 WR2012 redistribution. D1 and D2 were decided in issue #641
+  (2026-10-28: Stripe, and its prices); they blocked WP-4.6 only. D3 blocks
   everything.
 - **Legal:** counsel reviews the operator agreement / DPA template, terms of
   service and privacy notice before the first external tenant (WP-4.8).
@@ -115,7 +116,7 @@ flowchart LR
     DB[(RDS Postgres<br/>RLS: org wall)]
     S3R[(S3 runs + tenant files<br/>org-prefixed)]
   end
-  PAY[Billing provider<br/>manual / Paystack / Stripe, D1]
+  PAY[Billing provider<br/>Stripe, D1 decided]
   INT[Integrators · webhooks]
 
   SPA --> CF --> API
@@ -432,18 +433,20 @@ run in parallel after WP-4.1.
 - **The estate constraint.** feohledger bills through a pluggable adapter
   (`mock` default, `stripe_billing` live, `stripe-mock` locally, HMAC-verified
   and deduplicated webhooks; [feohledger backend/docs/billing.md]). Reuse that
-  shape. But **Stripe does not onboard South African-registered businesses**
-  ([Stripe global availability]). So the provider follows the seller entity
-  (D1):
-  - an SA seller uses **Paystack** (Stripe-owned; ZAR; local cards 2.9% + R1;
-    recurring plans) or PayFast ([Paystack ZA pricing],
-    [Paystack recurring charges]);
-  - a non-SA seller uses Stripe Billing, and registers for SA VAT as a
-    foreign supplier of electronic services once over the threshold
-    ([SARS VAT-REG-02-G02]).
-  - **Recommendation:** start with `manual` (in-app tax invoice, EFT against
-    PO). That is how CMAs, WUAs and consultancies pay anyway. Add the card
-    provider when self-serve sign-up matters.
+  shape. **Stripe does not onboard South African-registered businesses**
+  ([Stripe global availability]), so the provider follows the seller entity
+  (D1).
+  - **Decided (2026-10-28, issue #641): the seller is the operator**, a US
+    sole proprietor, so the provider is **Stripe Billing**, under the estate's
+    existing Stripe organization (one account per project). The operator
+    registers for SA VAT as a foreign supplier of electronic services once
+    over the threshold ([SARS VAT-REG-02-G02]).
+  - Paystack or PayFast ([Paystack ZA pricing], [Paystack recurring
+    charges]) would come back only if the seller became an SA entity: both
+    need an SA company and bank account.
+  - B2B customers pay Stripe invoices by card or SWIFT, unless a US Wise
+    Business account can take ZAR by EFT (to check once, #641).
+  - #641's phases build metering and limits first, then Stripe (Phase 3).
 - **VAT facts** (verify with a tax adviser before go-live):
   - Standard rate 15%.
   - Compulsory registration for SA vendors from **R2.3 million** taxable
@@ -456,11 +459,11 @@ run in parallel after WP-4.1.
     with both parties' names, addresses and VAT numbers
     ([SARS tax invoice checklist]).
 - **Changes**
-  - *backend:* `backend/src/billing/provider.ts` interface (`manual`,
-    `paystack` or `stripe`). `invoice.ts` renders a PDF (same renderer as
+  - *backend:* `backend/src/billing/provider.ts` interface (`manual` or
+    `stripe`). `invoice.ts` renders a PDF (same renderer as
     Step 2 reports). Webhook route `/billing/webhook/:provider`
-    (public allowlist): verify the HMAC over the raw body (Paystack:
-    `x-paystack-signature`, HMAC-SHA512), deduplicate on the event id, and
+    (public allowlist): verify the HMAC over the raw body (Stripe:
+    `Stripe-Signature`, HMAC-SHA256 with a timestamp), deduplicate on the event id, and
     make it the **only** writer of payment status.
   - *frontend:* billing profile (legal name, address, VAT number), invoice
     list and download.
@@ -477,10 +480,10 @@ run in parallel after WP-4.1.
   `PUT /orgs/:id/billing-profile`, `POST /billing/webhook/:provider`.
 - **UI.** Invoice list (empty: "No invoices yet"). Downloads. Past-due
   banner for admins only.
-- **Local-first.** `manual` needs nothing. For a card provider, a local
-  webhook-sink fixture replays signed synthetic events (`dev:billing:replay`).
-  If Stripe is chosen, `stripe-mock` in docker-compose (the feohledger
-  `stripe:up` pattern).
+- **Local-first.** `manual` needs nothing. For Stripe, a local
+  webhook-sink fixture replays signed synthetic events (`dev:billing:replay`),
+  and `stripe-mock` runs in docker-compose (the feohledger `stripe:up`
+  pattern).
 - **Tests.** *Unit:* VAT rounding per line and total, invoice numbering has
   no gaps, HMAC verify (good, bad, replay). *DB:* immutability trigger,
   deduplication. *e2e:* issue an invoice → download PDF → it shows every s20
@@ -490,7 +493,8 @@ run in parallel after WP-4.1.
 - **Acceptance.** A replayed or forged webhook changes nothing. An issued
   invoice can't be edited.
 - **Size.** M (manual + one provider). +M for dunning and proration.
-- **Depends on.** WP-4.5, D1, D2, counsel on terms.
+- **Depends on.** WP-4.5, D2, counsel on terms, a tax adviser (#641 Phase 0).
+  D1 is decided (Stripe).
 
 ### WP-4.7 SSO with Microsoft Entra ID (OIDC) and JIT provisioning
 
@@ -926,6 +930,8 @@ run in parallel after WP-4.1.
 
 ### WP-4.14 i18n infrastructure and unit preferences
 
+- **Unit preferences** were dropped with WP-1.26 (2026-09-30); the i18n part
+  stands.
 - **Goal.** Any UI language can be added without code changes. Numbers,
   dates and units follow the user's preferences. The engine stays SI.
 - **Changes**
@@ -1067,6 +1073,11 @@ run in parallel after WP-4.1.
 
 ### WP-4.18 Excel round-trip (b023-compatible workbooks)
 
+- **Status.** Dropped (2026-09-30, planned-work.md): the engine deliberately
+  departs from the workbook (engine-audit.md), so a b023 file would
+  recompute different numbers with its own formulas; the `.xlsx` run export
+  covers "check it in Excel". D11 goes with it. The plan below is kept for
+  the record.
 - **Goal.** Users who still need Excel can export a project into a
   b023-layout workbook, and re-import an edited one.
 - **Design**
@@ -1197,8 +1208,7 @@ infra/README.md § Cost):
 | Multi-AZ RDS (only if 99.9% is promised, D8) | roughly doubles the DB line | |
 | Second region (international.md) | +≈ 50 idle | a full stack |
 
-**Other costs.** Billing provider fees (Paystack 2.9% + R1 per local card
-transaction). Entra ID: none for us; SCIM needs P1 on the customer's side.
+**Other costs.** Stripe's fees (about $4 on a R899 Pro month, issue #641). Entra ID: none for us; SCIM needs P1 on the customer's side.
 Counsel for the DPA and terms (one-off). An external status page, if used.
 
 **Support load.** Expect onboarding help for each new tenant (first catchment
@@ -1281,8 +1291,8 @@ Run before building (`/persona …`) and record each **Need verdict** here.
 
 | # | Decision | Options | Recommendation | Who decides |
 | --- | --- | --- | --- | --- |
-| D1 | **Seller entity and payment provider** | (a) client's SA company + Paystack/PayFast; (b) operator's non-SA entity + Stripe Billing, SA VAT as a foreign e-services supplier; (c) manual EFT invoicing first | (c) now, then (a) if the client is the seller. Stripe can't onboard an SA entity | Client + operator, with a tax adviser |
-| D2 | **Prices and plan limits** | Per catchment; per editor seat; flat per org | Catchments as the main metric, editor seats second, viewers free | Client |
+| D1 | **Seller entity and payment provider** | (a) client's SA company + Paystack/PayFast; (b) operator's non-SA entity + Stripe Billing, SA VAT as a foreign e-services supplier; (c) manual EFT invoicing first | **Decided 2026-10-28 (#641): (b).** The operator, a US sole proprietor, sells on Stripe; the client service agreement records that the operator owns the software | Operator (decided); tax adviser still to confirm VAT (#641 Phase 0) |
+| D2 | **Prices and plan limits** | Per catchment; per editor seat; flat per org | **Decided 2026-10-28/29 (#641):** Free / Pro R899 / Team R2,499 incl. 3 editors; Free never limits modelling, only AI, live catchments, server PDFs and issued packs | Operator (decided) |
 | D3 | **Tenancy model** | Shared schema + RLS org wall; database-per-tenant (feohledger); stack-per-tenant | Shared + RLS. Offer a dedicated stack to one large customer if ever needed | Operator (CISO consulted) |
 | D4 | **Outbound internet from the VPC Lambdas** (SSO, webhooks, fetchers) | NAT gateway (~$33/month + data); NAT instance (~$4); a non-VPC egress Lambda fed by SQS (no NAT, more moving parts) | Reuse Step 2's pattern (WP-2.10: a non-VPC egress Lambda fed by SQS) for webhooks and fetchers; add a small NAT instance only for SSO token calls, which must run inline | Operator |
 | D5 | **WR2012 data** | Users upload what they downloaded; platform hosts a national copy with WRC permission | Upload now; ask the WRC | Client asks the WRC |
@@ -1299,7 +1309,7 @@ Run before building (`/persona …`) and record each **Need verdict** here.
 | --- | --- | --- | --- |
 | R1 **Cross-tenant data leak** through a policy that skips `app_has_role` or a new principal | Low–Med | Very high | One chokepoint (`app_project_role`) for all principals; cross-org tests with positive controls for every table; a catalogue test that every table with `project_id`/`organisation_id` has RLS; `/audit/auth`; persona-adversary each WP |
 | R2 **SSO account takeover** via an IdP asserting someone else's email | Med | High | Link by email only for DNS-verified domains of that org; pin the Entra `tid`; JIT never grants admin |
-| R3 **No payment rail** because Stripe excludes SA entities | High (if the SA client sells) | Med | Manual invoicing first; a Paystack adapter behind the feohledger-style interface |
+| R3 **No payment rail** because Stripe excludes SA entities | Low (the US operator sells, D1) | Med | Stripe under the operator; a Paystack adapter behind the feohledger-style interface only if the seller ever becomes an SA entity |
 | R4 **VAT mistakes** (thresholds changed April 2026; foreign-supplier rule unclear) | Med | Med | Tax adviser sign-off before the first invoice; VAT rate and registration stored as config, not code |
 | R5 **Single-tenant restore is hard** in a shared database | Med | High | A tested copy-one-org script from a PITR restore; rehearse before the first external tenant; export (WP-4.8) as the tenant's own backup |
 | R6 **Egress adds cost and attack surface** | High | Low–Med | D4; SSRF guard; separate egress role with no DB access where possible |
