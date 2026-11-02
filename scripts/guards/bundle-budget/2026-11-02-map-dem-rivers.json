@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "DEM rivers layer toggle (MapLayers, mapLayers.ts helpers, ChannelLayer.retry) plus the help text naming it: measured 2318 KB on origin/main ecf974689, 2319 KB with this change; no headroom left"
+}

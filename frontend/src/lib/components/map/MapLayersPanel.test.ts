@@ -1,6 +1,7 @@
 // The Map tab's Layers box (MapLayers.svelte): the Relief toggle shows only
 // with a DEM configured, with its note when on and its error when the DEM
-// failed; the River network (#345) lists its reaches, the picked one's facts
+// failed; the River network (#345; its toggle "Rivers (HydroRIVERS)", the DEM
+// rivers beside it) lists its reaches, the picked one's facts
 // and source, and Add for an editor only, or "On the map" once added. Server-rendered; the toggling itself (the URL) is mapLayers.test.ts's.
 // (Not MapLayers.test.ts: mapLayers.test.ts differs from it only in case.)
 import { render } from 'svelte/server';
@@ -212,6 +213,45 @@ describe('the Layers box’s DEM grid toggle', () => {
 		expect(html_(grid({ ...ok, points: [], tooDense: true }))).toMatch(/This view holds more than 5.000 of the grid’s points/);
 		expect(html_(grid({ ...ok, points: [] }))).toContain('The elevation model has no cell in this view.');
 		expect(html_(grid(null, { error: 'The DEM grid is off: the server has no elevation model (DEM_URL is empty).' }))).toContain('no elevation model');
+	});
+});
+
+describe('the Layers box’s DEM rivers toggle, beside HydroRIVERS', () => {
+	const state = { noView: false, zoomIn: false, error: null, loading: false, tileCount: 4, retry: () => {} };
+	const html_ = (demRivers: unknown) => withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, demRivers: demRivers as never } }).body);
+
+	it('pairs the two river layers by name: HydroRIVERS’ toggle reads “Rivers (HydroRIVERS)”, its id still `rivers`', () => {
+		const b = html_({ on: false, layer: state });
+		expect(b).toMatch(/data-testid="map-layer-rivers"[^>]*>[\s\S]*?Rivers \(HydroRIVERS\)/);
+		expect(b).toMatch(/data-testid="map-layer-channels"[^>]*>[\s\S]*?DEM rivers/);
+	});
+
+	it('is not offered without an elevation model, or to a viewer (the tab passes null)', () => {
+		expect(html_(null)).not.toContain('map-layer-channels');
+	});
+
+	it('is unchecked with nothing said while off', () => {
+		const b = html_({ on: false, layer: state });
+		expect(b).not.toMatch(/<input[^>]*checked[^>]*data-testid="map-layer-channels"/);
+		expect(b).not.toContain('data-testid="map-channels"');
+	});
+
+	it('says what the lines are while drawn, and to zoom in past about 35 km instead of drawing nothing in silence', () => {
+		const drawn = html_({ on: true, layer: state });
+		expect(drawn).toMatch(/<input[^>]*checked[^>]*data-testid="map-layer-channels"/);
+		expect(drawn).toContain('The rivers delineation follows, worked out from the elevation model');
+		expect(drawn).toContain('data-state="drawn"');
+		expect(drawn).toContain('DEM rivers drawn.');
+		const zoom = html_({ on: true, layer: { ...state, zoomIn: true } });
+		expect(zoom).toContain('Zoom in to about 35 km across to draw the DEM rivers.');
+		expect(zoom).toContain('data-state="zoom"');
+		expect(zoom).not.toContain('DEM rivers drawn.');
+	});
+
+	it('says why they couldn’t be drawn, as an alert with Try again', () => {
+		const b = html_({ on: true, layer: { ...state, error: 'You have asked the elevation model 60 times in the last hour; try again later.' } });
+		expect(b).toMatch(/role="alert"[^>]*>The DEM rivers couldn’t be drawn: You have asked the elevation model 60 times/);
+		expect(b).toContain('data-retry');
 	});
 });
 

@@ -121,6 +121,50 @@ describe('ChannelLayer', () => {
 		expect(layer.tileCount).toBe(1);
 	});
 
+	it('Try again asks the view’s missing tiles once more, not the ones it has', async () => {
+		let refuse = true;
+		const load = vi.fn<ChannelLayerDeps['load']>(async (_, [i, j]) => {
+			if (refuse && load.mock.calls.length === 2) throw new Error('You already have 2 elevation-model requests running; wait for one to finish.');
+			return tileAnswer(i, j);
+		});
+		const { deps, layer } = setup(load);
+		deps.on = true;
+		deps.view = [21.05, -28.5, 21.25, -28.35];
+		flushSync();
+		await settle();
+		expect(layer.error).toMatch(/2 elevation-model requests/);
+		expect(layer.tileCount).toBe(1);
+		refuse = false;
+		layer.retry();
+		await settle();
+		expect(layer.error).toBeNull();
+		expect(layer.tileCount).toBe(4);
+		// The refused tile and the two never asked: three more, the fetched one not again.
+		expect(load).toHaveBeenCalledTimes(5);
+	});
+
+	it('a burst of views (a pan or zoom, one per moveend) asks only the last view’s tiles beyond the one already out', async () => {
+		const gates: (() => void)[] = [];
+		const load = vi.fn<ChannelLayerDeps['load']>((_, [i, j]) => new Promise((ok) => gates.push(() => ok(tileAnswer(i, j)))));
+		const { deps, layer } = setup(load);
+		deps.on = true;
+		deps.view = [21.05, -28.5, 21.25, -28.35];
+		flushSync();
+		await settle();
+		expect(load).toHaveBeenCalledTimes(1);
+		// Two more views while the first tile is out: the second's queue is replaced by the third's.
+		deps.view = [22.05, -28.5, 22.25, -28.35];
+		flushSync();
+		deps.view = [23.11, -28.39, 23.15, -28.37];
+		flushSync();
+		while (gates.length) {
+			gates.shift()!();
+			await settle();
+		}
+		expect(load.mock.calls.map((c) => c[1].join(','))).toEqual(['105,-143', '115,-142']);
+		expect(layer.tileCount).toBe(2);
+	});
+
 	it('forgets one project’s tiles in another', async () => {
 		const load = vi.fn<ChannelLayerDeps['load']>(async (_, [i, j]) => tileAnswer(i, j));
 		const { deps, layer } = setup(load);

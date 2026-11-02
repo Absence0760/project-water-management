@@ -12,9 +12,55 @@ import { boundsOfAll } from './mapData';
 import { interiorPoint } from './pieces';
 import type { ReadonlyURLSearchParams } from '$app/state';
 
-/** The layers the tab can add, in the order the URL lists them. */
-export const MAP_LAYERS = ['quaternaries', 'rivers', 'relief', 'units', 'mapgrid', 'chirps', 'demgrid'] as const;
+/**
+ * The layers the tab can add, in the order the URL lists them. An id is what
+ * a shared or saved `layers=` holds, so it never changes when a label does
+ * (`rivers` is labelled "Rivers (HydroRIVERS)" since the DEM rivers,
+ * `channels`, came beside it).
+ */
+export const MAP_LAYERS = ['quaternaries', 'rivers', 'channels', 'relief', 'units', 'mapgrid', 'chirps', 'demgrid'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
+
+/** The HydroRIVERS layer's toggle (`rivers`): mapped rivers, for reference. */
+export const HYDRORIVERS_LAYER_LABEL = 'Rivers (HydroRIVERS)';
+/** The DEM rivers layer's toggle (`channels`, docs/maps.md § The elevation model's channels): the terrain channels, drawn outside Delineate. */
+export const DEM_RIVERS_LAYER_LABEL = 'DEM rivers';
+/** What the DEM rivers are, under their toggle while on. */
+export const DEM_RIVERS_NOTE = 'The rivers delineation follows, worked out from the elevation model (the terrain channels in the Key): wider for a larger area upstream. The HydroRIVERS lines can sit a few hundred metres off them.';
+
+/**
+ * Whether the DEM rivers toggle is offered: to an editor (the channels route
+ * is an editor's, delineation/channelRoutes.ts) once their delineation check
+ * says the server has an elevation model (DEM_URL set). Without one it isn't
+ * offered, as the DEM grid and the relief aren't.
+ */
+export const demRiversOffered = (canEdit: boolean, demAvailable: boolean) => canEdit && demAvailable;
+
+/**
+ * Whether the terrain channels are drawn: while the DEM rivers layer is on
+ * (and offered), or while Delineate, Sub-catchments or a proposal under
+ * review needs them, whichever of the two.
+ */
+export const channelsWanted = (o: { offered: boolean; layerOn: boolean; tool: boolean }) => o.offered && (o.layerOn || o.tool);
+
+/** The DEM rivers layer's state, as the Layers box reads it (channelLayer.svelte.ts ChannelLayer). */
+export interface DemRiversState {
+	noView: boolean;
+	zoomIn: boolean;
+	error: string | null;
+	loading: boolean;
+	tileCount: number;
+}
+
+/** The Layers box's line for the DEM rivers while on, and whether it is the layer's failure (an alert). */
+export function demRiversLine(s: DemRiversState): { text: string; kind: 'note' | 'error' } {
+	if (s.noView) return { text: 'The DEM rivers are drawn on the map, which isn’t showing here.', kind: 'note' };
+	// CHANNEL_VIEW_MAX_DEG (0.35°) is about 35 km north to south (and 30-odd km east to west here).
+	if (s.zoomIn) return { text: 'Zoom in to about 35 km across to draw the DEM rivers.', kind: 'note' };
+	if (s.error) return { text: `The DEM rivers couldn’t be drawn: ${s.error}`, kind: 'error' };
+	if (s.loading) return { text: 'Drawing the DEM rivers…', kind: 'note' };
+	return { text: DEM_RIVERS_NOTE, kind: 'note' };
+}
 
 /** The layers `layers=` turns on (unknown names ignored). */
 export function layersOn(params: ReadonlyURLSearchParams): Set<MapLayer> {

@@ -13,6 +13,13 @@ import {
 	MAP_CREDIT_TEXT,
 	mapCredits,
 	creditedReach,
+	channelsWanted,
+	DEM_RIVERS_LAYER_LABEL,
+	DEM_RIVERS_NOTE,
+	demRiversLine,
+	demRiversOffered,
+	HYDRORIVERS_LAYER_LABEL,
+	MAP_LAYERS,
 	layersOn,
 	layersStatus,
 	MAP_GRID_BBOX_MAX_DEG,
@@ -61,6 +68,48 @@ describe('layers in the URL', () => {
 		expect(new URLSearchParams(all).get('layers')).toBe('units,mapgrid,chirps');
 		expect(new URLSearchParams(withLayer(all, 'mapgrid', false)).get('layers')).toBe('units,chirps');
 		expect([...layersOn(new URLSearchParams('layers=chirps,units'))]).toEqual(['units', 'chirps']);
+	});
+});
+
+describe('the DEM rivers beside HydroRIVERS', () => {
+	it('is its own layer, `channels`, listed after the HydroRIVERS one, whose stored id stays `rivers`', () => {
+		expect(MAP_LAYERS.indexOf('channels')).toBe(MAP_LAYERS.indexOf('rivers') + 1);
+		// A saved or shared `layers=rivers` still turns HydroRIVERS on, whatever its toggle is called now.
+		expect([...layersOn(new URLSearchParams('layers=rivers'))]).toEqual(['rivers']);
+		const both = withLayer(withLayer('?tab=map', 'channels', true), 'rivers', true);
+		expect(new URLSearchParams(both).get('layers')).toBe('rivers,channels');
+		expect(new URLSearchParams(withLayer(both, 'rivers', false)).get('layers')).toBe('channels');
+	});
+
+	it('reads as a pair: the DEM’s rivers and HydroRIVERS’, the first saying it is what delineation follows', () => {
+		expect(DEM_RIVERS_LAYER_LABEL).toBe('DEM rivers');
+		expect(HYDRORIVERS_LAYER_LABEL).toBe('Rivers (HydroRIVERS)');
+		expect(DEM_RIVERS_NOTE).toMatch(/^The rivers delineation follows, worked out from the elevation model/);
+	});
+
+	it('is offered to an editor whose server has an elevation model, and no one else', () => {
+		expect(demRiversOffered(true, true)).toBe(true);
+		// DEM_URL empty (the local default): not offered, as the DEM grid and the relief aren't.
+		expect(demRiversOffered(true, false)).toBe(false);
+		// The channels route is an editor's.
+		expect(demRiversOffered(false, true)).toBe(false);
+	});
+
+	it('draws the channels with the layer on outside Delineate, with a tool on whatever the layer, and never without an elevation model', () => {
+		expect(channelsWanted({ offered: true, layerOn: true, tool: false })).toBe(true);
+		expect(channelsWanted({ offered: true, layerOn: false, tool: true })).toBe(true);
+		expect(channelsWanted({ offered: true, layerOn: true, tool: true })).toBe(true);
+		expect(channelsWanted({ offered: true, layerOn: false, tool: false })).toBe(false);
+		expect(channelsWanted({ offered: false, layerOn: true, tool: true })).toBe(false);
+	});
+
+	it('says to zoom in past the widest view, and otherwise what is happening, failures as errors', () => {
+		const s = { noView: false, zoomIn: false, error: null, loading: false, tileCount: 4 };
+		expect(demRiversLine({ ...s, zoomIn: true })).toEqual({ text: 'Zoom in to about 35 km across to draw the DEM rivers.', kind: 'note' });
+		expect(demRiversLine({ ...s, noView: true }).text).toMatch(/isn’t showing here/);
+		expect(demRiversLine({ ...s, error: 'try again later.' })).toEqual({ text: 'The DEM rivers couldn’t be drawn: try again later.', kind: 'error' });
+		expect(demRiversLine({ ...s, loading: true }).text).toBe('Drawing the DEM rivers…');
+		expect(demRiversLine(s)).toEqual({ text: DEM_RIVERS_NOTE, kind: 'note' });
 	});
 });
 

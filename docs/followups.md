@@ -5317,7 +5317,11 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       path: build the channel lines once per DEM in the tiles pipeline (a
       `pnpm dev:tiles:channels` step and the production tiles bucket, as
       vector PMTiles) and draw them like the basemap. Trigger: the first
-      production deploy with `delineation_dem = true`.
+      production deploy with `delineation_dem = true` (passed: production
+      has DEM_URL set), and more pressing since the DEM rivers layer
+      (2026-11-02, `layers=channels`) draws them outside Delineate, where
+      each newly computed tile shares the editor's 60-an-hour
+      elevation-model cap with their delineations.
 - [x] **Delineation of catchments larger than about 100 km across**
       (2026-10-03, branch wip/r2-delineate-job; design/delineation.md §
       Where it runs): a click still at the edge of the request's window

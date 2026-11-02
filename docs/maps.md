@@ -1661,7 +1661,8 @@ to a point on a river. The design, the method and its accuracy are in
 
 ## The elevation model's channels
 
-While **Delineate** or **Sub-catchments** is on, the Map draws the DEM's own
+While **Delineate** or **Sub-catchments** is on, or the **DEM rivers** layer
+is ticked (`layers=channels`, below), the Map draws the DEM's own
 channels in solid red, wider for a larger area (issue #374;
 `delineation/channels.ts`, `channelRoutes.ts`, the Map's
 `channelLayer.svelte.ts`). River lines sit hundreds of metres off the
@@ -1678,22 +1679,52 @@ these lines draw is one a click can go on, both at 1 km²).
   area at its lower end (window-local: a river entering from beyond the
   window carries less than it drains). A tile keeps the steps that start
   inside it, so tiles meet without overlapping. Simplified by half a cell.
-- **When.** Only while one of the two tools is on, or while a delineated
+- **When.** While one of the two tools is on, while a delineated
   proposal waits for a decision (dimmed then, so the outline reads first
   and can be checked against the channels it follows; they go once it is
-  accepted or rejected), and only for a view at most 0.35° a side
-  (3 × 3 tiles); wider, a line over the map says to zoom in (tiles already
-  fetched stay drawn). Tiles are fetched one at a time and kept for the session; the server
-  keeps the last 128 in memory per instance.
+  accepted or rejected), or while the DEM rivers layer is on, and only for
+  a view at most 0.35° a side (3 × 3 tiles); wider, a line over the map
+  says to zoom in while a tool needs them, and the Layers panel says "Zoom
+  in to about 35 km across to draw the DEM rivers." while the layer does
+  (tiles already fetched stay drawn). Tiles are fetched one at a time and
+  kept for the session; the server keeps the last 128 in memory per
+  instance.
+- **The DEM rivers layer** (`layers=channels`, confirmed by the client's
+  hydrologist 2026-11-02; `mapLayers.ts` `demRiversOffered`,
+  `channelsWanted`). A toggle in the Layers panel right after HydroRIVERS'
+  (labelled **Rivers (HydroRIVERS)** since, its stored id still `rivers`,
+  so saved and shared views keep working), so the two read as a pair: the
+  rivers delineation follows, worked out from the elevation model, and the
+  mapped rivers for reference. Ticked, the channels draw whenever the view
+  is small enough, with no tool on; Delineate and Sub-catchments draw them
+  as before whether it is on or not. Offered to an editor once their
+  delineation check finds an elevation model (the channels route is an
+  editor's); without `DEM_URL` (the local default) or for a viewer it isn't
+  offered, as the DEM grid and the relief aren't. Kept in the URL with the
+  other layers.
+- **Requests while panning.** The layer asks nothing new for a view it has
+  already drawn: a tile is fetched once a session, the map reports its view
+  only at the end of a move (`moveend`), and each new view replaces the
+  queue of tiles still to fetch, so the views a pan or zoom passes through
+  cost at most the one tile already out (`channelLayer.svelte.test.ts`). No
+  extra debounce: that already is one. Panning hard over new ground is a few
+  tiles a view, about 30 in a busy 5 minutes, well under the WAF's
+  `waf_dem_rate_limit_per_ip` (300 per 5 minutes, infra/waf.tf), which
+  counts this route with the other DEM routes.
 - **Cost.** A tile it computes (not one it has) counts against the account's
   elevation-model cap like a delineation (60 an hour, 2 at once;
-  security.md § Map uploads); a few seconds of CPU each.
+  security.md § Map uploads); a few seconds of CPU each. With the DEM rivers
+  layer left on while exploring new ground, those tiles share the hour with
+  the editor's delineations; a refusal shows in the Layers panel with
+  **Try again**. Building the channels once in the tiles pipeline removes
+  the cost (docs/followups.md, the elevation model's channels from the
+  tiles pipeline).
 - **What says so.** On screen they are the **terrain channels** (the words
   the operator understood, 2026-10-03; "red" was wrong in the dark theme,
   where they are orange-red). Delineate's bar and the Sub-catchments panel
   say "Click a terrain channel …" and what the result follows, then name
   both kinds of line with their swatches: **Terrain channels**: where your
-  click goes; the outline follows these, and, with the River network layer
+  click goes; the outline follows these (the DEM rivers layer's lines), and, with the River network layer
   on, **River network**: mapped rivers, for reference only; they can sit off
   the terrain channels. The Key's Lines lead with the same two entries while
   the channels are drawn (the Key is the side column's Key tab beside the
@@ -2311,7 +2342,9 @@ pick first.
 ## River network
 
 The Map tab's **River network** layer (issue #345, the client checklist's
-"show the rivers", #342 map item 2; `layers=rivers` in the URL) draws a
+"show the rivers", #342 map item 2; `layers=rivers` in the URL; its toggle
+reads **Rivers (HydroRIVERS)** beside the **DEM rivers**, [§ The elevation
+model's channels](#the-elevation-models-channels)) draws a
 sourced river network around the project and proposes its reaches as the
 project's own `river` features. The basemap already draws OpenStreetMap's
 waterways ([§ Labels](#labels)), but OSM's coverage of small and

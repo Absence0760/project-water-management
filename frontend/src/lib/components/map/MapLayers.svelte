@@ -11,7 +11,11 @@
 	network (`layers=rivers`, issue #345, docs/maps.md § River network) lists
 	the reaches around the catchment, biggest first; a reach picked here or on
 	the map shows its facts and source, and an editor adds it to the project
-	as a river (one reach at a time: the layer proposes, the modeller decides).
+	as a river (one reach at a time: the layer proposes, the modeller decides);
+	its toggle reads "Rivers (HydroRIVERS)", beside the DEM rivers
+	(`layers=channels`, docs/maps.md § The elevation model's channels), the
+	elevation model's own channels that delineation follows, offered to an
+	editor when the server has an elevation model.
 	Hydrological units (`layers=units`, docs/maps.md § Hydrological units
 	layer) outlines each unit's polygon and writes its name on it, listed here
 	too; the MAP grid (`layers=mapgrid`, § MAP grid) draws one loaded mean
@@ -41,14 +45,18 @@
 		reachLabel,
 		RIVER_BBOX_MAX_DEG,
 		type UnitLabel,
-		withLayer
+		withLayer,
+		DEM_RIVERS_LAYER_LABEL,
+		demRiversLine,
+		HYDRORIVERS_LAYER_LABEL
 	} from './mapLayers';
-	import { chirpsColour, DEM_RAMP, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
+	import { channelColour, chirpsColour, DEM_RAMP, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
 	import type { MapGridLayer } from './mapGridLayer.svelte';
 	import type { DemGridLayer } from './demGridLayer.svelte';
 	import { AREA_FILL_STEP, type AreaFill } from './areaFill.svelte';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import type { RiverLayer } from './riverLayer.svelte';
+	import type { ChannelLayer } from './channelLayer.svelte';
 
 	let {
 		quaternaries,
@@ -63,6 +71,7 @@
 		chirps = null,
 		labels = true,
 		demGrid = null,
+		demRivers = null,
 		areaFill = null
 	}: {
 		quaternaries: QuaternaryLayer;
@@ -86,6 +95,8 @@
 		labels?: boolean;
 		/** The DEM grid layer's state. Null: no toggle (the server has no elevation model). */
 		demGrid?: DemGridLayer | null;
+		/** The DEM rivers layer: whether its toggle is on, and the channels' state (drawn for the tools too). Null: no toggle (a viewer, or no elevation model). */
+		demRivers?: { on: boolean; layer: Pick<ChannelLayer, 'noView' | 'zoomIn' | 'error' | 'loading' | 'tileCount' | 'retry'> } | null;
 		/** The Area fill slider's state (areaFill.svelte.ts): how strongly the polygons are filled. Null: no slider. */
 		areaFill?: AreaFill | null;
 	} = $props();
@@ -139,6 +150,7 @@
 	/** The DEM grid's swatch: its elevation colours, lowest first. */
 	const demGradient = `linear-gradient(90deg, ${DEM_RAMP.map(([, c]) => c).join(', ')})`;
 	const dg = $derived(demGrid?.answer ?? null);
+	const drLine = $derived(demRivers?.on ? demRiversLine(demRivers.layer) : null);
 	const dgRange = $derived(demGrid?.range ?? null);
 
 	const status = $derived(
@@ -154,6 +166,13 @@
 							? 'Too many MAP grid points in view: zoom in.'
 							: `${mg.cells.length} MAP grid ${mg.cells.length === 1 ? 'point' : 'points'} shown.`
 						: 'Loading the MAP grid…'
+					: null,
+				demRivers?.on && !demRivers.layer.zoomIn && !demRivers.layer.noView && !demRivers.layer.error
+					? demRivers.layer.loading
+						? 'Drawing the DEM rivers…'
+						: demRivers.layer.tileCount
+							? 'DEM rivers drawn.'
+							: null
 					: null,
 				chirps?.on && chirps.cells ? `${chirps.cells.length} CHIRPS grid ${chirps.cells.length === 1 ? 'point' : 'points'} shown.` : null,
 				demGrid?.on && !demGrid.zoomIn && !demGrid.error
@@ -233,7 +252,7 @@
 		<label class="check">
 			<input type="checkbox" checked={rivers.on} onchange={(e) => toggle('rivers', e.currentTarget.checked)} data-testid="map-layer-rivers" />
 			<span class="swatch rn-swatch" style:--rn={riverNetworkColour(dark)} aria-hidden="true"></span>
-			River network
+			{HYDRORIVERS_LAYER_LABEL}
 		</label>
 		<HelpTip key="river-network" />
 	</div>
@@ -287,6 +306,25 @@
 				{/if}
 			{/if}
 		</div>
+	{/if}
+	{#if demRivers}
+		<div class="tip-row">
+			<label class="check">
+				<input type="checkbox" checked={demRivers.on} onchange={(e) => toggle('channels', e.currentTarget.checked)} data-testid="map-layer-channels" />
+				<span class="swatch dr-swatch" style:--dr={channelColour(dark)} aria-hidden="true"></span>
+				{DEM_RIVERS_LAYER_LABEL}
+			</label>
+			<HelpTip key="terrain-channels" label="About the DEM rivers" />
+		</div>
+		{#if drLine}
+			<div class="qt small" data-testid="map-channels" data-state={demRivers.layer.zoomIn ? 'zoom' : demRivers.layer.error ? 'error' : demRivers.layer.loading ? 'loading' : demRivers.layer.noView ? 'no-view' : 'drawn'}>
+				{#if drLine.kind === 'error'}
+					<p class="err" role="alert">{drLine.text} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, demRivers!.layer, 'map-layer-channels')}>Try again</button></p>
+				{:else}
+					<p class="muted" data-testid="map-channels-line" data-loading={demRivers.layer.loading && !demRivers.layer.zoomIn && !demRivers.layer.noView ? '' : undefined}>{drLine.text}</p>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 	{#if units}
 		<label class="check">
@@ -484,6 +522,10 @@
 	.fill-row p {
 		grid-column: 1 / -1;
 		margin: 0;
+	}
+	/* The DEM rivers as the map draws them: a solid line in the channels' colour (mapStyle.ts channelColour). */
+	.dr-swatch {
+		border-top: 2px solid var(--dr);
 	}
 	/* A unit's outline as the layer draws it: a solid line in the parcels' green. */
 	.units-swatch {

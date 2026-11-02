@@ -1,6 +1,6 @@
 // The elevation model's channels on the Map (issue #374 item 3; docs/maps.md
 // § The elevation model's channels): while Delineate or Sub-catchments is on,
-// the tiles of GET …/map/channels covering the map's view are fetched (one at
+// or the DEM rivers layer (`layers=channels`), the tiles of GET …/map/channels covering the map's view are fetched (one at
 // a time: each is an elevation-model request the account's cap counts, and
 // at most two may run at once) and drawn, so the editor clicks the line the
 // elevation model agrees with rather than a displaced river line. Fetched
@@ -86,6 +86,13 @@ export class ChannelLayer {
 		const out: ChannelLineData[] = [];
 		for (const ls of this.#tiles.values()) for (const l of ls) out.push(l);
 		return out;
+	}
+	/** Ask the view's tiles again after a refusal stopped them (the Layers box's Try again). */
+	retry() {
+		const tiles = this.#deps.on() ? tilesInView(this.#deps.view()) : null;
+		this.error = null;
+		this.#queue = (tiles ?? []).filter((t) => !this.#tiles.has(this.#key(t)));
+		void this.#drain();
 	}
 	/** How many tiles are drawn, for the status line and the tests. */
 	get tileCount() {
