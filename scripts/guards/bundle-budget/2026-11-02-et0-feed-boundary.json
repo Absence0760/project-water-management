@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "PR #686, the reference ET feed's boundary cells proposal (feeds/BoundaryRain.svelte, DataFeedsPanel.svelte, feeds.ts): measured 569 B gzip by building the 2026-11-02 consolidated branch with and without the PR's frontend change (2 371 117 → 2 371 686 B)."
+}
