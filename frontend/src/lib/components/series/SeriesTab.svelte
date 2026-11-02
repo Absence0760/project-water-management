@@ -105,7 +105,8 @@
 	import { unplacedAdvice, unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
-	import { cachedValues, cacheValues } from './valuesCache';
+	import { seriesListLoader, seriesValuesLoader } from './seriesLoads';
+	import type { Latest } from '#lib/api/latest.js';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
 	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
@@ -125,6 +126,7 @@
 		timeZone = null,
 		warningsOpen = null,
 		onSeriesChange,
+		listSeries = seriesListLoader(),
 		onadddata
 	}: {
 		projectId: string;
@@ -143,7 +145,13 @@
 		timeZone?: string | null;
 		/** The open items the Warnings page lists (issue #611; its Open chip, the Warnings row's badge): null until counted. */
 		warningsOpen?: number | null;
-		onSeriesChange?: (list: SeriesMeta[]) => void;
+		/** The tab's list changed: `listed` when it is the tab's own read (listSeries) of the list, else a change the tab made. */
+		onSeriesChange?: (list: SeriesMeta[], listed?: boolean) => void;
+		/**
+		 * The tab's own read of the list (Try again, after a day is edited), latest wins. The page passes its own
+		 * (workspace/pageLoads.ts `list`), so this read and the page's (a header upload's refresh) share one order.
+		 */
+		listSeries?: (projectId: string) => Promise<Latest<SeriesMeta[]>>;
 		/** Opens the page's Add data dialog (the header's button): the empty state's action, and the retired `#upload-csv` link. */
 		onadddata?: () => void;
 	} = $props();
@@ -306,21 +314,32 @@
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
 	const isRain = (k: string) => k.endsWith('_mm');
 
+	// Latest wins (seriesLoads.ts, and the page's pageLoads.ts for the list): a list or values asked for earlier never land over a later answer.
+	const readValues = seriesValuesLoader();
 	async function load() {
 		if (!list.length) loading = true;
 		loadError = null;
 		refreshError = null;
+		// False when a later load answered instead: it owns the list and the loading state.
+		let mine = true;
 		try {
-			list = await api.series.list(projectId);
-			onSeriesChange?.(list);
+			const r = await listSeries(projectId);
+			if (!r.current) {
+				mine = false;
+				return;
+			}
+			list = r.value;
+			onSeriesChange?.(list, true);
 			void loadValues();
 		} catch (e) {
 			// With a list already drawn (the page's), keep it and say the refresh failed; else the error replaces the table.
 			if (list.length) refreshError = msg(e);
 			else loadError = msg(e);
 		} finally {
-			loading = false;
-			refreshing = false;
+			if (mine) {
+				loading = false;
+				refreshing = false;
+			}
 		}
 	}
 	onMount(() => {
@@ -328,28 +347,22 @@
 		void load();
 	});
 
-	async function loadValues() {
-		await Promise.all(
-			list.map(async (s) => {
-				if (s.id in valuesFailed) {
-					const rest = { ...valuesFailed };
-					delete rest[s.id];
-					valuesFailed = rest;
-				}
-				const hit = cachedValues(projectId, s);
-				if (hit) {
-					values = { ...values, [s.id]: hit };
-					return;
-				}
-				try {
-					const v = cacheValues(projectId, await api.series.get(projectId, s.id));
-					values = { ...values, [s.id]: v };
-				} catch (e) {
-					// The coverage cells stay "–"; the preview shows the error with Try again.
-					valuesFailed = { ...valuesFailed, [s.id]: msg(e) };
-				}
-			})
-		);
+	function loadValues(): Promise<void> {
+		return readValues(projectId, list, {
+			retry(id) {
+				if (!(id in valuesFailed)) return;
+				const rest = { ...valuesFailed };
+				delete rest[id];
+				valuesFailed = rest;
+			},
+			value(id, v) {
+				values = { ...values, [id]: v };
+			},
+			// The coverage cells stay "–"; the preview shows the error with Try again.
+			failed(id, message) {
+				valuesFailed = { ...valuesFailed, [id]: message };
+			}
+		});
 	}
 
 	// Default chart: observed flow if present, else the main rainfall.

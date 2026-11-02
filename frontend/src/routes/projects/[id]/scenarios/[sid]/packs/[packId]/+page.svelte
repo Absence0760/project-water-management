@@ -26,7 +26,8 @@
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import PackBadge from '#lib/components/packs/PackBadge.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { errataFoundSinceNote, latestOnly } from '#lib/components/packs/pack.js';
+	import { latestOnly } from '#lib/api/latest.js';
+	import { errataFoundSinceNote } from '#lib/components/packs/pack.js';
 	import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from '#lib/components/packs/applicantPack.js';
 	import ShareLinksPanel from '#lib/components/project/ShareLinksPanel.svelte';
 	import { fmtDate } from '#lib/format/number.js';

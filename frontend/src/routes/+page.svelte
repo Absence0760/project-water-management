@@ -19,6 +19,7 @@
 	import NeedsAttention from '#lib/components/projects/NeedsAttention.svelte';
 	import ProjectTable from '#lib/components/projects/ProjectTable.svelte';
 	import { needsAttention } from '#lib/components/projects/outcomes.js';
+	import { projectListLoader } from '#lib/components/projects/listLoad.js';
 	import {
 		IRRIGATION_LABEL,
 		IRRIGATION_RULE,
@@ -181,12 +182,17 @@
 			.catch(() => request === outcomesRequest && (outcomesFailed = true));
 	}
 
+	// Latest wins (listLoad.ts): a slower earlier read (before Try again, or an import) never replaces the list.
+	const readList = projectListLoader();
 	async function load() {
 		loading = true;
 		loadError = null;
 		loadOutcomes();
+		const r = await readList();
+		// A later load owns the page now, its loading state included.
+		if (!r.current) return;
 		try {
-			const [p, t] = await Promise.allSettled([api.projects.list(), api.teams.list()]);
+			const [p, t] = r.value;
 			if (p.status === 'rejected') throw p.reason;
 			// A user who is only ever a farmer has no workspace: their farms are
 			// the farmer view (WP-2.6, docs/design/farmer-view.md).

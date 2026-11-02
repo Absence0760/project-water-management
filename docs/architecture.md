@@ -456,6 +456,40 @@ build, median of 9 loads of an 8-year run, time to the hydrograph's first
 paint: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU throttling.
 `auth.spec.ts` pins the request order and `runs-page.spec.ts` the paint order.
 
+## Stale responses (frontend)
+
+A page that asks again while its last request is still out (another
+project, a refresh, Try again, a pasted link) must never let the earlier
+answer land over the later one. `lib/api/latest.ts` is the one sequencer,
+latest wins, in two forms: `latestCall(load)` wraps a loader, so an earlier
+call that comes back later answers `{ current: false }`, its failure too
+(the latest call's failure is thrown); `latestOnly()` hands out checks for a
+step of several awaits written in place. Each call site keeps its wrapped
+loader in a `.ts` module beside it, where a unit test answers two requests
+out of order:
+
+- the project list (`components/projects/listLoad.ts`: the list page, read
+  again on Try again and after an import, and the Compare page's picker);
+- the catchment page (`workspace/pageLoads.ts`): moving to another project
+  while one loads never draws the first project's answer, or its error, and
+  the series list, which several writers set (the page's load, a header
+  upload's refresh, the Time series tab's own reads, which the page hands it
+  as `listSeries`, and the tab's changes), is ordered by when each list was
+  asked for, so an older one never replaces a newer one already shown, while
+  a newer read that fails doesn't hide an older answer still to come;
+- the Time series tab (`components/series/seriesLoads.ts`): each round of reading every series' values (a later round, after a day is
+  edited, wins; the values cache checks entries against each series' last
+  change, so a late answer may still be cached);
+- the Map's data step (`components/map/startDataLoad.ts`), read again after
+  each change on the tab;
+- the share page's link (`routes/share`) and the evidence pack and verify
+  pages' lookups.
+
+A picked file's read has its own guard (`files/latest.ts`), and the
+preview and calibration workers stop a superseded request themselves. The
+run-result charts (`components/runs/cache.ts` callers such as `RunChart`)
+check that the run or series they asked for is still the one shown.
+
 ## The landing page: the prerendered routes
 
 The app is a static SPA (`ssr = false`, `prerender = false` in
