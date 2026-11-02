@@ -47,7 +47,13 @@ pnpm test:verify                                   # the guard: ~11 min locally 
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
+python3 verify/diff.py --no-examples --probes apan-daily --random 10 --dense 10 --workers 2   # a targeted run: the probes named by these substrings and a few networks
+python3 verify/diff.py --no-examples --probes apan-daily --random 12 --dense 12 --mutants "A-pan"   # a targeted self-test: only the mutants whose description contains the text
 ```
+
+A change to one feature needs only the targeted runs above (its probes, a
+dozen random and dense networks, its own mutants); the whole guard is CI's
+job (`--probes ''` keeps no probe).
 
 It needs Python 3.14 and the repo's `pnpm install` (for `tsx`); no database,
 no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
