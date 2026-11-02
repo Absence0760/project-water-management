@@ -472,12 +472,12 @@ out of order:
   again on Try again and after an import, and the Compare page's picker);
 - the catchment page (`workspace/pageLoads.ts`): moving to another project
   while one loads never draws the first project's answer, or its error, and
-  the series list, which several writers set (the page's load, a refresh,
-  the Time series tab's own list), is ordered by when each list was asked
-  for, so an older one never replaces a newer one already shown, while a
-  newer read that fails doesn't hide an older answer still to come;
-- the Time series tab (`components/series/seriesLoads.ts`): its list, and
-  each round of reading every series' values (a later round, after a day is
+  the series list, which several writers set (the page's load, a header
+  upload's refresh, the Time series tab's own reads, which the page hands it
+  as `listSeries`, and the tab's changes), is ordered by when each list was
+  asked for, so an older one never replaces a newer one already shown, while
+  a newer read that fails doesn't hide an older answer still to come;
+- the Time series tab (`components/series/seriesLoads.ts`): each round of reading every series' values (a later round, after a day is
   edited, wins; the values cache checks entries against each series' last
   change, so a late answer may still be cached);
 - the Map's data step (`components/map/startDataLoad.ts`), read again after

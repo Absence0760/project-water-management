@@ -106,6 +106,7 @@
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { seriesListLoader, seriesValuesLoader } from './seriesLoads';
+	import type { Latest } from '#lib/api/latest.js';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
 	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
@@ -125,6 +126,7 @@
 		timeZone = null,
 		warningsOpen = null,
 		onSeriesChange,
+		listSeries = seriesListLoader(),
 		onadddata
 	}: {
 		projectId: string;
@@ -143,7 +145,13 @@
 		timeZone?: string | null;
 		/** The open items the Warnings page lists (issue #611; its Open chip, the Warnings row's badge): null until counted. */
 		warningsOpen?: number | null;
-		onSeriesChange?: (list: SeriesMeta[]) => void;
+		/** The tab's list changed: `listed` when it is the tab's own read (listSeries) of the list, else a change the tab made. */
+		onSeriesChange?: (list: SeriesMeta[], listed?: boolean) => void;
+		/**
+		 * The tab's own read of the list (Try again, after a day is edited), latest wins. The page passes its own
+		 * (workspace/pageLoads.ts `list`), so this read and the page's (a header upload's refresh) share one order.
+		 */
+		listSeries?: (projectId: string) => Promise<Latest<SeriesMeta[]>>;
 		/** Opens the page's Add data dialog (the header's button): the empty state's action, and the retired `#upload-csv` link. */
 		onadddata?: () => void;
 	} = $props();
@@ -306,8 +314,7 @@
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
 	const isRain = (k: string) => k.endsWith('_mm');
 
-	// Latest wins (seriesLoads.ts): a list or values asked for earlier never land over a later answer.
-	const listSeries = seriesListLoader();
+	// Latest wins (seriesLoads.ts, and the page's pageLoads.ts for the list): a list or values asked for earlier never land over a later answer.
 	const readValues = seriesValuesLoader();
 	async function load() {
 		if (!list.length) loading = true;
@@ -322,7 +329,7 @@
 				return;
 			}
 			list = r.value;
-			onSeriesChange?.(list);
+			onSeriesChange?.(list, true);
 			void loadValues();
 		} catch (e) {
 			// With a list already drawn (the page's), keep it and say the refresh failed; else the error replaces the table.

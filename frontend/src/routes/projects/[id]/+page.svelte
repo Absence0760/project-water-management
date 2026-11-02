@@ -1293,8 +1293,10 @@
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								nodes={editor.model.nodes}
 								warningsOpen={warningsBadge}
-								onSeriesChange={(l) => {
-									loads.wrote();
+								listSeries={loads.list}
+								onSeriesChange={(l, listed) => {
+									// The tab's own read is in the page's order already (loads.list); a change it made is newer than any read.
+									if (!listed) loads.wrote();
 									series = l;
 								}}
 								onadddata={() => openAddData()}
