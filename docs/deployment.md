@@ -2445,9 +2445,10 @@ existing `MIRROR_URL` and read grant (the production check refuses
 `FUTURE_YIELD=on` on a worker without an `s3://` `MIRROR_URL`), and the API
 never reads it, so no other `infra/` change. Until then leave it off:
 on with a partial copy, § 8 is computed on part of each window and the
-`futureYield` check holds every pack with it from issue. It is also held
-until NASA's caveat is quoted in `FUTURE_YIELD_CAVEAT`
-(`packages/engine/src/evidence/future.ts`), a code change. An editor can
+`futureYield` check holds every pack with it from issue. (It would also be
+held while NASA's caveat in `FUTURE_YIELD_CAVEAT`,
+`packages/engine/src/evidence/future.ts`, is unquoted; it was quoted on
+2026-11-01.) An editor can
 cancel a job that is waiting or running (§ 8's board, the Scenarios tab's
 form; 284_cancel_future_jobs). Locally it is off too
 (`backend/.env.development` doesn't set it); put `FUTURE_YIELD=on` in

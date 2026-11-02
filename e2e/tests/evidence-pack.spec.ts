@@ -14,7 +14,7 @@
 // issue #621) on an application: run on the committed synthetic NEX-GDDP-CMIP6
 // copy (invented models SYN-A..C, FUTURE_YIELD=on in playwright.config.ts),
 // shown with its caveat and labelled as too few models on partial windows,
-// and no pack made of it while NASA's caveat is a placeholder.
+// quoting NASA's own caveat, and no pack made of it while its windows are partial.
 //
 // Needs MinIO (`pnpm dev:s3:up`; CI starts it): issuing a pack stores its
 // reproduction bundle there. Locally, without it the spec is skipped and says
@@ -434,7 +434,7 @@ test('an application’s packs show in the Applications tab and its panel; a new
 	await anon.close();
 });
 
-test('§ 8 future yield: run on the synthetic projections, shown with its caveat and labels, held from any pack while its caveat is a placeholder', async ({ page, owner, signIn }) => {
+test('§ 8 future yield: run on the synthetic projections, shown with its caveat and labels, held from any pack while its windows are partial', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Pack future yield');
 	const baseline = await createRun(page.request, project.id, 'Baseline');
@@ -500,8 +500,11 @@ test('§ 8 future yield: run on the synthetic projections, shown with its caveat
 	const caveat = page.getByTestId('evidence-future-caveat');
 	await expect(caveat).toContainText('These are projections, not predictions.');
 	await expect(caveat).toContainText('bias correction and spatial disaggregation (BCSD)');
-	// NASA's words aren't quoted yet (the tech note is 404): a marked placeholder, never invented words.
-	await expect(page.getByTestId('evidence-future-caveat-placeholder')).toContainText('[Placeholder: NASA’s caveat on engineering use of NEX-GDDP-CMIP6 is to be quoted here verbatim');
+	// NASA's own words, quoted verbatim from the v2 tech note with its address and the date read; no placeholder.
+	const nasa = page.getByTestId('evidence-future-caveat-nasa');
+	await expect(nasa).toContainText('engineering or design studies is not recommended without consultation with a qualified expert.');
+	await expect(nasa).toContainText('https://www.nccs.nasa.gov/wp-content/uploads/2025/06/NEX-GDDP-CMIP6-v2-Tech_Note.pdf');
+	await expect(page.getByTestId('evidence-future-caveat-placeholder')).toHaveCount(0);
 	await expect(page.getByTestId('evidence-future-few')).toContainText('Only 3 climate models (SYN-A, SYN-B, SYN-C): fewer than the 5 a range across models needs');
 	await expect(page.getByTestId('evidence-future-partial')).toContainText('rest on part of their 30-year windows');
 	const table = page.getByTestId('evidence-future-table');
@@ -512,7 +515,7 @@ test('§ 8 future yield: run on the synthetic projections, shown with its caveat
 	await expect(page.getByTestId('evidence-checks')).toContainText('§ 8 Future yield rests on the whole method and quotes its caveat (stops issue)');
 	await expectNoViolations(page);
 
-	// Held back: no pack is made of it while the caveat is a placeholder and the windows are partial, on the page or through the API.
+	// Held back: no pack is made of it while the windows are partial, on the page or through the API.
 	const packs = page.getByTestId('evidence-packs');
 	await expect(packs).toContainText('A pack can be made once every check that stops issue passes.');
 	await expect(packs.getByRole('button', { name: 'Create evidence pack' })).toHaveCount(0);

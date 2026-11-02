@@ -2272,7 +2272,7 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 	const result = runFutureYield({ baseline: fyBase, application: fyApp, nodeId: 'F1', ownedNodeIds: ['F1'], factors: fixtureFactorTable() });
 	const found = { result, createdAt: '2026-10-29T08:00:00.000Z', createdBy: 'Analyst' };
 
-	it('freezes the stored result whole, with the caveat, and holds the pack from issue while NASA’s words are missing', () => {
+	it('freezes the stored result whole, with NASA’s quoted caveat, and passes the check on whole windows', () => {
 		const r = evidenceReport(input({ futureYield: found }));
 		expect(r.version).toBe('evidence-26');
 		const s = r.futureYield!;
@@ -2282,11 +2282,9 @@ describe('§ 8 future yield (evidence-23, issue #621)', () => {
 		expect(s.factors).toEqual(result.factors);
 		expect(s.caveat).toEqual(FUTURE_YIELD_CAVEAT);
 		const check = r.checks.find((c) => c.id === 'futureYield')!;
-		expect(check).toMatchObject({ passed: !futureCaveatPending(), refuses: false, blocksIssue: true });
-		if (futureCaveatPending()) {
-			expect(check.detail).toMatch(/^NASA’s own caveat on engineering use of the projections isn’t quoted yet/);
-			expect(r.issuable).toBe(false);
-		}
+		expect(futureCaveatPending()).toBe(false);
+		expect(check).toMatchObject({ passed: true, refuses: false, blocksIssue: true });
+		expect(check.detail).toBe(`3 climate models, whole windows, NASA’s caveat quoted from ${FUTURE_YIELD_CAVEAT.nasa.source} (read 2026-11-01).`);
 		// Positive control: the same report without § 8 has no such check.
 		expect(evidenceReport(input()).checks.some((c) => c.id === 'futureYield')).toBe(false);
 	});

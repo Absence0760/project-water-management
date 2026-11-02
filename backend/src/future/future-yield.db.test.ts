@@ -160,7 +160,8 @@ describe('§ 8 future yield', () => {
 		const check = report.checks.find((c) => c.id === 'futureYield')!;
 		expect(check).toMatchObject({ passed: false, blocksIssue: true });
 		expect(check.detail).toContain('part of their 30-year windows');
-		if (futureCaveatPending()) expect(check.detail).toContain('NASA’s own caveat');
+		expect(futureCaveatPending()).toBe(false);
+		expect(check.detail).not.toContain('NASA’s own caveat');
 		expect(report.issuable).toBe(false);
 	});
 

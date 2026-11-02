@@ -651,7 +651,7 @@ plan stays on the issue. Found while building:
       us-west-2 (deployment.md § NEX-GDDP-CMIP6 (one-off)), records the result
       on #621, and pins each model's variant in `MODELS` and the register's
       table. Trigger: before the first `copy`, with the operator's go-ahead.
-- [ ] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
+- [x] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
       cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returns 404. Slice 4 built
       § 8 with a marked placeholder (`FUTURE_YIELD_CAVEAT.nasa` in
       `packages/engine/src/evidence/future.ts`), and its `futureYield` check
@@ -660,6 +660,7 @@ plan stays on the issue. Found while building:
       current tech note, quote its engineering-use caveat word for word in
       that constant and in data-sources.md, with the URL and the date read.
       Trigger: before `FUTURE_YIELD=on` in production.
+      **Done (2026-11-01):** § 5.1 *Recommended Use* of the NEX-GDDP-CMIP6 v2 Tech Note (May 31, 2025), quoted whole in `FUTURE_YIELD_CAVEAT.nasa` and data-sources.md § nex-gddp-cmip6, read 2026-11-01; the v1 note (now at `uploads/2024/03/`) has the same words. No `ENGINE_VERSION` bump: no run result moves.
 - [x] **§ 8 has no Run button.** The future yield is queued by
       `POST /projects/:id/runs/:runId/future-yield` (an editor); the
       evidence report's § 8 says *Not assessed* until then but offers no

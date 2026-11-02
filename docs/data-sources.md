@@ -1300,13 +1300,26 @@ loaded once.
   World Climate Research Programme's CMIP6 for producing and making
   available their model output." with the models used and their groups.
   The engine's credit text lands with slice 4.
-- **The caveat (owed before slice 4):** NASA's technical note asks for
-  expert input before the projections are used for engineering (the #604
-  research read it in `NEX-GDDP-CMIP6-Tech_Note_4.pdf`). **That URL returns
-  404 today** (2026-10-27), so the caveat is **not yet quoted**. Before §
-  8 *Future yield* ships, the current tech note is found and its caveat
-  quoted here verbatim, with its URL and the date read; § 8 opens with
-  those words.
+- **The caveat (quoted 2026-11-01):** NASA's technical note asks for
+  expert input before the projections are used for engineering. The
+  current note is the NEX-GDDP-CMIP6 v2 Tech Note ("NASA Earth eXchange
+  Global Daily Downscaled Projections version 2 (NEX-GDDP-CMIP6 v2.0)",
+  latest update May 31, 2025), linked as "tech note (v2 data)" from NCCS's
+  dataset page
+  (<https://www.nccs.nasa.gov/services/data-collections/land-based-products/nex-gddp-cmip6>),
+  at <https://www.nccs.nasa.gov/wp-content/uploads/2025/06/NEX-GDDP-CMIP6-v2-Tech_Note.pdf>, read
+  2026-11-01. Its § 5.1 *Recommended Use*, verbatim and whole:
+
+  > This dataset has been generated and is being distributed to assist the science community in conducting studies of climate change impacts at local to regional scales, and to enhance public understanding of possible future climate patterns and climate impacts at the scale of individual cities, communities, and watersheds. This dataset is intended for use in scientific research only, and use of this dataset for other purposes, such as commercial applications, and engineering or design studies is not recommended without consultation with a qualified expert.
+
+  The v1 note, "tech note (v1 data)" on the same page
+  (<https://www.nccs.nasa.gov/wp-content/uploads/2024/03/NEX-GDDP-CMIP6-Tech_Note_4.pdf>,
+  which resolves again on 2026-11-01; the address the #604 research used
+  returned 404 on 2026-10-27), has the same paragraph word for word as its
+  § 4.1. § 8 *Future yield* prints it after our own caveat, with the
+  address and the date read (`FUTURE_YIELD_CAVEAT.nasa` in
+  `packages/engine/src/evidence/future.ts`; its test pins the words, so
+  keep the two the same).
 - **The model list (frozen; provisional, pending the hydrologist):** ten
   models, one per modelling centre so the range isn't one centre's model
   counted twice, each needing `pr`, `tasmax` and `tasmin` for

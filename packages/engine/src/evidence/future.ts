@@ -464,13 +464,14 @@ export function checkFutureYield(stored: FutureYieldResult, inputs: { baseline: 
 
 /**
  * The words § 8 opens with. `ours` is ours; `nasa` is NASA's own caveat on
- * engineering use of NEX-GDDP-CMIP6, to be quoted **verbatim** from the
- * product's current technical note with its URL and the date it was read.
- * The note the research cited (NEX-GDDP-CMIP6-Tech_Note_4.pdf) returned 404
- * when slice 4 was built (2026-10-29), so `text` is null: the section prints
- * a marked placeholder, and the `futureYield` check stops a pack with § 8
- * being issued until it is filled (report.ts, evidence-pack.md § Future
- * yield). Fill text, url and readOn together, and never paraphrase.
+ * engineering use of NEX-GDDP-CMIP6, quoted **verbatim** (§ 5.1 Recommended
+ * Use, the whole paragraph) from the product's current technical note, the v2
+ * note NCCS's dataset page links, with its URL and the date it was read. The
+ * v1 note (Tech Note 4, uploads/2024/03/) carries the same paragraph word for
+ * word in its § 4.1. The `futureYield` check stops a pack with § 8 being
+ * issued while text, url or readOn is missing (report.ts, evidence-pack.md
+ * § Future yield), and the section prints `placeholder` instead. If the note
+ * is revised, fill text, url and readOn together, and never paraphrase.
  */
 export const FUTURE_YIELD_CAVEAT = {
 	ours: [
@@ -480,12 +481,12 @@ export const FUTURE_YIELD_CAVEAT = {
 	],
 	nasa: {
 		/** NASA's words, verbatim. null until quoted: the section can't be issued without them. */
-		text: null as string | null,
+		text: 'This dataset has been generated and is being distributed to assist the science community in conducting studies of climate change impacts at local to regional scales, and to enhance public understanding of possible future climate patterns and climate impacts at the scale of individual cities, communities, and watersheds. This dataset is intended for use in scientific research only, and use of this dataset for other purposes, such as commercial applications, and engineering or design studies is not recommended without consultation with a qualified expert.' as string | null,
 		/** Where they are quoted from. */
-		source: 'NEX-GDDP-CMIP6 Technical Note, NASA Center for Climate Simulation',
-		url: null as string | null,
+		source: 'NASA Earth eXchange Global Daily Downscaled Projections version 2 (NEX-GDDP-CMIP6 v2.0) Tech Note, latest update May 31, 2025, § 5.1 Recommended Use',
+		url: 'https://www.nccs.nasa.gov/wp-content/uploads/2025/06/NEX-GDDP-CMIP6-v2-Tech_Note.pdf' as string | null,
 		/** When the quoted note was read (YYYY-MM-DD). */
-		readOn: null as string | null,
+		readOn: '2026-11-01' as string | null,
 		/** Printed where the words go while `text` is null. */
 		placeholder:
 			'[Placeholder: NASA’s caveat on engineering use of NEX-GDDP-CMIP6 is to be quoted here verbatim from the product’s current technical note, with its address and the date it was read. The note this section was designed against (NEX-GDDP-CMIP6-Tech_Note_4.pdf) could not be found on 2026-10-29. A pack with this section can’t be issued until the caveat is filled.]'

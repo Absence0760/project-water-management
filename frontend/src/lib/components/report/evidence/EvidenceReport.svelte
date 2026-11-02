@@ -941,7 +941,7 @@
 				<div class="future-caveat" data-testid="evidence-future-caveat">
 					{#each fy.caveat.ours as p, i (i)}<p class="small">{p}</p>{/each}
 					{#if fy.caveat.nasa.text}
-						<blockquote class="small">
+						<blockquote class="small" data-testid="evidence-future-caveat-nasa">
 							<p>{fy.caveat.nasa.text}</p>
 							<footer>{fy.caveat.nasa.source}, {fy.caveat.nasa.url}, read {fmtDate(fy.caveat.nasa.readOn ?? '')}.</footer>
 						</blockquote>
