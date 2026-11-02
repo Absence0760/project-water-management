@@ -10,8 +10,23 @@
 # secret header, and the app rejects requests that bypass CloudFront — so
 # every API request passes through this ACL.
 #
-# Four per-IP rate rules, tightest first:
+# Five per-IP rate rules, tightest first:
 #   - /api/auth/*: 100 per 5 minutes (credential stuffing);
+#   - the elevation-model routes: waf_dem_rate_limit_per_ip (default 300),
+#     /api/projects/<id>/map/ delineation, start, divide, subcatchments
+#     (and its save), channels, dem-grid and dam-trace, the collection paths
+#     only (each GET or POST there reads DEM or water-occurrence tiles; the
+#     polls of a waiting request, accept, reject, apply and discard read
+#     none and stay under the API's limit alone). The compute POSTs are
+#     already capped per account in the app (delineation/attempt.ts: 60 an
+#     hour, 2 at once; dam traces 600 an hour, delineation/throttle.ts), but
+#     each refusal is still an invocation, and the DEM grid and the state
+#     GETs have no app cap at all. One person mapping hard is ~200 in a busy
+#     5 minutes: up to ~120 DEM grid views while panning (one per 0.01°
+#     snapped view, demGridLayer.svelte.ts), ~30 channel tiles (at most 9 a
+#     view, kept for the session), ~30 clicks (delineate, trace, divide), a
+#     few state GETs per Map visit. These requests count against the API's
+#     limit too (a rate rule that doesn't block lets the request on);
 #   - /api/*: waf_rate_limit_per_ip (default 1,000), the requests that cost
 #     a Lambda invocation and usually a database query;
 #   - /tiles/*: waf_tiles_rate_limit_per_ip (default 1,000), the map's
@@ -40,7 +55,7 @@
 # No AWS managed rule groups: AWSManagedRulesCommonRuleSet blocks request
 # bodies over 8 KB, and time-series uploads are legitimately ~1 MB.
 #
-# Cost: ~$5/month per ACL + $1/month per rule (5 rules) + $0.60 per 1M requests.
+# Cost: ~$5/month per ACL + $1/month per rule (6 rules) + $0.60 per 1M requests.
 # ----------------------------------------------------------------------------
 
 resource "aws_wafv2_web_acl" "frontend" {
@@ -199,10 +214,58 @@ resource "aws_wafv2_web_acl" "frontend" {
     }
   }
 
+  # The elevation-model routes (header above). A regex, since the project id
+  # sits mid-path; matched on the path as the API routes it (decoded,
+  # normalised, lowercased, as the other rules). Collection paths only:
+  # `…/map/delineation` and `…/map/delineation/` match,
+  # `…/map/delineation/requests/<rid>` doesn't.
+  rule {
+    name     = "RateLimitDemPerIP"
+    priority = 2
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = var.waf_dem_rate_limit_per_ip
+        aggregate_key_type = "IP"
+
+        scope_down_statement {
+          regex_match_statement {
+            regex_string = local.waf_dem_path_regex
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "NORMALIZE_PATH"
+            }
+            text_transformation {
+              priority = 2
+              type     = "LOWERCASE"
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.project}-frontend-RateLimitDemPerIP"
+    }
+  }
+
   # The API: every request is a Lambda invocation (and usually a query).
   rule {
     name     = "RateLimitPerIP"
-    priority = 2
+    priority = 3
 
     action {
       block {}
@@ -249,7 +312,7 @@ resource "aws_wafv2_web_acl" "frontend" {
   # matches /tiles/* (decoded, normalised, lowercased, as the API rules).
   rule {
     name     = "RateLimitTilesPerIP"
-    priority = 3
+    priority = 4
 
     action {
       block {}
@@ -295,7 +358,7 @@ resource "aws_wafv2_web_acl" "frontend" {
   # backstop (header above).
   rule {
     name     = "RateLimitSitePerIP"
-    priority = 4
+    priority = 5
 
     action {
       block {}
@@ -339,6 +402,13 @@ resource "aws_wafv2_api_key" "captcha" {
 }
 
 locals {
+  # The elevation-model routes RateLimitDemPerIP counts (backend/src/delineation/:
+  # routes.ts, startRoutes.ts, divideRoutes.ts, clicks.ts, channelRoutes.ts,
+  # demGridRoutes.ts, traceRoutes.ts). A new route that reads the DEM joins
+  # this list.
+  waf_dem_routes     = ["delineation", "start", "divide", "subcatchments", "subcatchments/save", "channels", "dem-grid", "dam-trace"]
+  waf_dem_path_regex = "^/api/projects/[^/]+/map/(${join("|", local.waf_dem_routes)})/?$"
+
   # The CAPTCHA script's origin, and its challenge script's: jsapi.js loads
   # challenge.js from the same id on sdk.awswaf.com, and without it no token
   # is issued (checked against AWS's SDK, 2026-09; docs/security.md).

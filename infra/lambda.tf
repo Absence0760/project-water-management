@@ -375,6 +375,12 @@ resource "aws_cloudwatch_log_group" "migrate" {
   retention_in_days = var.lambda_log_retention_days
 }
 
+locals {
+  # Lambda's maximum; also the ceiling rds.tf's idle-in-transaction timeout
+  # is set above (the longest any database Lambda can hold a transaction).
+  migrate_timeout_seconds = 900
+}
+
 resource "aws_lambda_function" "migrate" {
   function_name = "${local.project}-migrate"
   description   = "Applies backend/migrations as the schema owner and syncs the water_app role. Invoked by deploy-backend.yml."
@@ -391,7 +397,7 @@ resource "aws_lambda_function" "migrate" {
   # 900 s (Lambda's maximum) for a reference-dataset load, which parses and
   # writes a country's reaches or cells in one transaction (geo/referenceLoad.ts);
   # a migration keeps migrate.ts DEFAULT_TIMEOUTS.statement_timeout (240 s).
-  timeout     = 900
+  timeout     = local.migrate_timeout_seconds
   memory_size = var.migrate_memory_mb
 
   reserved_concurrent_executions = var.migrate_reserved_concurrency

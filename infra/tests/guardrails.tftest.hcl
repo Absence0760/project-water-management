@@ -1243,8 +1243,8 @@ run "edge_security" {
     error_message = "The WAF web ACL must be attached to the distribution (it is the API's rate limit too)."
   }
   assert {
-    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 5
-    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the API, tiles and site-wide rate rules."
+    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 6
+    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the elevation-model, API, tiles and site-wide rate rules."
   }
   assert {
     condition = alltrue([
@@ -3780,8 +3780,8 @@ run "waf_rate_rules_scope" {
     error_message = "The auth rate rule stays /api/auth/ at 100 per 5 minutes."
   }
   assert {
-    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitPerIP = 2, RateLimitTilesPerIP = 3, RateLimitSitePerIP = 4 }
-    error_message = "The rate rules run tightest first: auth, API, the tiles, then the site-wide backstop."
+    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitDemPerIP = 2, RateLimitPerIP = 3, RateLimitTilesPerIP = 4, RateLimitSitePerIP = 5 }
+    error_message = "The rate rules run tightest first: auth, the elevation-model routes, API, the tiles, then the site-wide backstop."
   }
   # The tiles' bytes bound (waf.tf): /tiles/ only, per IP, blocking, the path as CloudFront matches it.
   assert {
@@ -3802,6 +3802,88 @@ run "waf_rate_rules_scope" {
     ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
     error_message = "The tiles rate rule must match the decoded, normalised, lowercased path, or /%74iles/… slips past it."
   }
+}
+
+# The elevation-model routes (waf.tf RateLimitDemPerIP): a lower limit than
+# the API's on the collection paths that read DEM or water tiles, matched on
+# the path as the API routes it. regex() here is Terraform's RE2; the WAF's
+# regex is PCRE, and this pattern uses only what both read alike (anchors,
+# a negated class, alternation).
+run "waf_dem_rule" {
+  command = plan
+
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).statement[0].rate_based_statement[0].limit == 300 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).statement[0].rate_based_statement[0].limit < one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].limit &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).action[0].block) == 1 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].regex_match_statement[0].field_to_match[0].uri_path) == 1
+    )
+    error_message = "The elevation-model rule must block per IP at waf_dem_rate_limit_per_ip (300), below the API's limit, on the URI path."
+  }
+  assert {
+    condition = toset([
+      for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].regex_match_statement[0].text_transformation :
+      "${t.priority}:${t.type}"
+    ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    error_message = "The elevation-model rule must match the decoded, normalised, lowercased path, or /api/projects/x/map/%64em-grid slips past it."
+  }
+  # Every route that reads the DEM or the water raster matches...
+  assert {
+    condition = alltrue([for path in [
+      "/api/projects/0b7c4f8e-1d2a-4c3b-9e8f-123456789abc/map/delineation",
+      "/api/projects/0b7c4f8e-1d2a-4c3b-9e8f-123456789abc/map/delineation/",
+      "/api/projects/p/map/start",
+      "/api/projects/p/map/divide",
+      "/api/projects/p/map/subcatchments",
+      "/api/projects/p/map/subcatchments/save",
+      "/api/projects/p/map/channels",
+      "/api/projects/p/map/dem-grid",
+      "/api/projects/p/map/dam-trace",
+    ] : can(regex(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].regex_match_statement[0].regex_string, path))])
+    error_message = "The elevation-model rule must match every route that reads the DEM or the water raster (waf.tf local.waf_dem_routes)."
+  }
+  # ...and nothing else: the polls, accept/reject/apply/discard, the rest of the Map.
+  assert {
+    condition = !anytrue([for path in [
+      "/api/projects/p/map/delineation/requests/r1",
+      "/api/projects/p/map/delineation/p1/accept",
+      "/api/projects/p/map/delineation/p1/reject",
+      "/api/projects/p/map/start/requests/r1",
+      "/api/projects/p/map/start/s1/apply",
+      "/api/projects/p/map/start/s1/discard",
+      "/api/projects/p/map/divide/s1/apply",
+      "/api/projects/p/map/features",
+      "/api/projects/p/map/dem-gridx",
+      "/api/projects/p/map/startx",
+      "/api/projects/p/map",
+      "/api/projects/p/model",
+      "/tiles/terrain.pmtiles",
+      "/api/projects/p/q/map/start",
+    ] : can(regex(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitDemPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].regex_match_statement[0].regex_string, path))])
+    error_message = "The elevation-model rule must match only the collection paths that read tiles, not the polls, the decisions or the rest of the API."
+  }
+}
+
+run "rejects_dem_rate_limit_above_the_api_limit" {
+  command = plan
+
+  variables {
+    waf_dem_rate_limit_per_ip = 1001
+  }
+
+  expect_failures = [var.waf_dem_rate_limit_per_ip]
+}
+
+run "rejects_dem_rate_limit_below_the_aws_minimum" {
+  command = plan
+
+  variables {
+    waf_dem_rate_limit_per_ip = 99
+  }
+
+  expect_failures = [var.waf_dem_rate_limit_per_ip]
 }
 
 run "rejects_tiles_rate_limit_above_the_site_limit" {
@@ -3846,7 +3928,7 @@ run "signin_captcha" {
   command = plan
 
   assert {
-    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP", "3:RateLimitTilesPerIP", "4:RateLimitSitePerIP"])
+    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitDemPerIP", "3:RateLimitPerIP", "4:RateLimitTilesPerIP", "5:RateLimitSitePerIP"])
     error_message = "Rule order: the auth block first (an IP past 100 is blocked, not offered a billed puzzle), then the sign-in CAPTCHA, then the site-wide limit."
   }
   assert {

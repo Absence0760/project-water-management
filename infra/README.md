@@ -240,6 +240,20 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
   `https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`), and
   `NODE_EXTRA_CA_CERTS` points Node at it (the worker's zip too). `rds.force_ssl = 1` in the
   parameter group.
+- **Idle-in-transaction timeout:** `idle_in_transaction_session_timeout` in
+  the parameter group ends a session left idle inside an open transaction
+  (it holds its locks and a connection) after 5 minutes past the longest
+  timeout of any database Lambda: the migrate Lambda's 900 s, so 20 minutes
+  (`local.db_idle_in_transaction_timeout_ms`, `rds.tf`). Only the gap
+  between two statements counts, and a Lambda's transaction ends with its
+  invocation, so no legitimate transaction (a 60-farm run, a migration, a
+  reference load) can reach it; RDS's own default is 24 hours. Dynamic: no
+  reboot. Set cluster-wide rather than `ALTER ROLE water_app`, so the schema
+  owner's sessions (migrations, reference loads, an operator's psql) are
+  covered too and local dev keeps Postgres's default (off). A backend still
+  holding such a connection gets FATAL `25P03` on its next query and answers
+  an ordinary 500: `db/tx.ts` listens for the checked-out client's `error`,
+  which otherwise ends the Node process (`db/tx.db.test.ts`).
 
 ## Files
 
@@ -269,7 +283,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      icwbt.jaredho
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions (`spa_rewrite`, `api_strip_prefix`, `tiles_range`), distribution (incl. the `/tiles/*` behaviour), A/AAAA records |
 | `map_data.tf` | The catchment map's data ([deployment.md § The Map tab](../docs/deployment.md#the-map-tab)): the tiles bucket (SSE-S3, TLS only, ACLs off, versioned with old versions kept 14 days, broken uploads aborted after 7 days; only this distribution reads `tiles/`) and its OAC; the API's and the worker's read of `tiles/terrain.pmtiles` for delineation (`api_dem`, `worker_dem`, only with `delineation_dem`; the worker then has at least 2 048 MB, jobs.tf) and of `tiles/water.pmtiles` for tracing a dam (`api_water`, only with `dam_trace_water`); the private reference bucket (versioned, old versions kept a year; no grant in its policy) and the migrate role's read of `reference/*`; the migrate Lambda's path to the S3 endpoint |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
-| `waf.tf` | Web ACL with 4 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; `/tiles/*`, the egress bound: `waf_tiles_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
+| `waf.tf` | Web ACL with 5 per-IP rate rules (`/api/auth/*`: 100/5 min; the elevation-model routes under `/api/projects/<id>/map/`: `waf_dem_rate_limit_per_ip`; `/api/*`: `waf_rate_limit_per_ip`; `/tiles/*`, the egress bound: `waf_tiles_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
 | `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood, CloudFront egress (`cloudfront-bytes`) and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
 | `iam.tf` | Every Lambda role's logs policy (create streams and put events in its own log group only; no `logs:CreateLogGroup`, no AWS-managed policy) and the API, worker and migrate roles' VPC ENI policy (AWS's six EC2 actions, denied to the function's own code) |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
@@ -575,14 +589,14 @@ Idle to light use, on-demand, us-east-1:
 | S3 tiles bucket (~3.5 GB: the basemap, relief and glyphs) and reference bucket (a few hundred MB), `map_data.tf` | ~0.10 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
-| WAF: ACL + 5 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 10.00 |
+| WAF: ACL + 6 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 11.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | KMS `alias/water-management-rds` (`rds_customer_managed_key`, default on; +$1 at each of the first two yearly rotations; requests within the free tier) | 1.00 |
 | CloudWatch: 44 alarms, 41 until the renderer is on, +6 with the assistant (costed in its own table below), and 4 more with `dam_observations_enabled` (`dam-pass-waterbodies`, `dam-pass-wofs`, `dam-recency-wofs`, `dam-recency-waterbodies`, ≈ $0.40; `dam_observations.tf`), and 1 more with `climate_indices_enabled` (`mirror-lag-indices`, ≈ $0.10; `climate_indices.tf`), and 1 more with `c3s_enabled` (`mirror-lag-c3s`, ≈ $0.10; `c3s.tf`) (incl. the CloudFront request-flood, egress (bytes) and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.30 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $63** (list prices checked 2026-10-04; the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
+| **Total** | **≈ $64** (list prices checked 2026-10-04; the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA, tiles and elevation-model rules $1.00 each, the S3 endpoint $7.30) |
 
 **The API Lambda's ceiling.** Reserved concurrency (`lambda_reserved_concurrency`,
 25) bounds it: 25 containers × 1 GB busy all month is 64.8 M GB-s, ≈ $1,146 at
@@ -597,7 +611,8 @@ the daily budget reports the spend a day later.
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
 at Africa's), $1.60–2.80 per million; one it blocks costs the WAF's $0.60/M
 only (CloudFront doesn't bill WAF-blocked requests). The per-IP rate limits
-(`waf.tf`: 100 on `/api/auth/*`, `waf_rate_limit_per_ip` on `/api/*`,
+(`waf.tf`: 100 on `/api/auth/*`, `waf_dem_rate_limit_per_ip`, default 300,
+on the elevation-model routes, `waf_rate_limit_per_ip` on `/api/*`,
 `waf_tiles_rate_limit_per_ip` on `/tiles/*`, and
 `waf_site_rate_limit_per_ip`, default 5,000, on every path) stop one client,
 not a botnet keeping each IP under them. The API's limit doesn't count the
@@ -1287,7 +1302,8 @@ character set, because changing one replaces the group.
 
 `tests/data.tftest.hcl` (same mocks) pins the data-protection controls: the
 parameter group's `rds.force_ssl = 1`, `log_statement = none`, slow-statement
-logging and no bind values; `delete_automated_backups = false`,
+logging, no bind values and the idle-in-transaction timeout (20 minutes,
+above every database Lambda's timeout, applied immediately); `delete_automated_backups = false`,
 `copy_tags_to_snapshot`, the final snapshot's `random_id` suffix (never a
 fixed name or `timestamp()`) and `prevent_destroy` on the instance (read from
 the source); the event subscription's topic, source and categories and the

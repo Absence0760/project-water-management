@@ -695,6 +695,26 @@ run "db_parameters" {
     ])
     error_message = "Bind values must never be logged: log_parameter_max_length and its _on_error twin must be 0."
   }
+  # A session idle inside an open transaction ends after 20 minutes (rds.tf):
+  # past every database Lambda's timeout, so never a legitimate transaction.
+  assert {
+    condition     = contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "idle_in_transaction_session_timeout=1200000")
+    error_message = "idle_in_transaction_session_timeout must be 1200000 ms (20 minutes) at the default Lambda timeouts."
+  }
+  assert {
+    condition = alltrue([for t in [
+      aws_lambda_function.migrate.timeout,
+      aws_lambda_function.worker.timeout,
+      aws_lambda_function.backend.timeout,
+      var.assistant_timeout_seconds,
+    ] : tonumber(one([for p in aws_db_parameter_group.main.parameter : p.value if p.name == "idle_in_transaction_session_timeout"])) > t * 1000])
+    error_message = "idle_in_transaction_session_timeout must stay above every database Lambda's timeout, or it can cut a legitimate transaction."
+  }
+  # Dynamic: the provider's default apply_method (immediate), no reboot.
+  assert {
+    condition     = one([for p in aws_db_parameter_group.main.parameter : p.apply_method if p.name == "idle_in_transaction_session_timeout"]) == "immediate"
+    error_message = "idle_in_transaction_session_timeout is dynamic and must apply immediately (no reboot)."
+  }
 }
 
 run "db_backups_and_snapshots" {

@@ -126,6 +126,10 @@ waf_rate_limit_per_ip = 1000
 # ...and on every path, the static site's backstop (at least the /api/*
 # limit; waf.tf). The SPA's files don't count against the API's limit.
 # waf_site_rate_limit_per_ip = 5000
+# ...and on the elevation-model routes (delineation, start, divide,
+# sub-catchments, the DEM's channels and grid, tracing a dam; between 100 and
+# the /api/* limit; waf.tf). One person mapping hard is ~200 in 5 minutes.
+# waf_dem_rate_limit_per_ip = 300
 
 # Request-flood alarm (us-east-1): CloudFront requests per 5 minutes, ~20x a
 # busy 5 minutes for a handful of users. 1000-20000; raise it only for real

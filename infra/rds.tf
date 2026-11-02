@@ -36,6 +36,21 @@ locals {
   db_major_version = "17"
   # Performance Insights stays off (the aws_db_instance comment says why).
   db_performance_insights = false
+
+  # idle_in_transaction_session_timeout (the parameter below): 5 minutes past
+  # the longest timeout of any Lambda that connects to the database (the
+  # migrate Lambda's 900 s; the worker 300 s, the assistant 60-300 s, the
+  # API 30 s), so 20 minutes at today's values. A transaction is only idle
+  # between its statements, and a Lambda's open transaction ends with its
+  # invocation, so no legitimate gap can reach it: what it ends is a session
+  # whose client is gone without closing it (a frozen or partitioned
+  # container, an operator's forgotten psql). RDS's own default is 24 hours.
+  db_idle_in_transaction_timeout_ms = 1000 * (300 + max(
+    local.migrate_timeout_seconds,
+    local.worker_timeout_seconds,
+    var.lambda_timeout_seconds,
+    var.assistant_timeout_seconds,
+  ))
 }
 
 resource "aws_db_parameter_group" "main" {
@@ -92,6 +107,23 @@ resource "aws_db_parameter_group" "main" {
   parameter {
     name  = "log_parameter_max_length_on_error"
     value = "0"
+  }
+
+  # End a session left idle inside an open transaction (it holds its locks
+  # and a connection) after local.db_idle_in_transaction_timeout_ms (above:
+  # past every database Lambda's timeout, so never a legitimate one). Postgres
+  # ends it with FATAL 25P03; a backend still holding that connection gets the
+  # error on its next query and answers 500 (db/tx.ts listens for it, so the
+  # process doesn't crash). Dynamic (a `user`-context setting): applies to new
+  # and existing sessions without a reboot (apply_method spelled out, the
+  # provider's default, so a plan test can see it). Cluster-wide, not ALTER ROLE
+  # water_app: the schema owner's sessions (migrations, reference loads, an
+  # operator's psql) are the ones most likely to be left open, and local dev
+  # (a debugger paused mid-transaction) keeps Postgres's default of off.
+  parameter {
+    name         = "idle_in_transaction_session_timeout"
+    value        = tostring(local.db_idle_in_transaction_timeout_ms)
+    apply_method = "immediate"
   }
 
   lifecycle {

@@ -1258,8 +1258,10 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_bytes" {
   }
 }
 
-# Sustained blocks. Only the four rate rules block (waf.tf has no managed
+# Sustained blocks. Only the five rate rules block (waf.tf has no managed
 # rule groups), so a block means one IP went over 100 auth requests,
+# waf_dem_rate_limit_per_ip elevation-model requests (the Map's delineation,
+# DEM grid, channels, dam tracing),
 # waf_rate_limit_per_ip API requests, waf_tiles_rate_limit_per_ip tile
 # requests, or waf_site_rate_limit_per_ip requests in all, in 5 minutes. 100 blocked in a period is a whole auth-rule
 # window's worth; in each of 3 periods running (15 minutes) it is someone
@@ -1284,7 +1286,7 @@ resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests" {
   period              = 300
   statistic           = "Sum"
   threshold           = 100
-  alarm_description   = "The WAF blocked more than 100 requests in each of the last three 5-minute periods: an attacker persisting, or a real client stuck behind a rate limit. Read the ACL's sampled requests (us-east-1): /api/auth/ from many IPs is credential stuffing; the renderer's IPs mean reports are being retried and may fail; one office IP means raise waf_rate_limit_per_ip (API paths) or waf_site_rate_limit_per_ip (the rest). Runbook: docs/deployment.md, Runbooks, Request flood."
+  alarm_description   = "The WAF blocked more than 100 requests in each of the last three 5-minute periods: an attacker persisting, or a real client stuck behind a rate limit. Read the ACL's sampled requests (us-east-1): /api/auth/ from many IPs is credential stuffing; the renderer's IPs mean reports are being retried and may fail; one office IP means raise waf_dem_rate_limit_per_ip (blocks on the RateLimitDemPerIP rule: the Map's /map/ delineation, dem-grid, channels, dam-trace paths), waf_rate_limit_per_ip (other API paths) or waf_site_rate_limit_per_ip (the rest). Runbook: docs/deployment.md, Runbooks, Request flood."
   alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
   treat_missing_data  = "notBreaching"
 
