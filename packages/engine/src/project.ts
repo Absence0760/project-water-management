@@ -2605,16 +2605,54 @@ export interface Transfer {
 	 * today (its demand, plus its dam's room with `topUpDam`). 'capacity': up
 	 * to its capacity whatever the destination needs, like a canal that runs
 	 * full; what the destination doesn't use flows on down its river.
+	 * 'diversionCurve' (engine ≥ 1.113.0, docs/model.md §2.6a): a share of the
+	 * river's flow at the off-take, `a · x^b` percent of it (the fields
+	 * `diversion*` below), at most `diversionMaxPct` of it and at most its
+	 * capacity; what the destination doesn't use flows on, as 'capacity'.
 	 */
 	sizing?: TransferSizing;
+	/**
+	 * river, sizing 'diversionCurve' (engine ≥ 1.113.0): the coefficient a of the
+	 * share diverted, `a · x^b` percent of the river's flow at the off-take,
+	 * x in `diversionFlowUnit`. A number > 0; null / absent on any other sizing.
+	 */
+	diversionCoefficient?: number | null;
+	/** river, sizing 'diversionCurve': the exponent b of `a · x^b` (any finite number; below 0 the share falls as the river rises). */
+	diversionExponent?: number | null;
+	/**
+	 * river, sizing 'diversionCurve': the most of the river's flow it diverts, a
+	 * share 0 < m ≤ 1 (0.97 = 97 %), whatever the curve gives at low flows.
+	 * null / absent = 1 (all of it).
+	 */
+	diversionMaxPct?: number | null;
+	/** river, sizing 'diversionCurve': the unit x is in when the curve is read (DIVERSION_FLOW_UNITS). Required with that sizing. */
+	diversionFlowUnit?: DiversionFlowUnit | null;
+	/**
+	 * river, sizing 'diversionCurve': which flow x is. 'modelled' (null / absent):
+	 * the river leaving the source that day after the upstream use, the flow
+	 * the off-take sees. 'natural': the natural runoff of the source and every
+	 * unit upstream of it that day, before any use. Either way the share is
+	 * taken of the modelled flow at the off-take.
+	 */
+	diversionFlowBasis?: DiversionFlowBasis | null;
 	/** river: what is left once the destination's demand is met tops up its dam (true) or flows on below it (false, the default). */
 	topUpDam?: boolean;
 }
 
 export const TRANSFER_SOURCES = ['dam', 'river'] as const;
 export type TransferSource = (typeof TRANSFER_SOURCES)[number];
-export const TRANSFER_SIZINGS = ['demand', 'capacity'] as const;
+export const TRANSFER_SIZINGS = ['demand', 'capacity', 'diversionCurve'] as const;
 export type TransferSizing = (typeof TRANSFER_SIZINGS)[number];
+/**
+ * The units a diversion-curve off-take's curve reads the river's flow in (engine ≥
+ * 1.113.0), and how many m³/day one of each is.
+ */
+export const DIVERSION_FLOW_UNITS = ['L/s', 'm3/s', 'm3/day', 'Ml/day'] as const;
+export type DiversionFlowUnit = (typeof DIVERSION_FLOW_UNITS)[number];
+export const DIVERSION_FLOW_UNIT_M3_DAY: Readonly<Record<DiversionFlowUnit, number>> = { 'L/s': 86.4, 'm3/s': 86_400, 'm3/day': 1, 'Ml/day': 1_000 };
+/** Which flow a diversion-curve off-take's curve reads (engine ≥ 1.113.0): the modelled river at the off-take, or the natural flow there. */
+export const DIVERSION_FLOW_BASES = ['modelled', 'natural'] as const;
+export type DiversionFlowBasis = (typeof DIVERSION_FLOW_BASES)[number];
 
 /** What a transfer without the river off-take fields (engine < 1.14.0) runs as: a dam transfer. */
 export const OFFTAKE_DEFAULTS = {
@@ -2626,7 +2664,13 @@ export const OFFTAKE_DEFAULTS = {
 	topUpDam: false,
 	// Canal seepage back to the river (engine ≥ 1.42.0): none returns unless set.
 	lossReturnPct: 0,
-	lossReturnNodeId: null
+	lossReturnNodeId: null,
+	// A diversion-curve off-take's curve (engine ≥ 1.113.0): none unless sized by a share of the flow.
+	diversionCoefficient: null,
+	diversionExponent: null,
+	diversionMaxPct: null,
+	diversionFlowUnit: null,
+	diversionFlowBasis: null
 } as const;
 
 export interface ProjectModel {

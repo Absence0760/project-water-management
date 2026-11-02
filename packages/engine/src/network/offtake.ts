@@ -14,7 +14,7 @@
 // self-checks (../verify/checks.ts) read a rule through these functions, so a
 // stored rule means the same thing to each.
 import { cmpStr } from '../order';
-import type { NetworkNode, Transfer } from '../project';
+import { DIVERSION_FLOW_BASES, DIVERSION_FLOW_UNIT_M3_DAY, DIVERSION_FLOW_UNITS, type DiversionFlowUnit, type NetworkNode, type Transfer } from '../project';
 import { transferDailyLimit } from './transferRates';
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -57,11 +57,81 @@ export interface PlanOfftake {
 	lossReturn: number;
 	/** Node index of the farm whose outflow the returned seepage joins: the source or one downstream of it along the river. */
 	returnAt: number;
-	/** 0 = sized to the destination's need, 1 = up to capacity. */
-	sizing: 0 | 1;
+	/** 0 = sized to the destination's need, 1 = up to capacity, 2 = a share of the river's flow (engine ≥ 1.113.0). */
+	sizing: 0 | 1 | 2;
+	/** sizing 2: the curve that sets the share; null on any other sizing, or when the curve is incomplete (it then takes nothing). */
+	diversion: DiversionCurve | null;
 	topUpDam: boolean;
 	/** Lower takes first at its source; equal priorities share the flow pro rata to their limits. */
 	priority: number;
+}
+
+/**
+ * A diversion-curve off-take's curve (engine ≥ 1.113.0, docs/model.md §2.6a): it
+ * diverts `a · x^b` percent of the river's flow at the off-take, at most
+ * `maxShare` of it, x read in the unit `m3DayPerUnit` m³/day make one of.
+ */
+export interface DiversionCurve {
+	a: number;
+	b: number;
+	/** The most of the flow it diverts, 0 < m ≤ 1. */
+	maxShare: number;
+	/** m³/day in one of the curve's flow unit (DIVERSION_FLOW_UNIT_M3_DAY). */
+	m3DayPerUnit: number;
+	/** x is the natural flow at the off-take (true) or the modelled river there (false, the default). */
+	natural: boolean;
+}
+
+/**
+ * The share 0 ≤ s ≤ maxShare of the river's flow a diversion-curve off-take
+ * diverts when the flow its curve reads is `xM3Day`: MIN(maxShare, a · x^b ÷
+ * 100), x in the curve's unit. No flow (x ≤ 0, or not a number) diverts
+ * nothing; with b < 0 the share grows without bound as x → 0 and the cap
+ * holds it (x^b is +∞ at a flow that underflows, still capped). Pure.
+ */
+export function diversionShareOf(c: DiversionCurve, xM3Day: number): number {
+	if (!(xM3Day > 0)) return 0;
+	const s = (c.a * Math.pow(xM3Day / c.m3DayPerUnit, c.b)) / 100;
+	return s > 0 ? Math.min(c.maxShare, s) : 0;
+}
+
+/**
+ * What a diversion-curve off-take wants from the river today (m³/day, before its
+ * capacity, keeps and losses): its share of the modelled flow `riverM3Day` at
+ * the off-take, the share read at `basisM3Day` (the same flow, or the natural
+ * flow there). Never more than `riverM3Day`: the share is at most 1. Pure.
+ */
+export function diversionWant(c: DiversionCurve, riverM3Day: number, basisM3Day: number): number {
+	if (!(riverM3Day > 0)) return 0;
+	return diversionShareOf(c, basisM3Day) * riverM3Day;
+}
+
+/**
+ * Why a rule's diversion curve can't run, or null when it can (engine ≥
+ * 1.113.0): a > 0, b finite, the cap 0 < m ≤ 1 (absent = 1), a known unit and
+ * basis (absent basis = modelled). Shared by the run (./offtake.ts offtakeOf)
+ * and the save (../modelRules.ts), so both refuse the same rules.
+ */
+export function diversionCurveProblem(tr: Pick<Transfer, 'diversionCoefficient' | 'diversionExponent' | 'diversionMaxPct' | 'diversionFlowUnit' | 'diversionFlowBasis'>): string | null {
+	const a = tr.diversionCoefficient;
+	if (!(finite(a) && a > 0)) return 'its coefficient a must be a number above 0';
+	if (!finite(tr.diversionExponent)) return 'its exponent b must be a number';
+	const m = tr.diversionMaxPct ?? 1;
+	if (!(finite(m) && m > 0 && m <= 1)) return 'its largest share must be above 0 % and at most 100 %';
+	if (!(DIVERSION_FLOW_UNITS as readonly unknown[]).includes(tr.diversionFlowUnit)) return `its flow unit must be one of ${DIVERSION_FLOW_UNITS.join(', ')}`;
+	if (tr.diversionFlowBasis != null && !(DIVERSION_FLOW_BASES as readonly unknown[]).includes(tr.diversionFlowBasis)) return `the flow it reads must be one of ${DIVERSION_FLOW_BASES.join(', ')}`;
+	return null;
+}
+
+/** The curve a valid diversion-curve rule runs with (diversionCurveProblem null first). */
+export function diversionCurveOf(tr: Transfer): DiversionCurve {
+	return {
+		a: tr.diversionCoefficient!,
+		b: tr.diversionExponent!,
+		maxShare: tr.diversionMaxPct ?? 1,
+		m3DayPerUnit: DIVERSION_FLOW_UNIT_M3_DAY[tr.diversionFlowUnit as DiversionFlowUnit],
+		natural: tr.diversionFlowBasis === 'natural'
+	};
 }
 
 /** Is this rule a river off-take? */
@@ -90,8 +160,16 @@ export function offtakeOf(tr: Transfer, from: number, to: number, fromName: stri
 		warnings.push(`${who}: share of the conveyance losses returning ${String(lossReturn)} is outside [0, 1]; none returns`);
 		lossReturn = 0;
 	}
-	const sizing = tr.sizing === 'capacity' ? 1 : 0;
-	if (tr.sizing !== undefined && tr.sizing !== 'capacity' && tr.sizing !== 'demand') warnings.push(`${who}: unknown sizing "${String(tr.sizing)}"; sized to the destination's need`);
+	const sizing = tr.sizing === 'capacity' ? 1 : tr.sizing === 'diversionCurve' ? 2 : 0;
+	if (tr.sizing !== undefined && tr.sizing !== 'capacity' && tr.sizing !== 'demand' && tr.sizing !== 'diversionCurve') warnings.push(`${who}: unknown sizing "${String(tr.sizing)}"; sized to the destination's need`);
+	// A share of the river's flow (engine ≥ 1.113.0): a rule whose curve is incomplete takes nothing, with a warning
+	// (the API refuses one on save, modelRules).
+	let diversion: DiversionCurve | null = null;
+	if (sizing === 2) {
+		const problem = diversionCurveProblem(tr);
+		if (problem) warnings.push(`${who}: sized by a diversion curve, but ${problem}; it takes nothing`);
+		else diversion = diversionCurveOf(tr);
+	}
 	return {
 		from,
 		to,
@@ -102,6 +180,7 @@ export function offtakeOf(tr: Transfer, from: number, to: number, fromName: stri
 		lossReturn: loss > 0 ? lossReturn : 0,
 		returnAt: from,
 		sizing,
+		diversion,
 		topUpDam: tr.topUpDam === true,
 		priority: Number.isFinite(tr.priority) ? tr.priority : 0
 	};

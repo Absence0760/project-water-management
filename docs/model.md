@@ -4093,7 +4093,11 @@ the destination is simulated after its source.
 | `handsOffM3Day` | a hands-off flow left in the river below the source before anything is taken; null = none (the default) |
 | `handsOffEwr` | also leave the EWR at the source (its cumulative requirement Z) in the river; default false. A scenario's only from engine 1.84.0 (§2.9g) |
 | `lossPct` | conveyance losses, 0 ≤ l < 1 of what is taken, lost from the catchment on the way (seepage and evaporation from the canal); default 0 |
-| `sizing` | `demand` (default): take only what the destination needs today, its abstraction demand (crops and demand objects) plus, with `topUpDam`, its dam's room, grossed up for the losses. `capacity`: up to capacity whatever the destination needs, like a weir-fed canal that runs full |
+| `sizing` | `demand` (default): take only what the destination needs today, its abstraction demand (crops and demand objects) plus, with `topUpDam`, its dam's room, grossed up for the losses. `capacity`: up to capacity whatever the destination needs, like a weir-fed canal that runs full. `diversionCurve` (engine ≥ 1.113.0, migration 308): a share of the river's flow set by a curve, "Sized by a diversion curve" below |
+| `diversionCoefficient`, `diversionExponent` | `diversionCurve` only: a > 0 and b (any number) of the share a · x^b percent; null on any other sizing |
+| `diversionMaxPct` | `diversionCurve` only: the largest share it diverts, 0 < m ≤ 1; null = 1 (all of the flow) |
+| `diversionFlowUnit` | `diversionCurve` only: the unit x is read in, `L/s`, `m3/s`, `m3/day` or `Ml/day`; required |
+| `diversionFlowBasis` | `diversionCurve` only: which flow x is, `modelled` (null, the default: the river at the off-take that day) or `natural` (the natural flow there) |
 | `topUpDam` | what arrives beyond the destination's demand goes into its dam (spilling what doesn't fit) rather than flowing on below it; default false |
 | `lossReturnPct` | engine ≥ 1.42.0, migration 126: the share 0 ≤ r ≤ 1 of the conveyance losses that seeps back to the river the same day, like a dam's seepage return (§2.7b, WP-3.5); default 0: all the losses leave the catchment |
 | `lossReturnNodeId` | engine ≥ 1.42.0: the unit whose outflow the returned seepage joins; null (the default) = the source itself, just below the off-take; otherwise a farm downstream of the source along the river (the API refuses any other; a run given one returns none, with a warning) |
@@ -4220,6 +4224,91 @@ question 20):
   otherwise (its export is then net of what came back); at a site above
   which it doesn't return, nothing changes (the losses left that site's
   catchment). The return unit is never charged for water it merely carries.
+
+**Sized by a diversion curve (engine ≥ 1.113.0, migration 308).** A
+canal fed by a diversion weir often takes a share of the river that depends
+on how much the river carries: most of a low flow, a small part of a flood.
+The client's hydrologist gave one of the client's canals such a rule
+(2026-11-02): the percentage diverted is y = a · x^b, x the river's flow at
+the diversion point, b negative, capped at a largest share at the lowest
+flows and at the canal's capacity. A rule with `sizing: 'diversionCurve'`
+takes that share of the river leaving its source, in place of a share of its
+destination's need:
+
+```
+x       = U₀ in the curve's unit                    (diversionFlowBasis 'modelled', the default)
+        = N in the curve's unit                     (diversionFlowBasis 'natural')
+s       = MIN(m, a · x^b ÷ 100)    for x > 0;  0 for x ≤ 0
+ask     = MIN(cap, s × U₀)
+U₀      = the flow leaving the source after its own use, before its off-takes (as above)
+N       = Σ natural runoff of the source and every unit upstream of it that day (§2.4, §2.4h), before land cover,
+          base-flow and bed losses and any use: the flow the runoff model gives there, as if nobody took water
+cap     = the rule's capacity today (max or monthly rate × 86 400, capped by the daily cap): the canal's capacity
+units   : 1 L/s = 86.4 m³/day, 1 m³/s = 86 400 m³/day, 1 Ml/day = 1 000 m³/day
+```
+
+The ask then goes through everything else unchanged: shared in bands at the
+keeps with the other rules of its priority (so never below its hands-off
+flow, the EWR when `handsOffEwr`, the priority users' requirement or a
+pass-inflow target), less the conveyance losses on the way, and at the
+destination used, put into its dam (`topUpDam`) or passed on as a
+capacity-sized rule's water is. So what it diverts is
+
+```
+v = MIN(s × U₀, cap, what the keeps and its priority's sharing leave)  ≤  U₀
+```
+
+**Which limit binds** depends on the unit of x, which scales the curve by
+(unit ÷ L/s)^b. For an invented curve of the same shape, a = 2000, b = −0.9,
+m = 95 %, a canal of 0.25 m³/s (21 600 m³/day): a · x^b ≥ 95 for x ≤ 29.5
+units, so
+
+| x in | 95 % up to | then | the canal fills at |
+| --- | --- | --- | --- |
+| L/s | 29.5 L/s (2 552 m³/day) | the share falls: 31.7 % at 100 L/s, 4.0 % at 1 000 L/s; the volume grows as x^(1 + b) = x^0.1 | never: 0.25 m³/s needs x ≈ 9 × 10^10 L/s |
+| m³/s | 29.5 m³/s | (the canal fills first) | x = 0.263 m³/s; above it the canal's 0.25 m³/s |
+| Ml/day | 29.5 Ml/day | (the canal fills first) | x = 22.7 Ml/day; above it 21.6 Ml/day |
+| m³/day | 29.5 m³/day | the share falls: 4.0 % at 1 000 m³/day | when 20 · x^0.1 m³/day reaches 21 600: x ≈ 2 × 10^30 m³/day, never |
+
+So in L/s or m³/day the curve shapes every day's diversion and the canal's
+capacity never binds; in m³/s or Ml/day the rule is in effect "the largest
+share of the river, up to the canal".
+
+**Decisions** (provisional, pending the client's hydrologist; his open
+questions of 2026-11-02 are in [followups.md § Hydrologist](./followups.md#hydrologist)):
+
+- *The unit of x* is a setting with no default: a rule sized by a curve
+  must name it (the save refuses one that doesn't, `modelRuleIssues`).
+- *The canal's capacity* is the rule's own rate, as for any off-take (its
+  max or monthly rates × 86 400, and its daily cap): no second capacity
+  field. A curve without a canal limit takes a rate above any flow.
+- *Which flow x is.* `modelled` (the default) reads the flow the off-take
+  sees in calculation order, after every upstream use and the source's own;
+  `natural` reads the natural flow at the source. Either way the share is of
+  the river at the off-take, U₀: the curve sets the percentage, the water
+  comes from what is there.
+- *The share is of the river, before losses.* y is the percentage of the
+  river's flow diverted, so `lossPct` reduces what arrives, not what is
+  taken.
+- *What else applies* is what applies to any off-take: its months and
+  rates, priority, hands-off flow, `handsOffEwr`, losses and their return,
+  destination and top-up. None is set by the curve: the model states them.
+- *An incomplete curve* (a ≤ 0, b not a number, m outside (0, 1], no unit)
+  takes nothing, with a warning (`… sized by a diversion curve, but …; it
+  takes nothing`); the API refuses it on save.
+- *b < 0 as x → 0.* x^b grows without bound and the cap m holds the share
+  (x = 0 diverts nothing). With b < −1 the diverted volume falls as the
+  river rises; the model doesn't refuse such a curve.
+
+**Checks.** `checkTransferLimits` holds each curve rule to MIN(cap, s × U₀)
+with s read at U₀ (reading the natural flow, which no series carries, to m ×
+U₀), and a source whose rules are all sized to capacity or by a curve on the
+modelled flow to taking MIN(Σ asks, the flow above the largest keep). The
+fuzz generator gives half its capacity-sized off-takes a curve (exponents either side
+of −1, caps, every unit, the natural flow now and then, an incomplete curve
+now and then). Hand examples: `run.offtakeDiversion.test.ts`,
+`network/diversionCurve.test.ts`; the cross-check's probe
+`diversion-curve-canal` (verify/).
 
 **Rules of one priority: proportional rationing (engine ≥ 1.70.0,
 provisional decision 2026-10-03, issue #90 Q25, to be confirmed by the

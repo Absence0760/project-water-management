@@ -982,6 +982,28 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **A canal sized by a diversion curve (engine 1.113.0, model.md
+      §2.6a *Sized by a diversion curve*).** The hydrologist's rule for one
+      of the client's canals (2026-11-02) is built as a river off-take with
+      `sizing: 'diversionCurve'` (y = a · x^b percent of the river, capped
+      at a largest share and the canal's capacity). Nothing is configured
+      for the client until he answers:
+      1. *The unit of x* (L/s, m³/s, m³/day or Ml/day): it changes
+         everything. In L/s the curve shapes every day and the canal never
+         fills; in m³/s or Ml/day the rule is the largest share of the river
+         up to the canal. Setting: `diversionFlowUnit` (required).
+      2. *Which flow x is*: the modelled flow at the off-take that day after
+         the upstream use (`diversionFlowBasis: 'modelled'`, the default) or
+         the natural flow there (`'natural'`).
+      3. *Where the water goes*: the destination unit (the canal's users),
+         whether what they don't use tops up a dam (`topUpDam`) or flows on,
+         and the canal's losses and how much returns (`lossPct`,
+         `lossReturnPct`, `lossReturnNodeId`).
+      4. *Its order* against other users at the same source (`priority`) and
+         downstream (the priority users' requirement is always kept), and
+         whether it leaves the EWR (`handsOffEwr`).
+      5. *A hands-off flow* below the weir (`handsOffM3Day`), and whether it
+         runs all year (its months and monthly rates).
 - [ ] **The gap-filling product (engine 1.101.0, issue #604 R4-B,
       model.md §2.4b *Gap-filling product*).** Built off by default
       (`settings.gapRain` absent runs as before, to the bit). Calls made

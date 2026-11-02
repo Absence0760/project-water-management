@@ -692,7 +692,22 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 				if (e) fail(`${k} ${e}`);
 			}
 			// Engine ≥ 1.14.0 fields, when given: monthly rates and a river off-take's.
-			for (const k of ['monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam', 'lossReturnPct', 'lossReturnNodeId'] as const) {
+			for (const k of [
+				'monthlyRateM3s',
+				'source',
+				'handsOffM3Day',
+				'handsOffEwr',
+				'lossPct',
+				'sizing',
+				'topUpDam',
+				'lossReturnPct',
+				'lossReturnNodeId',
+				'diversionCoefficient',
+				'diversionExponent',
+				'diversionMaxPct',
+				'diversionFlowUnit',
+				'diversionFlowBasis'
+			] as const) {
 				if (t[k] === undefined) continue;
 				const e = transferFieldError(k, t[k]);
 				if (e) fail(`${k} ${e}`);

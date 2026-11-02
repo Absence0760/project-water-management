@@ -247,6 +247,17 @@ MUTANTS = [
     ),
     ("canal seepage always returns at the source", 'rn = t.get("lossReturnNodeId") or xid', "rn = xid"),
     ("off-take water left over always tops up the dam", "to_dam = left_off * arr_up / arrives if arrives > 0 else 0.0", "to_dam = left_off"),
+    # River off-takes sized by a diversion curve (§2.6a, engine 1.113.0).
+    ("a diversion curve ignores the canal's capacity", "v = 0.0 if dc is None else min(v, diversion_share(dc, NAT[xid] if dc[4] else U0) * U0) if U0 > 0 else 0.0", "v = 0.0 if dc is None else diversion_share(dc, NAT[xid] if dc[4] else U0) * U0 if U0 > 0 else 0.0"),
+    ("a diversion curve ignores its largest share", "return min(c[2], s) if s > 0 else 0.0", "return min(1.0, s) if s > 0 else 0.0"),
+    ("a diversion curve's exponent has the wrong sign", "s = c[0] * (x / c[3]) ** c[1] / 100", "s = c[0] * (x / c[3]) ** -c[1] / 100"),
+    ("a diversion curve reads the flow in m³/day whatever its unit", "s = c[0] * (x / c[3]) ** c[1] / 100", "s = c[0] * x ** c[1] / 100"),
+    ("a diversion curve takes L/s as 86 400 m³/day (the m³/s factor)", '"L/s": 86.4,', '"L/s": 86400.0,'),
+    ("a diversion curve always reads the modelled flow", "diversion_share(dc, NAT[xid] if dc[4] else U0)", "diversion_share(dc, U0)"),
+    ("a diversion curve reading the natural flow takes its share of the natural flow", "diversion_share(dc, NAT[xid] if dc[4] else U0) * U0", "diversion_share(dc, NAT[xid] if dc[4] else U0) * (NAT[xid] if dc[4] else U0)"),
+    ("a diversion curve's share is a fraction, not a percent", "s = c[0] * (x / c[3]) ** c[1] / 100", "s = c[0] * (x / c[3]) ** c[1]"),
+    ("a diversion curve's natural flow leaves out the units above", "        nat_up = 0.0\n            for u in ups[xid]:\n                nat_up += NAT[u]", "        nat_up = 0.0"),
+    ("an off-take sized by a diversion curve takes a share of its destination's need", 'caps = [(t, rule_limit(t, o, m)) for t in lst if t.get("sizing", "demand") not in ("capacity", "diversionCurve")]', 'caps = [(t, rule_limit(t, o, m)) for t in lst if t.get("sizing", "demand") != "capacity"]'),
     # Other water users (§2.7c).
     ("a junior user takes the seniors' water", 'river = H if x.get("userPriority", "senior") != "junior" else max(0.0, H - zs_in)', "river = H"),
     ("a user returns nothing", 'T = (x.get("userReturnPct") or 0.0) * G', "T = 0.0"),

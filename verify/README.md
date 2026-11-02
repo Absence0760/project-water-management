@@ -44,7 +44,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 235 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 245 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
@@ -64,7 +64,7 @@ no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
 case is `model.py`'s run plus `diff.compare` over every column and day
 (about half each; 0.1–2 s a case), while the engine runs all ~90 default
 cases in one tsx process in about 5 s. The mutation self-test is the bulk:
-235 mutants, each running the cases in order until its first disagreement
+245 mutants, each running the cases in order until its first disagreement
 (about a third of them on average), about 35 min on one core, against about
 3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
 the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
@@ -506,6 +506,17 @@ of a seed is unchanged), with probes and mutants:
   a full allocation fitted on the days from then). Probes
   `development-sediment`, `-curve-none`, `-in-service`, `-in-service-emergency`, `-in-service-trigger`, `-in-service-trigger-zero`,
   `-filled-run-of-river`, `-abstraction`, `-abstraction-gap-year`, `-rate-no-survey`.
+- **River off-takes sized by a diversion curve** (§2.6a, engine ≥ 1.113.0;
+  `add_diversion_curves`, a third of the random networks' off-takes and two
+  thirds of the dense ones'): the share MIN(m, a · x^b ÷ 100) of the river
+  leaving the source, x that flow (or the natural flow there: the runoff of
+  the source and every node above it, before land cover and any use) in the
+  curve's unit (L/s, m³/s, m³/day, Ml/day), asked up to the rule's capacity
+  and shared in bands at the keeps like any off-take; an incomplete curve
+  takes nothing; a curve rule takes no share of its destination's need.
+  Probe `diversion-curve-canal` (a canal of the client's shape, invented numbers, in L/s and in
+  m³/s, and reading the natural flow below an irrigating farm, beside a
+  demand-sized off-take into the same canal head).
 
 ## Phase 2b (not covered yet)
 
@@ -573,7 +584,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (235
+`test_verify.py` breaks `model.py` one documented rule at a time (245
 mutants; phase 2b's 43 are listed under its features in `mutants.py`:
 the daily A-pan record's 7, the demand factors by part and dated windows' 8,
 land cover's 9 and development during a run's 19). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
@@ -663,7 +674,16 @@ are, a unit's zone taken nearest the outlet rather than the first ticked
 location on its way down, a borrowed unit (Parameters from) ignored, the
 nearest rule taking the location nearest the outlet rather than the fewest
 hops up, a legacy inner site's rows at or below it still used, and the
-exchange series written on the catchment's X2 alone. Each mutant must disagree with the engine somewhere on the examples,
+exchange series written on the catchment's X2 alone. River off-takes sized
+by a diversion curve's 10 (§2.6a, engine 1.113.0; `model.py`
+`diversion_curve` and `diversion_share`, cases from `generate.py`
+`add_diversion_curves` and the probe `diversion-curve-canal`): the
+canal's capacity ignored, the largest share ignored, the exponent's sign
+flipped, x read in m³/day whatever its unit, L/s taken at the m³/s factor,
+the natural flow never read, the share taken of the natural flow rather than
+the river at the off-take, the natural flow without the units above, the
+share a fraction rather than a percent, and a curve rule taking a share of
+its destination's need. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes

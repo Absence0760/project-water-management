@@ -13,7 +13,8 @@
 // (issue #90 Q25), keeps its source's pass-inflow release target (Q27), and a
 // top-up's room counts its destination's fixed release, MIN(amount, outlet) (Q26). A destination with a river abstraction (§2.7j) is sized to its dam
 // side, which no series publishes, so the sources feeding one by demand are
-// left out. Synthetic values only.
+// left out, as are the sources with a diversion curve reading the natural flow (engine ≥ 1.113.0), which no
+// series publishes. Synthetic values only.
 import { isRiverOfftake } from '../network/offtake';
 import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
@@ -22,6 +23,20 @@ import { runModel } from '../run';
 import { randomInput, withoutCropSupply } from '../testing/fuzz';
 
 const opt = (out: ModelOutput, id: string, key: string) => out.series.find((x) => x.nodeId === id && x.key === key)?.values ?? null;
+
+/** m³/day in one of a diversion curve's flow units (docs/model.md §2.6a). */
+const PER: Record<string, number> = { 'L/s': 86.4, 'm3/s': 86_400, 'm3/day': 1, 'Ml/day': 1_000 };
+
+/** What a rule sized by a diversion curve asks when the river at the off-take is U0 (§2.6a); 0 for an incomplete curve. */
+function curveAsk(tr: Transfer, U0: number, cap: number): number {
+	const a = tr.diversionCoefficient;
+	const b = tr.diversionExponent;
+	const m = tr.diversionMaxPct ?? 1;
+	const per = tr.diversionFlowUnit ? PER[tr.diversionFlowUnit] : undefined;
+	if (!(typeof a === 'number' && a > 0 && Number.isFinite(a)) || !(typeof b === 'number' && Number.isFinite(b)) || !(m > 0 && m <= 1) || per === undefined || !(U0 > 0)) return 0;
+	const s = Math.min(m, (a * Math.pow(U0 / per, b)) / 100);
+	return Math.min(cap, (s > 0 ? s : 0) * U0);
+}
 
 function capOf(tr: Transfer, m: number): number {
 	const wi = (m + 2) % 12;
@@ -75,7 +90,7 @@ function share(rules: { id: string; priority: number; cap: number; keep: number;
 }
 
 /** Rule-days where a source's pass-inflow target set a rule's keep, and where a top-up's room counted a fixed release floor. */
-const reach = { target: 0, floor: 0 };
+const reach = { target: 0, floor: 0, curve: 0 };
 
 function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: string | null } {
 	const nodes = new Map(input.model.nodes.map((n) => [n.id, n]));
@@ -92,6 +107,8 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 	for (const src of new Set(rules.map((r) => r.fromNodeId))) {
 		const mine = rules.filter((r) => r.fromNodeId === src);
 		if (mine.some((r) => r.sizing === 'demand' && onRiver(r.toNodeId!))) continue;
+		// A diversion curve reading the natural flow (engine ≥ 1.113.0): no series publishes the natural flow at a unit.
+		if (mine.some((r) => r.sizing === 'diversionCurve' && r.diversionFlowBasis === 'natural')) continue;
 		const outflow = opt(out, src, 'outflow')!;
 		const ret = opt(out, src, 'offtake_loss_return');
 		const xout = opt(out, src, 'offtake_out')!;
@@ -136,6 +153,11 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 						need += Math.max(0, capNow - (q + g('rain_on_dam') + Math.max(0, g('transfer')) - g('dam_evaporation') - g('dam_seepage')) + floor);
 					}
 					limit = cap > 0 ? Math.min(cap, (need * cap) / capInto / (1 - lossOf(tr))) : 0;
+				} else if (tr.sizing === 'diversionCurve') {
+					// A share of the river (engine ≥ 1.113.0, §2.6a): MIN(capacity, s × U₀), s = MIN(m, a · x^b ÷ 100), x = U₀ in
+					// the curve's unit; an incomplete curve asks nothing.
+					limit = curveAsk(tr, U0, cap);
+					if (limit > 0) reach.curve++;
 				}
 				const keep = Math.max(zs, target, handsOf(tr), tr.handsOffEwr ? Z[t]! : 0);
 				if (target > 0 && target === keep && cap > 0) reach.target++;
@@ -179,5 +201,7 @@ describe('deep: the off-take bands on the engine’s own random networks (§2.6a
 		// fixed release floor in a top-up's room (119).
 		expect(reach.target).toBeGreaterThan(200);
 		expect(reach.floor).toBeGreaterThan(30);
+		// …and engine 1.113.0's diversion curves asking a share of the river.
+		expect(reach.curve, String(reach.curve)).toBeGreaterThan(500);
 	});
 });

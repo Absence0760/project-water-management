@@ -8,6 +8,9 @@ import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser, type Db } from '../db/tx.js';
 import { loadModel, loadSettingsAndModel, saveModel } from './store.js';
 
+/** A transfer without a diversion curve (engine 1.113.0, migration 308) loads with the curve's fields null. */
+const NO_CURVE = { diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null, diversionFlowUnit: null, diversionFlowBasis: null };
+
 type User = Awaited<ReturnType<typeof signUp>>;
 
 async function newProject(u: User, name: string): Promise<string> {
@@ -147,7 +150,7 @@ describe('model store', () => {
 			],
 			// The second with its own rate per month (engine 1.14.0, 090): months and max rate follow the list.
 			transfers: [
-				{ ...transfer(3, 1000), monthlyRateM3s: null, source: 'dam', handsOffM3Day: null, handsOffEwr: false, lossPct: 0, sizing: 'demand', topUpDam: false, lossReturnPct: 0, lossReturnNodeId: null },
+				{ ...transfer(3, 1000), monthlyRateM3s: null, source: 'dam', handsOffM3Day: null, handsOffEwr: false, lossPct: 0, sizing: 'demand', topUpDam: false, lossReturnPct: 0, lossReturnNodeId: null, ...NO_CURVE },
 				// A river off-take (engine 1.14.0, 091) with every field of its own set.
 				{
 					...transfer(0, null),
@@ -163,7 +166,29 @@ describe('model store', () => {
 					topUpDam: true,
 					// Canal seepage back to the river (engine 1.42.0, 126): 40 % of the losses, below the source.
 					lossReturnPct: 0.4,
-					lossReturnNodeId: farm.id
+					lossReturnNodeId: farm.id,
+					...NO_CURVE
+				},
+				// A river off-take sized by a diversion curve (engine 1.113.0, 308), every field of the curve set.
+				{
+					...transfer(5, null),
+					toNodeId: canal.id,
+					months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+					maxRateM3s: 0.25,
+					monthlyRateM3s: null,
+					source: 'river',
+					handsOffM3Day: 500,
+					handsOffEwr: false,
+					lossPct: 0,
+					sizing: 'diversionCurve',
+					topUpDam: false,
+					lossReturnPct: 0,
+					lossReturnNodeId: null,
+					diversionCoefficient: 2000,
+					diversionExponent: -0.9,
+					diversionMaxPct: 0.95,
+					diversionFlowUnit: 'Ml/day',
+					diversionFlowBasis: 'natural'
 				}
 			],
 			landCover: [
@@ -200,7 +225,7 @@ describe('model store', () => {
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
-		expect(put.status).toBe(200);
+		expect(put.status, JSON.stringify(put.body)).toBe(200);
 
 		const got = await withUser(u.id, (db) => loadModel(db, projectId));
 		const full = (n: Record<string, unknown>) => ({
@@ -254,7 +279,15 @@ describe('model store', () => {
 		await expect(asOwner('UPDATE node SET user_restriction_pct = 1.5 WHERE id = $1', [mill.id])).rejects.toMatchObject({ code: '23514' });
 		expect(got.crops).toEqual([maize, beans]);
 		expect([...got.cropAreas].sort((a, b) => a.areaM2 - b.areaM2)).toEqual([model.cropAreas[1], model.cropAreas[0]]);
-		expect(got.transfers).toEqual([model.transfers[1], model.transfers[0]]);
+		expect(got.transfers).toEqual([model.transfers[1], model.transfers[0], model.transfers[2]]);
+		// Migration 308's CHECKs hold a curve row to a complete curve, in range, even past the API.
+		const curveId = model.transfers[2]!.id;
+		for (const set of ['diversion_flow_unit = NULL', 'diversion_coefficient = NULL', 'diversion_exponent = NULL', 'diversion_coefficient = 0', "diversion_exponent = 'Infinity'", 'diversion_max_pct = 1.5', "diversion_flow_unit = 'cumecs'", "diversion_flow_basis = 'observed'", "sizing = 'curve'"])
+			await expect(asOwner(`UPDATE transfer SET ${set} WHERE id = $1`, [curveId]), set).rejects.toThrow(/violates check constraint/);
+		// The positive control: the cap and the basis may go back to NULL (1, and the modelled flow).
+		await asOwner('UPDATE transfer SET diversion_max_pct = NULL, diversion_flow_basis = NULL WHERE id = $1', [curveId]);
+		expect((await withUser(u.id, (db) => loadModel(db, projectId))).transfers[2]).toMatchObject({ diversionMaxPct: null, diversionFlowBasis: null, diversionFlowUnit: 'Ml/day' });
+		await asOwner("UPDATE transfer SET diversion_max_pct = 0.95, diversion_flow_basis = 'natural' WHERE id = $1", [curveId]);
 		// By node, then cover class: 'other' before 'pine'.
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
 		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
@@ -334,7 +367,8 @@ describe('model store', () => {
 			sizing: 'demand',
 			topUpDam: false,
 			lossReturnPct: 0,
-			lossReturnNodeId: null
+			lossReturnNodeId: null,
+			...NO_CURVE
 		};
 		const put = (transfers: Record<string, unknown>[]) => u.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers });
 		expect((await put([out])).status).toBe(200);

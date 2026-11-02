@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, diversionCurveProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -445,6 +445,9 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 			if (!inRange(t.lossReturnPct ?? 0, 0, 1)) issues.push({ area: 'transfers', itemId: t.id, message: `${label}: the share of the losses seeping back is 0–100%.` });
 			if (t.lossReturnNodeId && nodes.some((n) => n.id === t.fromNodeId) && offtakeReturnAt(t, nodes.findIndex((n) => n.id === t.fromNodeId), nodes) === undefined)
 				issues.push({ area: 'transfers', itemId: t.id, message: `${label}: the seepage can rejoin the river only below the source or a hydrological unit downstream of it.` });
+			// Sized by a diversion curve (engine ≥ 1.113.0): a complete curve, as the save refuses one without.
+			const curve = t.sizing === 'diversionCurve' ? diversionCurveProblem(t) : null;
+			if (curve) issues.push({ area: 'transfers', itemId: t.id, message: `${label}: a share of the river’s flow needs a complete curve: ${curve}.` });
 		}
 	});
 

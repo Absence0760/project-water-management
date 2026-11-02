@@ -1550,6 +1550,42 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
     }
 
 
+# A river off-take sized by a diversion curve (§2.6a, engine >= 1.113.0): it diverts a · x^b percent of the river's
+# flow at the off-take, at most the largest share of it, x in the curve's flow unit (m3/day per one of each).
+DIVERSION_UNIT_M3_DAY = {"L/s": 86.4, "m3/s": 86400.0, "m3/day": 1.0, "Ml/day": 1000.0}
+
+
+def diversion_curve(t: dict):
+    """(a, b, largest share, m3/day per unit, reads the natural flow) of a rule's diversion curve, or None when it
+    is incomplete (a <= 0, b not a number, a largest share outside (0, 1], an unknown unit or basis): such a rule
+    diverts nothing (§2.6a)."""
+
+    def num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+    a, b = t.get("diversionCoefficient"), t.get("diversionExponent")
+    top = t.get("diversionMaxPct")
+    top = 1.0 if top is None else top
+    unit, basis = t.get("diversionFlowUnit"), t.get("diversionFlowBasis")
+    if not (num(a) and a > 0) or not num(b) or not (num(top) and 0 < top <= 1):
+        return None
+    if unit not in DIVERSION_UNIT_M3_DAY or basis not in (None, "modelled", "natural"):
+        return None
+    return (a, b, top, DIVERSION_UNIT_M3_DAY[unit], basis == "natural")
+
+
+def diversion_share(c, x: float) -> float:
+    """The share of the river a diversion curve takes when the flow it reads is x m3/day: MIN(largest, a · x^b / 100),
+    nothing at no flow; a share past any float (x -> 0 with b < 0) is the largest."""
+    if not x > 0:
+        return 0.0
+    try:
+        s = c[0] * (x / c[3]) ** c[1] / 100
+    except OverflowError:
+        s = math.inf
+    return min(c[2], s) if s > 0 else 0.0
+
+
 def run(doc: dict) -> dict:
     doc = apply_scenario_ops(doc)
     settings = merge_settings(doc.get("settings") or {})
@@ -2691,7 +2727,8 @@ def run(doc: dict) -> dict:
         ot_need: dict[str, float] = {}
         for dst, lst in ot_into.items():
             # Σ cap over the demand-sized rules into dst (a capacity-sized one takes no share of the need).
-            caps = [(t, rule_limit(t, o, m)) for t in lst if t.get("sizing", "demand") != "capacity"]
+            # A rule sized by a diversion curve (engine >= 1.113.0) takes no share of the need either.
+            caps = [(t, rule_limit(t, o, m)) for t in lst if t.get("sizing", "demand") not in ("capacity", "diversionCurve")]
             tot_cap = 0.0
             for t, c in caps:
                 tot_cap += c
@@ -2723,6 +2760,7 @@ def run(doc: dict) -> dict:
         Z: dict[str, float] = {}
         AA: dict[str, float] = {}
         ZS: dict[str, float] = {}
+        NAT: dict[str, float] = {}
         for x in order:
             xid = x["id"]
             cc = col[xid]
@@ -2748,6 +2786,14 @@ def run(doc: dict) -> dict:
             for u in ups[xid]:
                 zs_in += ZS[u] - min(ZS[u], sen_led[u][i]) if u in sen_led else ZS[u]
             cc["inflow_upstream"][i] = H
+            # The natural flow here (§2.6a, a diversion curve reading it): the runoff of this unit (before land
+            # cover, base-flow and bed losses) and of every node above it; a gauge or a user adds none.
+            nat_up = 0.0
+            for u in ups[xid]:
+                nat_up += NAT[u]
+            if x["kind"] == "farm":
+                nat_up += natural[i] * shares.get(xid, 0.0) if local is None else (local[xid][i] if xid in local else 0.0)
+            NAT[xid] = nat_up
             if x["kind"] == "gauge":
                 U[xid] = H
                 Z[xid] = zu
@@ -3182,7 +3228,11 @@ def run(doc: dict) -> dict:
                     # Asks MIN(capacity, need share), never capped at the flow above its keep (engine >= 1.70.0,
                     # issue #90 Q25); the bands keep it above its keep.
                     v = lim
-                    if t.get("sizing", "demand") != "capacity":
+                    if t.get("sizing", "demand") == "diversionCurve":
+                        # Its share of the river here, read at that flow or at the natural flow here (§2.6a).
+                        dc = diversion_curve(t)
+                        v = 0.0 if dc is None else min(v, diversion_share(dc, NAT[xid] if dc[4] else U0) * U0) if U0 > 0 else 0.0
+                    elif t.get("sizing", "demand") != "capacity":
                         v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))
                     wants[t["id"]] = max(0.0, v)
                 # Shared in bands at the rules' keeps (§2.6a): the flow between two successive keeps, highest

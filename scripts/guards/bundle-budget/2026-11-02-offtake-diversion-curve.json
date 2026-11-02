@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "River off-takes sized by a diversion curve (engine 1.113.0): the Transfers card's curve fields and preview table (DiversionCurveFields.svelte, diversionPreview.ts), the engine's curve helpers it reads, the glossary entry and the scenario fields. Measured 2318 -> 2322 KB against the branch's base (ecf974689) with check:bundle."
+}

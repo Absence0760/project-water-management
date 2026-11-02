@@ -11,7 +11,7 @@ import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surface
 import { splitSupply, type PlanObjects } from './demandObjects';
 import { hasPumpLimit, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
 import { damHasFilled, PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
-import type { PlanOfftake } from './offtake';
+import { diversionWant, type PlanOfftake } from './offtake';
 import type { PlanRemote } from './cropSupply';
 import type { AllocationCap } from '../allocations/mode';
 import { reachLossDay, type PlanReachLoss } from './reachLoss';
@@ -1033,6 +1033,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const otLeft = new Float64Array(offtakes.length);
 	const otAct = new Int32Array(offtakes.length);
 	const otCapInto = new Float64Array(nodes.length);
+	// The natural flow at each node today (engine ≥ 1.113.0): its own natural runoff and every node's above it, before
+	// any use. Only a diversion-curve off-take reading the natural flow (docs/model.md §2.6a) needs it.
+	const natAt = offtakes.some((o) => o.diversion?.natural) ? new Float64Array(nodes.length) : null;
 	const trOut = transfers.map(() => new Float64Array(days));
 	// A rule out of the catchment (EXTERNAL_TO, engine ≥ 1.86.0) settles into an extra receiver slot after the
 	// nodes, one per source unit (XS + its index). Water pumped out of the catchment is its source unit's surface
@@ -1430,6 +1433,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				sumZ += ur.ewrCumulative[t]!;
 				sumAA += ur.ewrShortfall[t]!;
 				absAA += Math.abs(ur.ewrShortfall[t]!);
+			}
+			if (natAt) {
+				// A unit's natural runoff as the runoff model gives it (before land cover, base-flow and bed losses);
+				// a gauge or a user adds none of its own.
+				let natUp = 0;
+				for (let u = 0; u < ups.length; u++) natUp += natAt[ups[u]!]!;
+				natAt[i] = natUp + (node.kind === 'farm' ? (node.localRunoff ? node.localRunoff[t]! : nat * node.share) : 0);
 			}
 
 			if (node.kind === 'gauge') {
@@ -1847,7 +1857,16 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						// What it asks: MIN(capacity, its share of the need), never capped at the flow above its keep
 						// (engine ≥ 1.70.0, issue #90 Q25): the bands below keep it above its keep, and sharing in
 						// proportion to the asks alone gives a licence split into several rules the same total.
-						const w = o.sizing === 0 ? Math.min(cap, otShare[k]! / (1 - o.loss)) : cap;
+						// A diversion-curve rule (engine ≥ 1.113.0) asks its share of the river here, U₀, read off its curve at
+						// U₀ or at the natural flow here; never more than U₀, and the bands hold it above its keep.
+						const w =
+							o.sizing === 0
+								? Math.min(cap, otShare[k]! / (1 - o.loss))
+								: o.sizing === 2
+									? o.diversion
+										? Math.min(cap, diversionWant(o.diversion, U0, o.diversion.natural ? natAt![i]! : U0))
+										: 0
+									: cap;
 						if (!(w > 0)) continue;
 						// Insert into the active rules, highest keep first, ties in id order (a level lists its rules in id order).
 						otKeep[k] = keep;
