@@ -268,6 +268,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_calibration_locations(random.Random(seed * 52368691 + 23), doc)
     add_apan_daily(random.Random(seed * 15485867 + 29), doc, start, days, dense)
     add_demand_parts(random.Random(seed * 32452867 + 31), doc, start, days, dense)
+    add_land_cover(random.Random(seed * 49979693 + 37), doc, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
@@ -357,6 +358,36 @@ def add_demand_parts(rng: random.Random, doc: dict, start: dt.date, days: int, d
                     w["part"] = rng.choice(["crops"] + own + ["domestic"])
                 wins.append(w)
             x["demandFactorWindows"] = wins
+
+
+LAND_COVER_CLASSES = ["eucalyptus", "pine", "invasive", "invasiveRiparian", "other"]
+
+
+def add_land_cover(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """Land-cover patches (§2.5a, engine >= 0.24.0), from their own stream so
+    the rest of a network is unchanged: in 25 % of networks (65 % dense), on
+    about half the farms one to three patches of a random class, from a
+    sliver to more than the unit (so some units' condensed cover is scaled
+    down to it), a cover 0–1, now and then the patch's own reductions; now and
+    then a patch on a gauge, a user or a farm without area (skipped)."""
+    if rng.random() >= (0.65 if dense else 0.25):
+        return
+    m = doc["model"]
+    patches = []
+    for x in m["nodes"]:
+        land = x["kind"] == "farm" and (x.get("areaKm2") or 0) > 0
+        if rng.random() >= (0.5 if land else 0.08):
+            continue
+        a = float(x.get("areaKm2") or 1)
+        for _ in range(rng.randint(1, 3)):
+            patches.append({
+                "id": _uuid(rng), "nodeId": x["id"], "coverClass": rng.choice(LAND_COVER_CLASSES),
+                "areaKm2": round(a * rng.choice([rng.uniform(0.01, 0.3), rng.uniform(0.3, 1.3)]), 3),
+                "densityPct": rng.choice([1, round(rng.uniform(0.05, 1), 2)]),
+                "factors": None if rng.random() < 0.6 else {"mar": round(rng.random(), 2), "lowFlow": round(rng.random(), 2)},
+            })
+    rng.shuffle(patches)
+    m["landCover"] = patches
 
 
 def add_calibration_locations(rng: random.Random, doc: dict) -> None:

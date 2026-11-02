@@ -764,13 +764,21 @@ def farm_efficiency(node: dict, rows: list[tuple[dict, float, dict]], apan: list
 # --------------------------------------------------------------------------
 
 
+# §2.5a: each land-cover class's reductions at full cover, (mar, lowFlow).
+LAND_COVER_CLASSES = {
+    "eucalyptus": (0.75, 0.9),
+    "pine": (0.4, 0.55),
+    "invasive": (0.5, 0.6),
+    "invasiveRiparian": (0.75, 0.9),
+    "other": (0.0, 0.0),
+}
+
+
 def unsupported(doc: dict) -> list[str]:
     """What an input uses beyond phases 1 and 2a (verify/README.md § Phase 2b)."""
     s = doc.get("settings", {}) or {}
     m = doc.get("model", {}) or {}
     out = []
-    if m.get("landCover"):
-        out.append("land cover")
     for n in m.get("nodes", []):
         if n.get("damSedimentPctPerYear") or n.get("damInServiceFrom") or n.get("abstractionFrom"):
             out.append("time-varying development")
@@ -1574,6 +1582,8 @@ def run(doc: dict) -> dict:
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
                 divert_by_month_days=0, reach_loss_days=0, baseflow_days=0,
+                # Phase 2b: land cover's units, the units whose patches were scaled to the unit, unit-days above q.
+                land_cover_units=0, land_cover_scaled=0, land_cover_above_q=0,
                 # Phase 2b: unit-days a dated demand factor window covered (counted once per read).
                 demand_window_days=0,
                 # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
@@ -1776,6 +1786,58 @@ def run(doc: dict) -> dict:
         else:
             shares = dict(area_share)
             diag["ewr_split_area"] = diag.get("ewr_split_area", 0) + 1
+    # ---- land cover (§2.5a, engine >= 0.24.0) ------------------------------
+    # Per farm with an area, its patches in id order: f = area x cover / the farm's area (scaled together to 1 when
+    # their condensed areas add up to more than the farm, probe land-cover-overfull); MAR_u = sum f x mar, LOW_u =
+    # sum f x lowFlow (the class's, or the patch's own factors). Each day, with I0 the unit's natural runoff and
+    # q = share x the catchment natural flow's Q75 over the historical days (the 25th percentile, linear between
+    # ranks: probe land-cover-q75): reduction = LOW_u MIN(I0, q) + MAR_u MAX(I0 - q, 0), never more than I0.
+    lc_red: dict[str, list[float]] = {}
+    lc_by: dict[str, list[dict]] = {}
+    lc_nodes = {x["id"]: x for x in model["nodes"]}
+    for pch in model.get("landCover") or []:
+        nd = lc_nodes.get(pch.get("nodeId"))
+        if nd is None or nd["kind"] != "farm" or not (nd.get("areaKm2") or 0) > 0:
+            continue
+        lc_by.setdefault(nd["id"], []).append(pch)
+    if lc_by:
+        hn = sorted(natural[:hist])
+        pos = 0.25 * (len(hn) - 1)
+        lo_ = int(math.floor(pos))
+        q75 = hn[lo_] + (pos - lo_) * (hn[min(lo_ + 1, len(hn) - 1)] - hn[lo_]) if hn else 0.0
+        for fid, lst in lc_by.items():
+            fa = float(lc_nodes[fid]["areaKm2"])
+            fs = []
+            for pch in sorted(lst, key=lambda p_: p_["id"]):
+                cls = LAND_COVER_CLASSES.get(pch["coverClass"], (0.0, 0.0))
+                fac = pch.get("factors")
+                mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls
+                fs.append((float(pch["areaKm2"]) * float(pch["densityPct"]) / fa, mar, low))
+            tot_f = 0.0
+            for f_, _, _ in fs:
+                tot_f += f_
+            k_ = 1.0 / tot_f if tot_f > 1 else 1.0
+            if tot_f > 1:
+                diag["land_cover_scaled"] += 1
+            mar_u = low_u = 0.0
+            for f_, mar, low in fs:
+                mar_u += f_ * k_ * mar
+                low_u += f_ * k_ * low
+            q = shares.get(fid, 0.0) * q75
+            i0s = local[fid] if local is not None and fid in local else [natural[i] * shares.get(fid, 0.0) for i in range(n)]
+            red = []
+            for v in i0s:
+                r_ = low_u * min(v, q) + mar_u * max(v - q, 0.0)
+                red.append(min(r_, v) if v > 0 else 0.0)
+            lc_red[fid] = red
+            diag["land_cover_units"] += 1
+            diag["land_cover_above_q"] += sum(1 for v in i0s if v > q)
+        tot_r = [0.0] * n
+        for fid in sorted(lc_red):
+            for i in range(n):
+                tot_r[i] += lc_red[fid][i]
+        put(None, "landcover_reduction", tot_r)
+
     eff_monthly = settings.get("effectiveRainFractionMonthly")
     store_mm = settings["effectiveRainStoreMm"]
     nodes = model["nodes"]
@@ -2707,6 +2769,9 @@ def run(doc: dict) -> dict:
             rule_ = supply_rule(x)
             # Per-unit rain (§2.4h): the unit's own runoff in place of natural × share.
             I = natural[i] * shares.get(xid, 0.0) if local is None else (local[xid][i] if xid in local else 0.0)
+            # Land cover (§2.5a): the farm routes its natural runoff less the reduction; the runoff column is that.
+            if xid in lc_red:
+                I -= lc_red[xid][i]
             # The unit's base-flow loss and gain (§2.6b): Ib = I − MIN(loss, I) + gain is what its runoff brings to
             # the dam and the river; the runoff column stays I.
             Ib = I
@@ -3338,6 +3403,8 @@ def run(doc: dict) -> dict:
                     put(xid, f"river_pool@{t['key']}", c_["pool"])
             for k in extra:
                 put(xid, k, cc[k])
+            if xid in lc_red:
+                put(xid, "landcover_reduction", lc_red[xid])
             put(xid, "ewr_charge", charge[xid])
             put(xid, "ewr_charge_irrigation", charge_irr[xid])
             if xid in binding:

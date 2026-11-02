@@ -475,6 +475,17 @@ of a seed is unchanged), with probes and mutants:
   `settings.demandFactorFrom`; an object's combined factor through the
   basic-needs floor; after a full allocation's k. Probes
   `demand-parts-windows` and `demand-parts-windows-from`.
+- **Land cover** (§2.5a, engine ≥ 0.24.0; `add_land_cover`, a quarter
+  of the random networks and most dense ones): each farm's patches in id
+  order, f = area × cover ÷ the unit's area (scaled together to 1 when the
+  condensed areas exceed the unit), MAR_u and LOW_u from the class's or the
+  patch's own reductions, the threshold q = the unit's natural MAR share ×
+  the historical natural flow's Q75, the reduction LOW_u × MIN(I0, q) +
+  MAR_u × MAX(I0 − q, 0) taken off the unit's runoff before the base-flow
+  loss, the dam split and the EWR attribution, `landcover_reduction` on the
+  unit and for the catchment; patches on a gauge, a user or a farm without
+  area skipped. Probes `land-cover-q75`, `land-cover-odd-days`,
+  `land-cover-baseflow`, `land-cover-ewr`, `land-cover-forecast-tail`.
 
 ## Phase 2b (not covered yet)
 
@@ -491,7 +502,6 @@ docs/followups.md § Verification ("`verify/` phase 2b").
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
 - calibration (the fit itself; the calibration statistics);
-- land cover, §2.5a;
 - time-varying development (sediment, a dam in service from a date,
   abstraction from a date), §2.7g;
 - the `demand.scale` scenario op itself (its factors, by part and dated,
@@ -858,3 +868,13 @@ networks:
   so an input carrying the rule would have run in `model.py` without it and
   disagreed rather than being refused. It is named now
   (`test_drought_restrictions_are_refused`); modelling it stays in phase 2b.
+- **Land cover** (§2.5a): agrees on every column. Two points the docs left
+  open, settled from `runModel`'s reductions (q backed out of a day above
+  the threshold, LOW_u from a day below it) and written into §2.5a: Q75 is
+  linear between ranks (position 0.25 × (n − 1) of the ascending historical
+  natural flow; probe `land-cover-q75`, 38 days, where the nearest-rank
+  readings differ), and "patches covering more than the unit" means their
+  condensed areas, scaled together to Σ f = 1 (unit b of the probes: areas
+  6 km², condensed 5.5 km² on a 4 km² unit; scaling by the areas would give
+  a low-flow share of 0.546, the engine's is 0.5955 = (5 × 0.6 + 0.5 ×
+  0.55) ÷ 5.5).

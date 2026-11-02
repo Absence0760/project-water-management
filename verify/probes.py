@@ -1790,6 +1790,46 @@ def demand_parts_and_windows(dff: str | None = None) -> dict:
             "series": {"rain_catchment_mm": {"startDate": start, "values": rain[:n]}}}
 
 
+def land_cover(n: int = 38, baseflow: bool = False, ewr: bool = False, tail: bool = False) -> dict:
+    """Land cover (§2.5a) on two units under Per unit: unit a's patch (its own
+    reductions, 1/6 of the unit) and unit b's two (one class default) whose
+    condensed areas, 5.5 km², are more than b's 4 km², so they are scaled
+    together to the unit (by condensed area: their areas alone add up to 6
+    km²) ; a patch on the gauge and one on a farm without area are skipped,
+    and the patches are listed out of id order. n = 38 days puts the low-flow
+    threshold's Q75 between two ranks (linear: index 0.25 × 37 = 9.25 of the
+    sorted natural flow). `baseflow`: a base-flow loss on b, taken after the
+    reduction (§2.6b: MIN(loss, I) on the runoff less land cover). `ewr`: an
+    EWR at the outlet short most days, so the attribution reads the runoff
+    after land cover. `tail`: 20 days of heavy forecast rain after the record,
+    which the threshold's Q75 leaves out (it reads the historical days, §2.4f)."""
+    start = dt.date(2020, 1, 1)
+    rain = _wave(start, n, 3, 1.0)
+    b_kw = {"baseflowLossM3Day": 900.0} if baseflow else {}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("a", "farm", "o", areaKm2=6, damCapacityM3=20000, damInitialPct=0.5, pctRunoffToDam=0.4),
+        _node("b", "farm", "o", areaKm2=4, **b_kw),
+        _node("z", "farm", "o", areaKm2=0),
+    ]
+    crops, areas = _crop("a", 50000)
+    lc = [
+        {"id": "p3", "nodeId": "b", "coverClass": "pine", "areaKm2": 1, "densityPct": 0.5, "factors": None},
+        {"id": "p1", "nodeId": "a", "coverClass": "other", "areaKm2": 2, "densityPct": 0.5, "factors": {"mar": 0.2, "lowFlow": 0.8}},
+        {"id": "p2", "nodeId": "b", "coverClass": "other", "areaKm2": 5, "densityPct": 1.0, "factors": {"mar": 0.3, "lowFlow": 0.6}},
+        {"id": "p4", "nodeId": "o", "coverClass": "eucalyptus", "areaKm2": 1, "densityPct": 1.0, "factors": None},
+        {"id": "p5", "nodeId": "z", "coverClass": "eucalyptus", "areaKm2": 1, "densityPct": 1.0, "factors": None},
+    ]
+    s = _settings(gr4j={"x1": 150, "x2": 0, "x3": 40, "x4": 1.3, "warmupDays": 0})
+    if ewr:
+        s["ewrPragmaticM3PerDay"] = [6000] * 12
+    series = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": rain}}
+    if tail:
+        series["rain_forecast_mm"] = {"startDate": (start + dt.timedelta(days=n)).isoformat(), "values": [30.0, 45.0, 20.0, 60.0] * 5}
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": [], "landCover": lc},
+            "series": series}
+
+
 def _zone(gauge: str, gr4j: dict | None, enabled: bool = True) -> dict:
     return {
         "nodeId": gauge, "enabled": enabled, "calibrationStart": None, "calibrationEnd": None, "calibrationFlowKind": None,
@@ -2044,6 +2084,12 @@ PROBES = {
     # Demand factors by part and dated demand factors (§2.3 item 4a).
     "demand-parts-windows": demand_parts_and_windows(),
     "demand-parts-windows-from": demand_parts_and_windows("2020-02-10"),
+    # Land cover (§2.5a).
+    "land-cover-q75": land_cover(),
+    "land-cover-odd-days": land_cover(37),
+    "land-cover-baseflow": land_cover(baseflow=True),
+    "land-cover-ewr": land_cover(120, ewr=True),
+    "land-cover-forecast-tail": land_cover(tail=True),
     # The forecast-conditioned outlook's member (issue #620 step 6).
     "forecast-member-rescaled": forecast_member_rescaled(),
     # Future climate (issue #621, §2.17): the op on a dam, then on the per-unit rules (the MAPs by the annual

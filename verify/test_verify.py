@@ -487,6 +487,16 @@ MUTANTS = [
     ("demand factors: a window's last day is left out", 'days[i] <= iso_to_ord(w["to"]))', 'days[i] < iso_to_ord(w["to"]))'),
     ("demand factors: a window with no start never opens", '(w.get("from") is None or days[i] >= iso_to_ord(w["from"]))', '(w.get("from") is not None and days[i] >= iso_to_ord(w["from"]))'),
     ("demand factors: the windows and part factors run before demandFactorFrom", ("        if dff_o is not None and days[i] < dff_o:\n            return 1.0\n        m = wm[i]\n        f = x.get(\"demandFactor\")\n        v = float(f[m]) if f else 1.0", "        m = wm[i]\n        f = x.get(\"demandFactor\")\n        v = float(f[m]) if f and not (dff_o is not None and days[i] < dff_o) else 1.0"),),
+    # Land cover (§2.5a, engine >= 0.24.0).
+    ("land cover: no reduction", "            if xid in lc_red:\n                I -= lc_red[xid][i]", "            if False:\n                I -= lc_red[xid][i]"),
+    ("land cover: the low-flow share on the whole flow", "r_ = low_u * min(v, q) + mar_u * max(v - q, 0.0)", "r_ = low_u * v"),
+    ("land cover: the threshold is Q75 without the unit's share", "q = shares.get(fid, 0.0) * q75", "q = q75"),
+    ("land cover: Q75 is the nearest rank below, not interpolated", "q75 = hn[lo_] + (pos - lo_) * (", "q75 = hn[lo_] + 0 * ("),
+    ("land cover: the threshold reads the forecast tail too", "hn = sorted(natural[:hist])", "hn = sorted(natural)"),
+    ("land cover: patches covering more than the unit aren't scaled down", "k_ = 1.0 / tot_f if tot_f > 1 else 1.0", "k_ = 1.0"),
+    ("land cover: a patch's cover is ignored (its whole area counts)", 'fs.append((float(pch["areaKm2"]) * float(pch["densityPct"]) / fa, mar, low))', 'fs.append((float(pch["areaKm2"]) / fa, mar, low))'),
+    ("land cover: a patch's own reductions are ignored", 'mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls', "mar, low = cls"),
+    ("land cover: the patches' mar and lowFlow swapped", 'mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls', 'low, mar = (fac["mar"], fac["lowFlow"]) if fac else cls'),
     ("daily A-pan: the record counts as evaporation only where that day's pan coefficient is above 0", "any(v is not None and v > 0 for v in apan_day) and any(c > 0 for c in settings[\"panCoefficient\"])", "any(v is not None and v > 0 and settings[\"panCoefficient\"][m] > 0 for v, m in zip(apan_day, wm))"),
 ]
 
@@ -552,6 +562,8 @@ class CrossCheck(unittest.TestCase):
             "apan_daily_days",
             # Dated demand factors (§2.3 item 4a).
             "demand_window_days",
+            # Land cover (§2.5a).
+            "land_cover_units", "land_cover_scaled", "land_cover_above_q",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 

@@ -3599,8 +3599,11 @@ farm (the hydrological unit) a list of patches, each with a cover class, an
 area (km²), a condensed (canopy) cover 0–1 and optional reductions overriding
 the class's. A patch's share of its unit is `f = area × cover ÷ the farm's
 area` (patches covering more than the unit are scaled down to it, with a
-warning; patches on a gauge, a user or a farm without area are skipped, with
-a warning).
+warning: when their condensed areas Σ area × cover add up to more than the
+unit's area, every f is multiplied by the unit's area ÷ that sum, so they
+add up to 1; patches whose areas alone exceed the unit but whose condensed
+areas don't are left as they are; patches on a gauge, a user or a farm
+without area are skipped, with a warning).
 
 **Classes** (`LAND_COVER_CLASSES`; reductions at full cover, **indicative**):
 
@@ -3630,7 +3633,11 @@ in mm/yr over its condensed area, the figure Le Maitre et al. compare
 natural runoff (its own GR4J runoff, §2.4h; natural flow × share without the units' runoff, and under Fragmentation before engine 1.109.0) and
 q = share × the catchment's natural flow exceeded on 75 % of the run's days
 (its low-flow threshold; from engine 1.28.0 of its historical days, so a
-forecast tail doesn't move it, §2.4f). The share is the unit's natural MAR
+forecast tail doesn't move it, §2.4f). Q75 is the 25th percentile of those
+days' natural flow sorted ascending, linear between ranks: with n days, the
+value at position 0.25 × (n − 1) counting from 0 (Excel's
+`PERCENTILE.INC(…, 0.25)`; `verify/` probes `land-cover-q75`,
+`land-cover-odd-days`). The share is the unit's natural MAR
 share from engine 1.105.0 (§2.5, issue #616; before, its
 flow share, engine-audit.md U1):
 
