@@ -555,7 +555,12 @@ in the browser worker and server-side), the uncertainty ensemble, forecast
 mode, scenarios and firm yield use the same days. The "no evaporation, no
 run" refusal (`GR4J_NO_PET`, §2.4a) counts a daily series with a value above
 0, under `pe.kind: 'pan'` with a pan coefficient above 0, as evaporation, so a
-project with only a daily record runs. A run stores the series in its inputs
+project with only a daily record runs. Precisely: a value above 0 on one of
+the run's days (a record wholly outside the run doesn't count) and a pan
+coefficient above 0 in any month, not necessarily that day's; so a record
+whose values above 0 all fall in months with a pan coefficient of 0 runs,
+with a GR4J PE of 0 every day (`verify/` probes `apan-daily-no-pet`,
+`apan-daily-outside-run`). A run stores the series in its inputs
 (`run_input_series`, like every input series), so re-running it reproduces
 the same days. `pnpm pan-sensitivity` reads the series from a project.json
 too, so its cases vary the coefficient that multiplies the daily A-pan on the
@@ -3594,8 +3599,11 @@ farm (the hydrological unit) a list of patches, each with a cover class, an
 area (km²), a condensed (canopy) cover 0–1 and optional reductions overriding
 the class's. A patch's share of its unit is `f = area × cover ÷ the farm's
 area` (patches covering more than the unit are scaled down to it, with a
-warning; patches on a gauge, a user or a farm without area are skipped, with
-a warning).
+warning: when their condensed areas Σ area × cover add up to more than the
+unit's area, every f is multiplied by the unit's area ÷ that sum, so they
+add up to 1; patches whose areas alone exceed the unit but whose condensed
+areas don't are left as they are; patches on a gauge, a user or a farm
+without area are skipped, with a warning).
 
 **Classes** (`LAND_COVER_CLASSES`; reductions at full cover, **indicative**):
 
@@ -3625,7 +3633,11 @@ in mm/yr over its condensed area, the figure Le Maitre et al. compare
 natural runoff (its own GR4J runoff, §2.4h; natural flow × share without the units' runoff, and under Fragmentation before engine 1.109.0) and
 q = share × the catchment's natural flow exceeded on 75 % of the run's days
 (its low-flow threshold; from engine 1.28.0 of its historical days, so a
-forecast tail doesn't move it, §2.4f). The share is the unit's natural MAR
+forecast tail doesn't move it, §2.4f). Q75 is the 25th percentile of those
+days' natural flow sorted ascending, linear between ranks: with n days, the
+value at position 0.25 × (n − 1) counting from 0 (Excel's
+`PERCENTILE.INC(…, 0.25)`; `verify/` probes `land-cover-q75`,
+`land-cover-odd-days`). The share is the unit's natural MAR
 share from engine 1.105.0 (§2.5, issue #616; before, its
 flow share, engine-audit.md U1):
 
@@ -6234,6 +6246,17 @@ took the water routed to the absent dam before irrigation, and a dam-target
 borehole pumped nothing). The dam's starting storage is its initial level × the
 first day's capacity.
 
+Four points this leaves open, as `runModel` settles them (`verify/` probes
+`development-*`): a dam
+that starts a day above that day's capacity (sediment shrank it overnight)
+has its full-supply area that day, the power law's storage ratio held at 1,
+and spills the excess; the unknown-area estimate (7.2 × C^0.77, §2.7a)
+reads the entered capacity, as the full-supply area doesn't scale; a
+sediment rate without a survey date runs as the entered dam (k = 1); and on
+a day with no capacity a `trigger` supply rule runs river first, as it does
+on a unit without a dam (§2.7e), while `runOfRiver` on a unit with an
+entered dam stays river first, as it is on every other day.
+
 **Drought restriction reviews** (§2.7i, engine ≥ 1.70.0): a dam that comes
 into service after the run's first day starts empty, and until it first
 starts a day holding the mildest level's share of its capacity each review
@@ -6244,7 +6267,9 @@ after the in-service day read the new, empty dam, so the deepest level
 applied (issue #90 Q30).
 
 A run with such a dam carries its `dam_capacity` column (m³, the day's
-capacity); a run resumed from a snapshot (§2.16) judges "such a dam" by the
+capacity): a dam with a sediment rate and a survey date, or with an
+in-service date after the run's first day (one in service from the first day
+or before, without sediment, is the entered dam and has none); a run resumed from a snapshot (§2.16) judges "such a dam" by the
 capture run's first day, so it carries the column whenever the uninterrupted
 run does, even resumed on or after the in-service date (engine ≥ 1.69.0;
 before, it dropped it). The self-checks recompute k from the node and hold every
@@ -6264,7 +6289,11 @@ On a day with no capacity what is routed into the dam comes out in its
 `spill` column (the dam can't hold it), so a dam not yet in service reads as
 spilling everything that reaches it; the balance is exact. Under a full
 allocation (§2.12a) a unit with an abstraction date asks for the registered
-volume over its days from then, not the whole year's in fewer days. A run
+volume over its days from then, not the whole year's in fewer days; a water
+year wholly before the date asks for none, so it is listed as scaled with 0
+m³ and a factor of 0, even when none of its allocations is in force that year
+(the 1.70.0 "keeps its modelled demand" rule reads only the days it is scaled
+on, and it has none; its demand is 0 either way). A run
 warns when sediment run back from the survey makes a dam more than 1.25 ×
 its surveyed capacity. Firm yield (§2.13) resizes the entered capacity and
 keeps each day's factor.

@@ -266,9 +266,155 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_rain_stations(random.Random(seed * 67867967 + 5), doc, start, days, dense)
     add_calibration_zones(random.Random(seed * 86028121 + 17), doc, dense)
     add_calibration_locations(random.Random(seed * 52368691 + 23), doc)
+    add_apan_daily(random.Random(seed * 15485867 + 29), doc, start, days, dense)
+    add_demand_parts(random.Random(seed * 32452867 + 31), doc, start, days, dense)
+    add_land_cover(random.Random(seed * 49979693 + 37), doc, dense)
+    add_development(random.Random(seed * 67867979 + 41), doc, start, days, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
+
+
+def add_apan_daily(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """A daily A-pan record (§2.3a, engine >= 0.38.0, `evap_apan_mm`), from its
+    own stream so the rest of a network is unchanged: in 25 % of networks (60 %
+    dense), the month's mean spread over its days × a day's weather, starting
+    before or after the rain and ending before or after it, with blank
+    stretches and now and then a negative (no-data) value and a 0. Now and then
+    the monthly means are all 0, so the record is the only A-pan."""
+    if rng.random() >= (0.6 if dense else 0.25):
+        return
+    s = doc["settings"]
+    if rng.random() < 0.15:
+        s["apanMm"] = [0] * 12
+    mean = [max(1.0, float(v)) if v else rng.uniform(40, 250) for v in s["apanMm"]]
+    off = rng.randint(-120, days // 2)
+    length = rng.randint(30, days + 200 - max(0, off))
+    a0 = start + dt.timedelta(days=off)
+    vals: list = []
+    for k in range(length):
+        d = a0 + dt.timedelta(days=k)
+        wm = (d.month - 10) % 12
+        mdays = (dt.date(d.year + (d.month == 12), d.month % 12 + 1, 1) - dt.date(d.year, d.month, 1)).days
+        vals.append(round(mean[wm] / mdays * rng.uniform(0.3, 1.8), 2))
+    for _ in range(rng.randint(0, 4)):
+        a = rng.randrange(length)
+        for j in range(a, min(length, a + rng.randint(1, 50))):
+            vals[j] = None
+    for _ in range(rng.randint(0, 3)):
+        vals[rng.randrange(length)] = rng.choice([-1, -999, 0.0])
+    doc["series"]["evap_apan_mm"] = {"startDate": a0.isoformat(), "values": vals}
+
+
+DEMAND_PARTS = ["crops", "domestic", "municipal", "industrial", "livestock", "irrigation", "external", "other"]
+
+
+def add_demand_parts(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """Demand factors by part (`partDemandFactor`, engine >= 1.45.0) and dated
+    demand factors (`demandFactorWindows`, engine >= 1.82.0), §2.3 item 4a and
+    scenarios.md § Demand scaling, from their own stream so the rest of a
+    network is unchanged: in 25 % of networks (65 % dense). On some farms a
+    factor for the crops or for a category of demand object (its own, or one
+    the farm has none of), cuts and rises; on some farms and users one to
+    three windows, each from–to (open now and then, sometimes outside the
+    run), 12 multipliers (1 in the months a months-only op leaves out), a
+    farm's window now and then on one part."""
+    if rng.random() >= (0.65 if dense else 0.25):
+        return
+    m = doc["model"]
+    cats: dict[str, list[str]] = {}
+    for ob in m.get("demandObjects") or []:
+        cats.setdefault(ob["nodeId"], []).append(ob["category"])
+
+    def row() -> list[float]:
+        if rng.random() < 0.3:
+            v = round(rng.uniform(0, 1.6), 2)
+            months = set(rng.sample(range(12), rng.randint(1, 6)))
+            return [v if k in months else 1 for k in range(12)]
+        return _monthly(rng, 0, 1.4, 2)
+
+    def date(lo: int, hi: int) -> str:
+        return (start + dt.timedelta(days=rng.randint(lo, hi))).isoformat()
+
+    for x in m["nodes"]:
+        if x["kind"] not in ("farm", "user") or rng.random() >= 0.6:
+            continue
+        own = cats.get(x["id"], [])
+        if x["kind"] == "farm" and rng.random() < 0.6:
+            parts = {}
+            for _ in range(rng.randint(1, 3)):
+                p = rng.choice(["crops", "crops"] + own + [rng.choice(DEMAND_PARTS)])
+                parts[p] = row()
+            x["partDemandFactor"] = parts
+        if rng.random() < 0.6:
+            wins = []
+            for _ in range(rng.randint(1, 3)):
+                a = rng.randint(-200, days)
+                w: dict = {"factor": row()}
+                if rng.random() < 0.85:
+                    w["from"] = date(a, a)
+                if rng.random() < 0.85:
+                    w["to"] = date(a + rng.randint(0, 400), a + 400)
+                if x["kind"] == "farm" and rng.random() < 0.35:
+                    w["part"] = rng.choice(["crops"] + own + ["domestic"])
+                wins.append(w)
+            x["demandFactorWindows"] = wins
+
+
+LAND_COVER_CLASSES = ["eucalyptus", "pine", "invasive", "invasiveRiparian", "other"]
+
+
+def add_land_cover(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """Land-cover patches (§2.5a, engine >= 0.24.0), from their own stream so
+    the rest of a network is unchanged: in 25 % of networks (65 % dense), on
+    about half the farms one to three patches of a random class, from a
+    sliver to more than the unit (so some units' condensed cover is scaled
+    down to it), a cover 0–1, now and then the patch's own reductions; now and
+    then a patch on a gauge, a user or a farm without area (skipped)."""
+    if rng.random() >= (0.65 if dense else 0.25):
+        return
+    m = doc["model"]
+    patches = []
+    for x in m["nodes"]:
+        land = x["kind"] == "farm" and (x.get("areaKm2") or 0) > 0
+        if rng.random() >= (0.5 if land else 0.08):
+            continue
+        a = float(x.get("areaKm2") or 1)
+        for _ in range(rng.randint(1, 3)):
+            patches.append({
+                "id": _uuid(rng), "nodeId": x["id"], "coverClass": rng.choice(LAND_COVER_CLASSES),
+                "areaKm2": round(a * rng.choice([rng.uniform(0.01, 0.3), rng.uniform(0.3, 1.3)]), 3),
+                "densityPct": rng.choice([1, round(rng.uniform(0.05, 1), 2)]),
+                "factors": None if rng.random() < 0.6 else {"mar": round(rng.random(), 2), "lowFlow": round(rng.random(), 2)},
+            })
+    rng.shuffle(patches)
+    m["landCover"] = patches
+
+
+def add_development(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """Development that changes during a run (§2.7g, engine >= 1.30.0), from
+    its own stream so the rest of a network is unchanged: in 25 % of networks
+    (65 % dense), on about half the dams a survey date (before, inside or after
+    the run) with a sediment rate of up to 0.2 a year (so some dams fill up and
+    some run back past their entered capacity), now and then a survey date
+    without a rate, and an in-service date (before the run or inside it); on
+    some farms and users the first day they take water."""
+    if rng.random() >= (0.65 if dense else 0.25):
+        return
+
+    def date(lo: int, hi: int) -> str:
+        return (start + dt.timedelta(days=rng.randint(lo, hi))).isoformat()
+
+    for x in doc["model"]["nodes"]:
+        if x["kind"] == "farm" and (x.get("damCapacityM3") or 0) > 0 and rng.random() < 0.55:
+            if rng.random() < 0.7:
+                x["damSurveyDate"] = date(-5 * 365, days + 2 * 365)
+                if rng.random() < 0.85:
+                    x["damSedimentPctPerYear"] = rng.choice([0.005, 0.02, round(rng.uniform(0, 0.2), 3), 0.2])
+            if rng.random() < 0.5:
+                x["damInServiceFrom"] = date(-200, days - 30)
+        if x["kind"] in ("farm", "user") and rng.random() < 0.2:
+            x["abstractionFrom"] = date(-100, days)
 
 
 def add_calibration_locations(rng: random.Random, doc: dict) -> None:

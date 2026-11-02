@@ -148,7 +148,7 @@ MUTANTS = [
     ("a crop's default system is ignored", 'for sid in (planting.get("irrigationSystemId"), crop.get("irrigationSystemId")):', 'for sid in (planting.get("irrigationSystemId"),):'),
     ("the project's systems table is ignored (the SABI defaults)", 'if model.get("irrigationSystems") else dict(DEFAULT_SYSTEMS)', 'if False else dict(DEFAULT_SYSTEMS)'),
     ("GR4J's PE uses the 28.25-day February", "pet.append(monthly / calendar_days_in_month(o))", "pet.append(monthly / mdays[m])"),
-    ("dam evaporation uses calendar days", "e_raw = k_lake[m] * apan[m] / mdays[m] / 1000 * area", "e_raw = k_lake[m] * apan[m] / calendar_days_in_month(o) / 1000 * area"),
+    ("dam evaporation uses calendar days", "else k_lake[m] * apan[m] / mdays[m]) / 1000 * area", "else k_lake[m] * apan[m] / calendar_days_in_month(o)) / 1000 * area"),
     ("return flow is the whole loss (r ignored, N1)", "T = r_ret * G", "T = (1 - d[\"e\"]) * G"),
     ("return flow above the losses is not capped at 1 − e (engine 1.71.0)", 'r_ret = (1 - d["e"]) if r_ret > 1 - d["e"] + 1e-9 else max(r_ret, 0)', "r_ret = max(r_ret, 0)"),
     ("GR4J's routing store gets no exchange", "r = max(0.0, self.r + q9 + f)", "r = max(0.0, self.r + q9)"),
@@ -471,6 +471,50 @@ MUTANTS = [
     ("climate.delta reads rain factors by water-year month", "vals = [v * f[cal_month(o0 + t) - 1] if", "vals = [v * f[wy_month(o0 + t)] if"),
     ("climate.delta's A-pan row takes the water-year month's own index", 's["apanMm"] = [v * ef[(w + 9) % 12] for', 's["apanMm"] = [v * ef[w] for'),
     ("climate.delta's annual factor is the plain mean of the rain factors", "    return sum(w[m] * f[m] for m in range(12)) / sum(w)", "    return sum(f) / 12"),
+    # The daily A-pan record (§2.3a, engine >= 0.38.0).
+    ("daily A-pan: the crops' demand reads the monthly mean on the record's days", "                if apan_day[i] is not None:\n                    gross +=", "                if False:\n                    gross +="),
+    ("daily A-pan: the dam's evaporation reads the monthly mean on the record's days", "e_raw = (k_lake[m] * apan_day[i] if apan_day[i] is not None else", "e_raw = (k_lake[m] * apan_day[i] if False else"),
+    ("daily A-pan: GR4J's PE reads the monthly mean on the record's days", 'if pe.get("kind") != "monthly" and apan_day[i] is not None:', "if False:"),
+    ("daily A-pan: GR4J reads the record under a monthly PE row", 'if pe.get("kind") != "monthly" and apan_day[i] is not None:', "if apan_day[i] is not None:"),
+    ("daily A-pan: a negative value is the day's A-pan", "if (v := apan_s.get(o)) is not None and v >= 0 else None", "if (v := apan_s.get(o)) is not None else None"),
+    ("daily A-pan: the record doesn't count as evaporation (GR4J_NO_PET)", "any(v is not None and v > 0 for v in apan_day) and any(", "False and any("),
+    # Demand factors by part (engine >= 1.45.0) and dated demand factors (engine >= 1.82.0), §2.3 item 4a.
+    ("demand factors: a part's factor is ignored", "            if pf:\n                v *= float(pf[m])", "            if False:\n                v *= float(pf[m])"),
+    ("demand factors: the crops don't read their part's factor", 'F = (need - used) * dfac(f, i, "crops")', "F = (need - used) * dfac(f, i)"),
+    ("demand factors: an object reads the crops' part, not its category's", ('                f_ = dfac(x, i, ob.get("category"))\n                v = base', '                f_ = dfac(x, i, "crops")\n                v = base'), ('                        f_ = dfac(x, i, ob.get("category"))', '                        f_ = dfac(x, i, "crops")')),
+    ("demand factors: the dated windows are ignored", '        for w in x.get("demandFactorWindows") or []:', "        for w in []:"),
+    ("demand factors: a window on one part scales the whole demand", '            if w.get("part") is not None and w.get("part") != part:\n                continue', '            if False:\n                continue'),
+    ("demand factors: a window's last day is left out", 'days[i] <= iso_to_ord(w["to"]))', 'days[i] < iso_to_ord(w["to"]))'),
+    ("demand factors: a window with no start never opens", '(w.get("from") is None or days[i] >= iso_to_ord(w["from"]))', '(w.get("from") is not None and days[i] >= iso_to_ord(w["from"]))'),
+    ("demand factors: the windows and part factors run before demandFactorFrom", ("        if dff_o is not None and days[i] < dff_o:\n            return 1.0\n        m = wm[i]\n        f = x.get(\"demandFactor\")\n        v = float(f[m]) if f else 1.0", "        m = wm[i]\n        f = x.get(\"demandFactor\")\n        v = float(f[m]) if f and not (dff_o is not None and days[i] < dff_o) else 1.0"),),
+    # Land cover (§2.5a, engine >= 0.24.0).
+    ("land cover: no reduction", "            if xid in lc_red:\n                I -= lc_red[xid][i]", "            if False:\n                I -= lc_red[xid][i]"),
+    ("land cover: the low-flow share on the whole flow", "r_ = low_u * min(v, q) + mar_u * max(v - q, 0.0)", "r_ = low_u * v"),
+    ("land cover: the threshold is Q75 without the unit's share", "q = shares.get(fid, 0.0) * q75", "q = q75"),
+    ("land cover: Q75 is the nearest rank below, not interpolated", "q75 = hn[lo_] + (pos - lo_) * (", "q75 = hn[lo_] + 0 * ("),
+    ("land cover: the threshold reads the forecast tail too", "hn = sorted(natural[:hist])", "hn = sorted(natural)"),
+    ("land cover: patches covering more than the unit aren't scaled down", "k_ = 1.0 / tot_f if tot_f > 1 else 1.0", "k_ = 1.0"),
+    ("land cover: a patch's cover is ignored (its whole area counts)", 'fs.append((float(pch["areaKm2"]) * float(pch["densityPct"]) / fa, mar, low))', 'fs.append((float(pch["areaKm2"]) / fa, mar, low))'),
+    ("land cover: a patch's own reductions are ignored", 'mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls', "mar, low = cls"),
+    ("land cover: the patches' mar and lowFlow swapped", 'mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls', 'low, mar = (fac["mar"], fac["lowFlow"]) if fac else cls'),
+    # Development that changes during a run (§2.7g, engine >= 1.30.0).
+    ("development: the dam keeps its entered capacity", "            c_ = cap0[fid] * ks[i]\n", "            c_ = cap0[fid]\n"),
+    ("development: sediment only after the survey (not run back before it)", "(max(0.0, 1 - rate * (o - sv_o) / 365.25) if sv_o is not None else 1.0)", "(max(0.0, 1 - rate * max(0, o - sv_o) / 365.25) if sv_o is not None else 1.0)"),
+    ("development: a dam holds water before its in-service date", "(1.0 if ins_o is None or o >= ins_o else 0.0)", "1.0"),
+    ("development: the starting storage is the initial level x the entered capacity", '* (kdev[f["id"]][0] if f["id"] in kdev and n else 1.0) for f in farms}', "for f in farms}"),
+    ("development: the survey curve keeps its volumes", '                f["damCurve"] = [{**r_, "volumeM3": r_["volumeM3"] * ks[i]} for r_ in curve0[fid]]', "                pass"),
+    ("development: the unknown full-supply area is estimated from the day's capacity", 'a_full = 7.2 * cap0[f["id"]] ** 0.77', "a_full = 7.2 * cap ** 0.77"),
+    ("development: a dam above its day's capacity has an area above full supply", "a_full * min(1.0, s0 / cap) ** b", "a_full * (s0 / cap) ** b"),
+    ("development: dam-target boreholes pump nothing while the dam has no capacity", "units[fid] = units_dam[fid] if c_ > 0 else units_nodam[fid]", "units[fid] = units_dam[fid]"),
+    ("development: a trigger rule keeps waiting for a dam with no capacity", 'if r == "trigger" and x["damCapacityM3"] <= 0:', 'if r == "trigger" and cap0.get(x["id"], x["damCapacityM3"]) <= 0:'),
+    ("development: run of river on a dam with no capacity that day runs as run of river", 'if r == "runOfRiver" and cap0.get(x["id"], x["damCapacityM3"]) > 0:', 'if r == "runOfRiver" and x["damCapacityM3"] > 0:'),
+    ("development: a sediment rate without a survey date still runs", "if isinstance(sv, str) and _is_iso(sv) and rate else None", "if isinstance(sv, str) and _is_iso(sv) and rate else (days[0] if rate and days else None)"),
+    ("development: the crops take water before abstractionFrom", '            on_ = 0.0 if f["id"] in abs_from and days[i] < abs_from[f["id"]] else 1.0', "            on_ = 1.0"),
+    ("development: an object takes water before abstractionFrom", "                if fid in abs_from and o < abs_from[fid]:\n                    v = 0.0", "                if False:\n                    v = 0.0"),
+    ("development: a user takes water before abstractionFrom", '        on_ = [0.0 if u["id"] in abs_from and days[i] < abs_from[u["id"]] else 1.0 for i in range(n)]', "        on_ = [1.0] * n"),
+    ("development: a full allocation asks for the whole year's volume after abstractionFrom", 'and (af_ is None or days[i] >= af_))', ")"),
+    ("development: a year wholly before abstractionFrom keeps its modelled demand when nothing is in force", "                if not fit_idx:\n                    fac_y[y] = 0.0", "                if not fit_idx and any(a[\"from\"] <= days[i] <= a[\"to\"] for a in both for i in idx):\n                    fac_y[y] = 0.0"),
+    ("daily A-pan: the record counts as evaporation only where that day's pan coefficient is above 0", "any(v is not None and v > 0 for v in apan_day) and any(c > 0 for c in settings[\"panCoefficient\"])", "any(v is not None and v > 0 and settings[\"panCoefficient\"][m] > 0 for v, m in zip(apan_day, wm))"),
 ]
 
 
@@ -531,6 +575,14 @@ class CrossCheck(unittest.TestCase):
             *model.STATION_DIAG,
             # Calibration zones (§2.10n).
             "zone_units",
+            # Phase 2b: the daily A-pan record (§2.3a).
+            "apan_daily_days",
+            # Dated demand factors (§2.3 item 4a).
+            "demand_window_days",
+            # Land cover (§2.5a).
+            "land_cover_units", "land_cover_scaled", "land_cover_above_q",
+            # Development during the run (§2.7g).
+            "dev_dams", "dev_no_capacity_days", "dev_shrink_spill_days", "abstraction_from_units",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 
@@ -604,6 +656,10 @@ class Generator(unittest.TestCase):
         self.assertEqual(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "u"}}}, "model": {}}), [])
         self.assertEqual(len(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "u", "pinnedFactors": [1] * 12}}}, "model": {}})), 1)
         self.assertEqual(len(model.unsupported({"settings": {}, "model": {}, "series": {"rain_forecast_mm@u": {"startDate": "2020-01-01", "values": [1]}}})), 1)
+
+    def test_drought_restrictions_are_refused(self):
+        # §2.7i isn't modelled yet: an input with the rule is named, not cross-checked.
+        self.assertEqual(model.unsupported({"settings": {"droughtRestriction": {"levels": []}}, "model": {}}), ["drought restrictions"])
 
     def test_known_differences_name_their_followup(self):
         for key, why in diff.KNOWN_DIFFERENCES.items():

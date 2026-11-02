@@ -1693,6 +1693,242 @@ def daily_et0_monthly_pe(pe_kind: str = "monthly", zero_row: bool = False) -> di
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def apan_daily(pe_kind: str = "pan", monthly_zero: bool = False, coeff_gap: bool = False, outside_run: bool = False) -> dict:
+    """A daily A-pan record (§2.3a, engine >= 0.38.0) on a cropped farm with a
+    dam: on the days it has a value >= 0 the crops' gross demand is
+    area × crop factor × the day's A-pan, the dam's evaporation depth the lake
+    factor × it and GR4J's PE (under pan coefficient × A-pan) the pan
+    coefficient × it; a blank day, a negative one and the days before and
+    after the record read the month's mean spread over the month. `pe_kind`
+    "monthly": GR4J runs on the PE row and never reads the record, the crops
+    and the dam still do. `monthly_zero`: the monthly means are all 0, so the
+    record is the only A-pan and the run isn't GR4J_NO_PET. `coeff_gap`: on
+    top of that the pan coefficient is 0 in January and February (calendar),
+    the only months the record has a value above 0 in, so GR4J's PE is 0 on
+    every day; the run still runs, since "no evaporation, no run" counts a run
+    day's value above 0 with a pan coefficient above 0 in any month (§2.3a,
+    verify/README.md § Findings). `outside_run`: the record's values above 0
+    all fall before the run, so it is GR4J_NO_PET."""
+    start = dt.date(2019, 12, 1)
+    n = 120
+    rain = [0.0, 14.0, 0.0, 2.0, 0.0, 0.0, 30.0, 0.0, 5.0, 0.0, 0.0, 0.0] * 10
+    # The record runs from 10 December to 15 March: a blank stretch, a negative day and a 0 inside it.
+    rec = [round(3 + (k % 7) * 1.25, 2) for k in range(96)]
+    for k in range(20, 26):
+        rec[k] = None
+    rec[40] = -1
+    rec[41] = 0.0
+    if coeff_gap:
+        # Above 0 only in January and February.
+        rec = [v if dt.date(2019, 12, 10) + dt.timedelta(days=k) < dt.date(2020, 3, 1) and dt.date(2019, 12, 10) + dt.timedelta(days=k) >= dt.date(2020, 1, 1) else 0.0 for k, v in enumerate(rec)]
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=4, damCapacityM3=60000, damInitialPct=0.6, pctRunoffToDam=0.5,
+              damAreaFullM2=20000, damAreaExponent=0.8),
+    ]
+    crops, areas = _crop("f", 80000)
+    crops[0]["cropFactor"] = [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.5]
+    apan = [0] * 12 if monthly_zero else [150, 180, 220, 230, 190, 160, 110, 70, 50, 55, 80, 110]
+    pc = [0.7] * 12
+    if coeff_gap:
+        pc[3] = pc[4] = 0.0  # water-year months 3, 4: January, February
+    pe = {"kind": "monthly", "mm": [120, 140, 170, 175, 150, 120, 80, 50, 35, 40, 60, 90], "source": "invented"} if pe_kind == "monthly" else {"kind": "pan"}
+    s = _settings(apanMm=apan, panCoefficient=pc, pe=pe, lakeEvapFactor=0.8, effectiveRainFraction=0.6,
+                  gr4j={"x1": 250, "x2": 0, "x3": 70, "x4": 1.6, "warmupDays": 40})
+    series = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": rain[:n]},
+        "evap_apan_mm": {"startDate": "2019-12-10", "values": rec},
+    }
+    if outside_run:
+        series["evap_apan_mm"] = {"startDate": "2019-10-01", "values": [4.0] * 60 + [0.0, None, -1.0] * 30}
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": series}
+
+
+def demand_parts_and_windows(dff: str | None = None) -> dict:
+    """Demand factors by part and dated demand factors (§2.3 item 4a, engine
+    >= 1.45.0 and 1.82.0; scenarios.md § Demand scaling) on a farm with crops,
+    a domestic object with people (so the basic-needs floor holds it) and a
+    livestock object, and a senior user below it: the crops × 0.7 by part and
+    the domestic objects × 0.3 on top of the unit's 0.9; a whole-demand window
+    × 1.3 over February 2020, a domestic-only window × 0.5 from 20 February
+    (open-ended), a livestock window × 0 over the first ten days of March with
+    its months-only shape (1 outside March), a crops window wholly before the
+    run, and on the user a window × 0.6 to 15 February (open start). `dff`:
+    settings.demandFactorFrom, before which every factor, the windows' too,
+    is 1."""
+    start = "2020-01-01"
+    n = 100
+    rain = [0.0, 0.0, 6.0, 0.0, 0.0, 0.0, 18.0, 0.0, 0.0, 1.0] * 10
+    one = [1] * 12
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "user", "o", userDemandM3Day=[800] * 12, userPriority="senior", userReturnPct=0,
+              demandFactorWindows=[{"to": "2020-02-15", "factor": [0.6] * 12}]),
+        _node("f", "farm", "s", areaKm2=3, damCapacityM3=80000, damInitialPct=0.7, pctUpstreamToDam=1, pctRunoffToDam=1,
+              demandFactor=[0.9] * 12,
+              partDemandFactor={"crops": [0.7] * 12, "domestic": [0.3] * 12},
+              demandFactorWindows=[
+                  {"from": "2020-02-01", "to": "2020-02-29", "factor": [1.3] * 12},
+                  {"from": "2020-02-20", "factor": [0.5] * 12, "part": "domestic"},
+                  {"from": "2020-03-01", "to": "2020-03-10", "factor": one[:5] + [0] + one[6:], "part": "livestock"},
+                  {"from": "2019-01-01", "to": "2019-06-30", "factor": [0.1] * 12, "part": "crops"},
+              ]),
+    ]
+    crops, areas = _crop("f", 60000)
+    objs = [
+        {"id": "d", "nodeId": "f", "name": "houses", "category": "domestic", "sizing": "perUnit", "monthlyM3Day": None,
+         "count": 400, "litresPerUnitDay": 120, "lossPct": 0.1, "monthlyFactor": None, "population": None,
+         "returnPct": 0.2, "priority": "first", "destination": "internal", "enabled": True, "note": ""},
+        {"id": "l", "nodeId": "f", "name": "cattle", "category": "livestock", "sizing": "monthly",
+         "monthlyM3Day": [30] * 12, "count": None, "litresPerUnitDay": None, "lossPct": 0, "monthlyFactor": None,
+         "returnPct": 0, "priority": "shared", "destination": "internal", "enabled": True, "note": ""},
+    ]
+    s = _settings(effectiveRainFraction=0.5)
+    if dff:
+        s["demandFactorFrom"] = dff
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": [], "demandObjects": objs},
+            "series": {"rain_catchment_mm": {"startDate": start, "values": rain[:n]}}}
+
+
+def land_cover(n: int = 38, baseflow: bool = False, ewr: bool = False, tail: bool = False) -> dict:
+    """Land cover (§2.5a) on two units under Per unit: unit a's patch (its own
+    reductions, 1/6 of the unit) and unit b's two (one class default) whose
+    condensed areas, 5.5 km², are more than b's 4 km², so they are scaled
+    together to the unit (by condensed area: their areas alone add up to 6
+    km²) ; a patch on the gauge and one on a farm without area are skipped,
+    and the patches are listed out of id order. n = 38 days puts the low-flow
+    threshold's Q75 between two ranks (linear: index 0.25 × 37 = 9.25 of the
+    sorted natural flow). `baseflow`: a base-flow loss on b, taken after the
+    reduction (§2.6b: MIN(loss, I) on the runoff less land cover). `ewr`: an
+    EWR at the outlet short most days, so the attribution reads the runoff
+    after land cover. `tail`: 20 days of heavy forecast rain after the record,
+    which the threshold's Q75 leaves out (it reads the historical days, §2.4f)."""
+    start = dt.date(2020, 1, 1)
+    rain = _wave(start, n, 3, 1.0)
+    b_kw = {"baseflowLossM3Day": 900.0} if baseflow else {}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("a", "farm", "o", areaKm2=6, damCapacityM3=20000, damInitialPct=0.5, pctRunoffToDam=0.4),
+        _node("b", "farm", "o", areaKm2=4, **b_kw),
+        _node("z", "farm", "o", areaKm2=0),
+    ]
+    crops, areas = _crop("a", 50000)
+    lc = [
+        {"id": "p3", "nodeId": "b", "coverClass": "pine", "areaKm2": 1, "densityPct": 0.5, "factors": None},
+        {"id": "p1", "nodeId": "a", "coverClass": "other", "areaKm2": 2, "densityPct": 0.5, "factors": {"mar": 0.2, "lowFlow": 0.8}},
+        {"id": "p2", "nodeId": "b", "coverClass": "other", "areaKm2": 5, "densityPct": 1.0, "factors": {"mar": 0.3, "lowFlow": 0.6}},
+        {"id": "p4", "nodeId": "o", "coverClass": "eucalyptus", "areaKm2": 1, "densityPct": 1.0, "factors": None},
+        {"id": "p5", "nodeId": "z", "coverClass": "eucalyptus", "areaKm2": 1, "densityPct": 1.0, "factors": None},
+    ]
+    s = _settings(gr4j={"x1": 150, "x2": 0, "x3": 40, "x4": 1.3, "warmupDays": 0})
+    if ewr:
+        s["ewrPragmaticM3PerDay"] = [6000] * 12
+    series = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": rain}}
+    if tail:
+        series["rain_forecast_mm"] = {"startDate": (start + dt.timedelta(days=n)).isoformat(), "values": [30.0, 45.0, 20.0, 60.0] * 5}
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": [], "landCover": lc},
+            "series": series}
+
+
+def development(kind: str) -> dict:
+    """Development that changes during a run (§2.7g, engine >= 1.30.0), on a
+    year of invented rain from 1 October 2019. `sediment`: a 30 000 m³ dam
+    surveyed on 1 April 2020 losing 0.15 a year, so it starts larger than
+    entered and ends smaller, spilling what it no longer holds (at its
+    full-supply area while it starts a day above the day's capacity); its
+    dead storage, its trigger and stop levels and a dam rule's reserve scale
+    with it; a survey curve on a second dam has its volumes × k. `curve-none`:
+    the same with the full-supply area unknown (the estimate from the entered
+    capacity, which doesn't scale). `in-service`: a dam in service from
+    1 February 2020 with a primary and an emergency dam-target borehole and a
+    pass-inflow release: before it, what is routed to it spills, nothing
+    is released and the boreholes pump direct, the emergency one as
+    supplemental; `in-service-trigger`: a trigger rule on it, river first
+    until then. `filled-run-of-river`: a run-of-river unit whose dam fills
+    with sediment, still river first once it has no capacity. `abstraction`: a farm taking water from 1 March 2020 (its
+    soil-water store running before), a domestic object on it with a floor,
+    and a senior user from 1 January 2020, whose claim passes the farm above
+    only from then; under a full allocation the farm asks for the year's
+    volume over its days from 1 March. `abstraction-gap-year`: a full
+    allocation from 1 October 2019 on a run from 1 September 2019, so the
+    month before is a year wholly before the date with nothing in force. `rate-no-survey`: a sediment rate
+    without a survey date, which runs as the entered dam."""
+    start = dt.date(2019, 10, 1)
+    n = 366
+    rain = _wave(start, n, 4, 1.4)
+    crops, areas = _crop("f", 90000)
+    crops[0]["cropFactor"] = [0.5, 0.7, 0.9, 1.0, 1.0, 0.9, 0.6, 0.4, 0.3, 0.3, 0.4, 0.5]
+    curve = [
+        {"levelM": 0, "areaM2": 0, "volumeM3": 0},
+        {"levelM": 1, "areaM2": 4000, "volumeM3": 2000},
+        {"levelM": 3, "areaM2": 9000, "volumeM3": 15000},
+        {"levelM": 5, "areaM2": 12000, "volumeM3": 40000},
+    ]
+    f_kw: dict = dict(areaKm2=5, damCapacityM3=30000, damInitialPct=0.9, damMinPct=0.1, pctRunoffToDam=0.8,
+                      damAreaFullM2=9000, damAreaExponent=0.8, damSeepagePerDay=0.001)
+    g_kw: dict = dict(areaKm2=3, damCapacityM3=40000, damInitialPct=0.5, pctRunoffToDam=1, damCurve=curve)
+    nodes_extra: list = []
+    alloc: list = []
+    s = _settings(apanMm=[150, 180, 220, 230, 190, 160, 110, 70, 50, 55, 80, 110], lakeEvapFactor=0.8,
+                  effectiveRainFraction=0.6, effectiveRainStoreMm=30,
+                  gr4j={"x1": 250, "x2": 0, "x3": 70, "x4": 1.6, "warmupDays": 120})
+    transfers: list = []
+    objs: list = []
+    if kind in ("sediment", "curve-none"):
+        f_kw.update(damSurveyDate="2020-04-01", damSedimentPctPerYear=0.15, supplyRule="trigger",
+                    supplyTriggerPct=0.4, supplyStopPct=0.7, pumpCapacityM3Day=400)
+        if kind == "curve-none":
+            f_kw["damAreaFullM2"] = None
+        g_kw.update(damSurveyDate="2019-12-01", damSedimentPctPerYear=0.2)
+        transfers = [_rule("t", "g", "f", 600, 0.3)]
+    elif kind == "in-service":
+        f_kw.update(damInServiceFrom="2020-02-01", damInitialPct=0.5, damReleaseRule="passInflow", damReleaseM3Day=[300] * 12)
+        s["boreholes"] = None
+    elif kind == "in-service-trigger":
+        # A trigger rule before the dam exists runs river first (as on a unit without a dam), its pump capped.
+        f_kw.update(damInServiceFrom="2020-02-01", supplyRule="trigger", supplyTriggerPct=0.4, supplyStopPct=0.7,
+                    pumpCapacityM3Day=250, pctRunoffToDam=0.3)
+    elif kind == "filled-run-of-river":
+        # A run-of-river unit whose small dam fills with sediment in the run: still river first once it has no capacity.
+        f_kw.update(damSurveyDate="2019-07-01", damSedimentPctPerYear=0.2, supplyRule="runOfRiver", damCapacityM3=3000,
+                    pumpCapacityM3Day=300)
+    elif kind == "abstraction-gap-year":
+        # The run starts on 1 September 2019, so water year 2019 is a month wholly before abstractionFrom with no
+        # licence in force (it starts on 1 October): factor 0 and a row of 0 m³, not the modelled demand.
+        f_kw.update(abstractionFrom="2020-03-01")
+        s["allocationMode"] = "fullAllocation"
+        alloc = [{"id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 25000, "storageM3": None,
+                  "validFrom": "2019-10-01", "validTo": None, "months": [], "maxRateM3s": None}]
+        start = dt.date(2019, 9, 1)
+        rain = _wave(start, n, 4, 1.4)
+    elif kind == "abstraction":
+        f_kw.update(abstractionFrom="2020-03-01")
+        nodes_extra = [_node("u", "user", "o", userDemandM3Day=[900] * 12, userPriority="senior", userReturnPct=0,
+                             abstractionFrom="2020-01-01")]
+        objs = [{"id": "d", "nodeId": "f", "name": "houses", "category": "domestic", "sizing": "perUnit", "monthlyM3Day": None,
+                 "count": 300, "litresPerUnitDay": 150, "lossPct": 0, "monthlyFactor": None, "population": None,
+                 "returnPct": 0, "priority": "first", "destination": "internal", "enabled": True, "note": ""}]
+        f_kw["demandFactor"] = [0.5] * 12
+        s["allocationMode"] = "fullAllocation"
+        alloc = [{"id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 25000, "storageM3": None,
+                  "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None}]
+    elif kind == "rate-no-survey":
+        f_kw.update(damSedimentPctPerYear=0.2)
+    down = "u" if nodes_extra else "o"
+    nodes = [_node("o", "gauge", None), *nodes_extra, _node("f", "farm", down, **f_kw), _node("g", "farm", "f", **g_kw)]
+    boreholes = []
+    if kind == "in-service":
+        boreholes = [
+            {"id": "b1", "nodeId": "f", "capacityM3Day": 150, "annualCapM3": None, "mode": "primary", "target": "dam", "depletionFactor": 0},
+            {"id": "b2", "nodeId": "f", "capacityM3Day": 200, "annualCapM3": None, "mode": "emergency", "emergencyBelowPct": 0.5,
+             "target": "dam", "depletionFactor": 0},
+        ]
+        s.pop("boreholes")
+    m = {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": transfers, "demandObjects": objs,
+         "boreholes": boreholes, "allocations": alloc}
+    return {"settings": s, "model": m, "series": {"rain_catchment_mm": {"startDate": start.isoformat(), "values": rain}}}
+
+
 def _zone(gauge: str, gr4j: dict | None, enabled: bool = True) -> dict:
     return {
         "nodeId": gauge, "enabled": enabled, "calibrationStart": None, "calibrationEnd": None, "calibrationFlowKind": None,
@@ -1938,6 +2174,30 @@ PROBES = {
     "daily-et0-monthly-pe": daily_et0_monthly_pe(),
     "daily-et0-pan-pe": daily_et0_monthly_pe("pan"),
     "daily-et0-zero-row": daily_et0_monthly_pe(zero_row=True),
+    # The daily A-pan record (§2.3a).
+    "apan-daily": apan_daily(),
+    "apan-daily-monthly-pe": apan_daily("monthly"),
+    "apan-daily-only": apan_daily(monthly_zero=True),
+    "apan-daily-no-pet": apan_daily(monthly_zero=True, coeff_gap=True),
+    "apan-daily-outside-run": apan_daily(monthly_zero=True, outside_run=True),
+    # Demand factors by part and dated demand factors (§2.3 item 4a).
+    "demand-parts-windows": demand_parts_and_windows(),
+    "demand-parts-windows-from": demand_parts_and_windows("2020-02-10"),
+    # Land cover (§2.5a).
+    "land-cover-q75": land_cover(),
+    "land-cover-odd-days": land_cover(37),
+    "land-cover-baseflow": land_cover(baseflow=True),
+    "land-cover-ewr": land_cover(120, ewr=True),
+    "land-cover-forecast-tail": land_cover(tail=True),
+    # Development that changes during a run (§2.7g).
+    "development-sediment": development("sediment"),
+    "development-curve-none": development("curve-none"),
+    "development-in-service": development("in-service"),
+    "development-in-service-trigger": development("in-service-trigger"),
+    "development-filled-run-of-river": development("filled-run-of-river"),
+    "development-abstraction": development("abstraction"),
+    "development-abstraction-gap-year": development("abstraction-gap-year"),
+    "development-rate-no-survey": development("rate-no-survey"),
     # The forecast-conditioned outlook's member (issue #620 step 6).
     "forecast-member-rescaled": forecast_member_rescaled(),
     # Future climate (issue #621, §2.17): the op on a dam, then on the per-unit rules (the MAPs by the annual
