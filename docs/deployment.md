@@ -1679,7 +1679,10 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
      and the copy's `changes` don't go back that far), in parts over a few
      ticks, and the feeds read them again from the copy over the next
      fetches. Nothing to do but expect `mirror_revision_partial` then
-     `mirror_revision_applied` in the worker's logs ([data-model.md §
+     `mirror_revision_applied` in the worker's logs, then a
+     `feed_copy_read` line per CHIRPS or CHIRPS-GEFS fetch read from the copy
+     (its window, `outcome` and `ms`; the fetcher's `feed_fetched` covers only
+     the fetches it makes) ([data-model.md §
      Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql-246_mirror_revision_partssql)).
   5. **Re-enable** the CHIRPS feeds paused since the 403s (#571), and watch
      the first day: feeds catch up from the copy in minutes, and none shows
