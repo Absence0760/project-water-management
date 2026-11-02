@@ -2,9 +2,9 @@
 // for the big number arrays a run stores (runs/execute.ts storeRun).
 //
 // node-postgres sends every parameter as text unless it is a Buffer, which it
-// sends in the binary format. A run's 432 series of 16 161 days went over as
-// ~95 MB of `{1.25,0.5,…}` text: ~1.2 s to build in Node and as long again for
-// the server to parse 7 million numbers back (docs/followups.md § V1 run
+// sends in the binary format. A client-sized run's 400-odd series of some
+// 16 000 days each went over as ~95 MB of `{1.25,0.5,…}` text: ~1.2 s to build
+// in Node and as long again for the server to parse 7 million numbers back (docs/followups.md § V1 run
 // budget). This is 12 bytes a value, written with no number formatting, and
 // read by the server with no parsing. Bind it with an explicit cast
 // (`$n::float8[]`) so the server knows which type's binary input to use.

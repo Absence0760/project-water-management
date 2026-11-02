@@ -221,7 +221,7 @@ export async function chirpsSeriesChoice(db: Db, projectId: string): Promise<Ser
 		 FROM time_series s
 		 -- One pass over the array. Subscripting it per day ("values"[i] over
 		 -- generate_subscripts) detoasted the whole array for every day: 6.8 s
-		 -- for a 16 161-day record, most of a client-sized run (followups.md § V1 run budget).
+		 -- for a record of some 16 000 days, most of a client-sized run (followups.md § V1 run budget).
 		 CROSS JOIN LATERAL (SELECT min(o)::int AS first, max(o)::int AS last FROM unnest(s."values") WITH ORDINALITY u(v, o) WHERE v IS NOT NULL) d
 		 WHERE s.project_id = $1 AND s.kind = 'rain_chirps_mm'
 		 ORDER BY s.site_node_id NULLS FIRST, s.name COLLATE "C"`,
