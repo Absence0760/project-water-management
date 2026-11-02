@@ -73,7 +73,7 @@ function fromGeoJson(v: unknown): MapGeometry {
 	if (typeof crs === 'string' && !/(EPSG::?4326|CRS84)$/i.test(crs)) throw new Refused(`It’s in ${crs}; reproject it to WGS84 (EPSG:4326).`);
 	if (o.type === 'FeatureCollection') {
 		const fs = Array.isArray(o.features) ? o.features : [];
-		if (fs.length !== 1) throw new Refused(`It holds ${fs.length} features; paste one shape, or upload the file (Upload GeoJSON) for several.`);
+		if (fs.length !== 1) throw new Refused(`It holds ${fs.length} features; paste one shape, or upload the file (Upload map file) for several.`);
 		return fromGeoJson(fs[0]);
 	}
 	if (o.type === 'Feature') {
@@ -162,7 +162,7 @@ function fromWkt(text: string): MapGeometry {
 export function parseShape(text: string): Parsed {
 	const t = text.trim();
 	if (!t) return { error: 'Paste a shape first.' };
-	if (t.length > PASTE_MAX_CHARS) return { error: 'That is too long to paste; upload it as a GeoJSON file instead.' };
+	if (t.length > PASTE_MAX_CHARS) return { error: 'That is too long to paste; upload it as a file instead (Upload map file).' };
 	try {
 		if (t.startsWith('{') || t.startsWith('[')) {
 			let v: unknown;

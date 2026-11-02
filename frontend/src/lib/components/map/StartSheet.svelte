@@ -293,7 +293,7 @@
 					<button type="button" class="btn btn-primary" onclick={ondelineate} data-testid="start-delineate">Delineate from the outlet</button>
 				{/if}
 				<button type="button" class={ondelineate ? 'btn' : 'btn btn-primary'} onclick={ondraw} data-testid="start-draw">Draw the boundary</button>
-				<button type="button" class="btn" onclick={onupload}>Upload a GeoJSON file</button>
+				<button type="button" class="btn" onclick={onupload}>Upload a map file</button>
 			</div>
 			{#if !ondelineate}
 				<!-- Delineation off (DEM_URL empty, maps.md § Delineation): say so, rather than leave the way out unexplained (WP-4.10). -->

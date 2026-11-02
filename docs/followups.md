@@ -5109,13 +5109,16 @@ Phases 1–2 of WP-3.12 landed (2026-10-01: migration 152, `backend/src/geo/`,
 the Map tab, Settings → WR2012 check → Propose from the map;
 [maps.md](./maps.md)). Left, from the WP and the issue:
 
-- [ ] **Shapefile import** (zipped `.shp`/`.dbf`/`.prj`, parsed in the browser
-      with `shpjs`, reprojected from the `.prj` with proj4, Hartebeesthoek94
-      Lo zones; an unknown projection refused). Today the form turns a
-      `.zip`/`.shp` away with how to export GeoJSON in EPSG:4326 from QGIS.
-      Needs the zip-bomb test and the "Lo projection within 0.5 % of a
-      reference area" acceptance test. Trigger: a client holding only
-      shapefiles.
+- [x] **Shapefile import** (2026-11-02, with KML and KMZ; the client's
+      hydrologist confirmed it): zipped `.shp`/`.dbf`/`.prj` parsed in the
+      browser (the app's own `.shp` reader and `parsedbf`; `shpjs` would
+      have brought all of proj4), reprojected from the `.prj` with proj4 (Lo zones,
+      UTM; an unreadable `.prj`, a missing one in metres and a datum with no
+      shift refused), KML/KMZ with `@tmcw/togeojson`, then sent as GeoJSON
+      through the unchanged server checks. The zip-bomb tests and the "Lo
+      projection within 0.5 %" acceptance test are in
+      `map/upload/upload.test.ts` ([maps.md § Shapefiles and
+      KML](./maps.md#shapefiles-and-kml)).
 - [x] **Production basemap** (2026-10-02, PR feat/infra-map-data): the
       tiles bucket and the same-origin `/tiles/*` behaviour
       (`infra/map_data.tf`, `s3_cloudfront.tf`: cached, its own OAC, the

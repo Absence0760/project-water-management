@@ -8,6 +8,7 @@
 // warns that it replaces it, and Import waits for "Replace the current
 // boundary". The list, never the map's pixels, says what went in.
 // Synthetic data only: the sample model's names and invented boxes.
+import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
@@ -34,9 +35,16 @@ const halfRefused = JSON.stringify({
 });
 
 
+/** The synthetic KML and zipped shapefile the upload's unit tests build (frontend/src/lib/components/map/upload/__fixtures__/build.ts). */
+const fixture = (name: string, mimeType: string) => ({
+	name,
+	mimeType,
+	buffer: readFileSync(new URL(`../../frontend/src/lib/components/map/upload/__fixtures__/${name}`, import.meta.url))
+});
+
 async function review(page: Page, name: string, text: string) {
 	const sheet = await openUploadSheet(page);
-	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile(name, text));
+	await sheet.getByLabel(/^Map file/).setInputFiles(geoFile(name, text));
 	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
 	await expect(sheet.getByTestId('map-review-table')).toBeVisible();
 	return sheet;
@@ -118,7 +126,7 @@ test('a refused feature lists its problem on its row, and the file imports nothi
 	await expectNoViolations(page);
 
 	await sheet.getByRole('button', { name: 'Choose another file' }).click();
-	await expect(sheet.getByLabel(/^GeoJSON file/)).toBeVisible();
+	await expect(sheet.getByLabel(/^Map file/)).toBeVisible();
 	await sheet.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
 });
@@ -221,11 +229,11 @@ test('a file nothing in can be imported says so once and leaves Choose another f
 	for (const size of [{ width: 1440, height: 960 }, { width: 390, height: 844 }]) {
 		await page.setViewportSize(size);
 		await openMap(page, project.id, '&upload=1');
-		const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
+		const sheet = page.getByRole('dialog', { name: 'Upload a map file' });
 		// The empty sheet: one short line under the file field; the rest stays its description.
-		await expect(sheet.locator('.hint').first()).toHaveText(/^WGS84 longitude and latitude; a file in a Lo zone or UTM is refused\./);
-		await expect(sheet.getByLabel(/^GeoJSON file/)).toHaveAccessibleDescription(/reproject it first \(QGIS: Export → Save Features As, CRS EPSG:4326\)/);
-		await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile('lo19.geojson', JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [-45_000, 3_700_000] } }] })));
+		await expect(sheet.locator('.hint').first()).toHaveText(/^A shapefile in a Lo zone or UTM is reprojected from its \.prj; GeoJSON must be WGS84\./);
+		await expect(sheet.getByLabel(/^Map file/)).toHaveAccessibleDescription(/reproject it first \(QGIS: Export → Save Features As, CRS EPSG:4326\)/);
+		await sheet.getByLabel(/^Map file/).setInputFiles(geoFile('lo19.geojson', JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [-45_000, 3_700_000] } }] })));
 		await sheet.getByRole('button', { name: 'Review', exact: true }).click();
 		await expect(sheet.getByTestId('map-review-summary')).toContainText('Nothing in this file can be imported.');
 		await expect(sheet.getByTestId('map-review-summary')).not.toContainText('Check each kind');
@@ -237,6 +245,60 @@ test('a file nothing in can be imported says so once and leaves Choose another f
 		await expectNoSidewaysScroll(page);
 		await expectNoViolations(page);
 		await sheet.getByRole('button', { name: 'Choose another file' }).click();
-		await expect(sheet.getByLabel(/^GeoJSON file/)).toBeVisible();
+		await expect(sheet.getByLabel(/^Map file/)).toBeVisible();
 	}
+});
+
+test('a KML and a zipped shapefile in a Lo zone are read in the browser and land on the map', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'KML and shapefile import');
+	await openMap(page, project.id);
+
+	// The KML: four shapes from three placemarks (a MultiGeometry split by shape), the one with no shape left out.
+	let sheet = await openUploadSheet(page);
+	await sheet.getByLabel(/^Map file/).setInputFiles(fixture('synthetic-farm.kml', 'application/vnd.google-earth.kml+xml'));
+	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
+	await expect(sheet.getByTestId('map-review-read-as')).toHaveText('Read from a KML file: 4 placemarks. 1 placemark with no shape left out.');
+	await expect(sheet.getByTestId('map-review-summary')).toContainText('synthetic-farm.kml: 4 features');
+	await expect(sheet.getByLabel('Kind of feature 1')).toHaveValue('dam');
+	await expect(sheet.getByLabel('Kind of feature 4')).toHaveValue('river');
+	await expectNoViolations(page, { include: 'dialog[open]' });
+	await sheet.getByRole('button', { name: 'Import 4 features' }).click();
+	await expect(page.getByTestId('map-notice')).toContainText('Imported 4 features from synthetic-farm.kml.');
+	await expect(sheet).toBeHidden();
+	await expect(page).not.toHaveURL(/[?&]upload=1/);
+
+	// The zipped shapefile, in Hartebeesthoek94 Lo19 (westing/southing): reprojected from its .prj, named from its .dbf.
+	sheet = await openUploadSheet(page);
+	await sheet.getByLabel(/^Map file/).setInputFiles(fixture('synthetic-parcels-lo19.zip', 'application/zip'));
+	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
+	await expect(sheet.getByTestId('map-review-read-as')).toHaveText('Read from a zipped shapefile, reprojected from Hartebeesthoek94 / Lo19 to WGS84.');
+	await expect(sheet.getByTestId('map-review-summary')).toContainText('synthetic-parcels-lo19.zip: 2 features (2 farm parcels)');
+	await sheet.getByRole('button', { name: 'Import 2 features' }).click();
+	await expect(page.getByTestId('map-notice')).toContainText('Imported 2 features from synthetic-parcels-lo19.zip.');
+	await expect(sheet).toBeHidden();
+
+	await showTab(page, 'features');
+	const list = page.getByTestId('map-feature-list');
+	await expect(list.getByRole('group', { name: /Farm parcels/ }).locator('.nm')).toHaveText(['Synthetic parcel A', 'Synthetic fields', 'Synthetic parcel B']); // largest first
+	await expect(list.getByRole('group', { name: /Dams/ }).locator('.nm')).toHaveText(['Synthetic dam']);
+	await expect(list.getByRole('group', { name: /Rivers/ }).locator('.nm')).toHaveText(['Synthetic stream']);
+	// Both files are listed under Imported files, by the names they were picked with.
+	sheet = await openUploadSheet(page);
+	await expect(sheet.getByText('synthetic-farm.kml', { exact: true })).toBeVisible();
+	await expect(sheet.getByText('synthetic-parcels-lo19.zip', { exact: true })).toBeVisible();
+});
+
+test('a lone .shp and a broken zip are refused in the browser, saying why', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Shapefile without prj');
+	await openMap(page, project.id);
+	const sheet = await openUploadSheet(page);
+	await sheet.getByLabel(/^Map file/).setInputFiles({ name: 'parcels.shp', mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
+	await expect(sheet.getByTestId('map-import-error')).toHaveText('A shapefile is several files: zip the layer’s .shp, .shx, .dbf and .prj together and upload the .zip.');
+	await sheet.getByLabel(/^Map file/).setInputFiles({ name: 'broken.zip', mimeType: 'application/zip', buffer: Buffer.from('not a zip') });
+	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
+	await expect(sheet.getByTestId('map-import-error')).toHaveText('This file isn’t a zip we can open: it may be damaged or only partly downloaded.');
+	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
 });

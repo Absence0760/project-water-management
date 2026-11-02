@@ -48,8 +48,8 @@ export function mapSetupSteps(s: { boundaryName: string | null; rain: RainReads;
 				title: 'Catchment boundary',
 				done: false,
 				detail: s.canDelineate
-					? 'No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it as a GeoJSON file (WGS84).'
-					: 'No catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file (WGS84).'
+					? 'No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it from a file (GeoJSON, KML or a zipped shapefile).'
+					: 'No catchment boundary yet. Draw it on the map, or upload it from a file (GeoJSON, KML or a zipped shapefile).'
 			};
 	const rain: MapSetupStep = !hasBoundary
 		? { id: 'rain', title: 'Rain from the boundary', done: false, detail: 'Once the boundary is on the map, a rain feed can read the cells inside it.' }

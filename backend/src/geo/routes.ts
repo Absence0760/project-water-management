@@ -36,7 +36,7 @@ import {
 	centerOf,
 	checkGeometry,
 	FEATURE_NAME_MAX,
-	featureNameOf,
+	nameFromFileName,
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	KIND_GEOMETRY,
@@ -346,7 +346,7 @@ interface ImportRow {
 }
 type Made = { problems: GeoProblem[]; rows: ImportRow[] };
 
-const boundaryName = (name: string, fileName: string) => name || featureNameOf(fileName.replace(/\.(geo)?json$/i, ''));
+const boundaryName = (name: string, fileName: string) => name || nameFromFileName(fileName);
 const mismatch = (f: ParsedFeature, kind: MapFeatureKind): GeoProblem => ({
 	feature: f.index,
 	message: `is a ${f.geometry.type}; ${KIND_LABEL[kind]} is a ${KIND_TYPES[kind].join(' or ')}`

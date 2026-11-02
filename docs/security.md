@@ -3610,8 +3610,22 @@ placed points. The server never trusts the browser with geometry:
   problem ("too detailed … simplify it", 400 on the accept routes), not
   minutes of CPU (`geo/clip.test.ts`, `feeds/boundaryCells.test.ts`). The import route has its own body limit (7 MB of JSON, `app.ts`
   exempts that one path from the general 4 MB), and the parse is
-  `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
-  there is no archive to bomb), no external references.
+  `JSON.parse` of a string: no XML, no zip, no external references on the
+  server. A KML, KMZ or zipped shapefile is parsed **in the browser** into
+  GeoJSON, which then meets every server check above; the browser is the
+  untrusted file's only parser, and it is the uploader's own browser
+  ([maps.md § Shapefiles and KML](./maps.md#shapefiles-and-kml)). The
+  parsing threats there are bounded anyway: a **zip bomb** (the app's own
+  zip reader, `map/upload/zip.ts`, inflates only the entries it needs, refuses
+  one on its declared size, counts the bytes as they stream and stops past
+  the declared size or a 50 MB total, and refuses encrypted, ZIP64 and
+  unknown methods), **XML entities** (the browser's `DOMParser` fetches no
+  external entity, DTD or XInclude, and a KML declaring a `DOCTYPE` or an
+  `ENTITY` is refused before parsing, so no internal entity expansion), and
+  **size** (25 MB picked, 500 records or placemarks counted before
+  conversion, 5 MB of GeoJSON out). `rawHtml.test.ts` allows a `DOMParser`
+  call only with a literal XML type: the parsed KML is read, never
+  rendered.
 - Every **area is computed on the server** (`geo/area.ts`); a client's figure
   is never accepted. An area reaches the model only through
   `area-from-map`, an editor's explicit action recorded as a model revision;

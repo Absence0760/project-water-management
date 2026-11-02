@@ -7,7 +7,7 @@
 	// largest, opened on few visits (an empty model), loads when opened,
 	// which keeps the tab under its 60 KB budget (61 → 57 KB, issue #374;
 	// splitting Divide the model too saved 2 KB more for 3 KB of overhead).
-	// Upload GeoJSON (the sheet and its review table, importReview.ts) loads
+	// Upload map file (the sheet and its review table, importReview.ts) loads
 	// when opened too: round 3's delineation work took the tab back to 62 KB,
 	// and the split brought it to 58 KB for ~1.8 KB of overhead in the total.
 	const loadMap = () => import('./CatchmentMap.svelte');
@@ -1190,7 +1190,7 @@
 <!-- The page's actions only: the map's tools are on the map (MapToolPalette). -->
 {#snippet headerActions()}
 	{#if canEdit}
-		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
+		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload map file</a>
 		{#if canStart}
 			<a class="btn" href={withParam(page.url, 'start', '1')} data-testid="map-start-open">{pendingStart ? 'Review the proposed model' : 'Start from the map'}</a>
 		{/if}
@@ -1382,7 +1382,7 @@
 				{/if}
 				<button type="button" class={delineation?.available ? 'btn' : 'btn btn-primary'} onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button>
 			</p>
-			<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
+			<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it from a file</a> (GeoJSON, KML or a zipped shapefile), or place a point.</p>
 			{#if canStart}
 				<p class="empty-line small">
 					<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then each unit’s own boundary, and the app proposes their order and links the dams and pumps inside each.

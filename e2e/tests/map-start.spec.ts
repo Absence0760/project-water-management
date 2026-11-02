@@ -75,7 +75,7 @@ test('an editor starts an empty model from the map: delineate, the units’ boun
 	const empty = page.getByTestId('map-no-boundary');
 	await expect(empty.getByTestId('map-empty-delineate')).toBeVisible();
 	await expect(empty.getByTestId('map-draw-boundary')).toBeVisible();
-	await expect(empty.getByRole('link', { name: 'upload it as a GeoJSON file' })).toBeVisible();
+	await expect(empty.getByRole('link', { name: 'upload it from a file' })).toBeVisible();
 	await empty.getByTestId('map-empty-start').click();
 	await expect(page).toHaveURL(/[?&]start=1(&|$)/);
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'boundary');

@@ -13,6 +13,7 @@ import {
 	interiorPoint,
 	intersectionArea,
 	kindFromWord,
+	nameFromFileName,
 	parseGeoJson,
 	pointInGeometry,
 	OVERLAP_SHARE,
@@ -622,5 +623,18 @@ describe('intersectionArea', () => {
 				throw new Error('too much');
 			})
 		).toThrow('too much');
+	});
+});
+
+describe('nameFromFileName', () => {
+	it('drops the extension of every format the upload takes, and only that', () => {
+		expect(['Upper catchment.geojson', 'b.JSON', 'farm.kml', 'farm.KMZ', 'parcels-lo19.zip', 'notes.txt'].map(nameFromFileName)).toEqual([
+			'Upper catchment',
+			'b',
+			'farm',
+			'farm',
+			'parcels-lo19',
+			'notes.txt'
+		]);
 	});
 });

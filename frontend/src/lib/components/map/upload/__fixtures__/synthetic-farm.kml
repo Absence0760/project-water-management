@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+	<name>Synthetic farm</name>
+	<Folder>
+		<name>Dams</name>
+		<Placemark>
+			<name>Synthetic dam</name>
+			<description>Invented outline</description>
+			<ExtendedData><Data name="kind"><value>dam</value></Data><Data name="ref"><value>SD-1</value></Data></ExtendedData>
+			<Polygon><outerBoundaryIs><LinearRing><coordinates>
+				19.50,-33.50,120 19.51,-33.50,120 19.51,-33.51,120 19.50,-33.51,120 19.50,-33.50,120
+			</coordinates></LinearRing></outerBoundaryIs></Polygon>
+		</Placemark>
+	</Folder>
+	<Placemark>
+		<name>Synthetic fields</name>
+		<MultiGeometry>
+			<Polygon><outerBoundaryIs><LinearRing><coordinates>19.52,-33.50 19.53,-33.50 19.53,-33.51 19.52,-33.51 19.52,-33.50</coordinates></LinearRing></outerBoundaryIs></Polygon>
+			<Polygon><outerBoundaryIs><LinearRing><coordinates>19.54,-33.50 19.55,-33.50 19.55,-33.51 19.54,-33.51 19.54,-33.50</coordinates></LinearRing></outerBoundaryIs></Polygon>
+			<Point><coordinates>19.525,-33.515,0</coordinates></Point>
+		</MultiGeometry>
+	</Placemark>
+	<Placemark>
+		<name>Synthetic stream</name>
+		<ExtendedData><SchemaData schemaUrl="#s"><SimpleData name="layer">streams</SimpleData></SchemaData></ExtendedData>
+		<LineString><coordinates>19.49,-33.49,0 19.50,-33.52,0 19.56,-33.53,0</coordinates></LineString>
+	</Placemark>
+	<Placemark>
+		<name>A note with no shape</name>
+	</Placemark>
+</Document>
+</kml>
