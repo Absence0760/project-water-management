@@ -190,7 +190,9 @@ execution's hold. A month that dies, or an execution stopped by hand, leaves a
 hold that expires on its own; to free it at once, delete
 `ingest-state/hosts/chc/lease.json` (docs/deployment.md § Backfill). A month
 that finds the slot held by anyone else reserves the next turn
-(`ingest-state/hosts/chc/reserved.json`, 5 minutes, renewed by each retry);
+(`ingest-state/hosts/chc/reserved.json`, 5 minutes, renewed by each retry),
+unless someone else's is live (the fetcher's scheduled passes reserve the
+same way while they wait), which it waits behind instead of overwriting;
 any other taker, here or in the fetcher, that takes a free slot with someone
 else's live reservation gives it back and is busy. The hold's take, keep and
 release are logged with the holder's name. A backfill event sent by hand

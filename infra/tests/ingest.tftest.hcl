@@ -1175,12 +1175,12 @@ run "daily_ingest_off_by_default" {
       alltrue([for s in data.aws_iam_policy_document.fetcher_chc_slot.statement :
         s.effect != "Deny" && (
           (toset(s.actions) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]) && toset(s.resources) == toset(["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/lease.json"])) ||
-          (toset(s.actions) == toset(["s3:GetObject"]) && toset(s.resources) == toset(["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/reserved.json"])) ||
+          (toset(s.actions) == toset(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]) && toset(s.resources) == toset(["${aws_s3_bucket.mirror.arn}/ingest-state/hosts/chc/reserved.json"])) ||
           (toset(s.actions) == toset(["s3:ListBucket"]) && toset(s.resources) == toset([aws_s3_bucket.mirror.arn]))
         )
       ])
     )
-    error_message = "The fetcher may read, create, take over and delete CHC's request slot (ingest-state/hosts/chc/lease.json), only read its reservation (reserved.json), and nothing else in the mirror bucket, daily ingest on or off."
+    error_message = "The fetcher may read, create, take over and delete CHC's request slot (ingest-state/hosts/chc/lease.json), read, create, renew and delete its reservation (reserved.json), and nothing else in the mirror bucket, daily ingest on or off."
   }
 }
 

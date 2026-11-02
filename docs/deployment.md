@@ -1921,6 +1921,21 @@ machine's change. The fetcher's read grant on `reserved.json` comes with the
 same apply; the fetcher ignores a reservation it can't read, so the backend
 release can go in either order.
 
+**The scheduled passes reserve too** (2026-11-01: the preliminary pass
+twice found the slot held by `fetcher:chirps` and copied nothing, the
+crawl's per-feed fetches holding it 9–12 minutes each, back to back). A
+preliminary or GEFS pass that finds the slot held reserves the next turn
+(`reserved.json`, holder `fetcher:prelim` or `fetcher:gefs`, renewed every
+15 s), never over a backfill's live reservation, and waits until 150 s
+before its deadline (about 12 minutes); the next per-feed fetch then
+defers (`feed_fetch_deferred`, `reserved: true`) and the pass takes the
+freed slot within 15 s. It withdraws its reservation once it holds the slot
+or gives up; one left by a killed run lapses 5 minutes after its last
+renewal. The fetcher's write and delete grant on `reserved.json` comes with
+Terraform (`fetcher_chc_slot`): apply it with or before the backend release.
+Without it the reservation fails, logged (`host_slot_reservation_failed`),
+and the pass still waits the longer wait without one.
+
 **Rolling out the shared slot:** apply Terraform (the fetcher's
 `fetcher_chc_slot` grant on that one key, the state machine's `HostBusy`
 retrier) **before** the backend release that brings it, since without the

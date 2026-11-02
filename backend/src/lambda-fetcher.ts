@@ -55,8 +55,10 @@
 // GEFS pass) first takes the one slot it shares with the Python mirror-ingest
 // Lambda, so at most one of our processes asks CHC at a time. A fetch request
 // that finds it held is answered HOST_BUSY_ANSWER at once (the worker queues
-// the fetch again; no failure, no SQS retry); a scheduled pass waits a little
-// for it, then skips that run (`stopped: "host_busy"`), its next run catching up.
+// the fetch again; no failure, no SQS retry); a scheduled pass reserves the
+// next turn and waits for it through most of its run (feeds/hostSlot.ts
+// takeHostSlotWaiting, HOST_SLOT_PASS_WORK_MS), and only if it is still held
+// then skips that run (`stopped: "host_busy"`), its next run catching up.
 //
 // Like lambda.ts, this must never import a module that loads dotenv
 // (lambda-fetcher.test.ts bundles it to check).
@@ -239,8 +241,10 @@ async function fetchHoldingSlot(
 
 /**
  * Run a scheduled pass that asks CHC (the preliminary days, GEFS) holding
- * CHC's request slot, waiting a little for a held one (feeds/hostSlot.ts
- * takeHostSlotWaiting); the pass measures its own budget once it holds it.
+ * CHC's request slot, reserving the next turn and waiting for a held one
+ * until HOST_SLOT_PASS_WORK_MS before its deadline (feeds/hostSlot.ts
+ * takeHostSlotWaiting: long enough to outlast one per-feed CHIRPS fetch);
+ * the pass measures its own budget once it holds it.
  * Still held at the wait's end: the pass is skipped, logged (`host_busy`,
  * not an error, no lag datapoint this run), and its next run catches up. A
  * failure to read or write the slot throws: the invocation fails (the

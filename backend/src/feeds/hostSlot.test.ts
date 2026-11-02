@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HOST_BUSY_ANSWER, HOST_SLOT_DEFAULT_MS, HOST_SLOT_MARGIN_MS, HostBusyAnswer, hostReservationKey, hostSlotKey, hostSlots, type SlotS3, slotHostFor, takeHostSlotWaiting } from './hostSlot.js';
+import { HOST_BUSY_ANSWER, HOST_RESERVATION_MS, HOST_SLOT_DEFAULT_MS, HOST_SLOT_MARGIN_MS, HOST_SLOT_PASS_WORK_MS, HostBusyAnswer, hostReservationKey, hostSlotKey, hostSlots, type SlotS3, slotHostFor, takeHostSlotWaiting } from './hostSlot.js';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -125,7 +125,7 @@ describe('CHC request slot (feeds/hostSlot.ts)', () => {
 			busy: { holder: 'ingest:backfill:run-1', until: new Date(now + 300_000).toISOString(), reserved: true }
 		});
 		expect(s3.objects.has(`mirror/pre/${KEY}`)).toBe(false); // given back
-		expect(s3.objects.get(`mirror/pre/${RESERVED}`)).toBe(reservation); // only ever read here
+		expect(s3.objects.get(`mirror/pre/${RESERVED}`)).toBe(reservation); // someone else's: left alone
 		// Expired (the backfill gave up or took its turn and died): ignored.
 		s3.objects.set(`mirror/pre/${RESERVED}`, JSON.stringify({ owner: 'backfill:run-1', expires: now / 1000 - 1 }));
 		const t = await slots.take('chc', { holder: 'fetcher:chirps', remainingMs: 1000 });
@@ -228,7 +228,9 @@ describe('takeHostSlotWaiting (the scheduled passes)', () => {
 		return {
 			tries: () => tries,
 			slots: {
-				take: async () => (++tries > n ? { held: { owner: 'x', release: async () => {} } } : { busy: { holder: 'ingest:rnl:backfill', until: null } })
+				take: async () => (++tries > n ? { held: { owner: 'x', release: async () => {} } } : { busy: { holder: 'ingest:rnl:backfill', until: null } }),
+				reserve: async () => true,
+				withdraw: async () => {}
 			}
 		};
 	};
@@ -260,6 +262,165 @@ describe('takeHostSlotWaiting (the scheduled passes)', () => {
 		const c2 = clock();
 		await takeHostSlotWaiting(held(Infinity).slots, 'chc', { holder: 'p', deadline: 20_000, waitMs: 180_000, pollMs: 15_000, now: c2.now, sleep: c2.sleep });
 		expect(c2.at()).toBe(15_000);
+	});
+
+	it('by default waits until HOST_SLOT_PASS_WORK_MS before its deadline: long enough to outlast one per-feed fetch', async () => {
+		const c = clock();
+		// The fetcher's 900 s run less the 20 s save margin, as lambda-fetcher.ts holdingPassSlot sets it.
+		const deadline = 880_000;
+		expect(await takeHostSlotWaiting(held(Infinity).slots, 'chc', { holder: 'p', deadline, pollMs: 15_000, now: c.now, sleep: c.sleep })).toHaveProperty('busy');
+		expect(c.at()).toBeLessThanOrEqual(deadline - HOST_SLOT_PASS_WORK_MS);
+		expect(c.at()).toBeGreaterThan(deadline - HOST_SLOT_PASS_WORK_MS - 15_000);
+		// Longer than the longest per-feed CHIRPS fetch seen in production (707 s, 2026-11-01).
+		expect(c.at()).toBeGreaterThan(707_000);
+	});
+
+	it('a reservation that can’t be written is logged and the wait goes on: it is advisory', async () => {
+		const c = clock();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const h = held(2);
+		const slots = {
+			...h.slots,
+			reserve: async () => {
+				throw Object.assign(new Error('Access Denied'), { name: 'AccessDenied' });
+			}
+		};
+		expect(await takeHostSlotWaiting(slots, 'chc', { holder: 'fetcher:prelim', deadline: 1e9, pollMs: 15_000, now: c.now, sleep: c.sleep })).toHaveProperty('held');
+		expect(warn.mock.calls.map(([l]) => JSON.parse(l as string)).find((l) => l.event === 'host_slot_reservation_failed')).toMatchObject({ host: 'chc', holder: 'fetcher:prelim', error: 'AccessDenied' });
+		warn.mockRestore();
+	});
+});
+
+// The fix for 2026-11-01's skipped preliminary pass: back-to-back per-feed
+// CHIRPS fetches (9–12 minutes each) outran a pass that only polled.
+describe.each([
+	['S3', () => ({ s3: new FakeS3(), url: 's3://mirror/pre' })],
+	['file://', () => ({ s3: undefined, url: pathToFileURL(`${tmp()}/`).href })]
+] as const)('takeHostSlotWaiting reserves the next turn (%s)', (_name, setup) => {
+	const NOW = 2_000_000_000_000;
+	/** One clock for the slots and the wait; `onSleep` runs at each pause, as time moves on. */
+	const world = () => {
+		const { s3, url } = setup();
+		let t = NOW;
+		const clock = { now: () => t };
+		const slots = hostSlots(url, { s3, now: clock.now })!;
+		const dir = url.startsWith('file:') ? new URL(url).pathname : null;
+		const read = (key: string): string | undefined => {
+			if (s3) return s3.objects.get(`mirror/pre/${key}`);
+			return existsSync(join(dir!, key)) ? readFileSync(join(dir!, key), 'utf8') : undefined;
+		};
+		const write = (key: string, b: object) => {
+			if (s3) s3.objects.set(`mirror/pre/${key}`, JSON.stringify(b));
+			else {
+				mkdirSync(dirname(join(dir!, key)), { recursive: true });
+				writeFileSync(join(dir!, key), JSON.stringify(b));
+			}
+		};
+		const remove = (key: string) => (s3 ? s3.objects.delete(`mirror/pre/${key}`) : rmSync(join(dir!, key), { force: true }));
+		return { slots, clock, read, write, remove, advance: (ms: number) => void (t += ms), at: () => t };
+	};
+	/** A per-feed CHIRPS fetch holding the slot for ~11 minutes (its Lambda's deadline plus the margin). */
+	const longFetch = { owner: 'fetch-1', expires: NOW / 1000 + 900, holder: 'fetcher:chirps' };
+
+	it('waits behind a long holder with a reservation, takes the slot on release, and a competing take meanwhile is busy reserved', async () => {
+		const w = world();
+		w.write(KEY, longFetch);
+		const competing: unknown[] = [];
+		let reservationSeen: { owner: string; expires: number; holder: string } | null = null;
+		const sleep = async (ms: number) => {
+			w.advance(ms);
+			reservationSeen ??= JSON.parse(w.read(RESERVED)!);
+			// The fetch ends ~11 minutes in, and the FIFO's next CHIRPS fetch tries at once: it must yield.
+			if (w.at() >= NOW + 660_000 && w.read(KEY)?.includes('fetch-1')) {
+				w.remove(KEY);
+				competing.push(await w.slots.take('chc', { holder: 'fetcher:chirps', remainingMs: 885_000 }));
+			}
+		};
+		const t = await takeHostSlotWaiting(w.slots, 'chc', { holder: 'fetcher:prelim', deadline: NOW + 880_000, pollMs: 15_000, now: w.clock.now, sleep });
+		if (!('held' in t)) throw new Error(`expected the slot, got ${JSON.stringify(t)}`);
+		// Its reservation: the body lease.py writes, its holder, live 5 minutes from that look.
+		expect(reservationSeen).toEqual({ owner: t.held.owner, expires: NOW / 1000 + HOST_RESERVATION_MS / 1000, holder: 'fetcher:prelim' });
+		// The competing fetch got the free slot, saw the reservation, gave it back.
+		expect(competing).toEqual([{ busy: { holder: 'fetcher:prelim', until: expect.any(String), reserved: true } }]);
+		// The pass holds the slot, in its own name, within one look of the release.
+		expect(JSON.parse(w.read(KEY)!)).toMatchObject({ owner: t.held.owner, holder: 'fetcher:prelim' });
+		expect(w.at()).toBeLessThanOrEqual(NOW + 660_000 + 15_000);
+		// Its reservation has done its work: withdrawn.
+		expect(w.read(RESERVED)).toBeUndefined();
+		await t.held.release();
+		expect(w.read(KEY)).toBeUndefined();
+	});
+
+	it('withdraws its reservation when it gives up', async () => {
+		const w = world();
+		w.write(KEY, { ...longFetch, expires: NOW / 1000 + 3600 });
+		let reserved = false;
+		const sleep = async (ms: number) => {
+			w.advance(ms);
+			reserved ||= w.read(RESERVED) !== undefined;
+		};
+		expect(await takeHostSlotWaiting(w.slots, 'chc', { holder: 'fetcher:gefs', deadline: NOW + 880_000, pollMs: 15_000, now: w.clock.now, sleep })).toMatchObject({
+			busy: { holder: 'fetcher:chirps' }
+		});
+		expect(reserved).toBe(true);
+		expect(w.read(RESERVED)).toBeUndefined();
+		expect(JSON.parse(w.read(KEY)!).owner).toBe('fetch-1'); // the holder's slot left alone
+	});
+
+	it('never overwrites another waiter’s live reservation (a backfill’s): it waits behind it, and leaves it there', async () => {
+		const w = world();
+		w.write(KEY, longFetch);
+		const backfill = { owner: 'backfill:arn:x', expires: NOW / 1000 + 300, holder: 'ingest:backfill:run-1' };
+		w.write(RESERVED, backfill);
+		const sleep = async (ms: number) => {
+			w.advance(ms);
+			// The backfill renews its reservation at each retry (lease.py), and is still waiting when the fetch ends.
+			if (JSON.parse(w.read(RESERVED)!).owner === backfill.owner) w.write(RESERVED, { ...backfill, expires: w.at() / 1000 + 300 });
+			if (w.at() >= NOW + 120_000) w.remove(KEY);
+		};
+		const t = await takeHostSlotWaiting(w.slots, 'chc', { holder: 'fetcher:prelim', deadline: NOW + 400_000, pollMs: 15_000, now: w.clock.now, sleep });
+		// The freed slot was the backfill's turn: the pass took it, saw the reservation, gave it back, and gave up at its wait's end.
+		expect(t).toMatchObject({ busy: { holder: 'ingest:backfill:run-1', reserved: true } });
+		expect(JSON.parse(w.read(RESERVED)!).owner).toBe(backfill.owner);
+		expect(w.read(KEY)).toBeUndefined();
+	});
+});
+
+describe.each([
+	['S3', () => ({ s3: new FakeS3(), url: 's3://mirror' })],
+	['file://', () => ({ s3: undefined, url: pathToFileURL(`${tmp()}/`).href })]
+] as const)('HostSlots.reserve and withdraw (%s)', (_name, setup) => {
+	it('creates, renews its own, refuses another’s live one, takes over an expired one; withdraws only its own; a take by the same owner doesn’t yield to it', async () => {
+		const { s3, url } = setup();
+		let now = 2_000_000_000_000;
+		const slots = hostSlots(url, { s3, now: () => now })!;
+		const read = () => {
+			const b = s3 ? s3.objects.get(`mirror/${RESERVED}`) : existsSync(join(new URL(url).pathname, RESERVED)) ? readFileSync(join(new URL(url).pathname, RESERVED), 'utf8') : undefined;
+			return b === undefined ? undefined : JSON.parse(b);
+		};
+		expect(await slots.reserve('chc', { owner: 'a', holder: 'fetcher:prelim' })).toBe(true);
+		expect(read()).toEqual({ owner: 'a', expires: (now + HOST_RESERVATION_MS) / 1000, holder: 'fetcher:prelim' });
+		now += 15_000;
+		expect(await slots.reserve('chc', { owner: 'a', holder: 'fetcher:prelim' })).toBe(true);
+		expect(read().expires).toBe((now + HOST_RESERVATION_MS) / 1000);
+		// Another waiter while ours is live: refused, ours untouched.
+		expect(await slots.reserve('chc', { owner: 'b', holder: 'ingest:backfill:run-1' })).toBe(false);
+		expect(read().owner).toBe('a');
+		await slots.withdraw('chc', 'b');
+		expect(read().owner).toBe('a');
+		// A take by the reservation's own owner keeps the slot; anyone else's gives it back.
+		expect(await slots.take('chc', { holder: 'fetcher:chirps', remainingMs: 1000 })).toMatchObject({ busy: { holder: 'fetcher:prelim', reserved: true } });
+		const mine = await slots.take('chc', { holder: 'fetcher:prelim', remainingMs: 1000, owner: 'a' });
+		if (!('held' in mine)) throw new Error('expected the slot');
+		await mine.held.release();
+		await slots.withdraw('chc', 'a');
+		expect(read()).toBeUndefined();
+		await slots.withdraw('chc', 'a'); // none left: nothing to do
+		// An expired one (its waiter died) is taken over.
+		expect(await slots.reserve('chc', { owner: 'b', holder: 'ingest:backfill:run-1' })).toBe(true);
+		now += HOST_RESERVATION_MS + 1;
+		expect(await slots.reserve('chc', { owner: 'a', holder: 'fetcher:gefs' })).toBe(true);
+		expect(read()).toMatchObject({ owner: 'a', holder: 'fetcher:gefs' });
 	});
 });
 

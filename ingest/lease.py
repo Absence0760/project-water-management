@@ -69,7 +69,9 @@ running crawl. A backfill month that finds the slot held by someone else
 reserves the next turn for RESERVATION_S (each retry renews it), and any
 other taker (this module's, and the Node side's) that takes a free slot while
 someone else's reservation is live lets it go again at once and answers busy.
-The backfill deletes its reservation once it holds the slot. A reservation
+The backfill deletes its reservation once it holds the slot. The fetcher's
+scheduled passes (backend/src/feeds/hostSlot.ts takeHostSlotWaiting) write
+the same reservation, by the same rules, while they wait. A reservation
 only ever makes others wait a turn; it is advisory (the Node side ignores one
 it can't read), and the slot itself is what keeps CHC to one process.
 """
