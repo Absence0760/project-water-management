@@ -2407,13 +2407,13 @@ def run(doc: dict) -> dict:
         diag["dev_dams"] += 1
 
     def supply_rule(x):
-        # §2.7g: on a day its dam has no capacity a unit runs as one without a dam, so a trigger runs river first
-        # (probe development-in-service); x["damCapacityM3"] is the day's capacity inside the day loop.
+        # §2.7g: on a day its dam has no capacity a trigger runs river first, as on a unit without a dam (probe
+        # development-in-service-trigger; x["damCapacityM3"] is the day's capacity inside the day loop), while run of
+        # river on a unit with an entered dam stays river first on such a day (dense seed 8).
         r = x.get("supplyRule") or "damFirst"
-        c_ = x["damCapacityM3"]
-        if r == "trigger" and c_ <= 0:
+        if r == "trigger" and x["damCapacityM3"] <= 0:
             return "riverFirst"
-        if r == "runOfRiver" and c_ > 0:
+        if r == "runOfRiver" and cap0.get(x["id"], x["damCapacityM3"]) > 0:
             return "riverFirst"
         return r
 

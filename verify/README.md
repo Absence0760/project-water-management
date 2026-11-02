@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 189 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 232 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
@@ -63,7 +63,7 @@ no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
 case is `model.py`'s run plus `diff.compare` over every column and day
 (about half each; 0.1–2 s a case), while the engine runs all ~90 default
 cases in one tsx process in about 5 s. The mutation self-test is the bulk:
-189 mutants, each running the cases in order until its first disagreement
+232 mutants, each running the cases in order until its first disagreement
 (about a third of them on average), about 35 min on one core, against about
 3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
 the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
@@ -500,7 +500,7 @@ of a seed is unchanged), with probes and mutants:
   `dam_capacity` column; and `abstractionFrom` on farms and users (no
   crop, object or user demand before it, the soil-water store running on,
   a full allocation fitted on the days from then). Probes
-  `development-sediment`, `-curve-none`, `-in-service`, `-in-service-trigger`, `-abstraction`,
+  `development-sediment`, `-curve-none`, `-in-service`, `-in-service-trigger`, `-filled-run-of-river`, `-abstraction`, `-abstraction-gap-year`,
   `-rate-no-survey`.
 
 ## Phase 2b (not covered yet)
@@ -569,8 +569,10 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (178
-mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
+`test_verify.py` breaks `model.py` one documented rule at a time (232
+mutants; phase 2b's 40 are listed under its features in `test_verify.py`:
+the daily A-pan record's 7, the demand factors by part and dated windows' 8,
+land cover's 9 and development during a run's 16). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
 accumulations not spread, or tested over the whole run; raw CHIRPS; the
@@ -901,7 +903,8 @@ networks:
   (dense seed 8: a dam in service since before the run has none); on a day
   with no capacity a `trigger` rule runs river first, as on a unit without
   a dam (dense seed 110: 22 237 m³ a day from the river against Python's
-  0); and under a full allocation a water year wholly before
+  0), while run of river on a unit with an entered dam stays river first
+  (dense seed 8, a dam filled with sediment); and under a full allocation a water year wholly before
   `abstractionFrom` is scaled to 0 and listed with 0 m³ even when no
   allocation is in force (dense seed 123, 20 days of September 2010). The
   last was first taken for an engine departure from §2.12a's "a year with

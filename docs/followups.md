@@ -2759,15 +2759,24 @@ Still open:
       input that uses it. To add, each from its model.md section, with
       random-generator coverage (dense networks too), a probe for anything
       the docs leave open and a mutant per rule
-      ([verify/README.md § Phase 2b](../verify/README.md#phase-2b-not-covered-yet)):
-      demand factors by part (`partDemandFactor`, the `demand.scale` op with
-      a part, merged in #252), dated demand factors (`demandFactorWindows`,
-      the op with `from`/`to`, engine 1.82.0, #514), drought restrictions (once #258 merges),
-      Reserve rule tables A1–A7 (§2.9c–d), forecast mode (§2.4f),
-      calibration (§2.10, §2.10b), land cover (§2.5a), time-varying
-      development (§2.7g), rain-source periods, the areal correction, the
-      daily A-pan, CHIRPS fit ranges, the CHIRPS quantile map (CR-23),
-      keep-dry and the non-default data-quality limits. **Trigger:** the
+      ([verify/README.md § Phase 2b](../verify/README.md#phase-2b-not-covered-yet)).
+      **Done (2026-11-01, engine 1.110.0):** the daily A-pan record
+      (§2.3a), demand factors by part and dated demand factors (§2.3 item
+      4a), land cover (§2.5a) and development during a run (§2.7g), each with
+      generator coverage, probes and mutants, all agreeing with `runModel`;
+      the points the docs left open were settled from its outputs and
+      written into §2.3a, §2.5a and §2.7g (no engine change); drought
+      restrictions are now refused by `unsupported()` instead of silently
+      disagreeing ([verify/README.md § What phase 2b covers so far](../verify/README.md#what-phase-2b-covers-so-far)).
+      **Left:** drought restrictions (§2.7i, with a Priority user's fixed
+      restriction %), Reserve rule tables A1–A7 (§2.9c–d), forecast mode
+      (§2.4f), calibration (§2.10, §2.10b), rain-source periods (§2.4e), the
+      areal correction (§2.4g), CHIRPS fit ranges (§2.4b), the CHIRPS
+      quantile map (CR-23), keep-dry and listed accumulations (§2.4c–d), the
+      non-default data-quality limits (§2.10a), scenario ops other than
+      `climate.delta`, the outlook-only settings and the pinned factors.
+      Suggested next slice: drought restrictions (the largest daily
+      behaviour left), then rain-source periods and CHIRPS fit ranges. **Trigger:** the
       next engine change to any of these features (its PR adds that feature
       to `verify/` first, so the change lands against an independent
       reading), #258 merging (drought restrictions), or before the first

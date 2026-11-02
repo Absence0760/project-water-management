@@ -6254,7 +6254,8 @@ and spills the excess; the unknown-area estimate (7.2 × C^0.77, §2.7a)
 reads the entered capacity, as the full-supply area doesn't scale; a
 sediment rate without a survey date runs as the entered dam (k = 1); and on
 a day with no capacity a `trigger` supply rule runs river first, as it does
-on a unit without a dam (§2.7e).
+on a unit without a dam (§2.7e), while `runOfRiver` on a unit with an
+entered dam stays river first, as it is on every other day.
 
 **Drought restriction reviews** (§2.7i, engine ≥ 1.70.0): a dam that comes
 into service after the run's first day starts empty, and until it first

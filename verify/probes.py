@@ -1844,11 +1844,14 @@ def development(kind: str) -> dict:
     pass-inflow release: before it, what is routed to it spills, nothing
     is released and the boreholes pump direct, the emergency one as
     supplemental; `in-service-trigger`: a trigger rule on it, river first
-    until then. `abstraction`: a farm taking water from 1 March 2020 (its
+    until then. `filled-run-of-river`: a run-of-river unit whose dam fills
+    with sediment, still river first once it has no capacity. `abstraction`: a farm taking water from 1 March 2020 (its
     soil-water store running before), a domestic object on it with a floor,
     and a senior user from 1 January 2020, whose claim passes the farm above
     only from then; under a full allocation the farm asks for the year's
-    volume over its days from 1 March. `rate-no-survey`: a sediment rate
+    volume over its days from 1 March. `abstraction-gap-year`: a full
+    allocation from 1 October 2019 on a run from 1 September 2019, so the
+    month before is a year wholly before the date with nothing in force. `rate-no-survey`: a sediment rate
     without a survey date, which runs as the entered dam."""
     start = dt.date(2019, 10, 1)
     n = 366
@@ -1885,6 +1888,19 @@ def development(kind: str) -> dict:
         # A trigger rule before the dam exists runs river first (as on a unit without a dam), its pump capped.
         f_kw.update(damInServiceFrom="2020-02-01", supplyRule="trigger", supplyTriggerPct=0.4, supplyStopPct=0.7,
                     pumpCapacityM3Day=250, pctRunoffToDam=0.3)
+    elif kind == "filled-run-of-river":
+        # A run-of-river unit whose small dam fills with sediment in the run: still river first once it has no capacity.
+        f_kw.update(damSurveyDate="2019-07-01", damSedimentPctPerYear=0.2, supplyRule="runOfRiver", damCapacityM3=3000,
+                    pumpCapacityM3Day=300)
+    elif kind == "abstraction-gap-year":
+        # The run starts on 1 September 2019, so water year 2019 is a month wholly before abstractionFrom with no
+        # licence in force (it starts on 1 October): factor 0 and a row of 0 m³, not the modelled demand.
+        f_kw.update(abstractionFrom="2020-03-01")
+        s["allocationMode"] = "fullAllocation"
+        alloc = [{"id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 25000, "storageM3": None,
+                  "validFrom": "2019-10-01", "validTo": None, "months": [], "maxRateM3s": None}]
+        start = dt.date(2019, 9, 1)
+        rain = _wave(start, n, 4, 1.4)
     elif kind == "abstraction":
         f_kw.update(abstractionFrom="2020-03-01")
         nodes_extra = [_node("u", "user", "o", userDemandM3Day=[900] * 12, userPriority="senior", userReturnPct=0,
@@ -2178,7 +2194,9 @@ PROBES = {
     "development-curve-none": development("curve-none"),
     "development-in-service": development("in-service"),
     "development-in-service-trigger": development("in-service-trigger"),
+    "development-filled-run-of-river": development("filled-run-of-river"),
     "development-abstraction": development("abstraction"),
+    "development-abstraction-gap-year": development("abstraction-gap-year"),
     "development-rate-no-survey": development("rate-no-survey"),
     # The forecast-conditioned outlook's member (issue #620 step 6).
     "forecast-member-rescaled": forecast_member_rescaled(),
