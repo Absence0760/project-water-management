@@ -37,6 +37,7 @@
 		"import:dam-register": "tsx scripts/import-dam-register.ts",
 		"gen:dem-fixture": "tsx scripts/dem-fixture.ts",
 		"gen:water-fixture": "tsx scripts/water-fixture.ts",
+		"gen:channels-fixture": "tsx scripts/channels-build.ts --fixture",
 		"gen:waterbodies-fixture": "tsx scripts/waterbodies-fixture.ts",
 		"gen:mirror-fixture": "tsx scripts/gen-mirror-fixture.ts",
 		"import:land-cover": "tsx scripts/import-land-cover.ts",

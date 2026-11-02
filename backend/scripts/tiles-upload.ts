@@ -4,7 +4,8 @@
 //
 //   tsx scripts/tiles-upload.ts [--terrain | --water | --fonts] <file.pmtiles | dir> [provenance flags]
 //   tsx scripts/tiles-upload.ts --production --tiles-bucket <b> --reference-bucket <r> [--terrain | --water | --fonts] <path> [provenance flags]
-//   tsx scripts/tiles-upload.ts --env <file> [--terrain]
+//   tsx scripts/tiles-upload.ts [--production --tiles-bucket <b>] --channels <channels.pmtiles> [--dry-run]
+//   tsx scripts/tiles-upload.ts --env <file> [--terrain] [--channels]
 //
 // The archives (TILE_ARCHIVES, geo/referenceOrigin.ts): the basemap
 // (`south-africa.pmtiles`), the relief's DEM (--terrain, `terrain.pmtiles`,
@@ -43,8 +44,15 @@
 // and the CloudFront invalidation. **An upload is itself the release** of
 // the archive (docs/deployment.md § Map tiles): mind the licence step first.
 //
+// With --channels <file> it puts the precomputed terrain channels
+// (scripts/channels-build.ts) as channels.pmtiles, locally or, with
+// --production --tiles-bucket, in the tiles bucket under tiles/; it records no
+// provenance (the archive is derived from terrain.pmtiles, whose record
+// stands, and its metadata names that DEM's fingerprint).
+//
 // With --env it uploads nothing: it sets PUBLIC_TILES_URL and
-// PUBLIC_TILES_GLYPHS_URL (and, with a trailing --terrain, PUBLIC_TERRAIN_URL)
+// PUBLIC_TILES_GLYPHS_URL (and, with --terrain, PUBLIC_TERRAIN_URL; with
+// --channels, PUBLIC_CHANNELS_URL)
 // in <file> (the frontend's gitignored .env.development.local; `pnpm
 // dev:tiles:up`), keeping every other line, and prints whether it changed.
 import { createHash } from 'node:crypto';
@@ -53,6 +61,9 @@ import { basename, join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import pg from 'pg';
 import { loadDevEnv } from '../src/config/devEnv.js';
+import { CHANNEL_ARCHIVE_FORMAT } from '../src/delineation/channelArchive.js';
+import { byteSource } from '../src/delineation/dem.js';
+import { PmtilesReader } from '../src/delineation/pmtiles.js';
 import {
 	recordTileProvenance,
 	TILE_ARCHIVES,
@@ -71,6 +82,8 @@ export const TILES_KEY = 'south-africa.pmtiles';
 export const TERRAIN_KEY = 'terrain.pmtiles';
 /** The water occurrence tracing a dam reads (Terrarium PMTiles; the API reads it, not the browser). */
 export const WATER_KEY = 'water.pmtiles';
+/** The precomputed terrain channels (channelArchive.ts; scripts/channels-build.ts): read by the browser, recorded by no provenance row (the archive's metadata names its DEM). */
+export const CHANNELS_KEY = 'channels.pmtiles';
 /** Where the glyph ranges go in the bucket. */
 export const FONTS_PREFIX = 'fonts';
 
@@ -95,6 +108,9 @@ export const tilesUrl = (endpoint = process.env.S3_ENDPOINT?.trim() || 'http://1
 
 /** The relief's URL the frontend reads (PUBLIC_TERRAIN_URL), from the MinIO endpoint. */
 export const terrainUrl = (endpoint = process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002') => `${base(endpoint)}/${TERRAIN_KEY}`;
+
+/** The precomputed channels' URL the frontend reads (PUBLIC_CHANNELS_URL), from the MinIO endpoint. */
+export const channelsUrl = (endpoint = process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002') => `${base(endpoint)}/${CHANNELS_KEY}`;
 
 /** The glyphs URL template the frontend reads (PUBLIC_TILES_GLYPHS_URL), from the MinIO endpoint. */
 export const glyphsUrl = (endpoint = process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002') => `${base(endpoint)}/${FONTS_PREFIX}/{fontstack}/{range}.pbf`;
@@ -145,10 +161,44 @@ export function withEnv(text: string, vars: Record<string, string>): { text: str
  * large (dev:tiles:terrain), so its URL is included only with `terrain`
  * (bin/tiles-dev.sh up passes it when MinIO serves the DEM).
  */
-export function tilesEnv(terrain: boolean): Record<string, string> {
+export function tilesEnv(terrain: boolean, channels = false): Record<string, string> {
 	const vars: Record<string, string> = { PUBLIC_TILES_URL: tilesUrl(), PUBLIC_TILES_GLYPHS_URL: glyphsUrl() };
 	if (terrain) vars.PUBLIC_TERRAIN_URL = terrainUrl();
+	if (channels) vars.PUBLIC_CHANNELS_URL = channelsUrl();
 	return vars;
+}
+
+export interface ChannelsUploadArgs {
+	path: string;
+	/** The tiles bucket in production; null: the local MinIO. */
+	tilesBucket: string | null;
+	dryRun: boolean;
+}
+
+/** `--channels <file> [--production --tiles-bucket <b>] [--dry-run]`; a string is the problem. */
+export function parseChannelsArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): ChannelsUploadArgs | string {
+	const cwd = env.INIT_CWD ?? process.cwd();
+	let path: string | null = null;
+	let production = false;
+	let tilesBucket: string | null = null;
+	let dryRun = false;
+	for (let i = 0; i < argv.length; i++) {
+		const a = argv[i]!;
+		if (a === '--channels') {
+			const v = argv[++i];
+			if (v === undefined || v.startsWith('--')) return '--channels needs the archive';
+			path = resolve(cwd, v);
+		} else if (a === '--production') production = true;
+		else if (a === '--tiles-bucket') {
+			const v = argv[++i];
+			if (v === undefined || !BUCKET.test(v)) return 'a bucket name is 3–63 lower-case letters, digits, dots and dashes';
+			tilesBucket = v;
+		} else if (a === '--dry-run') dryRun = true;
+		else return `${a}: --channels takes only --production, --tiles-bucket and --dry-run (it records no provenance: the archive names its DEM)`;
+	}
+	if (!path) return '--channels needs the archive';
+	if (production !== !!tilesBucket) return '--production and --tiles-bucket go together';
+	return { path, tilesBucket, dryRun };
 }
 
 // ---------------------------------------------------------------------------
@@ -463,10 +513,63 @@ function s3Store(sdk: typeof import('@aws-sdk/client-s3'), s3: InstanceType<type
 	};
 }
 
+/** The S3 client: your own session in production, else the local MinIO. */
+function s3Client(sdk: typeof import('@aws-sdk/client-s3'), production: boolean) {
+	return production
+		? // Your own session: AWS_PROFILE (and AWS_REGION) as for `aws s3 cp`.
+			new sdk.S3Client({})
+		: new sdk.S3Client({
+				endpoint: process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002',
+				region: process.env.S3_REGION?.trim() || 'us-east-1',
+				forcePathStyle: true,
+				// DEV-ONLY MinIO root credentials (docker-compose.yml).
+				credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || 'minioadmin', secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || 'minioadmin' }
+			});
+}
+
+/**
+ * The precomputed channels (scripts/channels-build.ts): one archive to the tiles
+ * bucket as channels.pmtiles. Checked to be a channels archive first (its
+ * metadata's format); no provenance row, since it is derived from the terrain
+ * archive, whose own record stands, and names that DEM in its metadata.
+ */
+async function uploadChannels(argv: string[]): Promise<number> {
+	const args = parseChannelsArgs(argv);
+	if (typeof args === 'string') {
+		console.error(`${args}\nusage: tsx scripts/tiles-upload.ts [--production --tiles-bucket <b>] --channels <channels.pmtiles> [--dry-run]`);
+		return 2;
+	}
+	if (!args.tilesBucket && (process.env.STORAGE ?? 'local').trim() === 's3') {
+		console.error('STORAGE=s3: this uploads to the local MinIO; production takes --production with your own AWS session.');
+		return 2;
+	}
+	const meta = await new PmtilesReader(byteSource(args.path)).getMetadata();
+	if (meta.format !== CHANNEL_ARCHIVE_FORMAT) throw new Error(`${args.path} is not a channels archive (format ${String(meta.format)}, expected ${CHANNEL_ARCHIVE_FORMAT}): build it with scripts/channels-build.ts.`);
+	const dem = meta.dem as { label?: string; fingerprint?: string } | undefined;
+	const { bytes } = await hashFile(args.path);
+	const bucket = args.tilesBucket ?? TILES_BUCKET;
+	const key = args.tilesBucket ? `tiles/${CHANNELS_KEY}` : CHANNELS_KEY;
+	console.log(`${args.path}: ${bytes} bytes, the channels of ${dem?.label ?? 'an unnamed DEM'} (fingerprint ${dem?.fingerprint ?? 'unknown'}) → s3://${bucket}/${key}`);
+	if (args.dryRun) {
+		console.log('Dry run: nothing uploaded.');
+		return 0;
+	}
+	const sdk = await import('@aws-sdk/client-s3');
+	const store = s3Store(sdk, s3Client(sdk, !!args.tilesBucket));
+	if (!args.tilesBucket) await store.ensureBucket(TILES_BUCKET, true);
+	await store.put({ bucket, key, body: createReadStream(args.path), bytes, contentType: 'application/vnd.pmtiles', cacheControl: args.tilesBucket ? 'public, max-age=86400' : undefined });
+	console.log(
+		args.tilesBucket
+			? `Uploaded. Then: gh variable set PUBLIC_CHANNELS_URL --body /tiles/${CHANNELS_KEY}, release the web, and invalidate '/tiles/*' if it replaced an older archive.`
+			: `Uploaded. PUBLIC_CHANNELS_URL=${channelsUrl()} (pnpm dev:tiles:up sets it in frontend/.env.development.local).`
+	);
+	return 0;
+}
+
 async function main(argv: string[]): Promise<number> {
 	if (argv[0] === '--env') {
 		if (!argv[1]) {
-			console.error('usage: tsx scripts/tiles-upload.ts --env <file> [--terrain]');
+			console.error('usage: tsx scripts/tiles-upload.ts --env <file> [--terrain] [--channels]');
 			return 2;
 		}
 		const path = resolve(process.env.INIT_CWD ?? process.cwd(), argv[1]);
@@ -477,15 +580,17 @@ async function main(argv: string[]): Promise<number> {
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
 		}
-		const { text, changed } = withEnv(before, tilesEnv(argv[2] === '--terrain'));
+		const rest = argv.slice(2);
+		const { text, changed } = withEnv(before, tilesEnv(rest.includes('--terrain'), rest.includes('--channels')));
 		if (changed) writeFileSync(path, text);
 		console.log(changed ? `Set the tiles URLs in ${path}: restart pnpm dev.` : `${path} already has the tiles URLs.`);
 		return 0;
 	}
+	if (argv.includes('--channels')) return uploadChannels(argv);
 	const args = parseUploadArgs(argv);
 	if (typeof args === 'string') {
 		console.error(
-			`${args}\nusage: tsx scripts/tiles-upload.ts [--production --tiles-bucket <b> --reference-bucket <r>] [--terrain | --water | --fonts] <file.pmtiles | dir> [--version <v>] [--upstream <url>] [--original <file>]… [--no-head] [--dry-run]\n       tsx scripts/tiles-upload.ts --env <file> [--terrain]`
+			`${args}\nusage: tsx scripts/tiles-upload.ts [--production --tiles-bucket <b> --reference-bucket <r>] [--terrain | --water | --fonts] <file.pmtiles | dir> [--version <v>] [--upstream <url>] [--original <file>]… [--no-head] [--dry-run]\n       tsx scripts/tiles-upload.ts [--production --tiles-bucket <b>] --channels <channels.pmtiles> [--dry-run]\n       tsx scripts/tiles-upload.ts --env <file> [--terrain] [--channels]`
 		);
 		return 2;
 	}
@@ -503,16 +608,7 @@ async function main(argv: string[]): Promise<number> {
 		return 0;
 	}
 	const sdk = await import('@aws-sdk/client-s3');
-	const s3 = args.production
-		? // Your own session: AWS_PROFILE (and AWS_REGION) as for `aws s3 cp`.
-			new sdk.S3Client({})
-		: new sdk.S3Client({
-				endpoint: process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002',
-				region: process.env.S3_REGION?.trim() || 'us-east-1',
-				forcePathStyle: true,
-				// DEV-ONLY MinIO root credentials (docker-compose.yml).
-				credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || 'minioadmin', secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || 'minioadmin' }
-			});
+	const s3 = s3Client(sdk, !!args.production);
 	await executePlan(plan, s3Store(sdk, s3), { local: !args.production });
 	writeSidecar(args, plan.provenance, plan.originalPaths);
 	console.log(`Uploaded ${plan.puts.length} object(s).\n${describeProvenance(plan.provenance)}`);

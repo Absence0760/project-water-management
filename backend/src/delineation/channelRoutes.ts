@@ -8,7 +8,9 @@
 // work (delineation/attempt.ts) in the channel tiles' own pool (307,
 // CHANNEL_ATTEMPTS), never delineation's, counted before the work, as every
 // elevation-model request is. On Lambda the cache is per instance; the
-// durable path is tiles built in the tiles pipeline (docs/followups.md).
+// Map reads tiles from the precomputed archive first when there is one
+// (channelArchive.ts, PUBLIC_CHANNELS_URL), so this route answers only what
+// the archive lacks.
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';

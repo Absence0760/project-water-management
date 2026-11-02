@@ -17,7 +17,7 @@ describe('frontend: the tile variables', () => {
 	});
 
 	it('the documented same-origin paths pass, the relief with its liability sentence', () => {
-		const env = { PUBLIC_TILES_URL: '/tiles/south-africa.pmtiles', PUBLIC_TILES_GLYPHS_URL: '/tiles/fonts/{fontstack}/{range}.pbf', PUBLIC_TERRAIN_URL: '/tiles/terrain.pmtiles' };
+		const env = { PUBLIC_TILES_URL: '/tiles/south-africa.pmtiles', PUBLIC_TILES_GLYPHS_URL: '/tiles/fonts/{fontstack}/{range}.pbf', PUBLIC_TERRAIN_URL: '/tiles/terrain.pmtiles', PUBLIC_CHANNELS_URL: '/tiles/channels.pmtiles' };
 		assert.deepEqual(frontendProblems(env, has), []);
 	});
 
@@ -27,6 +27,7 @@ describe('frontend: the tile variables', () => {
 			['PUBLIC_TILES_URL', '/api/tiles.pmtiles'],
 			['PUBLIC_TILES_URL', '/tiles/../x.pmtiles'],
 			['PUBLIC_TERRAIN_URL', '//evil.example/terrain.pmtiles'],
+			['PUBLIC_CHANNELS_URL', 'http://localhost:9002/tiles/channels.pmtiles'],
 			['PUBLIC_TILES_GLYPHS_URL', '/tiles/fonts/{fontstack}/{range}.json']
 		]) {
 			assert.equal(frontendProblems({ [k]: v }, has).length, 1, `${k}=${v}`);
@@ -37,6 +38,8 @@ describe('frontend: the tile variables', () => {
 		const [p] = frontendProblems({ PUBLIC_TERRAIN_URL: '/tiles/terrain.pmtiles' }, lacks);
 		assert.match(p, /Art\. 6\(c\)/);
 		assert.deepEqual(frontendProblems({ PUBLIC_TILES_URL: '/tiles/south-africa.pmtiles' }, lacks), [], 'the basemap needs no such sentence');
+		const [c] = frontendProblems({ PUBLIC_CHANNELS_URL: '/tiles/channels.pmtiles' }, lacks);
+		assert.match(c, /DEM rivers.*Art\. 6\(c\)/);
 	});
 });
 

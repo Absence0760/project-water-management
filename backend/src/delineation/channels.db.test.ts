@@ -3,13 +3,18 @@
 // editors only (a viewer 403, a stranger 404); a bad tile 400; a tile outside
 // the DEM 422; a tile computed once and then served from the cache, and only
 // the computed one counting against the per-account elevation-model cap, and
-// finished by the time the response is back (issue #541).
+// finished by the time the response is back (issue #541); and its answer the
+// same as the precomputed archive's (channelArchive.ts) for the tile.
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { CHANNEL_ATTEMPTS, CHANNELS_HOURLY } from './attempt.js';
+import { CHANNELS_FIXTURE_FILE } from '../../scripts/channels-build.js';
+import { channelArchiveZxy } from './channelArchive.js';
 import { clearChannelCache } from './channelRoutes.js';
+import { byteSource } from './dem.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
+import { PmtilesReader } from './pmtiles.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 const FIXTURE = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
@@ -73,6 +78,18 @@ describe('the elevation model’s channels', () => {
 		expect(out.status).toBe(422);
 		expect(out.body.error).toMatch(/outside the elevation model/);
 		expect(await unfinished(editor)).toBe(0);
+	});
+
+	it('answers, for a tile, exactly what the precomputed archive holds for it (the static source the Map reads first)', async () => {
+		process.env.DEM_URL = FIXTURE;
+		const r = await editor.call('GET', at(`tile=${TILE}`));
+		expect(r.status).toBe(200);
+		const archive = new PmtilesReader(byteSource(fileURLToPath(CHANNELS_FIXTURE_FILE)));
+		const [i, j] = TILE.split(',').map(Number) as [number, number];
+		const stored = JSON.parse(new TextDecoder().decode((await archive.getTile(...channelArchiveZxy([i, j])))!));
+		const { cached: _cached, ...answer } = r.body;
+		expect(answer).toEqual(stored);
+		expect(stored.lines.length).toBeGreaterThan(5);
 	});
 
 	it('past their own hourly pool, new tiles are paused, and a delineation still succeeds (it has its own)', async () => {

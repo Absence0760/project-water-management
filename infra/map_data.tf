@@ -5,7 +5,11 @@
 # Two buckets, kept apart because one is public and the other is not:
 #
 #   - tiles: what the browser reads, the basemap (tiles/south-africa.pmtiles),
-#     the relief's DEM (tiles/terrain.pmtiles) and the labels' glyph ranges
+#     the relief's DEM (tiles/terrain.pmtiles), the DEM rivers precomputed
+#     from it (tiles/channels.pmtiles: one gzip JSON entry of ~15 KB per 0.2°
+#     tile, backend/scripts/channels-build.ts; the frontend's
+#     PUBLIC_CHANNELS_URL, a repository variable like the others, so nothing
+#     here names it) and the labels' glyph ranges
 #     (tiles/fonts/<font stack>/<range>.pbf, with tiles/fonts/OFL.txt). Served
 #     same-origin through the site's /tiles/* CloudFront behaviour
 #     (s3_cloudfront.tf) with its own OAC, so the CSP's connect-src 'self'

@@ -310,6 +310,10 @@ server ([§ Delineation](#delineation)).
   The relief's DEM is the same: one more PMTiles file under `/tiles/`,
   read with `fetch`, decoded in MapLibre's worker (no `blob:`, no
   `img-src` change).
+  The precomputed channels too (`/tiles/channels.pmtiles`, [§ The
+  elevation model's channels](#the-elevation-models-channels)): ranged
+  `fetch`es by the `pmtiles` reader on the main thread, gunzipped with the
+  browser's `DecompressionStream`; no CSP change.
   Locally there is no CSP header (only SvelteKit's meta policy, which sets
   `script-src`).
 - The app loads **no third-party script, style, font or tile**: MapLibre is
@@ -1749,6 +1753,40 @@ these lines draw is one a click can go on, both at 1 km²).
   area at its lower end (window-local: a river entering from beyond the
   window carries less than it drains). A tile keeps the steps that start
   inside it, so tiles meet without overlapping. Simplified by half a cell.
+- **Precomputed** (`delineation/channelArchive.ts`,
+  `backend/scripts/channels-build.ts`, the Map's `channelArchive.ts`). The
+  same tiles, built once per DEM by the same `channelTile` with the same
+  window and threshold, into one PMTiles archive, `channels.pmtiles`, that
+  the tiles bucket serves beside the relief (`/tiles/channels.pmtiles`;
+  locally MinIO's `tiles` bucket). Each entry is one tile's answer as the
+  route gives it (its lines, their areas, the DEM's label and fingerprint),
+  gzip JSON, at zoom 11 as x = i + 1 024, y = j + 1 024 (tile type 0,
+  "other": a key-value store MapLibre never reads, so no vector-tile
+  encoder, no new dependency and no quantising of the lines a click snaps
+  to; the browser reads it with the `pmtiles` package the basemap already
+  loads, one byte range per tile). With `PUBLIC_CHANNELS_URL` set the layer
+  reads each tile from it first and asks the route only for a tile it lacks
+  (outside the region it was built for), for every tile if it can't be read
+  or isn't a channels archive, and for every tile if its DEM fingerprint
+  isn't the one the server's delineation check reports, so a file left from
+  an older DEM never draws channels a click wouldn't snap to. Unset (the
+  default, CI and e2e), everything is as before. A tile from the file costs
+  no CPU and no account's hourly pool. `channelArchive.test.ts` (backend)
+  checks every tile of the synthetic DEM's archive equals `channelTile`'s
+  answer and that the committed `backend/fixtures/channels/` archive is what
+  the builder writes today (`pnpm gen:channels-fixture` after changing the
+  channels' code or the synthetic terrain); `channels.db.test.ts` that the
+  route answers a tile exactly as the archive holds it; the frontend's
+  `channelArchive.test.ts` reads that archive through the `pmtiles` reader
+  and checks each fallback. Locally `pnpm dev:tiles:channels` builds it
+  (from the cached relief DEM over `CHANNELS_BBOX`, default the Western
+  Cape, else from the synthetic DEM) and uploads it to MinIO, and `pnpm
+  dev:tiles:up` then sets `PUBLIC_CHANNELS_URL`; the DEM must be the one the
+  backend's `DEM_URL` names, or every tile falls back. Measured on GLO-30:
+  about 0.35 s and 15 KB (gzip; 60–90 KB as JSON) a tile, so the Western
+  Cape (~800 tiles) builds in about 5 minutes into about 10–12 MB, and all of
+  South Africa (~5 500) in about half an hour into about 80 MB. Production:
+  deployment.md § Map tiles.
 - **When.** While one of the two tools is on, while a delineated
   proposal waits for a decision (dimmed then, so the outline reads first
   and can be checked against the channels it follows; they go once it is
@@ -1800,9 +1838,9 @@ these lines draw is one a click can go on, both at 1 km²).
   with the next view. Delineate's own channels come from the same pool, so
   while it is spent the pill over the map says "New terrain channels are
   paused for this hour; delineation still works." and a click still
-  delineates (the server places it on its own channels). Building the
-  channels once in the tiles pipeline removes the cost (docs/followups.md,
-  the elevation model's channels from the tiles pipeline).
+  delineates (the server places it on its own channels). With the
+  precomputed file (above) none of this applies to the tiles it holds: they
+  cost a byte range each, so neither the CPU nor the pool is touched.
 - **What says so.** On screen they are the **terrain channels** (the words
   the operator understood, 2026-10-03; "red" was wrong in the dark theme,
   where they are orange-red). Delineate's bar and the Sub-catchments panel
@@ -3282,6 +3320,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Basemap tiles (Protomaps vector schema of OpenStreetMap) | Protomaps; OpenStreetMap contributors | ODbL 1.0 for the data: commercial use allowed with attribution; share-alike applies to derived *databases*, not to a map drawn from them ([openstreetmap.org/copyright](https://www.openstreetmap.org/copyright), read 2026-10-01) | "© Protomaps © OpenStreetMap contributors", always visible on the map | the daily build fetched (`TILES_BUILD`) | daily builds; refreshed when the operator re-fetches | allowed (in use) |
 | Relief DEM: Copernicus GLO-30, as Terrarium tiles ([Mapterhorn](https://mapterhorn.com) planet build) | Copernicus DEM: DLR e.V. and Airbus Defence and Space, provided under COPERNICUS by the European Union and ESA; tiles compiled by Mapterhorn ([attribution](https://mapterhorn.com/attribution), code BSD-3) | The Copernicus WorldDEM-30 licence: free of charge, worldwide, with the rights of reproduction, distribution, communication to the public and adaptation (Art. 4), no restriction on commercial use ([License COPDEM 30](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), read 2026-10-01) | "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved" (Art. 6(b)), on the map while the relief is drawn, with "© Mapterhorn"; the liability sentence (Art. 6(c)) on the Data sources and credits page (`/data-sources`, 2026-10-02) | Mapterhorn 0.0.13 (GLO-30 accessed 2025) | when Mapterhorn rebuilds; refreshed when the operator re-fetches | allowed (in use locally) |
 | Delineation DEM: the Relief DEM above (Copernicus GLO-30, Mapterhorn's Terrarium tiles), read by the API | as above | as above: Art. 4 allows adaptation, which deriving flow directions and catchment polygons is | the Art. 6(b) notice on the delineation sheet; the dataset label and fingerprint on every proposal | as above | as above | allowed (in use locally; production with the basemap) |
+| DEM rivers, precomputed: the Delineation DEM's terrain channels in `tiles/channels.pmtiles` ([§ The elevation model's channels](#the-elevation-models-channels)), read by the browser | as above | as above: Art. 4 allows adaptation and distribution, which the channel lines and serving them under `/tiles/` (anyone can fetch them, as the relief) are; the release gate holds `PUBLIC_CHANNELS_URL` until the Art. 6(c) sentence is in the legal text, as for the relief | the archive's metadata carries the DEM's label and attribution; the Art. 6(c) sentence on `/data-sources` | built per DEM (its fingerprint in the metadata) | rebuilt whenever the DEM is | allowed (local; production once the operator uploads it) |
 | HydroSHEDS v1 flow direction (3″, conditioned from SRTM), considered for delineation, not used | WWF / McGill University ([hydrosheds.org](https://www.hydrosheds.org/products/hydrosheds)) | "freely available for scientific, educational and commercial use" under the HydroSHEDS licence agreement in its technical documentation (product page read 2026-10-01; the site's own terms of use are non-commercial but cover the website) | per its licence agreement | v1 | none | not used: passes D-B, but 90 m against GLO-30's 30 m and a second download (design/delineation.md § The DEM) |
 | MERIT Hydro, considered for delineation | University of Tokyo ([MERIT Hydro](https://global-hydrodynamics.github.io/MERIT_Hydro/)) | dual: CC BY-NC 4.0 (non-commercial) or ODbL 1.0, under which data derived from it in a commercial product must be released under the ODbL (read 2026-10-01) | – | – | – | rejected: non-commercial, or share-alike on our output (D-B) |
 | JRC Global Surface Water v1.5 (1984–2024), occurrence: tracing a dam ([§ Assisted drawing](#assisted-drawing)) | European Commission Joint Research Centre, with Google ([global-surface-water.appspot.com](https://global-surface-water.appspot.com/download)); Pekel, J.-F. et al. (2016), *Nature* 540, 418–422 | "All data here is produced under the Copernicus Programme and is provided free of charge, without restriction of use" (the download page, read 2026-10-02), under the Copernicus Regulation's free, full and open data policy; commercial use allowed | "Source: EC JRC/Google" on a published map; the archive's attribution, written into every traced feature's description, and on the Data sources and credits page (`/data-sources#jrc-water`); cite Pekel et al. (2016) in published material | v1.5 (`occurrence_<lon>_<lat>_v1_5_2024.tif`) | yearly releases so far (v1.4 2021, v1.5 2024); refreshed when the operator re-fetches | **Allowed.** The operator's own download (`pnpm dev:tiles:water`), never committed; built and tested against the synthetic raster |

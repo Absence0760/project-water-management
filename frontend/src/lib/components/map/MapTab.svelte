@@ -68,7 +68,7 @@
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
+	import { PUBLIC_CHANNELS_URL, PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
 	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '#lib/api/index.js';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
@@ -104,6 +104,7 @@
 	import { BAND_WORD } from './mapStatus';
 	import { ClickDivider, clickShape } from './clickPieces.svelte';
 	import { ChannelLayer } from './channelLayer.svelte';
+	import { openChannelArchive, staticChannels } from './channelArchive';
 	import { openProposal } from './delineation';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
 	import type { DivideDraft } from './divideFlow';
@@ -922,11 +923,15 @@
 	const demRiversShown = $derived(demRiversOffered(canEdit, !!delineation?.available));
 	/** A tool needs the channels (not the layer): the pill over the map speaks for them; the Layers box speaks for the layer. */
 	const toolChannels = $derived(delineating || dividing || reviewingProposal);
+	/** The channels precomputed into a static file (PUBLIC_CHANNELS_URL), read before the route, which stays the fallback tile by tile (channelArchive.ts). */
+	const channelsUrl = PUBLIC_CHANNELS_URL?.trim() || null;
 	const channels = new ChannelLayer({
 		projectId: () => projectId,
 		on: () => channelsWanted({ offered: demRiversShown, layerOn: layersOn(params).has('channels'), tool: toolChannels }),
 		view: () => mapView,
-		load: api.delineation.channels
+		load: channelsUrl
+			? staticChannels({ open: openChannelArchive(channelsUrl), fingerprint: () => delineation?.dataset?.fingerprint, fallback: api.delineation.channels })
+			: api.delineation.channels
 	});
 
 	// --- the relief: the land shaded from the DEM, on while `layers=relief` (and a DEM is configured) ---
