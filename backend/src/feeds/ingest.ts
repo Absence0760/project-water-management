@@ -119,7 +119,7 @@ import {
 	isForecastSource,
 	SOURCES
 } from './config.js';
-import { CellsResult, chirpsPendingFrom, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
+import { CellsResult, chirpsPendingFrom, CopyCellsResult, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
 
@@ -133,6 +133,18 @@ export const BACKFILL_NEXT_SECONDS = 60;
  * a worker's) never runs the whole chain in one go.
  */
 export const CACHED_NEXT_SECONDS = 5;
+/**
+ * A CHIRPS window read from our own copy (feeds/fromMirror.ts) asked nothing
+ * external, so the next one is due at once: the worker goes straight on to it
+ * (jobs/runner.ts drains what comes due within its budget). Fair to other
+ * jobs all the same: the claim takes the oldest run_after first, and a job's
+ * run_after is the moment it was queued (queue.ts enqueueJob,
+ * clock_timestamp()), so a job queued while a window ran goes before that
+ * window's successor. A test's tick (maxJobs 25) may now run a short chain
+ * through; a backfill from 1981 is a handful of windows (fetch.ts
+ * COPY_CELL_YEARS).
+ */
+export const COPY_NEXT_SECONDS = 0;
 
 /**
  * A fetch whose window stopped short of the newest day the source can have
@@ -449,8 +461,16 @@ async function stageReplacement(
  * (a value it won't store) is rolled back to before the merge and refused
  * whole, as an invalid answer is, so the job never dies retrying it.
  */
-async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindow, origin: CacheOrigin, fetchJobId: string | null): Promise<FetchResult> {
-	const parsed = CellsResult.safeParse(raw);
+async function fromCells(
+	db: Db,
+	feed: FeedRow,
+	raw: unknown,
+	window: FetchWindow,
+	origin: CacheOrigin,
+	fetchJobId: string | null,
+	schema: typeof CellsResult = CellsResult
+): Promise<FetchResult> {
+	const parsed = schema.safeParse(raw);
 	const config = feed.config as GridConfig;
 	const product = chirpsProduct(config);
 	if (!parsed.success || parsed.data.cells.product !== product) return { ok: false, error: INVALID };
@@ -520,8 +540,8 @@ async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindo
  * answer that isn't a cell-cache answer of at least one day is left to
  * fromCells to refuse.
  */
-export function cutWindow(raw: unknown, window: FetchWindow): FetchWindow {
-	const parsed = CellsResult.safeParse(raw);
+export function cutWindow(raw: unknown, window: FetchWindow, schema: typeof CellsResult = CellsResult): FetchWindow {
+	const parsed = schema.safeParse(raw);
 	if (!parsed.success) return window;
 	const { startDate, read } = parsed.data.cells;
 	if (startDate !== window.start || read.length === 0) return window;
@@ -537,20 +557,25 @@ export function cutWindow(raw: unknown, window: FetchWindow): FetchWindow {
  * an inline fetch's are what FEED_SOURCE reads (cellCacheStore.ts
  * cacheOrigin). `cacheOnly`: the fetch job found nothing to read and asked
  * the source for nothing (feed-fetch.ts), so a backfill goes on sooner.
+ * `fromCopy`: the answer is a read of our own copy, in this job
+ * (feeds/fromMirror.ts): its window may be years (CopyCellsResult, fetch.ts
+ * COPY_CELL_YEARS), and the next window is due at once (COPY_NEXT_SECONDS).
+ * Never set for an answer from the fetcher, which stays within CHIRPS_MAX_DAYS.
  */
 export async function ingestResult(
 	db: Db,
 	feed: FeedRow,
 	raw: unknown,
 	window: FetchWindow,
-	opts: { origin?: CacheOrigin; cacheOnly?: boolean; fetchJobId?: string } = {}
+	opts: { origin?: CacheOrigin; cacheOnly?: boolean; fromCopy?: boolean; fetchJobId?: string } = {}
 ): Promise<IngestOutcome> {
-	const nextSeconds = opts.cacheOnly ? CACHED_NEXT_SECONDS : BACKFILL_NEXT_SECONDS;
+	const nextSeconds = opts.fromCopy ? COPY_NEXT_SECONDS : opts.cacheOnly ? CACHED_NEXT_SECONDS : BACKFILL_NEXT_SECONDS;
+	const schema = opts.fromCopy ? CopyCellsResult : CellsResult;
 	const origin = opts.origin ?? cacheOrigin();
 	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) {
 		// A fetch the fetcher's time budget cut short answered fewer days than the window: they are the window now.
-		window = cutWindow(raw, window);
-		raw = await fromCells(db, feed, raw, window, origin, opts.fetchJobId ?? null);
+		window = cutWindow(raw, window, schema);
+		raw = await fromCells(db, feed, raw, window, origin, opts.fetchJobId ?? null, schema);
 	}
 	const parsed = FetchResult.safeParse(raw);
 	if (!parsed.success || (isForecastSource(feed.source) && parsed.data.ok && !isKeyedIssue(parsed.data, FORECAST_DAYS[feed.source]))) {

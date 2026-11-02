@@ -317,8 +317,9 @@ test('a coastal box leaves out its sea cells when asked, and fetches the land’
 test('a CHIRPS feed backfilling from our copy says it is catching up, not Stale, and its Run now waits for the next window', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Catching up');
-	// A record that starts years back: each 120-day window queues the next by itself (feeds/ingest.ts continueBackfill).
-	const start = new Date(Date.now() - 2000 * 86_400_000).toISOString().slice(0, 10);
+	// A record that starts decades back: each window from our copy (ten years, fetch.ts COPY_CELL_YEARS) queues the
+	// next by itself, due at once (feeds/ingest.ts continueBackfill), so the tick runs one window only (maxJobs: 1).
+	const start = '2005-01-01';
 	const made = await page.request.post(`${API_URL}/projects/${project.id}/feeds`, {
 		data: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }], startDate: start } }
 	});
@@ -329,7 +330,7 @@ test('a CHIRPS feed backfilling from our copy says it is catching up, not Stale,
 	const feed = panel.getByRole('list', { name: 'Data feeds' }).getByRole('listitem');
 	await feed.getByRole('button', { name: 'Run now: Rainfall — CHIRPS' }).click();
 	await expect(feed).toHaveAttribute('data-fetch', 'queued');
-	await fetchOnce(project.id);
+	await runJobsTick({ projects: [project.id], maxJobs: 1 });
 	// The panel follows the fetch it queued; once that has run, the backfill's next window is what waits.
 	await nextPoll(page);
 	await expect(feed.getByTestId('feed-fetch')).toHaveText(/^Catching up/);
@@ -474,11 +475,12 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 		/^Replacement confirmed: the feed backfills CHIRPS sat v3\.0 from its start date, then replaces the series \(CHIRPS v2\.0\) with it whole/
 	);
 
-	// The first fetch stages the new record (2001 onwards is a long backfill): the card says how far it has got,
-	// and the Data and Runs tabs say runs keep the current series until it completes.
-	await runJobsTick({ projects: [project.id] });
+	// The first fetch stages the new record (2001 onwards is a long backfill; one window, ten years from our copy, with
+	// the next due at once, so the tick runs just the one): the card says how far it has got, and the Data and Runs
+	// tabs say runs keep the current series until it completes.
+	await runJobsTick({ projects: [project.id], maxJobs: 1 });
 	await page.reload();
-	await expect(feed.getByRole('paragraph').filter({ hasText: /^Replacing the series: the new record runs 1 Jan 2001 to 30 Apr 2001 so far\./ })).toBeVisible();
+	await expect(feed.getByRole('paragraph').filter({ hasText: /^Replacing the series: the new record runs 1 Jan 2001 to 31 Dec 2010 so far\./ })).toBeVisible();
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await expect(page.getByTestId('rebuilding-note')).toHaveText(/Runs use the current series until the replacement completes/);
 	await page.goto(`/projects/${project.id}?tab=series`);

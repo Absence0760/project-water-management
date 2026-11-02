@@ -1525,7 +1525,11 @@ minute later: a record from 1981 (`rnl`) takes about a day per cell set, from
 the fetcher's 885 s, so its fetches are cut short and it takes several times
 that. Feeds over different cells queue behind each other.
 Cells another feed already read come from the cell cache at no cost. The
-copy of our own ([§ The data mirror](#the-data-mirror)) replaces this for history.
+copy of our own ([§ The data mirror](#the-data-mirror)) replaces this for history:
+with `CHIRPS_SOURCE=mirror` a feed reads the copy in the worker, ten calendar
+years a window (fewer past 50 cells), the next window due at once, so a
+record from 1981 is five windows, seconds of the worker's time
+([architecture.md § Our copy of the rain data](./architecture.md#our-copy-of-the-rain-data)).
 
 ## The data mirror
 

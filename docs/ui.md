@@ -6797,7 +6797,7 @@ editors run one now and read the map's proposals, viewers read.
   is nothing to do here. Newest data 5 Oct 2026." Its chip is neutral, not a
   warning colour.
 - **A fetch under way** (the list's `pendingFetch`, api.md: a backfill
-  working through its 120-day windows, a Run now, the schedule's): the card
+  working through its windows, a Run now, the schedule's): the card
   carries `data-fetch="queued"` or `"running"` and a line under the health
   sentence (`data-testid="feed-fetch"`, `pendingNote` in `feeds.ts`): "A
   fetch is waiting to run." / "A fetch is under way.", then "Run now waits

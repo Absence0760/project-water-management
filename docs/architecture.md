@@ -809,17 +809,24 @@ alerts plug in as a further kind.
   that is within `waitDueMs` and the time budget, waits for it and goes on
   claiming. Nothing else would run such a job soon: the worker never sends
   itself a wake message (only the API does, infra/jobs.tf), so a job one job
-  queues a few seconds on (a data feed backfill's next window,
-  `CACHED_NEXT_SECONDS`) otherwise waited for the 5-minute tick, and a
+  queues a few seconds on (a data feed backfill's next window from the
+  cell cache, `CACHED_NEXT_SECONDS`) otherwise waited for the 5-minute tick, and a
   CHIRPS backfill read from our copy moved one window a tick
   (2026-11-02). The worker Lambda's tick is bounded by its time budget (the
   Lambda's remaining time less a minute), not a job count
   (`WORKER_MAX_JOBS`, 1000; `JOB_MAX_PER_TICK` overrides): at `runTick`'s
   default of 25, 13 feeds backfilling ran 25 windows and stopped. Jobs are
   claimed oldest `run_after` first, so one chain can't starve other work: a
-  job queued now runs before any link queued after it. A tick with waiting
+  job queued now runs before any link queued after it. A job's `run_after`
+  counts from the moment it is queued (`enqueueJob`, `clock_timestamp()`),
+  not its transaction's start: a link queued due at once at the end of a
+  long job (a CHIRPS window read from our copy, `COPY_NEXT_SECONDS`, 0)
+  would otherwise date from before jobs queued while that job ran, and jump
+  ahead of them (jobs.db.test.ts). A tick with waiting
   off (the default: tests, `pnpm dev:jobs:tick`, the e2e tick) stops at the
-  first moment nothing is due, so it never runs a whole chain. `runTick({ projectIds })` claims
+  first moment nothing is due, so it never runs a chain whose links are
+  queued seconds on; a chain due at once (the copy's backfill windows) it
+  runs up to its job cap (`JOB_MAX_PER_TICK`; the e2e tick's `maxJobs`). `runTick({ projectIds })` claims
   only those projects' jobs: the e2e suite's tick (`worker.ts --once
   --project <id>`), so parallel tests never run each other's jobs; the
   worker Lambda and the local loop never pass it.
@@ -1224,7 +1231,8 @@ row names a source, where to read it and the series it merges into:
   synthetic export both are tested on is `packages/engine/fixtures/dws-daily-export.txt`.
 - **The window.** CHIRPS reads from 50 days before its newest day to
   yesterday, so final values overwrite preliminary ones, at most 120 days per
-  fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
+  fetch from CHC (whole calendar years, up to ten, when the feed reads our
+  copy: § Our copy of the rain data); the first fetch reads 60 days, or from the feed's `startDate`. GEFS
   reads the newest complete issue and merges all 16 days, so each issue
   replaces the last from its issue date on; one caught half-written is never
   merged (the fetch falls back to yesterday's, or fails and retries). DWS asks for at most two years a request (`DWS_WINDOW_DAYS`, 730 days;
@@ -1472,13 +1480,33 @@ row names a source, where to read it and the series it merges into:
   the cache lacks from the copy **inside the job** and merges them through
   `chirps_cache_merge` in the same transaction (`feeds/fromMirror.ts`): no
   `FetchRequest` and no SQS round trip, even with `FEED_FETCHER=sqs`. One job
-  reads one fetch window (at most 120 days), and a backfill's next window
-  follows in `CACHED_NEXT_SECONDS`, run by the same worker invocation, which
-  waits for it (`waitDueMs`, § Background work): a window takes tens of
-  milliseconds on the committed fixture copy, so a feed's backfill moves at
-  about a window every 5 s (1981 to today, about 135 windows, in roughly
-  11 minutes of a worker's time, several feeds interleaving), less the
-  minute or so between one invocation's budget and the next tick. A day the copy doesn't hold yet reads as
+  reads one fetch window, and that window is not CHC's 120 days (sized for
+  asking CHC at a request a second, and for an answer that rides SQS): it
+  runs from its start through the 31 December of a later year, or
+  yesterday, so it reads each of the copy's one-year chunks of finals once
+  (`fetchWindow`'s `copyYears`). How many years is `copyWindowYears`
+  (`feeds/fetch.ts`): 500 cell-years a window (`COPY_CELL_YEARS`), at most
+  ten (`COPY_MAX_YEARS`), at least one, so a feed of up to 50 cells (the
+  boundary feeds' 4–17 among them) reads ten years a window and a 100-cell
+  one five. Measured on the fixture copy through the queue (2026-11-02, the
+  dev laptop), a window's job costs about 5 µs a cell-day: 17 cells × 10
+  years ~0.6 s, 50 × 10 ~1.1 s, 100 × 5 ~0.9 s, against the worker's
+  ~240 s tick budget; the cap is there to keep short the one transaction
+  that holds the cache rows another feed over the same cells waits on. The
+  answer is checked against `CopyCellsResult` (years, at most 500
+  cell-years; an answer from the fetcher stays held to `CellsResult`'s 120
+  days, `ingestResult`'s `fromCopy`), and merged a calendar year a
+  `chirps_cache_merge` call (`cellCacheStore.ts mergeCellCache`, which
+  splits every answer so, a 120-day one crossing New Year too, so every
+  merge locks year, then cell, then that year's files). Nothing external
+  was asked, so a backfill's next window is due at once
+  (`COPY_NEXT_SECONDS`, 0, `feeds/ingest.ts`) and the same worker
+  invocation goes straight on to it: a backfill from 1981 is five windows,
+  a few seconds of the worker's time (`fromMirror.db.test.ts` runs a
+  17-cell one through in one tick). Fair to other work all the same:
+  claims take the oldest `run_after` first, and the next window's dates
+  from when it was queued (§ Background work), so a job queued while a
+  window ran goes before it. A day the copy doesn't hold yet reads as
   `-`, as a day CHC hasn't published, and a later fetch reads it. No copy at
   all (no manifest, `MirrorNotReadyError`) writes nothing and records only
   the attempt (`last_attempt_at`): no failure, no backoff, the same window
@@ -1591,9 +1619,10 @@ row names a source, where to read it and the series it merges into:
     `replace_config_from` keeps the config its record was read over. The feed
     starts at its first own day (a later start date is a 409
     `series_backfill`) and backfills the record over the new cells into its
-    stage exactly as above, at the source's own pace and limits (CHIRPS a
-    120-day window a minute, or 5 s when the cell cache holds it, reading CHC
-    or our copy through the polite client, [data-sources.md](./data-sources.md);
+    stage exactly as above, at the source's own pace and limits (CHIRPS from
+    CHC a 120-day window a minute, or 5 s when the cell cache holds it,
+    through the polite client, [data-sources.md](./data-sources.md); from our
+    copy whole years a window, the next due at once;
     reference ET a year a fetch from our copy only), while runs read the old
     record whole. The stage records which product each reference ET day came
     from (`feed_stage.agera5_days` / `power_days`). When caught up, the swap
@@ -1628,13 +1657,15 @@ row names a source, where to read it and the series it merges into:
   vouches that it already is what the feed writes.
 - **Backfill continues at once.** A fetch whose window stopped short of the
   newest day the source can have (CHIRPS and DWS windows are capped: 120
-  days for CHIRPS, two years for DWS) queues the feed's next fetch a minute later
+  days for CHIRPS from CHC, up to ten calendar years from our copy, two
+  years for DWS) queues the feed's next fetch a minute later
   (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts; 5 s, `CACHED_NEXT_SECONDS`,
-  after a CHIRPS window the cell cache held whole) instead of waiting for the
+  after a CHIRPS window the cell cache held whole; at once,
+  `COPY_NEXT_SECONDS`, after one read from our copy) instead of waiting for the
   schedule, so a long backfill (a replacement, or an early start date) goes a
   window at a time rather than a window a day. Each CHIRPS window starts
   after the final days before it (the window, above), so a backfill of final
-  days moves on the whole 120. "Run now" while that fetch waits makes
+  days moves on a whole window. "Run now" while that fetch waits makes
   it due now (`app_feed_fetch_now`, 032).
 - **"Run now" is rate-limited per feed** (111, `app_feed_take_run_now`): a
   token bucket of 6 presses, one back every 10 minutes (`RUN_NOW_RATE`,

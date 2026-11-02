@@ -198,8 +198,10 @@ export interface TickOptions {
 	 * feeds/ingest.ts CACHED_NEXT_SECONDS) then runs in this tick, rather than
 	 * on the next one: the production worker is woken only by the API's wake
 	 * messages and the 5-minute schedule, never by a job a job queued. Off
-	 * (0) by default, so a test's tick or `pnpm dev:jobs:tick` never runs a
-	 * whole chain; the worker Lambda and the local worker loop turn it on.
+	 * (0) by default, so a test's tick or `pnpm dev:jobs:tick` never waits
+	 * for a chain's later links (one queued due at once, a CHIRPS window read
+	 * from our copy, ingest.ts COPY_NEXT_SECONDS, it runs up to maxJobs); the
+	 * worker Lambda and the local worker loop turn it on.
 	 */
 	waitDueMs?: number;
 	/** When a job must be done by (epoch ms), passed to each handler (JobContext.deadline): the worker Lambda's timeout, less a margin. */

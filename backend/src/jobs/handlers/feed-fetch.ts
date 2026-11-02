@@ -49,7 +49,7 @@ import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
 import { cacheOrigin, claimRecheck, readCellCache } from '../../feeds/cellCacheStore.js';
 import { chirpsProduct, type FeedSource, type GridConfig, gridCells } from '../../feeds/config.js';
-import { type CellsResult, type FetchRequest, type FetchWindow, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
+import { type CellsResult, copyWindowYears, type FetchRequest, type FetchWindow, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
 import { feedHttp, LiveFeedRequestRefusedError } from '../../feeds/http.js';
@@ -93,9 +93,12 @@ export const feedFetchHandler = defineHandler({
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
-		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
+		// A CHIRPS feed reading our copy reads whole years a window (fetch.ts COPY_CELL_YEARS), not CHC's 120 days.
+		const fromCopy = feed.source === 'chirps' && chirpsSource() === 'mirror';
+		const copyYears = fromCopy ? copyWindowYears(copyCellCount(feed.config)) : undefined;
+		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough, { copyYears });
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
-		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
+		if (fromCopy) {
 			const started = Date.now();
 			const outcome = await fetchFromMirror(db, feed, window, { jobId: job.id, today });
 			logCopyRead(feed.id, job.id, feed.source, window, outcome, started);
@@ -198,6 +201,15 @@ export const feedFetchHandler = defineHandler({
 		await ingestResult(db, feed, await runFetch(request, http), window, { fetchJobId: job.id });
 	}
 });
+
+/** A CHIRPS feed's grid cells, for its window's size; a config that names none (refused by the read, fetchFromMirror) counts as one. */
+function copyCellCount(config: unknown): number {
+	try {
+		return uniqueCells(gridCells(config as GridConfig)).length;
+	} catch {
+		return 1;
+	}
+}
 
 /**
  * One line per CHIRPS or CHIRPS-GEFS fetch read from our copy (CHIRPS_SOURCE=mirror). The fetcher Lambda logs
