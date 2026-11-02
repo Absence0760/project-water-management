@@ -22,14 +22,14 @@
 		"svelte": "5.57.2",
 		"svelte-check": "4.7.7",
 		"typescript": "6.0.3",
-		"vite": "8.3.4",
+		"vite": "8.3.5",
 		"vitest": "^5.0.5",
 		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
 	},
 	"type": "module",
 	"dependencies": {
 		"@water-management/engine": "workspace:*",
-		"maplibre-gl": "6.15.0",
+		"maplibre-gl": "6.16.0",
 		"pmtiles": "4.5.0",
 		"uplot": "1.6.32",
 		"uqr": "0.1.3"
