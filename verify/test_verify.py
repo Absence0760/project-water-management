@@ -159,7 +159,7 @@ MUTANTS = [
     ("depletion the river can't pay is forgiven", "dd_owed[xid] = dd_owed[xid] + due - dep", "dd_owed[xid] = 0.0"),
     (
         "an emergency borehole ignores the dam's level",
-        'if u_["target"] == "direct" and u_["mode"] == "emergency" and s_prev < u_["level"] * cap:',
+        'if u_["target"] == "direct" and u_["mode"] == "emergency" and (s_prev < u_["level"] * cap if cap > 0 else 0 < u_["level"] * cap0[xid]):',
         'if u_["target"] == "direct" and u_["mode"] == "emergency":',
     ),
     (
