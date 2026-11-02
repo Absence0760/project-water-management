@@ -128,6 +128,28 @@ after a Node major bump ([upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md
    `$app/env/public` exists only under SvelteKit;
    `components/map/riverLayer.svelte.test.ts` is the pattern).
 
+## Time zone
+
+Every vitest project (engine, backend, frontend) runs in a skewed time zone,
+not the shell's: each `vitest.config.ts` sets `test.env.TZ` from
+`scripts/test-tz.mjs` (CLAUDE.md rule 7). The default is **Pacific/Chatham**
+(UTC+12:45, +13:45 in the southern summer), where a local midnight is the
+previous UTC day. CI runs `pnpm test` a second time with
+`TEST_TZ=America/St_Johns` (UTC−3:30, −2:30 in the northern summer), where a
+UTC midnight is the previous local day, as its own job (`test-west`, "Unit
+tests west of UTC") beside the unit job, so the two passes run at once rather
+than one after the other. Both are off the whole hour and have
+DST, so a local-time `Date` used for a UTC calendar day (`getDate()` on a
+`YYYY-MM-DD` parse, `new Date(y, m, d).toISOString()`) fails one pass or the
+other. Run the west pass locally with
+`TEST_TZ=America/St_Johns pnpm -C <workspace> exec vitest run …`; `TEST_TZ`
+takes only those two zones. A test that needs a third zone (UTC, Kiritimati,
+Pago Pago) sets `process.env.TZ` itself and restores it after. Guards: each
+workspace's `tz.test.ts` (`packages/engine/src/testing/`,
+`backend/src/__tests__/`, `frontend/src/lib/`) checks the zone a worker sees,
+and `scripts/guards/test_tz.test.mjs` (`pnpm test:guards`) checks the configs
+and that CI's second pass is its own job the CI gate needs. e2e keeps its own pinned `timezoneId: 'UTC'` (rule 9).
+
 ## Layout checks and fonts
 
 e2e renders with the pinned DejaVu fonts in `e2e/fonts/` on every machine
@@ -226,6 +248,14 @@ What it can't see:
   `src/__tests__/` are left out.
 
 ## Fresh clone
+
+The frontend's tsconfig extends `$app/tsconfig`, which `svelte-kit sync`
+writes into `frontend/node_modules/$app/` (SvelteKit 3). Without it Vitest's
+dependency optimizer stops at "Tsconfig not found" and no frontend test runs.
+So the frontend runs the sync on every `pnpm install` (its `prepare` script)
+and again before `pnpm test` and `pnpm test:coverage`; before 2026-11-02 only
+`pnpm check` ran it, and a job that tested without checking first (CI's
+`test-west`) failed on a fresh checkout.
 
 `.github/workflows/fresh-clone.yml` holds the V1 promise that a fresh clone
 runs with `pnpm run setup && pnpm dev` and nothing else (plan.md Phase 1

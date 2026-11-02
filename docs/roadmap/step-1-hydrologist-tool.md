@@ -722,7 +722,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     recommendation if sign-up stays open.
   - **Skewed `TZ`:** (Done.) Every workspace's `vitest.config.ts` sets
     `test.env.TZ` from `scripts/test-tz.mjs`: `Pacific/Chatham` (UTC+12:45),
-    and CI's unit job runs a second pass under `America/St_Johns` (UTC−3:30).
+    and CI runs a second pass under `America/St_Johns` (UTC−3:30) as its own job.
     Both zones are off the whole hour and have DST, which catches more than
     the Kiritimati/Adak pair first planned ([testing.md § Time
     zone](../testing.md#time-zone)).

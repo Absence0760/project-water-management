@@ -60,9 +60,15 @@ describe('the vitest configs', () => {
 });
 
 describe('CI', () => {
-	it("the unit job also runs pnpm test west of UTC", () => {
+	it('a job of its own runs pnpm test west of UTC, beside the unit job, and the CI gate needs it', () => {
 		const ci = read('.github/workflows/ci.yml');
-		assert.match(ci, /TEST_TZ: America\/St_Johns\n\s+run: pnpm test\n/);
+		// Its own job (test-west), so the two passes run at once rather than one after the other in `test`.
+		const job = ci.match(/\n  test-west:\n([\s\S]*?)(?=\n  [a-z][\w-]*:\n)/);
+		assert.ok(job, 'ci.yml has no test-west job');
+		assert.match(job[1], /TEST_TZ: America\/St_Johns\n\s+run: pnpm test\n/);
+		const unit = ci.match(/\n  test:\n([\s\S]*?)(?=\n  [a-z][\w-]*:\n)/);
+		assert.ok(unit && !unit[1].includes('TEST_TZ'), 'the second pass belongs in test-west, not after the unit job');
+		assert.match(ci, /ci-gate:[\s\S]*needs: \[[^\]]*\btest-west\b/);
 		assert.ok(TEST_TIME_ZONES.includes('America/St_Johns'));
 	});
 });

@@ -9,8 +9,9 @@
 		"preview": "vite preview --port 8888",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "vitest run",
-		"test:coverage": "vitest run --coverage",
+		"prepare": "svelte-kit sync || echo 'svelte-kit sync failed; pnpm check or pnpm test will run it again'",
+		"test": "svelte-kit sync && vitest run",
+		"test:coverage": "svelte-kit sync && vitest run --coverage",
 		"test:watch": "vitest"
 	},
 	"devDependencies": {
