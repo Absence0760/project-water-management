@@ -5,8 +5,9 @@
 // A tile is routed once per DEM and kept in an in-memory LRU of CACHE_TILES,
 // keyed by the DEM's fingerprint, so panning back asks nothing new. A tile
 // computed (not cached) counts against the per-account cap on elevation-model
-// work (delineation/attempt.ts) as a delineation, counted before the work, as
-// every elevation-model request is. On Lambda the cache is per instance; the
+// work (delineation/attempt.ts) in the channel tiles' own pool (307,
+// CHANNEL_ATTEMPTS), never delineation's, counted before the work, as every
+// elevation-model request is. On Lambda the cache is per instance; the
 // durable path is tiles built in the tiles pipeline (docs/followups.md).
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -75,7 +76,7 @@ export const channelRoutes = new Hono<AuthEnv>().get('/:id/map/channels', async 
 	if (!work) {
 		const attempt = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
-			return beginDemAttempt(db, 'delineation');
+			return beginDemAttempt(db, 'channels');
 		});
 		// The attempt is finished before `work` settles, so before the response:
 		// a transaction left running after it would hold one of the container's

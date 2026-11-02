@@ -89,7 +89,7 @@
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
-	import { chirpsCells, layersOn, unitLabels } from './mapLayers';
+	import { channelsWanted, chirpsCells, demRiversOffered, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
 	import { AreaFill } from './areaFill.svelte';
@@ -911,15 +911,20 @@
 	/** The Area fill slider (kept in this browser): the polygons' fill strength. */
 	const areaFill = new AreaFill();
 
-	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
+	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes,
+	// and while the DEM rivers layer is (`layers=channels`, docs/maps.md § The elevation model's channels) ---
 	/**
 	 * A delineated proposal waits for a decision and no other tool has the map: the channels stay drawn, dimmed, so
 	 * the outline can be checked against the terrain it follows; they go once it is accepted or rejected.
 	 */
 	const reviewingProposal = $derived(!!pendingProposal && !draft.active && !measure.active && !dividing);
+	/** The DEM rivers toggle: an editor's, once their delineation check finds an elevation model. */
+	const demRiversShown = $derived(demRiversOffered(canEdit, !!delineation?.available));
+	/** A tool needs the channels (not the layer): the pill over the map speaks for them; the Layers box speaks for the layer. */
+	const toolChannels = $derived(delineating || dividing || reviewingProposal);
 	const channels = new ChannelLayer({
 		projectId: () => projectId,
-		on: () => canEdit && !!delineation?.available && (delineating || dividing || reviewingProposal),
+		on: () => channelsWanted({ offered: demRiversShown, layerOn: layersOn(params).has('channels'), tool: toolChannels }),
 		view: () => mapView,
 		load: api.delineation.channels
 	});
@@ -1406,6 +1411,7 @@
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
 		demGrid={demGridOffered ? demGrid : null}
+		demRivers={demRiversShown ? { on: layersOn(params).has('channels'), layer: channels } : null}
 		{areaFill}
 	/>
 {/snippet}
@@ -1501,7 +1507,7 @@
 							{/if}
 							{#if dividing && divider.busy === 'pieces'}
 								<p class="map-pill small" aria-hidden="true" data-testid="map-click-busy">Working out the sub-catchments…</p>
-							{:else if channels.on && (channels.noView || channels.zoomIn || channels.error || channels.loading)}
+							{:else if channels.on && toolChannels && (channels.noView || channels.zoomIn || channels.error || channels.paused || channels.loading)}
 								<!-- Only what needs saying: the bars and the Key already say what the terrain channels are. -->
 								<p class="map-pill channel-note small" role="status" data-testid="map-channels-note">
 									<span class="swatch" aria-hidden="true" style:background={channelColour(dark)}></span>
@@ -1509,6 +1515,8 @@
 										The terrain channels are drawn on the map, which isn’t showing here.
 									{:else if channels.zoomIn}
 										{reviewingProposal ? 'Zoom in to see the terrain channels the outline follows.' : 'Zoom in to see the terrain channels.'}
+									{:else if channels.paused}
+										New terrain channels are paused for this hour; delineation still works.
 									{:else if channels.error}
 										<span class="err">The terrain channels couldn’t be drawn: {channels.error}</span>
 									{:else}

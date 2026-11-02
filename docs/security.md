@@ -3717,11 +3717,14 @@ placed points. The server never trusts the browser with geometry:
   account has its own cap on elevation-model work (184_dem_attempt,
   `delineation/attempt.ts`), shared by delineate, start, divide and the
   sub-catchments from clicks (each click's preview and the save are one
-  attempt each, counted as delineation) and the elevation model's channels
-  (each tile computed, not one served from the cache) and
+  attempt each, counted as delineation), and
   counted before the work in the transaction that checks the role: at most
   2 attempts running at once and 60 started an hour, across every project,
-  refused and failed attempts included (429). It is per account because the
+  refused and failed attempts included (429). The elevation model's channels
+  (each tile computed, not one served from the cache) count in a pool of
+  their own (307, `CHANNEL_ATTEMPTS`): 2 running and 150 an hour, so the
+  DEM rivers layer can never spend the delineation hour; past it the route
+  answers 429 with `details.reason: 'channels_hourly'`. It is per account because the
   per-project count missed the attempts that store nothing (a `too_large`
   refusal still reads and routes the windows), passed parallel requests
   (counted in one transaction, stored in another) and reset with a new
