@@ -285,7 +285,11 @@ const PAGE_BUILD_WORKERS = [
 	{ label: 'preview worker', file: 'workers/preview.worker-*.js', url: 'virtual:preview-worker-url', re: /(^|\/)workers\/preview\.worker-[^/]*\.js$/ },
 	// MapLibre's worker (issue #288): an entry of the page build for its same-origin URL (CSP worker-src 'self').
 	// Self-contained since maplibre-gl 6.13, so it shares nothing with the main thread and counts under mapKb (mapChunks).
-	{ label: 'map worker', file: 'workers/maplibre.worker-*.js', url: 'virtual:maplibre-worker-url', re: /(^|\/)workers\/maplibre\.worker-[^/]*\.js$/ },
+	// selfContained: it is not asked to import from chunks/. Whether Rolldown happens to lift its body into a chunk
+	// is layout, not sharing (maplibre-gl 6.15 built as a facade over one; 6.16 builds as one file). That it is an
+	// entry of the page build at all is what its name under workers/ shows: Vite's own worker build
+	// (new Worker(new URL(…))) writes assets/maplibre-gl-worker-*.js instead, and the guard finds no map worker.
+	{ label: 'map worker', file: 'workers/maplibre.worker-*.js', url: 'virtual:maplibre-worker-url', re: /(^|\/)workers\/maplibre\.worker-[^/]*\.js$/, selfContained: true },
 ];
 /** A static import from the page build's shared chunks, as Rollup writes it next to workers/. */
 const SHARED_CHUNK_IMPORT = /(?:\bfrom|\bimport)\s*["']\.\.\/chunks\//;
@@ -576,7 +580,8 @@ export function violations(m, budget = BUDGET) {
  * (issue #9, WP-1.17), so they share the engine with the pages and with each
  * other instead of carrying their own copies: each file imports from
  * ../chunks/. A worker built on its own (Vite's `new Worker(new URL(…))`)
- * imports nothing.
+ * imports nothing. MapLibre's worker is self-contained (maplibre-gl 6.13+),
+ * so it is only checked to be there, once, under workers/.
  * @param {{ path: string, text: string }[]} workers the files under workers/
  * @returns {string[]}
  */
@@ -588,7 +593,7 @@ export function pageBuildWorkerViolations(workers) {
 				`Expected one ${w.label} (${w.file}) in the build, found ${entry.length}. frontend/vite.config.ts (workerChunks) emits it; check the plugin still runs and names it.`,
 			];
 		}
-		if (!SHARED_CHUNK_IMPORT.test(entry[0].text)) {
+		if (!w.selfContained && !SHARED_CHUNK_IMPORT.test(entry[0].text)) {
 			return [
 				`The ${w.label} ${entry[0].path} imports nothing from the page build's chunks/: it carries its own copy of the engine again. Start it with the URL from '${w.url}' (frontend/vite.config.ts, workerChunks), not new Worker(new URL(…)).`,
 			];

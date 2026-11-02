@@ -121,16 +121,18 @@ test('a spreadsheet worker has its own ceiling, apart from the calibration worke
 	assert.equal(measure([{ path: '_app/immutable/workers/csvexport.worker-z.js', gzipBytes: 1024 }]).largestSpreadsheetWorker.kb, 0);
 });
 
-test("the calibration, preview and map workers must share the page build's chunks (issue #9, WP-1.17, issue #288)", () => {
+test("the calibration and preview workers must share the page build's chunks, and the map worker be one of its entries (issue #9, WP-1.17, issue #288)", () => {
 	const shared = { path: '_app/immutable/workers/autocal.worker-Ab1.js', text: 'import{c as f}from"../chunks/D39qfV0U.js";self.onmessage=()=>{}' };
 	const preview = { path: '_app/immutable/workers/preview.worker-Cd2.js', text: 'import{r}from"../chunks/D39qfV0U.js";self.onmessage=()=>{}' };
 	const mapWorker = { path: '_app/immutable/workers/maplibre.worker-Ef3.js', text: 'import{D as e}from"../chunks/Dcg1s4G.js";' };
 	const spreadsheet = { path: '_app/immutable/workers/export.worker-x.js', text: 'self.onmessage=()=>{}' };
 	assert.deepEqual(pageBuildWorkerViolations([shared, preview, mapWorker, spreadsheet]), []);
-	// MapLibre's worker built on its own would carry its own copy of MapLibre's shared code.
-	const ownMap = pageBuildWorkerViolations([shared, preview, { path: mapWorker.path, text: 'self.onmessage=()=>{}' }]);
-	assert.equal(ownMap.length, 1);
-	assert.match(ownMap[0], /map worker .*'virtual:maplibre-worker-url'/);
+	// MapLibre's worker is self-contained (maplibre-gl 6.13+; 6.16 builds it as one file): importing nothing is fine.
+	assert.deepEqual(pageBuildWorkerViolations([shared, preview, { path: mapWorker.path, text: 'var e=Object.create;self.onmessage=()=>{}' }]), []);
+	// Vite's own worker build would name it under assets/, not workers/: no map worker in the page build.
+	const viteMap = pageBuildWorkerViolations([shared, preview, { path: '_app/immutable/assets/maplibre-gl-worker-Ef3.js', text: 'self.onmessage=()=>{}' }]);
+	assert.equal(viteMap.length, 1);
+	assert.match(viteMap[0], /Expected one map worker/);
 	// Built on its own (new Worker(new URL(…))): no import from chunks/.
 	const own = pageBuildWorkerViolations([{ path: shared.path, text: 'const e=1;self.onmessage=()=>{}' }, preview, mapWorker]);
 	assert.equal(own.length, 1);
