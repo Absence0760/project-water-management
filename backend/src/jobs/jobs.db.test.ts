@@ -325,6 +325,34 @@ describe('claiming', () => {
 		for (const j of [...a, ...b]) await withoutUser((db) => finishJob(db, j, { ok: true }));
 	});
 
+	it('a job queued due at once at the end of a long one dates from its queueing: it runs after a job queued while the long one ran', async () => {
+		// A CHIRPS backfill from our copy queues its next window due at once (feeds/ingest.ts COPY_NEXT_SECONDS). Were
+		// run_after the queueing transaction's now() (its start), that window would date from before a job another
+		// session queued meanwhile, and the claim (oldest run_after first) would run it first: one feed's backfill
+		// running ahead of everything queued while its windows ran (queue.ts enqueueJob, clock_timestamp()).
+		const u = await signUp('ClaimFair');
+		const pid = await project(u);
+		const order: string[] = [];
+		const handlers: HandlerRegistry = {
+			rerun: defineHandler({
+				role: 'editor',
+				payload: z.object({ name: z.string() }).strict(),
+				run: async ({ db, job, payload }) => {
+					order.push(payload.name);
+					if (payload.name !== 'window 1') return;
+					// Another session queues a job, committed, while this one runs; then this one queues its next window.
+					await enqueue(u, { projectId: job.projectId, kind: 'rerun', payload: { name: 'queued meanwhile' } });
+					await enqueueJob(db, { projectId: job.projectId, kind: 'rerun', payload: { name: 'window 2' }, delaySeconds: 0 });
+				}
+			})
+		};
+		await enqueue(u, { projectId: pid, kind: 'rerun', payload: { name: 'window 1' } });
+		const t = await runTick({ feeds: false, reports: false, alerts: false, projectIds: [pid], handlers });
+		expect(t).toMatchObject({ claimed: 3, done: 3 });
+		expect(order).toEqual(['window 1', 'queued meanwhile', 'window 2']);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
 	it('a job whose worker died is claimed again after its lease; the old worker can no longer finish it', async () => {
 		const u = await signUp('Lease');
 		const pid = await project(u);
