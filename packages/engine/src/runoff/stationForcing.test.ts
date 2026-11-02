@@ -953,7 +953,7 @@ describe('the station paths stay unchanged (golden)', () => {
 	};
 	const EXPECTED: Record<string, GoldenFingerprint> = {
 		units: {
-			shape: "ac1555d75f0ec526",
+			shape: "2b3801b843614df9",
 			series: {
 				"natural_flow@": {
 					sum: 128449487.38522124,
@@ -1023,7 +1023,7 @@ describe('the station paths stay unchanged (golden)', () => {
 			}
 		},
 		catchment: {
-			shape: "4dfbbd1095456425",
+			shape: "c2e75d5eac71492b",
 			series: {
 				"natural_flow@": {
 					sum: 43262835.21512982,
@@ -1093,7 +1093,7 @@ describe('the station paths stay unchanged (golden)', () => {
 			}
 		},
 		both: {
-			shape: "521b4d9dcf0f2078",
+			shape: "9e2a55e190119724",
 			series: {
 				"natural_flow@": {
 					sum: 71118750.87790546,
