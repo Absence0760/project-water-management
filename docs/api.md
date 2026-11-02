@@ -5157,8 +5157,13 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 - `FeedMeta = { id, source, config, targetKind, targetName, enabled, schedule,
   createdAt, updatedAt, actingUser, lastAttemptAt, lastSuccessAt,
   lastDataDate, lastValue, consecutiveFailures, lastError, lastMeta, health,
-  writes, series, versionConflict, replaceFrom, rebuilding, nextAttemptAt }`.
-  `nextAttemptAt`: when the scheduler next takes the feed (ISO instant;
+  writes, series, versionConflict, replaceFrom, rebuilding, nextAttemptAt,
+  pendingFetch }`. `pendingFetch`: a fetch of the feed under way, `running`
+  while its `feed_fetch` job runs or its request is out at the fetcher with
+  the answer not yet applied (`app_feed_fetch_out`, 276, a day at most),
+  `queued` while one waits or retries under the feed's dedupe key (a
+  backfill's next window, a Run now, the schedule's), else null; read under
+  job's RLS (viewer). `nextAttemptAt`: when the scheduler next takes the feed (ISO instant;
   `app_feed_next_attempt`, 243, the rule that decides it is due): its daily
   slot, or sooner while failing, after the backoff (15 min, or 2 h after an
   HTTP 403 refusal, doubling, capped at the day). It may be in the past (due,
