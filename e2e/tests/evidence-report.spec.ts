@@ -61,7 +61,7 @@ async function scenarioRun(page: Page, projectId: string, baseRunId: string, upp
 	return { scenarioId: scenario.id, runId: ((await ran.json()) as { run: { id: string } }).run.id };
 }
 
-test('an application on the nominated run gives the full evidence report, draft on every page', async ({ page, owner }, testInfo) => {
+test('an application on the nominated run gives the full evidence report, draft on every page', async ({ page, owner }) => {
 	void owner;
 	const { project, baseline, upper } = await seed(page, 'Evidence report');
 
@@ -231,7 +231,7 @@ test('an application on the nominated run gives the full evidence report, draft 
 	if (hasPdftotext || process.env.CI) {
 		const footer = (await page.locator('main').getAttribute('data-report-footer'))!;
 		expect(footer).toMatch(/^Draft · not issued · /);
-		const texts = pdfPageTexts(pdf, testInfo.outputPath('evidence-report.pdf'));
+		const texts = pdfPageTexts(pdf);
 		expect(texts.length).toBeGreaterThan(1);
 		texts.forEach((t, i) => {
 			expect(t).toContain(footer.split(' · ').slice(0, 3).join(' · '));

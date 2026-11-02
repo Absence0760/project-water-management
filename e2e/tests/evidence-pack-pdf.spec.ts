@@ -37,7 +37,7 @@ test.beforeAll(async () => {
 	test.skip(!up && !process.env.CI, 'needs MinIO: pnpm dev:s3:up');
 });
 
-test('issuing a pack prints its PDF once; the download is the bytes whose SHA-256 the pack and verify answer', async ({ page, owner }, testInfo) => {
+test('issuing a pack prints its PDF once; the download is the bytes whose SHA-256 the pack and verify answer', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Pack PDF catchment');
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', evidenceUncertaintyRule: RULE });
@@ -111,7 +111,7 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	// The server PDF carries the page's own footer on every page (its @page margin box; the renderer adds none):
 	// the issued stamp, the manifest hash and verify code, the disclaimer's key point, and "Page X of Y".
 	if (hasPdftotext || process.env.CI) {
-		const texts = pdfPageTexts(pdf, testInfo.outputPath('pack.pdf'));
+		const texts = pdfPageTexts(pdf);
 		expect(texts).toHaveLength(read.pack.pdfPages!);
 		texts.forEach((t, i) => {
 			expect(t).toMatch(/Issued · version 1 · /);
