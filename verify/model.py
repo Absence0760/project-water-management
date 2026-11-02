@@ -779,9 +779,6 @@ def unsupported(doc: dict) -> list[str]:
     s = doc.get("settings", {}) or {}
     m = doc.get("model", {}) or {}
     out = []
-    for n in m.get("nodes", []):
-        if n.get("damSedimentPctPerYear") or n.get("damInServiceFrom") or n.get("abstractionFrom"):
-            out.append("time-varying development")
     # §2.7i: the drought restriction rule (and a Priority user's fixed restriction % under it) isn't modelled; before
     # phase 2b nothing refused it, so an input carrying one would have disagreed instead of being refused.
     if s.get("droughtRestriction"):
@@ -1557,7 +1554,8 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
 def run(doc: dict) -> dict:
     doc = apply_scenario_ops(doc)
     settings = merge_settings(doc.get("settings") or {})
-    model = doc["model"]
+    # A copy: the run sets each day's dam capacity and survey curve on its nodes (§2.7g).
+    model = copy.deepcopy(doc["model"])
     series = doc.get("series") or {}
     rain = prepare_rain(settings, series)
     # §2.4i: the catchment's station replaces its rain; the stations' records and pairings, built once.
@@ -1584,6 +1582,9 @@ def run(doc: dict) -> dict:
                 divert_by_month_days=0, reach_loss_days=0, baseflow_days=0,
                 # Phase 2b: land cover's units, the units whose patches were scaled to the unit, unit-days above q.
                 land_cover_units=0, land_cover_scaled=0, land_cover_above_q=0,
+                # Phase 2b: development during the run (§2.7g): dams whose capacity changes, unit-days with no capacity,
+                # unit-days a shrinking dam spilled what it could no longer hold, units with an abstraction date.
+                dev_dams=0, dev_no_capacity_days=0, dev_shrink_spill_days=0, abstraction_from_units=0,
                 # Phase 2b: unit-days a dated demand factor window covered (counted once per read).
                 demand_window_days=0,
                 # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
@@ -1846,6 +1847,10 @@ def run(doc: dict) -> dict:
     # §2.3 item 4a: the nodes' demand factors, from settings.demandFactorFrom on.
     dff = settings.get("demandFactorFrom")
     dff_o = iso_to_ord(dff) if isinstance(dff, str) and _is_iso(dff) else None
+    # §2.7g (engine >= 1.30.0): the first day a farm or a water user takes water.
+    abs_from = {x["id"]: iso_to_ord(x["abstractionFrom"]) for x in nodes
+                if x["kind"] in ("farm", "user") and isinstance(x.get("abstractionFrom"), str) and _is_iso(x["abstractionFrom"])}
+    diag["abstraction_from_units"] += len(abs_from)
 
     def dfac(x, i, part=None):
         """The day's demand factor on a node, or on one part of a farm's demand (`crops`, or a demand object
@@ -1899,8 +1904,10 @@ def run(doc: dict) -> dict:
             need = max(0.0, gross)
             # Rain short of the need by no more than 1e-12 of it covers it (§2.3).
             used = need if need - available <= 1e-12 * need else available
-            F0_s.append(need - used)
-            F = (need - used) * dfac(f, i, "crops")
+            # §2.7g: before abstractionFrom the unit's demand is 0; the store and the rain used run as usual.
+            on_ = 0.0 if f["id"] in abs_from and days[i] < abs_from[f["id"]] else 1.0
+            F0_s.append((need - used) * on_)
+            F = (need - used) * dfac(f, i, "crops") * on_
             w = min(smax, max(0.0, available - used))
             gross_s.append(gross)
             eff_s.append(used)
@@ -1947,6 +1954,10 @@ def run(doc: dict) -> dict:
                     if min(B, base[wm[i]] * s) > v:
                         diag["floor_days"] += 1
                     v = max(v, min(B, base[wm[i]] * s))
+                # §2.7g: no demand before the unit's abstractionFrom (the floor is on a demand, so none either).
+                if fid in abs_from and o < abs_from[fid]:
+                    v = 0.0
+                    raw[-1] = 0.0
                 dem.append(v)
                 flo.append(min(B, v) if B is not None else NAN)
             obj_dem[ob["id"]] = dem
@@ -1973,8 +1984,9 @@ def run(doc: dict) -> dict:
         D_base[f["id"]] = db
     for u in users:
         ud = u.get("userDemandM3Day")
-        D_base[u["id"]] = [float(ud[wm[i]]) if ud else 0.0 for i in range(n)]
-        D_fact[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) if ud else 0.0 for i in range(n)]
+        on_ = [0.0 if u["id"] in abs_from and days[i] < abs_from[u["id"]] else 1.0 for i in range(n)]
+        D_base[u["id"]] = [float(ud[wm[i]]) * on_[i] if ud else 0.0 for i in range(n)]
+        D_fact[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) * on_[i] if ud else 0.0 for i in range(n)]
 
     # ---- allocations (§2.12a) -------------------------------------------
     alloc_mode = settings.get("allocationMode") or "none"
@@ -2004,16 +2016,27 @@ def run(doc: dict) -> dict:
             scaled_rows: list = []
             fa_scaled[nid] = scaled_rows
             unlicensed: set[int] = set()
+            af0 = abs_from.get(nid)
             for y, idx in yrs.items():
+                # §2.7g: a unit with an abstraction date is scaled on its days from then; a year wholly before it
+                # asks for none: factor 0, listed with 0 m³, whatever is in force (probe development-abstraction).
+                fit_idx = [i for i in idx if af0 is None or days[i] >= af0]
+                if not fit_idx:
+                    fac_y[y] = 0.0
+                    vol_y[y] = 0.0
+                    dem_y[y] = 0.0
+                    continue
                 # §2.12a (engine >= 1.70.0): no allocation in force on the days a year is scaled
                 # on: the unit keeps its modelled demand there (factor 1), not listed as scaled.
-                if not any(a["from"] <= days[i] <= a["to"] for a in both for i in idx):
+                if not any(a["from"] <= days[i] <= a["to"] for a in both for i in fit_idx):
                     unlicensed.add(y)
                     fac_y[y] = 1.0
                     continue
                 vol = 0.0
+                af_ = abs_from.get(nid)
                 for a in both:
-                    inside = sum(1 for i in idx if a["from"] <= days[i] <= a["to"])
+                    # §2.7g: a unit with an abstraction date asks for the volume over its days from then.
+                    inside = sum(1 for i in idx if a["from"] <= days[i] <= a["to"] and (af_ is None or days[i] >= af_))
                     vol += a["volume"] * inside / wy_length(y)
                 tot = 0.0
                 for i in idx:
@@ -2326,6 +2349,8 @@ def run(doc: dict) -> dict:
     # Pumping units per node (§2.7d): the combined capacity first, then the
     # individual boreholes in id order.
     units: dict[str, list[dict]] = {}
+    units_nodam: dict[str, list[dict]] = {}
+    units_dam: dict[str, list[dict]] = {}
     for x in nodes:
         if x["kind"] not in ("farm", "user"):
             continue
@@ -2355,13 +2380,40 @@ def run(doc: dict) -> dict:
                 u_["target"] = "direct"
         if lst:
             units[x["id"]] = lst
+            # §2.7d, §2.7g: on a day its dam has no capacity, the node's units run as on a node without a dam.
+            units_nodam[x["id"]] = [{**u_, "mode": "supplemental" if u_["mode"] == "emergency" else u_["mode"], "target": "direct"} for u_ in lst]
+            units_dam[x["id"]] = lst
     has_bh = {x["id"] for x in nodes if x["kind"] in ("farm", "user") and (x.get("boreholeCapacityM3Day") or any(b.get("nodeId") == x["id"] for b in model.get("boreholes") or []))}
 
+    # §2.7g: each farm's entered dam capacity and survey curve; the day loop sets the day's on the node.
+    cap0 = {f["id"]: float(f["damCapacityM3"]) for f in farms}
+    curve0 = {f["id"]: f.get("damCurve") for f in farms}
+    kdev: dict[str, list[float]] = {}
+    for f in farms:
+        if not cap0[f["id"]] > 0:
+            continue
+        rate = f.get("damSedimentPctPerYear") or 0.0
+        sv = f.get("damSurveyDate")
+        sv_o = iso_to_ord(sv) if isinstance(sv, str) and _is_iso(sv) and rate else None
+        ins = f.get("damInServiceFrom")
+        ins_o = iso_to_ord(ins) if isinstance(ins, str) and _is_iso(ins) else None
+        # A dam in service from the run's first day or before, without sediment, is the entered dam (no column).
+        if sv_o is None and (ins_o is None or (days and ins_o <= days[0])):
+            continue
+        kdev[f["id"]] = [
+            (max(0.0, 1 - rate * (o - sv_o) / 365.25) if sv_o is not None else 1.0) * (1.0 if ins_o is None or o >= ins_o else 0.0)
+            for o in days
+        ]
+        diag["dev_dams"] += 1
+
     def supply_rule(x):
+        # §2.7g: on a day its dam has no capacity a unit runs as one without a dam, so a trigger runs river first
+        # (probe development-in-service); x["damCapacityM3"] is the day's capacity inside the day loop.
         r = x.get("supplyRule") or "damFirst"
-        if r == "trigger" and x["damCapacityM3"] <= 0:
+        c_ = x["damCapacityM3"]
+        if r == "trigger" and c_ <= 0:
             return "riverFirst"
-        if r == "runOfRiver" and x["damCapacityM3"] > 0:
+        if r == "runOfRiver" and c_ > 0:
             return "riverFirst"
         return r
 
@@ -2381,7 +2433,8 @@ def run(doc: dict) -> dict:
     obj_sup = {ob["id"]: [0.0] * n for lst in objs.values() for ob in lst}
     # Each river abstraction's take and pool storage (§2.7j).
     river_cols = {fid: {t["key"]: {"take": [0.0] * n, "pool": [0.0] * n} for t in ts} for fid, ts in riv.items()}
-    storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] for f in farms}
+    # §2.7g: the initial level x the first day's capacity.
+    storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] * (kdev[f["id"]][0] if f["id"] in kdev and n else 1.0) for f in farms}
     on_river = {f["id"]: False for f in farms}
     sd_store = {x["id"]: 0.0 for x in nodes}
     dd_owed = {x["id"]: 0.0 for x in nodes}
@@ -2418,14 +2471,32 @@ def run(doc: dict) -> dict:
         a_full = f.get("damAreaFullM2")
         if a_full is None:
             # Maaren & Moolman (1985) via Sawunyama (2013): A = 7.2 C^0.77 m² (engine >= 1.61.0).
-            a_full = 7.2 * cap ** 0.77
+            a_full = 7.2 * cap0[f["id"]] ** 0.77
         b = f.get("damAreaExponent", 0.7)
-        return (a_full * (s0 / cap) ** b if s0 > 0 else 0.0), None
+        # §2.7g: a dam that shrank overnight starts the day above its capacity, at its full-supply area (probe
+        # development-sediment-area), and spills the rest that day.
+        return (a_full * min(1.0, s0 / cap) ** b if s0 > 0 else 0.0), None
 
+    dev_cap: dict[str, list[float]] = {fid: [0.0] * n for fid in kdev}
     for i, o in enumerate(days):
         m = wm[i]
         rf = p_used[i]
         wy = water_year(o)
+        # §2.7g: the day's capacity (entered x k(t)); the survey curve's volumes x k at the same areas; dead storage,
+        # the trigger and stop levels, the drought borehole's and a transfer's reserve follow it (they read it).
+        for fid, ks in kdev.items():
+            f = by_id[fid]
+            c_ = cap0[fid] * ks[i]
+            f["damCapacityM3"] = c_
+            dev_cap[fid][i] = c_
+            if curve0[fid]:
+                f["damCurve"] = [{**r_, "volumeM3": r_["volumeM3"] * ks[i]} for r_ in curve0[fid]]
+            if fid in units_nodam:
+                units[fid] = units_dam[fid] if c_ > 0 else units_nodam[fid]
+            if not c_ > 0:
+                diag["dev_no_capacity_days"] += 1
+            elif storage[fid] > c_:
+                diag["dev_shrink_spill_days"] += 1
         if i == 0 or (_dt.date.fromordinal(o).month == 10 and _dt.date.fromordinal(o).day == 1):
             for k in bh_used:
                 bh_used[k] = [0.0] * len(bh_used[k])
@@ -3194,6 +3265,13 @@ def run(doc: dict) -> dict:
     put(None, "ewr", ewr)
     put(None, "ewr_shortfall", cat_short)
 
+    # §2.7g: the day loop is done; the nodes get their entered capacity and curve back (what follows is structural).
+    for fid in kdev:
+        by_id[fid]["damCapacityM3"] = cap0[fid]
+        by_id[fid]["damCurve"] = curve0[fid]
+        if fid in units_dam:
+            units[fid] = units_dam[fid]
+
     # ---- EWR attribution (§2.7b, §2.7c, §2.6a) ----------------------------
     sites = [(None, outlet["id"])] + [
         (x["id"], x["id"])
@@ -3405,6 +3483,8 @@ def run(doc: dict) -> dict:
                 put(xid, k, cc[k])
             if xid in lc_red:
                 put(xid, "landcover_reduction", lc_red[xid])
+            if xid in dev_cap:
+                put(xid, "dam_capacity", dev_cap[xid])
             put(xid, "ewr_charge", charge[xid])
             put(xid, "ewr_charge_irrigation", charge_irr[xid])
             if xid in binding:

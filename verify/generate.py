@@ -269,6 +269,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_apan_daily(random.Random(seed * 15485867 + 29), doc, start, days, dense)
     add_demand_parts(random.Random(seed * 32452867 + 31), doc, start, days, dense)
     add_land_cover(random.Random(seed * 49979693 + 37), doc, dense)
+    add_development(random.Random(seed * 67867979 + 41), doc, start, days, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
@@ -388,6 +389,32 @@ def add_land_cover(rng: random.Random, doc: dict, dense: bool = False) -> None:
             })
     rng.shuffle(patches)
     m["landCover"] = patches
+
+
+def add_development(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """Development that changes during a run (§2.7g, engine >= 1.30.0), from
+    its own stream so the rest of a network is unchanged: in 25 % of networks
+    (65 % dense), on about half the dams a survey date (before, inside or after
+    the run) with a sediment rate of up to 0.2 a year (so some dams fill up and
+    some run back past their entered capacity), now and then a survey date
+    without a rate, and an in-service date (before the run or inside it); on
+    some farms and users the first day they take water."""
+    if rng.random() >= (0.65 if dense else 0.25):
+        return
+
+    def date(lo: int, hi: int) -> str:
+        return (start + dt.timedelta(days=rng.randint(lo, hi))).isoformat()
+
+    for x in doc["model"]["nodes"]:
+        if x["kind"] == "farm" and (x.get("damCapacityM3") or 0) > 0 and rng.random() < 0.55:
+            if rng.random() < 0.7:
+                x["damSurveyDate"] = date(-5 * 365, days + 2 * 365)
+                if rng.random() < 0.85:
+                    x["damSedimentPctPerYear"] = rng.choice([0.005, 0.02, round(rng.uniform(0, 0.2), 3), 0.2])
+            if rng.random() < 0.5:
+                x["damInServiceFrom"] = date(-200, days - 30)
+        if x["kind"] in ("farm", "user") and rng.random() < 0.2:
+            x["abstractionFrom"] = date(-100, days)
 
 
 def add_calibration_locations(rng: random.Random, doc: dict) -> None:

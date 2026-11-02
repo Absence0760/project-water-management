@@ -486,6 +486,22 @@ of a seed is unchanged), with probes and mutants:
   unit and for the catchment; patches on a gauge, a user or a farm without
   area skipped. Probes `land-cover-q75`, `land-cover-odd-days`,
   `land-cover-baseflow`, `land-cover-ewr`, `land-cover-forecast-tail`.
+- **Development that changes during a run** (§2.7g, engine ≥ 1.30.0;
+  `add_development`, a quarter of the random networks and most dense ones):
+  each day's dam capacity, the entered one × k(t) = MAX(0, 1 − rate ×
+  (t − survey) ÷ 365.25) × [t ≥ in service], run back before the survey
+  too; the starting storage at the first day's capacity; dead storage, the
+  trigger and stop levels, the emergency and drought borehole levels, a dam
+  rule's reserve and the survey curve's volumes scaling with it (the
+  full-supply area not); storage above the day's capacity spilled; a day
+  with no capacity running as a unit without a dam (what is routed to it
+  spills, no release or pass-inflow target, dam-target boreholes direct and
+  emergency ones as supplemental, a trigger rule river first); the
+  `dam_capacity` column; and `abstractionFrom` on farms and users (no
+  crop, object or user demand before it, the soil-water store running on,
+  a full allocation fitted on the days from then). Probes
+  `development-sediment`, `-curve-none`, `-in-service`, `-in-service-trigger`, `-abstraction`,
+  `-rate-no-survey`.
 
 ## Phase 2b (not covered yet)
 
@@ -502,8 +518,6 @@ docs/followups.md § Verification ("`verify/` phase 2b").
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
 - calibration (the fit itself; the calibration statistics);
-- time-varying development (sediment, a dam in service from a date,
-  abstraction from a date), §2.7g;
 - the `demand.scale` scenario op itself (its factors, by part and dated,
   are covered as the node fields it writes), and drought restrictions
   (with a Priority user's fixed restriction %, engine 1.86.0, §2.7i);
@@ -878,3 +892,21 @@ networks:
   6 km², condensed 5.5 km² on a 4 km² unit; scaling by the areas would give
   a low-flow share of 0.546, the engine's is 0.5955 = (5 × 0.6 + 0.5 ×
   0.55) ÷ 5.5).
+- **Development that changes during a run** (§2.7g): agrees on every column
+  once four points §2.7g left open were read the way `runModel` does, each
+  settled from its outputs and now written into §2.7g: a dam that starts a
+  day above its shrunk capacity has its full-supply area (dense seed 8: an
+  exponent of 0.98 put Python's area at 75–78 m² against 71 m², the full
+  area); the `dam_capacity` column is written only when k can differ from 1
+  (dense seed 8: a dam in service since before the run has none); on a day
+  with no capacity a `trigger` rule runs river first, as on a unit without
+  a dam (dense seed 110: 22 237 m³ a day from the river against Python's
+  0); and under a full allocation a water year wholly before
+  `abstractionFrom` is scaled to 0 and listed with 0 m³ even when no
+  allocation is in force (dense seed 123, 20 days of September 2010). The
+  last was first taken for an engine departure from §2.12a's "a year with
+  none in force keeps its modelled demand"; checking whether it was one,
+  the engine's `fullAllocationFactors` comment was read, which says a year
+  wholly before the date "asks for none", so the independence rule was
+  broken for that one point: the behaviour itself is what the outputs show
+  (factor 0, the row), and the demand is 0 either way. No engine change.

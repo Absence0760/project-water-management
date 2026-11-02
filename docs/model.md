@@ -6246,6 +6246,16 @@ took the water routed to the absent dam before irrigation, and a dam-target
 borehole pumped nothing). The dam's starting storage is its initial level × the
 first day's capacity.
 
+Four points this leaves open, as `runModel` settles them (`verify/` probes
+`development-*`): a dam
+that starts a day above that day's capacity (sediment shrank it overnight)
+has its full-supply area that day, the power law's storage ratio held at 1,
+and spills the excess; the unknown-area estimate (7.2 × C^0.77, §2.7a)
+reads the entered capacity, as the full-supply area doesn't scale; a
+sediment rate without a survey date runs as the entered dam (k = 1); and on
+a day with no capacity a `trigger` supply rule runs river first, as it does
+on a unit without a dam (§2.7e).
+
 **Drought restriction reviews** (§2.7i, engine ≥ 1.70.0): a dam that comes
 into service after the run's first day starts empty, and until it first
 starts a day holding the mildest level's share of its capacity each review
@@ -6256,7 +6266,9 @@ after the in-service day read the new, empty dam, so the deepest level
 applied (issue #90 Q30).
 
 A run with such a dam carries its `dam_capacity` column (m³, the day's
-capacity); a run resumed from a snapshot (§2.16) judges "such a dam" by the
+capacity): a dam with a sediment rate and a survey date, or with an
+in-service date after the run's first day (one in service from the first day
+or before, without sediment, is the entered dam and has none); a run resumed from a snapshot (§2.16) judges "such a dam" by the
 capture run's first day, so it carries the column whenever the uninterrupted
 run does, even resumed on or after the in-service date (engine ≥ 1.69.0;
 before, it dropped it). The self-checks recompute k from the node and hold every
@@ -6276,7 +6288,11 @@ On a day with no capacity what is routed into the dam comes out in its
 `spill` column (the dam can't hold it), so a dam not yet in service reads as
 spilling everything that reaches it; the balance is exact. Under a full
 allocation (§2.12a) a unit with an abstraction date asks for the registered
-volume over its days from then, not the whole year's in fewer days. A run
+volume over its days from then, not the whole year's in fewer days; a water
+year wholly before the date asks for none, so it is listed as scaled with 0
+m³ and a factor of 0, even when none of its allocations is in force that year
+(the 1.70.0 "keeps its modelled demand" rule reads only the days it is scaled
+on, and it has none; its demand is 0 either way). A run
 warns when sediment run back from the survey makes a dam more than 1.25 ×
 its surveyed capacity. Firm yield (§2.13) resizes the entered capacity and
 keeps each day's factor.

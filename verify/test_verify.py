@@ -497,6 +497,22 @@ MUTANTS = [
     ("land cover: a patch's cover is ignored (its whole area counts)", 'fs.append((float(pch["areaKm2"]) * float(pch["densityPct"]) / fa, mar, low))', 'fs.append((float(pch["areaKm2"]) / fa, mar, low))'),
     ("land cover: a patch's own reductions are ignored", 'mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls', "mar, low = cls"),
     ("land cover: the patches' mar and lowFlow swapped", 'mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls', 'low, mar = (fac["mar"], fac["lowFlow"]) if fac else cls'),
+    # Development that changes during a run (§2.7g, engine >= 1.30.0).
+    ("development: the dam keeps its entered capacity", "            c_ = cap0[fid] * ks[i]\n", "            c_ = cap0[fid]\n"),
+    ("development: sediment only after the survey (not run back before it)", "(max(0.0, 1 - rate * (o - sv_o) / 365.25) if sv_o is not None else 1.0)", "(max(0.0, 1 - rate * max(0, o - sv_o) / 365.25) if sv_o is not None else 1.0)"),
+    ("development: a dam holds water before its in-service date", "(1.0 if ins_o is None or o >= ins_o else 0.0)", "1.0"),
+    ("development: the starting storage is the initial level x the entered capacity", '* (kdev[f["id"]][0] if f["id"] in kdev and n else 1.0) for f in farms}', "for f in farms}"),
+    ("development: the survey curve keeps its volumes", '                f["damCurve"] = [{**r_, "volumeM3": r_["volumeM3"] * ks[i]} for r_ in curve0[fid]]', "                pass"),
+    ("development: the unknown full-supply area is estimated from the day's capacity", 'a_full = 7.2 * cap0[f["id"]] ** 0.77', "a_full = 7.2 * cap ** 0.77"),
+    ("development: a dam above its day's capacity has an area above full supply", "a_full * min(1.0, s0 / cap) ** b", "a_full * (s0 / cap) ** b"),
+    ("development: dam-target boreholes pump nothing while the dam has no capacity", "units[fid] = units_dam[fid] if c_ > 0 else units_nodam[fid]", "units[fid] = units_dam[fid]"),
+    ("development: a trigger rule keeps waiting for a dam with no capacity", '        c_ = x["damCapacityM3"]\n        if r == "trigger"', '        c_ = cap0.get(x["id"], x["damCapacityM3"])\n        if r == "trigger"'),
+    ("development: a sediment rate without a survey date still runs", "if isinstance(sv, str) and _is_iso(sv) and rate else None", "if isinstance(sv, str) and _is_iso(sv) and rate else (days[0] if rate and days else None)"),
+    ("development: the crops take water before abstractionFrom", '            on_ = 0.0 if f["id"] in abs_from and days[i] < abs_from[f["id"]] else 1.0', "            on_ = 1.0"),
+    ("development: an object takes water before abstractionFrom", "                if fid in abs_from and o < abs_from[fid]:\n                    v = 0.0", "                if False:\n                    v = 0.0"),
+    ("development: a user takes water before abstractionFrom", '        on_ = [0.0 if u["id"] in abs_from and days[i] < abs_from[u["id"]] else 1.0 for i in range(n)]', "        on_ = [1.0] * n"),
+    ("development: a full allocation asks for the whole year's volume after abstractionFrom", 'and (af_ is None or days[i] >= af_))', ")"),
+    ("development: a year wholly before abstractionFrom keeps its modelled demand when nothing is in force", "                if not fit_idx:\n                    fac_y[y] = 0.0", "                if not fit_idx and any(a[\"from\"] <= days[i] <= a[\"to\"] for a in both for i in idx):\n                    fac_y[y] = 0.0"),
     ("daily A-pan: the record counts as evaporation only where that day's pan coefficient is above 0", "any(v is not None and v > 0 for v in apan_day) and any(c > 0 for c in settings[\"panCoefficient\"])", "any(v is not None and v > 0 and settings[\"panCoefficient\"][m] > 0 for v, m in zip(apan_day, wm))"),
 ]
 
@@ -564,6 +580,8 @@ class CrossCheck(unittest.TestCase):
             "demand_window_days",
             # Land cover (§2.5a).
             "land_cover_units", "land_cover_scaled", "land_cover_above_q",
+            # Development during the run (§2.7g).
+            "dev_dams", "dev_no_capacity_days", "dev_shrink_spill_days", "abstraction_from_units",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 

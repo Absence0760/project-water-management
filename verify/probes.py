@@ -1830,6 +1830,89 @@ def land_cover(n: int = 38, baseflow: bool = False, ewr: bool = False, tail: boo
             "series": series}
 
 
+def development(kind: str) -> dict:
+    """Development that changes during a run (§2.7g, engine >= 1.30.0), on a
+    year of invented rain from 1 October 2019. `sediment`: a 30 000 m³ dam
+    surveyed on 1 April 2020 losing 0.15 a year, so it starts larger than
+    entered and ends smaller, spilling what it no longer holds (at its
+    full-supply area while it starts a day above the day's capacity); its
+    dead storage, its trigger and stop levels and a dam rule's reserve scale
+    with it; a survey curve on a second dam has its volumes × k. `curve-none`:
+    the same with the full-supply area unknown (the estimate from the entered
+    capacity, which doesn't scale). `in-service`: a dam in service from
+    1 February 2020 with a primary and an emergency dam-target borehole and a
+    pass-inflow release: before it, what is routed to it spills, nothing
+    is released and the boreholes pump direct, the emergency one as
+    supplemental; `in-service-trigger`: a trigger rule on it, river first
+    until then. `abstraction`: a farm taking water from 1 March 2020 (its
+    soil-water store running before), a domestic object on it with a floor,
+    and a senior user from 1 January 2020, whose claim passes the farm above
+    only from then; under a full allocation the farm asks for the year's
+    volume over its days from 1 March. `rate-no-survey`: a sediment rate
+    without a survey date, which runs as the entered dam."""
+    start = dt.date(2019, 10, 1)
+    n = 366
+    rain = _wave(start, n, 4, 1.4)
+    crops, areas = _crop("f", 90000)
+    crops[0]["cropFactor"] = [0.5, 0.7, 0.9, 1.0, 1.0, 0.9, 0.6, 0.4, 0.3, 0.3, 0.4, 0.5]
+    curve = [
+        {"levelM": 0, "areaM2": 0, "volumeM3": 0},
+        {"levelM": 1, "areaM2": 4000, "volumeM3": 2000},
+        {"levelM": 3, "areaM2": 9000, "volumeM3": 15000},
+        {"levelM": 5, "areaM2": 12000, "volumeM3": 40000},
+    ]
+    f_kw: dict = dict(areaKm2=5, damCapacityM3=30000, damInitialPct=0.9, damMinPct=0.1, pctRunoffToDam=0.8,
+                      damAreaFullM2=9000, damAreaExponent=0.8, damSeepagePerDay=0.001)
+    g_kw: dict = dict(areaKm2=3, damCapacityM3=40000, damInitialPct=0.5, pctRunoffToDam=1, damCurve=curve)
+    nodes_extra: list = []
+    alloc: list = []
+    s = _settings(apanMm=[150, 180, 220, 230, 190, 160, 110, 70, 50, 55, 80, 110], lakeEvapFactor=0.8,
+                  effectiveRainFraction=0.6, effectiveRainStoreMm=30,
+                  gr4j={"x1": 250, "x2": 0, "x3": 70, "x4": 1.6, "warmupDays": 120})
+    transfers: list = []
+    objs: list = []
+    if kind in ("sediment", "curve-none"):
+        f_kw.update(damSurveyDate="2020-04-01", damSedimentPctPerYear=0.15, supplyRule="trigger",
+                    supplyTriggerPct=0.4, supplyStopPct=0.7, pumpCapacityM3Day=400)
+        if kind == "curve-none":
+            f_kw["damAreaFullM2"] = None
+        g_kw.update(damSurveyDate="2019-12-01", damSedimentPctPerYear=0.2)
+        transfers = [_rule("t", "g", "f", 600, 0.3)]
+    elif kind == "in-service":
+        f_kw.update(damInServiceFrom="2020-02-01", damInitialPct=0.5, damReleaseRule="passInflow", damReleaseM3Day=[300] * 12)
+        s["boreholes"] = None
+    elif kind == "in-service-trigger":
+        # A trigger rule before the dam exists runs river first (as on a unit without a dam), its pump capped.
+        f_kw.update(damInServiceFrom="2020-02-01", supplyRule="trigger", supplyTriggerPct=0.4, supplyStopPct=0.7,
+                    pumpCapacityM3Day=250, pctRunoffToDam=0.3)
+    elif kind == "abstraction":
+        f_kw.update(abstractionFrom="2020-03-01")
+        nodes_extra = [_node("u", "user", "o", userDemandM3Day=[900] * 12, userPriority="senior", userReturnPct=0,
+                             abstractionFrom="2020-01-01")]
+        objs = [{"id": "d", "nodeId": "f", "name": "houses", "category": "domestic", "sizing": "perUnit", "monthlyM3Day": None,
+                 "count": 300, "litresPerUnitDay": 150, "lossPct": 0, "monthlyFactor": None, "population": None,
+                 "returnPct": 0, "priority": "first", "destination": "internal", "enabled": True, "note": ""}]
+        f_kw["demandFactor"] = [0.5] * 12
+        s["allocationMode"] = "fullAllocation"
+        alloc = [{"id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 25000, "storageM3": None,
+                  "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None}]
+    elif kind == "rate-no-survey":
+        f_kw.update(damSedimentPctPerYear=0.2)
+    down = "u" if nodes_extra else "o"
+    nodes = [_node("o", "gauge", None), *nodes_extra, _node("f", "farm", down, **f_kw), _node("g", "farm", "f", **g_kw)]
+    boreholes = []
+    if kind == "in-service":
+        boreholes = [
+            {"id": "b1", "nodeId": "f", "capacityM3Day": 150, "annualCapM3": None, "mode": "primary", "target": "dam", "depletionFactor": 0},
+            {"id": "b2", "nodeId": "f", "capacityM3Day": 200, "annualCapM3": None, "mode": "emergency", "emergencyBelowPct": 0.5,
+             "target": "dam", "depletionFactor": 0},
+        ]
+        s.pop("boreholes")
+    m = {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": transfers, "demandObjects": objs,
+         "boreholes": boreholes, "allocations": alloc}
+    return {"settings": s, "model": m, "series": {"rain_catchment_mm": {"startDate": start.isoformat(), "values": rain}}}
+
+
 def _zone(gauge: str, gr4j: dict | None, enabled: bool = True) -> dict:
     return {
         "nodeId": gauge, "enabled": enabled, "calibrationStart": None, "calibrationEnd": None, "calibrationFlowKind": None,
@@ -2090,6 +2173,13 @@ PROBES = {
     "land-cover-baseflow": land_cover(baseflow=True),
     "land-cover-ewr": land_cover(120, ewr=True),
     "land-cover-forecast-tail": land_cover(tail=True),
+    # Development that changes during a run (§2.7g).
+    "development-sediment": development("sediment"),
+    "development-curve-none": development("curve-none"),
+    "development-in-service": development("in-service"),
+    "development-in-service-trigger": development("in-service-trigger"),
+    "development-abstraction": development("abstraction"),
+    "development-rate-no-survey": development("rate-no-survey"),
     # The forecast-conditioned outlook's member (issue #620 step 6).
     "forecast-member-rescaled": forecast_member_rescaled(),
     # Future climate (issue #621, §2.17): the op on a dam, then on the per-unit rules (the MAPs by the annual
