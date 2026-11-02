@@ -170,8 +170,18 @@ lease), it takes the slot it shares with the fetcher (`lease.hold_host`):
 `ingest-state/hosts/chc/lease.json`, by the same conditional writes, with the
 holder's name (`ingest:rnl:backfill`) and an expiry of the Lambda's time left
 plus a minute, so a run killed by its timeout frees it a minute later.
-Held by the fetcher, a monthly run ends quietly (`busy` in its answer, the lag
-still published; tomorrow's catches up) and a backfill month raises
+Held by the fetcher, a monthly (daily) run waits for it
+(`lease.hold_host_waiting`): it reserves the next turn
+(`ingest-state/hosts/chc/reserved.json`, renewed at each look, every 15 s;
+never over another waiter's live reservation, behind which it just waits)
+and looks again until `DAILY_RUN_WORK_S` (120 s) before its deadline, about
+12 minutes of its 15: longer than one per-feed CHIRPS fetch holds the slot
+(9–12 minutes), and the reservation keeps the next fetch from taking the
+freed slot first. It withdraws the reservation once it holds the slot or
+gives up. Still held then, or held by a backfill execution (which keeps it
+for hours, so it doesn't wait at all), it ends quietly (`busy` in its
+answer, the lag still published; the next day's run catches up). A
+backfill month raises
 `HostBusy` (a `MirrorBusy`), which the state machine retries every 2 minutes
 for an hour (`infra/ingest_backfill.tf`). The Node side is
 `backend/src/feeds/hostSlot.ts`; both read and write the same JSON
@@ -814,7 +824,7 @@ They cover:
 - **The polite client:** pacing, the 304 skip, the 403 stop, `Retry-After` given in seconds or as a date, each 429/503 logged with its `Retry-After` (or `absent`) and named in `RetryLater`, a wait the time budget refuses, and a body that ends early (short of its `Content-Length`, or broken mid-read) retried then refused with `TruncatedDownload`, in memory, to a file and for a 206 part; no `Content-Length` accepted as before. They run against a fake opener and clock, so nothing touches the network or sleeps.
 - **The writer:** the exact D2 metadata, and where a known cell-day lands, for leap and non-leap years and across New Year. Chunks that are all NaN aren't written, and S3 staging is checked against an in-memory fake.
 - **The manifest:** the round-trip, refusing manifests that don't follow the spec, and a hash that stays stable across NaN payloads, memory layout and byte order.
-- **CHC's request slot** (`test_lambda_handler.py`): taken and released by a run; HostBusy for a backfill month and a quiet end for a daily run while held; an expired slot taken over; a backfill execution's hold kept across its months, kept through a failed month, busy for others and another execution, released at the end (only its own, its reservation too), taken over once expired; the reservation of the next turn; the same on a `file://` copy; the `hold` and `release_hold` events.
+- **CHC's request slot** (`test_lambda_handler.py`): taken and released by a run; HostBusy for a backfill month and a quiet end for a daily run while held; a daily run's wait (`DailyRunWaits`: it reserves the next turn so the next fetch yields the freed slot, renews it at each look, gives up with its work time left and withdraws it, never overwrites another waiter's live reservation, takes over an expired one, doesn't wait out a backfill execution); an expired slot taken over; a backfill execution's hold kept across its months, kept through a failed month, busy for others and another execution, released at the end (only its own, its reservation too), taken over once expired; the reservation of the next turn; the same on a `file://` copy; the `hold` and `release_hold` events.
 - **The handler:** a fixtures-mode run from start to finish, a re-run that is one 304, the variants through the environment, a retry after a crash between the chunk upload and the manifest, a gap in the months that holds `finalThrough` back, a file whose days aren't its month's, and an image whose COPY line lacks a module.
 - **The finals job** (`test_chirps_final.py`): the listing parser, a new month, a rewrite with the same values (no bump), a rewrite with changed values (a bump and its `changes`), the 304, a 403 that stops with no retry, the time budget, the pacing (within and across runs, on a fake clock), a backfill of a named month, the lease (local and S3), and the metric on every exit.
 - **IMERG Late** (`test_imerg.py`): a known cell of a synthetic *global* file in IMERG's layout lands at its lat/lon (neighbours east and north, the region's four corners, nothing from outside), the whole region cell by cell, an OPeNDAP subset reading the same as the global file, a north-first (lat, lon) file still placed by coordinate, the units (mm/day read as the day's mm; mm/hr, V06's `precipitationCal`, the wrong day, 2500 mm and a login page refused), the CMR search (the newest version wins, a missing OPeNDAP link or a wrong time stops), the last 10 days newest first, held days skipped with no request, a gap (not held, `prelimThrough` still the newest day, and one older than the 10-day search blocking no later day), the time budget, keeping 30 days (manifest and chunks), the per-day version (V08 replacing V07 with and without a change of values), a 403 or 401 from either host stopping with the same-day marker, the lease (local and S3), the metric on every exit, and the token read from Secrets Manager and sent only to OPeNDAP, never on a redirect.

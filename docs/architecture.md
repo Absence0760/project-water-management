@@ -1760,7 +1760,9 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     Still held at the wait's end, the pass skips the run
     (`stopped: "host_busy"`, logged, no lag datapoint that run). A backfill month raises `HostBusy`, which the state
     machine retries every 2 minutes for an hour; a daily `rnl`/`sat` run
-    ends quietly. A backfill execution keeps the slot for its whole run
+    reserves the next turn and waits the same way, until 120 s before its
+    deadline (`lease.hold_host_waiting`, `DAILY_RUN_WORK_S`), then ends
+    quietly, and ends at once while a backfill execution holds it. A backfill execution keeps the slot for its whole run
     (every month the same owner, kept through the pauses, released by the
     state machine's last step; `lease.hold_host_for_backfill`), so the
     fetches defer for hours and resume after it; a backfill month waiting

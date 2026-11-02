@@ -1907,7 +1907,7 @@ wait. While it runs:
   SQS receive spent and their health untouched; they resume within 2
   minutes of the release. A feed may show Stale if the backfill outlasts
   its stale threshold;
-- the daily `rnl`/`sat` runs end quietly (`busy`, lag still published),
+- the daily `rnl`/`sat` runs end quietly at once, without waiting (`busy`, lag still published),
   and the fetcher's preliminary and GEFS passes skip with
   `stopped: "host_busy"`; their next run after the backfill catches up;
 - a second execution started meanwhile fails after an hour of `HostBusy`:
@@ -1945,6 +1945,25 @@ renewal. The fetcher's write and delete grant on `reserved.json` comes with
 Terraform (`fetcher_chc_slot`): apply it with or before the backend release.
 Without it the reservation fails, logged (`host_slot_reservation_failed`),
 and the pass still waits the longer wait without one.
+
+**The daily rnl and sat runs wait and reserve too** (2026-10-29: both
+runs, 02:00Z and 02:20Z, found the slot held by per-feed fetches and copied
+nothing). A daily run that finds the slot held by anyone but a backfill
+execution reserves the next turn (`reserved.json`, holder
+`ingest:rnl:monthly` or `ingest:sat:monthly`, renewed every 15 s), never
+over another waiter's live reservation, and waits until 120 s before its
+deadline (`DAILY_RUN_WORK_S`, about 12½ minutes of its 15); the next
+per-feed fetch then defers (`reserved: true`) and the run takes the freed
+slot within 15 s. Its log says `waiting for it` and `took the chc request
+slot after waiting N s`, or `gave up after waiting N s` (`busy` in its
+answer; the next day's run catches up). A run that gets the slot with less
+than 6 minutes left reads the listing but leaves a new month for the next
+day. The wait stays inside the Lambda's existing 900 s run, so no Terraform
+changes: the ingest role already writes the whole mirror bucket,
+`reserved.json` included. It arrives with the ingest image (move
+`ingest_image_tag`), in either order with any backend release. Cost: at
+most ~13 minutes of the 3 GB function a day per product, only on days the
+slot is held.
 
 **Rolling out the shared slot:** apply Terraform (the fetcher's
 `fetcher_chc_slot` grant on that one key, the state machine's `HostBusy`

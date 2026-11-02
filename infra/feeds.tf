@@ -48,10 +48,13 @@
 #     fetch (backend/src/feeds/hostSlot.ts HOST_SLOT_PASS_WORK_MS), then skip
 #     the run (stopped "host_busy"; the next run catches up);
 #   - a backfill month raises HostBusy, which the state machine retries
-#     (ingest_backfill.tf); a daily rnl/sat run ends quietly.
+#     (ingest_backfill.tf); a daily rnl/sat run reserves the next turn and
+#     waits the same way inside its 900 s run (ingest/lease.py
+#     hold_host_waiting, lambda_handler.py DAILY_RUN_WORK_S), then ends
+#     quietly.
 # A backfill execution keeps the slot for its whole run (hours), released by
 # its last step, so the per-feed fetches keep deferring until it ends; a
-# backfill month (or a waiting scheduled pass) reserves the next turn
+# backfill month (or a waiting scheduled pass or daily run) reserves the next turn
 # (ingest-state/hosts/chc/reserved.json, never overwriting another's live
 # one), and a fetch that takes a free slot with someone else's live
 # reservation gives it back.

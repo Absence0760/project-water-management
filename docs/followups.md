@@ -322,23 +322,21 @@ provenance, `ingest/verify_copy.py`):
       `dws_source = "store"`, whose apply removes the per-feed queues
       ([deployment.md § The cutover](./deployment.md#the-cutover)). Each
       `terraform apply` with the operator's go-ahead.
-- [ ] **The daily rnl and sat runs give up the day when the fetcher holds
-      CHC's slot.** `ingest/lambda_handler.py` ends a daily run on
-      `HostBusy` ("tomorrow's run catches up"), and per-feed CHIRPS fetches
-      go back to back while a backfill runs (each takes the slot for its 8–10
-      minutes, `feeds/hostSlot.ts`), so on 2026-10-29 both runs (02:00Z,
-      02:20Z) found it held; while the scheduler re-queued failing feeds
-      (fixed in 276_feed_fetch_out_hold) that would have been every day. A
-      per-feed backfill (unit `rnl` feeds from their start date) can still
-      hold the slot most of the day for days. Durable fix: the daily runs
-      reserve the next turn as a backfill month does (`lease.py`
-      `hold_host` taking the backfill's `reserve=True`; the fetcher already yields to a live
-      reservation, `hostSlot.ts yieldToReservation`) and are invoked again
-      ~20 minutes later (a second EventBridge schedule, or the Lambda's own
-      async retry), by which time the fetch holding the slot has ended and
-      the next one has yielded. Trigger: before the cutover, since the copy
-      must keep up for `chirps_source = "mirror"`; until then the next
-      daily run after the backfill ends catches up the missed days.
+- [x] **The daily rnl and sat runs give up the day when the fetcher holds
+      CHC's slot.** Done: a daily run that finds the slot held reserves the
+      next turn (`reserved.json`, renewed every 15 s, never over another
+      waiter's live reservation) and waits inside its own 900 s run until
+      120 s before its deadline (`ingest/lease.py` `hold_host_waiting`,
+      `lambda_handler.py` `DAILY_RUN_WORK_S`), which outlasts one per-feed
+      fetch (524–707 s seen); the next fetch yields the freed slot to it. It
+      doesn't wait out a backfill execution's hold. No Terraform change (an
+      async retry or a second schedule would need one, and a 5-minute
+      reservation would lapse before a second rule fired); it ships with the
+      ingest image ([deployment.md § Backfill](./deployment.md#backfill)).
+      Left as accepted: a fetch that took the slot just before the run
+      started can still outlast the wait, and that day's run then ends
+      `busy`, the next day's catching up (finals arrive once a month, so the
+      cost is at most a day's delay of one file).
 - [x] **The portfolio counts a copy-behind feed as stale.** Done: the
       portfolio and project-list routes pass `rainCopy(db)` into
       `loadPortfolio`/`loadMyOutcomes`, which count such feeds in a new
