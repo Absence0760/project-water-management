@@ -59,11 +59,11 @@ beforeAll(async () => {
 
 describe('who acts for the responsible authority', () => {
 	it('is the authority’s to confirm: the owner proposes, the operator confirms the first, and the member list shows it (229)', async () => {
-		// The 163 flag is no longer settable: not through the route, nor past it.
+		// The 163 flag is gone (dropped by 303): the route refuses the field, and there is no column to write past it.
 		expect((await owner.call('PATCH', `${P()}/members/${marked.id}`, { actsForAuthority: true })).status).toBe(400);
 		await expect(
 			withUser(owner.id, (db) => db.query('UPDATE project_member SET acts_for_authority = true WHERE project_id = $1 AND user_id = $2', [projectId, marked.id]))
-		).rejects.toMatchObject({ code: '42501' });
+		).rejects.toMatchObject({ code: '42703' });
 		// An editor can't propose themselves.
 		expect((await marked.call('POST', `${P()}/authority-delegates`, { userId: marked.id })).status).toBe(403);
 		// The owner proposes: shown as proposed, granting nothing.
@@ -92,11 +92,17 @@ describe('who acts for the responsible authority', () => {
 		expect((await viewer.call('GET', P())).body.project.actsForAuthority).toBe(false);
 	});
 
-	it('never comes with a new membership, whatever the insert says', async () => {
+	it('never comes with a new membership', async () => {
 		const late = await signUp('AuLate');
 		expect((await owner.call('POST', `${P()}/members`, { email: late.email, role: 'editor' })).status).toBe(201);
-		const [row] = await asOwner('SELECT acts_for_authority FROM project_member WHERE project_id = $1 AND user_id = $2', [projectId, late.id]);
-		expect(row.acts_for_authority).toBe(false);
+		expect((await late.call('GET', P())).body.project.actsForAuthority).toBe(false);
+		expect(await asOwner('SELECT 1 FROM authority_delegate WHERE project_id = $1 AND user_id = $2', [projectId, late.id])).toEqual([]);
+		// 163's flag, its trigger and its function are gone (303).
+		expect(await asOwner(`SELECT 1 FROM information_schema.columns WHERE table_name = 'project_member' AND column_name = 'acts_for_authority'`)).toEqual([]);
+		expect(await asOwner(`SELECT 1 FROM pg_trigger WHERE tgname = 'project_member_authority'`)).toEqual([]);
+		expect(await asOwner(`SELECT 1 FROM pg_proc WHERE proname = 'project_member_authority'`)).toEqual([]);
+		// Control: 229's lapse trigger on the same table is still there.
+		expect(await asOwner(`SELECT 1 FROM pg_trigger WHERE tgname = 'project_member_authority_lapse'`)).toHaveLength(1);
 	});
 
 	it('names the project’s authority in its settings, which runs never record', async () => {

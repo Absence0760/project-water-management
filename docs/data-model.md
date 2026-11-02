@@ -1879,9 +1879,10 @@ were swept and who was mailed.
   nominates a run, + 5 years; backfilled for existing projects); the tick's
   bookkeeping `record_reminders_sent` (0–3), `record_reminded_at`,
   `record_close_notified_at`. Two partial indexes serve the tick.
-- Written only through **`app_set_licence_outcome`** (since 233 it still
-  takes 161's three words and stores the new ones, for a backend released
-  before 233; dropping them is in [followups.md](./followups.md)) and
+- Written only through **`app_set_licence_outcome`** (233 took 161's three
+  words too and stored the new ones, for a backend released before it;
+  303_contract_licence_words_acts_for dropped them, so an old word fails
+  the column's CHECK) and
   **`app_confirm_licence_record`** (SECURITY DEFINER, owners) and the
   tick's **`app_licence_record_due(limit)`** (marks and returns the due
   notices with the owners to tell); `licence_record_guard` and
@@ -1894,8 +1895,8 @@ were swept and who was mailed.
   `team_public_records_guard` refuse deleting its projects or the team, and
   moving a project out of it, until the disposal is confirmed
   (`app_project_public_records`).
-- Guards: `licence/licence-record.db.test.ts`, `db/migration-233.db.test.ts`
-  (161's words mapped, dates kept).
+- Guards: `licence/licence-record.db.test.ts` (161's words refused since
+  303), `db/migration-233.db.test.ts` (161's words mapped, dates kept).
 
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
@@ -2767,12 +2768,12 @@ projection's read and narrows their series further:
   `signoff_select_specialist`). Set by an owner (`member_update`); a party
   change clears it unless the same update sets it. water_app's column
   `UPDATE` grant now includes it.
-- **`project_member.acts_for_authority`** (163_licensing_authority, boolean,
-  default false): superseded by `authority_delegate` (229). Read by nothing;
-  water_app's column `UPDATE` grant on it is revoked (its grant is now
-  `role`, `party`, `specialist`); its pre-229 values were carried over as
-  confirmed delegates. `project_member_authority` (163) stays with it until a
-  later migration drops both (expand/contract).
+- **`project_member.acts_for_authority`** (163_licensing_authority) is gone:
+  superseded by `authority_delegate` (229), which carried its values over as
+  confirmed delegates, and dropped with 163's `project_member_authority`
+  trigger and function by 303_contract_licence_words_acts_for (the contract
+  step). water_app's column `UPDATE` grant on `project_member` is `role`,
+  `party`, `specialist`.
 - **Who acts for the responsible authority** (`authority_delegate`,
   229_authority_delegates, issue #523 G5): `(project_id → project CASCADE,
   user_id → app_user CASCADE)` primary key, `proposed_by → app_user SET

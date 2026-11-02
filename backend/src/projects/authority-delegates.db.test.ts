@@ -238,7 +238,9 @@ describe('grandfathering the flags an owner set before 229', () => {
 		await db.connect();
 		try {
 			await db.query('BEGIN');
-			// As the owner ticked it before 229 (163's project_member_authority still asks for an owner).
+			// 303 dropped 163's flag, so put it back as 163 had it, inside this rolled-back transaction, for 229's carry-over to read.
+			await db.query('ALTER TABLE project_member ADD COLUMN acts_for_authority boolean NOT NULL DEFAULT false');
+			// As the owner ticked it before 229.
 			await db.query(`SELECT set_config('app.current_user_id', $1, true)`, [owner.id]);
 			await db.query('UPDATE project_member SET acts_for_authority = true WHERE project_id = $1 AND user_id = ANY($2)', [id, [editor.id, viewerU.id]]);
 			await db.query(
