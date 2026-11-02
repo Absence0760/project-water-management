@@ -853,3 +853,8 @@ networks:
   written into §2.3a as the rule rather than changed in the engine.
 - **Demand factors by part and dated demand factors** (§2.3 item 4a):
   agree on every column, nothing left open by the docs.
+- **Drought restrictions weren't refused** (a harness gap, not an engine
+  one): `unsupported()` didn't name `settings.droughtRestriction` (§2.7i),
+  so an input carrying the rule would have run in `model.py` without it and
+  disagreed rather than being refused. It is named now
+  (`test_drought_restrictions_are_refused`); modelling it stays in phase 2b.

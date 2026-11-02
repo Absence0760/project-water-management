@@ -626,6 +626,10 @@ class Generator(unittest.TestCase):
         self.assertEqual(len(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "u", "pinnedFactors": [1] * 12}}}, "model": {}})), 1)
         self.assertEqual(len(model.unsupported({"settings": {}, "model": {}, "series": {"rain_forecast_mm@u": {"startDate": "2020-01-01", "values": [1]}}})), 1)
 
+    def test_drought_restrictions_are_refused(self):
+        # §2.7i isn't modelled yet: an input with the rule is named, not cross-checked.
+        self.assertEqual(model.unsupported({"settings": {"droughtRestriction": {"levels": []}}, "model": {}}), ["drought restrictions"])
+
     def test_known_differences_name_their_followup(self):
         for key, why in diff.KNOWN_DIFFERENCES.items():
             self.assertIn("followups.md", why, key)

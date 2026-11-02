@@ -774,6 +774,10 @@ def unsupported(doc: dict) -> list[str]:
     for n in m.get("nodes", []):
         if n.get("damSedimentPctPerYear") or n.get("damInServiceFrom") or n.get("abstractionFrom"):
             out.append("time-varying development")
+    # §2.7i: the drought restriction rule (and a Priority user's fixed restriction % under it) isn't modelled; before
+    # phase 2b nothing refused it, so an input carrying one would have disagreed instead of being refused.
+    if s.get("droughtRestriction"):
+        out.append("drought restrictions")
     if s.get("chirpsQuantileMap"):
         out.append("CHIRPS quantile map")
     if s.get("rainSource"):
