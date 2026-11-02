@@ -42,6 +42,25 @@ export interface UnitEffect {
 	deficitM3Day: MetricDelta;
 }
 
+/** One daily series of the preview's hydrograph: its first day and a value a day, null on a day it has none. */
+export interface PreviewLine {
+	startDate: string;
+	values: (number | null)[];
+}
+
+/**
+ * The flow at the outlet, day by day, for the preview's mini hydrograph
+ * (roadmap WP-1.17): the catchment's `simulated_outflow` in the last run (a)
+ * and with the edits (b), in m³/day, and the outlet's observed record when the
+ * run has one (the edited run's: the edits can't change a measurement, but a
+ * settings edit can change which record is read).
+ */
+export interface PreviewHydrograph {
+	last: PreviewLine;
+	edited: PreviewLine;
+	observed: PreviewLine | null;
+}
+
 /**
  * What the edits do, as compareRuns (engine ./compare.ts) reads two runs:
  * a = the last run's input on this build's engine, b = with the edits. Both
@@ -61,6 +80,8 @@ export interface PreviewEffect {
 	/** Units only in the last run (the edits removed them) and only with the edits (added). */
 	removedUnits: string[];
 	addedUnits: string[];
+	/** The outlet's flow both ways, for the mini hydrograph; null when either run stored no simulated outflow. */
+	hydrograph: PreviewHydrograph | null;
 }
 
 export type ToWorker = { type: 'yield'; id: number; request: YieldPreviewRequest } | { type: 'effect'; id: number; request: EffectPreviewRequest };

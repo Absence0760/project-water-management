@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "WP-1.17 Preview mini hydrograph: the dialog chunk +0.77 KB (PreviewHydrograph.svelte, hydrograph.ts), the preview worker +0.14 KB (previewHydrograph), CSS +0.03 KB; measured 2 814 417 → 2 815 379 B gzip, total 2312 → 2313 KB"
+}

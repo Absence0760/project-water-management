@@ -4,7 +4,7 @@
 // ship the model in a page chunk; the bundle guard's worker checks and
 // src/lib/preview/compute.test.ts's import scan say so).
 import { applyScenario, firmYield, prepareYield, runModelWithoutChecks, validateScenarioOps, type CalibrationStats, type FarmSummary, type MetricDelta, type ModelInput, type ModelOutput, type YieldPattern, type YieldPoint } from '@water-management/engine';
-import type { EffectPreviewRequest, FromWorker, PreviewEffect, ToWorker, YieldPreviewRequest } from './messages';
+import type { EffectPreviewRequest, FromWorker, PreviewEffect, PreviewHydrograph, PreviewLine, ToWorker, YieldPreviewRequest } from './messages';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -135,6 +135,25 @@ function totals(farms: readonly FarmSummary[]) {
 	};
 }
 
+/** A run's catchment-level series (nodeId null) by key, as a hydrograph line: NaN (a day with no value) → null. */
+function catchmentLine(out: ModelOutput, key: string): PreviewLine | null {
+	const s = out.series.find((x) => x.nodeId === null && x.key === key);
+	return s ? { startDate: out.startDate, values: Array.from(s.values, (v) => (Number.isFinite(v) ? v : null)) } : null;
+}
+
+/**
+ * The mini hydrograph's lines (roadmap WP-1.17): the outlet's simulated flow in
+ * both runs, and the observed record the edited run read at the outlet. Every
+ * day of the record: the chart opens on its last year and zooms from there.
+ */
+export function previewHydrograph(base: ModelOutput, edited: ModelOutput): PreviewHydrograph | null {
+	const last = catchmentLine(base, 'simulated_outflow');
+	const withEdits = catchmentLine(edited, 'simulated_outflow');
+	if (!last || !withEdits) return null;
+	const observed = catchmentLine(edited, 'observed_flow');
+	return { last, edited: withEdits, observed: observed && observed.values.some((v) => v !== null) ? observed : null };
+}
+
 /**
  * What unsaved edits do to the last run (issue #284): the model on the run's
  * input and on the input with the edits (./overlay.ts), on this build's
@@ -202,7 +221,8 @@ export function previewEffect(req: EffectPreviewRequest): PreviewEffect {
 		calibration: ka || kb ? { nse: delta(ka?.nse, kb?.nse), kge: delta(ka?.kge, kb?.kge), pbias: delta(ka?.pbias, kb?.pbias) } : null,
 		units,
 		removedUnits: fa.filter((f) => !bIds.has(f.nodeId)).map((f) => f.name),
-		addedUnits: fb.filter((f) => !aById.has(f.nodeId)).map((f) => f.name)
+		addedUnits: fb.filter((f) => !aById.has(f.nodeId)).map((f) => f.name),
+		hydrograph: previewHydrograph(base, edited)
 	};
 }
 

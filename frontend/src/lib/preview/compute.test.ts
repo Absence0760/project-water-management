@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { applyScenario, compareRuns, firmYield, prepareYield, runModelWithoutChecks, SUPPLY_TARGET, type ModelInput, type ScenarioOp } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { forgetBase, handle, parseMessage, previewEffect, previewYield } from './compute';
+import { forgetBase, handle, parseMessage, previewEffect, previewHydrograph, previewYield } from './compute';
 import type { FromWorker, ToWorker } from './messages';
 
 /** A random catchment (engine fuzz) with a dam on a farm: the input and that farm's id. */
@@ -223,6 +223,49 @@ describe('previewEffect: what unsaved edits do to the last run (issue #284)', ()
 		const edited: ModelInput = JSON.parse(JSON.stringify(base));
 		edited.model.nodes[0]!.downstreamNodeId = 'no-such-node';
 		expect(() => previewEffect({ baseKey: 'p/r', base, edited })).toThrow(/^the model can't run with these edits: /);
+	});
+
+	it("carries the outlet's simulated flow both ways for the mini hydrograph, every day, gaps as null (WP-1.17)", () => {
+		const { base, edited } = withCrops();
+		const a = runModelWithoutChecks(base);
+		const b = runModelWithoutChecks(edited);
+		const e = previewEffect({ baseKey: 'p/r', base, edited });
+		const sim = (o: typeof a) => o.series.find((s) => s.nodeId === null && s.key === 'simulated_outflow')!.values;
+		expect(e.hydrograph?.last).toEqual({ startDate: a.startDate, values: sim(a) });
+		expect(e.hydrograph?.edited).toEqual({ startDate: b.startDate, values: sim(b) });
+		expect(e.hydrograph?.last.values).toHaveLength(a.days);
+		// Its mean is the figures table's mean outflow at the outlet, so the chart and the numbers agree.
+		const mean = (v: (number | null)[]) => v.reduce<number>((t, x) => t + (x ?? 0), 0) / v.length;
+		expect(mean(e.hydrograph!.edited.values)).toBeCloseTo(e.catchment.meanSimulatedOutflowM3Day.b!, 6);
+		// More planted area takes more water: some day's outflow drops.
+		expect(e.hydrograph!.edited.values.some((v, i) => v! < e.hydrograph!.last.values[i]! - 1e-6)).toBe(true);
+	});
+
+	it('gives the observed record at the outlet when the run has one, its missing days as null, and none without one', () => {
+		for (let seed = 1; seed < 400; seed++) {
+			const input = randomInput(seed, { maxNodes: 4, maxDays: 300 });
+			let out;
+			try {
+				out = runModelWithoutChecks(input);
+			} catch {
+				continue;
+			}
+			const obs = out.series.find((s) => s.nodeId === null && s.key === 'observed_flow');
+			const h = previewHydrograph(out, out)!;
+			if (!obs || !obs.values.some(Number.isFinite)) {
+				expect(h.observed).toBeNull();
+				continue;
+			}
+			expect(h.observed!.values).toEqual(obs.values.map((v) => (Number.isFinite(v) ? v : null)));
+			return;
+		}
+		throw new Error('no fuzz seed with an observed record at the outlet');
+	});
+
+	it('has no hydrograph when a run stored no simulated outflow', () => {
+		const { base } = withCrops();
+		const out = runModelWithoutChecks(base);
+		expect(previewHydrograph({ ...out, series: out.series.filter((s) => s.key !== 'simulated_outflow') }, out)).toBeNull();
 	});
 
 	it('handle answers an effect request with its id', () => {

@@ -6,7 +6,8 @@
 	// against the same input without them, and the two compared as the compare
 	// page compares runs. Nothing is stored and no run slot is used. The
 	// dialog is modal, so the edits can't change under an answer: each opening
-	// works the preview out again.
+	// works the preview out again. Under the figures, the mini hydrograph of the
+	// outlet's flow both ways (./PreviewHydrograph.svelte).
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { onDestroy, untrack } from 'svelte';
 	import type { MetricDelta } from '@water-management/engine';
@@ -19,6 +20,7 @@
 	import type { PreviewEffect } from '#lib/preview/messages.js';
 	import { overlayUnsaved, previewBaseRun, type UnsavedEdits } from '#lib/preview/overlay.js';
 	import type { PreviewEngine } from '#lib/preview/runner.js';
+	import PreviewHydrograph from './PreviewHydrograph.svelte';
 
 	let {
 		open = $bindable(false),
@@ -168,6 +170,7 @@
 						</tbody>
 					</table>
 				</div>
+				{#if e.hydrograph}<PreviewHydrograph hydrograph={e.hydrograph} />{/if}
 				{#if e.units.length}
 					<h3>Units whose supply changes</h3>
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
