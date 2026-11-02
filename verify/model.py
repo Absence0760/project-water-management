@@ -777,7 +777,6 @@ LAND_COVER_CLASSES = {
 def unsupported(doc: dict) -> list[str]:
     """What an input uses beyond phases 1 and 2a (verify/README.md § Phase 2b)."""
     s = doc.get("settings", {}) or {}
-    m = doc.get("model", {}) or {}
     out = []
     # §2.7i: the drought restriction rule (and a Priority user's fixed restriction % under it) isn't modelled; before
     # phase 2b nothing refused it, so an input carrying one would have disagreed instead of being refused.
