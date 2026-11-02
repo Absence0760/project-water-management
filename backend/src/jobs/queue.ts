@@ -148,6 +148,17 @@ export async function purgeJobs(db: Db, days = JOB_RETENTION_DAYS): Promise<numb
 	return rows[0]?.n ?? 0;
 }
 
+/**
+ * Seconds until the soonest pending job that isn't due yet comes due, or null
+ * when none is (305 app_next_job_due; the worker's context only). A due job
+ * the claim skipped (its key's job is running) isn't counted: it is the
+ * running job's worker's to follow. `projectIds` scopes it as claimJobs does.
+ */
+export async function nextJobDueSeconds(db: Db, projectIds?: readonly string[]): Promise<number | null> {
+	const { rows } = await db.query<{ s: number | null }>('SELECT app_next_job_due($1::uuid[]) AS s', [projectIds ? [...projectIds] : null]);
+	return rows[0]?.s ?? null;
+}
+
 export interface QueueStats {
 	due: number;
 	running: number;

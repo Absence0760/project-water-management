@@ -2,7 +2,9 @@
 //
 //   pnpm dev:run:worker    loop: a tick every JOB_POLL_SECONDS (15), and at
 //                          once when LISTEN job_queued fires (the job
-//                          table's insert trigger NOTIFYs at commit)
+//                          table's insert trigger NOTIFYs at commit); a tick
+//                          waits for a job coming due before the next poll
+//                          (runner.ts waitDueMs), as the worker Lambda does
 //   pnpm dev:jobs:tick     one tick, print what it did, exit (scripts, e2e)
 //   pnpm dev:feeds:run     one tick that first queues EVERY enabled data feed,
 //                          due or not, then runs it all and exits (--all-feeds)
@@ -74,7 +76,8 @@ async function loop(): Promise<void> {
 			again = true;
 			return;
 		}
-		ticking = runTick()
+		// Waits for a job coming due before the next poll, as the worker Lambda does (a backfill's next window, 5 s on).
+		ticking = runTick({ waitDueMs: pollMs })
 			.then((r) => {
 				if (r.claimed || r.alerts?.sent || r.alerts?.failed) console.log(summary(r));
 			})

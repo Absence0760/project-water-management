@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import type { TickResult } from './jobs/runner.js';
 
-const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasuresPurged: 0, assistantPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, released: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
+const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasuresPurged: 0, assistantPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, released: 0, waitedMs: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
 	alerts: { scheduled: 0, purged: 0, sent: 7, skipped: 1, failed: 2, digests: 1 },
 	packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
 	erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 },
@@ -12,7 +12,10 @@ const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasures
 	packReproductionsFailed: 0
 };
 const runTick = vi.fn(async (_o?: unknown) => tick);
-vi.mock('./jobs/runner.js', () => ({ runTick: (o: unknown) => runTick(o) }));
+vi.mock('./jobs/runner.js', () => ({
+	runTick: (o: unknown) => runTick(o),
+	envInt: (v: string | undefined, fallback: number) => (v ? Number(v) : fallback)
+}));
 const acceptIngestResult = vi.fn(async (_m: unknown) => 'queued' as string);
 vi.mock('./feeds/schedule.js', () => ({ acceptIngestResult: (m: unknown) => acceptIngestResult(m) }));
 const acceptRenderResult = vi.fn(async (_m: unknown) => 'queued' as string);
@@ -21,7 +24,9 @@ vi.mock('./reports/schedule.js', () => ({ acceptRenderResult: (m: unknown) => ac
 const acceptMailEvent = vi.fn(async (_b: string): Promise<unknown> => ({ reason: 'bounce', suppressed: 1 }));
 vi.mock('./mail/suppression.js', () => ({ acceptMailEvent: (b: string) => acceptMailEvent(b) }));
 
-const { handler, metricLine, METRIC_NAMESPACE } = await import('./lambda-worker.js');
+const { handler, metricLine, METRIC_NAMESPACE, WORKER_MAX_JOBS, WORKER_WAIT_DUE_SECONDS } = await import('./lambda-worker.js');
+/** What every invocation's tick runs with besides its budget: jobs bounded by time, and a wait for jobs coming due. */
+const drain = { maxJobs: 1000, waitDueMs: 30_000 };
 
 afterEach(() => {
 	runTick.mockClear();
@@ -48,11 +53,23 @@ describe('handler', () => {
 	it('runs a tick on the EventBridge schedule, within the time left', async () => {
 		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const res = await handler({ source: 'aws.events', 'detail-type': 'Scheduled Event' } as never, { getRemainingTimeInMillis: () => 300_000 });
-		expect(runTick).toHaveBeenCalledWith({ budgetMs: 240_000, deadline: expect.any(Number) });
+		expect(runTick).toHaveBeenCalledWith({ budgetMs: 240_000, deadline: expect.any(Number), ...drain });
 		// The deadline a job must fit: the Lambda's timeout, less 10 s.
 		const { deadline } = runTick.mock.calls[0]![0] as { deadline: number };
 		expect(Math.abs(deadline - (Date.now() + 290_000))).toBeLessThan(5_000);
 		expect(res).toEqual({ claimed: 3, done: 1, failed: 1, dead: 1 });
+	});
+
+	it('drains the queue: its budget bounds a tick rather than a job count, and it waits for jobs coming due (env overrides)', async () => {
+		expect({ maxJobs: WORKER_MAX_JOBS, waitDueMs: WORKER_WAIT_DUE_SECONDS * 1000 }).toEqual(drain);
+		vi.stubEnv('JOB_MAX_PER_TICK', '40');
+		vi.stubEnv('JOB_WAIT_DUE_SECONDS', '10');
+		try {
+			await handler({ source: 'aws.events', 'detail-type': 'Scheduled Event' } as never, { getRemainingTimeInMillis: () => 300_000 });
+			expect(runTick).toHaveBeenCalledWith(expect.objectContaining({ maxJobs: 40, waitDueMs: 10_000 }));
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 
 	it('writes the tick metric to stdout as a bare EMF line, never through console, even under the JSON log format', async () => {
@@ -86,7 +103,7 @@ describe('handler', () => {
 		await handler({ Records: records } as never, { getRemainingTimeInMillis: () => 30_000 });
 		expect(runTick).toHaveBeenCalledTimes(1);
 		// Never less than 10 s of budget.
-		expect(runTick).toHaveBeenCalledWith({ budgetMs: 10_000, deadline: expect.any(Number) });
+		expect(runTick).toHaveBeenCalledWith({ budgetMs: 10_000, deadline: expect.any(Number), ...drain });
 		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'job_message_ignored', messageId: 'm2' }));
 	});
 

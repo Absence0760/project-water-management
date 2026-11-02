@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { JobError } from './errors.js';
-import { claimJobs, enqueueJob, finishJob } from './queue.js';
+import { claimJobs, enqueueJob, finishJob, nextJobDueSeconds } from './queue.js';
 import { defineHandler, type HandlerRegistry } from './registry.js';
 import { handlers } from './handlers/index.js';
 import { runJob, runTick } from './runner.js';
@@ -519,6 +519,67 @@ describe('the tick', () => {
 		expect(tick.claimed).toBe(0);
 		expect(tick.stats.due).toBeGreaterThanOrEqual(1);
 		expect(tick.stats.oldestDueSeconds).toBeGreaterThanOrEqual(600);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+});
+
+describe('a tick that waits for jobs coming due (waitDueMs, 305_job_next_due.sql)', () => {
+	/** A rerun that queues the next link of its chain `delaySeconds` on, as a data feed's backfill queues its next window (feeds/ingest.ts). */
+	const chain = (links: number, delaySeconds: number) =>
+		defineHandler({
+			role: 'editor',
+			payload: z.object({ n: z.number().int() }).strict(),
+			run: async ({ db, job, payload }) => {
+				if (payload.n < links) await enqueueJob(db, { projectId: job.projectId, kind: 'rerun', payload: { n: payload.n + 1 }, delaySeconds });
+			}
+		});
+	const scoped = (pid: string, o: Parameters<typeof runTick>[0] = {}) =>
+		runTick({ feeds: false, reports: false, alerts: false, projectIds: [pid], ...o });
+	const statuses = async (pid: string) => (await asOwner('SELECT status FROM job WHERE project_id = $1 ORDER BY created_at', [pid])).map((r) => r.status);
+
+	it('runs a chain whose next link is queued seconds on in the same tick; without waiting the tick ends after the first link', async () => {
+		const u = await signUp('ChainWait');
+		const pid = await project(u);
+		const handlers: HandlerRegistry = { rerun: chain(3, 1) };
+		await enqueue(u, { projectId: pid, kind: 'rerun', payload: { n: 1 } });
+		// Positive control, and what production did before 305: the next link isn't due, so the tick stops and it waits for the next one.
+		const first = await scoped(pid, { handlers });
+		expect(first).toMatchObject({ claimed: 1, done: 1, waitedMs: 0 });
+		expect(await statuses(pid)).toEqual(['done', 'queued']);
+		// Waiting for jobs coming due: the rest of the chain runs in this tick, with no tick in between.
+		const rest = await scoped(pid, { handlers, waitDueMs: 5_000 });
+		expect(rest).toMatchObject({ claimed: 2, done: 2 });
+		expect(rest.waitedMs).toBeGreaterThan(0);
+		expect(await statuses(pid)).toEqual(['done', 'done', 'done']);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('never waits for a job due later than waitDueMs, or past the budget', async () => {
+		const u = await signUp('ChainNoWait');
+		const pid = await project(u);
+		await enqueue(u, { projectId: pid, kind: 'rerun', payload: { n: 1 }, delaySeconds: 2 });
+		const started = Date.now();
+		expect(await scoped(pid, { handlers: { rerun: noop }, waitDueMs: 1_000 })).toMatchObject({ claimed: 0, waitedMs: 0 });
+		expect(await scoped(pid, { handlers: { rerun: noop }, waitDueMs: 10_000, budgetMs: 1_000 })).toMatchObject({ claimed: 0, waitedMs: 0 });
+		expect(Date.now() - started).toBeLessThan(2_000);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('app_next_job_due: seconds to the soonest future job of the scope, never a due one; null for none; the worker’s context only', async () => {
+		const u = await signUp('NextDue');
+		const pid = await project(u);
+		expect(await withoutUser((db) => nextJobDueSeconds(db, [pid]))).toBeNull();
+		await enqueue(u, { projectId: pid, kind: 'rerun', delaySeconds: 3600 });
+		await enqueue(u, { projectId: pid, kind: 'rerun', delaySeconds: 600 });
+		// A due job (one the claim may be skipping while its key's job runs) isn't waited for.
+		await enqueue(u, { projectId: pid, kind: 'rerun' });
+		const s = await withoutUser((db) => nextJobDueSeconds(db, [pid]));
+		expect(s).toBeGreaterThan(590);
+		expect(s).toBeLessThanOrEqual(600);
+		// Another project's scope doesn't see them.
+		expect(await withoutUser((db) => nextJobDueSeconds(db, [crypto.randomUUID()]))).toBeNull();
+		// A signed-in session never reads the queue's timing.
+		await expect(withUser(u.id, (db) => nextJobDueSeconds(db, [pid]))).rejects.toMatchObject({ code: '42501' });
 		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
 	});
 });

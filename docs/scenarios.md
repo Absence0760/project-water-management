@@ -1218,8 +1218,9 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   about 3.9 s and the run that prepares it 1.7 s, so at most about 15
   minutes of worker time an assessment, and at most 2 assessments in
   flight per user (an assessment counts while any of its jobs is pending).
-  The worker takes up to 25 jobs a tick, so a full fan-out spans several
-  5-minute ticks. On the DB tests' 120-day fixture an assessment with six
+  The worker Lambda runs jobs until its time budget (about 4 minutes) is
+  spent, not a fixed count (`WORKER_MAX_JOBS`), so a full fan-out takes
+  about one invocation's worth of worker time. On the DB tests' 120-day fixture an assessment with six
   dams (24 yield jobs) completes in one tick in well under a second. `report.dams = { nodeIds, onVolumes }` names
   the dams and says whether a run capped use at, or scaled demand to, the
   registered volumes (a viewer kept from them reads only each direction:

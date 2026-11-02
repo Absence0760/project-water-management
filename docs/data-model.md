@@ -3890,6 +3890,12 @@ The background job queue's source of truth ([architecture.md § Background work]
     that update through ([§ The job purge clears links](#the-job-purge-clears-links-148_job_purge_clears_linkssql)).
   - `app_job_stats()`: counts and the oldest due job's age, for the
     production backlog alarm.
+  - `app_next_job_due(projects)` (305): seconds until the soonest queued
+    (or failed, waiting to retry) job that isn't due yet comes due, or NULL;
+    never a due one (the claim may be skipping it while its key's job runs).
+    Scoped like the claim. The worker's context only (`alert_worker_context`):
+    a signed-in session gets `insufficient_privilege`. The tick waits for that
+    job when it is soon (`jobs/runner.ts` `waitDueMs`).
   - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
     job, only with the current lease; returns false for anyone else, or once
     the job was cancelled, which tells the handler to stop.

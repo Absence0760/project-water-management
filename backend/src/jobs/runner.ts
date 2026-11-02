@@ -4,7 +4,8 @@
 // alert checks (app_alert_schedule) that are due (after bringing the CHIRPS
 // cell cache up to our copy's revisions, handlers/mirror-tick.ts, so the
 // feeds queued read the days it marked), then claim and run due
-// jobs one at a time until none are due or the time budget is spent, then
+// jobs one at a time until none are due (or, with waitDueMs, none comes due
+// soon enough to wait for) or the time budget is spent, then
 // send the alert mails those jobs queued (alerts/send.ts) and the evidence
 // pack notices (evidence/notices.ts), and complete or remind the resets of a
 // lost second factor (auth/mfaReset.ts). Every transport ends
@@ -23,7 +24,7 @@ import { rank, requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
 import { describeFailure, JOB_ERROR_MAX, JobError, JobRelease, LeaseLostError } from './errors.js';
 import { handlers as builtInHandlers } from './handlers/index.js';
-import { claimJobs, finishJob, type JobStatus, purgeJobs, queueStats, type QueueStats } from './queue.js';
+import { claimJobs, finishJob, type JobStatus, nextJobDueSeconds, purgeJobs, queueStats, type QueueStats } from './queue.js';
 import type { ClaimedJob, HandlerRegistry, JobHandler } from './registry.js';
 import { logEvent } from '../logging/logEvent.js';
 import { type MfaResetTickResult, runMfaResets } from '../auth/mfaReset.js';
@@ -190,6 +191,17 @@ export interface TickOptions {
 	leaseSeconds?: number;
 	/** Stop claiming once this much time has passed (a job already started still finishes). */
 	budgetMs?: number;
+	/**
+	 * When no job is due, wait for one that comes due within this many ms (and
+	 * inside the budget) and go on claiming, instead of ending the tick. A job
+	 * queued a few seconds on (a data feed backfill's next window,
+	 * feeds/ingest.ts CACHED_NEXT_SECONDS) then runs in this tick, rather than
+	 * on the next one: the production worker is woken only by the API's wake
+	 * messages and the 5-minute schedule, never by a job a job queued. Off
+	 * (0) by default, so a test's tick or `pnpm dev:jobs:tick` never runs a
+	 * whole chain; the worker Lambda and the local worker loop turn it on.
+	 */
+	waitDueMs?: number;
 	/** When a job must be done by (epoch ms), passed to each handler (JobContext.deadline): the worker Lambda's timeout, less a margin. */
 	deadline?: number;
 	handlers?: HandlerRegistry;
@@ -227,6 +239,8 @@ export interface TickResult {
 	lost: number;
 	/** Handed back to the queue for a later tick, their attempt given back (JobRelease). */
 	released: number;
+	/** How long the tick waited for jobs to come due (TickOptions.waitDueMs). */
+	waitedMs: number;
 	/**
 	 * Pending assessments failed on a firm-yield job that stopped without its yield where nothing else could record
 	 * it (301 app_fail_stopped_assessments): a lease run out with no attempts left, or its user no longer an editor.
@@ -266,6 +280,22 @@ export function envInt(value: string | undefined, fallback: number): number {
 	return value !== undefined && value.trim() !== '' && Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
+/** Past a job's run_after before claiming it: the database's clock decides, and a timer can fire a little early. */
+const DUE_MARGIN_MS = 50;
+
+/**
+ * How long to wait for the next job to come due (app_next_job_due), or null:
+ * waiting is off, nothing is pending, it comes due later than `horizonMs`, or
+ * not before `budgetEnd` (epoch ms).
+ */
+async function dueWait(horizonMs: number, budgetEnd: number, projectIds: readonly string[] | undefined): Promise<number | null> {
+	if (!(horizonMs > 0)) return null;
+	const seconds = await withoutUser((db) => nextJobDueSeconds(db, projectIds));
+	if (seconds === null) return null;
+	const wait = Math.max(0, Math.ceil(seconds * 1000)) + DUE_MARGIN_MS;
+	return wait <= horizonMs && Date.now() + wait < budgetEnd ? wait : null;
+}
+
 export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	const started = Date.now();
 	const maxJobs = o.maxJobs ?? envInt(process.env.JOB_MAX_PER_TICK, 25);
@@ -283,6 +313,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		dead: 0,
 		lost: 0,
 		released: 0,
+		waitedMs: 0,
 		assessmentsFailed: 0,
 		packReproductionsFailed: 0,
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
@@ -330,7 +361,14 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	// One at a time, so a job's lease starts when it does, not when a batch was claimed.
 	while (result.claimed < maxJobs && Date.now() - started < budgetMs) {
 		const [job] = await withoutUser((db) => claimJobs(db, 1, leaseSeconds, o.projectIds));
-		if (!job) break;
+		if (!job) {
+			// Nothing due: wait for a job coming due soon, if there's time for it, else the tick is done.
+			const wait = await dueWait(o.waitDueMs ?? 0, started + budgetMs, o.projectIds);
+			if (wait === null) break;
+			await new Promise((resolve) => setTimeout(resolve, wait));
+			result.waitedMs += wait;
+			continue;
+		}
 		result.claimed++;
 		result[await runJob(job, o.handlers, o.deadline ?? null)]++;
 	}

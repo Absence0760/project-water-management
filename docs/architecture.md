@@ -802,7 +802,24 @@ alerts plug in as a further kind.
   which imports only `calendar.ts`); the same test asserts it.
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
-  SKIP LOCKED`, a lease) and runs each. `runTick({ projectIds })` claims
+  SKIP LOCKED`, a lease) and runs each. With `waitDueMs` (the worker
+  Lambda: `WORKER_WAIT_DUE_SECONDS`, 30, `JOB_WAIT_DUE_SECONDS` overrides;
+  the local loop: its poll interval), a tick with nothing due asks
+  `app_next_job_due` (305) how soon the next queued job comes due and, when
+  that is within `waitDueMs` and the time budget, waits for it and goes on
+  claiming. Nothing else would run such a job soon: the worker never sends
+  itself a wake message (only the API does, infra/jobs.tf), so a job one job
+  queues a few seconds on (a data feed backfill's next window,
+  `CACHED_NEXT_SECONDS`) otherwise waited for the 5-minute tick, and a
+  CHIRPS backfill read from our copy moved one window a tick
+  (2026-11-02). The worker Lambda's tick is bounded by its time budget (the
+  Lambda's remaining time less a minute), not a job count
+  (`WORKER_MAX_JOBS`, 1000; `JOB_MAX_PER_TICK` overrides): at `runTick`'s
+  default of 25, 13 feeds backfilling ran 25 windows and stopped. Jobs are
+  claimed oldest `run_after` first, so one chain can't starve other work: a
+  job queued now runs before any link queued after it. A tick with waiting
+  off (the default: tests, `pnpm dev:jobs:tick`, the e2e tick) stops at the
+  first moment nothing is due, so it never runs a whole chain. `runTick({ projectIds })` claims
   only those projects' jobs: the e2e suite's tick (`worker.ts --once
   --project <id>`), so parallel tests never run each other's jobs; the
   worker Lambda and the local loop never pass it.
@@ -1341,7 +1358,8 @@ row names a source, where to read it and the series it merges into:
   request with `cells` reaching a fetcher from before 208 is refused as
   invalid and the feed retries 15 minutes later. A window the cache held whole
   asked CHC for nothing, so a backfill's next window follows in 5 s
-  (`CACHED_NEXT_SECONDS`) rather than a minute.
+  (`CACHED_NEXT_SECONDS`) rather than a minute, in the same worker
+  invocation (the tick waits for it, § Background work).
 - **Re-checking finals** (`210_chirps_final_recheck.sql`; `feeds/cellCache.ts`
   `RECHECK_*`, `cellCacheStore.ts`, `ingest.ts refreshRevisedDays`). CHC
   rewrites published final files in place with no version bump (the 2024
@@ -1455,7 +1473,12 @@ row names a source, where to read it and the series it merges into:
   `chirps_cache_merge` in the same transaction (`feeds/fromMirror.ts`): no
   `FetchRequest` and no SQS round trip, even with `FEED_FETCHER=sqs`. One job
   reads one fetch window (at most 120 days), and a backfill's next window
-  follows in `CACHED_NEXT_SECONDS`. A day the copy doesn't hold yet reads as
+  follows in `CACHED_NEXT_SECONDS`, run by the same worker invocation, which
+  waits for it (`waitDueMs`, § Background work): a window takes tens of
+  milliseconds on the committed fixture copy, so a feed's backfill moves at
+  about a window every 5 s (1981 to today, about 135 windows, in roughly
+  11 minutes of a worker's time, several feeds interleaving), less the
+  minute or so between one invocation's budget and the next tick. A day the copy doesn't hold yet reads as
   `-`, as a day CHC hasn't published, and a later fetch reads it. No copy at
   all (no manifest, `MirrorNotReadyError`) writes nothing and records only
   the attempt (`last_attempt_at`): no failure, no backoff, the same window
