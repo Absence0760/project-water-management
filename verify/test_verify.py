@@ -478,6 +478,15 @@ MUTANTS = [
     ("daily A-pan: GR4J reads the record under a monthly PE row", 'if pe.get("kind") != "monthly" and apan_day[i] is not None:', "if apan_day[i] is not None:"),
     ("daily A-pan: a negative value is the day's A-pan", "if (v := apan_s.get(o)) is not None and v >= 0 else None", "if (v := apan_s.get(o)) is not None else None"),
     ("daily A-pan: the record doesn't count as evaporation (GR4J_NO_PET)", "any(v is not None and v > 0 for v in apan_day) and any(", "False and any("),
+    # Demand factors by part (engine >= 1.45.0) and dated demand factors (engine >= 1.82.0), §2.3 item 4a.
+    ("demand factors: a part's factor is ignored", "            if pf:\n                v *= float(pf[m])", "            if False:\n                v *= float(pf[m])"),
+    ("demand factors: the crops don't read their part's factor", 'F = (need - used) * dfac(f, i, "crops")', "F = (need - used) * dfac(f, i)"),
+    ("demand factors: an object reads the crops' part, not its category's", ('                f_ = dfac(x, i, ob.get("category"))\n                v = base', '                f_ = dfac(x, i, "crops")\n                v = base'), ('                        f_ = dfac(x, i, ob.get("category"))', '                        f_ = dfac(x, i, "crops")')),
+    ("demand factors: the dated windows are ignored", '        for w in x.get("demandFactorWindows") or []:', "        for w in []:"),
+    ("demand factors: a window on one part scales the whole demand", '            if w.get("part") is not None and w.get("part") != part:\n                continue', '            if False:\n                continue'),
+    ("demand factors: a window's last day is left out", 'days[i] <= iso_to_ord(w["to"]))', 'days[i] < iso_to_ord(w["to"]))'),
+    ("demand factors: a window with no start never opens", '(w.get("from") is None or days[i] >= iso_to_ord(w["from"]))', '(w.get("from") is not None and days[i] >= iso_to_ord(w["from"]))'),
+    ("demand factors: the windows and part factors run before demandFactorFrom", ("        if dff_o is not None and days[i] < dff_o:\n            return 1.0\n        m = wm[i]\n        f = x.get(\"demandFactor\")\n        v = float(f[m]) if f else 1.0", "        m = wm[i]\n        f = x.get(\"demandFactor\")\n        v = float(f[m]) if f and not (dff_o is not None and days[i] < dff_o) else 1.0"),),
     ("daily A-pan: the record counts as evaporation only where that day's pan coefficient is above 0", "any(v is not None and v > 0 for v in apan_day) and any(c > 0 for c in settings[\"panCoefficient\"])", "any(v is not None and v > 0 and settings[\"panCoefficient\"][m] > 0 for v, m in zip(apan_day, wm))"),
 ]
 
@@ -541,6 +550,8 @@ class CrossCheck(unittest.TestCase):
             "zone_units",
             # Phase 2b: the daily A-pan record (§2.3a).
             "apan_daily_days",
+            # Dated demand factors (§2.3 item 4a).
+            "demand_window_days",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 

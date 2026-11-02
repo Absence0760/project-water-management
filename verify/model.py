@@ -774,10 +774,6 @@ def unsupported(doc: dict) -> list[str]:
     for n in m.get("nodes", []):
         if n.get("damSedimentPctPerYear") or n.get("damInServiceFrom") or n.get("abstractionFrom"):
             out.append("time-varying development")
-        if n.get("partDemandFactor"):
-            out.append("demand factors by part (demand.scale by part)")
-        if n.get("demandFactorWindows"):
-            out.append("dated demand factors (demand.scale with dates)")
     if s.get("chirpsQuantileMap"):
         out.append("CHIRPS quantile map")
     if s.get("rainSource"):
@@ -1574,6 +1570,8 @@ def run(doc: dict) -> dict:
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
                 divert_by_month_days=0, reach_loss_days=0, baseflow_days=0,
+                # Phase 2b: unit-days a dated demand factor window covered (counted once per read).
+                demand_window_days=0,
                 # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
                 unit_rule_gauge=0, unit_rule_gauge_map=0, unit_rule_chirps=0, unit_rule_catchment=0, unit_clamped=0,
                 unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0,
@@ -1783,11 +1781,26 @@ def run(doc: dict) -> dict:
     dff = settings.get("demandFactorFrom")
     dff_o = iso_to_ord(dff) if isinstance(dff, str) and _is_iso(dff) else None
 
-    def dfac(x, i):
-        f = x.get("demandFactor")
-        if not f or (dff_o is not None and days[i] < dff_o):
+    def dfac(x, i, part=None):
+        """The day's demand factor on a node, or on one part of a farm's demand (`crops`, or a demand object
+        category): demandFactor[m] x the part's partDemandFactor[m] (engine >= 1.45.0, farms only) x each dated
+        window covering the day, the whole demand's and the part's (engine >= 1.82.0); 1 before demandFactorFrom."""
+        if dff_o is not None and days[i] < dff_o:
             return 1.0
-        return float(f[wm[i]])
+        m = wm[i]
+        f = x.get("demandFactor")
+        v = float(f[m]) if f else 1.0
+        if part is not None and x["kind"] == "farm":
+            pf = (x.get("partDemandFactor") or {}).get(part)
+            if pf:
+                v *= float(pf[m])
+        for w in x.get("demandFactorWindows") or []:
+            if w.get("part") is not None and w.get("part") != part:
+                continue
+            if (w.get("from") is None or days[i] >= iso_to_ord(w["from"])) and (w.get("to") is None or days[i] <= iso_to_ord(w["to"])):
+                v *= float(w["factor"][m])
+                diag["demand_window_days"] += 1
+        return v
 
     fd: dict[str, dict] = {}
     # The model's irrigation systems by id (engine >= 1.72.0), else the SABI defaults.
@@ -1821,7 +1834,7 @@ def run(doc: dict) -> dict:
             # Rain short of the need by no more than 1e-12 of it covers it (§2.3).
             used = need if need - available <= 1e-12 * need else available
             F0_s.append(need - used)
-            F = (need - used) * dfac(f, i)
+            F = (need - used) * dfac(f, i, "crops")
             w = min(smax, max(0.0, available - used))
             gross_s.append(gross)
             eff_s.append(used)
@@ -1862,7 +1875,7 @@ def run(doc: dict) -> dict:
             for i, o in enumerate(days):
                 s = schedule_factor(sched, o)
                 raw.append(base[wm[i]] * s)
-                f_ = dfac(x, i)
+                f_ = dfac(x, i, ob.get("category"))
                 v = base[wm[i]] * f_ * s
                 if B is not None and f_ < 1:
                     if min(B, base[wm[i]] * s) > v:
@@ -1981,7 +1994,7 @@ def run(doc: dict) -> dict:
                     B = obj_B.get(ob["id"])
                     x = by_id[nid]
                     for i in range(n):
-                        f_ = dfac(x, i)
+                        f_ = dfac(x, i, ob.get("category"))
                         v = rw[i] * k[i] * f_
                         if B is not None and f_ < 1:
                             v = max(v, min(B, rw[i] * k[i]))

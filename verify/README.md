@@ -464,6 +464,17 @@ of a seed is unchanged), with probes and mutants:
   record counts as evaporation for `GR4J_NO_PET` (§ Findings). Probes
   `apan-daily`, `apan-daily-monthly-pe`, `apan-daily-only` (monthly means
   all 0), `apan-daily-no-pet` and `apan-daily-outside-run`.
+- **Demand factors by part and dated demand factors** (§2.3 item 4a,
+  §2.7f, scenarios.md § Demand scaling; engine ≥ 1.45.0 and ≥ 1.82.0;
+  `add_demand_parts`, a quarter of the random networks and most dense
+  ones): a farm's `partDemandFactor` on its crops (F) or on its demand
+  objects of one category, multiplying the unit's `demandFactor`; each
+  `demandFactorWindows` window's 12 multipliers on its days from–to
+  (inclusive, either end open), the whole demand's on every part and a
+  part's on that part only, users' too; all of them 1 before
+  `settings.demandFactorFrom`; an object's combined factor through the
+  basic-needs floor; after a full allocation's k. Probes
+  `demand-parts-windows` and `demand-parts-windows-from`.
 
 ## Phase 2b (not covered yet)
 
@@ -483,9 +494,8 @@ docs/followups.md § Verification ("`verify/` phase 2b").
 - land cover, §2.5a;
 - time-varying development (sediment, a dam in service from a date,
   abstraction from a date), §2.7g;
-- demand factors by part (`partDemandFactor`, the `demand.scale` scenario op
-  with a part), dated demand factors (`demandFactorWindows`, the op with
-  `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges
+- the `demand.scale` scenario op itself (its factors, by part and dated,
+  are covered as the node fields it writes), and drought restrictions
   (with a Priority user's fixed restriction %, engine 1.86.0, §2.7i);
 - rain-source periods (§2.4e), the areal rainfall correction (§2.4g),
   CHIRPS fit ranges (§2.4b), the CHIRPS quantile
@@ -841,3 +851,5 @@ networks:
   settings-level check Settings shows (`hasPotentialEvaporation`), and the
   case needs a coefficient of 0 in exactly the record's months, so it was
   written into §2.3a as the rule rather than changed in the engine.
+- **Demand factors by part and dated demand factors** (§2.3 item 4a):
+  agree on every column, nothing left open by the docs.

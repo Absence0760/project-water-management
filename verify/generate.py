@@ -267,6 +267,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_calibration_zones(random.Random(seed * 86028121 + 17), doc, dense)
     add_calibration_locations(random.Random(seed * 52368691 + 23), doc)
     add_apan_daily(random.Random(seed * 15485867 + 29), doc, start, days, dense)
+    add_demand_parts(random.Random(seed * 32452867 + 31), doc, start, days, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
@@ -301,6 +302,61 @@ def add_apan_daily(rng: random.Random, doc: dict, start: dt.date, days: int, den
     for _ in range(rng.randint(0, 3)):
         vals[rng.randrange(length)] = rng.choice([-1, -999, 0.0])
     doc["series"]["evap_apan_mm"] = {"startDate": a0.isoformat(), "values": vals}
+
+
+DEMAND_PARTS = ["crops", "domestic", "municipal", "industrial", "livestock", "irrigation", "external", "other"]
+
+
+def add_demand_parts(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """Demand factors by part (`partDemandFactor`, engine >= 1.45.0) and dated
+    demand factors (`demandFactorWindows`, engine >= 1.82.0), §2.3 item 4a and
+    scenarios.md § Demand scaling, from their own stream so the rest of a
+    network is unchanged: in 25 % of networks (65 % dense). On some farms a
+    factor for the crops or for a category of demand object (its own, or one
+    the farm has none of), cuts and rises; on some farms and users one to
+    three windows, each from–to (open now and then, sometimes outside the
+    run), 12 multipliers (1 in the months a months-only op leaves out), a
+    farm's window now and then on one part."""
+    if rng.random() >= (0.65 if dense else 0.25):
+        return
+    m = doc["model"]
+    cats: dict[str, list[str]] = {}
+    for ob in m.get("demandObjects") or []:
+        cats.setdefault(ob["nodeId"], []).append(ob["category"])
+
+    def row() -> list[float]:
+        if rng.random() < 0.3:
+            v = round(rng.uniform(0, 1.6), 2)
+            months = set(rng.sample(range(12), rng.randint(1, 6)))
+            return [v if k in months else 1 for k in range(12)]
+        return _monthly(rng, 0, 1.4, 2)
+
+    def date(lo: int, hi: int) -> str:
+        return (start + dt.timedelta(days=rng.randint(lo, hi))).isoformat()
+
+    for x in m["nodes"]:
+        if x["kind"] not in ("farm", "user") or rng.random() >= 0.6:
+            continue
+        own = cats.get(x["id"], [])
+        if x["kind"] == "farm" and rng.random() < 0.6:
+            parts = {}
+            for _ in range(rng.randint(1, 3)):
+                p = rng.choice(["crops", "crops"] + own + [rng.choice(DEMAND_PARTS)])
+                parts[p] = row()
+            x["partDemandFactor"] = parts
+        if rng.random() < 0.6:
+            wins = []
+            for _ in range(rng.randint(1, 3)):
+                a = rng.randint(-200, days)
+                w: dict = {"factor": row()}
+                if rng.random() < 0.85:
+                    w["from"] = date(a, a)
+                if rng.random() < 0.85:
+                    w["to"] = date(a + rng.randint(0, 400), a + 400)
+                if x["kind"] == "farm" and rng.random() < 0.35:
+                    w["part"] = rng.choice(["crops"] + own + ["domestic"])
+                wins.append(w)
+            x["demandFactorWindows"] = wins
 
 
 def add_calibration_locations(rng: random.Random, doc: dict) -> None:

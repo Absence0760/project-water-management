@@ -1744,6 +1744,52 @@ def apan_daily(pe_kind: str = "pan", monthly_zero: bool = False, coeff_gap: bool
     return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": series}
 
 
+def demand_parts_and_windows(dff: str | None = None) -> dict:
+    """Demand factors by part and dated demand factors (§2.3 item 4a, engine
+    >= 1.45.0 and 1.82.0; scenarios.md § Demand scaling) on a farm with crops,
+    a domestic object with people (so the basic-needs floor holds it) and a
+    livestock object, and a senior user below it: the crops × 0.7 by part and
+    the domestic objects × 0.3 on top of the unit's 0.9; a whole-demand window
+    × 1.3 over February 2020, a domestic-only window × 0.5 from 20 February
+    (open-ended), a livestock window × 0 over the first ten days of March with
+    its months-only shape (1 outside March), a crops window wholly before the
+    run, and on the user a window × 0.6 to 15 February (open start). `dff`:
+    settings.demandFactorFrom, before which every factor, the windows' too,
+    is 1."""
+    start = "2020-01-01"
+    n = 100
+    rain = [0.0, 0.0, 6.0, 0.0, 0.0, 0.0, 18.0, 0.0, 0.0, 1.0] * 10
+    one = [1] * 12
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "user", "o", userDemandM3Day=[800] * 12, userPriority="senior", userReturnPct=0,
+              demandFactorWindows=[{"to": "2020-02-15", "factor": [0.6] * 12}]),
+        _node("f", "farm", "s", areaKm2=3, damCapacityM3=80000, damInitialPct=0.7, pctUpstreamToDam=1, pctRunoffToDam=1,
+              demandFactor=[0.9] * 12,
+              partDemandFactor={"crops": [0.7] * 12, "domestic": [0.3] * 12},
+              demandFactorWindows=[
+                  {"from": "2020-02-01", "to": "2020-02-29", "factor": [1.3] * 12},
+                  {"from": "2020-02-20", "factor": [0.5] * 12, "part": "domestic"},
+                  {"from": "2020-03-01", "to": "2020-03-10", "factor": one[:5] + [0] + one[6:], "part": "livestock"},
+                  {"from": "2019-01-01", "to": "2019-06-30", "factor": [0.1] * 12, "part": "crops"},
+              ]),
+    ]
+    crops, areas = _crop("f", 60000)
+    objs = [
+        {"id": "d", "nodeId": "f", "name": "houses", "category": "domestic", "sizing": "perUnit", "monthlyM3Day": None,
+         "count": 400, "litresPerUnitDay": 120, "lossPct": 0.1, "monthlyFactor": None, "population": None,
+         "returnPct": 0.2, "priority": "first", "destination": "internal", "enabled": True, "note": ""},
+        {"id": "l", "nodeId": "f", "name": "cattle", "category": "livestock", "sizing": "monthly",
+         "monthlyM3Day": [30] * 12, "count": None, "litresPerUnitDay": None, "lossPct": 0, "monthlyFactor": None,
+         "returnPct": 0, "priority": "shared", "destination": "internal", "enabled": True, "note": ""},
+    ]
+    s = _settings(effectiveRainFraction=0.5)
+    if dff:
+        s["demandFactorFrom"] = dff
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": [], "demandObjects": objs},
+            "series": {"rain_catchment_mm": {"startDate": start, "values": rain[:n]}}}
+
+
 def _zone(gauge: str, gr4j: dict | None, enabled: bool = True) -> dict:
     return {
         "nodeId": gauge, "enabled": enabled, "calibrationStart": None, "calibrationEnd": None, "calibrationFlowKind": None,
@@ -1995,6 +2041,9 @@ PROBES = {
     "apan-daily-only": apan_daily(monthly_zero=True),
     "apan-daily-no-pet": apan_daily(monthly_zero=True, coeff_gap=True),
     "apan-daily-outside-run": apan_daily(monthly_zero=True, outside_run=True),
+    # Demand factors by part and dated demand factors (§2.3 item 4a).
+    "demand-parts-windows": demand_parts_and_windows(),
+    "demand-parts-windows-from": demand_parts_and_windows("2020-02-10"),
     # The forecast-conditioned outlook's member (issue #620 step 6).
     "forecast-member-rescaled": forecast_member_rescaled(),
     # Future climate (issue #621, §2.17): the op on a dam, then on the per-unit rules (the MAPs by the annual
