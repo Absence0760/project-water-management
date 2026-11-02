@@ -7059,6 +7059,18 @@ Left, from the design and the persona review (§11), each with its trigger.
       longer apologising for the overlap. A pack issued before `evidence-7`
       keeps its frozen document, with no table and the old caption. No
       `ENGINE_VERSION` bump: no run's output changes.
+- [x] **Page x of y footers on the evidence report and the pack's PDF.**
+      Built (2026-11-01): the draft's browser print and an issued pack's
+      server PDF print the footer (*Draft · not issued* or the pack's stamp
+      and verify line, the project, the disclaimer's key point) with "Page X
+      of Y." on every page, from the same `@page` margin box as the
+      catchment report (`report/printedPage.svelte.ts`, shared by the four
+      printable pages). Finding on the way: since issue #70 moved the footer
+      from the renderer's `footerTemplate` into the page's CSS, the pack's
+      page set an `@page` rule without the footer box, so an issued pack's
+      PDF printed no footer at all, though the docs said it did. Tested:
+      `evidence-report.spec.ts` and `evidence-pack-pdf.spec.ts` read each
+      printed page's text (pdftotext).
 - [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue

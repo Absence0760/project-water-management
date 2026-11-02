@@ -786,8 +786,10 @@ Not built, or changed:
 - `POST /projects/:id/reports` with `evidence: true` is not built: the
   evidence report prints from the browser only. The server-rendered PDF
   comes with the issued pack (WP-3.14).
-- Page numbers ("page x of y") in the footer: the browser print has none;
-  they come with the server render.
+- Page numbers ("page x of y") in the footer: built (2026-11-01). The
+  draft's browser print and an issued pack's server PDF both print the
+  footer with "Page X of Y" from the page's own `@page` margin box, as the
+  catchment report does (`report/printedPage.svelte.ts`).
 
 **WP-3.14:** contents per §10; renders the Phase C components.
 **WP-3.15:** gaming items G1–G16 (§6), each with its named test.
