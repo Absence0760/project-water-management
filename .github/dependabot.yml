@@ -121,6 +121,13 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    # python-dateutil 3 can't install beside boto3: botocore requires
+    # python-dateutil<3.0.0 (still so in botocore 1.43.123, 2026-11-02), and
+    # pip refuses the pair (ResolutionImpossible, PR #701). Drop this ignore
+    # once a botocore release allows dateutil 3.
+    ignore:
+      - dependency-name: "python-dateutil"
+        update-types: ["version-update:semver-major"]
 
   # The bulk ingest Lambda's base image (ingest/Dockerfile:
   # public.ecr.aws/lambda/python:<version>-arm64@sha256:…, issue #604).
