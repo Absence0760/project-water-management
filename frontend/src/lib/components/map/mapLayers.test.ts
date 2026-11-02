@@ -110,6 +110,9 @@ describe('the DEM rivers beside HydroRIVERS', () => {
 		expect(demRiversLine({ ...s, error: 'try again later.' })).toEqual({ text: 'The DEM rivers couldn’t be drawn: try again later.', kind: 'error' });
 		expect(demRiversLine({ ...s, loading: true }).text).toBe('Drawing the DEM rivers…');
 		expect(demRiversLine(s)).toEqual({ text: DEM_RIVERS_NOTE, kind: 'note' });
+		// The layer's own hourly pool spent: said in words, as a note, never an error; delineation has its own.
+		expect(demRiversLine({ ...s, paused: true })).toEqual({ text: 'DEM rivers paused for this hour; delineation still works.', kind: 'note' });
+		expect(demRiversLine({ ...s, paused: true, zoomIn: true }).text).toMatch(/^Zoom in/);
 	});
 });
 

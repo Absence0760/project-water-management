@@ -47,6 +47,7 @@
 		type UnitLabel,
 		withLayer,
 		DEM_RIVERS_LAYER_LABEL,
+		DEM_RIVERS_PAUSED,
 		demRiversLine,
 		HYDRORIVERS_LAYER_LABEL
 	} from './mapLayers';
@@ -96,7 +97,7 @@
 		/** The DEM grid layer's state. Null: no toggle (the server has no elevation model). */
 		demGrid?: DemGridLayer | null;
 		/** The DEM rivers layer: whether its toggle is on, and the channels' state (drawn for the tools too). Null: no toggle (a viewer, or no elevation model). */
-		demRivers?: { on: boolean; layer: Pick<ChannelLayer, 'noView' | 'zoomIn' | 'error' | 'loading' | 'tileCount' | 'retry'> } | null;
+		demRivers?: { on: boolean; layer: Pick<ChannelLayer, 'noView' | 'zoomIn' | 'error' | 'loading' | 'tileCount' | 'retry' | 'paused'> } | null;
 		/** The Area fill slider's state (areaFill.svelte.ts): how strongly the polygons are filled. Null: no slider. */
 		areaFill?: AreaFill | null;
 	} = $props();
@@ -167,7 +168,10 @@
 							: `${mg.cells.length} MAP grid ${mg.cells.length === 1 ? 'point' : 'points'} shown.`
 						: 'Loading the MAP grid…'
 					: null,
-				demRivers?.on && !demRivers.layer.zoomIn && !demRivers.layer.noView && !demRivers.layer.error
+				demRivers?.on && demRivers.layer.paused && !demRivers.layer.zoomIn
+					? DEM_RIVERS_PAUSED
+					: null,
+				demRivers?.on && !demRivers.layer.zoomIn && !demRivers.layer.noView && !demRivers.layer.error && !demRivers.layer.paused
 					? demRivers.layer.loading
 						? 'Drawing the DEM rivers…'
 						: demRivers.layer.tileCount
@@ -317,7 +321,7 @@
 			<HelpTip key="terrain-channels" label="About the DEM rivers" />
 		</div>
 		{#if drLine}
-			<div class="qt small" data-testid="map-channels" data-state={demRivers.layer.zoomIn ? 'zoom' : demRivers.layer.error ? 'error' : demRivers.layer.loading ? 'loading' : demRivers.layer.noView ? 'no-view' : 'drawn'}>
+			<div class="qt small" data-testid="map-channels" data-state={demRivers.layer.zoomIn ? 'zoom' : demRivers.layer.paused ? 'paused' : demRivers.layer.error ? 'error' : demRivers.layer.loading ? 'loading' : demRivers.layer.noView ? 'no-view' : 'drawn'}>
 				{#if drLine.kind === 'error'}
 					<p class="err" role="alert">{drLine.text} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, demRivers!.layer, 'map-layer-channels')}>Try again</button></p>
 				{:else}

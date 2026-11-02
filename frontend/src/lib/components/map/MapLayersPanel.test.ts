@@ -248,6 +248,14 @@ describe('the Layers box’s DEM rivers toggle, beside HydroRIVERS', () => {
 		expect(zoom).not.toContain('DEM rivers drawn.');
 	});
 
+	it('says the DEM rivers are paused for the hour, in words and not as an alert, when their own pool is spent', () => {
+		const b = html_({ on: true, layer: { ...state, paused: true } });
+		expect(b).toContain('data-state="paused"');
+		expect(b).toContain('DEM rivers paused for this hour; delineation still works.');
+		expect(b).not.toContain('role="alert"');
+		expect(b).not.toContain('DEM rivers drawn.');
+	});
+
 	it('says why they couldn’t be drawn, as an alert with Try again', () => {
 		const b = html_({ on: true, layer: { ...state, error: 'You have asked the elevation model 60 times in the last hour; try again later.' } });
 		expect(b).toMatch(/role="alert"[^>]*>The DEM rivers couldn’t be drawn: You have asked the elevation model 60 times/);

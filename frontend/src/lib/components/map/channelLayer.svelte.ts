@@ -13,6 +13,10 @@ import type { ChannelLineData } from './mapStyle';
 
 /** A tile's side (degrees), as the server's (backend delineation/channels.ts CHANNEL_TILE_DEG). */
 export const CHANNEL_TILE_DEG = 0.2;
+/** The refusal's reason when the account's hourly pool of channel tiles is spent (backend attempt.ts CHANNELS_HOURLY, 307). */
+export const CHANNELS_HOURLY = 'channels_hourly';
+/** How long a spent pool keeps the layer from asking again (a view's ask after it finds whether the hour has freed some). */
+export const CHANNELS_PAUSE_MS = 5 * 60_000;
 /** The widest view (degrees a side) the channels are drawn for: at most 3 × 3 tiles, each an elevation-model request. */
 export const CHANNEL_VIEW_MAX_DEG = 0.35;
 
@@ -37,6 +41,8 @@ export interface ChannelLayerDeps {
 	view: () => readonly [number, number, number, number] | null;
 	/** GET …/map/channels?tile=i,j. */
 	load: (projectId: string, tile: readonly [number, number]) => Promise<ChannelTileAnswer>;
+	/** The clock (tests pass their own). */
+	now?: () => number;
 }
 
 export class ChannelLayer {
@@ -45,6 +51,13 @@ export class ChannelLayer {
 	#tiles = $state.raw(new Map<string, ChannelLineData[]>());
 	loading = $state(false);
 	error = $state<string | null>(null);
+	/**
+	 * The account's hourly pool of channel tiles is spent (a 429 with reason CHANNELS_HOURLY): the tiles already
+	 * fetched stay drawn, nothing more is asked for CHANNELS_PAUSE_MS, and the panel says so in words, not as an
+	 * error. Delineation has its own pool and is unaffected.
+	 */
+	paused = $state(false);
+	#pausedUntil = 0;
 	#queue: [number, number][] = [];
 	#running = false;
 	#project = '';
@@ -89,6 +102,7 @@ export class ChannelLayer {
 	}
 	/** Ask the view's tiles again after a refusal stopped them (the Layers box's Try again). */
 	retry() {
+		this.#pausedUntil = 0;
 		const tiles = this.#deps.on() ? tilesInView(this.#deps.view()) : null;
 		this.error = null;
 		this.#queue = (tiles ?? []).filter((t) => !this.#tiles.has(this.#key(t)));
@@ -103,6 +117,11 @@ export class ChannelLayer {
 		if (this.#running) return;
 		this.#running = true;
 		try {
+			// Paused: ask nothing until the pause runs out (finally frees the drain).
+			if (this.paused && (this.#deps.now ?? Date.now)() < this.#pausedUntil) {
+				this.#queue = [];
+				return;
+			}
 			for (let t = this.#queue.shift(); t; t = this.#queue.shift()) {
 				const key = this.#key(t);
 				if (this.#tiles.has(key)) continue;
@@ -113,8 +132,16 @@ export class ChannelLayer {
 					next.set(key, a.lines);
 					this.#tiles = next;
 					this.error = null;
+					this.paused = false;
 				} catch (e) {
-					// A refusal (off the elevation model, the hourly cap) stops this view's tiles; the next view tries again.
+					if ((e as { details?: { reason?: unknown } } | null)?.details?.reason === CHANNELS_HOURLY) {
+						this.paused = true;
+						this.#pausedUntil = (this.#deps.now ?? Date.now)() + CHANNELS_PAUSE_MS;
+						this.error = null;
+						this.#queue = [];
+						continue;
+					}
+					// A refusal (off the elevation model, two tiles already being worked out) stops this view's tiles; the next view tries again.
 					this.error = e instanceof Error ? e.message : String(e);
 					this.#queue = [];
 				}

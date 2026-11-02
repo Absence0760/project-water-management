@@ -3869,7 +3869,7 @@ map feature like any other.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/map/channels?tile=i,j` | – | `200 { tile: [i, j], bounds: [w, s, e, n], minKm2, lines: { coordinates: [lon, lat][], km2 }[], cellSizeM, dataset: { label, fingerprint }, cached }`: one 0.2° tile (i = floor(lon / 0.2), j = floor(lat / 0.2)) of the DEM's channels, each line from a stream head or confluence to the next, `km2` the window-local upstream area at its lower end (maps.md § The elevation model's channels). `400` for a missing or malformed tile, `409` when there is no DEM, `422 { error }` outside it, `429` past the account's elevation-model cap (a computed tile counts; a cached one doesn't), `503` when the DEM can't be read | editor |
+| GET | `/projects/:id/map/channels?tile=i,j` | – | `200 { tile: [i, j], bounds: [w, s, e, n], minKm2, lines: { coordinates: [lon, lat][], km2 }[], cellSizeM, dataset: { label, fingerprint }, cached }`: one 0.2° tile (i = floor(lon / 0.2), j = floor(lat / 0.2)) of the DEM's channels, each line from a stream head or confluence to the next, `km2` the window-local upstream area at its lower end (maps.md § The elevation model's channels). `400` for a missing or malformed tile, `409` when there is no DEM, `422 { error }` outside it, `429` past the channel tiles' own pool of the account's elevation-model cap (2 running, 150 an hour; a computed tile counts, a cached one doesn't; never delineation's pool), with `details: { reason: 'channels_hourly' }` once the hour's 150 are spent, `503` when the DEM can't be read | editor |
 
 ### Sub-catchments from clicks
 

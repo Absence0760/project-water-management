@@ -1711,14 +1711,28 @@ these lines draw is one a click can go on, both at 1 km²).
   tiles a view, about 30 in a busy 5 minutes, well under the WAF's
   `waf_dem_rate_limit_per_ip` (300 per 5 minutes, infra/waf.tf), which
   counts this route with the other DEM routes.
-- **Cost.** A tile it computes (not one it has) counts against the account's
-  elevation-model cap like a delineation (60 an hour, 2 at once;
-  security.md § Map uploads); a few seconds of CPU each. With the DEM rivers
-  layer left on while exploring new ground, those tiles share the hour with
-  the editor's delineations; a refusal shows in the Layers panel with
-  **Try again**. Building the channels once in the tiles pipeline removes
-  the cost (docs/followups.md, the elevation model's channels from the
-  tiles pipeline).
+- **Cost and caps.** A tile it computes (not one it has: a cached tile is
+  free) is a few seconds of CPU at most, and counts against the account's
+  elevation-model cap in the channel tiles' **own pool** (migration 307,
+  `attempt.ts` `CHANNEL_ATTEMPTS`): 150 an hour and 2 at once, apart from
+  delineation's 60 an hour and 2 at once (delineate, start, divide, the
+  sub-catchments from clicks; security.md § Map uploads). Neither pool
+  touches the other, so the DEM rivers layer left on while exploring new
+  ground can never refuse the delineation the editor runs next. 150 is
+  sized from the measurement above: about 30 new tiles in a busy 5 minutes
+  of panning, a few dozen to a hundred in an hour of real exploring, while
+  bounding one account at a few CPU-minutes an hour; the WAF stays the outer
+  bound per address. Past it the server answers 429 with
+  `details.reason: 'channels_hourly'`; the Layers panel says "DEM rivers
+  paused for this hour; delineation still works." (a note, not an error),
+  the tiles already drawn stay, and the layer asks nothing more for 5
+  minutes (`channelLayer.svelte.ts` `CHANNELS_PAUSE_MS`), then tries again
+  with the next view. Delineate's own channels come from the same pool, so
+  while it is spent the pill over the map says "New terrain channels are
+  paused for this hour; delineation still works." and a click still
+  delineates (the server places it on its own channels). Building the
+  channels once in the tiles pipeline removes the cost (docs/followups.md,
+  the elevation model's channels from the tiles pipeline).
 - **What says so.** On screen they are the **terrain channels** (the words
   the operator understood, 2026-10-03; "red" was wrong in the dark theme,
   where they are orange-red). Delineate's bar and the Sub-catchments panel

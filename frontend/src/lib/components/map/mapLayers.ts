@@ -50,13 +50,19 @@ export interface DemRiversState {
 	error: string | null;
 	loading: boolean;
 	tileCount: number;
+	/** The account's hourly pool of channel tiles is spent (channelLayer.svelte.ts ChannelLayer.paused). */
+	paused?: boolean;
 }
+
+/** What the Layers box says while the channel tiles' own hourly pool is spent: words, not an error. */
+export const DEM_RIVERS_PAUSED = 'DEM rivers paused for this hour; delineation still works.';
 
 /** The Layers box's line for the DEM rivers while on, and whether it is the layer's failure (an alert). */
 export function demRiversLine(s: DemRiversState): { text: string; kind: 'note' | 'error' } {
 	if (s.noView) return { text: 'The DEM rivers are drawn on the map, which isn’t showing here.', kind: 'note' };
 	// CHANNEL_VIEW_MAX_DEG (0.35°) is about 35 km north to south (and 30-odd km east to west here).
 	if (s.zoomIn) return { text: 'Zoom in to about 35 km across to draw the DEM rivers.', kind: 'note' };
+	if (s.paused) return { text: DEM_RIVERS_PAUSED, kind: 'note' };
 	if (s.error) return { text: `The DEM rivers couldn’t be drawn: ${s.error}`, kind: 'error' };
 	if (s.loading) return { text: 'Drawing the DEM rivers…', kind: 'note' };
 	return { text: DEM_RIVERS_NOTE, kind: 'note' };

@@ -7,8 +7,9 @@
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
+import { CHANNEL_ATTEMPTS, CHANNELS_HOURLY } from './attempt.js';
 import { clearChannelCache } from './channelRoutes.js';
-import { DAM_CELL, fixtureLonLat } from './fixture.js';
+import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 const FIXTURE = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
@@ -53,6 +54,8 @@ describe('the elevation model’s channels', () => {
 		expect(first.body.lines.length).toBeGreaterThan(5);
 		expect(Math.max(...first.body.lines.map((l: { km2: number }) => l.km2))).toBeGreaterThan(100);
 		expect(await attempts(editor)).toBe(n0 + 1);
+		// In the channel tiles' own pool (307), never delineation's.
+		expect((await asOwner(`SELECT kind FROM dem_attempt WHERE user_id = $1 ORDER BY started_at DESC LIMIT 1`, [editor.id]))[0]!.kind).toBe('channels');
 		expect(await unfinished(editor)).toBe(0);
 		const again = await editor.call('GET', at(`tile=${TILE}`));
 		expect(again.body.cached).toBe(true);
@@ -70,5 +73,28 @@ describe('the elevation model’s channels', () => {
 		expect(out.status).toBe(422);
 		expect(out.body.error).toMatch(/outside the elevation model/);
 		expect(await unfinished(editor)).toBe(0);
+	});
+
+	it('past their own hourly pool, new tiles are paused, and a delineation still succeeds (it has its own)', async () => {
+		process.env.DEM_URL = FIXTURE;
+		const u = await signUp('Chpaused');
+		const pid = (await u.call('POST', '/projects', { name: 'Channels paused' })).body.project.id;
+		await asOwner(
+			`INSERT INTO dem_attempt (user_id, kind, started_at, finished_at) SELECT $1, 'channels', now() - interval '10 minutes', now() - interval '10 minutes' FROM generate_series(1, $2)`,
+			[u.id, CHANNEL_ATTEMPTS.perHour]
+		);
+		clearChannelCache();
+		const tile = await u.call('GET', `/projects/${pid}/map/channels?tile=${TILE}`);
+		expect(tile.status).toBe(429);
+		expect(tile.body).toMatchObject({ error: expect.stringMatching(/DEM rivers paused for this hour.*delineation still works/), details: { reason: CHANNELS_HOURLY } });
+		// Positive control: the delineation the editor came to run.
+		const [olon, olat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+		const del = await u.call('POST', `/projects/${pid}/map/delineation`, { lon: olon, lat: olat, from: 'outlet' });
+		expect(del.status, JSON.stringify(del.body).slice(0, 300)).toBe(201);
+		const pools = await asOwner(`SELECT kind, count(*)::int AS n FROM dem_attempt WHERE user_id = $1 GROUP BY kind ORDER BY kind`, [u.id]);
+		expect(pools).toEqual([
+			{ kind: 'channels', n: CHANNEL_ATTEMPTS.perHour },
+			{ kind: 'delineation', n: 1 }
+		]);
 	});
 });

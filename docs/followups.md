@@ -5319,9 +5319,12 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       vector PMTiles) and draw them like the basemap. Trigger: the first
       production deploy with `delineation_dem = true` (passed: production
       has DEM_URL set), and more pressing since the DEM rivers layer
-      (2026-11-02, `layers=channels`) draws them outside Delineate, where
-      each newly computed tile shares the editor's 60-an-hour
-      elevation-model cap with their delineations.
+      (2026-11-02, `layers=channels`) draws them outside Delineate. Since
+      307 the computed tiles have their own pool (150 an hour, apart from
+      delineation's 60), so the layer can no longer starve a delineation;
+      what remains is the per-tile CPU and the layer pausing for the hour
+      once an editor explores past 150 new tiles. Precomputed channels
+      remove both.
 - [x] **Delineation of catchments larger than about 100 km across**
       (2026-10-03, branch wip/r2-delineate-job; design/delineation.md §
       Where it runs): a click still at the edge of the request's window

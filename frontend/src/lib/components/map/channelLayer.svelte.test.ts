@@ -5,7 +5,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChannelTileAnswer } from '#lib/api/types.js';
-import { ChannelLayer, CHANNEL_VIEW_MAX_DEG, tilesInView, type ChannelLayerDeps } from './channelLayer.svelte';
+import { ChannelLayer, CHANNEL_VIEW_MAX_DEG, CHANNELS_HOURLY, CHANNELS_PAUSE_MS, tilesInView, type ChannelLayerDeps } from './channelLayer.svelte';
 
 const tileAnswer = (i: number, j: number): ChannelTileAnswer => ({
 	tile: [i, j],
@@ -162,6 +162,44 @@ describe('ChannelLayer', () => {
 			await settle();
 		}
 		expect(load.mock.calls.map((c) => c[1].join(','))).toEqual(['105,-143', '115,-142']);
+		expect(layer.tileCount).toBe(2);
+	});
+
+	it('pauses on the channel tiles’ spent hourly pool: no error, the drawn tiles kept, nothing asked until the pause runs out', async () => {
+		let clock = 1_000_000;
+		let spent = false;
+		const load = vi.fn<ChannelLayerDeps['load']>(async (_, [i, j]) => {
+			if (spent) throw Object.assign(new Error('DEM rivers paused for this hour (150 new squares an hour); delineation still works.'), { status: 429, details: { reason: CHANNELS_HOURLY } });
+			return tileAnswer(i, j);
+		});
+		const deps = $state({ on: true, projectId: 'p1', view: [21.11, -28.39, 21.15, -28.37] as [number, number, number, number] | null });
+		let layer!: ChannelLayer;
+		cleanup = $effect.root(() => {
+			layer = new ChannelLayer({ projectId: () => deps.projectId, on: () => deps.on, view: () => deps.view, load, now: () => clock });
+		});
+		flushSync();
+		await settle();
+		expect(layer.tileCount).toBe(1);
+		spent = true;
+		deps.view = [22.11, -28.39, 22.15, -28.37];
+		flushSync();
+		await settle();
+		expect(layer.paused).toBe(true);
+		expect(layer.error).toBeNull();
+		expect(layer.lines).toHaveLength(1);
+		// Another view inside the pause asks nothing.
+		deps.view = [23.11, -28.39, 23.15, -28.37];
+		flushSync();
+		await settle();
+		expect(load).toHaveBeenCalledTimes(2);
+		// Past the pause, the next view asks again, and a tile coming back ends it.
+		spent = false;
+		clock += CHANNELS_PAUSE_MS + 1;
+		deps.view = [24.11, -28.39, 24.15, -28.37];
+		flushSync();
+		await settle();
+		expect(load).toHaveBeenCalledTimes(3);
+		expect(layer.paused).toBe(false);
 		expect(layer.tileCount).toBe(2);
 	});
 

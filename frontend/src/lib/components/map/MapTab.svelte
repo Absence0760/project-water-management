@@ -1507,7 +1507,7 @@
 							{/if}
 							{#if dividing && divider.busy === 'pieces'}
 								<p class="map-pill small" aria-hidden="true" data-testid="map-click-busy">Working out the sub-catchments…</p>
-							{:else if channels.on && toolChannels && (channels.noView || channels.zoomIn || channels.error || channels.loading)}
+							{:else if channels.on && toolChannels && (channels.noView || channels.zoomIn || channels.error || channels.paused || channels.loading)}
 								<!-- Only what needs saying: the bars and the Key already say what the terrain channels are. -->
 								<p class="map-pill channel-note small" role="status" data-testid="map-channels-note">
 									<span class="swatch" aria-hidden="true" style:background={channelColour(dark)}></span>
@@ -1515,6 +1515,8 @@
 										The terrain channels are drawn on the map, which isn’t showing here.
 									{:else if channels.zoomIn}
 										{reviewingProposal ? 'Zoom in to see the terrain channels the outline follows.' : 'Zoom in to see the terrain channels.'}
+									{:else if channels.paused}
+										New terrain channels are paused for this hour; delineation still works.
 									{:else if channels.error}
 										<span class="err">The terrain channels couldn’t be drawn: {channels.error}</span>
 									{:else}
