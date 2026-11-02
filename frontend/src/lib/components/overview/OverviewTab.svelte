@@ -26,6 +26,7 @@
 	import PublishedBaseline from './PublishedBaseline.svelte';
 	import DroughtIndex from './DroughtIndex.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
+	import GuidedStart from './GuidedStart.svelte';
 	import SetupPill from './SetupPill.svelte';
 
 	// Supply by farm waits for the run's record too: its own chunk keeps the page's first chunk under its budget.
@@ -289,6 +290,8 @@
 {/snippet}
 
 {#if !pick}
+	<!-- An empty model's guided way in, the Map's Start sheet (WP-4.10), for an editor who is shown the Map. -->
+	{#if canEdit && !editor.model.nodes.length && visibleTabs.includes('map')}<GuidedStart />{/if}
 	<SetupChecklist {steps} tabs={visibleTabs} />
 	{#if attentionItems.length}<div class="pre-run"><NeedsAttention items={attentionItems} /></div>{/if}
 	<!-- Below it, before the first run: the alerts beside the published baseline, then the links. -->

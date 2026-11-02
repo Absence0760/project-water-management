@@ -47,6 +47,13 @@ export const STEP_LABEL: Record<Exclude<StartStep, 'closed'>, string> = {
 	data: 'Data and the first run'
 };
 
+/**
+ * The boundary step without an elevation model on the server (DEM_URL empty, docs/maps.md § Delineation): Delineate
+ * isn't offered, and the sheet says why and what the manual way gives up (WP-4.10: a dataset that is off says so).
+ */
+export const NO_ELEVATION_BOUNDARY =
+	'Delineating from the outlet is off: this server has no elevation model. Draw the boundary or upload it instead. Without one, the units’ order isn’t proposed either: you set it on the Network.';
+
 const isStart = (p: StartProposal | DivideProposal): p is StartProposal => p.mode === 'start';
 const isDivide = (p: StartProposal | DivideProposal): p is DivideProposal => p.mode === 'divide';
 /** The open start proposal, if any (the GET lists both modes, the newest first; at most one is open). */

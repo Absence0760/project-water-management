@@ -687,6 +687,25 @@ run in parallel after WP-4.1.
 
 ### WP-4.10 Fast catchment onboarding
 
+> **Partly built (2026-11-01, PR feat/fast-catchment-onboarding).** The
+> guided sequence from an empty project runs on the Map's Start from the map
+> rather than in a separate `/projects/new/guided` wizard, so the delineation,
+> unit, rain, MAP, evaporation, gauge, dam and land-cover proposals it needs
+> are the ones already built (maps.md § Delineation, § Start from the map):
+> **New project** starts **Guided, from the map** by default and opens the
+> Start sheet; an empty model's Summary offers the same; the boundary step
+> says when delineation is off (no DEM) and offers Draw and Upload; the data
+> to-do list goes past the first run to **Calibrate, and run with the fit**
+> (a stored GR4J fit and a run newer than it), with **The EWR** as an
+> optional item and the cultivated area linked to the first unplanted
+> unit's land-cover proposal (ui.md § Project list, § Summary, § Map). Each
+> step is saved as it is accepted and the list reads its statuses from the
+> project, so it resumes after a reload. **Still open** (docs/followups.md
+> § Fast catchment onboarding (WP-4.10)): the WR2012 file importer, DWS
+> quality-code flags, farms from a CSV template, the org crop library and
+> templates (need WP-4.1), the first-login tour, an ET₀ feed proposed from
+> the boundary in the list, and the timed usability test.
+
 - **Goal.** A trained hydrologist sets up a typical catchment (≤ 15 farms,
   one gauge) to a first calibrated run in **≤ 4 hours** instead of days.
 - **Data sources**

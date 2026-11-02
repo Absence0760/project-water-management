@@ -21,6 +21,8 @@ async function createThroughDialog(page: Page, name: string, description = '') {
 	const dialog = page.getByRole('dialog', { name: 'New project' });
 	await dialog.getByLabel('Name').fill(name);
 	if (description) await dialog.getByLabel(/Description/).fill(description);
+	// An empty model opens the workspace's Summary; the guided default opens the Map's Start sheet (onboarding.spec.ts).
+	await dialog.getByRole('radio', { name: 'An empty model' }).check();
 	await dialog.getByRole('button', { name: 'Create project' }).click();
 	// Creating opens the new project's workspace.
 	await expect(page.getByTestId('project-name').filter({ hasText: name })).toBeVisible();

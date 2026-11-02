@@ -4975,6 +4975,51 @@ from the WP:
       screen-reader description counting the whole years above the band
       ([ui.md § Allocations](./ui.md#allocations-taballocations)).
 
+## Fast catchment onboarding (WP-4.10)
+
+The first slice (2026-11-01, PR feat/fast-catchment-onboarding): New
+project's **Guided, from the map** default and the empty Summary's card open
+the Map's Start sheet; the boundary step says when delineation is off; the
+data to-do list (`map/startData.ts`) carries on past the first run to the
+fit and a run with it, with the EWR and a direct link to the first unit's
+land-cover proposal ([roadmap step 4 § WP-4.10](./roadmap/step-4-platform.md#wp-410-fast-catchment-onboarding)).
+Left, from the WP:
+
+- [ ] **WR2012 file importer** (`POST /projects/:id/import/wr2012`,
+      `backend/src/onboarding/wr2012.ts`: the quaternary spreadsheet and
+      naturalised-flow file the user downloaded, values only, ≤ 10 MB;
+      MAP, area and A-pan into the settings, several quaternaries summed by
+      area; the naturalised flow into the WR2012 check as a comparison).
+      Needs the committed synthetic WR2012-shaped fixtures and the monthly →
+      daily volume test. Today the WR2012 check is proposed from the loaded
+      quaternary dataset only. Trigger: the WRC's answer on redistribution
+      (D5), or a client with WR2012 files in hand.
+- [ ] **DWS quality codes as per-value flags.** DWS feeds and the gauge
+      record store exist (`feeds/fromGaugeRecord.ts`, `pnpm import:dws`, the
+      nearest-gauges proposal); the WP's mapping of DWS quality codes into a
+      `flags` array beside each `time_series` value array (generalising
+      WP-1.32's `filled` mask) is not built. Trigger: the first real DWS
+      record with suspect codes in a calibration window.
+- [ ] **Farms from a CSV template** in the guided flow (planned-work
+      "Spreadsheet templates"): today units come from boundaries on the
+      map or typed on the Network.
+- [ ] **Org crop library and project templates** (`crop_library`,
+      `project_template`, "Save as template", `/orgs/:id/crops`,
+      `/orgs/:id/templates`). Blocked on WP-4.1 (organisations). Today crop
+      factors come from Load crop factors.
+- [ ] **First-login tour** over the synthetic example catchment (6–8
+      steps, in-house, dismissible, keyboard-accessible,
+      `app_user.settings.tour_done`). The example itself is built (#286).
+- [ ] **An ET₀ feed proposed from the boundary in the to-do list.** The
+      `agera5_et0` feed source exists (Data feeds), but the list's
+      Evaporation item links only the A-pan row and Evaporation from the
+      map; a `?feed=agera5_et0` deep link that opens the attach card on the
+      boundary would close the gap. Only GR4J under a monthly PE row reads
+      it, so it doesn't block a first run.
+- [ ] **The timed usability test** with the hydrologist (≤ 4 hours from an
+      empty project to a calibrated run on a real, uncommitted catchment):
+      the WP's acceptance. Operator to schedule.
+
 ## Catchment map (issue #288)
 
 Phases 1–2 of WP-3.12 landed (2026-10-01: migration 152, `backend/src/geo/`,

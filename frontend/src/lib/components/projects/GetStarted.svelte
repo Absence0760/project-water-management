@@ -62,8 +62,8 @@
 			<div>
 				<h3>Build the network and crops</h3>
 				<p>
-					Add hydrological units and gauges with areas and dam sizes, then crops, crop factors and irrigated hectares. Or start it from the Map:
-					delineate the catchment, place its dams, and the units, their areas and their order are proposed.
+					Guided, from the map (the default): delineate or draw the catchment and its units, and the network is proposed, then a to-do list
+					takes you through the data. Or start an empty model and add hydrological units, gauges and crops yourself.
 				</p>
 			</div>
 		</li>
