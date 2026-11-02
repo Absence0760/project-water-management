@@ -220,17 +220,16 @@ workbook (as in 1a) with **no manual edits**.
 **Phase 1 acceptance (the demo):**
 
 - [ ] A fresh clone with `pnpm setup && pnpm dev` works with no other setup
-      ([run-locally.md](./run-locally.md)). *Not shown by any test: no CI
-      job runs `pnpm setup` on a fresh checkout (CI installs, then each job
-      brings up its own services; e2e's global setup migrates `water_e2e`).
-      `pnpm check:env` guards the committed env files only.*
+      ([run-locally.md](./run-locally.md)). Checked by
+      `.github/workflows/fresh-clone.yml` (weekly and on PRs that touch setup;
+      [testing.md § Fresh clone](./testing.md#fresh-clone)); tick it once that
+      workflow's first run on `main` is green.
 - [ ] Client catchment imported: its results match the workbook, the charts and
       Shortfalls table appear, and a run finishes in under 2 s including storage.
-      *Results: the client catchment regression suite (`packages/engine/src/run.test.ts`
-      § workbook regression) matches within its deviation list, locally only
-      (rule 10: it skips without `data/`). The 2 s including storage has no
-      measurement: the nearest budget is `runs/load.db.perf.test.ts`, a
-      60-farm ten-year run under 10 s.*
+      The 2 s is measured by `runs/load.db.perf.test.ts` (`pnpm
+      test:backend:perf:db`) on an invented catchment of the client's size,
+      and **fails**: ~11 s on the dev laptop (2026-11-01), most of it storing
+      the run's series ([followups.md § V1 run budget](./followups.md#v1-run-budget)).
 - [x] Projects A, B, C exist side by side. Creating D and copying C both work.
       *`e2e/tests/projects.spec.ts` "several projects for one place: create,
       copy, delete"; `projects/projects.db.test.ts` (`POST …/copy`).*

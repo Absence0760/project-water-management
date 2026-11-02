@@ -305,6 +305,27 @@ The checklist for these is issue #62; the history scrub is #63.
       `budget_monthly_usd` (110) is already sized for it; set `dmarc_report_email`.
       — *Done: af-south-1; production has been live since 2026-10-05.*
 
+## V1 run budget
+
+The V1 acceptance criterion "a run finishes in under 2 s including storage"
+(plan.md Phase 1) does not hold. `runs/load.db.perf.test.ts` (`V1 demo
+budget`, `pnpm test:backend:perf:db`, run alone) runs an invented catchment of
+the client's size (13 nodes, 9 crops, 23 planted areas, one transfer, four
+daily records of 16 161 days) through `POST /projects/:id/runs` and measured
+a median of **11.1 s** (12.1, 11.1, 11.0, 11.0, 11.1 s) on the dev laptop on
+2026-11-01, Node CPU 3.4 s of it. Each run stores 432 series, ~22 MB in
+`run_series`, so about 7.5 s is Postgres taking the series
+(`runs/execute.ts` `storeRun`: batched `INSERT`s of `float8[]` parameters,
+sent as text). The test stays red; the budget is not to be loosened.
+
+- [ ] Cut the storage cost. Durable options, to measure in the perf test:
+      send the arrays in binary (`COPY … FROM STDIN BINARY`, or a bytea of
+      packed float64/float32) instead of text arrays; store fewer series per
+      run (derive the per-node series a view never asks for on read); or
+      store a run's series once as one compressed blob (S3 or `series_blob`)
+      and read slices from it. Then the engine's 3.4 s CPU (a second budget).
+      Trigger: before the client demo, or before tick of plan.md's criterion.
+
 ## The rain data copy (issue #604)
 
 Round 2 built CHIRPS on our own copy behind `CHIRPS_SOURCE`
