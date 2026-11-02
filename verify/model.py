@@ -764,20 +764,25 @@ def farm_efficiency(node: dict, rows: list[tuple[dict, float, dict]], apan: list
 # --------------------------------------------------------------------------
 
 
+# §2.5a: each land-cover class's reductions at full cover, (mar, lowFlow).
+LAND_COVER_CLASSES = {
+    "eucalyptus": (0.75, 0.9),
+    "pine": (0.4, 0.55),
+    "invasive": (0.5, 0.6),
+    "invasiveRiparian": (0.75, 0.9),
+    "other": (0.0, 0.0),
+}
+
+
 def unsupported(doc: dict) -> list[str]:
     """What an input uses beyond phases 1 and 2a (verify/README.md § Phase 2b)."""
     s = doc.get("settings", {}) or {}
     m = doc.get("model", {}) or {}
     out = []
-    if m.get("landCover"):
-        out.append("land cover")
-    for n in m.get("nodes", []):
-        if n.get("damSedimentPctPerYear") or n.get("damInServiceFrom") or n.get("abstractionFrom"):
-            out.append("time-varying development")
-        if n.get("partDemandFactor"):
-            out.append("demand factors by part (demand.scale by part)")
-        if n.get("demandFactorWindows"):
-            out.append("dated demand factors (demand.scale with dates)")
+    # §2.7i: the drought restriction rule (and a Priority user's fixed restriction % under it) isn't modelled; before
+    # phase 2b nothing refused it, so an input carrying one would have disagreed instead of being refused.
+    if s.get("droughtRestriction"):
+        out.append("drought restrictions")
     if s.get("chirpsQuantileMap"):
         out.append("CHIRPS quantile map")
     if s.get("rainSource"):
@@ -795,8 +800,6 @@ def unsupported(doc: dict) -> list[str]:
     for k in ("zeroRunRule", "zeroRunChirpsCheck", "lowVsChirpsRatio", "lowVsChirpsBaseline", "lowVsChirpsMinimum"):
         if k in dq and dq[k] not in (None, "wetDays", False, 0.5, "record", "fixed"):
             out.append("non-default data-quality limits")
-    if (doc.get("series") or {}).get("evap_apan_mm"):
-        out.append("daily A-pan series")
     if any(op.get("op") != "climate.delta" for op in doc.get("scenarioOps") or []):
         out.append("scenario ops other than climate.delta")
     if s.get("damStorageReset"):
@@ -1551,7 +1554,8 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
 def run(doc: dict) -> dict:
     doc = apply_scenario_ops(doc)
     settings = merge_settings(doc.get("settings") or {})
-    model = doc["model"]
+    # A copy: the run sets each day's dam capacity and survey curve on its nodes (§2.7g).
+    model = copy.deepcopy(doc["model"])
     series = doc.get("series") or {}
     rain = prepare_rain(settings, series)
     # §2.4i: the catchment's station replaces its rain; the stations' records and pairings, built once.
@@ -1576,6 +1580,13 @@ def run(doc: dict) -> dict:
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
                 divert_by_month_days=0, reach_loss_days=0, baseflow_days=0,
+                # Phase 2b: land cover's units, the units whose patches were scaled to the unit, unit-days above q.
+                land_cover_units=0, land_cover_scaled=0, land_cover_above_q=0,
+                # Phase 2b: development during the run (§2.7g): dams whose capacity changes, unit-days with no capacity,
+                # unit-days a shrinking dam spilled what it could no longer hold, units with an abstraction date.
+                dev_dams=0, dev_no_capacity_days=0, dev_shrink_spill_days=0, abstraction_from_units=0,
+                # Phase 2b: unit-days a dated demand factor window covered (counted once per read).
+                demand_window_days=0,
                 # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
                 unit_rule_gauge=0, unit_rule_gauge_map=0, unit_rule_chirps=0, unit_rule_catchment=0, unit_clamped=0,
                 unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0,
@@ -1608,16 +1619,25 @@ def run(doc: dict) -> dict:
     # ---- GR4J -----------------------------------------------------------
     g = settings["gr4j"]
     apan = [float(x) for x in settings["apanMm"]]
+    # §2.3a (engine >= 0.38.0, issue #45): a daily A-pan record (evap_apan_mm) is the day's A-pan wherever it has a
+    # value >= 0; any other day (none, negative, outside the record) reads the month's mean spread over the month.
+    # Crop demand, dam evaporation and GR4J's PE under pan coefficient x A-pan all read it.
+    apan_s = Series(series.get("evap_apan_mm"))
+    apan_day = [v if (v := apan_s.get(o)) is not None and v >= 0 else None for o in days]
+    diag["apan_daily_days"] = sum(1 for v in apan_day if v is not None)
     pe = settings["pe"]
     # §2.4a (engine ≥ 1.104.0, issue #604 R5-E): under a monthly PE row a daily
     # reference ET record (evap_et0_mm) is the day's PE as it stands wherever it
     # has a value ≥ 0; never read under pan coefficient × A-pan.
     et0 = Series(series.get("evap_et0_mm")) if pe.get("kind") == "monthly" else Series(None)
     pet = []
-    for o, m in zip(days, wm):
+    for i, (o, m) in enumerate(zip(days, wm)):
         e = et0.get(o)
         if e is not None and e >= 0:
             pet.append(float(e))
+            continue
+        if pe.get("kind") != "monthly" and apan_day[i] is not None:
+            pet.append(settings["panCoefficient"][m] * apan_day[i])
             continue
         if pe.get("kind") == "monthly":
             monthly = pe["mm"][m]
@@ -1637,7 +1657,11 @@ def run(doc: dict) -> dict:
     if pe.get("kind") == "monthly":
         no_pet = all(x == 0 for x in pe["mm"]) and not any((v := et0.get(o)) is not None and v > 0 for o in days)
     else:
-        no_pet = all(settings["panCoefficient"][m] * apan[m] == 0 for m in range(12))
+        # §2.3a: a daily A-pan value above 0 on a run day counts as evaporation when any month's pan coefficient is
+        # above 0, that day's or not (probes apan-daily-no-pet, apan-daily-outside-run).
+        no_pet = all(settings["panCoefficient"][m] * apan[m] == 0 for m in range(12)) and not (
+            any(v is not None and v > 0 for v in apan_day) and any(c > 0 for c in settings["panCoefficient"])
+        )
     if no_pet:
         raise Refused("GR4J_NO_PET")
     farms = [x for x in model["nodes"] if x["kind"] == "farm"]
@@ -1763,6 +1787,58 @@ def run(doc: dict) -> dict:
         else:
             shares = dict(area_share)
             diag["ewr_split_area"] = diag.get("ewr_split_area", 0) + 1
+    # ---- land cover (§2.5a, engine >= 0.24.0) ------------------------------
+    # Per farm with an area, its patches in id order: f = area x cover / the farm's area (scaled together to 1 when
+    # their condensed areas add up to more than the farm, probe land-cover-overfull); MAR_u = sum f x mar, LOW_u =
+    # sum f x lowFlow (the class's, or the patch's own factors). Each day, with I0 the unit's natural runoff and
+    # q = share x the catchment natural flow's Q75 over the historical days (the 25th percentile, linear between
+    # ranks: probe land-cover-q75): reduction = LOW_u MIN(I0, q) + MAR_u MAX(I0 - q, 0), never more than I0.
+    lc_red: dict[str, list[float]] = {}
+    lc_by: dict[str, list[dict]] = {}
+    lc_nodes = {x["id"]: x for x in model["nodes"]}
+    for pch in model.get("landCover") or []:
+        nd = lc_nodes.get(pch.get("nodeId"))
+        if nd is None or nd["kind"] != "farm" or not (nd.get("areaKm2") or 0) > 0:
+            continue
+        lc_by.setdefault(nd["id"], []).append(pch)
+    if lc_by:
+        hn = sorted(natural[:hist])
+        pos = 0.25 * (len(hn) - 1)
+        lo_ = int(math.floor(pos))
+        q75 = hn[lo_] + (pos - lo_) * (hn[min(lo_ + 1, len(hn) - 1)] - hn[lo_]) if hn else 0.0
+        for fid, lst in lc_by.items():
+            fa = float(lc_nodes[fid]["areaKm2"])
+            fs = []
+            for pch in sorted(lst, key=lambda p_: p_["id"]):
+                cls = LAND_COVER_CLASSES.get(pch["coverClass"], (0.0, 0.0))
+                fac = pch.get("factors")
+                mar, low = (fac["mar"], fac["lowFlow"]) if fac else cls
+                fs.append((float(pch["areaKm2"]) * float(pch["densityPct"]) / fa, mar, low))
+            tot_f = 0.0
+            for f_, _, _ in fs:
+                tot_f += f_
+            k_ = 1.0 / tot_f if tot_f > 1 else 1.0
+            if tot_f > 1:
+                diag["land_cover_scaled"] += 1
+            mar_u = low_u = 0.0
+            for f_, mar, low in fs:
+                mar_u += f_ * k_ * mar
+                low_u += f_ * k_ * low
+            q = shares.get(fid, 0.0) * q75
+            i0s = local[fid] if local is not None and fid in local else [natural[i] * shares.get(fid, 0.0) for i in range(n)]
+            red = []
+            for v in i0s:
+                r_ = low_u * min(v, q) + mar_u * max(v - q, 0.0)
+                red.append(min(r_, v) if v > 0 else 0.0)
+            lc_red[fid] = red
+            diag["land_cover_units"] += 1
+            diag["land_cover_above_q"] += sum(1 for v in i0s if v > q)
+        tot_r = [0.0] * n
+        for fid in sorted(lc_red):
+            for i in range(n):
+                tot_r[i] += lc_red[fid][i]
+        put(None, "landcover_reduction", tot_r)
+
     eff_monthly = settings.get("effectiveRainFractionMonthly")
     store_mm = settings["effectiveRainStoreMm"]
     nodes = model["nodes"]
@@ -1771,12 +1847,31 @@ def run(doc: dict) -> dict:
     # §2.3 item 4a: the nodes' demand factors, from settings.demandFactorFrom on.
     dff = settings.get("demandFactorFrom")
     dff_o = iso_to_ord(dff) if isinstance(dff, str) and _is_iso(dff) else None
+    # §2.7g (engine >= 1.30.0): the first day a farm or a water user takes water.
+    abs_from = {x["id"]: iso_to_ord(x["abstractionFrom"]) for x in nodes
+                if x["kind"] in ("farm", "user") and isinstance(x.get("abstractionFrom"), str) and _is_iso(x["abstractionFrom"])}
+    diag["abstraction_from_units"] += len(abs_from)
 
-    def dfac(x, i):
-        f = x.get("demandFactor")
-        if not f or (dff_o is not None and days[i] < dff_o):
+    def dfac(x, i, part=None):
+        """The day's demand factor on a node, or on one part of a farm's demand (`crops`, or a demand object
+        category): demandFactor[m] x the part's partDemandFactor[m] (engine >= 1.45.0, farms only) x each dated
+        window covering the day, the whole demand's and the part's (engine >= 1.82.0); 1 before demandFactorFrom."""
+        if dff_o is not None and days[i] < dff_o:
             return 1.0
-        return float(f[wm[i]])
+        m = wm[i]
+        f = x.get("demandFactor")
+        v = float(f[m]) if f else 1.0
+        if part is not None and x["kind"] == "farm":
+            pf = (x.get("partDemandFactor") or {}).get(part)
+            if pf:
+                v *= float(pf[m])
+        for w in x.get("demandFactorWindows") or []:
+            if w.get("part") is not None and w.get("part") != part:
+                continue
+            if (w.get("from") is None or days[i] >= iso_to_ord(w["from"])) and (w.get("to") is None or days[i] <= iso_to_ord(w["to"])):
+                v *= float(w["factor"][m])
+                diag["demand_window_days"] += 1
+        return v
 
     fd: dict[str, dict] = {}
     # The model's irrigation systems by id (engine >= 1.72.0), else the SABI defaults.
@@ -1799,15 +1894,20 @@ def run(doc: dict) -> dict:
         for i, m in enumerate(wm):
             gross = 0.0
             for crop, a, _p in rows:
-                gross += a * (apan[m] * crop["cropFactor"][m]) / 1000 / mdays[m]
+                if apan_day[i] is not None:
+                    gross += a * crop["cropFactor"][m] * apan_day[i] / 1000
+                else:
+                    gross += a * (apan[m] * crop["cropFactor"][m]) / 1000 / mdays[m]
             frac = eff_monthly[m] if eff_monthly else settings["effectiveRainFraction"]
             pe_m3 = cropped * frac / 1000 * rain_demand[i]
             available = w + pe_m3
             need = max(0.0, gross)
             # Rain short of the need by no more than 1e-12 of it covers it (§2.3).
             used = need if need - available <= 1e-12 * need else available
-            F0_s.append(need - used)
-            F = (need - used) * dfac(f, i)
+            # §2.7g: before abstractionFrom the unit's demand is 0; the store and the rain used run as usual.
+            on_ = 0.0 if f["id"] in abs_from and days[i] < abs_from[f["id"]] else 1.0
+            F0_s.append((need - used) * on_)
+            F = (need - used) * dfac(f, i, "crops") * on_
             w = min(smax, max(0.0, available - used))
             gross_s.append(gross)
             eff_s.append(used)
@@ -1848,12 +1948,16 @@ def run(doc: dict) -> dict:
             for i, o in enumerate(days):
                 s = schedule_factor(sched, o)
                 raw.append(base[wm[i]] * s)
-                f_ = dfac(x, i)
+                f_ = dfac(x, i, ob.get("category"))
                 v = base[wm[i]] * f_ * s
                 if B is not None and f_ < 1:
                     if min(B, base[wm[i]] * s) > v:
                         diag["floor_days"] += 1
                     v = max(v, min(B, base[wm[i]] * s))
+                # §2.7g: no demand before the unit's abstractionFrom (the floor is on a demand, so none either).
+                if fid in abs_from and o < abs_from[fid]:
+                    v = 0.0
+                    raw[-1] = 0.0
                 dem.append(v)
                 flo.append(min(B, v) if B is not None else NAN)
             obj_dem[ob["id"]] = dem
@@ -1880,8 +1984,9 @@ def run(doc: dict) -> dict:
         D_base[f["id"]] = db
     for u in users:
         ud = u.get("userDemandM3Day")
-        D_base[u["id"]] = [float(ud[wm[i]]) if ud else 0.0 for i in range(n)]
-        D_fact[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) if ud else 0.0 for i in range(n)]
+        on_ = [0.0 if u["id"] in abs_from and days[i] < abs_from[u["id"]] else 1.0 for i in range(n)]
+        D_base[u["id"]] = [float(ud[wm[i]]) * on_[i] if ud else 0.0 for i in range(n)]
+        D_fact[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) * on_[i] if ud else 0.0 for i in range(n)]
 
     # ---- allocations (§2.12a) -------------------------------------------
     alloc_mode = settings.get("allocationMode") or "none"
@@ -1911,16 +2016,27 @@ def run(doc: dict) -> dict:
             scaled_rows: list = []
             fa_scaled[nid] = scaled_rows
             unlicensed: set[int] = set()
+            af0 = abs_from.get(nid)
             for y, idx in yrs.items():
+                # §2.7g: a unit with an abstraction date is scaled on its days from then; a year wholly before it
+                # asks for none: factor 0, listed with 0 m³, whatever is in force (probe development-abstraction).
+                fit_idx = [i for i in idx if af0 is None or days[i] >= af0]
+                if not fit_idx:
+                    fac_y[y] = 0.0
+                    vol_y[y] = 0.0
+                    dem_y[y] = 0.0
+                    continue
                 # §2.12a (engine >= 1.70.0): no allocation in force on the days a year is scaled
                 # on: the unit keeps its modelled demand there (factor 1), not listed as scaled.
-                if not any(a["from"] <= days[i] <= a["to"] for a in both for i in idx):
+                if not any(a["from"] <= days[i] <= a["to"] for a in both for i in fit_idx):
                     unlicensed.add(y)
                     fac_y[y] = 1.0
                     continue
                 vol = 0.0
+                af_ = abs_from.get(nid)
                 for a in both:
-                    inside = sum(1 for i in idx if a["from"] <= days[i] <= a["to"])
+                    # §2.7g: a unit with an abstraction date asks for the volume over its days from then.
+                    inside = sum(1 for i in idx if a["from"] <= days[i] <= a["to"] and (af_ is None or days[i] >= af_))
                     vol += a["volume"] * inside / wy_length(y)
                 tot = 0.0
                 for i in idx:
@@ -1967,7 +2083,7 @@ def run(doc: dict) -> dict:
                     B = obj_B.get(ob["id"])
                     x = by_id[nid]
                     for i in range(n):
-                        f_ = dfac(x, i)
+                        f_ = dfac(x, i, ob.get("category"))
                         v = rw[i] * k[i] * f_
                         if B is not None and f_ < 1:
                             v = max(v, min(B, rw[i] * k[i]))
@@ -2233,6 +2349,8 @@ def run(doc: dict) -> dict:
     # Pumping units per node (§2.7d): the combined capacity first, then the
     # individual boreholes in id order.
     units: dict[str, list[dict]] = {}
+    units_nodam: dict[str, list[dict]] = {}
+    units_dam: dict[str, list[dict]] = {}
     for x in nodes:
         if x["kind"] not in ("farm", "user"):
             continue
@@ -2262,13 +2380,42 @@ def run(doc: dict) -> dict:
                 u_["target"] = "direct"
         if lst:
             units[x["id"]] = lst
+            # §2.7d, §2.7g: on a day its dam has no capacity, the node's units pump direct, each in its mode's step.
+            # An emergency unit keeps its own step, after the supplemental ones, and its trigger reads an empty
+            # dam: it runs while 0 < level x the entered capacity (the dam's level at the entered scale is 0).
+            units_nodam[x["id"]] = [{**u_, "target": "direct"} for u_ in lst]
+            units_dam[x["id"]] = lst
     has_bh = {x["id"] for x in nodes if x["kind"] in ("farm", "user") and (x.get("boreholeCapacityM3Day") or any(b.get("nodeId") == x["id"] for b in model.get("boreholes") or []))}
 
+    # §2.7g: each farm's entered dam capacity and survey curve; the day loop sets the day's on the node.
+    cap0 = {f["id"]: float(f["damCapacityM3"]) for f in farms}
+    curve0 = {f["id"]: f.get("damCurve") for f in farms}
+    kdev: dict[str, list[float]] = {}
+    for f in farms:
+        if not cap0[f["id"]] > 0:
+            continue
+        rate = f.get("damSedimentPctPerYear") or 0.0
+        sv = f.get("damSurveyDate")
+        sv_o = iso_to_ord(sv) if isinstance(sv, str) and _is_iso(sv) and rate else None
+        ins = f.get("damInServiceFrom")
+        ins_o = iso_to_ord(ins) if isinstance(ins, str) and _is_iso(ins) else None
+        # A dam in service from the run's first day or before, without sediment, is the entered dam (no column).
+        if sv_o is None and (ins_o is None or (days and ins_o <= days[0])):
+            continue
+        kdev[f["id"]] = [
+            (max(0.0, 1 - rate * (o - sv_o) / 365.25) if sv_o is not None else 1.0) * (1.0 if ins_o is None or o >= ins_o else 0.0)
+            for o in days
+        ]
+        diag["dev_dams"] += 1
+
     def supply_rule(x):
+        # §2.7e: a trigger on a unit with no entered dam runs river first. §2.7g: on a day an entered dam has no
+        # capacity a trigger stays a trigger (the day loop reads the empty dam's level), and run of river on a
+        # unit with an entered dam stays river first (dense seed 8).
         r = x.get("supplyRule") or "damFirst"
-        if r == "trigger" and x["damCapacityM3"] <= 0:
+        if r == "trigger" and not cap0.get(x["id"], x["damCapacityM3"]) > 0:
             return "riverFirst"
-        if r == "runOfRiver" and x["damCapacityM3"] > 0:
+        if r == "runOfRiver" and cap0.get(x["id"], x["damCapacityM3"]) > 0:
             return "riverFirst"
         return r
 
@@ -2288,7 +2435,8 @@ def run(doc: dict) -> dict:
     obj_sup = {ob["id"]: [0.0] * n for lst in objs.values() for ob in lst}
     # Each river abstraction's take and pool storage (§2.7j).
     river_cols = {fid: {t["key"]: {"take": [0.0] * n, "pool": [0.0] * n} for t in ts} for fid, ts in riv.items()}
-    storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] for f in farms}
+    # §2.7g: the initial level x the first day's capacity.
+    storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] * (kdev[f["id"]][0] if f["id"] in kdev and n else 1.0) for f in farms}
     on_river = {f["id"]: False for f in farms}
     sd_store = {x["id"]: 0.0 for x in nodes}
     dd_owed = {x["id"]: 0.0 for x in nodes}
@@ -2325,14 +2473,32 @@ def run(doc: dict) -> dict:
         a_full = f.get("damAreaFullM2")
         if a_full is None:
             # Maaren & Moolman (1985) via Sawunyama (2013): A = 7.2 C^0.77 m² (engine >= 1.61.0).
-            a_full = 7.2 * cap ** 0.77
+            a_full = 7.2 * cap0[f["id"]] ** 0.77
         b = f.get("damAreaExponent", 0.7)
-        return (a_full * (s0 / cap) ** b if s0 > 0 else 0.0), None
+        # §2.7g: a dam that shrank overnight starts the day above its capacity, at its full-supply area (probe
+        # development-sediment-area), and spills the rest that day.
+        return (a_full * min(1.0, s0 / cap) ** b if s0 > 0 else 0.0), None
 
+    dev_cap: dict[str, list[float]] = {fid: [0.0] * n for fid in kdev}
     for i, o in enumerate(days):
         m = wm[i]
         rf = p_used[i]
         wy = water_year(o)
+        # §2.7g: the day's capacity (entered x k(t)); the survey curve's volumes x k at the same areas; dead storage,
+        # the trigger and stop levels, the drought borehole's and a transfer's reserve follow it (they read it).
+        for fid, ks in kdev.items():
+            f = by_id[fid]
+            c_ = cap0[fid] * ks[i]
+            f["damCapacityM3"] = c_
+            dev_cap[fid][i] = c_
+            if curve0[fid]:
+                f["damCurve"] = [{**r_, "volumeM3": r_["volumeM3"] * ks[i]} for r_ in curve0[fid]]
+            if fid in units_nodam:
+                units[fid] = units_dam[fid] if c_ > 0 else units_nodam[fid]
+            if not c_ > 0:
+                diag["dev_no_capacity_days"] += 1
+            elif storage[fid] > c_:
+                diag["dev_shrink_spill_days"] += 1
         if i == 0 or (_dt.date.fromordinal(o).month == 10 and _dt.date.fromordinal(o).day == 1):
             for k in bh_used:
                 bh_used[k] = [0.0] * len(bh_used[k])
@@ -2368,7 +2534,7 @@ def run(doc: dict) -> dict:
                 area, slope = area_of(f, s0)
                 pd = rf * area / 1000
                 seep = f.get("damSeepagePerDay") or 0.0
-                e_raw = k_lake[m] * apan[m] / mdays[m] / 1000 * area
+                e_raw = (k_lake[m] * apan_day[i] if apan_day[i] is not None else k_lake[m] * apan[m] / mdays[m]) / 1000 * area
                 if slope is None:
                     b = f.get("damAreaExponent", 0.7)
                     if b > 1:
@@ -2676,6 +2842,9 @@ def run(doc: dict) -> dict:
             rule_ = supply_rule(x)
             # Per-unit rain (§2.4h): the unit's own runoff in place of natural × share.
             I = natural[i] * shares.get(xid, 0.0) if local is None else (local[xid][i] if xid in local else 0.0)
+            # Land cover (§2.5a): the farm routes its natural runoff less the reduction; the runoff column is that.
+            if xid in lc_red:
+                I -= lc_red[xid][i]
             # The unit's base-flow loss and gain (§2.6b): Ib = I − MIN(loss, I) + gain is what its runoff brings to
             # the dam and the river; the runoff column stays I.
             Ib = I
@@ -2794,8 +2963,13 @@ def run(doc: dict) -> dict:
             elif rule_ == "trigger":
                 trig = x.get("supplyTriggerPct", 0.4)
                 stop = max(trig, x.get("supplyStopPct", 0.6))
-                on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap
-                hold = on and not s_prev < trig * cap
+                # §2.7g: on a day with no capacity the dam's level reads 0 against the levels at the entered
+                # capacity: the pump switches to the river under a trigger above 0 (probe
+                # development-in-service-trigger), stays on under a stop level above 0, and under a trigger of 0
+                # stays on the dam unless it was already on the river (random seed 88).
+                s_lvl, c_lvl = (s_prev, cap) if cap > 0 else (0.0, cap0[xid])
+                on = s_lvl < stop * c_lvl if on_river[xid] else s_lvl < trig * c_lvl
+                hold = on and not s_lvl < trig * c_lvl
             else:
                 on = False
             on_river[xid] = on
@@ -2844,7 +3018,7 @@ def run(doc: dict) -> dict:
                 if u_["target"] == "direct" and u_["mode"] == "supplemental":
                     GW += pump(k_, rem - Gs - Gr - GW)
             for k_, u_ in enumerate(ulist):
-                if u_["target"] == "direct" and u_["mode"] == "emergency" and s_prev < u_["level"] * cap:
+                if u_["target"] == "direct" and u_["mode"] == "emergency" and (s_prev < u_["level"] * cap if cap > 0 else 0 < u_["level"] * cap0[xid]):
                     GW += pump(k_, rem - Gs - Gr - GW)
             G = min(used_off + Gs + Gr + GW, dem)
             # The demand objects' split of G (§2.7f).
@@ -3098,6 +3272,13 @@ def run(doc: dict) -> dict:
     put(None, "ewr", ewr)
     put(None, "ewr_shortfall", cat_short)
 
+    # §2.7g: the day loop is done; the nodes get their entered capacity and curve back (what follows is structural).
+    for fid in kdev:
+        by_id[fid]["damCapacityM3"] = cap0[fid]
+        by_id[fid]["damCurve"] = curve0[fid]
+        if fid in units_dam:
+            units[fid] = units_dam[fid]
+
     # ---- EWR attribution (§2.7b, §2.7c, §2.6a) ----------------------------
     sites = [(None, outlet["id"])] + [
         (x["id"], x["id"])
@@ -3307,6 +3488,10 @@ def run(doc: dict) -> dict:
                     put(xid, f"river_pool@{t['key']}", c_["pool"])
             for k in extra:
                 put(xid, k, cc[k])
+            if xid in lc_red:
+                put(xid, "landcover_reduction", lc_red[xid])
+            if xid in dev_cap:
+                put(xid, "dam_capacity", dev_cap[xid])
             put(xid, "ewr_charge", charge[xid])
             put(xid, "ewr_charge_irrigation", charge_irr[xid])
             if xid in binding:

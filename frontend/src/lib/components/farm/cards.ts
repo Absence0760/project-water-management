@@ -121,7 +121,11 @@ export function systemName(efficiency: number): string {
 // i18n-section: farm.supply
 export const littleNeed = () => t('Your hydrological unit needed very little water this season.');
 
-/** "Short on 16 days in Nov and Dec, all when your dam was down to its stop level." */
+/**
+ * "Short on 16 days in Nov and Dec, all when your dam was down to its stop
+ * level." On a dam with river abstractions beside it (shortDaysRiver), which
+ * side was short: the dam, the river (or its pump), or both.
+ */
 export function shortLine(farm: FarmProjection): string {
 	const s = farm.season;
 	// i18n-section: farm.short
@@ -133,6 +137,36 @@ export function shortLine(farm: FarmProjection): string {
 	// No dam, or a dam that serves none of the unit's demands (each draws on the river, engine ≥ 1.65.0): the river's days.
 	if (farm.damCapacityM3 <= 0 || s.onlyRiver) return t(one ? '{head}, when the river was too low to take from.' : '{head}, all when the river was too low to take from.', { head });
 	const stop = farm.damMinPct > 0;
+	// A dam with river abstractions beside it (engine ≥ 1.111.0): which side was short. Absent on an older run.
+	const river = s.shortDaysRiver ?? 0;
+	if (river > 0) {
+		const dam = s.shortDaysAtStopLevel;
+		const both = s.shortDaysBoth ?? 0;
+		if (dam <= 0) {
+			if (river >= s.shortDays)
+				return t(one ? "{head}, when the river or your pump couldn't give enough." : "{head}, all when the river or your pump couldn't give enough.", { head });
+			return t("{head}, {n} of them when the river or your pump couldn't give enough.", { head, n: river });
+		}
+		if (both >= s.shortDays) {
+			return t(
+				stop
+					? one
+						? "{head}, when your dam was down to its stop level and the river or your pump couldn't give enough."
+						: "{head}, all when your dam was down to its stop level and the river or your pump couldn't give enough."
+					: one
+						? "{head}, when your dam was empty and the river or your pump couldn't give enough."
+						: "{head}, all when your dam was empty and the river or your pump couldn't give enough.",
+				{ head }
+			);
+		}
+		const sides = t(
+			stop
+				? "{head}: your dam was down to its stop level on {dam}, and the river or your pump couldn't give enough on {river}."
+				: "{head}: your dam was empty on {dam}, and the river or your pump couldn't give enough on {river}.",
+			{ head, dam: count(DAYS, dam), river: count(DAYS, river) }
+		);
+		return both > 0 ? `${sides} ${t('Both were short on {both}.', { both: count(DAYS, both) })}` : sides;
+	}
 	if (s.shortDaysAtStopLevel >= s.shortDays) {
 		return t(
 			stop

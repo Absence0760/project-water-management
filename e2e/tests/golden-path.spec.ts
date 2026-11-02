@@ -41,6 +41,8 @@ async function createProjectThroughUi(page: Page, name: string) {
 	await page.getByRole('button', { name: 'New project' }).first().click();
 	const dialog = page.getByRole('dialog', { name: 'New project' });
 	await dialog.getByLabel('Name').fill(name);
+	// This path types the network in; the guided default (the Map's Start sheet) is onboarding.spec.ts's.
+	await dialog.getByRole('radio', { name: 'An empty model' }).check();
 	await dialog.getByRole('button', { name: 'Create' }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: name })).toBeVisible();
 }

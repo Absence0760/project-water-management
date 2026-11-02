@@ -41,7 +41,7 @@ Per the rule in `CLAUDE.md`: every PR that touches code also touches tests and d
 ## Running the checks locally
 
 ```
-pnpm setup                 # bootstrap: install, local Postgres + migrations, Mailpit
+pnpm run setup             # bootstrap: install, local Postgres + migrations, Mailpit
 pnpm check                 # typecheck across workspaces
 pnpm test                  # unit tests (no DB)
 pnpm test:backend:db       # API + RLS tests (needs pnpm dev:db:up)

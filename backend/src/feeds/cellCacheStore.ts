@@ -2,6 +2,7 @@
 // reading a feed's cells, and merging a fetch's cell values through
 // chirps_cache_merge. Worker side only (the fetcher Lambda has no database);
 // the pure side is feeds/cellCache.ts.
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { feedFetcher } from '../jobs/transport.js';
 import { type CacheProduct, type CacheView, decodeCellValue, type GridCell, viewKey, windowYears } from './cellCache.js';
@@ -50,24 +51,41 @@ export type CacheCells = Omit<CellsResult['cells'], 'product'> & { product: Cach
  * (chirps_cache_merge, which takes them only from a running job of that
  * feed, checks every value again and keeps final values over preliminary
  * ones).
- * The cells go in (row, column) order, the function's lock order. Throws
- * what the function raises; the ingest turns that into an invalid answer.
+ * The cells go in (row, column) order, the function's lock order.
+ *
+ * One call a calendar year of the answer: the function takes at most 366
+ * days a call, and a read of our copy spans years (fetch.ts COPY_CELL_YEARS).
+ * Every answer is split so, a 120-day one that crosses New Year too, so every
+ * merge takes the cache's locks in one order: year, then cell, then that
+ * year's file rows. Throws what the function raises; the ingest turns that
+ * into an invalid answer (the caller's savepoint undoes the years already
+ * merged).
  */
 export async function mergeCellCache(db: Db, feedId: string, origin: CacheOrigin, answer: CacheCells): Promise<number> {
 	if (!answer.cells.length || !answer.read.length) return 0;
 	const order = answer.cells.map((_, i) => i).sort((a, b) => answer.cells[a]![0] - answer.cells[b]![0] || answer.cells[a]![1] - answer.cells[b]![1]);
-	const { rows } = await db.query<{ n: number }>('SELECT chirps_cache_merge($1, $2, $3, $4, $5, $6, $7, $8, $9) AS n', [
-		feedId,
-		origin,
-		answer.product,
-		answer.startDate,
-		answer.read,
-		order.map((i) => answer.cells[i]![0]),
-		order.map((i) => answer.cells[i]![1]),
-		order.flatMap((i) => answer.values[i]!.map(decodeCellValue)),
-		answer.tags ?? null
-	]);
-	return rows[0]?.n ?? 0;
+	const first = toEpochDay(answer.startDate);
+	const n = answer.read.length;
+	let changed = 0;
+	for (let a = 0; a < n; ) {
+		const day = fromEpochDay(first + a);
+		// Through 31 December of this day's year, or the answer's last day.
+		const b = Math.min(n, a + toEpochDay(`${day.slice(0, 4)}-12-31`) - (first + a) + 1);
+		const { rows } = await db.query<{ n: number }>('SELECT chirps_cache_merge($1, $2, $3, $4, $5, $6, $7, $8, $9) AS n', [
+			feedId,
+			origin,
+			answer.product,
+			day,
+			answer.read.slice(a, b),
+			order.map((i) => answer.cells[i]![0]),
+			order.map((i) => answer.cells[i]![1]),
+			order.flatMap((i) => answer.values[i]!.slice(a, b).map(decodeCellValue)),
+			answer.tags ? answer.tags.slice(a, b) : null
+		]);
+		changed += rows[0]?.n ?? 0;
+		a = b;
+	}
+	return changed;
 }
 
 /** What one fetch re-checks (chirps_recheck_claim): days to read again at the feed's cells, and files to HEAD. */

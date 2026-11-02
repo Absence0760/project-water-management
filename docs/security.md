@@ -2696,6 +2696,33 @@ In short:
   and read as unverified: re-run them to sign one (there was no production
   deployment then). Verifying re-hashes the run's rows (a fraction of a second for a
   400-series, multi-decade run), which is why the run list doesn't carry it.
+  *Signing* doesn't (304): `storeRun` hashes the binary parameters it sent,
+  which are `array_send`'s bytes of the stored arrays, and
+  `app_run_signing_digest` builds the same canonical digest with those
+  hashes and everything else read from the rows. It trusts nothing it
+  shouldn't: the stamp key is still the backend's alone, a hash that doesn't
+  match the rows only makes a run that never verifies (fails closed), and
+  the function answers only for the caller's own unstamped run made in this
+  transaction, with exactly one well-formed hash a stored series, else NULL
+  (`runs/stamp.db.test.ts` § the signing digest). It is `SECURITY DEFINER`
+  for the same reason `app_run_digest` is (077): the storing transaction of
+  an applicant can't read their own run's rows (046), and its gate is
+  `app_set_run_stamp`'s exactly (`created_by` the caller, `stamp` still
+  NULL, `created_at = now()`), so it answers for no run but the one being
+  stamped. *Drift guard:* before signing, `stampRun` re-hashes one or two
+  of the stored series (the first constant one, built by `array_fill`, and
+  the first sent one) through `app_run_series_sha256` (`SECURITY DEFINER`,
+  the same gate) and compares them with the hashes it is about to sign. Should
+  Postgres's `array_send` and the backend's encoding ever disagree (a
+  Postgres or node-postgres change, an encoder bug), every new run would
+  otherwise silently read as unverified. On a mismatch it logs
+  `run_stamp_drift` (run id and series keys, never values; alarmed on both
+  the API and worker log groups, `infra/alarms.tf`, essential tier) and
+  signs from the stored rows with `app_run_digest`, the pre-304 path. It
+  doesn't fail the run: the run is still stored, verifies and can be signed
+  off, the operator is paged, and the only cost is the old 0.3 s until the
+  encoder is fixed. Failing would turn an encoding drift into every run
+  failing.
   *Rotation:* a new `AUTH_JWT_SECRET` leaves every stored run unverified
   (existing sign-offs and decisions stand; new ones need a fresh run), which
   after a leak is what you want, since the old key could have signed

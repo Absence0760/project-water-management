@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "PR #692, guided catchment onboarding (WP-4.10: overview/GuidedStart.svelte, projects/newProject.ts, GetStarted, StartSheet, startData/startFlow, help article): measured 1 671 B gzip by building the 2026-11-02 consolidated branch with and without the PR's frontend change (2 370 015 → 2 371 686 B)."
+}

@@ -16,9 +16,11 @@
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { loadOnce, peek, prefetch } from '#lib/components/common/lazy.js';
 	import GetStarted from '#lib/components/projects/GetStarted.svelte';
+	import { DEFAULT_START, newProjectPath, START_CHOICES, type StartHow } from '#lib/components/projects/newProject.js';
 	import NeedsAttention from '#lib/components/projects/NeedsAttention.svelte';
 	import ProjectTable from '#lib/components/projects/ProjectTable.svelte';
 	import { needsAttention } from '#lib/components/projects/outcomes.js';
+	import { projectListLoader } from '#lib/components/projects/listLoad.js';
 	import {
 		IRRIGATION_LABEL,
 		IRRIGATION_RULE,
@@ -53,6 +55,8 @@
 	let newName = $state('');
 	let newDescription = $state('');
 	let newTeamId = $state('');
+	/** Guided from the map (the default) or an empty model (WP-4.10, newProject.ts). */
+	let newStart = $state<StartHow>(DEFAULT_START);
 	let creating = $state(false);
 
 	let importOpen = $state(false);
@@ -181,12 +185,17 @@
 			.catch(() => request === outcomesRequest && (outcomesFailed = true));
 	}
 
+	// Latest wins (listLoad.ts): a slower earlier read (before Try again, or an import) never replaces the list.
+	const readList = projectListLoader();
 	async function load() {
 		loading = true;
 		loadError = null;
 		loadOutcomes();
+		const r = await readList();
+		// A later load owns the page now, its loading state included.
+		if (!r.current) return;
 		try {
-			const [p, t] = await Promise.allSettled([api.projects.list(), api.teams.list()]);
+			const [p, t] = r.value;
 			if (p.status === 'rejected') throw p.reason;
 			// A user who is only ever a farmer has no workspace: their farms are
 			// the farmer view (WP-2.6, docs/design/farmer-view.md).
@@ -290,6 +299,7 @@
 		newName = '';
 		newDescription = '';
 		newTeamId = canAddTo(selectedTeam?.id) ? selectedTeam!.id : '';
+		newStart = DEFAULT_START;
 		actionError = null;
 		createOpen = true;
 	}
@@ -302,7 +312,7 @@
 		try {
 			const p = await api.projects.create(cleanName(newName), newDescription.trim() || undefined, newTeamId || null);
 			createOpen = false;
-			await goto(resolve(`projects/${p.id}`));
+			await goto(`${basePath()}${newProjectPath(p.id, newStart)}`);
 		} catch (err) {
 			actionError = msg(err);
 		} finally {
@@ -598,6 +608,18 @@
 				bind:value={newDescription}
 			></textarea>
 		</div>
+		<fieldset class="field start-how" data-testid="np-start">
+			<legend>How to start</legend>
+			{#each START_CHOICES as c (c.value)}
+				<label class="choice">
+					<input type="radio" name="np-start" value={c.value} bind:group={newStart} aria-describedby="np-start-{c.value}" />
+					<span>
+						<span class="choice-label">{c.label}</span>
+						<span class="hint" id="np-start-{c.value}">{c.hint}</span>
+					</span>
+				</label>
+			{/each}
+		</fieldset>
 	</form>
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (createOpen = false)}>Cancel</button>
@@ -674,6 +696,38 @@
 </Dialog>
 
 <style>
+	/* The New project dialog's two ways to start (WP-4.10): a radio each, its hint under its label. */
+	.start-how {
+		border: 0;
+		padding: 0;
+		margin: 0;
+		min-width: 0;
+	}
+	/* As a .field's label. */
+	.start-how legend {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+		padding: 0;
+	}
+	.start-how .choice {
+		display: flex;
+		gap: 0.5rem;
+		align-items: flex-start;
+		padding: 0.35rem 0;
+		font-weight: normal;
+	}
+	.start-how .choice input {
+		margin-top: 0.2rem;
+		flex: none;
+	}
+	.start-how .choice-label {
+		display: block;
+		font-weight: 600;
+	}
+	.start-how .hint {
+		display: block;
+	}
 	.projects-page {
 		container: projects-page / inline-size;
 	}

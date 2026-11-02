@@ -37,8 +37,14 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
  * schedule (data-feeds.spec.ts, whose feeds are queued by it): the schedules
  * look at every project, so such a tick can queue another spec's due feed
  * (never run it: the claim is scoped).
+ *
+ * `maxJobs` caps the jobs the tick runs (JOB_MAX_PER_TICK). A CHIRPS
+ * backfill read from our copy queues its next window due at once
+ * (feeds/ingest.ts COPY_NEXT_SECONDS), so a tick runs the whole chain; a
+ * test that looks at a backfill part-way through runs one window with
+ * `maxJobs: 1`.
  */
-export async function runJobsTick({ projects, schedule = true }: { projects: [string, ...string[]]; schedule?: boolean }): Promise<string> {
+export async function runJobsTick({ projects, schedule = true, maxJobs }: { projects: [string, ...string[]]; schedule?: boolean; maxJobs?: number }): Promise<string> {
 	const args = ['exec', 'tsx', 'src/jobs/worker.ts', '--once', ...(schedule ? [] : ['--no-schedule']), ...projects.flatMap((id) => ['--project', id])];
 	const { stdout } = await promisify(execFile)('pnpm', args, {
 		cwd: backendDir,
@@ -58,7 +64,8 @@ export async function runJobsTick({ projects, schedule = true }: { projects: [st
 			// A `delineate` job reads the same committed synthetic DEM as the e2e API (playwright.config.ts).
 			DEM_URL: DEM_FIXTURE,
 			// A `future_yield` job reads the committed synthetic NEX-GDDP-CMIP6 copy, with § 8 on as the e2e API has it.
-			FUTURE_YIELD: 'on'
+			FUTURE_YIELD: 'on',
+			...(maxJobs ? { JOB_MAX_PER_TICK: String(maxJobs) } : {})
 		},
 		timeout: 60_000
 	});

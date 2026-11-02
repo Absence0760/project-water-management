@@ -409,10 +409,12 @@ export interface NodeResult {
 	 * `river.takes` order: what each pumped (part of `supplied`) and, with a
 	 * pool, the pool's storage at the end of the day (null without one; a pool
 	 * is storage only from engine 1.86.0, so it has no evaporation), and with a pump capacity the demand the pump left unmet
-	 * although the water was there (engine ≥ 1.66.0; null without a capacity).
+	 * although the water was there (engine ≥ 1.66.0; null without a capacity),
+	 * and what each was asked for after the drought restriction less what it
+	 * pumped (`short`, engine ≥ 1.111.0; got + short = that demand).
 	 * Absent on a unit without a river-sourced demand.
 	 */
-	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; pumpLimited: (Float64Array | null)[] };
+	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; pumpLimited: (Float64Array | null)[]; short: Float64Array[] };
 	/** Supplied to the crops from another unit's dam (engine ≥ 1.73.0, docs/model.md §2.7k), part of `supplied`; absent on a unit without a remote share. */
 	remoteIn?: Float64Array;
 	/** Given from this unit's dam to other units' crops (engine ≥ 1.73.0), out of its storage; absent on a unit no remote share draws on. */
@@ -798,7 +800,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			r.riverTakes = {
 				got: tk.map(() => new Float64Array(days)),
 				pool: tk.map((x) => (x.pool ? new Float64Array(days) : null)),
-				pumpLimited: tk.map((x) => (hasPumpLimit(x) ? new Float64Array(days) : null))
+				pumpLimited: tk.map((x) => (hasPumpLimit(x) ? new Float64Array(days) : null)),
+				short: tk.map(() => new Float64Array(days))
 			};
 		}
 		if (n.remote) r.remoteIn = new Float64Array(days);
@@ -1796,6 +1799,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					const x = tk[a]!;
 					const v = td.got[a]!;
 					rt.got[a]![t] = v;
+					// Its unmet demand after the restriction (engine ≥ 1.111.0): got + short = want; never below 0.
+					rt.short[a]![t] = v < want[a]! ? want[a]! - v : 0;
 					const pl = rt.pumpLimited[a];
 					if (pl) pl[t] = td.pumpLimited[a]!;
 					Griver += v;

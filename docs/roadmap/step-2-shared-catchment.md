@@ -1573,8 +1573,9 @@ doesn't flood storage, and it doesn't evict the modeller's runs.
   Optional per project: `autoRun.publish = 'never' | 'if_no_new_warnings'`.
 - **Partial recompute: not built.** The engine takes about a second for a
   full record at 60 farms. A run writes 1,937 series (15.9 MB stored, after
-  TOAST compression; measured in WP-2.16), and storing them takes about 5 s,
-  which dominates, so a partial engine recompute wouldn't reduce it. **Leave
+  TOAST compression; measured in WP-2.16), and storing them took about 5 s,
+  which dominated (since 304 the whole manual run takes ~1.5 s; followups.md §
+  V1 run budget), so a partial engine recompute wouldn't reduce it. **Leave
   room:** if runs get slow, first store only the tail of auto runs
   (`run_series` from the first changed day, with the published run as the
   base). Measure first.
@@ -2068,8 +2069,12 @@ for alert counts.
 > It is one run-scoped endpoint (`GET …/runs/:runId/evidence-report`) drawn
 > by the route's `&evidence` mode, printed from the browser only. Left: the
 > server-rendered evidence PDF and `POST …/reports { evidence: true }` (with
-> the pack, WP-3.14, so ER1 isn't needed yet), per-unit supply bands (ER4
-> rest), the REC (ER9), the banded FDC (ER5) and page x of y footers
+> the pack, WP-3.14, so ER1 isn't needed yet). Since built: per-unit supply
+> bands (ER4 rest) and the banded FDC (ER5, both engine 1.33.0), the REC
+> (ER9, the rule table's `category`), and page x of y footers on the
+> evidence report's print and an issued pack's PDF (2026-11-01, the
+> catchment report's `@page` margin box,
+> [ui.md § Evidence report](../ui.md#evidence-report))
 > ([followups.md § Evidence report](../followups.md#evidence-report-issue-71)).
 
 **Goal.** A meeting-ready catchment report in one click. It replaces the
@@ -2120,8 +2125,8 @@ consultant copy-pasting from Excel.
     the "one implementation" principle behind the engine.
 
 - **Phase C, evidence mode (issue #15; M, about 2 weeks; after A and B).
-  Built (issue #71), except item 4 and the parts of 1–3 the status note
-  above lists.** The licensing evidence report on the same route:
+  Built (issue #71; items 1–3 whole since 2026-11-01), except item 4,
+  which waits for the pack (WP-3.14) as the status note above says.** The licensing evidence report on the same route:
   `/projects/:id/report?run=<applicationRun>&evidence`, built only from
   the project's current nominated evidence run and a scenario run on it
   (or the nominated run alone, for baseline evidence), refused otherwise.
@@ -2525,7 +2530,7 @@ Step 2 is done, and Step 3 can open, when **all** of these hold:
 | Feed sources change format or disappear (DWS HTML, CHIRPS paths) | High | Medium | Strict parsers that fail loudly; health UI and staleness alerts; manual CSV and API-key paths stay first-class |
 | CHIRPS bias against calibration rain degrades results after the catchment series ends | Medium | Medium | Rain-source priority unchanged; `rain_source` visible in charts and CSV; hydrologist decision D7 on scaling |
 | DB growth from 60-farm runs (measured in WP-2.16: 1,937 series, 15.9 MB per run) | Medium | Medium | Auto runs replace each other (one kept per automatic trigger; flat over 30 simulated days); the publication cap of 12. The kept runs of one 60-farm project (20 manual, the automatic ones, up to 12 published, plus pinned and cited runs) come to ~0.6 GB, so the 20 GiB default holds about 20 such projects before the trigger below. Trigger for moving `run_series` to S3 (planned-work "Run storage in S3"): DB > 60 % of allocated storage |
-| Synchronous manual runs at 60 farms approach the 30 s API budget | Low–Medium | Medium | Measured in WP-2.16: 5.9 s here, ≈ 8.7 s scaled to the API Lambda's 0.58 vCPU, under the 10 s trigger but with little headroom. Re-measure on the deployed Lambda (the p95-duration alarm fires at 80 % of the timeout, `infra/alarms.tf`); if a 60-farm run passes 10 s there, route manual runs through the job queue too (the worker has a 300 s budget). Storing the series (~5 s of it) is the part to cut first |
+| Synchronous manual runs at 60 farms approach the 30 s API budget | Low–Medium | Medium | Measured in WP-2.16: 5.9 s here, ≈ 8.7 s scaled to the API Lambda's 0.58 vCPU, under the 10 s trigger but with little headroom. Re-measure on the deployed Lambda (the p95-duration alarm fires at 80 % of the timeout, `infra/alarms.tf`); if a 60-farm run passes 10 s there, route manual runs through the job queue too (the worker has a 300 s budget). Storing the series (~5 s of it) is the part to cut first. Cut (304, 2026-11-01): the manual run now 1.5 s here, ≈ 2.7 s scaled; the auto run 1.5 s (followups.md § V1 run budget) |
 | Translation drift, or poor-quality Afrikaans | Medium | Medium | Typed keys; the help `sourceHash` test; a named reviewer; no unreviewed machine translation |
 | Alert fatigue, or SES complaints hurting deliverability | Medium | Medium | Hysteresis, daily cap, digest, one-click unsubscribe, suppression handling |
 | Scope: 16 WPs for one developer | High | Medium | The shortest path to the exit criteria (§6 end) first; fetchers, forecast, portfolio and report may trail the first live catchment |

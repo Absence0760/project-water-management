@@ -4,7 +4,10 @@
 // Invoked three ways, and each runs the same tick (jobs/runner.ts) against the
 // job table, which is the source of truth:
 //   * the EventBridge schedule, every 5 minutes: runs whatever is due, and
-//     catches any job whose wake message was lost;
+//     catches any job whose wake message was lost (the worker sends none
+//     itself, so a job a job queues for later runs in the invocation that
+//     queued it when it comes due within WORKER_WAIT_DUE_SECONDS and the
+//     budget, else on this schedule);
 //   * a batch from the SQS `jobs` queue: wake messages the API sends after
 //     enqueueing (jobs/transport.ts), so a job needn't wait for the schedule;
 //   * a batch from the SQS `ingest-results` queue: a data feed's fetch result
@@ -34,13 +37,31 @@
 import type { Context, ScheduledEvent, SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda';
 import { assertLambdaEnv } from './config/production.js';
 import { loadRuntimeSecrets } from './config/runtimeSecrets.js';
-import { runTick, type TickResult } from './jobs/runner.js';
+import { envInt, runTick, type TickResult } from './jobs/runner.js';
 import { acceptIngestResult } from './feeds/schedule.js';
 import { acceptMailEvent } from './mail/suppression.js';
 import { acceptPackRenderResult, acceptRenderResult } from './reports/schedule.js';
 import { parseWorkerMessage } from './jobs/transport.js';
 import { emitMetricLine, logEvent } from './logging/logEvent.js';
 import { safeError } from './logging/safeError.js';
+
+/**
+ * Most jobs one invocation runs (JOB_MAX_PER_TICK overrides). High on purpose:
+ * the time budget bounds an invocation, not a count. At runTick's default of
+ * 25, 13 CHIRPS feeds backfilling from our copy (a window a job, a second or
+ * two each) ran 25 windows and stopped, and the rest waited for the next
+ * 5-minute tick (2026-11-02).
+ */
+export const WORKER_MAX_JOBS = 1000;
+/**
+ * With nothing due, an invocation waits up to this long for a job coming due
+ * and runs it (runner.ts TickOptions.waitDueMs; JOB_WAIT_DUE_SECONDS
+ * overrides). The worker never wakes itself (infra/jobs.tf: no send on the
+ * jobs queue), so without it a job queued a few seconds on by another job (a
+ * backfill's next window, feeds/ingest.ts CACHED_NEXT_SECONDS) waited for the
+ * 5-minute tick. Short, so an invocation never idles long for a retry's backoff.
+ */
+export const WORKER_WAIT_DUE_SECONDS = 30;
 
 /** CloudWatch namespace of the worker's embedded metrics (infra/jobs.tf alarm). */
 export const METRIC_NAMESPACE = 'water-management/Jobs';
@@ -142,7 +163,12 @@ export async function handler(event: SQSEvent | ScheduledEvent, context?: Pick<C
 	// job that bounds its own work (delineate) fits it before the timeout, less 10 s.
 	const remaining = context?.getRemainingTimeInMillis() ?? 300_000;
 	const budgetMs = Math.max(10_000, remaining - 60_000);
-	const result = await runTick({ budgetMs, deadline: Date.now() + remaining - 10_000 });
+	const result = await runTick({
+		budgetMs,
+		deadline: Date.now() + remaining - 10_000,
+		maxJobs: envInt(process.env.JOB_MAX_PER_TICK, WORKER_MAX_JOBS),
+		waitDueMs: envInt(process.env.JOB_WAIT_DUE_SECONDS, WORKER_WAIT_DUE_SECONDS) * 1000
+	});
 	emitMetricLine(metricLine(result));
 	// An SQS invocation answers with the records to retry (an empty list: none).
 	if (isSqs(event)) return { batchItemFailures: failures };

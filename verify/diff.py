@@ -270,15 +270,20 @@ def compare_summary(py: dict, eng: dict | None) -> tuple[dict, list[str]]:
     return parts, bad
 
 
-def build_cases(tmp: Path, n_random: int, seed: int, examples: bool, n_dense: int = 0, workers: int = 1) -> list[tuple[str, Path, Path]]:
+def build_cases(tmp: Path, n_random: int, seed: int, examples: bool, n_dense: int = 0, workers: int = 1,
+                probe_filter: list[str] | None = None) -> list[tuple[str, Path, Path]]:
     """Write every case's input, run the engine on all of them (`workers` tsx
-    processes), and return (name, input path, engine output path)."""
+    processes), and return (name, input path, engine output path).
+    `probe_filter` (diff.py --probes) keeps only the probes whose name contains
+    one of its strings; an empty list keeps none."""
     cases: list[tuple[str, Path]] = []
     if examples:
         for p in example_inputs(tmp / "examples"):
             cases.append((p.name.replace(".input.json", ""), p))
     (tmp / "probes").mkdir(parents=True, exist_ok=True)
     for name, doc in probes.PROBES.items():
+        if probe_filter is not None and not any(f in name for f in probe_filter):
+            continue
         p = tmp / "probes" / f"probe-{name}.input.json"
         p.write_text(json.dumps(doc))
         cases.append((f"probe-{name}", p))
@@ -505,6 +510,11 @@ def main(argv=None) -> int:
     ap.add_argument("--dense", type=int, default=int(os.environ.get("VERIFY_DENSE", "0")),
                     help="also N dense networks (every phase-2a feature in most)")
     ap.add_argument("--no-examples", action="store_true")
+    ap.add_argument("--probes", default=None,
+                    help="only the probes whose name contains one of these comma-separated strings ('' for none)")
+    ap.add_argument("--mutants", default=None,
+                    help="instead of the report, run the mutants (mutants.py) whose description contains this text "
+                    "on these cases and say which are caught (a targeted self-test)")
     ap.add_argument("--keep", type=Path, default=None, help="keep inputs and outputs here")
     ap.add_argument("--verbose", action="store_true", help="list series only the engine outputs")
     ap.add_argument("--workers", type=int, default=default_workers(),
@@ -515,7 +525,21 @@ def main(argv=None) -> int:
     tmp = Path(tmp_ctx.name) if tmp_ctx else args.keep
     tmp.mkdir(parents=True, exist_ok=True)
     try:
-        cases = build_cases(tmp, args.random, args.seed, not args.no_examples, args.dense, args.workers)
+        pf = None if args.probes is None else [f for f in args.probes.split(",") if f]
+        cases = build_cases(tmp, args.random, args.seed, not args.no_examples, args.dense, args.workers, pf)
+        if args.mutants is not None:
+            from mutants import MUTANTS
+
+            mine = [m for m in MUTANTS if args.mutants in m[0]]
+            edit_lists = [[tuple(e)] if isinstance(e[0], str) else list(e) for _, *e in mine]
+            results = mutants_caught(cases, edit_lists, args.workers)
+            missed = 0
+            for (what, *_), (error, fails) in zip(mine, results):
+                ok = not error and fails
+                missed += 0 if ok else 1
+                print(f"{'caught' if ok else 'MISSED'}: {what}" + (f" ({error})" if error else ""))
+            print(f"{len(mine) - missed}/{len(mine)} mutants caught on {len(cases)} cases")
+            return 1 if missed or not mine else 0
         notes: list[str] = []
         r = evaluate(cases, model, notes, workers=args.workers, progress=Progress("verify", cases))
     finally:
@@ -524,7 +548,8 @@ def main(argv=None) -> int:
 
     per_key, failures = r["per_key"], r["failures"]
     print(
-        f"verify: {len(cases)} cases ({'3 examples + ' if not args.no_examples else ''}{len(probes.PROBES)} probes + "
+        f"verify: {len(cases)} cases ({'3 examples + ' if not args.no_examples else ''}"
+        f"{sum(1 for c in cases if c[0].startswith('probe-'))} probes + "
         f"{args.random} random + {args.dense} dense from seed {args.seed})"
     )
     if r["refused"]:

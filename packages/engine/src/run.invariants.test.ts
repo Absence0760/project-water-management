@@ -12,6 +12,10 @@ import { randomInput, Rng, withoutReachLosses, withoutRiverSources } from './tes
 import { hasMonthlyRates, transferRatesM3s, withMonthlyRates } from './network/transferRates';
 import { checkAll, checkDoubledCropAreas, droughtBoreholesAsSupplemental, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
 import { clientCatchmentDirs } from './testing/client-catchment-fixture';
+import { riverShortKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
+import { RESTRICTION_SERIES, restrictedObjectDemand, restrictionCutKey } from './network/restriction';
+import { basicNeedsM3Day } from './network/demandObjects';
+import type { DemandPart } from './project';
 
 describe('engine invariants on random networks', () => {
 	// The random soak itself (checkAll on FUZZ_CASES seeds, GR4J) is
@@ -586,5 +590,73 @@ describe('dam rules out of the catchment with base flow (engine 1.86.0, issue #5
 			expect(Math.abs(wb.residualM3), `seed ${seed}`).toBeLessThan(1e-6 * scale);
 		}
 		expect(seen).toBe(8);
+	});
+});
+
+describe('a river abstraction’s unmet demand (engine 1.111.0, docs/model.md §2.7j)', () => {
+	it('random networks: every river take has its river_short@, and take + short = the abstraction’s demand after the drought restriction, the crops’ included', () => {
+		let seen = 0;
+		let restrictedSeen = 0;
+		let shortDays = 0;
+		// Days a cut abstraction was short: the crops' and a demand object's, so both sides of the ask are exercised.
+		let cutCrops = 0;
+		let cutObjects = 0;
+		for (let seed = 1; seed < 600 && seen < 16; seed++) {
+			const x = randomInput(seed, { maxDays: 200 });
+			const rule = x.settings.droughtRestriction;
+			// One level for every unit, so the catchment's restriction_cut@<part> columns give each unit's cut ('own'
+			// gives a level per unit and publishes no cut per part).
+			if (rule) {
+				delete rule.basis;
+				delete rule.damNodeIds;
+			}
+			const out = withVerification(x, runModel(x));
+			const takes = out.series.filter((s) => s.key.startsWith('river_take@'));
+			if (!takes.length) continue;
+			seen++;
+			expect(out.summary.verification?.passed, `seed ${seed}: ${JSON.stringify(out.summary.verification?.checks.filter((c) => !c.passed))}`).toBe(true);
+			const col = (nodeId: string | null, key: string) => out.series.find((y) => y.nodeId === nodeId && y.key === key)?.values;
+			for (const n of x.model.nodes) {
+				const nodeTakes = takes.filter((s) => s.nodeId === n.id);
+				if (!nodeTakes.length) continue;
+				const objects = (x.model.demandObjects ?? []).filter((o) => o.nodeId === n.id && o.enabled !== false);
+				const river = riverSourcesOf(n, objects, []).river!;
+				// A unit the rule cuts carries restricted_demand; its cut per part is the catchment's column that day.
+				const inScope = !!col(n.id, RESTRICTION_SERIES.restricted.key);
+				if (inScope) restrictedSeen++;
+				const cutOf = (part: DemandPart, t: number) => (inScope ? (col(null, restrictionCutKey(part))?.[t] ?? 0) : 0);
+				const demand = col(n.id, 'demand')!;
+				for (const k of river.takes) {
+					const take = col(n.id, riverTakeKey(k.key))!;
+					const short = col(n.id, riverShortKey(k.key));
+					expect(short, `seed ${seed} ${n.id} ${k.key}`).toBeDefined();
+					const o = k.obj >= 0 ? objects.find((y) => y.id === k.key)! : null;
+					for (let t = 0; t < take.length; t++) {
+						let ask: number;
+						if (o) ask = restrictedObjectDemand(col(n.id, `object_demand@${o.id}`)![t]!, cutOf(o.category, t), basicNeedsM3Day(o));
+						else {
+							// The crops' abstraction demand is the unit's demand less its objects', times the river's share.
+							let crops = demand[t]!;
+							for (const y of objects) crops -= col(n.id, `object_demand@${y.id}`)![t]!;
+							ask = Math.max(0, crops) * (1 - cutOf('crops', t)) * river.cropShare;
+						}
+						const v = short![t]!;
+						expect(v, `seed ${seed} ${k.key} day ${t}`).toBeGreaterThanOrEqual(0);
+						if (v > 1e-6) shortDays++;
+						if (v > 1e-6 && cutOf(o ? o.category : 'crops', t) > 0) {
+							if (o) cutObjects++;
+							else cutCrops++;
+						}
+						expect(Math.abs(take[t]! + v - ask), `seed ${seed} ${n.id} ${k.key} day ${t}: take ${take[t]} + short ${v} vs ask ${ask}`).toBeLessThanOrEqual(1e-6 + 1e-9 * Math.max(ask, demand[t]!));
+					}
+				}
+			}
+		}
+		expect(seen).toBe(16);
+		// Some abstraction was short somewhere, and some unit was under a restriction, or the property proves little.
+		expect(shortDays).toBeGreaterThan(0);
+		expect(restrictedSeen).toBeGreaterThan(0);
+		expect(cutCrops, 'a cut crops abstraction short').toBeGreaterThan(0);
+		expect(cutObjects, 'a cut demand object abstraction short').toBeGreaterThan(0);
 	});
 });

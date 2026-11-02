@@ -31,6 +31,10 @@ import {
 	et0Note,
 	gapFillNote,
 	needsAttention,
+	attentionText,
+	catchingUp,
+	pendingNote,
+	stateLabel,
 	nextTryNote,
 	parseBbox,
 	type RainCopy,
@@ -301,6 +305,35 @@ describe('descriptions', () => {
 		expect(STATE_LABELS['copy-behind']).toBe('Copy behind');
 	});
 
+	it('a stale feed with a fetch under way is catching up: its own chip, no warning, and a line that says how far it has read', () => {
+		const f = (state: string, pendingFetch: 'queued' | 'running' | null, lastMeta: Record<string, string | number> | null = null, lastDataDate: string | null = null) =>
+			({ health: { state, stale: state === 'stale', staleAfterDays: 62, reason: { code: 'waiting' } }, pendingFetch, lastMeta, lastDataDate }) as never;
+		const backfilling = f('stale', 'queued', { through: '1995-03-12' }, '1995-03-12');
+		expect(catchingUp(backfilling)).toBe(true);
+		expect(stateLabel(backfilling)).toBe('Catching up');
+		expect(needsAttention([backfilling])).toBe(0);
+		expect(pendingNote(backfilling)).toBe(`Catching up: a fetch is waiting to run, read to ${fmtDay('1995-03-12')} so far. Run now waits for it, and this card updates by itself.`);
+		// Out at the source, and no `through` yet: the newest day.
+		expect(pendingNote(f('stale', 'running', null, '2001-01-31'))).toBe(`Catching up: a fetch is under way, read to ${fmtDay('2001-01-31')} so far. Run now waits for it, and this card updates by itself.`);
+		expect(pendingNote(f('stale', 'running'))).toBe('Catching up: a fetch is under way. Run now waits for it, and this card updates by itself.');
+		// Not stale: a fetch waits, no progress to tell.
+		expect(pendingNote(f('failing', 'queued'))).toBe('A fetch is waiting to run. Run now waits for it, and this card updates by itself.');
+		expect(stateLabel(f('failing', 'queued'))).toBe('Failing');
+		expect(needsAttention([f('failing', 'queued')])).toBe(1);
+		// Positive control: stale with nothing under way is still Stale and counted; no line.
+		const idle = f('stale', null);
+		expect(catchingUp(idle)).toBe(false);
+		expect(stateLabel(idle)).toBe('Stale');
+		expect(needsAttention([idle])).toBe(1);
+		expect(pendingNote(idle)).toBeNull();
+	});
+
+	it('word the attention warning for one feed and for several', () => {
+		expect(attentionText(1)).toBe('1 feed needs attention: its data is out of date or its last fetch failed.');
+		expect(attentionText(13)).toBe('13 feeds need attention: their data is out of date or their last fetch failed.');
+		expect(attentionText(2)).not.toMatch(/\bits\b/);
+	});
+
 	describe('the line about our copy of the rain data (issue #604)', () => {
 		const tz = process.env.TZ;
 		afterEach(() => {
@@ -523,6 +556,32 @@ describe('the rain feed from the catchment boundary (issue #326 B-rain)', () => 
 			['GET', '/projects/p1/feeds/chirps/from-boundary'],
 			['POST', '/projects/p1/feeds/chirps/from-boundary', { featureId: 'b1', updatedAt: boundary.updatedAt, targetName: 'CHIRPS boundary' }]
 		]);
+		request.mockClear();
+		await f.boundaryProposal('agera5_et0');
+		await f.applyBoundary({ featureId: 'b1', updatedAt: boundary.updatedAt }, 'agera5_et0');
+		expect(request.mock.calls).toEqual([
+			['GET', '/projects/p1/feeds/agera5_et0/from-boundary'],
+			['POST', '/projects/p1/feeds/agera5_et0/from-boundary', { featureId: 'b1', updatedAt: boundary.updatedAt }]
+		]);
+	});
+
+	it('proposes the reference ET feed from the boundary without a daily product', () => {
+		const boundary2 = { featureId: 'b1', name: 'B', updatedAt: '2026-10-01T08:00:00.000Z', areaKm2: 1 };
+		const p = { boundary: boundary2, apply: { action: 'create' as const, targetKind: 'evap_et0_mm', targetName: '', startDate: null } };
+		const choice = boundaryChoice(p);
+		expect(applyWords(p, [], choice, 'agera5_et0')).toMatch(/^Apply attaches a new reference ET feed into .*\. It reads the last 365 days at its first fetch/);
+		expect(applyWords({ apply: { action: 'none', feedId: 'f1' } }, [], undefined, 'agera5_et0')).toBe('A reference ET feed already reads this boundary: nothing to apply.');
+		// The product is never sent; the start date is checked against the reference ET floor, not a CHIRPS product's.
+		expect(boundaryApplyBody(p, choice, 'agera5_et0')).toEqual({ body: { featureId: 'b1', updatedAt: boundary2.updatedAt, targetName: '' } });
+		expect(boundaryApplyBody(p, { ...choice, startDate: '1990-01-01' }, 'agera5_et0')).toEqual({
+			body: { featureId: 'b1', updatedAt: boundary2.updatedAt, targetName: '', startDate: '1990-01-01' }
+		});
+		expect(applyWords(p, [], { ...choice, startDate: '1990-01-01' }, 'agera5_et0')).toMatch(new RegExp(`It reads from ${fmtDay('1990-01-01')}, then keeps up daily\\.$`));
+		expect(boundaryApplyBody(p, { ...choice, startDate: '1980-12-31' }, 'agera5_et0')).toEqual({ error: `A reference ET feed reads from ${fmtDay('1981-01-01')}.` });
+		expect(boundaryApplyBody(p, { ...choice, startDate: '1990' }, 'agera5_et0')).toEqual({ error: 'The start date should be a day, YYYY-MM-DD.' });
+		expect(boundaryApplyBody(p, { replace: true, product: 'sat', startDate: '' }, 'agera5_et0')).toEqual({ body: { featureId: 'b1', updatedAt: boundary2.updatedAt, replace: true } });
+		// Positive control: CHIRPS sends its product.
+		expect(boundaryApplyBody(p, choice)).toEqual({ body: { featureId: 'b1', updatedAt: boundary2.updatedAt, targetName: '', product: 'sat' } });
 	});
 });
 

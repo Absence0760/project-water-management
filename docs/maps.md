@@ -299,6 +299,10 @@ server ([§ Delineation](#delineation)).
   fix for a stale cached worker, maplibre-gl-js #8621), a second copy of the
   code the main thread's chunk holds (~140 KB gzipped); it loads only with
   the map, so the guard counts it under `mapKb` with the rest of MapLibre.
+  The guard checks it is there once, as `workers/maplibre.worker-*.js`
+  (Vite's own worker build would name it `maplibre-gl-worker-*.js`), but not that it imports from
+  `chunks/` as the engine's workers must: from maplibre-gl 6.16 it builds
+  as a single file.
 - Tiles and glyphs are fetched with `connect-src` (MapLibre `fetch`es glyph
   ranges; they are not CSS fonts, so `font-src` is not involved):
   same-origin in production (`/tiles/*`, `/tiles/fonts/*`), so
@@ -1100,8 +1104,31 @@ boundary itself rather than over a box around it.
   - a run whose CHIRPS series spans less of it than another CHIRPS series
     warns, naming both ([model.md § Which CHIRPS series the run
     reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
+- **Reference ET from the boundary.** The same proposal and Apply for the
+  daily reference evapotranspiration feed (`agera5_et0`): **Attach a feed**
+  → **Source** *AgERA5 daily reference evapotranspiration* → **Area** *The
+  catchment boundary, from the map* (`BoundaryRain.svelte` with `source`
+  `agera5_et0`, heading **Reference ET from the catchment boundary**), and
+  `GET`/`POST /projects/:id/feeds/agera5_et0/from-boundary`
+  (`feeds/fromBoundary.ts ET0_BOUNDARY`, one code path with CHIRPS's). The
+  cells are cut on our copy's own grid, not CHIRPS's: AgERA5's 0.1° cells,
+  centred on x.x5° (`ingest/agera5.py`; NASA POWER's days are regridded onto
+  the same cells), over region D1 (`mirror/grid.ts MIRROR_REGION`, 10–41° E,
+  8–35.5° S), so each listed centre names the one copy cell that holds it
+  (`fromMirrorEt0.ts et0Cell`) and a boundary up to about 10,000 km² fits the
+  feed's 100 cells; a boundary reaching outside D1 is refused (409
+  `boundary_cells`). The feed writes `evap_et0_mm` (a separate series named
+  "Reference ET boundary", "… 2" … beside a record, as for CHIRPS), has no
+  daily product (a `product` is refused, 400), and reads from the record's
+  first day (1981 at the earliest) or, with no record, the last 365 days.
+  Replacing the record runs read is offered only through the catchment
+  reference ET feed that writes it, as an area replacement (its own days
+  re-read over the boundary's cells); a record no feed writes (an upload)
+  has no product version to be replaced by, so it is kept and the
+  boundary's series sits beside it. Each unit's parcel stays CHIRPS only
+  (a unit's own series is rain, 209_unit_rain_series).
 - **The weights** (`backend/src/feeds/boundaryCells.ts`, pure). Each 0.05°
-  cell gets *share of the cell inside the boundary × cos(cell-centre
+  cell (0.1° for reference ET, `ET0_GRID`) gets *share of the cell inside the boundary × cos(cell-centre
   latitude)*, the weighting `bboxCells` gives a box, so a rectangle gets
   exactly a box's cells and weights. Holes are subtracted and the parts of a
   MultiPolygon add up. The share is computed by **exact clipping**, not
@@ -1253,7 +1280,7 @@ as the schema owner; the app never writes it.
   `Z01A`–`Z02C`, with invented MAP, MAR and monthly means (the monthly means
   add up to the MAR, the MAR is below the rain on the area). Every source
   says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
-  (`pnpm setup` does), as dataset `synthetic`. The repo is public: no real
+  (`pnpm run setup` does), as dataset `synthetic`. The repo is public: no real
   quaternary values are committed.
 - **Seeded example map.** `pnpm seed:examples` gives the Sandspruit example
   an invented map inside those cells (`backend/scripts/examples/map.ts`,
@@ -1337,7 +1364,7 @@ loads as the schema owner; the app never writes it.
   codes `Z1H001`–`Z1H005` and a reservoir `Z1R001`, round the seeded
   Sandspruit map's outlet (21.31° E, 33.79° S): four river gauges within
   20 km, one about 40 km off. Every source says "SYNTHETIC".
-  `pnpm import:gauge-stations` with no argument loads it (`pnpm setup` does),
+  `pnpm import:gauge-stations` with no argument loads it (`pnpm run setup` does),
   as dataset `synthetic`, and the panel marks it **Sample stations**.
 - **Real data: the operator's own download, once its licence allows it**
   (see Sources: blocked today). The DWS station catalogue
@@ -1406,7 +1433,7 @@ reads it.
   (`Z100/01`–`Z100/08`), most within a few hundred metres of the seeded
   Sandspruit dams (Bosrand's 1.5 km off, so never proposed) and one beside
   the e2e and DB tests' dam. Every source says "SYNTHETIC".
-  `pnpm import:dam-register` with no argument loads it (`pnpm setup` does),
+  `pnpm import:dam-register` with no argument loads it (`pnpm run setup` does),
   as dataset `synthetic`, and every proposal from it carries a "Synthetic
   test data" warning.
 - **Real data: the operator's own download, once the licence allows it**
@@ -1439,7 +1466,7 @@ as the schema owner, and only the worker reads it (no route, no map layer).
   900001), and `backend/fixtures/waterbodies/series/<wb_id>.csv` holds an
   invented wet-area series for each in the Waterbodies API's layout, to
   2026-10-11. `pnpm import:waterbodies` with no argument loads it
-  (`pnpm setup` does), as dataset `synthetic`; `pnpm gen:waterbodies-fixture`
+  (`pnpm run setup` does), as dataset `synthetic`; `pnpm gen:waterbodies-fixture`
   rewrites it.
 - **Real data: the operator's own clip** of the v0.0.3 historical extent
   (CC BY 4.0, § Sources). DE Africa publishes it for the whole continent
@@ -1796,7 +1823,7 @@ The search's places come from `gazetteer_reference` (225), which the
   every one made up): four in the synthetic DEM's valley (**Kwartsvallei** at
   its outlet, where the e2e find-then-start delineates from), five round
   region Z's stations and dams, and a school and a railway the loader leaves
-  out. `pnpm import:gazetteer` with no argument loads it (`pnpm setup` does)
+  out. `pnpm import:gazetteer` with no argument loads it (`pnpm run setup` does)
   as dataset `synthetic`, each place's source "SYNTHETIC test data…".
 - **Real data: GeoNames' dumps of South Africa and its six neighbours**
   (CC BY 4.0, § Sources): `ZA.zip`, and `BW.zip` (Botswana), `LS.zip`
@@ -1925,15 +1952,23 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   for each unit, MAP for each unit, evaporation (the A-pan, and Evaporation
   from the map), the WR2012 check, observed flow (its link opens Data
   feeds on a DWS gauge with the nearest gauging stations proposed,
-  `?feed=dws`), each unit's composite dam, the cultivated area, then **Run
-  the model**. Each line has a status worked out from what the project
+  `?feed=dws`), each unit's composite dam, the cultivated area (linked to
+  the first unit with nothing planted, in its drawer, where land cover
+  proposes it), the EWR, **Run the model**, then **Calibrate, and run with
+  the fit** (WP-4.10: a first *calibrated* run is the goal, so the list
+  goes on past the first run). Each line has a status worked out from what the project
   holds now, never a stored tick: Done, Started (done for some units),
   To do, or Checking while it is read (a unit's rain is a CHIRPS feed with
   that unit's mark; its MAP `mapMm`; observed flow an outlet record, or a
   DWS feed waiting for its first fetch; a composite dam a volume above 0 on
-  each unit a dam on the map is part of; a run any run). The next one a run
+  each unit a dam on the map is part of; the EWR the pragmatic row or a
+  daily EWR from the DRM tables; a run any run; the calibration a stored
+  GR4J fit, `settings.fitRecord`, with a run newer than it, Started while
+  no run is). The next one a run
   needs is marked; the catchment's MAP, the WR2012 check, the cultivated
-  area and the units' areas are optional (a stand-in or a check). The list
+  area, the EWR and the units' areas are optional (a stand-in or a check),
+  and so is the calibration while the outlet has no observed record and
+  nothing is fitted (there is nothing to fit to). The list
   outlives the sheet: once it is closed, the Map's **Getting started** pill
   shows the same items, each with its link, and links back to the data
   step, until every item a run needs is done. An editor's lines say the
@@ -2107,7 +2142,12 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   outlets in gullies of a fraction of a km² beside their rivers; now a
   point lands only on a cell with 1 km² or more draining through it, and
   the warning names a much larger channel beside it.
-- **Without a DEM** (`DEM_URL` empty): each unit has its boundary's area
+- **Where it starts.** A project made with **New project**'s default, **Guided, from the
+  map**, opens here on the sheet's first step (`?tab=map&start=1`), and an
+  empty model's Summary offers the same (WP-4.10; [ui.md § Project
+  list](./ui.md#project-list), [§ Summary](./ui.md#summary)).
+- **Without a DEM** (`DEM_URL` empty): the boundary step says delineating
+  is off and why, and offers Draw and Upload only; each unit has its boundary's area
   and drains into the outflow gauge (the order is set on the Network); the
   rest of the catchment is the boundary less the units' boundaries (the
   whole boundary, saved as its parcel, with none), and drains into the
@@ -2348,7 +2388,7 @@ reads it.
   1–3, a network that flows together) round the seeded Sandspruit map and
   the e2e tests' boundary, and one far away (22.5° E) outside every test's
   bbox. Every source says "SYNTHETIC". `pnpm import:rivers` with no argument
-  loads it (`pnpm setup` does), as dataset `synthetic`.
+  loads it (`pnpm run setup` does), as dataset `synthetic`.
 - **Real data: HydroRIVERS v1.0** (WWF HydroSHEDS; § Sources: allowed).
   `pnpm dev:tiles:rivers` (`bin/tiles-dev.sh rivers`; operator-run, never in
   CI) downloads the Africa shapefile (about 110 MB, cached in
@@ -2490,7 +2530,7 @@ reads them.
   33.625–33.805° S): every cell 0.5 inside 21.30–21.35° E, 33.65–33.70° S
   (the DB and e2e tests' parcels), a fixed pattern elsewhere (its
   `_comment` gives the rule). `pnpm import:land-cover` with no argument loads
-  it (`pnpm setup` does), as dataset `synthetic`, and the box marks it
+  it (`pnpm run setup` does), as dataset `synthetic`, and the box marks it
   "Synthetic test data".
 - **Real data: ESA WorldCover, the operator's own download** (§ Sources:
   allowed, CC BY 4.0). The 2021 v200 map tiles are 3° × 3° GeoTIFFs
@@ -2596,7 +2636,7 @@ the app, like the land-cover grid.
   33.65–33.70° S (the DB and e2e tests' parcels), a fixed pattern elsewhere
   (its `_comment` gives the rule), with editions "synthetic 2022" and
   "synthetic 2018". `pnpm import:crop-types` with no argument loads it
-  (`pnpm setup` does), as dataset `synthetic`, and the box marks it
+  (`pnpm run setup` does), as dataset `synthetic`, and the box marks it
   "Synthetic test data".
 - **Real data: the operator's own SANLC download, for local evaluation
   only** until the terms are recorded. SANLC 2018 and 2022 come from
@@ -2726,7 +2766,7 @@ only reads them.
   33.6–33.7° S (the DB and e2e tests' boundary) hold a base row of 120 … 95
   mm (1 335 mm a year) exactly, the rest a fixed multiple of it, and 12 cells
   in the south-west corner have no value (the "sea"; its `_comment` gives the
-  rule). `pnpm import:evaporation` with no argument loads it (`pnpm setup`
+  rule). `pnpm import:evaporation` with no argument loads it (`pnpm run setup`
   does), as dataset `synthetic`, and the panel marks it "Synthetic test data".
 - **Real data: dPET, the operator's own download** (§ Sources: allowed, CC
   BY 4.0). `pnpm import:evaporation:fetch [first] [last]`
@@ -2859,7 +2899,7 @@ verified daily record (one array of mm a day, `NULL` for a day not read). The
   a Class-A pan with under two years (too short); `Z2E001`, about 200 km off
   (outside the default radius). `pnpm import:evaporation-stations` with no
   argument loads them as dataset `synthetic`; the panel marks them
-  "Synthetic test data". `pnpm setup` loads them; the DB and e2e tests load
+  "Synthetic test data". `pnpm run setup` loads them; the DB and e2e tests load
   them themselves.
 - **Real data: the operator's own request to DWS, once the permission covers
   it** (§ Sources: blocked). DWS publishes a weather station's verified
@@ -2952,7 +2992,7 @@ the points show without their values), then the grid's source line.
   with a value, keyed by the cell's south-west indices, like the evaporation
   grid. `pnpm import:map-grid` loads one, as the schema owner, replacing its
   dataset: with no argument the committed synthetic grid (invented rainfall
-  over region Z; `pnpm setup` loads it), else `<grid.asc> --dataset <label>
+  over region Z; `pnpm run setup` loads it), else `<grid.asc> --dataset <label>
   --source "<product, author, year>" [--version …] [--attribution …]
   [--bbox w,s,e,n]`, an ESRI ASCII grid in WGS84 degrees (`gdal_translate
   -of AAIGrid`; a grid on the Cape datum, as the Atlas's is, is reprojected
@@ -3147,27 +3187,27 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | DWS 1:500 000 rivers (`rivs500k`, Resource Quality Information Services; from the 1994 CDNGI 1:500 000 coverage) | DWS, `https://www.dws.gov.za/iwqs/gis_data/river/rivs500k.aspx` | **Unconfirmed.** Read 2026-10-01: the page and its description (`rivs500txt.html`) answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) shows the coverage offered "as is … for display or modelling", a research mirror listing it with "No License Provided", and DWS's wording on its river reports that they "may be reproduced only for non-commercial purposes and only after appropriate authorisation"; DWS's general data terms (NIWIS) are non-commercial too | "Department of Water and Sanitation" | the operator's download | none (a 1994 coverage, revised by RQIS) | **Blocked: licence unconfirmed** (and DWS's published terms are non-commercial). HydroRIVERS is used instead. To unblock: DWS's written permission for commercial reuse, recorded here with the date |
 | Digital Earth Africa Waterbodies v0.0.3 (historical extent polygons, and the per-waterbody surface area series from their Waterbodies API): the dam observations ([§ Waterbodies](#waterbodies)) | Digital Earth Africa ([docs.digitalearthafrica.org](https://docs.digitalearthafrica.org)): the polygons from `s3://deafrica-services/waterbodies/` (af-south-1, anonymous), the series from `api.digitalearth.africa/waterbodies/` (by `wb_id`, from `geoserver.digitalearth.africa`'s WFS) | **CC BY 4.0** for both (Digital Earth Africa's products; read by the lead 2026-10-27, issue #604 Round 5, confirmed by DE Africa 2026-10-30); commercial use allowed with attribution | "Digital Earth Africa, CC BY 4.0" (`dams/observed/upstream.ts` `DEAFRICA_ATTRIBUTION`) wherever an observed value shows, and on the Data sources and credits page (`/data-sources#deafrica`), with the paper DE Africa ask formal documents to cite (Halabisky et al. 2024, *Front. Environ. Sci.* 12:1251315, doi:10.3389/fenvs.2024.1251315) | v0.0.3 (series current within about a week; one ran to 2026-10-11 when checked 2026-10-30) | weekly ([data-sources.md](./data-sources.md#deafrica-waterbodies-series)) | **Allowed.** Polygons: the operator's clip, loaded (`pnpm import:waterbodies`, `load-reference.yml` kind `waterbodies`), never committed; series: read by the fetcher's weekly pass. Built and tested against the synthetic set |
 | Copernicus Sentinel-2 L2A Collection 1 (`s2_l2a_c1`) and Sentinel-1 RTC (`s1_rtc`), as Digital Earth Africa publishes them: water inside each traced dam's own outline, Sentinel-1 as radar (issue #624; [data-sources.md](./data-sources.md#deafrica-sentinel-2-c1)) | The EU's Copernicus programme and ESA; analysis-ready data processed by Digital Earth Africa, `deafrica-sentinel-2-l2a-c1` and `deafrica-sentinel-1` (af-south-1, anonymous) | "Free, full and open" under the EU's legal notice on the use of Copernicus Sentinel data (Regulation (EU) No 1159/2013, read 2026-10-27); DE Africa's spec pages state no licence of their own; modification and commercial use allowed with the credit | "Contains modified Copernicus Sentinel data [year], processed by Digital Earth Africa" ([year]: the years of the views shown; defined once in the engine's `evidence/sentinelCredit.ts`, which the evidence report's § 7 and `dams/observed/upstream.ts` `SENTINEL_ATTRIBUTION`, `sentinelCredit` both read) wherever a Sentinel value shows: the Dams tab's *Seen from space* panel, the farm dam card, and the Data sources and credits page (`/data-sources#copernicus-sentinel`) | Collection 1 from 2019; RTC from 2018 | daily (S2), every 6–12 days (S1) | **Allowed.** Registered; the reader prefers Sentinel-2 over WOfS and shows radar as radar (model.md §2.10l); the passes that read them are #624 steps 4–5. Synthetic rows only in dev, CI and e2e |
-| Synthetic Waterbodies fixture (`backend/fixtures/waterbodies/`) | this repo (invented outlines round the Sandspruit example's dams, `pnpm gen:waterbodies-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, `pnpm setup`, `pnpm dev:dams:run`) |
+| Synthetic Waterbodies fixture (`backend/fixtures/waterbodies/`) | this repo (invented outlines round the Sandspruit example's dams, `pnpm gen:waterbodies-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, `pnpm run setup`, `pnpm dev:dams:run`) |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 / 2022 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020, 2022 (released May 2024) | Every two years, irregular | **Blocked.** Built for its orchard and vine classes (issue #604 R5-D, § Orchards and vines from SANLC: kind `crop-types`, synthetic fixture only) and refused in production. To unblock: DFFE's written terms for 2018/2022 allowing derivatives in a commercial service (the EGIS terms, issue #618 step 8b), recorded here with the date |
 | Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the MAP grid layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unconfirmed.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", if allowed | the 2008 Atlas zip | none (a 2004 surface) | **Blocked: licence unconfirmed.** Loaded locally only (`pnpm import:map-grid`), never committed; production loads refused. To unblock: the WRC's or the Atlas editor's written terms for showing the grid in a commercial service, recorded here with the date |
 | Mean annual rainfall surface for the Southwestern Cape (WAAS, about 100 m): the MAP grid layer ([§ MAP grid](#map-grid)) and MAP from the grid ([§ MAP for each unit](#map-for-each-unit)) | Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now DWS), March 2007; a copy received from the client | **Terms not stated** (read 2026-10-23): the copy's ESRI `metadata.xml` still has the ArcGIS template text in its access and use constraints. **The operator's decision (2026-10-23): use it in production**, recorded in [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23) | "Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.", stored as the grid's source and attribution, shown whole with the layer and on `/data-sources#waas-map`; the map's credits show the short "MAP grid: WAAS (2007), Beuster Clarke & Associates" linking to it ([§ Credits on the map](#credits-on-the-map)) | Version 1.1 (March 2007) | none (a 2007 surface) | allowed (the operator's decision, 2026-10-23): production loads it as dataset `WAAS-SWCape-2007` only, clipped with `--bbox` to the client's area, stored with the credit line above whatever the file says (`geo/referenceLoad.ts`); never committed |
 | Other provincial MAP surfaces (about 100 m, another water availability study's) | the study's client or consultant, per surface | **Unconfirmed**: each is a project deliverable whose reuse terms are its owner's | as its owner asks | per surface | none | **Blocked: licence unconfirmed.** Loaded locally only, by the operator who holds the file; never committed; a production load refuses any label but the allowed ones |
-| Synthetic MAP grid (`backend/fixtures/geo/map-grid.synthetic.json`) | this repo (invented rainfall over region Z) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
+| Synthetic MAP grid (`backend/fixtures/geo/map-grid.synthetic.json`) | this repo (invented rainfall over region Z) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm run setup`) |
 | dPET, the daily files of hPET (hourly potential evapotranspiration, FAO-56 Penman-Monteith, 0.1°, 1981 onwards): the evaporation proposals' reference ET ([§ Evaporation from the map](#evaporation-from-the-map)) | University of Bristol (data.bris); Singer, M.B. et al. (2021), *Sci Data* 8, 224 ([doi:10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp](https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp)) | **CC BY 4.0**: "Licence: Creative Commons Attribution 4.0" on the dataset page ([data.bris.ac.uk](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp), read 2026-10-02); commercial use allowed with attribution. Its README: "This dataset contains modified Copernicus Climate Change Service information", from ERA5-Land, itself CC BY 4.0 (next row) | "hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it." Stored on the dataset row, shown under the panel's Source and method, and on the Data sources and credits page (`/data-sources#dpet`) | v3 (yearly files, one added each January) | yearly | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
 | GeoNames gazetteer, South Africa and its six neighbours (`ZA.txt`, and `BW.txt`, `LS.txt`, `MZ.txt`, `NA.txt`, `SZ.txt`, `ZW.txt` inside the basemap's extent: place and farm names, feature class, province, country, position): the Map's search ([§ Search](#search)) | GeoNames ([geonames.org](https://www.geonames.org), [download.geonames.org/export/dump](https://download.geonames.org/export/dump/)) | **CC BY 4.0**: "This work is licensed under a Creative Commons Attribution 4.0 License" (the dump's `readme.txt`, read 2026-10-13; the seven countries' dumps carry the same `readme.txt`); commercial use allowed with attribution | "GeoNames (geonames.org), CC BY 4.0", stored on every place and shown under every search that lists one, and on the Data sources and credits page (`/data-sources#geonames`) | the operator's download date (`--dataset GeoNames-ZA-<date>`, `GeoNames-neighbours-<date>`) | daily dumps; refreshed when the operator re-loads | **Allowed.** The operator's own download, never committed; built and tested against the synthetic gazetteer |
 | Surveyor-General's farm names (registered farm names and numbers), considered for the search | Chief Surveyor-General, Department of Agriculture, Land Reform and Rural Development | **Unconfirmed**: no reuse terms for a commercial service found in writing | – | – | – | **Blocked: licence unconfirmed.** Not loaded; a later dataset once its reuse licence is confirmed in writing, recorded here with the date |
-| Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
+| Synthetic gazetteer (`backend/fixtures/geo/gazetteer.synthetic.txt`) | this repo (invented places, GeoNames' format) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm run setup`) |
 | SoilGrids 2.0 water retention, `wv0033` and `wv1500` (water content at 33 and 1500 kPa, six depths to 200 cm, 250 m): the soil water capacity grid ([§ Soil water capacity](#soil-water-capacity)) | ISRIC – World Soil Information; Turek, M.E. et al. (2023), ISWCR 11(2) | **CC BY 4.0** on each layer's data.isric.org record and in ISRIC's SoilGrids FAQ (read 2026-10-28; [data-sources.md § GR4J priors](./data-sources.md#gr4j-priors-issue-622)) | "Soil water retention: SoilGrids 2.0 © ISRIC – World Soil Information, CC BY 4.0.", stored on the dataset | SoilGrids 2.0 (water retention of 2023; files of 2021-10-27) | none announced | allowed (`load-reference.yml` kind `soils`) |
 | iSDAsoil depth to bedrock (30 m, 0–200 cm): the soil grid's root depth | Innovative Solutions for Decision Agriculture (iSDA); Hengl, T. et al. (2021), Sci. Rep. 11 | **CC BY 4.0** (the AWS Registry of Open Data entry iSDA manages, read 2026-10-28) | "Depth to bedrock: iSDAsoil © Innovative Solutions for Decision Agriculture (iSDA), CC BY 4.0.", stored on the dataset | v1 (2001–2017) | none announced | allowed (with SoilGrids, kind `soils`) |
 | GRDC-Caravan v0.6 (daily streamflow and basin polygons of GRDC stations; South Africa's 434, Namibia's 51): the GR4J donor basins, fitted offline (`pnpm fit-donors`); their flows never shown, only the fitted parameters, on the Calibration page's Regional prior panel | Färber, C. et al. (2025), Zenodo 10.5281/zenodo.15349031; data from the Global Runoff Data Centre and its providers (DWS, Namibia's ministry) | **CC BY 4.0** on the record and in the archive's licence file; South Africa and Namibia "Free to use" in its per-country table (read 2026-10-28) | the donor set's attribution (`GR4J_DONORS`, `backend/src/geo/gr4jDonors.ts`), stored on the dataset, shown under the Regional prior panel and on `/data-sources` | 0.6 (2025-05-06) | per Zenodo release | allowed (kind `gr4j-donors`; only fitted parameters are loaded) |
 | HydroATLAS v1.0 (BasinATLAS attributes: aridity, precipitation, slope, clay, sand, forest, regulation): the donors' similarity attributes | WWF / McGill University (HydroSHEDS); Linke, S. et al. (2019), Sci. Data 6 | **CC BY 4.0** (hydrosheds.org/hydroatlas, read 2026-10-28) | "Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0." | 1.0 | none | allowed (with GRDC-Caravan, kind `gr4j-donors`) |
-| Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
-| Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm setup`) |
+| Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
+| Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
 | Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)", and the proposal and its revision call its values "modelled Class-A pan evaporation (PenPan, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
 
@@ -3214,7 +3254,7 @@ left out.
   *Soils and GR4J donors*, has the GDAL recipe).
 - **Load:** `pnpm import:soils <soils.json.gz> --dataset <label>` locally;
   `load-reference.yml` kind `soils` in production. Both go into
-  `soil_dataset` and `soil_cell_reference` (migration 268). `pnpm setup`
+  `soil_dataset` and `soil_cell_reference` (migration 268). `pnpm run setup`
   loads the synthetic grid. A load replaces its dataset in one transaction;
   a production load records its file in `reference_load`.
 - **Read:** `backend/src/geo/soilGrid.ts` `summariseSoil` gives a catchment

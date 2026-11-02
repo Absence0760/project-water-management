@@ -1,5 +1,6 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
+import { testTimeZone } from '../scripts/test-tz.mjs';
 
 // Separate from vite.config.ts so the SvelteKit plugin (which needs a full
 // dev-server lifecycle) isn't pulled into the Vitest runtime. The plain Svelte
@@ -13,6 +14,8 @@ export default defineConfig({
 	},
 	test: {
 		environment: 'node',
+		// A skewed time zone for every project (CLAUDE.md rule 7; scripts/test-tz.mjs).
+		env: { TZ: testTimeZone() },
 		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
 		// gate. No thresholds, on purpose: a number to hit invites tests written
 		// for the number. Read it for what no test reaches (docs/testing.md

@@ -30,9 +30,21 @@ export interface SeasonTotals extends WindowTotals {
 	/**
 	 * Of shortDays, how many had the dam at or below its stop level (all of
 	 * them for a dam farm whose demands all draw on the dam, by the engine's
-	 * rule). 0 on a unit whose demands all draw on the river (onlyRiver).
+	 * rule). 0 on a unit whose demands all draw on the river (onlyRiver). With
+	 * shortDaysRiver present, only the days the dam side itself was short
+	 * (the deficit beyond the river abstractions' unmet demand).
 	 */
 	shortDaysAtStopLevel: number;
+	/**
+	 * A dam unit with river abstractions beside it (engine ≥ 1.111.0,
+	 * docs/model.md §2.7j): of shortDays, how many a river abstraction was
+	 * short (its `river_short@`), whatever the dam did. Absent on a unit
+	 * without one, on onlyRiver, and on a run before 1.111.0 (whose short days
+	 * can't be split by side).
+	 */
+	shortDaysRiver?: number;
+	/** Of shortDays, how many both sides were short (≤ shortDaysAtStopLevel and shortDaysRiver); present with shortDaysRiver. */
+	shortDaysBoth?: number;
 	/**
 	 * Every demand of the unit draws on the river through its own abstraction
 	 * (engine ≥ 1.65.0, docs/model.md §2.7j), so its dam serves none of them

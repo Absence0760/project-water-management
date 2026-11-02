@@ -374,7 +374,8 @@ export const SETTINGS: Record<string, Setting> = {
 	JOB_TRANSPORT: { why: 'inprocess (the default) wakes no Lambda worker.', checks: { api: oneOf('sqs') } },
 	JOBS_QUEUE_URL: { why: 'The wake-up queue.', checks: { api: publicHttps } },
 	JOB_LEASE_SECONDS: { why: 'Tick tuning; the code default is safe.' },
-	JOB_MAX_PER_TICK: { why: 'Tick tuning; the code default is safe.' },
+	JOB_MAX_PER_TICK: { why: 'Tick tuning; the code default is safe (the worker Lambda’s is lambda-worker.ts WORKER_MAX_JOBS: its time budget bounds a tick).' },
+	JOB_WAIT_DUE_SECONDS: { why: 'Tick tuning: how long the worker Lambda waits for a job coming due before it ends a tick (lambda-worker.ts WORKER_WAIT_DUE_SECONDS); the code default is safe.' },
 	RUNS_KEPT_PER_PROJECT: { why: 'Run retention; the code default is safe.' },
 
 	// --- Data feeds ------------------------------------------------------------------------

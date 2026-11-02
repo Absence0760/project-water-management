@@ -155,7 +155,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, orchards and vines, evaporation, evaporation stations, MAP grid, gazetteer, Waterbodies polygons, soil water capacity grid, GR4J donor basins), start Mailpit and MinIO (one-time)
+pnpm run setup              # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, orchards and vines, evaporation, evaporation stations, MAP grid, gazetteer, Waterbodies polygons, soil water capacity grid, GR4J donor basins), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:all                # everything: Mailpit, MinIO + the map's basemap if cached (never fetched), then dev:full
@@ -200,41 +200,41 @@ pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 ×
 pnpm test:backend:v8-osr    # does this Node still miscompile the pre-fix assurance loop (issue #232)? [--rev <rev>] [--node <bin>] [-- <V8 flags>]; alone, minutes, not in CI
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts and mfa-email-mailpit.spec.ts dev:mail:up)
 
-pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lookup proposes from (pnpm setup runs it);
+pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lookup proposes from (pnpm run setup runs it);
                              # <boundaries.geojson> --dataset <label> --source "<study>" [--values <csv>] loads your own DWS/WR2012 download (maps.md)
-pnpm import:dam-register    # load the synthetic register of dams the Dams page's proposals read (pnpm setup runs it);
+pnpm import:dam-register    # load the synthetic register of dams the Dams page's proposals read (pnpm run setup runs it);
                              # <list.csv> <overlay.kml> --dataset <label> --source "<list, edition>" loads your own DSO download, once its licence allows (maps.md § Sources)
-pnpm import:rivers          # load the synthetic river network the Map's River network layer draws and proposes rivers from (pnpm setup runs it);
+pnpm import:rivers          # load the synthetic river network the Map's River network layer draws and proposes rivers from (pnpm run setup runs it);
                              # pnpm dev:tiles:rivers fetches HydroRIVERS (GDAL's ogr2ogr) and loads it (maps.md § River network)
-pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm setup runs it);
+pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm run setup runs it);
                              # <tile.tif> … --dataset <label> [--cell 0.0025] [--bbox w,s,e,n] loads your own ESA WorldCover tiles (maps.md § Cultivated area from land cover)
-pnpm import:crop-types      # load the synthetic orchard and vine grid the planted-areas drawer shows beside the land cover (pnpm setup runs it);
+pnpm import:crop-types      # load the synthetic orchard and vine grid the planted-areas drawer shows beside the land cover (pnpm run setup runs it);
                              # <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC, warped to EPSG:4326
                              # (its terms are pending: local evaluation only, production refuses it; maps.md § Orchards and vines from SANLC)
-pnpm import:evaporation     # load the synthetic evaporation grid Calibration → Evaporation from the map proposes from (pnpm setup runs it);
+pnpm import:evaporation     # load the synthetic evaporation grid Calibration → Evaporation from the map proposes from (pnpm run setup runs it);
                              # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
                              # <apan.json[.gz]> --dataset <label> loads ingest/apan_grid.py's modelled Class-A pan grid (PenPan; local only,
                              # production blocked until the hydrologist signs off its validation; data-sources.md § penpan-apan)
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
-pnpm import:evaporation-stations  # load the synthetic DWS evaporation stations Calibration → Evaporation stations proposes the A-pan from (pnpm setup runs it);
+pnpm import:evaporation-stations  # load the synthetic DWS evaporation stations Calibration → Evaporation stations proposes the A-pan from (pnpm run setup runs it);
                              # <stations.csv> --records <dir> --dataset <label> --source "<DWS reply reference, date>" loads your own DWS pan records
                              # (DWS's permission doesn't cover them yet: local only, production refuses them; maps.md § Evaporation stations)
-pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm setup runs it);
+pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm run setup runs it);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees; [--out <grid.json[.gz]>] writes it for a production load instead, which takes only the
                              # Southwestern Cape surface (WAAS-SWCape-2007; Lynch and the rest refused; maps.md § MAP grid)
-pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm setup runs it);
+pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm run setup runs it);
                              # <ZA.txt[.gz]> [<BW.txt[.gz]> …] --dataset <label> [--source "<attribution>"] loads GeoNames' dumps of South Africa and its
                              # neighbours (BW, LS, MZ, NA, SZ, ZW; theirs inside the basemap only), several files as one dataset (CC BY 4.0; maps.md § Gazetteer)
 pnpm import:dws <file> --reference "<reply>"   # load a DWS daily flow table (DWS's reply to a data request; --source upload for any other) into the
                              # gauge record store DWS feeds read with DWS_SOURCE=store, as the schema owner; [--station A2H012] [--from … --to …]
                              # (backend/fixtures/dws/ holds an invented reply; deployment.md § DWS gauge records)
-pnpm import:waterbodies     # load the synthetic DE Africa Waterbodies polygons the dam observations match traced dams to (pnpm setup runs it);
+pnpm import:waterbodies     # load the synthetic DE Africa Waterbodies polygons the dam observations match traced dams to (pnpm run setup runs it);
                              # <file.geojson> --dataset <label> [--bbox w,s,e,n] [--source "…"] loads your clip of the v0.0.3 historical extent (CC BY 4.0; maps.md § Waterbodies)
-pnpm import:soils           # load the synthetic soil water capacity grid the regional GR4J prior reads (pnpm setup runs it);
+pnpm import:soils           # load the synthetic soil water capacity grid the regional GR4J prior reads (pnpm run setup runs it);
                              # <soils.json[.gz]> --dataset <label> loads the grid ingest/soils.py writes from SoilGrids 2.0 + iSDAsoil (maps.md § Soil water capacity)
-pnpm import:gr4j-donors     # load the synthetic GR4J donor basins the regional prior is built from (pnpm setup runs it); <donors.json[.gz]> --dataset <label> loads fit-donors' file
+pnpm import:gr4j-donors     # load the synthetic GR4J donor basins the regional prior is built from (pnpm run setup runs it); <donors.json[.gz]> --dataset <label> loads fit-donors' file
 pnpm fit-donors --caravan <dir> --basins <basins.geojson> --out <donors.json[.gz]>   # operator-run, offline: refit GRDC-Caravan basins in D1 on our own forcing (model.md §2.10m; deployment.md § Reference datasets)
 pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
@@ -347,7 +347,7 @@ defaults (localhost URLs, the throwaway docker DB passwords, a dev-only JWT
 secret). Needs Node 24, pnpm 10, and docker (with compose).
 
 ```bash
-pnpm setup
+pnpm run setup
 pnpm dev
 ```
 

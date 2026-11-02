@@ -82,7 +82,7 @@ Status key: ✅ done · 🚧 in progress · ⬜ not started.
 
 ## Phase 1: V1 local demo 🚧
 
-**Goal:** after `git clone`, `pnpm setup`, `pnpm dev`, a person can register,
+**Goal:** after `git clone`, `pnpm run setup`, `pnpm dev`, a person can register,
 import the client catchment, run the model and look at the results. They can also create
 a second and third project (empty, or copied) side by side.
 
@@ -200,32 +200,36 @@ workbook (as in 1a) with **no manual edits**.
   last run against the same run with the unsaved edits (WP-1.17), with a
   mini hydrograph of the outlet's flow both ways.
 - ✅ Members panel (owner manages; anyone can leave).
-- ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
+- ✅ **Request sequencer** for list and series fetches, so that a slow, stale
   response can't overwrite a newer one when the user switches project or
-  series quickly.
+  series quickly: `lib/api/latest.ts` (latest wins) on the project list, the
+  Compare picker, the catchment page's load and series list, the Time series
+  tab's list and values, and the Map's data step
+  ([architecture.md § Stale responses](./architecture.md#stale-responses-frontend)).
 - ✅ **e2e (Playwright)** under `e2e/`, running fully locally against docker
   Postgres, the backend and a production build of the frontend. Pinned `timezoneId: 'UTC'`, and waits on real
   signals (no `networkidle`). The first spec is the demo path: register,
   create project, import, run, chart.
 - ✅ `packageManager` is pinned (pnpm 10) in the root `package.json`.
-- 🚧 Run date-sensitive unit tests under a skewed `TZ`, so that code which
-  accidentally depends on local time fails. Some date tests set a skewed
-  `TZ` themselves; no workspace's test script sets one yet (roadmap WP-1.12).
+- ✅ Run date-sensitive unit tests under a skewed `TZ`, so that code which
+  accidentally depends on local time fails. Every vitest config sets
+  `Pacific/Chatham`, and CI runs the unit tests again under
+  `America/St_Johns` ([testing.md § Time zone](./testing.md#time-zone);
+  roadmap WP-1.12).
 
 **Phase 1 acceptance (the demo):**
 
-- [ ] A fresh clone with `pnpm setup && pnpm dev` works with no other setup
-      ([run-locally.md](./run-locally.md)). *Not shown by any test: no CI
-      job runs `pnpm setup` on a fresh checkout (CI installs, then each job
-      brings up its own services; e2e's global setup migrates `water_e2e`).
-      `pnpm check:env` guards the committed env files only.*
+- [ ] A fresh clone with `pnpm run setup && pnpm dev` works with no other setup
+      ([run-locally.md](./run-locally.md)). Checked by
+      `.github/workflows/fresh-clone.yml` (weekly and on PRs that touch setup;
+      [testing.md § Fresh clone](./testing.md#fresh-clone)); tick it once that
+      workflow's first run on `main` is green.
 - [ ] Client catchment imported: its results match the workbook, the charts and
       Shortfalls table appear, and a run finishes in under 2 s including storage.
-      *Results: the client catchment regression suite (`packages/engine/src/run.test.ts`
-      § workbook regression) matches within its deviation list, locally only
-      (rule 10: it skips without `data/`). The 2 s including storage has no
-      measurement: the nearest budget is `runs/load.db.perf.test.ts`, a
-      60-farm ten-year run under 10 s.*
+      The 2 s is measured by `runs/load.db.perf.test.ts` (`pnpm
+      test:backend:perf:db`) on an invented catchment of the client's size,
+      and passes: 1.5 s on the dev laptop (2026-11-01; ~11 s before the
+      fixes in [followups.md § V1 run budget](./followups.md#v1-run-budget)).
 - [x] Projects A, B, C exist side by side. Creating D and copying C both work.
       *`e2e/tests/projects.spec.ts` "several projects for one place: create,
       copy, delete"; `projects/projects.db.test.ts` (`POST …/copy`).*

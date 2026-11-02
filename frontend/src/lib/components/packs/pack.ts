@@ -216,22 +216,6 @@ export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks 
 	];
 }
 
-/**
- * A guard against stale responses: each `begin()` starts a new request and
- * returns a check that stays true only while no later request has begun. A
- * page that loads on navigation applies an answer only when its check is
- * still true, so a slow first lookup can't overwrite a later one.
- */
-export function latestOnly(): { begin: () => () => boolean } {
-	let seq = 0;
-	return {
-		begin() {
-			const mine = ++seq;
-			return () => mine === seq;
-		}
-	};
-}
-
 /** What the verify page shows for a code: a lookup's outcome, as its states. */
 export type VerifyLookup =
 	| { status: 'no-code' | 'not-found' }

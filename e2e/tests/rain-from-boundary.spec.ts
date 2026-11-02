@@ -11,7 +11,8 @@
 // its own whose runs read a CHIRPS record (issue #561), the proposal names the
 // record, keeps it for runs (the new series sorts after it, read from the
 // record's first day with rnl), and replaces it only when the owner chooses,
-// through the catchment feed that writes it when one does (296).
+// through the catchment feed that writes it when one does (296). The
+// reference ET source offers the same proposal on its own 0.1° grid.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL, WEB_URL } from '../support/env.ts';
@@ -193,4 +194,34 @@ test('a record another catchment feed writes is replaced through that feed: the 
 	// No second feed: the one that writes the record now reads the boundary's cells.
 	const { feeds } = (await (await page.request.get(`${API_URL}/projects/${id}/feeds`)).json()) as { feeds: { id: string; targetName: string; config: { boundary?: unknown } }[] };
 	expect(feeds).toEqual([expect.objectContaining({ id: (await fed.json()).feed.id, targetName: RECORD, config: expect.objectContaining({ boundary: expect.anything() }) })]);
+});
+
+test('the reference ET feed from the boundary: the AgERA5 source offers the boundary, proposes its 0.1° cells without a daily product, and Apply attaches it', async ({ page, owner }) => {
+	void owner;
+	const { id } = await createProject(page.request, 'Reference ET from the boundary');
+	const made = await page.request.post(`${API_URL}/projects/${id}/map/features`, {
+		data: { kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.26, -33.74, 0.1)] } }
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	await page.goto(`/projects/${id}?tab=series#data-feeds`);
+	const panel = page.getByRole('region', { name: 'Data feeds' });
+	await panel.getByRole('button', { name: 'Attach a feed' }).click();
+	await panel.getByLabel('Source').selectOption({ label: 'AgERA5 daily reference evapotranspiration' });
+	const area = panel.getByLabel('Area');
+	// The boundary, not each unit's parcel (a unit's own series is rain).
+	await expect(area.locator('option[value="units"]')).toHaveCount(0);
+	await area.selectOption('boundary');
+
+	const proposal = page.getByRole('region', { name: 'Reference ET from the catchment boundary' });
+	await expect(proposal.getByTestId('boundary-rain-cells')).toHaveText(/^\d+ AgERA5 cells of 0\.1° in \d+ rows, [\d\s.]+ km² in all, [\d\s.]+ km² of it inside the boundary$/);
+	await expect(proposal.getByText(/^Reference evapotranspiration area-weighted over \d+ AgERA5 cells \(0\.1°\), each by the share of it inside the boundary\. Source: AgERA5 v2\.0/)).toBeVisible();
+	await expect(proposal.getByLabel(/^Daily product/)).toHaveCount(0);
+	await expect(proposal.getByTestId('boundary-rain-apply-words')).toHaveText(/^Apply attaches a new reference ET feed into .+\. It reads the last 365 days at its first fetch, then keeps up daily\.$/);
+	await expectNoViolations(page);
+
+	await proposal.getByTestId('boundary-rain-apply').click();
+	await expect(proposal.getByTestId('boundary-rain-done')).toContainText('the reference ET feed now reads');
+	const { feeds } = (await (await page.request.get(`${API_URL}/projects/${id}/feeds`)).json()) as { feeds: { source: string; targetKind: string; config: { product?: string; boundary?: unknown } }[] };
+	expect(feeds).toEqual([expect.objectContaining({ source: 'agera5_et0', targetKind: 'evap_et0_mm', config: expect.objectContaining({ boundary: expect.anything() }) })]);
+	expect(feeds[0]!.config.product).toBeUndefined();
 });

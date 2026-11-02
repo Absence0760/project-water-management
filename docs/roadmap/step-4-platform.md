@@ -628,6 +628,14 @@ run in parallel after WP-4.1.
 
 ### WP-4.9 Run storage in S3
 
+- **Status (2026-11-01): not started, and not needed for the V1 run
+  budget.** The 2 s V1 criterion failed at ~11 s, which looked like a case
+  for moving outputs out of Postgres. Profiling showed otherwise: 6.8 s was
+  one quadratic input query, and storing 432 series fell from ~3.7 s to
+  ~0.5 s with binary parameters, lz4 and signing from the bytes sent, with
+  `run_series` unchanged (304; data-model.md § Time-series storage,
+  followups.md § V1 run budget). This WP stays the plan for when storage
+  size or restore time grow with tenants, its original goal.
 - **Goal.** Run output arrays leave Postgres. The DB keeps metadata and
   summaries. Cost and restore time stay flat as tenants grow.
 - **Design (driven by the cost model below)**
@@ -690,6 +698,25 @@ run in parallel after WP-4.1.
 - **Depends on.** WP-4.1 (org prefix). Step 2 queue (WP-2.8) for the backfill.
 
 ### WP-4.10 Fast catchment onboarding
+
+> **Partly built (2026-11-01, PR feat/fast-catchment-onboarding).** The
+> guided sequence from an empty project runs on the Map's Start from the map
+> rather than in a separate `/projects/new/guided` wizard, so the delineation,
+> unit, rain, MAP, evaporation, gauge, dam and land-cover proposals it needs
+> are the ones already built (maps.md § Delineation, § Start from the map):
+> **New project** starts **Guided, from the map** by default and opens the
+> Start sheet; an empty model's Summary offers the same; the boundary step
+> says when delineation is off (no DEM) and offers Draw and Upload; the data
+> to-do list goes past the first run to **Calibrate, and run with the fit**
+> (a stored GR4J fit and a run newer than it), with **The EWR** as an
+> optional item and the cultivated area linked to the first unplanted
+> unit's land-cover proposal (ui.md § Project list, § Summary, § Map). Each
+> step is saved as it is accepted and the list reads its statuses from the
+> project, so it resumes after a reload. **Still open** (docs/followups.md
+> § Fast catchment onboarding (WP-4.10)): the WR2012 file importer, DWS
+> quality-code flags, farms from a CSV template, the org crop library and
+> templates (need WP-4.1), the first-login tour, an ET₀ feed proposed from
+> the boundary in the list, and the timed usability test.
 
 - **Goal.** A trained hydrologist sets up a typical catchment (≤ 15 farms,
   one gauge) to a first calibrated run in **≤ 4 hours** instead of days.

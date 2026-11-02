@@ -1,0 +1,164 @@
+name: Fresh clone
+
+# The V1 promise (docs/plan.md Phase 1 acceptance): a fresh clone runs with
+# `pnpm run setup && pnpm dev` and nothing else. This checks out a clean tree,
+# runs `pnpm run setup` exactly as a developer would (install, Postgres,
+# migrations, every synthetic reference dataset, Mailpit, MinIO), starts
+# `pnpm dev` (backend :3001, frontend :7777), checks both answer, and stops
+# them (docs/testing.md § Fresh clone).
+#
+# Its own workflow, not a ci.yml job, so not behind `CI gate`: ci.yml's jobs
+# already install, migrate and build on every PR, and what only this catches
+# (a root script chain, a reference import, a dev entry point, the committed
+# .env.development files, docker-compose.yml) lives in the paths below. A
+# whole `pnpm run setup` from a cold pnpm store costs several minutes, so it runs
+# on a PR or a push to main that touches those, weekly for the drift no path
+# shows (a runner image, Docker, compose, the npm registry), and by hand.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/fresh-clone.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .tool-versions
+      - '*/package.json'
+      - packages/*/package.json
+      - docker-compose.yml
+      - dev/**
+      - scripts/ci/service-image.sh
+      - backend/scripts/**
+      - backend/fixtures/**
+      - backend/src/config/**
+      - backend/src/server.ts
+      - backend/.env.development
+      - frontend/.env.development
+      - frontend/vite.config.ts
+      - frontend/svelte-options.js
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fresh-clone.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .tool-versions
+      - '*/package.json'
+      - packages/*/package.json
+      - docker-compose.yml
+      - dev/**
+      - scripts/ci/service-image.sh
+      - backend/scripts/**
+      - backend/fixtures/**
+      - backend/src/config/**
+      - backend/src/server.ts
+      - backend/.env.development
+      - frontend/.env.development
+      - frontend/vite.config.ts
+      - frontend/svelte-options.js
+  schedule:
+    # 07:00 UTC every Monday, after the coverage run (coverage.yml).
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: fresh-clone-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  setup-and-dev:
+    name: pnpm run setup && pnpm dev on a fresh clone
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      # No pnpm store cache: a fresh clone installs cold, as a new developer's
+      # does (docs/STACK.md § First-time setup needs Node 24, pnpm 10, docker).
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # The one departure from a laptop: where the service images come from.
+      # Docker Hub's and ECR Public's anonymous limits refused CI's runners
+      # (issues #492, #521), so the images come from the tarballs ci.yml caches
+      # by docker-compose.yml's pinned digests (a mirror-first pull on a miss).
+      # COMPOSE_FILE adds the overrides service-image.sh writes (the loaded
+      # image, `pull_policy: never`) to every `docker compose` call, so
+      # `pnpm run setup` and `pnpm dev` run their own unchanged commands.
+      - name: Restore the service images
+        id: service-images
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/service-images
+          key: service-images-${{ hashFiles('docker-compose.yml', 'scripts/ci/service-image.sh') }}
+
+      - name: Load the service images
+        env:
+          CACHED: ${{ steps.service-images.outputs.cache-hit }}
+        run: |
+          files=docker-compose.yml
+          for svc in postgres mailpit minio; do
+            [ "$CACHED" = "true" ] || bash scripts/ci/service-image.sh save "$svc" ~/service-images/"$svc".tar
+            bash scripts/ci/service-image.sh load "$svc" ~/service-images/"$svc".tar
+            files="$files:$RUNNER_TEMP/compose.$svc.yml"
+          done
+          echo "COMPOSE_FILE=$files" >> "$GITHUB_ENV"
+
+      - name: pnpm run setup
+        run: pnpm run setup
+
+      # `pnpm dev` in its own process group, so stopping it stops tsx watch
+      # and vite with it. Each wait is on the server answering, with a ceiling
+      # only so a server that never starts fails the job instead of hanging it.
+      - name: pnpm dev answers on :3001 and :7777
+        run: |
+          log="$RUNNER_TEMP/dev.log"
+          setsid pnpm dev > "$log" 2>&1 &
+          pid=$!
+          stop() { kill -- -"$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap stop EXIT
+          wait_for() {
+            for _ in $(seq 1 180); do
+              if curl -fs -o /dev/null "$1"; then return 0; fi
+              if ! kill -0 "$pid" 2>/dev/null; then echo "::error::pnpm dev exited before $1 answered"; cat "$log"; exit 1; fi
+              sleep 1
+            done
+            echo "::error::$1 did not answer within 180 s of pnpm dev starting"; cat "$log"; exit 1
+          }
+          wait_for http://localhost:3001/health
+          health=$(curl -fsS http://localhost:3001/health)
+          [ "$health" = '{"ok":true}' ] || { echo "::error::/health answered $health"; exit 1; }
+          wait_for http://localhost:7777/
+          # The SPA's shell, and the root layout compiled by vite (a broken
+          # Svelte or vite config serves the shell but fails here).
+          shell=$(curl -fsS http://localhost:7777/)
+          case "$shell" in *'<title>IC-WBT</title>'*) ;; *) echo "::error:::7777 did not serve the SPA shell"; exit 1 ;; esac
+          curl -fsS -o /dev/null http://localhost:7777/src/routes/+layout.svelte || { echo "::error::vite could not compile the root layout"; cat "$log"; exit 1; }
+          echo "Backend and frontend both answer."
+          stop
+          trap - EXIT
+          if curl -fs -o /dev/null http://localhost:3001/health; then echo "::error::the backend still answers after pnpm dev stopped"; exit 1; fi
+
+      - name: Stop the containers
+        if: always()
+        run: pnpm dev:down
+
+      - name: Upload the dev log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fresh-clone-dev-log
+          path: ${{ runner.temp }}/dev.log
+          if-no-files-found: ignore
+          retention-days: 7

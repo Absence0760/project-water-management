@@ -456,6 +456,40 @@ build, median of 9 loads of an 8-year run, time to the hydrograph's first
 paint: 323 → 268 ms, and 997–1167 → 643–755 ms at 4× CPU throttling.
 `auth.spec.ts` pins the request order and `runs-page.spec.ts` the paint order.
 
+## Stale responses (frontend)
+
+A page that asks again while its last request is still out (another
+project, a refresh, Try again, a pasted link) must never let the earlier
+answer land over the later one. `lib/api/latest.ts` is the one sequencer,
+latest wins, in two forms: `latestCall(load)` wraps a loader, so an earlier
+call that comes back later answers `{ current: false }`, its failure too
+(the latest call's failure is thrown); `latestOnly()` hands out checks for a
+step of several awaits written in place. Each call site keeps its wrapped
+loader in a `.ts` module beside it, where a unit test answers two requests
+out of order:
+
+- the project list (`components/projects/listLoad.ts`: the list page, read
+  again on Try again and after an import, and the Compare page's picker);
+- the catchment page (`workspace/pageLoads.ts`): moving to another project
+  while one loads never draws the first project's answer, or its error, and
+  the series list, which several writers set (the page's load, a header
+  upload's refresh, the Time series tab's own reads, which the page hands it
+  as `listSeries`, and the tab's changes), is ordered by when each list was
+  asked for, so an older one never replaces a newer one already shown, while
+  a newer read that fails doesn't hide an older answer still to come;
+- the Time series tab (`components/series/seriesLoads.ts`): each round of reading every series' values (a later round, after a day is
+  edited, wins; the values cache checks entries against each series' last
+  change, so a late answer may still be cached);
+- the Map's data step (`components/map/startDataLoad.ts`), read again after
+  each change on the tab;
+- the share page's link (`routes/share`) and the evidence pack and verify
+  pages' lookups.
+
+A picked file's read has its own guard (`files/latest.ts`), and the
+preview and calibration workers stop a superseded request themselves. The
+run-result charts (`components/runs/cache.ts` callers such as `RunChart`)
+check that the run or series they asked for is still the one shown.
+
 ## The landing page: the prerendered routes
 
 The app is a static SPA (`ssr = false`, `prerender = false` in
@@ -636,7 +670,10 @@ connection, and with it any locks and snapshot, for the whole run (issue
 2. **Compute**, with no transaction open. The engine is synchronous, so a
    run still occupies the Node thread. Only the database is freed.
 3. **Store**, in a new transaction: the role check again, then the run,
-   its outputs and stored inputs, the trim and the read-back.
+   its outputs and stored inputs, the trim and the read-back. The outputs go
+   as binary arrays, constant ones built in the server, and the stamp is
+   signed from the bytes sent (data-model.md § Time-series storage, 304): a
+   client-sized run (432 series of 16 161 days) stores in ~0.5 s.
 
 Between steps 1 and 3 the world may move:
 
@@ -765,7 +802,31 @@ alerts plug in as a further kind.
   which imports only `calendar.ts`); the same test asserts it.
 - **A tick** (`jobs/runner.ts`) deletes jobs finished more than 30 days ago,
   then claims due jobs one at a time through `app_claim_jobs` (`FOR UPDATE
-  SKIP LOCKED`, a lease) and runs each. `runTick({ projectIds })` claims
+  SKIP LOCKED`, a lease) and runs each. With `waitDueMs` (the worker
+  Lambda: `WORKER_WAIT_DUE_SECONDS`, 30, `JOB_WAIT_DUE_SECONDS` overrides;
+  the local loop: its poll interval), a tick with nothing due asks
+  `app_next_job_due` (305) how soon the next queued job comes due and, when
+  that is within `waitDueMs` and the time budget, waits for it and goes on
+  claiming. Nothing else would run such a job soon: the worker never sends
+  itself a wake message (only the API does, infra/jobs.tf), so a job one job
+  queues a few seconds on (a data feed backfill's next window from the
+  cell cache, `CACHED_NEXT_SECONDS`) otherwise waited for the 5-minute tick, and a
+  CHIRPS backfill read from our copy moved one window a tick
+  (2026-11-02). The worker Lambda's tick is bounded by its time budget (the
+  Lambda's remaining time less a minute), not a job count
+  (`WORKER_MAX_JOBS`, 1000; `JOB_MAX_PER_TICK` overrides): at `runTick`'s
+  default of 25, 13 feeds backfilling ran 25 windows and stopped. Jobs are
+  claimed oldest `run_after` first, so one chain can't starve other work: a
+  job queued now runs before any link queued after it. A job's `run_after`
+  counts from the moment it is queued (`enqueueJob`, `clock_timestamp()`),
+  not its transaction's start: a link queued due at once at the end of a
+  long job (a CHIRPS window read from our copy, `COPY_NEXT_SECONDS`, 0)
+  would otherwise date from before jobs queued while that job ran, and jump
+  ahead of them (jobs.db.test.ts). A tick with waiting
+  off (the default: tests, `pnpm dev:jobs:tick`, the e2e tick) stops at the
+  first moment nothing is due, so it never runs a chain whose links are
+  queued seconds on; a chain due at once (the copy's backfill windows) it
+  runs up to its job cap (`JOB_MAX_PER_TICK`; the e2e tick's `maxJobs`). `runTick({ projectIds })` claims
   only those projects' jobs: the e2e suite's tick (`worker.ts --once
   --project <id>`), so parallel tests never run each other's jobs; the
   worker Lambda and the local loop never pass it.
@@ -1090,7 +1151,7 @@ row names a source, where to read it and the series it merges into:
 | `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default for a catchment feed, from 1998) or `rnl` (from 1981; the feeds a project sets up for its hydrological units read `rnl`, so each unit's record covers the whole 1991–2020 MAP period its rain level is computed over, issue #500 item 3, [maps.md § Rain for each unit](./maps.md#rain-for-each-unit), [model.md §2.4h](./model.md#24h-runoff-from-each-units-own-rain-engine--1780-issue-482)) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old (on 2026-10-09 `daily/final/rnl/` ended at 2026-08-31 and `daily/prelim/sat/` at 2026-10-05). Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `ecmwf_ens` | The ECMWF ENS ensemble mean, 15 days from each 00 UTC run, from **our copy only** (`ecmwf/<issue>`, 0.1°): each feed cell's centre falls in a 0.1° cell, weighted as listed (same cells or box as CHIRPS) | `rain_forecast_mm`, mm, quantile-mapped to our rain once the operator's fit is in the copy, else labelled not yet calibrated | Zarr written by the Python ingest job from ECMWF's open data GRIB2 (`ingest/ecmwf_forecast.py`, below); no feed ever asks ECMWF |
-| `agera5_et0` | Daily FAO-56 reference evapotranspiration from **our copy only** (issue #604 R5-E): AgERA5 v2.0 (`agera5_et0`, 0.1°) on the days its copy holds, else the ET₀ the ingest computes from NASA POWER's daily weather (`power_et0`, 0.1°) on the newest days; each feed cell's centre falls in a 0.1° cell, weighted as listed, cells with no value left out (same cells or box as CHIRPS) | `evap_et0_mm`, mm/day, read by GR4J only under a monthly PE row (model.md §2.4a *Daily reference ET*) | Zarr written by the Python ingest job (`ingest/agera5.py`, `ingest/nasapower.py`); the feed re-reads the last 75 days, so a day POWER filled becomes AgERA5's once its month lands |
+| `agera5_et0` | Daily FAO-56 reference evapotranspiration from **our copy only** (issue #604 R5-E): AgERA5 v2.0 (`agera5_et0`, 0.1°) on the days its copy holds, else the ET₀ the ingest computes from NASA POWER's daily weather (`power_et0`, 0.1°) on the newest days; each feed cell's centre falls in a 0.1° cell, weighted as listed, cells with no value left out (same cells or box as CHIRPS, or the catchment boundary's own 0.1° cells, area weighted, from Data → Data feeds → Attach a feed → Area: the catchment boundary, `…/feeds/agera5_et0/from-boundary`: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)) | `evap_et0_mm`, mm/day, read by GR4J only under a monthly PE row (model.md §2.4a *Daily reference ET*) | Zarr written by the Python ingest job (`ingest/agera5.py`, `ingest/nasapower.py`); the feed re-reads the last 75 days, so a day POWER filled becomes AgERA5's once its month lands |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); the site allows 20 years per request, the feed asks for two (`DWS_WINDOW_DAYS`, the window below). Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
 - **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
@@ -1170,7 +1231,8 @@ row names a source, where to read it and the series it merges into:
   synthetic export both are tested on is `packages/engine/fixtures/dws-daily-export.txt`.
 - **The window.** CHIRPS reads from 50 days before its newest day to
   yesterday, so final values overwrite preliminary ones, at most 120 days per
-  fetch; the first fetch reads 60 days, or from the feed's `startDate`. GEFS
+  fetch from CHC (whole calendar years, up to ten, when the feed reads our
+  copy: § Our copy of the rain data); the first fetch reads 60 days, or from the feed's `startDate`. GEFS
   reads the newest complete issue and merges all 16 days, so each issue
   replaces the last from its issue date on; one caught half-written is never
   merged (the fetch falls back to yesterday's, or fails and retries). DWS asks for at most two years a request (`DWS_WINDOW_DAYS`, 730 days;
@@ -1304,7 +1366,8 @@ row names a source, where to read it and the series it merges into:
   request with `cells` reaching a fetcher from before 208 is refused as
   invalid and the feed retries 15 minutes later. A window the cache held whole
   asked CHC for nothing, so a backfill's next window follows in 5 s
-  (`CACHED_NEXT_SECONDS`) rather than a minute.
+  (`CACHED_NEXT_SECONDS`) rather than a minute, in the same worker
+  invocation (the tick waits for it, § Background work).
 - **Re-checking finals** (`210_chirps_final_recheck.sql`; `feeds/cellCache.ts`
   `RECHECK_*`, `cellCacheStore.ts`, `ingest.ts refreshRevisedDays`). CHC
   rewrites published final files in place with no version bump (the 2024
@@ -1417,8 +1480,33 @@ row names a source, where to read it and the series it merges into:
   the cache lacks from the copy **inside the job** and merges them through
   `chirps_cache_merge` in the same transaction (`feeds/fromMirror.ts`): no
   `FetchRequest` and no SQS round trip, even with `FEED_FETCHER=sqs`. One job
-  reads one fetch window (at most 120 days), and a backfill's next window
-  follows in `CACHED_NEXT_SECONDS`. A day the copy doesn't hold yet reads as
+  reads one fetch window, and that window is not CHC's 120 days (sized for
+  asking CHC at a request a second, and for an answer that rides SQS): it
+  runs from its start through the 31 December of a later year, or
+  yesterday, so it reads each of the copy's one-year chunks of finals once
+  (`fetchWindow`'s `copyYears`). How many years is `copyWindowYears`
+  (`feeds/fetch.ts`): 500 cell-years a window (`COPY_CELL_YEARS`), at most
+  ten (`COPY_MAX_YEARS`), at least one, so a feed of up to 50 cells (the
+  boundary feeds' 4–17 among them) reads ten years a window and a 100-cell
+  one five. Measured on the fixture copy through the queue (2026-11-02, the
+  dev laptop), a window's job costs about 5 µs a cell-day: 17 cells × 10
+  years ~0.6 s, 50 × 10 ~1.1 s, 100 × 5 ~0.9 s, against the worker's
+  ~240 s tick budget; the cap is there to keep short the one transaction
+  that holds the cache rows another feed over the same cells waits on. The
+  answer is checked against `CopyCellsResult` (years, at most 500
+  cell-years; an answer from the fetcher stays held to `CellsResult`'s 120
+  days, `ingestResult`'s `fromCopy`), and merged a calendar year a
+  `chirps_cache_merge` call (`cellCacheStore.ts mergeCellCache`, which
+  splits every answer so, a 120-day one crossing New Year too, so every
+  merge locks year, then cell, then that year's files). Nothing external
+  was asked, so a backfill's next window is due at once
+  (`COPY_NEXT_SECONDS`, 0, `feeds/ingest.ts`) and the same worker
+  invocation goes straight on to it: a backfill from 1981 is five windows,
+  a few seconds of the worker's time (`fromMirror.db.test.ts` runs a
+  17-cell one through in one tick). Fair to other work all the same:
+  claims take the oldest `run_after` first, and the next window's dates
+  from when it was queued (§ Background work), so a job queued while a
+  window ran goes before it. A day the copy doesn't hold yet reads as
   `-`, as a day CHC hasn't published, and a later fetch reads it. No copy at
   all (no manifest, `MirrorNotReadyError`) writes nothing and records only
   the attempt (`last_attempt_at`): no failure, no backoff, the same window
@@ -1531,9 +1619,10 @@ row names a source, where to read it and the series it merges into:
     `replace_config_from` keeps the config its record was read over. The feed
     starts at its first own day (a later start date is a 409
     `series_backfill`) and backfills the record over the new cells into its
-    stage exactly as above, at the source's own pace and limits (CHIRPS a
-    120-day window a minute, or 5 s when the cell cache holds it, reading CHC
-    or our copy through the polite client, [data-sources.md](./data-sources.md);
+    stage exactly as above, at the source's own pace and limits (CHIRPS from
+    CHC a 120-day window a minute, or 5 s when the cell cache holds it,
+    through the polite client, [data-sources.md](./data-sources.md); from our
+    copy whole years a window, the next due at once;
     reference ET a year a fetch from our copy only), while runs read the old
     record whole. The stage records which product each reference ET day came
     from (`feed_stage.agera5_days` / `power_days`). When caught up, the swap
@@ -1568,13 +1657,15 @@ row names a source, where to read it and the series it merges into:
   vouches that it already is what the feed writes.
 - **Backfill continues at once.** A fetch whose window stopped short of the
   newest day the source can have (CHIRPS and DWS windows are capped: 120
-  days for CHIRPS, two years for DWS) queues the feed's next fetch a minute later
+  days for CHIRPS from CHC, up to ten calendar years from our copy, two
+  years for DWS) queues the feed's next fetch a minute later
   (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts; 5 s, `CACHED_NEXT_SECONDS`,
-  after a CHIRPS window the cell cache held whole) instead of waiting for the
+  after a CHIRPS window the cell cache held whole; at once,
+  `COPY_NEXT_SECONDS`, after one read from our copy) instead of waiting for the
   schedule, so a long backfill (a replacement, or an early start date) goes a
   window at a time rather than a window a day. Each CHIRPS window starts
   after the final days before it (the window, above), so a backfill of final
-  days moves on the whole 120. "Run now" while that fetch waits makes
+  days moves on a whole window. "Run now" while that fetch waits makes
   it due now (`app_feed_fetch_now`, 032).
 - **"Run now" is rate-limited per feed** (111, `app_feed_take_run_now`): a
   token bucket of 6 presses, one back every 10 minutes (`RUN_NOW_RATE`,
@@ -1760,7 +1851,9 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     Still held at the wait's end, the pass skips the run
     (`stopped: "host_busy"`, logged, no lag datapoint that run). A backfill month raises `HostBusy`, which the state
     machine retries every 2 minutes for an hour; a daily `rnl`/`sat` run
-    ends quietly. A backfill execution keeps the slot for its whole run
+    reserves the next turn and waits the same way, until 120 s before its
+    deadline (`lease.hold_host_waiting`, `DAILY_RUN_WORK_S`), then ends
+    quietly, and ends at once while a backfill execution holds it. A backfill execution keeps the slot for its whole run
     (every month the same owner, kept through the pauses, released by the
     state machine's last step; `lease.hold_host_for_backfill`), so the
     fetches defer for hours and resume after it; a backfill month waiting

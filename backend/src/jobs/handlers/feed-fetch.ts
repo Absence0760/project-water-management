@@ -49,7 +49,7 @@ import { z } from 'zod';
 import { planFetch, RECHECK_HEAD_DAYS, RECHECK_INTERVAL_DAYS, RECHECK_READ_DAYS, uniqueCells } from '../../feeds/cellCache.js';
 import { cacheOrigin, claimRecheck, readCellCache } from '../../feeds/cellCacheStore.js';
 import { chirpsProduct, type FeedSource, type GridConfig, gridCells } from '../../feeds/config.js';
-import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
+import { type CellsResult, copyWindowYears, type FetchRequest, type FetchWindow, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { DAY_SKIP } from '../../feeds/sources/chirps.js';
 import { withUser } from '../../db/tx.js';
 import { feedHttp, LiveFeedRequestRefusedError } from '../../feeds/http.js';
@@ -63,6 +63,7 @@ import { ingestResult } from '../../feeds/ingest.js';
 import { chirpsSource } from '../../mirror/source.js';
 import { dwsSource, fetchFromGaugeRecord } from '../../feeds/fromGaugeRecord.js';
 import { beginFeedFetch, feedForJob, takeFeedFetch } from '../../feeds/store.js';
+import { logEvent } from '../../logging/logEvent.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
 
@@ -92,10 +93,15 @@ export const feedFetchHandler = defineHandler({
 		// Removed or switched off since it was queued: nothing to do.
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
-		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
+		// A CHIRPS feed reading our copy reads whole years a window (fetch.ts COPY_CELL_YEARS), not CHC's 120 days.
+		const fromCopy = feed.source === 'chirps' && chirpsSource() === 'mirror';
+		const copyYears = fromCopy ? copyWindowYears(copyCellCount(feed.config)) : undefined;
+		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough, { copyYears });
 		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
-		if (feed.source === 'chirps' && chirpsSource() === 'mirror') {
-			await fetchFromMirror(db, feed, window, { jobId: job.id, today });
+		if (fromCopy) {
+			const started = Date.now();
+			const outcome = await fetchFromMirror(db, feed, window, { jobId: job.id, today });
+			logCopyRead(feed.id, job.id, feed.source, window, outcome, started);
 			// The gap-filling products its project's runs read over this feed's cells (issue #604 R4-B, feeds/gapRainFill.ts):
 			// each product's outcome is recorded on the feed (last_meta, 254), and the fill stops in time for this job's deadline.
 			await fillGapProducts(db, feed, { jobId: job.id, today, deadline: deadline ?? null });
@@ -103,7 +109,9 @@ export const feedFetchHandler = defineHandler({
 		}
 		// CHIRPS-GEFS from the copy too (issue #604 R3-A): the newest issue the daily GEFS pass copied, read in this job.
 		if (feed.source === 'chirps_gefs' && chirpsSource() === 'mirror') {
-			await fetchGefsFromMirror(db, feed, window, { jobId: job.id, today });
+			const started = Date.now();
+			const outcome = await fetchGefsFromMirror(db, feed, window, { jobId: job.id, today });
+			logCopyRead(feed.id, job.id, feed.source, window, outcome, started);
 			return;
 		}
 		// ECMWF ENS (issue #604 R4-C): only ever from the copy, whatever CHIRPS_SOURCE says (there is no per-feed path).
@@ -193,3 +201,22 @@ export const feedFetchHandler = defineHandler({
 		await ingestResult(db, feed, await runFetch(request, http), window, { fetchJobId: job.id });
 	}
 });
+
+/** A CHIRPS feed's grid cells, for its window's size; a config that names none (refused by the read, fetchFromMirror) counts as one. */
+function copyCellCount(config: unknown): number {
+	try {
+		return uniqueCells(gridCells(config as GridConfig)).length;
+	} catch {
+		return 1;
+	}
+}
+
+/**
+ * One line per CHIRPS or CHIRPS-GEFS fetch read from our copy (CHIRPS_SOURCE=mirror). The fetcher Lambda logs
+ * feed_fetched for the fetches it makes; a fetch from the copy runs in the worker and, without this, left no trace
+ * in any log, so after the cutover nothing showed whether the feeds were reading the copy (#618 5a, 2026-11-02).
+ * `outcome` is the reader's: `ingested` (merged, or a failure recorded on the feed) or `not_ready` (no manifest yet).
+ */
+function logCopyRead(feedId: string, fetchJobId: string, source: FeedSource, window: FetchWindow, outcome: string, started: number): void {
+	logEvent('info', { event: 'feed_copy_read', feedId, fetchJobId, source, start: window.start, end: window.end, outcome, ms: Date.now() - started });
+}

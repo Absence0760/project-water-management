@@ -137,6 +137,19 @@ describe('the drought restriction rule (engine 1.54.0)', () => {
 			expect(get(out, 'A', 'deficit')).toEqual([0, 0, 0, 0, 50, 50, 50, 50, 50, 50]);
 			passed(out);
 		});
+		it('a river abstraction’s unmet demand is after the cut (engine 1.111.0): take + short = the restricted ask', () => {
+			// The crops on their own river abstraction on a dry river; the dam (60 %, serving nothing) is below 70 % from
+			// the start (last year's review decides day 0), so the crops' ask is cut to 50 every day.
+			const m = model(halfBelow70, { initialPct: 0.6 });
+			Object.assign(m.model.nodes[0]!, { cropWaterSource: 'river', cropRiverPumpM3Day: null });
+			const o = run(m);
+			passed(o);
+			expect(get(o, 'A', 'river_take@crops')).toEqual(new Array(10).fill(0));
+			expect(get(o, 'A', RESTRICTION_SERIES.restricted.key)).toEqual(new Array(10).fill(50));
+			expect(get(o, 'A', 'river_short@crops')).toEqual(new Array(10).fill(50));
+			// The deficit stays the unrestricted demand's.
+			expect(get(o, 'A', 'deficit')).toEqual(new Array(10).fill(100));
+		});
 		it('reports the days per level, per water year and over the run, and each unit’s mean demands', () => {
 			const s = out.summary.droughtRestriction!;
 			expect(s.daysByLevel).toEqual([4, 6]);

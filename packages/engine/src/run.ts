@@ -39,7 +39,7 @@ import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
 import { cropSharesOf, planRemoteSupply, REMOTE_SERIES } from './network/cropSupply';
-import { RIVER_TAKE_SERIES, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
+import { RIVER_TAKE_SERIES, riverPoolKey, riverPumpLimitedKey, riverShortKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey, userRestrictionShare } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
@@ -835,6 +835,8 @@ function runNetworkIn(
 				// Its pump's limit (engine ≥ 1.66.0): only with a pump capacity.
 				const pl = r.riverTakes!.pumpLimited[a];
 				if (pl) push(node.id, riverPumpLimitedKey(x.key), RIVER_TAKE_SERIES.pumpLimited.label(x.name), RIVER_TAKE_SERIES.pumpLimited.unit, pl);
+				// Its unmet demand after any drought restriction (engine ≥ 1.111.0): on every abstraction.
+				push(node.id, riverShortKey(x.key), RIVER_TAKE_SERIES.short.label(x.name), RIVER_TAKE_SERIES.short.unit, r.riverTakes!.short[a]!);
 			});
 		}
 		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.

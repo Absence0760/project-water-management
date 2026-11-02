@@ -113,6 +113,21 @@ describe('after the cutover (CHIRPS_SOURCE=mirror, DWS_SOURCE=store) no feed fet
 		}
 	}
 
+	for (const source of ['chirps', 'chirps_gefs'] as const) {
+		it(`${source}: a fetch from the copy logs feed_copy_read with its window and outcome`, async () => {
+			cutoverWorker(undefined);
+			const owner = await signUp(`CutoverLog-${source}`);
+			const feedId = await feed(owner, source);
+			const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+			expect(await tickOnLambda()).toMatchObject({ done: 1, failed: 0 });
+			const lines = info.mock.calls.map(([l]) => (typeof l === 'string' ? JSON.parse(l) : l)).filter((l) => l.event === 'feed_copy_read');
+			expect(lines).toHaveLength(1);
+			expect(lines[0]).toMatchObject({ feedId, source, outcome: expect.stringMatching(/^(ingested|not_ready)$/) });
+			expect(lines[0].start <= lines[0].end).toBe(true);
+			expect(typeof lines[0].ms).toBe('number');
+		});
+	}
+
 	it('negative control: a source still on the old value with FEED_FETCHER unset would fetch inline, and the live client refuses it on Lambda', async () => {
 		cutoverWorker(undefined);
 		vi.stubEnv('CHIRPS_SOURCE', 'chc');

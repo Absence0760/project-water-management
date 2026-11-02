@@ -1,4 +1,4 @@
-// The CHIRPS cells of a catchment boundary (boundaryCells.ts): each cell's
+// The grid cells of a catchment boundary (boundaryCells.ts): each cell's
 // share inside the polygon against shapes whose answer is known by hand,
 // holes and MultiPolygons, the shares adding up to the polygon's own area,
 // agreement with bboxCells for a rectangle, the limits, and the seeded
@@ -8,10 +8,12 @@ import { buildExamples } from '../../scripts/examples/catchments.js';
 import { sandspruitMap } from '../../scripts/examples/map.js';
 import { geometryAreaM2 } from '../geo/area.js';
 import type { Geometry, Position } from '../geo/geojson.js';
-import { boundaryCells, MIN_SHARE } from './boundaryCells.js';
+import { MIRROR_REGION } from '../mirror/grid.js';
+import { boundaryCells, ET0_GRID, MIN_SHARE } from './boundaryCells.js';
 import { bboxCells, BBOX_MAX_CELLS, FeedInput } from './config.js';
 import { fixtureHttp } from './fixtures.js';
 import { fetchChirps } from './sources/chirps.js';
+import { et0Cell } from './fromMirrorEt0.js';
 
 const D = 0.05;
 const cos = (lat: number) => Math.cos((lat * Math.PI) / 180);
@@ -171,5 +173,55 @@ describe('boundaryCells and the work budget', () => {
 		expect(tall).toMatchObject({ problem: expect.stringMatching(/too detailed to read the CHIRPS cells/) });
 		const short = boundaryCells({ type: 'Polygon', coordinates: [comb(0.1)] });
 		expect('problem' in short).toBe(false);
+	});
+});
+
+// The reference ET copy's 0.1° grid (ET0_GRID, feeds/fromMirrorEt0.ts): the
+// same clipping on cells twice the size, centred on x.x5°, each centre naming
+// the copy's cell that holds it, and refused outside region D1.
+describe('boundaryCells on the reference ET grid (ET0_GRID)', () => {
+	const et0 = (g: Geometry) => {
+		const r = boundaryCells(g, 'the catchment boundary', ET0_GRID);
+		if ('problem' in r) throw new Error(r.problem);
+		return r;
+	};
+
+	it('cuts the boundary on 0.1° cells centred on x.x5°, each centre inside the copy’s cell it names', () => {
+		// 0.12° × 0.10° straddling two columns and two rows of 0.1° cells (edges at 21.2/21.3/21.4, −33.8/−33.7/−33.6).
+		const r = et0(poly(rect(21.21, -33.79, 21.33, -33.69)));
+		expect(r.cells.map((c) => `${c.lat},${c.lon}`).sort()).toEqual(['-33.65,21.25', '-33.65,21.35', '-33.75,21.25', '-33.75,21.35']);
+		expect(r.rows).toBe(2);
+		const sw = r.cells.find((c) => c.lat === -33.75 && c.lon === 21.25)!;
+		// 0.09° × 0.09° of the 0.1° cell.
+		expect(sw.share).toBeCloseTo(0.81, 6);
+		expect(sw.weight).toBeCloseTo(0.81 * cos(-33.75), 9);
+		for (const c of r.cells) {
+			const { y, x } = et0Cell(c.lat, c.lon);
+			expect(MIRROR_REGION.s + y * ET0_GRID.step).toBeLessThan(c.lat);
+			expect(MIRROR_REGION.s + (y + 1) * ET0_GRID.step).toBeGreaterThan(c.lat);
+			expect(MIRROR_REGION.w + x * ET0_GRID.step).toBeLessThan(c.lon);
+			expect(MIRROR_REGION.w + (x + 1) * ET0_GRID.step).toBeGreaterThan(c.lon);
+		}
+		// The inside area is the boundary's, whatever the grid.
+		expect(r.insideKm2).toBeCloseTo(geometryAreaM2(poly(rect(21.21, -33.79, 21.33, -33.69)))! / 1e6, 0);
+		// And the listed cells make a valid reference ET feed config.
+		expect(FeedInput.safeParse({ source: 'agera5_et0', config: { cells: r.cells.map(({ lat, lon, weight }) => ({ lat, lon, weight })) } }).success).toBe(true);
+	});
+
+	it('reads a boundary four times the CHIRPS limit’s area, and refuses one past its own', () => {
+		// 0.6° × 0.6°: 144 CHIRPS cells (refused above), 36 of the 0.1° ones.
+		const r = et0(poly(rect(25, -20.6, 25.6, -20)));
+		expect(r.cells).toHaveLength(36);
+		expect(boundaryCells(poly(rect(25, -21.1, 26.1, -20)), 'the catchment boundary', ET0_GRID)).toEqual({
+			problem: expect.stringMatching(/covers 121 of the 0\.1° AgERA5 cells in 11 rows; one feed reads at most 100 cells in 25 rows \(about 10,000 km²/)
+		});
+	});
+
+	it('refuses a boundary outside the region the copy holds', () => {
+		expect(boundaryCells(poly(rect(9.8, -20.2, 10.2, -20)), 'the catchment boundary', ET0_GRID)).toEqual({
+			problem: 'the catchment boundary reaches outside the region our copy of the reference evapotranspiration holds (10–41° E, 8–35.5° S)'
+		});
+		// Positive control: the same box on CHIRPS's global grid.
+		expect('problem' in boundaryCells(poly(rect(9.8, -20.2, 10.2, -20)))).toBe(false);
 	});
 });

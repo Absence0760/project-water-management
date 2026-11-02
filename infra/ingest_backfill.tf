@@ -36,7 +36,8 @@
 #     names the execution ($$.Execution.Id) and the pause, so every month
 #     takes the slot as one owner and keeps it through the Pace after; the
 #     fetcher's per-feed fetches defer (and re-queue every 2 minutes) and the
-#     daily rnl/sat runs end quietly until it ends, with no manual switching.
+#     daily rnl/sat runs end quietly (without waiting) until it ends, with
+#     no manual switching.
 #     ReleaseHold, reached after the Map on success and through its Catch on
 #     failure, releases it; then Outcome fails the execution with the month's
 #     own error, or succeeds. Released here rather than by an EventBridge

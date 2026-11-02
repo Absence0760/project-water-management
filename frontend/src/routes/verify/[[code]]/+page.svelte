@@ -24,7 +24,8 @@
 	import { pageStart } from '#lib/a11y/focusPage.js';
 	import { followRetry } from '#lib/components/common/loadState.js';
 	import PackBadge from '#lib/components/packs/PackBadge.svelte';
-	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, latestOnly, lookUpCode, type FileCheck } from '#lib/components/packs/pack.js';
+	import { latestOnly } from '#lib/api/latest.js';
+	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, lookUpCode, type FileCheck } from '#lib/components/packs/pack.js';
 	import { registrationHeading, SIGNOFF_KIND_LABEL } from '#lib/components/liability/signoffForm.js';
 	import { fmtDate } from '#lib/format/number.js';
 

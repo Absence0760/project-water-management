@@ -18,7 +18,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
 | `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database; the backend's also the V8 deopt stress run of the assurance of supply (`model/assurance-jit.perf.test.ts`, issue #192: 8 child processes under `node --deopt-every-n-times`, timing-dependent, so alone) and the check that the server's time estimate still bounds a fit evaluation and a model run on this machine (`calibration/estimate.perf.test.ts`; its envelope was measured on a Ryzen 9 5900HX) | seconds; the stress run ~1–5 min |
 | `pnpm test:verify` | the independent cross-check of the engine (verify/README.md): a Python model written from the docs against `runModel` on the example catchments, the probes, 12 random and 12 dense networks (every phase-2a feature in most), and its 191-mutant self-test, per-unit rain (§2.4h) included; Python 3.14, no DB. Runs on `VERIFY_WORKERS` processes (default the cores, at most 4; the results never depend on it) with a progress line per batch; the mutants are most of the time (verify/README.md § Running it). CI's `verify` job runs 200 of each (`VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200`) in 3 shards (`VERIFY_SHARD=k/3`: shard 1 the agreement sweep, each a third of the mutants), about 10 min each; serial on one core it took about an hour. Run it when you change `packages/engine` or `verify/`, or the model's docs | ~11 min (4 workers; ~35 min on one) |
-| `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat; the Map's search over 150 000 invented gazetteer places (`geo/search.db.perf.test.ts`): each search's plan, explained in the search's own transaction (so with its sequential scans off, maps.md § Gazetteer), goes through both trigram indexes, never a scan of the table, and answers under 40 ms, median of 7 (measured 5–11 ms; about 150 ms before the index); reading 5,000 allocations and their holders as an editor, a viewer with the switch on and the authority's member under 250 ms each, median of 7 (`allocations/allocations.db.perf.test.ts`, 235: measured ~100 ms; 231's per-row policy ~560 ms) | ~4 min, most of it the 30 simulated days |
+| `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat; the Map's search over 150 000 invented gazetteer places (`geo/search.db.perf.test.ts`): each search's plan, explained in the search's own transaction (so with its sequential scans off, maps.md § Gazetteer), goes through both trigram indexes, never a scan of the table, and answers under 40 ms, median of 7 (measured 5–11 ms; about 150 ms before the index); reading 5,000 allocations and their holders as an editor, a viewer with the switch on and the authority's member under 250 ms each, median of 7 (`allocations/allocations.db.perf.test.ts`, 235: measured ~100 ms; 231's per-row policy ~560 ms); the V1 demo budget (`runs/load.db.perf.test.ts`, plan.md Phase 1 acceptance): a run of an invented catchment the client's size (13 nodes, 9 crops on 23 planted areas, one transfer, four daily records of 16 161 days) answers, stored, in under 2 s, median of 5 (measured 1.5 s, 2026-11-01, ~0.85 s of it the engine; 11.1 s before 304 and the one-pass series spans; 432 series, ~22 MB a run; followups.md § V1 run budget) | ~4 min, most of it the 30 simulated days |
 
 ## Several checkouts at once
 
@@ -205,7 +205,11 @@ backend coverage run (`--coverage`) multiplies the unit project's hang guard
 by 4, and exposes the factor as `COVERAGE_SLOWDOWN` for a test that sets its
 own: the example catchments' GR4J fit (`scripts/examples/catchments.test.ts`)
 took about 100 s of its 120 s guard under coverage, and went over it on a
-slower runner (PR #570). A
+slower runner (PR #570). The engine does the same
+(`packages/engine/vitest.config.ts`): the stepwise fit at every gauge
+(`calibrate/locations.test.ts`, twelve GR4J fits) takes about 70 s in CI's
+unit job and about 500 s under coverage, past its 240 s guard until the guard
+scaled. A
 test that records what its requests do keeps the record per request
 (`role-ladder.db.test.ts` carries it in an `AsyncLocalStorage`), so a request
 still running after its test ends can't fail the next one.
@@ -220,6 +224,40 @@ What it can't see:
   (about 52 %).
 - **Test helpers.** The engine's `src/testing/` and the backend's
   `src/__tests__/` are left out.
+
+## Fresh clone
+
+`.github/workflows/fresh-clone.yml` holds the V1 promise that a fresh clone
+runs with `pnpm run setup && pnpm dev` and nothing else (plan.md Phase 1
+acceptance). On a clean checkout with a cold pnpm store it runs `pnpm run setup`
+unchanged (install, Postgres, migrations, every synthetic reference import,
+Mailpit, MinIO), starts `pnpm dev`, and waits until the backend's `/health`
+on :3001 answers `{"ok":true}` and the frontend on :7777 serves the SPA shell
+and compiles the root layout; then it stops both and the containers. The one
+difference from a laptop is where the service images come from: Docker Hub's
+and ECR Public's anonymous limits refused CI's runners (issues #492, #521),
+so the job loads ci.yml's cached image tarballs (`scripts/ci/service-image.sh`)
+and points `COMPOSE_FILE` at the overrides, and every `docker compose` call in
+the scripts runs as written.
+
+It runs `pnpm run setup`, never `pnpm setup`: `setup` is one of pnpm's own
+commands (it adds pnpm to your shell profile), and pnpm runs its own command
+before a script of the same name, so a bare `pnpm setup` installs nothing
+and starts nothing. The first run of this job caught exactly that. `pnpm
+test:scripts` refuses a bare `pnpm setup` (or any other root script a pnpm
+command shadows) in a tracked doc, workflow or script.
+
+It isn't in `ci.yml` or behind `CI gate`: ci.yml's jobs already install,
+migrate and build on every PR, and a full setup from a cold store takes
+several minutes. It runs on a PR or a push to `main` that touches what setup
+and dev depend on (the root and workspace `package.json`s, the lockfile,
+`docker-compose.yml`, `dev/`, `backend/scripts/`, `backend/fixtures/`, the
+backend's dev config and server entry, the committed `.env.development`
+files, the frontend's Vite and Svelte config, the workflow itself), every
+Monday for drift no diff shows (runner image, Docker, the npm registry), and
+by hand (`gh workflow run fresh-clone.yml`). Locally, the same check is
+`pnpm run setup && pnpm dev` in a fresh clone; never run `pnpm run setup` in a
+checkout you share with other sessions.
 
 ## Engine end-to-end tests
 

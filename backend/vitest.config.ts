@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { testTimeZone } from '../scripts/test-tz.mjs';
 
 // Four projects:
 //   unit — pure logic, no database, no wall-clock assertions (`pnpm test`).
@@ -22,7 +23,8 @@ const coverageSlowdown = process.argv.includes('--coverage') ? 4 : 1;
 
 export default defineConfig({
 	test: {
-		env: { COVERAGE_SLOWDOWN: String(coverageSlowdown) },
+		// TZ: a skewed time zone for every project (CLAUDE.md rule 7; scripts/test-tz.mjs).
+		env: { COVERAGE_SLOWDOWN: String(coverageSlowdown), TZ: testTimeZone() },
 		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
 		// gate. No thresholds, on purpose: a number to hit invites tests written
 		// for the number. Read it for what no test reaches (docs/testing.md

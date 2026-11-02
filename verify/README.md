@@ -39,15 +39,22 @@ returns. It imports the engine by path and the example catchments from
 | `probes.py` | Hand-built inputs, each pinning a point the docs left open (§ Findings), and a few coverage probes for rules the random networks rarely reach |
 | `diff.py` | Runs both sides on the examples, the probes and N random and dense networks and prints, per column, the largest absolute and relative difference, the known differences and a coverage count |
 | `test_verify.py` | The guard: agreement, the mutation self-test and the generator's scope |
+| `mutants.py` | The mutation self-test's mutants (`MUTANTS`), apart so `test_verify.py` and `diff.py --mutants` both read them without importing each other |
 
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 189 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 235 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
+python3 verify/diff.py --no-examples --probes apan-daily --random 10 --dense 10 --workers 2   # a targeted run: the probes named by these substrings and a few networks
+python3 verify/diff.py --no-examples --probes apan-daily --random 12 --dense 12 --mutants "A-pan"   # a targeted self-test: only the mutants whose description contains the text
 ```
+
+A change to one feature needs only the targeted runs above (its probes, a
+dozen random and dense networks, its own mutants); the whole guard is CI's
+job (`--probes ''` keeps no probe).
 
 It needs Python 3.14 and the repo's `pnpm install` (for `tsx`); no database,
 no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
@@ -57,7 +64,7 @@ no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
 case is `model.py`'s run plus `diff.compare` over every column and day
 (about half each; 0.1–2 s a case), while the engine runs all ~90 default
 cases in one tsx process in about 5 s. The mutation self-test is the bulk:
-189 mutants, each running the cases in order until its first disagreement
+235 mutants, each running the cases in order until its first disagreement
 (about a third of them on average), about 35 min on one core, against about
 3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
 the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
@@ -203,6 +210,8 @@ the ranks within one (engine ≥ 1.64.0),
   Not the pump-limited measure of engine 1.66.0 (`river_pump_limited@`): the
   model doesn't write it, so the comparison notes it as engine-only; the
   engine's own self-checks (`checkWorkings`, `checkReportTotals`) bound it.
+  Nor the unmet demand of engine 1.111.0 (`river_short@`), engine-only too:
+  `checkWorkings` holds take + short = the demand after the restriction.
 - **The crop supply table** (§2.7k, engine ≥ 1.73.0): the crops' demand
   in shares of the unit's dam side, the crops' river abstraction and another
   unit's dam; the remote share settled in the supplying unit's step before
@@ -440,6 +449,64 @@ whose claims the shares split, §2.7c). Mutants: the shares ignored, the retired
 taken over every day instead of the complete water years, and the flow, the
 EWR or the senior claims split by area instead of the shares.
 
+## What phase 2b covers so far
+
+Phase 2b (tracking item: docs/followups.md § Verification) adds the rest of
+the model one feature at a time, each written from its docs/model.md
+section, from its own random stream in the generator (so every other draw
+of a seed is unchanged), with probes and mutants:
+
+- **The daily A-pan record** (§2.3a, engine ≥ 0.38.0; `generate.py`
+  `add_apan_daily`, a quarter of the random networks and most dense ones):
+  on a day `evap_apan_mm` has a value ≥ 0 the crops' gross demand is
+  Σ area × crop factor × that value ÷ 1000, the dam's evaporation depth the
+  lake factor × it and, under pan coefficient × A-pan, GR4J's PE the pan
+  coefficient × it; a blank or negative day and the days outside the record
+  read the month's mean spread over the month; a monthly PE row never reads
+  it; the planting efficiencies' weights stay on the monthly means; and the
+  record counts as evaporation for `GR4J_NO_PET` (§ Findings). Probes
+  `apan-daily`, `apan-daily-monthly-pe`, `apan-daily-only` (monthly means
+  all 0), `apan-daily-no-pet` and `apan-daily-outside-run`.
+- **Demand factors by part and dated demand factors** (§2.3 item 4a,
+  §2.7f, scenarios.md § Demand scaling; engine ≥ 1.45.0 and ≥ 1.82.0;
+  `add_demand_parts`, a quarter of the random networks and most dense
+  ones): a farm's `partDemandFactor` on its crops (F) or on its demand
+  objects of one category, multiplying the unit's `demandFactor`; each
+  `demandFactorWindows` window's 12 multipliers on its days from–to
+  (inclusive, either end open), the whole demand's on every part and a
+  part's on that part only, users' too; all of them 1 before
+  `settings.demandFactorFrom`; an object's combined factor through the
+  basic-needs floor; after a full allocation's k. Probes
+  `demand-parts-windows` and `demand-parts-windows-from`.
+- **Land cover** (§2.5a, engine ≥ 0.24.0; `add_land_cover`, a quarter
+  of the random networks and most dense ones): each farm's patches in id
+  order, f = area × cover ÷ the unit's area (scaled together to 1 when the
+  condensed areas exceed the unit), MAR_u and LOW_u from the class's or the
+  patch's own reductions, the threshold q = the unit's natural MAR share ×
+  the historical natural flow's Q75, the reduction LOW_u × MIN(I0, q) +
+  MAR_u × MAX(I0 − q, 0) taken off the unit's runoff before the base-flow
+  loss, the dam split and the EWR attribution, `landcover_reduction` on the
+  unit and for the catchment; patches on a gauge, a user or a farm without
+  area skipped. Probes `land-cover-q75`, `land-cover-odd-days`,
+  `land-cover-baseflow`, `land-cover-ewr`, `land-cover-forecast-tail`.
+- **Development that changes during a run** (§2.7g, engine ≥ 1.30.0;
+  `add_development`, a quarter of the random networks and most dense ones):
+  each day's dam capacity, the entered one × k(t) = MAX(0, 1 − rate ×
+  (t − survey) ÷ 365.25) × [t ≥ in service], run back before the survey
+  too; the starting storage at the first day's capacity; dead storage, the
+  trigger and stop levels, the emergency and drought borehole levels, a dam
+  rule's reserve and the survey curve's volumes scaling with it (the
+  full-supply area not); storage above the day's capacity spilled; a day
+  with no capacity running as a unit without a dam (what is routed to it
+  spills, no release or pass-inflow target, dam-target boreholes direct,
+  emergency ones after the supplemental ones while the empty dam is below
+  their level, a trigger rule reading the empty dam's level); the
+  `dam_capacity` column; and `abstractionFrom` on farms and users (no
+  crop, object or user demand before it, the soil-water store running on,
+  a full allocation fitted on the days from then). Probes
+  `development-sediment`, `-curve-none`, `-in-service`, `-in-service-emergency`, `-in-service-trigger`, `-in-service-trigger-zero`,
+  `-filled-run-of-river`, `-abstraction`, `-abstraction-gap-year`, `-rate-no-survey`.
+
 ## Phase 2b (not covered yet)
 
 `model.unsupported()` names each of these, and the generator never produces
@@ -455,15 +522,11 @@ docs/followups.md § Verification ("`verify/` phase 2b").
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
 - calibration (the fit itself; the calibration statistics);
-- land cover, §2.5a;
-- time-varying development (sediment, a dam in service from a date,
-  abstraction from a date), §2.7g;
-- demand factors by part (`partDemandFactor`, the `demand.scale` scenario op
-  with a part), dated demand factors (`demandFactorWindows`, the op with
-  `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges
+- the `demand.scale` scenario op itself (its factors, by part and dated,
+  are covered as the node fields it writes), and drought restrictions
   (with a Priority user's fixed restriction %, engine 1.86.0, §2.7i);
-- rain-source periods (§2.4e), the areal rainfall correction (§2.4g), the
-  daily A-pan series (§2.3a), CHIRPS fit ranges (§2.4b), the CHIRPS quantile
+- rain-source periods (§2.4e), the areal rainfall correction (§2.4g),
+  CHIRPS fit ranges (§2.4b), the CHIRPS quantile
   map (CR-23), keep-dry periods and the keep-dry guard, listed and kept
   accumulations, non-default data-quality limits (§2.10a) and the
   outlook-only settings.
@@ -510,8 +573,10 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (178
-mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
+`test_verify.py` breaks `model.py` one documented rule at a time (235
+mutants; phase 2b's 43 are listed under its features in `mutants.py`:
+the daily A-pan record's 7, the demand factors by part and dated windows' 8,
+land cover's 9 and development during a run's 19). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
 accumulations not spread, or tested over the whole run; raw CHIRPS; the
@@ -801,3 +866,64 @@ to fitted; `station-pairing-as-recorded` keeps a window-broken year refused.
 §2.4i also said a negative value is a no-data code "as in §2.4b", where
 §2.4b reads a negative catchment reading as a reading; it now says a value
 below 0 is a gap in a station's record and no CHIRPS in an area's.
+
+Phase 2b, 2026-11-01 (engine 1.110.0), one feature at a time (§ What phase
+2b covers so far), each on its probes and 12–30 random and 12–20 dense
+networks:
+
+- **The daily A-pan record** (§2.3a): agrees on every column. One point the
+  docs left open: which days and which pan coefficient "no evaporation, no
+  run" reads the record on. `runModel` counts a value above 0 on a run day
+  (a record wholly before the run is refused, probe
+  `apan-daily-outside-run`) with a pan coefficient above 0 in *any* month,
+  so a record whose values above 0 fall only in months with a coefficient of
+  0 runs on a PE of 0 every day (probe `apan-daily-no-pet`). That is the
+  settings-level check Settings shows (`hasPotentialEvaporation`), and the
+  case needs a coefficient of 0 in exactly the record's months, so it was
+  written into §2.3a as the rule rather than changed in the engine.
+- **Demand factors by part and dated demand factors** (§2.3 item 4a):
+  agree on every column, nothing left open by the docs.
+- **Drought restrictions weren't refused** (a harness gap, not an engine
+  one): `unsupported()` didn't name `settings.droughtRestriction` (§2.7i),
+  so an input carrying the rule would have run in `model.py` without it and
+  disagreed rather than being refused. It is named now
+  (`test_drought_restrictions_are_refused`); modelling it stays in phase 2b.
+- **Land cover** (§2.5a): agrees on every column. Two points the docs left
+  open, settled from `runModel`'s reductions (q backed out of a day above
+  the threshold, LOW_u from a day below it) and written into §2.5a: Q75 is
+  linear between ranks (position 0.25 × (n − 1) of the ascending historical
+  natural flow; probe `land-cover-q75`, 38 days, where the nearest-rank
+  readings differ), and "patches covering more than the unit" means their
+  condensed areas, scaled together to Σ f = 1 (unit b of the probes: areas
+  6 km², condensed 5.5 km² on a 4 km² unit; scaling by the areas would give
+  a low-flow share of 0.546, the engine's is 0.5955 = (5 × 0.6 + 0.5 ×
+  0.55) ÷ 5.5).
+- **Development that changes during a run** (§2.7g): agrees on every column
+  once four points §2.7g left open were read the way `runModel` does, each
+  settled from its outputs and now written into §2.7g: a dam that starts a
+  day above its shrunk capacity has its full-supply area (dense seed 8: an
+  exponent of 0.98 put Python's area at 75–78 m² against 71 m², the full
+  area); the `dam_capacity` column is written only when k can differ from 1
+  (dense seed 8: a dam in service since before the run has none); on a day
+  with no capacity a `trigger` rule reads the empty dam's level, 0, against
+  its levels at the entered capacity, so it switches to the river under any
+  trigger above 0 (dense seed 110: 22 237 m³ a day from the river against
+  Python's 0) but never under a trigger of 0 (random seed 88: Python's
+  first reading, river first on such a day, took 2 448 m³ a day the engine
+  leaves in the river), while run of river on a unit with an entered dam stays river first
+  (dense seed 8, a dam filled with sediment); and under a full allocation a water year wholly before
+  `abstractionFrom` is scaled to 0 and listed with 0 m³ even when no
+  allocation is in force (dense seed 123, 20 days of September 2010). A
+  fifth point came up in CI's 200 random networks: on a day with no
+  capacity an emergency borehole keeps its own step, after the supplemental
+  ones, and its level reads the empty dam the same way, so it pumps unless
+  its level is 0 (random seed 50: a silted dam's emergency borehole, first
+  by id, took the 24 m³ a supplemental one pumps in the engine, its
+  depletion factor 0.82 against 0.51 putting 7.6 m³ a day less in the
+  river); Python had run it as supplemental, in id order. The
+  last was first taken for an engine departure from §2.12a's "a year with
+  none in force keeps its modelled demand"; checking whether it was one,
+  the engine's `fullAllocationFactors` comment was read, which says a year
+  wholly before the date "asks for none", so the independence rule was
+  broken for that one point: the behaviour itself is what the outputs show
+  (factor 0, the row), and the demand is 0 either way. No engine change.

@@ -16,7 +16,7 @@ docker, the API on Node, and the site on Vite.
 ## One-time setup
 
 ```bash
-pnpm setup
+pnpm run setup
 ```
 
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
@@ -487,7 +487,7 @@ offline: the committed synthetic Waterbodies polygons and series, no
 network.
 
 ```bash
-pnpm import:waterbodies   # the synthetic polygons (pnpm setup already ran it)
+pnpm import:waterbodies   # the synthetic polygons (pnpm run setup already ran it)
 pnpm seed:examples        # Sandspruit's traced dams, if not seeded yet
 pnpm dev:dams:run         # tick (match, wanted list) → Waterbodies pass → WOfS pass (both fixtures) → tick (load)
 ```
@@ -556,7 +556,7 @@ It prints what each step did. The pass reads invented dekads
 seasonal ETa field, some dekads partly under cloud, only over the seeded
 examples' synthetic catchments (a unit elsewhere gets rows with a valid
 share of 0). A unit whose parcels lie on the synthetic land cover
-(`pnpm import:land-cover`, which `pnpm setup` runs) is averaged over its
+(`pnpm import:land-cover`, which `pnpm run setup` runs) is averaged over its
 cropland only (`mask` `cropland`), the rest over their whole parcels
 (`parcel`). Run it again and nothing is asked: every dekad served is held.
 The handover goes through `MIRROR_URL` when it names a directory of its own,
@@ -661,21 +661,21 @@ uploads, points, areas, the quaternary lookup and the dam proposals all
 work. Optional pieces:
 
 ```bash
-pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Calibration → WR2012 check → Propose from the map looks up
-pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Data → Data feeds → DWS proposes as the nearest stations
-pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
-pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
+pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm run setup runs it): what Calibration → WR2012 check → Propose from the map looks up
+pnpm import:gauge-stations  # the synthetic gauging stations (pnpm run setup runs it): what Data → Data feeds → DWS proposes as the nearest stations
+pnpm import:dam-register    # the synthetic register of dams (pnpm run setup runs it): what Dams → Proposed from the register and the map proposes capacities from
+pnpm import:rivers          # the synthetic river network (pnpm run setup runs it): what Map → Layers → River network draws and proposes as rivers
 pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal, or docker), cut to South Africa and loaded as HydroRIVERS-v10
-pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
-pnpm import:crop-types      # the synthetic orchard and vine grid (pnpm setup runs it): the drawer's Orchards and vines; <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC for local evaluation (production refuses it until its terms are recorded; maps.md § Orchards and vines from SANLC)
-pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Calibration → Evaporation from the map averages over the boundary
-pnpm import:evaporation-stations  # the synthetic DWS evaporation stations (pnpm setup runs it): what Calibration → Evaporation stations proposes as the A-pan
+pnpm import:land-cover      # the synthetic cropland grid (pnpm run setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
+pnpm import:crop-types      # the synthetic orchard and vine grid (pnpm run setup runs it): the drawer's Orchards and vines; <current.tif> --dataset <label> [--baseline <earlier.tif> --baseline-version <name>] loads your own SANLC for local evaluation (production refuses it until its terms are recorded; maps.md § Orchards and vines from SANLC)
+pnpm import:evaporation     # the synthetic evaporation grid (pnpm run setup runs it): what Calibration → Evaporation from the map averages over the boundary
+pnpm import:evaporation-stations  # the synthetic DWS evaporation stations (pnpm run setup runs it): what Calibration → Evaporation stations proposes as the A-pan
                             # or your own DWS reply: <stations.csv> --records <dir> --dataset <label> --source "<reply reference, date>", your own
                             # database only (DWS's permission doesn't cover evaporation records yet; maps.md § Evaporation stations)
-pnpm import:map-grid        # the synthetic MAP grid (pnpm setup runs it): what Map → Layers → MAP grid draws
+pnpm import:map-grid        # the synthetic MAP grid (pnpm run setup runs it): what Map → Layers → MAP grid draws
                             # or a real one: <grid.asc> --dataset <label> --source "…" [--bbox w,s,e,n]; add --out <file.json.gz> to write
                             # the cut grid for a production load instead (deployment.md § Reference datasets; maps.md § MAP grid)
-pnpm import:gazetteer       # the synthetic place and farm names (pnpm setup runs it): what the Map's search finds after the map's own layers
+pnpm import:gazetteer       # the synthetic place and farm names (pnpm run setup runs it): what the Map's search finds after the map's own layers
                             # or the real ones: GeoNames' dumps (ZA.txt, and BW/LS/MZ/NA/SZ/ZW.txt for the towns over the border), several files
                             # as one dataset, e.g. pnpm import:gazetteer ZA.txt BW.txt LS.txt MZ.txt NA.txt SZ.txt ZW.txt --dataset GeoNames-2026-10 (maps.md § Gazetteer)
 pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: starts MinIO, uploads the cached tiles and fonts if MinIO

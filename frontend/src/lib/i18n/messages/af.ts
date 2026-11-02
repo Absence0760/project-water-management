@@ -511,6 +511,26 @@ export const af: Catalogue = {
 	'6c55630d': '{head}, toe die rivier te laag was om uit te neem.',
 	// {head}, all when the river was too low to take from.
 	'a299ea88': '{head}, elke keer toe die rivier te laag was om uit te neem.',
+	// {head}, when the river or your pump couldn't give enough.
+	'10b470b1': '{head}, toe die rivier of jou pomp nie genoeg kon gee nie.',
+	// {head}, all when the river or your pump couldn't give enough.
+	'12df3b02': '{head}, elke keer toe die rivier of jou pomp nie genoeg kon gee nie.',
+	// {head}, {n} of them when the river or your pump couldn't give enough.
+	'2838d8f8': '{head}, {n} daarvan toe die rivier of jou pomp nie genoeg kon gee nie.',
+	// {head}, when your dam was down to its stop level and the river or your pump couldn't give enough.
+	'c9632213': '{head}, toe jou dam tot by sy stopvlak gesak het en die rivier of jou pomp nie genoeg kon gee nie.',
+	// {head}, all when your dam was down to its stop level and the river or your pump couldn't give enough.
+	'4db4b308': '{head}, elke keer toe jou dam tot by sy stopvlak gesak het en die rivier of jou pomp nie genoeg kon gee nie.',
+	// {head}, when your dam was empty and the river or your pump couldn't give enough.
+	'e936753f': '{head}, toe jou dam leeg was en die rivier of jou pomp nie genoeg kon gee nie.',
+	// {head}, all when your dam was empty and the river or your pump couldn't give enough.
+	'8c9482de': '{head}, elke keer toe jou dam leeg was en die rivier of jou pomp nie genoeg kon gee nie.',
+	// {head}: your dam was down to its stop level on {dam}, and the river or your pump couldn't give enough on {river}.
+	'e5e98685': '{head}: jou dam het op {dam} tot by sy stopvlak gesak, en die rivier of jou pomp kon op {river} nie genoeg gee nie.',
+	// {head}: your dam was empty on {dam}, and the river or your pump couldn't give enough on {river}.
+	'f1932df1': '{head}: jou dam was op {dam} leeg, en die rivier of jou pomp kon op {river} nie genoeg gee nie.',
+	// Both were short on {both}.
+	'8fcb0087': 'Albei het op {both} tekortgeskiet.',
 	// {head}, when your dam was down to its stop level.
 	'c6733c26': '{head}, toe jou dam tot by sy stopvlak gesak het.',
 	// {head}, all when your dam was down to its stop level.

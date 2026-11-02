@@ -72,10 +72,13 @@ export class JobCollisionError extends ApiError {
 export async function enqueueJob(db: Db, o: EnqueueOptions): Promise<{ job: JobMeta; created: boolean }> {
 	// Two tries: the pending job we collided with may be claimed (so no longer
 	// pending) between the insert and the read, and then the insert succeeds.
+	// run_after counts from clock_timestamp(), the moment of queueing, not now() (the transaction's start): the claim
+	// takes the oldest run_after first, and a job queued at the end of a long one (a feed backfill's next window, due at
+	// once, ingest.ts COPY_NEXT_SECONDS) would otherwise date from before jobs queued while it ran, and jump ahead of them.
 	for (let attempt = 0; attempt < 2; attempt++) {
 		const { rows } = await db.query<{ id: string }>(
 			`INSERT INTO job (project_id, kind, payload, dedupe_key, run_after, max_attempts, acting_user_id)
-			 VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5), $6, app_current_user_id())
+			 VALUES ($1, $2, $3, $4, clock_timestamp() + make_interval(secs => $5), $6, app_current_user_id())
 			 ON CONFLICT (project_id, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued', 'failed') DO NOTHING
 			 RETURNING id`,
 			[o.projectId, o.kind, JSON.stringify(o.payload ?? {}), o.dedupeKey ?? null, o.delaySeconds ?? 0, o.maxAttempts ?? 5]
@@ -146,6 +149,17 @@ export const JOB_RETENTION_DAYS = 30;
 export async function purgeJobs(db: Db, days = JOB_RETENTION_DAYS): Promise<number> {
 	const { rows } = await db.query<{ n: number }>('SELECT app_purge_jobs(make_interval(days => $1)) AS n', [days]);
 	return rows[0]?.n ?? 0;
+}
+
+/**
+ * Seconds until the soonest pending job that isn't due yet comes due, or null
+ * when none is (305 app_next_job_due; the worker's context only). A due job
+ * the claim skipped (its key's job is running) isn't counted: it is the
+ * running job's worker's to follow. `projectIds` scopes it as claimJobs does.
+ */
+export async function nextJobDueSeconds(db: Db, projectIds?: readonly string[]): Promise<number | null> {
+	const { rows } = await db.query<{ s: number | null }>('SELECT app_next_job_due($1::uuid[]) AS s', [projectIds ? [...projectIds] : null]);
+	return rows[0]?.s ?? null;
 }
 
 export interface QueueStats {

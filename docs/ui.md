@@ -654,7 +654,7 @@ English only: its readers are licensing assessors, like the methods page's.
   code*. The code is read in any case, with or without dashes, or as the full
   64-character hash. Bare `/verify` asks for a code; **Verify another pack**
   is at the foot of every state. Only the latest lookup is shown
-  (`packs/pack.ts` `latestOnly`, `lookUpCode`): a slow first lookup that
+  (`api/latest.ts` `latestOnly`, `packs/pack.ts` `lookUpCode`): a slow first lookup that
   answers after following *Verify the newer version* or **Verify another
   pack** is dropped, and so is a file check of the pack no longer shown.
 - Everything shown is text (Svelte escapes it). The links are underlined,
@@ -1599,7 +1599,14 @@ put the results first; its first screen follows board A1 of the redesign
 
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
    leads, then Needs attention: there is nothing to summarise yet, so there
-   is no KPI row or supply list.
+   is no KPI row or supply list. On an empty model, for an editor shown the
+   Map, a card leads above the checklist (`overview/GuidedStart.svelte`,
+   WP-4.10): **Set the catchment up from its map**, one paragraph on the
+   guided way (the boundary, each unit's boundary, dams and gauges, the
+   proposed network, then the data to-do list to a first run and its
+   calibration), **Start from the map** (`?tab=map&start=1`, the Map's
+   Start sheet, [§ Map](#map-tabmap)) and **Or type the network in**
+   (`?tab=network`). It goes once the model has a node.
 2. **The first screen, once there is a run**: the **Latest run** KPI row
    (four cards, irrigation first: issue #558), then **Needs attention**
    with the **Active alerts** ([§ Alerts](#alerts)) under it, beside
@@ -2533,6 +2540,18 @@ stacked; the owner filter and the sort share the filter row evenly
 on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
+
+**New project** opens a dialog: **Name**, **Belongs to** (Personal or one of
+your teams), **Description** (optional) and **How to start** (WP-4.10,
+`projects/newProject.ts`), a radio of two, each with its hint under it:
+**Guided, from the map**, the default ("Put the catchment and its units on
+the map: the network is proposed, then a to-do list takes you through the
+data to a first calibrated run."), which opens the new project's Map on the
+Start sheet (`?tab=map&start=1`, [§ Map](#map-tabmap)); and **An empty
+model** ("Type the network in on the Network page. While the model is empty
+you can still start it from the map."), which opens its Summary, where the
+empty model's guided card offers the sheet again ([§ Summary](#summary)).
+Each opening of the dialog starts on the default.
 
 **No projects yet** (`projects/GetStarted.svelte`): in place of the list, a
 card says what a project is and the three steps from nothing to a run, with
@@ -4218,7 +4237,11 @@ map" card) stays the schematic; this is the geography.
   the current one `aria-current="step"`), each read from the server:
   **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
   boundary**, **Upload a GeoJSON file**; each closes the sheet into that
-  tool, and the sheet opens again once it saves; with a gauge on the map
+  tool, and the sheet opens again once it saves; without a DEM, a line under
+  them says why Delineate isn't there ("Delineating from the outlet is off:
+  this server has no elevation model. Draw the boundary or upload it
+  instead. Without one, the units’ order isn’t proposed either: you set it
+  on the Network.", `startFlow.ts` `NO_ELEVATION_BOUNDARY`, WP-4.10); with a gauge on the map
   and no boundary, "go on to the points". **The points** (units follow the
   user's boundaries, `start-16`, #523 C1; the lead says a dam or an
   abstraction point is never a unit of its own): each unit's boundary (an
@@ -4269,7 +4292,7 @@ map" card) stays the schematic; this is the geography.
   order a run reads it, each line numbered (a check once done), its title a
   link to where it is accepted, its status (Done, Started, To do,
   Checking), **Next** on the first a run still needs, "(optional)" on the
-  catchment's MAP, the WR2012 check, the cultivated area and the units'
+  catchment's MAP, the WR2012 check, the cultivated area, the EWR and the units'
   areas, and a detail line with the place in words: The units’ areas and
   order (Network), How natural flow is made (`#set-share`), Rain from the
   boundary (`?rain=boundary`), The catchment’s MAP (`#set-share`), Rain for
@@ -4280,7 +4303,19 @@ map" card) stays the schematic; this is the geography.
   on a DWS gauge with the nearest gauging stations proposed, for an
   owner), Each unit’s composite dam (Dams: its volume and the area
   draining to it yours to enter; the register a reference only),
-  Cultivated area (Crops) and **Run the model** (Runs & results). Each
+  Cultivated area (Crops; its link opens the first unit with nothing
+  planted in its drawer, `?tab=crops&farm=<id>`, where land cover proposes
+  its planted area, "Crops → Upper unit’s planted areas"; plain Crops once
+  every unit has one), The EWR (`?tab=settings#set-ewr`, optional: done once
+  the pragmatic row or a daily EWR from the DRM tables is set), **Run the
+  model** (Runs & results) and, after it, **Calibrate, and run with the
+  fit** (`?tab=calibration#set-fit`; WP-4.10's first calibrated run): To do
+  until GR4J has a stored fit (`settings.fitRecord`, which Apply to form
+  writes), Started once it has one but no run is newer than the fit ("GR4J
+  fitted on 29 Oct 2026: run the model again so the results use the fit."),
+  Done once one is; optional, saying it "Needs an observed flow record at
+  the outlet first", while the outlet has no observed flow and nothing is
+  fitted, so it never holds the list open with nothing to fit to. Each
   status is worked out from what the project holds (the settings, the feed
   list, the series list, the model, the runs), read when the Map opens and
   again after an apply here. Evaporation is done once the monthly A-pan or
@@ -6495,7 +6530,7 @@ CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against <station>)*, *<unit>
 rain used* and *<unit> rain used from* (a day a patch station filled reads
 *patch N: <station>*), then the other
 series stored at the unit (a gauge with its m³/day; its CHIRPS series is the
-raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors (fitted for that unit since engine 1.105.0:
+raw line already; the raw lines read their stored series, on every day of the table and not only over the run window the derived lines cover, so the search, *Missing only*, *Flagged only* and the check flags work on them and a unit's CHIRPS stored before the run window (a CHIRPS feed from 1981 beside a station from 2009) still shows; `preview.ts` `areaColumnCell`), with the twelve monthly factors (fitted for that unit since engine 1.105.0:
 its station's rain taken to the unit's MAP over the unit's own CHIRPS), the
 station they were fitted against, or why the pairing was refused, listed above
 the table (`data-testid="preview-factors"`), and, when the patching priority
@@ -6705,7 +6740,8 @@ editors run one now and read the map's proposals, viewers read.
 - **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
   **Failing**, **Waiting**, **Off**, **Copy behind**; colour is never the
   only signal, and the card carries `data-state`; the chip is a badge's
-  rounded box, so a wrapped "Copy behind" on a phone stays readable), the source, the series it writes ("→ Rainfall —
+  rounded box, so a wrapped "Copy behind" on a phone stays readable; a stale feed with a fetch under way reads
+  **Catching up** instead, below), the source, the series it writes ("→ Rainfall —
   forecast"), where it reads ("cell -20.12, 25.17" or "station X0H000"), the
   what a CHIRPS feed writes ("· CHIRPS sat v3.0"), the schedule and who it
   runs as, the health sentence ("The last fetch
@@ -6760,22 +6796,52 @@ editors run one now and read the map's proposals, viewers read.
   itself is fine and fills in the newer days once the copy catches up; there
   is nothing to do here. Newest data 5 Oct 2026." Its chip is neutral, not a
   warning colour.
-- **A warning** above the list counts the feeds that are stale or failing
-  ("1 feed needs attention: …", `role="alert"`); a feed whose copy is
-  behind isn't counted, since nothing here can fix it.
-- **Run now** (editors) queues a fetch at once and says so ("Fetch queued.
-  …"), then follows it (issue #586 Round 4, `feeds/follow.ts`): the panel
-  re-reads the list every 2 s for the first 10 s, then every 5 s, then every
-  10 s, about two minutes in all, until the feed's `lastAttemptAt` moves (a
-  result was recorded; in production when the fetcher's answer comes back).
-  Then the card updates and the live region says how it went, focus staying
-  on the button: "Fetch done: Rainfall — forecast. OK; newest data …" or
-  "Fetch failed: Rainfall — CHIRPS: <why>. It tries again after 10:13."
-  Polling stops when the panel unmounts and pauses while the page is hidden
-  (one poll at once when it shows again); a failed poll just waits for the
-  next, and never overwrites a newer list. If the two minutes run out it
+- **A fetch under way** (the list's `pendingFetch`, api.md: a backfill
+  working through its windows, a Run now, the schedule's): the card
+  carries `data-fetch="queued"` or `"running"` and a line under the health
+  sentence (`data-testid="feed-fetch"`, `pendingNote` in `feeds.ts`): "A
+  fetch is waiting to run." / "A fetch is under way.", then "Run now waits
+  for it, and this card updates by itself." A stale feed doing so is
+  catching up, not idle: its chip reads **Catching up** (neutral) instead of
+  Stale, its line says how far it has read ("Catching up: a fetch is
+  waiting to run, read to 12 Mar 1995 so far. …", from the fetch's
+  `last_meta.through`, else its newest day), and it isn't counted in the
+  warning. The schedule's "It tries again after …" is left off while a fetch
+  is under way. **Run now** waits too: `aria-disabled` (still focusable, its
+  press ignored), with that line as its description (`aria-describedby`)
+  and its tooltip, since a press would only join the fetch already waiting.
+  The panel re-reads the list on its own while any card has a fetch under
+  way (below), so a backfill's progress shows without Refresh status.
+- **A warning** above the list counts the feeds that are stale (and not
+  catching up) or failing ("1 feed needs attention: its data is out of date
+  or its last fetch failed.", "13 feeds need attention: their data is out of
+  date or their last fetch failed.", `attentionText` in `feeds.ts`,
+  `role="alert"`); a feed whose copy is behind isn't counted, since nothing
+  here can fix it. The Warnings tab counts the same feeds.
+- **Run now** (editors) queues a fetch at once. The feedback is on the card
+  that was run, not the top of the section: its line says a fetch is
+  waiting (above; "Fetch queued: it waits for the background worker, …"
+  when the server doesn't report it) and its Run now waits with it, while
+  the section's polite live region (`role="status"`, never `role="alert"`)
+  announces "Fetch queued: Rainfall — CHIRPS. Its card updates by itself
+  once the fetch has run." for screen readers only. It then follows the
+  fetch (issue #586 Round 4, `feeds/follow.ts`): the panel re-reads the list
+  every 2 s for the first 10 s, then every 5 s, then every 10 s, then every
+  30 s, five minutes in all (a fetch waiting its turn at CHC can take
+  minutes), until the feed's `lastAttemptAt` moves (a result was recorded;
+  in production when the fetcher's answer comes back). Then the card's line
+  reads "Fetch done." or "Fetch failed: the line above says why."
+  (`data-fetch="done"` / `"failed"`, until the next action or Refresh
+  status), and the live region says how it went, focus staying on the
+  button: "Fetch done: Rainfall — forecast. OK; newest data …" or "Fetch
+  failed: Rainfall — CHIRPS: <why>. It tries again after 10:13." Polling
+  stops when the panel unmounts and pauses while the page is hidden (one
+  poll at once when it shows again); a failed poll just waits for the next,
+  and never overwrites a newer list. If the five minutes run out the card
   says "The fetch is still waiting to run. Refresh status will show it once
-  it has." **Refresh status** still re-reads at any time.
+  it has." (`data-fetch="slow"`); past them the panel goes on every 30 s only
+  while the server still reports a fetch under way. **Refresh status** still
+  re-reads at any time.
   Pressed too often (6 fetches, then one every 10 minutes per feed), the
   section's error line shows the server's words, with the wait in whole
   minutes and a reminder that the feed also runs daily.
@@ -6794,7 +6860,15 @@ editors run one now and read the map's proposals, viewers read.
   boundary](./maps.md#rain-from-the-boundary)). Until issue #521 this and
   the next were two unlabelled buttons under the list; now they are choices
   of the card's **Area** for CHIRPS (an editor's card, **Rain from the
-  map**, has only these two, the boundary first). Picking one replaces the
+  map**, has only these two, the boundary first). With the source *AgERA5
+  daily reference evapotranspiration* the **Area** offers the boundary too
+  (not each unit's parcel): the same proposal headed **Reference ET from the
+  catchment boundary**, on our copy's 0.1° AgERA5 cells ("4 AgERA5 cells of
+  0.1° in 2 rows, …"), with no **Daily product** field, a start date from
+  1981, and the feed's words in **Apply** ("Apply attaches a new reference
+  ET feed into …"; [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary), *Reference ET from the
+  boundary*). Switching the source redraws the proposal for it. Picking one replaces the
   series fields, the typed area and **Attach feed** with the proposal and its
   own action row; the focus stays on the Area choice. It shows **Rain from the
   catchment boundary** (a heading in the card) with the proposal: the boundary (name,
@@ -12982,7 +13056,8 @@ baseline card links to the published run's report (**Report**, beside
   signal is what e2e waits on, and what the server-side render waits on.
 - **Download PDF** calls `window.print()`; the hint says to choose **Save as
   PDF**. Print CSS: A4 (`@page`, added while the page is open,
-  `report/printPage.ts`), a running footer on every page in the bottom
+  `report/printPage.ts`, set up by `report/printedPage.svelte.ts`, which the
+  evidence report, a pack's page and the applicant's copy share), a running footer on every page in the bottom
   margin from CSS page-margin boxes (`@bottom-center`, Chromium 131+): the
   page's `data-report-footer` (the engine's `REPORT_FOOTER`: project · run ·
   "Model estimates; see the Disclaimer (section N, version …). The operator
@@ -13313,8 +13388,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   page still says it.
 - **Ready and print.** `data-report-ready` follows the catchment report's
   contract (every fetch in, every chart drawn). **Download draft PDF** is the
-  browser's print (always light, A4). There is no server-rendered evidence
-  PDF yet: it comes with the issued pack (WP-3.14).
+  browser's print (always light, A4), with the running footer on every page:
+  *Draft · not issued*, the project, the report's title, the disclaimer's key
+  point and "Page X of Y.", from the same `@page` margin box as the catchment
+  report (`report/printedPage.svelte.ts`, which the evidence page sets up
+  itself; the route's own print set-up stands down in evidence mode). The
+  draft has no server-rendered PDF: an issued pack's is printed from the
+  pack's page (WP-3.14).
 - Tested by `e2e/tests/evidence-report.spec.ts`, for § 5 with volumes
   `e2e/tests/evidence-allocations.spec.ts`, for § 6 with objects
   `e2e/tests/evidence-demand-objects.spec.ts`, and for the applications
@@ -13336,8 +13416,10 @@ their own application's in [their own view](#the-applicants-pack-view).
   (with its issue date when it had one). Once issued, every section and the
   footer also print the manifest SHA-256, the short code and the verify link
   `{origin}/verify/{code}` (`packVerifyLine`), and Appendix B.4 lists them.
-  The footer is `data-report-footer`, which a server render prints on every
-  page; `data-report-ready` follows the catchment report's contract, so e2e
+  The footer is `data-report-footer`, printed with "Page X of Y." on every
+  page by the page's own `@page` margin box (`report/printedPage.svelte.ts`),
+  in the browser's print and the server PDF alike (before 2026-11-01 the
+  pack's page set no footer box, so its PDF printed none); `data-report-ready` follows the catchment report's contract, so e2e
   and the renderer wait on it. Printing is A4 and light. The page reads only
   the pack and its sign-offs, and the project for the caller's role; a
   render session, which may read only the first two, skips the project, and
@@ -14010,6 +14092,23 @@ published.
   failed load is one line asking to check the connection and reload, as the
   map card's. Nothing of a neighbour's dam reaches it (the route names the
   farm, and 249's farmer policies are the second layer).
+- **The short-days line** on the supply card (`farm/cards.ts` `shortLine`):
+  "Short on 16 days in Nov and Dec, all when your dam was down to its stop
+  level." (or "…empty" with no stop level), and on a unit with no dam, or
+  whose demands all draw on the river (`season.onlyRiver`), "…when the river
+  was too low to take from." A dam unit with demands on both its dam and a
+  river abstraction (engine ≥ 1.111.0, model.md §2.7j) says which side was
+  short, from `season.shortDaysRiver` / `shortDaysBoth`: the river side only
+  ("…all when the river or your pump couldn't give enough." / "…5 of them
+  when …"), both sides on different days ("Short on 16 days in Nov and Dec:
+  your dam was down to its stop level on 10 days, and the river or your pump
+  couldn't give enough on 8 days. Both were short on 2 days."), both every
+  day ("…all when your dam was down to its stop level and the river or your
+  pump couldn't give enough."), or the dam's words when only the dam side
+  was. A drought restriction's cut is never the dam side's shortfall: the
+  dam side is measured against `restricted_demand` where the rule cut the
+  unit (model.md §2.7j). A view from an older run has no split and keeps
+  the dam's words.
 - **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
   figures are worked out by a computer model of the catchment. They are
   estimates, not measurements or instructions, and they can be wrong. Only a
@@ -14598,7 +14697,7 @@ signed in or out, for someone outside the project, on a phone first.
   strips it from the address bar (a shallow `goto` with `replace`, as the
   reset pages strip `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
   (only the fragment changes) is picked up the same way, and only the latest
-  link's answer is shown, however the two answers race (`share/load.ts latestOnly`). The page sets
+  link's answer is shown, however the two answers race (`api/latest.ts latestCall`). The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water
   Management" with "Shared view" under it, and the EN | AF switch beside,
   one row on a 360 px phone; its content lined up over the page's), not

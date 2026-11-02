@@ -29,9 +29,10 @@ so before either asks anything it takes one shared lease,
 product's. Its expiry is the holder's own hard deadline (the Lambda's time
 left) plus HOST_SLOT_MARGIN_S, so a run killed by its timeout frees the slot
 a minute later, and no renewal is needed: a Lambda can't run past its
-deadline. Busy raises `HostBusy` (a MirrorBusy): the daily run ends quietly
-(tomorrow's catches up) and a backfill month fails with that name, which the
-state machine's own retrier waits out (infra/ingest_backfill.tf). The body
+deadline. Busy raises `HostBusy` (a MirrorBusy): a backfill month fails with
+that name, which the state machine's own retrier waits out
+(infra/ingest_backfill.tf), and the daily rnl/sat run waits for it instead
+(`hold_host_waiting`, below). The body
 the Node side writes and reads is the same JSON: {"owner", "expires"
 (epoch seconds), "holder"}.
 
@@ -49,7 +50,8 @@ failure alike, releases it (`release_backfill_hold`, the handler's
 `{"mode": "release_hold"}` event); an execution stopped by hand, or a month
 that dies, leaves a hold that expires on its own within the margin. While it
 holds the slot the fetcher's fetches defer and re-queue themselves, and the
-daily rnl/sat runs end quietly, as for any holder.
+daily rnl/sat runs end quietly without waiting (a backfill keeps the slot
+for hours).
 
 **An operator's run keeps the slot by renewing it** (`hold_host_renewed`):
 `verify_copy.py`'s CHC check (~600 range requests at one a second, ~10
@@ -71,7 +73,17 @@ other taker (this module's, and the Node side's) that takes a free slot while
 someone else's reservation is live lets it go again at once and answers busy.
 The backfill deletes its reservation once it holds the slot. The fetcher's
 scheduled passes (backend/src/feeds/hostSlot.ts takeHostSlotWaiting) write
-the same reservation, by the same rules, while they wait. A reservation
+the same reservation, by the same rules, while they wait.
+
+**A daily run waits for its turn** (`hold_host_waiting`): the daily rnl and
+sat runs have no retry but tomorrow's, and per-feed CHIRPS fetches hold the
+slot 9-12 minutes each, back to back (2026-10-29: both runs found it held
+and copied nothing). So a daily run that finds the slot held reserves the
+next turn, by the same rules, and looks again every HOST_SLOT_POLL_S until
+only its own work time is left (lambda_handler.DAILY_RUN_WORK_S): long
+enough to outlast one fetch, and its reservation keeps the next fetch from
+taking the freed slot first. It doesn't wait out a backfill execution's
+hold. A reservation
 only ever makes others wait a turn; it is advisory (the Node side ignores one
 it can't read), and the slot itself is what keeps CHC to one process.
 """
@@ -114,6 +126,13 @@ RESERVATION_S = 5 * 60
 OPERATOR_HOLD_S = 5 * 60
 OPERATOR_RENEW_S = 60
 OPERATOR_RETRY_S = 30
+# A daily run waiting for the slot (hold_host_waiting): how often it looks,
+# and renews its reservation. A per-feed fetch that finds the freed slot
+# reserved gives it back and asks again two minutes later
+# (backend/src/feeds/hostSlot.ts HOST_BUSY_RETRY_SECONDS), so a look every
+# 15 s takes the turn well before that, as the fetcher's own scheduled passes
+# do (hostSlot.ts HOST_SLOT_POLL_MS).
+HOST_SLOT_POLL_S = 15
 # A Step Functions execution ARN (or a plain id locally); its last part is the execution's name.
 _EXECUTION = re.compile(r"^[A-Za-z0-9:_./-]{1,256}$")
 
@@ -308,7 +327,9 @@ def _acquire(m: zarrstore.Mirror, ls: _Lease, owner: str, now: float) -> str:
             ours = held.get("owner") == owner
             if not ours and _live(held, now):
                 reserved = ls.reserve and _reserve(m, ls, owner, now)
-                raise ls.busy(f"another run ({held.get('holder') or held.get('owner')}) holds the {ls.label} until {_until(held)}" + ("; reserved the next turn" if reserved else ""))
+                err = ls.busy(f"another run ({held.get('holder') or held.get('owner')}) holds the {ls.label} until {_until(held)}" + ("; reserved the next turn" if reserved else ""))
+                err.held = held  # who holds it: a waiting daily run doesn't wait out a backfill's hold
+                raise err
             if not _put(m, ls.rel_key, ls.body(owner, now), if_match=etag):
                 raise ls.busy(f"another run took over the expired {ls.label} first")
             how = "renewed" if ours else "took over"
@@ -371,6 +392,78 @@ def hold_host(mirror: zarrstore.Mirror, host: str, remaining_s: float | None, ho
     deadline; the slot expires that long plus HOST_SLOT_MARGIN_S from now."""
     seconds = _host_seconds(remaining_s) + HOST_SLOT_MARGIN_S
     return _hold(mirror, _Lease(host_slot_key(host), f"{host} request slot", HostBusy, seconds, holder, reservation=host_reservation_key(host)), now)
+
+
+def _withdraw(m: zarrstore.Mirror, ls: _Lease, owner: str) -> None:
+    """Delete our reservation, only ever our own."""
+    got = _read(m, ls.reservation)
+    if got is not None and got[0].get("owner") == owner:
+        _delete(m, ls.reservation)
+
+
+def _is_backfill_hold(held: dict | None) -> bool:
+    return isinstance(held, dict) and str(held.get("owner") or "").startswith(backfill_owner(""))
+
+
+@contextlib.contextmanager
+def hold_host_waiting(
+    mirror: zarrstore.Mirror,
+    host: str,
+    holder: str,
+    remaining: Callable[[], float | None],
+    keep_s: float,
+    poll_s: float = HOST_SLOT_POLL_S,
+    now: Callable[[], float] = time.time,
+    sleep: Callable[[float], None] = time.sleep,
+):
+    """Hold `host`'s slot for a daily run, waiting for it (and reserving the next turn) while someone else has it.
+
+    Each look takes the slot as hold_host does (expiry: the time left, from
+    `remaining()`, plus HOST_SLOT_MARGIN_S; None, no deadline, counts down
+    from HOST_SLOT_DEFAULT_S). Held by someone else, it reserves the next
+    turn (or renews its own reservation; another waiter's live one is never
+    overwritten, it just waits behind it) and looks again every `poll_s`, so
+    the next per-feed fetch yields the freed slot to it. It stops waiting
+    when the next look would leave less than `keep_s` for the run's own
+    work, and at once when the holder is a backfill execution, which keeps
+    the slot for hours (hold_host_for_backfill): then it withdraws its
+    reservation and raises HostBusy. Its reservation is withdrawn too once
+    it holds the slot (_acquire), or on any other way out while waiting."""
+    _check_backend(mirror)
+    owner = uuid.uuid4().hex
+    start = now()
+
+    def left() -> float:
+        r = remaining()
+        return HOST_SLOT_DEFAULT_S - (now() - start) if r is None else r
+
+    ls = _Lease(host_slot_key(host), f"{host} request slot", HostBusy, holder=holder[:80], reservation=host_reservation_key(host), reserve=True)
+    waits = 0
+    try:
+        while True:
+            ls.seconds = max(0.0, left()) + HOST_SLOT_MARGIN_S
+            try:
+                _acquire(mirror, ls, owner, now())
+                break
+            except HostBusy as e:
+                if _is_backfill_hold(getattr(e, "held", None)):
+                    raise  # the backfill keeps it for its whole run: waiting can't outlast it
+                if left() - poll_s < keep_s:
+                    raise HostBusy(f"{e}; gave up after waiting {now() - start:.0f} s") from None
+                if waits == 0:
+                    log.info("%s: %s; waiting for it", ls.holder, e)
+                waits += 1
+                sleep(poll_s)
+    except BaseException:
+        # Giving up: our reservation would make others wait for nothing.
+        _withdraw(mirror, ls, owner)
+        raise
+    if waits:
+        log.info("%s: took the %s after waiting %.0f s", ls.holder, ls.label, now() - start)
+    try:
+        yield owner
+    finally:
+        _release(mirror, ls, owner)
 
 
 @contextlib.contextmanager
@@ -474,9 +567,7 @@ def hold_host_renewed(
                 sleep(retry_s)
     except BaseException:
         # Giving up (or Ctrl+C while waiting): our reservation would make others wait for nothing.
-        got = _read(mirror, ls.reservation)
-        if got is not None and got[0].get("owner") == owner:
-            _delete(mirror, ls.reservation)
+        _withdraw(mirror, ls, owner)
         raise
     hold = RenewedHold(owner, ls.holder, ls.label)
     log.info("%s: took the %s", ls.holder, ls.label)

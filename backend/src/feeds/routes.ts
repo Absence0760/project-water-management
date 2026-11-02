@@ -270,7 +270,7 @@ export async function attachSlot(db: Db, projectId: string): Promise<void> {
  */
 function refuseBoundaryMark(config: unknown) {
 	if (config !== null && typeof config === 'object' && 'boundary' in config) {
-		throw new ApiError(400, 'a feed’s cells are marked as the catchment boundary’s only by “Use the catchment boundary” (POST …/feeds/chirps/from-boundary)');
+		throw new ApiError(400, 'a feed’s cells are marked as the catchment boundary’s only by “The catchment boundary, from the map” (POST …/feeds/chirps/from-boundary, or …/feeds/agera5_et0/from-boundary for reference ET)');
 	}
 	if (config !== null && typeof config === 'object' && 'unit' in config) {
 		throw new ApiError(400, 'a feed’s cells are marked as a unit’s only by “Rain for each unit” (POST …/feeds/chirps/from-units)');

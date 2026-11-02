@@ -11,11 +11,18 @@ import { describeTarget, type FeedMeta } from './feeds';
 
 /**
  * The waits between polls: every 2 s for the first 10 s (the local worker
- * answers in a second or two), then every 5 s, then every 10 s, about two
- * minutes in all (a production fetch went through the fetcher Lambda in
- * ~35 s). After the last, the panel stops and says Refresh status will show it.
+ * answers in a second or two), then every 5 s, then every 10 s, then every
+ * 30 s, five minutes in all (a production fetch went through the fetcher
+ * Lambda in ~35 s, but one that waits its turn at a throttled source, CHC's
+ * one request a second shared with the copy's passes, can take minutes).
+ * After the last, the panel stops and says Refresh status will show it.
  */
-export const FOLLOW_DELAYS_MS: readonly number[] = [...Array<number>(5).fill(2_000), ...Array<number>(10).fill(5_000), ...Array<number>(6).fill(10_000)];
+export const FOLLOW_DELAYS_MS: readonly number[] = [
+	...Array<number>(5).fill(2_000),
+	...Array<number>(10).fill(5_000),
+	...Array<number>(6).fill(10_000),
+	...Array<number>(6).fill(30_000)
+];
 
 /** What became of a followed fetch: still waiting, run (ok or failed), or the feed is gone or switched off. */
 export type FetchOutcome = 'waiting' | 'done' | 'failed' | 'gone';
@@ -43,7 +50,40 @@ export function outcomeMessage(
 	return `Fetch failed: ${describeTarget(f)}: ${f.lastError ?? 'unknown error'}.${nextTry ? ` ${nextTry}` : ''}`;
 }
 
+/** How often the panel goes on re-reading the list after the schedule while the server reports a fetch under way. */
+export const FOLLOW_TAIL_MS = 30_000;
+
 export const STILL_WAITING = 'The fetch is still waiting to run. Refresh status will show it once it has.';
+
+/** Where a card's Run now stands, as the panel saw it: queued (followed), run (done or failed), or still waiting when the follow gave up. */
+export type CardFetchState = 'queued' | 'done' | 'failed' | 'slow';
+
+/**
+ * The line on the card that was run (its `data-fetch`): the press's feedback
+ * sits on the card, not only in the section's status line. `created` is the
+ * run-now answer's (false: a fetch was already waiting, and this press joined it).
+ */
+export function cardFetchNote(state: CardFetchState, created = true): string {
+	switch (state) {
+		case 'queued':
+			return created
+				? 'Fetch queued: it waits for the background worker, and this card updates by itself once it has run.'
+				: 'A fetch for this feed was already waiting to run: this card updates by itself once it has.';
+		case 'done':
+			return 'Fetch done.';
+		case 'failed':
+			return 'Fetch failed: the line above says why.';
+		case 'slow':
+			return STILL_WAITING;
+	}
+}
+
+/** What the live region says when Run now has queued (or joined) a fetch, naming the feed. */
+export function queuedMessage(f: Pick<FeedMeta, 'targetKind' | 'targetName'>, created: boolean): string {
+	return created
+		? `Fetch queued: ${describeTarget(f)}. Its card updates by itself once the fetch has run.`
+		: `A fetch for ${describeTarget(f)} is already waiting to run. Its card updates by itself once it has.`;
+}
 
 export interface PollerOptions {
 	/** One poll; resolves true to keep following, false when nothing is left to follow. */
@@ -51,12 +91,19 @@ export interface PollerOptions {
 	/** The cap ran out with something still followed. */
 	onGiveUp: () => void;
 	delays?: readonly number[];
+	/**
+	 * After the schedule (and onGiveUp), go on every `tailMs` while `poll` says
+	 * there is more: what the server itself reports under way (a backfill's
+	 * windows) is followed for as long as it lasts. Unset: stop at the cap.
+	 */
+	tailMs?: number;
 	/** Whether the page is hidden now (document.hidden); a hidden page isn't polled. */
 	hidden?: () => boolean;
 }
 
 /**
- * A poller that runs `poll` on FOLLOW_DELAYS_MS's schedule. start() (again)
+ * A poller that runs `poll` on FOLLOW_DELAYS_MS's schedule (then every
+ * `tailMs`, when set). start() (again)
  * restarts the schedule; pause() while the page is hidden and resume() when it
  * shows again (one poll at once, the schedule going on from where it was);
  * stop() for good (the panel unmounting). Polls never overlap.
@@ -69,6 +116,7 @@ export function createPoller(o: PollerOptions) {
 	let active = false;
 	let polling = false;
 	let stopped = false;
+	let gaveUp = false;
 
 	const clear = () => {
 		if (timer !== null) clearTimeout(timer);
@@ -78,8 +126,12 @@ export function createPoller(o: PollerOptions) {
 		clear();
 		if (!active || stopped || polling || hidden()) return;
 		if (step >= delays.length) {
-			active = false;
-			o.onGiveUp();
+			if (!gaveUp) {
+				gaveUp = true;
+				o.onGiveUp();
+			}
+			if (o.tailMs === undefined) active = false;
+			else timer = setTimeout(() => void run(), o.tailMs);
 			return;
 		}
 		timer = setTimeout(() => void run(), delays[step++]);
@@ -104,6 +156,7 @@ export function createPoller(o: PollerOptions) {
 			if (stopped) return;
 			active = true;
 			step = 0;
+			gaveUp = false;
 			schedule();
 		},
 		pause: clear,

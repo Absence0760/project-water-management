@@ -282,3 +282,52 @@ test('a unit’s two-step patching chain: Bergwater, then Kloof raw and adjusted
 	await expect(headers.filter({ hasText: /^Upper unit: patch 1: Kloof × ratio/ })).toHaveCount(1);
 	await expect(headers.filter({ hasText: /^Patch 1: Kloof raw/ })).toHaveCount(0);
 });
+
+// Production, web@0.10.0: a unit's CHIRPS stored only before its station's record (here 2010–2012 beside 2015–2020),
+// so the pairing is refused. The run window follows the catchment's rain (model.md §2.1), so the rain used and its
+// source are blank before 2015; the CHIRPS raw line, which takes the stored CHIRPS column's place in the unit's view,
+// still shows the CHIRPS as stored there (preview.ts areaColumnCell).
+test('a unit’s CHIRPS raw shows its stored CHIRPS before the run window, where the rain used is blank', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Unit view, CHIRPS before the station');
+	const gauge = node('Outflow gauge', 'gauge', null, 1, { areaKm2: 0, pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
+	const a = node('Upper unit', 'farm', gauge.id, 2, { mapMm: 745, mapSource: 'invented' });
+	await putModel(page.request, project.id, { nodes: [gauge, a], crops: [], cropAreas: [], transfers: [] });
+	const bergId = await put(page.request, project.id, {
+		kind: 'rain_catchment_mm',
+		name: 'Bergwater',
+		values: rain(1.6, 1).map((v, i) => (i >= 40 && i < 50 ? null : v)),
+		station: { mapMm: 745, mapSource: 'Station record, 1991–2020', lat: null, lon: null }
+	});
+	const CH_DAYS = 1096; // 2010 … 2012
+	await put(page.request, project.id, { kind: 'rain_chirps_mm', name: 'CHIRPS Upper unit', startDate: '2010-01-01', values: rain(0.8, 1).slice(0, CH_DAYS) }, a.id);
+	await updateSettings(page.request, project.id, {
+		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
+		unitRain: { mode: 'perUnit' },
+		rainStations: { units: { [a.id]: { stationId: bergId } } }
+	});
+	await openData(page, project.id);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	const headers = dialog.locator('thead th');
+	await dialog.getByLabel('View', { exact: true }).selectOption({ label: 'Upper unit' });
+	// No year in common: the pairing is refused, so no corrected CHIRPS line.
+	await expect(headers).toHaveText([/^Date/, /^Bergwater raw/, /^Bergwater adjusted to Upper unit \(× 1\.000\)/, /^Upper unit CHIRPS raw/, /^Upper unit rain used/, /^Upper unit rain used from/]);
+
+	const search = dialog.getByLabel('Search by date or value');
+	const row = (day: string) => dialog.getByRole('table').getByRole('row').filter({ has: page.getByRole('cell', { name: day, exact: true }) }).getByRole('cell');
+	// 16 Mar 2011, day 439 of the CHIRPS: 19.2 mm stored; before the run window, so no rain used and no source.
+	await search.fill('2011-03-16');
+	const before = row('16 Mar 2011');
+	await expect(before).toHaveCount(6);
+	await expect(before.nth(1)).toHaveText('–');
+	await expect(before.nth(3)).toHaveText('19.20');
+	await expect(before.nth(4)).toHaveText('–');
+	await expect(before.nth(5)).toHaveText('–');
+	// A Bergwater gap day in the run window: no CHIRPS there, the pairing refused, so the next fallback.
+	await search.fill('2015-02-13');
+	const gap = row('13 Feb 2015');
+	await expect(gap.nth(3)).toHaveText('–');
+	await expect(gap.nth(5)).toHaveText(/^(next fallback|no source \(dry\))$/);
+});

@@ -118,6 +118,49 @@ export const ET0_FIRST_DAYS = 365;
 export const ET0_MAX_DAYS = 366;
 export const ET0_REVISION_DAYS = 75;
 
+/**
+ * A CHIRPS window read from our own copy (CHIRPS_SOURCE=mirror, the worker's
+ * read in feeds/fromMirror.ts) is not CHIRPS_MAX_DAYS: that cap was sized for
+ * asking CHC at about a request a second, and for an answer that rides SQS.
+ * The copy is read in the job, so what bounds a window is the job: the
+ * worker Lambda (2048 MB, a ~240 s tick budget inside a 300 s timeout), the
+ * one transaction the read, chirps_cache_merge and the series merge share,
+ * and the cache rows that transaction keeps locked to its commit. The copy
+ * stores finals in one chunk a year, so a window runs from its start through
+ * the 31 December of a later year (or yesterday): it reads each year's chunk
+ * once, where 120-day windows read it three times.
+ *
+ * How many years: COPY_CELL_YEARS cell-years a window, at most
+ * COPY_MAX_YEARS, at least one. The cell-years, not the days, are what the
+ * read, the merge (one chirps_cache_merge call a year), the cache rows the
+ * transaction locks and the memory scale with. Measured on the fixture copy
+ * (a scratch db test through the queue, rnl from 1981, 2026-11-02, this
+ * laptop, Postgres 17 in docker), one window's job:
+ *
+ *   cells × years   job      cells × years   job
+ *     17 × 1       ~80 ms      17 × 10      ~630 ms (5 windows 1981–2026, 3 s in all)
+ *     50 × 5      ~520 ms      50 × 10      ~1.1 s
+ *    100 × 5      ~880 ms     100 × 10      ~1.8 s
+ *
+ * about 5 µs a cell-day, linear. Every one is far inside the tick's ~240 s;
+ * the bound that matters is how long one transaction holds the cache rows a
+ * feed over the same cells waits on, so 500 cell-years keeps the worst
+ * window near a second here (a few on production's smaller RDS, with the
+ * copy's chunks read from S3): a feed of up to 50 cells (the 17-cell
+ * boundary feeds among them) reads 10 years a window, a 100-cell one 5.
+ * Ten years makes a 1981 backfill five windows; more would hold the locks
+ * longer for little gain.
+ */
+export const COPY_MAX_YEARS = 10;
+/** The cell-years one window from the copy reads (see above): up to 50 cells read COPY_MAX_YEARS a window, 100 cells 5. */
+export const COPY_CELL_YEARS = 500;
+export const COPY_MAX_DAYS = COPY_MAX_YEARS * 366;
+
+/** How many calendar years one window read from the copy spans, for a feed of `cells` grid cells (fetchWindow's `copyYears`). */
+export function copyWindowYears(cells: number): number {
+	return Math.max(1, Math.min(COPY_MAX_YEARS, Math.floor(COPY_CELL_YEARS / Math.max(1, cells))));
+}
+
 /** The inclusive days one fetch asks for (FetchRequest's start and end). */
 export interface FetchWindow {
 	start: string;
@@ -171,23 +214,32 @@ export function fetchWindow(
 	lastDataDate: string | null,
 	today: string,
 	readThrough: string | null = null,
-	finalThrough: string | null = null
+	finalThrough: string | null = null,
+	opts: { copyYears?: number } = {}
 ): FetchWindow {
 	const floor = (start: string) => (config.startDate && start < config.startDate ? config.startDate : start);
-	const from = (revisionDays: number, firstDays: number, maxDays: number, newest: string) => {
+	// The last day a window starting on `start` may reach: maxDays on, or for a CHIRPS read of our copy the 31 December
+	// `copyYears` - 1 years on (COPY_CELL_YEARS).
+	const span = (maxDays: number) => (start: string) => addDays(start, maxDays - 1);
+	const from = (revisionDays: number, firstDays: number, limit: (start: string) => string, newest: string) => {
 		let start = lastDataDate ? addDays(lastDataDate, -revisionDays) : (config.startDate ?? addDays(today, -firstDays));
-		if (readThrough && readThrough < newest && addDays(start, maxDays - 1) <= readThrough) start = addDays(readThrough, 1 - revisionDays);
+		if (readThrough && readThrough < newest && limit(start) <= readThrough) start = addDays(readThrough, 1 - revisionDays);
 		return floor(start);
 	};
 	switch (source) {
 		case 'chirps': {
 			const end = addDays(today, -1);
-			let start = from(CHIRPS_REVISION_DAYS, CHIRPS_FIRST_DAYS, CHIRPS_MAX_DAYS, end);
+			const years = opts.copyYears;
+			const limit =
+				years === undefined
+					? span(CHIRPS_MAX_DAYS)
+					: (s: string) => `${String(Number(s.slice(0, 4)) + Math.max(1, Math.min(COPY_MAX_YEARS, Math.floor(years))) - 1).padStart(4, '0')}-12-31`;
+			let start = from(CHIRPS_REVISION_DAYS, CHIRPS_FIRST_DAYS, limit, end);
 			const pending = chirpsPendingFrom(finalThrough, lastDataDate, config.startDate);
-			if (pending && pending < start && (!readThrough || addDays(pending, CHIRPS_MAX_DAYS - 1) > readThrough)) start = pending;
+			if (pending && pending < start && (!readThrough || limit(pending) > readThrough)) start = pending;
 			if (finalThrough && finalThrough >= start && start <= end) start = finalThrough < end ? addDays(finalThrough, 1) : end;
-			const capped = toEpochDay(end) - toEpochDay(start) + 1 > CHIRPS_MAX_DAYS ? addDays(start, CHIRPS_MAX_DAYS - 1) : end;
-			return { start, end: capped };
+			const last = limit(start);
+			return { start, end: last < end ? last : end };
 		}
 		case 'chirps_gefs':
 			return { start: today, end: addDays(today, 15) };
@@ -197,7 +249,7 @@ export function fetchWindow(
 			// Up to yesterday; ET0_REVISION_DAYS re-read, so a day NASA POWER filled is replaced by AgERA5's once the copy
 			// holds its month (feeds/fromMirrorEt0.ts), and at most ET0_MAX_DAYS (a year: one read of the finals' year chunks).
 			const end = addDays(today, -1);
-			const start = from(ET0_REVISION_DAYS, ET0_FIRST_DAYS, ET0_MAX_DAYS, end);
+			const start = from(ET0_REVISION_DAYS, ET0_FIRST_DAYS, span(ET0_MAX_DAYS), end);
 			const capped = toEpochDay(end) - toEpochDay(start) + 1 > ET0_MAX_DAYS ? addDays(start, ET0_MAX_DAYS - 1) : end;
 			return { start: start > end ? end : start, end: capped };
 		}
@@ -292,62 +344,73 @@ const RecheckDays = (max: number) =>
  * Size: at most 100 cells × 120 days, a value at most ten digits of JSON, so
  * the largest answer is about 135 KB, inside SQS's 256 KB with the envelope
  * and the meta (fetch.test.ts checks the worst case).
+ *
+ * A read of our own copy (feeds/fromMirror.ts) never crosses SQS, and its
+ * window is years (COPY_MAX_DAYS, COPY_CELL_YEARS): CopyCellsResult takes it,
+ * and only the copy path parses with it (ingest.ts ingestResult `fromCopy`),
+ * so an answer from the fetcher is held to CHIRPS_MAX_DAYS as before.
  */
-export const CellsResult = z
-	.object({
-		ok: z.literal(true),
-		cells: z
-			.object({
-				product: z.enum(CHIRPS_DAILY_PRODUCTS),
-				startDate: SeriesStartDate,
-				/** Per day: `f` read from the final file, `p` the preliminary, `-` not read. */
-				read: z.string().regex(/^[-fp]*$/).max(CHIRPS_MAX_DAYS),
-				/** [row, column] of the CHC grid. */
-				cells: z.array(z.tuple([z.number().int().min(0).max(CHC_ROWS - 1), z.number().int().min(0).max(CHC_COLS - 1)])).max(BBOX_MAX_CELLS),
-				/** Per cell, per day of `read`. */
-				values: z.array(z.array(CellValue).max(CHIRPS_MAX_DAYS)).max(BBOX_MAX_CELLS),
-				/** Per day of `read`: the final file's tag on an `f` day, else null. Absent from a fetcher before 210. */
-				tags: z.array(FileTag.nullable()).max(CHIRPS_MAX_DAYS).optional()
-			})
-			.strict()
-			.superRefine((c, ctx) => {
-				const bad = (message: string) => ctx.addIssue({ code: 'custom', message });
-				if (c.tags && (c.tags.length !== c.read.length || c.tags.some((t, d) => t !== null && c.read[d] !== 'f'))) return bad('a tag on a final day only, one per day');
-				if (c.values.length !== c.cells.length) return bad('one row of values per cell');
-				if (new Set(c.cells.map(([r, k]) => `${r},${k}`)).size !== c.cells.length) return bad('a cell is listed twice');
-				if (c.product === 'rnl' && c.read.includes('p')) return bad('rnl has no preliminary files');
-				for (const row of c.values) {
-					if (row.length !== c.read.length) return bad('one value per day');
-					// A day read gives every cell a value or no data; a day not read gives none.
-					for (let d = 0; d < row.length; d++) if ((row[d] === null) !== (c.read[d] === '-')) return bad('a value for exactly the days read');
-				}
-			}),
-		/**
-		 * The re-check the request asked for (FetchRequest.recheck): each HEADed
-		 * file's tag, and each day read again with a value per cell (in the
-		 * request's cells' order, encoded as above, never null), or none when
-		 * the file is gone. Which days were asked for is the worker's to check
-		 * (210 chirps_recheck_apply takes only the days the fetch claimed or
-		 * the feed's cells hold stale).
-		 */
-		recheck: z
-			.object({
-				head: z.array(z.object({ day: SeriesStartDate, tag: FileTag.nullable() }).strict()).max(RECHECK_HEAD_DAYS),
-				read: z
-					.array(
-						z
-							.object({ day: SeriesStartDate, tag: FileTag.nullable(), values: z.array(CellValue.unwrap()).max(BBOX_MAX_CELLS).nullable() })
-							.strict()
-							.refine((r) => r.values !== null || r.tag === null, 'no tag for a file that is gone')
-					)
-					.max(RECHECK_READ_DAYS)
-			})
-			.strict()
-			.refine((r) => r.head.every((h, i) => i === 0 || h.day > r.head[i - 1]!.day) && r.read.every((h, i) => i === 0 || h.day > r.read[i - 1]!.day), 'each day once, in order')
-			.optional(),
-		meta: FetchMeta
-	})
-	.strict();
+const cellsResult = (maxDays: number, maxCellDays: number) =>
+	z
+		.object({
+			ok: z.literal(true),
+			cells: z
+				.object({
+					product: z.enum(CHIRPS_DAILY_PRODUCTS),
+					startDate: SeriesStartDate,
+					/** Per day: `f` read from the final file, `p` the preliminary, `-` not read. */
+					read: z.string().regex(/^[-fp]*$/).max(maxDays),
+					/** [row, column] of the CHC grid. */
+					cells: z.array(z.tuple([z.number().int().min(0).max(CHC_ROWS - 1), z.number().int().min(0).max(CHC_COLS - 1)])).max(BBOX_MAX_CELLS),
+					/** Per cell, per day of `read`. */
+					values: z.array(z.array(CellValue).max(maxDays)).max(BBOX_MAX_CELLS),
+					/** Per day of `read`: the final file's tag on an `f` day, else null. Absent from a fetcher before 210. */
+					tags: z.array(FileTag.nullable()).max(maxDays).optional()
+				})
+				.strict()
+				.superRefine((c, ctx) => {
+					const bad = (message: string) => ctx.addIssue({ code: 'custom', message });
+					if (c.tags && (c.tags.length !== c.read.length || c.tags.some((t, d) => t !== null && c.read[d] !== 'f'))) return bad('a tag on a final day only, one per day');
+					if (c.values.length !== c.cells.length) return bad('one row of values per cell');
+					if (c.cells.length * c.read.length > maxCellDays) return bad(`at most ${maxCellDays} cell-days`);
+					if (new Set(c.cells.map(([r, k]) => `${r},${k}`)).size !== c.cells.length) return bad('a cell is listed twice');
+					if (c.product === 'rnl' && c.read.includes('p')) return bad('rnl has no preliminary files');
+					for (const row of c.values) {
+						if (row.length !== c.read.length) return bad('one value per day');
+						// A day read gives every cell a value or no data; a day not read gives none.
+						for (let d = 0; d < row.length; d++) if ((row[d] === null) !== (c.read[d] === '-')) return bad('a value for exactly the days read');
+					}
+				}),
+			/**
+			 * The re-check the request asked for (FetchRequest.recheck): each HEADed
+			 * file's tag, and each day read again with a value per cell (in the
+			 * request's cells' order, encoded as above, never null), or none when
+			 * the file is gone. Which days were asked for is the worker's to check
+			 * (210 chirps_recheck_apply takes only the days the fetch claimed or
+			 * the feed's cells hold stale).
+			 */
+			recheck: z
+				.object({
+					head: z.array(z.object({ day: SeriesStartDate, tag: FileTag.nullable() }).strict()).max(RECHECK_HEAD_DAYS),
+					read: z
+						.array(
+							z
+								.object({ day: SeriesStartDate, tag: FileTag.nullable(), values: z.array(CellValue.unwrap()).max(BBOX_MAX_CELLS).nullable() })
+								.strict()
+								.refine((r) => r.values !== null || r.tag === null, 'no tag for a file that is gone')
+						)
+						.max(RECHECK_READ_DAYS)
+				})
+				.strict()
+				.refine((r) => r.head.every((h, i) => i === 0 || h.day > r.head[i - 1]!.day) && r.read.every((h, i) => i === 0 || h.day > r.read[i - 1]!.day), 'each day once, in order')
+				.optional(),
+			meta: FetchMeta
+		})
+		.strict();
+/** An answer from the fetcher (or the cell cache alone): at most CHIRPS_MAX_DAYS days. */
+export const CellsResult = cellsResult(CHIRPS_MAX_DAYS, BBOX_MAX_CELLS * CHIRPS_MAX_DAYS);
+/** A read of our copy, in the worker: years a window (COPY_MAX_DAYS), and no more cell-days than COPY_CELL_YEARS allows (a 100-cell feed's one year). */
+export const CopyCellsResult = cellsResult(COPY_MAX_DAYS, Math.max(COPY_CELL_YEARS, BBOX_MAX_CELLS) * 366);
 export type CellsResult = z.output<typeof CellsResult>;
 
 /** What the fetcher answers: a CHIRPS request with `cells` gets a CellsResult, every other request a FetchResult. */

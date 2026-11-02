@@ -138,6 +138,8 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		const f = both.summary.farms.find((x) => x.nodeId === 'A')!;
 		// Day 1 the river had 2000 below the dam and the pump took 500 of the town's 600: 100 pump-limited (engine ≥ 1.66.0).
 		close(col(both, 'A', 'river_pump_limited@town'), [0, 100, 0]);
+		// What it was left short (engine ≥ 1.111.0): its 600 less what it pumped, so take + short = its demand.
+		close(col(both, 'A', 'river_short@town'), [100, 100, 600]);
 		expect(f.riverTakes).toEqual([{ key: 'town', name: 'town', avgTakeM3Day: 1000 / 3, pumpM3Day: 500, avgPumpLimitedM3Day: 100 / 3, daysPumpLimited: 1 }]);
 	});
 
@@ -287,6 +289,22 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 			const again = withVerification(make(), { ...o, summary: { ...o.summary, verification: undefined } });
 			expect(again.summary.verification!.passed, `day ${day}`).toBe(false);
 		}
+	});
+
+	it('the self-checks catch an unmet demand that doesn’t add up with the take to the demand (engine 1.111.0)', () => {
+		const make = () => input({}, [obj('town', 600, { waterSource: 'river', riverPumpM3Day: 500 })], 0, 2);
+		const o = run(make(), [300, 1000]);
+		passed(o);
+		close(col(o, 'A', 'river_short@town'), [300, 100]);
+		for (const v of [0, -1, 150]) {
+			const t = structuredClone(o);
+			t.series.find((x) => x.key === 'river_short@town')!.values[1] = v;
+			const again = withVerification(make(), { ...t, summary: { ...t.summary, verification: undefined } });
+			expect(again.summary.verification!.passed, `short ${v}`).toBe(false);
+		}
+		// And a missing column.
+		const gone = { ...o, series: o.series.filter((x) => x.key !== 'river_short@town'), summary: { ...o.summary, verification: undefined } };
+		expect(withVerification(make(), gone).summary.verification!.passed).toBe(false);
 	});
 
 	it('the self-checks catch a take tampered above its pump', () => {

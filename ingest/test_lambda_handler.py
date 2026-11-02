@@ -325,9 +325,16 @@ class FixturesRun(unittest.TestCase):
         self.assertEqual(json.loads(s3.objects[("mirror", lease.host_slot_key("chc"))])["owner"], "fetcher-run")
 
     def test_a_daily_run_ends_quietly_while_the_slot_is_held_locally(self):
-        self._held_by_fetcher()
-        out = lambda_handler.handler({"product": "sat", "mode": "monthly"})
+        # Held past the whole wait (DailyRunWaits has the wait itself): busy, on a fake clock.
+        t = [time.time()]
+        body = json.dumps({"owner": "fetcher-run", "expires": t[0] + 3600, "holder": "fetcher"}).encode()
+        p = self.root / lease.host_slot_key("chc")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(body)
+        out = lambda_handler.handler({"product": "sat", "mode": "monthly"}, clock=lambda: t[0], sleep=lambda s: t.__setitem__(0, t[0] + s))
         self.assertRegex(out["busy"], "chc request slot")
+        self.assertRegex(out["busy"], "gave up after waiting")
+        self.assertFalse((self.root / lease.host_reservation_key("chc")).exists())  # withdrawn on giving up
         self.assertEqual(out["files"], [])
         self.assertIsNone(out["revision"])
         # Control: once the holder lets go, the next run copies.
@@ -585,6 +592,153 @@ class FixturesRun(unittest.TestCase):
         with self.assertRaises(polite.HttpError) as caught:
             lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "1999-01"})
         self.assertEqual(caught.exception.status, 404)
+
+
+class DailyRunWaits(unittest.TestCase):
+    """A daily rnl/sat run that finds CHC's slot held waits for it, reserving the next turn (lease.hold_host_waiting)."""
+
+    LAMBDA_S = 900.0
+
+    def setUp(self):
+        # Today's epoch, so what reads the real clock (the product lease, manifest times) agrees with it.
+        self.START = float(int(time.time()))
+        self.t = [self.START]
+        self.s3 = FakeS3()
+        self.mirror = zarrstore.Mirror.from_url("s3://mirror", s3_client=self.s3)
+        self.slot = ("mirror", lease.host_slot_key("chc"))
+        self.reserved = ("mirror", lease.host_reservation_key("chc"))
+        self.sleeps = []
+        self.on_sleep = lambda: None
+        self.env = unittest.mock.patch.dict(os.environ, {"MIRROR_URL": "s3://mirror", "FEED_SOURCE": "fixtures"})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+
+    def clock(self):
+        return self.t[0]
+
+    def sleep(self, s):
+        self.sleeps.append(s)
+        self.t[0] += s
+        self.on_sleep()
+
+    def context(self):
+        t, deadline = self.t, self.START + self.LAMBDA_S
+
+        class Context:
+            def get_remaining_time_in_millis(self):
+                return int((deadline - t[0]) * 1000)
+
+        return Context()
+
+    def held(self, owner="fetcher-run", holder="fetcher:chirps", until=None):
+        self.s3.objects[self.slot] = json.dumps({"owner": owner, "expires": until or self.START + 3600, "holder": holder}).encode()
+
+    def run_daily(self, product="rnl", **kw):
+        return lambda_handler.handler({"product": product, "mode": "monthly"}, self.context(), s3_client=self.s3, clock=self.clock, sleep=self.sleep, **kw)
+
+    def test_waits_out_a_fetch_and_the_next_fetch_yields_the_turn(self):
+        # The case the reservation is for: one 450 s fetch ends and the next
+        # per-feed fetch is queued to take the freed slot at once. Without
+        # the reservation (or a taker's check of it) the second fetch would
+        # take it, hold it for the rest of the run, and the day would be lost.
+        self.held()
+        reservations, refused, stole = [], [], []
+
+        def on_sleep():
+            got = self.s3.objects.get(self.reserved)
+            reservations.append(json.loads(got) if got else None)
+            # Ending by 450 s leaves the run more than DOWNLOAD_RESERVE_S to fetch the month.
+            if self.t[0] >= self.START + 450 and self.slot in self.s3.objects and not refused and not stole:
+                del self.s3.objects[self.slot]  # the fetch ends
+                try:
+                    lease.hold_host(self.mirror, "chc", 900.0, holder="fetcher:chirps", now=self.clock).__enter__()
+                    stole.append(True)  # left held, as a 9-minute fetch would
+                except lease.HostBusy as e:
+                    refused.append(str(e))
+
+        self.on_sleep = on_sleep
+        out = self.run_daily()
+        self.assertEqual(stole, [], "the next fetch took the freed slot past the daily run's reservation")
+        self.assertEqual(len(refused), 1)
+        self.assertRegex(refused[0], "ingest:rnl:monthly reserved the chc request slot")
+        self.assertNotIn("busy", out)
+        self.assertEqual(out["revision"], 1)  # it copied
+        self.assertEqual(out["pending"], 0)
+        # It reserved the next turn from its first look and renewed it at each one.
+        self.assertTrue(all(r and r["holder"] == "ingest:rnl:monthly" for r in reservations), reservations)
+        self.assertEqual(len({r["owner"] for r in reservations}), 1)
+        exp = [r["expires"] for r in reservations]
+        self.assertEqual(exp, sorted(exp))
+        self.assertGreater(exp[-1], exp[0])
+        self.assertTrue(all(s == lease.HOST_SLOT_POLL_S for s in self.sleeps))
+        # Its turn came: the reservation is gone, and the slot released at the end.
+        self.assertNotIn(self.reserved, self.s3.objects)
+        self.assertNotIn(self.slot, self.s3.objects)
+
+    def test_gives_up_with_its_work_time_left_and_withdraws_its_reservation(self):
+        self.held()  # past the whole run
+        out = self.run_daily(opener=lambda *a, **k: self.fail("asked CHC"))
+        self.assertRegex(out["busy"], r"fetcher:chirps.*gave up after waiting")
+        self.assertEqual(out["files"], [])
+        # It waited through most of the run, and stopped with the work time still left.
+        left = self.START + self.LAMBDA_S - self.t[0]
+        self.assertGreaterEqual(left, lambda_handler.DAILY_RUN_WORK_S)
+        self.assertLess(left, lambda_handler.DAILY_RUN_WORK_S + 2 * lease.HOST_SLOT_POLL_S)
+        self.assertGreater(self.t[0] - self.START, 707)  # longer than the longest fetch seen (2026-11-01)
+        self.assertNotIn(self.reserved, self.s3.objects)
+        self.assertEqual(json.loads(self.s3.objects[self.slot])["owner"], "fetcher-run")  # left alone
+        self.assertNotIn(("put", lease.lease_key("rnl")), self.s3.calls)
+
+    def test_never_overwrites_another_waiters_live_reservation(self):
+        # A fetcher's scheduled pass (or a backfill month) reserved first: the daily run waits behind it.
+        self.held(until=self.START + 300)
+        theirs = json.dumps({"owner": "pass-1", "expires": self.START + 3600, "holder": "fetcher:prelim"}).encode()
+        self.s3.objects[self.reserved] = theirs
+        out = self.run_daily()
+        self.assertRegex(out["busy"], "fetcher:prelim reserved the chc request slot")
+        self.assertEqual(self.s3.objects[self.reserved], theirs)  # never replaced nor withdrawn
+        # The freed slot was taken and given straight back to the reservation, every look.
+        self.assertNotIn(self.slot, self.s3.objects)
+        self.assertGreater(len(self.sleeps), 10)
+
+    def test_a_turn_that_comes_late_reads_the_listing_and_leaves_the_month_for_tomorrow(self):
+        # Slot freed at ~720 s: under DOWNLOAD_RESERVE_S left, so no download starts, but the run isn't lost.
+        self.held(until=self.START + 720)
+        out = self.run_daily()
+        self.assertNotIn("busy", out)
+        self.assertEqual(out["listing"], "read")
+        self.assertEqual(out["files"], [])
+        self.assertGreater(out["pending"], 0)
+        self.assertGreater(self.START + self.LAMBDA_S - self.t[0], lambda_handler.DAILY_RUN_WORK_S)
+
+    def test_takes_over_an_expired_reservation(self):
+        self.held(until=self.START + 100)
+        self.s3.objects[self.reserved] = json.dumps({"owner": "dead-pass", "expires": self.START - 1, "holder": "fetcher:prelim"}).encode()
+        out = self.run_daily()
+        self.assertEqual(out["revision"], 1)
+        self.assertNotIn(self.reserved, self.s3.objects)
+
+    def test_does_not_wait_out_a_backfill_execution(self):
+        self.held(owner=lease.backfill_owner(EXECUTION), holder=lease.backfill_holder(EXECUTION))
+        out = self.run_daily("sat")
+        self.assertRegex(out["busy"], "ingest:backfill:run-1")
+        self.assertEqual(self.sleeps, [])  # it keeps the slot for hours: no wait
+        self.assertNotIn(self.reserved, self.s3.objects)  # nor a reservation left behind
+
+    def test_a_free_slot_takes_no_wait(self):
+        out = self.run_daily()
+        self.assertEqual(out["revision"], 1)
+        self.assertEqual(self.sleeps, [])
+        self.assertNotIn(("put", lease.host_reservation_key("chc")), self.s3.calls)
+
+    def test_a_backfill_month_still_does_not_wait(self):
+        # The state machine retries a backfill month's HostBusy itself (infra/ingest_backfill.tf).
+        self.held()
+        with self.assertRaises(lease.HostBusy):
+            lambda_handler.handler({"product": "rnl", "mode": "backfill", "month": "2024-02"}, self.context(), s3_client=self.s3, clock=self.clock, sleep=self.sleep)
+        self.assertEqual(self.sleeps, [])
 
 
 class LocalLeaseWrites(unittest.TestCase):

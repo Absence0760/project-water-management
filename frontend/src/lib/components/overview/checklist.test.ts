@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { defaultProjectSettings, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '#lib/api/types.js';
 import { checklist, checklistMode, nextStep, progress, type ChecklistStep } from './checklist';
@@ -50,6 +50,20 @@ const settled = () => {
 const statuses = (steps: ReturnType<typeof checklist>) => Object.fromEntries(steps.map((s) => [s.id, s.status]));
 
 describe('checklist', () => {
+	// The runs step dates the latest run on the viewer's calendar day, and no
+	// instant is the same day in every zone (noon UTC is already tomorrow in
+	// Pacific/Chatham, the suite's TZ). So the fixtures' runs are read by a
+	// South African viewer; 'dates the latest run on the viewer’s own day'
+	// checks the rule itself in other zones.
+	let zone: string | undefined;
+	beforeAll(() => {
+		zone = process.env.TZ;
+		process.env.TZ = 'Africa/Johannesburg';
+	});
+	afterAll(() => {
+		process.env.TZ = zone;
+	});
+
 	it('a brand-new catchment: everything to do, network first', () => {
 		const steps = checklist({ model: empty, settings: defaultProjectSettings(), series: [], runs: [] });
 		expect(statuses(steps)).toEqual({ network: 'todo', crops: 'todo', series: 'todo', settings: 'todo', runs: 'todo' });

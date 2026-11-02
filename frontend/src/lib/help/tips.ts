@@ -1801,7 +1801,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'preview-area-station-raw',
 		term: 'Station raw (daily preview)',
-		short: 'An area’s rainfall station as recorded, over the run window, beside the same rain adjusted to the area’s MAP.',
+		short: 'An area’s rainfall station as recorded, on every day it has, beside the same rain adjusted to the area’s MAP (over the run window).',
 		units: 'mm/day',
 		category: 'data',
 		fields: ['preview.areaStationRaw']
@@ -1817,7 +1817,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'preview-area-patch-raw',
 		term: 'Patch station raw (daily preview)',
-		short: 'A station in an area’s patching priority as recorded, over the run window, beside the same rain adjusted to the area’s MAP.',
+		short: 'A patch station of an area as recorded, on every day it has, beside the same rain adjusted to the area’s MAP (over the run window).',
 		units: 'mm/day',
 		category: 'data',
 		fields: ['preview.areaPatchRaw']
@@ -1833,7 +1833,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'preview-area-chirps-raw',
 		term: 'Area CHIRPS raw (daily preview)',
-		short: 'The area’s own CHIRPS as stored, over the run window, beside the same CHIRPS bias-corrected against its station.',
+		short: 'The area’s own CHIRPS as stored, on every day it has, beside the same CHIRPS bias-corrected against its station (over the run window).',
 		units: 'mm/day',
 		category: 'data',
 		fields: ['preview.areaChirpsRaw']

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createPoller, fetchOutcome, FOLLOW_DELAYS_MS, outcomeMessage, STILL_WAITING } from './follow';
+import { cardFetchNote, createPoller, fetchOutcome, FOLLOW_DELAYS_MS, outcomeMessage, queuedMessage, STILL_WAITING } from './follow';
 
 describe('fetchOutcome: has the followed fetch run?', () => {
 	const feed = { enabled: true, lastAttemptAt: '2026-10-26T08:00:00Z', consecutiveFailures: 0 };
@@ -71,10 +71,36 @@ describe('createPoller', () => {
 		expect(poll).toHaveBeenCalledTimes(3);
 	});
 
-	it('the default cap is modest: about two minutes, never faster than every 2 s', () => {
+	it('with a tail, goes on past the cap (giving up once) while the poll says there is more, then stops', async () => {
+		let left = 5;
+		const poll = vi.fn(async () => --left > 0);
+		const onGiveUp = vi.fn();
+		const p = createPoller({ poll, onGiveUp, delays: [10, 10], tailMs: 1_000 });
+		p.start();
+		await vi.advanceTimersByTimeAsync(20);
+		expect(poll).toHaveBeenCalledTimes(2);
+		expect(onGiveUp).toHaveBeenCalledTimes(1);
+		expect(p.active).toBe(true);
+		await vi.advanceTimersByTimeAsync(999);
+		expect(poll).toHaveBeenCalledTimes(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(poll).toHaveBeenCalledTimes(3);
+		await vi.advanceTimersByTimeAsync(10_000);
+		// The fifth poll said nothing is left: stopped, and onGiveUp was never said twice.
+		expect(poll).toHaveBeenCalledTimes(5);
+		expect(onGiveUp).toHaveBeenCalledTimes(1);
+		expect(p.active).toBe(false);
+	});
+
+	it('the default cap is modest: five minutes, never faster than every 2 s nor slower than every 30 s', () => {
 		const total = FOLLOW_DELAYS_MS.reduce((a, b) => a + b, 0);
-		expect(total).toBe(120_000);
+		expect(total).toBe(300_000);
 		expect(Math.min(...FOLLOW_DELAYS_MS)).toBe(2_000);
+		expect(Math.max(...FOLLOW_DELAYS_MS)).toBe(30_000);
+		// The first polls come quickly: a local worker answers in a second or two.
+		expect(FOLLOW_DELAYS_MS.slice(0, 5)).toEqual([2_000, 2_000, 2_000, 2_000, 2_000]);
+		// Never slower as it goes on, then faster again.
+		expect(FOLLOW_DELAYS_MS.every((d, i) => i === 0 || d >= FOLLOW_DELAYS_MS[i - 1]!)).toBe(true);
 		expect(STILL_WAITING).toBe('The fetch is still waiting to run. Refresh status will show it once it has.');
 	});
 
@@ -132,5 +158,22 @@ describe('createPoller', () => {
 		p.start();
 		await vi.advanceTimersByTimeAsync(10);
 		expect(poll).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('the run card’s own line and the queued announcement', () => {
+	const f = { targetKind: 'rain_chirps_mm', targetName: '' };
+
+	it('says on the card that the fetch is queued, or joined one already waiting, and how it went', () => {
+		expect(cardFetchNote('queued')).toBe('Fetch queued: it waits for the background worker, and this card updates by itself once it has run.');
+		expect(cardFetchNote('queued', false)).toBe('A fetch for this feed was already waiting to run: this card updates by itself once it has.');
+		expect(cardFetchNote('done')).toBe('Fetch done.');
+		expect(cardFetchNote('failed')).toBe('Fetch failed: the line above says why.');
+		expect(cardFetchNote('slow')).toBe(STILL_WAITING);
+	});
+
+	it('names the feed in the announcement', () => {
+		expect(queuedMessage(f, true)).toBe('Fetch queued: Rainfall — CHIRPS. Its card updates by itself once the fetch has run.');
+		expect(queuedMessage(f, false)).toBe('A fetch for Rainfall — CHIRPS is already waiting to run. Its card updates by itself once it has.');
 	});
 });

@@ -693,3 +693,25 @@ export function areaCell(lines: AreaRainLines | UnitChainLines, line: AreaLine, 
 						: lines.chirpsCorrected?.[i];
 	return v == null || !Number.isFinite(v) ? null : v;
 }
+
+/** The lines that are a stored series as recorded (an area's station, a patch station, its CHIRPS): the view shows them in that series' place. */
+const isRawLine = (line: AreaLine): boolean => line === 'stationRaw' || line === 'chirpsRaw' || parsePatchLine(line)?.kind === 'patchRaw';
+
+/**
+ * One area column's cell on a row of the table: its value (a number, or the source in words) and the check flags
+ * to show beside it. A raw line (the station, a patch station or the area's CHIRPS, as stored) reads its stored
+ * series' cell on every day the table has, as the series' own column would: the view shows the raw line in that
+ * column's place (columnsForView), and the run window, which the derived lines cover, follows the catchment's rain
+ * (model.md §2.1), so a unit's CHIRPS stored before the station's record would otherwise be blank. With its values
+ * not loaded, it falls back to the line. Every other line is the run's, over the run window (areaCell).
+ */
+export function areaColumnCell(
+	col: Pick<PreviewColumn, 'area' | 'seriesId'>,
+	row: Pick<PreviewRow, 'date' | 'series'>,
+	lines: AreaRainLines | UnitChainLines | null | undefined
+): { value: number | string | null; flags: PreviewFlag[] } {
+	if (!col.area) return { value: null, flags: [] };
+	const stored = col.seriesId ? row.series[col.seriesId] : undefined;
+	const value = stored && isRawLine(col.area.line) ? stored.value : lines ? areaCell(lines, col.area.line, row.date) : null;
+	return { value, flags: value !== null && stored ? stored.flags.filter((f) => f !== 'missing') : [] };
+}

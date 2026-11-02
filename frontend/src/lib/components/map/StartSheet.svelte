@@ -49,6 +49,7 @@
 		emptyName,
 		initialTicks,
 		km2Text,
+		NO_ELEVATION_BOUNDARY,
 		openStart,
 		outletGauges,
 		planBeforeBoundaries,
@@ -294,6 +295,10 @@
 				<button type="button" class={ondelineate ? 'btn' : 'btn btn-primary'} onclick={ondraw} data-testid="start-draw">Draw the boundary</button>
 				<button type="button" class="btn" onclick={onupload}>Upload a GeoJSON file</button>
 			</div>
+			{#if !ondelineate}
+				<!-- Delineation off (DEM_URL empty, maps.md § Delineation): say so, rather than leave the way out unexplained (WP-4.10). -->
+				<p class="hint" data-testid="start-no-dem">{NO_ELEVATION_BOUNDARY}</p>
+			{/if}
 			{#if gauges.length}
 				<p class="hint">
 					Or, with no boundary, the outlet gauge on the map can be the outlet:

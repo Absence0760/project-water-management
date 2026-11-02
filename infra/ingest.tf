@@ -42,6 +42,15 @@
 # the next day's run tries again. The failed event lands in the
 # mirror-ingest DLQ, which alarms.
 #
+# CHC's request slot held (by the fetcher's per-feed fetches, 9-12 minutes
+# each): the daily run waits for it inside its own run, reserving the next
+# turn, until 120 s before the 900 s deadline (ingest/lease.py
+# hold_host_waiting). Not a retry here or a second schedule: an async retry
+# comes 1-2 minutes on, only after an error, and a reservation written at
+# 02:00 would have lapsed (5 minutes) before a second rule fired, while the
+# wait needs no change in this file and stays inside the run's 900 s that
+# the 20-minute spacing of the schedules (below) already allows for.
+#
 # Freshness (issue #604 rule 4): each run publishes, per product,
 #   namespace  <project>/Mirror   (water-management/Mirror)
 #   metric     MirrorLagDays      (Unit: None; days, a number)

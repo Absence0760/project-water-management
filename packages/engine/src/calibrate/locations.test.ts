@@ -335,8 +335,12 @@ const close = (got: Record<string, number>, truth: Gr4jParams) => {
 	expect(Math.abs(got.x4! - truth.x4)).toBeLessThan(0.3);
 };
 
+// 4 under coverage (vitest.config.ts), else 1: the guard, about twice a plain run, scales with the instrumentation.
+const slow = Number(process.env.COVERAGE_SLOWDOWN ?? 1);
+
 describe('the stepwise fit at every gauge (issue #659)', () => {
-	it('option 1 recovers each gauge’s true parameters in a three-gauge chain; option 2 borrows and still recovers them', { timeout: 240_000 }, () => {
+	// Twelve fits (two starts of three steps, twice): ~55–120 s alone, ~500 s under CI's coverage. A hang guard, not a budget.
+	it('option 1 recovers each gauge’s true parameters in a three-gauge chain; option 2 borrows and still recovers them', { timeout: 240_000 * slow }, () => {
 		const opts = { budget: 1500, starts: 2, validate: false, seed: 3 } as const;
 		const one = calibrateStepwise(chain(false), opts);
 		expect(one.steps.map((s) => [s.zoneNodeId, s.units])).toEqual([

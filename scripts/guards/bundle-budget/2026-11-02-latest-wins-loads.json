@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "PR #687, latest wins for the project list and series fetches (api/latest.ts and the loaders that use it): measured 829 B gzip by building the 2026-11-02 consolidated branch with and without the PR's frontend change (2 370 857 → 2 371 686 B)."
+}

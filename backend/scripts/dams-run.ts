@@ -18,7 +18,7 @@
 // names a bucket or directory of its own, else a scratch directory under the
 // system's temp directory (one per dev database), never the committed
 // synthetic copy. Needs the synthetic waterbodies (`pnpm import:waterbodies`,
-// which `pnpm setup` runs) and a traced dam: `pnpm seed:examples` draws the
+// which `pnpm run setup` runs) and a traced dam: `pnpm seed:examples` draws the
 // Sandspruit example's.
 import { loadDevEnv } from '../src/config/devEnv.js';
 loadDevEnv();

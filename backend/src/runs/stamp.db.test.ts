@@ -8,10 +8,13 @@
 // Positive controls (CLAUDE.md rule 5): a run the API made verifies and is
 // signed off, and the application is decided once the forged runs are gone;
 // a tampered run verifies again once its rows are put back as they were.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { actForAuthority, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
-import { RUN_UNVERIFIED } from './stamp.js';
+import { float8ArrayParam } from '../db/float8Array.js';
+import { computeRun, prepareRun, storeRun } from './execute.js';
+import { RUN_UNVERIFIED, stampRun } from './stamp.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -206,3 +209,147 @@ describe('the stamp functions', () => {
 		await expect(withUser(owner.id, (db) => db.query('UPDATE model_run SET stamp = NULL WHERE id = $1', [teamRun]))).rejects.toMatchObject({ code: '42501' });
 	});
 });
+
+// storeRun signs a digest built from the series hashes it computed of what it
+// sent (app_run_signing_digest, 304), not from re-reading the stored values;
+// verifying still re-reads them (app_run_digest). The two must agree.
+describe('the signing digest (304)', () => {
+	const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+
+	it('signs a run whose series hold NULLs, -0, a constant and no values at all, and the run verifies', async () => {
+		const runId = await withUser(owner.id, async (db) => {
+			const plan = await prepareRun(db, projectId, 'Edge values', 'manual');
+			const output = await computeRun(plan);
+			const n = output.series[0]!.values.length;
+			const extra = (key: string, values: number[]) => ({ nodeId: null, key, label: key, unit: 'm3', values });
+			output.series.push(
+				extra('edge_nonfinite', Array.from({ length: n }, (_, i) => (i % 3 === 0 ? Number.NaN : i % 3 === 1 ? Number.POSITIVE_INFINITY : 0.1 * i))),
+				extra('edge_negative_zero', Array.from({ length: n }, (_, i) => (i % 2 ? -0 : 1))),
+				extra('edge_constant', Array.from({ length: n }, () => 7.25)),
+				extra('edge_all_negative_zero', Array.from({ length: n }, () => -0)),
+				extra('edge_empty', [])
+			);
+			return (await storeRun(db, plan, output)).id;
+		});
+		const stored = await asOwner(`SELECT key, "values" FROM run_series WHERE run_id = $1 AND key LIKE 'edge_%' ORDER BY key`, [runId]);
+		expect(Object.fromEntries(stored.map((r) => [r.key, (r.values as (number | null)[]).slice(0, 3)]))).toEqual({
+			edge_all_negative_zero: [0, 0, 0],
+			edge_constant: [7.25, 7.25, 7.25],
+			edge_empty: [],
+			edge_negative_zero: [1, 0, 1],
+			edge_nonfinite: [null, null, 0.2]
+		});
+		expect(await verified(owner, runId)).toBe(true);
+		// And it is the digest the stored rows give (positive control: a value changed is told apart).
+		await asOwner(`UPDATE run_series SET "values"[1] = 7.5 WHERE run_id = $1 AND key = 'edge_constant'`, [runId]);
+		expect(await verified(owner, runId)).toBe(false);
+		await asOwner(`UPDATE run_series SET "values"[1] = 7.25 WHERE run_id = $1 AND key = 'edge_constant'`, [runId]);
+		expect(await verified(owner, runId)).toBe(true);
+		expect((await owner.call('DELETE', `${P()}/runs/${runId}`)).status).toBe(204);
+	});
+
+	it('is the stored rows\' digest given every series\' hash once, and no digest given a hash missing, extra, repeated or malformed', async () => {
+		const rollback = new Error('rollback');
+		const [real] = await asOwner('SELECT inputs, summary, engine_version, start_date, end_date FROM model_run WHERE id = $1', [teamRun]);
+		const a = float8ArrayParam([1, 2, 3]);
+		const b = float8ArrayParam([4, Number.NaN]);
+		const id = crypto.randomUUID();
+		const results = new Map<string, Buffer | null>();
+		await withUser(owner.id, async (db) => {
+			await db.query(
+				`INSERT INTO model_run (id, project_id, created_by, label, engine_version, start_date, end_date, inputs, summary)
+				 VALUES ($1, $2, app_current_user_id(), 'Signing digest', $3, $4, $5, $6, $7)`,
+				[id, projectId, real.engine_version, real.start_date, real.end_date, real.inputs, real.summary]
+			);
+			await db.query(
+				`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ($1, $2, NULL, 'natural_flow', '{}', $3::float8[]), ($1, $2, $4, 'storage', '{}', $5::float8[])`,
+				[id, projectId, a, rooikloof.id, b]
+			);
+			const digest = async (nodes: (string | null)[], keys: string[], hashes: string[]) =>
+				(await db.query('SELECT app_run_signing_digest($1, $2::uuid[], $3::text[], $4::text[]) AS d', [id, nodes, keys, hashes])).rows[0].d as Buffer | null;
+			results.set('stored', (await db.query('SELECT app_run_digest($1) AS d', [id])).rows[0].d);
+			results.set('given', await digest([null, rooikloof.id], ['natural_flow', 'storage'], [sha(a), sha(b)]));
+			// Order doesn't matter: the series are matched by node and key.
+			results.set('reordered', await digest([rooikloof.id, null], ['storage', 'natural_flow'], [sha(b), sha(a)]));
+			results.set('wrong', await digest([null, rooikloof.id], ['natural_flow', 'storage'], [sha(b), sha(a)]));
+			results.set('missing', await digest([null], ['natural_flow'], [sha(a)]));
+			results.set('extra', await digest([null, rooikloof.id, null], ['natural_flow', 'storage', 'other'], [sha(a), sha(b), sha(a)]));
+			results.set('repeated', await digest([null, rooikloof.id, rooikloof.id], ['natural_flow', 'storage', 'storage'], [sha(a), sha(b), sha(b)]));
+			results.set('malformed', await digest([null, rooikloof.id], ['natural_flow', 'storage'], [sha(a), 'not a hash']));
+			results.set('lengths', await digest([null, rooikloof.id], ['natural_flow'], [sha(a), sha(b)]));
+			// The node matters: a catchment-level hash doesn't stand for a node's series of the same key.
+			results.set('node', await digest([null, null], ['natural_flow', 'storage'], [sha(a), sha(b)]));
+			throw rollback;
+		}).catch((e) => {
+			if (e !== rollback) throw e;
+		});
+		expect(results.get('stored')).toHaveLength(32);
+		expect(results.get('given')!.equals(results.get('stored')!)).toBe(true);
+		expect(results.get('reordered')!.equals(results.get('stored')!)).toBe(true);
+		// A wrong hash gives a digest, just not the stored rows': the run would never verify.
+		expect(results.get('wrong')!.equals(results.get('stored')!)).toBe(false);
+		for (const k of ['missing', 'extra', 'repeated', 'malformed', 'lengths', 'node']) expect(results.get(k), k).toBeNull();
+	});
+
+	it('logs run_stamp_drift and signs from the stored rows when a probed series is not the bytes signed, so the run still verifies', async () => {
+		const [real] = await asOwner('SELECT inputs, summary, engine_version, start_date, end_date FROM model_run WHERE id = $1', [teamRun]);
+		const sent = float8ArrayParam([1, 2, 3]);
+		const zeros = float8ArrayParam([0, 0, 0]);
+		const store = async (tamper: boolean) => {
+			const id = crypto.randomUUID();
+			await withUser(owner.id, async (db) => {
+				await db.query(
+					`INSERT INTO model_run (id, project_id, created_by, label, engine_version, start_date, end_date, inputs, summary)
+					 VALUES ($1, $2, app_current_user_id(), 'Drift guard', $3, $4, $5, $6, $7)`,
+					[id, projectId, real.engine_version, real.start_date, real.end_date, real.inputs, real.summary]
+				);
+				// One sent series, one built by array_fill: the two ways storeRun writes one.
+				await db.query(
+					`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ($1, $2, NULL, 'natural_flow', '{}', $3::float8[]), ($1, $2, $4, 'spill', '{}', array_fill(0::float8, ARRAY[3]))`,
+					[id, projectId, sent, rooikloof.id]
+				);
+				// The drift stood in for: the hash signed for the constant series isn't its stored bytes' (an array_fill that drifted).
+				const constantSha = tamper ? sha(float8ArrayParam([0, 0, 1])) : sha(zeros);
+				await stampRun(db, id, { nodeIds: [null, rooikloof.id], keys: ['natural_flow', 'spill'], sha256: [sha(sent), constantSha], probes: [1, 0] });
+			});
+			return id;
+		};
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const drifted = await store(true);
+			const events = error.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.event === 'run_stamp_drift');
+			expect(events).toEqual([{ event: 'run_stamp_drift', runId: drifted, series: [{ nodeId: rooikloof.id, key: 'spill' }] }]);
+			// Stamped from the rows as stored (app_run_digest), so it verifies: kept, and the operator told.
+			expect(await verified(owner, drifted)).toBe(true);
+			// Positive control: hashes that match log nothing, and the run verifies.
+			error.mockClear();
+			const clean = await store(false);
+			expect(error.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('run_stamp_drift'))).toEqual([]);
+			expect(await verified(owner, clean)).toBe(true);
+			for (const id of [drifted, clean]) expect((await owner.call('DELETE', `${P()}/runs/${id}`)).status).toBe(204);
+		} finally {
+			error.mockRestore();
+		}
+	});
+
+	it('re-hashes a stored series only for the run being stamped (app_run_series_sha256)', async () => {
+		const as = (u: User, sql: string, p: unknown[]) => withUser(u.id, async (db) => (await db.query(sql, p)).rows);
+		const q = `SELECT * FROM app_run_series_sha256($1, ARRAY[NULL]::uuid[], ARRAY['natural_flow'])`;
+		for (const u of [owner, assessor, applicant]) expect(await as(u, q, [teamRun]), u.email).toEqual([]);
+		// Positive control: the series is there to hash, as the owner sees it.
+		expect(await asOwner(`SELECT 1 FROM run_series WHERE run_id = $1 AND node_id IS NULL AND key = 'natural_flow'`, [teamRun])).toHaveLength(1);
+	});
+
+	it('answers only for a run the caller is stamping: not an earlier run of their own, nor another user\'s', async () => {
+		const as = (u: User, sql: string, p: unknown[]) => withUser(u.id, async (db) => (await db.query(sql, p)).rows[0]);
+		const q = 'SELECT app_run_signing_digest($1, $2::uuid[], $3::text[], $4::text[]) AS d';
+		const hashes = await asOwner(`SELECT array_agg(node_id) AS n, array_agg(key) AS k, array_agg(encode(sha256(array_send("values")), 'hex')) AS h FROM run_series WHERE run_id = $1`, [teamRun]);
+		const args = [teamRun, hashes[0].n, hashes[0].k, hashes[0].h];
+		expect((await as(owner, q, args)).d).toBeNull();
+		expect((await as(assessor, q, args)).d).toBeNull();
+		expect((await as(applicant, q, args)).d).toBeNull();
+		// Positive control: the same hashes are the run's digest as app_run_digest gives it.
+		expect(((await as(owner, 'SELECT app_run_digest($1) AS d', [teamRun])).d as Buffer).length).toBe(32);
+	});
+});
+

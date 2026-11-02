@@ -12,7 +12,9 @@
 // words, no workspace code: the one staleness limit and age count, issue #162),
 // and the word-free focus helpers its Try again hands the focus on with
 // ($lib/components/common/loadState, $lib/a11y/focusPage, and what they
-// import: $lib/help/anchor, $lib/nav/scrollHold; issue #586 R4-L).
+// import: $lib/help/anchor, $lib/nav/scrollHold; issue #586 R4-L), and the
+// request sequencer $lib/api/latest (latest wins for a pasted link; no
+// imports, no words, docs/architecture.md § Stale responses).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -61,7 +63,7 @@ it('msg() imports nothing, so marking a message costs a shared module nothing', 
 describe('/share stays off the workspace’s code', () => {
 	/** Static (non-type) imports of any module. */
 	const imports = (code: string) => [...code.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]!);
-	const allowed = /^(svelte|\$app\/(navigation|paths|state)|#lib\/api\/(index|types|client)\.js|@water-management\/engine|#lib\/i18n\/(locale\.svelte\.js|state\.svelte\.js|msg\.js|LanguageSwitch\.svelte|apiError\.js)|#lib\/components\/share\/[\w.]+|#lib\/components\/farm\/(notice\.js|numbers\.js|format\.js|chartGeometry\.js|NoticeCard\.svelte)|#lib\/components\/layout\/BrandMark\.svelte|#lib\/brand\.js|#lib\/format\/(age|number)\.js|#lib\/nav\/(base|scrollHold)\.js|#lib\/components\/common\/loadState\.js|#lib\/a11y\/focusPage\.js|#lib\/help\/anchor\.js|\.\/[\w.]+)$/;
+	const allowed = /^(svelte|\$app\/(navigation|paths|state)|#lib\/api\/(index|types|client|latest)\.js|@water-management\/engine|#lib\/i18n\/(locale\.svelte\.js|state\.svelte\.js|msg\.js|LanguageSwitch\.svelte|apiError\.js)|#lib\/components\/share\/[\w.]+|#lib\/components\/farm\/(notice\.js|numbers\.js|format\.js|chartGeometry\.js|NoticeCard\.svelte)|#lib\/components\/layout\/BrandMark\.svelte|#lib\/brand\.js|#lib\/format\/(age|number)\.js|#lib\/nav\/(base|scrollHold)\.js|#lib\/components\/common\/loadState\.js|#lib\/a11y\/focusPage\.js|#lib\/help\/anchor\.js|\.\/[\w.]+)$/;
 	for (const file of [
 		'routes/share/+page.svelte',
 		'lib/components/share/share.ts',
@@ -80,7 +82,8 @@ describe('/share stays off the workspace’s code', () => {
 		'lib/components/common/loadState.ts',
 		'lib/a11y/focusPage.ts',
 		'lib/help/anchor.ts',
-		'lib/nav/scrollHold.ts'
+		'lib/nav/scrollHold.ts',
+		'lib/api/latest.ts'
 	]) {
 		it(`${file} imports only /share's own, the farm view's shared and the i18n modules`, () => {
 			expect(imports(src(file)).filter((p) => !allowed.test(p))).toEqual([]);

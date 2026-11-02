@@ -84,7 +84,9 @@ resource "aws_iam_role" "worker_lambda" {
 # Consume the jobs queue: the event source mapping polls as this role. No
 # SendMessage: only the API's routes wake the worker (jobs/wake.ts
 # wakeWorker); a job that queues follow-up work leaves it to the insert
-# trigger locally and the 5-minute tick in production (series/newData.ts).
+# trigger locally and, in production, to the invocation that queued it (its
+# tick waits for a job coming due within 30 s and its budget,
+# lambda-worker.ts WORKER_WAIT_DUE_SECONDS), else the 5-minute tick.
 # The worker has no JOB_TRANSPORT / JOBS_QUEUE_URL either, and
 # backend/src/lambda-worker.test.ts fails if its bundle reaches jobs/wake.ts.
 data "aws_iam_policy_document" "worker_lambda" {

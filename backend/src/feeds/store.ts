@@ -61,6 +61,15 @@ export interface FeedMeta {
 	 * scheduled yet (due at once).
 	 */
 	nextAttemptAt: string | null;
+	/**
+	 * A fetch of this feed under way, for the panel's card (a backfill's next
+	 * window, a Run now, the schedule's): `running` while its feed_fetch job
+	 * runs or its request is out at the fetcher, the answer not yet applied
+	 * (app_feed_fetch_out, 276: a day at most); `queued` while one waits (or
+	 * retries) under the feed's dedupe key (feedFetchDedupeKey). Null: none.
+	 * Read as the caller, so job's RLS (viewer) applies.
+	 */
+	pendingFetch: 'queued' | 'running' | null;
 }
 
 /** The row the handlers work from. */
@@ -111,7 +120,12 @@ const COLS = `f.id, f.source, f.config, f.target_kind AS "targetKind", f.target_
 		'updatedAt', st.updated_at) END AS rebuilding,
 	(SELECT p.time_zone FROM project p WHERE p.id = f.project_id) AS "timeZone",
 	CASE WHEN f.enabled AND f.acting_user_id IS NOT NULL
-		THEN app_feed_next_attempt(f.source, f.schedule, f.consecutive_failures, f.last_scheduled_at, f.last_error) END AS "nextAttemptAt"`;
+		THEN app_feed_next_attempt(f.source, f.schedule, f.consecutive_failures, f.last_scheduled_at, f.last_error) END AS "nextAttemptAt",
+	CASE WHEN app_feed_fetch_out(f.fetch_job_id, now()) OR EXISTS (SELECT 1 FROM job j
+			WHERE j.project_id = f.project_id AND j.dedupe_key = 'feed_fetch:' || f.id::text AND j.status = 'running') THEN 'running'
+		WHEN EXISTS (SELECT 1 FROM job j
+			WHERE j.project_id = f.project_id AND j.dedupe_key = 'feed_fetch:' || f.id::text AND j.status IN ('queued', 'failed')) THEN 'queued'
+		END AS "pendingFetch"`;
 const FROM = `data_feed f LEFT JOIN app_user u ON u.id = f.acting_user_id
 	LEFT JOIN time_series t ON t.project_id = f.project_id AND t.kind = f.target_kind AND t.name = f.target_name
 	LEFT JOIN feed_stage st ON st.feed_id = f.id`;
@@ -165,9 +179,11 @@ export async function targetSeries(
 	name: string
 ): Promise<{ filled: boolean; provenance: SeriesProvenance | null; firstDay: string | null } | null> {
 	const { rows } = await db.query<{ product: string | null; productVersion: string | null; firstDay: string | null }>(
-		`SELECT product, product_version AS "productVersion",
-			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay"
-		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`,
+		`SELECT s.product, s.product_version AS "productVersion", to_char(s.start_date + d.first - 1, 'YYYY-MM-DD') AS "firstDay"
+		 FROM time_series s
+		 -- One pass over the array (subscripting it per day detoasts it once a day; runs/execute.ts chirpsSeriesChoice).
+		 CROSS JOIN LATERAL (SELECT min(o)::int AS first FROM unnest(s."values") WITH ORDINALITY u(v, o) WHERE v IS NOT NULL) d
+		 WHERE s.project_id = $1 AND s.kind = $2 AND s.name = $3`,
 		[projectId, kind, name]
 	);
 	const r = rows[0];
@@ -212,10 +228,13 @@ export interface RunSeriesPick {
 export async function runSeries(db: Db, projectId: string, kind: string): Promise<RunSeriesPick | null> {
 	const { rows } = await db.query<Omit<RunSeriesPick, 'provenance'> & { product: string | null; productVersion: string | null }>(
 		`SELECT t.name, t.product, t.product_version AS "productVersion",
-			to_char(t.start_date + (SELECT min(i) FROM generate_subscripts(t."values", 1) i WHERE t."values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay",
-			to_char(t.start_date + (SELECT max(i) FROM generate_subscripts(t."values", 1) i WHERE t."values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "lastDay",
+			to_char(t.start_date + d.first - 1, 'YYYY-MM-DD') AS "firstDay",
+			to_char(t.start_date + d.last - 1, 'YYYY-MM-DD') AS "lastDay",
 			(SELECT f.id FROM data_feed f WHERE f.project_id = t.project_id AND f.target_kind = t.kind AND f.target_name = t.name) AS "feedId"
-		 FROM time_series t WHERE t.project_id = $1 AND t.kind = $2 AND t.site_node_id IS NULL
+		 FROM time_series t
+		 -- One pass over the array (subscripting it per day detoasts it once a day; runs/execute.ts chirpsSeriesChoice).
+		 CROSS JOIN LATERAL (SELECT min(o)::int AS first, max(o)::int AS last FROM unnest(t."values") WITH ORDINALITY u(v, o) WHERE v IS NOT NULL) d
+		 WHERE t.project_id = $1 AND t.kind = $2 AND t.site_node_id IS NULL
 		 ORDER BY t.name COLLATE "C" LIMIT 1`,
 		[projectId, kind]
 	);

@@ -1,8 +1,10 @@
 // A CHIRPS feed fetch read from our own copy of CHIRPS (fromMirror.ts, issue
 // #604 R2-C), end to end through the job queue: the fill, a copy that is
 // behind (the days it holds fill, the rest wait, with no failure), no copy
-// at all, a cell outside the copy's region, preliminary → final, one window
-// per job, and FEED_FETCHER=sqs sending nothing to the fetcher.
+// at all, a cell outside the copy's region, preliminary → final, whole years
+// a window (fetch.ts COPY_CELL_YEARS) with the next due at once, so a
+// backfill from 1981 runs through in one tick, and FEED_FETCHER=sqs sending
+// nothing to the fetcher.
 //
 // Most tests read a private copy of the committed fixture copy as a live copy
 // (FEED_SOURCE=live, MIRROR_URL=file://…), so its days are its own and a test
@@ -95,11 +97,12 @@ const nextIn = async (feedId: string) =>
 	(await asOwner(`SELECT ceil(extract(epoch FROM run_after - now()))::int AS s FROM job WHERE kind = 'feed_fetch' AND status = 'queued' AND payload->>'feedId' = $1`, [feedId]))[0]?.s as
 		| number
 		| undefined;
-/** Run the queued fetch now. */
-async function runNext(feedId: string) {
-	await asOwner(`UPDATE job SET run_after = now() WHERE kind = 'feed_fetch' AND status = 'queued' AND payload->>'feedId' = $1`, [feedId]);
+/** Fetch the feed again ("Run now"), and run that fetch. */
+async function fetchAgain(owner: User, f: { pid: string; feedId: string }) {
+	expect((await owner.call('POST', `/projects/${f.pid}/feeds/${f.feedId}/run-now`)).status).toBeLessThan(300);
 	expect((await tick()).done).toBe(1);
 }
+const yesterday = () => add(new Date().toISOString().slice(0, 10), -1);
 /** The cache's days of a cell-year: how many hold a value, and how many of those are final. */
 const cachedDays = async (origin: string, product: string, year: number) =>
 	(
@@ -116,7 +119,7 @@ async function copyValues(store: ReturnType<typeof openStore>, product: 'sat' | 
 }
 
 describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
-	it('fills from the copy in the job, one window per job, the next window in seconds; the cache is chc and tagged as the copy’s', async () => {
+	it('fills from the copy in the job, whole years a window, to yesterday; the cache is chc and tagged as the copy’s', async () => {
 		const store = liveCopy();
 		const owner = await signUp('MirrorFill');
 		const f = await feed(owner, { cells: [{ ...FIXTURE_CELL(), weight: 1 }], product: 'rnl', startDate: '2024-01-01' });
@@ -124,26 +127,50 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 		// Nothing went to the fetcher; the job merged and computed the days itself.
 		expect(sent).toEqual([]);
 		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_ingest'`))[0].n).toBe(0);
-		const want = await copyValues(store, 'rnl', '2024-01-01', '2024-04-29');
-		expect(want.read).toBe('f'.repeat(120));
+		// One window, 2024-01-01 to yesterday (under COPY_MAX_YEARS), not CHC's 120 days: every final the copy holds.
+		const want = await copyValues(store, 'rnl', '2024-01-01', '2025-12-31');
+		expect(want.read).toBe('f'.repeat(731));
 		const got = (await series(owner, f.pid))!;
 		expect(got.startDate).toBe('2024-01-01');
 		expect(got.values).toEqual(want.values);
 		expect(await feedRow(f.feedId)).toMatchObject({
 			consecutive_failures: 0,
 			last_error: null,
-			last_meta: { days: 120, daysRead: 120, cellDaysRead: 120, finalThrough: '2024-04-29', through: '2024-04-29', product: 'rnl' }
+			last_meta: { days: 731, daysRead: 731, cellDaysRead: 731, finalThrough: '2025-12-31', through: yesterday(), product: 'rnl' }
 		});
-		// One window per job: the cache holds only that window's 120 days of 2024, as the copy's finals, as origin chc.
-		expect(await cachedDays('chc', 'rnl', 2024)).toEqual({ held: 120, final: 120 });
+		// Merged a calendar year a call (mergeCellCache): both years whole, as the copy's finals, as origin chc.
+		expect(await cachedDays('chc', 'rnl', 2024)).toEqual({ held: 366, final: 366 });
+		expect(await cachedDays('chc', 'rnl', 2025)).toEqual({ held: 365, final: 365 });
 		expect(await cachedDays('fixtures', 'rnl', 2024)).toEqual({ held: 0, final: 0 });
 		const tags = (await asOwner(`SELECT DISTINCT tag FROM chirps_file WHERE origin = 'chc' AND product = 'rnl'`)) as { tag: string }[];
 		expect(tags).toEqual([{ tag: MIRROR_TAG }]);
-		// The backfill goes on in seconds (CACHED_NEXT_SECONDS), not a minute: nothing was asked of CHC.
-		expect(await nextIn(f.feedId)).toBeLessThanOrEqual(5);
-		await runNext(f.feedId);
-		expect(await cachedDays('chc', 'rnl', 2024)).toEqual({ held: 240, final: 240 });
-		expect((await feedRow(f.feedId)).last_meta).toMatchObject({ through: '2024-08-27', daysRead: 120 });
+		// Caught up: no next window.
+		expect(await nextIn(f.feedId)).toBeUndefined();
+	});
+
+	it('a backfill from 1981 (17 cells, as a boundary feed) runs through in one tick: five windows of whole years, each due at once', async () => {
+		// Fixtures mode (the committed copy re-dated to today): every day back to 1981 reads as a final, so this is the longest range there is.
+		const c = FIXTURE_CELL();
+		const cells = Array.from({ length: 17 }, (_, i) => ({ lat: c.lat - 0.05 * (i % 6), lon: c.lon + 0.05 * Math.floor(i / 6), weight: 1 }));
+		const owner = await signUp('MirrorBackfill');
+		const f = await feed(owner, { cells, product: 'rnl', startDate: '1981-01-01' });
+		const t = await tick();
+		expect(t).toMatchObject({ claimed: 5, done: 5, failed: 0, dead: 0 });
+		const windows = (await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_fetch' AND status = 'done' AND payload->>'feedId' = $1`, [f.feedId]))[0].n;
+		expect(windows).toBe(5);
+		expect(await nextIn(f.feedId)).toBeUndefined();
+		const row = await feedRow(f.feedId);
+		expect(row).toMatchObject({ consecutive_failures: 0, last_error: null, last_meta: { through: yesterday() } });
+		const got = (await series(owner, f.pid))!;
+		expect(got.startDate).toBe('1981-01-01');
+		// Every final the fixture files give through the newest day the feed holds; a 1981 record in seconds, not ~140 windows 5 s apart.
+		expect(add('1981-01-01', got.values.length - 1)).toBe(row.last_data_date);
+		expect(got.values.slice(0, 100).every((v) => v !== null)).toBe(true);
+		// A cache row for each cell and each year from 1981 through this one.
+		const years = (await asOwner(`SELECT count(DISTINCT year)::int AS n, count(*)::int AS rows FROM chirps_cell_year WHERE origin = 'fixtures' AND product = 'rnl'`))[0];
+		const thisYear = Number(yesterday().slice(0, 4));
+		expect(years.n).toBe(thisYear - 1981 + 1);
+		expect(years.rows).toBe(17 * (thisYear - 1981 + 1));
 	});
 
 	it('with FEED_FETCHER=sqs sends no FetchRequest: it reads the copy itself, and counts as the feed’s newest fetch', async () => {
@@ -154,8 +181,9 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 		const f = await feed(owner, { cells: [{ ...FIXTURE_CELL(), weight: 1 }], product: 'sat', startDate: '2025-06-01' });
 		expect((await tick()).done).toBe(1);
 		expect(sent).toEqual([]);
-		expect((await series(owner, f.pid))!.values).toHaveLength(120);
-		expect(await feedRow(f.feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, fetch_job_id: null, last_meta: { daysRead: 120 } });
+		// 2025-06-01 … 2026-02-06: the copy's finals, then its preliminary days, in one window.
+		expect((await series(owner, f.pid))!.values).toHaveLength(251);
+		expect(await feedRow(f.feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, fetch_job_id: null, last_meta: { daysRead: 251 } });
 	});
 
 	it('a copy that is behind: the days it holds fill, the rest wait unread, with no failure and no backoff, and fill once the copy has them', async () => {
@@ -178,7 +206,7 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 
 		// The copy catches up: the next fetch (from the day after the feed's finals) reads the rest of December.
 		await writeManifest(store, m);
-		await runNext(f.feedId);
+		await fetchAgain(owner, f);
 		const after = (await series(owner, f.pid))!;
 		expect(after.values.slice(0, 61)).toEqual((await copyValues(store, 'sat', '2025-11-01', '2025-12-31')).values);
 		expect(await feedRow(f.feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, last_meta: { finalThrough: '2025-12-31' } });
@@ -233,7 +261,7 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 			[home().row, home().col]
 		);
 
-		await runNext(f.feedId);
+		await fetchAgain(owner, f);
 		const after = (await series(owner, f.pid))!;
 		expect(after.values[40]).toBe(7.75);
 		expect(after.values.slice(0, 40)).toEqual(before.values.slice(0, 40));
@@ -264,7 +292,7 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 		const january = { ...m.files.at(-1)!, url: m.files.at(-1)!.url.replace('2025.12', '2026.01') };
 		await writeManifest(store, { ...m, years: { ...m.years, last: 2026 }, finalThrough: '2026-01-31', files: [...m.files, january] });
 
-		await runNext(f.feedId);
+		await fetchAgain(owner, f);
 		const after = (await series(owner, f.pid))!;
 		expect(after.values.slice(17, 48)).toEqual(new Array(31).fill(2.5));
 		// December's finals and February's preliminary days stay as they were.
@@ -299,7 +327,7 @@ describe('a CHIRPS feed reads our copy (CHIRPS_SOURCE=mirror)', () => {
 		const january = { ...m.files.at(-1)!, url: m.files.at(-1)!.url.replace('2025.12', '2026.01') };
 		await writeManifest(store, { ...m, years: { ...m.years, last: 2026 }, finalThrough: '2026-01-31', files: [...m.files, january] });
 
-		await runNext(f.feedId);
+		await fetchAgain(owner, f);
 		const after = (await series(owner, f.pid))!;
 		// Positive control: 01-01 … 01-04, which the 50-day re-read (from 01-05) never read again, are final too.
 		expect(after.values.slice(17, 21)).toEqual([2.5, 2.5, 2.5, 2.5]);

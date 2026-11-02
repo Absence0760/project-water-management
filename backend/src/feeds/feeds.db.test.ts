@@ -304,8 +304,14 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		expect(run.body.job).toMatchObject({ kind: 'feed_fetch', status: 'queued', createdBy: 'RunEditor' });
 		// One pending fetch per feed.
 		expect((await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).body).toMatchObject({ created: false, job: { id: run.body.job.id } });
+		// The list says a fetch waits, so the card can say so and hold its Run now: to a viewer too (job's RLS, positive control).
+		const viewer = await signUp('RunViewer');
+		await member(owner, pid, viewer, 'viewer');
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].pendingFetch).toBe('queued');
 
 		expect((await tick()).done).toBe(1);
+		// Run: nothing waits any more.
+		expect((await viewer.call('GET', `/projects/${pid}/feeds`)).body.feeds[0].pendingFetch).toBeNull();
 		const s = await series(owner, pid, 'rain_forecast_mm');
 		expect(s).toMatchObject({ startDate: utcToday(), unit: 'mm' });
 		expect(s!.values).toHaveLength(16);
@@ -354,6 +360,38 @@ describe('fetching (FEED_FETCHER=inline, FEED_SOURCE=fixtures)', () => {
 		expect(s.startDate).toBe(addDays(-20));
 		expect(s.values.filter((v) => v !== null).length).toBeGreaterThan(0);
 		expect((await feedRow(made.body.feed.id))).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: addDays(-3) });
+	});
+
+	it('a CHIRPS backfill read from our copy: each window stamps its own check time, and the list says the next window waits', async () => {
+		const owner = await signUp('Backfill');
+		const pid = await project(owner);
+		// 300 days: three 120-day windows (CHIRPS_MAX_DAYS), so the first leaves the next queued.
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(-300) } }))).body.feed.id;
+		const feed = async () => (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
+		await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`);
+		const ran = async () => {
+			const from = Date.now();
+			expect((await tick()).done).toBe(1);
+			return [from, Date.now()] as const;
+		};
+		const [from1, to1] = await ran();
+		const first = await feed();
+		// "checked" is the time of this fetch (app_record_feed_result's now()), not another feed's or a schedule's slot.
+		expect(Date.parse(first.lastAttemptAt)).toBeGreaterThanOrEqual(from1 - 1_000);
+		expect(Date.parse(first.lastAttemptAt)).toBeLessThanOrEqual(to1 + 1_000);
+		expect(first.lastMeta.through).toBe(addDays(-181));
+		// Its next window is queued by itself: the card says it is catching up and holds Run now.
+		expect(first.pendingFetch).toBe('queued');
+		expect((await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).body.created).toBe(false);
+		// The next window, due now: a later check time, and the read moves on.
+		await asOwner(`UPDATE job SET run_after = now() WHERE dedupe_key = $1 AND status = 'queued'`, [`feed_fetch:${id}`]);
+		await new Promise((r) => setTimeout(r, 20));
+		const [from2, to2] = await ran();
+		const second = await feed();
+		expect(Date.parse(second.lastAttemptAt)).toBeGreaterThan(Date.parse(first.lastAttemptAt));
+		expect(Date.parse(second.lastAttemptAt)).toBeGreaterThanOrEqual(from2 - 1_000);
+		expect(Date.parse(second.lastAttemptAt)).toBeLessThanOrEqual(to2 + 1_000);
+		expect(second.lastMeta.through).toBe(addDays(-61));
 	});
 
 	it('a later fetch never re-reads before the feed’s startDate, where the series holds the owner’s own days', async () => {
@@ -813,6 +851,9 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 	it('queues a feed_ingest job as the fetch job’s user, which merges the days and records how far it read', async () => {
 		const o = await fetchJob();
 		expect(o.window).toEqual({ start: addDays(-60), end: addDays(-1) });
+		// Its request is out at the fetcher (the fetch job is done): the list says a fetch is running.
+		const pending = async () => (await o.owner.call('GET', `/projects/${o.pid}/feeds`)).body.feeds[0].pendingFetch;
+		expect(await pending()).toBe('running');
 		expect(await acceptIngestResult(msg(o, result(o)))).toBe('queued');
 		// A redelivered message while the first waits is the same job.
 		expect(await acceptIngestResult(msg(o, result(o)))).toBe('queued');
@@ -820,6 +861,8 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		await tick();
 		expect((await series(o.owner, o.pid, 'rain_chirps_mm'))!.values).toEqual([1.5, null, 2.5]);
 		expect(await feedRow(o.feedId)).toMatchObject({ last_data_date: plus(o.window.start, 2), last_value: 2.5, consecutive_failures: 0, last_meta: { through: o.window.end } });
+		// Applied, and the window reached yesterday: no next window, nothing pending.
+		expect(await pending()).toBeNull();
 	});
 
 	it('a host_busy answer (CHC’s shared slot was held, feeds/hostSlot.ts) is no failure: the feed’s health is untouched and its fetch is queued again later', async () => {

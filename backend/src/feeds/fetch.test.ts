@@ -11,6 +11,11 @@ import {
 	CHIRPS_FIRST_DAYS,
 	CHIRPS_MAX_DAYS,
 	CHIRPS_REVISION_DAYS,
+	COPY_CELL_YEARS,
+	COPY_MAX_DAYS,
+	COPY_MAX_YEARS,
+	CopyCellsResult,
+	copyWindowYears,
 	FEED_META_MAX_BYTES,
 	type CellsResult,
 	CellsResult as CellsResultSchema,
@@ -766,6 +771,80 @@ describe('the cell cache path (issue #482): each cell’s values, merged, then t
 		expect(CellsResultSchema.safeParse(result).success).toBe(true);
 		const message = { v: 1, type: 'ingest', fetchJobId: '00000000-0000-4000-8000-000000000000', feedId: '00000000-0000-4000-8000-000000000000', feedVersion: 'x'.repeat(40), result };
 		expect(Buffer.byteLength(JSON.stringify(message))).toBeLessThan(MAX_MESSAGE_BYTES * 0.75);
+	});
+});
+
+describe('a CHIRPS window read from our copy (fetchWindow `copyYears`, COPY_CELL_YEARS)', () => {
+	const today = '2026-11-02';
+	const rnl = { ...grid, product: 'rnl' as const, startDate: '1981-01-01' };
+
+	it('the years a window spans: COPY_MAX_YEARS up to 50 cells, fewer past it, never under one', () => {
+		expect(COPY_MAX_YEARS).toBe(10);
+		expect(COPY_CELL_YEARS).toBe(500);
+		expect([1, 4, 17, 50].map(copyWindowYears)).toEqual([10, 10, 10, 10]);
+		expect([51, 100].map(copyWindowYears)).toEqual([9, 5]);
+		expect([0, 501, 10_000].map(copyWindowYears)).toEqual([10, 1, 1]);
+	});
+
+	it('a backfill from 1981 runs in whole calendar years, aligned to the copy’s year chunks, to yesterday: five windows', () => {
+		const windows = [];
+		let last: string | null = null;
+		for (let i = 0; i < 10; i++) {
+			// What the ingest records after each window of finals: the newest day, through and finalThrough at its end.
+			const w = fetchWindow('chirps', rnl, last, today, last, last, { copyYears: 10 });
+			windows.push(w);
+			if (w.end === '2026-11-01') break;
+			last = w.end;
+		}
+		expect(windows).toEqual([
+			{ start: '1981-01-01', end: '1990-12-31' },
+			{ start: '1991-01-01', end: '2000-12-31' },
+			{ start: '2001-01-01', end: '2010-12-31' },
+			{ start: '2011-01-01', end: '2020-12-31' },
+			{ start: '2021-01-01', end: '2026-11-01' }
+		]);
+	});
+
+	it('a start inside a year reads to that window’s last 31 December; fewer years for more cells', () => {
+		expect(fetchWindow('chirps', { ...rnl, startDate: '1998-06-15' }, null, today, null, null, { copyYears: 10 })).toEqual({ start: '1998-06-15', end: '2007-12-31' });
+		expect(fetchWindow('chirps', { ...rnl, startDate: '1998-06-15' }, null, today, null, null, { copyYears: 1 })).toEqual({ start: '1998-06-15', end: '1998-12-31' });
+		expect(fetchWindow('chirps', rnl, null, today, null, null, { copyYears: copyWindowYears(100) })).toEqual({ start: '1981-01-01', end: '1985-12-31' });
+		// Out-of-range years are held to 1–COPY_MAX_YEARS.
+		expect(fetchWindow('chirps', rnl, null, today, null, null, { copyYears: 99 })).toEqual({ start: '1981-01-01', end: '1990-12-31' });
+		expect(fetchWindow('chirps', rnl, null, today, null, null, { copyYears: 0 })).toEqual({ start: '1981-01-01', end: '1981-12-31' });
+	});
+
+	it('a caught-up feed: the same re-read as reading CHC, to yesterday', () => {
+		const copy = fetchWindow('chirps', grid, '2026-10-30', today, '2026-11-01', '2026-09-20', { copyYears: 10 });
+		expect(copy).toEqual(fetchWindow('chirps', grid, '2026-10-30', today, '2026-11-01', '2026-09-20'));
+		expect(copy).toEqual({ start: '2026-09-21', end: '2026-11-01' });
+	});
+
+	it('without `copyYears` (asking CHC) a window is still at most CHIRPS_MAX_DAYS', () => {
+		expect(fetchWindow('chirps', rnl, null, today)).toEqual({ start: '1981-01-01', end: fromEpochDay(toEpochDay('1981-01-01') + CHIRPS_MAX_DAYS - 1) });
+	});
+
+	const answer = (cells: number, days: number) => ({
+		ok: true as const,
+		cells: {
+			product: 'rnl' as const,
+			startDate: '1981-01-01',
+			read: 'f'.repeat(days),
+			cells: Array.from({ length: cells }, (_, i): [number, number] => [1600 + (i % 25), 4100 + Math.floor(i / 25)]),
+			values: Array.from({ length: cells }, () => new Array(days).fill(0))
+		},
+		meta: {}
+	});
+
+	it('CopyCellsResult takes a window of years at up to COPY_CELL_YEARS; the fetcher’s CellsResult still refuses past 120 days', () => {
+		expect(CopyCellsResult.safeParse(answer(17, 3652)).success).toBe(true);
+		expect(CopyCellsResult.safeParse(answer(50, COPY_MAX_DAYS)).success).toBe(true);
+		expect(CopyCellsResult.safeParse(answer(100, 5 * 366)).success).toBe(true);
+		expect(CopyCellsResult.safeParse(answer(1, COPY_MAX_DAYS + 1)).success).toBe(false);
+		expect(CopyCellsResult.safeParse(answer(100, 10 * 365)).success).toBe(false);
+		expect(CellsResultSchema.safeParse(answer(1, CHIRPS_MAX_DAYS)).success).toBe(true);
+		expect(CellsResultSchema.safeParse(answer(1, CHIRPS_MAX_DAYS + 1)).success).toBe(false);
+		expect(CellsResultSchema.safeParse(answer(17, 3652)).success).toBe(false);
 	});
 });
 

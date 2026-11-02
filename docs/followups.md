@@ -206,7 +206,7 @@ The checklist for these is issue #62; the history scrub is #63.
       the reboot and `postapply-check.sh --rds-event-test` (infra/README.md
       § Operator steps, step 10c): the topic policy's `aws:SourceArn`
       condition can't be proven by a plan.
-- [x] **Confirm the database's KMS key before the first apply (#126,
+- [ ] **Confirm the database's KMS key before the first apply (#126,
       2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
       customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
       sharing and AWS Backup cross-account copies possible, for $1–3 a month.
@@ -218,10 +218,7 @@ The checklist for these is issue #62; the history scrub is #63.
       logging write management events (KMS not excluded) covers the region
       before the first apply**, preferably the Organization trail from the
       management account; `preapply-check.sh`'s `cloudtrail` check FAILs
-      until one does (infra/README.md § Operator steps, step 7a). — *Moot
-      since the first apply (2026-10-05): the instance exists, so the key
-      can no longer be changed, and `preapply-check.sh` (cloudtrail check
-      included) passed before that apply.*
+      until one does (infra/README.md § Operator steps, step 7a).
 - [x] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
@@ -271,7 +268,7 @@ The checklist for these is issue #62; the history scrub is #63.
       issues #1–77 on their old numbers, and `pnpm check:terms` passes on
       its tree and history (checked from a fresh mirror clone).
 
-- [x] **GitHub plan.** The repo is private on a free plan, so:
+- [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
         the release preflight refuses every release;
       - CodeQL and Scorecard fail on every push;
@@ -283,9 +280,7 @@ The checklist for these is issue #62; the history scrub is #63.
         had a CI run; #20, #60 and #61 were merged on local checks only).
 
       Make the repo public (after the history scrub above) or upgrade the plan. Then
-      make `CI gate` a required check. — *Done: the repo is public, CI runs
-      green on every push to `main`, and `main`'s branch protection requires
-      `CI gate` (checked 2026-11-01).*
+      make `CI gate` a required check.
 - [x] **Client names (WP-1.7).** The tree and the history are scrubbed
       (2026-09, `git filter-repo --replace-text`). The repo was then
       recreated from the clean history, because GitHub keeps old commits
@@ -304,6 +299,52 @@ The checklist for these is issue #62; the history scrub is #63.
       recommendation](./deployment.md)). The default
       `budget_monthly_usd` (110) is already sized for it; set `dmarc_report_email`.
       — *Done: af-south-1; production has been live since 2026-10-05.*
+
+## V1 run budget
+
+The V1 acceptance criterion "a run finishes in under 2 s including storage"
+(plan.md Phase 1) is measured by `runs/load.db.perf.test.ts` (`V1 demo
+budget`, `pnpm test:backend:perf:db`, run alone): an invented catchment of
+the client's size (13 nodes, 9 crops, 23 planted areas, one transfer, four
+daily records of 16 161 days) through `POST /projects/:id/runs`, median of 5.
+It measured **11.1 s** on the dev laptop on 2026-11-01, and **1.5 s** (1.85,
+1.51, 1.52, 1.42, 1.65 s) after the fixes below. Each run stores 432 series,
+~22 MB in `run_series`.
+
+- [x] Cut the storage cost (2026-11-01, 304_run_series_store_cost.sql). The
+      profile split the 11.1 s differently from the first guess ("~7.5 s
+      storing"): **6.8 s** was one input query, `chirpsSeriesChoice`, which
+      found a series' first and last filled day by subscripting the array once
+      a day, detoasting all 16 161 days each time (now one `unnest … WITH
+      ORDINALITY` pass, 3 ms; the feeds' `runSeries` and `targetSeries` had
+      the same pattern and the same fix). Storing was **3.7 s**: 1.2 s of
+      Node formatting ~95 MB of array text, the server parsing it and
+      compressing with pglz (3.4 s for the insert in all), and 0.33 s
+      stamping, 0.3 s of it `array_send` re-reading every value to hash it.
+      Now the arrays go in binary (`db/float8Array.ts`), constant series
+      (113 of 432) are built in the server with `array_fill`, the column
+      compresses with lz4, and the stamp is signed from the hashes of the
+      bytes sent (`app_run_signing_digest`, 12 ms): insert ~0.5 s, the run
+      ~1.5 s, the column, values, readers and every digest unchanged
+      (data-model.md § Time-series storage). Rejected: `COPY … BINARY`
+      (Postgres refuses `COPY FROM` into a table with RLS for a role it
+      applies to); a packed-bytea or S3 blob (WP-4.9) would change every
+      reader of `run_series`, many in SQL functions, for ~0.3 s more.
+- [ ] **The engine is now most of a run: ~0.85 s of the 1.5 s** (the run
+      itself and its self-checks, `verify/checks.ts` ~0.3 s), and the
+      measured Node CPU (~2 s, GC threads included) scales to ~3 s on the
+      API Lambda's 0.58 vCPU. The local criterion holds with ~25 % headroom;
+      a busier laptop or a bigger catchment eats it. Durable fix: profile the
+      engine's self-checks (run them once per run, not per pass, or sample
+      them) before adding more per-day work. Trigger: the V1 test's median
+      passing 1.8 s, or a Lambda run of a client-sized catchment over 3 s.
+- [ ] **Verifying a run still re-hashes its rows** (`app_run_digest`, 0.3 s
+      for a client-sized run) on every `GET …/runs/:runId`, sign-off and
+      decision. Fine for one run; a list that verified many would not be.
+      Durable fix if it's ever needed: a per-series hash kept by a trigger
+      (`BEFORE INSERT OR UPDATE`, which `water_app` can't bypass), so the
+      digest reads 432 hashes instead of 7 million values. Trigger: a route
+      that verifies more than a handful of runs at once.
 
 ## The rain data copy (issue #604)
 
@@ -656,7 +697,7 @@ plan stays on the issue. Found while building:
       us-west-2 (deployment.md § NEX-GDDP-CMIP6 (one-off)), records the result
       on #621, and pins each model's variant in `MODELS` and the register's
       table. Trigger: before the first `copy`, with the operator's go-ahead.
-- [x] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
+- [ ] **The NEX-GDDP-CMIP6 caveat, verbatim.** The tech note the research
       cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returns 404. Slice 4 built
       § 8 with a marked placeholder (`FUTURE_YIELD_CAVEAT.nasa` in
       `packages/engine/src/evidence/future.ts`), and its `futureYield` check
@@ -665,7 +706,6 @@ plan stays on the issue. Found while building:
       current tech note, quote its engineering-use caveat word for word in
       that constant and in data-sources.md, with the URL and the date read.
       Trigger: before `FUTURE_YIELD=on` in production.
-      **Done (2026-11-01):** § 5.1 *Recommended Use* of the NEX-GDDP-CMIP6 v2 Tech Note (May 31, 2025), quoted whole in `FUTURE_YIELD_CAVEAT.nasa` and data-sources.md § nex-gddp-cmip6, read 2026-11-01; the v1 note (now at `uploads/2024/03/`) has the same words. No `ENGINE_VERSION` bump: no run result moves.
 - [x] **§ 8 has no Run button.** The future yield is queued by
       `POST /projects/:id/runs/:runId/future-yield` (an editor); the
       evidence report's § 8 says *Not assessed* until then but offers no
@@ -3887,10 +3927,7 @@ role and not before it.
       `trimRuns` (one unkept forecast run kept), is never auto-published, and
       does nothing when the observed rain has overtaken the issue. Tests:
       `runs/autoRun.db.test.ts` § scheduled forecast runs.
-- [x] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
-      Done: every item below is struck through (sediment, the curve op, the
-      transfer room, the self-checks table, the lake-factor presets); the
-      sediment rate's value waits on the hydrologist under #90.
+- [ ] **Dam storage (WP-3.5, engine 0.35.0): what the first slice left.**
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
       Still open:
@@ -4618,17 +4655,13 @@ role and not before it.
       the run's details, then its flows, each after the last; a chart wait
       failing at 6 workers again is the trigger to start the shown run's
       details beside the page's requests too.
-- [x] Optional:
-      - ~~a read-only Terraform plan role, for a real `terraform plan` in CI~~
-        **Won't do (2026-11-01):** `.github/workflows/terraform.yml`'s header
-        says there is deliberately no credentialed plan. The only role CI can
-        assume is the production-gated deploy role, so a plan would need a
-        reviewer approval on every infra push, the sops key and the private
-        infra-secrets checkout, and would still lack read permissions; a
-        second role trusted for pull requests would widen the OIDC trust for
-        little gain over the mocked-provider `terraform test` plans. The
-        real plan stays an operator step (infra/README.md § Operator steps,
-        step 8).
+- [ ] Optional:
+      - a read-only Terraform plan role, for a real `terraform plan` in CI.
+        Waits on the first deploy: there is no AWS account, state bucket or
+        OIDC provider to plan against yet (plan.md Phase 6), and the role
+        (read-only IAM + state read, trusted for pull requests without the
+        `production` environment) is an IAM decision for the operator.
+        Trigger: the account exists and `terraform apply` has run once (#108).
       - ~~a CodeQL Python leg for `scripts/wbt-import`~~ **Done (2026-09-28,
         issue #75):** `security.yml` analyses `python` too (the importer and
         the smaller Python tools), on Python 3.14.
@@ -6194,7 +6227,7 @@ Applicant view and the Applications tab. Left:
       record uses them too since 233, plus `application_withdrawn`), whose
       labels may follow the pilot authority's house style. Trigger: the
       client's answers.
-- [x] **Drop 161's licence-record words (the contract step of 233).**
+- [ ] **Drop 161's licence-record words (the contract step of 233).**
       233_licence_record_outcome_words (issue #523 G9 (b)) moved
       `project.licence_outcome` to the authority's words, but
       `app_set_licence_outcome` and `PUT /projects/:id/licence-record` still
@@ -6206,12 +6239,8 @@ Applicant view and the Applications tab. Left:
       licence-record DB test's "161's words" case turns into a `400`).
       Older `licence.outcome` audit events keep their words; the timeline
       reads them. Trigger: the first `backend@` and `web@` releases that both
-      contain 233 are in production. **Done** by
-      303_contract_licence_words_acts_for: 233 first shipped in backend@0.4.0
-      and web@0.3.0 (2026-10-13); production ran backend@0.13.1 and
-      web@0.10.0 when it landed. `LEGACY_OUTCOMES` is gone and the route
-      answers `400` for the old words (`licence-record.db.test.ts`).
-- [x] **Drop `project_member.acts_for_authority` and 163's
+      contain 233 are in production.
+- [ ] **Drop `project_member.acts_for_authority` and 163's
       `project_member_authority` trigger (the contract step of 229).**
       229_authority_delegates (issue #523 G5) moved who acts for the
       responsible authority to `authority_delegate` and redefined
@@ -6226,14 +6255,7 @@ Applicant view and the Applications tab. Left:
       Trigger: the first `backend@`
       and `web@` releases that both contain 229 are in production, and
       deployment.md runbook step 18 (each authority reviews its
-      grandfathered delegates) is done. **Done** by
-      303_contract_licence_words_acts_for: 229 first shipped in backend@0.4.0
-      and web@0.3.0 (2026-10-13), and the `authority-grandfathered` check
-      found no grandfathered delegates in production that day, so step 18
-      had nothing to review. `authority.db.test.ts` checks the column,
-      trigger and function are gone; `authority-delegates.db.test.ts` still
-      replays 229's carry-over, re-adding the column inside its rolled-back
-      transaction.
+      grandfathered delegates) is done.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
@@ -6490,10 +6512,8 @@ assume, the questions for counsel); these are the actions, with triggers.
       account on old terms sees the re-acceptance notice before any page and
       accepts through `POST /auth/me/accept-terms`. The material-change email
       to existing account holders (Terms §16) is still sent by hand.
-- [x] **Self-service account deletion** and what happens to evidence an
+- [ ] **Self-service account deletion** and what happens to evidence an
       account made: #90; the privacy notice discloses the current exception.
-      Done: `DELETE /auth/me` and the Account page's dialog (143, issue
-      #112); the open #90 parts are under § POPIA and the Step 2 release.
 
 ## Infrastructure edge
 
@@ -6565,7 +6585,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       public, static credits page (no API call), and no signed-in page lists
       the loaded datasets with their metadata, so the record is the
       operator's (the load log, or SQL as the owner).
-- [x] **A WAF rate rule scoped to the elevation-model routes (access audit,
+- [ ] **A WAF rate rule scoped to the elevation-model routes (access audit,
       PR #368; operator decision 2026-10-11, issue #90: build in a later
       round).** Delineation, Start from the map, Divide and the elevation and
       water GETs read DEM or raster tiles on every call, so they cost more per
@@ -6574,15 +6594,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       a lower limit than the API's, in `infra/` (plan test in
       `infra/tests/`). **Trigger:** the next infra round, or the elevation
       routes showing in the WAF's request metrics or the API's cost.
-      **Done 2026-11-01:** `RateLimitDemPerIP` (`infra/waf.tf`, priority 2,
-      after the auth rules), `waf_dem_rate_limit_per_ip` default 300 per 5
-      minutes (100 to `waf_rate_limit_per_ip`), a regex on the collection
-      paths `/api/projects/<id>/map/` delineation, start, divide,
-      subcatchments(/save), channels, dem-grid, dam-trace (not the polls or
-      the accept/apply/discard decisions). 300 from the UI's own pattern: one
-      person mapping hard is ~200 in a busy 5 minutes (docs/security.md).
-      Plan tests `waf_dem_rule` and the two `rejects_dem_rate_limit_*` runs.
-- [x] **An idle-in-transaction timeout on RDS (access audit, PR #368;
+- [ ] **An idle-in-transaction timeout on RDS (access audit, PR #368;
       operator decision 2026-10-11, issue #90: build in a later round).** A
       connection left idle inside an open transaction holds its locks and a
       pool slot until it is closed. **Durable fix:** set
@@ -6592,15 +6604,6 @@ assume, the questions for counsel); these are the actions, with triggers.
       error as an ordinary 500. **Trigger:** the next infra round, or any
       `idle in transaction` session seen in `pg_stat_activity` in
       production.
-      **Done 2026-11-01:** 20 minutes in the parameter group
-      (`infra/rds.tf`, dynamic, no reboot), computed as 5 minutes past the
-      longest database Lambda's timeout (the migrate Lambda's 900 s), since
-      only the gap between statements counts and a Lambda's transaction ends
-      with its invocation. Cluster-wide, not per role, so the schema owner's
-      sessions are covered and local dev keeps it off. `withUser` did *not*
-      surface it as a 500: the killed checked-out client's `error` event had
-      no listener and would have ended the Node process. `db/tx.ts` now
-      listens and releases the dead client (`db/tx.db.test.ts`).
 
 ## Housekeeping
 
@@ -7102,6 +7105,18 @@ Left, from the design and the persona review (§11), each with its trigger.
       longer apologising for the overlap. A pack issued before `evidence-7`
       keeps its frozen document, with no table and the old caption. No
       `ENGINE_VERSION` bump: no run's output changes.
+- [x] **Page x of y footers on the evidence report and the pack's PDF.**
+      Built (2026-11-01): the draft's browser print and an issued pack's
+      server PDF print the footer (*Draft · not issued* or the pack's stamp
+      and verify line, the project, the disclaimer's key point) with "Page X
+      of Y." on every page, from the same `@page` margin box as the
+      catchment report (`report/printedPage.svelte.ts`, shared by the four
+      printable pages). Finding on the way: since issue #70 moved the footer
+      from the renderer's `footerTemplate` into the page's CSS, the pack's
+      page set an `@page` rule without the footer box, so an issued pack's
+      PDF printed no footer at all, though the docs said it did. Tested:
+      `evidence-report.spec.ts` and `evidence-pack-pdf.spec.ts` read each
+      printed page's text (pdftotext).
 - [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue
@@ -7433,11 +7448,9 @@ own. Loop in the CISO or security analyst before acting on any of them.
       responsible party and the operator: security measures, sub-processors
       (AWS), breach notification to the client. Who: operator + client
       legal. Trigger: before production holds client data.
-- [x] **Hosting region and transfer.** `af-south-1` keeps the data in South
+- [ ] **Hosting region and transfer.** `af-south-1` keeps the data in South
       Africa; any other region is a transfer under s72 and needs the client's
-      agreement. Trigger: the region choice in § Blocking releases. — *Done:
-      production runs in af-south-1 (live since 2026-10-05, the AWS bootstrap
-      item there), so no s72 transfer arises from hosting.*
+      agreement. Trigger: the region choice in § Blocking releases.
 - [x] **Data-subject export** ("download my data", plan.md Phase 7;
       2026-09-26). `GET /auth/me/export` and the Account page's **Download
       my data**: the account, memberships, farm links with their published
@@ -7448,10 +7461,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       account. `auth/export.ts` `USER_FK_COVERAGE` classifies every foreign
       key to `app_user` (guarded by `export.db.test.ts`). The privacy notice
       (above) must say it exists.
-- [x] **Self-service account deletion, and evidence that names its maker.**
-      Done: operator path (138) and self-service (143, issue #112), as
-      below; what still waits on #90 is named at its end and tracked in the
-      items that follow.
+- [ ] **Self-service account deletion, and evidence that names its maker.**
       **Operator path done (138, issue #112):** deleting an account keeps
       the evidence it made (project, team, run, ensemble, nomination,
       scenario, import) with the maker cleared, deletes a started ensemble

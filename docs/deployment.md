@@ -713,7 +713,10 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   and the worker's log group (a saved run failing one of the engine's own
   invariant checks — docs/security.md § Infrastructure), one on
   `mail_send_failed` in the same two log groups (an account, invitation or
-  report email that failed to send, § Email), one on `unhandled_error` in
+  report email that failed to send, § Email), one on `run_stamp_drift` in
+  the same two (a stored run's bytes didn't match the hash about to be
+  signed, so it was signed the slow way; [security.md § Run
+  stamps](./security.md#run-stamps)), one on `unhandled_error` in
   the API's log group (a request answered with an unhandled 500, which the
   Lambda `Errors` metric can't see, § Runbooks), one on `login_failed` in
   the API's log group (failed sign-ins across all accounts, password spraying,
@@ -736,8 +739,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   rates, the jobs / mail-events / fetch-requests / ingest-results DLQ
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
   Lambda errors and throttles (`lambda-throttles`: the API at its reserved
-  concurrency, issue #541), `unhandled_error` and `mail_send_failed`, 13
-  alarm metrics; 16 once `ingest_image_tag` is set, with the data mirror's
+  concurrency, issue #541), `unhandled_error`, `mail_send_failed` and
+  `run_stamp_drift`, 14 alarm metrics; 17 once `ingest_image_tag` is set, with the data mirror's
   two freshness alarms and `mirror-backfill-failed` (§ The data mirror).
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
@@ -811,7 +814,9 @@ install and no cache; opens an issue),
 `gitleaks-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
 issue when it fails), `renderer-apt-snapshot.yml` (weekly age check of the
 renderer image's apt snapshot; opens a `renderer-apt-snapshot` issue past 90
-days, § Reports), and weekly runs of `security.yml` and `scorecard.yml`.
+days, § Reports), `fresh-clone.yml` (weekly `pnpm run setup && pnpm dev` on a
+clean checkout, also on PRs that touch setup; testing.md § Fresh clone), and
+weekly runs of `security.yml` and `scorecard.yml`.
 Also present: `claude.yml` (Claude Code on issue and PR comments, for the
 operator only; the model may edit files and read git and GitHub, but runs no
 `pnpm` command, so it can't execute code it wrote, and its checkout keeps no
@@ -1520,7 +1525,11 @@ minute later: a record from 1981 (`rnl`) takes about a day per cell set, from
 the fetcher's 885 s, so its fetches are cut short and it takes several times
 that. Feeds over different cells queue behind each other.
 Cells another feed already read come from the cell cache at no cost. The
-copy of our own ([§ The data mirror](#the-data-mirror)) replaces this for history.
+copy of our own ([§ The data mirror](#the-data-mirror)) replaces this for history:
+with `CHIRPS_SOURCE=mirror` a feed reads the copy in the worker, ten calendar
+years a window (fewer past 50 cells), the next window due at once, so a
+record from 1981 is five windows, seconds of the worker's time
+([architecture.md § Our copy of the rain data](./architecture.md#our-copy-of-the-rain-data)).
 
 ## The data mirror
 
@@ -1674,7 +1683,10 @@ below, production keeps `CHIRPS_SOURCE=chc` and behaves as before.
      and the copy's `changes` don't go back that far), in parts over a few
      ticks, and the feeds read them again from the copy over the next
      fetches. Nothing to do but expect `mirror_revision_partial` then
-     `mirror_revision_applied` in the worker's logs ([data-model.md §
+     `mirror_revision_applied` in the worker's logs, then a
+     `feed_copy_read` line per CHIRPS or CHIRPS-GEFS fetch read from the copy
+     (its window, `outcome` and `ms`; the fetcher's `feed_fetched` covers only
+     the fetches it makes) ([data-model.md §
      Mirror revisions](./data-model.md#mirror-revisions-245_mirror_revisionsql-246_mirror_revision_partssql)).
   5. **Re-enable** the CHIRPS feeds paused since the 403s (#571), and watch
      the first day: feeds catch up from the copy in minutes, and none shows
@@ -1907,7 +1919,7 @@ wait. While it runs:
   SQS receive spent and their health untouched; they resume within 2
   minutes of the release. A feed may show Stale if the backfill outlasts
   its stale threshold;
-- the daily `rnl`/`sat` runs end quietly (`busy`, lag still published),
+- the daily `rnl`/`sat` runs end quietly at once, without waiting (`busy`, lag still published),
   and the fetcher's preliminary and GEFS passes skip with
   `stopped: "host_busy"`; their next run after the backfill catches up;
 - a second execution started meanwhile fails after an hour of `HostBusy`:
@@ -1945,6 +1957,25 @@ renewal. The fetcher's write and delete grant on `reserved.json` comes with
 Terraform (`fetcher_chc_slot`): apply it with or before the backend release.
 Without it the reservation fails, logged (`host_slot_reservation_failed`),
 and the pass still waits the longer wait without one.
+
+**The daily rnl and sat runs wait and reserve too** (2026-10-29: both
+runs, 02:00Z and 02:20Z, found the slot held by per-feed fetches and copied
+nothing). A daily run that finds the slot held by anyone but a backfill
+execution reserves the next turn (`reserved.json`, holder
+`ingest:rnl:monthly` or `ingest:sat:monthly`, renewed every 15 s), never
+over another waiter's live reservation, and waits until 120 s before its
+deadline (`DAILY_RUN_WORK_S`, about 12½ minutes of its 15); the next
+per-feed fetch then defers (`reserved: true`) and the run takes the freed
+slot within 15 s. Its log says `waiting for it` and `took the chc request
+slot after waiting N s`, or `gave up after waiting N s` (`busy` in its
+answer; the next day's run catches up). A run that gets the slot with less
+than 6 minutes left reads the listing but leaves a new month for the next
+day. The wait stays inside the Lambda's existing 900 s run, so no Terraform
+changes: the ingest role already writes the whole mirror bucket,
+`reserved.json` included. It arrives with the ingest image (move
+`ingest_image_tag`), in either order with any backend release. Cost: at
+most ~13 minutes of the 3 GB function a day per product, only on days the
+slot is held.
 
 **Rolling out the shared slot:** apply Terraform (the fetcher's
 `fetcher_chc_slot` grant on that one key, the state machine's `HostBusy`

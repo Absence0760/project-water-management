@@ -7,7 +7,7 @@
 	// pack's status ("Issued · version n · date", "Draft pack · not issued",
 	// superseded, withdrawn) and, once issued, the manifest SHA-256, the short
 	// code and the verify link in every section and in the footer
-	// (data-report-footer, which a server render prints on every page). The
+	// (an @page margin box on every printed page, the server PDF's too). The
 	// status board above it carries the editor's moves (PackActions); signing
 	// is in Appendix B.2, against the pack statement. data-report-ready
 	// follows the catchment report's contract, so e2e and a server render wait
@@ -59,8 +59,9 @@
 	import PackActions from '#lib/components/packs/PackActions.svelte';
 	import PackBadge from '#lib/components/packs/PackBadge.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '#lib/components/packs/pack.js';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
+	import { latestOnly } from '#lib/api/latest.js';
+	import { errataFoundSinceNote, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '#lib/components/packs/pack.js';
+	import { printedPage } from '#lib/components/report/printedPage.svelte.js';
 	import { pageStart } from '#lib/a11y/focusPage.js';
 	import { followRetry } from '#lib/components/common/loadState.js';
 
@@ -235,22 +236,9 @@
 		return () => URL.revokeObjectURL(url);
 	});
 
-	// Printing is A4, in the light theme, without the app's header (see the styles).
-	$effect(() => {
-		const pageRule = document.createElement('style');
-		pageRule.textContent = '@page { size: A4; margin: 14mm 12mm 18mm; }';
-		document.head.append(pageRule);
-		const before = () => forceLightForPrint();
-		const after = () => restoreThemeAfterPrint();
-		addEventListener('beforeprint', before);
-		addEventListener('afterprint', after);
-		return () => {
-			pageRule.remove();
-			removeEventListener('beforeprint', before);
-			removeEventListener('afterprint', after);
-			restoreThemeAfterPrint();
-		};
-	});
+	// Printing is A4, in the light theme, without the app's header (see the styles), with the
+	// footer and "Page X of Y" on every page, in the browser's print and the server PDF alike (report/printedPage.svelte.ts).
+	printedPage(() => footer);
 </script>
 
 <svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}IC-WBT</title></svelte:head>

@@ -9,10 +9,15 @@
 // (mirror/readCells.ts), in the job, and merges them through
 // chirps_cache_merge (feeds/ingest.ts fromCells) in the same transaction.
 // There is no FetchRequest and no SQS round trip, whatever FEED_FETCHER says.
-// One job reads one fetch window (fetch.ts fetchWindow, at most
-// CHIRPS_MAX_DAYS = 120 days, so never more than a year: the copy is read
-// inside the job's transaction, and this keeps it bounded); a backfill's next
-// window follows in CACHED_NEXT_SECONDS, as when the cache held the window.
+// One job reads one fetch window (fetch.ts fetchWindow with `copyYears`):
+// not CHIRPS_MAX_DAYS, which was sized for asking CHC, but whole calendar
+// years, aligned to the copy's one-year chunks of finals, as many as
+// COPY_CELL_YEARS allows for the feed's cells (at most COPY_MAX_YEARS): the
+// copy is read inside the job's transaction, and this keeps it bounded. The
+// answer is checked against CopyCellsResult, never the fetcher's caps, and
+// merged a calendar year a call (cellCacheStore.ts mergeCellCache). A
+// backfill's next window is due at once (ingest.ts COPY_NEXT_SECONDS):
+// nothing external was asked. A backfill from 1981 is a handful of windows.
 //
 // What the copy doesn't hold:
 //   * A day past its finals or preliminary days (or in a gap) reads as `-`:
@@ -321,8 +326,8 @@ export async function fetchFromMirror(db: Db, feed: FeedRow, window: FetchWindow
 		await ingestResult(db, feed, fetchFailure(err, config), window, { origin });
 		return 'ingested';
 	}
-	// cacheOnly: nothing was asked of CHC, so a backfill's next window follows in CACHED_NEXT_SECONDS.
-	await ingestResult(db, feed, answer, window, { origin, cacheOnly: true, fetchJobId: opts.jobId });
+	// fromCopy: a window of years (CopyCellsResult), and nothing was asked of CHC, so a backfill's next window is due at once.
+	await ingestResult(db, feed, answer, window, { origin, fromCopy: true, fetchJobId: opts.jobId });
 	return 'ingested';
 }
 

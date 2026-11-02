@@ -26,12 +26,12 @@
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import PackBadge from '#lib/components/packs/PackBadge.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { errataFoundSinceNote, latestOnly } from '#lib/components/packs/pack.js';
+	import { latestOnly } from '#lib/api/latest.js';
+	import { errataFoundSinceNote } from '#lib/components/packs/pack.js';
 	import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from '#lib/components/packs/applicantPack.js';
 	import ShareLinksPanel from '#lib/components/project/ShareLinksPanel.svelte';
 	import { fmtDate } from '#lib/format/number.js';
-	import { reportPageRule } from '#lib/components/report/printPage.js';
-	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
+	import { printedPage } from '#lib/components/report/printedPage.svelte.js';
 	import { pageStart } from '#lib/a11y/focusPage.js';
 	import { followRetry } from '#lib/components/common/loadState.js';
 
@@ -115,29 +115,8 @@
 		}
 	}
 
-	// Printing is A4, in the light theme, with the copy's footer on every page (report/printPage.ts).
-	const pageRule = $derived(reportPageRule(footer));
-	let pageStyle: HTMLStyleElement | null = null;
-	$effect(() => {
-		const rule = pageRule;
-		if (pageStyle) pageStyle.textContent = rule;
-	});
-	$effect(() => {
-		pageStyle = document.createElement('style');
-		pageStyle.textContent = untrack(() => pageRule);
-		document.head.append(pageStyle);
-		const before = () => forceLightForPrint();
-		const after = () => restoreThemeAfterPrint();
-		addEventListener('beforeprint', before);
-		addEventListener('afterprint', after);
-		return () => {
-			pageStyle?.remove();
-			pageStyle = null;
-			removeEventListener('beforeprint', before);
-			removeEventListener('afterprint', after);
-			restoreThemeAfterPrint();
-		};
-	});
+	// Printing is A4, in the light theme, with the copy's footer on every page (report/printedPage.svelte.ts).
+	printedPage(() => footer);
 </script>
 
 <svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}IC-WBT</title></svelte:head>
