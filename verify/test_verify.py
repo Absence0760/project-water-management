@@ -298,7 +298,7 @@ MUTANTS = [
     ("a user returns nothing", 'T = (x.get("userReturnPct") or 0.0) * G', "T = 0.0"),
     ("farms pass nothing for senior users", "need = min(zs, H + Ib)", "need = 0.0"),
     # Supply rules and the river pump (§2.7e).
-    ("the trigger rule has no stop level", "on = s_prev < stop * cap if on_river[xid] else s_prev < trig * cap", "on = s_prev < trig * cap"),
+    ("the trigger rule has no stop level", "on = s_lvl < stop * c_lvl if on_river[xid] else s_lvl < trig * c_lvl", "on = s_lvl < trig * c_lvl"),
     ("the river pump has no capacity", 'pc = math.inf if pc is None else pc', "pc = math.inf"),
     ("the river pump takes the water kept for others", "proom = max(0.0, min(pc, S - keep)) if on else 0.0", "proom = max(0.0, min(pc, S)) if on else 0.0"),
     # Dam survey curves and releases (§2.7a).
