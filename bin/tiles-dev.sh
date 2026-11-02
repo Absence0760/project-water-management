@@ -40,9 +40,17 @@
 #                             zoom 12 with GDAL, and upload it to MinIO as
 #                             tiles/water.pmtiles; then WATER_URL in
 #                             backend/.env.development.local
+#   bin/tiles-dev.sh channels the DEM rivers precomputed (docs/maps.md § The
+#                             elevation model's channels): every 0.2° tile of
+#                             CHANNELS_BBOX routed with the same code as the
+#                             channels route (backend/scripts/channels-build.ts),
+#                             from the cached relief DEM, else the committed
+#                             synthetic DEM; uploaded to MinIO as
+#                             tiles/channels.pmtiles, then `up` sets
+#                             PUBLIC_CHANNELS_URL
 #   bin/tiles-dev.sh status   what is cached and whether MinIO serves it
-#   bin/tiles-dev.sh env      the PUBLIC_TILES_URL, PUBLIC_TILES_GLYPHS_URL and
-#                             PUBLIC_TERRAIN_URL lines for
+#   bin/tiles-dev.sh env      the PUBLIC_TILES_URL, PUBLIC_TILES_GLYPHS_URL,
+#                             PUBLIC_TERRAIN_URL and PUBLIC_CHANNELS_URL lines for
 #                             frontend/.env.development.local
 #
 # `fetch` needs the `pmtiles` CLI (go-pmtiles, https://github.com/protomaps/go-pmtiles
@@ -65,6 +73,12 @@
 # use (Copernicus; attribution "Source: EC JRC/Google"). Over South Africa its
 # six 10° occurrence tiles are about 100 MB together; the archive is a few
 # tens of MB. WATER_SOURCE (the download folder's URL) and TILES_BBOX override it.
+#
+# `channels` needs no network and no tool beyond node: CHANNELS_DEM (a file or
+# URL; default the cached terrain.pmtiles, else backend/fixtures/dem/) and
+# CHANNELS_BBOX (default the Western Cape, 17.6,-35.0,24.4,-30.4: ~800 tiles,
+# ~5 minutes and ~11 MB from GLO-30; ignored for the synthetic DEM, which is
+# built whole) override it.
 #
 # Each upload records where the archive came from (tiles-upload.ts: its SHA-256,
 # the upstream's version, ETag and Last-Modified, the originals kept in the
@@ -97,6 +111,9 @@ TERRAIN_URL="http://localhost:9002/tiles/terrain.pmtiles"
 WATER_SRC="${WATER_SOURCE:-https://s3.waw4-1.cloudferro.com/swift/v1/global-surface-water/download2024/Aggregated/VER1-5/occurrence}"
 WATER_FILE="$CACHE/water.pmtiles"
 WATER_URL="http://localhost:9002/tiles/water.pmtiles"
+CHANNELS_FILE="$CACHE/channels.pmtiles"
+CHANNELS_URL="http://localhost:9002/tiles/channels.pmtiles"
+CHANNELS_BBOX="${CHANNELS_BBOX:-17.6,-35.0,24.4,-30.4}"
 # By digest (the multi-arch index's), so the tag can't move under us; pnpm check:pins
 # refuses a default without one. To move it: docker buildx imagetools inspect <tag>.
 GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.11.3@sha256:a7c6f68b9868420861be6dd51873ac464fc587ae3b6206b546408d67d697328e}"
@@ -117,6 +134,7 @@ FONTS="$CACHE/fonts"
 die() { echo "$*" >&2; exit 2; }
 NUM='-?[0-9]+(\.[0-9]+)?'
 [[ "$BBOX" =~ ^$NUM,$NUM,$NUM,$NUM$ ]] || die "TILES_BBOX must be west,south,east,north in degrees (got: $BBOX)"
+[[ "$CHANNELS_BBOX" =~ ^$NUM,$NUM,$NUM,$NUM$ ]] || die "CHANNELS_BBOX must be west,south,east,north in degrees (got: $CHANNELS_BBOX)"
 [[ "$MAXZOOM" =~ ^[0-9]{1,2}$ ]] || die "TILES_MAXZOOM must be a zoom (got: $MAXZOOM)"
 [[ "$TERRAIN_MAXZOOM" =~ ^[0-9]{1,2}$ ]] || die "TERRAIN_MAXZOOM must be a zoom (got: $TERRAIN_MAXZOOM)"
 [[ "$RIVERS_MIN_ORDER" =~ ^[0-9]{1,2}$ ]] || die "RIVERS_MIN_ORDER must be a Strahler order (got: $RIVERS_MIN_ORDER)"
@@ -152,6 +170,7 @@ fetch_fonts() {
 serves_tiles() { curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; }
 serves_terrain() { curl -fsS -o /dev/null -r 0-15 "$TERRAIN_URL" 2>/dev/null; }
 serves_water() { curl -fsS -o /dev/null -r 0-15 "$WATER_URL" 2>/dev/null; }
+serves_channels() { curl -fsS -o /dev/null -r 0-15 "$CHANNELS_URL" 2>/dev/null; }
 serves_fonts() { curl -fsS -o /dev/null "http://localhost:9002/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf" 2>/dev/null; }
 
 case "${1:-}" in
@@ -184,6 +203,16 @@ case "${1:-}" in
 			relief=(--terrain)
 		else
 			echo "No relief DEM (optional: pnpm dev:tiles:terrain, then pnpm dev:tiles:up again)."
+		fi
+		# The precomputed channels likewise: upload a cached build, never build here (pnpm dev:tiles:channels).
+		if serves_channels; then
+			echo "MinIO serves $CHANNELS_URL"
+			relief+=(--channels)
+		elif [ -f "$CHANNELS_FILE" ]; then
+			(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --channels "$CHANNELS_FILE")
+			relief+=(--channels)
+		else
+			echo "No precomputed DEM rivers (optional: pnpm dev:tiles:channels; without them the Map computes each tile on request)."
 		fi
 		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --env "$ROOT/frontend/.env.development.local" "${relief[@]}")
 		;;
@@ -286,6 +315,24 @@ case "${1:-}" in
 		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --water "$WATER_FILE" --version 1.5 --upstream "$WATER_SRC/${tiles[0]}" "${originals[@]}")
 		echo "Now: put WATER_URL=$WATER_URL in backend/.env.development.local and restart pnpm dev; the Map offers Trace a dam."
 		;;
+	channels)
+		mkdir -p "$CACHE"
+		dem="${CHANNELS_DEM:-}"
+		area=()
+		if [ -z "$dem" ] && [ -f "$TERRAIN_FILE" ]; then dem="$TERRAIN_FILE"; fi
+		if [ -z "$dem" ]; then
+			dem="$ROOT/backend/fixtures/dem/synthetic-dem.pmtiles"
+			echo "No relief DEM cached (pnpm dev:tiles:terrain): building from the synthetic DEM, which DEM_URL can name in backend/.env.development.local."
+		else
+			area=(--bbox "$CHANNELS_BBOX")
+		fi
+		[[ "$dem" =~ ^(https?://|s3://|/)[^[:space:]]*$ ]] || die "CHANNELS_DEM must be an absolute path or a URL (got: $dem)"
+		echo "Precomputing the channels of $dem ${area[*]} …"
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/channels-build.ts --dem "$dem" --out "$CHANNELS_FILE" "${area[@]}")
+		(cd "$ROOT" && docker compose up -d --wait minio)
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --channels "$CHANNELS_FILE")
+		echo "Now: pnpm dev:tiles:up (sets PUBLIC_CHANNELS_URL in frontend/.env.development.local), then restart pnpm dev. The DEM must be the one DEM_URL names, or the Map ignores the file."
+		;;
 	fonts)
 		fetch_fonts
 		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev."
@@ -298,6 +345,8 @@ case "${1:-}" in
 		if [ -f "$RIVERS_FILE" ]; then du -h "$RIVERS_FILE"; else echo "No river network in $CACHE (pnpm dev:tiles:rivers)."; fi
 		if [ -f "$WATER_FILE" ]; then du -h "$WATER_FILE"; else echo "No water occurrence in $CACHE (pnpm dev:tiles:water)."; fi
 		if serves_water; then echo "MinIO serves $WATER_URL"; else echo "MinIO doesn't serve $WATER_URL (pnpm dev:tiles:water)."; fi
+		if [ -f "$CHANNELS_FILE" ]; then du -h "$CHANNELS_FILE"; else echo "No precomputed channels in $CACHE (pnpm dev:tiles:channels)."; fi
+		if serves_channels; then echo "MinIO serves $CHANNELS_URL"; else echo "MinIO doesn't serve $CHANNELS_URL (pnpm dev:tiles:channels)."; fi
 		if [ -d "$FONTS" ]; then du -sh "$FONTS"; else echo "No fonts in $FONTS (pnpm dev:tiles:fonts)."; fi
 		if serves_fonts; then echo "MinIO serves the label fonts"; else echo "MinIO doesn't serve the label fonts (pnpm dev:tiles:fonts)."; fi
 		;;
@@ -305,9 +354,10 @@ case "${1:-}" in
 		echo "PUBLIC_TILES_URL=$URL"
 		echo "PUBLIC_TILES_GLYPHS_URL=$GLYPHS"
 		echo "PUBLIC_TERRAIN_URL=$TERRAIN_URL"
+		echo "PUBLIC_CHANNELS_URL=$CHANNELS_URL"
 		;;
 	*)
-		echo "usage: bin/tiles-dev.sh up [--cached] | fetch | fonts | terrain | water | rivers | status | env" >&2
+		echo "usage: bin/tiles-dev.sh up [--cached] | fetch | fonts | terrain | water | rivers | channels | status | env" >&2
 		exit 2
 		;;
 esac

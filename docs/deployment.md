@@ -635,7 +635,7 @@ environment's job is the required reviewer (§ 1), not storage.
 | secret `LAMBDA_FUNCTION_URL` | `lambda_function_url` (debugging only) |
 | `WAF_CAPTCHA_SCRIPT_URL` | `waf_captcha_script_url` (the sign-in CAPTCHA's jsapi.js; empty until `waf_captcha_integration_url` is set) |
 | secret `WAF_CAPTCHA_API_KEY` | `waf_captcha_api_key` (the CAPTCHA API key for the site's domain; it ships in the public bundle, but the provider marks it sensitive) |
-| `PUBLIC_TILES_URL`, `PUBLIC_TILES_GLYPHS_URL`, `PUBLIC_TERRAIN_URL` | not outputs: set by hand once the files are in the tiles bucket (§ Map tiles); unset, the map draws the plain background |
+| `PUBLIC_TILES_URL`, `PUBLIC_TILES_GLYPHS_URL`, `PUBLIC_TERRAIN_URL`, `PUBLIC_CHANNELS_URL` | not outputs: set by hand once the files are in the tiles bucket (§ Map tiles); unset, the map draws the plain background |
 
 `PUBLIC_API_URL` is not a GitHub variable: the build reads `/api` from the
 committed `frontend/.env.production`.
@@ -3388,6 +3388,7 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 | `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
 | `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
 | `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
+| `tiles/channels.pmtiles` (the DEM rivers precomputed from `terrain.pmtiles`, ~11 MB for the Western Cape, ~80 MB for South Africa) | `backend/scripts/channels-build.ts` (below) | `PUBLIC_CHANNELS_URL=/tiles/channels.pmtiles` | the same Art. 6(c) sentence as the relief (the lines are derived from the Copernicus DEM) |
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
 Upload them with your own SSO session (no workflow or Lambda can write the
@@ -3422,6 +3423,32 @@ gh workflow run load-reference.yml -f kind=tiles -f key=reference/tiles/terrain-
 aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
 ```
 
+**The DEM rivers** (`channels.pmtiles`, [maps.md § The elevation model's
+channels](./maps.md#the-elevation-models-channels)) are built from the
+very `terrain.pmtiles` the API's `DEM_URL` reads, since the Map uses the file
+only while its DEM fingerprint matches the server's. Build it on your
+laptop from the cached extract (same bytes, same fingerprint) with the
+region the catchments are in, then upload it; it records no provenance row
+of its own (it is derived, its metadata names the DEM's label and
+fingerprint, and `terrain`'s record stands). About 0.35 s a 0.2° tile, so
+the Western Cape (~800 tiles) takes about 5 minutes and makes about 11 MB,
+all of South Africa (~5 500) about half an hour and 80 MB, at about 300 MB
+of memory. From `backend/`:
+
+```bash
+pnpm exec tsx scripts/channels-build.ts --dem $C/terrain.pmtiles --bbox 17.6,-35.0,24.4,-30.4 --out $C/channels.pmtiles
+pnpm exec tsx scripts/tiles-upload.ts --production --tiles-bucket <tiles_bucket> --channels $C/channels.pmtiles --dry-run
+pnpm exec tsx scripts/tiles-upload.ts --production --tiles-bucket <tiles_bucket> --channels $C/channels.pmtiles
+gh variable set PUBLIC_CHANNELS_URL --body /tiles/channels.pmtiles
+```
+
+then release the web. Rebuild and re-upload it (and invalidate `/tiles/*`)
+whenever `terrain.pmtiles` is replaced: until then the Map sees the
+fingerprints differ and computes every tile on request again, as it does
+with the variable unset. A tile outside the region built is computed on
+request too, against the editor's hourly pool, so build the whole region
+the catchments are in.
+
 The basemap's and the relief's original download *is* the extract (`pmtiles
 extract` reads the region's byte ranges of an archive of hundreds of GB, which
 can't be kept), so the extract goes in as its own original: the upstream
@@ -3435,8 +3462,8 @@ Then set the repository variables in the table (`gh variable set
 PUBLIC_TILES_URL --body /tiles/south-africa.pmtiles`, and so on) and
 release the web (`deploy-frontend.yml` reads them). Its **Map tiles gate**
 (`scripts/release/map-data-gates.mjs frontend`) refuses anything but those
-same-origin paths, and refuses the relief until the Art. 6(c) sentence is in
-the legal text under `frontend/src`. The CSP needs no change: the tiles
+same-origin paths, and refuses the relief and the DEM rivers until the Art.
+6(c) sentence is in the legal text under `frontend/src`. The CSP needs no change: the tiles
 and glyphs are fetched same-origin (`connect-src 'self'`), and MapLibre's
 worker is the app's own (`worker-src 'self'`).
 

@@ -184,6 +184,7 @@ pnpm dev:s3:up              # MinIO: report PDFs (API :9002, console :9003, mini
 pnpm dev:s3:down | dev:s3:status | dev:s3:logs
 pnpm dev:tiles:up           # optional basemap for the Map tab, one step, re-runnable: MinIO, tiles + fonts (cached, else fetched), a cached relief DEM, the frontend's URLs; restart pnpm dev
 pnpm dev:tiles:fetch        # re-download the SA extract (pmtiles CLI) into MinIO; dev:tiles:terrain (the Relief layer's DEM) | dev:tiles:water (Trace a dam's GSW occurrence; GDAL or docker) | dev:tiles:status | dev:tiles:env (maps.md)
+pnpm dev:tiles:channels     # precompute the DEM rivers (the channels route's own code) from the cached relief DEM over CHANNELS_BBOX, else the synthetic DEM, into MinIO as tiles/channels.pmtiles; dev:tiles:up then sets PUBLIC_CHANNELS_URL (maps.md § The elevation model's channels)
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
@@ -274,6 +275,7 @@ pnpm test:guards            # node:test suites for scripts/guards, scripts/relea
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~11 min on VERIFY_WORKERS=4, the default cap)
 pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Python 3.14; seconds)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
+pnpm gen:channels-fixture   # rewrite the synthetic DEM's precomputed channels (backend/fixtures/channels/; no DB; maps.md § The elevation model's channels)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
 pnpm gen:waterbodies-fixture # rewrite the synthetic Waterbodies polygons and series round the Sandspruit dams (backend/fixtures/waterbodies/; no DB; maps.md § Waterbodies)
 pnpm gen:mirror-fixture     # rewrite the synthetic rain data copy (backend/fixtures/mirror/: Zarr arrays + manifests from the synthetic CHIRPS files, plus invented ERA5-Land, IMERG, ECMWF, reference ET, C3S and NEX-GDDP-CMIP6 products; no DB; architecture.md § Data feeds)

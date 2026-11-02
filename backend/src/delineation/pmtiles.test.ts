@@ -31,6 +31,22 @@ describe('PMTiles', () => {
 		expect(await r.getTile(3, 1, 1)).toBeNull();
 	});
 
+	it('gzips the tiles when asked (tile type 0, other) and keeps the directory of 20 000 tiles within the first 16 KiB', async () => {
+		// 20 000 tiles scattered over zoom 11, of uneven sizes: well past the ~5 500 0.2° channel tiles of all of South Africa.
+		const tiles = Array.from({ length: 20000 }, (_, k) => ({ z: 11, x: (k * 7919) % 2048, y: (Math.floor(k / 2048) * 211 + k * 37) % 2048, data: Buffer.from(JSON.stringify({ k, pad: 'x'.repeat((k * 31) % 200) })) }));
+		const archive = writePmtiles(tiles, { tileType: 0, tileCompression: 'gzip', bounds: [16, -35, 33, -22], metadata: { name: 'x' } });
+		const r = new PmtilesReader(memory(archive));
+		const h = await r.getHeader();
+		expect(h).toMatchObject({ tileType: 0, tileCompression: 2 });
+		expect(h.rootOffset + h.rootLength).toBeLessThanOrEqual(16384);
+		for (const k of [0, 1, 4095, 4096, 19999]) {
+			const t = tiles[k]!;
+			expect(JSON.parse(new TextDecoder().decode((await r.getTile(t.z, t.x, t.y))!)).k).toBe(k);
+		}
+		expect(new Set(tiles.map((t) => `${t.x},${t.y}`)).size).toBe(20000);
+		expect(await r.getTile(11, 1, 0)).toBeNull();
+	});
+
 	it('writes the same bytes on every platform: its gzip parts say Unix, not the OS zlib ran on (macOS wrote 19)', async () => {
 		const archive = writePmtiles([{ z: 10, x: 570, y: 612, data: new Uint8Array([1]) }], { tileType: 2, bounds: [20, -34, 21, -33], metadata: { name: 'x' } });
 		const h = await new PmtilesReader(memory(archive)).getHeader();

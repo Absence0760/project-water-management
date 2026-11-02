@@ -5309,22 +5309,28 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       outlet is a gauge node in the order by default, partitioning like a
       water user; a division can add an unlinked gauge as a new gauge node
       (design/start-from-map.md § Gauges as nodes).
-- [ ] **The elevation model's channels from the tiles pipeline** (issue
-      #374 item 3, maps.md § The elevation model's channels): today each
-      0.2° tile is routed on request and kept in an in-memory cache, which
-      on Lambda lasts one instance, so a production user pays a few seconds
-      and an elevation-model attempt per tile per cold instance. Durable
-      path: build the channel lines once per DEM in the tiles pipeline (a
-      `pnpm dev:tiles:channels` step and the production tiles bucket, as
-      vector PMTiles) and draw them like the basemap. Trigger: the first
-      production deploy with `delineation_dem = true` (passed: production
-      has DEM_URL set), and more pressing since the DEM rivers layer
-      (2026-11-02, `layers=channels`) draws them outside Delineate. Since
-      307 the computed tiles have their own pool (150 an hour, apart from
-      delineation's 60), so the layer can no longer starve a delineation;
-      what remains is the per-tile CPU and the layer pausing for the hour
-      once an editor explores past 150 new tiles. Precomputed channels
-      remove both.
+- [x] **The elevation model's channels from the tiles pipeline** (issue
+      #374 item 3, maps.md § The elevation model's channels, Precomputed):
+      built 2026-11-02 (PR feat/precomputed-dem-channels).
+      `backend/scripts/channels-build.ts` runs the route's own `channelTile`
+      over a region into `channels.pmtiles` (gzip JSON per 0.2° tile, not
+      vector tiles: the exact lines a click snaps to, no new dependency),
+      `pnpm dev:tiles:channels` builds and serves it locally, and with
+      `PUBLIC_CHANNELS_URL` set the layer reads tiles from it, falling back
+      to the route per tile (outside the region, unreadable file, another
+      DEM's fingerprint). What remains is the operator's: build it from the
+      production `terrain.pmtiles` and upload it (deployment.md § Map tiles,
+      on the rollout tracker #618), then set the repository variable.
+- [ ] **What the precomputed channels allow next** (maps.md § The
+      elevation model's channels): with tiles costing a byte range, (a) the
+      0.35° view limit (`CHANNEL_VIEW_MAX_DEG`, sized for on-request CPU)
+      could widen to ~1° while the file serves the view, and (b) the DEM
+      rivers layer could be offered to viewers (the file is public map data;
+      today `demRiversOffered` needs an editor's delineation check, and the
+      route is editor-only). Both change what users see, so they wait for
+      the operator's call. Trigger: the production file uploaded and
+      `PUBLIC_CHANNELS_URL` set; or a viewer or hydrologist asking for wider
+      DEM rivers.
 - [x] **Delineation of catchments larger than about 100 km across**
       (2026-10-03, branch wip/r2-delineate-job; design/delineation.md §
       Where it runs): a click still at the edge of the request's window
