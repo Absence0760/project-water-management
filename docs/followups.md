@@ -300,6 +300,52 @@ The checklist for these is issue #62; the history scrub is #63.
       `budget_monthly_usd` (110) is already sized for it; set `dmarc_report_email`.
       — *Done: af-south-1; production has been live since 2026-10-05.*
 
+## V1 run budget
+
+The V1 acceptance criterion "a run finishes in under 2 s including storage"
+(plan.md Phase 1) is measured by `runs/load.db.perf.test.ts` (`V1 demo
+budget`, `pnpm test:backend:perf:db`, run alone): an invented catchment of
+the client's size (13 nodes, 9 crops, 23 planted areas, one transfer, four
+daily records of 16 161 days) through `POST /projects/:id/runs`, median of 5.
+It measured **11.1 s** on the dev laptop on 2026-11-01, and **1.5 s** (1.85,
+1.51, 1.52, 1.42, 1.65 s) after the fixes below. Each run stores 432 series,
+~22 MB in `run_series`.
+
+- [x] Cut the storage cost (2026-11-01, 304_run_series_store_cost.sql). The
+      profile split the 11.1 s differently from the first guess ("~7.5 s
+      storing"): **6.8 s** was one input query, `chirpsSeriesChoice`, which
+      found a series' first and last filled day by subscripting the array once
+      a day, detoasting all 16 161 days each time (now one `unnest … WITH
+      ORDINALITY` pass, 3 ms; the feeds' `runSeries` and `targetSeries` had
+      the same pattern and the same fix). Storing was **3.7 s**: 1.2 s of
+      Node formatting ~95 MB of array text, the server parsing it and
+      compressing with pglz (3.4 s for the insert in all), and 0.33 s
+      stamping, 0.3 s of it `array_send` re-reading every value to hash it.
+      Now the arrays go in binary (`db/float8Array.ts`), constant series
+      (113 of 432) are built in the server with `array_fill`, the column
+      compresses with lz4, and the stamp is signed from the hashes of the
+      bytes sent (`app_run_signing_digest`, 12 ms): insert ~0.5 s, the run
+      ~1.5 s, the column, values, readers and every digest unchanged
+      (data-model.md § Time-series storage). Rejected: `COPY … BINARY`
+      (Postgres refuses `COPY FROM` into a table with RLS for a role it
+      applies to); a packed-bytea or S3 blob (WP-4.9) would change every
+      reader of `run_series`, many in SQL functions, for ~0.3 s more.
+- [ ] **The engine is now most of a run: ~0.85 s of the 1.5 s** (the run
+      itself and its self-checks, `verify/checks.ts` ~0.3 s), and the
+      measured Node CPU (~2 s, GC threads included) scales to ~3 s on the
+      API Lambda's 0.58 vCPU. The local criterion holds with ~25 % headroom;
+      a busier laptop or a bigger catchment eats it. Durable fix: profile the
+      engine's self-checks (run them once per run, not per pass, or sample
+      them) before adding more per-day work. Trigger: the V1 test's median
+      passing 1.8 s, or a Lambda run of a client-sized catchment over 3 s.
+- [ ] **Verifying a run still re-hashes its rows** (`app_run_digest`, 0.3 s
+      for a client-sized run) on every `GET …/runs/:runId`, sign-off and
+      decision. Fine for one run; a list that verified many would not be.
+      Durable fix if it's ever needed: a per-series hash kept by a trigger
+      (`BEFORE INSERT OR UPDATE`, which `water_app` can't bypass), so the
+      digest reads 432 hashes instead of 7 million values. Trigger: a route
+      that verifies more than a handful of runs at once.
+
 ## The rain data copy (issue #604)
 
 Round 2 built CHIRPS on our own copy behind `CHIRPS_SOURCE`

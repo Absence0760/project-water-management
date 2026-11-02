@@ -165,9 +165,11 @@ export async function targetSeries(
 	name: string
 ): Promise<{ filled: boolean; provenance: SeriesProvenance | null; firstDay: string | null } | null> {
 	const { rows } = await db.query<{ product: string | null; productVersion: string | null; firstDay: string | null }>(
-		`SELECT product, product_version AS "productVersion",
-			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay"
-		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`,
+		`SELECT s.product, s.product_version AS "productVersion", to_char(s.start_date + d.first - 1, 'YYYY-MM-DD') AS "firstDay"
+		 FROM time_series s
+		 -- One pass over the array (subscripting it per day detoasts it once a day; runs/execute.ts chirpsSeriesChoice).
+		 CROSS JOIN LATERAL (SELECT min(o)::int AS first FROM unnest(s."values") WITH ORDINALITY u(v, o) WHERE v IS NOT NULL) d
+		 WHERE s.project_id = $1 AND s.kind = $2 AND s.name = $3`,
 		[projectId, kind, name]
 	);
 	const r = rows[0];
@@ -212,10 +214,13 @@ export interface RunSeriesPick {
 export async function runSeries(db: Db, projectId: string, kind: string): Promise<RunSeriesPick | null> {
 	const { rows } = await db.query<Omit<RunSeriesPick, 'provenance'> & { product: string | null; productVersion: string | null }>(
 		`SELECT t.name, t.product, t.product_version AS "productVersion",
-			to_char(t.start_date + (SELECT min(i) FROM generate_subscripts(t."values", 1) i WHERE t."values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay",
-			to_char(t.start_date + (SELECT max(i) FROM generate_subscripts(t."values", 1) i WHERE t."values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "lastDay",
+			to_char(t.start_date + d.first - 1, 'YYYY-MM-DD') AS "firstDay",
+			to_char(t.start_date + d.last - 1, 'YYYY-MM-DD') AS "lastDay",
 			(SELECT f.id FROM data_feed f WHERE f.project_id = t.project_id AND f.target_kind = t.kind AND f.target_name = t.name) AS "feedId"
-		 FROM time_series t WHERE t.project_id = $1 AND t.kind = $2 AND t.site_node_id IS NULL
+		 FROM time_series t
+		 -- One pass over the array (subscripting it per day detoasts it once a day; runs/execute.ts chirpsSeriesChoice).
+		 CROSS JOIN LATERAL (SELECT min(o)::int AS first, max(o)::int AS last FROM unnest(t."values") WITH ORDINALITY u(v, o) WHERE v IS NOT NULL) d
+		 WHERE t.project_id = $1 AND t.kind = $2 AND t.site_node_id IS NULL
 		 ORDER BY t.name COLLATE "C" LIMIT 1`,
 		[projectId, kind]
 	);

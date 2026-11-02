@@ -193,6 +193,41 @@ Trade-offs we accept: updating one day rewrites the whole array (fine, since
 inputs are uploaded in bulk), and SQL date-range aggregates need `unnest … WITH
 ORDINALITY` (fine for occasional reports).
 
+In SQL, read an array in one pass (`unnest("values") WITH ORDINALITY`), never
+by subscripting it once a day (`"values"[i]` over `generate_subscripts`):
+each subscript of a TOASTed array detoasts the whole array, so a 16 161-day
+record's first and last filled day took 6.8 s that way (a client-sized run's
+CHIRPS choice, `chirpsSeriesChoice`, and the feeds' `runSeries` /
+`targetSeries`; fixed, `runs/seriesSpan.db.test.ts`).
+
+**How a run's outputs are written (304_run_series_store_cost.sql).** A
+client-sized run stores 432 `run_series` arrays, ~7 million values (~56 MB
+raw, ~22 MB on disk). `storeRun` (`runs/execute.ts`) writes them so that
+storing costs about 0.5 s instead of ~3.7 s (docs/followups.md § V1 run
+budget):
+
+- **Binary parameters.** Each array goes as a Buffer in Postgres's
+  `array_recv` format (`db/float8Array.ts` `float8ArrayParam`, bound as
+  `$n::float8[]`), not as `{…}` text, which was ~95 MB to format in Node and
+  as much for the server to parse. The values stored are the ones the text
+  path stored: non-finite as NULL, -0 as 0.
+- **Constant series built in the server.** A series holding one value
+  throughout (113 of the 432, mostly zeros) is bound as `array_fill(c,
+  ARRAY[n])`, the same array with nothing sent.
+- **lz4.** `run_series."values"` compresses with lz4 (pglz was half the
+  insert's server time). Rows from before 304 stay pglz; both read the same.
+- **Signed from the bytes sent.** The stamp's digest takes each series'
+  SHA-256 from the backend's own parameter bytes, which are `array_send`'s
+  (`app_run_signing_digest`, [security.md § Run stamps](./security.md#run-stamps)); verifying still
+  hashes the stored rows.
+- The next batch is built while the database takes the last.
+
+The column, its type, the values and every reader are unchanged, so nothing
+reading `run_series` (charts, exports, compare, evidence packs and their
+reproduction bundles, farm views, share links, the assistant) changed, and
+neither did any run's digest or stamp. WP-4.9 (run outputs in S3) stays the
+plan for when storage *size*, not the time to store a run, needs it.
+
 ### Which series a run reads
 
 A project may hold several series of one kind (001: unique by project, kind
@@ -733,7 +768,14 @@ columns to exactly `notes` and `pinned` (below).
 NULL) is the backend's HMAC over `app_run_digest(id)`, the canonical digest
 of the run's inputs snapshot, summary, stored input series and output
 series, written once by `app_set_run_stamp` in the storing transaction
-(`storeRun`); `water_app` has no `UPDATE` on it. NULL (a run from before
+(`storeRun`); `water_app` has no `UPDATE` on it. Since 304 the digest
+`storeRun` signs is `app_run_signing_digest(run, node ids, keys, sha256s)`:
+the same canonical digest (`app_run_digest_from`, which `app_run_digest_body`
+now calls too) with each output series' hash given by the backend, of the
+binary parameter it sent, instead of re-hashing ~7 million stored values
+(0.3 s). It answers only for the caller's own unstamped run made in this
+transaction, and only when every stored series has exactly one well-formed
+hash; else NULL, and `storeRun` throws. NULL (a run from before
 077, or one inserted past the API) and a stamp that no longer matches the
 rows both read as unverified: such a run can't be signed off, and an
 application with one can't be decided

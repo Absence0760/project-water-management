@@ -624,6 +624,14 @@ run in parallel after WP-4.1.
 
 ### WP-4.9 Run storage in S3
 
+- **Status (2026-11-01): not started, and not needed for the V1 run
+  budget.** The 2 s V1 criterion failed at ~11 s, which looked like a case
+  for moving outputs out of Postgres. Profiling showed otherwise: 6.8 s was
+  one quadratic input query, and storing 432 series fell from ~3.7 s to
+  ~0.5 s with binary parameters, lz4 and signing from the bytes sent, with
+  `run_series` unchanged (304; data-model.md § Time-series storage,
+  followups.md § V1 run budget). This WP stays the plan for when storage
+  size or restore time grow with tenants, its original goal.
 - **Goal.** Run output arrays leave Postgres. The DB keeps metadata and
   summaries. Cost and restore time stay flat as tenants grow.
 - **Design (driven by the cost model below)**

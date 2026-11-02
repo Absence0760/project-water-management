@@ -35,13 +35,34 @@ export function stampMatches(digest: Buffer | null, stamp: Buffer | null): boole
 	return stamp.length === want.length && timingSafeEqual(stamp, want);
 }
 
+/** The SHA-256 (hex) of each output series' values as the backend sent them (db/float8Array.ts: array_send's bytes), for stampRun. */
+export interface SeriesHashes {
+	nodeIds: (string | null)[];
+	keys: string[];
+	sha256: string[];
+}
+
 /**
  * Stamp a run just stored, in the storing transaction, after its last row
  * (storeRun). Throws if the database gives no digest or won't take the stamp:
  * a run is never stored unsigned by the backend.
+ *
+ * With `series`, the digest signed takes each output series' hash from the
+ * backend (app_run_signing_digest, 304) instead of re-reading and re-hashing
+ * the run's ~7 million stored values (0.3 s for a client-sized run). It is
+ * the digest app_run_digest gives once the rows match what was sent; one that
+ * doesn't leaves a run that never verifies, and the database answers no
+ * digest at all unless every stored series has exactly one hash.
  */
-export async function stampRun(db: Db, runId: string): Promise<void> {
-	const { rows } = await db.query<{ digest: Buffer | null }>('SELECT app_run_digest($1) AS digest', [runId]);
+export async function stampRun(db: Db, runId: string, series?: SeriesHashes): Promise<void> {
+	const { rows } = series
+		? await db.query<{ digest: Buffer | null }>('SELECT app_run_signing_digest($1, $2::uuid[], $3::text[], $4::text[]) AS digest', [
+				runId,
+				series.nodeIds,
+				series.keys,
+				series.sha256
+			])
+		: await db.query<{ digest: Buffer | null }>('SELECT app_run_digest($1) AS digest', [runId]);
 	const digest = rows[0]?.digest;
 	if (!digest) throw new Error(`run ${runId}: no digest to stamp`);
 	const { rows: set } = await db.query<{ ok: boolean }>('SELECT app_set_run_stamp($1, $2) AS ok', [runId, runStamp(digest)]);

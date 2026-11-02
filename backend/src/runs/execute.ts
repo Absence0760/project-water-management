@@ -39,6 +39,7 @@ import { isUnitRainKind } from '../series/site.js';
 import { referenceCellInput } from './referenceCell.js';
 import { gapRainInputs } from './gapRainInput.js';
 import { stationInputs } from './stationInput.js';
+import { constantValue, float8ArrayParam } from '../db/float8Array.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -46,7 +47,7 @@ import { recordAudit } from '../history/record.js';
 import { loadModel } from '../model/store.js';
 import { requireRole } from '../projects/access.js';
 import { mergeSettings } from '../projects/settings.js';
-import { stampRun } from './stamp.js';
+import { type SeriesHashes, stampRun } from './stamp.js';
 import { type PublishedRecords, publishedRecordMeta, riverGauge } from './publishedRecords.js';
 import { logEvent } from '../logging/logEvent.js';
 
@@ -215,10 +216,15 @@ export function stationGaugeMap(unitRain: unknown, station: { mapMm: number | nu
 export async function chirpsSeriesChoice(db: Db, projectId: string): Promise<SeriesChoice | null> {
 	const { rows } = await db.query<SeriesSpan & { siteNodeId: string | null }>(
 		`SELECT name, site_node_id AS "siteNodeId",
-			to_char(start_date + (SELECT min(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "firstDay",
-			to_char(start_date + (SELECT max(i) FROM generate_subscripts("values", 1) i WHERE "values"[i] IS NOT NULL) - 1, 'YYYY-MM-DD') AS "lastDay"
-		 FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm'
-		 ORDER BY site_node_id NULLS FIRST, name COLLATE "C"`,
+			to_char(start_date + d.first - 1, 'YYYY-MM-DD') AS "firstDay",
+			to_char(start_date + d.last - 1, 'YYYY-MM-DD') AS "lastDay"
+		 FROM time_series s
+		 -- One pass over the array. Subscripting it per day ("values"[i] over
+		 -- generate_subscripts) detoasted the whole array for every day: 6.8 s
+		 -- for a 16 161-day record, most of a client-sized run (followups.md § V1 run budget).
+		 CROSS JOIN LATERAL (SELECT min(o)::int AS first, max(o)::int AS last FROM unnest(s."values") WITH ORDINALITY u(v, o) WHERE v IS NOT NULL) d
+		 WHERE s.project_id = $1 AND s.kind = 'rain_chirps_mm'
+		 ORDER BY s.site_node_id NULLS FIRST, s.name COLLATE "C"`,
 		[projectId]
 	);
 	// By site, each in the order a run picks (the first is the one it reads, as loadLiveInput's DISTINCT ON).
@@ -812,22 +818,49 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 	await storeRunInputs(db, projectId, runId, input.series, hashes, plan.seriesIds ?? {});
 	// A published DWS gauge record's series carries who published it (#523 G8, 232): the policies show it at any holder count.
 	const published = publishedRecordMeta(output.series, plan.publishedRecords);
-	// Batch the per-series inserts to keep round-trips low (~150 series per run).
+	// Batch the per-series inserts to keep round-trips low (432 series for a client-sized run). Each array goes
+	// in binary, not as text (db/float8Array.ts: ~95 MB of number text cost seconds both ends), and the next
+	// batch is built while the database takes this one.
 	const BATCH = 25;
-	for (let i = 0; i < output.series.length; i += BATCH) {
-		const chunk = output.series.slice(i, i + BATCH);
+	const sent: SeriesHashes = { nodeIds: [], keys: [], sha256: [] };
+	// A constant series' hash, by value and length: a run's are mostly zeros of one length.
+	const constantSha = new Map<string, string>();
+	const sha256Of = (values: Buffer) => createHash('sha256').update(values).digest('hex');
+	const batch = (chunk: ModelOutput['series']) => {
 		const params: unknown[] = [runId, projectId];
-		const values = chunk.map((s, j) => {
+		const $ = (v: unknown) => `$${params.push(v)}`;
+		const rows = chunk.map((s) => {
 			const mark = s.nodeId === null ? published.get(s.key) : undefined;
-			params.push(s.nodeId, s.key, JSON.stringify({ label: s.label, unit: s.unit, ...mark }), s.values.map((v) => (Number.isFinite(v) ? v : null)));
-			const b = 3 + j * 4;
-			return `($1, $2, $${b}::uuid, $${b + 1}, $${b + 2}::jsonb, $${b + 3}::float8[])`;
+			const row = `($1, $2, ${$(s.nodeId)}::uuid, ${$(s.key)}, ${$(JSON.stringify({ label: s.label, unit: s.unit, ...mark }))}::jsonb`;
+			// What stampRun signs: the bytes sent are array_send's of the stored array (app_run_signing_digest, 304).
+			sent.nodeIds.push(s.nodeId);
+			sent.keys.push(s.key);
+			const c = constantValue(s.values);
+			if (c !== null) {
+				// Built in the server, the same array (db/float8Array.ts constantValue): nothing to send.
+				const k = `${c}:${s.values.length}`;
+				let sha = constantSha.get(k);
+				if (sha === undefined) constantSha.set(k, (sha = sha256Of(float8ArrayParam(s.values))));
+				sent.sha256.push(sha);
+				return `${row}, array_fill(${$(c)}::float8, ARRAY[${$(s.values.length)}::int]))`;
+			}
+			const values = float8ArrayParam(s.values);
+			sent.sha256.push(sha256Of(values));
+			return `${row}, ${$(values)}::float8[])`;
 		});
-		await db.query(`INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${values.join(', ')}`, params);
+		return { text: `INSERT INTO run_series (run_id, project_id, node_id, key, meta, "values") VALUES ${rows.join(', ')}`, params };
+	};
+	let inFlight: Promise<unknown> | null = null;
+	for (let i = 0; i < output.series.length; i += BATCH) {
+		const next = batch(output.series.slice(i, i + BATCH));
+		// One statement at a time on the connection; building `next` overlapped the last one.
+		await inFlight;
+		inFlight = db.query(next.text, next.params);
 	}
+	await inFlight;
 	// Last of the run's rows: sign what was stored (077_run_stamp, runs/stamp.ts),
 	// so a run written past this path (a direct insert as water_app) is told apart.
-	await stampRun(db, runId);
+	await stampRun(db, runId, sent);
 	// Every way a run is made (POST /runs, the rerun job, an import's run, a scenario run) comes through here.
 	await recordAudit(db, projectId, 'run.created', {
 		runId,
