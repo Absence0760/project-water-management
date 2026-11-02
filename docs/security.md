@@ -2564,11 +2564,12 @@ In short:
     reference), `.withdrawn`, `.declined`, `.removed`, `.lapsed`,
     `.grandfathered`. Confirming and removing need two-step sign-in always
     (as deciding does); an owner's proposal or withdrawal, where the project
-    requires it. 163's `project_member.acts_for_authority` is no longer read,
-    and water_app can't set it (its column grant is revoked; dropped by a
-    later migration). **Residual:** the host still controls access: an owner
-    who removes or demotes a delegate ends their delegation (logged as
-    `authority.lapsed`); it can never make someone act for the authority.
+    requires it. 163's `project_member.acts_for_authority` and its trigger
+    are gone (dropped by 303 once every release in production read
+    `authority_delegate` instead). **Residual:** the host still controls
+    access: an owner who removes or demotes a delegate ends their delegation
+    (logged as `authority.lapsed`); it can never make someone act for the
+    authority.
     **Grandfathered:** every flag set before 229 on a member who still held
     editor or above was carried over as confirmed (`confirmed_via
     'grandfathered'`, an `authority.grandfathered` event whose actor is the

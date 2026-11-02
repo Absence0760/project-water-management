@@ -6181,7 +6181,7 @@ Applicant view and the Applications tab. Left:
       record uses them too since 233, plus `application_withdrawn`), whose
       labels may follow the pilot authority's house style. Trigger: the
       client's answers.
-- [ ] **Drop 161's licence-record words (the contract step of 233).**
+- [x] **Drop 161's licence-record words (the contract step of 233).**
       233_licence_record_outcome_words (issue #523 G9 (b)) moved
       `project.licence_outcome` to the authority's words, but
       `app_set_licence_outcome` and `PUT /projects/:id/licence-record` still
@@ -6193,8 +6193,12 @@ Applicant view and the Applications tab. Left:
       licence-record DB test's "161's words" case turns into a `400`).
       Older `licence.outcome` audit events keep their words; the timeline
       reads them. Trigger: the first `backend@` and `web@` releases that both
-      contain 233 are in production.
-- [ ] **Drop `project_member.acts_for_authority` and 163's
+      contain 233 are in production. **Done** by
+      303_contract_licence_words_acts_for: 233 first shipped in backend@0.4.0
+      and web@0.3.0 (2026-10-13); production ran backend@0.13.1 and
+      web@0.10.0 when it landed. `LEGACY_OUTCOMES` is gone and the route
+      answers `400` for the old words (`licence-record.db.test.ts`).
+- [x] **Drop `project_member.acts_for_authority` and 163's
       `project_member_authority` trigger (the contract step of 229).**
       229_authority_delegates (issue #523 G5) moved who acts for the
       responsible authority to `authority_delegate` and redefined
@@ -6209,7 +6213,14 @@ Applicant view and the Applications tab. Left:
       Trigger: the first `backend@`
       and `web@` releases that both contain 229 are in production, and
       deployment.md runbook step 18 (each authority reviews its
-      grandfathered delegates) is done.
+      grandfathered delegates) is done. **Done** by
+      303_contract_licence_words_acts_for: 229 first shipped in backend@0.4.0
+      and web@0.3.0 (2026-10-13), and the `authority-grandfathered` check
+      found no grandfathered delegates in production that day, so step 18
+      had nothing to review. `authority.db.test.ts` checks the column,
+      trigger and function are gone; `authority-delegates.db.test.ts` still
+      replays 229's carry-over, re-adding the column inside its rolled-back
+      transaction.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant

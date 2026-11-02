@@ -30,12 +30,6 @@ import { requireRole } from '../projects/access.js';
 export const LICENCE_OUTCOMES = ['licence_issued', 'licence_refused', 'application_rejected', 'not_considered', 'application_withdrawn'] as const;
 export type LicenceOutcome = (typeof LICENCE_OUTCOMES)[number];
 
-/**
- * 161's words, still accepted from a web release older than 233 and stored as
- * the new ones (expand/contract; dropping them is in docs/followups.md).
- */
-export const LEGACY_OUTCOMES = { granted: 'licence_issued', refused: 'licence_refused', withdrawn: 'application_withdrawn' } as const;
-
 /** The licence record as the API answers it (dates as YYYY-MM-DD). */
 export interface LicenceRecord {
 	outcome: LicenceOutcome | null;
@@ -59,10 +53,9 @@ const reason = z
 	.max(2000)
 	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters');
 
-const issued = z.enum(['licence_issued', 'granted']).transform((): 'licence_issued' => 'licence_issued');
-const otherOutcome = z
-	.enum(['licence_refused', 'application_rejected', 'not_considered', 'application_withdrawn', 'refused', 'withdrawn'])
-	.transform((o) => (o === 'refused' || o === 'withdrawn' ? LEGACY_OUTCOMES[o] : o));
+// 161's granted, refused and withdrawn were taken until 303 (the contract step of 233); now a 400.
+const issued = z.literal('licence_issued');
+const otherOutcome = z.enum(['licence_refused', 'application_rejected', 'not_considered', 'application_withdrawn']);
 
 export const OutcomeBody = z.union([
 	z

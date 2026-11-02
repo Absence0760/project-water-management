@@ -73,16 +73,17 @@ describe('the licence record', () => {
 		expect((await owner.call('PUT', at(), { outcome: 'approved', outcomeOn: '2026-03-01', reason: 'x' })).status).toBe(400);
 	});
 
-	it('still takes 161’s words from an older web release, storing the authority’s (expand/contract)', async () => {
-		const grant = await owner.call('PUT', at(), { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'x' });
-		expect(grant.body.licenceRecord).toMatchObject({ outcome: 'licence_issued', closesOn: '2049-02-28' });
-		for (const [old, now] of [
-			['refused', 'licence_refused'],
-			['withdrawn', 'application_withdrawn']
-		])
-			expect((await owner.call('PUT', at(), { outcome: old, outcomeOn: '2026-03-01', reason: 'x' })).body.licenceRecord).toMatchObject({ outcome: now, closesOn: '2029-03-01' });
-		// And so does the database function an older backend calls.
-		await withUser(owner.id, (db) => db.query(`SELECT app_set_licence_outcome($1, 'granted', '2026-03-01', '2046-02-28', 'x')`, [projectId]));
+	// 303 (the contract step of 233): 161's words are no longer taken, by the route or the database function.
+	it('refuses 161’s words, from the route and from the database function', async () => {
+		const before = (await owner.call('GET', at())).body.licenceRecord;
+		expect((await owner.call('PUT', at(), { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'x' })).status).toBe(400);
+		for (const old of ['refused', 'withdrawn']) expect((await owner.call('PUT', at(), { outcome: old, outcomeOn: '2026-03-01', reason: 'x' })).status, old).toBe(400);
+		await expect(withUser(owner.id, (db) => db.query(`SELECT app_set_licence_outcome($1, 'granted', '2026-03-01', '2046-02-28', 'x')`, [projectId]))).rejects.toMatchObject({
+			code: '23514'
+		});
+		// Nothing changed; control: the authority's word is taken by the same function.
+		expect((await owner.call('GET', at())).body.licenceRecord).toEqual(before);
+		await withUser(owner.id, (db) => db.query(`SELECT app_set_licence_outcome($1, 'licence_issued', '2026-03-01', '2046-02-28', 'x')`, [projectId]));
 		expect((await owner.call('GET', at())).body.licenceRecord).toMatchObject({ outcome: 'licence_issued', expiresOn: '2046-02-28', closesOn: '2049-02-28' });
 	});
 
