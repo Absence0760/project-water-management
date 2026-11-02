@@ -29,14 +29,16 @@
 # Gated by ecmwf_enabled (default false) as well as the ingest function
 # existing (ingest_image_tag): the rule stays DISABLED, with no target, and
 # there is no freshness alarm, until both. Turn it on only with an image
-# built from requirements.txt that includes eccodes (ingest/requirements.c.in).
+# built from an ingest/requirements.txt that includes eccodes.
 #
 # Freshness: MirrorLagDays{Product=ecmwf}, today minus the newest issue held,
 # published by every run that knows the copy. A healthy copy reads 0 after the
 # morning's runs, 1 before; at 2 neither today's nor yesterday's issue is held
 # and every ECMWF feed waits. Two days at 2 or more, or no datapoint for two
 # days (treat_missing_data = breaching: the job stopped running, or the copy
-# holds no issue yet, when it publishes nothing), alarms.
+# holds no issue yet, when it publishes nothing), alarms. So it fires within
+# the hour of being created, until a morning run copies the first issue
+# (docs/deployment.md § The data mirror → ECMWF).
 #
 # Cost: ~1.1 GB a day from ECMWF's bucket (AWS's open data programme pays its
 # egress), ~1,500 PUTs and ~4 MB of new Zarr a day, plus ~1.4 GB a year of

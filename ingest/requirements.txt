@@ -9,7 +9,7 @@
 # regenerate by hand, put the nine direct dependencies (numpy, xarray,
 # h5netcdf, h5py, zarr>=3,<4, boto3; ecmwf-datastores-client, the
 # Copernicus CDS client ERA5-Land's live runs import, era5land.py; and
-# eccodes with eccodeslib, which decode ECMWF's GRIB2, ecmwf.py: manylinux
+# eccodes with eccodeslib, which decode ECMWF's GRIB2, ecmwf_forecast.py: manylinux
 # wheels with the library bundled, x86_64 and aarch64) one per line in a scratch file and run
 # uv, holding Dependabot's 7-day cooldown:
 #

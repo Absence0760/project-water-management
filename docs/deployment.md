@@ -1819,11 +1819,21 @@ limits we keep to are in [data-sources.md § ecmwf-ens](./data-sources.md#ecmwf-
   datapoint arrives for two days. Feeds keep the forecast they have
   meanwhile.
 - **Turning it on.** Build an ingest image whose `requirements.txt` includes
-  eccodes (`ingest/requirements.c.in`: eccodes and eccodeslib, binary
+  eccodes (`ingest/requirements.txt`: eccodes and eccodeslib, binary
   wheels for arm64, no system package), deploy it (`ingest_image_tag`),
   then set `ecmwf_enabled = true` and apply. Without both, the rule stays
   disabled with no target and there is no alarm. ECMWF's open data needs no
   key. The feeds fall due at 14:00 UTC (253_feed_source_ecmwf.sql).
+- **The alarm fires on the day you turn it on.** It is created with the
+  rule, and CloudWatch evaluates its two daily periods at once: both are
+  empty (the copy holds no issue, so nothing is published) and missing data
+  is breaching, so it goes to ALARM within the hour. That is expected. It
+  clears after the first morning window (10:00–13:40 UTC) in which a run
+  finishes an issue and publishes `MirrorLagDays{Product=ecmwf} = 0`,
+  usually the 10:20 or 10:40 run. Seen 2026-11-01: enabled 21:07 UTC,
+  ALARM at 22:05 UTC, no run until 10:00 UTC the next day. Apply after
+  13:40 UTC only if you accept that night's alarm; applying before 10:00 UTC
+  avoids it.
 - **Quantile mapping** (D17, "quantile-mapped to our corrected rain"). Once
   the copy has archived a few months of issues, the operator fits the
   mapping offline and writes `ecmwf/qm.json` into the mirror; feeds apply it
