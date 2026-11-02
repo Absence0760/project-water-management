@@ -84,6 +84,39 @@ export async function clippedText(page: Page): Promise<string[]> {
 	);
 }
 
+/** An element's box in the viewport, as `boundingBox()` gives it. */
+export interface Box {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * The boxes of several elements read in one go, from the same layout. Two
+ * `boundingBox()` calls are two round trips, and the page can scroll between
+ * them: a page loaded on a #anchor holds that anchor at the top while the
+ * panels above it load (lib/nav/scrollHold.ts), re-scrolling as each one
+ * grows, so the second box came from a window 78 px further down and the
+ * Calibration run line's picker and its Open in Runs & results read as on
+ * different rows (calibration-page.spec.ts, CI 2026-11-01). Compare elements'
+ * positions with this, never with one `boundingBox()` each. Each locator
+ * waits for its element as `boundingBox()` does.
+ */
+export async function boxesOf<T extends Locator[]>(...locators: T): Promise<{ [K in keyof T]: Box }> {
+	const handles = await Promise.all(locators.map((l) => l.elementHandle()));
+	try {
+		const read = (els: (Element | null)[]) =>
+			els.map((el) => {
+				const r = el!.getBoundingClientRect();
+				return { x: r.x, y: r.y, width: r.width, height: r.height };
+			});
+		return (await locators[0]!.page().evaluate(read, handles)) as { [K in keyof T]: Box };
+	} finally {
+		await Promise.all(handles.map((h) => h?.dispose()));
+	}
+}
+
 /**
  * `upper` ends above where `lower` starts, on the page as drawn: a grid's
  * actions above its first row (issue #463), not under a long table. Compared
@@ -92,8 +125,7 @@ export async function clippedText(page: Page): Promise<string[]> {
 export async function expectAbove(upper: Locator, lower: Locator) {
 	await expect(upper).toBeVisible();
 	await expect(lower).toBeVisible();
-	const a = (await upper.boundingBox())!;
-	const b = (await lower.boundingBox())!;
+	const [a, b] = await boxesOf(upper, lower);
 	expect(a.y + a.height, 'ends above the other starts').toBeLessThanOrEqual(b.y + 1);
 	const before = await upper.evaluate((el, other) => !!(el.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING), await lower.elementHandle());
 	expect(before, 'comes first in the focus order').toBe(true);

@@ -12,7 +12,7 @@ import { API_URL } from '../support/env.ts';
 import { DEMO, KLEINBERG, seedExamplesOnce } from '../support/examples.ts';
 import { loadSyntheticQuaternaries } from '../support/map.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { boxesOf, expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { anySaveBar, fitSummary, header, isProjectPatch, openCalibration, openFold, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 import { headerControl } from '../support/sectionHeader.ts';
@@ -112,8 +112,8 @@ test('a link into a group (?tab=calibration, a note’s #set- link) opens the pa
 	const ewr = page.getByRole('heading', { name: 'EWR', exact: true });
 	await expect(ewr).toBeInViewport();
 	await expect(ewr).toBeFocused();
-	const menu = (await settingsMenu(page).boundingBox())!;
-	expect((await ewr.boundingBox())!.y).toBeGreaterThanOrEqual(menu.y + menu.height);
+	const [menu, ewrBox] = await boxesOf(settingsMenu(page), ewr);
+	expect(ewrBox.y).toBeGreaterThanOrEqual(menu.y + menu.height);
 
 	// A note on a settings group links to it from the Project page's recent notes (client-side navigation).
 	await page.getByRole('button', { name: 'Notes on Data quality', exact: true }).click();

@@ -9,6 +9,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { boxesOf } from '../support/reflow.ts';
 
 const ORCHARD = 'Orchard: Crop factor by month, Oct–Sep. max 0.80 in Dec; Oct 0.60, Nov 0.70, Dec 0.80, Jan 0.80, Feb 0.80, Mar 0.70, Apr 0.60, May 0.50, Jun 0.40, Jul 0.40, Aug 0.50, Sep 0.60.';
 
@@ -33,7 +34,7 @@ test('a crop row: the column’s caption, Oct and Sep at the ends, the highest f
 	const spark = orchard.getByTestId('sparkline');
 	await expect(spark.getByRole('img', { name: ORCHARD, exact: true })).toBeVisible();
 	// The caption sits over the sparklines' column.
-	const [c, s] = [(await caption.boundingBox())!, (await spark.boundingBox())!];
+	const [c, s] = await boxesOf(caption, spark);
 	expect(Math.abs(c.x - s.x)).toBeLessThanOrEqual(1);
 	expect(Math.abs(c.width - s.width)).toBeLessThanOrEqual(1);
 
