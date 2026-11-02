@@ -471,6 +471,14 @@ MUTANTS = [
     ("climate.delta reads rain factors by water-year month", "vals = [v * f[cal_month(o0 + t) - 1] if", "vals = [v * f[wy_month(o0 + t)] if"),
     ("climate.delta's A-pan row takes the water-year month's own index", 's["apanMm"] = [v * ef[(w + 9) % 12] for', 's["apanMm"] = [v * ef[w] for'),
     ("climate.delta's annual factor is the plain mean of the rain factors", "    return sum(w[m] * f[m] for m in range(12)) / sum(w)", "    return sum(f) / 12"),
+    # The daily A-pan record (§2.3a, engine >= 0.38.0).
+    ("daily A-pan: the crops' demand reads the monthly mean on the record's days", "                if apan_day[i] is not None:\n                    gross +=", "                if False:\n                    gross +="),
+    ("daily A-pan: the dam's evaporation reads the monthly mean on the record's days", "e_raw = (k_lake[m] * apan_day[i] if apan_day[i] is not None else", "e_raw = (k_lake[m] * apan_day[i] if False else"),
+    ("daily A-pan: GR4J's PE reads the monthly mean on the record's days", 'if pe.get("kind") != "monthly" and apan_day[i] is not None:', "if False:"),
+    ("daily A-pan: GR4J reads the record under a monthly PE row", 'if pe.get("kind") != "monthly" and apan_day[i] is not None:', "if apan_day[i] is not None:"),
+    ("daily A-pan: a negative value is the day's A-pan", "if (v := apan_s.get(o)) is not None and v >= 0 else None", "if (v := apan_s.get(o)) is not None else None"),
+    ("daily A-pan: the record doesn't count as evaporation (GR4J_NO_PET)", "any(v is not None and v > 0 for v in apan_day) and any(", "False and any("),
+    ("daily A-pan: the record counts as evaporation only where that day's pan coefficient is above 0", "any(v is not None and v > 0 for v in apan_day) and any(c > 0 for c in settings[\"panCoefficient\"])", "any(v is not None and v > 0 and settings[\"panCoefficient\"][m] > 0 for v, m in zip(apan_day, wm))"),
 ]
 
 
@@ -531,6 +539,8 @@ class CrossCheck(unittest.TestCase):
             *model.STATION_DIAG,
             # Calibration zones (§2.10n).
             "zone_units",
+            # Phase 2b: the daily A-pan record (§2.3a).
+            "apan_daily_days",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 

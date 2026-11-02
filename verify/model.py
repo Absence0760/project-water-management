@@ -795,8 +795,6 @@ def unsupported(doc: dict) -> list[str]:
     for k in ("zeroRunRule", "zeroRunChirpsCheck", "lowVsChirpsRatio", "lowVsChirpsBaseline", "lowVsChirpsMinimum"):
         if k in dq and dq[k] not in (None, "wetDays", False, 0.5, "record", "fixed"):
             out.append("non-default data-quality limits")
-    if (doc.get("series") or {}).get("evap_apan_mm"):
-        out.append("daily A-pan series")
     if any(op.get("op") != "climate.delta" for op in doc.get("scenarioOps") or []):
         out.append("scenario ops other than climate.delta")
     if s.get("damStorageReset"):
@@ -1608,16 +1606,25 @@ def run(doc: dict) -> dict:
     # ---- GR4J -----------------------------------------------------------
     g = settings["gr4j"]
     apan = [float(x) for x in settings["apanMm"]]
+    # §2.3a (engine >= 0.38.0, issue #45): a daily A-pan record (evap_apan_mm) is the day's A-pan wherever it has a
+    # value >= 0; any other day (none, negative, outside the record) reads the month's mean spread over the month.
+    # Crop demand, dam evaporation and GR4J's PE under pan coefficient x A-pan all read it.
+    apan_s = Series(series.get("evap_apan_mm"))
+    apan_day = [v if (v := apan_s.get(o)) is not None and v >= 0 else None for o in days]
+    diag["apan_daily_days"] = sum(1 for v in apan_day if v is not None)
     pe = settings["pe"]
     # §2.4a (engine ≥ 1.104.0, issue #604 R5-E): under a monthly PE row a daily
     # reference ET record (evap_et0_mm) is the day's PE as it stands wherever it
     # has a value ≥ 0; never read under pan coefficient × A-pan.
     et0 = Series(series.get("evap_et0_mm")) if pe.get("kind") == "monthly" else Series(None)
     pet = []
-    for o, m in zip(days, wm):
+    for i, (o, m) in enumerate(zip(days, wm)):
         e = et0.get(o)
         if e is not None and e >= 0:
             pet.append(float(e))
+            continue
+        if pe.get("kind") != "monthly" and apan_day[i] is not None:
+            pet.append(settings["panCoefficient"][m] * apan_day[i])
             continue
         if pe.get("kind") == "monthly":
             monthly = pe["mm"][m]
@@ -1637,7 +1644,11 @@ def run(doc: dict) -> dict:
     if pe.get("kind") == "monthly":
         no_pet = all(x == 0 for x in pe["mm"]) and not any((v := et0.get(o)) is not None and v > 0 for o in days)
     else:
-        no_pet = all(settings["panCoefficient"][m] * apan[m] == 0 for m in range(12))
+        # §2.3a: a daily A-pan value above 0 on a run day counts as evaporation when any month's pan coefficient is
+        # above 0, that day's or not (probes apan-daily-no-pet, apan-daily-outside-run).
+        no_pet = all(settings["panCoefficient"][m] * apan[m] == 0 for m in range(12)) and not (
+            any(v is not None and v > 0 for v in apan_day) and any(c > 0 for c in settings["panCoefficient"])
+        )
     if no_pet:
         raise Refused("GR4J_NO_PET")
     farms = [x for x in model["nodes"] if x["kind"] == "farm"]
@@ -1799,7 +1810,10 @@ def run(doc: dict) -> dict:
         for i, m in enumerate(wm):
             gross = 0.0
             for crop, a, _p in rows:
-                gross += a * (apan[m] * crop["cropFactor"][m]) / 1000 / mdays[m]
+                if apan_day[i] is not None:
+                    gross += a * crop["cropFactor"][m] * apan_day[i] / 1000
+                else:
+                    gross += a * (apan[m] * crop["cropFactor"][m]) / 1000 / mdays[m]
             frac = eff_monthly[m] if eff_monthly else settings["effectiveRainFraction"]
             pe_m3 = cropped * frac / 1000 * rain_demand[i]
             available = w + pe_m3
@@ -2368,7 +2382,7 @@ def run(doc: dict) -> dict:
                 area, slope = area_of(f, s0)
                 pd = rf * area / 1000
                 seep = f.get("damSeepagePerDay") or 0.0
-                e_raw = k_lake[m] * apan[m] / mdays[m] / 1000 * area
+                e_raw = (k_lake[m] * apan_day[i] if apan_day[i] is not None else k_lake[m] * apan[m] / mdays[m]) / 1000 * area
                 if slope is None:
                     b = f.get("damAreaExponent", 0.7)
                     if b > 1:

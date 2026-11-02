@@ -266,9 +266,41 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_rain_stations(random.Random(seed * 67867967 + 5), doc, start, days, dense)
     add_calibration_zones(random.Random(seed * 86028121 + 17), doc, dense)
     add_calibration_locations(random.Random(seed * 52368691 + 23), doc)
+    add_apan_daily(random.Random(seed * 15485867 + 29), doc, start, days, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
+
+
+def add_apan_daily(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """A daily A-pan record (§2.3a, engine >= 0.38.0, `evap_apan_mm`), from its
+    own stream so the rest of a network is unchanged: in 25 % of networks (60 %
+    dense), the month's mean spread over its days × a day's weather, starting
+    before or after the rain and ending before or after it, with blank
+    stretches and now and then a negative (no-data) value and a 0. Now and then
+    the monthly means are all 0, so the record is the only A-pan."""
+    if rng.random() >= (0.6 if dense else 0.25):
+        return
+    s = doc["settings"]
+    if rng.random() < 0.15:
+        s["apanMm"] = [0] * 12
+    mean = [max(1.0, float(v)) if v else rng.uniform(40, 250) for v in s["apanMm"]]
+    off = rng.randint(-120, days // 2)
+    length = rng.randint(30, days + 200 - max(0, off))
+    a0 = start + dt.timedelta(days=off)
+    vals: list = []
+    for k in range(length):
+        d = a0 + dt.timedelta(days=k)
+        wm = (d.month - 10) % 12
+        mdays = (dt.date(d.year + (d.month == 12), d.month % 12 + 1, 1) - dt.date(d.year, d.month, 1)).days
+        vals.append(round(mean[wm] / mdays * rng.uniform(0.3, 1.8), 2))
+    for _ in range(rng.randint(0, 4)):
+        a = rng.randrange(length)
+        for j in range(a, min(length, a + rng.randint(1, 50))):
+            vals[j] = None
+    for _ in range(rng.randint(0, 3)):
+        vals[rng.randrange(length)] = rng.choice([-1, -999, 0.0])
+    doc["series"]["evap_apan_mm"] = {"startDate": a0.isoformat(), "values": vals}
 
 
 def add_calibration_locations(rng: random.Random, doc: dict) -> None:

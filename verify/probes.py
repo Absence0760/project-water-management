@@ -1693,6 +1693,57 @@ def daily_et0_monthly_pe(pe_kind: str = "monthly", zero_row: bool = False) -> di
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def apan_daily(pe_kind: str = "pan", monthly_zero: bool = False, coeff_gap: bool = False, outside_run: bool = False) -> dict:
+    """A daily A-pan record (§2.3a, engine >= 0.38.0) on a cropped farm with a
+    dam: on the days it has a value >= 0 the crops' gross demand is
+    area × crop factor × the day's A-pan, the dam's evaporation depth the lake
+    factor × it and GR4J's PE (under pan coefficient × A-pan) the pan
+    coefficient × it; a blank day, a negative one and the days before and
+    after the record read the month's mean spread over the month. `pe_kind`
+    "monthly": GR4J runs on the PE row and never reads the record, the crops
+    and the dam still do. `monthly_zero`: the monthly means are all 0, so the
+    record is the only A-pan and the run isn't GR4J_NO_PET. `coeff_gap`: on
+    top of that the pan coefficient is 0 in January and February (calendar),
+    the only months the record has a value above 0 in, so GR4J's PE is 0 on
+    every day; the run still runs, since "no evaporation, no run" counts a run
+    day's value above 0 with a pan coefficient above 0 in any month (§2.3a,
+    verify/README.md § Findings). `outside_run`: the record's values above 0
+    all fall before the run, so it is GR4J_NO_PET."""
+    start = dt.date(2019, 12, 1)
+    n = 120
+    rain = [0.0, 14.0, 0.0, 2.0, 0.0, 0.0, 30.0, 0.0, 5.0, 0.0, 0.0, 0.0] * 10
+    # The record runs from 10 December to 15 March: a blank stretch, a negative day and a 0 inside it.
+    rec = [round(3 + (k % 7) * 1.25, 2) for k in range(96)]
+    for k in range(20, 26):
+        rec[k] = None
+    rec[40] = -1
+    rec[41] = 0.0
+    if coeff_gap:
+        # Above 0 only in January and February.
+        rec = [v if dt.date(2019, 12, 10) + dt.timedelta(days=k) < dt.date(2020, 3, 1) and dt.date(2019, 12, 10) + dt.timedelta(days=k) >= dt.date(2020, 1, 1) else 0.0 for k, v in enumerate(rec)]
+    nodes = [
+        _node("o", "gauge", None),
+        _node("f", "farm", "o", areaKm2=4, damCapacityM3=60000, damInitialPct=0.6, pctRunoffToDam=0.5,
+              damAreaFullM2=20000, damAreaExponent=0.8),
+    ]
+    crops, areas = _crop("f", 80000)
+    crops[0]["cropFactor"] = [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.5]
+    apan = [0] * 12 if monthly_zero else [150, 180, 220, 230, 190, 160, 110, 70, 50, 55, 80, 110]
+    pc = [0.7] * 12
+    if coeff_gap:
+        pc[3] = pc[4] = 0.0  # water-year months 3, 4: January, February
+    pe = {"kind": "monthly", "mm": [120, 140, 170, 175, 150, 120, 80, 50, 35, 40, 60, 90], "source": "invented"} if pe_kind == "monthly" else {"kind": "pan"}
+    s = _settings(apanMm=apan, panCoefficient=pc, pe=pe, lakeEvapFactor=0.8, effectiveRainFraction=0.6,
+                  gr4j={"x1": 250, "x2": 0, "x3": 70, "x4": 1.6, "warmupDays": 40})
+    series = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": rain[:n]},
+        "evap_apan_mm": {"startDate": "2019-12-10", "values": rec},
+    }
+    if outside_run:
+        series["evap_apan_mm"] = {"startDate": "2019-10-01", "values": [4.0] * 60 + [0.0, None, -1.0] * 30}
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": []}, "series": series}
+
+
 def _zone(gauge: str, gr4j: dict | None, enabled: bool = True) -> dict:
     return {
         "nodeId": gauge, "enabled": enabled, "calibrationStart": None, "calibrationEnd": None, "calibrationFlowKind": None,
@@ -1938,6 +1989,12 @@ PROBES = {
     "daily-et0-monthly-pe": daily_et0_monthly_pe(),
     "daily-et0-pan-pe": daily_et0_monthly_pe("pan"),
     "daily-et0-zero-row": daily_et0_monthly_pe(zero_row=True),
+    # The daily A-pan record (§2.3a).
+    "apan-daily": apan_daily(),
+    "apan-daily-monthly-pe": apan_daily("monthly"),
+    "apan-daily-only": apan_daily(monthly_zero=True),
+    "apan-daily-no-pet": apan_daily(monthly_zero=True, coeff_gap=True),
+    "apan-daily-outside-run": apan_daily(monthly_zero=True, outside_run=True),
     # The forecast-conditioned outlook's member (issue #620 step 6).
     "forecast-member-rescaled": forecast_member_rescaled(),
     # Future climate (issue #621, §2.17): the op on a dam, then on the per-unit rules (the MAPs by the annual

@@ -555,7 +555,12 @@ in the browser worker and server-side), the uncertainty ensemble, forecast
 mode, scenarios and firm yield use the same days. The "no evaporation, no
 run" refusal (`GR4J_NO_PET`, §2.4a) counts a daily series with a value above
 0, under `pe.kind: 'pan'` with a pan coefficient above 0, as evaporation, so a
-project with only a daily record runs. A run stores the series in its inputs
+project with only a daily record runs. Precisely: a value above 0 on one of
+the run's days (a record wholly outside the run doesn't count) and a pan
+coefficient above 0 in any month, not necessarily that day's; so a record
+whose values above 0 all fall in months with a pan coefficient of 0 runs,
+with a GR4J PE of 0 every day (`verify/` probes `apan-daily-no-pet`,
+`apan-daily-outside-run`). A run stores the series in its inputs
 (`run_input_series`, like every input series), so re-running it reproduces
 the same days. `pnpm pan-sensitivity` reads the series from a project.json
 too, so its cases vary the coefficient that multiplies the daily A-pan on the
