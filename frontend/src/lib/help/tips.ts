@@ -1056,6 +1056,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam', 'transfer.lossReturnPct', 'transfer.lossReturnNodeId']
 	},
 	{
+		id: 'transfer-diversion-curve',
+		term: 'Diversion curve',
+		short: 'An off-take taking a × x^b % of the river, x its flow at the off-take in the unit you pick; at most the largest share and the canal.',
+		units: 'a and b as given; largest share %; x in L/s, m³/s, m³/day or Ml/day',
+		category: 'transfers',
+		fields: ['transfer.diversionCoefficient', 'transfer.diversionExponent', 'transfer.diversionMaxPct', 'transfer.diversionFlowUnit', 'transfer.diversionFlowBasis']
+	},
+	{
 		id: 'transfer-min-storage',
 		term: 'Transfer minimum storage',
 		short: 'The source dam is not drawn below this fraction of its capacity by this transfer, nor below the dam’s own minimum operating level.',

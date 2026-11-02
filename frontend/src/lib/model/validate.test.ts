@@ -202,6 +202,19 @@ describe('validateModel', () => {
 		expect(messages(model([g, f, h], { transfers: [{ ...t, handsOffM3Day: -1 }] }))).toContain("Transfer 1: the hands-off flow can't be negative.");
 	});
 
+	it('checks a diversion curve (engine 1.113.0): complete when the off-take is sized by one, inert otherwise', () => {
+		const g = node('g', 'G', null);
+		const f = node('f', 'F', 'g');
+		const h = node('h', 'H', 'g');
+		const t = { id: 't', fromNodeId: 'f', toNodeId: 'h', months: [1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const };
+		const curve = { ...t, sizing: 'diversionCurve' as const, diversionCoefficient: 2000, diversionExponent: -0.9, diversionMaxPct: 0.95, diversionFlowUnit: 'L/s' as const };
+		expect(messages(model([g, f, h], { transfers: [curve] }))).toEqual([]);
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionFlowUnit: null }] }))).toContain('Transfer 1: a share of the river’s flow needs a complete curve: its flow unit must be one of L/s, m3/s, m3/day, Ml/day.');
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionCoefficient: null }] }))).toContain('Transfer 1: a share of the river’s flow needs a complete curve: its coefficient a must be a number above 0.');
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionMaxPct: 1.2 }] }))).toContain('Transfer 1: a share of the river’s flow needs a complete curve: its largest share must be above 0 % and at most 100 %.');
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, sizing: 'capacity', diversionFlowUnit: null }] }))).toEqual([]);
+	});
+
 	it('checks canal seepage back to the river: a share 0–100 %, rejoining below the source or a unit below it (engine 1.42.0)', () => {
 		const g = node('g', 'G', null);
 		const l = node('l', 'L', 'g');

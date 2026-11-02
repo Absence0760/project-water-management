@@ -34,6 +34,7 @@
 	import { transferIsBlank, type ModelEditor } from '#lib/model/editor.svelte.js';
 	import { transferAnchor } from '#lib/model/validate.js';
 	import MonthRates from './MonthRates.svelte';
+	import DiversionCurveFields from './DiversionCurveFields.svelte';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
@@ -320,6 +321,7 @@
 											<select aria-label="Takes, {label}" disabled={readonly} value={t.sizing ?? 'demand'} onchange={(e) => (t.sizing = e.currentTarget.value as TransferSizing)}>
 												<option value="demand">What the destination needs</option>
 												<option value="capacity">Up to capacity</option>
+												<option value="diversionCurve">A share of the river’s flow</option>
 											</select>
 										</div>
 										<div class="fld">
@@ -346,6 +348,8 @@
 												</select>
 											</div>
 										{/if}
+										<!-- Sized by a diversion curve (engine ≥ 1.113.0, §2.6a): its curve and what it diverts at a few flows. -->
+										{#if t.sizing === 'diversionCurve'}<DiversionCurveFields rule={t} {label} disabled={readonly} />{/if}
 										<div class="checks">
 											<span class="check-row">
 												<label class="check">

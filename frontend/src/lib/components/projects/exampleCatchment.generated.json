@@ -46,7 +46,7 @@
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.109.0",
+			"engineVersion": "1.113.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",
@@ -160,7 +160,7 @@
 					"volumeErrorPct": 1.5300533317998177,
 					"fdcHighPct": -3.8048498704905818,
 					"fdcMidSlopePct": 0.13505631631407863,
-					"fdcLowPct": 36.986733479823414
+					"fdcLowPct": 36.98673347982348
 				},
 				"wr2012Fit": {
 					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
@@ -185,8 +185,8 @@
 						{
 							"key": "sd",
 							"observed": 6.884284182700592,
-							"simulated": 7.079977961810429,
-							"diffPct": 2.8426162243794817,
+							"simulated": 7.079977961810428,
+							"diffPct": 2.842616224379469,
 							"bandPct": 6,
 							"withinBand": true
 						},
@@ -215,8 +215,8 @@
 					"seed": 20210101,
 					"years": 15,
 					"kgePrime": {
-						"lo": 0.9198819550964706,
-						"hi": 0.9350453834401092
+						"lo": 0.9198819550964707,
+						"hi": 0.9350453834401091
 					},
 					"nse": {
 						"lo": 0.8520440726166466,
@@ -224,7 +224,7 @@
 					},
 					"kgeLowHigh": {
 						"lo": 0.9337776669431219,
-						"hi": 0.9426510822882026
+						"hi": 0.9426510822882024
 					}
 				},
 				"benchmarks": {
@@ -267,16 +267,16 @@
 				"scores": {
 					"days": 4912,
 					"kgePrime": 0.8713951021048087,
-					"kgeYearly": 0.860814529792438,
+					"kgeYearly": 0.8608145297924381,
 					"kgeNp": 0.9068408111687996,
 					"nse": 0.8068092857561845,
 					"nseSqrt": 0.9247040029062731,
 					"nseLog": 0.9756401037949554,
-					"kgeLowHigh": 0.9145260281144159,
+					"kgeLowHigh": 0.914526028114416,
 					"volumeErrorPct": 8.827782738176577,
 					"fdcHighPct": 1.8683011753524172,
 					"fdcMidSlopePct": 0.1948581945420111,
-					"fdcLowPct": 20.690950425041652
+					"fdcLowPct": 20.690950425041674
 				},
 				"wr2012Fit": {
 					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
@@ -340,7 +340,7 @@
 					},
 					"kgeLowHigh": {
 						"lo": 0.9068629687230206,
-						"hi": 0.9217074067520675
+						"hi": 0.9217074067520673
 					}
 				},
 				"benchmarks": {
@@ -484,17 +484,17 @@
 					"waterYears": [2009,2010,2011,2012,2014,2015,2016,2017],
 					"scores": {
 						"days": 2456,
-						"kgePrime": 0.9359336098902754,
+						"kgePrime": 0.9359336098902755,
 						"kgeYearly": 0.9051442574948988,
 						"kgeNp": 0.9699573175906514,
 						"nse": 0.8790655733404288,
 						"nseSqrt": 0.9495777459667538,
 						"nseLog": 0.9801006834286311,
-						"kgeLowHigh": 0.9276104019203059,
+						"kgeLowHigh": 0.9276104019203057,
 						"volumeErrorPct": -0.8642210887889761,
 						"fdcHighPct": -4.473716194155466,
 						"fdcMidSlopePct": -0.035494788564499884,
-						"fdcLowPct": 44.05604560513663
+						"fdcLowPct": 44.05604560513666
 					},
 					"wr2012Fit": {
 						"waterYears": [2011,2012,2014,2016],
@@ -519,8 +519,8 @@
 							{
 								"key": "sd",
 								"observed": 6.638783443223159,
-								"simulated": 5.686298309113703,
-								"diffPct": -14.347284291698776,
+								"simulated": 5.686298309113701,
+								"diffPct": -14.347284291698816,
 								"bandPct": 6,
 								"withinBand": false
 							},
@@ -535,8 +535,8 @@
 							{
 								"key": "seasonalIndex",
 								"observed": 116.06177992284931,
-								"simulated": 113.61572957483341,
-								"diffPct": -2.107541646907263,
+								"simulated": 113.6157295748334,
+								"diffPct": -2.1075416469072756,
 								"bandPct": 8,
 								"withinBand": true
 							}
@@ -550,7 +550,7 @@
 						"years": 8,
 						"kgePrime": {
 							"lo": 0.9237383030189634,
-							"hi": 0.942794094704349
+							"hi": 0.9427940947043493
 						},
 						"nse": {
 							"lo": 0.8607141747945208,
@@ -583,7 +583,7 @@
 							"kgeNp": 0.8468147842028555,
 							"nse": 0.6117657239525476,
 							"nseSqrt": 0.837591217261483,
-							"nseLog": 0.9358053276631512,
+							"nseLog": 0.9358053276631513,
 							"kgeLowHigh": 0.792185557941993,
 							"volumeErrorPct": -0.01834861340570348,
 							"fdcHighPct": -53.37131742558257,
@@ -606,11 +606,11 @@
 						"nse": 0.8425891312918075,
 						"nseSqrt": 0.9397532324780973,
 						"nseLog": 0.9790940648293481,
-						"kgeLowHigh": 0.9244389993360766,
+						"kgeLowHigh": 0.9244389993360765,
 						"volumeErrorPct": 2.337422466486836,
 						"fdcHighPct": -1.670155037227127,
 						"fdcMidSlopePct": 0.23168949115467752,
-						"fdcLowPct": 39.443524459294466
+						"fdcLowPct": 39.44352445929443
 					},
 					"wr2012Fit": {
 						"waterYears": [2018,2020,2022,2023],
@@ -619,8 +619,8 @@
 							{
 								"key": "mar",
 								"observed": 28.850923035456915,
-								"simulated": 29.759506103478166,
-								"diffPct": 3.149233966984799,
+								"simulated": 29.759506103478174,
+								"diffPct": 3.1492339669848235,
 								"bandPct": 4,
 								"withinBand": true
 							},
@@ -635,24 +635,24 @@
 							{
 								"key": "sd",
 								"observed": 8.31905589468382,
-								"simulated": 9.53113134074227,
-								"diffPct": 14.569867799938832,
+								"simulated": 9.531131340742274,
+								"diffPct": 14.569867799938876,
 								"bandPct": 6,
 								"withinBand": false
 							},
 							{
 								"key": "logSd",
 								"observed": 0.13415397660016296,
-								"simulated": 0.15311926397551548,
-								"diffPct": 14.136955054174285,
+								"simulated": 0.15311926397551545,
+								"diffPct": 14.136955054174265,
 								"bandPct": 6,
 								"withinBand": false
 							},
 							{
 								"key": "seasonalIndex",
 								"observed": 113.59647205071336,
-								"simulated": 117.85414475178604,
-								"diffPct": 3.7480677209516746,
+								"simulated": 117.85414475178605,
+								"diffPct": 3.7480677209516875,
 								"bandPct": 8,
 								"withinBand": true
 							}
@@ -673,8 +673,8 @@
 							"hi": 0.8685269678947889
 						},
 						"kgeLowHigh": {
-							"lo": 0.9129946505481358,
-							"hi": 0.9320205954413531
+							"lo": 0.9129946505481359,
+							"hi": 0.932020595441353
 						}
 					},
 					"benchmarks": {
@@ -731,10 +731,10 @@
 						"nseSqrt": 0.9528153085370579,
 						"nseLog": 0.9843365331522371,
 						"kgeLowHigh": 0.9400913551409106,
-						"volumeErrorPct": -0.27196318805140257,
+						"volumeErrorPct": -0.27196318805142,
 						"fdcHighPct": -3.439663444291589,
 						"fdcMidSlopePct": 1.716963135344808,
-						"fdcLowPct": 43.88886563504658
+						"fdcLowPct": 43.88886563504664
 					},
 					"wr2012Fit": {
 						"waterYears": [2012,2016,2022,2023],
@@ -797,7 +797,7 @@
 							"hi": 0.8969276850418079
 						},
 						"kgeLowHigh": {
-							"lo": 0.9335237122154643,
+							"lo": 0.9335237122154642,
 							"hi": 0.9436410628090948
 						}
 					},
@@ -840,17 +840,17 @@
 					"waterYears": [2011,2014,2015,2017,2018,2019,2020],
 					"scores": {
 						"days": 2456,
-						"kgePrime": 0.9257110599167986,
+						"kgePrime": 0.9257110599167985,
 						"kgeYearly": 0.9138556855928686,
 						"kgeNp": 0.9693863049286287,
 						"nse": 0.8634182196613156,
 						"nseSqrt": 0.9475409522575902,
 						"nseLog": 0.983894386144402,
-						"kgeLowHigh": 0.933344514463208,
+						"kgeLowHigh": 0.9333445144632079,
 						"volumeErrorPct": -0.8076236420307452,
-						"fdcHighPct": -7.135705182185346,
+						"fdcHighPct": -7.13570518218533,
 						"fdcMidSlopePct": -0.34032998582744034,
-						"fdcLowPct": 34.25941495161563
+						"fdcLowPct": 34.25941495161565
 					},
 					"wr2012Fit": {
 						"waterYears": [2011,2014,2017,2018,2020],
@@ -913,7 +913,7 @@
 							"hi": 0.8818063650804336
 						},
 						"kgeLowHigh": {
-							"lo": 0.9278998680214549,
+							"lo": 0.927899868021455,
 							"hi": 0.9364841130629897
 						}
 					},
@@ -1359,7 +1359,12 @@
 				"sizing": "demand",
 				"topUpDam": false,
 				"lossReturnPct": 0,
-				"lossReturnNodeId": null
+				"lossReturnNodeId": null,
+				"diversionCoefficient": null,
+				"diversionExponent": null,
+				"diversionMaxPct": null,
+				"diversionFlowUnit": null,
+				"diversionFlowBasis": null
 			},
 			{
 				"id": "f6ca01bd-02b6-57ba-85a9-096ce7e42eee",
@@ -1379,7 +1384,12 @@
 				"sizing": "demand",
 				"topUpDam": false,
 				"lossReturnPct": 0,
-				"lossReturnNodeId": null
+				"lossReturnNodeId": null,
+				"diversionCoefficient": null,
+				"diversionExponent": null,
+				"diversionMaxPct": null,
+				"diversionFlowUnit": null,
+				"diversionFlowBasis": null
 			}
 		]
 	},

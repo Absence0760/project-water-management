@@ -29,6 +29,7 @@ import {
 	WATER_SOURCE_LABEL,
 	WATER_SOURCES,
 	TRANSFER_SET_FIELDS,
+	DIVERSION_FLOW_UNITS,
 	USER_PRIORITIES,
 	USER_PRIORITY_LABEL,
 	ZERO_RAIN_MODES,
@@ -274,11 +275,23 @@ export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
 	handsOffM3Day: { label: 'Off-take hands-off flow', spec: num('m³/day', { nullable: true, nullLabel: 'none' }) },
 	handsOffEwr: { label: 'Off-take leaves the EWR in the river', spec: { t: 'bool' } },
 	lossPct: { label: 'Off-take conveyance losses', spec: pct() },
-	sizing: { label: 'Off-take takes', spec: { t: 'enum', options: [{ value: 'demand', label: 'What the destination needs' }, { value: 'capacity', label: 'Up to capacity' }] } },
+	sizing: {
+		label: 'Off-take takes',
+		spec: { t: 'enum', options: [{ value: 'demand', label: 'What the destination needs' }, { value: 'capacity', label: 'Up to capacity' }, { value: 'diversionCurve', label: 'A share of the river’s flow' }] }
+	},
 	topUpDam: { label: 'Off-take tops up the destination’s dam', spec: { t: 'bool' } },
 	// Canal seepage back to the river (engine ≥ 1.42.0).
 	lossReturnPct: { label: 'Off-take losses seeping back to the river', spec: pct() },
-	lossReturnNodeId: { label: 'Off-take seepage rejoins the river below', spec: { t: 'node', nullLabel: 'the source' } }
+	lossReturnNodeId: { label: 'Off-take seepage rejoins the river below', spec: { t: 'node', nullLabel: 'the source' } },
+	// A diversion curve (engine ≥ 1.113.0): a × x^b % of the river; set the curve first and the sizing last.
+	diversionCoefficient: { label: 'Off-take diversion curve: coefficient a', spec: num('', { nullable: true, nullLabel: 'none' }) },
+	diversionExponent: { label: 'Off-take diversion curve: exponent b', spec: num('', { nullable: true, nullLabel: 'none' }) },
+	diversionMaxPct: { label: 'Off-take diversion curve: largest share', spec: pct(true, '100%') },
+	diversionFlowUnit: { label: 'Off-take diversion curve: unit of x', spec: { t: 'enum', options: DIVERSION_FLOW_UNITS.map((u) => ({ value: u, label: u === 'm3/s' ? 'm³/s' : u === 'm3/day' ? 'm³/day' : u })), nullable: true, nullLabel: 'none' } },
+	diversionFlowBasis: {
+		label: 'Off-take diversion curve: x is',
+		spec: { t: 'enum', options: [{ value: 'modelled', label: 'the river at the off-take' }, { value: 'natural', label: 'the natural flow there' }], nullable: true, nullLabel: 'the river at the off-take' }
+	}
 };
 
 export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.map((field) => ({ field, label: TRANSFER_FIELD_SPECS[field].label }));
