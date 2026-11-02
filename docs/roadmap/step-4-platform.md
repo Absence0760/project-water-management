@@ -724,9 +724,11 @@ run in parallel after WP-4.1.
   - **WR2012** (Water Research Commission). Per quaternary catchment: area,
     MAP, evaporation zone, WRSM2000/Pitman parameters, **monthly naturalised
     flow**, rainfall. Downloads need a free registration
-    ([WR2012 site], [WR2012 leaflet]). **The redistribution terms aren't
-    published** (D5). Until the WRC agrees, the importer takes the files the
-    user downloaded; the platform doesn't host a national copy.
+    ([WR2012 site], [WR2012 leaflet]). **No licence is published** (D5);
+    the operator decided on 2026-11-02 that production may load the
+    quaternary outlines with their WR2012 values (MAP, MAR, monthly flows)
+    on the published terms ([maps.md § Sources](../maps.md#sources)). The
+    rest of WR2012 still comes from the files the user downloaded.
   - **DWS verified daily flow** per gauging station from the Hydrological
     Services portal. Query limits are 20 years of daily data per request, so
     the fetcher chunks. About 680 active flow stations
@@ -1322,7 +1324,7 @@ Run before building (`/persona …`) and record each **Need verdict** here.
 | D2 | **Prices and plan limits** | Per catchment; per editor seat; flat per org | **Decided 2026-10-28/29 (#641):** Free / Pro R899 / Team R2,499 incl. 3 editors; Free never limits modelling, only AI, live catchments, server PDFs and issued packs | Operator (decided) |
 | D3 | **Tenancy model** | Shared schema + RLS org wall; database-per-tenant (feohledger); stack-per-tenant | Shared + RLS. Offer a dedicated stack to one large customer if ever needed | Operator (CISO consulted) |
 | D4 | **Outbound internet from the VPC Lambdas** (SSO, webhooks, fetchers) | NAT gateway (~$33/month + data); NAT instance (~$4); a non-VPC egress Lambda fed by SQS (no NAT, more moving parts) | Reuse Step 2's pattern (WP-2.10: a non-VPC egress Lambda fed by SQS) for webhooks and fetchers; add a small NAT instance only for SSO token calls, which must run inline | Operator |
-| D5 | **WR2012 data** | Users upload what they downloaded; platform hosts a national copy with WRC permission | Upload now; ask the WRC | Client asks the WRC |
+| D5 | **WR2012 data** | Users upload what they downloaded; platform hosts a national copy with WRC permission | **Decided 2026-11-02 for the quaternary dataset:** the operator allows production to load the DWS outlines with their WR2012 MAP, MAR and monthly flows, on the publishers' published terms (no open licence found; [maps.md § Sources](../maps.md#sources)); other WR2012 files: upload | Operator (decided); written WRC permission would still settle it |
 | D6 | **Stochastic method** | kNN block bootstrap of water years; parametric Markov + gamma; both | Bootstrap first | Hydrologist |
 | D7 | **SAML and SCIM timing** | Build with OIDC; build on first request | On first signed request | Operator, after client Q3 |
 | D8 | **SLO level** | 99.5% single-AZ; 99.9% with Multi-AZ RDS | 99.5% until an Agency contract needs more | Client + operator |

@@ -4642,7 +4642,9 @@ keyed by `(kind, dataset)`: the reference-bucket object a production load
 of a map dataset read (`land-cover`, `evaporation`, `rivers`, since
 225 `gazetteer`, since 238 `map-grid`, since 261 `waterbodies`, the
 DE Africa Waterbodies polygons, since 268 `soils` and since 269
-`gr4j-donors`, the regional GR4J prior's soil grid and donors) and the
+`gr4j-donors`, the regional GR4J prior's soil grid and donors, and since
+306 `quaternaries`, the DWS outlines with their WR2012 values in
+`quaternary_reference`) and the
 SHA-256 it was checked against. Since 258 also `dws`: a production load of
 one river gauge's DWS flow table into the gauge record store (below, DWS
 gauge records), its `dataset` the operator's label for that file, written
@@ -4653,7 +4655,8 @@ kind production allows is in the constraint
 (`referenceLoad.db.test.ts` inserts a row of every kind production allows). Written in the same transaction as the
 dataset by the replace functions (`replaceCroplandDataset`,
 `replaceEvaporationDataset`, `replaceRivers`, `replacePlaces`,
-`replaceRainMapDataset`, `replaceSoilDataset`, `replaceDonorDataset`, through
+`replaceRainMapDataset`, `replaceSoilDataset`, `replaceDonorDataset`,
+`loadQuaternaries.ts` `replaceDataset`, through
 `geo/referenceOrigin.ts`), and deleted by any other replace of that
 dataset (a local `pnpm import:*`), so it never outlives the data it
 describes. No foreign key: rivers have no dataset table. Owner-only like

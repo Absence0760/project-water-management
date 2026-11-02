@@ -1,6 +1,7 @@
 // Production reference loads (geo/referenceLoad.ts, docs/deployment.md §
 // Reference datasets), without a database:
-//  - only the kinds docs/maps.md § Sources marks allowed load; every other
+//  - only the kinds docs/maps.md § Sources marks allowed load (quaternaries
+//    since the operator's decision of 2026-11-02); every other
 //    kind is refused, naming its decision, and the table here can't drift
 //    from the Sources table (each kind's rows, read from the doc);
 //  - a malformed request is refused with fixed text, never echoing the input
@@ -174,7 +175,17 @@ describe('which kinds load', () => {
 		expect([...LOADABLE].sort()).toEqual(allowed.sort());
 	});
 
-	it.each(['quaternaries', 'dam-register', 'gauge-stations', 'evaporation-stations', 'crop-types'])('%s is refused in production, naming the decision that would unblock it', (kind) => {
+	it('quaternaries load from the GeoJSON `import:quaternaries --out` writes (the operator’s decision, 2026-11-02), never the shapefile or the values CSV', () => {
+		const req = parseLoadRequest({ kind: 'quaternaries', key: 'reference/quaternaries/wr2012.geojson.gz', sha256: 'd'.repeat(64), dataset: 'WR2012' });
+		expect(req).toMatchObject({ kind: 'quaternaries', dataset: 'WR2012', source: null });
+		expect(parseLoadRequest({ kind: 'quaternaries', key: 'reference/quaternaries/wr2012.json', sha256: 'd'.repeat(64), dataset: 'WR2012', source: 'WR2012 (WRC 2015), Vol. 1' }).source).toBe('WR2012 (WRC 2015), Vol. 1');
+		for (const key of ['reference/quaternaries/quaternaries.shp', 'reference/quaternaries/wr2012.csv']) {
+			const e = thrown(() => parseLoadRequest({ kind: 'quaternaries', key, sha256: 'd'.repeat(64), dataset: 'WR2012' }));
+			expect(e.publicReason).toMatch(/import:quaternaries/);
+		}
+	});
+
+	it.each(['dam-register', 'gauge-stations', 'evaporation-stations', 'crop-types'])('%s is refused in production, naming the decision that would unblock it', (kind) => {
 		const e = thrown(() => parseLoadRequest({ ...ok, kind, key: `reference/${kind}/x.json` }));
 		expect(e.code).toBe('refused');
 		expect(e.publicReason).toMatch(/blocked in production/);

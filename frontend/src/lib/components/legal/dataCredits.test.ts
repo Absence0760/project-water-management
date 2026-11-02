@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEAFRICA_STATEMENT, WATERBODIES_CITATION, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
+import { DWS_QUATERNARY_STATEMENT, WR2012_STATEMENT, DEAFRICA_STATEMENT, WATERBODIES_CITATION, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from './dataCredits';
 import { AGERA5_CITATION, copernicusAgera5Notice, copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, NASA_POWER_ET0_CREDIT } from '@water-management/engine';
 import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
@@ -80,6 +80,9 @@ describe('the data credits', () => {
 		expect(backend('dams/observed/upstream.ts')).toContain(`export { SENTINEL_CITATION as SENTINEL_ATTRIBUTION, sentinelCitation as sentinelCredit } from '@water-management/engine/sentinel-credit'`);
 		expect(doc('maps.md')).toContain(`"${SENTINEL_STATEMENT}"`);
 		expect(doc('data-sources.md')).toContain(`"${SENTINEL_STATEMENT}"`);
+		// The quaternary outlines' and WR2012's credit, stored on every row a production load writes (the lookup shows it with each value).
+		expect(backend('geo/loadQuaternaries.ts')).toContain(`'${DWS_QUATERNARY_STATEMENT} ' + '${WR2012_STATEMENT}'`);
+		expect(doc('maps.md')).toContain(`"${DWS_QUATERNARY_STATEMENT} ${WR2012_STATEMENT}"`);
 		// GeoNames' attribution, stored on every place a load takes without a source of its own (the Map's search shows it).
 		expect(backend('geo/gazetteer.ts')).toContain(`GEONAMES_SOURCE = '${GEONAMES_STATEMENT}'`);
 	});

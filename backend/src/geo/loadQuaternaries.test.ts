@@ -1,9 +1,13 @@
-// The quaternary dataset loader's parsing (geo/loadQuaternaries.ts) and the
-// committed synthetic fixture it loads by default.
-import { readFileSync } from 'node:fs';
+// The quaternary dataset loader's parsing (geo/loadQuaternaries.ts), the
+// committed synthetic fixture it loads by default, and the file `--out`
+// writes for a production load (read back through the same parser).
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { parseArgs, SYNTHETIC_FILE } from '../../scripts/import-quaternaries.js';
-import { parseValuesCsv, quaternaryRecords } from './loadQuaternaries.js';
+import { parseArgs, SYNTHETIC_FILE, writeQuaternariesJson } from '../../scripts/import-quaternaries.js';
+import { parseValuesCsv, quaternaryFeatureCollection, quaternaryRecords } from './loadQuaternaries.js';
 import { SYNTHETIC_DATASET } from './quaternary.js';
 
 const fixture = JSON.parse(readFileSync(SYNTHETIC_FILE, 'utf8'));
@@ -67,14 +71,40 @@ describe('quaternaryRecords', () => {
 
 describe('import-quaternaries arguments', () => {
 	it('loads the synthetic fixture with no arguments, and needs a dataset label (not "synthetic") for a file', () => {
-		expect(parseArgs([])).toEqual({ file: SYNTHETIC_FILE, dataset: SYNTHETIC_DATASET, source: '', values: null });
+		expect(parseArgs([])).toEqual({ file: SYNTHETIC_FILE, dataset: SYNTHETIC_DATASET, source: '', values: null, out: null });
 		expect(parseArgs(['q.geojson'])).toMatch(/--dataset/);
 		expect(parseArgs(['q.geojson', '--dataset', 'synthetic'])).toMatch(/committed fixture/);
 		expect(parseArgs(['q.geojson', '--dataset', 'WR2012', '--source', 'WR2012 study', '--values', 'v.csv'], { INIT_CWD: '/data' })).toEqual({
 			file: '/data/q.geojson',
 			dataset: 'WR2012',
 			source: 'WR2012 study',
-			values: '/data/v.csv'
+			values: '/data/v.csv',
+			out: null
 		});
+	});
+
+	it('--out names a GeoJSON file to write for a production load, and needs a boundaries file', () => {
+		expect(parseArgs(['q.geojson', '--dataset', 'WR2012', '--out', 'out/q.geojson.gz'], { INIT_CWD: '/data' })).toMatchObject({ out: '/data/out/q.geojson.gz' });
+		expect(parseArgs(['q.geojson', '--dataset', 'WR2012', '--out', 'q.csv'])).toMatch(/--out takes a \.geojson/);
+		expect(parseArgs(['--out', 'q.geojson'])).toMatch(/needs a boundaries file/);
+	});
+});
+
+describe('the file `import:quaternaries --out` writes', () => {
+	it('carries each outline with its values, so the production load reads back the same records', () => {
+		const dir = mkdtempSync(join(tmpdir(), 'quaternaries-out-'));
+		try {
+			const out = join(dir, 'q.geojson.gz');
+			const got = writeQuaternariesJson({ file: SYNTHETIC_FILE, dataset: 'WR2012-test', source: '', values: null, out });
+			const direct = quaternaryRecords(fixture, '');
+			expect(got).toEqual({ written: direct.records.length, problems: [] });
+			const back = quaternaryRecords(JSON.parse(gunzipSync(readFileSync(out)).toString('utf8')), 'unused');
+			expect(back.problems).toEqual([]);
+			expect(back.records).toEqual(direct.records);
+			// Nothing is written when no feature could be read.
+			expect(quaternaryFeatureCollection([]).features).toEqual([]);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

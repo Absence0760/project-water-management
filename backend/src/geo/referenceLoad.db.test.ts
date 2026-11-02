@@ -19,6 +19,10 @@
 //    (writeMapGridJson, gzipped) loads as the one allowed dataset
 //    (WAAS-SWCape-2007), cell for cell the same as the direct load, stored
 //    with the recorded credit line, never the file's own;
+//  - quaternaries (the operator's decision, 2026-11-02): the outlines with
+//    their values, through `pnpm import:quaternaries --out`
+//    (writeQuaternariesJson, gzipped), load with the recorded DWS and WR2012
+//    credit on every row (or the load's own source), never the file's;
 //  - a file with nothing loadable fails and leaves the dataset as it was;
 //  - DWS flow (issue #618 step 6b): the synthetic reply loads into the gauge
 //    record store through gauge_record_write as dws-request rows, origin dws,
@@ -31,7 +35,7 @@
 //    load, and a local replace (no file) clears it;
 //  - reference_load's kind check takes every kind production allows, so a
 //    migration that redefines it can't drop one.
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -46,6 +50,8 @@ import { SYNTHETIC_GAZETTEER_FILE } from '../../scripts/import-gazetteer.js';
 import { SYNTHETIC_DWS_REPLY } from '../../scripts/import-dws.js';
 import { loadSyntheticMapGrid, parseMapGridArgs, writeMapGridJson } from '../../scripts/import-map-grid.js';
 import { POLYGONS_FILE as SYNTHETIC_WATERBODIES_FILE } from '../../scripts/waterbodies-fixture.js';
+import { writeQuaternariesJson } from '../../scripts/import-quaternaries.js';
+import { QUATERNARY_SOURCE, replaceDataset as replaceQuaternaries } from './loadQuaternaries.js';
 import { replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { asOwner } from '../__tests__/helpers.js';
@@ -60,6 +66,7 @@ const GZN = 'test-reference-load-gz-neighbours';
 // The one MAP grid label production allows (REFERENCE_KINDS['map-grid'].datasets): only this file writes it in water_test.
 const MG = WAAS_MAP.dataset;
 const WB = 'Test-Waterbodies';
+const QT = 'Test-Quaternaries';
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const object = (bytes: Uint8Array): ReadObject => async () => ({ contentLength: bytes.byteLength, bytes: async () => bytes });
 let dir: string;
@@ -91,7 +98,8 @@ afterAll(async () => {
 	await client.query('DELETE FROM gazetteer_reference WHERE dataset = ANY($1::text[])', [[GZ, GZN]]);
 	await client.query('DELETE FROM rain_map_dataset WHERE dataset = $1', [MG]);
 	await client.query('DELETE FROM waterbody_reference WHERE dataset = $1', [WB]);
-	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG, WB]]);
+	await client.query('DELETE FROM quaternary_reference WHERE dataset = $1', [QT]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG, WB, QT]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -303,6 +311,63 @@ describe('MAP grid, from the file `import:map-grid --out` writes (issue #560)', 
 	});
 });
 
+describe('quaternaries, from the file `import:quaternaries --out` writes (the operator’s decision, 2026-11-02)', () => {
+	// Invented outlines in drainage region Y, out at sea: quaternary_reference is keyed by code across datasets, so these
+	// never touch the synthetic fixture's region Z that the other DB files read. The WR2012-style values come from a CSV.
+	const cell = (x: number, y: number) => ({ type: 'Polygon', coordinates: [[[x, y], [x + 0.2, y], [x + 0.2, y + 0.2], [x, y + 0.2], [x, y]]] });
+	const boundaries = {
+		type: 'FeatureCollection',
+		features: [
+			{ type: 'Feature', properties: { QUATERNARY: 'Y01A' }, geometry: cell(5, -45) },
+			{ type: 'Feature', properties: { QUATERNARY: 'Y01B' }, geometry: cell(5.2, -45) }
+		]
+	};
+	const csv = ['code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end', 'Y01A,450,600,12,1,1,1,1,1,1,1,1,1,1,1,1,1920,2009'].join('\n');
+	const file = (source: string) => {
+		const [geojson, values, out] = ['b.geojson', 'v.csv', 'q.geojson.gz'].map((f) => join(dir, f)) as [string, string, string];
+		writeFileSync(geojson, JSON.stringify(boundaries));
+		writeFileSync(values, csv);
+		expect(writeQuaternariesJson({ file: geojson, dataset: QT, source, values, out })).toEqual({ written: 2, problems: [] });
+		return readFileSync(out);
+	};
+	const rows = () => asOwner('SELECT code, area_km2, map_mm, mar_mm3, monthly_mm3, period_start, period_end, source FROM quaternary_reference WHERE dataset = $1 ORDER BY code', [QT]);
+
+	it('loads the outlines with their values, every row with the recorded DWS and WR2012 credit, not the file’s, and records the file', async () => {
+		const bytes = file('the file’s own source line');
+		const result = await load({ kind: 'quaternaries', key: 'reference/quaternaries/test.geojson.gz', dataset: QT }, bytes);
+		expect(result).toEqual({ kind: 'quaternaries', dataset: QT, written: 2, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('quaternaries', QT)).toEqual({ key: 'reference/quaternaries/test.geojson.gz', sha256: sha(bytes) });
+		const got = await rows();
+		expect(got.map((r) => r.code)).toEqual(['Y01A', 'Y01B']);
+		expect(got[0]).toMatchObject({ area_km2: 450, map_mm: 600, mar_mm3: 12, monthly_mm3: Array(12).fill(1), period_start: 1920, period_end: 2009 });
+		// Y01B has no values in the CSV: its area is the polygon's own, the rest empty.
+		expect(got[1]).toMatchObject({ map_mm: null, mar_mm3: null, monthly_mm3: null });
+		expect(got[1]!.area_km2).toBeGreaterThan(0);
+		for (const r of got) expect(r.source).toBe(QUATERNARY_SOURCE);
+		expect(QUATERNARY_SOURCE).toMatch(/Department of Water and Sanitation/);
+		expect(QUATERNARY_SOURCE).toMatch(/WR2012/);
+	});
+
+	it('the load’s own source replaces the recorded one; a second load replaces the dataset and names the file it replaced', async () => {
+		// No --source: the file carries the recorded credit rather than skipping every feature.
+		const bytes = file('');
+		const result = await load({ kind: 'quaternaries', key: 'reference/quaternaries/test-2.geojson.gz', dataset: QT, source: 'WR2012 (WRC 2015), test volume' }, bytes);
+		expect(result.replaced).toMatchObject({ key: 'reference/quaternaries/test.geojson.gz' });
+		expect(new Set((await rows()).map((r) => r.source))).toEqual(new Set(['WR2012 (WRC 2015), test volume']));
+	});
+
+	it('a file with no quaternary fails and leaves the dataset as it was; a local replace clears the record', async () => {
+		const before = await rows();
+		const err = await load({ kind: 'quaternaries', key: 'reference/quaternaries/none.geojson', dataset: QT }, Buffer.from('{"type":"FeatureCollection","features":[]}')).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(LoadError);
+		expect((err as LoadError).code).toBe('empty');
+		expect(await rows()).toEqual(before);
+		expect(await recorded('quaternaries', QT)).toBeDefined();
+		await replaceQuaternaries(client, QT, []);
+		expect(await recorded('quaternaries', QT)).toBeUndefined();
+	});
+});
+
 describe('DE Africa Waterbodies polygons (261, issue #604 R5)', () => {
 	it('loads the polygons of a GeoJSON clip, gzipped, with the default source, and records the file', async () => {
 		const bytes = gzipSync(readFileSync(SYNTHETIC_WATERBODIES_FILE));
@@ -444,6 +509,7 @@ describe('reference_load takes every kind production allows', () => {
 			.map(([kind]) => kind);
 		expect(allowed).toContain('dws');
 		expect(allowed).toContain('waterbodies');
+		expect(allowed).toContain('quaternaries');
 		await client.query('BEGIN');
 		try {
 			for (const kind of allowed) {
@@ -453,7 +519,7 @@ describe('reference_load takes every kind production allows', () => {
 				await client.query('INSERT INTO reference_load (kind, dataset, source_key, source_sha256) VALUES ($1, $2, $3, $4)', [kind, dataset, key, 'a'.repeat(64)]);
 			}
 			await expect(
-				client.query(`INSERT INTO reference_load (kind, dataset, source_key, source_sha256) VALUES ('quaternaries', 'x', 'reference/quaternaries/x', $1)`, ['a'.repeat(64)])
+				client.query(`INSERT INTO reference_load (kind, dataset, source_key, source_sha256) VALUES ('dam-register', 'x', 'reference/dam-register/x', $1)`, ['a'.repeat(64)])
 			).rejects.toMatchObject({ code: '23514' });
 		} finally {
 			await client.query('ROLLBACK');
