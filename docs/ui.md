@@ -6530,7 +6530,7 @@ CHIRPS raw*, *<unit> CHIRPS bias-corrected (f(m) against <station>)*, *<unit>
 rain used* and *<unit> rain used from* (a day a patch station filled reads
 *patch N: <station>*), then the other
 series stored at the unit (a gauge with its m³/day; its CHIRPS series is the
-raw line already; the raw lines read their stored series, so the search, *Missing only*, *Flagged only* and the check flags work on them), with the twelve monthly factors (fitted for that unit since engine 1.105.0:
+raw line already; the raw lines read their stored series, on every day of the table and not only over the run window the derived lines cover, so the search, *Missing only*, *Flagged only* and the check flags work on them and a unit's CHIRPS stored before the run window (a CHIRPS feed from 1981 beside a station from 2009) still shows; `preview.ts` `areaColumnCell`), with the twelve monthly factors (fitted for that unit since engine 1.105.0:
 its station's rain taken to the unit's MAP over the unit's own CHIRPS), the
 station they were fitted against, or why the pairing was refused, listed above
 the table (`data-testid="preview-factors"`), and, when the patching priority

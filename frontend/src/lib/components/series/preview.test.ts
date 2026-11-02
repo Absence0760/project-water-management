@@ -1,10 +1,11 @@
-import { defaultProjectSettings, SERIES_KINDS, type NetworkNode, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
+import { defaultProjectSettings, fromEpochDay, SERIES_KINDS, stationSeriesKey, toEpochDay, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { Daily } from './coverage';
 import { helpFor } from '#lib/help/content.js';
-import type { AreaRainLines, UnitChainLines } from './derivedRain';
+import { areaRainLines, type AreaRainLines, type UnitChainLines } from './derivedRain';
 import {
 	areaCell,
+	areaColumnCell,
 	areaColumnId,
 	areaViewColumns,
 	buildAreaColumns,
@@ -698,5 +699,104 @@ describe('a unit without a station: its §2.4h chain (issue #613 slice 2)', () =
 		expect(chirpsLevelText(chain({}, { gaugeMapFactor: null, chirps: { source: 'bias' } }))).toBe('× the catchment’s monthly bias factors');
 		expect(chirpsLevelText(chain({}, { chirps: { source: 'reference', factors: [], kUnit: { factor: 0.9 } } as never }))).toBe('× the reference gauge’s f(m) × k_unit 0.900');
 		expect(chirpsLevelText(chain({}, { chirps: { source: 'raw' } }))).toBe('raw: nothing to level it with');
+	});
+});
+
+// Production, web@0.10.0: a unit on its rainfall station (2009–2024) with its own CHIRPS of 1981–1998 only, so the
+// pairing is refused (no year in common). The run window follows the catchment's rain (model.md §2.1, §2.4i), so it
+// starts with the station; the unit's view showed "–" for its CHIRPS raw in 1990, though the CHIRPS is stored there,
+// because the raw line took the stored series' place and covers only the run window. Invented values (public repo).
+describe('a unit’s raw lines outside the run window (station 2009–2024, its CHIRPS 1981–1998)', () => {
+	const ST = '2009-10-01';
+	const ST_DAYS = toEpochDay('2024-06-02') - toEpochDay(ST) + 1;
+	const CH = '1981-01-01';
+	const CH_DAYS = toEpochDay('1998-01-31') - toEpochDay(CH) + 1;
+	const wet = (n: number, k: number) => Array.from({ length: n }, (_, i) => (i % 9 === 0 ? 12 * k : i % 4 === 0 ? 1.5 * k : 0));
+	// About 5% of the station's days missing.
+	const station: (number | null)[] = wet(ST_DAYS, 1).map((v, i) => (i % 20 === 9 ? null : v));
+	const chirps = wet(CH_DAYS, 0.8);
+	const node = { sortOrder: 0, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const settings = {
+		...defaultProjectSettings(),
+		runoffModel: 'gr4j',
+		unitRain: { mode: 'perUnit' },
+		rainStations: { units: { kunje: { stationId: 'kst' } } }
+	} as ProjectSettings;
+	const input: ModelInput = {
+		settings: settings as ModelInput['settings'],
+		model: {
+			nodes: [
+				{ ...node, id: 'g', name: 'Gauge', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
+				{ ...node, id: 'kunje', name: 'Kunje', kind: 'farm', downstreamNodeId: 'g', areaKm2: 12, mapMm: 745, mapSource: 'invented' }
+			],
+			crops: [],
+			cropAreas: [],
+			transfers: []
+		} as unknown as ModelInput['model'],
+		series: {
+			// The catchment's own rain (no station): the run window follows it (model.md §2.1).
+			rain_catchment_mm: { startDate: ST, values: wet(ST_DAYS, 0.9) },
+			[stationSeriesKey('kst')]: { startDate: ST, values: station },
+			'rain_chirps_mm@kunje': { startDate: CH, values: chirps }
+		},
+		stations: { kst: { name: 'Kunje rainfall station', mapMm: 745, mapSource: 'invented', lat: null, lon: null } }
+	};
+	const list = [
+		meta({ id: 'kst', kind: 'rain_catchment_mm', name: 'Kunje rainfall station', startDate: ST, length: ST_DAYS }),
+		meta({ id: 'chk', kind: 'rain_chirps_mm', name: 'Kunje’s own rain', siteNodeId: 'kunje', startDate: CH, length: CH_DAYS })
+	];
+	const values: Record<string, Daily> = { kst: { startDate: ST, values: station }, chk: { startDate: CH, values: chirps } };
+	const lines = areaRainLines(input, 'kunje')!;
+	const areas = [{ nodeId: 'kunje', name: 'Kunje', lines }];
+	const cols = columnsForView('unit:kunje', [...buildPreviewColumns(list), ...buildAreaColumns(areas)], { list, areas });
+	const rows = buildPreviewRows(list, values, settings);
+	const row = (date: string) => rows.find((r) => r.date === date)!;
+	const col = (line: string) => cols.find((c) => c.area?.line === line)!;
+	const cell = (line: string, date: string) => areaColumnCell(col(line), row(date), lines);
+
+	it('the run reads the unit from the station’s first day; the pairing is refused, so its gaps take the next fallback', () => {
+		expect(lines.startDate).toBe(ST);
+		expect(lines.refused).not.toBeNull();
+		expect(lines.chirpsCorrected).toBeNull();
+		expect(lines.source.filter((s) => s === 'fallback').length).toBe(station.filter((v) => v === null).length);
+		// The table spans every stored series, from the CHIRPS' first day.
+		expect(rows[0]!.date).toBe(CH);
+	});
+
+	it('the CHIRPS raw line shows the CHIRPS as stored on every day, 1990 included (it is the stored series’ only column here)', () => {
+		expect(cols.some((c) => c.group === 'series' && c.seriesId === 'chk')).toBe(false);
+		expect(col('chirpsRaw').seriesId).toBe('chk');
+		const d = '1990-06-15';
+		const stored = chirps[toEpochDay(d) - toEpochDay(CH)]!;
+		expect(row(d).series.chk!.value).toBe(stored);
+		expect(cell('chirpsRaw', d).value).toBe(stored);
+		// Every 1990 day with a stored value shows it.
+		const y1990 = rows.filter((r) => r.date.startsWith('1990'));
+		expect(y1990.map((r) => areaColumnCell(col('chirpsRaw'), r, lines).value)).toEqual(y1990.map((r) => r.series.chk!.value));
+		// Inside the run window it has none, as stored.
+		expect(cell('chirpsRaw', '2015-03-01').value).toBeNull();
+	});
+
+	it('the station raw line is the station as stored; the run’s own lines stay blank outside the run window', () => {
+		expect(cell('stationRaw', '1990-06-15').value).toBeNull();
+		expect(cell('stationRaw', ST).value).toBe(station[0]);
+		// 1990 is before the run window (the catchment's rain starts in 2009): the run reads no rain there, so no source.
+		expect(cell('rainUsed', '1990-06-15').value).toBeNull();
+		expect(cell('source', '1990-06-15').value).toBeNull();
+		expect(cell('stationScaled', '1990-06-15').value).toBeNull();
+		// A station gap inside the window: the next fallback, the catchment's rain as is (model.md §2.4i).
+		const gap = fromEpochDay(toEpochDay(ST) + 9);
+		expect(station[9]).toBeNull();
+		expect(cell('source', gap).value).toBe('next fallback');
+		expect(cell('rainUsed', gap).value).toBe(wet(ST_DAYS, 0.9)[9]);
+	});
+
+	it('a raw line shows the stored cell with its check flags; without the series loaded, the line; a derived line never reads the stored series', () => {
+		const c = col('chirpsRaw');
+		const r = { date: '1990-06-15', series: { chk: { value: -9999, flags: ['negative'], m3Day: null } } } as Pick<PreviewRow, 'date' | 'series'>;
+		expect(areaColumnCell(c, r, lines)).toEqual({ value: -9999, flags: ['negative'] });
+		expect(areaColumnCell(c, { date: '1990-06-15', series: {} }, lines)).toEqual({ value: null, flags: [] });
+		expect(areaColumnCell(col('stationRaw'), { date: ST, series: {} }, lines).value).toBe(station[0]);
+		expect(areaColumnCell({ ...col('rainUsed'), seriesId: 'chk' }, r, lines).value).toBeNull();
 	});
 });

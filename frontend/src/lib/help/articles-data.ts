@@ -175,7 +175,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/ui.md § Data'
 	},
 	'preview-area-station-raw': {
-		long: 'The station’s record as stored, cut to the run window, shown in a unit’s or the average catchment rainfall’s own view right before the same rain adjusted to the area. The difference between the two columns is only the MAP ratio, so reading them side by side checks the scaling day by day. Blank where the station has no reading.\n\nThe All view leaves it out: the station is a stored series column there already.',
+		long: 'The station’s record as stored, on every day of the table, shown in a unit’s or the average catchment rainfall’s own view right before the same rain adjusted to the area (which, like every derived line, covers the run window only). The difference between the two columns is only the MAP ratio, so reading them side by side checks the scaling day by day. Blank where the station has no reading.\n\nThe All view leaves it out: the station is a stored series column there already.',
 		related: ['preview-area-station-scaled', 'rain-stations'],
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
 	},
@@ -186,7 +186,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
 	},
 	'preview-area-patch-raw': {
-		long: 'Each station in the area’s patching priority (Model settings → Flow generation: “Then patch gaps from”) as stored, cut to the run window, shown in the area’s own view after the main station’s lines and before its CHIRPS, in priority order. The header numbers it by its place in the priority, the same number the Rain used from column gives a day it fills, so a CHIRPS earlier in the list keeps its place. A station the run skips (no record, or no MAP while scaling to the MAP) has no lines.\n\nThe All view leaves it out: the station is a stored series column there already.',
+		long: 'Each station in the area’s patching priority (Model settings → Flow generation: “Then patch gaps from”) as stored, on every day of the table, shown in the area’s own view after the main station’s lines and before its CHIRPS, in priority order. The header numbers it by its place in the priority, the same number the Rain used from column gives a day it fills, so a CHIRPS earlier in the list keeps its place. A station the run skips (no record, or no MAP while scaling to the MAP) has no lines.\n\nThe All view leaves it out: the station is a stored series column there already.',
 		aliases: ['patch station', 'patching priority'],
 		related: ['preview-area-patch-scaled', 'preview-area-rain-from', 'rain-stations'],
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
@@ -198,7 +198,7 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
 	},
 	'preview-area-chirps-raw': {
-		long: 'The area’s own CHIRPS as stored (a unit’s CHIRPS feed, or the catchment CHIRPS for the average catchment rainfall), cut to the run window, shown in the area’s own view right before the bias-corrected line. Each corrected value is this one × the factor of its month, listed above the table.\n\nThe All view leaves it out: the CHIRPS series is a stored series column there already.',
+		long: 'The area’s own CHIRPS as stored (a unit’s CHIRPS feed, or the catchment CHIRPS for the average catchment rainfall), on every day of the table, shown in the area’s own view right before the bias-corrected line. Each corrected value is this one × the factor of its month, listed above the table. The corrected line, the rain used and its source cover the run window only, which follows the catchment’s rain: CHIRPS stored before it (a unit’s CHIRPS feed from 1981 beside a station from 2009) shows here, with those columns blank, since a run reads no rain there.\n\nThe All view leaves it out: the CHIRPS series is a stored series column there already.',
 		related: ['preview-area-chirps-corrected', 'chirps-bias'],
 		source: 'Not in the workbook; docs/model.md §2.4i; docs/ui.md § Data'
 	},

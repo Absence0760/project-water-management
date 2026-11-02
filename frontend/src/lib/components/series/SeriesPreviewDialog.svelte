@@ -43,7 +43,7 @@
 	import { fmtDay, fmtNum, fmtReading } from '#lib/format/number.js';
 	import type { Daily } from './coverage';
 	import {
-		areaCell,
+		areaColumnCell,
 		areaData,
 		areaTitle,
 		chainOf,
@@ -505,10 +505,7 @@
 								{:else if col.id === 'chirpsCorrected'}
 									<td class="num">{numText(row.derived.chirpsCorrectedMm)}</td>
 								{:else if col.area}
-									{@const lines = areaLines.get(col.area.nodeId)}
-									{@const v = lines ? areaCell(lines, col.area.line, row.date) : null}
-									{@const stored = col.seriesId ? row.series[col.seriesId] : undefined}
-									{@const flags = v !== null && stored ? stored.flags.filter((f) => f !== 'missing') : []}
+									{@const { value: v, flags } = areaColumnCell(col, row, areaLines.get(col.area.nodeId))}
 									<td class:num={col.area.line !== 'source'} class="area" class:flag={flags.length > 0}>
 										{typeof v === 'string' ? v : numText(v)}{#if flags.length}<span class="tag" data-testid="cell-flags"> · {flagList(flags)}</span>{/if}
 									</td>
