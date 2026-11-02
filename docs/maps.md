@@ -1714,7 +1714,7 @@ these lines draw is one a click can go on, both at 1 km²).
   dev:tiles:up` then sets `PUBLIC_CHANNELS_URL`; the DEM must be the one the
   backend's `DEM_URL` names, or every tile falls back. Measured on GLO-30:
   about 0.35 s and 15 KB (gzip; 60–90 KB as JSON) a tile, so the Western
-  Cape (~800 tiles) builds in about 5 minutes into about 11 MB, and all of
+  Cape (~800 tiles) builds in about 5 minutes into about 10–12 MB, and all of
   South Africa (~5 500) in about half an hour into about 80 MB. Production:
   deployment.md § Map tiles.
 - **When.** While one of the two tools is on, while a delineated

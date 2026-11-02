@@ -3388,7 +3388,7 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 | `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
 | `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
 | `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
-| `tiles/channels.pmtiles` (the DEM rivers precomputed from `terrain.pmtiles`, ~11 MB for the Western Cape, ~80 MB for South Africa) | `backend/scripts/channels-build.ts` (below) | `PUBLIC_CHANNELS_URL=/tiles/channels.pmtiles` | the same Art. 6(c) sentence as the relief (the lines are derived from the Copernicus DEM) |
+| `tiles/channels.pmtiles` (the DEM rivers precomputed from `terrain.pmtiles`, ~10–12 MB for the Western Cape, ~80 MB for South Africa) | `backend/scripts/channels-build.ts` (below) | `PUBLIC_CHANNELS_URL=/tiles/channels.pmtiles` | the same Art. 6(c) sentence as the relief (the lines are derived from the Copernicus DEM) |
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
 Upload them with your own SSO session (no workflow or Lambda can write the
@@ -3431,7 +3431,7 @@ laptop from the cached extract (same bytes, same fingerprint) with the
 region the catchments are in, then upload it; it records no provenance row
 of its own (it is derived, its metadata names the DEM's label and
 fingerprint, and `terrain`'s record stands). About 0.35 s a 0.2° tile, so
-the Western Cape (~800 tiles) takes about 5 minutes and makes about 11 MB,
+the Western Cape (~800 tiles) takes about 5 minutes and makes about 10–12 MB,
 all of South Africa (~5 500) about half an hour and 80 MB, at about 300 MB
 of memory. From `backend/`:
 

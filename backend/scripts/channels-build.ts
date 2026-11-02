@@ -8,7 +8,7 @@
 // --dem defaults to DEM_URL; --bbox to the DEM's bounds. Every 0.2° tile is
 // routed with the same code and parameters as GET …/map/channels, about 0.35 s
 // and 15 KB (gzip) a tile on the GLO-30 DEM, so a run of the Western Cape
-// (~750 tiles) takes ~5 minutes and writes ~11 MB. `bin/tiles-dev.sh channels`
+// (~750 tiles) takes ~5 minutes and writes ~10–12 MB. `bin/tiles-dev.sh channels`
 // (pnpm dev:tiles:channels) runs it on the cached relief DEM and uploads the
 // result to MinIO.
 //

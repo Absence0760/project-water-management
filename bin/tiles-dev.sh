@@ -77,7 +77,7 @@
 # `channels` needs no network and no tool beyond node: CHANNELS_DEM (a file or
 # URL; default the cached terrain.pmtiles, else backend/fixtures/dem/) and
 # CHANNELS_BBOX (default the Western Cape, 17.6,-35.0,24.4,-30.4: ~800 tiles,
-# ~5 minutes and ~11 MB from GLO-30; ignored for the synthetic DEM, which is
+# ~5 minutes and ~10–12 MB from GLO-30; ignored for the synthetic DEM, which is
 # built whole) override it.
 #
 # Each upload records where the archive came from (tiles-upload.ts: its SHA-256,
