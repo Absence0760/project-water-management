@@ -11,7 +11,10 @@
 	attach card while that area is chosen, so it asks for the proposal when it
 	mounts; DataFeedsPanel opens it from the Map tab's link (?rain=boundary) with
 	`focus`, which puts the focus on its heading once loaded. Close closes the
-	card (`onclose`). Helpers in ./feeds.ts.
+	card (`onclose`). `source` agera5_et0 makes it the reference ET feed's
+	proposal instead: our copy's 0.1° cells into the daily reference ET series,
+	with no daily product (the panel draws it when that source is picked).
+	Helpers in ./feeds.ts.
 -->
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
@@ -25,7 +28,9 @@
 		boundaryChoice,
 		type BoundaryChoice,
 		type BoundaryProposal,
+		type BoundarySource,
 		CHIRPS_PRODUCT_FIRST_DAY,
+		ET0_FEED_FIRST_DAY,
 		errorText,
 		feedsApi,
 		type FeedMeta,
@@ -37,7 +42,8 @@
 		feeds,
 		onapplied,
 		onclose,
-		focus = false
+		focus = false,
+		source = 'chirps'
 	}: {
 		projectId: string;
 		feeds: FeedMeta[];
@@ -46,7 +52,30 @@
 		onclose: () => void;
 		/** Focus the heading once the proposal has loaded (a link arrived here), not while the area is picked. */
 		focus?: boolean;
+		/** The feed proposed: CHIRPS rain (the default) or the daily reference ET (agera5_et0). */
+		source?: BoundarySource;
 	} = $props();
+	const et0 = $derived(source === 'agera5_et0');
+	/** The source's words: the heading's, the cells', the method's source and the feed's. */
+	const words = $derived(
+		et0
+			? {
+					heading: 'Reference ET from the catchment boundary',
+					cells: 'AgERA5 cells of 0.1°',
+					quantity: 'Reference evapotranspiration',
+					credit: 'AgERA5 v2.0 daily FAO-56 reference evapotranspiration (Copernicus Climate Change Service), with NASA POWER’s on the newest days, from our copy.',
+					feed: 'reference ET feed',
+					table: 'The boundary’s reference ET cells'
+				}
+			: {
+					heading: 'Rain from the catchment boundary',
+					cells: 'CHIRPS v3 cells of 0.05°',
+					quantity: 'Rainfall',
+					credit: 'CHIRPS v3 daily, Climate Hazards Center, UC Santa Barbara.',
+					feed: 'CHIRPS feed',
+					table: 'The boundary’s CHIRPS cells'
+				}
+	);
 
 	const uid = $props.id();
 	const calls = $derived(feedsApi(api, projectId));
@@ -66,7 +95,7 @@
 		error = done = null;
 		proposal = null;
 		try {
-			proposal = await calls.boundaryProposal();
+			proposal = await calls.boundaryProposal(source);
 			choice = boundaryChoice(proposal);
 			startError = null;
 		} catch (e) {
@@ -82,7 +111,7 @@
 	function pickReplace(replace: boolean) {
 		if (!proposal) return;
 		const base = boundaryChoice(proposal);
-		choice = replace && proposal.replace?.available ? { replace: true, product: proposal.replace.product, startDate: '' } : { ...base, replace: false };
+		choice = replace && proposal.replace?.available ? { replace: true, product: proposal.replace.product ?? 'sat', startDate: '' } : { ...base, replace: false };
 		startError = null;
 	}
 
@@ -94,7 +123,7 @@
 			box.focus();
 			return;
 		}
-		const parsed = boundaryApplyBody(proposal, choice);
+		const parsed = boundaryApplyBody(proposal, choice, source);
 		if ('error' in parsed) {
 			startError = parsed.error;
 			await tick();
@@ -104,10 +133,10 @@
 		applying = true;
 		error = startError = null;
 		try {
-			const feed = await calls.applyBoundary(parsed.body);
+			const feed = await calls.applyBoundary(parsed.body, source);
 			done = choice.replace
-				? `Applied: a CHIRPS feed reads ${proposal.cells.length} cells of “${proposal.boundary.name || 'the catchment boundary'}” to replace “${proposal.replace?.targetName ?? ''}”. Runs keep reading its old values until the new record is complete.`
-				: `Applied: the CHIRPS feed now reads ${proposal.cells.length} cells of “${proposal.boundary.name || 'the catchment boundary'}”. It runs on the next schedule, or now with “Run now”.`;
+				? `Applied: a ${words.feed} reads ${proposal.cells.length} cells of “${proposal.boundary.name || 'the catchment boundary'}” to replace “${proposal.replace?.targetName ?? ''}”. Runs keep reading its old values until the new record is complete.`
+				: `Applied: the ${words.feed} now reads ${proposal.cells.length} cells of “${proposal.boundary.name || 'the catchment boundary'}”. It runs on the next schedule, or now with “Run now”.`;
 			proposal = null;
 			await onapplied(feed);
 		} catch (e) {
@@ -122,7 +151,7 @@
 </script>
 
 <section class="boundary-rain" aria-labelledby="{uid}-h" data-testid="boundary-rain">
-	<h4 id="{uid}-h" tabindex="-1" bind:this={heading}>Rain from the catchment boundary <HelpTip key="boundary-rain" /></h4>
+	<h4 id="{uid}-h" tabindex="-1" bind:this={heading}>{words.heading} <HelpTip key="boundary-rain" /></h4>
 	{#if loading}
 		<p class="muted" role="status">Working out the cells…</p>
 	{:else if proposal}
@@ -134,10 +163,10 @@
 			</dd>
 			<dt>Cells</dt>
 			<dd data-testid="boundary-rain-cells">
-				{p.cells.length} CHIRPS v3 cells of 0.05° in {p.rows} rows, {fmtNum(p.cellsKm2, 1)} km² in all, {fmtNum(p.insideKm2, 1)} km² of it inside the boundary
+				{p.cells.length} {words.cells} in {p.rows} rows, {fmtNum(p.cellsKm2, 1)} km² in all, {fmtNum(p.insideKm2, 1)} km² of it inside the boundary
 			</dd>
 			<dt>Method</dt>
-			<dd>Rainfall {p.method}. Source: CHIRPS v3 daily, Climate Hazards Center, UC Santa Barbara.</dd>
+			<dd>{words.quantity} {p.method}. Source: {words.credit}</dd>
 			{#if p.runSeries}
 				<dt>Runs read</dt>
 				<dd data-testid="boundary-rain-run-series">{runSeriesText(p.runSeries)}</dd>
@@ -146,10 +175,10 @@
 		{#if p.canApply && p.apply.action !== 'none'}
 			{#if p.replace}
 				<fieldset class="mode" data-testid="boundary-rain-keep">
-					<legend>The CHIRPS series runs read</legend>
+					<legend>The {et0 ? 'reference ET' : 'CHIRPS'} series runs read</legend>
 					<label class="check"
 						><input type="radio" name="{uid}-keep" checked={!choice.replace} disabled={applying} onchange={() => pickReplace(false)} /> Keep “{p.replace.targetName}” for runs, and
-						put the boundary’s rain beside it to compare</label
+						put the boundary’s {et0 ? 'reference ET' : 'rain'} beside it to compare</label
 					>
 					<label class="check"
 						><input
@@ -159,20 +188,22 @@
 							disabled={applying || !p.replace.available}
 							aria-describedby={p.replace.available ? undefined : `${uid}-no-replace`}
 							onchange={() => pickReplace(true)}
-						/> Replace “{p.replace.targetName}” with the boundary’s rain, once its whole record is read</label
+						/> Replace “{p.replace.targetName}” with the boundary’s {et0 ? 'reference ET' : 'rain'}, once its whole record is read</label
 					>
 					{#if !p.replace.available}<span class="hint muted" id="{uid}-no-replace" data-testid="boundary-rain-no-replace">Can’t replace it: {p.replace.reason}.</span>{/if}
 				</fieldset>
 			{/if}
 			{#if !choice.replace}
 				<div class="form-row">
-					<div class="field">
-						<label for="{uid}-product">Daily product <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
-						<select id="{uid}-product" bind:value={choice.product} disabled={applying} aria-describedby="{uid}-product-h" onchange={() => (startError = null)}>
-							<option value="rnl">rnl: from 1981, final days only</option>
-							<option value="sat">sat: from 1998, with preliminary days</option>
-						</select>
-					</div>
+					{#if !et0}
+						<div class="field">
+							<label for="{uid}-product">Daily product <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
+							<select id="{uid}-product" bind:value={choice.product} disabled={applying} aria-describedby="{uid}-product-h" onchange={() => (startError = null)}>
+								<option value="rnl">rnl: from 1981, final days only</option>
+								<option value="sat">sat: from 1998, with preliminary days</option>
+							</select>
+						</div>
+					{/if}
 					<div class="field">
 						<label for="{uid}-start">Start date <span class="muted">(optional)</span></label>
 						<DayInput
@@ -187,17 +218,17 @@
 				<p class="hint explain" id="{uid}-product-h">
 					{p.runSeries?.firstDay
 						? `Proposed from the first day of “${p.runSeries.name}”, so the two series cover the same years.`
-						: 'Without a start date the feed reads the last 60 days at its first fetch.'}
-					The {choice.product} product begins on {fmtDay(CHIRPS_PRODUCT_FIRST_DAY[choice.product])}.
+						: `Without a start date the feed reads the last ${et0 ? '365' : '60'} days at its first fetch.`}
+					{et0 ? `A reference ET feed reads from ${fmtDay(ET0_FEED_FIRST_DAY)}.` : `The ${choice.product} product begins on ${fmtDay(CHIRPS_PRODUCT_FIRST_DAY[choice.product])}.`}
 				</p>
 				{#if startError}<p class="err" id="{uid}-start-err" role="alert">{startError}</p>{/if}
 			{/if}
 		{/if}
-		<p data-testid="boundary-rain-apply-words">{applyWords(p, feeds, choice)}</p>
+		<p data-testid="boundary-rain-apply-words">{applyWords(p, feeds, choice, source)}</p>
 		<details>
 			<summary>The cells</summary>
 			<div class="table-wrap">
-				<table class="cells" aria-label="The boundary’s CHIRPS cells">
+				<table class="cells" aria-label={words.table}>
 					<thead><tr><th scope="col">Latitude</th><th scope="col">Longitude</th><th scope="col">Inside</th><th scope="col">Weight</th></tr></thead>
 					<tbody>
 						{#each p.cells as c (`${c.lat},${c.lon}`)}

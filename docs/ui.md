@@ -6784,7 +6784,15 @@ editors run one now and read the map's proposals, viewers read.
   boundary](./maps.md#rain-from-the-boundary)). Until issue #521 this and
   the next were two unlabelled buttons under the list; now they are choices
   of the card's **Area** for CHIRPS (an editor's card, **Rain from the
-  map**, has only these two, the boundary first). Picking one replaces the
+  map**, has only these two, the boundary first). With the source *AgERA5
+  daily reference evapotranspiration* the **Area** offers the boundary too
+  (not each unit's parcel): the same proposal headed **Reference ET from the
+  catchment boundary**, on our copy's 0.1° AgERA5 cells ("4 AgERA5 cells of
+  0.1° in 2 rows, …"), with no **Daily product** field, a start date from
+  1981, and the feed's words in **Apply** ("Apply attaches a new reference
+  ET feed into …"; [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary), *Reference ET from the
+  boundary*). Switching the source redraws the proposal for it. Picking one replaces the
   series fields, the typed area and **Attach feed** with the proposal and its
   own action row; the focus stays on the Area choice. It shows **Rain from the
   catchment boundary** (a heading in the card) with the proposal: the boundary (name,

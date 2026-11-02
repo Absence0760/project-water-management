@@ -346,3 +346,100 @@ describe('a plain feed never takes over the series runs read (issue #561)', () =
 		expect((await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps_gefs', config: { cells } })).status).toBe(201);
 	});
 });
+
+// The reference ET feed from the boundary (agera5_et0, docs/followups.md): the
+// same proposal and Apply on the reference ET copy's 0.1° grid, into
+// evap_et0_mm; no daily product; and replacing the record runs read only
+// through the catchment feed that wrote it (an area replacement).
+describe('the reference ET feed from the catchment boundary', () => {
+	const et0At = (pid: string) => `/projects/${pid}/feeds/agera5_et0/from-boundary`;
+	const applyEt0 = (u: User, pid: string, b: { id: string; updatedAt: string }, extra: Record<string, unknown> = {}) =>
+		u.call('POST', et0At(pid), { featureId: b.id, updatedAt: b.updatedAt, ...extra });
+
+	it('proposes the boundary’s 0.1° cells to editors, and owners apply it: an AgERA5 feed into evap_et0_mm, recorded in the History', async () => {
+		const { owner, editor, viewer, pid } = await setup();
+		const b = await drawBoundary(editor, pid);
+		expect((await viewer.call('GET', et0At(pid))).status).toBe(403);
+		expect((await applyEt0(viewer, pid, b)).status).toBe(403);
+		const seen = await editor.call('GET', et0At(pid));
+		expect(seen.status).toBe(200);
+		expect(seen.body.canApply).toBe(false);
+		expect((await applyEt0(editor, pid, b)).status).toBe(403);
+
+		// Positive control: the owner. 0.12° × 0.10° on the 0.1° grid: 2 columns × 2 rows (edges at 21.2/21.3/21.4, −33.8/−33.7/−33.6).
+		const p = (await owner.call('GET', et0At(pid))).body;
+		expect(p.canApply).toBe(true);
+		expect(p.cells.map((c: { lat: number; lon: number }) => `${c.lat},${c.lon}`).sort()).toEqual(['-33.65,21.25', '-33.65,21.35', '-33.75,21.25', '-33.75,21.35']);
+		expect(p.rows).toBe(2);
+		expect(p.insideKm2).toBeCloseTo(b.areaM2 / 1e6, 0);
+		expect(p.method).toMatch(/^area-weighted over 4 AgERA5 cells \(0\.1°\)/);
+		// No product, and no record: the default series over the last 365 days (startDate null).
+		expect(p.apply).toEqual({ action: 'create', targetKind: 'evap_et0_mm', targetName: '', startDate: null });
+		expect(p.runSeries).toBeNull();
+		expect(p.replace).toBeNull();
+
+		expect((await applyEt0(owner, pid, b, { product: 'sat' })).status).toBe(400);
+		const r = await applyEt0(owner, pid, b);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		expect(r.body.feed).toMatchObject({ source: 'agera5_et0', targetKind: 'evap_et0_mm', targetName: '', config: { boundary: p.boundary } });
+		expect(r.body.feed.config.cells).toHaveLength(4);
+		expect(r.body.feed.config.product).toBeUndefined();
+		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'feed.configured' ORDER BY id DESC LIMIT 1`, [pid]);
+		expect(ev.subject).toMatchObject({ action: 'created', source: 'agera5_et0', boundary: { featureId: b.id, name: 'Test catchment' }, cells: 4 });
+		expect((await owner.call('GET', et0At(pid))).body.apply).toEqual({ action: 'none', feedId: r.body.feed.id });
+		// The CHIRPS proposal is its own: a reference ET feed reading the boundary doesn't answer it.
+		expect((await owner.call('GET', at(pid))).body.apply).toMatchObject({ action: 'create', targetKind: 'rain_chirps_mm' });
+
+		// It fetches offline through the committed copy (FEED_SOURCE=fixtures).
+		expect((await owner.call('POST', `/projects/${pid}/feeds/${r.body.feed.id}/run-now`)).status).toBe(202);
+		await runTick({ feeds: false, reports: false, alerts: false });
+		const listed = (await owner.call('GET', `/projects/${pid}/feeds`)).body.feeds[0];
+		expect(listed).toMatchObject({ consecutiveFailures: 0, lastError: null });
+		expect(listed.lastDataDate).not.toBeNull();
+	});
+
+	it('gives the cells to an empty reference ET feed, never a CHIRPS one; refuses a boundary outside the copy’s region', async () => {
+		const { owner, pid } = await setup();
+		const b = await drawBoundary(owner, pid);
+		const chirps = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [{ lat: -33.72, lon: 21.27 }] } })).body.feed;
+		const feed = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'agera5_et0', config: { cells: [{ lat: -33.72, lon: 21.27 }], startDate: '2020-01-01' } })).body.feed;
+		expect((await owner.call('GET', et0At(pid))).body.apply).toEqual({ action: 'update', feedId: feed.id, targetKind: 'evap_et0_mm', targetName: '', startDate: '2020-01-01' });
+		expect((await applyEt0(owner, pid, b, { feedId: chirps.id })).status).toBe(409);
+		const r = await applyEt0(owner, pid, b, { feedId: feed.id });
+		expect(r.status, JSON.stringify(r.body)).toBe(200);
+		expect(r.body.feed.config).toMatchObject({ startDate: '2020-01-01', boundary: { featureId: b.id } });
+		expect(r.body.feed.config.cells).toHaveLength(4);
+
+		const away = await setup();
+		await drawBoundary(away.owner, away.pid, { type: 'Polygon', coordinates: [ring(-60.2, -33.79, -60.1, -33.69)] });
+		const out = await away.owner.call('GET', et0At(away.pid));
+		expect(out.status).toBe(409);
+		expect(out.body.error).toMatch(/outside the region our copy of the reference evapotranspiration holds/);
+		// Positive control: CHIRPS's grid is global.
+		expect((await away.owner.call('GET', at(away.pid))).status).toBe(200);
+	});
+
+	it('replaces the record runs read only through the catchment feed that wrote it, as an area replacement; keeps an uploaded one', async () => {
+		const up = await setup();
+		await up.owner.call('PUT', `/projects/${up.pid}/series`, { kind: 'evap_et0_mm', name: 'ET0 upload', unit: 'mm', startDate: '2001-01-01', values: [4, 5] });
+		const ub = await drawBoundary(up.owner, up.pid);
+		const kept = (await up.owner.call('GET', et0At(up.pid))).body;
+		expect(kept.runSeries).toMatchObject({ name: 'ET0 upload', firstDay: '2001-01-01' });
+		expect(kept.apply).toMatchObject({ action: 'create', targetName: 'Reference ET boundary', startDate: '2001-01-01' });
+		expect(kept.replace).toMatchObject({ available: false, reason: expect.stringMatching(/no feed writes “ET0 upload”/) });
+		expect((await applyEt0(up.owner, up.pid, ub, { replace: true })).body.details).toMatchObject({ code: 'series_replace' });
+
+		// A catchment reference ET feed with days of its own: it takes the boundary's cells and re-reads its record over them.
+		const { owner, pid } = await setup();
+		const feed = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'agera5_et0', config: { cells: [{ lat: -33.72, lon: 21.27 }] } })).body.feed;
+		expect((await owner.call('POST', `/projects/${pid}/feeds/${feed.id}/run-now`)).status).toBe(202);
+		await runTick({ feeds: false, reports: false, alerts: false });
+		const b = await drawBoundary(owner, pid);
+		const p = (await owner.call('GET', et0At(pid))).body;
+		expect(p.replace).toMatchObject({ available: true, targetName: '', feedId: feed.id, area: true, startDate: expect.any(String) });
+		const r = await applyEt0(owner, pid, b, { replace: true });
+		expect(r.status, JSON.stringify(r.body)).toBe(200);
+		expect(r.body.feed).toMatchObject({ id: feed.id, config: { boundary: { featureId: b.id }, startDate: p.replace.startDate } });
+		expect(r.body.feed.replaceFrom).toMatch(/^area:/);
+	});
+});

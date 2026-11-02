@@ -519,6 +519,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		const b = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }))).feature;
 		return { body: { featureId: b.id, updatedAt: b.updatedAt } };
 	},
+	// The reference ET feed from the boundary: the same, on the reference ET grid.
+	'POST /projects/:id/feeds/agera5_et0/from-boundary': async () => {
+		for (const f of (await ok(ctx.owner.call('GET', `${at()}/feeds`))).feeds as { id: string }[]) await ok(ctx.owner.call('DELETE', `${at()}/feeds/${f.id}`));
+		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+		const b = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass ET boundary', geometry: { type: 'Polygon', coordinates: [square] } }))).feature;
+		return { body: { featureId: b.id, updatedAt: b.updatedAt } };
+	},
 	// Rain for each unit (#482): the ladder's farm A has its parcel; no feed in the way of a new one.
 	'POST /projects/:id/feeds/chirps/from-units': async () => {
 		for (const f of (await ok(ctx.owner.call('GET', `${at()}/feeds`))).feeds as { id: string }[]) await ok(ctx.owner.call('DELETE', `${at()}/feeds/${f.id}`));

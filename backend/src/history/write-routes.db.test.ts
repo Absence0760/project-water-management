@@ -759,6 +759,16 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		// The reference ET feed from the map's boundary: records feed.configured naming the boundary.
+		route: `POST ${P}/feeds/agera5_et0/from-boundary`,
+		records: ['feed.configured'],
+		call: async (c) => {
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			return c.owner.call('POST', `${at(c)}/feeds/agera5_et0/from-boundary`, { featureId: b.body.feature.id, updatedAt: b.body.feature.updatedAt });
+		}
+	},
+	{
 		// Rain for each unit (#482): one feed.configured for the whole action, naming each unit it set up.
 		route: `POST ${P}/feeds/chirps/from-units`,
 		records: ['feed.configured'],
