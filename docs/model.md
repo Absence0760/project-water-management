@@ -6889,9 +6889,14 @@ stored `object_demand@` is before the cut, so the shortfall can't be worked
 back from it). A measure: nothing else in the run changes. The farm view
 reads it to split a dam unit's short days by side (`season.shortDaysRiver`,
 `shortDaysBoth`; ui.md § Farmer view): the river side was short on a day
-`Σ short_a` is above float noise, the dam side when `deficit − Σ short_a`
-is, with the dam at its stop level. A run before 1.111.0 has none, and its
-view keeps putting every short day at the stop level down to the dam.
+`Σ short_a` is above float noise, the dam side when the unit's shortfall
+against what it asked its sources for, less `Σ short_a`, is, with the dam
+at its stop level. What it asked for is `restricted_demand` on a unit a
+drought restriction cut (`restricted_demand − supplied − Σ short_a`), else
+the demand (`deficit − Σ short_a`): `deficit` is against the unrestricted
+demand, so it also holds the cut, the river side's included, which isn't
+the dam's. A run before 1.111.0 has none, and its view keeps putting every
+short day at the stop level down to the dam.
 
 **Checks.** `checkBalance` closes every unit's balance with the pools'
 change, and keeps each pool within 0 … capacity;

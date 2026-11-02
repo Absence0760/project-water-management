@@ -3426,6 +3426,23 @@ yet; each lands with the work package named.
       "Both were short on N days."; Afrikaans through the i18n agents). A
       view from an older run has no split and reads as before (ui.md §
       Farmer view).
+- [ ] **A short day on the crops' share from another unit's dam is put
+      down to this unit's dam** (engine-reviewer on PR #693, 2026-11-02;
+      predates it). The farm projection's dam-side shortfall is what is
+      left of the unit's shortfall once the river abstractions' unmet
+      demand (`river_short@`) is taken off. On a unit whose crops take a
+      share from another unit's dam (the crop supply table's remote share,
+      `remote_dam_in`, model.md §2.7k), that remainder also holds the
+      remote share's shortfall, so with this unit's dam at its stop level
+      the farm page reads "when your dam was down to its stop level" for a
+      day the other dam fell short. Durable fix: a per-side shortfall for
+      the remote share (the engine publishes what the remote share was
+      asked for after the restriction less what it got, an ENGINE_VERSION
+      bump, as `river_short@` does for the river side), the projection
+      takes it off the dam side's remainder, and the card gets a third
+      reason ("… when the other dam couldn't give enough", through the
+      i18n agents). Trigger: the client's first unit with a remote crop
+      share and a dam of its own is published to its farmer.
 
 ## Afrikaans (WP-2.5)
 

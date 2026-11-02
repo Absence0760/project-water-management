@@ -392,6 +392,37 @@ describe('the dam’s days left follow what the dam itself gave (persona-farmer,
 		expect(farmProjection(scenario().run, 'dam').season.shortDaysRiver).toBeUndefined();
 	});
 
+	it('does not put a drought restriction’s cut of the river side down to the dam (engine 1.111.0)', () => {
+		// The dam farm's crops are on its dam but need nothing all season; the dam sits at its stop level with no water
+		// into it. A 2000 m³/day works pumps from the river through a 600 m³/day pump, cut by half by a restriction:
+		// it asks 1000, gets 600, short 400. The deficit (against the unrestricted 2000) is 1400, but none of it is
+		// the dam side's: the dam served nothing.
+		const { input } = scenario();
+		const cut = structuredClone(input);
+		Object.assign(cut.model.nodes.find((n) => n.id === 'dam')!, { damInitialPct: 0.2, pctRunoffToDam: 0, pctUpstreamToDam: 0 });
+		cut.model.crops = cut.model.crops.map((c) => ({ ...c, cropFactor: c.cropFactor.map((v, m) => (m <= 2 ? 0 : v)) }));
+		cut.model.demandObjects = [
+			{ id: 'works', nodeId: 'dam', name: 'Works', category: 'industrial', sizing: 'monthly', monthlyM3Day: new Array(12).fill(2000), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'shared', destination: 'internal', enabled: true, note: '', waterSource: 'river', riverPumpM3Day: 600 }
+		];
+		cut.settings = { ...cut.settings, droughtRestriction: { reviewDates: ['10-01'], basis: 'own', nodeIds: ['dam'], levels: [{ belowPct: 0.5, cuts: { industrial: 0.5 } }] } };
+		const d0 = Date.parse('2021-10-01T00:00:00Z');
+		const natural = Array.from({ length: 822 }, (_, t) => ([1, 2].includes(new Date(d0 + t * 86_400_000).getUTCMonth() + 1) ? 40_000 : 3_000));
+		const out = runModelWith(cut, () => ({ naturalFlowM3Day: natural }));
+		const get = (k: string) => out.series.find((s) => s.nodeId === 'dam' && s.key === k)!.values;
+		const last = 821;
+		// The hand case on the season's last day.
+		expect(get('restricted_demand')[last]).toBeCloseTo(1000, 6);
+		expect(get('river_take@works')[last]).toBeCloseTo(600, 6);
+		expect(get('river_short@works')[last]).toBeCloseTo(400, 6);
+		expect(get('deficit')[last]).toBeCloseTo(1400, 6);
+		const p = farmProjection(asRun(cut, out), 'dam');
+		expect(p.season.onlyRiver).toBeUndefined();
+		expect(p.season.shortDays).toBeGreaterThan(0);
+		expect(p.season.shortDaysRiver).toBe(p.season.shortDays);
+		expect(p.season.shortDaysAtStopLevel).toBe(0);
+		expect(p.season.shortDaysBoth).toBe(0);
+	});
+
 	it('takes the boreholes and each river abstraction off supplied, keeps the supply rule’s pump and off-take water (the dam carries them with nothing flowing in), never below 0', () => {
 		const node = farm('u', 'out', { damCapacityM3: 1000, cropWaterSource: 'river' });
 		const stored: Record<string, number[]> = {

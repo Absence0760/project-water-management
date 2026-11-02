@@ -14013,7 +14013,10 @@ published.
   couldn't give enough on 8 days. Both were short on 2 days."), both every
   day ("…all when your dam was down to its stop level and the river or your
   pump couldn't give enough."), or the dam's words when only the dam side
-  was. A view from an older run has no split and keeps the dam's words.
+  was. A drought restriction's cut is never the dam side's shortfall: the
+  dam side is measured against `restricted_demand` where the rule cut the
+  unit (model.md §2.7j). A view from an older run has no split and keeps
+  the dam's words.
 - **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
   figures are worked out by a computer model of the catchment. They are
   estimates, not measurements or instructions, and they can be wrong. Only a

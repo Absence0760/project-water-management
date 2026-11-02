@@ -43,7 +43,7 @@ import {
 import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
 import { runReturnFlow, type CropArea, type CurtailmentFarm, type CurtailmentSummary, type DemandObject, type IrrigationSystemDef, type NetworkNode, type Transfer } from '../project';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
-import { userRestrictionShare } from '../network/restriction';
+import { RESTRICTION_SERIES, userRestrictionShare } from '../network/restriction';
 import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverShortKey, riverTakeKey } from '../network/riverSource';
 import { modelFarmEfficiency, type CropEfficiencyInput, type CropSystemInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
@@ -76,7 +76,9 @@ export const PROJECTION_SERIES = {
 	// has to give, read when present, so the dam's days left follow what it would carry with nothing flowing in.
 	// remote_dam_in and remote_dam_out (engine ≥ 1.73.0): another unit's dam's share of the crops (not this dam's), and
 	// what this dam gives other units' crops (a draw on it), read when present.
-	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow', 'basic_needs', 'groundwater_used', 'remote_dam_in', 'remote_dam_out'],
+	// restricted_demand (engine ≥ 1.54.0): only on a unit a drought restriction cut; the dam side's shortfall is
+	// measured against it (deficit is the unrestricted demand's), read when present.
+	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow', 'basic_needs', 'groundwater_used', 'remote_dam_in', 'remote_dam_out', RESTRICTION_SERIES.restricted.key],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
 	// ewr_charge_shortfall only where the charge followed a Reserve rule table (engine ≥ 1.3.0); read when present.
 	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall'],
@@ -862,10 +864,17 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 	// A unit whose demands all draw on the river (§2.7j): its dam serves none of them, so a short day is never the dam's.
 	const onlyRiver = hasDam && servesOnlyRiver(run, node);
 	// A dam unit with river abstractions beside it (§2.7j, engine ≥ 1.111.0): each side's short days apart. The
-	// river side was short when an abstraction was (river_short@); the dam side when the rest of the deficit is
-	// more than noise and the dam sat at its stop level. Null on a run before 1.111.0: every short day at the stop
+	// river side was short when an abstraction was (river_short@); the dam side when the rest of the shortfall
+	// against what the unit asked for (after any drought restriction) is more than noise and the dam sat at its
+	// stop level. Null on a run before 1.111.0: every short day at the stop
 	// level is put down to the dam, as before.
 	const riverShort = hasDam && !onlyRiver ? riverShortOf(run, node, days) : null;
+	// The dam side's own shortfall is the unit's shortfall against what its sources were asked for, less the river
+	// side's: under a drought restriction that is restricted_demand − supplied (deficit holds the cut as well, the
+	// river side's cut included, which isn't the dam's); without one, deficit.
+	const restricted = riverShort ? run.series(nodeId, RESTRICTION_SERIES.restricted.key) : undefined;
+	if (restricted && restricted.length !== days) throw new ProjectionInputError(`the run's ${RESTRICTION_SERIES.restricted.key} series has ${restricted.length} days, expected ${days}`);
+	const askedShort = (t: number) => (restricted ? val(restricted[t]) - supplied[t]! : deficit[t]!);
 	const shortMonths = new Set<string>();
 	let shortDays = 0;
 	let atStop = 0;
@@ -877,7 +886,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 		shortMonths.add(fromEpochDay(d0 + t).slice(0, 7));
 		const r = riverShort ? riverShort[t]! : 0;
 		const riverSide = r > NOISE_M3;
-		const damSide = hasDam && !onlyRiver && capOn(t) > 0 && storage[t]! <= stopOn(t) + 1e-3 && (!riverShort || deficit[t]! - r > NOISE_M3);
+		const damSide = hasDam && !onlyRiver && capOn(t) > 0 && storage[t]! <= stopOn(t) + 1e-3 && (!riverShort || askedShort(t) - r > NOISE_M3);
 		if (damSide) atStop++;
 		if (riverSide) onRiverDays++;
 		if (damSide && riverSide) both++;
