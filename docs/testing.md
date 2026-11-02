@@ -249,6 +249,14 @@ What it can't see:
 
 ## Fresh clone
 
+The frontend's tsconfig extends `$app/tsconfig`, which `svelte-kit sync`
+writes into `frontend/node_modules/$app/` (SvelteKit 3). Without it Vitest's
+dependency optimizer stops at "Tsconfig not found" and no frontend test runs.
+So the frontend runs the sync on every `pnpm install` (its `prepare` script)
+and again before `pnpm test` and `pnpm test:coverage`; before 2026-11-02 only
+`pnpm check` ran it, and a job that tested without checking first (CI's
+`test-west`) failed on a fresh checkout.
+
 `.github/workflows/fresh-clone.yml` holds the V1 promise that a fresh clone
 runs with `pnpm run setup && pnpm dev` and nothing else (plan.md Phase 1
 acceptance). On a clean checkout with a cold pnpm store it runs `pnpm run setup`
