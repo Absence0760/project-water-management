@@ -725,10 +725,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     all lack it. Set `TZ=Pacific/Kiritimati` (UTC+14) in the `test` scripts, and
     add a CI leg with `TZ=America/Adak` (UTC−10). Fix any failures at the
     source (CLAUDE.md rule 7).
-  - **Request sequencer (plan.md 1d):** list and series fetches in
-    `components/runs/cache.ts` and `components/series/valuesCache.ts` drop
-    stale responses (a generation counter or `AbortController`) when the
-    project or series changes.
+  - **Request sequencer (plan.md 1d):** list and series fetches drop
+    stale responses when the project or series changes. (Done:
+    `lib/api/latest.ts`, architecture.md § Stale responses.)
   - **Tick stale plan.md Phase 7 rows:** the per-account lockout (`005`) and
     the session watermark (`004`) are done. (Ticked.)
   - **Accessibility leftovers:** a 320 px reflow check and a token contrast

@@ -59,7 +59,8 @@
 	import PackActions from '#lib/components/packs/PackActions.svelte';
 	import PackBadge from '#lib/components/packs/PackBadge.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '#lib/components/packs/pack.js';
+	import { latestOnly } from '#lib/api/latest.js';
+	import { errataFoundSinceNote, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '#lib/components/packs/pack.js';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '#lib/components/report/printTheme.js';
 	import { pageStart } from '#lib/a11y/focusPage.js';
 	import { followRetry } from '#lib/components/common/loadState.js';

@@ -105,7 +105,7 @@
 	import { unplacedAdvice, unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
-	import { cachedValues, cacheValues } from './valuesCache';
+	import { seriesListLoader, seriesValuesLoader } from './seriesLoads';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
 	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
@@ -306,12 +306,22 @@
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
 	const isRain = (k: string) => k.endsWith('_mm');
 
+	// Latest wins (seriesLoads.ts): a list or values asked for earlier never land over a later answer.
+	const listSeries = seriesListLoader();
+	const readValues = seriesValuesLoader();
 	async function load() {
 		if (!list.length) loading = true;
 		loadError = null;
 		refreshError = null;
+		// False when a later load answered instead: it owns the list and the loading state.
+		let mine = true;
 		try {
-			list = await api.series.list(projectId);
+			const r = await listSeries(projectId);
+			if (!r.current) {
+				mine = false;
+				return;
+			}
+			list = r.value;
 			onSeriesChange?.(list);
 			void loadValues();
 		} catch (e) {
@@ -319,8 +329,10 @@
 			if (list.length) refreshError = msg(e);
 			else loadError = msg(e);
 		} finally {
-			loading = false;
-			refreshing = false;
+			if (mine) {
+				loading = false;
+				refreshing = false;
+			}
 		}
 	}
 	onMount(() => {
@@ -328,28 +340,22 @@
 		void load();
 	});
 
-	async function loadValues() {
-		await Promise.all(
-			list.map(async (s) => {
-				if (s.id in valuesFailed) {
-					const rest = { ...valuesFailed };
-					delete rest[s.id];
-					valuesFailed = rest;
-				}
-				const hit = cachedValues(projectId, s);
-				if (hit) {
-					values = { ...values, [s.id]: hit };
-					return;
-				}
-				try {
-					const v = cacheValues(projectId, await api.series.get(projectId, s.id));
-					values = { ...values, [s.id]: v };
-				} catch (e) {
-					// The coverage cells stay "–"; the preview shows the error with Try again.
-					valuesFailed = { ...valuesFailed, [s.id]: msg(e) };
-				}
-			})
-		);
+	function loadValues(): Promise<void> {
+		return readValues(projectId, list, {
+			retry(id) {
+				if (!(id in valuesFailed)) return;
+				const rest = { ...valuesFailed };
+				delete rest[id];
+				valuesFailed = rest;
+			},
+			value(id, v) {
+				values = { ...values, [id]: v };
+			},
+			// The coverage cells stay "–"; the preview shows the error with Try again.
+			failed(id, message) {
+				valuesFailed = { ...valuesFailed, [id]: message };
+			}
+		});
 	}
 
 	// Default chart: observed flow if present, else the main rainfall.

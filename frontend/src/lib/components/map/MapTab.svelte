@@ -120,6 +120,7 @@
 	import MapSetupPill from './MapSetupPill.svelte';
 	import { mapSetupSteps, type RainReads } from './mapSetup';
 	import { startDataItems, type DataFeed, type DataInput, type DataSeries } from './startData';
+	import { startDataLoader } from './startDataLoad';
 	import MapToolPalette from './MapToolPalette.svelte';
 	import { toolStrip } from './mapTools';
 	import SourceList from './SourceList.svelte';
@@ -486,16 +487,15 @@
 	let dataFeeds = $state.raw<DataFeed[] | null>(null);
 	let dataSeries = $state.raw<DataSeries[] | null>(null);
 	/** Read again after anything on this tab changes them; following a link to another tab remounts the Map, which reads them afresh. */
+	// Latest wins (startDataLoad.ts): a read from before the last change never sets the list back.
+	const readStartData = startDataLoader();
 	async function loadStartData() {
-		const [st, fd, sr] = await Promise.allSettled([
-			api.projects.get(projectId).then((p) => p.settings),
-			api.request<{ feeds: DataFeed[] }>('GET', `/projects/${encodeURIComponent(projectId)}/feeds`).then((r) => r.feeds),
-			api.series.list(projectId)
-		]);
+		const r = await readStartData(projectId);
+		if (!r.current) return;
 		// One that can't be read leaves its items Checking: no status is better than a wrong one.
-		dataSettings = st.status === 'fulfilled' ? st.value : null;
-		dataFeeds = fd.status === 'fulfilled' ? fd.value : null;
-		dataSeries = sr.status === 'fulfilled' ? sr.value : null;
+		dataSettings = r.value.settings;
+		dataFeeds = r.value.feeds;
+		dataSeries = r.value.series;
 	}
 	$effect(() => {
 		if (startedData) untrack(() => void loadStartData());

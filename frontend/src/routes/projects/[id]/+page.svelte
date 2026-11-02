@@ -79,7 +79,7 @@
 	import { projectToday } from '#lib/components/projects/freshness.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { ModelEditor } from '#lib/model/editor.svelte.js';
-	import { fetchProjectPage, takeProjectPage } from '#lib/workspace/firstLoad.js';
+	import { pageLoads } from '#lib/workspace/pageLoads.js';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
 	import { carriedRun, isRunTab, pickOf, tabHref as tabLinkHref } from '#lib/workspace/tabLinks.js';
 	import { defaultRunId } from '#lib/components/runs/runList.js';
@@ -525,7 +525,12 @@
 		sectionContext(tab, { runs, seriesCount: series?.length ?? null, behind: behindCount, transfers: editor.model.transfers })
 	);
 
+	// Latest wins (pageLoads.ts): moving to another project while this one loads never draws this one's answer.
+	const loads = pageLoads();
 	async function load() {
+		const id = projectId;
+		// False once a later load owns the page (another project, or this one again).
+		let mine = true;
 		loading = true;
 		error = null;
 		notFound = false;
@@ -536,7 +541,12 @@
 			// Everything a tab's first render needs, behind one loading gate, so no
 			// tab (or the Overview checklist) flashes an empty state. On a full page
 			// load the root layout already started them beside /auth/me (firstLoad.ts).
-			const [p, m, sl, rl] = await (takeProjectPage(projectId) ?? fetchProjectPage(projectId));
+			const r = await loads.page(id);
+			if (!r.current) {
+				mine = false;
+				return;
+			}
+			const [p, m, sl, rl] = r.value.data;
 			project = p;
 			editor.load(m);
 			details.load(p);
@@ -544,7 +554,8 @@
 			// Fit automatically's Search choices start from the last fit's (issue #554), once per project.
 			// The headline location's fit (issue #659): a gauge's is in its row.
 			fit.searchFrom(headlineView(p.settings, m.nodes).fitRecord);
-			series = sl;
+			// A newer list (a refresh asked for after this load, or the Time series tab's) is already showing.
+			if (r.value.seriesCurrent) series = sl;
 			setRuns(rl);
 		} catch (e) {
 			// A farmer gets 403 from the workspace's routes: their view of this
@@ -552,6 +563,10 @@
 			// view (WP-3.3).
 			if (e instanceof ApiError && e.status === 403) {
 				const here = await summaryHere();
+				if (projectId !== id) {
+					mine = false;
+					return;
+				}
 				if (here?.role === 'farmer') {
 					await goto(resolve(`farm/${encodeURIComponent(projectId)}`), { replace: true });
 					return;
@@ -564,7 +579,7 @@
 			if (e instanceof ApiError && e.status === 404) notFound = true;
 			else error = e instanceof Error ? e.message : String(e);
 		} finally {
-			loading = false;
+			if (mine) loading = false;
 		}
 	}
 	/** This project as the project list shows it to the caller (their role), or null. */
@@ -577,11 +592,12 @@
 	}
 	/** Refresh the shared lists in place (keeps the current values on failure). */
 	async function loadLists() {
+		const id = projectId;
 		await Promise.all([
-			api.series.list(projectId).then(
-				(l) => (series = l),
-				() => {}
-			),
+			// Null when it failed, or a newer list is already showing (pageLoads.ts).
+			loads.series(id).then((l) => {
+				if (l && id === projectId) series = l;
+			}),
 			loadRuns()
 		]);
 	}
@@ -1277,7 +1293,10 @@
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								nodes={editor.model.nodes}
 								warningsOpen={warningsBadge}
-								onSeriesChange={(l) => (series = l)}
+								onSeriesChange={(l) => {
+									loads.wrote();
+									series = l;
+								}}
 								onadddata={() => openAddData()}
 							/>
 						{/snippet}

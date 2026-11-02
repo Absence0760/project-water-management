@@ -654,7 +654,7 @@ English only: its readers are licensing assessors, like the methods page's.
   code*. The code is read in any case, with or without dashes, or as the full
   64-character hash. Bare `/verify` asks for a code; **Verify another pack**
   is at the foot of every state. Only the latest lookup is shown
-  (`packs/pack.ts` `latestOnly`, `lookUpCode`): a slow first lookup that
+  (`api/latest.ts` `latestOnly`, `packs/pack.ts` `lookUpCode`): a slow first lookup that
   answers after following *Verify the newer version* or **Verify another
   pack** is dropped, and so is a file check of the pack no longer shown.
 - Everything shown is text (Svelte escapes it). The links are underlined,
@@ -14588,7 +14588,7 @@ signed in or out, for someone outside the project, on a phone first.
   strips it from the address bar (a shallow `goto` with `replace`, as the
   reset pages strip `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
   (only the fragment changes) is picked up the same way, and only the latest
-  link's answer is shown, however the two answers race (`share/load.ts latestOnly`). The page sets
+  link's answer is shown, however the two answers race (`api/latest.ts latestCall`). The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water
   Management" with "Shared view" under it, and the EN | AF switch beside,
   one row on a 360 px phone; its content lined up over the page's), not

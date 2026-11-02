@@ -200,9 +200,12 @@ workbook (as in 1a) with **no manual edits**.
   last run against the same run with the unsaved edits (WP-1.17; no mini
   hydrograph).
 - ✅ Members panel (owner manages; anyone can leave).
-- ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
+- ✅ **Request sequencer** for list and series fetches, so that a slow, stale
   response can't overwrite a newer one when the user switches project or
-  series quickly.
+  series quickly: `lib/api/latest.ts` (latest wins) on the project list, the
+  Compare picker, the catchment page's load and series list, the Time series
+  tab's list and values, and the Map's data step
+  ([architecture.md § Stale responses](./architecture.md#stale-responses-frontend)).
 - ✅ **e2e (Playwright)** under `e2e/`, running fully locally against docker
   Postgres, the backend and a production build of the frontend. Pinned `timezoneId: 'UTC'`, and waits on real
   signals (no `networkidle`). The first spec is the demo path: register,

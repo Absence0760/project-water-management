@@ -2,7 +2,7 @@
 // it runs: pick a large file, then a small one, and the large read can land
 // last, over the small one (its text shown, or uploaded, under the second
 // file's name; issue #384). A guard for a whole read-then-request step lives
-// beside its caller (packs/pack.ts latestOnly, share/load.ts latestOnly).
+// in api/latest.ts (latestOnly, latestCall).
 
 /**
  * Reads a picked file's text, the latest pick only: a read that a later pick

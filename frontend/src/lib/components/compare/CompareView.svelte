@@ -24,6 +24,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { api, ApiError, type ProjectSummary, type RunCompareResponse, type RunMeta } from '#lib/api/index.js';
+	import { projectsLoader } from '#lib/components/projects/listLoad.js';
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import ChangesList from '#lib/components/compare/ChangesList.svelte';
@@ -112,16 +113,20 @@
 	let projects = $state<ProjectSummary[]>([]);
 	let projectsLoading = $state(true);
 	let projectsError = $state<string | null>(null);
+	// Latest wins (listLoad.ts): Try again while the first read is out shows only the later answer.
+	const listProjects = projectsLoader();
 	async function loadProjects() {
 		projectsLoading = true;
 		projectsError = null;
 		try {
-			projects = await api.projects.list();
+			const r = await listProjects();
+			// A later read owns the picker, its loading state included.
+			if (!r.current) return;
+			projects = r.value;
 		} catch (e) {
 			projectsError = msg(e);
-		} finally {
-			projectsLoading = false;
 		}
+		projectsLoading = false;
 	}
 	onMount(loadProjects);
 

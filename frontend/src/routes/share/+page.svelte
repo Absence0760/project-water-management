@@ -26,7 +26,8 @@
 	import BrandMark from '#lib/components/layout/BrandMark.svelte';
 	import { recentMonths } from '#lib/components/share/chart.js';
 	import FlowChart from '#lib/components/share/FlowChart.svelte';
-	import { latestOnly, loadPackShare, loadScenarioShare, loadShare, type PackShareLoad, type ScenarioShareLoad, type ShareLoad } from '#lib/components/share/load.js';
+	import { latestCall } from '#lib/api/latest.js';
+	import { loadPackShare, loadScenarioShare, loadShare, type PackShareLoad, type ScenarioShareLoad, type ShareLoad } from '#lib/components/share/load.js';
 	import PackView from '#lib/components/share/PackView.svelte';
 	import { readShareKind, SHARE_RETURN_KEY } from '#lib/components/share/scenario.js';
 	import MemberSummary from '#lib/components/share/MemberSummary.svelte';
@@ -51,7 +52,7 @@
 	let shown = $state<'scenario' | 'pack' | null>(null);
 
 	// Only the latest load counts: a link pasted while another was loading must not be replaced by the earlier one's answer.
-	const loadLink = latestOnly((k: typeof kind, tok: string | null): Promise<ShareLoad | ScenarioShareLoad | PackShareLoad> =>
+	const loadLink = latestCall((k: typeof kind, tok: string | null): Promise<ShareLoad | ScenarioShareLoad | PackShareLoad> =>
 		k === 'scenario' ? loadScenarioShare(api.share, tok) : k === 'pack' ? loadPackShare(api.share, tok) : loadShare(api.share, tok)
 	);
 	async function load() {

@@ -6,7 +6,8 @@ import { packManifestText, type PackManifest } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Pack, PackReproductionState } from '#lib/api/index.js';
-import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, reproductionNote, sha256Hex, verifyUrl } from './pack';
+import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, issueChecklist, issuedOf, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, reproductionNote, sha256Hex, verifyUrl } from './pack';
+import { latestOnly } from '#lib/api/latest.js';
 
 const tz = process.env.TZ;
 afterEach(() => {
@@ -257,14 +258,6 @@ describe('the verify page’s lookup (lookUpCode, latestOnly)', () => {
 		failures.get('cccc')!(new Error('network down'));
 		await third;
 		expect(shown).toEqual(['bbbb', 'dddd']);
-	});
-
-	it('keeps each check true only until a later request begins', () => {
-		const latest = latestOnly();
-		const a = latest.begin();
-		expect(a()).toBe(true);
-		const b = latest.begin();
-		expect([a(), b()]).toEqual([false, true]);
 	});
 });
 
