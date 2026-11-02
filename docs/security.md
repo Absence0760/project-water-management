@@ -4140,9 +4140,18 @@ readable by anyone. The rules:
   because the list itself names the client. In the repo the client's model is
   "the client catchment", its farms "Farm A", "Farm B" and so on, and the extracted fixtures
   live in `data/client-catchment/`. `scripts/guards/check_client_terms.mjs`
-  checks against the list: pre-commit (staged changes) and commit-msg hooks
-  via `pre-commit install`, `pnpm check:terms` for every tracked file and
-  path, and `--history` for every ref. It looks for the list beside the
+  checks against the list: pre-commit (staged changes) and commit-msg hooks,
+  `pnpm check:terms` for every tracked file and path, and `--history` for
+  every ref. The hooks are the repo's own (`.githooks/`): every `pnpm install`
+  (outside CI) points `core.hooksPath` at them (`scripts/git-hooks/install.mjs`,
+  the root `prepare` script), so they run in the main checkout and every
+  worktree, for a person's commits and a Claude session's alike, with nothing
+  else to install, and fail closed when `node` is missing. Until 2026-11 they
+  were wired only through `pre-commit install`, which nothing ran (and
+  pre-commit wasn't installed on the dev laptop), so no local commit met the
+  guard and figures from the client catchment reached `main` (PRs #689, #690,
+  #694); `core.hooksPath` naming somewhere else is left alone, with a warning
+  at install. It looks for the list beside the
   checkout and, in a linked git worktree (including one under
   `.claude/worktrees/`), beside the main checkout too. It is a no-op without
   the list (CI, outside contributors, cloud sessions) and never prints a
@@ -4151,6 +4160,21 @@ readable by anyone. The rules:
   to take the names out of every past commit, and the GitHub repo recreated
   from it, because GitHub keeps a PR's commits under `refs/pull/*` forever.
   If a name slips in again, rewrite *before* anyone opens a PR on it.
+  Once a term is on `main`, taking it out of HEAD never takes it out of the
+  history; whether to rewrite is the operator's call. Names warrant it (as in
+  2026-09); numeric figures of the catchment's shape (its node and crop
+  counts, its record's length) on their own don't, and the 2026-11 ones were
+  only reworded at HEAD.
+- **Released migrations can't be reworded.** A migration in the newest
+  `backend@*` release has run in production and the runner checksums every
+  applied file (`backend/scripts/migrate.ts`), so a term in one can't be
+  edited out (CLAUDE.md rule 2). The full scan reports a hit in a migration
+  byte-identical to that file at the newest `backend@*` tag as a
+  `::warning` (still no term or line text) and passes; one the tag lacks, or
+  that differs from it, still fails, as does any hit with no `backend@*` tag
+  to compare against. `--staged` and `--message` fail on every hit. A hit
+  that is a name, not a shape figure, is still a history-rewrite incident:
+  the warning only stops the guard failing forever.
 - **Local defaults only.** The committed `.env.development` files hold throwaway
   docker credentials and a dev-only JWT secret. That is safe because they grant
   nothing outside a local container. `pnpm check:env` (CI job
@@ -4158,8 +4182,8 @@ readable by anyone. The rules:
   `frontend/.env.production` may be tracked, no sops file may be, every host a
   dev default names must be local, and the dev-only placeholders must stay
   placeholders.
-- **gitleaks** runs as a pre-commit hook (`pre-commit install`, never
-  `--no-verify`), in CI on every push and PR (part of the `CI gate`), and
+- **gitleaks** runs as a pre-commit hook (through `.githooks/` when
+  `pre-commit` is on PATH, above; never `--no-verify`), in CI on every push and PR (part of the `CI gate`), and
   weekly over the whole history (`gitleaks-sweep.yml`, which opens a
   `secret-scan` issue when it fails). Reviewed false positives are
   allowlisted by their exact value in `.gitleaks.toml` (m³/day field names,

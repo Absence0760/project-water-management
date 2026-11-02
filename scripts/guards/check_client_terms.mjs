@@ -25,6 +25,17 @@
 // It never prints a matched term or the line's text, only the file, the line
 // and the term's number in the list: a CI log is as public as the repo.
 //
+// One exemption, in the full scan only: a hit in a migration
+// (backend/migrations/) whose file is byte-identical to the same file at the
+// newest backend@* release tag is a warning, not a failure. Production has
+// applied a released migration and the runner checksums every applied file
+// (backend/scripts/migrate.ts), so it can never change (CLAUDE.md rule 2);
+// failing on it would fail every run from then on. The term is in git history
+// regardless; removing it from HEAD could never change that. No tag, a file
+// the tag doesn't have, or one that differs from it: no exemption. --staged
+// and --message still fail on any hit (a released migration is never staged
+// unchanged).
+//
 // Run:   pnpm check:terms                  (every tracked file and path)
 //        node scripts/guards/check_client_terms.mjs --staged      (pre-commit)
 //        node scripts/guards/check_client_terms.mjs --message <f> (commit-msg)
@@ -119,16 +130,48 @@ export function addedLines(diff) {
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 30 });
 
-function report(findings, what) {
-	for (const f of findings) {
-		const loc = f.line ? `file=${f.file},line=${f.line}` : `file=${f.file}`;
-		console.error(`::error ${loc}::client term #${f.term} from the terms file`);
+export const MIGRATIONS_DIR = 'backend/migrations/';
+
+/** The newest backend@* release tag, or null (no tags, or git fails). */
+function newestBackendTag() {
+	try {
+		return git(['tag', '--list', 'backend@*', '--sort=-v:refname']).split('\n')[0].trim() || null;
+	} catch {
+		return null;
 	}
+}
+
+/**
+ * The released-migration exemption: is this a migration whose working file is
+ * byte-identical to the file at the release tag? Any doubt (no tag, the tag
+ * lacks the file, git fails) is a no.
+ * @param {string} path @param {Buffer | null} working @param {string | null} tag
+ * @param {(tag: string, path: string) => Buffer} showAtTag
+ */
+export function isReleasedMigration(path, working, tag, showAtTag) {
+	if (!path.startsWith(MIGRATIONS_DIR) || !tag || !working) return false;
+	try {
+		return showAtTag(tag, path).equals(working);
+	} catch {
+		return false;
+	}
+}
+
+const showAtTag = (tag, path) => execFileSync('git', ['show', `${tag}:${path}`], { cwd: ROOT, maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'ignore'] });
+
+const loc = (f) => (f.line ? `file=${f.file},line=${f.line}` : `file=${f.file}`);
+
+function report(findings, what, released = [], tag = null) {
+	for (const f of released) {
+		console.error(`::warning ${loc(f)}::client term #${f.term} from the terms file, in a migration released as ${tag} and unchanged since: it can't change (production checksums it), so this doesn't fail. See docs/security.md § Public repo hygiene.`);
+	}
+	for (const f of findings) console.error(`::error ${loc(f)}::client term #${f.term} from the terms file`);
 	if (findings.length) {
 		console.error(`${findings.length} client-term finding(s) in ${what}. Terms are deliberately not printed; see docs/security.md § Public repo hygiene.`);
 		process.exit(1);
 	}
-	console.log(`Client terms OK (${what}).`);
+	const note = released.length ? `; ${released.length} warning(s) in released migrations` : '';
+	console.log(`Client terms OK (${what}${note}).`);
 }
 
 function main() {
@@ -165,14 +208,17 @@ function main() {
 		return report(findings, 'the history of every ref');
 	}
 	const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean);
+	const released = [];
+	let tag;
 	for (const p of tracked) {
-		scanPath(p);
-		if (!existsSync(resolve(ROOT, p))) continue;
-		const buf = readFileSync(resolve(ROOT, p));
-		if (buf.includes(0)) continue; // binary
-		scanText(buf.toString('utf8'), patterns).forEach((f) => findings.push({ file: p, ...f }));
+		const buf = existsSync(resolve(ROOT, p)) ? readFileSync(resolve(ROOT, p)) : null;
+		const hits = scanText(p, patterns).map((f) => ({ file: p, term: f.term }));
+		if (buf && !buf.includes(0)) scanText(buf.toString('utf8'), patterns).forEach((f) => hits.push({ file: p, ...f }));
+		if (!hits.length) continue;
+		if (tag === undefined) tag = newestBackendTag();
+		(isReleasedMigration(p, buf, tag, showAtTag) ? released : findings).push(...hits);
 	}
-	report(findings, `${tracked.length} tracked files`);
+	report(findings, `${tracked.length} tracked files`, released, tag);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();
