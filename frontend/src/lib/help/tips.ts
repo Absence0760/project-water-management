@@ -1921,8 +1921,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'map-geojson-upload',
-		term: 'GeoJSON upload',
-		short: 'Map features from a GeoJSON file in WGS84 longitude/latitude, checked on the server; any problem refuses the whole file.',
+		term: 'Map file upload',
+		short: 'Map features from GeoJSON (WGS84), KML, KMZ or a zipped shapefile, checked on the server; any problem refuses the whole file.',
 		category: 'data'
 	},
 	{

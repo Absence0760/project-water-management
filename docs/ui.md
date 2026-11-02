@@ -397,7 +397,7 @@ anchor. `e2e/tests/planted-areas-import.spec.ts` checks the page.
 | Add data / Data, series upload (`series/UploadForm.svelte`) | .csv/.tsv/.txt `date,value`, or a DWS daily export (text or saved page); or, under *Rows pasted from a spreadsheet*, the same rows pasted (issue #477, `lib/series/paste.ts`), the note's first line and two rules worded for a paste | `example-daily-rainfall.csv` (`lib/series/example.ts`): a week with a blank, an `NA` and a `-999` | the line (“Line 12: …”, “Pasted rows: Line 2: …”) |
 | Allocations, Import registered volumes | CSV, 2 MB, 5 000 rows, 200 columns | the template's fewest columns, a take and a storage (`ALLOCATIONS_EXAMPLE`); **Download the CSV template** stays beside it | each row's line, in the preview |
 | Project, Invite farmers (CSV) | pasted rows, or .csv/.txt | `invite-farmers-example.csv`, built from the project's first two units (`inviteExampleCsv`) | each row's line, in the preview |
-| Map, Upload a GeoJSON file | .geojson/.json, 5 MB, 500 features | `example-features.geojson` (`map/example-features.geojson`): a boundary, a parcel, a river and a gauge, each with its `kind` | each feature's place (“Feature 3 …”) |
+| Map, Upload a map file | .geojson/.json, 5 MB, 500 features; or .kml/.kmz/.zip (a zipped shapefile), 25 MB, read into GeoJSON in the browser | `example-features.geojson` (`map/example-features.geojson`): a boundary, a parcel, a river and a gauge, each with its `kind` | each feature's place (“Feature 3 …”) |
 | Load crop factors, a Water Balance Tool workbook | .xlsx/.xlsm, the whole tool | – | the missing named ranges; the crops to check |
 | Load crop factors, a hydrological-unit-based workbook | .xlsx/.xlsm with [Crop_Factors] | the table's shape (`NODE_FACTORS_EXAMPLE`) | each warning's cell |
 | Import a workbook | .xlsm/.xlsx, 150 MB, a build the importer reads | – | the missing named ranges; sheet and cell |
@@ -3983,8 +3983,8 @@ map" card) stays the schematic; this is the geography.
   opens over the page (rightwards from the pill, never over the sidebar), so
   opening it never moves the map; Escape closes it and gives the pill the
   focus, a click outside closes it. Its steps: **Catchment boundary** ("No
-  catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
-  (WGS84)." with **Draw the boundary** and **Upload a GeoJSON file**; with a
+  catchment boundary yet. Draw it on the map, or upload it from a file
+  (GeoJSON, KML or a zipped shapefile)." with **Draw the boundary** and **Upload a map file**; with a
   DEM on the server, as the empty map does, "No catchment boundary yet.
   Delineate it from its outlet on the river, draw it on the map, or upload
   it …" with a primary **Delineate from the outlet** first) and
@@ -4011,7 +4011,7 @@ map" card) stays the schematic; this is the geography.
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
   when empty, "no boundary" without one), the Getting started pill, and the
-  page's actions only, for editors: **Upload GeoJSON** (a link that opens its
+  page's actions only, for editors: **Upload map file** (a link that opens its
   sheet), **Start from the map** while the model is empty (below) and
   **Divide the model** once it has nodes and the server a DEM (below; it sat
   at the end of the key row under the map until 2026-10-02); they fit one row
@@ -4222,8 +4222,8 @@ map" card) stays the schematic; this is the geography.
   catchment: delineate it from its outlet on the river, or draw its
   boundary.", a primary **Delineate from the outlet** and **Draw the
   boundary** (without one, "Start with the catchment boundary: draw it on
-  the map." and a primary **Draw the boundary**), then "Or upload it as a
-  GeoJSON file (WGS84), or place a point." and, for an editor of an empty
+  the map." and a primary **Draw the boundary**), then "Or upload it from a
+  file (GeoJSON, KML or a zipped shapefile), or place a point." and, for an editor of an empty
   model, **Start the model from the map**.
 - **Start the model from the map** (editors, while the model has no nodes;
   issue #326 C3, `StartSheet.svelte`, `startFlow.ts`, [maps.md § Start from
@@ -4236,7 +4236,7 @@ map" card) stays the schematic; this is the geography.
   top (The boundary · The points · The proposal · Data and the first run,
   the current one `aria-current="step"`), each read from the server:
   **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
-  boundary**, **Upload a GeoJSON file**; each closes the sheet into that
+  boundary**, **Upload a map file**; each closes the sheet into that
   tool, and the sheet opens again once it saves; without a DEM, a line under
   them says why Delineate isn't there ("Delineating from the outlet is off:
   this server has no elevation model. Draw the boundary or upload it
@@ -4752,16 +4752,28 @@ map" card) stays the schematic; this is the geography.
   **Imported files**. In a narrow modal each row becomes a labelled card.
   `?tab=network&grid=map-features` (any other tab) lands on the Map with
   it open.
-- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors;
-  `map/UploadSheet.svelte`, issue #326 D2): two steps. First the file (WGS84,
-  at most 5 MB; a `.zip`/`.shp` is turned away with how to export GeoJSON
-  from QGIS; its **Expected format** gives the shapes, the `kind` words and
-  an example file, `map/example-features.geojson`, [Expected format](#expected-format))
+- **Upload a map file** (`upload=1`, a side sheet, editors;
+  `map/UploadSheet.svelte`, issue #326 D2): two steps. First the file,
+  **Map file (GeoJSON, KML, KMZ or zipped shapefile)**: GeoJSON in WGS84 at
+  most 5 MB, or a `.kml`, `.kmz` or `.zip` (a zipped shapefile) at most
+  25 MB, which the browser reads into GeoJSON first
+  (`map/upload/`, [maps.md § Uploads](./maps.md#uploads)); a lone `.shp`
+  (or `.dbf`, `.prj`) is turned away with "A shapefile is several files:
+  zip the layer’s .shp, .shx, .dbf and .prj together and upload the .zip.",
+  and every conversion refusal is one plain sentence in the alert ("This
+  zip has no .prj for parcels.shp, so we can’t tell its coordinate system.
+  …"). Its **Expected format** gives the shapes, the formats, the `kind`
+  words and an example file, `map/example-features.geojson`, [Expected format](#expected-format))
   and **Review**, which reads it on the server
-  (`POST …/map/import/preview`). Under the file field one short line
-  ("WGS84 longitude and latitude; a file in a Lo zone or UTM is refused."),
-  the reprojection recipe and "a file may mix kinds" kept in its
-  description and its ⓘ. Then the sheet widens to the review: a line
+  (`POST …/map/import/preview`, the converted GeoJSON under the picked
+  file's name). Under the file field one short line
+  ("A shapefile in a Lo zone or UTM is reprojected from its .prj; GeoJSON
+  must be WGS84."), the zip and reprojection recipe and "a file may mix
+  kinds" kept in its description and its ⓘ. Then the sheet widens to the
+  review: for a converted file, a small line first saying what was read
+  ("Read from a zipped shapefile, reprojected from Hartebeesthoek94 / Lo19
+  to WGS84.", "Read from a KML file: 4 placemarks. 1 placemark with no
+  shape left out."; `map-review-read-as`), then a line
   with the file's name and its features counted by kind ("Kinds come from
   the file’s properties, else from each shape" when some do, then "Check
   each kind before you import; nothing is saved until then"), **Set every row’s

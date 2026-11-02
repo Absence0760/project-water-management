@@ -4206,6 +4206,14 @@ export interface StationPairingFit {
 	commonYears: number;
 	/** Shared days with a reading in both, on the fit's record. */
 	days: number;
+	/**
+	 * The first and last day with a reading of the station's checked record as the forcing reads it, and of the
+	 * area's CHIRPS (ISO; null without a record or a reading). Absent before engine 1.112.0.
+	 */
+	stationFrom?: string | null;
+	stationTo?: string | null;
+	chirpsFrom?: string | null;
+	chirpsTo?: string | null;
 	pinned: boolean;
 	/** Same shape as the reference gauge's months (§2.4h). Empty when refused. */
 	months: UnitRainReferenceMonth[];

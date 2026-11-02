@@ -43,7 +43,12 @@
 // Pinned factors (settings.rainStations.pinnedFactors[stationPairingKey(id,
 // area)], 12 positive finite numbers) replace the fit, and a pinned pairing
 // is never refused.
-import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
+//
+// A refusal for too few complete years says both records' spans (first and
+// last day with a reading) and whether they don't overlap, overlap for too
+// few whole calendar years, or overlap long enough with gaps breaking the
+// years (engine ≥ 1.112.0); the spans are also stationFrom/To, chirpsFrom/To.
+import { dayText, fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import {
 	AREAL_RAIN_FACTOR_MAX,
 	AREAL_RAIN_FACTOR_MIN,
@@ -93,6 +98,45 @@ function completeYears(a: DailySeries, b: DailySeries): number {
 	let years = 0;
 	for (const [y, d] of perYear) if (d === daysInYear(y)) years++;
 	return years;
+}
+
+/** The first and last day of `s` with a reading (epoch days); null without one. */
+function span(s: DailySeries): { first: number; last: number } | null {
+	let i = 0;
+	while (i < s.values.length && !reading(s.values[i])) i++;
+	if (i === s.values.length) return null;
+	let j = s.values.length - 1;
+	while (!reading(s.values[j])) j--;
+	const s0 = toEpochDay(s.startDate);
+	return { first: s0 + i, last: s0 + j };
+}
+
+/** The calendar years wholly inside the epoch days `lo` … `hi` (1 January … 31 December both in). */
+function wholeYears(lo: number, hi: number): number {
+	let n = 0;
+	for (let y = Number(fromEpochDay(lo).slice(0, 4)); y <= Number(fromEpochDay(hi).slice(0, 4)); y++) if (toEpochDay(`${y}-01-01`) >= lo && toEpochDay(`${y}-12-31`) <= hi) n++;
+	return n;
+}
+
+const spanText = (x: { first: number; last: number }) => `${dayText(fromEpochDay(x.first))} to ${dayText(fromEpochDay(x.last))}`;
+const yearsText = (n: number) => `${n} whole calendar ${n === 1 ? 'year' : 'years'}`;
+
+/**
+ * Why too few complete years (engine ≥ 1.112.0): both records' spans (first and last day with a reading), and
+ * whether they don't overlap, overlap for too few whole calendar years, or overlap long enough but gaps break
+ * the years. Written after "…, fewer than N: ".
+ */
+function whyTooFew(station: { first: number; last: number } | null, chirps: { first: number; last: number } | null, chirpsName: string, complete: number): string {
+	if (!station) return 'the station has no reading the checks keep';
+	if (!chirps) return `${chirpsName} has no reading`;
+	const runs = `the station runs ${spanText(station)} and ${chirpsName} ${spanText(chirps)}`;
+	const lo = Math.max(station.first, chirps.first);
+	const hi = Math.min(station.last, chirps.last);
+	if (lo > hi) return `${runs}, so they don’t overlap`;
+	const whole = wholeYears(lo, hi);
+	const gaps = complete < whole ? `, and gaps leave ${complete === 0 ? 'none' : `only ${complete}`} of them complete` : '';
+	if (whole < STATION_PAIRING_MIN_YEARS) return `${runs}, so they overlap only from ${spanText({ first: lo, last: hi })}, ${yearsText(whole)}${gaps}`;
+	return `${runs}, so they overlap for ${yearsText(whole)}, but gaps leave ${complete === 0 ? 'none' : `only ${complete}`} of them complete`;
 }
 
 /** The shared days of `a` and `b` by calendar month (count, Σa, Σb) and their first and last. */
@@ -154,6 +198,10 @@ export function fitStationPairing(
 	const rec = checked ? (r === 1 ? checked.record : { startDate: checked.record.startDate, values: checked.record.values.map((v) => (reading(v) ? v * r : v)) }) : null;
 	// The factors read the fit's record (accumulation windows left out); the complete years, the forcing's.
 	const c = rec && chirps ? { ...common(rec, chirps), years: completeYears(checked!.forcing ?? checked!.record, chirps) } : null;
+	// Each record's span, as the complete years read them: the station's as the forcing reads it, the area's CHIRPS.
+	const stationSpan = checked ? span(checked.forcing ?? checked.record) : null;
+	const chirpsSpan = chirps ? span(chirps) : null;
+	const chirpsName = `${area.id === null ? 'the catchment’s' : `"${area.name}"’s`} CHIRPS`;
 
 	const key = stationPairingKey(stationId, area.id);
 	const pinnedRaw = settings.rainStations?.pinnedFactors?.[key];
@@ -170,7 +218,11 @@ export function fitStationPairing(
 		fitFrom: c?.first != null ? fromEpochDay(c.first) : null,
 		fitTo: c?.last != null ? fromEpochDay(c.last) : null,
 		commonYears: c?.years ?? 0,
-		days: c ? c.n.reduce((s, x) => s + x, 0) : 0
+		days: c ? c.n.reduce((s, x) => s + x, 0) : 0,
+		stationFrom: stationSpan ? fromEpochDay(stationSpan.first) : null,
+		stationTo: stationSpan ? fromEpochDay(stationSpan.last) : null,
+		chirpsFrom: chirpsSpan ? fromEpochDay(chirpsSpan.first) : null,
+		chirpsTo: chirpsSpan ? fromEpochDay(chirpsSpan.last) : null
 	};
 
 	if (!pinned) {
@@ -179,7 +231,7 @@ export function fitStationPairing(
 			: !chirps
 				? `${area.id === null ? 'the catchment has' : `"${area.name}" has`} no CHIRPS of its own`
 				: c!.years < STATION_PAIRING_MIN_YEARS
-					? `the station and ${area.id === null ? 'the catchment’s' : `"${area.name}"’s`} CHIRPS have ${c!.years} complete calendar ${c!.years === 1 ? 'year' : 'years'} in common (every day a reading in both), fewer than ${STATION_PAIRING_MIN_YEARS}`
+					? `the station and ${chirpsName} have ${c!.years} complete calendar ${c!.years === 1 ? 'year' : 'years'} in common (every day a reading in both), fewer than ${STATION_PAIRING_MIN_YEARS}: ${whyTooFew(stationSpan, chirpsSpan, chirpsName, c!.years)}`
 					: null;
 		if (refused) {
 			warnings.push(`${who} is refused: ${refused}. Its CHIRPS isn’t corrected against it`);

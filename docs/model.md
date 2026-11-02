@@ -3371,7 +3371,18 @@ month needs §2.4b's 90 shared days and 50 mm of CHIRPS, else its factor is
 has no record, the area has no CHIRPS, or the two have fewer than
 `STATION_PAIRING_MIN_YEARS` = 5 complete calendar years in common (a year
 every day of which both have a reading in the checked record **as the
-forcing reads it**; not necessarily consecutive). A refused pairing
+forcing reads it**; not necessarily consecutive). A refusal for too few
+years says why (engine ≥ 1.112.0, a bump since the warning is run output): both records' spans, from the first to
+the last day with a reading (the station's as the forcing reads it, the
+area's CHIRPS), in the app's day format, then whether they don't overlap
+("…, fewer than 5: the station runs 1 Oct 2009 to 2 Jun 2024 and
+"Kunje"’s CHIRPS 1 Jan 1981 to 31 Jan 1998, so they don’t overlap"),
+overlap for fewer whole calendar years than 5 ("so they overlap only from
+… to …, 2 whole calendar years"), or overlap long enough with gaps
+breaking the years ("so they overlap for 11 whole calendar years, but gaps
+leave only 3 of them complete"). The spans are on the fit too
+(`stationFrom`/`stationTo`, `chirpsFrom`/`chirpsTo`, ISO; absent before
+1.112.0). A refused pairing
 corrects nothing: the area's CHIRPS gives no day, and its gaps take the next
 source. A pairing is fitted once per run for each (correcting station, area)
 whose patching priority has CHIRPS, so two units on one station get factors

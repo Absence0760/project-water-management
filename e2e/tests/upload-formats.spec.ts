@@ -98,12 +98,12 @@ test('Map upload: the expected format, and its example file passes the server’
 	await openMap(page, project.id);
 	const sheet = await openUploadSheet(page);
 	const help = await openFormat(sheet, /^A GeoJSON file \(\.geojson or \.json\): at most 5 MB/);
-	await expect(help).toContainText('Shapefiles and KML aren’t read');
+	await expect(help).toContainText('Or a KML, a KMZ or a zipped shapefile');
 	await expectNoViolations(page, { include: 'dialog[open]' });
 
 	const example = await downloadExample(page, help);
 	expect(example.name).toBe('example-features.geojson');
-	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(file(example.name, example.text, 'application/geo+json'));
+	await sheet.getByLabel(/^Map file/).setInputFiles(file(example.name, example.text, 'application/geo+json'));
 	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
 	await expect(sheet.getByTestId('map-review-summary')).toContainText('4 features (1 catchment boundary, 1 farm parcel, 1 gauge, 1 river)');
 	await expect(sheet.getByTestId('map-import-error')).toHaveCount(0);

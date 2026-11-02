@@ -50,7 +50,7 @@ test('the tools are on the map, in order, pressed while on, with a strip naming 
 
 	// The header: no tools, only the page's actions, on one row (its actions box: the title line's Assistant button sits apart, docs/ui.md § Section header).
 	for (const name of ['Measure', 'Draw a shape', 'Place a point', 'Delineate', 'Trace a dam']) await expect(header(page).getByRole('button', { name, exact: true })).toHaveCount(0);
-	await expect(header(page).getByRole('link', { name: 'Upload GeoJSON' })).toBeVisible();
+	await expect(header(page).getByRole('link', { name: 'Upload map file' })).toBeVisible();
 	await expect(header(page).getByRole('link', { name: 'Divide the model' })).toBeVisible();
 	const tops = await header(page).getByTestId('header-actions').locator('button:visible, a.btn:visible').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
 	expect(new Set(tops).size).toBe(1);
@@ -126,7 +126,7 @@ test('the setup steps are one pill: the boundary then the rain feed, each with i
 	await pill.click();
 	const setup = page.getByTestId('map-setup');
 	// The e2e server has an elevation model, so the step leads with Delineate, as the empty map does.
-	await expect(setup.locator('[data-step="boundary"]')).toContainText('No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it as a GeoJSON file (WGS84).');
+	await expect(setup.locator('[data-step="boundary"]')).toContainText('No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it from a file (GeoJSON, KML or a zipped shapefile).');
 	await expect(setup.getByTestId('map-setup-delineate')).toHaveText('Delineate from the outlet');
 	await expect(setup.locator('[data-step="rain"]')).toContainText('Once the boundary is on the map');
 	// Opening it never makes the page taller, and it stays inside the window (not over the sidebar).
