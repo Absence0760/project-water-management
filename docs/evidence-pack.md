@@ -748,18 +748,25 @@ does and doesn't correct; delta change keeps the historical sequence, GR4J
 keeps its parameters, evaporation moves by a temperature-only ratio) and
 NASA's own caveat on engineering use, **quoted verbatim** from the
 product's technical note with its address and the date read
-(`FUTURE_YIELD_CAVEAT` in `evidence/future.ts`). The note the research
-cited (`NEX-GDDP-CMIP6-Tech_Note_4.pdf`) returned 404 when this was built,
-so NASA's words are **a marked placeholder** for now.
+(`FUTURE_YIELD_CAVEAT` in `evidence/future.ts`): § 5.1 *Recommended Use*
+of the NEX-GDDP-CMIP6 v2 Tech Note (latest update May 31, 2025), whole,
+from <https://www.nccs.nasa.gov/wp-content/uploads/2025/06/NEX-GDDP-CMIP6-v2-Tech_Note.pdf>, read 2026-11-01. The words are in
+[data-sources.md § nex-gddp-cmip6](./data-sources.md). Until they were
+quoted (2026-11-01) the section printed a marked placeholder, which it still
+prints should `text`, `url` or `readOn` ever be emptied.
 
 **What stops issue.** The `futureYield` check (`blocksIssue`, never
 `refuses`) fails while NASA's caveat isn't quoted (`futureCaveatPending`:
 text, address and date all needed) or while any factor rests on part of its
 30-year window (`futureFactorsComplete`: the synthetic copy holds 2 baseline
 years and 1 of each future window). Since a pack is drafted only from an
-issuable report, **no pack with § 8 can be made** until both are fixed; the
-section still previews on the report. Filling the caveat is a code change
-(the constant, with its test), deployed.
+issuable report, **no pack with § 8 can be made** while either fails; the
+section still previews on the report. The caveat is quoted, so in practice
+only the partial windows hold it now. Changing the caveat is a code change
+(the constant, with its test pinning the words), deployed: no
+`ENGINE_VERSION` bump (no run result moves) and no report version (the
+shape is the same; no pack with § 8 could be drafted before, so none froze
+the placeholder).
 
 **Sign-off.** The applicant's specialist signs § 8 by name: a pack whose
 manifest has a § 8 result signs statement `pack-signoff-2`, which adds the
@@ -786,8 +793,8 @@ Tests: `packages/engine/src/evidence/future.test.ts` (the ranges; each case
 against its op run by hand; factors of 1 give the historical values to the
 bit; the firm yield never falls as the rain factor rises; refusals; the
 re-check passing and failing; the factor table from cells, whole and
-partial windows; the caveat's guard), `evidence/report.test.ts` (frozen
-whole, the check on a pending caveat and on partial windows, *Not assessed*,
+partial windows; the caveat's guard, and NASA's words, address and date pinned), `evidence/report.test.ts` (frozen
+whole with the quoted caveat, the check passing on whole windows and failing on partial ones, *Not assessed*,
 null for baseline evidence), `evidence/bundle.test.ts` and
 `scripts/reproduce-pack/reproduce-pack.test.ts` (`climate:delta` passes,
 fails on a tampered case, absent before `evidence-23`),
@@ -797,8 +804,8 @@ refusals; the job over the synthetic copy; RLS with a viewer as positive
 control, a stranger and another contributor reading nothing; the report
 freezing it and held from issue; a copy with no projections), the catalogue
 guards, `frontend/…/report/evidence/future.test.ts` and `sections.test.ts`,
-and `e2e/tests/evidence-pack.spec.ts` (run on the synthetic copy, the
-caveat's placeholder, the few-models and partial-window banners, the table,
+and `e2e/tests/evidence-pack.spec.ts` (run on the synthetic copy, NASA's
+quoted caveat and no placeholder, the few-models and partial-window banners, the table,
 and no pack made of it).
 
 ## Calibration zones

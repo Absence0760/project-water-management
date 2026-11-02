@@ -249,17 +249,16 @@ describe('the caveat', () => {
 		expect(futureCaveatPending({ ...c, nasa: { ...c.nasa, text: 'Words.', url: 'https://example.org/note.pdf', readOn: '2026-10-29' } })).toBe(false);
 	});
 
-	it('is quoted whole or not at all: once filled, its address and date are too, and the placeholder is gone', () => {
+	it('is quoted whole: NASA’s § 5.1 paragraph word for word, with the note’s address and the date read', () => {
 		const n = FUTURE_YIELD_CAVEAT.nasa;
-		if (n.text === null) {
-			// Not quoted yet (the tech note was 404): the section prints the marked placeholder, and the futureYield check stops issue (report.test.ts).
-			expect(n.placeholder).toMatch(/^\[Placeholder: .* can’t be issued until the caveat is filled\.\]$/);
-			expect(futureCaveatPending()).toBe(true);
-		} else {
-			expect(n.url).toMatch(/^https:\/\//);
-			expect(n.readOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-			expect(n.text).not.toContain('Placeholder');
-			expect(futureCaveatPending()).toBe(false);
-		}
+		// Verbatim from the NEX-GDDP-CMIP6 v2 Tech Note (May 31, 2025), § 5.1 Recommended Use, read 2026-11-01.
+		// A change here is a change of NASA's words: re-read the note, never edit the quote by hand.
+		expect(n.text).toBe(
+			'This dataset has been generated and is being distributed to assist the science community in conducting studies of climate change impacts at local to regional scales, and to enhance public understanding of possible future climate patterns and climate impacts at the scale of individual cities, communities, and watersheds. This dataset is intended for use in scientific research only, and use of this dataset for other purposes, such as commercial applications, and engineering or design studies is not recommended without consultation with a qualified expert.'
+		);
+		expect(n.url).toBe('https://www.nccs.nasa.gov/wp-content/uploads/2025/06/NEX-GDDP-CMIP6-v2-Tech_Note.pdf');
+		expect(n.readOn).toBe('2026-11-01');
+		expect(n.source).toContain('§ 5.1 Recommended Use');
+		expect(futureCaveatPending()).toBe(false);
 	});
 });
