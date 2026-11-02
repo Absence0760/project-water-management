@@ -129,8 +129,8 @@ test("the calibration and preview workers must share the page build's chunks, an
 	assert.deepEqual(pageBuildWorkerViolations([shared, preview, mapWorker, spreadsheet]), []);
 	// MapLibre's worker is self-contained (maplibre-gl 6.13+; 6.16 builds it as one file): importing nothing is fine.
 	assert.deepEqual(pageBuildWorkerViolations([shared, preview, { path: mapWorker.path, text: 'var e=Object.create;self.onmessage=()=>{}' }]), []);
-	// Vite's own worker build would name it under assets/, not workers/: no map worker in the page build.
-	const viteMap = pageBuildWorkerViolations([shared, preview, { path: '_app/immutable/assets/maplibre-gl-worker-Ef3.js', text: 'self.onmessage=()=>{}' }]);
+	// Vite's own worker build names it after the source (SvelteKit's workers/[name]-[hash].js): no map worker in the page build.
+	const viteMap = pageBuildWorkerViolations([shared, preview, { path: '_app/immutable/workers/maplibre-gl-worker-Ef3.js', text: 'self.onmessage=()=>{}' }]);
 	assert.equal(viteMap.length, 1);
 	assert.match(viteMap[0], /Expected one map worker/);
 	// Built on its own (new Worker(new URL(…))): no import from chunks/.

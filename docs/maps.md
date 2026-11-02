@@ -299,8 +299,8 @@ server ([§ Delineation](#delineation)).
   fix for a stale cached worker, maplibre-gl-js #8621), a second copy of the
   code the main thread's chunk holds (~140 KB gzipped); it loads only with
   the map, so the guard counts it under `mapKb` with the rest of MapLibre.
-  The guard checks it is there once, under `workers/` (Vite's own worker
-  build would write it under `assets/`), but not that it imports from
+  The guard checks it is there once, as `workers/maplibre.worker-*.js`
+  (Vite's own worker build would name it `maplibre-gl-worker-*.js`), but not that it imports from
   `chunks/` as the engine's workers must: from maplibre-gl 6.16 it builds
   as a single file.
 - Tiles and glyphs are fetched with `connect-src` (MapLibre `fetch`es glyph

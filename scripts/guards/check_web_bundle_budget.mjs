@@ -287,8 +287,8 @@ const PAGE_BUILD_WORKERS = [
 	// Self-contained since maplibre-gl 6.13, so it shares nothing with the main thread and counts under mapKb (mapChunks).
 	// selfContained: it is not asked to import from chunks/. Whether Rolldown happens to lift its body into a chunk
 	// is layout, not sharing (maplibre-gl 6.15 built as a facade over one; 6.16 builds as one file). That it is an
-	// entry of the page build at all is what its name under workers/ shows: Vite's own worker build
-	// (new Worker(new URL(…))) writes assets/maplibre-gl-worker-*.js instead, and the guard finds no map worker.
+	// entry of the page build at all is what its name shows: Vite's own worker build (new Worker(new URL(…)))
+	// names it after the source, workers/maplibre-gl-worker-*.js, which re doesn't match, so the guard finds no map worker.
 	{ label: 'map worker', file: 'workers/maplibre.worker-*.js', url: 'virtual:maplibre-worker-url', re: /(^|\/)workers\/maplibre\.worker-[^/]*\.js$/, selfContained: true },
 ];
 /** A static import from the page build's shared chunks, as Rollup writes it next to workers/. */
