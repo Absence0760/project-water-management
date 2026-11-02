@@ -745,3 +745,31 @@ test('with a Reserve rule table the headline tile is Reserve rules met, with the
 	await expect(strip.getByRole('listitem').nth(3)).toContainText(/^Jan 2020: (pragmatic EWR met every day \(28 days\)|below the pragmatic EWR on \d+ of 28 days)/);
 	await expectNoViolations(page);
 });
+
+// The flow chart holds its height while its first flows load, so the page under it doesn't jump down when they
+// arrive. It grew ~440 px; on a slow runner the seasonal outlook's form, opened before the flows came, lost its Run
+// button below the fold (seasonal-outlook.spec.ts failed on main this way, 2026-11-02). The flows are held back
+// until the first height is read, so the load is late on every run here, not only on a slow one.
+test('the flow chart keeps its height while its flows load', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River page, late flows');
+	await createRun(page.request, id, 'Baseline');
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route('**/series?key=*', async (route) => {
+		await held;
+		await route.continue();
+	});
+	// Not openRiver: it waits for the chart to draw, which the held flows stop.
+	await page.goto(`/projects/${id}?tab=river`);
+	await expect(riverTiles(page)).toHaveCount(2);
+	const flow = page.locator('#res-ewr');
+	await expect(flow.locator('section.flow')).toHaveAttribute('aria-busy', 'true');
+	const before = (await flow.boundingBox())!.height;
+	release();
+	await expect(flow.getByRole('img', { name: /^EWR vs simulated outflow: line chart/ })).toBeVisible();
+	await expect(flow.locator('section.flow')).toHaveAttribute('aria-busy', 'false');
+	const after = (await flow.boundingBox())!.height;
+	expect(Math.abs(after - before)).toBeLessThanOrEqual(2);
+});

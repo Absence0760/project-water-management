@@ -9348,7 +9348,10 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **First screen.** The **Flow vs reserve** chart, the app's only copy of it
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve
-  shaded and counted in its caption, a forecast run's band). The Summary
+  shaded and counted in its caption, a forecast run's band). While its
+  first flows load it holds the chart's height (`CHART_CHROME_PX` above the
+  plot), so nothing below jumps down when they arrive: it grew ~440 px and
+  pushed an open seasonal outlook form's Run button off the screen. The Summary
   drew it too until issue #162. Its shading comes from the run's own `ewr_shortfall` series
   (`overview/summaryChart.ts` `belowReserve`: negative on a day the engine
   counted as EWR not met), so the caption's count is the *EWR not met*
