@@ -1985,7 +1985,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'terrain-channels',
 		term: 'Terrain channels',
-		short: 'The rivers as the elevation model routes them, drawn while delineating: the lines to click. Mapped rivers can sit hundreds of metres off.',
+		short: 'The DEM rivers: the rivers as the elevation model routes them, drawn while delineating, the lines to click. Mapped rivers can sit off.',
 		category: 'data'
 	},
 	{

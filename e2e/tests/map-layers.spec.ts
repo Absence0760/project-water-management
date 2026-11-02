@@ -9,7 +9,8 @@
 // added as the project's river, which the list then marks on the map. The
 // hydrological units (each parcel named by its unit), the MAP grid (the
 // synthetic grid's points in view, with their range and source) and the
-// CHIRPS grid (its points in view), each its own toggle in the URL. Axe
+// CHIRPS grid (its points in view), each its own toggle in the URL. The DEM
+// rivers (the terrain channels drawn outside Delineate, `layers=channels`). Axe
 // with the layers on and while measuring, light and dark.
 import { readFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
@@ -102,7 +103,7 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 
 	await openLayers(page);
-	const toggle = layers(page).getByRole('checkbox', { name: 'River network' });
+	const toggle = layers(page).getByRole('checkbox', { name: 'Rivers (HydroRIVERS)' });
 	await expect(toggle).not.toBeChecked();
 	await toggle.check();
 	await expect(page).toHaveURL(/[?&]layers=rivers(&|$)/);
@@ -254,6 +255,50 @@ test('the DEM grid: every 10th elevation-model cell each way in view, with its e
 	await expect(page.getByTestId('map-demgrid')).toHaveCount(0);
 });
 
+test('the DEM rivers: the terrain channels drawn outside Delineate while the toggle is on, a toggle in the URL', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Map DEM rivers');
+	await openMap(page, project.id);
+	// A small boundary over the synthetic DEM's valley (e2e's DEM_URL), framed so the view is within the channels' 0.35°.
+	const valley = JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'Valley' }, geometry: { type: 'Polygon', coordinates: [[[20.71, -33.47], [20.77, -33.47], [20.77, -33.4], [20.71, -33.4], [20.71, -33.47]]] } }] });
+	await uploadThroughSheet(page, null, 'valley.geojson', valley);
+	await mapReady(page);
+	await page.getByTestId('map-show-everything').click();
+	const body = page.locator('.map-body');
+	await expect(body).not.toHaveAttribute('data-channels');
+
+	await openLayers(page);
+	// The pair: HydroRIVERS' mapped rivers and the elevation model's own.
+	await expect(layers(page).getByRole('checkbox', { name: 'Rivers (HydroRIVERS)' })).toBeVisible();
+	const toggle = layers(page).getByRole('checkbox', { name: 'DEM rivers' });
+	await expect(toggle).not.toBeChecked();
+	await toggle.check();
+	await expect(page).toHaveURL(/[?&]layers=channels(&|$)/);
+	// Drawn with no tool on: Delineate's bar is nowhere, the channels' tiles are on the map.
+	await expect(page.getByTestId('map-draw-bar')).toHaveCount(0);
+	await expect(body).toHaveAttribute('data-channels', 'on');
+	await expect(body).not.toHaveAttribute('data-channel-tiles', '0');
+	await expect(page.getByTestId('map-channels')).toHaveAttribute('data-state', 'drawn');
+	await expect(page.getByTestId('map-channels-line')).toHaveText(
+		'The rivers delineation follows, worked out from the elevation model (the terrain channels in the Key): wider for a larger area upstream. The HydroRIVERS lines can sit a few hundred metres off them.'
+	);
+	await expect(layers(page).getByRole('status')).toContainText('DEM rivers drawn.');
+	// The over-the-map pill is Delineate's: the Layers box speaks for the layer.
+	await expect(page.getByTestId('map-channels-note')).toHaveCount(0);
+
+	// Kept across a reload, as every layer; Back undoes the toggle and the channels go.
+	await page.reload();
+	await mapReady(page);
+	await page.getByTestId('map-show-everything').click();
+	await expect(body).toHaveAttribute('data-channels', 'on');
+	await expect(body).not.toHaveAttribute('data-channel-tiles', '0');
+	await openLayers(page);
+	await layers(page).getByRole('checkbox', { name: 'DEM rivers' }).uncheck();
+	await expect(page).not.toHaveURL(/layers=/);
+	await expect(body).not.toHaveAttribute('data-channels');
+});
+
 test('the Area fill slider: the polygons filled less, outlines kept, remembered in this browser', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Map area fill');
@@ -345,7 +390,7 @@ test('the river network with nothing on the map yet: zoom in and it asks for the
 	await openMap(page, project.id);
 	await mapReady(page);
 	await openLayers(page);
-	await layers(page).getByRole('checkbox', { name: 'River network' }).check();
+	await layers(page).getByRole('checkbox', { name: 'Rivers (HydroRIVERS)' }).check();
 	// The whole country is in view: too wide to ask for, so it says to zoom in, and asks nothing.
 	const rivers = page.getByTestId('map-rivers');
 	await expect(rivers).toContainText('Zoom in to see the river network here');
