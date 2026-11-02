@@ -25,6 +25,7 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { loadOnce } from '#lib/components/common/lazy.js';
 	import { boardChecks, DRAFT_STAMP, refusedChecks } from './sections';
+	import { printedPage } from '../printedPage.svelte';
 	import FutureYieldRun from './FutureYieldRun.svelte';
 
 	let { projectId, runId }: { projectId: string; runId: string | null } = $props();
@@ -92,6 +93,8 @@
 	const ready = $derived(status === 'loaded');
 	const title = $derived(report?.identity.title ?? '');
 	const footer = $derived(project && report ? `${DRAFT_STAMP} · ${REPORT_FOOTER(project.name, title, 'Appendix B.3')}` : undefined);
+	// Printing is A4 and light, with this footer and "Page X of Y" on every page (report/printedPage.svelte.ts).
+	printedPage(() => footer);
 	const back = $derived(
 		report?.identity.application ? resolve(`projects/${projectId}?tab=scenarios&scenario=${encodeURIComponent(report.identity.application.scenarioId)}`) : resolve(`projects/${projectId}?tab=runs${runId ? `&run=${encodeURIComponent(runId)}` : ''}`)
 	);

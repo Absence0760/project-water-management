@@ -2069,8 +2069,12 @@ for alert counts.
 > It is one run-scoped endpoint (`GET …/runs/:runId/evidence-report`) drawn
 > by the route's `&evidence` mode, printed from the browser only. Left: the
 > server-rendered evidence PDF and `POST …/reports { evidence: true }` (with
-> the pack, WP-3.14, so ER1 isn't needed yet), per-unit supply bands (ER4
-> rest), the REC (ER9), the banded FDC (ER5) and page x of y footers
+> the pack, WP-3.14, so ER1 isn't needed yet). Since built: per-unit supply
+> bands (ER4 rest) and the banded FDC (ER5, both engine 1.33.0), the REC
+> (ER9, the rule table's `category`), and page x of y footers on the
+> evidence report's print and an issued pack's PDF (2026-11-01, the
+> catchment report's `@page` margin box,
+> [ui.md § Evidence report](../ui.md#evidence-report))
 > ([followups.md § Evidence report](../followups.md#evidence-report-issue-71)).
 
 **Goal.** A meeting-ready catchment report in one click. It replaces the
@@ -2121,8 +2125,8 @@ consultant copy-pasting from Excel.
     the "one implementation" principle behind the engine.
 
 - **Phase C, evidence mode (issue #15; M, about 2 weeks; after A and B).
-  Built (issue #71), except item 4 and the parts of 1–3 the status note
-  above lists.** The licensing evidence report on the same route:
+  Built (issue #71; items 1–3 whole since 2026-11-01), except item 4,
+  which waits for the pack (WP-3.14) as the status note above says.** The licensing evidence report on the same route:
   `/projects/:id/report?run=<applicationRun>&evidence`, built only from
   the project's current nominated evidence run and a scenario run on it
   (or the nominated run alone, for baseline evidence), refused otherwise.

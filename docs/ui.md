@@ -13025,7 +13025,8 @@ baseline card links to the published run's report (**Report**, beside
   signal is what e2e waits on, and what the server-side render waits on.
 - **Download PDF** calls `window.print()`; the hint says to choose **Save as
   PDF**. Print CSS: A4 (`@page`, added while the page is open,
-  `report/printPage.ts`), a running footer on every page in the bottom
+  `report/printPage.ts`, set up by `report/printedPage.svelte.ts`, which the
+  evidence report, a pack's page and the applicant's copy share), a running footer on every page in the bottom
   margin from CSS page-margin boxes (`@bottom-center`, Chromium 131+): the
   page's `data-report-footer` (the engine's `REPORT_FOOTER`: project · run ·
   "Model estimates; see the Disclaimer (section N, version …). The operator
@@ -13356,8 +13357,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   page still says it.
 - **Ready and print.** `data-report-ready` follows the catchment report's
   contract (every fetch in, every chart drawn). **Download draft PDF** is the
-  browser's print (always light, A4). There is no server-rendered evidence
-  PDF yet: it comes with the issued pack (WP-3.14).
+  browser's print (always light, A4), with the running footer on every page:
+  *Draft · not issued*, the project, the report's title, the disclaimer's key
+  point and "Page X of Y.", from the same `@page` margin box as the catchment
+  report (`report/printedPage.svelte.ts`, which the evidence page sets up
+  itself; the route's own print set-up stands down in evidence mode). The
+  draft has no server-rendered PDF: an issued pack's is printed from the
+  pack's page (WP-3.14).
 - Tested by `e2e/tests/evidence-report.spec.ts`, for § 5 with volumes
   `e2e/tests/evidence-allocations.spec.ts`, for § 6 with objects
   `e2e/tests/evidence-demand-objects.spec.ts`, and for the applications
@@ -13379,8 +13385,10 @@ their own application's in [their own view](#the-applicants-pack-view).
   (with its issue date when it had one). Once issued, every section and the
   footer also print the manifest SHA-256, the short code and the verify link
   `{origin}/verify/{code}` (`packVerifyLine`), and Appendix B.4 lists them.
-  The footer is `data-report-footer`, which a server render prints on every
-  page; `data-report-ready` follows the catchment report's contract, so e2e
+  The footer is `data-report-footer`, printed with "Page X of Y." on every
+  page by the page's own `@page` margin box (`report/printedPage.svelte.ts`),
+  in the browser's print and the server PDF alike (before 2026-11-01 the
+  pack's page set no footer box, so its PDF printed none); `data-report-ready` follows the catchment report's contract, so e2e
   and the renderer wait on it. Printing is A4 and light. The page reads only
   the pack and its sign-offs, and the project for the caller's role; a
   render session, which may read only the first two, skips the project, and
