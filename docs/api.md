@@ -2331,7 +2331,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, fromScenario, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, fromScenario, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, fitEngineVersions, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
@@ -2341,10 +2341,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   (`run_fit_engine_version`, 289: the headline gauge's row's
   `fitRecord.engineVersion` when `summary.unitRain.zones` marks a gauge the
   headline, engine 1.110.0, else `settings.fitRecord.engineVersion`), else
-  `null`; `errata` the ids of the
+  `null`; `fitEngineVersions` the engines of every fit its parameters came
+  from, each applied calibration location's (`run_fit_engine_versions`,
+  313, issue #670), sorted, `[]` for entered parameters; `errata` the ids of the
   known engine bugs that may affect the run (issue #103,
   [engine-errata.md](./engine-errata.md)): the errata whose range holds its
-  engine, or its fit's for a `fit` erratum, `[]` for none. The list and
+  engine, or any of its fits' (`fitEngineVersions`) for a `fit` erratum,
+  `[]` for none. The list and
   `GET …/runs/:runId` carry it; other routes answering with a run may not.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed): a run of the legacy runoff model, which

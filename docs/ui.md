@@ -13316,8 +13316,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     not validated" for a location with none; from the document's
     `calibrationZones`, `zoneStats.ts` `evidenceZoneRows`), then
     validation (the headline location's fit record, `FitProvenance`, or
-    *Not assessed* without a stored fit), WR2012, the validation statement,
-    and the nomination history.
+    *Not assessed* without a stored fit), WR2012, the validation statement
+    (its errata keyed on every location's fit, `runFitEngineVersions`,
+    issue #670), and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
     days and years fully met, baseline and application, the change with its
     paired band and "worse in"; then *Served in full while an EWR site below

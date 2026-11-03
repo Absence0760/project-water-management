@@ -112,8 +112,8 @@ export interface SignableRun {
 /** A run of the project as a sign-off reads it; null when there is none (or the caller can't see it). */
 export async function loadSignableRun(db: Db, projectId: string, runId: string): Promise<SignableRun | null> {
 	if (!UUID.test(runId)) return null;
-	const { rows } = await db.query<{ engine_version: string; scenario: boolean; fit_engine_version: string | null; legacy: boolean; forecast: boolean }>(
-		`SELECT engine_version, from_scenario AS scenario, run_fit_engine_version(inputs, summary) AS fit_engine_version,
+	const { rows } = await db.query<{ engine_version: string; scenario: boolean; fit_engine_versions: string[]; legacy: boolean; forecast: boolean }>(
+		`SELECT engine_version, from_scenario AS scenario, run_fit_engine_versions(inputs, summary) AS fit_engine_versions,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 			"trigger" = 'forecast' AS forecast
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
@@ -124,7 +124,7 @@ export async function loadSignableRun(db: Db, projectId: string, runId: string):
 	// Its server stamp (077, runs/stamp.ts): a run written past the model run is never signed.
 	const verified = await runVerified(db, runId);
 	return {
-		run: { id: runId, engineVersion: r.engine_version, scenario: r.scenario, fitEngineVersion: r.fit_engine_version },
+		run: { id: runId, engineVersion: r.engine_version, scenario: r.scenario, fitEngineVersion: r.fit_engine_versions },
 		legacy: r.legacy,
 		forecast: r.forecast,
 		verified

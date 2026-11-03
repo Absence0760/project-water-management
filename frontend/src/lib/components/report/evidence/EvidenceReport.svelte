@@ -17,7 +17,8 @@
 		type EvidenceReport,
 		type EwrAssuranceSite,
 		type ModelInput,
-		type RunSummary
+		type RunSummary,
+		runFitEngineVersions
 	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '#lib/api/index.js';
 	import { APP_NAME, APP_SHORT_NAME } from '#lib/brand.js';
@@ -453,7 +454,7 @@
 					<p class="na">WR2012 five-statistic table (MAR, mean of logs, SD, log SD, seasonal index): not assessed for this run (no WR2012 reference, no complete water year, or a run from before engine 1.19.0). When there is one, the calibration record above shows it (CR-28).</p>
 				{/if}
 				<h3>Validation statement, data quality and limitations</h3>
-				<ValidationStatement summary={sum} engineVersion={id.baseline.engineVersion} legacy={id.baseline.runoffModel === 'legacy'} fitEngineVersion={(fit as { engineVersion?: string } | null)?.engineVersion ?? null} headingLevel={4} />
+				<ValidationStatement summary={sum} engineVersion={id.baseline.engineVersion} legacy={id.baseline.runoffModel === 'legacy'} fitEngineVersion={runFitEngineVersions(base?.settings, sum)} headingLevel={4} />
 				<h3>Nomination history</h3>
 				<div class="table-wrap">
 					<table class="data compact" data-testid="evidence-nominations">

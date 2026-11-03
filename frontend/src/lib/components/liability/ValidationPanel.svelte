@@ -5,7 +5,7 @@
 	// known-limitations list) loads as its own chunk only when opened. `open`
 	// is bindable, so the run header's known-bug badge (issue #103) can open it
 	// on the errata it names.
-	import type { RunSummary } from '@water-management/engine';
+	import type { FitEngines, RunSummary } from '@water-management/engine';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 
 	const loadStatement = () => import('./ValidationStatement.svelte');
@@ -16,7 +16,7 @@
 		legacy,
 		fitEngineVersion = null,
 		open = $bindable(false)
-	}: { summary: RunSummary; engineVersion: string; legacy: boolean; fitEngineVersion?: string | null; open?: boolean } = $props();
+	}: { summary: RunSummary; engineVersion: string; legacy: boolean; fitEngineVersion?: FitEngines; open?: boolean } = $props();
 
 	const uid = $props.id();
 </script>

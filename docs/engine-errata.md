@@ -23,8 +23,12 @@ the app prints "none recorded" for a version with no row, never "none".
 **Keyed on.** Most errata affect a run made by an affected engine (`run`: the
 run's `engine_version`). One that affects an automatic calibration affects
 every run that uses the fitted parameters, whichever engine runs them
-(`fit`: the fit record's `engineVersion`, `settings.fitRecord`); a run with
-entered parameters has none of those.
+(`fit`: the fit record's `engineVersion`, `settings.fitRecord`, or a
+calibration location's row's). A run calibrated at several locations is
+flagged when the erratum affects the fit at any of them, not only the
+headline's (issue #670; `runFitEngineVersions`, backend
+`run_fit_engine_versions`, 313). A run with entered parameters has none of
+those.
 
 **Adding one.** Add a row to the table below: a new `ER-<n>` id (never reuse
 one), what it is keyed on, the first affected version, the version that fixed

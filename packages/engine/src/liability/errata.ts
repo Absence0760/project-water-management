@@ -47,14 +47,58 @@ const affects = (e: Erratum, v: string | null | undefined): boolean =>
 	!!v && SEMVER.test(v) && compareEngineVersions(e.firstAffected, v) <= 0 && (e.fixedIn === null || compareEngineVersions(v, e.fixedIn) < 0);
 
 /**
+ * The engine of each automatic fit a run's parameters came from (issue #670):
+ * one version, or a list (a run calibrated at several locations), or null for
+ * entered parameters.
+ */
+export type FitEngines = string | readonly string[] | null;
+
+/**
  * The errata that affect a run: a `run` erratum when the run's
  * `engineVersion` is in its range (first affected ≤ it < fixed in), a `fit`
- * erratum when the engine of the fit its parameters came from
- * (`fitEngineVersion`, settings.fitRecord.engineVersion) is; a run with
- * entered parameters has no fit.
+ * erratum when the engine of a fit its parameters came from is: any of
+ * `fitEngineVersion` when it is a list (runFitEngineVersions, every applied
+ * calibration location's fit). A run with entered parameters has no fit.
  */
-export function errataFor(engineVersion: string, errata: readonly Erratum[], fitEngineVersion: string | null = null): Erratum[] {
-	return errata.filter((e) => affects(e, e.keyedOn === 'fit' ? fitEngineVersion : engineVersion));
+export function errataFor(engineVersion: string, errata: readonly Erratum[], fitEngineVersion: FitEngines = null): Erratum[] {
+	const fits: readonly (string | null)[] = typeof fitEngineVersion === 'string' || fitEngineVersion === null ? [fitEngineVersion] : fitEngineVersion;
+	return errata.filter((e) => (e.keyedOn === 'fit' ? fits.some((v) => affects(e, v)) : affects(e, engineVersion)));
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const fitVersion = (v: unknown): string | null => (isObject(v) && isObject(v.fitRecord) && typeof v.fitRecord.engineVersion === 'string' ? v.fitRecord.engineVersion : null);
+
+/**
+ * The engines of every automatic fit a run's parameters came from (issue
+ * #670), from its stored settings and summary, distinct and sorted, which a
+ * `fit` erratum keys on. Each group the run applied (summary.unitRain.zones,
+ * engine 1.106.0): a gauge's location (a string `nodeId`) its row's fit record
+ * (the first settings.calibrationZones row with that node), and the top-level
+ * settings.fitRecord too when it had no parameters of its own (`fitted`
+ * false: its units took the catchment's); the outlet's location and the units
+ * on settings.gr4j (`nodeId` null) the top-level fit record. The top-level
+ * one too when no group is the headline (a run with no gauge location, or
+ * from before engine 1.110.0), so the headline's fit (the API's
+ * `fitEngineVersion`, run_fit_engine_version) is always among them. Backend
+ * migration 313's run_fit_engine_versions is the same rule in SQL
+ * (migration-313.db.test.ts holds them together). Reads stored JSON, so it
+ * takes anything and skips what isn't the shape.
+ */
+export function runFitEngineVersions(settings: unknown, summary: unknown): string[] {
+	const s = isObject(settings) ? settings : {};
+	const rows = Array.isArray(s.calibrationZones) ? s.calibrationZones : [];
+	const top = fitVersion(s);
+	const unitRain = isObject(summary) ? summary.unitRain : null;
+	const zones = (isObject(unitRain) && Array.isArray(unitRain.zones) ? unitRain.zones : []).filter(isObject);
+	const out = new Set<string | null>();
+	for (const z of zones) {
+		if (typeof z.nodeId === 'string') {
+			out.add(fitVersion(rows.find((r) => isObject(r) && r.nodeId === z.nodeId)));
+			if (z.fitted === false) out.add(top);
+		} else out.add(top);
+	}
+	if (!zones.some((z) => z.headline === true)) out.add(top);
+	return [...out].filter((v): v is string => v !== null).sort();
 }
 
 function cells(row: string): string[] {

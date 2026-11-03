@@ -7,10 +7,10 @@
 // engine's errataFor, less what the manifest recorded.
 import { ENGINE_ERRATA, errataFor, type Erratum } from '@water-management/engine';
 
-/** One of a pack's runs: its engine, and the engine of the automatic fit its parameters came from (null: entered parameters). */
+/** One of a pack's runs: its engine, and the engines of the automatic fits its parameters came from (run_fit_engine_versions, 313; empty: entered parameters). */
 export interface PackRunEngines {
 	engineVersion: string;
-	fitEngineVersion: string | null;
+	fitEngineVersions: readonly string[];
 }
 
 /** An erratum as verify prints it: its id and what goes wrong, nothing else. */
@@ -20,12 +20,12 @@ export interface PackErratum {
 }
 
 /**
- * The errata that apply now to any of `runs` (by run engine, or by fit engine
- * for a `fit` erratum) and aren't among `recorded` (by id), in the list's
+ * The errata that apply now to any of `runs` (by run engine, or by any of its
+ * fits' engines for a `fit` erratum) and aren't among `recorded` (by id), in the list's
  * order, each once.
  */
 export function errataFoundSince(recorded: readonly { id: string }[], runs: readonly PackRunEngines[], errata: readonly Erratum[] = ENGINE_ERRATA): PackErratum[] {
 	const seen = new Set(recorded.map((e) => e.id));
-	const applies = new Set(runs.flatMap((r) => errataFor(r.engineVersion, errata, r.fitEngineVersion).map((e) => e.id)));
+	const applies = new Set(runs.flatMap((r) => errataFor(r.engineVersion, errata, r.fitEngineVersions).map((e) => e.id)));
 	return errata.filter((e) => applies.has(e.id) && !seen.has(e.id)).map((e) => ({ id: e.id, summary: e.summary }));
 }

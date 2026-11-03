@@ -6,7 +6,7 @@
 	// generated from docs/engine-audit.md, the errata from
 	// docs/engine-errata.md, and the methodology statement is cited by version
 	// and hash (docs/methodology).
-	import { validationStatement, type RunSummary } from '@water-management/engine';
+	import { validationStatement, type FitEngines, type RunSummary } from '@water-management/engine';
 	import { fmtDay, fmtNum } from '#lib/format/number.js';
 	import { ENGINE_BUILD } from './engineBuild';
 
@@ -21,7 +21,7 @@
 		engineVersion: string;
 		legacy: boolean;
 		/** The engine of the automatic fit the run's parameters came from (settings.fitRecord); null for entered parameters. */
-		fitEngineVersion?: string | null;
+		fitEngineVersion?: FitEngines;
 		/** The level of its own headings (Calibration, Data quality, Known limitations): one below the heading it sits under. */
 		headingLevel?: 3 | 4;
 	} = $props();

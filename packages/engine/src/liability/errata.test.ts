@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ENGINE_VERSION } from '../version';
-import { compareEngineVersions, errataFor, parseErrata, type Erratum } from './errata';
+import { compareEngineVersions, errataFor, parseErrata, runFitEngineVersions, type Erratum } from './errata';
 import { ENGINE_ERRATA } from './errata.generated';
 import { renderErrataModule } from './generate';
 
@@ -87,6 +87,16 @@ describe('errataFor', () => {
 		expect(errataFor('1.10.0', fit, '1.25.0')).toEqual([]);
 	});
 
+	it('keys a fit erratum on any of a run\'s fits when it has several (issue #670)', () => {
+		const fit = [e('ER-9', '0.5.0', '1.22.0', 'fit')];
+		// One affected location's fit among several is enough. Control: none of them affected, or no fits.
+		expect(errataFor('1.30.0', fit, ['1.25.0', '1.21.0']).map((x) => x.id)).toEqual(['ER-9']);
+		expect(errataFor('1.30.0', fit, ['1.25.0', '1.22.0'])).toEqual([]);
+		expect(errataFor('1.30.0', fit, [])).toEqual([]);
+		// A run erratum still keys on the run's engine alone.
+		expect(errataFor('0.16.0', list, ['9.0.0']).map((x) => x.id)).toEqual(['ER-1']);
+	});
+
 	it('gives nothing for a version that is not x.y.z (a legacy or hand-made run)', () => {
 		expect(errataFor('legacy', list)).toEqual([]);
 	});
@@ -95,5 +105,43 @@ describe('errataFor', () => {
 		for (const x of ENGINE_ERRATA) {
 			if (x.fixedIn) expect(compareEngineVersions(x.fixedIn, ENGINE_VERSION), x.id).toBeLessThanOrEqual(0);
 		}
+	});
+});
+
+describe('runFitEngineVersions (issue #670)', () => {
+	const G = 'g-1';
+	const H = 'g-2';
+	const settings = {
+		fitRecord: { engineVersion: '1.100.0' },
+		calibrationZones: [
+			{ nodeId: G, fitRecord: { engineVersion: '1.109.0' } },
+			{ nodeId: H, fitRecord: { engineVersion: '1.95.0' } },
+			{ nodeId: G, fitRecord: { engineVersion: '9.9.9' } }
+		]
+	};
+	const zone = (nodeId: string | null, extra: Record<string, unknown> = {}) => ({ nodeId, name: 'Z', units: [], ...extra });
+
+	it('reads every applied location: each gauge’s row (its first) and the top level for the outlet’s, the headline or not', () => {
+		const summary = { unitRain: { zones: [zone(G, { kind: 'gauge' }), zone(H, { kind: 'gauge' }), zone(null, { kind: 'outlet', headline: true })] } };
+		expect(runFitEngineVersions(settings, summary)).toEqual(['1.100.0', '1.109.0', '1.95.0']);
+		// Headline at a gauge, no outlet location: the top level is left out (it gave no unit its parameters).
+		expect(runFitEngineVersions(settings, { unitRain: { zones: [zone(H, { kind: 'gauge' }), zone(G, { kind: 'gauge', headline: true })] } })).toEqual(['1.109.0', '1.95.0']);
+	});
+
+	it('adds the top level for a gauge location with no parameters of its own, and for the units on settings.gr4j', () => {
+		expect(runFitEngineVersions(settings, { unitRain: { zones: [zone(G, { kind: 'gauge', headline: true, fitted: false })] } })).toEqual(['1.100.0', '1.109.0']);
+		expect(runFitEngineVersions(settings, { unitRain: { zones: [zone(G, { kind: 'gauge', headline: true }), zone(null, { kind: 'default' })] } })).toEqual(['1.100.0', '1.109.0']);
+	});
+
+	it('reads the top level for a run with no gauge location, or with no headline (before engine 1.110.0)', () => {
+		expect(runFitEngineVersions(settings, {})).toEqual(['1.100.0']);
+		expect(runFitEngineVersions(settings, { unitRain: { zones: [zone(H)] } })).toEqual(['1.100.0', '1.95.0']);
+	});
+
+	it('skips what isn’t the shape: no fit, a row without one, junk', () => {
+		expect(runFitEngineVersions({ calibrationZones: [{ nodeId: G, fitRecord: null }] }, { unitRain: { zones: [zone(G, { headline: true })] } })).toEqual([]);
+		expect(runFitEngineVersions({ fitRecord: { engineVersion: 7 } }, { unitRain: { zones: 'not a list' } })).toEqual([]);
+		expect(runFitEngineVersions(null, null)).toEqual([]);
+		expect(runFitEngineVersions(settings, { unitRain: { zones: [42, zone(G, { headline: true })] } })).toEqual(['1.109.0']);
 	});
 });
