@@ -27,6 +27,8 @@ export interface AllocationBody {
 	waterSource: 'surface' | 'groundwater';
 	volumeM3PerYear: number;
 	storageM3?: number | null;
+	/** The registered irrigated area, ha (244): a take's only. */
+	irrigatedAreaHa?: number | null;
 	validFrom?: string | null;
 	validTo?: string | null;
 	reference?: string;

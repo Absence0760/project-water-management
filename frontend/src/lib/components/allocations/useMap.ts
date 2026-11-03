@@ -1,6 +1,8 @@
 // The Allocations tab's map (issue #510, docs/allocations.md § The map): each
-// hydrological unit's polygon shaded by its modelled use ÷ its registered
-// volume. Pure, unit-tested in useMap.test.ts; AllocationMap.svelte draws it.
+// hydrological unit's polygon shaded by what the run models ÷ what is
+// registered for it, for the measure picked: its water use (the default), its
+// irrigated area, or its dam's capacity. Pure, unit-tested in useMap.test.ts;
+// AllocationMap.svelte draws it.
 //
 // It only reads the comparison (engine compareAllocations, the same figures
 // as the table, so the map can't disagree with it) and the Map tab's unit
@@ -25,6 +27,20 @@ export const USE_SOURCES: readonly { id: UseSource; label: string }[] = [
 	{ id: 'both', label: 'Both together' }
 ];
 
+/**
+ * What the map shades by (docs/allocations.md § The map): the water use
+ * (modelled use ÷ registered volume, per source and period), the irrigated
+ * area (the run's planted crop areas ÷ the registered irrigated area) or the
+ * dam capacity (the run's dam ÷ the registered storage, s21b). The last two
+ * are the run's inputs, so they have no source or water year.
+ */
+export type MapMeasure = 'use' | 'area' | 'storage';
+export const MAP_MEASURES: readonly { id: MapMeasure; label: string }[] = [
+	{ id: 'use', label: 'Water use' },
+	{ id: 'area', label: 'Irrigated area' },
+	{ id: 'storage', label: 'Dam capacity' }
+];
+
 /** Below this many m³ a volume counts as nothing (the engine's float dust, compare.ts NOTHING_M3). */
 const NOTHING_M3 = 1e-6;
 
@@ -47,6 +63,58 @@ export const BAND_SHORT: Record<UseBand, string> = {
 	unregistered: 'No registered volume',
 	none: 'No use, none registered'
 };
+
+/** The legend's words per band for each measure (water use's are BAND_LABEL). */
+export const MEASURE_BAND_LABEL: Record<MapMeasure, Record<UseBand, string>> = {
+	use: BAND_LABEL,
+	area: {
+		under: 'Less planted than registered (under 100 %)',
+		near: 'The same, up to 10 % more (100–110 %)',
+		over: '10–50 % more planted than registered (110–150 %)',
+		far: 'More than 50 % more planted than registered (over 150 %)',
+		unregistered: 'Planted, but no irrigated area registered',
+		none: 'Nothing planted, no area registered'
+	},
+	storage: {
+		under: 'A smaller dam than registered (under 100 %)',
+		near: 'The same, up to 10 % larger (100–110 %)',
+		over: '10–50 % larger than registered (110–150 %)',
+		far: 'More than 50 % larger than registered (over 150 %)',
+		unregistered: 'A dam, but no storage registered',
+		none: 'No dam, no storage registered'
+	}
+};
+
+/** The band in a few words for each measure (water use's are BAND_SHORT). */
+export const MEASURE_BAND_SHORT: Record<MapMeasure, Record<UseBand, string>> = {
+	use: BAND_SHORT,
+	area: {
+		under: 'Less than registered',
+		near: 'Up to 10 % more',
+		over: '10–50 % more',
+		far: 'Over 50 % more',
+		unregistered: 'No area registered',
+		none: 'Nothing planted or registered'
+	},
+	storage: {
+		under: 'Smaller than registered',
+		near: 'Up to 10 % larger',
+		over: '10–50 % larger',
+		far: 'Over 50 % larger',
+		unregistered: 'No storage registered',
+		none: 'No dam or storage'
+	}
+};
+
+/** What the key divides, for its heading ("modelled use ÷ registered volume"). */
+export const MEASURE_RATIO: Record<MapMeasure, string> = {
+	use: 'modelled use ÷ registered volume',
+	area: 'irrigated area in the run ÷ registered irrigated area',
+	storage: 'dam capacity in the run ÷ registered storage'
+};
+
+/** A measure's figure with its unit: m³ for use and storage, hectares for the area. */
+export const measureFigure = (measure: MapMeasure, v: number): string => (measure === 'area' ? `${fmtNum(v, 1, true)} ha` : `${fmtNum(v)} m³`);
 
 /**
  * The bands' colours (theme pairs, like mapStyle.ts overlayColours: MapLibre
@@ -86,10 +154,15 @@ export function wholeWaterYears(c: AllocationComparison): number[] {
 	return [...ys].sort((a, b) => a - b);
 }
 
-/** One unit's use against its volume for the picked source and period; null when the run covers no such whole year. */
+/**
+ * One unit's figure against what is registered for it, for the picked measure
+ * (and, for water use, source and period): m³ for use and storage, ha for the
+ * area. Null when there is nothing to read (water use: the run covers no such
+ * whole year; area: a comparison without areas).
+ */
 export interface UnitUse {
-	modelledM3: number;
-	registeredM3: number;
+	modelled: number;
+	registered: number;
 	/** modelled ÷ registered; null when nothing is registered. */
 	ratio: number | null;
 	band: UseBand;
@@ -104,29 +177,44 @@ export interface UnitUse {
  */
 export function unitUse(n: AllocationNodeComparison, source: UseSource, waterYear: number | null): UnitUse | null {
 	const sides = source === 'both' ? [n.surface, n.groundwater] : [source === 'surface' ? n.surface : n.groundwater];
-	let modelledM3 = 0;
-	let registeredM3 = 0;
+	let modelled = 0;
+	let registered = 0;
 	for (const side of sides) {
 		if (waterYear === null) {
 			if (side.wholeYears === 0) return null;
-			modelledM3 += side.meanModelledM3PerYear ?? 0;
-			registeredM3 += side.meanRegisteredM3PerYear ?? 0;
+			modelled += side.meanModelledM3PerYear ?? 0;
+			registered += side.meanRegisteredM3PerYear ?? 0;
 		} else {
 			const y = side.years.find((x) => x.waterYear === waterYear && !x.partial);
 			if (!y) return null;
-			modelledM3 += y.modelledM3;
-			registeredM3 += y.registeredM3;
+			modelled += y.modelledM3;
+			registered += y.registeredM3;
 		}
 	}
 	const atIntake = sides.some((side) => side.measuredAt === 'intake');
-	return { modelledM3, registeredM3, ratio: registeredM3 > NOTHING_M3 ? modelledM3 / registeredM3 : null, band: useBand(modelledM3, registeredM3), ...(atIntake ? { atIntake } : {}) };
+	return { ...figure(modelled, registered), ...(atIntake ? { atIntake } : {}) };
+}
+
+const figure = (modelled: number, registered: number): UnitUse => ({ modelled, registered, ratio: registered > NOTHING_M3 ? modelled / registered : null, band: useBand(modelled, registered) });
+
+/**
+ * A unit's figure for the picked measure: water use as unitUse; the irrigated
+ * area (the run's planted crop areas against the registered irrigated area,
+ * engine withIrrigatedAreas; null without it); the dam capacity in the run
+ * against the registered storage (no dam, or none registered, reads as 0).
+ */
+export function unitFigure(n: AllocationNodeComparison, measure: MapMeasure, source: UseSource, waterYear: number | null): UnitUse | null {
+	if (measure === 'use') return unitUse(n, source, waterYear);
+	if (measure === 'area') return n.irrigatedArea ? figure(n.irrigatedArea.modelledHa, n.irrigatedArea.registeredHa ?? 0) : null;
+	return figure(n.storage.modelledCapacityM3 ?? 0, n.storage.registeredM3 ?? 0);
 }
 
 /** The label a unit carries on the map: its % of registered ("132 %"), or the band in a word or two. */
-export function useLabel(u: Pick<UnitUse, 'ratio' | 'band'> | null): string {
-	if (!u) return 'No whole year';
+export function useLabel(u: Pick<UnitUse, 'ratio' | 'band'> | null, measure: MapMeasure = 'use'): string {
+	if (!u) return measure === 'use' ? 'No whole year' : 'No figures';
 	if (u.ratio !== null) return `${fmtNum(u.ratio * 100, 0)} %`;
-	return u.band === 'unregistered' ? 'None registered' : 'No use';
+	if (u.band === 'unregistered') return 'None registered';
+	return measure === 'use' ? 'No use' : measure === 'area' ? 'No area' : 'No dam';
 }
 
 type Polygonal = Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }>;
@@ -171,7 +259,7 @@ const BAND_RANK: Record<UseBand, number> = { far: 0, over: 1, unregistered: 2, n
  * unit's label sits inside its largest polygon. The unplaced list is in the
  * order to look into them (furthest above first), then by name.
  */
-export function useShading(c: AllocationComparison, features: readonly MapFeature[], source: UseSource, waterYear: number | null): UseShading {
+export function useShading(c: AllocationComparison, features: readonly MapFeature[], source: UseSource, waterYear: number | null, measure: MapMeasure = 'use'): UseShading {
 	const byNode = new Map<string, { featureId: string; geometry: Polygonal; area: number }[]>();
 	for (const f of features) {
 		if (f.kind !== 'farm_parcel' || !f.nodeId || !isPolygonal(f.geometry)) continue;
@@ -188,9 +276,9 @@ export function useShading(c: AllocationComparison, features: readonly MapFeatur
 	const inRun = new Set<string>();
 	for (const n of c.nodes) {
 		inRun.add(n.nodeId);
-		const use = unitUse(n, source, waterYear);
+		const use = unitFigure(n, measure, source, waterYear);
 		const p = placed(n.nodeId);
-		const u: ShadedUnit = { nodeId: n.nodeId, name: n.name, use, band: use?.band ?? null, label: useLabel(use), ...p };
+		const u: ShadedUnit = { nodeId: n.nodeId, name: n.name, use, band: use?.band ?? null, label: useLabel(use, measure), ...p };
 		(p.polygons.length ? drawn : unplaced).push(u);
 	}
 	const rank = (u: ShadedUnit) => (u.band ? BAND_RANK[u.band] : 6);
@@ -295,9 +383,26 @@ export function useBounds(s: UseShading): [[number, number], [number, number]] |
  * list under the map. It holds the label's words (useLabel) in order, so a
  * voice command that says what the label reads reaches it (WCAG 2.5.3).
  */
-export function useSentence(name: string, u: UnitUse | null, period: string): string {
+export function useSentence(name: string, u: UnitUse | null, period: string, measure: MapMeasure = 'use'): string {
+	if (measure === 'area') return areaSentence(name, u);
+	if (measure === 'storage') return storageMapSentence(name, u);
 	if (!u) return `${name}: no whole year; the run covers no whole water year for ${period}.`;
-	const m = `${fmtNum(u.modelledM3)} m³ modelled${u.atIntake ? ' (taken at the intake)' : ''}`;
+	const m = `${fmtNum(u.modelled)} m³ modelled${u.atIntake ? ' (taken at the intake)' : ''}`;
 	if (u.ratio === null) return u.band === 'unregistered' ? `${name}: none registered, ${m} (${period}).` : `${name}: no use, nothing modelled and nothing registered (${period}).`;
-	return `${name}: ${fmtNum(u.ratio * 100, 0)} % of registered, ${m} against ${fmtNum(u.registeredM3)} m³ registered (${period}). ${BAND_SHORT[u.band]}.`;
+	return `${name}: ${fmtNum(u.ratio * 100, 0)} % of registered, ${m} against ${fmtNum(u.registered)} m³ registered (${period}). ${BAND_SHORT[u.band]}.`;
+}
+
+function areaSentence(name: string, u: UnitUse | null): string {
+	if (!u) return `${name}: no figures; run the model again for the irrigated area.`;
+	const planted = `${measureFigure('area', u.modelled)} planted in the run`;
+	if (u.ratio === null) return u.band === 'unregistered' ? `${name}: none registered, ${planted}.` : `${name}: no area, nothing planted in the run and no irrigated area registered.`;
+	return `${name}: ${fmtNum(u.ratio * 100, 0)} % of registered, ${planted} against ${measureFigure('area', u.registered)} registered. ${MEASURE_BAND_SHORT.area[u.band]}.`;
+}
+
+function storageMapSentence(name: string, u: UnitUse | null): string {
+	if (!u) return `${name}: no figures.`;
+	if (u.ratio === null)
+		return u.band === 'unregistered' ? `${name}: none registered, a ${measureFigure('storage', u.modelled)} dam in the run.` : `${name}: no dam in the run and no storage registered.`;
+	const dam = u.modelled > NOTHING_M3 ? `a ${measureFigure('storage', u.modelled)} dam in the run` : 'no dam in the run';
+	return `${name}: ${fmtNum(u.ratio * 100, 0)} % of registered, ${dam} against ${measureFigure('storage', u.registered)} of storage registered. ${MEASURE_BAND_SHORT.storage[u.band]}.`;
 }

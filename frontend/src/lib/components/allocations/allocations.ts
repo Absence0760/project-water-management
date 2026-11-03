@@ -417,3 +417,81 @@ function capYearsWords(c: AllocationCapYears): string {
 		.map(([n, w]) => `${fmtNum(n as number)} ${w}`);
 	return `The cap held use back on ${fmtNum(days)} day${days === 1 ? '' : 's'} in ${years} water year${years === 1 ? '' : 's'}: ${parts.join(', ')}. ${usedUp}`;
 }
+
+/**
+ * One measure of a unit, registered against the run (docs/allocations.md §
+ * Per unit, all three): hectares for the irrigated area, m³ a year for the
+ * water use (the mean whole water year, surface and groundwater added), m³
+ * for the dam. null figures: none stated (registered) or none in the run.
+ */
+export interface MeasureCell {
+	registered: number | null;
+	modelled: number | null;
+	status: AllocationStatus;
+}
+
+/** A unit's three measures on the totals table; a measure is null when the run has nothing to read for it. */
+export interface UnitMeasures {
+	nodeId: string;
+	name: string;
+	area: MeasureCell | null;
+	use: MeasureCell | null;
+	storage: MeasureCell;
+}
+
+/** Each measure's status in words: what the numbers say, not a finding. */
+export const MEASURE_STATUS_LABEL: Record<'area' | 'use' | 'storage', Record<AllocationStatus, string>> = {
+	area: { over: 'More than registered', within: 'Within band', under: 'Less than registered', unregistered: 'None registered', none: 'Nothing planted' },
+	use: STATUS_LABEL,
+	storage: { over: 'Larger than registered', within: 'Within band', under: 'Smaller than registered', unregistered: 'None registered', none: 'No dam' }
+};
+
+/** The mean whole water year's use against its volume, both sources added; null without a whole year. */
+function meanUse(n: AllocationComparison['nodes'][number], tolerance: number): MeasureCell | null {
+	if (n.surface.wholeYears === 0 || n.groundwater.wholeYears === 0) return null;
+	const registered = (n.surface.meanRegisteredM3PerYear ?? 0) + (n.groundwater.meanRegisteredM3PerYear ?? 0);
+	const modelled = (n.surface.meanModelledM3PerYear ?? 0) + (n.groundwater.meanModelledM3PerYear ?? 0);
+	return { registered, modelled, status: allocationStatus(modelled, registered, tolerance) };
+}
+
+const sumOf = (cells: readonly (MeasureCell | null)[], k: 'registered' | 'modelled'): number | null => {
+	const vs = cells.map((c) => c?.[k]).filter((v): v is number => typeof v === 'number');
+	return vs.length ? vs.reduce((a, v) => a + v, 0) : null;
+};
+
+/**
+ * Every unit's irrigated area, water use and dam capacity, registered against
+ * the run, and the catchment's total of each, judged with the comparison's
+ * band as each unit is (engine allocationStatus): the irrigated area from
+ * the route's `irrigatedArea` (withIrrigatedAreas), the use the mean whole
+ * water year's, the dam the storage line's. A unit with nothing in any
+ * measure is left out. The units to look into first lead (any measure more
+ * than registered, then any with nothing registered, then any less), in the
+ * run's order otherwise. Volumes not matched to a unit aren't in any total
+ * (the page says how many there are).
+ */
+export function unitMeasures(c: AllocationComparison): { rows: UnitMeasures[]; total: Omit<UnitMeasures, 'nodeId' | 'name'> } {
+	const rows: UnitMeasures[] = [];
+	for (const n of c.nodes) {
+		const area: MeasureCell | null = n.irrigatedArea ? { registered: n.irrigatedArea.registeredHa, modelled: n.irrigatedArea.modelledHa, status: n.irrigatedArea.status } : null;
+		const use = meanUse(n, c.tolerance);
+		const storage: MeasureCell = { registered: n.storage.registeredM3, modelled: n.storage.modelledCapacityM3, status: n.storage.status };
+		if ([area, use, storage].every((x) => !x || (x.status === 'none' && !x.registered))) continue;
+		rows.push({ nodeId: n.nodeId, name: n.name, area, use, storage });
+	}
+	const rank = (r: UnitMeasures) => {
+		const st = [r.area, r.use, r.storage].map((x) => x?.status);
+		return st.includes('over') ? 0 : st.includes('unregistered') ? 1 : st.includes('under') ? 2 : 3;
+	};
+	rows.splice(0, rows.length, ...rows.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map(({ r }) => r));
+	const total = (pick: (r: UnitMeasures) => MeasureCell | null, noDam = false): MeasureCell | null => {
+		const cells = rows.map(pick);
+		if (cells.every((x) => !x)) return null;
+		const registered = sumOf(cells, 'registered');
+		const modelled = sumOf(cells, 'modelled');
+		// No dam anywhere in the run is no comparison, as a unit's storage line says.
+		const status = noDam && !modelled ? 'none' : allocationStatus(modelled ?? 0, registered ?? 0, c.tolerance);
+		return { registered, modelled, status };
+	};
+	return { rows, total: { area: total((r) => r.area), use: total((r) => r.use), storage: total((r) => r.storage, true) ?? { registered: null, modelled: null, status: 'none' } } };
+}

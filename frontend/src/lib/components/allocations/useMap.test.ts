@@ -1,8 +1,27 @@
-import { compareAllocations } from '@water-management/engine';
+import { compareAllocations, withIrrigatedAreas } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, MapGeometry } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
-import { BAND_LABEL, BAND_SHORT, bandColours, hatchPixels, unitUse, useBand, useBounds, useLabel, useLayers, useMapData, useSentence, useShading, USE_BANDS, wholeWaterYears } from './useMap';
+import {
+	BAND_LABEL,
+	BAND_SHORT,
+	bandColours,
+	hatchPixels,
+	MAP_MEASURES,
+	MEASURE_BAND_LABEL,
+	MEASURE_BAND_SHORT,
+	unitFigure,
+	unitUse,
+	useBand,
+	useBounds,
+	useLabel,
+	useLayers,
+	useMapData,
+	useSentence,
+	useShading,
+	USE_BANDS,
+	wholeWaterYears
+} from './useMap';
 
 describe('useBand: modelled use ÷ registered volume', () => {
 	it('puts each edge in the band the issue fixes (#510)', () => {
@@ -86,7 +105,7 @@ describe('unitUse and wholeWaterYears', () => {
 		expect(mean.band).toBe('over');
 		// Both whole years used 36 500 m³ against a volume of 36 500 / 1.3.
 		expect(mean.ratio!).toBeCloseTo(1.3, 6);
-		expect(unitUse(a, 'surface', 2002)!.modelledM3).toBe(36_500);
+		expect(unitUse(a, 'surface', 2002)!.modelled).toBe(36_500);
 		// The part year isn't offered, and a year outside the run has nothing.
 		expect(unitUse(a, 'surface', 2003)).toBeNull();
 		expect(unitUse(a, 'surface', 1990)).toBeNull();
@@ -99,8 +118,8 @@ describe('unitUse and wholeWaterYears', () => {
 		expect(unitUse(b, 'groundwater', null)!.ratio).toBeCloseTo(2, 6);
 		expect(unitUse(b, 'groundwater', null)!.band).toBe('far');
 		const both = unitUse(b, 'both', null)!;
-		expect(both.modelledM3).toBeCloseTo(7_300, 6);
-		expect(both.registeredM3).toBeCloseTo(3_650 / 1.25 + 3_650 / 2, 6);
+		expect(both.modelled).toBeCloseTo(7_300, 6);
+		expect(both.registered).toBeCloseTo(3_650 / 1.25 + 3_650 / 2, 6);
 		expect(both.ratio).toBeCloseTo(7_300 / (3_650 / 1.25 + 3_650 / 2), 6);
 	});
 
@@ -116,7 +135,7 @@ describe('unitUse and wholeWaterYears', () => {
 		expect(useLabel({ ratio: null, band: 'unregistered' })).toBe('None registered');
 		expect(useLabel({ ratio: null, band: 'none' })).toBe('No use');
 		expect(useLabel(null)).toBe('No whole year');
-		expect(useSentence('Farm A', { modelledM3: 1320, registeredM3: 1000, ratio: 1.32, band: 'over' }, 'the mean water year')).toBe(
+		expect(useSentence('Farm A', { modelled: 1320, registered: 1000, ratio: 1.32, band: 'over' }, 'the mean water year')).toBe(
 			`Farm A: 132 % of registered, ${fmtNum(1320)} m³ modelled against ${fmtNum(1000)} m³ registered (the mean water year). 10–50 % more.`
 		);
 	});
@@ -125,9 +144,9 @@ describe('unitUse and wholeWaterYears', () => {
 		const words = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 		const cases = [
 			null,
-			{ modelledM3: 1320, registeredM3: 1000, ratio: 1.32, band: 'over' as const },
-			{ modelledM3: 500, registeredM3: 0, ratio: null, band: 'unregistered' as const },
-			{ modelledM3: 0, registeredM3: 0, ratio: null, band: 'none' as const }
+			{ modelled: 1320, registered: 1000, ratio: 1.32, band: 'over' as const },
+			{ modelled: 500, registered: 0, ratio: null, band: 'unregistered' as const },
+			{ modelled: 0, registered: 0, ratio: null, band: 'none' as const }
 		];
 		for (const u of cases) expect(words(useSentence('Farm A', u, 'the mean water year'))).toContain(words(useLabel(u)));
 		expect(useSentence('Farm A', cases[2], 'the mean water year')).toBe(`Farm A: none registered, ${fmtNum(500)} m³ modelled (the mean water year).`);
@@ -140,9 +159,89 @@ describe('unitUse and wholeWaterYears', () => {
 			allocations: [{ id: 'e', nodeId: 'E', waterSource: 'surface', volumeM3PerYear: 36_500 }]
 		});
 		const u = unitUse(c.nodes[0]!, 'surface', null)!;
-		expect(u).toMatchObject({ modelledM3: 36_500, atIntake: true, band: 'near' });
+		expect(u).toMatchObject({ modelled: 36_500, atIntake: true, band: 'near' });
 		expect(useSentence('Farm E', u, 'the mean water year')).toMatch(/m³ modelled \(taken at the intake\) against/);
 		expect(unitUse(c.nodes[0]!, 'groundwater', null)?.atIntake).toBeUndefined();
+	});
+});
+
+describe('the measure: water use, irrigated area or dam capacity', () => {
+	/** The comparison with storage and areas: A's dam 120 000 m³ against 100 000 registered, 30 ha planted against 20. */
+	const measured = () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [
+				{ nodeId: 'A', name: 'Farm A', kind: 'farm', supplied: new Array(760).fill(100), damCapacityM3: 120_000 },
+				{ nodeId: 'B', name: 'Farm B', kind: 'farm', supplied: new Array(760).fill(20), damCapacityM3: 50_000 },
+				{ nodeId: 'C', name: 'Farm C', kind: 'farm', supplied: new Array(760).fill(0) },
+				{ nodeId: 'D', name: 'Farm D', kind: 'farm', supplied: new Array(760).fill(5) }
+			],
+			allocations: [
+				{ id: 'a', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 36_500, storageM3: 100_000 },
+				{ id: 'd', nodeId: 'D', waterSource: 'surface', volumeM3PerYear: 1_000, storageM3: 40_000 }
+			]
+		});
+		return withIrrigatedAreas(
+			c,
+			[
+				{ nodeId: 'A', areaM2: 300_000 },
+				{ nodeId: 'B', areaM2: 100_000 }
+			],
+			[{ nodeId: 'A', irrigatedAreaHa: 20 }]
+		);
+	};
+
+	it('reads the area and the dam from the comparison, whatever the source or year', () => {
+		const a = measured().nodes.find((n) => n.nodeId === 'A')!;
+		expect(unitFigure(a, 'area', 'surface', null)).toMatchObject({ modelled: 30, registered: 20, ratio: 1.5, band: 'over' });
+		expect(unitFigure(a, 'area', 'groundwater', 2002)).toEqual(unitFigure(a, 'area', 'surface', null));
+		expect(unitFigure(a, 'storage', 'surface', null)).toMatchObject({ modelled: 120_000, registered: 100_000, band: 'over' });
+		expect(unitFigure(a, 'use', 'surface', null)).toEqual(unitUse(a, 'surface', null));
+		const b = measured().nodes.find((n) => n.nodeId === 'B')!;
+		expect(unitFigure(b, 'area', 'surface', null)).toMatchObject({ ratio: null, band: 'unregistered' });
+		expect(unitFigure(b, 'storage', 'surface', null)).toMatchObject({ ratio: null, band: 'unregistered' });
+		// D registers storage but the run has no dam there: 0 % of it.
+		const d = measured().nodes.find((n) => n.nodeId === 'D')!;
+		expect(unitFigure(d, 'storage', 'surface', null)).toMatchObject({ modelled: 0, ratio: 0, band: 'under' });
+		// A comparison from before the areas reached it has none to read.
+		expect(unitFigure(comparison().nodes[0]!, 'area', 'surface', null)).toBeNull();
+	});
+
+	it('shades by the measure picked, each unit labelled in that measure’s words', () => {
+		const features = ['A', 'B', 'C', 'D'].map((id, i) => parcel(`p${id}`, id, i));
+		const by = (m: 'area' | 'storage') => useShading(measured(), features, 'surface', null, m).drawn.map((u) => [u.nodeId, u.band, u.label]);
+		expect(by('area')).toEqual([
+			['A', 'over', '150 %'],
+			['B', 'unregistered', 'None registered'],
+			['C', 'none', 'No area'],
+			['D', 'none', 'No area']
+		]);
+		expect(by('storage')).toEqual([
+			['A', 'over', '120 %'],
+			['B', 'unregistered', 'None registered'],
+			['C', 'none', 'No dam'],
+			['D', 'under', '0 %']
+		]);
+	});
+
+	it('every measure has words for every band, never a legal finding, and each sentence holds its label’s words', () => {
+		expect(MAP_MEASURES.map((m) => m.id)).toEqual(['use', 'area', 'storage']);
+		expect(MEASURE_BAND_LABEL.use).toBe(BAND_LABEL);
+		expect(MEASURE_BAND_SHORT.use).toBe(BAND_SHORT);
+		const words = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+		for (const { id } of MAP_MEASURES) {
+			for (const b of USE_BANDS) expect(MEASURE_BAND_LABEL[id][b] && MEASURE_BAND_SHORT[id][b], `${id} ${b}`).toBeTruthy();
+			expect([...Object.values(MEASURE_BAND_LABEL[id]), ...Object.values(MEASURE_BAND_SHORT[id])].join(' ')).not.toMatch(/lawful|illegal|legal|complian|violat|breach/i);
+			for (const n of measured().nodes) {
+				const u = unitFigure(n, id, 'surface', null);
+				expect(words(useSentence(n.name, u, 'the mean water year', id)), `${id} ${n.name}`).toContain(words(useLabel(u, id)));
+			}
+		}
+		const a = measured().nodes[0]!;
+		expect(useSentence('Farm A', unitFigure(a, 'area', 'surface', null), '', 'area')).toBe('Farm A: 150 % of registered, 30 ha planted in the run against 20 ha registered. 10–50 % more.');
+		expect(useSentence('Farm A', unitFigure(a, 'storage', 'surface', null), '', 'storage')).toBe(
+			`Farm A: 120 % of registered, a ${fmtNum(120_000)} m³ dam in the run against ${fmtNum(100_000)} m³ of storage registered. 10–50 % larger.`
+		);
 	});
 });
 
