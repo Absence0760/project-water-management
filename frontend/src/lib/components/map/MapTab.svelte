@@ -1148,6 +1148,8 @@
 	}
 	/** The tool palette's size: the picked name and the Key panel keep clear of it. */
 	let toolsW = $state(0);
+	/** The Layers button's width (its count badge widens it): on a narrow map the picked name stops short of it (--layers-clear). */
+	let layersW = $state(0);
 	let toolsH = $state(0);
 	/** The map's bottom-left corner (Show everything, Key, and the Key's panel while it is open over the map), which the attribution keeps clear of (.map-body's --foot-w, --foot-h). */
 	let footW = $state(0);
@@ -1496,7 +1498,7 @@
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:--foot-w={footW ? `calc(${footW}px + 0.6rem + 6px)` : null} style:--foot-h={footH ? `calc(${footH}px + 0.6rem + 6px)` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--layers-clear={layersW ? `${layersW + 26}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:--foot-w={footW ? `calc(${footW}px + 0.6rem + 6px)` : null} style:--foot-h={footH ? `calc(${footH}px + 0.6rem + 6px)` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
 						<!-- At least the tools' height and the key row under them, so the tool column stays inside the card while the map's chunk loads or when it fails (on a phone it ran over the Features list, issue #521). -->
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
@@ -1562,7 +1564,7 @@
 						<!-- Layers (#326 A6, #345; a box in the side column until 2026-10-02): under the zoom buttons, its panel over the map's right edge. -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="layers-at ov" onkeydown={(e) => panelKey(e, 'layers')}>
-							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersShown} aria-controls={panelsInSide ? `${uid}-panel-layers` : `${uid}-layers`} bind:this={layersBtn} onclick={() => openPanel('layers', !layersShown)} data-testid="map-layers-toggle">
+							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersShown} aria-controls={panelsInSide ? `${uid}-panel-layers` : `${uid}-layers`} bind:this={layersBtn} bind:offsetWidth={layersW} onclick={() => openPanel('layers', !layersShown)} data-testid="map-layers-toggle">
 								<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" class="ctl-ic"><path d="m10 3 7 3.8-7 3.8-7-3.8z" /><path d="m3 10.4 7 3.8 7-3.8" /><path d="m3 13.8 7 3.8 7-3.8" /></svg>
 								Layers{#if layersCount}<span class="ctl-count" aria-hidden="true">{layersCount}</span><span class="visually-hidden">{` (${layersCount} on)`}</span>{/if}
 							</button>
@@ -2052,7 +2054,8 @@
 		}
 		/* The picked name, under the search too, stops short of the Layers button beside it (CatchmentMap's --map-inset-right). */
 		.map-body > :global(:not(.ov)) {
-			--map-inset-right: 7.5rem;
+			/* The button's measured width + its 10px from the edge + a 6px gap + the name's own 0.6rem start (7.5rem until measured). */
+			--map-inset-right: var(--layers-clear, 7.5rem);
 		}
 	}
 	/* The corners' boxes pass clicks through between their controls (a feature under the gap stays clickable). */
