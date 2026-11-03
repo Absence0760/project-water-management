@@ -571,8 +571,6 @@
 			{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}
 		</Lazy>
 		<Lazy load={() => import('#lib/components/evaporation/EvaporationStationProposal.svelte')}>{#snippet children(EvaporationStationProposal)}<EvaporationStationProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}</Lazy>
-		<!-- WR2012's S-pan per quaternary (310; docs/maps.md § WR2012 S-pan): the same Saves-now pattern. -->
-		<Lazy load={() => import('#lib/components/evaporation/Wr2012SpanProposal.svelte')}>{#snippet children(Wr2012SpanProposal)}<Wr2012SpanProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}</Lazy>
 	</div>
 </section>
 

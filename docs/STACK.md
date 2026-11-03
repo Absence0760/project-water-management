@@ -203,6 +203,8 @@ pnpm test:e2e               # Playwright, incl. the new-catchment golden path (f
 
 pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lookup proposes from (pnpm run setup runs it);
                              # <boundaries.geojson> --dataset <label> --source "<study>" [--values <csv>] loads your own DWS/WR2012 download (maps.md)
+pnpm import:quaternary-evaporation  # load the synthetic monthly S-pan and A-pan per quaternary Demand's WR2012 source proposes the A-pan from (pnpm run setup runs it);
+                             # <evaporation.csv> --dataset <label> [--source "<study>"] loads the CSV scripts/wbt-import/wrsm_evaporation.py writes from WR2012's WRSM2000 configurations (maps.md § Quaternary evaporation)
 pnpm import:dam-register    # load the synthetic register of dams the Dams page's proposals read (pnpm run setup runs it);
                              # <list.csv> <overlay.kml> --dataset <label> --source "<list, edition>" loads your own DSO download, once its licence allows (maps.md § Sources)
 pnpm import:rivers          # load the synthetic river network the Map's River network layer draws and proposes rivers from (pnpm run setup runs it);

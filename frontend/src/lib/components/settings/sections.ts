@@ -74,9 +74,9 @@ export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'] | Calib
 export const isCalibrationSetting = (id: string): id is CalibrationSettingsId => CALIBRATION_SETTINGS_SECTIONS.some((s) => s.id === id);
 
 /**
- * Every settings anchor on the Calibration page: its four panels, Evaporation from the map, Evaporation stations and
- * WR2012 S-pan inside Flow calibration (EvaporationProposal.svelte's `#set-evaporation`, EvaporationStationProposal.svelte's
- * `#set-evaporation-station`, issue #646, Wr2012SpanProposal.svelte's `#set-evaporation-wr2012`) and the Regional prior inside Fit the parameters (RegionalPriorPanel.svelte's
+ * Every settings anchor on the Calibration page: its four panels, Evaporation from the map and Evaporation stations
+ * inside Flow calibration (EvaporationProposal.svelte's `#set-evaporation`, EvaporationStationProposal.svelte's
+ * `#set-evaporation-station`, issue #646) and the Regional prior inside Fit the parameters (RegionalPriorPanel.svelte's
  * `#set-prior`, issue #622), so a link to any of them lands there: one missing here was a Model settings anchor to
  * nav/anchorMoves.ts, which sent its link to Model settings. page.test.ts holds every `#set-…` the page draws to it.
  */
@@ -84,7 +84,6 @@ export const CALIBRATION_SETTINGS_ANCHORS: readonly string[] = [
 	...CALIBRATION_SETTINGS_SECTIONS.map((s) => s.id),
 	'set-evaporation',
 	'set-evaporation-station',
-	'set-evaporation-wr2012',
 	'set-prior'
 ];
 export const isCalibrationAnchor = (id: string): boolean => CALIBRATION_SETTINGS_ANCHORS.includes(id);
@@ -113,7 +112,6 @@ export const SETTINGS_ELSEWHERE = [
 	{ text: 'WR2012 check', words: 'WR2012 quaternary naturalised flow MAR reference', href: calibrationHref(null, 'set-wr2012'), page: 'Calibration' },
 	{ text: 'Evaporation from the map', words: 'ET0 dPET potential evaporation map proposal', href: calibrationHref(null, 'set-evaporation'), page: 'Calibration' },
 	{ text: 'Evaporation stations', words: 'DWS evaporation station A-pan Class-A Symons pan record monthly means S-pan conversion', href: calibrationHref(null, 'set-evaporation-station'), page: 'Calibration' },
-	{ text: 'WR2012 S-pan by quaternary', words: 'MAE mean annual evaporation evaporation zone WR2012 S-pan per quaternary catchment A-pan conversion', href: calibrationHref(null, 'set-evaporation-wr2012'), page: 'Calibration' },
 	{ text: 'Regional prior', words: 'regional prior donors donor basins ungauged GRDC Caravan HydroATLAS soil water capacity start from the prior p10 p90', href: calibrationHref(null, 'set-prior'), page: 'Calibration' }
 ] as const;
 

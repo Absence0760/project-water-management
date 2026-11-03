@@ -1,34 +1,33 @@
--- 310_quaternary_evaporation — WR2012's evaporation per quaternary: each
--- quaternary's mean annual S-pan evaporation (MAE) and evaporation zone, and
--- each zone's monthly distribution as a percentage of MAE (docs/maps.md §
--- Quaternary dataset, § WR2012 S-pan; docs/model.md §2.3a; docs/data-model.md
--- § Catchment map). Allowed in production by the operator's decision of
--- 2026-11-03, which extends the 2026-11-02 WR2012 decision to its
--- evaporation values on the same published terms (docs/maps.md § Sources).
+-- 310_quaternary_evaporation — WR2012's monthly evaporation per quaternary,
+-- from its WRSM2000 (Pitman) network configurations (docs/maps.md §
+-- Quaternary evaporation, § WR2012 evaporation by quaternary; docs/model.md
+-- §2.3a; docs/data-model.md § Catchment map). Allowed in production by the
+-- operator's decision of 2026-11-03, which extends the 2026-11-02 WR2012
+-- decision to its evaporation values on the same published terms
+-- (docs/maps.md § Sources).
 --
 -- In this file:
---  * quaternary_reference (152) gains two nullable columns, loaded with the
---    rest of a quaternary's values by `pnpm import:quaternaries` (and the
---    production load, kind `quaternaries`), never by the app:
---      - mae_mm: mean annual Symons-pan (S-pan) evaporation, mm a year.
---      - evap_zone: the WR2012 evaporation zone whose monthly distribution
---        spreads that MAE over the months.
---    Both or neither: the loader drops both when the zone has no
---    distribution in the same load, and lists the quaternary as skipped for
---    evaporation (it is loaded otherwise). Columns, not a sibling table: they
---    are one value each per quaternary, loaded, replaced and deleted with its
---    other values in the same transaction, and every reader already reads
---    quaternary_reference by code.
---  * quaternary_evap_zone: per dataset, each evaporation zone's 12 monthly
---    percentages of MAE (Oct … Sep). A zone is the dataset's own, keyed by
---    (dataset, zone): the same zone label in two loads may differ. The CHECKs
---    hold what the loader validates: 12 numbers, none missing, each 0 or
---    more, adding up to 95–105 (WR2012's tables round to whole or tenth
---    percentages, so they rarely add to exactly 100).
---  * No foreign key from quaternary_reference.evap_zone to the zones table:
---    quaternary_reference is keyed by code across datasets, and a load
---    replaces both together (loadQuaternaries.ts replaceDataset). The
---    proposal joins them on (dataset, zone).
+--  * quaternary_reference (152) gains two nullable context columns, loaded
+--    with the rest of a quaternary's values (`pnpm import:quaternaries`, the
+--    CSV `scripts/wbt-import/wr2012_quat_info.py` writes from WR2012's
+--    per-WMA spreadsheets), never by the app: `mae_mm`, the mean annual
+--    Symons-pan (S-pan) evaporation, mm, and `evap_zone`, the WR2012
+--    evaporation zone. Both or neither. Shown beside the monthly rows below:
+--    the MAE against the S-pan row's total is a check of the two sources.
+--  * quaternary_evaporation: per dataset and quaternary code, 12 monthly
+--    S-pan depths (the runoff module's) and 12 monthly A-pan depths (the
+--    irrigation module's), mm, October first, either missing, and their
+--    provenance: how many modules named the quaternary, how many agreed
+--    with the row kept (the majority), the other rows' annual totals, and the
+--    module file names. Loaded by the operator (`pnpm import:quaternary-evaporation`,
+--    the CSV `scripts/wbt-import/wrsm_evaporation.py` writes; in production
+--    reference-load kind `quaternary-evaporation`). Keyed by (dataset, code)
+--    and joined to quaternary_reference by code, with no foreign key: the two
+--    are loaded and replaced separately (a reload of the outlines must not
+--    delete the evaporation), and the outlines' table is keyed by code across
+--    datasets.
+--  * reference_load (192, latest 309) takes the kind 'quaternary-evaporation':
+--    a production load records its file and SHA-256 there, as the others do.
 --  * RLS: public reference data, as quaternary_reference's: anyone signed in
 --    reads it; water_app never writes it (SELECT only). No foreign keys, so
 --    no covering index beyond the primary key.
@@ -39,30 +38,50 @@ ALTER TABLE quaternary_reference
 	ADD CONSTRAINT quaternary_reference_evaporation_pair CHECK ((mae_mm IS NULL) = (evap_zone IS NULL));
 
 COMMENT ON COLUMN quaternary_reference.mae_mm IS
-	'Mean annual Symons-pan (S-pan) evaporation, mm a year (WR2012; 310). With evap_zone, or neither.';
+	'WR2012 mean annual Symons-pan (S-pan) evaporation, mm a year (310): context beside quaternary_evaporation''s monthly rows. With evap_zone, or neither.';
 COMMENT ON COLUMN quaternary_reference.evap_zone IS
-	'The WR2012 evaporation zone whose monthly distribution (quaternary_evap_zone, same dataset) spreads mae_mm over the months (310).';
+	'The WR2012 evaporation zone (310), shown as context.';
 
-CREATE TABLE quaternary_evap_zone (
-	-- The load it came from, as quaternary_reference.dataset.
-	dataset    text NOT NULL CHECK (char_length(dataset) BETWEEN 1 AND 50),
-	zone       text NOT NULL CHECK (zone ~ '^[A-Z0-9]{1,8}$'),
-	-- Each month's share of the mean annual evaporation, %, October … September.
-	pct        double precision[] NOT NULL CHECK (
-		cardinality(pct) = 12
-		AND array_position(pct, NULL) IS NULL
-		AND 0 <= ALL (pct)
-		AND pct[1] + pct[2] + pct[3] + pct[4] + pct[5] + pct[6] + pct[7] + pct[8] + pct[9] + pct[10] + pct[11] + pct[12] BETWEEN 95 AND 105
+CREATE TABLE quaternary_evaporation (
+	-- The load it came from: 'synthetic' (the repo's invented fixture) or the operator's label.
+	dataset         text NOT NULL CHECK (char_length(dataset) BETWEEN 1 AND 50),
+	code            text NOT NULL CHECK (code ~ '^[A-Z][0-9]{2}[A-Z]$'),
+	-- Monthly S-pan (runoff module) and A-pan (irrigation module), mm, October … September.
+	span_mm         double precision[] CHECK (
+		span_mm IS NULL OR (cardinality(span_mm) = 12 AND array_position(span_mm, NULL) IS NULL AND 0 <= ALL (span_mm) AND 1000 > ALL (span_mm))
 	),
-	loaded_at  timestamptz NOT NULL DEFAULT now(),
-	PRIMARY KEY (dataset, zone)
+	apan_mm         double precision[] CHECK (
+		apan_mm IS NULL OR (cardinality(apan_mm) = 12 AND array_position(apan_mm, NULL) IS NULL AND 0 <= ALL (apan_mm) AND 1000 > ALL (apan_mm))
+	),
+	-- How many modules named the quaternary, and how many gave the row kept; the others' annual totals, mm.
+	span_modules    integer NOT NULL DEFAULT 0 CHECK (span_modules >= 0),
+	span_agree      integer NOT NULL DEFAULT 0 CHECK (span_agree BETWEEN 0 AND span_modules),
+	span_others_mm  double precision[] NOT NULL DEFAULT '{}' CHECK (cardinality(span_others_mm) <= 50),
+	span_files      text[] NOT NULL DEFAULT '{}' CHECK (cardinality(span_files) <= 50),
+	apan_modules    integer NOT NULL DEFAULT 0 CHECK (apan_modules >= 0),
+	apan_agree      integer NOT NULL DEFAULT 0 CHECK (apan_agree BETWEEN 0 AND apan_modules),
+	apan_others_mm  double precision[] NOT NULL DEFAULT '{}' CHECK (cardinality(apan_others_mm) <= 50),
+	apan_files      text[] NOT NULL DEFAULT '{}' CHECK (cardinality(apan_files) <= 50),
+	-- Shown with every proposal: the study and the configurations.
+	source          text NOT NULL CHECK (char_length(source) BETWEEN 1 AND 500),
+	loaded_at       timestamptz NOT NULL DEFAULT now(),
+	PRIMARY KEY (dataset, code),
+	CHECK (span_mm IS NOT NULL OR apan_mm IS NOT NULL),
+	CHECK ((span_mm IS NULL) = (span_modules = 0)),
+	CHECK ((apan_mm IS NULL) = (apan_modules = 0))
 );
+-- The proposal reads a boundary's quaternaries by code, across datasets.
+CREATE INDEX quaternary_evaporation_code_idx ON quaternary_evaporation (code);
 
-COMMENT ON TABLE quaternary_evap_zone IS
-	'WR2012 evaporation zones: each zone''s monthly S-pan evaporation as % of MAE, Oct … Sep, per dataset; loaded with the quaternaries by the operator, read-only to the app (310).';
+COMMENT ON TABLE quaternary_evaporation IS
+	'WR2012 monthly S-pan (runoff modules) and A-pan (irrigation modules) per quaternary, from the WRSM2000 network configurations, with their module provenance; loaded by the operator, read-only to the app (310).';
 
-ALTER TABLE quaternary_evap_zone ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quaternary_evaporation ENABLE ROW LEVEL SECURITY;
 -- Public reference data: anyone signed in reads it; the app never writes it.
-CREATE POLICY quaternary_evap_zone_select ON quaternary_evap_zone FOR SELECT USING (app_current_user_id() IS NOT NULL);
+CREATE POLICY quaternary_evaporation_select ON quaternary_evaporation FOR SELECT USING (app_current_user_id() IS NOT NULL);
 
-GRANT SELECT ON quaternary_evap_zone TO water_app;
+GRANT SELECT ON quaternary_evaporation TO water_app;
+
+ALTER TABLE reference_load DROP CONSTRAINT reference_load_kind_check;
+ALTER TABLE reference_load ADD CONSTRAINT reference_load_kind_check
+	CHECK (kind IN ('land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors', 'quaternaries', 'quaternary-evaporation'));

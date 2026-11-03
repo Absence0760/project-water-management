@@ -3768,41 +3768,53 @@ export interface EvaporationStationProposals {
 	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
 }
 
-/** One quaternary the catchment boundary overlaps, with WR2012's S-pan for it (GET /projects/:id/evaporation-wr2012; docs/maps.md § WR2012 S-pan). */
-export interface Wr2012SpanQuaternary {
+/** A WRSM2000 module row's provenance: how many modules named the quaternary, how many give the row kept, the others' annual totals (mm). */
+export interface ModuleAgreement {
+	modules: number;
+	agree: number;
+	othersMm: number[];
+}
+
+/** One quaternary the catchment boundary overlaps, with WR2012's monthly evaporation (GET /projects/:id/evaporation-wr2012; docs/maps.md § WR2012 evaporation by quaternary). */
+export interface Wr2012EvaporationQuaternary {
 	code: string;
 	dataset: string;
-	/** The repo's invented quaternaries: never real values. */
+	evaporationDataset: string | null;
+	/** The repo's invented data: never real values. */
 	synthetic: boolean;
 	/** Share of the catchment's area inside it, 0–1, and that area, km². */
 	share: number;
 	areaKm2: number;
-	/** WR2012's evaporation zone, MAE (mm a year) and the zone's 12 monthly % of MAE; null when the dataset has no evaporation for it. */
+	/** WR2012's evaporation zone and MAE (mean annual S-pan, mm), context from its quaternary spreadsheets; null if not loaded. */
 	zone: string | null;
 	maeMm: number | null;
-	pct: number[] | null;
-	/** MAE × pct ÷ 100, mm, Oct … Sep, to 0.1; null without evaporation. */
+	/** Monthly S-pan (runoff modules) and A-pan (irrigation modules), mm, Oct … Sep; null where the configurations have none. */
 	spanMm: number[] | null;
-	source: string;
+	apanMm: number[] | null;
+	span: ModuleAgreement | null;
+	apan: ModuleAgreement | null;
+	files: number;
+	/** Some module named it with another row than the one kept. */
+	disagree: boolean;
+	/** Why it proposes no A-pan, or null. */
+	why: string | null;
+	source: string | null;
 }
 
-/** An inverted S→A equation's A-pan from the catchment's S-pan (engine apanMonthlyFromSpan), or why it refuses. */
-export type SpanToApanResult = { ok: true; values: number[]; note: string } | { ok: false; reason: string };
-
-/** GET /projects/:id/evaporation-wr2012: WR2012's S-pan for the quaternaries under the boundary, beside the saved A-pan. */
-export interface Wr2012SpanProposal {
+/** GET /projects/:id/evaporation-wr2012: WR2012's monthly S-pan and A-pan for the quaternaries under the boundary, beside the saved A-pan. */
+export interface Wr2012EvaporationProposal {
 	boundary: { featureId: string; name: string } | null;
-	/** The quaternary datasets loaded (none: no quaternary can be proposed). */
+	/** The quaternary outline datasets loaded (none: nothing can be proposed). */
 	datasets: { dataset: string; count: number }[];
 	/** Null with no boundary. */
-	span: {
-		quaternaries: Wr2012SpanQuaternary[];
-		/** Share of the catchment in quaternaries with WR2012 evaporation: the mean is over that part. */
-		coverage: number;
-		/** The catchment's S-pan, the quaternaries' area-weighted mean; null with none. */
+	evaporation: {
+		quaternaries: Wr2012EvaporationQuaternary[];
+		/** The catchment's rows, area-weighted over the quaternaries that have each; null with none. */
 		spanMm: number[] | null;
+		apanMm: number[] | null;
+		spanCoverage: number;
+		apanCoverage: number;
 		problem: string | null;
-		conversions: { id: SpanConversionId; label: string; result: SpanToApanResult }[];
 	} | null;
 	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
 }

@@ -187,8 +187,10 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/evaporation-from-map': () => ({ body: { dataset: 'synthetic' } }),
 	// A DWS evaporation station (issue #646 item 6): refused (400) past the role check unless the synthetic stations are loaded and a boundary drawn.
 	'POST /projects/:id/evaporation-from-station': () => ({ body: { station: 'Z1E001', daily: false } }),
-	// WR2012's S-pan (310): refused (400) past the role check unless the synthetic quaternaries are loaded and a boundary drawn.
-	'POST /projects/:id/evaporation-from-wr2012': () => ({ body: { conversion: 'taljaard2023' } }),
+	// WR2012's A-pan per quaternary (310): refused (400) past the role check unless the synthetic quaternaries and their evaporation are loaded and a boundary drawn.
+	'POST /projects/:id/evaporation-from-wr2012': () => ({ body: {} }),
+	// 12 S-pan months typed or pasted, converted: needs nothing loaded.
+	'POST /projects/:id/evaporation-from-span': () => ({ body: { spanMm: [150, 170, 190, 195, 160, 140, 95, 70, 55, 57, 78, 105], conversion: 'taljaard2023', note: 'Station notes' } }),
 	// Needs the synthetic MAP grid loaded (scripts/import-map-grid.ts); the ladder's parcel lies in its region Z.
 	'POST /projects/:id/map/unit-map': () => ({ body: { dataset: 'synthetic' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),

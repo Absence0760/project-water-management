@@ -1,44 +1,6 @@
 {
  "type": "FeatureCollection",
  "name": "quaternaries.synthetic",
- "evapZones": [
-  {
-   "zone": "Z1",
-   "pct": [
-    10.2,
-    11.8,
-    13.0,
-    13.2,
-    11.0,
-    9.6,
-    6.6,
-    4.8,
-    3.6,
-    3.8,
-    5.2,
-    7.2
-   ],
-   "note": "SYNTHETIC test data, invented for this repository (not WR2012): evaporation zone Z1"
-  },
-  {
-   "zone": "Z2",
-   "pct": [
-    9.8,
-    11.4,
-    12.6,
-    12.8,
-    10.8,
-    9.6,
-    7.0,
-    5.2,
-    4.0,
-    4.2,
-    5.4,
-    7.2
-   ],
-   "note": "SYNTHETIC test data, invented for this repository (not WR2012): evaporation zone Z2"
-  }
- ],
  "features": [
   {
    "type": "Feature",

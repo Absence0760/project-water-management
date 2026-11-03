@@ -21,6 +21,7 @@ import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticEvaporationStations } from '../../scripts/import-evaporation-stations.js';
 import { loadSyntheticQuaternaries } from '../../scripts/import-quaternaries.js';
+import { loadSyntheticQuaternaryEvaporation } from '../../scripts/import-quaternary-evaporation.js';
 import { loadSyntheticDonors } from '../../scripts/import-gr4j-donors.js';
 import { loadSyntheticSoils } from '../../scripts/import-soils.js';
 import { fileURLToPath } from 'node:url';
@@ -813,16 +814,24 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
-		// WR2012's S-pan (310): a settings revision whose reason names the dataset, the quaternaries, zones, MAEs and the
-		// equation (the boundary from an entry above, or drawn here when it runs alone).
+		// WR2012's A-pan per quaternary (310): a settings revision whose reason names the dataset, the quaternaries, their
+		// shares and module files (the boundary from an entry above, or drawn here when it runs alone).
 		route: `POST ${P}/evaporation-from-wr2012`,
 		records: ['revision'],
 		call: async (c) => {
 			await loadSyntheticQuaternaries(process.env.TEST_MIGRATION_DATABASE_URL!);
+			await loadSyntheticQuaternaryEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
+		await loadSyntheticQuaternaryEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
 			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
 			await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
-			return c.owner.call('POST', `${at(c)}/evaporation-from-wr2012`, { conversion: 'taljaard2023' });
+			return c.owner.call('POST', `${at(c)}/evaporation-from-wr2012`, {});
 		}
+	},
+	{
+		// 12 S-pan months typed or pasted and converted: a settings revision whose reason gives them and the equation.
+		route: `POST ${P}/evaporation-from-span`,
+		records: ['revision'],
+		call: (c) => c.owner.call('POST', `${at(c)}/evaporation-from-span`, { spanMm: [150, 170, 190, 195, 160, 140, 95, 70, 55, 57, 78, 105], conversion: 'wr90' })
 	},
 	{
 		// Start from the regional prior (issue #622): a settings revision writing the p50s into GR4J, with its start

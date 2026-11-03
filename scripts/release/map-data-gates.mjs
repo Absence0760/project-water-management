@@ -21,7 +21,7 @@
 //     Lambda accepts (backend/src/geo/referenceLoad.ts parseLoadRequest
 //     checks them again), the kind must be one the Sources table allows
 //     (land-cover, evaporation, rivers, gazetteer, map-grid, tiles,
-//     waterbodies, dws, soils, gr4j-donors, quaternaries), a MAP grid must name a dataset whose licence is recorded (DATASETS) and
+//     waterbodies, dws, soils, gr4j-donors, quaternaries, quaternary-evaporation), a MAP grid must name a dataset whose licence is recorded (DATASETS) and
 //     give no source, a DWS flow table needs its reference (the source, at
 //     most 200 characters) and takes a station only as a river gauge code, and
 //     rivers need HydroSHEDS' Exhibit B statement in the app's legal text
@@ -56,7 +56,7 @@ export const REQUIRED_TEXT = {
 };
 
 /** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones; referenceLoad.test.ts keeps the two in step). */
-export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors', 'quaternaries'];
+export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors', 'quaternaries', 'quaternary-evaporation'];
 
 /**
  * The kinds allowed dataset by dataset, and the labels each may load as

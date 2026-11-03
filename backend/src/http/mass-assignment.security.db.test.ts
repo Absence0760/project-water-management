@@ -26,6 +26,7 @@ import { anon, app, asOwner, confirmAsOperator, lastMailTo, signUp, tokenIn } fr
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticEvaporationStations } from '../../scripts/import-evaporation-stations.js';
 import { loadSyntheticQuaternaries } from '../../scripts/import-quaternaries.js';
+import { loadSyntheticQuaternaryEvaporation } from '../../scripts/import-quaternary-evaporation.js';
 import { loadSyntheticDonors } from '../../scripts/import-gr4j-donors.js';
 import { loadSyntheticSoils } from '../../scripts/import-soils.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
@@ -399,9 +400,10 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		await ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } });
 		return SAMPLE['POST /projects/:id/evaporation-from-station']!(ctx);
 	},
-	// WR2012's S-pan (310, geo/evaporationRoutes.ts): the synthetic quaternaries loaded, a boundary inside them.
+	// WR2012's A-pan per quaternary (310, geo/evaporationRoutes.ts): the synthetic quaternaries loaded, a boundary inside them.
 	'POST /projects/:id/evaporation-from-wr2012': async () => {
 		await loadSyntheticQuaternaries(process.env.TEST_MIGRATION_DATABASE_URL!);
+		await loadSyntheticQuaternaryEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
 		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
 		await ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } });
 		return SAMPLE['POST /projects/:id/evaporation-from-wr2012']!(ctx);

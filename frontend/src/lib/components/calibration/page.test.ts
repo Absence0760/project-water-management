@@ -108,7 +108,7 @@ describe('old ?tab=calibration links (nav/anchorMoves.ts)', () => {
 	it('leaves the page itself, its own parts and its settings panels alone (issue #586 round 3)', () => {
 		expect(anchorForward('calibration', at('/projects/p1?tab=calibration'))).toBeNull();
 		expect(anchorForward('calibration', at('/projects/p1?tab=calibration#cal-fit'))).toBeNull();
-		expect(CALIBRATION_SETTINGS_ANCHORS).toEqual(['set-flow', 'set-record', 'set-fit', 'set-wr2012', 'set-evaporation', 'set-evaporation-station', 'set-evaporation-wr2012', 'set-prior']);
+		expect(CALIBRATION_SETTINGS_ANCHORS).toEqual(['set-flow', 'set-record', 'set-fit', 'set-wr2012', 'set-evaporation', 'set-evaporation-station', 'set-prior']);
 		for (const id of CALIBRATION_SETTINGS_ANCHORS) expect(anchorForward('calibration', at(`/projects/p1?tab=calibration#${id}`)), id).toBeNull();
 		expect(anchorForward('calibration', at('/projects/p1?tab=calibration#%E0'))).toBeNull();
 		for (const hash of ['#res-calibration', '#res-fit-provenance']) expect(anchorForward('calibration', at(`/projects/p1?tab=calibration${hash}`)), hash).toBeNull();

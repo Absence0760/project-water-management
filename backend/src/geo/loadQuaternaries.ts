@@ -10,20 +10,14 @@
 // marMm3, monthlyMm3 [12, Oct … Sep, Mm³], periodStart, periodEnd, source)
 // or from a CSV keyed by code (the WR2012 tables, transcribed:
 // code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end,
-// optionally with mae_mm,evap_zone).
-//
-// WR2012's evaporation (310; docs/maps.md § WR2012 S-pan): each quaternary's
-// mean annual S-pan evaporation (MAE, mm; `maeMm` / `mae_mm`) and its
-// evaporation zone (`evapZone` / `evap_zone`), and each zone's monthly
-// distribution as % of MAE, from `--evap-zones <csv>` (zone,oct,…,sep) or the
-// boundaries file's top-level `evapZones` member ([{ zone, pct: [12] }], what
-// `--out` writes). A zone's 12 percentages must each be 0 or more and add up
-// to 95–105, or the zone is skipped, named; a quaternary whose zone has no
-// distribution in the load is listed as skipped for evaporation and loaded
-// without its MAE and zone.
-//
-// A load replaces every row of its dataset (quaternaries and zones), in one
-// transaction.
+// and optionally mae_mm,evap_zone; any column may be missing). Since 310 each
+// quaternary may carry WR2012's MAE (mean annual S-pan evaporation, mm;
+// `maeMm` / `mae_mm`) and evaporation zone (`evapZone` / `evap_zone`), both or
+// neither: context beside the monthly evaporation the WRSM2000 configurations
+// give (loadQuaternaryEvaporation.ts). `scripts/wbt-import/wr2012_quat_info.py`
+// writes this CSV from WR2012's per-WMA spreadsheets. A value missing from the
+// CSV comes from the feature's own property, else is none. A load replaces
+// every row of its dataset, in one transaction, so it keeps only what it gives.
 //
 // Production (decided 2026-11-02, docs/maps.md § Sources, Quaternary dataset):
 // `pnpm import:quaternaries … --out <file>` writes the boundaries with the
@@ -55,30 +49,21 @@ export interface QuaternaryRecord {
 	monthlyMm3: number[] | null;
 	periodStart: number | null;
 	periodEnd: number | null;
-	/** Mean annual S-pan evaporation, mm a year; with evapZone, or neither. */
+	/** WR2012's mean annual S-pan evaporation, mm a year, and evaporation zone (310): both or neither. */
 	maeMm: number | null;
 	evapZone: string | null;
 	source: string;
 }
 
-/** An evaporation zone's monthly distribution: % of MAE, Oct … Sep. */
-export interface EvapZone {
-	zone: string;
-	pct: number[];
-}
-
-/** What a load writes: the quaternaries and their dataset's evaporation zones. */
-export interface QuaternaryLoad {
-	records: readonly QuaternaryRecord[];
-	zones: readonly EvapZone[];
-}
-
 /** An evaporation zone's label: WR2012's are a number and a letter (e.g. 7A); upper-cased on load. */
 export const EVAP_ZONE = /^[A-Z0-9]{1,8}$/;
-/** A zone's 12 percentages add up to within this range, or it is skipped (WR2012's tables are rounded). */
-export const EVAP_ZONE_TOTAL: readonly [number, number] = [95, 105];
 /** The largest MAE a load takes, mm a year (the column's CHECK). */
 export const MAE_MAX_MM = 5000;
+const zoneLabel = (v: unknown): string | null => {
+	if (v === null || v === undefined) return null;
+	const z = String(v).trim().toUpperCase();
+	return z ? z : null;
+};
 
 export const CODE = /^[A-Z][0-9]{2}[A-Z]$/;
 const CODE_KEYS = ['code', 'QUATERNARY', 'QUATERN', 'Quaternary', 'quaternary', 'QUAT', 'QCODE'];
@@ -138,85 +123,21 @@ export function parseValuesCsv(text: string): { values: Map<string, Partial<Quat
 	return { values, problems };
 }
 
-/** A zone label as stored (trimmed, upper case), or null when empty. */
-const zoneLabel = (v: unknown): string | null => {
-	if (v === null || v === undefined) return null;
-	const z = String(v).trim().toUpperCase();
-	return z ? z : null;
-};
-
-/** Why a zone's distribution can't be loaded, or null: 12 numbers, each 0 or more, adding up to 95–105. */
-export function evapZoneProblem(zone: string, pct: readonly (number | null)[]): string | null {
-	if (!EVAP_ZONE.test(zone)) return `evaporation zone "${zone}" is not a zone label (letters and digits, at most 8)`;
-	if (pct.length !== 12 || pct.some((v) => v === null || !Number.isFinite(v))) return `evaporation zone ${zone}: needs a percentage for each of the 12 months`;
-	if (pct.some((v) => v! < 0)) return `evaporation zone ${zone}: a month's percentage is negative`;
-	const total = pct.reduce<number>((a, b) => a + b!, 0);
-	if (total < EVAP_ZONE_TOTAL[0] || total > EVAP_ZONE_TOTAL[1])
-		return `evaporation zone ${zone}: its months add up to ${Math.round(total * 10) / 10} %, not ${EVAP_ZONE_TOTAL[0]}–${EVAP_ZONE_TOTAL[1]} %`;
-	return null;
-}
-
-/** Zones from a list of { zone, pct } (the boundaries file's `evapZones`), each checked; a bad or repeated one is skipped, named. */
-function checkedZones(list: readonly { zone: unknown; pct: readonly unknown[] | null }[]): { zones: Map<string, EvapZone>; problems: string[] } {
-	const zones = new Map<string, EvapZone>();
-	const problems: string[] = [];
-	for (const z of list) {
-		const zone = zoneLabel(z.zone) ?? '';
-		const pct = (z.pct ?? []).map(num);
-		const problem = evapZoneProblem(zone, pct);
-		if (problem) problems.push(`${problem}; zone skipped`);
-		else if (zones.has(zone)) problems.push(`evaporation zone ${zone} appears twice; the second skipped`);
-		else zones.set(zone, { zone, pct: pct as number[] });
-	}
-	return { zones, problems };
-}
-
-/** A CSV of evaporation zones (header `zone,oct,nov,…,sep`, % of MAE), each checked. */
-export function parseEvapZonesCsv(text: string): { zones: Map<string, EvapZone>; problems: string[] } {
-	const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
-	if (!lines.length) return { zones: new Map(), problems: ['the evaporation zones file is empty'] };
-	const head = lines[0]!.split(',').map((h) => h.trim().toLowerCase());
-	const missing = ['zone', ...MONTHS].filter((h) => !head.includes(h));
-	if (missing.length) return { zones: new Map(), problems: [`the evaporation zones file has no ${missing.map((m) => `"${m}"`).join(', ')} column${missing.length === 1 ? '' : 's'}`] };
-	const rows = lines.slice(1).map((line) => {
-		const cells = line.split(',').map((c) => c.trim());
-		return { zone: cells[head.indexOf('zone')], pct: MONTHS.map((m) => cells[head.indexOf(m)] ?? null) };
-	});
-	return checkedZones(rows);
-}
-
-/** The boundaries file's `evapZones` member (what --out writes), or none. */
-function zonesInFile(fc: { evapZones?: unknown }): { zones: Map<string, EvapZone>; problems: string[] } {
-	if (fc.evapZones === undefined || fc.evapZones === null) return { zones: new Map(), problems: [] };
-	if (!Array.isArray(fc.evapZones)) return { zones: new Map(), problems: ['the boundaries file\'s "evapZones" is not a list; no zone loaded'] };
-	return checkedZones(fc.evapZones.map((z: { zone?: unknown; pct?: unknown }) => ({ zone: z?.zone, pct: Array.isArray(z?.pct) ? z.pct : null })));
-}
-
 /**
  * The records a boundaries file (and optional values) describes, with a
  * problem per feature skipped. The source is the feature's `source`
  * property, else `defaultSource`. With no area given, the polygon's own
- * geodesic area is used. The evaporation zones are `zones` when given (the
- * --evap-zones file), else the file's own `evapZones`; a quaternary whose MAE
- * or zone is missing, or whose zone isn't among them, is loaded without its
- * evaporation and listed as skipped for it.
+ * geodesic area is used.
  */
 export function quaternaryRecords(
 	boundaries: unknown,
 	defaultSource: string,
-	values: Map<string, Partial<QuaternaryRecord>> = new Map(),
-	zones?: Map<string, EvapZone>
-): { records: QuaternaryRecord[]; zones: EvapZone[]; problems: string[] } {
+	values: Map<string, Partial<QuaternaryRecord>> = new Map()
+): { records: QuaternaryRecord[]; problems: string[] } {
 	const problems: string[] = [];
 	const records: QuaternaryRecord[] = [];
-	const fc = boundaries as { type?: unknown; features?: unknown; evapZones?: unknown };
-	if (fc?.type !== 'FeatureCollection' || !Array.isArray(fc.features)) return { records, zones: [], problems: ['the boundaries file is not a GeoJSON FeatureCollection'] };
-	let zoneMap = zones;
-	if (!zoneMap) {
-		const inFile = zonesInFile(fc);
-		problems.push(...inFile.problems);
-		zoneMap = inFile.zones;
-	}
+	const fc = boundaries as { type?: unknown; features?: unknown };
+	if (fc?.type !== 'FeatureCollection' || !Array.isArray(fc.features)) return { records, problems: ['the boundaries file is not a GeoJSON FeatureCollection'] };
 	const seen = new Set<string>();
 	fc.features.forEach((f: { properties?: Record<string, unknown> | null; geometry?: unknown }, i: number) => {
 		const p = f?.properties ?? {};
@@ -231,7 +152,7 @@ export function quaternaryRecords(
 		const source = typeof p.source === 'string' && p.source.trim() ? p.source.trim().slice(0, 500) : defaultSource;
 		if (!source) return problems.push(`feature ${i + 1} (${code}): no source (give the feature a "source" or pass --source)`);
 		const areaKm2 = v.areaKm2 ?? num(p.areaKm2) ?? geometryAreaM2(checked.geometry)! / 1e6;
-		// Evaporation: both the MAE and a zone with a distribution, or neither (the columns' pair CHECK).
+		// WR2012's MAE and zone: both or neither (the columns' pair CHECK).
 		let maeMm = v.maeMm ?? num(p.maeMm);
 		let evapZone = v.evapZone ?? zoneLabel(p.evapZone);
 		if (maeMm !== null || evapZone !== null) {
@@ -242,11 +163,11 @@ export function quaternaryRecords(
 						? `MAE ${maeMm} mm is not above 0 and below ${MAE_MAX_MM}`
 						: evapZone === null
 							? 'an MAE but no evaporation zone'
-							: !zoneMap.has(evapZone)
-								? `evaporation zone ${evapZone} has no monthly distribution in this load`
+							: !EVAP_ZONE.test(evapZone)
+								? `evaporation zone "${evapZone}" is not a zone label`
 								: null;
 			if (why) {
-				problems.push(`${code}: ${why}; loaded without its evaporation`);
+				problems.push(`${code}: ${why}; loaded without its MAE and zone`);
 				maeMm = null;
 				evapZone = null;
 			}
@@ -267,26 +188,21 @@ export function quaternaryRecords(
 			source
 		});
 	});
-	return { records, zones: [...zoneMap.values()], problems };
+	return { records, problems };
 }
 
 /**
  * The records as one GeoJSON FeatureCollection with their values on each
- * feature's properties, and the evaporation zones as its `evapZones` member:
- * the file `pnpm import:quaternaries … --out` writes and a production load
- * (kind `quaternaries`) reads back through quaternaryRecords.
+ * feature's properties: the file `pnpm import:quaternaries … --out` writes
+ * and a production load (kind `quaternaries`) reads back through
+ * quaternaryRecords.
  */
-export function quaternaryFeatureCollection(
-	records: readonly QuaternaryRecord[],
-	zones: readonly EvapZone[] = []
-): {
+export function quaternaryFeatureCollection(records: readonly QuaternaryRecord[]): {
 	type: 'FeatureCollection';
-	evapZones: EvapZone[];
 	features: { type: 'Feature'; properties: Record<string, unknown>; geometry: Geometry }[];
 } {
 	return {
 		type: 'FeatureCollection',
-		evapZones: zones.map((z) => ({ zone: z.zone, pct: [...z.pct] })),
 		features: records.map((r) => ({
 			type: 'Feature',
 			properties: {
@@ -307,18 +223,15 @@ export function quaternaryFeatureCollection(
 }
 
 /**
- * Replace every row of `dataset` with the load's quaternaries and evaporation
- * zones, in one transaction, as the schema owner, recording the bucket file a
- * production load read (`origin`; a local import names none, which clears the
- * record). Returns how many quaternaries it wrote.
+ * Replace every row of `dataset` with `records`, in one transaction, as the
+ * schema owner, recording the bucket file a production load read (`origin`;
+ * a local import names none, which clears the record). Returns how many rows
+ * it wrote.
  */
-export async function replaceDataset(client: pg.ClientBase, dataset: string, load: QuaternaryLoad, origin: ReferenceOrigin | null = null): Promise<number> {
-	const { records, zones } = load;
+export async function replaceDataset(client: pg.ClientBase, dataset: string, records: readonly QuaternaryRecord[], origin: ReferenceOrigin | null = null): Promise<number> {
 	await client.query('BEGIN');
 	try {
 		await client.query('DELETE FROM quaternary_reference WHERE dataset = $1', [dataset]);
-		await client.query('DELETE FROM quaternary_evap_zone WHERE dataset = $1', [dataset]);
-		for (const z of zones) await client.query('INSERT INTO quaternary_evap_zone (dataset, zone, pct) VALUES ($1, $2, $3)', [dataset, z.zone, z.pct]);
 		for (const r of records) {
 			await client.query(
 				`INSERT INTO quaternary_reference (code, dataset, geometry, min_lon, min_lat, max_lon, max_lat, area_km2, map_mm, mar_mm3, monthly_mm3, period_start, period_end, mae_mm, evap_zone, source)

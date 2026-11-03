@@ -45,6 +45,7 @@ import { parseTileProvenance, recordReferenceOrigin, recordTileProvenance, refer
 import { replaceWaterbodies, WATERBODIES_SOURCE, waterbodyRecords } from '../dams/observed/loadWaterbodies.js';
 import { donorsFromJson, GR4J_DONORS, replaceDonorDataset } from './gr4jDonors.js';
 import { QUATERNARY_SOURCE, quaternaryRecords, replaceDataset as replaceQuaternaries } from './loadQuaternaries.js';
+import { QUATERNARY_EVAPORATION_SOURCE, quaternaryEvaporationRecords, replaceQuaternaryEvaporation } from './loadQuaternaryEvaporation.js';
 import { replaceSoilDataset, soilFromJson, soilMethodFor, SOILS } from './soilGrid.js';
 
 /** One dataset of a kind allowed dataset by dataset: its own Sources row, and what a load stores with it. */
@@ -108,9 +109,20 @@ export const REFERENCE_KINDS = {
 	// QUATERNARY_SOURCE, or the load's own source, never the file's.
 	quaternaries: {
 		status: 'allowed',
-		sourcesRows: ['Quaternary catchment outlines', 'WR2012 reference values', 'WR2012 evaporation'],
+		sourcesRows: ['Quaternary catchment outlines', 'WR2012 reference values'],
 		file: /\.(geo)?json(\.gz)?$/,
-		what: 'the GeoJSON `pnpm import:quaternaries <boundaries.geojson> … --values <values.csv> [--evap-zones <zones.csv>] --out <file>` writes (the outlines, each with its values, and the evaporation zones)'
+		what: 'the GeoJSON `pnpm import:quaternaries <boundaries.geojson> … --values <values.csv> --out <file>` writes (the outlines, each with its values)'
+	},
+	// WR2012's monthly S-pan and A-pan per quaternary from its WRSM2000 network configurations (310; docs/maps.md §
+	// Quaternary evaporation). Allowed by the operator's decision of 2026-11-03, extending the 2026-11-02 WR2012
+	// decision to these evaporation values. Every row is stored with QUATERNARY_EVAPORATION_SOURCE, or the load's own.
+	'quaternary-evaporation': {
+		status: 'allowed',
+		sourcesRows: ['WR2012 evaporation'],
+		file: /\.csv(\.gz)?$/,
+		what: 'the CSV `scripts/wbt-import/wrsm_evaporation.py <network folders> --out <file>` writes (one row per quaternary)',
+		// 327 quaternaries in four WMAs is about 80 KB; every quaternary in the country about 500 KB.
+		limits: { object: 4 * 1024 * 1024, text: 8 * 1024 * 1024 }
 	},
 	'dam-register': {
 		status: 'blocked',
@@ -541,7 +553,19 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		if (!got.records.length) throw new LoadError(`${req.key}: no quaternary to load`, 'empty', 'the file has no quaternary polygon with a code (a GeoJSON FeatureCollection, `code` on each feature)');
 		const records = got.records.map((r) => ({ ...r, source }));
 		try {
-			const written = await replaceQuaternaries(client, req.dataset, { records, zones: got.zones }, origin);
+			const written = await replaceQuaternaries(client, req.dataset, records, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
+	if (req.kind === 'quaternary-evaporation') {
+		const got = quaternaryEvaporationRecords(text);
+		for (const p of got.problems.slice(0, 50)) log(`refused: ${p}`);
+		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more refused`);
+		if (!got.records.length) throw new LoadError(`${req.key}: no quaternary to load`, 'empty', 'the file has no row with a quaternary code and 12 monthly S-pan or A-pan values (wrsm_evaporation.py writes it)');
+		try {
+			const written = await replaceQuaternaryEvaporation(client, req.dataset, got.records, req.source ?? QUATERNARY_EVAPORATION_SOURCE, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
