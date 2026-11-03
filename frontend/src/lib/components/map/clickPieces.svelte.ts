@@ -10,9 +10,32 @@
 // answer it had rather than asking again, and a click the server refuses
 // (off the elevation model, a catchment too large) is taken back with the
 // reason, so the clicks before it keep working.
+//
+// Within a catchment boundary (the answer's `within`), a click outside it is
+// refused by the server; when the boundary came from Delineate, its outlet is
+// the lowest point and its piece (click -1, badge O) is the land between the
+// lowest clicks and the outlet: it is no click, so Undo never takes it back.
 import type { ClickPieces, MapFeature, MapPosition } from '#lib/api/types.js';
 import { largerLine } from './largerChannel';
 import { interiorPoint, pieceTintsFor, type PiecesShape, type ProposalPiece } from './pieces';
+
+/** The catchment's delineated outlet's piece, in place of a click's index. */
+export const OUTLET_CLICK = -1;
+/** A piece's badge: its click's number, O for the outlet's. */
+export const clickLabel = (click: number) => (click === OUTLET_CLICK ? 'O' : String(click + 1));
+/** A piece's name, as Save names its area (the server's pieceName, delineation/clicks.ts). */
+export const clickPieceName = (click: number) => (click === OUTLET_CLICK ? 'Sub-catchment at the outlet' : `Sub-catchment ${click + 1}`);
+/** Where a piece's water goes, in a line: the outlet's piece, or the click's number. */
+const intoWords = (click: number) => (click === OUTLET_CLICK ? 'the outlet’s piece (O)' : String(click + 1));
+
+/** The catchment the clicks are within, in a sentence (the bar's), or null with no boundary. Pure. */
+export function withinLine(w: { name: string; outlet: 'delineation' | 'lowest' } | null): string | null {
+	if (!w) return null;
+	const name = w.name.trim() ? `“${w.name.trim()}”` : 'the catchment boundary';
+	return w.outlet === 'delineation'
+		? `Within ${name}: its delineated outlet is the lowest point, so the land between your lowest click and the outlet is the outlet’s piece (O). A click outside the boundary is refused.`
+		: `Within ${name}: drawn by hand, it has no delineated outlet, so your lowest click is the outlet. A click outside the boundary is refused.`;
+}
 
 /** The map's shape for an answer: one piece per click, numbered by click, the lowest click as the outlet and every kept click marked. Pure. */
 export function clickShape(r: ClickPieces | null, highlight: string | null = null): (PiecesShape & { outlets: MapPosition[] }) | null {
@@ -21,8 +44,8 @@ export function clickShape(r: ClickPieces | null, highlight: string | null = nul
 	const tints = pieceTintsFor(r.pieces.map((p) => p.geometry));
 	const pieces: ProposalPiece[] = r.pieces.map((p, i) => ({
 		key: String(p.click),
-		label: String(p.click + 1),
-		name: `Sub-catchment ${p.click + 1}`,
+		label: clickLabel(p.click),
+		name: clickPieceName(p.click),
 		geometry: p.geometry,
 		at: (p.geometry && interiorPoint(p.geometry)) ?? p.point,
 		tint: tints[i]!
@@ -48,9 +71,10 @@ export function pieceLine(r: ClickPieces, click: number): string {
 		return d ? `not a piece: it ${d.reason}` : 'not a piece';
 	}
 	const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
-	const into = p.drainsInto === null ? 'the lowest point: the rest drains out here' : `drains into ${p.drainsInto + 1}`;
-	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : `${p.drainsInto + 1}`} as an inflow`;
-	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => q.click + 1);
+	const into =
+		p.drainsInto !== null ? `drains into ${intoWords(p.drainsInto)}` : p.click === OUTLET_CLICK ? 'the catchment’s outlet: the rest drains out here' : 'the lowest point: the rest drains out here';
+	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : intoWords(p.drainsInto)} as an inflow`;
+	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => clickLabel(q.click));
 	const upstream = p.totalAreaM2 === null ? ' · more upstream than was routed' : p.drainsInto !== null || r.pieces.length > 1 ? ` · ${km2(p.totalAreaM2)} upstream in all` : '';
 	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the nearest terrain channel` : '';
 	// A much larger channel nearby: the click may be on a hillside stream beside the river meant.

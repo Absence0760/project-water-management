@@ -12,7 +12,7 @@ import { ClickDivider } from './clickPieces.svelte';
 // HelpTip links to the glossary under the app's base path.
 vi.mock('$app/paths', () => ({ resolve: (p: string) => `/${p}`, asset: (f: string) => `/${f}` }));
 
-const bar = (mapStatus: 'loading' | 'ready' | 'failed') =>
+const bar = (mapStatus: 'loading' | 'ready' | 'failed', within: { name: string; outlet: 'delineation' | 'lowest' } | null = null) =>
 	render(ClickBar, {
 		props: {
 			divider: new ClickDivider(
@@ -23,7 +23,8 @@ const bar = (mapStatus: 'loading' | 'ready' | 'failed') =>
 			ondone: () => {},
 			onsave: () => {},
 			onlit: () => {},
-			onone: () => {}
+			onone: () => {},
+			within
 		}
 	}).body;
 
@@ -48,5 +49,18 @@ describe('ClickBar: Enter coordinates', () => {
 		const html = bar('failed');
 		expect(coords(html)).toMatch(/\bopen\b/);
 		expect(how(html)).toBe('The map can’t be drawn here: enter each outlet’s coordinates.');
+	});
+});
+
+describe('ClickBar: within the catchment boundary', () => {
+	const within = (html: string) => html.match(/data-testid="map-click-within"[^>]*>([^<]*)</)?.[1]?.trim() ?? null;
+
+	it('names the catchment and its outlet before the first click', () => {
+		expect(within(bar('ready', { name: 'Valley', outlet: 'delineation' }))).toMatch(/^Within “Valley”: its delineated outlet is the lowest point/);
+		expect(within(bar('ready', { name: 'Drawn', outlet: 'lowest' }))).toMatch(/^Within “Drawn”: drawn by hand, it has no delineated outlet, so your lowest click is the outlet/);
+	});
+
+	it('says nothing of it with no boundary on the map', () => {
+		expect(within(bar('ready'))).toBeNull();
 	});
 });

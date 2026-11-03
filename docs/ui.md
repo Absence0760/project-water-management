@@ -4522,12 +4522,20 @@ map" card) stays the schematic; this is the geography.
   width, so the panel is in the DOM once). It has how ("Click a terrain
   channel for each outlet, or press Enter at the crosshair. Each gets the
   land that drains to it before any other click, following the terrain.")
-  with the lines on the map in words under it (as Delineate's bar), a polite line for the last change ("2 sub-catchments.", "Click 3
+  with the lines on the map in words under it (as Delineate's bar); with a
+  catchment boundary on the map, a line naming it ("Within “Valley”: its
+  delineated outlet is the lowest point, so the land between your lowest
+  click and the outlet is the outlet’s piece (O). A click outside the
+  boundary is refused.", or for a boundary drawn by hand "… drawn by hand,
+  it has no delineated outlet, so your lowest click is the outlet. …"); a polite line for the last change ("2 sub-catchments.", "Click 3
   is not a piece: it …", "Took back click 3.", "Moved the click back."), and
+  first, within a delineated boundary, the outlet's piece under badge O
+  ("The outlet’s piece: 212.40 km² · the catchment’s outlet: the rest
+  drains out here · …"; no click, so Undo never takes it), then
   one line per click under its badge (`PieceBadge`, the number and tint its
   piece has on the map, so the list is the map's key): its area, where its
-  water goes ("drains into 2", or "the lowest point: the rest drains out
-  here"), the area upstream in all (or "more upstream than was routed"),
+  water goes ("drains into 2", "drains into the outlet’s piece (O)", or
+  "the lowest point: the rest drains out here"), the area upstream in all (or "more upstream than was routed"),
   the inflow points entering it, how far it moved ("· moved 128 m to the
   nearest terrain channel", from 50 m), and a much larger terrain channel
   beside it ("· a much larger terrain channel (620 km²) runs 504 m north:
@@ -4548,10 +4556,18 @@ map" card) stays the schematic; this is the geography.
   all the pieces (tinted apart from their neighbours, every click's outlet
   a ringed dot); the map is framed on the first answer and then stays where
   the editor is clicking. A click the server refuses is taken back with the
-  reason ("Click not added: …"). **Save the *n* as areas** (primary) saves
-  each piece as an *other* polygon ("Saved 2 sub-catchments, 547.19 km² in
-  all on the map as areas. Link each to its unit and Use its area, or
-  rename it on its card.", the first one picked), **Undo** goes back to the
+  reason ("Click not added: …", among them a click outside the catchment
+  boundary: "Click 2 is outside “Valley”, the catchment boundary: …").
+  **Save the *n* as areas** (primary) saves each piece as an *other*
+  polygon and goes straight on to the network: on an empty model the Start
+  sheet opens at its points with each piece marked a hydrological unit
+  ("Saved 2 sub-catchments, 547.19 km² in all on the map as areas, each a
+  hydrological unit in the Start sheet: check them, propose the model, then
+  check each unit’s name and area and apply."), on a model with nodes the
+  Divide sheet ("… In the Divide sheet, say which hydrological unit each
+  stands for, then propose and apply."); nothing reaches the model before
+  the sheet's Apply. Without either, the first piece is picked ("… Link
+  each to its unit and Use its area, or rename it on its card."). **Undo** goes back to the
   answer before the last click or move at once, **Clear** drops them all,
   and **Done** (or Escape in the panel) leaves the mode, asking first
   ("Drop these clicks?": Keep clicking / Drop them) when there are clicks;
@@ -4666,10 +4682,12 @@ map" card) stays the schematic; this is the geography.
   map as a river, from the river network.") or "On the map as a river." and
   **Show it**. The key's Lines gain "river network" while it is on
   ([maps.md § River network](./maps.md#river-network)).
-  **DEM rivers** (`layers=channels`, a solid swatch in the terrain
+  **DEM rivers** (on by default where offered, `layers=-channels` off and
+  `layers=channels` on from its toggle; a solid swatch in the terrain
   channels' red, with a help tip; right after HydroRIVERS, so the two read
   as a pair; an editor's, offered once their delineation check finds an
-  elevation model): on, the terrain channels Delineate draws are drawn with
+  elevation model; counted on the Layers button only where offered, and
+  said in the live region only once turned on from its toggle): on, the terrain channels Delineate draws are drawn with
   no tool on, and the panel says what they are ("The rivers delineation
   follows, worked out from the elevation model (the terrain channels in the
   Key): wider for a larger area upstream. The HydroRIVERS lines can sit a

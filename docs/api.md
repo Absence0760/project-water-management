@@ -3888,15 +3888,26 @@ clicks](./maps.md#sub-catchments-from-clicks)). The lowest click (the one
 most water drains through) owns everything else above it. Nothing is stored
 until **save**, which routes the same clicks again and never takes a
 geometry from the request. Off while `DEM_URL` is empty (`GET
-…/map/delineation`'s `available` says so).
+…/map/delineation`'s `available` says so). With a catchment boundary on
+the map (the project's first `catchment_boundary`, read by the server on
+every request, never sent by the client) a click outside it is `422` with
+a sentence naming it and `details.reason: 'outside_boundary'`, before any
+elevation-model work (no attempt counted); when the boundary came from an
+accepted delineation, its snapped outlet is the lowest point, below every
+click (its piece `click: -1`), and a click draining more than it is the
+same `422`.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/map/subcatchments` | `{ clicks: { lon, lat, minKm2? }[] }` (1 to 50; each click's `minKm2` the channels the Map drew at its zoom, held to 0.1–1 km², absent 1, as Delineation's; `start-18`) | `200 ClickPieces`; nothing is stored. `422 { error }` with a sentence when the DEM refuses (the clicks outside it, a click with no terrain channel within 150 m, naming it, the lowest click's catchment past the largest window, about 100 km, almost nothing draining to it, no valid outline); `409` when it is off; `429` past the account's elevation-model cap (shared with delineate, start and divide, counted as delineation); `503` when the DEM can't be read | editor |
-| POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], dropped, summary }`: one `other` polygon per whole piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number), its area from the polygon and its description the outlet, where it drains, the area upstream, the dataset and the method version. The same refusals; `422` when no piece could be outlined | editor |
+| POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], dropped, summary }`: one `other` polygon per whole piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number; "Sub-catchment at the outlet" for the delineated outlet's piece), its area from the polygon and its description the outlet, where it drains, the area upstream, the dataset and the method version. The same refusals; `422` when no piece could be outlined | editor |
 
 - `ClickPieces = { pieces: ClickPiece[], dropped: { click, reason }[],
-  lowest, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
+  lowest, within, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
+  `within = { featureId, name, outlet: 'delineation' | 'lowest' }` names the
+  catchment boundary the clicks are within (`delineation`: its delineated
+  outlet is the lowest point, `lowest: -1`; `lowest`: a boundary drawn or
+  uploaded by hand, the lowest click is), null with none;
   `ClickPiece = { click, point: [lon, lat], snapDistanceM, drainsInto,
   geometry (a Polygon, or null when its cells couldn't be outlined), areaM2,
   totalAreaM2, nonContributingM2, open, larger }` (`nonContributingM2`: of its own area,
@@ -3905,7 +3916,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   clients sent is `400`); since `start-15` (issue #472) there is no
   `confluence` question, and a piece has no `placedBy`, `reach` or
   `unmatched`. `click` and `drainsInto` are indexes into the request's
-  clicks (`drainsInto` null for the lowest); `point` is where the click
+  clicks, or `-1` for the delineated outlet's piece (`drainsInto` null for the lowest); `point` is where the click
   went, on the terrain channel nearest it within 150 m; `totalAreaM2`
   everything upstream of it. `open`:
   an inflow point, its catchment past the routed window (about 100 km) or

@@ -10,7 +10,8 @@
 // hydrological units (each parcel named by its unit), the MAP grid (the
 // synthetic grid's points in view, with their range and source) and the
 // CHIRPS grid (its points in view), each its own toggle in the URL. The DEM
-// rivers (the terrain channels drawn outside Delineate, `layers=channels`). Axe
+// rivers (the terrain channels drawn outside Delineate): on by default for an
+// editor, `layers=-channels` turns them off and `layers=channels` on again. Axe
 // with the layers on and while measuring, light and dark.
 import { readFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
@@ -83,9 +84,9 @@ test('the quaternary outlines: a toggle in the URL, the codes around the catchme
 	// A reload keeps the layer on; Back turns it off.
 	await page.reload();
 	await expect(page.locator('.map-page[data-ready]')).toBeVisible();
-	// The panel's open state isn't in the URL (the layers are): its button counts the layers on.
+	// The panel's open state isn't in the URL (the layers are): its button counts the layers on, the DEM rivers (on by default for an editor) among them.
 	await expect(page.getByTestId('map-layers-toggle')).toHaveAttribute('aria-expanded', 'false');
-	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (1 on)');
+	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (2 on)');
 	await openLayers(page);
 	await expect(layers(page).getByRole('checkbox', { name: 'Quaternary catchments' })).toBeChecked();
 	await expect(codes(page).getByRole('button')).toHaveCount(6);
@@ -175,7 +176,8 @@ test('the hydrological units, the MAP grid and the CHIRPS grid: each a toggle in
 	await layers(page).getByRole('checkbox', { name: 'CHIRPS grid' }).check();
 	await expect(page).toHaveURL(/layers=units(%2C|,)mapgrid(%2C|,)chirps(&|$)/);
 	await expect(page.getByTestId('map-chirps-summary')).toHaveText(/^[\d\s,]+ CHIRPS v3 grid points? in view, each the centre of a 0\.05° cell/);
-	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (3 on)');
+	// The three and the DEM rivers, on by default.
+	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (4 on)');
 
 	// Back turns the last one off; the others stay.
 	await page.goBack();
@@ -255,7 +257,7 @@ test('the DEM grid: every 10th elevation-model cell each way in view, with its e
 	await expect(page.getByTestId('map-demgrid')).toHaveCount(0);
 });
 
-test('the DEM rivers: the terrain channels drawn outside Delineate while the toggle is on, a toggle in the URL', async ({ page, owner }) => {
+test('the DEM rivers: the terrain channels drawn outside Delineate, on by default, a toggle in the URL', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedRunnableProject(page.request, 'Map DEM rivers');
@@ -266,36 +268,42 @@ test('the DEM rivers: the terrain channels drawn outside Delineate while the tog
 	await mapReady(page);
 	await page.getByTestId('map-show-everything').click();
 	const body = page.locator('.map-body');
-	await expect(body).not.toHaveAttribute('data-channels');
+	// On with no `layers=` at all, and no tool on: Delineate's bar is nowhere, the channels' tiles are on the map.
+	await expect(page).not.toHaveURL(/layers=/);
+	await expect(page.getByTestId('map-draw-bar')).toHaveCount(0);
+	await expect(body).toHaveAttribute('data-channels', 'on');
+	await expect(body).not.toHaveAttribute('data-channel-tiles', '0');
 
 	await openLayers(page);
 	// The pair: HydroRIVERS' mapped rivers and the elevation model's own.
 	await expect(layers(page).getByRole('checkbox', { name: 'Rivers (HydroRIVERS)' })).toBeVisible();
 	const toggle = layers(page).getByRole('checkbox', { name: 'DEM rivers' });
-	await expect(toggle).not.toBeChecked();
-	await toggle.check();
-	await expect(page).toHaveURL(/[?&]layers=channels(&|$)/);
-	// Drawn with no tool on: Delineate's bar is nowhere, the channels' tiles are on the map.
-	await expect(page.getByTestId('map-draw-bar')).toHaveCount(0);
-	await expect(body).toHaveAttribute('data-channels', 'on');
-	await expect(body).not.toHaveAttribute('data-channel-tiles', '0');
+	await expect(toggle).toBeChecked();
 	await expect(page.getByTestId('map-channels')).toHaveAttribute('data-state', 'drawn');
 	await expect(page.getByTestId('map-channels-line')).toHaveText(
 		'The rivers delineation follows, worked out from the elevation model (the terrain channels in the Key): wider for a larger area upstream. The HydroRIVERS lines can sit a few hundred metres off them.'
 	);
-	await expect(layers(page).getByRole('status')).toContainText('DEM rivers drawn.');
+	// On by default, it is drawn without a word in the live region: nobody asked for it.
+	await expect(layers(page).getByRole('status')).toHaveText('');
 	// The over-the-map pill is Delineate's: the Layers box speaks for the layer.
 	await expect(page.getByTestId('map-channels-note')).toHaveCount(0);
 
-	// Kept across a reload, as every layer; Back undoes the toggle and the channels go.
+	// Off: written in the URL, the channels go; kept across a reload, as every layer.
+	await toggle.uncheck();
+	await expect(page).toHaveURL(/[?&]layers=-channels(&|$)/);
+	await expect(body).not.toHaveAttribute('data-channels');
 	await page.reload();
 	await mapReady(page);
-	await page.getByTestId('map-show-everything').click();
-	await expect(body).toHaveAttribute('data-channels', 'on');
-	await expect(body).not.toHaveAttribute('data-channel-tiles', '0');
+	await expect(body).not.toHaveAttribute('data-channels');
+	// On again from its toggle: in the URL, and said in the live region.
 	await openLayers(page);
-	await layers(page).getByRole('checkbox', { name: 'DEM rivers' }).uncheck();
-	await expect(page).not.toHaveURL(/layers=/);
+	await layers(page).getByRole('checkbox', { name: 'DEM rivers' }).check();
+	await expect(page).toHaveURL(/[?&]layers=channels(&|$)/);
+	await expect(body).toHaveAttribute('data-channels', 'on');
+	await expect(layers(page).getByRole('status')).toContainText('DEM rivers drawn.');
+	// Back undoes the toggle: off again.
+	await page.goBack();
+	await expect(page).toHaveURL(/[?&]layers=-channels(&|$)/);
 	await expect(body).not.toHaveAttribute('data-channels');
 });
 

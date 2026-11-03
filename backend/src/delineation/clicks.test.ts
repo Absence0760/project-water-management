@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInGeometry, type Geometry } from '../geo/geojson.js';
-import { ClicksBody, CLICKS_MAX, pieceDescription, pieceName, saveSummary, toClickPieces, type ClickPieces } from './clicks.js';
+import { clickRequest, ClicksBody, CLICKS_MAX, OUTLET_CLICK, OUTLET_KEY, outsideClick, outsideText, pastOutletText, pieceDescription, pieceName, saveSummary, toClickPieces, type ClickPieces, type Within } from './clicks.js';
 import { openDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
@@ -136,6 +136,7 @@ describe('the request and the names', () => {
 			],
 			dropped: [],
 			lowest: 2,
+			within: null,
 			cellSizeM: 30,
 			dataset: { label: 'Copernicus GLO-30', fingerprint: '0123456789abcdef' },
 			method: 'D8',
@@ -155,8 +156,67 @@ describe('the request and the names', () => {
 		expect(saveSummary(r, [r.pieces[2]!])).toBe('1 sub-catchment, 12.00 km² in all; 1 inflow point not saved (Sub-catchment 1); 1 couldn’t be outlined and weren’t saved');
 	});
 
-	it('names a piece by its click’s number, as the badge shows it', () => {
+	it('names a piece by its click’s number, as the badge shows it, and the catchment outlet’s piece by the outlet', () => {
 		expect(pieceName(0)).toBe('Sub-catchment 1');
 		expect(pieceName(4)).toBe('Sub-catchment 5');
+		expect(pieceName(OUTLET_CLICK)).toBe('Sub-catchment at the outlet');
+	});
+});
+
+describe('within the catchment boundary', () => {
+	const ring = (x0: number, y0: number, x1: number, y1: number) => [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), at(x0, y0)];
+	/** A box round the valley above the outlet, as an accepted delineation leaves it (its outlet set below). */
+	const box = (outlet: [number, number] | null): Within => ({ featureId: 'b', name: 'Valley', geometry: { type: 'Polygon', coordinates: [ring(OUTLET_CELL.x - 100, OUTLET_CELL.y - 250, OUTLET_CELL.x + 100, OUTLET_CELL.y + 2)] }, outlet });
+	const lonLat = (x: number, y: number) => {
+		const [lon, lat] = at(x, y);
+		return { lon, lat };
+	};
+
+	it('finds the first click outside the boundary, and the refusal names the catchment (positive control: inside is -1)', () => {
+		const w = box(null);
+		expect(outsideClick(w, [lonLat(DAM_CELL.x, DAM_CELL.y + 1)])).toBe(-1);
+		expect(outsideClick(w, [lonLat(DAM_CELL.x, DAM_CELL.y + 1), lonLat(OUTLET_CELL.x, OUTLET_CELL.y + 40)])).toBe(1);
+		expect(outsideText(w, 1)).toBe('Click 2 is outside “Valley”, the catchment boundary: every sub-catchment lies within it. Click a terrain channel inside the boundary.');
+		expect(outsideText({ name: ' ' }, 0)).toMatch(/^Click 1 is outside the catchment boundary, the catchment boundary/);
+		expect(pastOutletText(w, 0)).toMatch(/^Click 1 drains more water than “Valley”’s outlet/);
+	});
+
+	it('routes no outlet of its own without a boundary, or for one drawn by hand: the lowest click is the outlet, as before', () => {
+		const clicks = [lonLat(DAM_CELL.x, DAM_CELL.y + 1)];
+		expect(clickRequest(clicks, null).points.map((p) => p.id)).toEqual(['0']);
+		expect(clickRequest(clicks, box(null)).points.map((p) => p.id)).toEqual(['0']);
+		expect(clickRequest(clicks, null)).toMatchObject({ outlet: 'lowest', boundary: null });
+	});
+
+	it('takes a delineated boundary’s outlet as the lowest point: its piece is the land between the clicks and the outlet, and the pieces tile the catchment', async () => {
+		const whole = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y));
+		const w = box(whole.outlet);
+		const req = clickRequest([lonLat(DAM_CELL.x, DAM_CELL.y + 1)], w);
+		expect(req.points[0]).toMatchObject({ id: OUTLET_KEY, exact: true, geometry: { coordinates: whole.outlet } });
+		const r = toClickPieces(await delineateUnits(dem, req), { featureId: 'b', name: 'Valley', outlet: 'delineation' });
+		expect(r.lowest).toBe(OUTLET_CLICK);
+		expect(r.within).toEqual({ featureId: 'b', name: 'Valley', outlet: 'delineation' });
+		expect(r.pieces.map((p) => [p.click, p.drainsInto])).toEqual([
+			[OUTLET_CLICK, null],
+			[0, OUTLET_CLICK]
+		]);
+		const [out, dam] = r.pieces as [(typeof r.pieces)[0], (typeof r.pieces)[0]];
+		// On its delineated cell, never moved; the two pieces never nest: together they are the delineated catchment.
+		expect(out.point).toEqual(whole.outlet);
+		near(out.areaM2! + dam.areaM2!, whole.areaM2, 0.02);
+		near(out.totalAreaM2!, whole.areaM2, 0.02);
+		expect(pointInGeometry(at(DAM_CELL.x, DAM_CELL.y + 50), out.geometry as Geometry)).toBe(true);
+		expect(pointInGeometry(at(DAM_CELL.x, DAM_CELL.y + 50), dam.geometry as Geometry)).toBe(false);
+		expect(r.method).toMatch(/\(the outlet: “Valley”’s delineated outlet\)/);
+		expect(pieceDescription(r, out)).toMatch(/; the catchment’s delineated outlet; /);
+		expect(pieceDescription(r, dam)).toMatch(/; drains into sub-catchment at the outlet; /);
+	});
+
+	it('drops a click on the outlet itself, saying it is the catchment’s outlet', async () => {
+		const whole = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y));
+		const req = clickRequest([lonLat(DAM_CELL.x, DAM_CELL.y + 1), lonLat(OUTLET_CELL.x, OUTLET_CELL.y)], box(whole.outlet));
+		const r = toClickPieces(await delineateUnits(dem, req), { featureId: 'b', name: 'Valley', outlet: 'delineation' });
+		expect(r.pieces.map((p) => p.click)).toEqual([OUTLET_CLICK, 0]);
+		expect(r.dropped).toEqual([{ click: 1, reason: expect.stringMatching(/same place on the river as the catchment’s outlet/) }]);
 	});
 });

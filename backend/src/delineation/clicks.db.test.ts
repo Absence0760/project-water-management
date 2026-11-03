@@ -7,7 +7,11 @@
 //  - save routes the clicks again and saves one "other" polygon per piece,
 //    named by its click, with the provenance in its description, and audits
 //    it without a polygon;
-//  - the per-account cap on elevation-model work counts every request.
+//  - the per-account cap on elevation-model work counts every request;
+//  - within a catchment boundary: a click outside it is refused naming it
+//    (before any elevation-model work), one inside works (positive control);
+//    a boundary from Delineate puts its outlet's piece below the clicks, and
+//    Save saves it too; a boundary drawn by hand keeps the lowest click.
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
@@ -155,5 +159,76 @@ describe('sub-catchments from clicks (synthetic DEM)', () => {
 		);
 		const res = await u.call('POST', `/projects/${pid}/map/subcatchments`, { clicks: [OUTLET] });
 		expect(res.status).toBe(429);
+	});
+});
+
+describe('sub-catchments within the catchment boundary (synthetic DEM)', () => {
+	beforeAll(() => {
+		process.env.DEM_URL = FIXTURE;
+	});
+	const newProject = async (name: string) => {
+		const id = (await editor.call('POST', '/projects', { name })).body.project.id as string;
+		return (p: string) => `/projects/${id}${p}`;
+	};
+	const attempts = async () => (await asOwner(`SELECT count(*)::int AS n FROM dem_attempt WHERE user_id = $1`, [editor.id]))[0]!.n as number;
+	/** Below the outlet, on the river past the valley's southern rim: outside any boundary round the valley. */
+	const BELOW = point(OUTLET_CELL.x, OUTLET_CELL.y + 40);
+
+	it('from Delineate: the outlet is the lowest point, its piece the land between the clicks and it, a click outside refused naming the catchment', async () => {
+		const q = await newProject('Clicks, delineated');
+		const d = await editor.call('POST', q('/map/delineation'), { ...OUTLET, from: 'outlet' });
+		expect(d.status, JSON.stringify(d.body)).toBe(201);
+		expect((await editor.call('POST', q(`/map/delineation/${d.body.proposal.id}/accept`), { as: 'catchment_boundary' })).status).toBe(200);
+		await asOwner(`UPDATE map_feature SET name = 'Valley' WHERE kind = 'catchment_boundary' AND project_id = (SELECT project_id FROM delineation_proposal WHERE id = $1)`, [d.body.proposal.id]);
+
+		// Outside: refused with the catchment's name, before the elevation model is read (no attempt counted).
+		const before = await attempts();
+		const out = await editor.call('POST', q('/map/subcatchments'), { clicks: [DAM, BELOW] });
+		expect(out.status).toBe(422);
+		expect(out.body.error).toBe('Click 2 is outside “Valley”, the catchment boundary: every sub-catchment lies within it. Click a terrain channel inside the boundary.');
+		expect(await attempts()).toBe(before);
+		expect((await editor.call('POST', q('/map/subcatchments/save'), { clicks: [BELOW] })).status).toBe(422);
+
+		// Inside (the positive control): the outlet's piece below the click's, together the delineated catchment.
+		const res = await editor.call('POST', q('/map/subcatchments'), { clicks: [DAM] });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.lowest).toBe(-1);
+		expect(res.body.within).toMatchObject({ name: 'Valley', outlet: 'delineation' });
+		expect(res.body.pieces.map((p: { click: number; drainsInto: number | null }) => [p.click, p.drainsInto])).toEqual([
+			[-1, null],
+			[0, -1]
+		]);
+		expect(res.body.pieces[0].point).toEqual(d.body.proposal.outlet);
+		near(res.body.pieces[0].areaM2 + res.body.pieces[1].areaM2, d.body.proposal.areaM2, 0.02);
+
+		const saved = await editor.call('POST', q('/map/subcatchments/save'), { clicks: [DAM] });
+		expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+		expect(saved.body.features.map((f: { kind: string; name: string }) => [f.kind, f.name])).toEqual([
+			['other', 'Sub-catchment at the outlet'],
+			['other', 'Sub-catchment 1']
+		]);
+		expect(saved.body.features[0].properties.description).toMatch(/the catchment’s delineated outlet/);
+	});
+
+	it('drawn by hand: a click outside refused, one inside divides as before with the lowest click as the outlet', async () => {
+		const q = await newProject('Clicks, drawn');
+		const ring = [point(OUTLET_CELL.x - 100, OUTLET_CELL.y - 250), point(OUTLET_CELL.x + 100, OUTLET_CELL.y - 250), point(OUTLET_CELL.x + 100, OUTLET_CELL.y + 5), point(OUTLET_CELL.x - 100, OUTLET_CELL.y + 5)].map((c) => [c.lon, c.lat]);
+		const b = await editor.call('POST', q('/map/features'), { kind: 'catchment_boundary', name: '', geometry: { type: 'Polygon', coordinates: [[...ring, ring[0]]] } });
+		expect(b.status, JSON.stringify(b.body)).toBe(201);
+		const out = await editor.call('POST', q('/map/subcatchments'), { clicks: [BELOW] });
+		expect(out.status).toBe(422);
+		expect(out.body.error).toMatch(/^Click 1 is outside the catchment boundary/);
+		const res = await editor.call('POST', q('/map/subcatchments'), { clicks: [DAM, OUTLET] });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.lowest).toBe(1);
+		expect(res.body.within).toMatchObject({ featureId: b.body.feature.id, outlet: 'lowest' });
+		expect(res.body.pieces.map((p: { click: number }) => p.click)).toEqual([0, 1]);
+	});
+
+	it('with no boundary, reports none and divides as before (its project above)', async () => {
+		const res = await editor.call('POST', at('/map/subcatchments'), { clicks: [DAM, OUTLET] });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.within).toBeNull();
+		expect(res.body.lowest).toBe(1);
 	});
 });

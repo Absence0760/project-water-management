@@ -89,7 +89,7 @@
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, channelMinKm2AtZoom, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
-	import { channelsWanted, chirpsCells, demRiversOffered, layersOn, unitLabels } from './mapLayers';
+	import { channelsWanted, chirpsCells, demRiversOffered, layerAsked, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
 	import { AreaFill } from './areaFill.svelte';
@@ -571,6 +571,13 @@
 	const wide = $derived(pageWidth >= 784);
 	let clickLit = $state<string | null>(null);
 	const clickPieces = $derived(dividing ? clickShape(divider.result, clickLit) : null);
+	/**
+	 * The catchment boundary the clicks are within, as the map knows it before the server's first answer (which then says):
+	 * its delineated outlet when an accepted delineation made it, else the lowest click.
+	 */
+	const clickWithin = $derived(
+		boundary ? { name: boundary.name, outlet: delineation?.proposals.some((p) => p.status === 'accepted' && p.featureId === boundary.id) ? ('delineation' as const) : ('lowest' as const) } : null
+	);
 	function startDividing() {
 		if (dividing) return void doneDividing();
 		notice = null;
@@ -641,12 +648,21 @@
 		clickLit = null;
 		draft.cancel();
 		await load();
-		if (r.features[0]) await pickInPlace(r.features[0].id);
-		// Opened from the Start sheet's points step (#646 F13): each saved area is a unit's boundary there, and the sheet comes back.
-		notice =
-			backToSheet === 'start'
-				? `Saved ${r.summary} on the map as areas: each is a unit’s boundary in the Start sheet.`
-				: `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		// Straight on to the network: the Start sheet on an empty model (each saved piece marked a hydrological unit there),
+		// the Divide sheet on one with nodes (each piece listed to say which unit it stands for). Nothing is written to the
+		// model until the sheet's Apply; opened from the Start sheet's points step (#646 F13), it is the same sheet coming back.
+		const sheet = canStart ? 'start' : canDivide ? 'divide' : null;
+		if (sheet === 'start') {
+			for (const f of r.features) startDraft.picked[f.id] = 'unit';
+			startDraft.pointsAsked = true;
+			notice = `Saved ${r.summary} on the map as areas, each a hydrological unit in the Start sheet: check them, propose the model, then check each unit’s name and area and apply.`;
+		} else if (sheet === 'divide') {
+			notice = `Saved ${r.summary} on the map as areas. In the Divide sheet, say which hydrological unit each stands for, then propose and apply.`;
+		} else {
+			if (r.features[0]) await pickInPlace(r.features[0].id);
+			notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		}
+		backToSheet = sheet;
 		await returnToStart();
 	}
 	async function pickPiece(key: string) {
@@ -929,6 +945,8 @@
 	const reviewingProposal = $derived(!!pendingProposal && !draft.active && !measure.active && !dividing);
 	/** The DEM rivers toggle: an editor's, once their delineation check finds an elevation model. */
 	const demRiversShown = $derived(demRiversOffered(canEdit, !!delineation?.available));
+	/** The layers on, as the Layers button counts them: the DEM rivers (on by default) only where their toggle is offered. */
+	const layersCount = $derived([...layersOn(params)].filter((l) => l !== 'channels' || demRiversShown).length);
 	/** A tool needs the channels (not the layer): the pill over the map speaks for them; the Layers box speaks for the layer. */
 	const toolChannels = $derived(delineating || dividing || reviewingProposal);
 	/** The channels precomputed into a static file (PUBLIC_CHANNELS_URL), read before the route, which stays the fallback tile by tile (channelArchive.ts). */
@@ -1424,7 +1442,7 @@
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
 		demGrid={demGridOffered ? demGrid : null}
-		demRivers={demRiversShown ? { on: layersOn(params).has('channels'), layer: channels } : null}
+		demRivers={demRiversShown ? { on: layersOn(params).has('channels'), announce: layerAsked(params, 'channels'), layer: channels } : null}
 		{areaFill}
 	/>
 {/snippet}
@@ -1470,7 +1488,7 @@
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
 					{#if canEdit && dividing && !wide}
-						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
+						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} within={clickWithin} />{/snippet}</Lazy>
 					{:else if canEdit && draft.active && !dividing && !wide}
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
@@ -1543,7 +1561,7 @@
 						<div class="layers-at ov" onkeydown={(e) => panelKey(e, 'layers')}>
 							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersShown} aria-controls={panelsInSide ? `${uid}-panel-layers` : `${uid}-layers`} bind:this={layersBtn} onclick={() => openPanel('layers', !layersShown)} data-testid="map-layers-toggle">
 								<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" class="ctl-ic"><path d="m10 3 7 3.8-7 3.8-7-3.8z" /><path d="m3 10.4 7 3.8 7-3.8" /><path d="m3 13.8 7 3.8 7-3.8" /></svg>
-								Layers{#if layersOn(params).size}<span class="ctl-count" aria-hidden="true">{layersOn(params).size}</span><span class="visually-hidden">{` (${layersOn(params).size} on)`}</span>{/if}
+								Layers{#if layersCount}<span class="ctl-count" aria-hidden="true">{layersCount}</span><span class="visually-hidden">{` (${layersCount} on)`}</span>{/if}
 							</button>
 							{#if canEdit && !tilesUrl && !layersShown}
 								<!-- An operator's matter (docs/maps.md says how to serve a basemap): a small note under Layers, never a line above the map. Owners and editors only. -->
@@ -1632,7 +1650,7 @@
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
-							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
+							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} within={clickWithin} />{/snippet}</Lazy>
 						</div>
 
 					{:else if !features.length}

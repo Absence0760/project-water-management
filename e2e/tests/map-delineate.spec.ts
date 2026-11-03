@@ -135,7 +135,8 @@ test('while delineating, the bar and the Key say which line is which; the channe
 	// The River network layer on (its key entry and the bar's line show while the layer is; no reach is loaded near
 	// the valley, since river datasets are global to the e2e database and a reach there moves other specs' clicks).
 	const project = await seedRunnableProject(page.request, 'Delineate lines');
-	await openMap(page, project.id, '&layers=rivers');
+	// The DEM rivers layer off (it is on by default, `-channels`), so the channels drawn are the tool's alone.
+	await openMap(page, project.id, '&layers=rivers,-channels');
 	await uploadThroughSheet(page, 'other', 'square.geojson', squareAround([FIXTURE_MID_GAUGE[0], -33.515]));
 	await expect(page.locator('.map-wrap[data-status="ready"]')).toBeVisible();
 	await page.getByTestId('map-show-everything').click();
