@@ -30,6 +30,14 @@ section it belongs to, with the example that taught it.
    delete the spec with `command rm -f` (plain `rm` prompts). Never commit
    it. This is the sanctioned exception to CLAUDE.md's "don't spin up the
    dev server": it runs against the e2e build.
+   **Build the site first, then shoot it** when the machine is busy: the run
+   builds the site from the working tree when it starts, so "before" shots
+   queued behind other work picked up the edits made while they waited, and
+   a loaded build ran past the web server's 180 s start-up limit (the four
+   planning outputs, 2026-11-03). `pnpm -C e2e build:site` while the tree is
+   still the old screen, then `E2E_PREBUILT=1 pnpm -C e2e e2e tests/zz-shot.spec.ts`
+   serves that build, whatever the tree holds by then; build again for the
+   "after" shots.
 3. **Check with realistic and large data**, not the 3-node seed. Real
    catchments have many crops, many units, several dams, long names and
    multi-year runs. A demo with many units exposed clipping and label
@@ -1208,7 +1216,12 @@ section it belongs to, with the example that taught it.
 - **Ordered and banded colour is different.** Good-to-bad values (supply,
   % full, the reserve) use the band colours (`network/farmColour.ts`,
   `overview/supplyBars.ts`), never the categorical palette; one-directional
-  amounts (irrigated area) use one hue in steps.
+  amounts (irrigated area) use one hue in steps. A mock-up that brings bands
+  of its own doesn't move them: the operator's share-the-pain mock-up keyed
+  supply at 90 % and 60 %, but the board bands at the app's 95 % and 70 %
+  (`network/supplyThresholds.ts`, `curtailment/shareThePain.ts` `shareBand`),
+  so a unit is never green on the board and amber on Supply by hydrological
+  unit (2026-11-03).
 - **A red-to-green bar follows the data, not the axis.** The operator's
   sketch for *How much irrigation can the catchment support?* drew every
   level's bar as the same red → green sweep with a marker on it, so the

@@ -10514,27 +10514,46 @@ read it before.
   *Curtailment targets* heading and period line, over the same reporting
   window (it follows the [picker](#report-window)); the per-farm table
   follows under a *Per hydrological unit* heading. The printable report leaves the board
-  out (`CurtailmentTable`'s `board` prop). Two stages, side by side, each
-  as a share of the group's own demand: **1. Today** (supplied ÷ demand)
-  and **2. EWR met** (volume left ÷ demand: the equitable share less the
-  farm's EWR supply cut). The equitable share is not a stage: it is the same
-  % for every farm and its total always equals *Today*'s, so the intro says
-  it once ("At the equitable share every hydrological unit would get the
-  same K % of its demand*: the same water in total as today, shared
-  equally", or "nothing to share" with no farm demand, and "too little for the equitable
-  share's % to mean anything" when farm demand is under
-  `DEMAND_PCT_FLOOR_M3_DAY` in total; issue #177), marked *
+  out (`CurtailmentTable`'s `board` prop). Three stages, side by side, each
+  as a share of the group's own demand, as the operator's mock-up has them
+  (2026-11-03): **1. Today** (supplied, a bar, the whole % and the m³/day),
+  **2. Equitable share** (the *equitable share volume* M, the *change from
+  today* N with ↓ for − reduce and ↑ for + below the share, and the *share*
+  P, the same % for every farm), and **3. EWR met** (the *EWR charge* R as a
+  volume charged, the *total change* S from today, and what is *left* U, a
+  bar, the % and the m³/day: the equitable share less the farm's EWR supply
+  cut). Issue #177 had folded stage 2 into the intro, since its % is the same
+  for every farm and its total always equals *Today*'s; it is back as a stage
+  for what does differ per row, the volume each unit would move (its total
+  change is 0), and the intro still says the % once ("At the equitable share
+  every hydrological unit would get the same K % of its demand*: the same
+  water in total as today, shared equally", or "nothing to share" with no
+  farm demand, and "too little for the equitable share's % to mean anything"
+  when farm demand is under `DEMAND_PCT_FLOOR_M3_DAY` in total), marked *
   for the fixed `EQUITABLE_SHARE_FOOTNOTE`, with a line that SA restrictions
-  are set per user category. A row of two cards gives the farm totals per
-  stage; the table has one row per farm (a bar, the whole %, the m³/day), an
-  **All hydrological units** total row, then **Other water users (outside
-  the equitable share)**: each user its own row with a *priority, not
-  curtailed*, *priority, fixed N %* (engine 1.86.0, a fixed restriction %)
-  or *non-priority, curtailed* badge, and at stage 2 what it takes
-  after its supply cut (non-priority, or priority with a fixed %, noted
-  "N % fixed restriction, no basic-needs floor") or all it takes (priority), with an **All
-  other users** total. Each farm's equitable share volume stays in the
-  per-farm table below.
+  are set per user category and that a + change is not water a unit can get.
+  Three cards lead it, one per stage, over every group (farms and other
+  users): **Short of demand** today (demand − supplied, m³/day and % of all
+  groups' demand, with the farms' today %), **Moved between hydrological
+  units** at the equal share (the cuts of the units above it, net 0), and
+  **Further cut for the EWR** (each farm's equitable share − its volume left,
+  plus each other user's take − what it is left, with the farms' EWR %, and
+  the charge met by storing less / passing inflow, which takes no supply).
+  Each bar carries the app's supply band (≥ 95 %, 70–95 %, under 70 %,
+  `network/supplyThresholds.ts`, the same as Supply by hydrological unit and
+  the Network's colouring; the mock-up's 90 / 60 % bands are not the app's),
+  keyed in words in a legend with the arrows; each stage's columns and card
+  share an edge colour and its number. The
+  table has one row per farm, an **All hydrological units** total row, then
+  **Other water users (outside the equitable share)**: each user its own row
+  with a *priority, not curtailed*, *priority, fixed N %* (engine 1.86.0, a
+  fixed restriction %) or *non-priority, curtailed* badge, *outside the
+  share* at stage 2, and at stage 3 its charge, its cut from today and what
+  it takes after its supply cut (non-priority, or priority with a fixed %,
+  noted "N % fixed restriction, no basic-needs floor") or all it takes
+  (priority), with an **All other users** total. On a phone the table
+  stacks (`.table-stack`, each cell named by its stage and column). Each
+  farm's l/s and the charge's split stay in the per-farm table below.
   Every figure is the engine's `CurtailmentSummary`; nothing is recomputed.
   The % uses *Demand left %*'s rules (`fmtDemandLeft`): bounded to 0–100 %,
   "no demand" for a group with no demand (never a negative demand, which the
@@ -10553,11 +10572,13 @@ read it before.
   [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
   the client: whether the town's uses count as domestic or irrigation.
   Tests: `shareThePain.test.ts` (bounding, zero demand, priority / non-priority, the
-  equal share's %, and seeded engine runs whose totals match the engine's
-  and whose equal share is today's total %),
+  equal share's %, the three stages, the bands, the cards, and seeded engine
+  runs whose totals match the engine's, whose equal share is today's total %
+  and moves a net 0, and whose volume left is today plus the total change),
   `ShareThePainBoard.test.ts` (the markup, via Svelte's server renderer) and
   `e2e/tests/share-the-pain.spec.ts` (the rendered board against the tables
-  under it, the window picker, axe in both themes and on a phone).
+  under it, the cards and legend, the window picker, axe in both themes and
+  on a phone, and 30 units with no sideways page scroll).
 - **Curtailment targets** (`curtailment/CurtailmentTable.svelte`,
   view model `curtailment/curtailment.ts`; [model.md §2.11](./model.md)): per farm
   demand, supply, the *equitable share volume* and *above (−) / below (+)
@@ -11249,13 +11270,21 @@ reserve's chunk, view model `outcomes/matrix.ts`).
   sweep** (a sweep whose every member is one plain `demand.scale`; other
   sweeps, such as R5's, are skipped) and carries `data-state` (`loading`,
   `empty`, `pending`, `stuck`, `complete`).
-- **The matrix**: rows are the demand levels in the sweep's order,
-  columns the water-year classes of the **base run's** natural flow at the
-  outlet, by the project's method (Settings → Outcome matrix), each headed
-  with its bounds in m³ of annual natural flow and its **n years**. Each cell
-  is coloured by risk (green, amber, red, plus a coloured edge) **and**
-  names it (*Lower risk*, *Increasing risk*, *High risk*), with the
-  engine's sentence counting years (`describeOutcomeCell`: "EWR met on
+- **The matrix**: rows are the demand levels in the sweep's order, each
+  with its plain description under it (*Today’s demand*, *15 % less
+  demand*, *20 % more demand*; `lib/format/demandLevel.ts`, shared with the
+  outlook), columns the water-year classes of the **base run's** natural
+  flow at the outlet, by the project's method (Settings → Outcome matrix),
+  under one head, *Annual natural flow at the outlet (million m³ a year)*
+  (m³ a year when the wettest class starts under a million), each headed
+  with its range in that unit and its class, *≤ 20.3 (Dry)*, as the
+  operator's mock-up has them (2026-11-03; `matrix.ts` `boundsShort`; the
+  exact m³ bounds in its tooltip and `data-bounds`), and its **n years**.
+  Each cell is coloured by risk (green, amber, red, plus a coloured edge)
+  **and** names it with a phrase of degree (*Lower risk · EWR generally
+  met*, *Increasing risk · EWR may not be met*, *High risk · EWR often not
+  met*; *Reserve* for the Reserve measure; `riskPhrase`, never words of
+  chance), with the engine's sentence counting years (`describeOutcomeCell`: "EWR met on
   every day in 2 of 3 dry years (below it on 4 % of days)"); a class with
   fewer than 3 years reads *Not enough years*, uncoloured. A member whose
   ops didn't apply, or that the engine refused, is a row saying so, with the
@@ -11284,6 +11313,24 @@ reserve's chunk, view model `outcomes/matrix.ts`).
   the default cut-offs; the cut-offs in words; the water years not classed
   (part years, or a missing day); and the engine's warnings (e.g. only some
   levels have a rule table, or too few years for every class to judge).
+- **Beside and under it** (the mock-up's boxes, from the run): the **key**,
+  *Ecological outcome (modelled)* (`data-testid="outcome-legend"`), each
+  risk with its phrase and its cut-off in words (*Below the EWR on at most
+  5 % of days*, marked *(provisional)* while the defaults are in use;
+  `legendRows`), beside the matrix where its box is 56rem wide (a container
+  query), under it otherwise; then three boxes: **Model context** (the base
+  run's classed water years, *2010/11 – 2018/19 (9 complete water years)*,
+  the ecological assessment, the measure, and the water availability, the
+  annual natural flow at the outlet split into terciles or quintiles of its
+  own years, and what a demand level is), **How to read this matrix** (three
+  steps: a column, a row, the cell) and **Important notes** (past years,
+  not a forecast; the requirement is assessed day by day, or month by month,
+  so timing matters; less demand is not less area; lower demand can still
+  leave the river lower on some days; the app doesn't pick a level). The
+  mock-up's fourth band (*EWR likely met with greater margin*) and its "key
+  points" asserting that less demand always lowers risk are not built: the
+  matrix has three cut-off bands, and that claim is not always true where
+  return flow reaches the river.
 - **No recommendation.** The panel reports how past years went at each
   level ("Historical, not a forecast; the choice of level is the WUA's") and
   never picks one (a unit test holds the view model to that).
@@ -11298,7 +11345,9 @@ its retry). Until issue #521 each showed the bare server text with no way
 to try again but a reload (`e2e/tests/history-steps.spec.ts`).
 
 Tests: `outcomes/matrix.test.ts` (the adapter, NaN mapping, n years, not
-enough years, default vs custom cut-offs, problem members; the site list,
+enough years, default vs custom cut-offs, problem members; the ranges in
+million m³, the row descriptions, the risk phrases, the key and the model
+context; the site list,
 an ineligible stored site, the metric switching with the site, a sweep
 without the gauge's results), `backend/src/projects/outcomeSettings.db.test.ts`
 (who reads and writes the site, which nodes it accepts, copies) and
@@ -11421,11 +11470,46 @@ confirmed farmers see the outlook, O5, issue #90).
   met with a rule table there); the number of analogue years. Then the
   farm dams' storage on the day before the decision date, which every year
   starts from.
-- **The table**: one row per demand level, in the order given: **dam
-  storage at season end**, **hydrological unit demand met** and **days below the EWR**
+- **The briefing** (the operator's mock-up, 2026-11-03; view model
+  `outlook/briefing.ts`, from the outlook and the base run's `natural_flow`,
+  nothing new from the engine), numbered as the mock-up's six parts. First a
+  **risk line** (`data-testid="outlook-risk"`, `data-risk`) on the planning
+  rule at the highest level run: *Lower risk* when it met the requirement in
+  full in at least the planning share of past seasons, *Increasing risk*
+  when only a lower level did, *High risk* when none did, toned and in
+  words, with the counts; none with too few years. Then side by side:
+  **1. Where the season starts** (`outlook-start`): the dams' storage on the
+  decision date and its share of capacity; the natural flow at the outlet
+  over the six months before it (*Apr – Sep*), as a % of the median of the
+  same months in the record's earlier years, and *Below / Near / Above
+  normal* by their thirds (none with fewer than three); and the natural
+  flow over the season in the analogue years **as they happened** (median,
+  10–90 %), not run from this season's start, since a member's natural flow
+  isn't stored. Until the series loads the two lines say so; a run without
+  it shows the storage alone. **2. Planning figure**: the level in large
+  type, *of today’s irrigation demand*, the engine's sentence and that the
+  WUA decides. **3. What if more or less** heads the levels table (below).
+  **4. Monthly operating plan** (`outlook-monthly-plan`): a monthly plan's
+  months as typed (*Oct 100 % … Apr 80 %*), its outcome being its row; with
+  none, that the outlook tests a plan the WUA types in and doesn't work one
+  out. **5. Reassess and adjust** heads the review triggers (below), each
+  band's level set beside the planning figure. **6. Projected water balance
+  by month** (`outlook-balance`): not drawn, since an outlook keeps each
+  past season's totals, not its months; the part says so (followups.md §
+  Planning outputs against the mock-ups). Last, **Key messages for
+  farmers** (`outlook-messages`), each a sentence about past seasons: the
+  planning figure's count, what the highest level gave the units (median and
+  10–90 %), the review date, and that it is worked out from past weather and
+  the WUA decides.
+- **The table** (part 3): one row per demand level, in the order given, its
+  head with the level's description (*15 % less demand*) or a monthly plan's
+  months: **irrigation supplied over the season** (the median across the
+  years), **dam storage at season end** (with its share of capacity),
+  **hydrological unit demand met** and **days below the EWR**
   (or **Reserve months met**), each the median in bold with its 10–90 %
   range under it, and **years met in full** ("EWR met on every day in 7 of
-  12 years"). The planning figure's level carries a **Planning figure**
+  12 years") with a tag, *Meets the planning share* or *Under the planning
+  share*. The planning figure's level carries a **Planning figure**
   badge. A level whose ops didn't apply is a row saying so, with the reason.
   Under it, plainly: lower demand doesn't always mean fewer days below the
   EWR, because part of the water irrigated from a dam drains back to the
@@ -11501,7 +11585,9 @@ confirmed farmers see the outlook, O5, issue #90).
   year) and where the bands come from. The table: one row per band of
   total dam storage on the review date, fullest first (*At or above
   53 333 m³*, with its share of capacity), the **demand level** picked or
-  *No level*, **years met in full** (*10 of 12 years*), and every level's
+  *No level*, the level **beside the planning figure** (*The planning
+  figure*, *More than the planning figure (85 %)*, *Less than …*; part 5 of
+  the briefing), **years met in full** (*10 of 12 years*), and every level's
   count (*below the share* where it falls short). Under it each row in the
   engine's words (`describeTriggerRow`), the monotonicity notes, the
   warnings and refused members, and that the WUA decides on the review
@@ -11519,7 +11605,10 @@ confirmed farmers see the outlook, O5, issue #90).
   level and never picks one (a unit test holds the view model to that, and
   the e2e spec checks the rendered panel).
 
-Tests: `outlook/view.test.ts` (the request and monthly plan, the state,
+Tests: `outlook/briefing.test.ts` (volumes, windows of the natural flow,
+the months before the season and the season's flow, levels in words, the
+risk line, the table's additions, the triggers beside the planning figure,
+the key messages and the wording guard), `outlook/view.test.ts` (the request and monthly plan, the state,
 the view against the engine's `summariseOutlook` on invented members, the
 pending badges, too few years, the wording guard, the settings check,
 the review date's), `outlook/triggers.test.ts` (the table in words, fullest
@@ -13145,17 +13234,34 @@ baseline card links to the published run's report (**Report**, beside
   impact section opens with this board, the baseline as the background run.
   One column per water-year class of the baseline's natural flow (the
   project's `settings.outcomes.yearClassMethod`, terciles by default; the
-  header shows the bounds and the years compared), and three rows: the
+  header names the class, *Dry years*, with its place in the record, *the
+  driest third of years* (fifths for quintiles), its bounds and the years
+  compared). A small table leads it, as the operator's mock-up's application
+  summary (2026-11-03, `data-testid="board-summary"`): the **Baseline**, the
+  compared run (**This run** in the impact report, **The application** in
+  the evidence report), the **Proposed use, mean a year** per class (the
+  waterfall's proposed step), the **Years compared** (and the method) and the
+  **Requirement** read. Then three rows: the
   **annual waterfall** at the outlet, mean m³ a year (Natural flow, Existing
   use in the baseline “<label>”, Proposed use (this run − baseline), Other:
-  dams, storage, groundwater, land cover, Flow left at the outlet), the
+  dams, storage, groundwater, land cover, Flow left at the outlet), drawn
+  above its list as floating bars (`report/LicenceWaterfall.svelte`, layout
+  `licenceImpact.ts` `waterfallBars`: natural flow and the flow left from
+  zero, each step from the running total, a negative use rising; values in
+  m³ a year, or million m³ a year once the natural flow passes a million;
+  `aria-hidden`, since the list beside it is the same numbers in words). No
+  EWR line on it: the requirement is daily (or monthly), not an annual
+  volume, and the verdict comes from the months (planning-outputs.md §2
+  finding 5), the
   **months below the Reserve** at the project's Reserve site (the outcome
   matrix's `settings.outcomes.siteNodeId`; the outlet, with a note, when a run
   has no results there), or days below the pragmatic EWR without a rule
   table in both runs, baseline, this run and the change, and the
   **verdict** in words (`describeLicenceImpact`: "The Reserve was not met in
   4 more months over 7 dry years (…)"), from the months, never from the
-  annual totals, and with no verdict colour. A class with fewer than 3
+  annual totals, and with no verdict colour: a mark beside its label gives
+  the direction (▲ more below, ▼ fewer, = no change; `VERDICT_MARK`,
+  `aria-hidden`), the words carry it. A class with fewer than 3
   years reads *Not enough years* in every row. A note under the board says
   existing use is the baseline's as that run modelled it, and that existing
   *authorised* use needs a baseline at every holder's full registered volume

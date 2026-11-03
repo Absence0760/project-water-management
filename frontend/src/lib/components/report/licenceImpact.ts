@@ -48,6 +48,73 @@ export const VERDICT_LABEL: Readonly<Record<OutcomeMetric, Record<LicenceImpactV
 	daysBelowEwr: { moreBelow: 'More days below the EWR', fewerBelow: 'Fewer days below the EWR', noChange: 'No change in days below the EWR', notEnoughYears: 'Not enough years' }
 });
 
+/**
+ * A mark beside each verdict, so its direction reads at a glance (the words
+ * beside it carry the meaning; no colour: the board reports, it doesn't judge).
+ */
+export const VERDICT_MARK: Readonly<Record<LicenceImpactVerdict, string>> = Object.freeze({ moreBelow: '▲', fewerBelow: '▼', noChange: '=', notEnoughYears: '–' });
+
+/** Each class's place in the record, for its column head: "the driest third of years". */
+const CLASS_SHARE: Readonly<Record<'terciles' | 'quintiles', Record<string, string>>> = Object.freeze({
+	terciles: { dry: 'the driest third of years', normal: 'the middle third', wet: 'the wettest third' },
+	quintiles: { veryDry: 'the driest fifth of years', dry: 'the second-driest fifth', normal: 'the middle fifth', wet: 'the second-wettest fifth', veryWet: 'the wettest fifth' }
+});
+
+export interface WaterfallBar {
+	id: WaterfallStep['id'];
+	/** The step's full label (the list's), for the bar's tooltip. */
+	label: string;
+	/** Under the bar: "Natural", "Existing", "Proposed", "Other", "Left". */
+	short: string;
+	/** The bar spans from → to, m³ a year; `end` is the running total after it. */
+	from: number;
+	to: number;
+	end: number;
+	/** Over the bar, in the chart's unit: "1 800", "−100", "+40". */
+	value: string;
+}
+
+const SHORT: Readonly<Record<WaterfallStep['id'], string>> = Object.freeze({ natural: 'Natural', existing: 'Existing', proposed: 'Proposed', other: 'Other', left: 'Left' });
+
+/**
+ * The waterfall as floating bars (LicenceWaterfall.svelte): natural and left
+ * from zero, each step from the running total (a use takes, so its bar falls;
+ * a negative use adds, so it rises), in m³ a year, thousand m³ a year from
+ * 10 000, or million m³ a year once the natural flow passes a million, so a
+ * bar's value stays short enough to sit over it.
+ */
+export function waterfallBars(steps: readonly WaterfallStep[]): { bars: WaterfallBar[]; max: number; unit: string } {
+	const natural = Math.abs(steps.find((s) => s.id === 'natural')?.m3 ?? 0);
+	const scale = natural >= 1e6 ? 1e6 : natural >= 1e4 ? 1e3 : 1;
+	const scaled = natural / scale;
+	const digits = scale === 1 ? 0 : scaled < 10 ? 2 : scaled < 100 ? 1 : 0;
+	const fmt = (v: number, sign: boolean) => {
+		const x = v / scale;
+		if (Math.abs(x) < 0.5 * 10 ** -digits) return '0';
+		const t = fmtNum(Math.abs(x), digits);
+		return sign ? `${x < 0 ? '−' : '+'}${t}` : x < 0 ? `−${t}` : t;
+	};
+	let run = 0;
+	let max = 0;
+	const bars = steps.map((s): WaterfallBar => {
+		let from: number;
+		let to: number;
+		if (s.id === 'natural' || s.id === 'left') {
+			from = 0;
+			to = s.m3;
+			run = s.m3;
+		} else {
+			from = run;
+			to = run - s.m3;
+			run = to;
+		}
+		max = Math.max(max, from, to);
+		const value = s.id === 'natural' || s.id === 'left' ? fmt(s.m3, false) : fmt(-s.m3, true);
+		return { id: s.id, label: s.label, short: SHORT[s.id], from, to, end: run, value };
+	});
+	return { bars, max, unit: scale === 1e6 ? 'million m³ a year' : scale === 1e3 ? 'thousand m³ a year' : 'm³ a year' };
+}
+
 export interface WaterfallStep {
 	id: 'natural' | 'existing' | 'proposed' | 'other' | 'left';
 	label: string;
@@ -59,6 +126,8 @@ export interface WaterfallStep {
 export interface BoardColumn {
 	id: string;
 	label: string;
+	/** Its place in the record: "the driest third of years". */
+	share: string;
 	bounds: string;
 	nYears: number;
 	enoughYears: boolean;
@@ -68,6 +137,8 @@ export interface BoardColumn {
 	below: { background: number; application: number; change: string; units: number } | null;
 	verdict: LicenceImpactVerdict;
 	verdictLabel: string;
+	/** VERDICT_MARK: the verdict's direction, beside its words. */
+	mark: string;
 	/** describeLicenceImpact's sentence. */
 	text: string;
 }
@@ -86,6 +157,8 @@ export type BoardView =
 			nYears: number;
 			method: LicenceImpact['method'];
 			columns: BoardColumn[];
+			/** What the board compares, as the mock-up's application table: the runs, the proposed use, the years, the requirement. */
+			summary: { label: string; value: string }[];
 			/** Existing use is the background run's own, and what existing *authorised* use needs. */
 			existingNote: string;
 			notes: string[];
@@ -205,6 +278,7 @@ function boardOf(impact: LicenceImpact, ctx: { data: { a: BoardRun; b: BoardRun 
 	const columns: BoardColumn[] = impact.classes.map((c) => ({
 		id: c.classId,
 		label: c.label,
+		share: CLASS_SHARE[impact.method][c.classId] ?? '',
 		bounds: boundsText(c),
 		nYears: c.nYears,
 		enoughYears: c.enoughYears,
@@ -212,20 +286,35 @@ function boardOf(impact: LicenceImpact, ctx: { data: { a: BoardRun; b: BoardRun 
 		below: c.below ? { background: c.below.background, application: c.below.application, change: signed(c.below.change), units: c.below.units } : null,
 		verdict: c.verdict,
 		verdictLabel: VERDICT_LABEL[impact.metric][c.verdict],
+		mark: VERDICT_MARK[c.verdict],
 		text: describeLicenceImpact(impact.metric, c, names)
 	}));
 	notes.push(...impact.warnings);
 	if (unit === 'days' && !impact.warnings.length) notes.push(`Neither run has a Reserve rule table at the outlet, so the board counts days below ${dailyName}.`);
 	const classed = impact.classes.reduce((s, c) => s + c.nYears, 0);
+	const belowLabel = impact.metric === 'reserveMonthsMet' ? `Months below the Reserve (the rule table at ${site.where})` : `Days below ${dailyName} at the outlet`;
+	const proposed = impact.classes
+		.filter((c) => c.waterfall)
+		.map((c) => {
+			const v = c.waterfall!.proposedM3;
+			return `${c.label} ${Math.round(v) === 0 ? '0 m³' : v < 0 ? `−${m3(-v)}` : m3(v)}`;
+		});
 	return {
 		status: 'ok',
 		metric: impact.metric,
-		belowLabel: impact.metric === 'reserveMonthsMet' ? `Months below the Reserve (the rule table at ${site.where})` : `Days below ${dailyName} at the outlet`,
+		belowLabel,
 		background,
 		application,
 		nYears: classed,
 		method: impact.method,
 		columns,
+		summary: [
+			{ label: 'Baseline', value: background },
+			{ label: capitalised, value: `“${b.run.label || 'Untitled run'}”` },
+			{ label: 'Proposed use, mean a year', value: proposed.length ? proposed.join(' · ') : 'Not enough years in any class' },
+			{ label: 'Years compared', value: `${classed} complete water ${classed === 1 ? 'year' : 'years'}, in ${impact.method} of the baseline’s natural flow` },
+			{ label: 'Requirement', value: belowLabel }
+		],
 		existingNote: authorised
 			? `Existing authorised use is the use in the baseline ${background}, a full-allocation run: every holder at their full registered volume, irrigation and other water users, less what returns to the river.`
 			: `Existing use is the use in the baseline ${background} as that run modelled it: irrigation and other water users, less what returns to the river. For existing authorised use, compare with a baseline run at every holder’s full registered volume (a scenario that sets the allocation mode to full allocation: licence data never drives the project’s own baseline).`,

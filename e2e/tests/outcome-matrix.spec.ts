@@ -100,7 +100,7 @@ function expectedMatrix(natural: (number | null)[], members: SweepBody['sweep'][
 			const met = ys.filter((y) => y.below === 0).length;
 			// The defaults, pending the hydrologist: ≤ 5 % lower risk, ≤ 20 % increasing, else high.
 			const risk = share <= cutoffs.lower ? 'lower' : share <= cutoffs.increasing ? 'increasing' : 'high';
-			const label = { lower: 'Lower risk', increasing: 'Increasing risk', high: 'High risk' }[risk];
+			const label = { lower: 'Lower risk · EWR generally met', increasing: 'Increasing risk · EWR may not be met', high: 'High risk · EWR often not met' }[risk];
 			return { risk, text: `${label} EWR met on every day in ${met} of 3 ${c.label.toLowerCase()} years (below it on ${Math.round(share * 100)} % of days).` };
 		});
 	});
@@ -170,16 +170,22 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 
 	const table = panel.getByTestId('outcome-table');
 	const heads = table.locator('thead th');
-	await expect(heads).toHaveCount(4);
-	await expect(heads.first()).toHaveText('Demand level');
-	await expect(heads.nth(1)).toHaveText(/^Dry ≤ [\d\u202f]+ m³ · 3 years$/);
-	await expect(heads.nth(2)).toHaveText(/^Normal [\d\u202f]+ – [\d\u202f]+ m³ · 3 years$/);
-	await expect(heads.nth(3)).toHaveText(/^Wet > [\d\u202f]+ m³ · 3 years$/);
-	// The bounds are the catchment's own: each falls between the classes' annual totals, and the columns share them.
+	await expect(heads).toHaveCount(5);
+	// clock-free: “today” here is fixed wording (a stage, a level’s description), not a day from a clock.
+	await expect(heads.first()).toHaveText('Demand level % of today’s hydrological unit demand');
+	// The classes under one head, their ranges in its unit (million m³ a year here), each named as the mock-ups do.
+	await expect(heads.nth(1)).toHaveText('Annual natural flow at the outlet (million m³ a year)');
+	await expect(heads.nth(2)).toHaveText(/^≤ \d+\.\d\d \(Dry\) 3 years$/);
+	await expect(heads.nth(3)).toHaveText(/^\d+\.\d\d – \d+\.\d\d \(Normal\) 3 years$/);
+	await expect(heads.nth(4)).toHaveText(/^> \d+\.\d\d \(Wet\) 3 years$/);
+	// The bounds are the catchment's own: each falls between the classes' annual totals, and the columns share them (exact, in m³, on each head).
 	const num = ungroup;
-	const dryUpper = num((await heads.nth(1).innerText()).match(/≤ ([\d\u202f]+)/)![1]!);
-	const [normalLower, normalUpper] = (await heads.nth(2).innerText()).match(/([\d\u202f]+) – ([\d\u202f]+)/)!.slice(1).map(num);
-	const wetLower = num((await heads.nth(3).innerText()).match(/> ([\d\u202f]+)/)![1]!);
+	const bounds = (i: number) => heads.nth(i).getAttribute('data-bounds').then((b) => b!);
+	const dryUpper = num((await bounds(2)).match(/≤ ([\d\u202f]+)/)![1]!);
+	const [normalLower, normalUpper] = (await bounds(3)).match(/([\d\u202f]+) – ([\d\u202f]+)/)!.slice(1).map(num);
+	const wetLower = num((await bounds(4)).match(/> ([\d\u202f]+)/)![1]!);
+	// The short range is the exact bound in million m³.
+	expect((await heads.nth(2).innerText()).match(/≤ ([\d.]+)/)![1]).toBe((dryUpper / 1e6).toFixed(2));
 	expect(normalLower).toBe(dryUpper);
 	expect(wetLower).toBe(normalUpper);
 	const total = (wy: number) => want.totals.get(wy)!;
@@ -190,7 +196,8 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 
 	// The fixture is built so the matrix isn't one colour: the check below means something.
 	expect(new Set(want.rows.flat().map((c) => c.risk)).size).toBeGreaterThan(1);
-	await expect(table.locator('tbody th')).toHaveText(['100 %', '85 %', '70 %']);
+	// clock-free: “today” here is fixed wording (a stage, a level’s description), not a day from a clock.
+	await expect(table.locator('tbody th')).toHaveText(['100 % Today’s demand', '85 % 15 % less demand', '70 % 30 % less demand']);
 	for (const [i, row] of want.rows.entries()) {
 		const cells = table.locator('tbody tr').nth(i).locator('td');
 		await expect(cells).toHaveText(row.map((c) => c.text));
@@ -198,6 +205,22 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	}
 	await expect(panel.getByText(/^Lower risk: below the EWR on at most 5 % of days\. Increasing risk: at most 20 %\. High risk: more than that\./)).toBeVisible();
 	await expect(panel.getByText(/recommend/i)).toHaveCount(0);
+	// The key, the run behind it and how to read it, as the mock-ups have them, from this run.
+	const legend = panel.getByTestId('outcome-legend');
+	await expect(legend.locator('li')).toHaveText([
+		'Lower risk EWR generally met Below the EWR on at most 5 % of days (provisional)',
+		'Increasing risk EWR may not be met Below the EWR on at most 20 % of days (provisional)',
+		'High risk EWR often not met Below the EWR on more than 20 % of days (provisional)'
+	]);
+	const years = [...want.totals.keys()].sort((a, b) => a - b);
+	const wyLabel = (wy: number) => `${wy}/${String((wy + 1) % 100).padStart(2, '0')}`;
+	const context = panel.getByTestId('outcome-context');
+	await expect(context.locator('dt')).toHaveText(['Base run’s years', 'Ecological assessment', 'Water availability', 'Demand levels']);
+	await expect(context.locator('dd').nth(0)).toHaveText(`${wyLabel(years[0]!)} – ${wyLabel(years.at(-1)!)} (9 complete water years)`);
+	await expect(context.locator('dd').nth(1)).toHaveText('Days below the pragmatic EWR at the outlet');
+	await expect(context.locator('dd').nth(2)).toHaveText('Annual natural flow at the outlet in the base run, split into terciles of its own years');
+	await expect(panel.getByTestId('outcome-how-to-read').locator('li')).toHaveCount(3);
+	await expect(panel.getByTestId('outcome-notes')).toContainText('day by day');
 	await expectNoViolations(page, { include: '[data-testid="outcome-matrix"]' });
 
 	// The project's own cut-offs for days below the EWR: the same sweep re-read, no new run, and no pending badge.
@@ -231,7 +254,8 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await viewer.page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const theirs = viewer.page.getByTestId('outcome-matrix');
 	await expect(theirs).toHaveAttribute('data-state', 'complete');
-	await expect(theirs.getByTestId('outcome-table').locator('tbody th')).toHaveText(['100 %', '85 %', '70 %']);
+	// clock-free: “today” here is fixed wording (a stage, a level’s description), not a day from a clock.
+	await expect(theirs.getByTestId('outcome-table').locator('tbody th')).toHaveText(['100 % Today’s demand', '85 % 15 % less demand', '70 % 30 % less demand']);
 	await expect(theirs.getByTestId('outcome-table').locator('tbody tr').first().locator('td')).toHaveText(recoloured.rows[0]!.map((c) => c.text));
 	await expect(theirs.getByRole('button', { name: /demand sweep/ })).toHaveCount(0);
 });
@@ -315,14 +339,15 @@ test('the matrix reads the Reserve rule table at a chosen gauge, saved for the p
 			const full = ys.filter((y) => y.length > 0 && y.every((x) => x.met)).length;
 			// The defaults, pending the hydrologist: at least 90 % lower risk, 75 % increasing, else high.
 			const risk = share >= 0.9 ? 'lower' : share >= 0.75 ? 'increasing' : 'high';
-			const label = { lower: 'Lower risk', increasing: 'Increasing risk', high: 'High risk' }[risk];
+			const label = { lower: 'Lower risk · Reserve generally met', increasing: 'Increasing risk · Reserve may not be met', high: 'High risk · Reserve often not met' }[risk];
 			return { risk, text: `${label} Reserve met in every month in ${full} of 3 ${c.label.toLowerCase()} years (${Math.round(share * 100)} % of months met).` };
 		});
 	});
 	// The fixture is built so the matrix isn't one colour: the check below means something.
 	expect(new Set(want.flat().map((c) => c.risk)).size).toBeGreaterThan(1);
 	const table = panel.getByTestId('outcome-table');
-	await expect(table.locator('tbody th')).toHaveText(['100 %', '85 %', '70 %']);
+	// clock-free: “today” here is fixed wording (a stage, a level’s description), not a day from a clock.
+	await expect(table.locator('tbody th')).toHaveText(['100 % Today’s demand', '85 % 15 % less demand', '70 % 30 % less demand']);
 	for (const [i, row] of want.entries()) {
 		const cells = table.locator('tbody tr').nth(i).locator('td');
 		await expect(cells).toHaveText(row.map((c) => c.text));

@@ -60,8 +60,20 @@ test('the impact report opens with the board: a column per year class, the water
 	await expect(table.getByRole('columnheader')).toHaveText([/^Measure$/, /^Dry/, /^Normal/, /^Wet/]);
 	await expect(table.getByRole('rowheader')).toHaveText([/^Annual waterfall/, 'Days below the pragmatic EWR at the outlet', 'Verdict']);
 
+	// What is compared, first, as an application summary: the runs, the proposed use per class, the years, the requirement.
+	await expect(b.getByTestId('board-summary').getByRole('rowheader')).toHaveText(['Baseline', 'This run', 'Proposed use, mean a year', 'Years compared', 'Requirement']);
+	await expect(b.getByTestId('board-summary').getByRole('row', { name: /^This run/ })).toContainText('“Three times the orchard”');
+	await expect(b.getByTestId('board-summary').getByRole('row', { name: /^Proposed use/ })).toContainText(/^Proposed use, mean a year\s*Dry [−\d\u202f]+ m³ · Normal [−\d\u202f]+ m³ · Wet [−\d\u202f]+ m³$/);
+	await expect(b.getByTestId('board-summary').getByRole('row', { name: /^Years compared/ })).toContainText('9 complete water years, in terciles of the baseline’s natural flow');
+	await expect(b.getByTestId('board-class-dry')).toContainText('Dry years the driest third of years');
+	await expect(b.getByTestId('board-class-wet')).toContainText('Wet years the wettest third');
 	for (const id of ['dry', 'normal', 'wet']) {
 		await expect(b.getByTestId(`board-class-${id}`)).toContainText(/\d+ years?$/);
+		// The waterfall drawn beside its list: five bars, natural flow and flow left from zero, a picture a screen reader skips.
+		const chart = b.getByTestId(`board-waterfall-${id}`).getByTestId('waterfall-chart');
+		await expect(chart).toHaveAttribute('aria-hidden', 'true');
+		await expect(chart.locator('rect[data-step]')).toHaveCount(5);
+		await expect(chart.locator('rect[data-step]').evaluateAll((rs) => rs.map((r) => r.getAttribute('data-step')))).resolves.toEqual(['natural', 'existing', 'proposed', 'other', 'left']);
 		// The waterfall from natural flow to what is left, each step in m³ a year.
 		const w = b.getByTestId(`board-waterfall-${id}`);
 		await expect(w.locator('dt')).toHaveText(['Natural flow', 'Existing use in the baseline “Baseline”', 'Proposed use (this run − baseline)', 'Other: dams, storage, groundwater, land cover', 'Flow left at the outlet']);
@@ -73,12 +85,19 @@ test('the impact report opens with the board: a column per year class, the water
 		// The verdict from the days, reported as data, never advice.
 		const v = b.getByTestId(`board-verdict-${id}`);
 		await expect(v).toHaveAttribute('data-verdict', /^(moreBelow|fewerBelow|noChange)$/);
+		// A mark for the direction beside the words, never instead of them, and no colour.
+		await expect(v.locator('strong')).toHaveText(/^(▲ More|▼ Fewer|= No change in) days below the EWR$/);
 		await expect(v).toContainText(/The pragmatic EWR was (not met on \d+ (more|fewer) days? over \d+ \w+ years \(\d+ in the baseline “Baseline”, \d+ in this run\)|not met on \d+ days? over \d+ \w+ years in both runs|met on every day over \d+ \w+ years in both runs)\./);
 	}
 	// Existing use is the baseline's, said so, with what "authorised" would need.
 	await expect(b.getByText(/^Existing use is the use in the baseline “Baseline” as that run modelled it/)).toBeVisible();
 	await expect(b.getByText(/For existing authorised use, compare with a baseline run at every holder’s full registered volume/)).toBeVisible();
 	await expect(b.getByText('Neither run has a Reserve rule table at the outlet, so the board counts days below the pragmatic EWR.')).toBeVisible();
+	await expectNoViolations(page, { include: '[data-testid="licence-impact-board"]' });
+	// On a phone the board stacks or scrolls inside itself, never the page.
+	await page.setViewportSize({ width: 390, height: 844 });
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await page.emulateMedia({ colorScheme: 'dark' });
 	await expectNoViolations(page, { include: '[data-testid="licence-impact-board"]' });
 });
 
