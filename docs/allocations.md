@@ -157,6 +157,11 @@ is listed as "not read", never guessed.
   file's name and SHA-256 (`allocation_source`). The same file (same hash)
   can't be imported twice into a project. **Remove this import** deletes the
   file record and every row it brought.
+- **The sheet after a close.** Closing the import sheet drops the file and
+  its preview but keeps what the file is (WARMS extract or CSV) and the
+  reference, so a retry after a refused file needn't retype them (a choice,
+  issue #670). The page's success notice ("Imported 9 rows from …") stays
+  only until the next action ([ui.md § Allocations](./ui.md#allocations-taballocations)).
 - **CSV injection.** Cells are stored as text as they came (a holder of
   `=HYPERLINK(…)` is kept verbatim); the CSV export prefixes any cell that
   starts with `= + - @` (or a tab or CR) with `'`, as every export does
@@ -249,7 +254,7 @@ For a run, per farm or water user, per water source and per **water year**
   run (WP-2.12) is compared on its record only, the days before its
   forecast (issue #51), so its last water year may end as a part year.
 - **Status**, with the project's band, ±10 % unless set (Allocations ›
-  Comparison band, moved from Settings in issue #521, `settings.allocationTolerance`, pending the
+  Comparison band, moved from Settings in issue #521, `settings.allocationTolerance`; left empty, the field keeps the saved band and says so, issue #670; pending the
   hydrologist; `?tolerance=` on the API overrides it for one request):
   *above registered* (modelled > registered × 1.1),
   *within band*, *below registered* (< × 0.9), *no registered volume*

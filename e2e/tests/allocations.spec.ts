@@ -12,7 +12,8 @@
 // never drives the baseline: the Settings tab shows compare only, and the
 // capped run is a scenario's (settings.set allocationMode). The import sheet can't be closed
 // while the file is read or the import runs, and a file chosen while another
-// is read supersedes it (issue #384). Synthetic data only.
+// is read supersedes it (issue #384). A success notice goes with the next action, and a reopened import
+// sheet keeps its kind and reference (issue #670). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -88,6 +89,14 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await expect(page.getByRole('button', { name: 'Importing…' })).toBeDisabled();
 	release();
 	await expect(page.getByRole('status').filter({ hasText: 'Imported 2 rows' })).toHaveText('Imported 2 rows from allocations.csv; 1 with problems were left out.');
+	// Opening the sheet again is the next action, so the notice goes (issue #670); the sheet keeps the kind and the
+	// reference, handy for a retry.
+	await page.getByTestId('section-header').getByRole('link', { name: 'Import', exact: true }).click();
+	await expect(wizard.getByLabel('What the file is')).toHaveValue('csv');
+	await expect(wizard.getByLabel('Reference (optional)')).toHaveValue('e2e synthetic');
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(wizard).toBeHidden();
+	await expect(page.getByTestId('allocations-page').getByText('Imported 2 rows')).toHaveCount(0);
 
 	// The list: each volume with its farm, holder (an editor sees names) and source file.
 	const list = page.getByTestId('allocation-list');

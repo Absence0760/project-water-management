@@ -4,7 +4,8 @@
 	// file → preview (rows with problems and unmatched rows first, each
 	// unmatched row matched by hand) → import. The server keeps no preview: the
 	// commit sends the file again and re-checks it. Closing the sheet drops a
-	// preview.
+	// preview but keeps what the file is and its reference, for a retry (a
+	// choice, issue #670).
 	import { api, type AllocationImportKind, type AllocationPreview } from '#lib/api/index.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import { fmtNum } from '#lib/format/number.js';

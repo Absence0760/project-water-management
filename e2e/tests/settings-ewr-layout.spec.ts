@@ -2,7 +2,7 @@
 // registered-volumes comparison band moved to Allocations. Each panel's actions are on screen at 1440×900 once the
 // side index lands on it; the folds open; the shared paste dialog fills the EWR's TAB flows and a rule table's grid;
 // the drought levels are one table with chips for the dates; and the band saves from its own card with the same
-// settings PATCH the Settings save bar sends. Synthetic data.
+// settings PATCH the Settings save bar sends; left empty, it keeps the saved band and says so (issue #670). Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
@@ -248,6 +248,17 @@ test('the comparison band saves from its card on Allocations with the settings P
 	expect((await patch).postDataJSON()).toEqual({ settings: { allocationTolerance: 0.15 } });
 	await expect(card.getByTestId('allocation-band-status')).toHaveText('Saved. The comparison reads with the new band.');
 	await expect(save).toBeDisabled();
+	// Typing again is the next action, so Saved goes; an empty field isn't a band: the saved one stays, Save
+	// has nothing to send, the card says so, and the field shows the saved band again on blur (issue #670).
+	await band.fill('20');
+	await expect(card.getByTestId('allocation-band-status')).toHaveText('');
+	await expect(save).toBeEnabled();
+	await band.fill('');
+	await expect(card.getByTestId('allocation-band-status')).toHaveText('Left empty, so the comparison keeps the saved band, ±15 %.');
+	await expect(band).not.toHaveAttribute('aria-invalid', 'true');
+	await expect(save).toBeDisabled();
+	await band.blur();
+	await expect(band).toHaveValue('15');
 	await expectNoViolations(page, { include: '[data-testid="allocation-band"]' });
 
 	// Stored as the project's setting; Settings saves on top of it without putting the old value back.

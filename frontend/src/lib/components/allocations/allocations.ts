@@ -324,6 +324,15 @@ export function judgementSentence(j: { wholeYears: number; within: number; outsi
 export const VIEWER_UNITS_NOTE =
 	'Only switch this on if every viewer of this catchment works for, or was appointed by, your organisation. Otherwise viewers see totals per water source, at 5 or more registered users.';
 
+/**
+ * What the Comparison band card says when its field is left empty (issue #670): an empty field
+ * isn't a band, so the page keeps the saved one (`saved`, a fraction) and the field shows it again
+ * when it loses the focus. Said rather than done silently.
+ */
+export function emptyBandNote(saved: number): string {
+	return `Left empty, so the comparison keeps the saved band, ±${fmtNum(Math.round(saved * 1e6) / 1e4, 2, true)} %.`;
+}
+
 /** Preview rows in the order a person fixes them: rows with problems, then unmatched, then matched; file order within each. */
 export function previewOrder(rows: readonly AllocationPreviewRow[]): AllocationPreviewRow[] {
 	const rank = (r: AllocationPreviewRow) => (r.errors.length ? 0 : r.nodeId === null ? 1 : 2);
