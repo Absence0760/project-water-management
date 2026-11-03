@@ -669,6 +669,7 @@ export interface AlertEvent {
 	kind: AlertKind;
 	state: 'firing' | 'cleared';
 	value: number | null;
+	/** The level the event crossed, not the rule's level now (issue #670). */
 	threshold: number;
 	nodeId: string | null;
 	nodeName: string | null;

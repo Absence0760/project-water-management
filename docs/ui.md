@@ -14722,7 +14722,9 @@ the catalogue, [§ Language](#language)); both unit-tested.
 - **Farm view**: while the farm's own dam alert fires, an **Alerts** card
   under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
   alert level of 30 %: about 8 % on 20 Sep 2026" (or, on the forecast, "may
-  fall below … around …"), with *Choose your alert emails*. Nothing shows
+  fall below … around …"; the level is the one the alert crossed, as its
+  email says, even if the WUA has changed it since), with *Choose your alert
+  emails*. Nothing shows
   otherwise, or when the alerts can't be loaded.
 - **Portfolio**: an **Alerts** column (and card row): "None" or "2 firing"
   (a warning badge), from `alertsFiring`.

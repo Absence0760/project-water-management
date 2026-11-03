@@ -1639,6 +1639,10 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   "Flow — logger"; `seriesKeyFed` whether an API key still writes it, false once a person wrote over the
   key's days).
 - `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail, forecastOutOfDate }`.
+  `threshold` is the level the event crossed, recorded when it opened (312,
+  issue #670), not the rule's level now, so a level edited since never
+  contradicts the figures; the alert emails quote the same. An event opened
+  before 312 has none recorded and gives the rule's current level.
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
