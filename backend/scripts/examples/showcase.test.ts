@@ -149,6 +149,7 @@ describe('the showcase seed', () => {
 		for (const name of observed) expect(compareSeriesNames(SHOWCASE_DWS_FEED_TARGET, name), name).toBeGreaterThan(0);
 	});
 
+	// A second whole run of the 15-year showcase (the calibrated one), on top of the file's own: about 15 s alone, more beside the suite.
 	it('registers ten demo farmers, each “(invented)”, whose totals read within the band on Kransdal, above on Vleiplaas and below on Rivieroewer', () => {
 		// The calibrated baseline, as the seed runs it (the stored fit), compared as the Allocations route compares it.
 		const fitted = buildShowcase();
@@ -194,5 +195,5 @@ describe('the showcase seed', () => {
 		expect(statuses(UNITS.middle)).toEqual({ area: 'over', use: 'over', storage: 'over' });
 		expect(statuses(UNITS.lower)).toEqual({ area: 'under', use: 'under', storage: 'under' });
 		expect(statuses(UNITS.town)).toEqual({ area: 'none', use: 'unregistered', storage: 'none' });
-	}, 60_000);
+	}, 180_000);
 });

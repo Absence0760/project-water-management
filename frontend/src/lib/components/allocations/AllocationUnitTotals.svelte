@@ -127,8 +127,9 @@
 		font-weight: 400;
 		font-size: var(--font-xs);
 	}
-	/* A status word wraps in a narrow cell (a phone's 6rem blocks), not past it. */
-	.sub .status {
+	/* A status word wraps in a narrow cell (a phone's 6rem blocks), not past it: over the page's nowrap
+	   (AllocationsTab's `.allocations .status`, which a two-class selector here only ties with). */
+	td .sub .status {
 		white-space: normal;
 		max-width: 100%;
 	}
