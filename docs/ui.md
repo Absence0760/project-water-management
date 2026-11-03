@@ -636,7 +636,13 @@ English only: its readers are licensing assessors, like the methods page's.
   off by** lists each signer's name, date and registration as the report
   prints it (*self-declared*), with the professional body's register as a
   link and its address in full; the register URLs are the engine's, never the
-  database's. **Errata recorded in the pack** are those the manifest
+  database's. Every sign-off stays listed; one made against an earlier
+  statement than the one the issue rested on is marked *Signed against an
+  earlier statement*, naming both versions when they differ, else saying it
+  was an earlier text of the same version (a newly found erratum or
+  limitation changes the text, not the version), with a note under the list
+  (`earlierStatement`, 314, issue #670; `packs/pack.ts`
+  `earlierStatementNote`). **Errata recorded in the pack** are those the manifest
   recorded when it was drafted; under them, **Errata found since issue**
   lists those added to the errata list later for the engines its runs (or
   their fits) used (`errataFoundSince`, 132), or says none has been found.

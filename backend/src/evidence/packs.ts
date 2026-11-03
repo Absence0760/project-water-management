@@ -921,7 +921,16 @@ export interface PackVerification {
 		 * an owner of the project in the app (167_signers); null: the registration is self-declared.
 		 */
 		registrationCheck: { checkedAt: string; checkedByOrg: string } | null;
+		/** The sign-off statement version it was made against (e.g. pack-signoff-1; 314), or null if not recorded. */
+		statementVersion: string | null;
+		/**
+		 * Made against an earlier statement than the one the issue rested on (314): still listed, so the record is
+		 * complete, and marked. Compared by the statement's hash, so a new erratum counts though the version is the same.
+		 */
+		earlierStatement: boolean;
 	}[];
+	/** The version of the statement the issue rested on (its latest specialist sign-off's; 314), or null with none. */
+	statementVersion: string | null;
 }
 
 /**

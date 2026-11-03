@@ -2397,7 +2397,13 @@ export interface PackVerification {
 		kind?: SignoffKind;
 		/** The check bound when the pack was issued; null or absent: the registration is self-declared (167). */
 		registrationCheck?: { checkedAt: string; checkedByOrg: string } | null;
+		/** The sign-off statement version it was made against (314); null or absent: not recorded, or an older API. */
+		statementVersion?: string | null;
+		/** Made against an earlier statement than the one the issue rested on (314): listed and marked; absent from an older API. */
+		earlierStatement?: boolean;
 	}[];
+	/** The version of the statement the issue rested on (314); null or absent: none recorded, or an older API. */
+	statementVersion?: string | null;
 }
 
 /** POST /projects/:id/runs/:runId/signoffs. */

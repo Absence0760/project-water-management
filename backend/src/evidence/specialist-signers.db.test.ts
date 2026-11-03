@@ -347,3 +347,61 @@ describe('the project’s requirement', () => {
 		expect(await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'registration.requirement'`, [projectId])).toEqual([{ subject: { required: false } }]);
 	});
 });
+
+describe('verify and the statement each sign-off was made against (314, issue #670)', () => {
+	it('lists every sign-off, marking those of an earlier statement than the one the issue rested on (control: the current ones are unmarked)', async () => {
+		const EARLIER = 'b'.repeat(64);
+		const issuedB = await arrange(async (q) => {
+			const [r] = await q(`SELECT baseline_run_id::text AS base, scenario_run_id::text AS run FROM evidence_pack WHERE id = $1`, [draftB]);
+			const pack = await plantPack(q, { run: r!.base as string, scenario: appB, scenarioRun: r!.run as string, status: 'issued', title: 'B plan' });
+			const sign = (signer: User, kind: 'specialist' | 'review', version: string, statement: string, at: string) =>
+				q(
+					`INSERT INTO signoff (project_id, pack_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope, statement_version, statement_sha256, disclaimer_version, kind, signed_at)
+					 VALUES ($1, $2, $3, $4, 'sacnasp', 'pr_sci_nat', 'water_resources', '400555/10', 'x', $5, $6, 'v3', $7, $8)`,
+					[projectId, pack, signer.id, `Dr ${kind} ${at.slice(8, 10)}`, version, statement, kind, at]
+				);
+			// An older version, then the same version with another hash (a new erratum), then the statement issue checked.
+			await sign(specialistB, 'specialist', 'pack-signoff-1', 'c'.repeat(64), '2026-09-01T08:00:00Z');
+			await sign(assessor, 'review', 'pack-signoff-2', EARLIER, '2026-09-02T08:00:00Z');
+			await sign(specialistB, 'specialist', 'pack-signoff-2', STATEMENT, '2026-09-03T08:00:00Z');
+			await sign(assessor, 'review', 'pack-signoff-2', STATEMENT, '2026-09-04T08:00:00Z');
+			return pack;
+		});
+		const r = await anon('GET', `/verify/${sha(issuedB)}`);
+		expect(r.status).toBe(200);
+		const pack = r.body.pack as { statementVersion: string; signers: { fullName: string; kind: string; statementVersion: string; earlierStatement: boolean }[] };
+		expect(pack.statementVersion).toBe('pack-signoff-2');
+		expect(pack.signers.map((s) => [s.kind, s.statementVersion, s.earlierStatement])).toEqual([
+			['specialist', 'pack-signoff-1', true],
+			['review', 'pack-signoff-2', true],
+			['specialist', 'pack-signoff-2', false],
+			['review', 'pack-signoff-2', false]
+		]);
+		// No statement hash, account or email leaves with it.
+		const text = JSON.stringify(r.body);
+		for (const leak of [EARLIER, STATEMENT, specialistB.id, specialistB.email]) expect(text).not.toContain(leak);
+	});
+
+	it('marks nothing on a pack with no specialist sign-off', async () => {
+		const bare = await arrange(async (q) => {
+			const [r] = await q(`SELECT baseline_run_id::text AS base FROM evidence_pack WHERE id = $1`, [draftB]);
+			// Baseline evidence (no application), so it doesn't meet the one issued pack per application.
+			const id = randomUUID();
+			const manifest = { pack: { id, version: 1 }, project: { id: projectId, name: 'Signers' }, engine: { version: '1.50.0' }, report: { identity: { title: 'Baseline' } } };
+			await q(
+				`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, status, manifest, manifest_sha256, report_version, engine_version, created_by, issued_at, issued_by)
+				 VALUES ($1, $2, $3, 1, 'issued', $4, $5, 'evidence-8', '1.50.0', $6, now(), $6)`,
+				[id, projectId, r!.base, JSON.stringify(manifest), sha(id), assessor.id]
+			);
+			await q(
+				`INSERT INTO signoff (project_id, pack_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope, statement_version, statement_sha256, disclaimer_version, kind)
+				 VALUES ($1, $2, $3, 'Dr Review', 'sacnasp', 'pr_sci_nat', 'water_resources', '400555/10', 'x', 'pack-signoff-1', $4, 'v3', 'review')`,
+				[projectId, id, assessor.id, 'd'.repeat(64)]
+			);
+			return id;
+		});
+		const pack = (await anon('GET', `/verify/${sha(bare)}`)).body.pack as { statementVersion: string | null; signers: { earlierStatement: boolean }[] };
+		expect(pack.statementVersion).toBeNull();
+		expect(pack.signers).toEqual([expect.objectContaining({ earlierStatement: false, statementVersion: 'pack-signoff-1' })]);
+	});
+});
