@@ -51,7 +51,7 @@ async function seedTwelveYears(request: APIRequestContext, name: string) {
 	return project;
 }
 
-type Year = { waterYear: number; label: string; seasonEndStorageM3: number | null; demandM3: number; userDemandM3: number; demandMet: number | null; ewrDays: { days: number; below: number } };
+type Year = { waterYear: number; label: string; seasonEndStorageM3: number | null; demandM3: number; suppliedM3: number; userDemandM3: number; demandMet: number | null; ewrDays: { days: number; below: number } };
 type Level = { id: string; label: string; problems: string[]; nYears: number; years: Year[] };
 type OutlookBody = {
 	outlook: {
@@ -61,7 +61,7 @@ type OutlookBody = {
 		seasonEnd: string;
 		planningShare: number | null;
 		levels: { id: string; label: string; ops: unknown[] }[];
-		result: { metric: string; nYears: number; days: number; levels: Level[]; analogues: { waterYear: number }[] };
+		result: { metric: string; nYears: number; days: number; levels: Level[]; analogues: { waterYear: number }[]; startStorageM3: number | null; capacityM3: number };
 	};
 };
 
@@ -75,6 +75,8 @@ const whole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 // The app groups thousands with a narrow no-break space (fmtNum), not a comma.
 const m3 = (v: number) => `${grouped(v)} m³`;
 const pct = (v: number) => `${whole.format(v * 100)} %`;
+/** The briefing's volumes (outlook/briefing.ts volume): m³ under a million, million m³ above. */
+const vol = (v: number) => (Math.abs(v) < 1e6 ? m3(v) : `${new Intl.NumberFormat('en-US', { minimumFractionDigits: v < 1e7 ? 2 : v < 1e8 ? 1 : 0, maximumFractionDigits: v < 1e7 ? 2 : v < 1e8 ? 1 : 0 }).format(v / 1e6)} million m³`);
 function stat(values: (number | null)[], f: (v: number) => string) {
 	const v = values.filter((x): x is number => x !== null).sort((a, b) => a - b);
 	return { median: f(percentile(v, 50)), band: `10–90 %: ${f(percentile(v, 10))} – ${f(percentile(v, 90))}` };
@@ -167,17 +169,19 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 		expect(level.problems).toEqual([]);
 		expect(level.years).toHaveLength(n);
 		const cells = table.locator(`tbody tr[data-level="${level.id}"] td`);
+		// What if more or less: the irrigation supplied over the season (median), then the stored statistics.
+		await expect(cells.nth(0).locator('strong')).toHaveText(stat(level.years.map((y) => y.suppliedM3), vol).median);
 		const want = [
 			stat(level.years.map((y) => y.seasonEndStorageM3), m3),
 			stat(level.years.map((y) => y.demandMet), pct),
 			stat(level.years.map((y) => y.ewrDays.below / y.ewrDays.days), pct)
 		];
 		for (const [i, w] of want.entries()) {
-			await expect(cells.nth(i).locator('strong')).toHaveText(w.median);
-			await expect(cells.nth(i).locator('.band')).toHaveText(w.band);
+			await expect(cells.nth(i + 1).locator('strong')).toHaveText(w.median);
+			await expect(cells.nth(i + 1).locator('.band').last()).toHaveText(w.band);
 		}
 		const met = level.years.filter((y) => y.ewrDays.below === 0).length;
-		await expect(cells.nth(3)).toHaveText(`EWR met on every day in ${met} of ${n} years`);
+		await expect(cells.nth(4)).toHaveText(`EWR met on every day in ${met} of ${n} years ${met >= 0.55 * n ? 'Meets' : 'Under'} the planning share`);
 	}
 	// The planning figure: the highest level by mean season demand that met the EWR in full in at least 55 % of the years.
 	const mean = (l: Level) => l.years.reduce((a, y) => a + y.demandM3 + y.userDemandM3, 0) / n;
@@ -192,6 +196,25 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await expect(planning).toHaveText(`${pick!.label}: met the EWR on every day of the season in ${metIn(pick!)} of ${n} analogue years, the highest demand level to do so in at least 55 % of them.`);
 	await expect(table.locator(`tbody tr[data-level="${pick!.id}"]`).getByTestId('planning-level')).toHaveText('Planning figure');
 	await expect(panel.getByTestId('planning-level')).toHaveCount(1);
+	// clock-free: “today” here is fixed wording (a stage, a level’s description), not a day from a clock.
+	await expect(panel.getByTestId('outlook-planning-level')).toHaveText(`${pick!.label} of today’s irrigation demand`);
+	// The risk line, on the same rule: lower when the highest level met the share, increasing when only a lower one did.
+	await expect(panel.getByTestId('outlook-risk')).toHaveAttribute('data-risk', pick === ranked[0] ? 'lower' : 'increasing');
+	// Where the season starts: the dams on the decision date, of capacity, and the natural flow around it from the base run.
+	const start = panel.getByTestId('outlook-start');
+	await expect(start).toContainText(`Dam storage on 1 Oct 2018 ${m3(r.startStorageM3!)} ${pct(r.startStorageM3! / r.capacityM3)} of the hydrological units’ dam capacity`);
+	await expect(panel.getByTestId('outlook-inflow')).toContainText(/Natural flow before it \(Apr – Sep\) [\d\u202f.]+ (million )?m³ \d+ % of the median of the same months in 11 earlier years: (Below|Near|Above) normal/);
+	await expect(panel.getByTestId('outlook-season-flow')).toContainText('median of 12 analogue years as they happened; 10–90 %:');
+	// The monthly plan as typed, and the plain levels described by their change from today.
+	await expect(panel.getByTestId('outlook-monthly-plan')).toContainText('Taper, as the WUA typed it:');
+	await expect(panel.getByTestId('outlook-monthly-plan').locator('li')).toHaveText(['Oct 100 %', 'Nov 100 %', 'Dec 100 %', 'Jan 80 %', 'Feb 80 %', 'Mar 80 %', 'Apr 80 %']);
+	await expect(table.locator('tbody th').nth(1)).toContainText('15 % less demand');
+	await expect(table.locator('tbody th').nth(3).getByTestId('outlook-plan-months')).toHaveText('Oct 100 %, Nov 100 %, Dec 100 %, Jan 80 %, Feb 80 %, Mar 80 %, Apr 80 %');
+	// No month-by-month balance is stored: the part says so rather than drawing one.
+	await expect(panel.getByTestId('outlook-balance')).toContainText('Not drawn yet: an outlook keeps each past season’s totals, not its months');
+	const messages = panel.getByTestId('outlook-messages').locator('li');
+	await expect(messages.first()).toHaveText(`In past seasons from this start, ${pick!.label} met the EWR in full in ${metIn(pick!)} of ${n} years: the highest level to do so in at least 55 % of them.`);
+	await expect(messages.last()).toHaveText('All of this is worked out from past weather, not a forecast or a promise. The WUA decides the season’s level and publishes it as the restriction notice.');
 	// Every analogue year, one row each.
 	await panel.getByText('Every analogue year').click();
 	await expect(panel.getByTestId('outlook-years-table').locator('tbody tr')).toHaveCount(n);
@@ -269,7 +292,9 @@ test('the review triggers show for the review date, and a level published to far
 	for (const [i, r] of rows.entries()) {
 		const cells = triggers.getByTestId('triggers-table').locator('tbody tr').nth(i).locator('td');
 		await expect(cells.nth(0)).toHaveText(r.level?.label ?? 'No level');
-		await expect(cells.nth(1)).toHaveText(r.metYears === null ? '–' : `${r.metYears} of ${r.nYears} years`);
+		// Each band's level beside the planning figure (outlook/briefing.ts), in words.
+		await expect(cells.nth(1)).toHaveText(r.level ? /^(The planning figure|More than the planning figure \(.+\)|Less than the planning figure \(.+\)|No planning figure to compare with)$/ : /^No level met the EWR in the planning share from this storage$/);
+		await expect(cells.nth(2)).toHaveText(r.metYears === null ? '–' : `${r.metYears} of ${r.nYears} years`);
 	}
 	await expect(triggers.getByTestId('triggers-words').locator('li')).toHaveCount(rows.length);
 	await expect(triggers.getByText(/recommend|likely|should|best|optimal/i)).toHaveCount(0);
