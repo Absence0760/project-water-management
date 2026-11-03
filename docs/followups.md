@@ -5190,7 +5190,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       the kind is in `REFERENCE_KINDS` (`geo/referenceLoad.ts`, reading the
       GeoJSON `pnpm import:quaternaries … --out` writes), `LOADABLE`
       (`scripts/release/map-data-gates.mjs`) and the workflow's choices, and
-      `reference_load` takes the kind (306). The operator's download and
+      `reference_load` takes the kind (309). The operator's download and
       the workflow run are deployment.md § Reference datasets, The
       quaternary dataset.
 - [x] **Decision: WR2012's licence terms** (operator; maps.md § Quaternary
