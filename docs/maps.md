@@ -1605,14 +1605,21 @@ to a point on a river. The design, the method and its accuracy are in
   elevation model's channels](#the-elevation-models-channels)) at the
   catchment's outlet, or just below a dam wall (the draw bar's point; or
   **Enter coordinates**). The server puts the point on the nearest cell
-  within 150 m that has at least 1 km² draining through it (`place.ts`,
+  within 150 m that has at least `minKm2` draining through it (`place.ts`,
   issue #472), measured from the exact click to each cell's centre, the
-  larger area winning a tie. Nearest, not most-drained: a click on a
+  larger area winning a tie. `minKm2` is the least area of the channels
+  the map drew at the zoom of the click ([§ The elevation model's
+  channels](#the-elevation-models-channels): 1 km² below zoom 13, 0.5 at
+  13, 0.25 at 14, 0.1 km² from 15), sent with the click, so it lands on a
+  line the editor could see; the server holds it to 0.1–1 km², and without
+  it (Enter coordinates typed with no click, an older client) it is 1 km²
+  (`delineate-14`; 1 km² always in `delineate-13`). Nearest, not most-drained: a click on a
   tributary beside the main river stays on the tributary. With no terrain
   channel within 150 m the click is refused (`off_channel`): "No terrain
   channel runs within 150 m of that point. Zoom in until the terrain
   channels show (they're in the map's key), and click on one: they are the elevation
-  model's rivers, which the outline follows." The mapped river network
+  model's rivers, which the outline follows. Zoom in further to see
+  smaller channels." The mapped river network
   (HydroRIVERS, the basemap's waterways) never moves or chooses the
   outlet: the elevation model's rivers often run hundreds of metres from
   the mapped lines, and the outline follows the elevation model's
@@ -1754,12 +1761,47 @@ channels in solid red, wider for a larger area (issue #374;
 channel the DEM routes along ([design/delineation-snapping.md](./design/delineation-snapping.md)),
 so these are the lines to click: a click goes on the nearest one within
 150 m, and a click with none that near is refused (`place.ts`; every cell
-these lines draw is one a click can go on, both at 1 km²).
+the lines drawn at the click's zoom pass through is one the click can go
+on: the click sends that zoom's threshold, `minKm2`).
+
+- **Smaller channels as you zoom in.** The tiles carry every channel down
+  to 0.1 km² (`CHANNEL_FLOOR_KM2`, `place.ts`), each line with its area,
+  and the layer draws only those its zoom shows (`mapStyle.ts`
+  `channelMinKm2AtZoom`, the layer's filter a step on the zoom, which
+  MapLibre evaluates at each tile's whole zoom):
+
+  | Zoom | Channels drawn |
+  | --- | --- |
+  | below 13 | 1 km² or more |
+  | 13 | 0.5 km² or more |
+  | 14 | 0.25 km² or more |
+  | 15 and closer | 0.1 km² or more |
+
+  So the headwaters the basemap's OpenStreetMap streams reach (they go much
+  further up than the 1 km² channels did, so small hydrological units
+  couldn't be picked) have a terrain channel to click once zoomed in. The
+  lines also widen with the zoom, like the basemap's waterways (0.5–2.5 px
+  at zoom 10 to 1.5–5 px from 16, wider for a larger area at every zoom).
+  Below about 0.25 km² a delineated outline is only a few hundred cells
+  (a 0.1 km² catchment is about 100 cells of 32 m), so its shape and area
+  are coarse, and on flat ground the DEM can draw spurious parallel
+  channels where the fill's ε slope, not the terrain, decides the route:
+  check a small catchment against the relief and the basemap before using it.
+  Measured per 0.2° tile on the relief DEM (Mapterhorn, about 32 m cells):
+
+  | Least area | Channel per km² | Lines | Size (gzip) | Time |
+  | --- | --- | --- | --- | --- |
+  | 1 km² | 0.66–0.82 km | 200–250 | 12–16 KB | 0.7–1.1 s |
+  | 0.25 km² | 1.3–1.5 km | 800–970 | 25–32 KB | about the same |
+  | 0.1 km² (the tiles) | 1.9–2.3 km | 1 900–2 500 | 42–56 KB | about the same |
+
+  The routing dominates the time, so going down to 0.1 km² costs a tile
+  three to four times the bytes and almost no CPU.
 
 - **How.** The map's view is cut into fixed 0.2° tiles; each is routed in a
   1 024-cell window centred on it (Delineate's first window, about 6 km of
   margin) with the same fill, D8 and accumulation as Delineate, and every
-  cell with at least 1 km² draining through it is traced into lines from
+  cell with at least 0.1 km² draining through it is traced into lines from
   each stream head or confluence down to the next confluence, carrying the
   area at its lower end (window-local: a river entering from beyond the
   window carries less than it drains). A tile keeps the steps that start
@@ -1772,7 +1814,7 @@ these lines draw is one a click can go on, both at 1 km²).
 - **Precomputed** (`delineation/channelArchive.ts`,
   `backend/scripts/channels-build.ts`, the Map's `channelArchive.ts`). The
   same tiles, built once per DEM by the same `channelTile` with the same
-  window and threshold, into one PMTiles archive, `channels.pmtiles`, that
+  window and threshold (0.1 km²), into one PMTiles archive, `channels.pmtiles`, that
   the tiles bucket serves beside the relief (`/tiles/channels.pmtiles`;
   locally MinIO's `tiles` bucket). Each entry is one tile's answer as the
   route gives it (its lines, their areas, the DEM's label and fingerprint),
@@ -1783,7 +1825,9 @@ these lines draw is one a click can go on, both at 1 km²).
   loads, one byte range per tile). With `PUBLIC_CHANNELS_URL` set the layer
   reads each tile from it first and asks the route only for a tile it lacks
   (outside the region it was built for), for every tile if it can't be read
-  or isn't a channels archive, and for every tile if its DEM fingerprint
+  or isn't a channels archive of the current format
+  (`water-management-channels/2` since the lines go down to 0.1 km²; a `/1`
+  archive, built at 1 km², is refused, so rebuild it), and for every tile if its DEM fingerprint
   isn't the one the server's delineation check reports, so a file left from
   an older DEM never draws channels a click wouldn't snap to. Unset (the
   default, CI and e2e), everything is as before. A tile from the file costs
@@ -1798,11 +1842,12 @@ these lines draw is one a click can go on, both at 1 km²).
   (from the cached relief DEM over `CHANNELS_BBOX`, default the Western
   Cape, else from the synthetic DEM) and uploads it to MinIO, and `pnpm
   dev:tiles:up` then sets `PUBLIC_CHANNELS_URL`; the DEM must be the one the
-  backend's `DEM_URL` names, or every tile falls back. Measured on GLO-30:
-  about 0.35 s and 15 KB (gzip; 60–90 KB as JSON) a tile, so the Western
-  Cape (~800 tiles) builds in about 5 minutes into about 10–12 MB, and all of
-  South Africa (~5 500) in about half an hour into about 80 MB. Production:
-  deployment.md § Map tiles.
+  backend's `DEM_URL` names, or every tile falls back. At 0.1 km² a tile is
+  about 0.7–1.1 s and 42–56 KB (gzip) on the relief DEM (the table above),
+  so the Western Cape (~800 tiles) builds in about 10–15 minutes into about
+  30–40 MB, and all of South Africa (~5 500) in about 1–1.5 hours into about
+  250 MB: estimated from the measured tiles, not a full build (at 1 km² they
+  were about 10–12 MB and 80 MB). Production: deployment.md § Map tiles.
 - **When.** While one of the two tools is on, while a delineated
   proposal waits for a decision (dimmed then, so the outline reads first
   and can be checked against the channels it follows; they go once it is
@@ -1812,7 +1857,8 @@ these lines draw is one a click can go on, both at 1 km²).
   in to about 35 km across to draw the DEM rivers." while the layer does
   (tiles already fetched stay drawn). Tiles are fetched one at a time and
   kept for the session; the server keeps the last 128 in memory per
-  instance.
+  instance, keyed by the DEM's fingerprint and the 0.1 km² floor (so a
+  change of the floor never serves a tile cut at another).
 - **The DEM rivers layer** (`layers=channels`, confirmed by the client's
   hydrologist 2026-11-02; `mapLayers.ts` `demRiversOffered`,
   `channelsWanted`). A toggle in the Layers panel right after HydroRIVERS'
@@ -1869,8 +1915,9 @@ these lines draw is one a click can go on, both at 1 km²).
   map, so the bar's lines and the Key's sit side by side without covering the
   map). A pill over the map's top appears only when there
   is something to say: "Drawing the terrain channels…", "Zoom in to see …",
-  that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
-  309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
+  that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington
+  at 1 km² (before the tiles went down to 0.1 km²): 309 lines, about 1 km of
+  channel per km², 86 KB, 0.4 s.
 
 ## Search
 
@@ -2439,7 +2486,16 @@ pick first.
   that missed the river is the usual cause (finding 11).
 - **Clicking on the channel** (the same rule as Delineation's, [§
   Delineation](#delineation); `start-15`, issue #472). Each click goes on
-  the nearest cell within 150 m with at least 1 km² draining through it
+  the nearest cell within 150 m with at least its own `minKm2` draining
+  through it: the least area of the channels the map drew at the zoom it
+  was clicked at (1 km² below zoom 13 down to 0.1 km² from 15, [§ The
+  elevation model's channels](#the-elevation-models-channels); `start-18`),
+  so a click made zoomed in on a small headwater channel stays on it,
+  and each click keeps its own when the clicks are routed again after a
+  zoom. The method names the areas used ("at least 0.25 or 1 km² (the
+  channels the Map drew at each click's zoom)"). Start from the map and
+  Divide place their gauges and points on 1 km² channels as before: they
+  place from map points, not clicks made at a zoom
   (measured from the click itself to each cell's centre); its line says how
   far it moved from 50 m ("· moved 72 m to the nearest terrain channel").
   A click with no terrain channel within 150 m is refused, naming it ("No

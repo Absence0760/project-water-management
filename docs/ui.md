@@ -4537,7 +4537,7 @@ map" card) stays the schematic; this is the geography.
   with no terrain channel within 150 m is refused and taken back with the
   reason. Since issue #472 there is no confluence box, no river-reach
   warning and no "very little drains here" warning: a click always lands
-  on a channel with at least 1 km² draining through it. A line with the focus or the pointer lights
+  on a terrain channel the map drew at the zoom it was made at (1 km² or more below zoom 13, down to 0.1 km² from zoom 15; maps.md § The elevation model's channels). A line with the focus or the pointer lights
   its piece, and a piece under the pointer lights itself. Under the lines:
   the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
   piece against the map before you save."). **Enter coordinates** (folded,

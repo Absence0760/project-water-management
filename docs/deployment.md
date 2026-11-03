@@ -3388,7 +3388,7 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 | `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
 | `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
 | `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
-| `tiles/channels.pmtiles` (the DEM rivers precomputed from `terrain.pmtiles`, ~10–12 MB for the Western Cape, ~80 MB for South Africa) | `backend/scripts/channels-build.ts` (below) | `PUBLIC_CHANNELS_URL=/tiles/channels.pmtiles` | the same Art. 6(c) sentence as the relief (the lines are derived from the Copernicus DEM) |
+| `tiles/channels.pmtiles` (the DEM rivers precomputed from `terrain.pmtiles`, down to 0.1 km²: ~30–40 MB for the Western Cape, ~250 MB for South Africa, estimated) | `backend/scripts/channels-build.ts` (below) | `PUBLIC_CHANNELS_URL=/tiles/channels.pmtiles` | the same Art. 6(c) sentence as the relief (the lines are derived from the Copernicus DEM) |
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
 Upload them with your own SSO session (no workflow or Lambda can write the
@@ -3430,10 +3430,16 @@ only while its DEM fingerprint matches the server's. Build it on your
 laptop from the cached extract (same bytes, same fingerprint) with the
 region the catchments are in, then upload it; it records no provenance row
 of its own (it is derived, its metadata names the DEM's label and
-fingerprint, and `terrain`'s record stands). About 0.35 s a 0.2° tile, so
-the Western Cape (~800 tiles) takes about 5 minutes and makes about 10–12 MB,
-all of South Africa (~5 500) about half an hour and 80 MB, at about 300 MB
-of memory. From `backend/`:
+fingerprint, and `terrain`'s record stands). The lines go down to 0.1 km²
+(the Map shows the small ones only zoomed in), about 0.7–1.1 s and 42–56 KB
+(gzip) a 0.2° tile on the relief DEM, so the Western Cape (~800 tiles) takes
+about 10–15 minutes and makes about 30–40 MB, all of South Africa (~5 500)
+about 1–1.5 hours and about 250 MB: estimated from measured tiles (maps.md §
+The elevation model's channels), not from a full build; at 1 km² it was
+10–12 MB and 80 MB. The builder holds the archive in memory, so allow about
+300 MB plus its size. An archive built before the tiles went to 0.1 km²
+(format `water-management-channels/1`) is refused by the Map, which then
+computes every tile on request: rebuild and re-upload it. From `backend/`:
 
 ```bash
 pnpm exec tsx scripts/channels-build.ts --dem $C/terrain.pmtiles --bbox 17.6,-35.0,24.4,-30.4 --out $C/channels.pmtiles
