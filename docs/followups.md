@@ -994,12 +994,19 @@ runs and accumulations are real) can't be decided without the client.
          default). The canal's own unit has no irrigation.
       3. *Where the water goes*: the canal splits 50/50, half to the
          farmers and half to a dam in the town's unit; above the canal's
-         take the river spills on. No split field exists: model it as
-         **two curve rules from the same source**, each with a/2, m/2 and
-         half the canal (0.118 m³/s). Both read the same U₀ (the flow
-         before the source's off-takes), so together they take exactly
-         MIN(0.236 m³/s, MIN(97 %, a · x^b) × U₀). Still to ask: which
-         unit the farmers' half goes to, and the canal's losses.
+         take the river spills on. Engine 1.114.0 (migration 311, model.md
+         §2.6 *Split between destinations*) models it as **one rule split
+         between two destinations, 50 % each** (its one curve, its 0.236
+         m³/s canal): the run reads it as the two half rules this entry
+         first suggested (a/2, m/2, half the canal), so it takes exactly
+         MIN(0.236 m³/s, MIN(97 %, a · x^b) × U₀) and splits what arrives.
+         A curve can also differ by month, or be a plain maximum in some
+         months (§2.6a *A maximum or a formula by month*), if the
+         hydrologist's rule is seasonal. Still to ask: which unit the
+         farmers' half goes to, and the canal's losses. For a split sized
+         to what the destinations need, ask how a share a destination
+         can't use should be read (engine-audit.md SP1: the operator's
+         fixed split now, or each share sized to its own destination).
       4. *The EWR*: **none** (`handsOffEwr` off): the curve already keeps a
          low-flow release. Its priority against other users at the source
          is still open.
