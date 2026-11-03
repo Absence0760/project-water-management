@@ -27,7 +27,7 @@ it is marked **(judgement)**.
 
 | # | Sketch | What it shows | Already built | Gap |
 | --- | --- | --- | --- | --- |
-| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The board (today, EWR met; the equal share one sentence in its intro, issue #177) ([ui.md § Share the pain](../ui.md#share-the-pain)); the client confirmed one equal % for every category (O4, issue #90, §3.3) |
+| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The board (today, the equitable share, EWR met: three stages again since 2026-11-03, §3.8; the equal share's % also once in its intro, issue #177) ([ui.md § Share the pain](../ui.md#share-the-pain)); the client confirmed one equal % for every category (O4, issue #90, §3.3) |
 | S2 | **Outcome matrix** | Rows: irrigation demand at 100 / 85 / 70 % of today; columns: classes of annual natural water availability (very dry … very wet); each cell a risk label for the EWR | 🚧 Scenarios (WP-3.2), Reserve compliance (engine 0.21.0, 0.33.0) | A demand-scaling op, a batch of runs, year classes, the matrix view |
 | S3 | **Seasonal irrigation outlook** | From storage and wet-season inflow at the start of the irrigation season: a recommended demand level, the season at 100 / 85 / 70 %, a monthly operating plan, storage-triggered review rules for a mid-season date, and the projected water balance | ✅ The outlook (R5), the computed review triggers (R6), the published level on each farm's page (E3), and WP-3.8's drought restriction rule to apply the triggers in a run (engine 1.54.0) | – |
 | S4 | **Licence impact at dry / typical / wet** | For each of three year types: natural flow − existing authorised use − the proposed abstraction = flow left, against the EWR, with a met / not met verdict | ✅ The impact report's board by year class (R7, §3.7), the verdict from the months; existing *authorised* use on a full-allocation baseline (WP-3.10's allocation mode) | Year classes, the full-allocation run, the summary board |
@@ -143,7 +143,12 @@ longer a stage. Under the equal share it is an identity (every row the same
 K %, the total always *Today*'s), so the board has two stages (today, EWR
 met) and says the equal share once in its intro. A per-category what-if,
 should one be wanted later, would bring the middle stage back, since its
-rows would then differ (labelled as a what-if).
+rows would then differ (labelled as a what-if). **Changed again
+(2026-11-03, §3.8):** the operator's mock-up shows the middle stage, and it
+carries what does differ per row under the equal share: each unit's volume
+and its change from today (who gives up how much, net 0). It is a stage
+again, with those columns; its % is still the same for every farm, and the
+intro still says it once.
 
 ### 3.4 R4: year classes and the outcome matrix (**M**)
 
@@ -360,6 +365,23 @@ evidence report's page 1 (issue #15, Phase C) takes the same board.
 
 R1 → R3 → R2 → R4 → R7 → R5 → R6. R1 and R3 are small and useful on their
 own; R5 and R6 are the biggest and depend on the rest.
+
+### 3.8 Against the operator's mock-ups (2026-11-03)
+
+The operator sent four AI-drawn mock-ups of "the type of output users would
+expect", one per output, with invented figures for the client catchment (not
+committed: they name the catchment and invented users). Each built screen
+was compared with its mock-up and the gaps that carry information were
+closed from the app's own numbers; no figure was copied, and nothing in the
+engine changed (every addition is a frontend view-model computation from the
+stored run, sweep or outlook). [ui.md](../ui.md) has each screen as built.
+
+| Output | Now matches the mock-up | Not built, and why |
+| --- | --- | --- |
+| S1 Share the pain | Three stages again: today (bar, %, m³/day); the equitable share (its volume, the change from today with ↓ / ↑, the %); EWR met (the charge, the total change, what is left, %). A totals row per section, three cards (short of demand today, moved between units at the equal share, further cut for the EWR, with the store-less part), and a legend of the supply bands and arrows in words. Phone: the table stacks. | The mock-up's 90 / 60 % bands: the board uses the app's supply bands (95 / 70 %), so it never disagrees with Supply by hydrological unit or the Network. The negative "final demand" of a group with no demand (§1): still shown as store less / pass inflow. Icons per group: the app has no user-group icons; the badge names priority. |
+| S2 Outcome matrix | Columns under one head with their range of annual natural flow in million m³ and the class's name; rows with what the level means (*15 % less demand*); cells worded as a risk with a phrase of degree (*High risk · EWR often not met*) on the existing cut-offs; the key with each cut-off in words; Model context (the base run's years, the assessment, the availability metric), How to read this matrix, Important notes. | The fourth band (*likely met with greater margin*): the rule has three. "Likely" wording: the cells count years (§3.4). The key point that less demand always lowers risk: not true where return flow reaches the river (§3.5 note). |
+| S3 Seasonal outlook | A risk line on the planning rule; 1 where the season starts (storage on the decision date and of capacity, the natural flow of the six months before it against earlier years with a below / near / above normal class, the season's natural flow in past years as they happened, median and 10–90 %); 2 the planning figure in large type (never "recommended"); 3 what if more or less, with the irrigation supplied over the season, end storage of capacity and a meets / under the planning share tag; 4 a monthly plan as typed; 5 the review triggers beside the planning figure; key messages for farmers, each a sentence about past seasons. | 4: a *recommended* month-by-month plan: the outlook tests a plan the WUA types in and doesn't derive one (§3.5), so the part shows the typed plan or says so. 6: the projected monthly water balance (stacked bars, storage line): an outlook member stores its season's totals only, so there are no monthly figures to draw; the part says so ([followups.md](../followups.md#planning-outputs-against-the-mock-ups-2026-11-03)). The risk banner's single word for the season ("Moderate"): the line names the rule's band and the counts instead. "Estimated natural availability" from this season's start: member natural flow isn't stored, so the part shows past seasons as they happened, labelled so. |
+| S4 Licence impact | A summary of what is compared (the runs, the proposed use a year per class, the years, the requirement); each class headed *Dry years* with its place in the record (*the driest third of years*); the annual waterfall drawn as floating bars above its list; a mark beside each verdict (▲ more below, ▼ fewer, = no change). The evidence report's page 1 takes the same board. | The EWR line and "shortfall / margin in million m³ a year": the requirement is daily or monthly and the verdict comes from the months, never the annual total (§2 finding 5). Percentile years (25th / median / 75th): the board reads every year of each class, which is what its counts mean. Verdict colour: the board reports, it doesn't judge (§3.7). Application ID, location, use type: the evidence report's identity block already names the application and its WULA. |
 
 ## 4. Questions for the client
 

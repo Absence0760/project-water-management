@@ -1108,7 +1108,7 @@ export const GUIDES: Guide[] = [
 							'Run the model on the latest data. Both panels need an ordinary run, not a scenario or forecast run.',
 							'In **Model settings**, check **Outcome matrix** (how years are classed and the [[outcome-risk|risk cut-offs]]) and **Seasonal outlook** (the [[outlook-season|season]], the planning share and the review date).',
 							'On **EWR**, press **Run…** beside **Outcome matrix**, type the levels and press **Run demand sweep**. Read across a row for one level in every kind of year, and down a column for every level in one kind of year.',
-							'Press **Run…** beside **Seasonal outlook**, type the levels (and a monthly plan, if the WUA is considering one) and press **Run seasonal outlook**. Read each level’s season-end storage, demand met and days below the EWR as the median with its 10–90 % range, and the [[planning-figure]].',
+							'Press **Run…** beside **Seasonal outlook**, type the levels (and a monthly plan, if the WUA is considering one) and press **Run seasonal outlook**. Start with the risk line and **Where the season starts**, then read each level’s irrigation supplied, season-end storage, demand met and days below the EWR as the median with its 10–90 % range, and the [[planning-figure]]. **Key messages for farmers** sums it up in plain sentences.',
 							'For a mid-season check, read the [[review-triggers]]: the level each band of total dam storage on the review date supported in past years.',
 							'Once the WUA has decided, pick **Level the WUA has set** under **Farmers** and press **Publish to farmers** ([[outlook-publish]]).'
 						]

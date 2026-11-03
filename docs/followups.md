@@ -8006,3 +8006,30 @@ editor's and a large boundary's notes in step 4
       so a rename or relink (which bump `updated_at`) isn't flagged. Durable
       fix: a geometry hash in the stamp (and in the feed marks). Trigger: a
       client report of a reshaped boundary not flagged.
+
+## Planning outputs against the mock-ups (2026-11-03)
+
+The four planning outputs were brought to the operator's mock-ups
+([planning-outputs.md §3.8](./design/planning-outputs.md#38-against-the-operators-mock-ups-2026-11-03)).
+Two parts of the seasonal outlook's mock-up need figures the app doesn't store:
+
+- [ ] **A projected water balance by month** (part 6: irrigation, town,
+  EWR and losses as stacked bars per month of the season, with the
+  projected storage at each month's end). An outlook member stores its
+  season's totals (`OutlookMember`: demand, supplied, season-end storage,
+  days below the EWR), not its months. Durable fix: the engine's
+  `outlookMember` also sums each month of the season (supplied, user
+  supplied, outflow, the EWR shortfall, dam storage at each month's end),
+  the job stores it per member, and the panel draws the median month by
+  month, with its 10–90 % range. It grows each member by about 7 × 5
+  numbers, so `seasonal_outlook_member` needs a migration and the stored
+  result grows with it; an `ENGINE_VERSION` bump for the new member field.
+  Trigger: the WUA asks to see the season month by month, or the
+  hydrologist wants the monthly storage path for the review date.
+- [ ] **A derived monthly operating plan** (part 4: a % per month the app
+  works out). The outlook tests a plan the WUA types in (R1's `months`
+  form) and doesn't derive one, by design (§3.5: the WUA decides). If it is
+  wanted, the honest form is a search over monthly plans scored by the same
+  planning rule, reported as data; needs the client's decision first
+  (plan.md § Decision-support outputs).
+
