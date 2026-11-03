@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Runs & results' Cumulative flow at each unit panel (runs/CumulativeFlows.svelte, runs/cumulative.ts) and LineChart's onview/inPlace: total measured 2362 KB against the 2359 KB ceiling, +3 KB"
+}

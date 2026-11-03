@@ -40,7 +40,9 @@
 		pannable = true,
 		print = false,
 		printWidth = 680,
-		ready = $bindable(false)
+		ready = $bindable(false),
+		onview,
+		inPlace = false
 	}: {
 		series: ChartSeries[];
 		unit?: string;
@@ -128,6 +130,18 @@
 		printWidth?: number;
 		/** True once the chart has drawn (or has nothing to draw); also the figure's data-ready. */
 		ready?: boolean;
+		/**
+		 * Called with the visible x range (epoch seconds on a daily chart) whenever it changes: a zoom, a pan, a
+		 * window button, a rebuild. The cumulative flow chart counts from the view's first day by it
+		 * (runs/CumulativeFlows.svelte).
+		 */
+		onview?: (view: { min: number; max: number }) => void;
+		/**
+		 * New values for the same series (same labels, styles, colours, x days) update the drawn plot in place
+		 * (uPlot setData) instead of rebuilding it, keeping the view, so values that follow the view (a total
+		 * counted from its first day) don't break a zoom or Shift+drag in progress. Anything else still rebuilds.
+		 */
+		inPlace?: boolean;
 	} = $props();
 
 	let host: HTMLDivElement | undefined = $state();
@@ -196,7 +210,14 @@
 			show: print || (shownByLabel.get(s.label) ?? !s.hidden),
 			spanGaps: false,
 			// Gaps stay gaps; a lone reading between two gets a dot so it isn't lost.
-			points: { show: false, filter: isolatedIndices(plotted[i] ?? []), size: 4 * k, width: 0, fill: stroke },
+			// In place (inPlace), the values change under the same options: work the lone readings out from the data drawn.
+			points: {
+				show: false,
+				filter: inPlace ? (u: uPlot, si: number) => isolatedIndices((u.data[si] ?? []) as (number | null)[]) : isolatedIndices(plotted[i] ?? []),
+				size: 4 * k,
+				width: 0,
+				fill: stroke
+			},
 			value: (_u: uPlot, v: number | null) => fmtReading(v)
 		};
 		if (s.style === 'points') {
@@ -217,9 +238,39 @@
 		return base;
 	}
 
+	/** What the drawn plot was built for, bar the values (inPlace): the same shape again only updates its data. */
+	let builtShape: string | null = null;
+	let builtHost: HTMLDivElement | undefined;
+	function shapeOf(): string {
+		const x = aligned.x;
+		return JSON.stringify([
+			series.map((s) => [s.label, s.style, s.color, s.width, s.hidden, s.pointSize, s.hollow]),
+			unit,
+			height,
+			themeTick,
+			fontsTick,
+			hasData,
+			log,
+			shade,
+			band,
+			lanes,
+			lanesRoom,
+			x.length,
+			x[0],
+			x[x.length - 1]
+		]);
+	}
+	/** New values into the drawn plot, keeping the view (uPlot re-ranges y over it when x is set). */
+	function update() {
+		const prev = view;
+		plot!.setData([aligned.x, ...plotted] as uPlot.AlignedData, false);
+		plot!.setScale('x', prev ?? { min: dataLo, max: dataHi });
+	}
+
 	function build() {
 		plot?.destroy();
 		plot = null;
+		builtShape = null;
 		const w = print ? printWidth : width;
 		// Nothing to draw is a finished state too (the figure says "No data to plot").
 		ready = !!host && !hasData;
@@ -253,6 +304,7 @@
 						if (key !== 'x') return;
 						const { min, max } = u.scales.x!;
 						view = min != null && max != null ? { min, max } : null;
+						if (view) onview?.(view);
 					}
 				],
 				setSeries: [
@@ -339,6 +391,8 @@
 					u.batch(() => init());
 				})
 			: new uPlot(opts, data, host);
+		builtShape = shapeOf();
+		builtHost = host;
 		if (print) return;
 		// A rebuild (log scale, units, theme) keeps the window the user was
 		// looking at; a first build, or a window the new data doesn't cover,
@@ -562,7 +616,10 @@
 	// Rebuild when data, unit, scale, height, theme or the loaded fonts change…
 	$effect(() => {
 		void [plotted, unit, height, themeTick, fontsTick, hasData, host, log, series, shade, band, lanes, lanesRoom];
-		untrack(build);
+		untrack(() => {
+			if (inPlace && !print && plot && host === builtHost && builtShape === shapeOf()) update();
+			else build();
+		});
 	});
 	// …and only resize in place when the container width changes.
 	$effect(() => {
