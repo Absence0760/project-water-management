@@ -155,7 +155,7 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await expectNoSidewaysScroll(page);
 });
 
-test('a river off-take can take a share of the river (a diversion curve, engine 1.113.0): its curve, what it diverts at a few flows, and it saves', async ({ page, owner }) => {
+test('a river off-take can take a share of the river by a formula (engine 1.113.0, by month 1.114.0): its formula, what it diverts at a few flows, and it saves', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Transfers diversion curve');
@@ -165,14 +165,23 @@ test('a river off-take can take a share of the river (a diversion curve, engine 
 	await card.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('river');
 	const curve = card.getByTestId('diversion-curve');
 	await expect(curve).toHaveCount(0);
-	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption('diversionCurve');
-	// Until the curve is complete the card says what is missing, and asks for it under the fields.
+	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption('byMonth');
+	// Every month starts at a maximum, its rate as it was; until a month has a formula the card says so.
+	const months = card.getByTestId('takes-by-month');
+	await expect(months).toContainText('A maximum every month');
 	await expect(curve.getByTestId('diversion-preview-empty')).toBeVisible();
-	await expect(card.locator('.rule-problems')).toContainText('A share of the river’s flow needs a complete curve: its coefficient a must be a number above 0');
+	await expect(card.locator('.rule-problems')).toContainText('A formula needs a complete curve: no month has a formula');
+	await months.getByLabel('Takes in Oct, transfer 1', { exact: true }).selectOption('formula');
+	await expect(card.locator('.rule-problems')).toContainText('A formula needs a complete curve: in October its coefficient a must be a number above 0');
 	// Invented numbers of a canal's shape: 2 000 × x^−0.9 %, at most 95 %, x in m³/s, below the rule's rate.
-	await curve.getByLabel('Coefficient a of transfer 1', { exact: true }).fill('2000');
-	await curve.getByLabel('Exponent b of transfer 1', { exact: true }).fill('-0.9');
-	await curve.getByLabel('Largest share of transfer 1, %', { exact: true }).fill('95');
+	await months.getByLabel('Coefficient a of transfer 1 in Oct', { exact: true }).fill('2000');
+	await months.getByLabel('Exponent b of transfer 1 in Oct', { exact: true }).fill('-0.9');
+	await months.getByLabel('Largest share of transfer 1 in Oct, %', { exact: true }).fill('95');
+	await months.getByLabel('Canal capacity of transfer 1 in Oct, m³/s', { exact: true }).fill('0.01');
+	// October's rule, rate and formula in every month.
+	await months.getByLabel('Month to apply to every month, transfer 1', { exact: true }).selectOption('Oct');
+	await months.getByRole('button', { name: 'Apply to every month', exact: true }).click();
+	await expect(months).toContainText('A formula every month');
 	await curve.getByLabel('x in, flow unit of transfer 1', { exact: true }).selectOption('m3/s');
 	await curve.getByLabel('x is, the flow the curve of transfer 1 reads', { exact: true }).selectOption('natural');
 	// The preview: a row per example flow, the share and what is diverted, and which limit binds.
@@ -184,16 +193,19 @@ test('a river off-take can take a share of the river (a diversion curve, engine 
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
 	await page.reload();
-	const saved = ruleCard(page, 1).getByTestId('diversion-curve');
-	await expect(ruleCard(page, 1).getByLabel('Takes, transfer 1', { exact: true })).toHaveValue('diversionCurve');
-	await expect(saved.getByLabel('Coefficient a of transfer 1', { exact: true })).toHaveValue(/^2\s?000$/);
-	await expect(saved.getByLabel('Exponent b of transfer 1', { exact: true })).toHaveValue(/^[-\u2212]0\.9$/);
-	await expect(saved.getByLabel('Largest share of transfer 1, %', { exact: true })).toHaveValue('95');
+	const savedCard = ruleCard(page, 1);
+	const saved = savedCard.getByTestId('diversion-curve');
+	await expect(savedCard.getByLabel('Takes, transfer 1', { exact: true })).toHaveValue('byMonth');
+	for (const m of ['Oct', 'Jun']) {
+		await expect(savedCard.getByLabel(`Coefficient a of transfer 1 in ${m}`, { exact: true })).toHaveValue(/^2\s?000$/);
+		await expect(savedCard.getByLabel(`Exponent b of transfer 1 in ${m}`, { exact: true })).toHaveValue(/^[-\u2212]0\.9$/);
+		await expect(savedCard.getByLabel(`Largest share of transfer 1 in ${m}, %`, { exact: true })).toHaveValue('95');
+	}
 	await expect(saved.getByLabel('x in, flow unit of transfer 1', { exact: true })).toHaveValue('m3/s');
 	await expect(saved.getByLabel('x is, the flow the curve of transfer 1 reads', { exact: true })).toHaveValue('natural');
 	await expect(saved.getByTestId('diversion-preview')).toBeVisible();
 	await expectNoSidewaysScroll(page);
-	// On a phone the preview stays a table inside the card: no sideways scroll, every heading inside its cell.
+	// On a phone the preview stays a table inside the card, every heading inside its cell, and the page never scrolls sideways.
 	await page.setViewportSize({ width: 390, height: 844 });
 	const table = saved.getByTestId('diversion-preview');
 	await expect(table.getByRole('columnheader')).toHaveCount(4);
@@ -201,6 +213,76 @@ test('a river off-take can take a share of the river (a diversion curve, engine 
 	const tbox = (await table.boundingBox())!;
 	expect(tbox.x + tbox.width, 'the preview fits its card').toBeLessThanOrEqual(box.x + box.width + 0.5);
 	await expectNoSidewaysScroll(page);
+});
+
+test('a month with a formula beside a month with a maximum, and a 40/60 split between two units (engine 1.114.0), save and come back', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers split and formula by month');
+	const model = sampleModel();
+	// A third unit for the second share (invented).
+	const town = { ...model.nodes[2]!, id: crypto.randomUUID(), name: 'Town unit', sortOrder: 4 };
+	model.nodes.push(town);
+	await putModel(page.request, project.id, model);
+	await openTransfers(page, project.id);
+	const card = ruleCard(page, 1);
+	await card.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('river');
+	// Split: the destination keeps half, the next unit takes half; the route says so.
+	await card.getByRole('button', { name: 'Split transfer 1 between destinations', exact: true }).click();
+	await expect(card.getByLabel('Destination 2 of transfer 1', { exact: true })).toBeFocused();
+	await card.getByLabel('Destination 2 of transfer 1', { exact: true }).selectOption({ label: 'Town unit' });
+	const total = card.getByTestId('split-total');
+	await card.getByLabel('Share of destination 1 of transfer 1, %', { exact: true }).fill('40');
+	await card.getByLabel('Share of destination 1 of transfer 1, %', { exact: true }).press('Tab');
+	await expect(total).toHaveText('90 %, must be 100 %');
+	await expect(card.locator('.rule-problems')).toContainText('Its destinations’ shares must add up to 100 % (they add up to 90 %)');
+	await card.getByLabel('Share of destination 2 of transfer 1, %', { exact: true }).fill('60');
+	await card.getByLabel('Share of destination 2 of transfer 1, %', { exact: true }).press('Tab');
+	await expect(total).toHaveText('100 %');
+	await expect(card.getByTestId('transfer-route')).toHaveText('To Lower farm 40%, Town unit 60%');
+	// November takes by a formula (half the river, x in m³/day), December up to its maximum.
+	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption('byMonth');
+	const months = card.getByTestId('takes-by-month');
+	await months.getByLabel('Takes in Nov, transfer 1', { exact: true }).selectOption('formula');
+	await months.getByLabel('Coefficient a of transfer 1 in Nov', { exact: true }).fill('50');
+	await months.getByLabel('Exponent b of transfer 1 in Nov', { exact: true }).fill('0');
+	await card.getByLabel('x in, flow unit of transfer 1', { exact: true }).selectOption('m3/day');
+	await expect(months).toContainText('A formula in 1 month, a maximum in 11');
+	await expect(months.getByLabel('Max rate of transfer 1 in Dec, m³/s', { exact: true })).toHaveValue('0.01');
+	// The preview names its month and what each destination gets.
+	const preview = card.getByTestId('diversion-preview');
+	await expect(preview.locator('caption')).toContainText('(Nov)');
+	await expect(preview.getByRole('columnheader')).toHaveText(['River, m³/day', 'Share', 'Diverted, m³/day', 'To Lower farm (40%), m³/day', 'To Town unit (60%), m³/day', 'Limited by']);
+	await expect(card.locator('.rule-problems')).toHaveCount(0);
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toBeHidden();
+	await page.reload();
+	const saved = ruleCard(page, 1);
+	await expect(saved.getByTestId('transfer-route')).toHaveText('To Lower farm 40%, Town unit 60%');
+	await expect(saved.getByLabel('Share of destination 1 of transfer 1, %', { exact: true })).toHaveValue('40');
+	await expect(saved.getByLabel('Destination 2 of transfer 1', { exact: true }).locator('option:checked')).toHaveText('Town unit');
+	await expect(saved.getByLabel('Takes, transfer 1', { exact: true })).toHaveValue('byMonth');
+	await expect(saved.getByLabel('Takes in Nov, transfer 1', { exact: true })).toHaveValue('formula');
+	await expect(saved.getByLabel('Takes in Dec, transfer 1', { exact: true })).toHaveValue('max');
+	await expect(saved.getByLabel('Coefficient a of transfer 1 in Nov', { exact: true })).toHaveValue('50');
+	// Removing a share makes it a plain transfer again: the To select is back, all of it to the one left.
+	await saved.getByRole('button', { name: 'Remove destination 2 (Town unit) of transfer 1', exact: true }).click();
+	await expect(saved.getByLabel('To, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Lower farm');
+	await expect(saved.getByTestId('transfer-destinations')).toHaveCount(0);
+	await expectNoSidewaysScroll(page);
+});
+
+test('a formula on a transfer from the dam makes it a river off-take, and says so', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers formula from the dam');
+	await putModel(page.request, project.id, sampleModel());
+	await openTransfers(page, project.id);
+	const card = ruleCard(page, 1);
+	await expect(card.getByLabel('Takes from, transfer 1', { exact: true })).toHaveValue('dam');
+	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption('byMonth');
+	await expect(card.getByTestId('takes-moved-to-river')).toHaveText('A formula takes a share of the river’s flow, so this transfer now takes from the river (an off-take), set under Takes from.');
+	await expect(card.getByLabel('Takes from, transfer 1', { exact: true })).toHaveValue('river');
 });
 
 // One viewport per test, and the axe scan in a test of its own (as a11y.spec.ts does). Thirty rules make a
@@ -368,6 +450,24 @@ test.describe('no accessibility violations', () => {
 				diversionMaxPct: 0.95,
 				diversionFlowUnit: 'L/s'
 			});
+			// And a split between two units taking a formula in some months (engine 1.114.0), so its table and month rows are scanned.
+			const c = { coefficient: 50, exponent: 0, maxPct: null };
+			const town = { ...model.nodes[2]!, id: crypto.randomUUID(), name: 'Town unit', sortOrder: 4 };
+			model.nodes.push(town);
+			model.transfers.push({
+				...model.transfers[0]!,
+				id: crypto.randomUUID(),
+				priority: 4,
+				source: 'river',
+				sizing: 'diversionCurve',
+				diversionFlowUnit: 'm3/day',
+				monthlyDiversion: [c, c, null, null, null, null, null, null, null, null, null, c],
+				toNodeId: model.nodes[2]!.id,
+				destinations: [
+					{ nodeId: model.nodes[2]!.id, pct: 0.4 },
+					{ nodeId: town.id, pct: 0.6 }
+				]
+			});
 			await putModel(page.request, project.id, model);
 			await openTransfers(page, project.id);
 			await expect(page.getByLabel('From, transfer 2', { exact: true })).toBeVisible();
@@ -435,10 +535,13 @@ test('each rule is a card: its groups side by side and top-aligned, its rates wh
 	const oct = (await card.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).boundingBox())!;
 	expect(cap.x).toBeGreaterThan(oct.x);
 	expect(takes.x).toBeGreaterThan(cap.x);
-	// The off-take's fields are a grid of two, not one tall column: Hands-off flow beside Losses.
+	// The off-take's fields are a grid of two, not one tall column: Takes from beside Hands-off flow, Losses beside
+	// Losses seeping back (How much it takes moved to the rates' title line, engine 1.114.0).
 	const handsOff = (await card.getByLabel('Hands-off flow for transfer 2, m³/day', { exact: true }).boundingBox())!;
 	const losses = (await card.getByLabel('Losses on the way of transfer 2, %', { exact: true }).boundingBox())!;
-	expect(Math.abs(handsOff.y - losses.y)).toBeLessThan(1);
+	const back = (await card.getByLabel('Losses seeping back of transfer 2, %', { exact: true }).boundingBox())!;
+	expect(Math.abs(handsOff.y - takes.y)).toBeLessThan(1);
+	expect(Math.abs(losses.y - back.y)).toBeLessThan(1);
 	// Every month's field shows its rate whole (0.0129 and 12.345 were clipped in the old table).
 	for (const m of ['Oct', 'Nov', 'Dec']) {
 		const f = card.getByLabel(`Max rate of transfer 2 in ${m}, m³/s`, { exact: true });

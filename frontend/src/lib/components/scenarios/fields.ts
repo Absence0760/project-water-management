@@ -109,7 +109,16 @@ export type ValueSpec =
 	 * form's editor (settings/EwrDailySourceFields.svelte); null is the
 	 * pragmatic EWR.
 	 */
-	| { t: 'ewrDaily' };
+	| { t: 'ewrDaily' }
+	/**
+	 * A transfer's destinations and shares (engine ≥ 1.114.0,
+	 * transfer.destinations) or its curve by month (transfer.monthlyDiversion),
+	 * whole: set on the transfer's card in a scenario's Override mode, so the
+	 * Add a change form doesn't offer them. Their text is the stored list as
+	 * JSON (the round trip a draft needs); empty is null.
+	 */
+	| { t: 'destinations' }
+	| { t: 'diversionMonths' };
 
 /** The "Add a change" form's copy of a PE input: the monthly row stays text until it is parsed. */
 export interface PeDraft {
@@ -291,10 +300,21 @@ export const TRANSFER_FIELD_SPECS: Record<TransferSetField, FieldSpec> = {
 	diversionFlowBasis: {
 		label: 'Off-take diversion curve: x is',
 		spec: { t: 'enum', options: [{ value: 'modelled', label: 'the river at the off-take' }, { value: 'natural', label: 'the natural flow there' }], nullable: true, nullLabel: 'the river at the off-take' }
-	}
+	},
+	// A maximum or a formula by month, and the split between destinations (engine ≥ 1.114.0): set on the card in Override mode.
+	monthlyDiversion: { label: 'Off-take takes by month (a maximum or a formula)', spec: { t: 'diversionMonths' } },
+	destinations: { label: 'Destinations and shares', spec: { t: 'destinations' } }
 };
 
-export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.map((field) => ({ field, label: TRANSFER_FIELD_SPECS[field].label }));
+/**
+ * The fields the Add a change form offers for transfer.set: every one but the
+ * split and the curve by month (engine ≥ 1.114.0), which the transfer's card in
+ * Override mode sets whole.
+ */
+export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.filter((field) => TRANSFER_FIELD_SPECS[field].spec.t !== 'destinations' && TRANSFER_FIELD_SPECS[field].spec.t !== 'diversionMonths').map((field) => ({
+	field,
+	label: TRANSFER_FIELD_SPECS[field].label
+}));
 
 // ---------------------------------------------------------------------------
 // crop.set, landCover.set (engine ≥ 1.35.0)
@@ -534,6 +554,15 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[] | 
 			const bad = damCurveProblem(c.rows);
 			return bad ? { ok: false, error: bad } : { ok: true, value: c.rows };
 		}
+		case 'destinations':
+		case 'diversionMonths': {
+			if (text === '') return { ok: true, value: null };
+			try {
+				return { ok: true, value: JSON.parse(text) as unknown };
+			} catch {
+				return { ok: false, error: 'set it on the transfer’s card in Override mode' };
+			}
+		}
 	}
 	return { ok: false, error: 'unknown field' };
 }
@@ -604,6 +633,9 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 			return describeDroughtRestriction(v as DroughtRestrictionRule);
 		case 'ewrDaily':
 			return describeEwrDailySource(v);
+		case 'destinations':
+		case 'diversionMonths':
+			return JSON.stringify(v);
 		default:
 			return typeof v === 'string' ? v : String(v);
 	}
@@ -668,6 +700,18 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 			return describeDroughtRestriction((v ?? null) as DroughtRestrictionRule | null);
 		case 'ewrDaily':
 			return describeEwrDailySource(v);
+		case 'destinations': {
+			// Split between destinations (engine ≥ 1.114.0): "Upper farm 40 %, Town 60 %"; none is all of it to the destination.
+			if (!Array.isArray(v) || !v.length) return 'all of it to its destination';
+			return (v as { nodeId: string | null; pct: number }[]).map((d) => `${d.nodeId === null ? 'outside the catchment' : nodeName(d.nodeId)} ${fmtNum(d.pct * 100, 2, true)} %`).join(', ');
+		}
+		case 'diversionMonths': {
+			// A maximum or a formula by month (engine ≥ 1.114.0): each month's rule, Oct–Sep.
+			if (!Array.isArray(v)) return 'its one curve every month';
+			return (v as ({ coefficient: number; exponent: number; maxPct: number | null } | null)[])
+				.map((m, k) => `${WATER_YEAR_MONTHS[k]} ${m ? `${fmtNum(m.coefficient, 4, true)} × x^${fmtNum(m.exponent, 4, true)} %${m.maxPct != null ? `, at most ${fmtNum(m.maxPct * 100, 1, true)} %` : ''}` : 'a maximum'}`)
+				.join('; ');
+		}
 	}
 }
 

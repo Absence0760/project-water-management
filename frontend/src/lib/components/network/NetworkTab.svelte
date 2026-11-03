@@ -5,7 +5,7 @@
 	import { closeSettled, openAfterClose, trackClose } from '#lib/nav/closeNav.js';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import type { NodeKind, ProjectSettings, RunSummary } from '@water-management/engine';
+	import { transferDestinations, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '#lib/api/index.js';
 	import { cachedSeries, detailCache } from '#lib/components/runs/cache.js';
 	import { damChanges } from '#lib/components/dams/dams.js';
@@ -339,7 +339,8 @@
 
 	async function remove(id: string, name: string) {
 		const node = nodes.find((n) => n.id === id);
-		const refs = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id).length;
+		// A split's destinations too (engine ≥ 1.114.0): removing any of them removes the rule.
+		const refs = editor.model.transfers.filter((t) => t.fromNodeId === id || transferDestinations(t).some((d) => d.nodeId === id)).length;
 		const areas = editor.model.cropAreas.filter((a) => a.nodeId === id).length;
 		const cover = (editor.model.landCover ?? []).filter((p) => p.nodeId === id).length;
 		const boreholes = (editor.model.boreholes ?? []).filter((b) => b.nodeId === id).length;
@@ -556,9 +557,15 @@
 	const editingTransfers = $derived.by(() => {
 		if (!editing) return null;
 		const id = editing.id;
-		const mine = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id);
+		const mine = editor.model.transfers.filter((t) => t.fromNodeId === id || transferDestinations(t).some((d) => d.nodeId === id));
 		if (!mine.length) return null;
-		const ends = mine.map((t) => (t.fromNodeId === id ? `to ${t.toNodeId === null ? 'outside the catchment' : labelOf(t.toNodeId)}` : `from ${labelOf(t.fromNodeId)}`));
+		const ends = mine.map((t) =>
+			t.fromNodeId === id
+				? `to ${transferDestinations(t)
+						.map((d) => (d.nodeId === null ? 'outside the catchment' : labelOf(d.nodeId)))
+						.join(' and ')}`
+				: `from ${labelOf(t.fromNodeId)}`
+		);
 		return `${mine.length} transfer${mine.length === 1 ? '' : 's'}, ${ends.join(', ')}`;
 	});
 	/** The farm drawer over the map, in place of the sheet. */
