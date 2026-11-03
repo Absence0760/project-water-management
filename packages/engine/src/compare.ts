@@ -769,7 +769,10 @@ export function unitRainText(raw: unknown): string {
 	const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	// The reference gauge and unit (engine ≥ 1.80.0), only when set, so a setting without one reads as before.
 	const ref = u.reference ? `; reference gauge ${u.reference.gauge} at the unit ${u.reference.unitId}` : '';
-	return `on (${gauge}; MAP period ${dayText(p.start)} to ${dayText(p.end)}${ref})`;
+	// The units' CHIRPS drivers (engine ≥ 1.114.0), only when set, so a setting without them reads as before.
+	const drivers = Object.entries(u.chirpsUnits ?? {});
+	const chirps = drivers.length ? `; CHIRPS as the driver of ${drivers.map(([id, c]) => `the unit ${id} (${c.correction === 'raw' ? 'raw' : 'bias-corrected'})`).join(', ')}` : '';
+	return `on (${gauge}; MAP period ${dayText(p.start)} to ${dayText(p.end)}${ref}${chirps})`;
 }
 
 /** The change of settings.unitRain between two runs, or null. A run saved without it (engine < 1.78.0) ran on the catchment rain. */

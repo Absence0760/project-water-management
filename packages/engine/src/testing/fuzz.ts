@@ -10,7 +10,7 @@
 import { withMonthlyRates } from '../network/transferRates';
 import type { AllocationEntry } from '../allocations/compare';
 import { DEMAND_PARTS, irrigationFromReturnFlow, LAND_COVER_CLASSES, type DemandPart, type DroughtRestrictionRule, type Borehole, type DemandObject, type LandCoverPatch, type CropArea, type CropDef, DEFAULT_IRRIGATION_SYSTEMS, type IrrigationSystemDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
-import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/params';
 import { DEFAULT_ASSURANCE_POINTS } from '../reserve/rules';
@@ -1412,6 +1412,32 @@ export function withUnitRain(input: ModelInput, seed: number): ModelInput {
 			n.mapSource = 'synthetic MAP';
 		}
 	}
+	return input;
+}
+
+/**
+ * CHIRPS as a unit's driver (settings.unitRain.chirpsUnits, engine ≥ 1.114.0, docs/model.md §2.4h) on a per-unit
+ * input (withUnitRain's): about half the land units chosen at random, bias-corrected or raw, so some have no CHIRPS of
+ * their own (the choice can't apply); and, on half the inputs with a catchment gauge and no catchment CHIRPS, the
+ * catchment's CHIRPS (the gauge × a seeded monthly bias), so §2.4b's factors correct a bias-corrected unit with a MAP
+ * (level `bias` with k_unit). Its own stream, so withUnitRain's inputs are unchanged.
+ */
+export function withUnitChirpsChoice(input: ModelInput, seed: number): ModelInput {
+	const rng = new Rng(seed ^ 0x5c3a91e7);
+	if (input.settings.unitRain?.mode !== 'perUnit') return input;
+	const series = input.series as Record<string, DailySeries>;
+	const gauge = series.rain_catchment_mm;
+	if (gauge && !series.rain_chirps_mm && rng.bool(0.5)) {
+		const d0 = toEpochDay(gauge.startDate);
+		const bias = Array.from({ length: 12 }, () => rng.float(0.5, 0.9));
+		series.rain_chirps_mm = { startDate: gauge.startDate, values: gauge.values.map((v, i) => (typeof v === 'number' && v >= 0 ? v * bias[monthOfEpochDay(d0 + i) - 1]! : null)) };
+	}
+	const chirpsUnits: Record<string, { correction: 'bias' | 'raw' }> = {};
+	for (const n of input.model.nodes) {
+		if (n.kind !== 'farm' || !(n.areaKm2 > 0) || !rng.bool(0.5)) continue;
+		chirpsUnits[n.id] = { correction: rng.bool(0.5) ? 'bias' : 'raw' };
+	}
+	input.settings.unitRain = { ...input.settings.unitRain, chirpsUnits };
 	return input;
 }
 
