@@ -2440,7 +2440,22 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Divide the model** (a model that has nodes, with a DEM; `divide=1`,
   migration 182): each unit's boundary (an area on the map) stands for its
   unit, a point for an other water user, a gauge for a gauge node (or an
-  unlinked gauge for a new gauge node); a dam or an abstraction point never
+  unlinked gauge for a new gauge node), and an area no node has (a saved
+  sub-catchment, issue #670) for **a new hydrological unit**, proposed as
+  Start proposes a unit (its boundary's geodesic area, checked against the
+  elevation model; its drains-into the first unit or gauge its flow path
+  meets; its unlinked dams and abstraction points its composite dam and
+  river pump) and named as its feature ("Sub-catchment 2", editable). Its
+  **Add** makes a `farm` node in the same revision, draining into the
+  outflow until its drains-into is ticked, its ticked area its boundary,
+  linked as Start links one, and the feature and its members linked to it.
+  A new unit's land is **not taken from the units around it**: a unit whose
+  area holds it keeps that area until its own boundary is redrawn or a
+  smaller area typed, the proposal warns when the new boundary overlaps a
+  unit's area on the map ("… is a new unit, and its boundary overlaps …’s
+  area on the map. That unit keeps its area …", `newUnitOverlaps`), and the
+  sheet's overlap sentence counts the typed areas kept; the rest of the
+  catchment is proposed without it. A dam or an abstraction point never
   stands for a unit (400: "a dam or an abstraction point is part of its
   unit …, not where the unit ends"), and the unlinked ones inside a unit's
   boundary are listed on its card ("Joins its composite dam: …", "Joins its
@@ -2565,13 +2580,12 @@ clicking the rivers, with no points to place and no roles to pick first.
   network step with the new pieces: **Start from the map** on an empty
   model (`start=1`, at its points, each saved piece marked a hydrological
   unit), or **Divide the model** on one with nodes and a DEM (`divide=1`,
-  each piece among its areas, to say which unit it stands for). Nothing is
+  each piece picked as a new hydrological unit there, issue #670; the
+  editor may pick a unit already in the model instead). Nothing is
   written to the model there until the sheet's Apply, its one confirmation
   ([§ Start from the map](#start-from-the-map)). Without either (the
   Start state can't be read), the first piece's card opens as before: link
-  each to its unit and **Use** its area as with any other polygon. Divide
-  has no "a new unit" choice for an area, so on a model with nodes a piece
-  can only stand for a unit already in it.
+  each to its unit and **Use** its area as with any other polygon.
 - **Limits.** The clicks and every whole piece must fit the largest window
   (about 100 km across, 20 s); pieces past it are inflow points (above). At
   most 50 clicks a request. Inflow points are not saved: model what comes

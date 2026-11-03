@@ -7,7 +7,10 @@
 // incremental catchment, numbered by click: the lines say each one's area
 // and where its water goes. Undo takes the last back without asking again,
 // and Save keeps the pieces as areas and opens the network step (the Divide
-// sheet on a model with nodes, the Start sheet on an empty one). A click off
+// sheet on a model with nodes, each piece a new hydrological unit there,
+// #670; the Start sheet on an empty one). On a model with nodes and an outlet
+// gauge, the saved pieces are proposed and applied as new units, in the
+// order the elevation model gives them, and appear in the network. A click off
 // the DEM is taken back with the reason; Done with unsaved clicks asks first;
 // a viewer gets no button. Within a delineated catchment boundary its outlet
 // is the lowest piece (O), a click outside the boundary is refused, and Save
@@ -17,7 +20,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, node, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
-import { FIXTURE_DAM, FIXTURE_OFF_CHANNEL, FIXTURE_OFF_TERRAIN, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_MID_GAUGE, FIXTURE_OFF_CHANNEL, FIXTURE_OFF_TERRAIN, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openMap, uploadThroughSheet } from '../support/map.ts';
 
@@ -149,15 +152,78 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Took back click 3.');
 
 	await bar(page).getByTestId('map-click-save').click();
-	await expect(page.getByTestId('map-notice')).toContainText(/Saved 2 sub-catchments, 5[34]\d\.\d\d km² in all on the map as areas\. In the Divide sheet, say which hydrological unit each stands for/);
+	await expect(page.getByTestId('map-notice')).toContainText(/Saved 2 sub-catchments, 5[34]\d\.\d\d km² in all on the map as areas, each a new hydrological unit in the Divide sheet/);
 	await expect(bar(page)).toHaveCount(0);
 	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveAttribute('aria-pressed', 'false');
 	// Straight on to the network: the model has nodes, so the Divide sheet, the saved pieces among its areas.
 	await expect(page).toHaveURL(/[?&]divide=1(&|$)/);
 	const divide = page.getByTestId('divide-points');
-	await expect(divide.getByRole('combobox', { name: 'Sub-catchment 1 (area)' })).toBeVisible();
-	await expect(divide.getByRole('combobox', { name: 'Sub-catchment 2 (area)' })).toBeVisible();
+	// Each saved piece is picked as a new hydrological unit (#670); the uploaded square, drawn for another reason, stays out.
+	await expect(divide.getByRole('combobox', { name: 'Sub-catchment 1 (area)' })).toHaveValue('new-unit');
+	await expect(divide.getByRole('combobox', { name: 'Sub-catchment 2 (area)' })).toHaveValue('new-unit');
+	await expect(divide.getByRole('combobox', { name: 'Around the dam (area)' })).toHaveValue('none');
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
+});
+
+test('on a model with nodes, Save hands the pieces to Divide as new units, and applying puts them in the network in their order (#670)', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(90_000);
+	// A typed model (the outflow weir and a hillside unit with no boundary) and the weir's gauge at the valley's outlet.
+	const project = await createProject(page.request, 'Sub-catchments into Divide');
+	const weir = node('Valley weir', 'gauge', null, 0);
+	const hill = node('Hillside', 'farm', weir.id, 1, { areaKm2: 20 });
+	await putModel(page.request, project.id, { nodes: [weir, hill], crops: [], cropAreas: [], transfers: [] });
+	const g = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'gauge', name: 'Weir', lon: FIXTURE_OUTLET[0], lat: FIXTURE_OUTLET[1], nodeId: weir.id } });
+	expect(g.status()).toBe(201);
+	await openMap(page, project.id);
+	await mapReady(page);
+	await startClicks(page);
+	// At the dam, then on the river below it: the dam's piece drains into the second.
+	await typeOutlet(page, FIXTURE_DAM);
+	await expect(bar(page)).not.toHaveAttribute('data-busy');
+	await typeOutlet(page, FIXTURE_MID_GAUGE);
+	await expect(bar(page)).not.toHaveAttribute('data-busy');
+	await expect(lines(page)).toHaveCount(2);
+	await bar(page).getByTestId('map-click-save').click();
+	await expect(page.getByTestId('map-notice')).toContainText(/each a new hydrological unit in the Divide sheet/);
+	await expect(page).toHaveURL(/[?&]divide=1(&|$)/);
+	const sheet = page.getByRole('dialog', { name: 'Divide the model from the map' });
+	await expect(sheet.getByLabel(/^Sub-catchment 1/)).toHaveValue('new-unit');
+	await expect(sheet.getByLabel(/^Sub-catchment 2/)).toHaveValue('new-unit');
+	await expect(sheet.getByTestId('divide-count')).toHaveText('2 points in the division.');
+	await sheet.getByTestId('divide-propose').click();
+
+	const review = page.getByTestId('divide-review');
+	await expect(review).toBeVisible();
+	const cards = review.getByTestId('divide-unit');
+	await expect(cards).toHaveCount(2);
+	// Upstream first: the dam's piece, draining into the piece below it; each a new unit, its land taken from nobody.
+	await expect(cards.nth(0)).toContainText('A new hydrological unit');
+	await expect(cards.nth(0)).toContainText('from “Sub-catchment 1”');
+	await expect(cards.nth(0).getByTestId('divide-new-unit-land')).toContainText('Its land isn’t taken from any unit already in the model');
+	await expect(cards.nth(1)).toContainText('from “Sub-catchment 2”');
+	await review.getByTestId('divide-tick-all').click();
+	await expect(cards.nth(0)).toContainText('Drains into Sub-catchment 2');
+	await cards.nth(1).getByLabel('Its name').fill('Below the dam');
+	await expect(cards.nth(0)).toContainText('Drains into Below the dam');
+	await expectNoViolations(page);
+	await sheet.getByTestId('divide-apply').click();
+	const confirm = page.getByRole('alertdialog', { name: 'Apply the ticked values?' });
+	await expect(confirm).toContainText('The model takes 2 areas (a unit’s is its boundary on the map) and 2 drains-into, and 2 new hydrological units.');
+	await confirm.getByRole('button', { name: 'Apply' }).click();
+	await expect(page.getByTestId('map-notice')).toContainText('Divided the model from the map.');
+
+	// In the network: two land units, the dam's draining into the one below, that one into the weir; Hillside as typed.
+	const model = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { id: string; name: string; kind: string; downstreamNodeId: string | null; areaKm2: number }[] };
+	const by = Object.fromEntries(model.nodes.map((n) => [n.name, n]));
+	expect(by['Sub-catchment 1']).toMatchObject({ kind: 'farm', downstreamNodeId: by['Below the dam']!.id });
+	expect(by['Below the dam']).toMatchObject({ kind: 'farm', downstreamNodeId: weir.id });
+	expect(by['Sub-catchment 1']!.areaKm2).toBeGreaterThan(300);
+	expect(by['Hillside']).toMatchObject({ areaKm2: 20, downstreamNodeId: weir.id });
+	// Each piece stands for its unit on the map, its area from it.
+	const listed = (await (await page.request.get(`${API_URL}/projects/${project.id}/map/features`)).json()) as { features: { name: string; nodeId: string | null }[] };
+	expect(listed.features.find((f) => f.name === 'Sub-catchment 1')!.nodeId).toBe(by['Sub-catchment 1']!.id);
+	expect(listed.features.find((f) => f.name === 'Sub-catchment 2')!.nodeId).toBe(by['Below the dam']!.id);
 });
 
 test('within a delineated catchment: its outlet is the lowest piece, a click outside is refused naming it, and Save opens Start from the map with the pieces as units', async ({ page, owner }) => {

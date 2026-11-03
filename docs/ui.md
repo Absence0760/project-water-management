@@ -4379,7 +4379,9 @@ map" card) stays the schematic; this is the geography.
   / the nodes its kind may stand for: an area only a unit, a dam or other
   point only an other water user (or a gauge), since a dam or abstraction
   point never divides, `start-16` / A new gauge node for an unlinked
-  gauge), a linked feature on its node by default, "Two points stand for
+  gauge / A new hydrological unit for an area linked to no node, issue
+  #670), a linked feature on its node by default (a piece handed over by
+  the Sub-catchments Save on A new hydrological unit), "Two points stand for
   …" refusing a node twice, **Place a point**, the outlet,
   the count ("3 points in the division."), **Propose the division**; **the
   proposal**: the warnings (dropped points, "No point stands for …: it keeps
@@ -4389,7 +4391,12 @@ map" card) stays the schematic; this is the geography.
   `divideOverlap`, past 1 %), **Tick every value**, the problem the server would refuse
   (`role="alert"`, Apply disabled while it stands), one card a point with
   its number badge, the node's name (or "A new gauge" with **Add it to the
-  model as a gauge node** and its name), and a tick for each value with the
+  model as a gauge node** and its name, or "A new hydrological unit" with
+  **Add it to the model as a new hydrological unit, draining into the
+  outflow until its order is ticked**, its name, and "Its land isn’t taken
+  from any unit already in the model: a unit whose area holds it keeps that
+  area until you redraw its boundary or type a smaller one. The rest of the
+  catchment is proposed without it."), and a tick for each value with the
   value now beside it (Area …, its boundary on the map (the elevation model
   gives … draining to its outflow). Now: 12.00 km², typed; Drains into …
   Now: …), "(the same)" when equal, then "Joins its composite dam: …" and
@@ -4404,7 +4411,7 @@ map" card) stays the schematic; this is the geography.
   model takes 2 areas (a unit’s is its boundary on the map) and 2
   drains-into, and 1 new gauge. The unlinked dams and pumps inside each
   unit’s boundary are linked to it. Every value not ticked stays as it
-  is."). Without a DEM the sheet says
+  is.", "… and 2 new hydrological units." for new units). Without a DEM the sheet says
   dividing needs one; with no single outflow, that the Network must set it.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
@@ -4564,8 +4571,10 @@ map" card) stays the schematic; this is the geography.
   ("Saved 2 sub-catchments, 547.19 km² in all on the map as areas, each a
   hydrological unit in the Start sheet: check them, propose the model, then
   check each unit’s name and area and apply."), on a model with nodes the
-  Divide sheet ("… In the Divide sheet, say which hydrological unit each
-  stands for, then propose and apply."); nothing reaches the model before
+  Divide sheet with each piece picked as a new hydrological unit ("… on the
+  map as areas, each a new hydrological unit in the Divide sheet (or pick
+  the unit it stands for): propose the division, then check each unit’s
+  name and area and apply."); nothing reaches the model before
   the sheet's Apply. Without either, the first piece is picked ("… Link
   each to its unit and Use its area, or rename it on its card."). **Undo** goes back to the
   answer before the last click or move at once, **Clear** drops them all,

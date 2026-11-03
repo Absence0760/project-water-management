@@ -107,7 +107,7 @@
 	import { openChannelArchive, staticChannels } from './channelArchive';
 	import { openProposal } from './delineation';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
-	import type { DivideDraft } from './divideFlow';
+	import type { DivideChoice, DivideDraft } from './divideFlow';
 	import { emptyPlacement } from './placement';
 	import { litPieces, piecesShape } from './pieces';
 	import type { MapAreaBasis, MapGeometry, MapPosition } from '#lib/api/types.js';
@@ -542,7 +542,7 @@
 	);
 	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {}, placement: emptyPlacement() });
 	async function divideApplied() {
-		notice = 'Divided the model from the map. The ticked areas, order and gauges are in the model, each area saved as its unit’s parcel.';
+		notice = 'Divided the model from the map. The ticked areas, order, gauges and new units are in the model, each unit’s area its boundary on the map.';
 		await Promise.all([load(), loadStart(), onModelChanged()]);
 	}
 	async function divideDiscarded() {
@@ -657,7 +657,10 @@
 			startDraft.pointsAsked = true;
 			notice = `Saved ${r.summary} on the map as areas, each a hydrological unit in the Start sheet: check them, propose the model, then check each unit’s name and area and apply.`;
 		} else if (sheet === 'divide') {
-			notice = `Saved ${r.summary} on the map as areas. In the Divide sheet, say which hydrological unit each stands for, then propose and apply.`;
+			// Each saved piece a new hydrological unit there (#670; divideFlow's NEW_UNIT, written out so that module stays in
+			// the sheet's chunk): the editor may pick a unit already in the model instead.
+			for (const f of r.features) divideDraft.picked[f.id] = 'new-unit' satisfies DivideChoice;
+			notice = `Saved ${r.summary} on the map as areas, each a new hydrological unit in the Divide sheet (or pick the unit it stands for): propose the division, then check each unit’s name and area and apply.`;
 		} else {
 			if (r.features[0]) await pickInPlace(r.features[0].id);
 			notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;

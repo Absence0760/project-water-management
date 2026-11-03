@@ -4154,7 +4154,7 @@ export interface DivideCurrent {
 	pctUpstreamToDam?: number;
 }
 
-/** One point of a division: the node it stands for (null: a new gauge), its own piece, the point below it, and the node's values now. */
+/** One point of a division: the node it stands for (null: a new gauge, or with role `unit` a new hydrological unit from an area, #670), its own piece, the point below it, and the node's values now. */
 export interface DivideUnit {
 	key: string;
 	featureName: string;
@@ -4203,6 +4203,7 @@ export interface DividePlan {
 /** The ticks an editor sends to apply a division: every point once. */
 export interface DivideTicks {
 	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
+	/** `add` and `name`: a new gauge or a new hydrological unit (#670) made, and its name. */
 	units: { key: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; name?: string }[];
 	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis; drainsInto?: boolean };
 }
