@@ -9,7 +9,7 @@
 //  - the export writes it and reads back;
 //  - RLS: a viewer reads it only with each volume (positive control: on).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { allocationsForRun } from '../runs/execute.js';
 
@@ -143,5 +143,62 @@ describe('who reads it', () => {
 		expect((await owner.call('PUT', `/projects/${projectId}/allocations/viewer-units`, { on: true })).status).toBe(200);
 		const shown = await viewer.call('GET', `/projects/${projectId}/allocations`);
 		expect(shown.body.allocations.map((a: { irrigatedAreaHa: number | null }) => a.irrigatedAreaHa).filter((a: number | null) => a !== null).sort()).toEqual([20, 42.5]);
+	});
+});
+
+describe('a run’s comparison: the registered irrigated area beside the area the run planted', () => {
+	let pid: string;
+	let runId: string;
+	const weir = node('Weir', null);
+	const planted = node('Planted', weir.id, { damCapacityM3: 80_000 });
+	const bare = node('Bare', weir.id);
+	let areaViewer: User;
+
+	beforeAll(async () => {
+		areaViewer = await signUp('IAcmpviewer');
+		pid = (await owner.call('POST', '/projects', { name: 'Irrigated area comparison' })).body.project.id;
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		// 42 ha planted on one unit, none on the other.
+		const model = { nodes: [weir, planted, bare], crops: [crop], cropAreas: [{ nodeId: planted.id, cropId: crop.id, areaM2: 420_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(300) } })).status).toBe(200);
+		const rain = Array.from({ length: 400 }, (_, i) => (i % 9 === 0 ? 25 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'areas' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		runId = run.body.run.id;
+		for (const [no, ha] of [
+			['CA-1', 25],
+			['CA-2', 10]
+		] as const)
+			expect((await owner.call('POST', `/projects/${pid}/allocations`, { nodeId: planted.id, registrationNo: no, holder: `Invented ${no}`, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 50_000, irrigatedAreaHa: ha })).status).toBe(201);
+		// A storage-only row's storage counts for the dam, never for an area.
+		expect((await owner.call('POST', `/projects/${pid}/allocations`, { nodeId: planted.id, registrationNo: 'CA-3', authorisation: 'licence', waterSource: 'surface', waterUse: '21b', volumeM3PerYear: 0, storageM3: 60_000 })).status).toBe(201);
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: areaViewer.email, role: 'viewer' })).status).toBe(201);
+	}, 60_000);
+
+	it('gives each unit its planted and registered hectares, banded like its use', async () => {
+		const res = await owner.call('GET', `/projects/${pid}/runs/${runId}/allocations`);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const at = (id: string) => res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === id);
+		// 42 ha planted against 35 ha registered: 20 % more, outside the ±10 % band.
+		expect(at(planted.id).irrigatedArea).toMatchObject({ registeredHa: 35, status: 'over' });
+		expect(at(planted.id).irrigatedArea.modelledHa).toBeCloseTo(42, 9);
+		expect(at(planted.id).irrigatedArea.differenceHa).toBeCloseTo(7, 9);
+		expect(at(planted.id).storage).toMatchObject({ registeredM3: 60_000, modelledCapacityM3: 80_000 });
+		expect(at(bare.id).irrigatedArea).toEqual({ registeredHa: null, modelledHa: 0, differenceHa: null, status: 'none' });
+		// The band of the request reads the area too.
+		const wide = await owner.call('GET', `/projects/${pid}/runs/${runId}/allocations?tolerance=0.25`);
+		expect(wide.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === planted.id).irrigatedArea.status).toBe('within');
+	});
+
+	it('a viewer kept from each volume gets no unit’s area; with What viewers see on, they read it (positive control)', async () => {
+		const hidden = await areaViewer.call('GET', `/projects/${pid}/runs/${runId}/allocations`);
+		expect(hidden.status).toBe(200);
+		expect(hidden.body.comparison).toBeNull();
+		expect(JSON.stringify(hidden.body)).not.toMatch(/irrigatedArea|registeredHa/);
+		expect((await owner.call('PUT', `/projects/${pid}/allocations/viewer-units`, { on: true })).status).toBe(200);
+		const shown = await areaViewer.call('GET', `/projects/${pid}/runs/${runId}/allocations`);
+		expect(shown.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === planted.id).irrigatedArea).toMatchObject({ registeredHa: 35, status: 'over' });
 	});
 });

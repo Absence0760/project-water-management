@@ -15,6 +15,7 @@
 // incomplete). The wording on every screen follows that.
 
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import type { IrrigatedAreaComparison } from './area';
 
 export type AllocationWaterSource = 'surface' | 'groundwater';
 
@@ -222,6 +223,12 @@ export interface AllocationNodeComparison {
 	 * = a dam with no storage registered.
 	 */
 	storage: { registeredM3: number | null; modelledCapacityM3: number | null; differenceM3: number | null; status: AllocationStatus };
+	/**
+	 * The registered irrigated area against the run's planted crop areas
+	 * (./area.ts). Never set by compareAllocations (so never in a run's
+	 * summary): the backend's Allocations route adds it (withIrrigatedAreas).
+	 */
+	irrigatedArea?: IrrigatedAreaComparison;
 }
 
 export interface AllocationComparison {
