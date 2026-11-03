@@ -24,7 +24,7 @@ describe('resultGroups', () => {
 		expect(groups[2]!.sections.map((s) => [s.id, s.label])).toEqual([
 			['res-checks', 'Arithmetic checks'],
 			[RUN_SUBSECTIONS.trace, 'Trace a day'],
-			['res-cumulative', 'Cumulative flow at each unit'],
+			['res-cumulative', 'Accumulated flow at each unit'],
 			['res-explore', 'Chart any daily series']
 		]);
 	});
@@ -59,7 +59,7 @@ describe('resultGroups', () => {
 			'Validation statement',
 			'Publication',
 			'Arithmetic checks',
-			'Cumulative flow at each unit',
+			'Accumulated flow at each unit',
 			'Chart any daily series'
 		]);
 		for (const s of resultSections({ forecast }, true)) {
@@ -80,7 +80,7 @@ describe('resultGroups', () => {
 			['res-publication', 'Publication'],
 			['res-checks', 'Arithmetic checks'],
 			[RUN_SUBSECTIONS.trace, 'Trace a day'],
-			['res-cumulative', 'Cumulative flow at each unit'],
+			['res-cumulative', 'Accumulated flow at each unit'],
 			['res-explore', 'Chart any daily series']
 		]);
 		const bar = resultSections({}).map((s) => s.id);
