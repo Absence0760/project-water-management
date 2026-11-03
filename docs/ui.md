@@ -7545,7 +7545,27 @@ unit on a line of its own, so about four months show beside it rather than
 two.
 
 
-- **Demand**: A-pan (Oct–Sep), with **Paste from a spreadsheet…** above it
+- **Demand**: above the A-pan row, **A-pan from** (a select beside **Paste
+  from a spreadsheet…**; a view choice, never saved; `evaporation/spanEntry.ts`
+  `APAN_SOURCES`): **Typed or pasted A-pan (the row below)** (the default, as
+  before, with the paste button); **WR2012 Pitman configuration, per
+  quaternary** (`Wr2012EvaporationProposal.svelte`, lazy): the quaternaries
+  under the boundary (code, share, zone, MAE, S-pan and A-pan totals, A ÷ S,
+  each module kind's agreement, flagged where they disagree), then the
+  monthly table (each quaternary's A-pan, the catchment's S-pan, the
+  proposed A-pan, the saved A-pan) and **Use as the A-pan** ("Saves now",
+  asks first, waits while the form has unsaved changes); a quaternary with
+  S-pan only shows "None: no irrigation module gives its A-pan, only S-pan";
+  **Typed or pasted S-pan, converted (WR90 / Taljaard)** (`SpanEntry.svelte`,
+  lazy): 12 S-pan months typed, or pasted with **Fill the months**, the
+  equation picked (Taljaard's warning; one under its floor disabled with the
+  month named), an optional note, and **Use as the A-pan**; and **A DWS
+  evaporation station** and **An evaporation grid**, each a link to its card
+  on Calibration ([maps.md § WR2012 evaporation by
+  quaternary](./maps.md#wr2012-evaporation-by-quaternary)). The month inputs
+  show 0.1 mm (`NumberInput` `decimals`); the stored value keeps its
+  precision until edited. Then the A-pan (Oct–Sep), with **Paste from a
+  spreadsheet…** while the typed A-pan is picked
   (editors; a block pasted into a month of the row opens it too): **Paste
   monthly A-pan evaporation** (`settings/monthlyPaste.ts`, issue #477) takes
   a row named A-pan evaporation (or A-pan; mm, 0–10 000), months Oct … Sep.

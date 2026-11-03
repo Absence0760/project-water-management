@@ -1,0 +1,4 @@
+{
+	"addKb": 11,
+	"why": "Model settings → Demand's A-pan source select, with WR2012 evaporation by quaternary (lazy panel) and the typed S-pan entry (lazy panel), and the credit text; measured 2359 KB on origin/main 680315f77 vs 2369 KB on this branch after build:frontend"
+}

@@ -18,6 +18,10 @@
 	const loadFlowGenCatchment = () => loadSections().then((m) => ({ default: m.FlowGenerationCatchment }));
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
+	// The typed or pasted S-pan, converted (Demand's A-pan source): loaded only when that source is picked.
+	const loadSpanEntry = () => import('#lib/components/evaporation/SpanEntry.svelte');
+	// WR2012's monthly A-pan per quaternary (Demand's A-pan source): loaded only when that source is picked.
+	const loadWr2012Evaporation = () => import('#lib/components/evaporation/Wr2012EvaporationProposal.svelte');
 	// Rain gaps' three cards, Gap-filling product (issue #604), CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
 	// line at the defaults (most projects): out of the tab's chunk for the same reason, with its three sections.
 	const loadRainGaps = () => loadSections().then((m) => ({ default: m }));
@@ -48,7 +52,7 @@
 		defaultProjectSettings,
 		resolveCatchmentAreaKm2
 	} from '@water-management/engine';
-	import { hasRole, type Project } from '#lib/api/index.js';
+	import { api, hasRole, type Project } from '#lib/api/index.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
@@ -79,6 +83,7 @@
 	import Fold from '#lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { apanSourceNote, withLakeMonthly } from './peInput';
+	import { APAN_SOURCES, type ApanSourceId } from '#lib/components/evaporation/spanEntry.js';
 	import { FLOW_METHOD, stationOptions, unitsOnCatchmentRain } from './flowGeneration';
 	import { calibrationHref } from '#lib/components/calibration/links.js';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
@@ -101,7 +106,8 @@
 		rainSeries,
 		rainRecords = null,
 		readonly,
-		onModelChanged = () => {}
+		onModelChanged = () => {},
+		onProjectChange = () => {}
 	}: {
 		project: Project;
 		editor?: ModelEditor;
@@ -122,6 +128,8 @@
 		readonly: boolean;
 		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
 		onModelChanged?: () => Promise<void> | void;
+		/** The project as the server now has it, after a value saved straight to it (the converted S-pan). */
+		onProjectChange?: (p: Project) => void;
 	} = $props();
 
 	// The form edits the page's draft in place (settings/settingsDraft.svelte.ts), so a tab change keeps it.
@@ -205,6 +213,14 @@
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	// Where Demand's A-pan comes from: a daily A-pan series (issue #45) is A-pan too, on the days it covers.
 	const apanSource = $derived(apanSourceNote(seriesKinds));
+	/** Where the A-pan row comes from (spanEntry.ts APAN_SOURCES): a view choice only, never saved. */
+	let apanFrom = $state<ApanSourceId>('typed');
+	/** A value saved straight to the project (the converted S-pan): the form takes the saved settings. */
+	async function reloadAfterApply() {
+		const p = await api.projects.get(project.id);
+		draft.rebase(p.settings, 'saved');
+		onProjectChange(p);
+	}
 
 	/**
 	 * From this content width (rem, 14 px) the menu is a side index (issue #468): at 1440 px the content is
@@ -519,10 +535,30 @@
 		</div>
 		<p class="summary" data-testid="summary-demand">{summaries['set-demand']}</p>
 		<p class="hint explain">Gross irrigation need = A-pan × crop factor × area.</p>
-		{#if !readonly}
-			<div class="toolbar grid-actions" data-testid="grid-actions">
+		<!-- Where the A-pan row comes from, beside its paste (spanEntry.ts APAN_SOURCES): a view choice, never saved; the
+		     model reads the row below whatever filled it, and each fill is recorded in History with its source. -->
+		<div class="toolbar grid-actions apan-from" data-testid="grid-actions">
+			<label for="st-apan-from">A-pan from</label>
+			<select id="st-apan-from" bind:value={apanFrom} data-testid="apan-from" aria-describedby="st-apan-from-h">
+				{#each APAN_SOURCES as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
+			</select>
+			{#if !readonly && apanFrom === 'typed'}
 				<button type="button" class="btn btn-sm" onclick={openMonthlyPaste}>Paste from a spreadsheet…</button>
-			</div>
+			{/if}
+		</div>
+		<p class="hint explain" id="st-apan-from-h">Only how you fill the row: the model reads the A-pan row below whatever filled it, and each fill is recorded in History with its source.</p>
+		{#if apanFrom === 'station'}
+			<p class="hint" data-testid="apan-from-link">On Calibration, under Flow calibration: <a href="?tab=calibration#set-evaporation-station">Evaporation stations</a> proposes the row and saves it with its source.</p>
+		{:else if apanFrom === 'grid'}
+			<p class="hint" data-testid="apan-from-link">On Calibration, under Flow calibration: <a href="?tab=calibration#set-evaporation">Evaporation from the map</a> proposes the row and saves it with its source.</p>
+		{:else if apanFrom === 'wr2012'}
+			<Lazy load={loadWr2012Evaporation}>
+				{#snippet children(Wr2012EvaporationProposal)}<Wr2012EvaporationProposal projectId={project.id} {readonly} formDirty={draft.dirty} onApplied={reloadAfterApply} />{/snippet}
+			</Lazy>
+		{:else if apanFrom === 'span'}
+			<Lazy load={loadSpanEntry}>
+				{#snippet children(SpanEntry)}<SpanEntry projectId={project.id} {readonly} formDirty={draft.dirty} savedApanMm={draft.saved.apanMm} onApplied={reloadAfterApply} />{/snippet}
+			</Lazy>
 		{/if}
 		<div class="table-wrap">
 			<!-- `short`: a month's A-pan is at most a few hundred mm, so its cells are narrower than the EWR row's
@@ -539,7 +575,7 @@
 					<tr>
 						<th scope="row" class="sticky">A-pan evaporation <span class="u">mm</span> <HelpTip key="settings.apanMm" /></th>
 						{#each WATER_YEAR_MONTHS as m, i (m)}
-							<td data-paste-col={i}><NumberInput label="A-pan evaporation, {m}, mm" min={0} disabled={readonly} bind:value={s.apanMm[i]} /></td>
+							<td data-paste-col={i}><NumberInput label="A-pan evaporation, {m}, mm" min={0} decimals={1} disabled={readonly} bind:value={s.apanMm[i]} /></td>
 						{/each}
 						<td class="num muted">{fmtNum(apanAnnual)}</td>
 					</tr>

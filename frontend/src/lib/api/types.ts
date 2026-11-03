@@ -3768,6 +3768,57 @@ export interface EvaporationStationProposals {
 	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
 }
 
+/** A WRSM2000 module row's provenance: how many modules named the quaternary, how many give the row kept, the others' annual totals (mm). */
+export interface ModuleAgreement {
+	modules: number;
+	agree: number;
+	othersMm: number[];
+}
+
+/** One quaternary the catchment boundary overlaps, with WR2012's monthly evaporation (GET /projects/:id/evaporation-wr2012; docs/maps.md § WR2012 evaporation by quaternary). */
+export interface Wr2012EvaporationQuaternary {
+	code: string;
+	dataset: string;
+	evaporationDataset: string | null;
+	/** The repo's invented data: never real values. */
+	synthetic: boolean;
+	/** Share of the catchment's area inside it, 0–1, and that area, km². */
+	share: number;
+	areaKm2: number;
+	/** WR2012's evaporation zone and MAE (mean annual S-pan, mm), context from its quaternary spreadsheets; null if not loaded. */
+	zone: string | null;
+	maeMm: number | null;
+	/** Monthly S-pan (runoff modules) and A-pan (irrigation modules), mm, Oct … Sep; null where the configurations have none. */
+	spanMm: number[] | null;
+	apanMm: number[] | null;
+	span: ModuleAgreement | null;
+	apan: ModuleAgreement | null;
+	files: number;
+	/** Some module named it with another row than the one kept. */
+	disagree: boolean;
+	/** Why it proposes no A-pan, or null. */
+	why: string | null;
+	source: string | null;
+}
+
+/** GET /projects/:id/evaporation-wr2012: WR2012's monthly S-pan and A-pan for the quaternaries under the boundary, beside the saved A-pan. */
+export interface Wr2012EvaporationProposal {
+	boundary: { featureId: string; name: string } | null;
+	/** The quaternary outline datasets loaded (none: nothing can be proposed). */
+	datasets: { dataset: string; count: number }[];
+	/** Null with no boundary. */
+	evaporation: {
+		quaternaries: Wr2012EvaporationQuaternary[];
+		/** The catchment's rows, area-weighted over the quaternaries that have each; null with none. */
+		spanMm: number[] | null;
+		apanMm: number[] | null;
+		spanCoverage: number;
+		apanCoverage: number;
+		problem: string | null;
+	} | null;
+	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
+}
+
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
 export interface RegisterDamProposal {
 	registerNo: string;

@@ -3595,6 +3595,7 @@ Lambda's list against the Sources table):
 | `soils` | SoilGrids 2.0 and iSDAsoil, CC BY 4.0: allowed (their attribution is stored on the dataset row) | the soil water capacity grid `ingest/soils.py` writes (JSON, gzipped), never the GeoTIFFs; at most 32 MiB (64 MiB unzipped) | the GDAL steps below, then `python3 ingest/soils.py … --out soils-d1.json.gz` |
 | `gr4j-donors` | GRDC-Caravan and HydroATLAS, CC BY 4.0: allowed (only fitted parameters, scores and attributes are in the file, no flow; the recorded attribution `GR4J_DONORS` is stored whatever the file says) | the donor file `pnpm fit-donors` writes (JSON, gzipped); at most 4 MiB (8 MiB unzipped) | the donor fit below (offline, on our own forcing) |
 | `quaternaries` | the DWS quaternary outlines and the WR2012 reference values: allowed by the operator's decision of 2026-11-02, citing the publishers' published terms (no open licence found for either; maps.md § Sources quotes them). Every row is stored with the recorded credit, `QUATERNARY_SOURCE` ("Quaternary catchments: Department of Water and Sanitation (DWS). Reference values: WR2012, …"), unless `-f source=…` gives one | the outlines with their values on each feature, the GeoJSON `--out` writes (gzipped), never the shapefile or the values CSV on their own | `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --values wr2012.csv --out quaternaries.geojson.gz` (steps below) |
+| `quaternary-evaporation` | WR2012's monthly S-pan and A-pan per quaternary from its WRSM2000 network configurations (WMAs 16–19): allowed by the operator's decision of 2026-11-03, extending the WR2012 decision to these evaporation values (maps.md § Sources). Every row is stored with the recorded credit, `QUATERNARY_EVAPORATION_SOURCE`, unless `-f source=…` gives one | the CSV `scripts/wbt-import/wrsm_evaporation.py` writes (at most 4 MiB), never the module files | `python scripts/wbt-import/wrsm_evaporation.py <network folders or zips> --out evaporation.csv` (below) |
 | `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 | `evaporation-stations` | blocked: DWS's permission (2026-10-28, data-sources.md § dws-flow) covers verified daily flow only, not evaporation station records (data-sources.md § dws-evaporation) | the station list and the stations' DWS daily evaporation replies, once allowed | refused by the gate (not in its allowed kinds) and by the Lambda (`REFERENCE_KINDS` status `blocked`) until followups.md *Decision: DWS evaporation station records* is made and the Sources row says allowed; a pan record can't arrive as `dws` either (a river gauge's `H` code and a flow table only). Until then the live site's Calibration page lists no evaporation stations ([maps.md § Evaporation stations](./maps.md#evaporation-stations)) |
 | `crop-types` | blocked: SANLC's terms not yet recorded (issue #604 R5-D, #618 step 8b) | the orchard and vine summary `pnpm import:crop-types … --out` writes, once allowed | refused until followups.md *Decision: SANLC's licence* is made; the live site shows no orchards or vines until then |
@@ -3830,7 +3831,14 @@ outside the repo (nothing real is ever committed):
    `ogr2ogr -t_srs EPSG:4326 -f GeoJSON quaternaries.geojson <file>.shp`.
    The loader takes the code from `code`, `QUATERNARY`, `QUATERN`,
    `Quaternary`, `QUAT` or `QCODE`.
-2. Transcribe the WR2012 tables you use to a CSV keyed by code,
+2. Turn WR2012's per-WMA quaternary spreadsheets into the values CSV:
+   `soffice --headless --convert-to xlsx "WR2012 <Basin> Quat Info WMA nn_Jul2015.xls"` for each,
+   then `python scripts/wbt-import/wr2012_quat_info.py <the .xlsx files> --out wr2012.csv`
+   (`--mae wr90` for WR90's MAE; it prints the `--source` line naming the
+   MAE). It refuses two files for one WMA: for WMA 17 list only the
+   original `…WMA 17_Jul2015`, not the `-2` copy (the client's local
+   correction; the operator's decision of 2026-11-03), or `--exclude` it.
+   Or transcribe the WR2012 tables you use to a CSV keyed by code,
    `code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end`
    (monthly means in Mm³, October first; maps.md § Quaternary dataset).
 3. Look at it locally:
@@ -3855,6 +3863,34 @@ load takes over any code an earlier dataset held. To withdraw it (the
 publishers object): take `quaternaries` out of `REFERENCE_KINDS` and the
 gate's `LOADABLE`, and delete the rows with a forward migration (`DELETE
 FROM quaternary_reference WHERE dataset = 'WR2012'`).
+
+**WR2012's evaporation per quaternary** (Model settings → Demand → A-pan
+from → WR2012 Pitman configuration; [maps.md § Quaternary
+evaporation](./maps.md#quaternary-evaporation)), allowed by the operator's
+decision of 2026-11-03. From the unzipped (or zipped) WRSM2000 network
+folders, outside the repo:
+
+1. `python scripts/wbt-import/wrsm_evaporation.py "<16 Gouritz WMA>" "<17 …>" "<18 …>" "<19 …>" --out evaporation.csv`
+   (it prints how many quaternaries have S-pan and A-pan, those whose modules
+   disagree, and every module file skipped, with why).
+2. Look at it locally: `pnpm import:quaternary-evaporation evaporation.csv --dataset WR2012-WRSM2000`,
+   with the quaternary outlines loaded, then the A-pan source on a project
+   whose boundary lies in those WMAs.
+3. Keep the network zips under `originals/quaternary-evaporation/`, then
+   upload and load:
+
+```bash
+sha256sum evaporation.csv
+aws s3 cp evaporation.csv s3://<reference_bucket>/reference/quaternary-evaporation/wrsm2000-wma16-19.csv --profile water-management
+gh workflow run load-reference.yml -f kind=quaternary-evaporation -f key=reference/quaternary-evaporation/wrsm2000-wma16-19.csv -f sha256=<hex> -f dataset=WR2012-WRSM2000
+```
+
+Approve it in the `production` environment. Every row is stored with the
+recorded credit, "WR2012 (WRC 2015), WRSM2000 network configurations, WMAs
+16–19: …", unless `-f source=` gives one. A load replaces its dataset; the
+outlines are separate and stay. To withdraw it: take `quaternary-evaporation`
+out of `REFERENCE_KINDS` and the gate's `LOADABLE`, and delete the rows with a
+forward migration (`DELETE FROM quaternary_evaporation WHERE dataset = 'WR2012-WRSM2000'`).
 
 #### Refreshing a dataset
 

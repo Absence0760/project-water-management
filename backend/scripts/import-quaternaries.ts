@@ -91,6 +91,9 @@ export async function importQuaternaries(url: string, args: Args): Promise<{ wri
 	}
 }
 
+/** Load the committed synthetic dataset (its outlines and values) into the database at `url`. */
+export const loadSyntheticQuaternaries = (url: string) => importQuaternaries(url, parseArgs([]) as Args);
+
 if (import.meta.url === `file://${process.argv[1]}`) {
 	loadDevEnv();
 	const url = process.env.MIGRATION_DATABASE_URL;

@@ -14,6 +14,8 @@ import { headerControl } from './sectionHeader.ts';
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 /** Advisory lock key for loading the dataset (distinct from the examples' seed). */
 const QUATERNARY_LOCK = 288_288;
+/** Advisory lock key for loading the quaternaries' evaporation (distinct from the other reference loaders'). */
+const QUATERNARY_EVAPORATION_LOCK = 288_310;
 /** And for the gauging stations (issue #326 B-gauge). */
 const STATIONS_LOCK = 326_153;
 /** And for the river network (issue #345). */
@@ -55,6 +57,17 @@ export const projectedGeoJson = () =>
 export async function loadSyntheticQuaternaries(): Promise<void> {
 	await withSetupLock(QUATERNARY_LOCK, async () => {
 		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-quaternaries.ts'], {
+			cwd: backendDir,
+			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
+			stdio: 'pipe'
+		});
+	});
+}
+
+/** Load the committed synthetic monthly S-pan and A-pan per quaternary (`pnpm import:quaternary-evaporation`; replacing them; idempotent). */
+export async function loadSyntheticQuaternaryEvaporation(): Promise<void> {
+	await withSetupLock(QUATERNARY_EVAPORATION_LOCK, async () => {
+		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-quaternary-evaporation.ts'], {
 			cwd: backendDir,
 			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
 			stdio: 'pipe'
