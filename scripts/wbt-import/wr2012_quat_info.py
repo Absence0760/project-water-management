@@ -37,6 +37,7 @@ and the line to give `--source` is printed (it names the MAE chosen). Real
 WR2012 files and their values are never committed: the repo is public.
 """
 
+import math
 import argparse
 import csv
 import re
@@ -93,7 +94,7 @@ def _num(v):
         n = float(v)
     except (TypeError, ValueError):
         return None
-    return n if n == n and n not in (float("inf"), float("-inf")) else None
+    return n if math.isfinite(n) else None
 
 
 def _fmt(n):
