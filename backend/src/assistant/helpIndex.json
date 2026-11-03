@@ -337,7 +337,7 @@
 			"id": "plan-the-season#2",
 			"title": "Weigh a season’s demand level: Steps",
 			"url": "/help/guides/plan-the-season",
-			"text": "Run the model on the latest data. Both panels need an ordinary run, not a scenario or forecast run. In Model settings, check Outcome matrix (how years are classed and the risk cut-offs) and Seasonal outlook (the season, the planning share and the review date). On EWR, press Run… beside Outcome matrix, type the levels and press Run demand sweep. Read across a row for one level in every kind of year, and down a column for every level in one kind of year. Press Run… beside Seasonal outlook, type the levels (and a monthly plan, if the WUA is considering one) and press Run seasonal outlook. Read each level’s season-end storage, demand met and days below the EWR as the median with its 10–90 % range, and the Planning figure and planning share. For a mid-season check, read the Review triggers: the level each band of total dam storage on the review date supported in past years. Once the WUA has decided, pick Level the WUA has set under Farmers and press Publish to farmers (Publishing an outlook level to farmers). A lower demand level doesn’t always mean fewer days below the EWR: part of the water irrigated from a dam drains back to the river on dry days. With fewer than 10 analogue years the outlook gives no ranges and no planning figure."
+			"text": "Run the model on the latest data. Both panels need an ordinary run, not a scenario or forecast run. In Model settings, check Outcome matrix (how years are classed and the risk cut-offs) and Seasonal outlook (the season, the planning share and the review date). On EWR, press Run… beside Outcome matrix, type the levels and press Run demand sweep. Read across a row for one level in every kind of year, and down a column for every level in one kind of year. Under it, How much irrigation can the catchment support? reads the same sweep: for each level, the natural water in a year below which the river’s requirement started to fail (the wettest year that failed), with the Key message in words. Press Run… beside Seasonal outlook, type the levels (and a monthly plan, if the WUA is considering one) and press Run seasonal outlook. Read each level’s season-end storage, demand met and days below the EWR as the median with its 10–90 % range, and the Planning figure and planning share. For a mid-season check, read the Review triggers: the level each band of total dam storage on the review date supported in past years. Once the WUA has decided, pick Level the WUA has set under Farmers and press Publish to farmers (Publishing an outlook level to farmers). A lower demand level doesn’t always mean fewer days below the EWR: part of the water irrigated from a dam drains back to the river on dry days. With fewer than 10 analogue years the outlook gives no ranges and no planning figure."
 		},
 		{
 			"kind": "guide",
@@ -5239,6 +5239,21 @@
 			"url": "/help/glossary/results#outcome-matrix",
 			"summary": "For each demand level and water-year class, how the river fared in those years of the record: a historical tally, not a forecast.",
 			"text": "One row per demand level, one column per water-year class of the base run. Each level is the base run re-run with every unit’s demand scaled (a demand sweep). Each cell reads the years of its class: with a Reserve rule table at the chosen site for every level, the share of months meeting the table over those years; otherwise the share of days below the pragmatic EWR at the outlet. The sentence in each cell counts years (“EWR met on every day in 2 of 3 dry years”), and its colour and words give the risk: lower, increasing or high. A class with fewer than three years reads Not enough years. Reserve site (the outlet, or a gauge with a rule table) is a project setting, so everyone sees the matrix the editor chose. The classes and the risk are worked out from the stored sweep, so changing them in Settings re-reads it without running it again. The matrix reports how past years went at each level. It doesn’t recommend a level: that is the WUA’s decision."
+		},
+		{
+			"kind": "glossary",
+			"id": "irrigation-support",
+			"title": "Irrigation the catchment supports",
+			"aliases": [
+				"irrigation support",
+				"how much irrigation",
+				"breach threshold",
+				"supportable irrigation",
+				"MAR threshold"
+			],
+			"url": "/help/glossary/results#irrigation-support",
+			"summary": "Per demand level, the natural water in a year below which the river’s requirement started to fail: the wettest year not met. (million m³ a year)",
+			"text": "Beside the outcome matrix on EWR, from the same demand sweep. Each demand level is a bar across the record’s complete water years, placed by the year’s natural flow at the outlet (the water the catchment had that year, in million m³; MAR marks their mean). Each year is a dot where the river’s requirement was not met in full that year and a ring where it was, by the matrix’s own measure: every month meeting the Reserve rule table, or no day below the EWR. The marker is the wettest year that was not met. Every wetter year met the requirement, so it is where breaches start in the record; \"about\" because the true edge lies somewhere up to the next wetter year, and because a drier year can still meet it when its water came at the right time (the table counts those). There is no marker when no year failed, when even the wettest year failed, or with fewer than 9 complete years (a judgement, pending the hydrologist). Each level is read on its own and never smoothed: a lower level can start failing in wetter years, since less irrigation can mean less water draining back to the river. The hectares are the run’s planted area scaled by the level: the sweep scales demand, not the crops, so read them as equivalents (none on a full-allocation run, where a level is a share of the registered volume). The Key message is written from these numbers. It reports past years at each level and doesn’t recommend one: that is the WUA’s decision."
 		},
 		{
 			"kind": "glossary",

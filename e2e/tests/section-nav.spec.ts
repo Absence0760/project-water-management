@@ -51,6 +51,7 @@ const EWR_LINKS = [
 	'Uncertainty bands',
 	'Sensitivity runs',
 	'Outcome matrix',
+	'How much irrigation can the catchment support?',
 	'Seasonal outlook'
 ];
 const moreButton = (menu: Locator) => menu.getByRole('button', { name: /^More sections/ });
@@ -302,7 +303,7 @@ test('EWR has the menu: every panel by its heading, a jump that lands, and a loa
 	// met is listed without a rule table too, as its panel then says what it needs (issue #465). Each link says its
 	// panel's heading word for word, as the side index does (issue #586 R4-F), and they still fit two rows at 1280.
 	await expect(menu.getByRole('link')).toHaveText(EWR_LINKS);
-	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'Seasonal outlook']);
+	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'How much irrigation can the catchment support?', 'Seasonal outlook']);
 	// Its group names would take it to another row, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
 	await expect(moreButton(menu)).toHaveCount(0);
@@ -315,7 +316,7 @@ test('EWR has the menu: every panel by its heading, a jump that lands, and a loa
 		[
 			['The reserve', EWR_LINKS.slice(0, 4)],
 			['Water balance', ['Water account']],
-			['How sure, and what if', ['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'Seasonal outlook']]
+			['How sure, and what if', ['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'How much irrigation can the catchment support?', 'Seasonal outlook']]
 		],
 		page.getByRole('region', { name: 'Flow vs reserve' })
 	);

@@ -1209,6 +1209,17 @@ section it belongs to, with the example that taught it.
   % full, the reserve) use the band colours (`network/farmColour.ts`,
   `overview/supplyBars.ts`), never the categorical palette; one-directional
   amounts (irrigated area) use one hue in steps.
+- **A red-to-green bar follows the data, not the axis.** The operator's
+  sketch for *How much irrigation can the catchment support?* drew every
+  level's bar as the same red → green sweep with a marker on it, so the
+  colour said nothing the marker didn't, and a reader would take the red end
+  for the failing years whether or not they were. The built bars
+  (`outcomes/IrrigationSupportPanel.svelte`) put the band tints where the
+  record puts them: `--danger-soft` up to the driest year that met, blended
+  through `--warning-soft` at the marker to `--success-soft` at the next
+  wetter year, with each year drawn on top as a dot (not met) or a ring
+  (met). The tint is soft, so no text sits on it: the marker's words go
+  above the bar on the card.
 - **Name each bar of a pair beside it; don't key them with a split swatch.**
   The landing's what-if drew Today and This plan as two unlabelled bars under
   each figure with one key below, whose "This plan" swatch was half green,

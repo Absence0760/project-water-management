@@ -2219,6 +2219,13 @@ export const TIPS: HelpTipText[] = [
 		category: 'results'
 	},
 	{
+		id: 'irrigation-support',
+		term: 'Irrigation the catchment supports',
+		short: 'Per demand level, the natural water in a year below which the river’s requirement started to fail: the wettest year not met.',
+		units: 'million m³ a year',
+		category: 'results'
+	},
+	{
 		id: 'outcome-risk',
 		term: 'Outcome risk cut-offs',
 		short: 'Where a cell turns from lower to increasing to high risk: months met ≥ 90 % / ≥ 75 %, or days below the EWR ≤ 5 % / ≤ 20 %.',

@@ -324,6 +324,7 @@ test('each anchor the moves send on lands on its new home’s panel heading, for
 		'res-uncertainty': 'Uncertainty bands',
 		'res-sensitivity': 'Sensitivity runs',
 		'res-outcomes': 'Outcome matrix',
+		'res-irrigation': 'How much irrigation can the catchment support?',
 		'res-outlook': 'Seasonal outlook',
 		'res-reserve-strip': 'Days below the reserve',
 		'res-farm': 'Hydrological unit detail: Lower farm',

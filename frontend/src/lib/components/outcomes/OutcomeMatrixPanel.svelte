@@ -39,6 +39,7 @@
 		parseDemandLevels,
 		SWEEP_MEMBERS_MAX,
 		sweepState,
+		type MatrixShare,
 		type MatrixView
 	} from './matrix';
 	import { resolveOutcomes } from './outcomeSettings';
@@ -53,6 +54,7 @@
 		ewrRules = [],
 		daily,
 		onProjectChange,
+		onview,
 		canEdit
 	}: {
 		projectId: string;
@@ -70,6 +72,8 @@
 		daily?: DailyEwrSource;
 		/** The project after the site was saved. */
 		onProjectChange?: (p: Project) => void;
+		/** The panel's sweep and matrix whenever they change: the irrigation support board reads the same years (IrrigationSupportPanel). */
+		onview?: (v: MatrixShare) => void;
 		canEdit: boolean;
 	} = $props();
 
@@ -201,7 +205,12 @@
 	let opened = $state(false);
 	const runnable = $derived(ordinary && hasNaturalFlow);
 	const collapsed = $derived(!opened && !submitting && !submitError && !loadError && (!runnable || loading || !sweep));
-	async function open() {
+	// Shared with the irrigation support board, which reads this sweep rather than looking it up again.
+	$effect(() => {
+		onview?.({ state: dataState, view, sweep, runnable });
+	});
+	/** Open the sweep form, focus on the levels (also the irrigation support board's Run…). */
+	export async function open() {
 		opened = true;
 		await tick();
 		document.getElementById('outcome-levels')?.focus();
