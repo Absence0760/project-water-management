@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunCompareResponse } from '#lib/api/types.js';
 import { OUTLET_SITE } from '#lib/components/outcomes/matrix.js';
 import { loadImpactSeries, type ImpactSeries } from './impactSeries';
-import { buildLicenceImpactBoard, evidenceBoard, VERDICT_LABEL } from './licenceImpact';
+import { buildLicenceImpactBoard, evidenceBoard, VERDICT_LABEL, VERDICT_MARK, waterfallBars } from './licenceImpact';
 
 // Nine invented water years from 1 October 2000, natural totals 900 … 8100 m³
 // (terciles: 2000–02 dry, 2003–05 normal, 2006–08 wet).
@@ -83,6 +83,52 @@ describe('buildLicenceImpactBoard', () => {
 		expect(v.existingNote).toMatch(/^Existing use is the use in the baseline “Baseline” as that run modelled it/);
 		expect(v.existingNote).toMatch(/For existing authorised use, compare with a baseline run at every holder’s full registered volume/);
 		expect(v.notes).toEqual(['Neither run has a Reserve rule table at the outlet, so the board counts days below the pragmatic EWR.']);
+	});
+
+	it('reads like the mock-up’s board: each class’s share of the record, the summary of what is compared, a mark beside each verdict', () => {
+		const v = buildLicenceImpactBoard({
+			data: { a: side('Baseline', 100), b: side('More orchard', 160) },
+			series: series((wy) => (wy <= 2002 ? 5 : 0), (wy) => (wy <= 2002 ? 9 : 0)),
+			method: 'auto'
+		});
+		if (v.status !== 'ok') throw new Error(v.reason);
+		expect(v.columns.map((c) => c.share)).toEqual(['the driest third of years', 'the middle third', 'the wettest third']);
+		expect(v.summary).toEqual([
+			{ label: 'Baseline', value: '“Baseline”' },
+			{ label: 'This run', value: '“More orchard”' },
+			{ label: 'Proposed use, mean a year', value: 'Dry 60 m³ · Normal 60 m³ · Wet 60 m³' },
+			{ label: 'Years compared', value: '9 complete water years, in terciles of the baseline’s natural flow' },
+			{ label: 'Requirement', value: 'Days below the pragmatic EWR at the outlet' }
+		]);
+		expect(v.columns.map((c) => c.mark)).toEqual(['▲', '=', '=']);
+		expect(VERDICT_MARK).toEqual({ moreBelow: '▲', fewerBelow: '▼', noChange: '=', notEnoughYears: '–' });
+	});
+
+	it('waterfallBars floats each step from the running total, natural and left from zero, in the unit the flows need', () => {
+		const steps = [
+			{ id: 'natural', label: 'Natural flow', m3: 1800, text: '' },
+			{ id: 'existing', label: 'Existing use', m3: 100, text: '' },
+			{ id: 'proposed', label: 'Proposed use', m3: -40, text: '' },
+			{ id: 'other', label: 'Other', m3: 0, text: '' },
+			{ id: 'left', label: 'Flow left', m3: 1740, text: '' }
+		] as const;
+		const w = waterfallBars(steps);
+		expect(w.unit).toBe('m³ a year');
+		expect(w.max).toBe(1800);
+		expect(w.bars.map((b) => [b.id, b.from, b.to, b.end, b.value, b.short])).toEqual([
+			['natural', 0, 1800, 1800, '1\u202f800', 'Natural'],
+			['existing', 1800, 1700, 1700, '−100', 'Existing'],
+			// Using less adds to the flow: the bar rises.
+			['proposed', 1700, 1740, 1740, '+40', 'Proposed'],
+			['other', 1740, 1740, 1740, '0', 'Other'],
+			['left', 0, 1740, 1740, '1\u202f740', 'Left']
+		]);
+		const big = waterfallBars(steps.map((x) => ({ ...x, m3: x.m3 * 10_000 })));
+		expect(big.unit).toBe('million m³ a year');
+		expect(big.bars.map((b) => b.value)).toEqual(['18.0', '−1.0', '+0.4', '0', '17.4']);
+		const mid = waterfallBars(steps.map((x) => ({ ...x, m3: x.m3 * 456 })));
+		expect(mid.unit).toBe('thousand m³ a year');
+		expect(mid.bars.map((b) => b.value)).toEqual(['821', '−46', '+18', '0', '793']);
 	});
 
 	it('names the runs’ daily EWR when it came from the DRM tables (engine ≥ 1.77.0), and each run’s when they differ', () => {
