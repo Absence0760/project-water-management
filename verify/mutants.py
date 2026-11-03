@@ -377,6 +377,12 @@ MUTANTS = [
     ("the reference fit keeps the catchment gauge's accumulation windows (engine 1.85.0)", 'out_of_fit = rain["fit_window_days"]', "out_of_fit = set()"),
     ("the reference fit keeps a unit gauge's accumulation windows (engine 1.85.0)", 'out_of_fit = prep["fit_window_days"] if for_fit else set()', "out_of_fit = set()"),
     ("the reference fit reads the gauge as stored (item 1c)", "gv = gauge(o)", "gv = stored.get(o)"),
+    # CHIRPS as a unit's driver (§2.4h, engine 1.114.0, the operator 2026-11-03).
+    ("a raw CHIRPS driver takes the reference factors", '    if choice == "raw":\n        ref = None\n        has_bias = False\n', '    if choice == "raw":\n        has_bias = False\n'),
+    ("a raw CHIRPS driver takes the catchment's bias factors", '    if choice == "raw":\n        ref = None\n        has_bias = False\n', '    if choice == "raw":\n        ref = None\n'),
+    ("a bias-corrected CHIRPS driver has no k_unit on the bias factors", 'return kinded(lambda v, o, k=k: v * fb(o) * k, "map")', 'return kinded(lambda v, o: v * fb(o), "shape")'),
+    ("a bias-corrected CHIRPS driver with a MAP and no reference ignores the bias factors", 'if choice == "bias" and has_bias and map_mm is not None:', 'if False:'),
+    ("a CHIRPS driver still reads the unit's own gauge first", 'chain = [lev]\n            diag["unit_choice_" + choice] += 1', 'chain = [own, lev]\n            diag["unit_choice_" + choice] += 1'),
     # Rainfall stations (§2.4i, engine 1.91.0, issue #553).
     ("a station's MAP ratio isn't clamped", "        f = area_map / st_map\n        r = min(FACTOR_MAX, max(FACTOR_MIN, f))", "        f = area_map / st_map\n        r = f"),
     ("scaleToMap false still scales by the MAP ratio", 'if a.get("scaleToMap") is False:', "if False:"),

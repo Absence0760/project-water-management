@@ -955,6 +955,46 @@ def unit_rain_reference_kunit() -> dict:
     return _net(nodes, series, unitRain=ur)
 
 
+def unit_rain_chirps_driver(point: str = "reference") -> dict:
+    """CHIRPS as a unit's driver (§2.4h, engine 1.114.0, the operator
+    2026-11-03). Eight years (2012–2019), MAP period 2012–2019. `point`:
+    'reference', a reference gauge at r (the cell the gauge × 0.5);
+    'bias', the catchment's CHIRPS (the gauge × 0.5 in the wet months, × 0.8
+    in the rest) for §2.4b's factors, no reference; 'none', neither. Units:
+    a raw, with a gauge of its own too (not read); b bias with a MAP; c bias
+    without a MAP; d raw without a MAP; e raw with a MAP 40 mm (k clamped);
+    r not set, the control (the reference unit under 'reference')."""
+    start = dt.date(2012, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    gauge = _season(start, n, 0)
+    series: dict = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge}}
+    if point == "reference":
+        series["rain_chirps_cell_mm@r"] = {"startDate": start.isoformat(), "values": [round(g * 0.5, 2) for g in gauge]}
+    if point == "bias":
+        series["rain_chirps_mm"] = {"startDate": start.isoformat(), "values": [round(g * (0.5 if (start + dt.timedelta(days=i)).month in WET else 0.8), 2) for i, g in enumerate(gauge)]}
+    for k, u in enumerate("abcder"):
+        series[f"rain_chirps_mm@{u}"] = {"startDate": start.isoformat(), "values": _season(start, n, k + 1, 0.6 + 0.1 * k)}
+    series["rain_catchment_mm@a"] = {"startDate": start.isoformat(), "values": _season(start, n, 9, 1.4)}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("a", "farm", "o", areaKm2=2, mapMm=700, **src),
+        _node("b", "farm", "o", areaKm2=3, mapMm=850, **src),
+        _node("c", "farm", "o", areaKm2=1),
+        _node("d", "farm", "o", areaKm2=1),
+        _node("e", "farm", "o", areaKm2=0.5, mapMm=40, **src),
+        _node("r", "farm", "o", areaKm2=2, mapMm=650, **src),
+    ]
+    ur: dict = {
+        "mode": "perUnit",
+        "mapPeriod": {"start": "2012-01-01", "end": "2019-12-31"},
+        "chirpsUnits": {"a": {"correction": "raw"}, "b": {"correction": "bias"}, "c": {"correction": "bias"}, "d": {"correction": "raw"}, "e": {"correction": "raw"}},
+    }
+    if point == "reference":
+        ur["reference"] = {"gauge": "rain_catchment_mm", "unitId": "r"}
+    return _net(nodes, series, unitRain=ur)
+
+
 def unit_rain_unusable_chirps() -> dict:
     """CHIRPS averaging 0 mm a year without a reference (issue #500 item
     7a): complete years of 0 mm, rain only in an incomplete last year. c3
@@ -2213,6 +2253,9 @@ PROBES = {
     "baseflow-loss-and-gain": baseflow_loss_and_gain(),
     # Issue #500's decisions.
     "unit-rain-reference-kunit": unit_rain_reference_kunit(),
+    "unit-rain-chirps-driver-reference": unit_rain_chirps_driver("reference"),
+    "unit-rain-chirps-driver-bias": unit_rain_chirps_driver("bias"),
+    "unit-rain-chirps-driver-none": unit_rain_chirps_driver("none"),
     "unit-rain-unusable-chirps": unit_rain_unusable_chirps(),
     "unit-rain-forecast-gefs": unit_rain_forecast_gefs(),
     "unit-rain-forecast-gefs-noref": unit_rain_forecast_gefs_noref(),
