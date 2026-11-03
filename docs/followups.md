@@ -982,6 +982,20 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **CHIRPS as a unit's driver, bias-corrected (engine 1.114.0, model.md
+      §2.4h *CHIRPS as a unit's driver*).** Built from the operator's ask
+      (2026-11-03). Two calls were made without the hydrologist: with no
+      reference gauge, a unit with a MAP is corrected by the catchment's
+      §2.4b monthly factors (catchment gauge ÷ catchment CHIRPS) and then
+      levelled by k_unit, as the reference's factors are; and a station
+      pairing (`correctAgainst`, §2.4i) is not a source of the correction
+      here, so a project whose only point records are rainfall stations, with
+      no reference gauge and its catchment on a station (§2.4b off), runs a
+      bias-corrected unit raw. Ask: is §2.4b's catchment-wide bias a fair
+      correction for a unit's own cells, and should the choice name a
+      station to correct against (its pairing, at the unit's MAP)? Trigger:
+      the next hydrologist round, or a client project with stations and no
+      reference gauge.
 - [ ] **A canal sized by a diversion curve (engine 1.113.0, model.md
       §2.6a *Sized by a diversion curve*).** The hydrologist's rule for one
       of the client's canals (2026-11-02) is built as a river off-take with

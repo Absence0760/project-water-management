@@ -7491,7 +7491,7 @@ other sections.
   shortened to the menu's words; the summary line under each says the rest);
   inside the long ones each sub-group is an `h3` in the order shown (in its
   fieldset's legend where it has one), so heading navigation reaches them:
-  under Flow generation its cards (Per unit: Each unit's rainfall station,
+  under Flow generation its cards (Per unit: Each unit's driver rainfall,
   then the Flow share card; Units without a station an `h4` in its legend,
   issue #553); under Rain gaps its three cards, Gap-filling product (issue
   #604), CHIRPS gap filling and Flagged rain, with the Flagged rain card's zero-rain runs, multi-day accumulations
@@ -7771,17 +7771,43 @@ two.
     `rain-patch-priority.spec.ts` covers the station, with a forecast tail;
     `catchment-rain-map.spec.ts` the MAP: entered, saved, scaling a run's
     station rain, and cleared.
-  - Then two cards. **Each unit's rainfall station**
+  - Then two cards. **Each unit's driver rainfall** (named Each unit's
+    rainfall station until engine 1.114.0)
     (`settings/FlowGenerationUnits.svelte`, in the lazy sections chunk;
-    helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`,
-    [model.md §2.4i](./model.md)): a line ("1 of 2 units with land have a
-    rainfall station."), then a table, one row per land unit (a farm with an
-    area, in model order): the unit with its MAP and source; **Station**, a
-    select of the project's rainfall stations (every catchment rain series
-    with no site, by name) and *No station: as before stations* (the unit keeps
-    the §2.4h rule, so a project from before stations runs as it did).
-    Satellite rain is never an option: CHIRPS only fills a station's gaps
-    (operator, 2026-10-23). **Scale to unit MAP**, a checkbox (on by default,
+    helpers in `settings/flowGeneration.ts`; `settings.rainStations.units`
+    and `settings.unitRain.chirpsUnits`, [model.md §2.4h, §2.4i](./model.md)):
+    a line ("1 of 2 units with land have a rainfall station[, and 1 runs on
+    its own CHIRPS]."), then a table, one row per land unit (a farm with an
+    area, in model order): the unit with its MAP and source; **Driver
+    rainfall**, a select of *Not set: as before* (the unit keeps the §2.4h
+    rule, so a project from before stations runs as it did), *CHIRPS,
+    bias-corrected* and *CHIRPS, raw (levelled to the unit's MAP)* (the
+    unit's own CHIRPS as its driver, the operator's ask of 2026-11-03,
+    [model.md §2.4h *CHIRPS as a unit's driver*](./model.md#chirps-as-a-units-driver-engine--11140)),
+    then the project's rainfall stations (every catchment rain series with
+    no site, by name, under *Rainfall stations*). A unit has one driver:
+    picking CHIRPS takes its station away and a station its CHIRPS, in the
+    one save. Under a CHIRPS driver, the line the select describes: how it is
+    levelled, from the engine's `unitChirpsChoicePreview` over the stored
+    model input with the form's choices, unit-rain setting (reference gauge,
+    MAP period) and CHIRPS bias mode, so it follows the unsaved draft
+    (`settings/chirpsDriverPreview.ts`, loaded when a unit has a CHIRPS
+    driver, the input fetched once per visit; "Working out its MAP ÷ its
+    CHIRPS mean annual rain…" while it loads, and a note that the figures
+    show once the project has rain to run on when it can't be worked out): "MAP
+    900 mm ÷ its CHIRPS 293 mm a year (2015–2020) = × 3.073" for raw, "Corrected
+    month by month against the reference gauge, then MAP … ÷ its corrected
+    CHIRPS … = × …" or "Corrected by the catchment's CHIRPS bias factors,
+    then …" for bias-corrected; and, in the warning colour, when the choice
+    won't run as chosen: bias-corrected with no point rainfall record to
+    correct against ("… so it runs on raw CHIRPS, levelled to its MAP"), or a
+    unit with no CHIRPS series of its own ("… runs as Not set until it has
+    one"), from the engine's `unitChirpsChoiceNotes` before the preview
+    loads. A station unit's controls (patching, scaling, correcting station)
+    stay empty for a CHIRPS unit. The tick-several action offers the same
+    drivers, and shows with no station too. Satellite rain is never a
+    station unit's main rain: CHIRPS only fills a station's gaps (operator,
+    2026-10-23). **Scale to unit MAP**, a checkbox (on by default,
     stored as none; off stores `scaleToMap: false`) with the ratio beside it
     (*× 1.5*, *× 4 (clamped from 6)*, *× 1: the unit has no MAP*, *× 1, as
     recorded*); **Then patch gaps from** (issue #612,
@@ -7808,7 +7834,7 @@ two.
     is corrected against (*Its station* by default, stored as none). A unit
     whose station was deleted says so in red and keeps its id until another
     is picked. Editors tick rows (or every row) and give the ticked units one
-    station with **Assign to the ticked units**, and, once a station is
+    driver with **Assign to the ticked units**, and, once a station is
     picked there, one patching priority too. Under the table, each station
     in use once (main, correcting or patching, however many units share
     it): its MAP and source, the units it runs and patches, a link to edit it in
@@ -9676,7 +9702,12 @@ read it before.
   names the land units with no rain of their own (no station, rain gauge or
   CHIRPS of their own, no MAP with a gauge MAP; issue #615): they run on the
   catchment rain, so their share follows their area, with a link to
-  Model settings (`run-catchment-rain`, a note, never a blocker). A run the header started on
+  Model settings (`run-catchment-rain`, a note, never a blocker), and the
+  units whose CHIRPS driver won't run as chosen (engine ≥ 1.114.0,
+  `run-chirps-driver`, the engine's `unitChirpsChoiceNotes`, also in the
+  assistant's get_run_readiness): no CHIRPS series of their own (they run
+  as Not set), or bias-corrected with no point rainfall record to correct
+  against (raw CHIRPS, levelled to the unit's MAP). A run the header started on
   another section and still going when the page opens shows here the same
   way, the form waiting for it. A viewer gets no form, and
   the inputs-changed note as before.
