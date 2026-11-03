@@ -318,10 +318,19 @@
 			</Lazy>
 		</div>
 		<div class="sub-card" data-testid="flowgen-stations-card">
-			<h3 class="sub first">Each unit’s rainfall station <HelpTip key="settings.rainStations" /></h3>
+			<h3 class="sub first">Each unit’s driver rainfall <HelpTip key="settings.rainStations" /></h3>
 			<Lazy load={loadFlowGenUnits}>
 				{#snippet children(FlowGenerationUnits)}
-					<FlowGenerationUnits bind:value={s.rainStations} {readonly} nodes={editor?.model.nodes ?? []} {stations} projectId={project.id} />
+					<FlowGenerationUnits
+						bind:value={s.rainStations}
+						bind:unitRain={s.unitRain}
+						{readonly}
+						nodes={editor?.model.nodes ?? []}
+						{stations}
+						projectId={project.id}
+						rainSeries={rainSeries ?? undefined}
+						chirpsBiasCorrection={s.chirpsBiasCorrection}
+					/>
 				{/snippet}
 			</Lazy>
 		</div>

@@ -45,7 +45,7 @@
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
-	import { unitsOnCatchmentRain } from '#lib/components/settings/flowGeneration.js';
+	import { unitChirpsChoiceNotes, unitsOnCatchmentRain } from '#lib/components/settings/flowGeneration.js';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
@@ -529,6 +529,9 @@
 	// Run readiness (issue #615): the land units with no rain of their own run on the catchment rain, so their EWR share
 	// follows their area. A note, not a blocker: the run says so too.
 	const onCatchmentRain = $derived(series ? unitsOnCatchmentRain(editor.model.nodes, project.settings, series) : []);
+	// CHIRPS as a unit's driver (engine ≥ 1.114.0): the units whose choice won't run as chosen. Notes, not blockers.
+	const chirpsNotes = $derived(series ? unitChirpsChoiceNotes(editor.model.nodes, project.settings, series) : { noChirps: [], rawInstead: [] });
+	const unitNames = (units: readonly { name: string }[]) => `${units.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}${units.length > 6 ? ` and ${units.length - 6} more` : ''}`;
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	// The in-page menu (SectionNav): above the results, or beside them from 62rem of results (a 1440 px
 	// window), where 13rem of index leaves the results about as wide as at 1280 px without it (issue #462). The index lists the
@@ -638,6 +641,19 @@
 			<p class="note" data-testid="run-catchment-rain">
 				{onCatchmentRain.length === 1 ? '1 unit has' : `${onCatchmentRain.length} units have`} no rain of {onCatchmentRain.length === 1 ? 'its' : 'their'} own, so {onCatchmentRain.length === 1 ? 'its' : 'their'} share follows {onCatchmentRain.length === 1 ? 'its' : 'their'} area:
 				{onCatchmentRain.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}{onCatchmentRain.length > 6 ? ` and ${onCatchmentRain.length - 6} more` : ''}. Set up their rain in
+				<a href="?tab=settings#set-share">Model settings</a>.
+			</p>
+		{/if}
+		{#if !runBusy && (chirpsNotes.noChirps.length || chirpsNotes.rawInstead.length)}
+			<p class="note" data-testid="run-chirps-driver">
+				{#if chirpsNotes.noChirps.length}
+					{chirpsNotes.noChirps.length === 1 ? '1 unit has' : `${chirpsNotes.noChirps.length} units have`} CHIRPS as the driver rainfall but no CHIRPS series of {chirpsNotes.noChirps.length === 1 ? 'its' : 'their'} own, so
+					{chirpsNotes.noChirps.length === 1 ? 'it runs' : 'they run'} as Not set: {unitNames(chirpsNotes.noChirps)}.
+				{/if}
+				{#if chirpsNotes.rawInstead.length}
+					{chirpsNotes.rawInstead.length === 1 ? '1 unit has' : `${chirpsNotes.rawInstead.length} units have`} CHIRPS, bias-corrected, but there is no point rainfall record to correct it against, so raw
+					CHIRPS is used, levelled to the unit’s MAP: {unitNames(chirpsNotes.rawInstead)}.
+				{/if}
 				<a href="?tab=settings#set-share">Model settings</a>.
 			</p>
 		{/if}

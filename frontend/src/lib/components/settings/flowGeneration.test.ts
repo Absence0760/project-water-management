@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import type { RainStationSettings } from '@water-management/engine';
 import {
 	assignmentLine,
+	chirpsDriverLine,
 	catchmentMapFormError,
 	catchmentMapReadout,
 	FLOW_METHOD,
@@ -34,7 +35,9 @@ import {
 	withUnitCorrectAgainst,
 	withUnitPatch,
 	withUnitScale,
+	withUnitChirps,
 	withUnitStation,
+	withUnitsDriver,
 	withUnitsStation,
 	type StationOption
 } from './flowGeneration';
@@ -239,6 +242,55 @@ describe('writing settings.rainStations', () => {
 	it('tidies an emptied setting to null, keeping any part still set', () => {
 		expect(tidyStations({ units: {}, sites: {}, unreliable: {}, catchment: null, catchmentMapMm: null })).toBeNull();
 		expect(tidyStations({ units: {}, catchmentMapMm: 650, catchmentMapSource: 'x' })).toEqual({ catchmentMapMm: 650, catchmentMapSource: 'x' });
+	});
+});
+
+describe('a unit’s driver rainfall: a station or its own CHIRPS (engine ≥ 1.114.0)', () => {
+	const nodes = [
+		{ id: 'a', name: 'Upper', kind: 'farm' as const, areaKm2: 2, mapMm: 800, mapSource: 'x' },
+		{ id: 'b', name: 'Lower', kind: 'farm' as const, areaKm2: 1, mapMm: null, mapSource: null }
+	];
+	it('a row reads its CHIRPS choice, never beside a station', () => {
+		const rows = unitStationRows(nodes, { units: { b: { stationId: 's' } } }, [{ id: 's', name: 'Ridge', station: null }], { chirpsUnits: { a: { correction: 'raw' }, b: { correction: 'bias' } } });
+		expect(rows.map((r) => [r.chirps, r.driver])).toEqual([
+			['raw', 'chirps:raw'],
+			[null, 's']
+		]);
+		expect(assignmentLine(rows)).toBe('1 of 2 units with land has a rainfall station, and 1 runs on its own CHIRPS.');
+	});
+
+	it('choosing CHIRPS takes the station away, a station takes the CHIRPS away, and not set takes both; the last choice gone stores none', () => {
+		const rs: RainStationSettings = { units: { a: { stationId: 's', scaleToMap: false } }, catchment: { stationId: 's' } };
+		const ur = { mode: 'perUnit' as const, gaugeMapMm: 600, gaugeMapSource: 'g' };
+		const chirps = withUnitsDriver(rs, ur, ['a'], 'chirps:bias');
+		expect(chirps.rainStations).toEqual({ catchment: { stationId: 's' } });
+		expect(chirps.unitRain).toEqual({ ...ur, chirpsUnits: { a: { correction: 'bias' } } });
+		const station = withUnitsDriver(chirps.rainStations, chirps.unitRain, ['a'], 's2');
+		expect(station.rainStations?.units).toEqual({ a: { stationId: 's2' } });
+		expect(station.unitRain).toEqual(ur);
+		const none = withUnitsDriver(chirps.rainStations, chirps.unitRain, ['a'], '');
+		expect(none).toEqual({ rainStations: { catchment: { stationId: 's' } }, unitRain: ur });
+		// Several at once, and a form that never touches CHIRPS leaves the unit-rain setting as it was (the same object).
+		expect(withUnitsDriver(null, undefined, ['a', 'b'], 'chirps:raw').unitRain).toEqual({ mode: 'perUnit', chirpsUnits: { a: { correction: 'raw' }, b: { correction: 'raw' } } });
+		const kept = withUnitsDriver(null, ur, ['a'], 's');
+		expect(kept.unitRain).toBe(ur);
+		expect(withUnitChirps({ mode: 'perUnit', chirpsUnits: { a: { correction: 'raw' } } }, 'a', null)).toEqual({ mode: 'perUnit' });
+	});
+
+	it('the line beside a CHIRPS driver: MAP, CHIRPS mean annual rain and factor, and when it won’t run as chosen', () => {
+		const map = { source: 'map' as const, factor: 1.25, ownFactor: 1.25, clamped: false, outsideBand: false, meanAnnualMm: 640, years: [2015, 2020], inPeriod: false };
+		expect(chirpsDriverLine('raw', 800, { applies: true, level: map })).toEqual({ text: 'MAP 800 mm ÷ its CHIRPS 640 mm a year (2015–2020) = × 1.25', fallback: null });
+		expect(chirpsDriverLine('bias', 800, { applies: true, level: map }).fallback).toMatch(/^There is no point rainfall record to correct its CHIRPS against/);
+		const kUnit = { ...map, factor: 4, ownFactor: 5.5, clamped: true };
+		expect(chirpsDriverLine('bias', 800, { applies: true, level: { source: 'reference', factors: Array(12).fill(1), kUnit } }).text).toBe(
+			'Corrected month by month against the reference gauge, then MAP 800 mm ÷ its corrected CHIRPS 640 mm a year (2015–2020) = × 4 (clamped from 5.5)'
+		);
+		expect(chirpsDriverLine('bias', 800, { applies: true, level: { source: 'bias', kUnit: map } }).text).toMatch(/^Corrected by the catchment’s CHIRPS bias factors, then MAP 800 mm/);
+		expect(chirpsDriverLine('raw', null, { applies: true, level: { source: 'raw' } }).text).toBe('Raw, as published: the unit has no MAP to level it to.');
+		expect(chirpsDriverLine('raw', 800, { applies: false, level: null }).fallback).toMatch(/^It has no CHIRPS series of its own/);
+		// Before the preview loads, the setup's notes alone.
+		expect(chirpsDriverLine('bias', 800, null, { rawInstead: true, noChirps: false })).toEqual({ text: null, fallback: expect.stringMatching(/^There is no point rainfall record/) });
+		expect(chirpsDriverLine('raw', 800, null, { rawInstead: true, noChirps: false })).toEqual({ text: null, fallback: null });
 	});
 });
 
