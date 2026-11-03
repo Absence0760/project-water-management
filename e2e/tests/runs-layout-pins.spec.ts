@@ -52,7 +52,7 @@ const RECORD_AND_DEEPER = [
 	'## The model’s working',
 	'res-checks: Arithmetic checks',
 	'res-trace: Trace a day',
-	'res-cumulative: Cumulative flow at each unit',
+	'res-cumulative: Accumulated flow at each unit',
 	'res-explore: Chart any daily series'
 ];
 
@@ -67,7 +67,7 @@ const RAIL_RECORD_AND_AFTER = [
 	'## The model’s working',
 	'Arithmetic checks → #res-checks',
 	'Trace a day → #res-trace',
-	'Cumulative flow at each unit → #res-cumulative',
+	'Accumulated flow at each unit → #res-cumulative',
 	'Chart any daily series → #res-explore',
 	'## On Calibration',
 	'Hydrograph↗ → ?tab=calibration&run=RUN#res-hydrograph',
@@ -155,7 +155,7 @@ test('every #res-* anchor on the page lands on its panel, in view, with the focu
 		['res-publication', 'Publication'],
 		['res-checks', 'Arithmetic checks'],
 		['res-trace', 'Trace a day'],
-		['res-cumulative', 'Cumulative flow at each unit'],
+		['res-cumulative', 'Accumulated flow at each unit'],
 		['res-explore', 'Chart any daily series']
 	];
 	// The pins cover every #res-* id the page renders.

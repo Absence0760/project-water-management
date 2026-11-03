@@ -153,12 +153,12 @@ test('Settings: at 1280 px every link is on the bar, in at most two rows; at 144
 
 /** Runs & results' bar, each link its panel's heading word for word (issue #586, D4), and the side index's lines (issue #462). */
 // Model quality moved to Calibration (issue #586 Round 3); the water balance stays, after the summary.
-const RUNS_BAR = ['Summary', 'Water balance by water year', 'Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication', 'Arithmetic checks', 'Cumulative flow at each unit', 'Chart any daily series'];
+const RUNS_BAR = ['Summary', 'Water balance by water year', 'Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication', 'Arithmetic checks', 'Accumulated flow at each unit', 'Chart any daily series'];
 const RUNS_RAIL: [string | null, string[]][] = [
 	[null, ['Summary', 'Water balance by water year']],
 	// The side index also has a line for each sub-heading a reader looks for (D4).
 	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Changes since this run', 'Validation statement', 'Publication']],
-	['The model’s working', ['Arithmetic checks', 'Trace a day', 'Cumulative flow at each unit', 'Chart any daily series']],
+	['The model’s working', ['Arithmetic checks', 'Trace a day', 'Accumulated flow at each unit', 'Chart any daily series']],
 	['On Calibration', ['Hydrograph, on Calibration', 'Calibration against observed flow, on Calibration']],
 	['On EWR', ['Reserve rules met, by month, on EWR', 'Days below the EWR, by month, on EWR', 'Water account, on EWR']],
 	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]

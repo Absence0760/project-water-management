@@ -143,7 +143,6 @@
 	// Display order and names come from the current model (nodes deleted since
 	// the run fall back to the run's own names).
 	const nodeOrder = $derived(new Map(editor.model.nodes.map((n, i) => [n.id, i] as [string, number])));
-	const nodeKinds = $derived(new Map(editor.model.nodes.map((n) => [n.id, n.kind] as [string, string])));
 	const nodeNames = $derived.by(() => {
 		const m = new Map(editor.model.nodes.map((n) => [n.id, n.name] as [string, string]));
 		for (const f of detail?.run.summary.farms ?? []) if (!m.has(f.nodeId)) m.set(f.nodeId, f.name);
@@ -880,7 +879,7 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder} {nodeKinds}>
+			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder} liveNodes={editor.model.nodes}>
 				{#snippet waterBalance()}
 					<!-- The water balance per water year (issue #137): the table a hydrologist hands a client first. -->
 					<div class="panel" id="res-water-balance">
