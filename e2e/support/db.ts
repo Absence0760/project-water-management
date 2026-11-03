@@ -358,6 +358,30 @@ export async function plantGefsForecastDays(projectId: string): Promise<void> {
 }
 
 /**
+ * Make one of a project's CHIRPS series (rain_chirps_mm, by name) a CHIRPS
+ * feed's, every day of it, as the feed's ingest leaves a series it wrote
+ * (031_feed_days): a disabled feed with no acting user, so no tick fetches
+ * for it. For Run readiness's "a feed writes a series runs don't read"
+ * (issue #670); the real ingest is covered by backend/src/feeds/feeds.db.test.ts.
+ */
+export async function plantChirpsFeedDays(projectId: string, name: string): Promise<void> {
+	await withDb(async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled)
+			 SELECT $1, 'chirps', '{"cells":[{"lat":-33.1,"lon":19.1,"weight":1}]}'::jsonb, 'rain_chirps_mm', name, false
+			 FROM time_series WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND name = $2 AND site_node_id IS NULL RETURNING id`,
+			[projectId, name]
+		);
+		if (rows.length !== 1) throw new Error(`project ${projectId}: no single CHIRPS series named ${name}`);
+		await db.query(
+			`UPDATE time_series SET feed_id = $3, feed_days = datemultirange(daterange(start_date, start_date + cardinality("values")))
+			 WHERE project_id = $1 AND kind = 'rain_chirps_mm' AND name = $2 AND site_node_id IS NULL`,
+			[projectId, name, rows[0]!.id]
+		);
+	});
+}
+
+/**
  * Make the project's outlet gauge record (flow_observed_m3s) a DWS feed's,
  * every day of it, as the feed's ingest leaves a record it wrote whole
  * (031_feed_days): a run then marks it a published DWS gauge record (#523 G8,

@@ -6240,7 +6240,11 @@ a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name, in byte order as runs pick: `lib/series/pick.ts`) are marked. The role badge carries its reason in its own
 words, and the kind's role is an ⓘ `HelpTip` beside it (`series.<kind>`); a
 gauge record adds a line saying where it is checked and scored
-(`roles.ts` `roleBadge`). None of it is a hover title any more, which
+(`roles.ts` `roleBadge`). A series a data feed writes that runs don't
+read adds a line naming the series they read instead, and the series read,
+when no feed writes it and it ends first, a line saying how far each reaches
+(`series-feed-shadow`, `feedShadow.ts` `feedShadowWhy`, issue #670), the
+same pairs Run readiness lists. None of it is a hover title any more, which
 keyboard, touch and screen-reader users never got. **Series details**
 (issue #464, `series/details.ts`): under the chart, one labelled row for the
 charted series (a group named *Series details*, a `<dl>` whose terms are the
@@ -9676,7 +9680,17 @@ read it before.
   names the land units with no rain of their own (no station, rain gauge or
   CHIRPS of their own, no MAP with a gauge MAP; issue #615): they run on the
   catchment rain, so their share follows their area, with a link to
-  Model settings (`run-catchment-rain`, a note, never a blocker). A run the header started on
+  Model settings (`run-catchment-rain`, a note, never a blocker). It also
+  names each series a data feed writes that runs don't read, because another
+  of its kind sorts first by name (`run-feed-shadow`, issue #670,
+  `series/feedShadow.ts`): both series with their spans, in warning colour
+  when the one runs read has no feed and ends before the feed's ("… so the
+  feed’s days after 22 Oct 2025 never reach a run"), with a link to the
+  series read (its Series details, to rename it; a feed's own series keeps
+  its name) and, for CHIRPS, to Rain from the boundary, whose **Replace**
+  points a feed at that record ([maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)); otherwise a plain note
+  linking to Data. A note, never a blocker. A run the header started on
   another section and still going when the page opens shows here the same
   way, the form waiting for it. A viewer gets no form, and
   the inputs-changed note as before.

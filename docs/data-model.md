@@ -287,6 +287,20 @@ An upload of a new series that would sort first says so before it is saved
 ("this one will replace “…” in runs", frontend `lib/series/pick.ts`
 `newSeriesEffect`), so no path adds a series that takes over unseen.
 
+The other way round goes unseen too: the series sorting second keeps
+everything a feed writes into it out of the runs. A feed writing a series
+"(boundary)" beside a workbook's gap-filler that no feed writes fills the
+feed's series, while runs read the gap-filler, which stops at its last day,
+and the run's span check stays quiet because the gap-filler still covers
+every day of the run (issue #670). So Run readiness and the Data rows name
+both whenever a feed's series (the outlet's, with days still the feed's own,
+031_feed_days) is not the one read, and warn when the one read has no feed
+and ends before the feed's (frontend `lib/components/series/feedShadow.ts`;
+[ui.md § Runs & results](./ui.md#runs--results)). The fix stays the pick by
+name: rename or remove the series read (a feed's own series keeps its name),
+or, for CHIRPS, **Replace** it from Rain from the boundary
+([maps.md](./maps.md#rain-from-the-boundary)).
+
 ### Series provenance (032_series_provenance.sql)
 
 `time_series.product` and `product_version` say what the values are, e.g.

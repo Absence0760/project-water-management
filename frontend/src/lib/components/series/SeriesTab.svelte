@@ -104,6 +104,7 @@
 	import { normalizedLocations } from '#lib/calibration/zones.js';
 	import { unplacedAdvice, unplacedRecords, unplacedWhy } from '#lib/calibration/unplaced.js';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, renameEffect, renameEffectText, roleBadge, seriesInUse, SITED_KINDS } from './roles';
+	import { feedShadows, feedShadowWhy } from './feedShadow';
 	import { dataSpan, freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { seriesListLoader, seriesValuesLoader } from './seriesLoads';
 	import type { Latest } from '#lib/api/latest.js';
@@ -692,6 +693,8 @@
 	const unitNames = $derived(new Map(nodes.filter(isLandUnit).map((n) => [n.id, n.name])));
 	// Where each station's rain goes, as a run reads it (groups.ts stationUses): the row's line and its badge both read it.
 	const stationUseMap = $derived(new Map(list.filter(asksStation).map((s) => [s.id, stationUses(s.id, settings, nodes)])));
+	// A data feed writing a series no run reads, and the series read in its place (issue #670): said under both rows' badges.
+	const shadows = $derived(feedShadows(list, { periodKinds: rainSourceKinds(settings?.rainSource), settings, nodes }));
 	const areaOf = (it: AreaItem) => areaNames(it, areaCtx);
 	const areaInfo = (it: AreaItem) => areaRowInfo(it, areaCtx);
 	const areaPanelId = (itemId: string) => `area-${itemId.replace(':', '-')}`;
@@ -892,6 +895,7 @@
 	{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationGauges, units: unitNames, stationUses: stationUseMap, catchmentStationId: settings?.rainStations?.catchment?.stationId ?? null })}
 	{@const behind = behindAge.get(s.id)}
 	{@const fed = feedMark(s.feed, st?.present)}
+	{@const shadowWhy = feedShadowWhy(s, shadows)}
 	<!-- Pointer shortcut only; the View button is the accessible control. -->
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_no_redundant_roles -->
 	<tr role="row" id="ser-row-{s.id}" class="pick" class:sub class:selected={s.id === selectedId} class:is-behind={behind !== undefined} data-series={s.id} onclick={(e) => rowClick(e, s.id)}>
@@ -931,6 +935,7 @@
 					<HelpTip key={`series.${s.kind}`} />
 				</span>
 				{#if role.why}<span class="prov why" data-testid="series-role-why">{role.why}</span>{/if}
+				{#if shadowWhy}<span class="prov why" data-testid="series-feed-shadow">{shadowWhy}</span>{/if}
 			{/if}
 		</th>
 		<td role="cell" class="upto" data-label="Data up to">

@@ -46,6 +46,8 @@
 	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
 	import { unitsOnCatchmentRain } from '#lib/components/settings/flowGeneration.js';
+	import { boundaryFixes, feedShadows, feedShadowText } from '#lib/components/series/feedShadow.js';
+	import { rainSourceKinds } from '#lib/components/series/roles.js';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
@@ -529,6 +531,11 @@
 	// Run readiness (issue #615): the land units with no rain of their own run on the catchment rain, so their EWR share
 	// follows their area. A note, not a blocker: the run says so too.
 	const onCatchmentRain = $derived(series ? unitsOnCatchmentRain(editor.model.nodes, project.settings, series) : []);
+	// Run readiness (issue #670): a data feed writes a series no run reads, because another of its kind sorts first; a
+	// warning when the one read has no feed and stops while the feed's runs on (its new days never reach a run).
+	const shadows = $derived(
+		series ? feedShadows(series, { periodKinds: rainSourceKinds(project.settings?.rainSource), settings: project.settings, nodes: editor.model.nodes }) : []
+	);
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	// The in-page menu (SectionNav): above the results, or beside them from 62rem of results (a 1440 px
 	// window), where 13rem of index leaves the results about as wide as at 1280 px without it (issue #462). The index lists the
@@ -640,6 +647,19 @@
 				{onCatchmentRain.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}{onCatchmentRain.length > 6 ? ` and ${onCatchmentRain.length - 6} more` : ''}. Set up their rain in
 				<a href="?tab=settings#set-share">Model settings</a>.
 			</p>
+		{/if}
+		{#if !runBusy}
+			{#each shadows as x (x.fed.id)}
+				<p class={x.stalled ? 'note warn' : 'note'} data-testid="run-feed-shadow" data-stalled={x.stalled ? 'true' : undefined}>
+					{feedShadowText(x)}
+					{#if x.stalled}
+						Rename or remove <a href="?tab=series&series={encodeURIComponent(x.read.id)}#data-chart">{x.read.name || 'that series'}</a> so runs read the feed’s series{#if boundaryFixes(x)}, or replace it in
+							<a href="?tab=series&rain=boundary#data-feeds">Rain from the boundary</a>{/if}.
+					{:else}
+						See both in <a href="?tab=series&series={encodeURIComponent(x.fed.id)}#data-chart">Data</a>.
+					{/if}
+				</p>
+			{/each}
 		{/if}
 	</div>
 {:else if stale}
