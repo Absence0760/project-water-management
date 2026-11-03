@@ -27,6 +27,13 @@ describe('withErrata (issue #103)', () => {
 		expect(withErrata({ engineVersion: '2.0.0' }, LIST).errata).toEqual([]);
 	});
 
+	it('keys a fit erratum on any of the run’s fits when RUN_META gives them, not just the headline’s (issue #670)', () => {
+		// The headline location's fit is clear; another location's is affected.
+		expect(withErrata({ engineVersion: '2.0.0', fitEngineVersion: '1.0.5', fitEngineVersions: ['1.0.5', '1.1.0'] }, LIST).errata).toEqual(['ER-2']);
+		// Control: every fit clear.
+		expect(withErrata({ engineVersion: '2.0.0', fitEngineVersion: '1.0.5', fitEngineVersions: ['1.0.5'] }, LIST).errata).toEqual([]);
+	});
+
 	it('a version that isn’t x.y.z matches nothing, and doesn’t throw', () => {
 		expect(withErrata({ engineVersion: 'b023', fitEngineVersion: 'junk' }, LIST).errata).toEqual([]);
 	});

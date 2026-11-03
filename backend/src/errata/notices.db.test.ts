@@ -121,7 +121,7 @@ beforeAll(async () => {
 					JSON.stringify({ unitRain: { zones: [{ nodeId: G, kind: 'gauge', ...(headline === 'gauge' ? { headline: true } : {}) }, { nodeId: null, kind: 'outlet', ...(headline === 'outlet' ? { headline: true } : {}) }] } })
 				]
 			);
-		// The affected fit is the headline's in one run, and only another location's in the other.
+		// The affected fit is the headline's in one run, and only another location's in the other: both are reached (313, issue #670).
 		await rowRun('gauge');
 		await rowRun('outlet');
 	});
@@ -138,9 +138,9 @@ describe('the sweep', () => {
 		expect(await queued('ER-9001')).toEqual([row(affected, owner, 2), row(affected, teamAdmin, 2)].sort());
 	});
 
-	it('keys a `fit` erratum on the fit’s engine, not the run’s: the headline location’s, a gauge’s row included (issue #659)', async () => {
+	it('keys a `fit` erratum on the fit’s engine, not the run’s: any applied location’s, a gauge’s row included, the headline or not (issues #659, #670)', async () => {
 		await sweepErrata([erratum('ER-9002', { keyedOn: 'fit', firstAffected: '90.2.0', fixedIn: null })]);
-		expect(await queued('ER-9002')).toEqual([row(fitOnly, otherOwner, 1), row(rowFit, otherOwner, 1)].sort());
+		expect(await queued('ER-9002')).toEqual([row(fitOnly, otherOwner, 1), row(rowFit, otherOwner, 2)].sort());
 	});
 
 	it('an open erratum (no fix yet) reaches every later engine', async () => {

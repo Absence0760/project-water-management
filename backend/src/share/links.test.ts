@@ -384,8 +384,9 @@ describe('toSharePack', () => {
 		const raw = verify('issued', {
 			errata: [{ id: 'ER-90', summary: 'Recorded at draft' }],
 			runs: [
-				{ engineVersion: '1.50.0', fitEngineVersion: '1.44.0' },
-				{ engineVersion: '1.50.0', fitEngineVersion: null }
+				// The fit bug is at a location other than the headline's (issue #670): any fit counts.
+				{ engineVersion: '1.50.0', fitEngineVersions: ['1.46.0', '1.44.0'] },
+				{ engineVersion: '1.50.0', fitEngineVersions: [] }
 			]
 		});
 		const out = toVerify(raw, list);

@@ -1892,10 +1892,11 @@ were swept and who was mailed.
   your own rows (`erratum_notice_own`); `water_app` holds `SELECT` only.
 - **`app_erratum_sweep(errata jsonb)`**: the worker's context only. For each
   erratum not yet swept with its range, finds the projects with a run whose
-  engine (`model_run.engine_version`, or for a `fit` erratum
-  `run_fit_engine_version(inputs, summary)`, the headline location's fit's
-  engine, [289](#calibration-locations-289_calibration_locationssql); before
-  289 `inputs.settings.fitRecord.engineVersion`) is in [first affected, fixed
+  engine (`model_run.engine_version`, or for a `fit` erratum any of
+  `run_fit_engine_versions(inputs, summary)`, every applied calibration
+  location's fit's engine, 313 below; from 289 to 313 only the headline
+  location's, `run_fit_engine_version`; before 289
+  `inputs.settings.fitRecord.engineVersion`) is in [first affected, fixed
   in), compared numerically (`engine_version_key`), and queues each owner
   (project owner or team admin) with a confirmed, unsuppressed address.
 - **`app_erratum_notice_claim`**, **`app_erratum_notice_finish`**,
@@ -4584,6 +4585,35 @@ Tested in `backend/src/db/migration-289.db.test.ts` (each case asserted equal
 to the API's conversion on the same settings, network and records) and
 `backend/src/model/examples.zones.test.ts` (every example catchment and the
 Showcase run and fit the same in both shapes).
+
+### A `fit` erratum at any location (313_fit_errata_every_location.sql)
+
+Issue #670: 289 keyed a `fit` erratum on the headline location's fit alone,
+though a run calibrated at several gauges takes each unit's parameters from
+its own location's fit. 313 adds `run_fit_engine_versions(inputs jsonb,
+summary jsonb) text[]` (IMMUTABLE, reads only its arguments): the engines of
+every fit the run's parameters came from, distinct and sorted. For each group
+in `summary.unitRain.zones`: a gauge's location (a string `nodeId`) its
+`settings.calibrationZones` row's `fitRecord.engineVersion` (the first row for
+that node), plus the top-level `settings.fitRecord` when the group had no
+parameters of its own (`fitted: false`); the outlet's location and the units
+on `settings.gr4j` (`nodeId` null) the top-level one. The top level too when
+no group is the headline (no gauge location, or a run before engine 1.110.0),
+so `run_fit_engine_version`'s value is always in the list. The engine's
+`runFitEngineVersions` (`liability/errata.ts`) is the same rule, which the
+frontend's validation statements use.
+
+`app_erratum_sweep` keys a `fit` erratum on any element;
+`app_verify_pack` and `app_specialist_pack` carry `fitEngineVersions` (a JSON
+array) in place of `fitEngineVersion`, each redefined from 289 with only that
+changed (CREATE OR REPLACE keeps the grants). The API's run list, sign-off
+statements and packs' errata found since issue read the list the same way.
+`run_fit_engine_version` stays for the run list's `fitEngineVersion`. No
+table, policy or grant change, so no RLS change. Errata swept before 313
+aren't swept again, and none needs to be: the only `fit` erratum (ER-6) was
+fixed in 1.22.0, long before a fit at a non-headline location existed
+(1.106.0). Tested in `backend/src/db/migration-313.db.test.ts` (every case
+asserted equal to the engine's answer) and `backend/src/errata/notices.db.test.ts`.
 
 ### Calibration zones (270_calibration_sites.sql)
 

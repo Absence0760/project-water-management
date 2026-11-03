@@ -78,7 +78,7 @@
 	import SelfChecksPanel from '#lib/components/runs/SelfChecksPanel.svelte';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { fmtDate, fmtNum } from '#lib/format/number.js';
-	import { runForcingOfSummary } from '@water-management/engine';
+	import { runFitEngineVersions, runForcingOfSummary } from '@water-management/engine';
 
 	// The server-side PDF (Generate / Email me). In the report's chunk: the bar renders it for every
 	// report of a run, so as a chunk of its own it only added split overhead (issue #9).
@@ -548,7 +548,7 @@
 						{#if prev.attribution}<p class="muted small">{attributionSummary(prev.attribution)}</p>{/if}
 						<ChangesList changes={prev.changes} authors={lineAuthors(prev.changes, prev.attribution)} />
 					{:else if s.id === 'validation'}
-						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} fitEngineVersion={hs?.fitRecord?.engineVersion ?? null} />
+						<ValidationStatement {summary} engineVersion={run.engineVersion} legacy={run.legacy} fitEngineVersion={runFitEngineVersions(run.settings, summary)} />
 					{:else if s.id === 'signoff' && signoffs}
 						<SignoffSection {projectId} target={{ kind: 'run', id: run.id }} list={signoffs} onchange={signoffsChanged} />
 					{:else if s.id === 'disclaimer'}

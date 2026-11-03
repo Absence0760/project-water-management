@@ -8,7 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { runFitEngineVersions, toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { rebuildingNote } from '#lib/series/provenance.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
@@ -57,7 +57,6 @@
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '#lib/components/history/RunInputsPanel.svelte';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
-	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -919,7 +918,7 @@
 							{summary}
 							engineVersion={shownRun.engineVersion}
 							legacy={shownRun.legacy}
-							fitEngineVersion={runHeadlineSettings(shownRun)?.fitRecord?.engineVersion ?? null}
+							fitEngineVersion={runFitEngineVersions(shownRun.settings, summary)}
 							bind:open={validationOpen}
 						/>
 					</div>

@@ -20,35 +20,41 @@ const LIST = [er('ER-1', 'run', '1.0.0', '1.5.0'), er('ER-2', 'run', '1.2.0', nu
 
 describe('errataFoundSince', () => {
 	it('lists what applies to a run’s engine now and the manifest didn’t record, as id and summary', () => {
-		expect(errataFoundSince([], [{ engineVersion: '1.4.0', fitEngineVersion: null }], LIST)).toEqual([
+		expect(errataFoundSince([], [{ engineVersion: '1.4.0', fitEngineVersions: [] }], LIST)).toEqual([
 			{ id: 'ER-1', summary: 'ER-1 goes wrong' },
 			{ id: 'ER-2', summary: 'ER-2 goes wrong' }
 		]);
 	});
 
 	it('leaves out one the manifest recorded (positive control: the same run with nothing recorded lists it)', () => {
-		const runs = [{ engineVersion: '1.4.0', fitEngineVersion: null }];
+		const runs = [{ engineVersion: '1.4.0', fitEngineVersions: [] }];
 		expect(errataFoundSince([{ id: 'ER-1' }], runs, LIST).map((e) => e.id)).toEqual(['ER-2']);
 		expect(errataFoundSince([{ id: 'ER-1' }, { id: 'ER-2' }], runs, LIST)).toEqual([]);
 	});
 
 	it('keys a fit erratum on the fit’s engine, not the run’s; entered parameters (no fit) meet none', () => {
-		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersion: '1.1.0' }], LIST).map((e) => e.id)).toEqual(['ER-2', 'ER-3']);
-		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersion: null }], LIST).map((e) => e.id)).toEqual(['ER-2']);
-		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersion: '1.3.0' }], LIST).map((e) => e.id)).toEqual(['ER-2']);
+		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersions: ['1.1.0'] }], LIST).map((e) => e.id)).toEqual(['ER-2', 'ER-3']);
+		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersions: [] }], LIST).map((e) => e.id)).toEqual(['ER-2']);
+		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersions: ['1.3.0'] }], LIST).map((e) => e.id)).toEqual(['ER-2']);
+	});
+
+	it('keys a fit erratum on any of a run’s fits, the headline location’s or another’s (issue #670)', () => {
+		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersions: ['1.3.0', '1.1.0'] }], LIST).map((e) => e.id)).toEqual(['ER-2', 'ER-3']);
+		// Control: none of its fits in range.
+		expect(errataFoundSince([], [{ engineVersion: '1.6.0', fitEngineVersions: ['1.3.0', '1.4.0'] }], LIST).map((e) => e.id)).toEqual(['ER-2']);
 	});
 
 	it('takes either run, each erratum once, in the list’s order', () => {
 		const runs = [
-			{ engineVersion: '2.1.0', fitEngineVersion: null },
-			{ engineVersion: '1.2.0', fitEngineVersion: '1.2.0' }
+			{ engineVersion: '2.1.0', fitEngineVersions: [] },
+			{ engineVersion: '1.2.0', fitEngineVersions: ['1.2.0'] }
 		];
 		expect(errataFoundSince([], runs, LIST).map((e) => e.id)).toEqual(['ER-1', 'ER-2', 'ER-3', 'ER-4']);
 	});
 
 	it('meets nothing for an engine outside every range or not a version (legacy)', () => {
-		expect(errataFoundSince([], [{ engineVersion: '0.9.0', fitEngineVersion: null }], LIST)).toEqual([]);
-		expect(errataFoundSince([], [{ engineVersion: 'legacy', fitEngineVersion: 'legacy' }], LIST)).toEqual([]);
+		expect(errataFoundSince([], [{ engineVersion: '0.9.0', fitEngineVersions: [] }], LIST)).toEqual([]);
+		expect(errataFoundSince([], [{ engineVersion: 'legacy', fitEngineVersions: ['legacy'] }], LIST)).toEqual([]);
 		expect(errataFoundSince([], [], LIST)).toEqual([]);
 	});
 });

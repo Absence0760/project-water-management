@@ -7,7 +7,7 @@
 // and the sign-off is refused.
 import { canonicalJson } from '../manifest';
 import { DISCLAIMER } from './disclaimer';
-import { errataFor, type Erratum } from './errata';
+import { errataFor, type Erratum, type FitEngines } from './errata';
 import { ENGINE_ERRATA } from './errata.generated';
 import type { Limitation } from './limitations';
 import { KNOWN_LIMITATIONS } from './limitations.generated';
@@ -57,8 +57,11 @@ export interface SignoffRun {
 	engineVersion: string;
 	/** The run was made by a scenario (model_run.scenario_id). */
 	scenario: boolean;
-	/** The engine of the automatic fit the run's parameters came from (settings.fitRecord.engineVersion); null for entered parameters. */
-	fitEngineVersion?: string | null;
+	/**
+	 * The engine of the automatic fit the run's parameters came from, or of each (runFitEngineVersions: every
+	 * applied calibration location's, issue #670); null for entered parameters.
+	 */
+	fitEngineVersion?: FitEngines;
 }
 
 /** The statement a signer of this run is shown and confirms. */
