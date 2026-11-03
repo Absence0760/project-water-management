@@ -4243,12 +4243,12 @@ export interface PlanRequest {
 
 /** One click's piece (POST …/map/subcatchments): its incremental catchment, the land draining to it before any other click. */
 export interface ClickPiece {
-	/** The click's index in the request. */
+	/** The click's index in the request; -1 (OUTLET_CLICK) for the catchment's delineated outlet's piece. */
 	click: number;
 	/** The click, snapped onto the channel. */
 	point: MapPosition;
 	snapDistanceM: number | null;
-	/** The click whose piece this one flows into next; null for the lowest click. */
+	/** The click whose piece this one flows into next (-1: the outlet's piece); null for the lowest. */
 	drainsInto: number | null;
 	/** Null when it is open, or its cells couldn't be outlined as a valid polygon (the area still counts them). */
 	geometry: { type: 'Polygon'; coordinates: MapPosition[][] } | null;
@@ -4292,8 +4292,13 @@ export interface LargerChannel {
 export interface ClickPieces {
 	pieces: ClickPiece[];
 	dropped: { click: number; reason: string }[];
-	/** The lowest click's index: it owns what drains to it through no other click. */
+	/** The lowest click's index (-1 when the catchment's delineated outlet is): it owns what drains to it through no other click. */
 	lowest: number;
+	/**
+	 * The catchment boundary the clicks are within (a click outside it is refused); null with none on the map. `delineation`:
+	 * its delineated outlet is the lowest point, below every click; `lowest`: drawn or uploaded by hand, the lowest click is.
+	 */
+	within: { featureId: string; name: string; outlet: 'delineation' | 'lowest' } | null;
 	cellSizeM: number;
 	dataset: { label: string; fingerprint: string };
 	method: string;

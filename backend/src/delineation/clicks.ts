@@ -4,6 +4,14 @@
 // before any other click. The lowest click (the one most water drains
 // through) owns everything else above it.
 //
+// Within the catchment: with a catchment boundary on the map, a click outside
+// it is refused (422, naming the catchment), and when the boundary came from
+// Delineate its accepted outlet is the lowest point, ahead of every click: its
+// piece (click -1 in the answer, "Sub-catchment at the outlet") is the land
+// between the lowest clicks and the outlet. A boundary drawn or uploaded by
+// hand has no outlet stored, so the lowest click stays the outlet there. Both
+// are read from the database on every request, never taken from the browser.
+//
 //   POST /projects/:id/map/subcatchments        the pieces for these clicks (editor; nothing stored)
 //   POST /projects/:id/map/subcatchments/save   the same, saved as "other" polygons, one per piece (editor)
 //
@@ -16,9 +24,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
-import { withUser } from '../db/tx.js';
+import { withUser, type Db } from '../db/tx.js';
 import { panReferenceLoader } from './panReference.js';
 import type { Geometry, Position } from '../geo/geojson.js';
+import { pointInGeometry } from '../geo/geojson.js';
 import { loadFeature, toFeature } from '../geo/routes.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -29,7 +38,7 @@ import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { DelineationRefused, type LargerChannel } from './delineate.js';
 import { configuredDem } from './dem.js';
-import { delineateUnits, type Subcatchments } from './subcatchments.js';
+import { delineateUnits, type SubcatchmentRequest, type Subcatchments } from './subcatchments.js';
 
 /** Clicks one request may carry: Start from the map's cap on points. */
 export const CLICKS_MAX = 50;
@@ -42,14 +51,38 @@ export const ClicksBody = z.object({ clicks: z.array(Click).min(1).max(CLICKS_MA
 
 type Poly = Extract<Geometry, { type: 'Polygon' }>;
 
+/** The catchment's outlet's piece, in place of a click's index (OUTLET_KEY in the routing). */
+export const OUTLET_CLICK = -1;
+/** The catchment outlet's id among the routed points: no click's (their ids are their indices). */
+export const OUTLET_KEY = 'outlet';
+
+/**
+ * The catchment boundary the clicks divide (the project's first `catchment_boundary`), with its outlet when it came from
+ * Delineate (its accepted proposal's snapped outlet, as Start from the map reads it, start.ts readMapInputs); null without one.
+ */
+export interface Within {
+	featureId: string;
+	name: string;
+	geometry: Geometry;
+	outlet: Position | null;
+}
+
+/** The catchment the clicks are within, as the answer reports it: whose outlet ends the pieces. */
+export interface WithinAnswer {
+	featureId: string;
+	name: string;
+	/** `delineation`: the boundary's delineated outlet is the lowest point; `lowest`: drawn or uploaded by hand, the lowest click is. */
+	outlet: 'delineation' | 'lowest';
+}
+
 export interface ClickPiece {
-	/** The click's index in the request. */
+	/** The click's index in the request; OUTLET_CLICK (-1) for the catchment outlet's piece. */
 	click: number;
 	/** The click, on the terrain channel nearest it (place.ts). */
 	point: Position;
 	/** How far the click moved to the nearest terrain channel (m). */
 	snapDistanceM: number | null;
-	/** The click whose piece this one's water flows into next; null for the lowest click. */
+	/** The click whose piece this one's water flows into next (OUTLET_CLICK: the outlet's piece); null for the lowest. */
 	drainsInto: number | null;
 	/** Its incremental catchment; null when it is open, or its cells couldn't be outlined as a valid polygon (the area still counts them). */
 	geometry: Poly | null;
@@ -73,18 +106,27 @@ export interface ClickPieces {
 	pieces: ClickPiece[];
 	/** Clicks that are not pieces, with why (on another river, or on the same spot as another click). */
 	dropped: { click: number; reason: string }[];
-	/** The lowest click's index: it owns what drains to it through no other click. */
+	/** The lowest click's index (OUTLET_CLICK when the catchment's outlet is): it owns what drains to it through no other click. */
 	lowest: number;
+	/** The catchment boundary the clicks are within; null with none on the map (the clicks anywhere, as before). */
+	within: WithinAnswer | null;
 	cellSizeM: number;
 	dataset: { label: string; fingerprint: string };
 	method: string;
 	methodVersion: string;
 }
 
+/** A routed point's id as a click: its index, or OUTLET_CLICK for the catchment's outlet. */
+const clickOf = (id: string) => (id === OUTLET_KEY ? OUTLET_CLICK : Number(id));
+
+/** What the routing's sentences call the lowest point, once the catchment's outlet is it. */
+const OUTLET_WORDS = 'the catchment’s outlet';
+
 /** The partition's answer in clicks: the lowest click's piece is its "rest". Pure. */
-export function toClickPieces(r: Subcatchments): ClickPieces {
-	const lowest = Number(r.outlet.id);
-	const index = (id: string | null) => (id === null ? lowest : Number(id));
+export function toClickPieces(r: Subcatchments, within: WithinAnswer | null = null): ClickPieces {
+	const lowest = clickOf(r.outlet.id!);
+	const index = (id: string | null) => (id === null ? lowest : clickOf(id));
+	const atOutlet = lowest === OUTLET_CLICK;
 	const all = [
 		{
 			click: lowest,
@@ -129,37 +171,88 @@ export function toClickPieces(r: Subcatchments): ClickPieces {
 			totalAreaM2: unknown.has(p.click) ? null : p.totalAreaM2
 		}))
 		.sort((a, b) => a.click - b.click);
+	const words = (t: string) => (atOutlet ? t.replaceAll('the lowest click', OUTLET_WORDS) : t);
 	return {
 		pieces,
-		dropped: r.dropped.map((d) => ({ click: Number(d.id), reason: d.reason })).sort((a, b) => a.click - b.click),
+		dropped: r.dropped.map((d) => ({ click: clickOf(d.id), reason: words(d.reason) })).sort((a, b) => a.click - b.click),
 		lowest,
+		within,
 		cellSizeM: r.cellSizeM,
 		dataset: { label: r.dataset.label, fingerprint: r.dataset.fingerprint },
-		method: r.method,
+		method: atOutlet && within ? r.method.replace('(the outlet: the click most water drains through)', `(the outlet: ${withinName(within)}’s delineated outlet)`) : r.method,
 		methodVersion: r.methodVersion
 	};
 }
 
-/** A piece's name: its click's number, as the map's badge shows it. */
-export const pieceName = (click: number) => `Sub-catchment ${click + 1}`;
+/** A piece's name: its click's number, as the map's badge shows it; the catchment outlet's piece says so. */
+export const pieceName = (click: number) => (click === OUTLET_CLICK ? 'Sub-catchment at the outlet' : `Sub-catchment ${click + 1}`);
+
+/** The boundary's name in a sentence. */
+export const withinName = (w: Pick<Within, 'name'>) => (w.name.trim() ? `“${w.name.trim()}”` : 'the catchment boundary');
+
+/** The project's catchment boundary and its delineated outlet (one read, as the request's user). */
+export async function readWithin(db: Db, projectId: string): Promise<Within | null> {
+	const { rows } = await db.query<{ id: string; name: string; geometry: Geometry }>(
+		`SELECT id, name, geometry FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' ORDER BY created_at LIMIT 1`,
+		[projectId]
+	);
+	const b = rows[0];
+	if (!b) return null;
+	const { rows: d } = await db.query<{ outlet_lon: number; outlet_lat: number }>(
+		`SELECT outlet_lon, outlet_lat FROM delineation_proposal WHERE project_id = $1 AND feature_id = $2 AND status = 'accepted' ORDER BY decided_at DESC LIMIT 1`,
+		[projectId, b.id]
+	);
+	return { featureId: b.id, name: b.name, geometry: b.geometry, outlet: d[0] ? [d[0].outlet_lon, d[0].outlet_lat] : null };
+}
+
+/** The first click outside the boundary (its index), or -1 when every one is inside. Pure. */
+export function outsideClick(within: Pick<Within, 'geometry'>, clicks: readonly { lon: number; lat: number }[]): number {
+	return clicks.findIndex((c) => !pointInGeometry([c.lon, c.lat], within.geometry));
+}
+
+/** The refusal for a click outside the catchment boundary. Pure. */
+export const outsideText = (within: Pick<Within, 'name'>, i: number) =>
+	`Click ${i + 1} is outside ${withinName(within)}, the catchment boundary: every sub-catchment lies within it. Click a terrain channel inside the boundary.`;
+
+/** The refusal when a click drains more water than the delineated outlet: it is on another river, past the boundary's edge. Pure. */
+export const pastOutletText = (within: Pick<Within, 'name'>, i: number) =>
+	`Click ${i + 1} drains more water than ${withinName(within)}’s outlet, so it isn’t on a river inside the catchment: click a terrain channel inside the boundary.`;
+
+/**
+ * The routing request for the clicks: the lowest point is the outlet, the delineated outlet ahead of the clicks (on its own
+ * cell, as Start places it) when the boundary has one, so it wins a tie with a click on it. Pure.
+ */
+export function clickRequest(clicks: readonly { lon: number; lat: number }[], within: Within | null): SubcatchmentRequest {
+	const points: SubcatchmentRequest['points'] = clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] } }));
+	const outlet = within?.outlet;
+	return {
+		outlet: 'lowest',
+		boundary: null,
+		points: outlet ? [{ id: OUTLET_KEY, name: OUTLET_WORDS, role: 'abstraction', geometry: { type: 'Point', coordinates: outlet }, exact: true }, ...points] : points
+	};
+}
 
 /** Count the attempt (editor only), route the clicks, free the attempt. Refusals are 422 with the sentence. */
 async function route(userId: string, projectId: string, clicks: readonly z.infer<typeof Click>[]): Promise<ClickPieces> {
-	const attempt = await withUser(userId, async (db) => {
+	const { attempt, within } = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
-		return beginDemAttempt(db, 'delineation');
+		const within = await readWithin(db, projectId);
+		// Refused before any elevation-model work, so a click outside costs no attempt.
+		const outside = within ? outsideClick(within, clicks) : -1;
+		if (within && outside >= 0) throw new ApiError(422, outsideText(within, outside), { reason: 'outside_boundary' });
+		return { attempt: await beginDemAttempt(db, 'delineation'), within };
 	});
+	const answer: WithinAnswer | null = within ? { featureId: within.featureId, name: within.name, outlet: within.outlet ? 'delineation' : 'lowest' } : null;
 	try {
 		const dem = configuredDem();
 		if (!dem) throw new ApiError(409, 'Sub-catchments are off: the server has no elevation model (DEM_URL is empty).');
 		try {
-			const r = await delineateUnits(dem, {
-				outlet: 'lowest',
-				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] } }))
-			}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), projectId) });
-			return toClickPieces(r);
+			const r = await delineateUnits(dem, clickRequest(clicks, within), { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), projectId) });
+			// A click that drains more than the delineated outlet is on another river (just inside the boundary's edge).
+			if (within?.outlet && r.outlet.id !== OUTLET_KEY) throw new ApiError(422, pastOutletText(within, Number(r.outlet.id)), { reason: 'outside_boundary' });
+			return toClickPieces(r, answer);
 		} catch (err) {
+			if (err instanceof ApiError) throw err;
 			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
 			logEvent('error', { event: 'subcatchments_failed', ...safeError(err) });
 			throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
@@ -177,7 +270,7 @@ export function pieceDescription(r: ClickPieces, p: ClickPiece): string {
 	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => pieceName(q.click).toLowerCase());
 	return (
 		`The land draining to ${deg(p.point[0])}° E, ${deg(Math.abs(p.point[1]))}° ${p.point[1] < 0 ? 'S' : 'N'} before any other click; ` +
-		`${p.drainsInto === null ? 'the lowest click' : `drains into ${pieceName(p.drainsInto).toLowerCase()}`}; ` +
+		`${p.drainsInto === null ? (p.click === OUTLET_CLICK ? 'the catchment’s delineated outlet' : 'the lowest click') : `drains into ${pieceName(p.drainsInto).toLowerCase()}`}; ` +
 		`${p.totalAreaM2 !== null ? `${km2(p.totalAreaM2)} upstream in all` : 'more upstream than was routed'}${inflows.length ? `; an inflow enters at ${inflows.join(' and ')}` : ''}. ` +
 		`${p.nonContributingM2 ? `${km2(p.nonContributingM2)} of its own area drains into pans (non-contributing in WR2012’s sense; still in its area). ` : ''}` +
 		`Delineated from ${r.dataset.label} (${r.methodVersion}); check it against the map.`

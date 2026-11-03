@@ -174,7 +174,7 @@ test('the points step makes units’ boundaries: Sub-catchments, one per click, 
 	await bar.getByTestId('map-click-add').click();
 	await expect(bar.getByTestId('map-click-piece')).toHaveCount(1);
 	await bar.getByTestId('map-click-save').click();
-	await expect(page.getByTestId('map-notice')).toContainText('on the map as areas: each is a unit’s boundary in the Start sheet.');
+	await expect(page.getByTestId('map-notice')).toContainText('on the map as areas, each a hydrological unit in the Start sheet');
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'points');
 	await expect(startSheet(page).getByTestId('start-points').locator('select[id*="-role-"]')).toHaveCount(1);
 	await expect(startSheet(page).getByTestId('start-points').locator('select[id*="-role-"]').first()).toHaveValue('unit');

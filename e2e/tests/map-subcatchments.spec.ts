@@ -6,8 +6,12 @@
 // then types two more, one below and one above it. Each click gets its
 // incremental catchment, numbered by click: the lines say each one's area
 // and where its water goes. Undo takes the last back without asking again,
-// and Save keeps the pieces as areas. A click off the DEM is taken back with
-// the reason; Done with unsaved clicks asks first; a viewer gets no button.
+// and Save keeps the pieces as areas and opens the network step (the Divide
+// sheet on a model with nodes, the Start sheet on an empty one). A click off
+// the DEM is taken back with the reason; Done with unsaved clicks asks first;
+// a viewer gets no button. Within a delineated catchment boundary its outlet
+// is the lowest piece (O), a click outside the boundary is refused, and Save
+// opens Start from the map with the pieces as hydrological units.
 // Axe-scanned with the pieces drawn, light and dark.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -145,11 +149,59 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Took back click 3.');
 
 	await bar(page).getByTestId('map-click-save').click();
-	await expect(page.getByTestId('map-notice')).toContainText(/Saved 2 sub-catchments, 5[34]\d\.\d\d km² in all on the map as areas/);
+	await expect(page.getByTestId('map-notice')).toContainText(/Saved 2 sub-catchments, 5[34]\d\.\d\d km² in all on the map as areas\. In the Divide sheet, say which hydrological unit each stands for/);
 	await expect(bar(page)).toHaveCount(0);
 	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveAttribute('aria-pressed', 'false');
-	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Sub-catchment 1' })).toBeVisible();
+	// Straight on to the network: the model has nodes, so the Divide sheet, the saved pieces among its areas.
+	await expect(page).toHaveURL(/[?&]divide=1(&|$)/);
+	const divide = page.getByTestId('divide-points');
+	await expect(divide.getByRole('combobox', { name: 'Sub-catchment 1 (area)' })).toBeVisible();
+	await expect(divide.getByRole('combobox', { name: 'Sub-catchment 2 (area)' })).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
+});
+
+test('within a delineated catchment: its outlet is the lowest piece, a click outside is refused naming it, and Save opens Start from the map with the pieces as units', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(60_000);
+	// An empty model and the valley's catchment from Delineate, accepted as the boundary (the API, as the sheet does).
+	const { id } = await createProject(page.request, 'Sub-catchments within');
+	const d = await page.request.post(`${API_URL}/projects/${id}/map/delineation`, { data: { lon: FIXTURE_OUTLET[0], lat: FIXTURE_OUTLET[1], from: 'outlet' } });
+	expect(d.status(), await d.text()).toBe(201);
+	const accepted = await page.request.post(`${API_URL}/projects/${id}/map/delineation/${(await d.json()).proposal.id}/accept`, { data: { as: 'catchment_boundary' } });
+	expect(accepted.status(), await accepted.text()).toBe(200);
+	await openMap(page, id);
+	await mapReady(page);
+	await startClicks(page);
+	// Before any click the bar says which catchment, and that its outlet is the lowest point.
+	await expect(bar(page).getByTestId('map-click-within')).toHaveText(/^Within “.+”: its delineated outlet is the lowest point, so the land between your lowest click and the outlet is the outlet’s piece \(O\)\. A click outside the boundary is refused\.$/);
+
+	await typeOutlet(page, FIXTURE_DAM);
+	await expect(bar(page)).not.toHaveAttribute('data-busy');
+	// The outlet's piece first, under O (no click, so Undo never takes it), then the click's, draining into it.
+	const outlet = bar(page).getByTestId('map-click-outlet');
+	await expect(outlet.getByTestId('piece-badge')).toHaveText('Piece O: O');
+	await expect(outlet.getByTestId('map-click-line')).toHaveText(/^The outlet’s piece: 2\d\d\.\d\d km² · the catchment’s outlet: the rest drains out here · 5[34]\d\.\d\d km² upstream in all$/);
+	await expect(lines(page)).toHaveCount(1);
+	await expect(line(page, 0)).toHaveText(/^3[34]\d\.\d\d km² · drains into the outlet’s piece \(O\) · /);
+
+	// Below the outlet, past the boundary: refused with the catchment's name, the pieces before it kept.
+	await typeOutlet(page, [FIXTURE_OUTLET[0], FIXTURE_OUTLET[1] - 0.05]);
+	await expect(bar(page).getByTestId('map-click-error')).toHaveText(/^Click not added: Click 2 is outside “.+”, the catchment boundary: every sub-catchment lies within it\./);
+	await expect(lines(page)).toHaveCount(1);
+	await expect(outlet).toBeVisible();
+	await expectNoViolations(page);
+
+	// Save: straight on to Start from the map, at its points, each piece a hydrological unit; nothing in the model yet.
+	await bar(page).getByTestId('map-click-save').click();
+	await expect(page.getByTestId('map-notice')).toContainText(/^Saved 2 sub-catchments, 5[34]\d\.\d\d km² in all on the map as areas, each a hydrological unit in the Start sheet/);
+	await expect(page).toHaveURL(/[?&]start=1(&|$)/);
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'points');
+	const roles = page.getByTestId('start-points').locator('select[id*="-role-"]');
+	await expect(roles).toHaveCount(2);
+	await expect(roles.nth(0)).toHaveValue('unit');
+	await expect(roles.nth(1)).toHaveValue('unit');
+	await expect(page.getByTestId('start-points')).toContainText('Sub-catchment at the outlet');
+	await expect(page.getByTestId('start-points')).toContainText('Sub-catchment 1');
 });
 
 test('Use this area on a saved piece holding a pan asks which area: gross by default, the effective one when picked (195)', async ({ page, owner }) => {

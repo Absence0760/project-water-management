@@ -1747,7 +1747,7 @@ to a point on a river. The design, the method and its accuracy are in
 ## The elevation model's channels
 
 While **Delineate** or **Sub-catchments** is on, or the **DEM rivers** layer
-is ticked (`layers=channels`, below), the Map draws the DEM's own
+is (on by default for an editor, `layers=-channels` off, below), the Map draws the DEM's own
 channels in solid red, wider for a larger area (issue #374;
 `delineation/channels.ts`, `channelRoutes.ts`, the Map's
 `channelLayer.svelte.ts`). River lines sit hundreds of metres off the
@@ -1826,6 +1826,16 @@ these lines draw is one a click can go on, both at 1 km²).
   editor's); without `DEM_URL` (the local default) or for a viewer it isn't
   offered, as the DEM grid and the relief aren't. Kept in the URL with the
   other layers.
+- **On by default** (`mapLayers.ts` `DEFAULT_LAYERS`), wherever it is
+  offered: an editor delineating sees the rivers a click goes to without
+  looking for the toggle. Off is written into the URL as `-channels` in
+  `layers=`; turned on again from the toggle it is written as `channels`,
+  so Back undoes either toggle, and a view saved or shared as
+  `layers=channels` before the default still means on. With no `layers=`
+  (or one that doesn't name it) it is on. The Layers button counts it among
+  the layers on only where it is offered; the panel's live region says
+  "DEM rivers drawn." only once its toggle turned it on (`layerAsked`), so
+  a page that opens with it on by default announces nothing of it.
 - **Requests while panning.** The layer asks nothing new for a view it has
   already drawn: a tile is fetched once a session, the map reports its view
   only at the end of a move (`moveend`), and each new view replaces the
@@ -2112,8 +2122,13 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   boundaries too: **Draw a unit's boundary** (an *other* area) and
   **Sub-catchments, one per click** (with a DEM) sit beside Place a point,
   and the sheet comes back once the area or the pieces are saved (#646
-  F13). Typing the model in on the Network stays the other way; upload
-  works at every step.
+  F13). Sub-catchments started from the Map's own tools lands here too:
+  after its Save, an empty model's Start sheet opens at the points with
+  each saved piece marked *a hydrological unit*, so what is left is to
+  propose, check each unit's name and area in the proposal, and Apply (a
+  model with nodes gets the Divide sheet instead; [§ Sub-catchments from
+  clicks](#sub-catchments-from-clicks)). Typing the model in on the
+  Network stays the other way; upload works at every step.
 - **Data and the first run: a to-do list** (issue #646 item 2, the
   hydrologist's review F2–F4; `startData.ts`). Every data proposal a run
   needs, in the order a run reads them: the units' areas and order, how
@@ -2404,8 +2419,29 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 `backend/src/delineation/clicks.ts`, the Map's `ClickBar.svelte`; the screen
 in [ui.md § Map](./ui.md#map-tabmap), the API in [api.md § Sub-catchments
 from clicks](./api.md#sub-catchments-from-clicks)) divides the land by
-clicking the rivers, with no boundary, no points to place and no roles to
-pick first.
+clicking the rivers, with no points to place and no roles to pick first.
+
+- **Within the catchment.** With a catchment boundary on the map, every
+  piece lies within it, and the bar says so ("Within “Valley”: …"). A click
+  outside the boundary polygon is refused before any elevation-model work,
+  naming it ("Click 2 is outside “Valley”, the catchment boundary: every
+  sub-catchment lies within it. …"; 422, no attempt counted). When the
+  boundary came from Delineate, its accepted delineation's snapped outlet
+  (`delineation_proposal.outlet_lon`/`outlet_lat`, as Start from the map
+  reads it) is the **lowest point**, ahead of every click and on its own
+  cell: its piece is the land between the lowest clicks and the outlet,
+  listed first under badge **O** ("The outlet’s piece: …"), click `-1` in
+  the answer, saved as "Sub-catchment at the outlet". It is no click, so
+  Undo never takes it away (it goes only with the last click, when there is
+  nothing to divide). A click that drains more than that outlet (on another
+  river just inside the boundary's edge) is refused too. A boundary drawn
+  or uploaded by hand has no stored outlet, so there the lowest click stays
+  the outlet, as without a boundary, and the bar says so: its outflow (its
+  most-drained cell, as Start places a unit at its boundary's) would need
+  the outlet mode of `delineateUnits`, which refuses a catchment past the
+  window instead of keeping inflow points, so it isn't used. The server
+  reads the boundary and its outlet on every preview and Save, never from
+  the browser. With no boundary at all, nothing changes.
 
 - **What a click is.** An outlet on a terrain channel: the server puts it
   on the nearest terrain channel within 150 m, as Delineation does. Its piece is
@@ -2465,10 +2501,21 @@ pick first.
   catchment past the largest window) is taken back with the reason.
 - **Save** routes the same clicks again on the server (never trusting a
   geometry from the browser) and saves each piece as an *other* polygon,
-  "Sub-catchment *n*" by its click's number, its description the outlet,
-  where it drains, the area upstream (or "more upstream than was routed"),
-  the inflow points entering it, the dataset and the method version.
-  Link each to its unit and **Use** its area as with any other polygon.
+  "Sub-catchment *n*" by its click's number ("Sub-catchment at the outlet"
+  for the outlet's piece), its description the outlet, where it drains, the
+  area upstream (or "more upstream than was routed"), the inflow points
+  entering it, the dataset and the method version.
+- **Then straight on to the network.** After a Save the Map opens the
+  network step with the new pieces: **Start from the map** on an empty
+  model (`start=1`, at its points, each saved piece marked a hydrological
+  unit), or **Divide the model** on one with nodes and a DEM (`divide=1`,
+  each piece among its areas, to say which unit it stands for). Nothing is
+  written to the model there until the sheet's Apply, its one confirmation
+  ([§ Start from the map](#start-from-the-map)). Without either (the
+  Start state can't be read), the first piece's card opens as before: link
+  each to its unit and **Use** its area as with any other polygon. Divide
+  has no "a new unit" choice for an area, so on a model with nodes a piece
+  can only stand for a unit already in it.
 - **Limits.** The clicks and every whole piece must fit the largest window
   (about 100 km across, 20 s); pieces past it are inflow points (above). At
   most 50 clicks a request. Inflow points are not saved: model what comes
