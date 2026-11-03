@@ -1459,6 +1459,28 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(gone.applied[0]!.notes.join()).toMatch(/seepage no longer returns to the river \(it rejoined below "Farm A"\)/);
 	});
 
+	it('sizes an off-take by a diversion curve (engine 1.113.0): the curve first, the sizing last; the sizing before the curve is skipped', () => {
+		const b = base();
+		b.model.transfers = [{ id: 'r1', fromNodeId: 'C', toNodeId: 'B', months: [1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river', sizing: 'capacity' }];
+		const curve: ScenarioOp[] = [
+			{ op: 'transfer.set', transferId: 'r1', field: 'diversionCoefficient', value: 2000 },
+			{ op: 'transfer.set', transferId: 'r1', field: 'diversionExponent', value: -0.9 },
+			{ op: 'transfer.set', transferId: 'r1', field: 'diversionMaxPct', value: 0.95 },
+			{ op: 'transfer.set', transferId: 'r1', field: 'diversionFlowUnit', value: 'Ml/day' },
+			{ op: 'transfer.set', transferId: 'r1', field: 'diversionFlowBasis', value: 'natural' }
+		];
+		const ok = applyScenario(b, [...curve, { op: 'transfer.set', transferId: 'r1', field: 'sizing', value: 'diversionCurve' }]);
+		expect(ok.problems).toEqual([]);
+		expect(ok.input.model.transfers[0]).toMatchObject({ sizing: 'diversionCurve', diversionCoefficient: 2000, diversionExponent: -0.9, diversionMaxPct: 0.95, diversionFlowUnit: 'Ml/day', diversionFlowBasis: 'natural' });
+		// The sizing first: no curve yet, so the save rules refuse it and the op is skipped with the rule as its problem.
+		const early = applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'sizing', value: 'diversionCurve' }, ...curve]);
+		expect(early.problems[0]).toMatch(/^op 1 \(transfer\.set\): river off-take r1: sized by a diversion curve, its coefficient a must be a number above 0/);
+		expect(early.input.model.transfers[0]!.sizing).toBe('capacity');
+		// Each field checked on its own.
+		for (const [field, value] of [['diversionCoefficient', 0], ['diversionMaxPct', 1.5], ['diversionFlowUnit', 'cumecs'], ['diversionFlowBasis', 'observed'], ['diversionExponent', 'x']] as const)
+			expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field, value } as ScenarioOp]).problems[0], field).toMatch(new RegExp(field));
+	});
+
 	it('node.insert puts a new node on a reach: the named nodes drain into it, it drains where they did', () => {
 		const weir = node('W', { name: 'New weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, divertCapacityM3Day: 0 });
 		const b = deepFreeze(base());

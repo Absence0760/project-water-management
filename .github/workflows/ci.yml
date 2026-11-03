@@ -560,9 +560,9 @@ jobs:
       - name: Migrations (a new one sorts after the base's highest; an applied one is unchanged)
         run: node scripts/guards/check_migration_order.mjs
 
-      - name: Guard unit tests (scripts/guards, scripts/release, scripts/ingest, infra/scripts)
+      - name: Guard unit tests (scripts/guards, scripts/git-hooks, scripts/release, scripts/ingest, infra/scripts)
         run: |
-          if ! node --test scripts/guards/*.test.mjs scripts/release/*.test.mjs scripts/ingest/*.test.mjs infra/scripts/*.test.mjs; then
+          if ! node --test scripts/guards/*.test.mjs scripts/git-hooks/*.test.mjs scripts/release/*.test.mjs scripts/ingest/*.test.mjs infra/scripts/*.test.mjs; then
             echo "::error::A guard's own tests failed; its verdicts elsewhere in CI cannot be trusted until they pass. Reproduce: pnpm test:guards"
             exit 1
           fi

@@ -46,7 +46,8 @@ pnpm check                 # typecheck across workspaces
 pnpm test                  # unit tests (no DB)
 pnpm test:backend:db       # API + RLS tests (needs pnpm dev:db:up)
 pnpm test:e2e              # Playwright end-to-end (see e2e/README.md)
-pre-commit install         # once: gitleaks + client-terms hooks on every commit
+                           # pnpm install points git at .githooks/: the client-terms guard on every commit,
+                           # plus .pre-commit-config.yaml (gitleaks) when pre-commit is on PATH; never `pre-commit install`
 pre-commit run --all-files # gitleaks, the client-terms guard and the other hygiene hooks
 ```
 

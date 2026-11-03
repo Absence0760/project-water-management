@@ -7,7 +7,7 @@
 	// largest, opened on few visits (an empty model), loads when opened,
 	// which keeps the tab under its 60 KB budget (61 → 57 KB, issue #374;
 	// splitting Divide the model too saved 2 KB more for 3 KB of overhead).
-	// Upload GeoJSON (the sheet and its review table, importReview.ts) loads
+	// Upload map file (the sheet and its review table, importReview.ts) loads
 	// when opened too: round 3's delineation work took the tab back to 62 KB,
 	// and the split brought it to 58 KB for ~1.8 KB of overhead in the total.
 	const loadMap = () => import('./CatchmentMap.svelte');
@@ -68,7 +68,7 @@
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
+	import { PUBLIC_CHANNELS_URL, PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
 	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '#lib/api/index.js';
 	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
@@ -89,7 +89,7 @@
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
-	import { chirpsCells, layersOn, unitLabels } from './mapLayers';
+	import { channelsWanted, chirpsCells, demRiversOffered, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
 	import { AreaFill } from './areaFill.svelte';
@@ -104,6 +104,7 @@
 	import { BAND_WORD } from './mapStatus';
 	import { ClickDivider, clickShape } from './clickPieces.svelte';
 	import { ChannelLayer } from './channelLayer.svelte';
+	import { openChannelArchive, staticChannels } from './channelArchive';
 	import { openProposal } from './delineation';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
 	import type { DivideDraft } from './divideFlow';
@@ -911,17 +912,26 @@
 	/** The Area fill slider (kept in this browser): the polygons' fill strength. */
 	const areaFill = new AreaFill();
 
-	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
+	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes,
+	// and while the DEM rivers layer is (`layers=channels`, docs/maps.md § The elevation model's channels) ---
 	/**
 	 * A delineated proposal waits for a decision and no other tool has the map: the channels stay drawn, dimmed, so
 	 * the outline can be checked against the terrain it follows; they go once it is accepted or rejected.
 	 */
 	const reviewingProposal = $derived(!!pendingProposal && !draft.active && !measure.active && !dividing);
+	/** The DEM rivers toggle: an editor's, once their delineation check finds an elevation model. */
+	const demRiversShown = $derived(demRiversOffered(canEdit, !!delineation?.available));
+	/** A tool needs the channels (not the layer): the pill over the map speaks for them; the Layers box speaks for the layer. */
+	const toolChannels = $derived(delineating || dividing || reviewingProposal);
+	/** The channels precomputed into a static file (PUBLIC_CHANNELS_URL), read before the route, which stays the fallback tile by tile (channelArchive.ts). */
+	const channelsUrl = PUBLIC_CHANNELS_URL?.trim() || null;
 	const channels = new ChannelLayer({
 		projectId: () => projectId,
-		on: () => canEdit && !!delineation?.available && (delineating || dividing || reviewingProposal),
+		on: () => channelsWanted({ offered: demRiversShown, layerOn: layersOn(params).has('channels'), tool: toolChannels }),
 		view: () => mapView,
-		load: api.delineation.channels
+		load: channelsUrl
+			? staticChannels({ open: openChannelArchive(channelsUrl), fingerprint: () => delineation?.dataset?.fingerprint, fallback: api.delineation.channels })
+			: api.delineation.channels
 	});
 
 	// --- the relief: the land shaded from the DEM, on while `layers=relief` (and a DEM is configured) ---
@@ -1190,7 +1200,7 @@
 <!-- The page's actions only: the map's tools are on the map (MapToolPalette). -->
 {#snippet headerActions()}
 	{#if canEdit}
-		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
+		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload map file</a>
 		{#if canStart}
 			<a class="btn" href={withParam(page.url, 'start', '1')} data-testid="map-start-open">{pendingStart ? 'Review the proposed model' : 'Start from the map'}</a>
 		{/if}
@@ -1382,7 +1392,7 @@
 				{/if}
 				<button type="button" class={delineation?.available ? 'btn' : 'btn btn-primary'} onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button>
 			</p>
-			<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
+			<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it from a file</a> (GeoJSON, KML or a zipped shapefile), or place a point.</p>
 			{#if canStart}
 				<p class="empty-line small">
 					<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then each unit’s own boundary, and the app proposes their order and links the dams and pumps inside each.
@@ -1406,6 +1416,7 @@
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
 		demGrid={demGridOffered ? demGrid : null}
+		demRivers={demRiversShown ? { on: layersOn(params).has('channels'), layer: channels } : null}
 		{areaFill}
 	/>
 {/snippet}
@@ -1501,7 +1512,7 @@
 							{/if}
 							{#if dividing && divider.busy === 'pieces'}
 								<p class="map-pill small" aria-hidden="true" data-testid="map-click-busy">Working out the sub-catchments…</p>
-							{:else if channels.on && (channels.noView || channels.zoomIn || channels.error || channels.loading)}
+							{:else if channels.on && toolChannels && (channels.noView || channels.zoomIn || channels.error || channels.paused || channels.loading)}
 								<!-- Only what needs saying: the bars and the Key already say what the terrain channels are. -->
 								<p class="map-pill channel-note small" role="status" data-testid="map-channels-note">
 									<span class="swatch" aria-hidden="true" style:background={channelColour(dark)}></span>
@@ -1509,6 +1520,8 @@
 										The terrain channels are drawn on the map, which isn’t showing here.
 									{:else if channels.zoomIn}
 										{reviewingProposal ? 'Zoom in to see the terrain channels the outline follows.' : 'Zoom in to see the terrain channels.'}
+									{:else if channels.paused}
+										New terrain channels are paused for this hour; delineation still works.
 									{:else if channels.error}
 										<span class="err">The terrain channels couldn’t be drawn: {channels.error}</span>
 									{:else}

@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DEMAND_MONTHLY_UNITS, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, MAP_MM_MAX, MAP_MM_MIN, mapMmError, modelRuleProblems, PE_SOURCE_MAX, REACH_LOSS_FRAC_MAX, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DEMAND_MONTHLY_UNITS, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, DIVERSION_FLOW_BASES, DIVERSION_FLOW_UNITS, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, MAP_MM_MAX, MAP_MM_MIN, mapMmError, modelRuleProblems, PE_SOURCE_MAX, REACH_LOSS_FRAC_MAX, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -194,7 +194,14 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// Canal seepage back to the river (engine ≥ 1.42.0, migration 126): the share of the losses, and the
 				// unit it rejoins below (null = the source; modelRuleIssues holds it to the source or a farm below it).
 				lossReturnPct: frac.default(0),
-				lossReturnNodeId: uuid.nullable().default(null)
+				lossReturnNodeId: uuid.nullable().default(null),
+				// A diversion curve (engine ≥ 1.113.0, migration 308): a · x^b percent of the river, read only under
+				// sizing 'diversionCurve' (modelRuleIssues refuses an incomplete one there); null on any other sizing.
+				diversionCoefficient: z.number().finite().gt(0).nullable().default(null),
+				diversionExponent: z.number().finite().nullable().default(null),
+				diversionMaxPct: z.number().finite().gt(0).max(1).nullable().default(null),
+				diversionFlowUnit: z.enum(DIVERSION_FLOW_UNITS).nullable().default(null),
+				diversionFlowBasis: z.enum(DIVERSION_FLOW_BASES).nullable().default(null)
 			})
 		)
 		.max(500),

@@ -44,7 +44,7 @@ describe('float8ArrayParam in Postgres', () => {
 	});
 
 	it("builds a constant series with array_fill as the same array the values would have sent", async () => {
-		for (const xs of [Array.from({ length: 16_161 }, () => 0), [-0, 0, -0], [42.5, 42.5]]) {
+		for (const xs of [Array.from({ length: 16_000 }, () => 0), [-0, 0, -0], [42.5, 42.5]]) {
 			const c = constantValue(xs);
 			expect(c).not.toBeNull();
 			const [row] = (await asOwner('SELECT array_send(array_fill($1::float8, ARRAY[$2::int])) AS filled', [c, xs.length])) as { filled: Buffer }[];

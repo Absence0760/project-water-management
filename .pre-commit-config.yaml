@@ -1,5 +1,6 @@
-# Install once with: pre-commit install   (installs the pre-commit and commit-msg hooks)
-# Manual run: pre-commit run --all-files
+# Run by the repo's own hooks (.githooks/, which `pnpm install` points
+# core.hooksPath at) whenever pre-commit is on PATH; don't `pre-commit install`
+# (it refuses with core.hooksPath set). Manual run: pre-commit run --all-files
 default_install_hook_types: [pre-commit, commit-msg]
 default_stages: [pre-commit]
 repos:

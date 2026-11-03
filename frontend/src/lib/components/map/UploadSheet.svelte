@@ -1,6 +1,9 @@
 <!--
-	Upload a GeoJSON file, in a side sheet over the Map (`upload=1`; issue
-	#326 E5 and D2, docs/ui.md § Map). Two steps: choose the file, and Review
+	Upload a map file, in a side sheet over the Map (`upload=1`; issue
+	#326 E5 and D2, docs/ui.md § Map): GeoJSON, or a KML, KMZ or zipped
+	shapefile, which the browser first reads into GeoJSON (upload/convert.ts,
+	reprojecting a shapefile from its .prj) and which then goes the GeoJSON's
+	way unchanged. Two steps: choose the file, and Review
 	reads it on the server (POST …/map/import/preview), which proposes each
 	feature's kind (from a `kind`/`type`/`layer` property, else from its
 	shape) and the node it stands for. The review table lets the editor change
@@ -18,7 +21,7 @@
 	import { api, ApiError, type MapFeatureKind, type MapImportPreview, type MapImportProblem, type MapSource } from '#lib/api/index.js';
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import FormatHelp from '#lib/components/common/FormatHelp.svelte';
-	import { areaText, GEO_MAX_BYTES, importProblems, KIND_LABEL, KIND_NODES, problemText } from './mapData';
+	import { areaText, importProblems, KIND_LABEL, KIND_NODES, problemText } from './mapData';
 	// The example file the "Expected format" offers; the backend's geojson.test.ts checks it passes the upload's checks.
 	import { GEOJSON_FORMAT } from './uploadFormat';
 	import {
@@ -36,6 +39,7 @@
 		type ReviewRow
 	} from './importReview';
 	import SourceList from './SourceList.svelte';
+	import { readUpload, UPLOAD_ACCEPT } from './upload/convert';
 
 	let {
 		open = $bindable(false),
@@ -54,6 +58,8 @@
 	const formId = `${uid}-form`;
 	let file = $state<File | null>(null);
 	let text = '';
+	/** What a KML, KMZ or shapefile was read as ("Read from a zipped shapefile, reprojected from …"); null for GeoJSON. */
+	let readAs = $state<string | null>(null);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 	/** The file's problems, or the import's refusal, listed by feature. */
@@ -89,15 +95,7 @@
 		e.preventDefault();
 		reset();
 		if (!file) {
-			error = 'Choose a GeoJSON file (.geojson or .json).';
-			return;
-		}
-		if (file.size > GEO_MAX_BYTES) {
-			error = `The file is larger than ${GEO_MAX_BYTES / 1024 / 1024} MB; simplify it or split it.`;
-			return;
-		}
-		if (/\.(zip|shp)$/i.test(file.name)) {
-			error = 'Shapefiles aren’t read yet: export the layer as GeoJSON in WGS84 (EPSG:4326), e.g. from QGIS, and upload that.';
+			error = 'Choose a file: GeoJSON (.geojson or .json), KML, KMZ or a zipped shapefile (.zip).';
 			return;
 		}
 		busy = true;
@@ -107,11 +105,13 @@
 		const picked = file;
 		const current = () => open && file === picked;
 		try {
-			const t = await picked.text();
+			// A KML, KMZ or zipped shapefile becomes GeoJSON here (refused with a message the alert shows as it is).
+			const read = await readUpload(picked);
 			if (!current()) return;
-			const p = await api.map.importPreview(projectId, { fileName: picked.name, text: t });
+			const p = await api.map.importPreview(projectId, { fileName: picked.name, text: read.text });
 			if (!current()) return;
-			text = t;
+			text = read.text;
+			readAs = read.summary;
 			review = p;
 			rows = reviewRows(p);
 			everyKind = '';
@@ -147,6 +147,7 @@
 		rows = [];
 		file = null;
 		text = '';
+		readAs = null;
 		replaceTicked = false;
 		reset();
 	}
@@ -164,24 +165,24 @@
 	}
 </script>
 
-<Dialog bind:open title="Upload a GeoJSON file" side extraWide={review !== null}>
+<Dialog bind:open title="Upload a map file" side extraWide={review !== null}>
 	{#if !review}
 		<form id={formId} onsubmit={readFile} novalidate>
 			<div class="field">
-				<label for="{uid}-file">GeoJSON file <span class="u">(WGS84, at most 5 MB)</span> <HelpTip key="map-geojson-upload" label="About the GeoJSON checks" /></label>
+				<label for="{uid}-file">Map file <span class="u">(GeoJSON, KML, KMZ or zipped shapefile)</span> <HelpTip key="map-geojson-upload" label="About the map file checks" /></label>
 				<input
 					id="{uid}-file"
 					type="file"
-					accept=".geojson,.json,application/geo+json,application/json"
+					accept={UPLOAD_ACCEPT}
 					onchange={(e) => (file = e.currentTarget.files?.[0] ?? null)}
 					aria-describedby="{uid}-file-h"
 					data-testid="map-file"
 				/>
 				<!-- One short line under the field (playbook § 2); the rest stays its description, and the ⓘ explains it in full. -->
 				<span class="hint" id="{uid}-file-h">
-					WGS84 longitude and latitude; a file in a Lo zone or UTM is refused.
+					A shapefile in a Lo zone or UTM is reprojected from its .prj; GeoJSON must be WGS84.
 					<span class="visually-hidden"
-						>It is refused rather than guessed: reproject it first (QGIS: Export → Save Features As, CRS EPSG:4326). A file may mix boundaries,
+						>Zip the layer’s .shp, .shx, .dbf and .prj together. A GeoJSON file in a Lo zone or UTM is refused rather than guessed: reproject it first (QGIS: Export → Save Features As, CRS EPSG:4326). A file may mix boundaries,
 						parcels, dams, gauges and rivers: you check each feature’s kind before anything is saved.</span
 					>
 				</span>
@@ -194,6 +195,7 @@
 	{:else}
 		<form id={formId} onsubmit={importReviewed} novalidate class="review">
 			<p class="summary" data-testid="map-review-summary">
+				{#if readAs}<span class="read-as" data-testid="map-review-read-as">{readAs}</span>{/if}
 				<strong>{review.fileName}</strong>: {rows.length}
 				{rows.length === 1 ? 'feature' : 'features'}{importable ? ` (${kindCounts(rows)})` : ''}.
 				{#if importable}{fromFile ? 'Kinds come from the file’s properties, else from each shape. ' : ''}Check each kind before you import; nothing is saved until then.{:else}Nothing in this file can be imported.{/if}
@@ -332,6 +334,11 @@
 	.alert p,
 	.summary {
 		margin: 0;
+	}
+	.read-as {
+		display: block;
+		font-size: var(--font-sm);
+		color: var(--text-muted);
 	}
 	.replace {
 		display: grid;

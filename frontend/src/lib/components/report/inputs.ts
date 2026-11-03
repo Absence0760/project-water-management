@@ -219,7 +219,7 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
 	return [...(model.transfers ?? [])]
 		.sort((a, b) => a.priority - b.priority)
 		.map((t) => [
-			`${name.get(t.fromNodeId) ?? '–'}${isRiverOfftake(t) ? ' (river off-take)' : ''}`,
+			`${name.get(t.fromNodeId) ?? '–'}${isRiverOfftake(t) ? (t.sizing === 'diversionCurve' ? ` (river off-take, ${diversionText(t)})` : ' (river off-take)') : ''}`,
 			t.toNodeId === null ? 'Outside the catchment' : (name.get(t.toNodeId) ?? '–'),
 			describeMonths(t.months),
 			// A rule with its own rate per month (engine ≥ 1.14.0) lists each month it runs in with its rate.
@@ -233,6 +233,19 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
 			isRiverOfftake(t) ? seepingBack(t, name) : '–',
 			t.enabled ? 'on' : 'off'
 		]);
+}
+
+/**
+ * A river off-take sized by a diversion curve (engine ≥ 1.113.0), as its inputs were: "2 000 × x^−0.9 % of the river, x in L/s
+ * (the river there), at most 95%". An incomplete curve (the run took nothing on it) says so.
+ */
+export function diversionText(t: Transfer): string {
+	const a = t.diversionCoefficient;
+	const b = t.diversionExponent;
+	if (a == null || b == null || !t.diversionFlowUnit) return 'a diversion curve left incomplete, so it took nothing';
+	const unit = t.diversionFlowUnit === 'm3/s' ? 'm³/s' : t.diversionFlowUnit === 'm3/day' ? 'm³/day' : t.diversionFlowUnit;
+	const basis = t.diversionFlowBasis === 'natural' ? 'the natural flow there' : 'the river there';
+	return `${fmtNum(a, 6, true)} × x^${fmtNum(b, 6, true)} % of the river, x in ${unit} (${basis}), at most ${fmtPct(t.diversionMaxPct ?? 1, 0)}`;
 }
 
 /** A river off-take's canal seepage back to the river (engine ≥ 1.42.0): its share of the losses and where it rejoins (null = below the source). */

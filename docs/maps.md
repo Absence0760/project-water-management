@@ -310,6 +310,10 @@ server ([§ Delineation](#delineation)).
   The relief's DEM is the same: one more PMTiles file under `/tiles/`,
   read with `fetch`, decoded in MapLibre's worker (no `blob:`, no
   `img-src` change).
+  The precomputed channels too (`/tiles/channels.pmtiles`, [§ The
+  elevation model's channels](#the-elevation-models-channels)): ranged
+  `fetch`es by the `pmtiles` reader on the main thread, gunzipped with the
+  browser's `DecompressionStream`; no CSP change.
   Locally there is no CSP header (only SvelteKit's meta policy, which sets
   `script-src`).
 - The app loads **no third-party script, style, font or tile**: MapLibre is
@@ -595,7 +599,9 @@ name.
 ## Uploads
 
 `POST /projects/:id/map/import` (and its review,
-`POST /projects/:id/map/import/preview`) takes a **GeoJSON** file's text; the server
+`POST /projects/:id/map/import/preview`) takes a **GeoJSON** file's text
+(a KML, KMZ or zipped shapefile is read into GeoJSON in the browser first,
+below: [Shapefiles and KML](#shapefiles-and-kml)); the server
 parses and checks it (`backend/src/geo/geojson.ts`), whatever the browser
 did, and refuses the whole file on any problem, listing them per feature:
 
@@ -703,10 +709,78 @@ did, and refuses the whole file on any problem, listing them per feature:
   always sends `features`). A parcel, dam or gauge named like a node of a fitting kind is linked
   to it; the editor can change the link.
 
-**Shapefiles are not read yet** (WP-3.12 plans `shpjs` and proj4 in the
-browser, with Hartebeesthoek94 Lo projections from the `.prj`); the form
-says to export the layer as GeoJSON in EPSG:4326 (QGIS: *Export → Save
-Features As*). See followups.
+### Shapefiles and KML
+
+The upload sheet also takes a **KML**, a **KMZ** and a **zipped shapefile**
+(confirmed with the client's hydrologist, 2026-11-02). The browser reads
+each into GeoJSON (`frontend/src/lib/components/map/upload/`) and sends
+that through the same preview and import, under the name the file was
+picked with, so every check and limit above applies unchanged and the
+server stays the authority. The readers load with `import()` only when such
+a file is picked, never with the Map.
+
+- **Libraries** (exact pins): `proj4` 2.22.0 (MIT), `parsedbf` 2.0.0 (MIT,
+  the `.dbf` reader `shpjs` uses) and `@tmcw/togeojson` 7.1.3
+  (BSD-2-Clause). The zip reader (`upload/zip.ts`, for its caps) and the
+  `.shp` reader (`upload/shp.ts`) are the app's own: `shpjs`, which WP-3.12
+  planned, imports the whole of proj4, and that made the shapefile chunk
+  47 KB gzipped, over the 42 KB a chunk may weigh. `upload/proj4lite.ts`
+  registers only Transverse Mercator (and its extended form), UTM, Albers,
+  Lambert conformal conic and Lambert azimuthal equal-area on proj4's core
+  (which adds longitude/latitude and Mercator): 28 KB for the whole
+  shapefile chunk. A `.prj` in any other projection is refused as
+  unreadable. The readers add about 36 KB gzipped to the total
+  (`scripts/guards/bundle-budget/2026-11-02-map-upload-kml-shapefile.json`),
+  none of it loaded until such a file is picked.
+- **Zipped shapefile** (`upload/shapefile.ts`): every `.shp` in the zip is a
+  layer (macOS's `__MACOSX/` and `._` files ignored), read as Point,
+  PolyLine, Polygon or MultiPoint (their Z and M forms too; MultiPatch is
+  refused), a polygon's clockwise rings its outer rings and each
+  anticlockwise one a hole of the smallest outer ring holding it; its `.dbf` gives the
+  properties (decoded with the `.cpg`'s code page), and a `NAME`,
+  `Description` and the like are copied to the lowercase key the server
+  reads. Each layer is **reprojected to WGS84 from its `.prj`** with proj4
+  (`upload/projection.ts`): a Hartebeesthoek94 **Lo zone** (EPSG:2046–2055,
+  GDAL's south-orientated Transverse Mercator with westing/southing axes,
+  which proj4 can't read by name, is read as plain Transverse Mercator with
+  both coordinates negated; Esri's form of the same zone needs nothing), a
+  **UTM** zone, Albers or Lambert. Refused, with a sentence saying
+  why: a zip without a `.shp` (one with a `.kml` is read as a KMZ; one with a
+  `.geojson` says to upload that), a layer with **no `.prj`** unless every
+  position is already longitude/latitude in range ("This zip has no .prj for
+  parcels.shp, so we can’t tell its coordinate system."), a `.prj` proj4
+  can't read, and a datum with **no shift to WGS84** (the old Cape datum
+  without a `TOWGS84`, which would land 200–300 m out). Hartebeesthoek94
+  itself is WGS84's ellipsoid with no shift and passes. A lone `.shp` is
+  turned away before reading: a shapefile is several files.
+- **KML / KMZ** (`upload/kml.ts`): each placemark's name, description and
+  ExtendedData (`Data` and `SimpleData`) become its properties; a
+  placemark with no shape is left out and counted. A KMZ's `doc.kml` (else
+  its shallowest `.kml`) is read.
+- **Made to fit the GeoJSON checks** (`upload/normalize.ts`): a third
+  coordinate (an altitude, a PolygonZ's z) is dropped; a MultiGeometry
+  becomes one MultiPolygon of its polygons and one MultiLineString of its
+  lines, and each of its points a Point, each keeping the placemark's
+  properties; a MultiPoint becomes its Points; positions are rounded to 7
+  decimals (about a centimetre).
+- **Caps on an untrusted file**: the picked KML, KMZ or zip at most 25 MB;
+  a zip's entries read at most 50 MB unpacked in all, each refused on its
+  declared size before it is inflated, and inflation counted as it streams
+  and stopped the moment it passes the entry's declared size (a zip that
+  lies is refused as damaged), so a zip bomb never unpacks; encrypted
+  entries, ZIP64 and methods other than stored and deflate are refused. A
+  shapefile's records are counted from the `.shp`'s record headers, and a
+  KML's placemarks from the parsed document, before either is converted:
+  over 500 is refused there. The GeoJSON made must still be at most 5 MB.
+  [security.md § Input handling](./security.md#input-handling) has the XML
+  side.
+- **Tests**: `upload/upload.test.ts` with synthetic files built byte by byte
+  (`upload/__fixtures__/build.ts`: a Lo19 layer whose areas come out within
+  0.5 % of the drawn squares, WP-3.12's acceptance; Esri Lo19 and UTM 34S
+  reference points; a two-layer WGS84 zip; no `.prj`; Cape; a lying and an
+  oversized zip entry; KML with a MultiGeometry; KMZ; a DOCTYPE), and
+  `e2e/tests/map-import-review.spec.ts`, which imports the committed KML and
+  Lo19 zip and finds their features in the map's list.
 
 ## Areas
 
@@ -1672,7 +1746,8 @@ to a point on a river. The design, the method and its accuracy are in
 
 ## The elevation model's channels
 
-While **Delineate** or **Sub-catchments** is on, the Map draws the DEM's own
+While **Delineate** or **Sub-catchments** is on, or the **DEM rivers** layer
+is ticked (`layers=channels`, below), the Map draws the DEM's own
 channels in solid red, wider for a larger area (issue #374;
 `delineation/channels.ts`, `channelRoutes.ts`, the Map's
 `channelLayer.svelte.ts`). River lines sit hundreds of metres off the
@@ -1689,22 +1764,105 @@ these lines draw is one a click can go on, both at 1 km²).
   area at its lower end (window-local: a river entering from beyond the
   window carries less than it drains). A tile keeps the steps that start
   inside it, so tiles meet without overlapping. Simplified by half a cell.
-- **When.** Only while one of the two tools is on, or while a delineated
+  No channel is drawn on the sea (a cell at 0 m or below, read before the
+  fill, `withSea`): the DEM holds the ocean as a flat at 0 m, which the
+  fill tilts by ε and D8 then followed in long straight lines out to the
+  window's edge, striping the sea off every coast. A river's line now ends
+  at the coast; the routing and the areas are unchanged.
+- **Precomputed** (`delineation/channelArchive.ts`,
+  `backend/scripts/channels-build.ts`, the Map's `channelArchive.ts`). The
+  same tiles, built once per DEM by the same `channelTile` with the same
+  window and threshold, into one PMTiles archive, `channels.pmtiles`, that
+  the tiles bucket serves beside the relief (`/tiles/channels.pmtiles`;
+  locally MinIO's `tiles` bucket). Each entry is one tile's answer as the
+  route gives it (its lines, their areas, the DEM's label and fingerprint),
+  gzip JSON, at zoom 11 as x = i + 1 024, y = j + 1 024 (tile type 0,
+  "other": a key-value store MapLibre never reads, so no vector-tile
+  encoder, no new dependency and no quantising of the lines a click snaps
+  to; the browser reads it with the `pmtiles` package the basemap already
+  loads, one byte range per tile). With `PUBLIC_CHANNELS_URL` set the layer
+  reads each tile from it first and asks the route only for a tile it lacks
+  (outside the region it was built for), for every tile if it can't be read
+  or isn't a channels archive, and for every tile if its DEM fingerprint
+  isn't the one the server's delineation check reports, so a file left from
+  an older DEM never draws channels a click wouldn't snap to. Unset (the
+  default, CI and e2e), everything is as before. A tile from the file costs
+  no CPU and no account's hourly pool. `channelArchive.test.ts` (backend)
+  checks every tile of the synthetic DEM's archive equals `channelTile`'s
+  answer and that the committed `backend/fixtures/channels/` archive is what
+  the builder writes today (`pnpm gen:channels-fixture` after changing the
+  channels' code or the synthetic terrain); `channels.db.test.ts` that the
+  route answers a tile exactly as the archive holds it; the frontend's
+  `channelArchive.test.ts` reads that archive through the `pmtiles` reader
+  and checks each fallback. Locally `pnpm dev:tiles:channels` builds it
+  (from the cached relief DEM over `CHANNELS_BBOX`, default the Western
+  Cape, else from the synthetic DEM) and uploads it to MinIO, and `pnpm
+  dev:tiles:up` then sets `PUBLIC_CHANNELS_URL`; the DEM must be the one the
+  backend's `DEM_URL` names, or every tile falls back. Measured on GLO-30:
+  about 0.35 s and 15 KB (gzip; 60–90 KB as JSON) a tile, so the Western
+  Cape (~800 tiles) builds in about 5 minutes into about 10–12 MB, and all of
+  South Africa (~5 500) in about half an hour into about 80 MB. Production:
+  deployment.md § Map tiles.
+- **When.** While one of the two tools is on, while a delineated
   proposal waits for a decision (dimmed then, so the outline reads first
   and can be checked against the channels it follows; they go once it is
-  accepted or rejected), and only for a view at most 0.35° a side
-  (3 × 3 tiles); wider, a line over the map says to zoom in (tiles already
-  fetched stay drawn). Tiles are fetched one at a time and kept for the session; the server
-  keeps the last 128 in memory per instance.
-- **Cost.** A tile it computes (not one it has) counts against the account's
-  elevation-model cap like a delineation (60 an hour, 2 at once;
-  security.md § Map uploads); a few seconds of CPU each.
+  accepted or rejected), or while the DEM rivers layer is on, and only for
+  a view at most 0.35° a side (3 × 3 tiles); wider, a line over the map
+  says to zoom in while a tool needs them, and the Layers panel says "Zoom
+  in to about 35 km across to draw the DEM rivers." while the layer does
+  (tiles already fetched stay drawn). Tiles are fetched one at a time and
+  kept for the session; the server keeps the last 128 in memory per
+  instance.
+- **The DEM rivers layer** (`layers=channels`, confirmed by the client's
+  hydrologist 2026-11-02; `mapLayers.ts` `demRiversOffered`,
+  `channelsWanted`). A toggle in the Layers panel right after HydroRIVERS'
+  (labelled **Rivers (HydroRIVERS)** since, its stored id still `rivers`,
+  so saved and shared views keep working), so the two read as a pair: the
+  rivers delineation follows, worked out from the elevation model, and the
+  mapped rivers for reference. Ticked, the channels draw whenever the view
+  is small enough, with no tool on; Delineate and Sub-catchments draw them
+  as before whether it is on or not. Offered to an editor once their
+  delineation check finds an elevation model (the channels route is an
+  editor's); without `DEM_URL` (the local default) or for a viewer it isn't
+  offered, as the DEM grid and the relief aren't. Kept in the URL with the
+  other layers.
+- **Requests while panning.** The layer asks nothing new for a view it has
+  already drawn: a tile is fetched once a session, the map reports its view
+  only at the end of a move (`moveend`), and each new view replaces the
+  queue of tiles still to fetch, so the views a pan or zoom passes through
+  cost at most the one tile already out (`channelLayer.svelte.test.ts`). No
+  extra debounce: that already is one. Panning hard over new ground is a few
+  tiles a view, about 30 in a busy 5 minutes, well under the WAF's
+  `waf_dem_rate_limit_per_ip` (300 per 5 minutes, infra/waf.tf), which
+  counts this route with the other DEM routes.
+- **Cost and caps.** A tile it computes (not one it has: a cached tile is
+  free) is a few seconds of CPU at most, and counts against the account's
+  elevation-model cap in the channel tiles' **own pool** (migration 307,
+  `attempt.ts` `CHANNEL_ATTEMPTS`): 150 an hour and 2 at once, apart from
+  delineation's 60 an hour and 2 at once (delineate, start, divide, the
+  sub-catchments from clicks; security.md § Map uploads). Neither pool
+  touches the other, so the DEM rivers layer left on while exploring new
+  ground can never refuse the delineation the editor runs next. 150 is
+  sized from the measurement above: about 30 new tiles in a busy 5 minutes
+  of panning, a few dozen to a hundred in an hour of real exploring, while
+  bounding one account at a few CPU-minutes an hour; the WAF stays the outer
+  bound per address. Past it the server answers 429 with
+  `details.reason: 'channels_hourly'`; the Layers panel says "DEM rivers
+  paused for this hour; delineation still works." (a note, not an error),
+  the tiles already drawn stay, and the layer asks nothing more for 5
+  minutes (`channelLayer.svelte.ts` `CHANNELS_PAUSE_MS`), then tries again
+  with the next view. Delineate's own channels come from the same pool, so
+  while it is spent the pill over the map says "New terrain channels are
+  paused for this hour; delineation still works." and a click still
+  delineates (the server places it on its own channels). With the
+  precomputed file (above) none of this applies to the tiles it holds: they
+  cost a byte range each, so neither the CPU nor the pool is touched.
 - **What says so.** On screen they are the **terrain channels** (the words
   the operator understood, 2026-10-03; "red" was wrong in the dark theme,
   where they are orange-red). Delineate's bar and the Sub-catchments panel
   say "Click a terrain channel …" and what the result follows, then name
   both kinds of line with their swatches: **Terrain channels**: where your
-  click goes; the outline follows these, and, with the River network layer
+  click goes; the outline follows these (the DEM rivers layer's lines), and, with the River network layer
   on, **River network**: mapped rivers, for reference only; they can sit off
   the terrain channels. The Key's Lines lead with the same two entries while
   the channels are drawn (the Key is the side column's Key tab beside the
@@ -2322,7 +2480,9 @@ pick first.
 ## River network
 
 The Map tab's **River network** layer (issue #345, the client checklist's
-"show the rivers", #342 map item 2; `layers=rivers` in the URL) draws a
+"show the rivers", #342 map item 2; `layers=rivers` in the URL; its toggle
+reads **Rivers (HydroRIVERS)** beside the **DEM rivers**, [§ The elevation
+model's channels](#the-elevation-models-channels)) draws a
 sourced river network around the project and proposes its reaches as the
 project's own `river` features. The basemap already draws OpenStreetMap's
 waterways ([§ Labels](#labels)), but OSM's coverage of small and
@@ -3177,6 +3337,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Basemap tiles (Protomaps vector schema of OpenStreetMap) | Protomaps; OpenStreetMap contributors | ODbL 1.0 for the data: commercial use allowed with attribution; share-alike applies to derived *databases*, not to a map drawn from them ([openstreetmap.org/copyright](https://www.openstreetmap.org/copyright), read 2026-10-01) | "© Protomaps © OpenStreetMap contributors", always visible on the map | the daily build fetched (`TILES_BUILD`) | daily builds; refreshed when the operator re-fetches | allowed (in use) |
 | Relief DEM: Copernicus GLO-30, as Terrarium tiles ([Mapterhorn](https://mapterhorn.com) planet build) | Copernicus DEM: DLR e.V. and Airbus Defence and Space, provided under COPERNICUS by the European Union and ESA; tiles compiled by Mapterhorn ([attribution](https://mapterhorn.com/attribution), code BSD-3) | The Copernicus WorldDEM-30 licence: free of charge, worldwide, with the rights of reproduction, distribution, communication to the public and adaptation (Art. 4), no restriction on commercial use ([License COPDEM 30](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), read 2026-10-01) | "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved" (Art. 6(b)), on the map while the relief is drawn, with "© Mapterhorn"; the liability sentence (Art. 6(c)) on the Data sources and credits page (`/data-sources`, 2026-10-02) | Mapterhorn 0.0.13 (GLO-30 accessed 2025) | when Mapterhorn rebuilds; refreshed when the operator re-fetches | allowed (in use locally) |
 | Delineation DEM: the Relief DEM above (Copernicus GLO-30, Mapterhorn's Terrarium tiles), read by the API | as above | as above: Art. 4 allows adaptation, which deriving flow directions and catchment polygons is | the Art. 6(b) notice on the delineation sheet; the dataset label and fingerprint on every proposal | as above | as above | allowed (in use locally; production with the basemap) |
+| DEM rivers, precomputed: the Delineation DEM's terrain channels in `tiles/channels.pmtiles` ([§ The elevation model's channels](#the-elevation-models-channels)), read by the browser | as above | as above: Art. 4 allows adaptation and distribution, which the channel lines and serving them under `/tiles/` (anyone can fetch them, as the relief) are; the release gate holds `PUBLIC_CHANNELS_URL` until the Art. 6(c) sentence is in the legal text, as for the relief | the archive's metadata carries the DEM's label and attribution; the Art. 6(c) sentence on `/data-sources` | built per DEM (its fingerprint in the metadata) | rebuilt whenever the DEM is | allowed (local; production once the operator uploads it) |
 | HydroSHEDS v1 flow direction (3″, conditioned from SRTM), considered for delineation, not used | WWF / McGill University ([hydrosheds.org](https://www.hydrosheds.org/products/hydrosheds)) | "freely available for scientific, educational and commercial use" under the HydroSHEDS licence agreement in its technical documentation (product page read 2026-10-01; the site's own terms of use are non-commercial but cover the website) | per its licence agreement | v1 | none | not used: passes D-B, but 90 m against GLO-30's 30 m and a second download (design/delineation.md § The DEM) |
 | MERIT Hydro, considered for delineation | University of Tokyo ([MERIT Hydro](https://global-hydrodynamics.github.io/MERIT_Hydro/)) | dual: CC BY-NC 4.0 (non-commercial) or ODbL 1.0, under which data derived from it in a commercial product must be released under the ODbL (read 2026-10-01) | – | – | – | rejected: non-commercial, or share-alike on our output (D-B) |
 | JRC Global Surface Water v1.5 (1984–2024), occurrence: tracing a dam ([§ Assisted drawing](#assisted-drawing)) | European Commission Joint Research Centre, with Google ([global-surface-water.appspot.com](https://global-surface-water.appspot.com/download)); Pekel, J.-F. et al. (2016), *Nature* 540, 418–422 | "All data here is produced under the Copernicus Programme and is provided free of charge, without restriction of use" (the download page, read 2026-10-02), under the Copernicus Regulation's free, full and open data policy; commercial use allowed | "Source: EC JRC/Google" on a published map; the archive's attribution, written into every traced feature's description, and on the Data sources and credits page (`/data-sources#jrc-water`); cite Pekel et al. (2016) in published material | v1.5 (`occurrence_<lon>_<lat>_v1_5_2024.tif`) | yearly releases so far (v1.4 2021, v1.5 2024); refreshed when the operator re-fetches | **Allowed.** The operator's own download (`pnpm dev:tiles:water`), never committed; built and tested against the synthetic raster |

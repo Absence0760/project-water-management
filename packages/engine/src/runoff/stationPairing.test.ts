@@ -246,11 +246,84 @@ describe('fitStationPairing: the area’s CHIRPS against the station’s adjuste
 		expect(warnings).toHaveLength(1);
 	});
 });
+/** S1's record over `station` and the area's CHIRPS over `chirps` ([start, end) each), the CHIRPS at the station over the station's own days. */
+function apart(station: [string, string], chirps: [string, string], opts: { gap?: [string, string]; areaId?: string | null } = {}) {
+	const st = chirpsOver(station[0], daysBetween(station[0], station[1]), 3);
+	const rec: (number | null)[] = scaled(station[0], st, (m) => K[m - 1]!);
+	if (opts.gap) for (let d = toEpochDay(opts.gap[0]); d <= toEpochDay(opts.gap[1]); d++) rec[d - toEpochDay(station[0])] = null;
+	const series = seriesOf({ [stationSeriesKey('S1')]: { startDate: station[0], values: rec }, [stationChirpsSeriesKey('S1')]: { startDate: station[0], values: st } });
+	const areaId = opts.areaId === undefined ? 'U' : opts.areaId;
+	const warnings: string[] = [];
+	const fit = fitStationPairing(
+		{
+			settings: settingsWith(),
+			series,
+			stations: STATIONS,
+			stationId: 'S1',
+			area: { id: areaId, name: areaId === null ? 'the catchment' : 'Unit U', chirps: { startDate: chirps[0], values: chirpsOver(chirps[0], daysBetween(chirps[0], chirps[1])) }, ratio: 1 }
+		},
+		warnings
+	);
+	return { fit, warnings };
+}
+
+describe('fitStationPairing: a refusal for too few years says both records’ dates (engine 1.112.0)', () => {
+	it('records that don’t overlap at all: both spans, and that they don’t overlap', () => {
+		// As the client's case: the station from 1 Oct 2009, the unit's CHIRPS up to 31 Jan 1998.
+		const { fit, warnings } = apart(['2009-10-01', '2024-06-03'], ['1981-01-01', '1998-02-01']);
+		expect(fit.commonYears).toBe(0);
+		expect(fit.refused).toBe(
+			'the station and "Unit U"’s CHIRPS have 0 complete calendar years in common (every day a reading in both), fewer than 5: the station runs 1 Oct 2009 to 2 Jun 2024 and "Unit U"’s CHIRPS 1 Jan 1981 to 31 Jan 1998, so they don’t overlap'
+		);
+		expect(fit).toMatchObject({ stationFrom: '2009-10-01', stationTo: '2024-06-02', chirpsFrom: '1981-01-01', chirpsTo: '1998-01-31', fitFrom: null, fitTo: null, days: 0, months: [] });
+		expect(warnings).toEqual([`station pairing: "Hill station" for "Unit U" is refused: ${fit.refused}. Its CHIRPS isn’t corrected against it`]);
+	});
+
+	it('the catchment’s CHIRPS is named as the catchment’s', () => {
+		const { fit } = apart(['2009-10-01', '2024-06-03'], ['1981-01-01', '1998-02-01'], { areaId: null });
+		expect(fit.refused).toMatch(/: the station runs 1 Oct 2009 to 2 Jun 2024 and the catchment’s CHIRPS 1 Jan 1981 to 31 Jan 1998, so they don’t overlap$/);
+	});
+
+	it('records that overlap for too few whole years: the overlap and how many whole years it holds', () => {
+		const { fit } = apart(['2009-10-01', '2024-06-03'], ['1981-01-01', '2012-07-01']);
+		expect(fit.commonYears).toBe(2);
+		expect(fit.refused).toMatch(/fewer than 5: the station runs 1 Oct 2009 to 2 Jun 2024 and "Unit U"’s CHIRPS 1 Jan 1981 to 30 Jun 2012, so they overlap only from 1 Oct 2009 to 30 Jun 2012, 2 whole calendar years$/);
+	});
+
+	it('records that overlap long enough but have gaps: how many years overlap and that gaps leave fewer complete', () => {
+		// 2010–2020 overlap whole (11 years); a station gap from mid-2012 to mid-2019 breaks 2012–2019.
+		const { fit } = apart(['2009-10-01', '2024-06-03'], ['1981-01-01', '2021-01-01'], { gap: ['2012-06-01', '2019-06-01'] });
+		expect(fit.commonYears).toBe(3);
+		expect(fit.refused).toMatch(
+			/have 3 complete calendar years in common \(every day a reading in both\), fewer than 5: the station runs 1 Oct 2009 to 2 Jun 2024 and "Unit U"’s CHIRPS 1 Jan 1981 to 31 Dec 2020, so they overlap for 11 whole calendar years, but gaps leave only 3 of them complete$/
+		);
+		expect(fit).toMatchObject({ stationFrom: '2009-10-01', stationTo: '2024-06-02', chirpsFrom: '1981-01-01', chirpsTo: '2020-12-31' });
+	});
+
+	it('enough complete years in common: no refusal, and the spans are still on the fit', () => {
+		const { fit, warnings } = apart(['2009-10-01', '2024-06-03'], ['1981-01-01', '2021-01-01']);
+		expect(fit.commonYears).toBe(11);
+		expect(fit.refused).toBeNull();
+		expect(fit.months).toHaveLength(12);
+		expect(warnings.some((w) => w.includes('refused'))).toBe(false);
+		expect(fit).toMatchObject({ stationFrom: '2009-10-01', stationTo: '2024-06-02', chirpsFrom: '1981-01-01', chirpsTo: '2020-12-31' });
+	});
+
+	it('a station with no record has no span', () => {
+		const { fit } = apart(['2009-10-01', '2024-06-03'], ['1981-01-01', '2021-01-01']);
+		expect(fit.stationFrom).not.toBeNull(); // positive control
+		const none = fitStationPairing({ settings: settingsWith(), series: seriesOf({}), stations: STATIONS, stationId: 'S1', area: { id: 'U', name: 'Unit U', chirps: { startDate: '2015-01-01', values: chirpsOver('2015-01-01', 400) }, ratio: 1 } }, []);
+		expect(none).toMatchObject({ refused: 'the station has no record', stationFrom: null, stationTo: null, chirpsFrom: '2015-01-01' });
+	});
+});
+
 describe('fitStationPairing: complete years in common', () => {
 	it(`refused with ${STATION_PAIRING_MIN_YEARS - 1} complete years, accepted with ${STATION_PAIRING_MIN_YEARS}`, () => {
 		const four = pairing({ start: '2016-01-01', end: '2020-01-01' });
 		expect(four.fit.commonYears).toBe(4);
-		expect(four.fit.refused).toBe('the station and "Unit U"’s CHIRPS have 4 complete calendar years in common (every day a reading in both), fewer than 5');
+		expect(four.fit.refused).toBe(
+			'the station and "Unit U"’s CHIRPS have 4 complete calendar years in common (every day a reading in both), fewer than 5: the station runs 1 Jan 2016 to 31 Dec 2019 and "Unit U"’s CHIRPS 1 Jan 2016 to 31 Dec 2019, so they overlap only from 1 Jan 2016 to 31 Dec 2019, 4 whole calendar years'
+		);
 		expect(four.fit.months).toEqual([]);
 		expect(four.fit).toMatchObject({ fitFrom: '2016-01-01', fitTo: '2019-12-31', days: daysBetween('2016-01-01', '2020-01-01') });
 		expect(four.warnings[0]).toMatch(/^station pairing: "Hill station" for "Unit U" is refused: .*4 complete calendar years/);

@@ -14,9 +14,9 @@ describe('mapSetupSteps', () => {
 	});
 	it('with no boundary: the step leads with Delineate when the server has an elevation model, as the empty map does', () => {
 		expect(mapSetupSteps({ boundaryName: null, rain: null, canDelineate: true })![0]!.detail).toBe(
-			'No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it as a GeoJSON file (WGS84).'
+			'No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it from a file (GeoJSON, KML or a zipped shapefile).'
 		);
-		expect(mapSetupSteps({ boundaryName: null, rain: null })![0]!.detail).toBe('No catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file (WGS84).');
+		expect(mapSetupSteps({ boundaryName: null, rain: null })![0]!.detail).toBe('No catchment boundary yet. Draw it on the map, or upload it from a file (GeoJSON, KML or a zipped shapefile).');
 	});
 	it('with a boundary and no feed reading it (or one reading it before a redraw): one of two', () => {
 		const none = mapSetupSteps({ boundaryName: 'Upper catchment', rain: 'none' })!;

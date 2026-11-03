@@ -1,0 +1,4 @@
+{
+	"addKb": 36,
+	"why": "Map upload reads KML, KMZ and zipped shapefiles in the browser (2026-11-02). Lazy chunks, loaded only when such a file is picked: the shapefile reader with proj4 2.22.0 core and six projections (proj4lite.ts) 28.2 KB, the KML reader with @tmcw/togeojson 3.9 KB, the shared zip reader and normaliser 2.1 KB, the upload sheet's dispatcher ~1.5 KB. Measured locally on main @ ecf974689 plus this branch: 2352 KB against 2318 before the entry (+34 over). The full proj4 entry was 47 KB in one chunk; trimmed to the projections SA data uses."
+}

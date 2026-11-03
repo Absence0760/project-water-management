@@ -1056,6 +1056,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam', 'transfer.lossReturnPct', 'transfer.lossReturnNodeId']
 	},
 	{
+		id: 'transfer-diversion-curve',
+		term: 'Diversion curve',
+		short: 'An off-take taking a × x^b % of the river, x its flow at the off-take in the unit you pick; at most the largest share and the canal.',
+		units: 'a and b as given; largest share %; x in L/s, m³/s, m³/day or Ml/day',
+		category: 'transfers',
+		fields: ['transfer.diversionCoefficient', 'transfer.diversionExponent', 'transfer.diversionMaxPct', 'transfer.diversionFlowUnit', 'transfer.diversionFlowBasis']
+	},
+	{
 		id: 'transfer-min-storage',
 		term: 'Transfer minimum storage',
 		short: 'The source dam is not drawn below this fraction of its capacity by this transfer, nor below the dam’s own minimum operating level.',
@@ -1913,8 +1921,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'map-geojson-upload',
-		term: 'GeoJSON upload',
-		short: 'Map features from a GeoJSON file in WGS84 longitude/latitude, checked on the server; any problem refuses the whole file.',
+		term: 'Map file upload',
+		short: 'Map features from GeoJSON (WGS84), KML, KMZ or a zipped shapefile, checked on the server; any problem refuses the whole file.',
 		category: 'data'
 	},
 	{
@@ -1977,7 +1985,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'terrain-channels',
 		term: 'Terrain channels',
-		short: 'The rivers as the elevation model routes them, drawn while delineating: the lines to click. Mapped rivers can sit hundreds of metres off.',
+		short: 'The DEM rivers: the rivers as the elevation model routes them, drawn while delineating, the lines to click. Mapped rivers can sit off.',
 		category: 'data'
 	},
 	{

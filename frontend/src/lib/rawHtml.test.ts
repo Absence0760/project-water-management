@@ -15,9 +15,12 @@ import { describe, expect, it } from 'vitest';
 
 /** `{@html expr}`: the block with an expression, not a comment that names it ("never {@html}"). */
 const HTML_BLOCK = /\{@html\s+[^}\s]/g;
-/** DOM writes that parse a string as markup. */
+/**
+ * DOM writes that parse a string as markup. A DOMParser call is allowed only with a literal XML type (the Map's
+ * KML upload, map/upload/kml.ts): an XML document is never rendered, and its scripts never run.
+ */
 const DOM_HTML =
-	/\.(innerHTML|outerHTML)\s*\+?=(?!=)|\binsertAdjacentHTML\s*\(|\bdocument\.write(ln)?\s*\(|\bcreateContextualFragment\s*\(|\bsetHTMLUnsafe\s*\(|\bparseHTMLUnsafe\s*\(|\bparseFromString\s*\(/g;
+	/\.(innerHTML|outerHTML)\s*\+?=(?!=)|\binsertAdjacentHTML\s*\(|\bdocument\.write(ln)?\s*\(|\bcreateContextualFragment\s*\(|\bsetHTMLUnsafe\s*\(|\bparseHTMLUnsafe\s*\(|\bparseFromString\s*\((?![^()]*,\s*['"](?:application|text)\/xml['"]\s*\))/g;
 /** Svelte's two-way binding of a contenteditable element's markup: whatever lands in it is read back and re-rendered as HTML. */
 const BIND_HTML = /\bbind:(innerHTML|outerHTML)\b/g;
 
@@ -41,6 +44,10 @@ describe('raw HTML', () => {
 		expect('el.setHTMLUnsafe(body)'.match(DOM_HTML)).toHaveLength(1);
 		expect('Document.parseHTMLUnsafe(body)'.match(DOM_HTML)).toHaveLength(1);
 		expect('new DOMParser().parseFromString(body, "text/html")'.match(DOM_HTML)).toHaveLength(1);
+		expect('new DOMParser().parseFromString(body, type)'.match(DOM_HTML)).toHaveLength(1);
+		expect("new DOMParser().parseFromString(body, 'image/svg+xml')".match(DOM_HTML)).toHaveLength(1);
+		expect("new DOMParser().parseFromString(text, 'application/xml')".match(DOM_HTML)).toBeNull();
+		expect('new DOMParser().parseFromString(text, "text/xml")'.match(DOM_HTML)).toBeNull();
 		expect('if (el.innerHTML === "") {}'.match(DOM_HTML)).toBeNull();
 		expect('el.textContent = body'.match(DOM_HTML)).toBeNull();
 		expect('<div contenteditable bind:innerHTML={body}></div>'.match(BIND_HTML)).toHaveLength(1);

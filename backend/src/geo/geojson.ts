@@ -66,6 +66,13 @@ export const FEATURE_NAME_MAX = 100;
  */
 export const featureNameOf = (s: string): string => oneLineName(s).slice(0, FEATURE_NAME_MAX).trimEnd();
 
+/**
+ * A boundary's name when its feature has none: the file's, without its
+ * extension. A KML, KMZ or zipped shapefile reaches the server as the
+ * GeoJSON the browser read it as, under the name it was picked with.
+ */
+export const nameFromFileName = (fileName: string): string => featureNameOf(fileName.replace(/\.(geojson|json|kml|kmz|zip)$/i, ''));
+
 /** The CRS names a GeoJSON 2008 `crs` member may carry that mean WGS84 lon/lat. */
 const WGS84_NAMES = new Set(['urn:ogc:def:crs:OGC:1.3:CRS84', 'urn:ogc:def:crs:OGC::CRS84', 'EPSG:4326', 'urn:ogc:def:crs:EPSG::4326', 'urn:ogc:def:crs:EPSG:4326']);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode, ProjectModel, SeriesMeta } from '@water-management/engine';
 import { lakeFactorPresetFill, withMonthlyRates } from '@water-management/engine';
-import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, reportRainCredits, settingsRows, STATION_HEAD, stationPairingRows, stationRows, transferRows } from './inputs';
+import { coverageRows, cropAreaRows, diversionText, effectiveSettings, monthlyRows, nodeRows, PAIRING_HEAD, reportRainCredits, settingsRows, STATION_HEAD, stationPairingRows, stationRows, transferRows } from './inputs';
 import type { RainStationSummary, StationAreaForcing } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
 
@@ -265,6 +265,12 @@ describe('transferRows', () => {
 	it('says when a transfer is a river off-take (engine 1.14.0)', () => {
 		const t = { ...model.transfers![0]!, source: 'river' as const };
 		expect(transferRows({ ...model, transfers: [t] })[0]![0]).toBe('Lower farm (river off-take)');
+	});
+	it('gives a diversion curve\'s inputs on a river off-take sized by one (engine 1.113.0), or that it was left incomplete', () => {
+		const t = { ...model.transfers![0]!, source: 'river' as const, sizing: 'diversionCurve' as const, diversionCoefficient: 2000, diversionExponent: -0.9, diversionMaxPct: 0.95, diversionFlowUnit: 'Ml/day' as const, diversionFlowBasis: 'natural' as const };
+		expect(transferRows({ ...model, transfers: [t] })[0]![0]).toBe('Lower farm (river off-take, 2\u202f000 × x^\u22120.9 % of the river, x in Ml/day (the natural flow there), at most 95%)');
+		expect(diversionText({ ...t, diversionFlowUnit: 'm3/s', diversionFlowBasis: null, diversionMaxPct: null })).toBe('2\u202f000 × x^\u22120.9 % of the river, x in m³/s (the river there), at most 100%');
+		expect(diversionText({ ...t, diversionCoefficient: null })).toBe('a diversion curve left incomplete, so it took nothing');
 	});
 	it('gives a river off-take\'s conveyance losses and the share seeping back, with the unit it rejoins below (engine 1.42.0)', () => {
 		const t = { ...model.transfers![0]!, fromNodeId: 'a', toNodeId: 'b', source: 'river' as const, lossPct: 0.2 };

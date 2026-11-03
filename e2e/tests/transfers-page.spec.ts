@@ -155,6 +155,54 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await expectNoSidewaysScroll(page);
 });
 
+test('a river off-take can take a share of the river (a diversion curve, engine 1.113.0): its curve, what it diverts at a few flows, and it saves', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers diversion curve');
+	await putModel(page.request, project.id, sampleModel());
+	await openTransfers(page, project.id);
+	const card = ruleCard(page, 1);
+	await card.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('river');
+	const curve = card.getByTestId('diversion-curve');
+	await expect(curve).toHaveCount(0);
+	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption('diversionCurve');
+	// Until the curve is complete the card says what is missing, and asks for it under the fields.
+	await expect(curve.getByTestId('diversion-preview-empty')).toBeVisible();
+	await expect(card.locator('.rule-problems')).toContainText('A share of the river’s flow needs a complete curve: its coefficient a must be a number above 0');
+	// Invented numbers of a canal's shape: 2 000 × x^−0.9 %, at most 95 %, x in m³/s, below the rule's rate.
+	await curve.getByLabel('Coefficient a of transfer 1', { exact: true }).fill('2000');
+	await curve.getByLabel('Exponent b of transfer 1', { exact: true }).fill('-0.9');
+	await curve.getByLabel('Largest share of transfer 1, %', { exact: true }).fill('95');
+	await curve.getByLabel('x in, flow unit of transfer 1', { exact: true }).selectOption('m3/s');
+	await curve.getByLabel('x is, the flow the curve of transfer 1 reads', { exact: true }).selectOption('natural');
+	// The preview: a row per example flow, the share and what is diverted, and which limit binds.
+	const preview = curve.getByTestId('diversion-preview');
+	await expect(preview.getByRole('columnheader')).toHaveText(['River, m³/s', 'Share', 'Diverted, m³/s', 'Limited by']);
+	await expect(preview.locator('tbody tr').first().locator('td')).toHaveText(['95%', '0.0048', 'the largest share']);
+	await expect(preview.locator('tbody tr').last().locator('td').last()).toHaveText('the canal’s capacity');
+	await expect(card.locator('.rule-problems')).toHaveCount(0);
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toBeHidden();
+	await page.reload();
+	const saved = ruleCard(page, 1).getByTestId('diversion-curve');
+	await expect(ruleCard(page, 1).getByLabel('Takes, transfer 1', { exact: true })).toHaveValue('diversionCurve');
+	await expect(saved.getByLabel('Coefficient a of transfer 1', { exact: true })).toHaveValue(/^2\s?000$/);
+	await expect(saved.getByLabel('Exponent b of transfer 1', { exact: true })).toHaveValue(/^[-\u2212]0\.9$/);
+	await expect(saved.getByLabel('Largest share of transfer 1, %', { exact: true })).toHaveValue('95');
+	await expect(saved.getByLabel('x in, flow unit of transfer 1', { exact: true })).toHaveValue('m3/s');
+	await expect(saved.getByLabel('x is, the flow the curve of transfer 1 reads', { exact: true })).toHaveValue('natural');
+	await expect(saved.getByTestId('diversion-preview')).toBeVisible();
+	await expectNoSidewaysScroll(page);
+	// On a phone the preview stays a table inside the card: no sideways scroll, every heading inside its cell.
+	await page.setViewportSize({ width: 390, height: 844 });
+	const table = saved.getByTestId('diversion-preview');
+	await expect(table.getByRole('columnheader')).toHaveCount(4);
+	const box = (await saved.boundingBox())!;
+	const tbox = (await table.boundingBox())!;
+	expect(tbox.x + tbox.width, 'the preview fits its card').toBeLessThanOrEqual(box.x + box.width + 0.5);
+	await expectNoSidewaysScroll(page);
+});
+
 // One viewport per test, and the axe scan in a test of its own (as a11y.spec.ts does). Thirty rules make a
 // 4,400-element page (sixteen fields a rule) whose WCAG scan takes 1.75 s idle and 6 s at a 4× CPU throttle,
 // color-contrast two thirds of it and growing with every row: on top of two page loads that left a loaded run
@@ -308,6 +356,18 @@ test.describe('no accessibility violations', () => {
 			model.transfers.push({ ...model.transfers[0]!, id: crypto.randomUUID(), months: [6, 7, 8], dailyCapM3: 500, enabled: false, priority: 1 });
 			// A river off-take too (engine 1.14.0), so its fields are scanned.
 			model.transfers.push({ ...model.transfers[0]!, id: crypto.randomUUID(), priority: 2, source: 'river', handsOffM3Day: 100, lossPct: 0.1, sizing: 'capacity' });
+			// And one sized by a diversion curve (engine 1.113.0), so its fields and preview table are scanned.
+			model.transfers.push({
+				...model.transfers[0]!,
+				id: crypto.randomUUID(),
+				priority: 3,
+				source: 'river',
+				sizing: 'diversionCurve',
+				diversionCoefficient: 2000,
+				diversionExponent: -0.9,
+				diversionMaxPct: 0.95,
+				diversionFlowUnit: 'L/s'
+			});
 			await putModel(page.request, project.id, model);
 			await openTransfers(page, project.id);
 			await expect(page.getByLabel('From, transfer 2', { exact: true })).toBeVisible();

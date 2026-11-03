@@ -63,6 +63,13 @@
 
 	// $state.raw: long daily arrays must not become deep proxies (ModelQuality.svelte).
 	let flows = $state.raw<CatchmentFlows & { shortfall?: DailySeries }>({});
+	/**
+	 * What the chart draws besides its plot (toolbar, log toggle, windows, caption), in px: the body keeps the plot's
+	 * height plus this while the first flows load, so the page under the chart doesn't jump down when they arrive. It
+	 * jumped ~440 px on EWR's page: a reader who had opened a form further down (the seasonal outlook's) lost its Run
+	 * button below the fold. Measured with the run's caption; a longer caption adds a line, a few px of shift at most.
+	 */
+	const CHART_CHROME_PX = 113;
 	let loading = $state(true);
 	/** The run drawn, set with its flows: another run's keep the chart on screen (aria-busy) until they are in, so EWR's
 	 *  page doesn't lose the chart's height under a reader scrolled down when the run picker changes the run. The props
@@ -138,6 +145,7 @@
 	<div class="head">
 		<h2 id="flow-h">{flowHeading(view.ruleTable, hasRuleLine(view.refs), view.daily)}</h2>
 	</div>
+	<div class="body" style:min-height={!drawn && !error ? `${height + CHART_CHROME_PX}px` : null}>
 	<LoadState loading={loading && !drawn} {error} retry={() => attempt++}>
 		{#if series.length === 0}
 			<p class="muted">This run stored no outflow or EWR series.</p>
@@ -159,6 +167,7 @@
 			/>
 		{/if}
 	</LoadState>
+	</div>
 </section>
 
 <style>

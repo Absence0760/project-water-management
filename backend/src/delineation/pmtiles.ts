@@ -1,4 +1,5 @@
-// A PMTiles v3 reader (and a small writer for the synthetic fixture): the
+// A PMTiles v3 reader (and a small writer for the synthetic fixtures and the
+// precomputed channels, channelArchive.ts): the
 // archive format of the DEM (docs/design/delineation.md § The DEM; spec:
 // https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md). Reads
 // only the byte ranges it needs, so the same code reads a local file, the
@@ -265,30 +266,53 @@ function gzip(b: Uint8Array): Buffer {
 	return out;
 }
 
+/** A directory's bytes (spec § 4): ids as deltas, run lengths, lengths, then offsets (0: right after the entry before). */
+function encodeDirectory(entries: Entry[]): Buffer {
+	const out: number[] = [];
+	writeVarint(out, entries.length);
+	let last = 0;
+	for (const e of entries) {
+		writeVarint(out, e.tileId - last);
+		last = e.tileId;
+	}
+	for (const e of entries) writeVarint(out, e.runLength);
+	for (const e of entries) writeVarint(out, e.length);
+	entries.forEach((e, i) => {
+		const prev = entries[i - 1];
+		writeVarint(out, prev && e.offset === prev.offset + prev.length ? 0 : e.offset + 1);
+	});
+	return Buffer.from(out);
+}
+
 /**
- * A small single-directory PMTiles archive (gzip directories, uncompressed
- * tiles): what backend/scripts/dem-fixture.ts writes the synthetic DEM as.
+ * A small PMTiles archive (gzip directories): what backend/scripts/dem-fixture.ts
+ * writes the synthetic DEM as (PNG tiles, uncompressed), and what
+ * delineation/channelArchive.ts writes the elevation model's channels as
+ * (tile type 0, other: gzip JSON). One root directory, which must fit beside
+ * the header in the first 16 KiB (spec § 2).
  */
 export function writePmtiles(
 	tiles: { z: number; x: number; y: number; data: Uint8Array }[],
-	opts: { tileType: 2 | 4; bounds: [number, number, number, number]; metadata: Record<string, unknown> }
-): Buffer {
-	const sorted = tiles.map((t) => ({ ...t, id: tileId(t.z, t.x, t.y) })).sort((a, b) => a.id - b.id);
-	const out: number[] = [];
-	writeVarint(out, sorted.length);
-	let last = 0;
-	for (const t of sorted) {
-		writeVarint(out, t.id - last);
-		last = t.id;
+	opts: {
+		/** 0: other (not a map tile; channelArchive's JSON), 2: PNG, 4: WebP. */
+		tileType: 0 | 2 | 4;
+		bounds: [number, number, number, number];
+		metadata: Record<string, unknown>;
+		/** gzip: the writer compresses each tile; none (the default): stored as given. */
+		tileCompression?: 'none' | 'gzip';
 	}
-	for (let i = 0; i < sorted.length; i++) writeVarint(out, 1);
-	for (const t of sorted) writeVarint(out, t.data.length);
+): Buffer {
+	const gz = opts.tileCompression === 'gzip';
+	const sorted = tiles.map((t) => ({ ...t, id: tileId(t.z, t.x, t.y), data: gz ? gzip(t.data) : t.data })).sort((a, b) => a.id - b.id);
+	const entries: Entry[] = [];
 	let offset = 0;
-	sorted.forEach((t, i) => {
-		writeVarint(out, i === 0 ? offset + 1 : 0);
+	for (const t of sorted) {
+		entries.push({ tileId: t.id, offset, length: t.data.length, runLength: 1 });
 		offset += t.data.length;
-	});
-	const root = gzip(Buffer.from(out));
+	}
+	const root = gzip(encodeDirectory(entries));
+	// No leaf directories: 20 000 tiles' root still fits (pmtiles.test.ts), against ~5 500 channel tiles over all of South Africa.
+	if (127 + root.length > 16384) throw new PmtilesError(`${entries.length} tiles need a root directory past the first 16 KiB (this writer makes no leaf directories)`);
 	const meta = gzip(Buffer.from(JSON.stringify(opts.metadata)));
 	const data = Buffer.concat(sorted.map((t) => t.data));
 	const h = Buffer.alloc(127);
@@ -312,7 +336,7 @@ export function writePmtiles(
 	put(88, sorted.length);
 	h[96] = 1; // clustered
 	h[97] = COMPRESSION_GZIP;
-	h[98] = COMPRESSION_NONE;
+	h[98] = gz ? COMPRESSION_GZIP : COMPRESSION_NONE;
 	h[99] = opts.tileType;
 	h[100] = Math.min(...sorted.map((t) => t.z));
 	h[101] = Math.max(...sorted.map((t) => t.z));

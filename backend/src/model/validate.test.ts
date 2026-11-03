@@ -234,6 +234,39 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(ModelBody.parse(body({ ...river, toNodeId: out.id })) as never).join()).toMatch(/runs from one unit to another/);
 	});
 
+	it('diversion curves (engine 1.113.0): none by default, each field in range, and a complete curve when the rule is sized by one', () => {
+		const out = node('Gauge', null);
+		const up = node('Up', out.id);
+		const canal = node('Canal', out.id);
+		const t = { id: crypto.randomUUID(), fromNodeId: up.id, toNodeId: canal.id, months: [1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' };
+		const body = (tr: object) => ({ nodes: [out, up, canal], crops: [], cropAreas: [], transfers: [tr] });
+		expect(ModelBody.parse(body(t)).transfers[0]).toMatchObject({ diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null, diversionFlowUnit: null, diversionFlowBasis: null });
+		const curve = { ...t, sizing: 'diversionCurve', diversionCoefficient: 2000, diversionExponent: -0.9, diversionMaxPct: 0.95, diversionFlowUnit: 'L/s', diversionFlowBasis: 'natural' };
+		const ok = ModelBody.parse(body(curve));
+		expect(ok.transfers[0]).toMatchObject({ sizing: 'diversionCurve', diversionCoefficient: 2000, diversionExponent: -0.9, diversionMaxPct: 0.95, diversionFlowUnit: 'L/s', diversionFlowBasis: 'natural' });
+		expect(modelProblems(ok as never)).toEqual([]);
+		// Every unit, the cap and the basis optional.
+		for (const u of ['L/s', 'm3/s', 'm3/day', 'Ml/day']) expect(modelProblems(ModelBody.parse(body({ ...curve, diversionFlowUnit: u, diversionMaxPct: null, diversionFlowBasis: null })) as never), u).toEqual([]);
+		for (const bad of [
+			{ diversionCoefficient: 0 },
+			{ diversionCoefficient: -1 },
+			{ diversionCoefficient: 'x' },
+			{ diversionExponent: 'x' },
+			{ diversionMaxPct: 0 },
+			{ diversionMaxPct: 1.01 },
+			{ diversionFlowUnit: 'cumecs' },
+			{ diversionFlowUnit: 'l/s' },
+			{ diversionFlowBasis: 'observed' },
+			{ sizing: 'curve' }
+		])
+			expect(ModelBody.safeParse(body({ ...curve, ...bad })).success, JSON.stringify(bad)).toBe(false);
+		// Sized by a curve without one: the save refuses it, naming what is missing.
+		expect(modelProblems(ModelBody.parse(body({ ...curve, diversionFlowUnit: null })) as never).join()).toMatch(/sized by a diversion curve, its flow unit must be one of L\/s, m3\/s, m3\/day, Ml\/day/);
+		expect(modelProblems(ModelBody.parse(body({ ...curve, diversionCoefficient: null })) as never).join()).toMatch(/its coefficient a must be a number above 0/);
+		// On another sizing a half-entered curve is inert.
+		expect(modelProblems(ModelBody.parse(body({ ...curve, sizing: 'capacity', diversionFlowUnit: null })) as never)).toEqual([]);
+	});
+
 	it('canal seepage back to the river (engine 1.42.0): none by default, a share 0–1, rejoining below the source or a farm below it', () => {
 		const out = node('Gauge', null);
 		const low = node('Low', out.id);

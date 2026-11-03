@@ -150,6 +150,7 @@ jobs:
           PUBLIC_TILES_URL: ${{ vars.PUBLIC_TILES_URL }}
           PUBLIC_TILES_GLYPHS_URL: ${{ vars.PUBLIC_TILES_GLYPHS_URL }}
           PUBLIC_TERRAIN_URL: ${{ vars.PUBLIC_TERRAIN_URL }}
+          PUBLIC_CHANNELS_URL: ${{ vars.PUBLIC_CHANNELS_URL }}
         run: node scripts/release/map-data-gates.mjs frontend
 
       - name: Build frontend
@@ -160,6 +161,7 @@ jobs:
           PUBLIC_TILES_URL: ${{ vars.PUBLIC_TILES_URL }}
           PUBLIC_TILES_GLYPHS_URL: ${{ vars.PUBLIC_TILES_GLYPHS_URL }}
           PUBLIC_TERRAIN_URL: ${{ vars.PUBLIC_TERRAIN_URL }}
+          PUBLIC_CHANNELS_URL: ${{ vars.PUBLIC_CHANNELS_URL }}
         run: pnpm build:frontend
 
       # The CloudFront CSP header allows inline scripts only because SvelteKit's

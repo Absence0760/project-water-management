@@ -27,6 +27,8 @@ import {
 	REFERENCE_BUCKET,
 	sidecarPath,
 	terrainUrl,
+	channelsUrl,
+	parseChannelsArgs,
 	tilesEnv,
 	tilesUrl,
 	UpstreamRefused,
@@ -91,6 +93,23 @@ describe('tiles-upload', () => {
 	it('adds the relief URL to the env lines only when asked (the DEM is optional)', () => {
 		expect(Object.keys(tilesEnv(false))).toEqual(['PUBLIC_TILES_URL', 'PUBLIC_TILES_GLYPHS_URL']);
 		expect(tilesEnv(true)).toEqual({ ...tilesEnv(false), PUBLIC_TERRAIN_URL: terrainUrl() });
+	});
+
+	it('adds the precomputed channels’ URL only when asked (dev:tiles:up passes it when MinIO serves them)', () => {
+		expect(tilesEnv(false, true)).toEqual({ ...tilesEnv(false), PUBLIC_CHANNELS_URL: channelsUrl() });
+		expect(channelsUrl('http://127.0.0.1:9002')).toBe('http://localhost:9002/tiles/channels.pmtiles');
+	});
+});
+
+describe('the channels upload’s arguments', () => {
+	const env = { INIT_CWD: '/work' };
+	it('takes the archive, locally or with the production tiles bucket, and nothing provenance-shaped', () => {
+		expect(parseChannelsArgs(['--channels', 'c.pmtiles'], env)).toEqual({ path: '/work/c.pmtiles', tilesBucket: null, dryRun: false });
+		expect(parseChannelsArgs(['--production', '--tiles-bucket', 'wm-tiles-1', '--channels', 'c.pmtiles', '--dry-run'], env)).toEqual({ path: '/work/c.pmtiles', tilesBucket: 'wm-tiles-1', dryRun: true });
+		expect(parseChannelsArgs(['--channels'], env)).toMatch(/needs the archive/);
+		expect(parseChannelsArgs(['--production', '--channels', 'c.pmtiles'], env)).toMatch(/go together/);
+		expect(parseChannelsArgs(['--tiles-bucket', 'Bad_Bucket', '--channels', 'c.pmtiles'], env)).toMatch(/bucket name/);
+		expect(parseChannelsArgs(['--channels', 'c.pmtiles', '--version', '1'], env)).toMatch(/records no provenance/);
 	});
 });
 

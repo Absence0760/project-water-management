@@ -247,7 +247,11 @@
 	async function open() {
 		opened = true;
 		await tick();
-		document.getElementById('outlook-levels')?.focus();
+		const levels = document.getElementById('outlook-levels');
+		levels?.focus();
+		// Focus scrolls only the box into view; bring its action row (the Run button) along when the panel
+		// opens near the bottom of the page, so the editor can see what to press next.
+		levels?.closest('form')?.querySelector('.action-row')?.scrollIntoView?.({ block: 'nearest' });
 	}
 </script>
 

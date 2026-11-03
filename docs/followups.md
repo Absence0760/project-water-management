@@ -309,18 +309,19 @@ The checklist for these is issue #62; the history scrub is #63.
 
 The V1 acceptance criterion "a run finishes in under 2 s including storage"
 (plan.md Phase 1) is measured by `runs/load.db.perf.test.ts` (`V1 demo
-budget`, `pnpm test:backend:perf:db`, run alone): an invented catchment of
-the client's size (13 nodes, 9 crops, 23 planted areas, one transfer, four
-daily records of 16 161 days) through `POST /projects/:id/runs`, median of 5.
+budget`, `pnpm test:backend:perf:db`, run alone): an invented catchment about
+the client's size (a dozen or so nodes, several crops on a couple of dozen
+planted areas, one transfer, four daily records of 16 000 days, about four
+and a half decades) through `POST /projects/:id/runs`, median of 5.
 It measured **11.1 s** on the dev laptop on 2026-11-01, and **1.5 s** (1.85,
-1.51, 1.52, 1.42, 1.65 s) after the fixes below. Each run stores 432 series,
+1.51, 1.52, 1.42, 1.65 s) after the fixes below. Each run stores 400-odd series,
 ~22 MB in `run_series`.
 
 - [x] Cut the storage cost (2026-11-01, 304_run_series_store_cost.sql). The
       profile split the 11.1 s differently from the first guess ("~7.5 s
       storing"): **6.8 s** was one input query, `chirpsSeriesChoice`, which
       found a series' first and last filled day by subscripting the array once
-      a day, detoasting all 16 161 days each time (now one `unnest … WITH
+      a day, detoasting the whole record each time (now one `unnest … WITH
       ORDINALITY` pass, 3 ms; the feeds' `runSeries` and `targetSeries` had
       the same pattern and the same fix). Storing was **3.7 s**: 1.2 s of
       Node formatting ~95 MB of array text, the server parsing it and
@@ -981,6 +982,34 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **A canal sized by a diversion curve (engine 1.113.0, model.md
+      §2.6a *Sized by a diversion curve*).** The hydrologist's rule for one
+      of the client's canals (2026-11-02) is built as a river off-take with
+      `sizing: 'diversionCurve'` (y = a · x^b percent of the river, capped
+      at a largest share and the canal's capacity). His answers
+      (2026-11-02, second reply):
+      1. *The unit of x*: **m³/s** (`diversionFlowUnit: 'm3/s'`).
+      2. *Which flow x is*: the daily average present-day flow, after
+         abstractions upstream: **`diversionFlowBasis: 'modelled'`** (the
+         default). The canal's own unit has no irrigation.
+      3. *Where the water goes*: the canal splits 50/50, half to the
+         farmers and half to a dam in the town's unit; above the canal's
+         take the river spills on. No split field exists: model it as
+         **two curve rules from the same source**, each with a/2, m/2 and
+         half the canal (0.118 m³/s). Both read the same U₀ (the flow
+         before the source's off-takes), so together they take exactly
+         MIN(0.236 m³/s, MIN(97 %, a · x^b) × U₀). Still to ask: which
+         unit the farmers' half goes to, and the canal's losses.
+      4. *The EWR*: **none** (`handsOffEwr` off): the curve already keeps a
+         low-flow release. Its priority against other users at the source
+         is still open.
+      5. *A hands-off flow*: none, for the same reason; all year.
+      **Please confirm the unit.** In m³/s the cap binds long before the
+      curve does: a · x^b ≥ 97 % up to x ≈ 29 m³/s, while the canal fills
+      at 0.243 m³/s. So the rule is in effect "97 % of the river up to
+      0.236 m³/s" and the curve itself never acts. In L/s the curve shapes
+      every day instead (97 % up to 29 L/s, 17 % at 200 L/s) and the canal
+      never fills. Configure it once he confirms m³/s against that.
 - [ ] **The gap-filling product (engine 1.101.0, issue #604 R4-B,
       model.md §2.4b *Gap-filling product*).** Built off by default
       (`settings.gapRain` absent runs as before, to the bit). Calls made
@@ -5110,13 +5139,16 @@ Phases 1–2 of WP-3.12 landed (2026-10-01: migration 152, `backend/src/geo/`,
 the Map tab, Settings → WR2012 check → Propose from the map;
 [maps.md](./maps.md)). Left, from the WP and the issue:
 
-- [ ] **Shapefile import** (zipped `.shp`/`.dbf`/`.prj`, parsed in the browser
-      with `shpjs`, reprojected from the `.prj` with proj4, Hartebeesthoek94
-      Lo zones; an unknown projection refused). Today the form turns a
-      `.zip`/`.shp` away with how to export GeoJSON in EPSG:4326 from QGIS.
-      Needs the zip-bomb test and the "Lo projection within 0.5 % of a
-      reference area" acceptance test. Trigger: a client holding only
-      shapefiles.
+- [x] **Shapefile import** (2026-11-02, with KML and KMZ; the client's
+      hydrologist confirmed it): zipped `.shp`/`.dbf`/`.prj` parsed in the
+      browser (the app's own `.shp` reader and `parsedbf`; `shpjs` would
+      have brought all of proj4), reprojected from the `.prj` with proj4 (Lo zones,
+      UTM; an unreadable `.prj`, a missing one in metres and a datum with no
+      shift refused), KML/KMZ with `@tmcw/togeojson`, then sent as GeoJSON
+      through the unchanged server checks. The zip-bomb tests and the "Lo
+      projection within 0.5 %" acceptance test are in
+      `map/upload/upload.test.ts` ([maps.md § Shapefiles and
+      KML](./maps.md#shapefiles-and-kml)).
 - [x] **Production basemap** (2026-10-02, PR feat/infra-map-data): the
       tiles bucket and the same-origin `/tiles/*` behaviour
       (`infra/map_data.tf`, `s3_cloudfront.tf`: cached, its own OAC, the
@@ -5324,15 +5356,28 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       outlet is a gauge node in the order by default, partitioning like a
       water user; a division can add an unlinked gauge as a new gauge node
       (design/start-from-map.md § Gauges as nodes).
-- [ ] **The elevation model's channels from the tiles pipeline** (issue
-      #374 item 3, maps.md § The elevation model's channels): today each
-      0.2° tile is routed on request and kept in an in-memory cache, which
-      on Lambda lasts one instance, so a production user pays a few seconds
-      and an elevation-model attempt per tile per cold instance. Durable
-      path: build the channel lines once per DEM in the tiles pipeline (a
-      `pnpm dev:tiles:channels` step and the production tiles bucket, as
-      vector PMTiles) and draw them like the basemap. Trigger: the first
-      production deploy with `delineation_dem = true`.
+- [x] **The elevation model's channels from the tiles pipeline** (issue
+      #374 item 3, maps.md § The elevation model's channels, Precomputed):
+      built 2026-11-02 (PR feat/precomputed-dem-channels).
+      `backend/scripts/channels-build.ts` runs the route's own `channelTile`
+      over a region into `channels.pmtiles` (gzip JSON per 0.2° tile, not
+      vector tiles: the exact lines a click snaps to, no new dependency),
+      `pnpm dev:tiles:channels` builds and serves it locally, and with
+      `PUBLIC_CHANNELS_URL` set the layer reads tiles from it, falling back
+      to the route per tile (outside the region, unreadable file, another
+      DEM's fingerprint). What remains is the operator's: build it from the
+      production `terrain.pmtiles` and upload it (deployment.md § Map tiles,
+      on the rollout tracker #618), then set the repository variable.
+- [ ] **What the precomputed channels allow next** (maps.md § The
+      elevation model's channels): with tiles costing a byte range, (a) the
+      0.35° view limit (`CHANNEL_VIEW_MAX_DEG`, sized for on-request CPU)
+      could widen to ~1° while the file serves the view, and (b) the DEM
+      rivers layer could be offered to viewers (the file is public map data;
+      today `demRiversOffered` needs an editor's delineation check, and the
+      route is editor-only). Both change what users see, so they wait for
+      the operator's call. Trigger: the production file uploaded and
+      `PUBLIC_CHANNELS_URL` set; or a viewer or hydrologist asking for wider
+      DEM rivers.
 - [x] **Delineation of catchments larger than about 100 km across**
       (2026-10-03, branch wip/r2-delineate-job; design/delineation.md §
       Where it runs): a click still at the edge of the request's window

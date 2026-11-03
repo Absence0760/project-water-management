@@ -46,14 +46,14 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(page.getByTestId('map-no-boundary')).toContainText('Nothing on the map yet. Start with the catchment: delineate it from its outlet on the river, or draw its boundary.');
 	await expect(page.getByTestId('map-no-boundary').getByRole('button', { name: 'Delineate from the outlet' })).toBeVisible();
 	await expect(page.getByTestId('map-no-boundary').getByRole('button', { name: 'Draw the boundary' })).toBeVisible();
-	await expect(page.getByTestId('map-no-boundary').getByRole('link', { name: 'upload it as a GeoJSON file' })).toBeVisible();
+	await expect(page.getByTestId('map-no-boundary').getByRole('link', { name: 'upload it from a file' })).toBeVisible();
 	await expect(page.getByTestId('map-no-tiles')).toBeVisible();
 	await expect(page.getByTestId('map-show-everything')).toHaveCount(0);
 
 	// Upload opens a sheet in the URL; a projected file is refused with its problem per feature, and the sheet stays.
-	await header(page).getByRole('link', { name: 'Upload GeoJSON' }).click();
+	await header(page).getByRole('link', { name: 'Upload map file' }).click();
 	await expect(page).toHaveURL(/[?&]upload=1/);
-	const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
+	const sheet = page.getByRole('dialog', { name: 'Upload a map file' });
 	await uploadThroughSheet(page, null, 'lo19.geojson', projectedGeoJson(), false);
 	const error = sheet.getByTestId('map-import-error');
 	await expect(error).toContainText('The file was not imported. Fix these and upload it again:');
@@ -75,7 +75,7 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await showTab(page, 'features');
 	await expect(list(page).getByRole('group', { name: /Farm parcels/ })).toBeVisible();
 	await expect(row(page, 'Upper farm')).toContainText('linked · area typed');
-	await header(page).getByRole('link', { name: 'Upload GeoJSON' }).click();
+	await header(page).getByRole('link', { name: 'Upload map file' }).click();
 	await expect(sheet.getByTestId('map-source-hash')).toHaveText([/^[0-9a-f]{12}…$/, /^[0-9a-f]{12}…$/]);
 	await sheet.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page).not.toHaveURL(/upload=/);
@@ -317,7 +317,7 @@ test('a viewer sees the map, its sidebar row, the list, the card and Every featu
 	await expect(v.locator('.map-page[data-ready]')).toBeVisible();
 	await expect(row(v, 'Synthetic catchment')).toBeVisible();
 	await expect(v.getByTestId('map-show-everything')).toBeVisible();
-	await expect(header(v).getByRole('link', { name: 'Upload GeoJSON' })).toHaveCount(0);
+	await expect(header(v).getByRole('link', { name: 'Upload map file' })).toHaveCount(0);
 	await expect(v.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true })).toHaveCount(0);
 	await expect(v.getByTestId('map-tools').getByRole('button', { name: 'Draw a shape', exact: true })).toHaveCount(0);
 	await expect(v.getByTestId('map-no-tiles')).toHaveCount(0);
@@ -330,7 +330,7 @@ test('a viewer sees the map, its sidebar row, the list, the card and Every featu
 	await v.goto(`/projects/${project.id}?tab=map&upload=1`);
 	await expect(v.locator('.map-page[data-ready]')).toBeVisible();
 	await expect(v).not.toHaveURL(/upload=/);
-	await expect(v.getByRole('dialog', { name: 'Upload a GeoJSON file' })).toHaveCount(0);
+	await expect(v.getByRole('dialog', { name: 'Upload a map file' })).toHaveCount(0);
 	// Every feature reads the same rows, with the files, and no controls.
 	await v.getByTestId('map-open-grid').click();
 	const grid = v.getByRole('dialog', { name: 'Every map feature' });

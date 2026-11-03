@@ -10,7 +10,7 @@ import { damCurveProblem } from './network/damCurve';
 import { cropSupplyIssues } from './network/cropSupply';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
-import { isRiverOfftake, offtakeReturnAt } from './network/offtake';
+import { diversionCurveProblem, isRiverOfftake, offtakeReturnAt } from './network/offtake';
 import { DEMAND_SCHEDULE_MAX_WINDOWS, scheduleWindowProblem } from './network/demandSchedule';
 
 /**
@@ -203,6 +203,11 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			// Canal seepage back to the river (engine ≥ 1.42.0): a share 0–100 %, rejoining below the source or a farm below it.
 			const back = t.lossReturnPct ?? 0;
 			if (!(back >= 0 && back <= 1)) add(`trRiverReturn:${t.id}`, `river off-take ${t.id}: the share of the losses seeping back must be between 0 % and 100 %`);
+			// Sized by a share of the river's flow (engine ≥ 1.113.0, docs/model.md §2.6a): a complete curve.
+			if (t.sizing === 'diversionCurve') {
+				const fs = diversionCurveProblem(t);
+				if (fs) add(`trRiverDiversion:${t.id}`, `river off-take ${t.id}: sized by a diversion curve, ${fs}`);
+			}
 			const at = t.lossReturnNodeId;
 			if (a && at !== null && at !== undefined) {
 				if (offtakeReturnAt(t, nodeIndex.get(a.id)!, m.nodes, nodeIndex) === undefined)

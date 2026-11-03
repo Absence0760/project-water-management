@@ -5,12 +5,13 @@
 //
 //   node scripts/release/map-data-gates.mjs frontend
 //     deploy-frontend.yml, before the build. PUBLIC_TILES_URL,
-//     PUBLIC_TILES_GLYPHS_URL and PUBLIC_TERRAIN_URL (from the repository's
+//     PUBLIC_TILES_GLYPHS_URL, PUBLIC_TERRAIN_URL and PUBLIC_CHANNELS_URL (from the repository's
 //     variables) must each be empty or a same-origin path under /tiles/ that
 //     the site's /tiles/* behaviour serves (infra/s3_cloudfront.tf
 //     tiles_range): the CSP's connect-src 'self' allows nothing else anyway,
 //     and a typo would ship a map that silently draws nothing. The relief
-//     (PUBLIC_TERRAIN_URL) needs the Copernicus WorldDEM-30 licence's
+//     (PUBLIC_TERRAIN_URL) and the DEM rivers routed from it
+//     (PUBLIC_CHANNELS_URL) need the Copernicus WorldDEM-30 licence's
 //     liability sentence (Art. 6(c)) in the app's legal text first.
 //
 //   node scripts/release/map-data-gates.mjs load
@@ -93,11 +94,17 @@ export function frontendProblems(env, hasText = legalTextHas) {
 	const tiles = (env.PUBLIC_TILES_URL ?? '').trim();
 	const glyphs = (env.PUBLIC_TILES_GLYPHS_URL ?? '').trim();
 	const terrain = (env.PUBLIC_TERRAIN_URL ?? '').trim();
+	const channels = (env.PUBLIC_CHANNELS_URL ?? '').trim();
 	if (tiles && !ARCHIVE.test(tiles)) problems.push('PUBLIC_TILES_URL must be empty or /tiles/<name>.pmtiles (same origin, served by the /tiles/* behaviour)');
 	if (glyphs && glyphs !== GLYPHS) problems.push(`PUBLIC_TILES_GLYPHS_URL must be empty or exactly ${GLYPHS}`);
 	if (terrain && !ARCHIVE.test(terrain)) problems.push('PUBLIC_TERRAIN_URL must be empty or /tiles/<name>.pmtiles');
 	if (terrain && !hasText(REQUIRED_TEXT.terrain)) {
 		problems.push('PUBLIC_TERRAIN_URL (the relief) needs the Copernicus WorldDEM-30 licence’s liability sentence (Art. 6(c)) in the app’s legal text first (docs/maps.md § Relief)');
+	}
+	if (channels && !ARCHIVE.test(channels)) problems.push('PUBLIC_CHANNELS_URL must be empty or /tiles/<name>.pmtiles');
+	// The channels are routed from the same Copernicus DEM: adapted data drawn in the browser, so the same sentence first.
+	if (channels && !hasText(REQUIRED_TEXT.terrain)) {
+		problems.push('PUBLIC_CHANNELS_URL (the DEM rivers, derived from the Copernicus DEM) needs the Copernicus WorldDEM-30 licence’s liability sentence (Art. 6(c)) in the app’s legal text first (docs/maps.md § Relief)');
 	}
 	return problems;
 }

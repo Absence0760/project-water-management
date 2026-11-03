@@ -565,6 +565,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['transfer', 'transfer-rate', 'transfer-months'],
 		source: 'docs/model.md §2.6a'
 	},
+	'transfer-diversion-curve': {
+		long: 'Pick **A share of the river’s flow** under **Takes** on a river off-take. Each day the off-take wants the share y = a × x^b percent of the river at the off-take, where x is that flow in the **flow unit** you pick (L/s, m³/s, m³/day or Ml/day), never more than the **largest share** (100 % when left blank), and never more than the rule’s rate × 86 400 (the canal’s capacity) or its daily cap. With b below 0 the share falls as the river rises: most of a low flow, a small part of a flood.\n\nThe unit of x changes everything. The same a and b read in L/s give a falling share over a small river’s whole range, so the canal may never fill; read in m³/s or Ml/day they give the largest share at every ordinary flow, so the rule becomes “the largest share, up to the canal”. The card shows the share and what is diverted at a few example flows, and which limit binds, so check it against what the curve’s author meant.\n\n**x is** the river at the off-take that day, after the use upstream (the default: the flow the off-take sees), or the **natural flow** there (the runoff from the source and every hydrological unit above it, as if nobody took water). Either way the share is taken of the river actually at the off-take. Everything else is an off-take’s: the flow it must leave (hands-off flow, the EWR when asked, the priority users’ requirement), its priority beside other off-takes, its losses on the way, and what the destination does with the water.',
+		aliases: ['flow-dependent diversion', 'diversion share', 'weir split', 'power curve', 'canal share'],
+		related: ['transfer-offtake', 'transfer-rate'],
+		source: 'docs/model.md §2.6a'
+	},
 	'transfer-min-storage': {
 		long: 'Checked against yesterday’s end-of-day storage. The reserve kept is the higher of this value and the source dam’s minimum operating level.',
 		related: ['dam-min', 'transfer'],

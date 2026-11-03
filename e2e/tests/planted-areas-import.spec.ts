@@ -122,7 +122,7 @@ test('the File formats help page lists every format, this one with its template'
 	await expect(plantings.getByRole('link', { name: 'Download the template' })).toHaveAttribute('download', 'plantings-template.csv');
 	// Every format, each with an anchor its note links to.
 	expect(await page.getByTestId('file-format').count()).toBeGreaterThan(15);
-	await expect(page.locator('article#map-geojson')).toContainText('Shapefiles and KML aren’t read');
+	await expect(page.locator('article#map-geojson')).toContainText('Or a KML, a KMZ or a zipped shapefile');
 	await expect(page.getByRole('navigation', { name: 'Help' }).getByRole('link', { name: 'File formats' })).toHaveAttribute('aria-current', 'page');
 	await expectNoViolations(page);
 });
