@@ -3,7 +3,8 @@
 // Postgres and the committed synthetic DEM (backend/fixtures/dem/). The units
 // follow the user's own boundaries (start-16, #523 C1):
 //  - each unit's boundary (an area on the map) stands for its node, a gauge
-//    point for a gauge node or a new one; the proposal gives each unit its
+//    point for a gauge node or a new one, an area no node has for a new unit
+//    (#670); the proposal gives each unit its
 //    boundary's area (checked against the elevation model) and the order,
 //    beside the node's current values, and names the units it leaves alone;
 //    a dam or an abstraction point never divides: the unlinked ones inside a
@@ -374,6 +375,98 @@ describe('dividing the valley', () => {
 		const spid = (await owner.call('POST', v.at('/map/divide'), v.body)).body.proposal.id;
 		await expect(asOwner(`UPDATE start_proposal SET mode = 'start' WHERE id = $1`, [spid])).rejects.toThrow(/mode stays as proposed/);
 		await expect(asOwner(`INSERT INTO start_proposal (project_id, mode, plan, from_dem, method, method_version) VALUES ($1, 'divide', '{}', false, 'm', 'start-2')`, [v.id])).rejects.toThrow(/start_proposal_divide_from_dem/);
+	});
+});
+
+describe('a new hydrological unit from an area no node has (#670)', () => {
+	it('proposes it as a unit, its boundary’s area checked on the elevation model and its dam its composite dam, and applies it as one revision', async () => {
+		const v = await valley('Divide, new unit');
+		const lowDam = await v.feature({ kind: 'dam', name: 'Low dam', ...(() => {
+			const [lon, lat] = pos(DAM_CELL.x, DAM_CELL.y + 30);
+			return { lon, lat };
+		})() });
+		// The lower boundary stands for no node: null makes it a new unit (the lower unit as typed stays out of the division).
+		const body = { ...v.body, points: v.body.points.map((p) => (p.featureId === v.f.lower ? { ...p, nodeId: null } : p)) };
+		// An area that stands for a unit already can't be a new one.
+		const linked = await owner.call('POST', v.at('/map/divide'), { outletFeatureId: v.f.outlet, points: [{ featureId: v.f.upper, nodeId: null }] });
+		expect(linked.status).toBe(400);
+		expect(linked.body.error).toMatch(/stands for Upper unit already/);
+		expect((await viewer.call('POST', v.at('/map/divide'), body)).status).toBe(403);
+		const r = await owner.call('POST', v.at('/map/divide'), body);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const { id: spid, plan } = r.body.proposal;
+		expect(plan.units.map((u: { name: string; role: string; nodeId: string | null; drainsInto: string | null }) => [u.name, u.role, u.nodeId, u.drainsInto])).toEqual([
+			['Upper unit', 'unit', v.nodes.upper.id, v.f.mid],
+			['Mid weir', 'gauge', null, v.f.lower],
+			['Lower boundary', 'unit', null, null]
+		]);
+		const low = plan.units[2];
+		expect(low).toMatchObject({ featureName: 'Lower boundary', current: null, areaM2: await areaOf(v.f.lower) });
+		expect(Math.abs(low.demAreaM2 / low.areaM2 - 1)).toBeLessThan(0.1);
+		expect(low.members).toEqual([{ featureId: lowDam, name: 'Low dam', role: 'dam' }]);
+		// The rest is the catchment less both boundaries; the lower unit, with no point now, keeps its values.
+		expect(plan.rest.areaM2).toBeCloseTo(plan.catchment.areaM2 - plan.units[0].areaM2 - low.areaM2, 0);
+		expect(plan.untouched.map((u: { name: string }) => u.name).sort()).toEqual(['Hillside', 'Lower unit']);
+
+		const url = v.at(`/map/divide/${spid}/apply`);
+		// Its area or order needs Add; its name can't clash; nothing drains into it unless it is added.
+		const notAdded = await owner.call('POST', url, { units: ticks(plan, { [low.key]: { area: true } }), rest: { to: 'none' } });
+		expect(notAdded.status).toBe(400);
+		expect(notAdded.body.error).toMatch(/Lower boundary is a new unit: tick Add it before taking its area or its order/);
+		const clash = await owner.call('POST', url, { units: ticks(plan, { [low.key]: { add: true, name: 'lower unit' } }), rest: { to: 'none' } });
+		expect(clash.status).toBe(400);
+		expect(clash.body.error).toMatch(/Two hydrological units would be called “lower unit”/);
+		const into = await owner.call('POST', url, { units: ticks(plan, { [v.f.mid]: { add: true, drainsInto: true, name: 'Mid weir' } }), rest: { to: 'none' } });
+		expect(into.status).toBe(400);
+		expect(into.body.error).toMatch(/would drain into the new unit Lower boundary, which isn’t being added/);
+		expect((await viewer.call('POST', url, { units: ticks(plan), rest: { to: 'none' } })).status).toBe(403);
+
+		const ok = await owner.call('POST', url, {
+			units: ticks(plan, {
+				[v.f.upper]: { area: true, drainsInto: true },
+				[v.f.mid]: { add: true, drainsInto: true, name: 'Mid weir' },
+				[low.key]: { add: true, area: true, drainsInto: true, name: 'New lower' }
+			}),
+			rest: { to: 'none' }
+		});
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const by = Object.fromEntries((ok.body.model.nodes as ApiNode[]).map((n) => [n.name, n]));
+		// A land unit, in the order: the new gauge drains into it, it into the outflow; the lower unit as typed.
+		expect(by['New lower']).toMatchObject({ kind: 'farm', downstreamNodeId: v.nodes.weir.id, damCapacityM3: 0 });
+		expect(by['New lower']!.areaKm2).toBeCloseTo(low.areaM2 / 1e6, 9);
+		expect(by['Mid weir']).toMatchObject({ kind: 'gauge', downstreamNodeId: by['New lower']!.id });
+		expect(by['Lower unit']).toMatchObject({ areaKm2: 2, downstreamNodeId: v.nodes.weir.id });
+		// Its area is its boundary, linked as Start links one; the boundary and its dam stand for it.
+		const [row] = await asOwner('SELECT area_source, area_basis, area_feature_id FROM node WHERE id = $1', [by['New lower']!.id]);
+		expect(row).toEqual({ area_source: 'map', area_basis: 'gross', area_feature_id: v.f.lower });
+		const links = await asOwner('SELECT id, node_id FROM map_feature WHERE id = ANY($1::uuid[])', [[v.f.lower, lowDam]]);
+		expect(links.map((l) => l.node_id)).toEqual([by['New lower']!.id, by['New lower']!.id]);
+		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND source <> 'baseline' ORDER BY id DESC LIMIT 1`, [v.id]);
+		expect(rev!.reason).toMatch(/^Divided from the map: 2 areas \(gross\), 3 drains-into, 1 gauge added, 1 unit added from Synthetic DEM/);
+		expect(ok.body.proposal.decision.units.find((u: { key: string }) => u.key === low.key)).toMatchObject({ nodeId: by['New lower']!.id, role: 'unit', add: true, area: true, boundaryId: v.f.lower, parcelId: null });
+		// RLS: a member sees the new unit (the positive control), a stranger sees no model at all.
+		expect(((await viewer.call('GET', v.at('/model'))).body.nodes as ApiNode[]).some((n) => n.name === 'New lower')).toBe(true);
+		expect((await stranger.call('GET', v.at('/model'))).status).toBe(404);
+	});
+
+	it('says when its boundary overlaps a unit’s area, takes nothing from that unit, and drains into the outflow with its order unticked', async () => {
+		const v = await valley('Divide, new unit overlapping');
+		// The upper unit's area is its boundary on the map; a new piece is drawn over the same stretch of the valley.
+		await asOwner(`UPDATE node SET area_source = 'map', area_basis = 'gross', area_feature_id = $2 WHERE id = $1`, [v.nodes.upper.id, v.f.upper]);
+		const top = await v.feature({ kind: 'other', name: 'Sub-catchment 1', geometry: valleyUnit(0, DAM_CELL.y + 1) });
+		const r = await owner.call('POST', v.at('/map/divide'), { outletFeatureId: v.f.outlet, points: [{ featureId: v.f.mid, nodeId: null }, { featureId: top, nodeId: null }] });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const { id: spid, plan } = r.body.proposal;
+		const piece = plan.units.find((u: { key: string }) => u.key === top);
+		expect(piece).toMatchObject({ name: 'Sub-catchment 1', role: 'unit', nodeId: null, drainsInto: v.f.mid });
+		expect(plan.warnings).toContainEqual(expect.stringMatching(/^Sub-catchment 1 is a new unit, and its boundary overlaps Upper unit’s area on the map\. That unit keeps its area/));
+		const ok = await owner.call('POST', v.at(`/map/divide/${spid}/apply`), { units: ticks(plan, { [top]: { add: true, area: true, name: 'Sub-catchment 1' } }), rest: { to: 'none' } });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const by = Object.fromEntries((ok.body.model.nodes as ApiNode[]).map((n) => [n.name, n]));
+		// Its order unticked: into the outflow, as Start's new units; the upper unit's area as it was.
+		expect(by['Sub-catchment 1']).toMatchObject({ kind: 'farm', downstreamNodeId: v.nodes.weir.id });
+		expect(by['Upper unit']!.areaKm2).toBe(5);
+		expect(by['Mid weir']).toBeUndefined();
 	});
 });
 
