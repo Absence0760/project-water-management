@@ -29,6 +29,7 @@ import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { DelineationRefused, type LargerChannel } from './delineate.js';
 import { configuredDem } from './dem.js';
+import { MinKm2 } from './requests.js';
 import { delineateUnits, type Subcatchments } from './subcatchments.js';
 
 /** Clicks one request may carry: Start from the map's cap on points. */
@@ -36,8 +37,8 @@ export const CLICKS_MAX = 50;
 
 const Lon = z.number().finite().min(-180).max(180);
 const Lat = z.number().finite().min(-90).max(90);
-/** A click, on a terrain channel (place.ts). */
-const Click = z.object({ lon: Lon, lat: Lat }).strict();
+/** A click, on a terrain channel (place.ts): `minKm2`, the least area of the channels the Map drew at its zoom (requests.ts MinKm2). */
+const Click = z.object({ lon: Lon, lat: Lat, minKm2: MinKm2.optional() }).strict();
 export const ClicksBody = z.object({ clicks: z.array(Click).min(1).max(CLICKS_MAX) }).strict();
 
 type Poly = Extract<Geometry, { type: 'Polygon' }>;
@@ -156,7 +157,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 			const r = await delineateUnits(dem, {
 				outlet: 'lowest',
 				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] } }))
+				points: clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', minKm2: c.minKm2, geometry: { type: 'Point', coordinates: [c.lon, c.lat] } }))
 			}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), projectId) });
 			return toClickPieces(r);
 		} catch (err) {

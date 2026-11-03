@@ -17,7 +17,7 @@
 // and needs no new dependency: the writer is pmtiles.ts's, the browser's
 // reader the `pmtiles` package the basemap already loads.
 import type { ChannelTile } from './channels.js';
-import { channelTile, CHANNEL_MIN_KM2, CHANNEL_TILE_DEG, CHANNEL_WINDOW } from './channels.js';
+import { channelTile, CHANNEL_FLOOR_KM2, CHANNEL_TILE_DEG, CHANNEL_WINDOW } from './channels.js';
 import { DelineationRefused } from './delineate.js';
 import type { Dem } from './dem.js';
 import { writePmtiles } from './pmtiles.js';
@@ -26,8 +26,11 @@ import { writePmtiles } from './pmtiles.js';
 export const CHANNEL_ARCHIVE_ZOOM = 11;
 /** Added to a tile's index to make it a non-negative x or y. */
 export const CHANNEL_ARCHIVE_OFFSET = 1024;
-/** The archive's `format` in its metadata: the frontend refuses any other. */
-export const CHANNEL_ARCHIVE_FORMAT = 'water-management-channels/1';
+/**
+ * The archive's `format` in its metadata: the frontend refuses any other, and asks the route instead. /2: the lines go down to
+ * CHANNEL_FLOOR_KM2 (0.1 km²); a /1 archive, built at 1 km², lacks the small channels the Map shows zoomed in.
+ */
+export const CHANNEL_ARCHIVE_FORMAT = 'water-management-channels/2';
 
 /** Where tile (i, j) is stored. */
 export const channelArchiveZxy = ([i, j]: readonly [number, number]): [number, number, number] => [CHANNEL_ARCHIVE_ZOOM, i + CHANNEL_ARCHIVE_OFFSET, j + CHANNEL_ARCHIVE_OFFSET];
@@ -98,7 +101,7 @@ export async function buildChannelArchive(dem: Dem, opts: BuildOptions = {}): Pr
 		attribution: info.attribution,
 		tileDeg: CHANNEL_TILE_DEG,
 		window: CHANNEL_WINDOW,
-		minKm2: CHANNEL_MIN_KM2,
+		minKm2: CHANNEL_FLOOR_KM2,
 		dem: { label: info.label, fingerprint: info.fingerprint },
 		tiles: [i0, j0, i1, j1]
 	};

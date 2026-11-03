@@ -6,9 +6,10 @@
 //   tsx scripts/channels-build.ts --fixture
 //
 // --dem defaults to DEM_URL; --bbox to the DEM's bounds. Every 0.2° tile is
-// routed with the same code and parameters as GET …/map/channels, about 0.35 s
-// and 15 KB (gzip) a tile on the GLO-30 DEM, so a run of the Western Cape
-// (~750 tiles) takes ~5 minutes and writes ~10–12 MB. `bin/tiles-dev.sh channels`
+// routed with the same code and parameters as GET …/map/channels (lines down
+// to 0.1 km²), about 0.7–1.1 s and 42–56 KB (gzip) a tile on the relief DEM,
+// so a run of the Western Cape (~800 tiles) takes ~10–15 minutes and writes
+// ~30–40 MB (estimated from measured tiles). `bin/tiles-dev.sh channels`
 // (pnpm dev:tiles:channels) runs it on the cached relief DEM and uploads the
 // result to MinIO.
 //

@@ -122,12 +122,15 @@ describe('a catchment too large for the request', () => {
 
 	it('goes to the worker at once with `background`, from its first window', async () => {
 		delineationLimits.jobWindows = [384, 1024];
-		const res = await editor.call('POST', at('/map/delineation'), { ...DAM, from: 'dam_wall', background: true });
+		const res = await editor.call('POST', at('/map/delineation'), { ...DAM, from: 'dam_wall', background: true, minKm2: 0.25 });
 		expect(res.status, JSON.stringify(res.body)).toBe(202);
 		expect((await asOwner('SELECT from_window FROM delineation_request WHERE id = $1', [res.body.request.id]))[0].from_window).toBe(384);
+		// The click's channel threshold rides in the job's payload, and the worker places on it.
+		expect((await jobOf(res.body.request.id)).payload).toEqual({ requestId: res.body.request.id, minKm2: 0.25 });
 		await tick();
 		const done = (await editor.call('GET', at(`/map/delineation/requests/${res.body.request.id}`))).body.request;
 		expect(done).toMatchObject({ status: 'proposed', proposal: { from: 'dam_wall', windowCells: 384 } });
+		expect(done.proposal.method).toMatch(/\(at least 0\.25 km² draining through it\)/);
 		expect(done.proposal.areaM2).toBeLessThan(0.8 * BASIN_AREA_M2);
 	});
 

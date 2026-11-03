@@ -1,10 +1,13 @@
 // Where a click on the map goes on the DEM's channel network (issue #472,
 // docs/design/delineation.md § Method, step 6). The outlet is a point on a terrain
-// channel: a cell the DEM's own routing drains ON_CHANNEL_KM2 or more
-// through, the red lines the Map draws (channels.ts). The click goes on the
-// nearest such cell within the snap radius, and nowhere else; with none
-// within it the click is refused, so an outlet never sits on a slope or in
-// a gully the Map doesn't draw.
+// channel: a cell the DEM's own routing drains `minKm2` or more through, the
+// red lines the Map draws at the zoom the editor clicked at (channels.ts; the
+// frontend's channelMinKm2AtZoom: 1 km² below zoom 13, down to
+// CHANNEL_FLOOR_KM2 from zoom 15). The click goes on the nearest such cell
+// within the snap radius, and nowhere else; with none within it the click is
+// refused, so an outlet never sits on a slope or in a gully the Map didn't
+// draw. Without a `minKm2` (Enter coordinates, Start and Divide, an older
+// client) it is ON_CHANNEL_KM2.
 //
 // Mapped rivers (HydroRIVERS, the basemap's waterways) never move it. Issue
 // #374 had matched the click to the nearby HydroRIVERS reach's upstream area,
@@ -20,8 +23,22 @@
 // a gauge or a dam placed from its coordinates (Start, Divide) on a hillside
 // stream beside the river it measures says so, and the editor decides.
 
-/** The least upstream area (km²) of a channel cell: the Map's red lines (channels.ts CHANNEL_MIN_KM2, kept equal by a test). */
+/**
+ * The smallest channel the Map's tiles carry (km²), and so the least a request may ask a click to go on (channels.ts re-exports
+ * it as the tiles' floor; defined here, the module with no imports, so the two can't drift or meet in an import cycle). Below
+ * about 0.25 km² an outline is a few hundred cells, and on flat ground the DEM draws spurious parallel channels.
+ */
+export const CHANNEL_FLOOR_KM2 = 0.1;
+/** The least upstream area (km²) of a channel cell when the request names none: the red lines the Map draws below zoom 13. */
 export const ON_CHANNEL_KM2 = 1;
+/** The least a request may ask for (km²): the tiles' floor. */
+export const MIN_ON_CHANNEL_KM2 = CHANNEL_FLOOR_KM2;
+
+/** A request's `minKm2` held to [MIN_ON_CHANNEL_KM2, ON_CHANNEL_KM2]; absent (or not a finite number), ON_CHANNEL_KM2. Pure. */
+export function clampMinKm2(v: number | null | undefined): number {
+	if (v === null || v === undefined || !Number.isFinite(v)) return ON_CHANNEL_KM2;
+	return Math.min(ON_CHANNEL_KM2, Math.max(MIN_ON_CHANNEL_KM2, v));
+}
 /** How far the larger-channel guard looks (m). */
 export const GUARD_RADIUS_M = 1000;
 /** How many times the placed cell's upstream cells a channel needs to be "much larger". */
@@ -46,12 +63,13 @@ export interface PlaceGrid {
 }
 
 /**
- * Put the click at (cx, cy) (fractional cells) on the nearest terrain-channel cell within `snapRadiusM`, measured from the exact
- * click to each cell's centre (the larger area wins a tie); null when no channel cell is within it. Pure.
+ * Put the click at (cx, cy) (fractional cells) on the nearest terrain-channel cell (`minKm2` or more draining through it, default
+ * ON_CHANNEL_KM2, held to clampMinKm2's range) within `snapRadiusM`, measured from the exact click to each cell's centre (the larger
+ * area wins a tie); null when no channel cell is within it. Pure.
  */
-export function place(g: PlaceGrid, cx: number, cy: number, opts: { snapRadiusM: number }): Placement | null {
+export function place(g: PlaceGrid, cx: number, cy: number, opts: { snapRadiusM: number; minKm2?: number }): Placement | null {
 	const { nx, ny, acc, edge, cellSizeM } = g;
-	const minCells = (ON_CHANNEL_KM2 * 1e6) / (cellSizeM * cellSizeM);
+	const minCells = (clampMinKm2(opts.minKm2) * 1e6) / (cellSizeM * cellSizeM);
 	const disc = (m: number, visit: (i: number, d: number) => void) => {
 		const r = Math.ceil(m / cellSizeM);
 		const ix = Math.floor(cx);

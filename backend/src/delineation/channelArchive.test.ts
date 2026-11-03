@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CHANNELS_FIXTURE_FILE } from '../../scripts/channels-build.js';
 import { buildChannelArchive, CHANNEL_ARCHIVE_FORMAT, channelArchiveZxy, tileRange } from './channelArchive.js';
-import { channelTile, CHANNEL_MIN_KM2, CHANNEL_WINDOW } from './channels.js';
+import { channelTile, CHANNEL_FLOOR_KM2, CHANNEL_WINDOW } from './channels.js';
 import { DelineationRefused } from './delineate.js';
 import { openDem } from './dem.js';
 import { FIXTURE_FILE } from './fixture.js';
@@ -48,7 +48,7 @@ describe('tileRange', () => {
 describe('the precomputed channels', () => {
 	it('hold, tile for tile, exactly what the on-request route computes, and leave tiles off the DEM to it', { timeout: 60_000 }, async () => {
 		const { archive, meta, built, skipped } = await buildChannelArchive(dem());
-		expect(meta).toMatchObject({ format: CHANNEL_ARCHIVE_FORMAT, window: CHANNEL_WINDOW, minKm2: CHANNEL_MIN_KM2, dem: { fingerprint: (await dem().info()).fingerprint } });
+		expect(meta).toMatchObject({ format: CHANNEL_ARCHIVE_FORMAT, window: CHANNEL_WINDOW, minKm2: CHANNEL_FLOOR_KM2, dem: { fingerprint: (await dem().info()).fingerprint } });
 		const { tiles, header } = await contents(archive);
 		expect(header).toMatchObject({ tileType: 0, tileCompression: 2 });
 		expect(tiles.size).toBe(built);

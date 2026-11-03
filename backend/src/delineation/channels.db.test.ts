@@ -12,6 +12,7 @@ import { CHANNEL_ATTEMPTS, CHANNELS_HOURLY } from './attempt.js';
 import { CHANNELS_FIXTURE_FILE } from '../../scripts/channels-build.js';
 import { channelArchiveZxy } from './channelArchive.js';
 import { clearChannelCache } from './channelRoutes.js';
+import { CHANNEL_FLOOR_KM2 } from './channels.js';
 import { byteSource } from './dem.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 import { PmtilesReader } from './pmtiles.js';
@@ -55,8 +56,10 @@ describe('the elevation model’s channels', () => {
 		const n0 = await attempts(editor);
 		const first = await editor.call('GET', at(`tile=${TILE}`));
 		expect(first.status, JSON.stringify(first.body).slice(0, 300)).toBe(200);
-		expect(first.body).toMatchObject({ cached: false, minKm2: 1, tile: TILE.split(',').map(Number) });
+		// Down to the floor (0.1 km²), every line with its area: the Map shows the small ones only zoomed in.
+		expect(first.body).toMatchObject({ cached: false, minKm2: CHANNEL_FLOOR_KM2, tile: TILE.split(',').map(Number) });
 		expect(first.body.lines.length).toBeGreaterThan(5);
+		expect(first.body.lines.some((l: { km2: number }) => l.km2 < 1)).toBe(true);
 		expect(Math.max(...first.body.lines.map((l: { km2: number }) => l.km2))).toBeGreaterThan(100);
 		expect(await attempts(editor)).toBe(n0 + 1);
 		// In the channel tiles' own pool (307), never delineation's.

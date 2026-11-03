@@ -12,7 +12,7 @@
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import type { Dem, DemInfo } from './dem.js';
 import { accumulate, BORDER, d8, edgeMask, fill, NO_DATA_EDGE, openFlags, upstream, type Grid } from './flow.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, place } from './place.js';
+import { clampMinKm2, GUARD_RADIUS_M, LARGER_FACTOR, place } from './place.js';
 import { simplifyRing, traceOutline, type Pt } from './outline.js';
 import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport } from './pans.js';
 import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
@@ -40,8 +40,10 @@ import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
  * delineate-13 (issue #472): the outlet on the terrain channel (ON_CHANNEL_KM2 or more) nearest the click, within the snap radius,
  * else refused (`off_channel`); the mapped river network no longer matches, moves or chooses it (delineate-2 to -11's rules gone); the
  * much larger channel (the DEM alone) is still offered, never taken.
+ * delineate-14: the outlet on the channel the Map drew at the zoom of the click: the request's `minKm2` (1 km² below zoom 13 down to
+ * 0.1 km² from zoom 15, held to that range; 1 km² without it, as delineate-13), named in the method sentence.
  */
-export const METHOD_VERSION = 'delineate-13';
+export const METHOD_VERSION = 'delineate-14';
 /** Web Mercator zoom the DEM is read at: 512 px tiles at zoom 11 are about 33 m a cell over South Africa, GLO-30's own resolution. */
 export const TARGET_ZOOM = 11;
 /** How far the click may be from the terrain channel it goes on (docs/design/delineation.md § Method, step 6). */
@@ -137,7 +139,7 @@ export function largerChannelRefusal(
 export function offChannelText(what: string, snapRadiusM: number, kind: 'click' | 'gauge' = 'click'): string {
 	return kind === 'gauge'
 		? `No terrain channel runs within ${snapRadiusM} m of ${what}. Move the gauge onto a terrain channel (Delineate and Sub-catchments draw them; they're in the map's key) and propose again.`
-		: `No terrain channel runs within ${snapRadiusM} m of ${what}. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows.`;
+		: `No terrain channel runs within ${snapRadiusM} m of ${what}. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows. Zoom in further to see smaller channels.`;
 }
 
 /**
@@ -304,6 +306,8 @@ export interface DelineationMethodFacts {
 	cellM: number;
 	zoom: number;
 	snapRadiusM: number;
+	/** The least area of the channel the outlet went on (km², place.ts clampMinKm2). */
+	minKm2: number;
 	/** The editor kept the point beside the much larger channel offered. */
 	kept: boolean;
 	/** The pans were cross-checked against the river network and the dams (pans.ts). */
@@ -313,8 +317,8 @@ export interface DelineationMethodFacts {
 /** The method sentence a delineation stores. Pure. */
 export function delineationMethod(f: DelineationMethodFacts): string {
 	const placement = f.kept
-		? `outlet placed on the terrain channel (at least ${ON_CHANNEL_KM2} km² draining through it) nearest the point, within ${f.snapRadiusM} m, and kept there by the editor though a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m was offered; `
-		: `outlet placed on the terrain channel (at least ${ON_CHANNEL_KM2} km² draining through it) nearest the point, within ${f.snapRadiusM} m; the mapped river network not used to place it; `;
+		? `outlet placed on the terrain channel (at least ${f.minKm2} km² draining through it) nearest the point, within ${f.snapRadiusM} m, and kept there by the editor though a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m was offered; `
+		: `outlet placed on the terrain channel (at least ${f.minKm2} km² draining through it) nearest the point, within ${f.snapRadiusM} m; the mapped river network not used to place it; `;
 	return (
 		`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${f.cellM} m cells (zoom ${f.zoom}); ` +
 		placement +
@@ -342,6 +346,8 @@ export async function delineate(
 		mapped?: { name: string; km2: number } | null;
 		/** Keep the point even beside a much larger channel (otherwise refused with `larger_channel`). */
 		keepPoint?: boolean;
+		/** The least area (km²) of the channel the click may go on: what the Map drew at its zoom; held to [0.1, 1], default 1 (place.ts). */
+		minKm2?: number;
 		/** Where an earlier try's last window cut the catchment (the request's, for the worker): the first window is placed over it. */
 		aim?: WindowAim | null;
 		/** Called before each window is read, with its place in `windows` (the worker reports it as the job's progress). */
@@ -355,6 +361,7 @@ export async function delineate(
 	const budget = opts.budgetMs ?? TIME_BUDGET_MS;
 	const windows = opts.windows ?? WINDOWS;
 	const snapRadiusM = opts.snapRadiusM ?? SNAP_RADIUS_M;
+	const minKm2 = clampMinKm2(opts.minKm2);
 	const info = await dem.info();
 	const [lon, lat] = click;
 	const [w, s, e, n] = info.bounds;
@@ -399,7 +406,7 @@ export async function delineate(
 			}
 			aim = aimAt(mask, nCells, x0, y0);
 		};
-		const placed = place({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, gx - x0, gy - y0, { snapRadiusM });
+		const placed = place({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, gx - x0, gy - y0, { snapRadiusM, minKm2 });
 		if (placed === null) throw new DelineationRefused('off_channel', offChannelText('that point', snapRadiusM));
 		if (placed.larger && !opts.keepPoint) {
 			const lx = placed.larger.cell % nCells;
@@ -473,6 +480,7 @@ export async function delineate(
 				cellM,
 				zoom: z,
 				snapRadiusM,
+				minKm2,
 				kept: !!placed.larger,
 				checked: !!opts.panReference
 			}),

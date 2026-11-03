@@ -76,9 +76,19 @@ describe('sub-catchments from clicks (synthetic DEM)', () => {
 		near(low.totalAreaM2, dam.areaM2 + low.areaM2, 0.01);
 		expect(dam.geometry.type).toBe('Polygon');
 		expect(r.dataset.label).toMatch(/Synthetic DEM/);
-		expect(r.methodVersion).toBe('start-17');
+		expect(r.methodVersion).toBe('start-18');
 		const stored = await asOwner(`SELECT count(*)::integer AS n FROM map_feature WHERE project_id = $1`, [projectId]);
 		expect(stored[0]!.n).toBe(0);
+	});
+
+	it('puts each click on the channels the Map drew at its zoom (its minKm2), named in the method, and refuses a non-number', async () => {
+		const mixed = await editor.call('POST', at('/map/subcatchments'), { clicks: [{ ...DAM, minKm2: 0.25 }, OUTLET] });
+		expect(mixed.status, JSON.stringify(mixed.body)).toBe(200);
+		expect(mixed.body.method).toMatch(/with at least 0\.25 or 1 km² \(the channels the Map drew at each click’s zoom\) draining through it/);
+		// Positive control: all at one zoom, one figure.
+		const one = await editor.call('POST', at('/map/subcatchments'), { clicks: [{ ...DAM, minKm2: 0.1 }, { ...OUTLET, minKm2: 0.1 }] });
+		expect(one.body.method).toMatch(/with at least 0\.1 km² draining through it/);
+		expect((await editor.call('POST', at('/map/subcatchments'), { clicks: [{ ...DAM, minKm2: 'small' }] })).status).toBe(400);
 	});
 
 	it('lets no viewer or stranger ask, and refuses a click off the DEM with 422 and a sentence', async () => {
@@ -103,11 +113,11 @@ describe('sub-catchments from clicks (synthetic DEM)', () => {
 			[projectId]
 		)) as { name: string; description: string; area_m2: number }[];
 		// The upper piece holds the valley's pan: its description says how much of it drains there (start-11).
-		expect(rows[0]!.description).toMatch(/drains into sub-catchment 2; .* km² upstream in all\. [\d.]+ km² of its own area drains into pans \(non-contributing in WR2012’s sense; still in its area\)\. Delineated from Synthetic DEM.*\(start-17\)/);
+		expect(rows[0]!.description).toMatch(/drains into sub-catchment 2; .* km² upstream in all\. [\d.]+ km² of its own area drains into pans \(non-contributing in WR2012’s sense; still in its area\)\. Delineated from Synthetic DEM.*\(start-18\)/);
 		expect(rows[1]!.description).toMatch(/the lowest click/);
 		near(rows[0]!.area_m2 + rows[1]!.area_m2, BASIN_AREA_M2, 0.04);
 		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.subcatchments_saved'`, [projectId]);
-		expect(audit[0]!.subject).toMatchObject({ pieces: 2, methodVersion: 'start-17', featureIds: res.body.features.map((f: { id: string }) => f.id) });
+		expect(audit[0]!.subject).toMatchObject({ pieces: 2, methodVersion: 'start-18', featureIds: res.body.features.map((f: { id: string }) => f.id) });
 		expect(JSON.stringify(audit[0]!.subject)).not.toMatch(/coordinates/);
 		// Each piece keeps what of it drains into pans (195): the upper one the pan's catchment, the lower none.
 		const [upper, lower] = res.body.features as { id: string; areaM2: number; nonContributingM2: number }[];
