@@ -121,6 +121,11 @@ export const HYDROATLAS_STATEMENT = 'Basin attributes: HydroATLAS v1.0 (BasinATL
 export const SOILGRIDS_STATEMENT = 'Soil water retention: SoilGrids 2.0 © ISRIC – World Soil Information, CC BY 4.0.';
 export const ISDA_STATEMENT = 'Depth to bedrock: iSDAsoil © Innovative Solutions for Decision Agriculture (iSDA), CC BY 4.0.';
 
+/** The quaternary outlines' credit (DWS): the first half of the backend's `QUATERNARY_SOURCE` (geo/loadQuaternaries.ts), stored on every row a production load writes. */
+export const DWS_QUATERNARY_STATEMENT = 'Quaternary catchments: Department of Water and Sanitation (DWS).';
+/** The WR2012 reference values' credit: the second half of the backend's `QUATERNARY_SOURCE`. */
+export const WR2012_STATEMENT = 'Reference values: WR2012, Water Resources of South Africa 2012 Study (Water Research Commission, 2015).';
+
 export const DATA_CREDITS: readonly DataCredit[] = [
 	{
 		id: 'basemap',
@@ -261,6 +266,27 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licence: 'No licence terms came with the copy used; it is shown with the credit its authors give',
 		read: '2026-10-23',
 		statements: [WAAS_MAP_STATEMENT]
+	},
+	{
+		id: 'dws-quaternaries',
+		name: 'DWS quaternary catchment outlines',
+		usedFor: 'The quaternary lookup: which quaternary catchment a place on the map lies in, whose WR2012 values Calibration → WR2012 check proposes.',
+		publisher: 'Department of Water and Sanitation (DWS)',
+		licence:
+			'DWS’s terms and conditions for the supply of digital spatial data: the data “is therefore in the public domain”, supplied free of charge, “without distribution rights”, and “may not be sold in any form (value added or not)”; used on the operator’s decision',
+		licenceUrl: 'https://gia.dws.gov.za/hosting/rest/services/Hosted/Quinary_Catchments/FeatureServer/info/iteminfo?f=pjson',
+		read: '2026-11-02',
+		statements: [DWS_QUATERNARY_STATEMENT]
+	},
+	{
+		id: 'wrc-water-resources',
+		name: 'WR2012 reference values (MAP, MAR, monthly flows per quaternary)',
+		usedFor: 'Calibration → WR2012 check: the quaternary’s mean annual precipitation, runoff and monthly naturalised flows the lookup proposes.',
+		publisher: 'Water Research Commission (WRC), Water Resources of South Africa 2012 Study',
+		licence: 'No open licence is published: a free registered download, copyright reserved by its authors (the site’s disclaimer); used on the operator’s decision',
+		licenceUrl: 'https://waterresourceswr2012.co.za/disclaimer/',
+		read: '2026-11-02',
+		statements: [WR2012_STATEMENT]
 	},
 	{
 		id: 'geonames',

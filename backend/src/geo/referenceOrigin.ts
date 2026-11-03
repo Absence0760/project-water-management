@@ -26,7 +26,7 @@
 import type pg from 'pg';
 
 /** The kinds a production load takes (referenceLoad.ts REFERENCE_KINDS' allowed ones), and the tile archives' record. */
-export type ReferenceLoadKind = 'land-cover' | 'evaporation' | 'rivers' | 'gazetteer' | 'map-grid' | 'tiles' | 'waterbodies' | 'dws' | 'soils' | 'gr4j-donors';
+export type ReferenceLoadKind = 'land-cover' | 'evaporation' | 'rivers' | 'gazetteer' | 'map-grid' | 'tiles' | 'waterbodies' | 'dws' | 'soils' | 'gr4j-donors' | 'quaternaries';
 
 /** The object a load read: its key in the reference bucket and the SHA-256 it was checked against. */
 export interface ReferenceOrigin {

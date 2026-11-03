@@ -5104,8 +5104,9 @@ Left, from the WP:
       area; the naturalised flow into the WR2012 check as a comparison).
       Needs the committed synthetic WR2012-shaped fixtures and the monthly →
       daily volume test. Today the WR2012 check is proposed from the loaded
-      quaternary dataset only. Trigger: the WRC's answer on redistribution
-      (D5), or a client with WR2012 files in hand.
+      quaternary dataset only (allowed in production since the operator's
+      decision of 2026-11-02). Trigger: a client with WR2012 files in hand
+      beyond the quaternary values, or the WRC's written permission (D5).
 - [ ] **DWS quality codes as per-value flags.** DWS feeds and the gauge
       record store exist (`feeds/fromGaugeRecord.ts`, `pnpm import:dws`, the
       nearest-gauges proposal); the WP's mapping of DWS quality codes into a
@@ -5184,14 +5185,28 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       is built (the migrate Lambda reads one file from the private reference
       bucket, hash-checked, through `load-reference.yml` in the `production`
       environment; [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
-      It refuses `quaternaries` by name while the WR2012 decision below is
-      open; on a yes, mark the Sources rows allowed and add the kind to
-      `REFERENCE_KINDS` (`geo/referenceLoad.ts`, with its parser) and
-      `LOADABLE` (`scripts/release/map-data-gates.mjs`).
-- [ ] **Decision: WR2012's licence terms** (operator; maps.md § Quaternary
-      dataset, roadmap Step 4 D5). Until the WRC confirms redistribution,
-      WR2012 values are loaded only from the operator's own registered
-      download, never committed or shipped.
+      It refused `quaternaries` by name while the WR2012 decision below was
+      open. Done 2026-11-02 with that decision: the Sources rows say allowed,
+      the kind is in `REFERENCE_KINDS` (`geo/referenceLoad.ts`, reading the
+      GeoJSON `pnpm import:quaternaries … --out` writes), `LOADABLE`
+      (`scripts/release/map-data-gates.mjs`) and the workflow's choices, and
+      `reference_load` takes the kind (309). The operator's download and
+      the workflow run are deployment.md § Reference datasets, The
+      quaternary dataset.
+- [x] **Decision: WR2012's licence terms** (operator; maps.md § Quaternary
+      dataset, roadmap Step 4 D5). **Decided 2026-11-02 by the operator:**
+      both the DWS quaternary outlines and the WR2012 reference values may
+      be used in production, on the publishers' published terms. Read the
+      same day and quoted in maps.md § Sources and
+      legal/map-data-licences.md § 3.3d: DWS's terms for its digital spatial
+      data say it is "in the public domain" but supplied "without
+      distribution rights" and "may not be sold in any form (value added or
+      not)"; the WR2012 site publishes no licence, and its disclaimer
+      reserves its authors' copyright. Neither has a clause allowing
+      commercial use in so many words, so the basis is the operator's
+      decision, not an open licence. Still never committed (the repo is
+      public). Written confirmation from the WRC and DWS would turn the
+      decision into a licence; record it in § 3.3d if it comes.
 - [ ] **Decision: the DWS station catalogue's licence** (operator; maps.md
       § Sources, issue #326 B-gauge, decision D-B). The Verified data pages
       answer 403 outside South Africa, and DWS's information pages restrict

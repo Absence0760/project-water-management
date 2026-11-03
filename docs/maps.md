@@ -1363,8 +1363,8 @@ as the schema owner; the app never writes it.
   Parcels are drawn to the model's areas, so the map proposes nothing new
   until someone edits it; `map.test.ts` holds the layout to the model.
 - **Real data: the operator's own download.**
-  1. Boundaries: the DWS quaternary catchments (open data; the DWS/WR2012
-     GIS layers). Convert the shapefile to GeoJSON in WGS84:
+  1. Boundaries: the DWS quaternary catchments (the DWS/WR2012 GIS layers;
+     their terms in § Sources). Convert the shapefile to GeoJSON in WGS84:
      `ogr2ogr -t_srs EPSG:4326 -f GeoJSON quaternaries.geojson <file>.shp`.
      The loader reads the code from `code`, `QUATERNARY`, `QUATERN`,
      `Quaternary`, `QUAT` or `QCODE`.
@@ -1378,19 +1378,30 @@ as the schema owner; the app never writes it.
      A load replaces every row of its dataset in one transaction; features it
      can't take are listed as skipped. Without an area, the polygon's own is
      used.
-- **Decision to check: WR2012's licence terms.** The WR2012 site requires a
-  registration and its redistribution terms are not published (roadmap
-  Step 4 D5). Until the WRC confirms them, the values are loaded only into
-  the operator's database from their own download, never committed or
-  shipped, and whether a client-facing deployment may show them is the
-  operator's call. The DWS quaternary boundaries are open data.
+- **Decision: production may load both (the operator, 2026-11-02).** The
+  operator decided that the DWS quaternary outlines and the WR2012 reference
+  values may be used in production, on the publishers' published terms
+  (roadmap Step 4 D5; followups.md, *Decision: WR2012's licence terms*). What
+  those terms say, read 2026-11-02, is quoted in § Sources and
+  [legal/map-data-licences.md § 3.3d](./legal/map-data-licences.md#33d-the-dws-quaternary-outlines-and-the-wr2012-values-the-operators-decision-added-2026-11-02):
+  DWS's terms put its GIS data in the public domain but supply it "without
+  distribution rights" and say it "may not be sold in any form (value added
+  or not)"; the WR2012 site publishes no licence, only a disclaimer that
+  reserves its authors' copyright. Neither page has a clause that allows
+  commercial use in so many words, so this rests on the operator's decision,
+  not on an open licence. Nothing real is committed (the repo is public).
 - **Production loading**: the database is in a private VPC, so production
   loads run in the migrate Lambda from a file in the private reference
-  bucket, through `load-reference.yml` (the `production` environment;
-  [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
-  The quaternaries are **refused** there until their licence is settled
-  (§ Sources: blocked); the path takes them once the row says allowed and
-  `quaternaries` joins the allowed kinds (`geo/referenceLoad.ts`).
+  bucket, through `load-reference.yml` kind `quaternaries` (the `production`
+  environment; [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+  `pnpm import:quaternaries <boundaries.geojson> --dataset WR2012 --values
+  <values.csv> --out quaternaries.geojson.gz` writes the one file it reads:
+  the outlines with their values on each feature. Every row is stored with
+  the recorded credit, "Quaternary catchments: Department of Water and Sanitation (DWS). Reference values: WR2012, Water Resources of South Africa 2012 Study (Water Research Commission, 2015).",
+  shown with every value the lookup proposes, unless the load gives a source
+  of its own (`geo/referenceLoad.ts`, `geo/loadQuaternaries.ts`
+  `QUATERNARY_SOURCE`); the Data sources page credits both
+  (`/data-sources#dws-quaternaries`, `/data-sources#wrc-water-resources`).
 
 ## Gauging stations
 
@@ -2855,8 +2866,9 @@ grid's kind, and **nothing is converted between them**:
   cells every year has. The result is 12 numbers a cell in water-year order
   (`evaporation_cell_reference`, 180): at most about 23 000 cells for South Africa,
   Lesotho and eSwatini. A grid, not a value per quaternary: a per-quaternary
-  summary would need the DWS quaternary outlines, whose licence is
-  unconfirmed (§ Sources), and the boundary's own cells are a closer average.
+  summary would need the DWS quaternary outlines (allowed in production since
+  the operator's decision of 2026-11-02, § Sources), and the boundary's own
+  cells are a closer average.
 - **The boundary's month** (`geo/evaporation.ts`) is the mean of the cells it
   covers, each weighted by its area on the WGS84 ellipsoid × the share of it
   inside the boundary (`geo/gridShares.ts`, the clipper of [§ Rain from the
@@ -3332,8 +3344,8 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Synthetic water occurrence fixture (`backend/fixtures/water/synthetic-water.pmtiles`) | this repo (invented water, `pnpm gen:water-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, e2e) |
 | Synthetic DEM fixture (`backend/fixtures/dem/synthetic-dem.pmtiles`) | this repo (invented terrain, `pnpm -C backend gen:dem-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, e2e) |
 | Label glyphs: Noto Sans Regular, Medium, Italic (PBF glyph ranges) | The Noto Project Authors; packaged by Protomaps ([basemaps-assets](https://github.com/protomaps/basemaps-assets), `fonts/OFL.txt`) | SIL Open Font License 1.1: use, embedding and redistribution with software allowed, commercially too; the fonts may not be sold on their own, and copies keep the OFL and its notice ([openfontlicense.org](https://openfontlicense.org/open-font-license-official-text/), read 2026-10-01) | the OFL notice, uploaded beside the glyphs (`tiles/fonts/OFL.txt`) | basemaps-assets commit `028c18f7` (2025-10-31) | when the pin is moved | allowed (in use) |
-| Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
-| WR2012 reference values (MAP, MAR, monthly flows) | WRC | redistribution terms unpublished ([§ Quaternary dataset](#quaternary-dataset)) | WR2012 (WRC 2015) | the operator's download | none (a 2012 study) | blocked: licence unconfirmed; operator's own database only |
+| Quaternary catchment outlines | DWS (Department of Water and Sanitation) | DWS's "Terms and conditions for the supply of digital spatial data", published with its GIS data on DWS's own portal ([gia.dws.gov.za, the item's licence info](https://gia.dws.gov.za/hosting/rest/services/Hosted/Quinary_Catchments/FeatureServer/info/iteminfo?f=pjson), read 2026-11-02): "This data has been developed using public funds. The data is therefore in the public domain. Data supplied by the Department may not be sold in any form (value added or not), or distributed to other bodies/organisations." and "All data is supplied without distribution rights." No attribution is asked for. The terms sit on DWS's quinary layer; the quaternary layer DWS serves carries none of its own, and DWS's IWQS quaternary page answered 403 from outside South Africa. No clause allows commercial use in so many words | "Quaternary catchments: Department of Water and Sanitation (DWS)." on every row and on `/data-sources#dws-quaternaries` | the operator's download | per DWS release | allowed (the operator's decision, 2026-11-02, citing the published terms quoted here; [legal/map-data-licences.md § 3.3d](./legal/map-data-licences.md#33d-the-dws-quaternary-outlines-and-the-wr2012-values-the-operators-decision-added-2026-11-02)): production loads it with `load-reference.yml` kind `quaternaries` ([§ Quaternary dataset](#quaternary-dataset)); never committed |
+| WR2012 reference values (MAP, MAR, monthly flows) | WRC (Water Research Commission), with Royal HaskoningDHV, [waterresourceswr2012.co.za](https://waterresourceswr2012.co.za/) | No licence published (read 2026-11-02): a free download after registration; the site's [disclaimer](https://waterresourceswr2012.co.za/disclaimer/) says "The copyright for any material created by the author is reserved. Any duplication or use of objects such as images, diagrams, sounds or texts in other electronic or printed publications is not permitted without the author's agreement." No clause allows commercial use or redistribution | "Reference values: WR2012, Water Resources of South Africa 2012 Study (Water Research Commission, 2015)." on every row and on `/data-sources#wrc-water-resources` | WR2012 (WRC 2015) | none (a 2012 study) | allowed (the operator's decision, 2026-11-02, citing the publishers' published terms; no open licence found, [legal/map-data-licences.md § 3.3d](./legal/map-data-licences.md#33d-the-dws-quaternary-outlines-and-the-wr2012-values-the-operators-decision-added-2026-11-02)): loaded with the outlines above; never committed |
 | Hydrological station catalogue (station code, name, river, lat/lon, catchment area, record start/end): the nearest-gauge proposal | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyCatalogue.aspx` | **Unconfirmed.** Read 2026-10-01: the Verified data pages answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) surfaced DWS's information-page wording (NIWIS pages on `dws.gov.za`): "copyright … remains with the Department of Water and Sanitation", data "may not be sold to third parties", and "the use of information data is restricted to use for academic, research or personal purposes". If that wording covers the hydrological catalogue, it is a non-commercial restriction and fails D-B | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's download date | DWS updates the catalogue as stations open and close | **Blocked: licence unconfirmed.** Built and tested against the synthetic fixture only. To unblock: written confirmation from DWS Hydrological Services that the station metadata may be reused in a commercial service, recorded here with the date |
 | DWS evaporation station records (station code, name, pan type Class-A or Symons, lat/lon, the verified daily pan record): the A-pan proposal ([§ Evaporation stations](#evaporation-stations)) | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyData.aspx` (`SiteType=MET`) and the per-area station lists (`Verified/dwafapp2_wma/WMA*_Met.pdf`) | **Not covered.** The permission obtained through the client's hydrologist (recorded 2026-10-28, [data-sources.md § dws-flow](./data-sources.md#dws-flow)) covers verified daily **flow** only; the same NIWIS wording as the station catalogue applies otherwise | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's load of DWS's reply | DWS updates records as they are verified | **Blocked: needs DWS's permission extended to evaporation station records** (the operator, through the client's hydrologist, GeoRequests@dws.gov.za). Built and tested against the synthetic fixture only |
 | DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`; the gauge record store, `gauge_record`, 247) | DWS, `HyData.aspx`, or DWS's reply to a data request | Permission to store the verified daily flow and show results derived from it obtained through the client's hydrologist (recorded 2026-10-28, #618 step 6a; the written permission is kept with the client's records, [data-sources.md § dws-flow](./data-sources.md#dws-flow)); DWS publishes no terms for the pages themselves | "Department of Water and Sanitation" | per fetch or load | daily (the feed), weekly (the store's web pass) | allowed: the verified daily flow only (production loads it with `load-reference.yml` kind `dws`, [deployment.md § DWS gauge records](./deployment.md#dws-gauge-records)); the station catalogue keeps its own row |
@@ -3369,7 +3381,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | HydroATLAS v1.0 (BasinATLAS attributes: aridity, precipitation, slope, clay, sand, forest, regulation): the donors' similarity attributes | WWF / McGill University (HydroSHEDS); Linke, S. et al. (2019), Sci. Data 6 | **CC BY 4.0** (hydrosheds.org/hydroatlas, read 2026-10-28) | "Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0." | 1.0 | none | allowed (with GRDC-Caravan, kind `gr4j-donors`) |
 | Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
 | Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
-| WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+| WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: no licence published; the operator's decision of 2026-11-02 covers the MAP, MAR and monthly flows only | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
 | Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)", and the proposal and its revision call its values "modelled Class-A pan evaporation (PenPan, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
 
 **Which version is in use.** The table's Version column is the version the

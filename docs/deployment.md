@@ -3588,7 +3588,8 @@ Lambda's list against the Sources table):
 | `dws` | DWS verified daily flow: allowed, by DWS's permission obtained through the client's hydrologist (2026-10-28; data-sources.md § dws-flow). Not map data: one river gauge's flow, written into the gauge record store as `dws-request` rows (origin `dws`), merged with the station's other windows rather than replacing a dataset; `source` (the record's reference, 1–200 characters) is required, `station` optional | one station's DWS daily table: a `HyData.aspx` page saved as HTML (up to 20 years a request) or DWS's text reply, `.txt`, `.html`, `.htm` or `.aspx`, gzipped or not; at most 8 MiB (16 MiB unzipped) | save the page or keep the reply, `gzip -c` it to a neutral name ([§ DWS gauge records](#dws-gauge-records), Loading DWS's reply) |
 | `soils` | SoilGrids 2.0 and iSDAsoil, CC BY 4.0: allowed (their attribution is stored on the dataset row) | the soil water capacity grid `ingest/soils.py` writes (JSON, gzipped), never the GeoTIFFs; at most 32 MiB (64 MiB unzipped) | the GDAL steps below, then `python3 ingest/soils.py … --out soils-d1.json.gz` |
 | `gr4j-donors` | GRDC-Caravan and HydroATLAS, CC BY 4.0: allowed (only fitted parameters, scores and attributes are in the file, no flow; the recorded attribution `GR4J_DONORS` is stored whatever the file says) | the donor file `pnpm fit-donors` writes (JSON, gzipped); at most 4 MiB (8 MiB unzipped) | the donor fit below (offline, on our own forcing) |
-| `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+| `quaternaries` | the DWS quaternary outlines and the WR2012 reference values: allowed by the operator's decision of 2026-11-02, citing the publishers' published terms (no open licence found for either; maps.md § Sources quotes them). Every row is stored with the recorded credit, `QUATERNARY_SOURCE` ("Quaternary catchments: Department of Water and Sanitation (DWS). Reference values: WR2012, …"), unless `-f source=…` gives one | the outlines with their values on each feature, the GeoJSON `--out` writes (gzipped), never the shapefile or the values CSV on their own | `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --values wr2012.csv --out quaternaries.geojson.gz` (steps below) |
+| `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 | `evaporation-stations` | blocked: DWS's permission (2026-10-28, data-sources.md § dws-flow) covers verified daily flow only, not evaporation station records (data-sources.md § dws-evaporation) | the station list and the stations' DWS daily evaporation replies, once allowed | refused by the gate (not in its allowed kinds) and by the Lambda (`REFERENCE_KINDS` status `blocked`) until followups.md *Decision: DWS evaporation station records* is made and the Sources row says allowed; a pan record can't arrive as `dws` either (a river gauge's `H` code and a flow table only). Until then the live site's Calibration page lists no evaporation stations ([maps.md § Evaporation stations](./maps.md#evaporation-stations)) |
 | `crop-types` | blocked: SANLC's terms not yet recorded (issue #604 R5-D, #618 step 8b) | the orchard and vine summary `pnpm import:crop-types … --out` writes, once allowed | refused until followups.md *Decision: SANLC's licence* is made; the live site shows no orchards or vines until then |
 
@@ -3811,6 +3812,43 @@ billed only while they run. Don't run a load while a backend deploy is
 migrating: the migrate Lambda's reserved concurrency of 1 turns the second
 invocation away (the workflow fails with a throttle, nothing is loaded), and
 a load writes only its own dataset's rows, so retrying afterwards is safe.
+
+**The quaternary dataset** (the quaternary lookup and Calibration → WR2012
+check; [maps.md § Quaternary dataset](./maps.md#quaternary-dataset)),
+allowed by the operator's decision of 2026-11-02. From an empty folder
+outside the repo (nothing real is ever committed):
+
+1. Download the DWS quaternary catchment shapefile (the WR2012 site's GIS
+   data, after its free registration, or DWS's own GIS download) and
+   convert it to GeoJSON in WGS84:
+   `ogr2ogr -t_srs EPSG:4326 -f GeoJSON quaternaries.geojson <file>.shp`.
+   The loader takes the code from `code`, `QUATERNARY`, `QUATERN`,
+   `Quaternary`, `QUAT` or `QCODE`.
+2. Transcribe the WR2012 tables you use to a CSV keyed by code,
+   `code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end`
+   (monthly means in Mm³, October first; maps.md § Quaternary dataset).
+3. Look at it locally:
+   `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --source "WR2012 (WRC 2015), <volume, table>" --values wr2012.csv`,
+   then write the production file:
+   `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --values wr2012.csv --out quaternaries.geojson.gz`
+   (it prints how many it wrote and every feature it skipped, with why).
+4. Keep the shapefile and the CSV under `originals/quaternaries/`, then
+   upload and load:
+
+```bash
+sha256sum quaternaries.geojson.gz
+aws s3 cp quaternaries.geojson.gz s3://<reference_bucket>/reference/quaternaries/wr2012-2026.geojson.gz --profile water-management
+gh workflow run load-reference.yml -f kind=quaternaries -f key=reference/quaternaries/wr2012-2026.geojson.gz -f sha256=<hex> -f dataset=WR2012
+```
+
+Approve it in the `production` environment. Every row is stored with the
+recorded DWS and WR2012 credit, which the lookup shows with each value it
+proposes; `-f source="WR2012 (WRC 2015), <volume, table>"` stores that line
+instead, on every row. Quaternary codes are unique across datasets, so a
+load takes over any code an earlier dataset held. To withdraw it (the
+publishers object): take `quaternaries` out of `REFERENCE_KINDS` and the
+gate's `LOADABLE`, and delete the rows with a forward migration (`DELETE
+FROM quaternary_reference WHERE dataset = 'WR2012'`).
 
 #### Refreshing a dataset
 

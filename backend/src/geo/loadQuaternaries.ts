@@ -11,9 +11,26 @@
 // or from a CSV keyed by code (the WR2012 tables, transcribed:
 // code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end).
 // A load replaces every row of its dataset, in one transaction.
+//
+// Production (decided 2026-11-02, docs/maps.md § Sources, Quaternary dataset):
+// `pnpm import:quaternaries … --out <file>` writes the boundaries with the
+// values on each feature's properties (quaternaryFeatureCollection), one file
+// that load-reference.yml's `quaternaries` kind reads (referenceLoad.ts), and
+// every row is stored with QUATERNARY_SOURCE (or the load's own source), never
+// the file's.
 import type pg from 'pg';
 import { geometryAreaM2 } from './area.js';
 import { checkGeometry, type Geometry } from './geojson.js';
+import { recordReferenceOrigin, type ReferenceOrigin } from './referenceOrigin.js';
+
+/**
+ * The credit a production load stores on every row, shown with every value
+ * the lookup proposes: the outlines' publisher (DWS) and the values' study
+ * (WR2012, Water Research Commission). docs/maps.md § Sources records it;
+ * the Data sources page credits each half (dataCredits.ts, the test checks the words).
+ */
+export const QUATERNARY_SOURCE =
+	'Quaternary catchments: Department of Water and Sanitation (DWS). ' + 'Reference values: WR2012, Water Resources of South Africa 2012 Study (Water Research Commission, 2015).';
 
 export interface QuaternaryRecord {
 	code: string;
@@ -130,8 +147,42 @@ export function quaternaryRecords(
 	return { records, problems };
 }
 
-/** Replace every row of `dataset` with `records`, in one transaction, as the schema owner. Returns how many rows it wrote. */
-export async function replaceDataset(client: pg.ClientBase, dataset: string, records: readonly QuaternaryRecord[]): Promise<number> {
+/**
+ * The records as one GeoJSON FeatureCollection with their values on each
+ * feature's properties: the file `pnpm import:quaternaries … --out` writes
+ * and a production load (kind `quaternaries`) reads back through
+ * quaternaryRecords.
+ */
+export function quaternaryFeatureCollection(records: readonly QuaternaryRecord[]): {
+	type: 'FeatureCollection';
+	features: { type: 'Feature'; properties: Record<string, unknown>; geometry: Geometry }[];
+} {
+	return {
+		type: 'FeatureCollection',
+		features: records.map((r) => ({
+			type: 'Feature',
+			properties: {
+				code: r.code,
+				areaKm2: r.areaKm2,
+				mapMm: r.mapMm,
+				marMm3: r.marMm3,
+				monthlyMm3: r.monthlyMm3,
+				periodStart: r.periodStart,
+				periodEnd: r.periodEnd,
+				source: r.source
+			},
+			geometry: r.geometry
+		}))
+	};
+}
+
+/**
+ * Replace every row of `dataset` with `records`, in one transaction, as the
+ * schema owner, recording the bucket file a production load read (`origin`;
+ * a local import names none, which clears the record). Returns how many rows
+ * it wrote.
+ */
+export async function replaceDataset(client: pg.ClientBase, dataset: string, records: readonly QuaternaryRecord[], origin: ReferenceOrigin | null = null): Promise<number> {
 	await client.query('BEGIN');
 	try {
 		await client.query('DELETE FROM quaternary_reference WHERE dataset = $1', [dataset]);
@@ -146,6 +197,7 @@ export async function replaceDataset(client: pg.ClientBase, dataset: string, rec
 				[r.code, dataset, JSON.stringify(r.geometry), ...r.bbox, r.areaKm2, r.mapMm, r.marMm3, r.monthlyMm3, r.periodStart, r.periodEnd, r.source]
 			);
 		}
+		await recordReferenceOrigin(client, 'quaternaries', dataset, origin);
 		await client.query('COMMIT');
 		return records.length;
 	} catch (e) {

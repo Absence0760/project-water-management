@@ -44,6 +44,7 @@ import { rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { parseTileProvenance, recordReferenceOrigin, recordTileProvenance, referenceLoadOf, TILE_ARCHIVES, type ReferenceLoadRecord } from './referenceOrigin.js';
 import { replaceWaterbodies, WATERBODIES_SOURCE, waterbodyRecords } from '../dams/observed/loadWaterbodies.js';
 import { donorsFromJson, GR4J_DONORS, replaceDonorDataset } from './gr4jDonors.js';
+import { QUATERNARY_SOURCE, quaternaryRecords, replaceDataset as replaceQuaternaries } from './loadQuaternaries.js';
 import { replaceSoilDataset, soilFromJson, soilMethodFor, SOILS } from './soilGrid.js';
 
 /** One dataset of a kind allowed dataset by dataset: its own Sources row, and what a load stores with it. */
@@ -101,10 +102,15 @@ export const REFERENCE_KINDS = {
 		// all of GeoNames' (allCountries) about 1.6 GB. Past this it is not the region's.
 		limits: { object: 64 * 1024 * 1024, text: 128 * 1024 * 1024 }
 	},
+	// The DWS quaternary outlines with their WR2012 reference values, for the quaternary lookup (152; docs/maps.md §
+	// Quaternary dataset). Allowed by the operator's decision of 2026-11-02 on the publishers' published terms, which
+	// docs/maps.md § Sources quotes (followups.md, Decision: WR2012's licence terms). Every row is stored with
+	// QUATERNARY_SOURCE, or the load's own source, never the file's.
 	quaternaries: {
-		status: 'blocked',
+		status: 'allowed',
 		sourcesRows: ['Quaternary catchment outlines', 'WR2012 reference values'],
-		why: "WR2012's and the DWS quaternary outlines' licence terms are unconfirmed (followups.md, Decision: WR2012's licence terms)"
+		file: /\.(geo)?json(\.gz)?$/,
+		what: 'the GeoJSON `pnpm import:quaternaries <boundaries.geojson> … --values <values.csv> --out <file>` writes (the outlines, each with its values)'
 	},
 	'dam-register': {
 		status: 'blocked',
@@ -343,7 +349,7 @@ export async function readReferenceText(req: LoadRequest, read: ReadObject, limi
 export interface LoadResult {
 	kind: AllowedKind;
 	dataset: string;
-	/** Rows written (reaches, cells with cropland, evaporation cells, places, MAP grid cells, soil cells or donors). */
+	/** Rows written (reaches, cells with cropland, evaporation cells, places, MAP grid cells, soil cells, donors or quaternaries). */
 	written: number;
 	/** Features or cells the file had that the load couldn't take (their reasons are in CloudWatch). */
 	skipped: number;
@@ -516,6 +522,26 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 			throw new LoadError(`${req.key}: no place to load`, 'empty', 'the file has no place the load can take (a GeoNames dump of South Africa and its neighbours: 19 tab-separated columns)');
 		try {
 			const written = await replacePlaces(client, req.dataset, got.records, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
+	if (req.kind === 'quaternaries') {
+		try {
+			doc = JSON.parse(text);
+		} catch {
+			throw new LoadError(`${req.key} is not JSON`, 'unreadable', 'the file is not JSON');
+		}
+		// The recorded credit (or the load's own source) on every row, never the file's: the decision recorded it with the licence.
+		const source = req.source ?? QUATERNARY_SOURCE;
+		const got = quaternaryRecords(doc, source);
+		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
+		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
+		if (!got.records.length) throw new LoadError(`${req.key}: no quaternary to load`, 'empty', 'the file has no quaternary polygon with a code (a GeoJSON FeatureCollection, `code` on each feature)');
+		const records = got.records.map((r) => ({ ...r, source }));
+		try {
+			const written = await replaceQuaternaries(client, req.dataset, records, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');

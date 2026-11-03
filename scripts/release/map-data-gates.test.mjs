@@ -65,7 +65,10 @@ describe('load: a reference load’s inputs', () => {
 		const donors = { ...landCover, LOAD_KIND: 'gr4j-donors', LOAD_KEY: 'reference/gr4j-donors/caravan-d1.json.gz', LOAD_DATASET: 'Caravan-D1-2026' };
 		assert.deepEqual(loadProblems(donors, lacks), []);
 		assert.match(loadProblems({ ...donors, LOAD_KEY: 'reference/soils/caravan-d1.json.gz' }, lacks).join('\n'), /reference\/gr4j-donors\//);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors']);
+		// The DWS quaternary outlines with their WR2012 values: allowed by the operator's decision of 2026-11-02 (docs/maps.md § Sources).
+		const quaternaries = { ...landCover, LOAD_KIND: 'quaternaries', LOAD_KEY: 'reference/quaternaries/wr2012.geojson.gz', LOAD_DATASET: 'WR2012' };
+		assert.deepEqual(loadProblems(quaternaries, lacks), []);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors', 'quaternaries']);
 	});
 
 	it('a DWS flow table needs its reference, takes a station only as a river gauge code, and no other kind takes one', () => {
@@ -133,7 +136,7 @@ describe('load: a reference load’s inputs', () => {
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
-		for (const kind of ['quaternaries', 'dam-register', 'gauge-stations', 'evaporation-stations', 'crop-types', 'sanlc']) {
+		for (const kind of ['dam-register', 'gauge-stations', 'evaporation-stations', 'crop-types', 'sanlc']) {
 			const problems = loadProblems({ ...landCover, LOAD_KIND: kind }, has);
 			assert.equal(problems.length, 1);
 			assert.match(problems[0], /blocked by their licences/);
