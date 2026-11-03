@@ -3,7 +3,7 @@
 -- § Verification).
 --
 -- In this file:
---  * app_verify_pack, from its latest definition (289_calibration_locations),
+--  * app_verify_pack, from its latest definition (313_fit_errata_every_location),
 --    adds to each signer `statementVersion` (the sign-off statement version it
 --    was made against, e.g. pack-signoff-1: a version name, never personal)
 --    and `earlierStatement`, and to the pack `statementVersion`, the version
@@ -71,7 +71,7 @@ CREATE OR REPLACE FUNCTION app_verify_pack(p_code text) RETURNS jsonb
 			'runs', (
 				SELECT coalesce(jsonb_agg(jsonb_build_object(
 					'engineVersion', r.engine_version,
-					'fitEngineVersion', run_fit_engine_version(r.inputs, r.summary)
+					'fitEngineVersions', to_jsonb(run_fit_engine_versions(r.inputs, r.summary))
 				) ORDER BY r.id IS DISTINCT FROM p.baseline_run_id), '[]'::jsonb)
 				FROM model_run r WHERE r.id = p.baseline_run_id OR r.id = p.scenario_run_id
 			),
