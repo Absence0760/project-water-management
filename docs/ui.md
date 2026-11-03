@@ -9825,7 +9825,7 @@ read it before.
   results (`railSide="right"`: the runs list is the page's left column),
   every group named over its links, each link named as its panel's heading
   (**Water balance by water year**, **Run notes**, **Evidence**, **Reproduction**, **Validation
-  statement**, **Chart any daily series**), with a line for two sub-headings a reader looks for, each
+  statement**, **Cumulative flow at each unit**, **Chart any daily series**), with a line for two sub-headings a reader looks for, each
   under its panel and on its heading's id (**Changes since this run**, `#res-changes`, under
   Reproduction; **Trace a day**, `#res-trace`, under Arithmetic checks; `RUN_SUBSECTIONS`, issue #586 D4),
   and three last groups for the panels that moved to their own pages
@@ -10026,11 +10026,61 @@ read it before.
      computed twice: both call the engine's `validationStatement`.
   4. **The model’s working** (was *Dig deeper*): **Arithmetic checks** (the
      engine's self-checks, was *Self-checks*; with Trace a day, and a line
-     linking to the water balance), **Chart any daily series** (was *Explore
+     linking to the water balance), **Cumulative flow at each unit**
+     (`#res-cumulative`, below), **Chart any daily series** (was *Explore
      any output*). #586 E14 named the group and its panels in plain words, apart
      from Calibration's **Plausibility checks** and the Summary's things to
      check; their ids (`#res-checks`, `#res-explore`) are unchanged, so old
      links land.
+
+     **Cumulative flow at each unit** (`runs/CumulativeFlows.svelte`, the
+     arithmetic in `runs/cumulative.ts`; operator, 2026-11-03) is one chart
+     with a line per hydrological unit (a node of kind `farm`, its kind from
+     the run's model snapshot, else today's model; network order, today's
+     names) and the catchment outlet first (**Catchment outlet (simulated
+     outflow)**, `simulated_outflow`). A unit's line is the running total of
+     its stored `outflow` series: what leaves the unit downstream, the flow
+     from upstream included (model.md § 2.7, column U), so the lines grow
+     down the river. Gauges aren't drawn (their flow is the sum of the units
+     above them), nor are other water users (not hydrological units); the
+     note under the chart says so. The values are m³/day summed per day into
+     **Mm³** (the volume at the end of each day). A day with no value adds
+     nothing and the total carries over it (0 before the first value); the
+     note names the lines that had such days and how many, or says the run
+     had none. Observed flow isn't drawn: a gauge record's gaps would carry
+     a running total flat across them and read as a drier catchment beside
+     the gap-free simulated line (Calibration's double mass curve and
+     hydrograph compare them). Each line's series comes through the Runs
+     cache, four at a time (`eachAtOnce`), "Loading the units' flows… n of
+     N" while they come, **Try again** if one fails. Colours are
+     `LINE_TOKENS`: the categorical palette's tokens that hold 3:1 as a line
+     on the card in both themes (`--series-5` and `-6` don't on the light
+     card), ordered so neighbours stay ΔE00 ≥ 12 apart for every reader
+     (`cumulative.test.ts` computes both from `app.css`); past the seventh
+     line they repeat dashed. **Lines shown** is a box per line (its swatch
+     beside its name; **Show all** / **Show none** past four lines); a line
+     keeps its colour when others are hidden. Zoom is the chart's own (a
+     drag box, Shift+drag, **Earlier** / **Later**; it opens on the whole
+     run). **Count from the first day in view** (a pressed button in the
+     chart's controls group, *Cumulative flow at each unit controls*) restarts
+     every line at 0 on the view's first whole day (a zoom box starting
+     mid-day starts the next day), so a period's volume reads off the chart;
+     the days before the view aren't drawn. Off (the default) the totals run
+     from the run's first day. The lines follow the view as it moves: the
+     chart takes `LineChart`'s `onview` (the visible range on every zoom,
+     pan or rebuild) and `inPlace` (new values for the same lines update the
+     drawn plot through uPlot's `setData`, keeping the view, so a Shift+drag
+     in progress carries on; the lines are rebuilt only when a line's first
+     counted day moves, not on every frame). A forecast run's forecast days
+     are hatched as on Chart any daily series (`band`), the totals running on
+     through them (`scripts/guards/check_forecast_cut.mjs` lists it as
+     `band`). **Show the numbers** is a table
+     of each shown line's volume over the counted days ("1 Oct 2021 to 28 Jan
+     2022 (Mm³)", to the last day in view). The wrapper carries
+     `data-lines`, `data-count-from`, `data-count-to`, `data-from-view` and
+     `data-ready` (`e2e/tests/runs-cumulative.spec.ts`). Hydrological units
+     links here under its results table (**Cumulative flow at each unit →
+     Runs & results**, for the run shown).
 
   The run summary no longer draws the land-cover, groundwater,
   demand-object and other-user tables, which had no menu entry: they are
@@ -10576,7 +10626,7 @@ read it before.
   for 1 September. Every daily chart has the same moves
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
-  demand, Chart any daily series, the model stores, the Data tab's series chart and
+  demand, Cumulative flow at each unit, Chart any daily series, the model stores, the Data tab's series chart and
   the run comparison's daily series overlay. Every chart's legend swatch is
   its series' colour and line style: a dashed or stepped line has a dashed
   swatch, a points-only series (recessions, double mass) a filled one, where

@@ -1,6 +1,6 @@
 // The Runs & results page's in-page menu: the results panels in page order,
 // grouped by the question they answer (the run itself, the record, then
-// the model's working: its arithmetic checks and any daily series; #586 E14 named
+// the model's working: its arithmetic checks, the cumulative flow at each unit and any daily series; #586 E14 named
 // these plainly, ids kept). Each id is set on its panel (RunsTab.svelte,
 // RunCharts.svelte); each group's heading is on the page too. Model quality
 // (the hydrograph to the plausibility checks) moved to Calibration (issue #586
@@ -71,6 +71,8 @@ export function resultGroups(summary: SectionInput, rail = false): ResultGroup[]
 			sections: [
 				{ id: 'res-checks', label: 'Arithmetic checks' },
 				...(rail ? [{ id: RUN_SUBSECTIONS.trace, label: 'Trace a day' }] : []),
+				// Each unit's outflow as a running total, zoomable (operator, 2026-11-03).
+				{ id: 'res-cumulative', label: 'Cumulative flow at each unit' },
 				{ id: 'res-explore', label: 'Chart any daily series' }
 			]
 		}

@@ -447,6 +447,8 @@
 						{#if showAllocations}
 							<p class="alloc-link small"><a href={allocationsHref(run.id)}>Registered vs modelled use, for each unit <span aria-hidden="true">→</span> Allocations</a></p>
 						{/if}
+						<!-- Each unit's outflow as a running total, zoomable, is a results panel (runs/CumulativeFlows.svelte). -->
+						<p class="alloc-link small"><a href={runHref(run.id) + '#res-cumulative'}>Cumulative flow at each unit <span aria-hidden="true">→</span> Runs &amp; results</a></p>
 					</section>
 					<section class="panel" id="res-curtailment">
 						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
