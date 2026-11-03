@@ -5,7 +5,8 @@
 	// or in, it shows exactly what GET /verify/:code returns (status, version,
 	// issue date, catchment, engine, methodology, the errata the pack recorded
 	// and, apart, those found since issue for its runs' engines, signers with their
-	// register links as the report prints them, the newer version, a
+	// register links as the report prints them, each sign-off made against an
+	// earlier statement marked (314, issue #670), the newer version, a
 	// withdrawal's reason) and nothing else; a code that answers nothing is
 	// "not found", whatever the reason. "Check a PDF or manifest" hashes a
 	// chosen file in the browser (WebCrypto SHA-256) and compares it with the
@@ -25,7 +26,7 @@
 	import { followRetry } from '#lib/components/common/loadState.js';
 	import PackBadge from '#lib/components/packs/PackBadge.svelte';
 	import { latestOnly } from '#lib/api/latest.js';
-	import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, lookUpCode, type FileCheck } from '#lib/components/packs/pack.js';
+	import { checkableAccept, checkableFiles, checkFile, earlierStatementNote, errataFoundSinceNote, lookUpCode, type FileCheck } from '#lib/components/packs/pack.js';
 	import { registrationHeading, SIGNOFF_KIND_LABEL } from '#lib/components/liability/signoffForm.js';
 	import { fmtDate } from '#lib/format/number.js';
 
@@ -188,10 +189,14 @@
 				{#each v.signers as s, i (i)}
 					{@const line = registrationLine(s.registrationBody, s.registrationCategory, s.registrationField, s.registrationNo)}
 					{@const register = line ? registrationBody(s.registrationBody) : undefined}
+					{@const earlier = earlierStatementNote(s, v.statementVersion)}
 					<dl class="kv signer" aria-label="Sign-off by {s.fullName}">
 						<div><dt>Name</dt><dd>{s.fullName}</dd></div>
 						<div><dt>Signed</dt><dd>{fmtDate(s.signedAt, true)}</dd></div>
 						<div><dt>Signed as</dt><dd data-testid="verify-signer-kind">{SIGNOFF_KIND_LABEL[s.kind ?? 'specialist']}</dd></div>
+						{#if earlier}
+							<div class="wide earlier" data-testid="verify-signer-earlier"><dt>Statement</dt><dd>{earlier}</dd></div>
+						{/if}
 						<div class="wide">
 							<dt data-testid="verify-registration-heading">{registrationHeading(s.registrationCheck ?? null, (d) => fmtDate(d))}</dt>
 							<dd>{line ?? `${s.registrationBody} ${s.registrationNo} (category and field not recorded)`}</dd>
@@ -210,6 +215,12 @@
 					Registration details are each signer’s own declaration unless marked “checked against the register”: the project’s host checks them against the
 					professional body’s register and records when and by whom; this app itself checks nothing. Check them there.
 				</p>
+				{#if v.signers.some((s) => s.earlierStatement)}
+					<p class="small muted" data-testid="verify-earlier-note">
+						A sign-off marked “signed against an earlier statement” was made before the sign-off statement changed (a new version, or a newly found erratum or
+						limitation it lists). It stays on the record; the pack was issued on a specialist’s sign-off of the statement current at issue.
+					</p>
+				{/if}
 			</section>
 
 			<section class="card" aria-labelledby="errata-h">
@@ -383,6 +394,11 @@
 	}
 	.kv .wide {
 		grid-column: 1 / -1;
+	}
+	/* A sign-off of an earlier statement: marked by its words and a rule in the warning colour, never colour alone (WCAG 1.4.1). */
+	.earlier {
+		border-left: 3px solid var(--warning);
+		padding-left: 0.5rem;
 	}
 	.signer + .signer {
 		border-top: 1px solid var(--border);

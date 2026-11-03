@@ -806,6 +806,7 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 				'reportVersion',
 				'shortCode',
 				'signers',
+				'statementVersion',
 				'status',
 				'successorSha256',
 				'version',
@@ -817,6 +818,7 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 			expect.objectContaining({ fullName: 'Dr A. Hydrologist', registrationBody: 'sacnasp', registrationCategory: 'pr_sci_nat', registrationField: 'water_resources', registrationNo: '400999/20' })
 		]);
 		expect(Object.keys(res.body.pack.signers[0]).sort()).toEqual([
+			'earlierStatement',
 			'fullName',
 			'kind',
 			'registrationBody',
@@ -824,8 +826,12 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 			'registrationCheck',
 			'registrationField',
 			'registrationNo',
-			'signedAt'
+			'signedAt',
+			'statementVersion'
 		]);
+		// The statement issue checked, through the real sign and issue routes: its sign-off is of it, so not marked (314).
+		expect(res.body.pack.statementVersion).toBe('pack-signoff-1');
+		expect(res.body.pack.signers[0]).toMatchObject({ statementVersion: 'pack-signoff-1', earlierStatement: false });
 		// The check bound at issue (167): who checked and when, nothing else of it (not the register's name or the note).
 		expect(res.body.pack.signers[0]).toMatchObject({ kind: 'specialist', registrationCheck: { checkedByOrg: 'Pack catchment WUA', checkedAt: expect.any(String) } });
 		expect(Object.keys(res.body.pack.signers[0].registrationCheck).sort()).toEqual(['checkedAt', 'checkedByOrg']);

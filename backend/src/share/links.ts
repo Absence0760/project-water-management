@@ -727,9 +727,12 @@ export function toVerify(raw: Record<string, unknown>, errata: readonly Erratum[
 				registrationNo: str(s.registrationNo) ?? '',
 				signedAt: str(s.signedAt) ?? '',
 				kind: s.kind === 'review' ? 'review' : 'specialist',
-				registrationCheck: toRegistrationCheck(s.registrationCheck)
+				registrationCheck: toRegistrationCheck(s.registrationCheck),
+				statementVersion: str(s.statementVersion),
+				earlierStatement: s.earlierStatement === true
 			};
-		})
+		}),
+		statementVersion: str(raw.statementVersion)
 	};
 }
 

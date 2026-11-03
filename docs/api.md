@@ -3248,9 +3248,14 @@ reproduction bundle).
   successorSha256, withdrawnReason, methodology: { version, sha256 },
   errata: { id, summary }[], errataFoundSince: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt, kind,
-  registrationCheck }[] }`, and nothing else (`kind` 167: `specialist` or
+  registrationCheck, statementVersion, earlierStatement }[],
+  statementVersion }`, and nothing else (`kind` 167: `specialist` or
   `review`; `registrationCheck`: `{ checkedAt, checkedByOrg }` bound at
-  issue, or `null`: self-declared) (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
+  issue, or `null`: self-declared; 314, issue #670: each sign-off's
+  `statementVersion` and `earlierStatement`, true when it was made against
+  an earlier statement than the one the issue rested on, and the pack's
+  `statementVersion`, that statement's version or `null`, [evidence-pack.md
+  § Verification](./evidence-pack.md#verification)) (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
   `errata` is what the manifest recorded when the pack was drafted, never
   changed; `errataFoundSince` (132) lists the errata of the current list
   (engine-errata.md) that apply to either run's engine, or to the engine of

@@ -281,18 +281,32 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	const since = pub.getByTestId('verify-errata-since');
 	await expect(since.getByRole('heading', { name: 'Errata found since issue' })).toBeVisible();
 	await expect(since).toContainText('None: no erratum has been found since issue for the engines this pack’s runs used.');
+	// Its one sign-off is of the statement the issue checked, so it isn't marked as signed against an earlier one (314, issue #670).
+	await expect(pub.getByTestId('verify-signer-earlier')).toHaveCount(0);
+	await expect(pub.getByTestId('verify-earlier-note')).toHaveCount(0);
 	// ... and one listed when the API names one (132): no real erratum can be added to docs/engine-errata.md from a test,
-	// so the answer is the live one with an entry added to errataFoundSince, which is all the page reads for it.
+	// so the answer is the live one with an entry added to errataFoundSince, which is all the page reads for it. The same
+	// answer adds a sign-off made against an earlier statement before the live one, marked and still listed (314, issue
+	// #670): the route signs only the current statement, so a test can't make one.
 	const verifyErrata = await fetchRoute(pub, `${API_URL}/verify/**`, async (route) => {
 		const res = await route.fetch();
 		const body = await res.json();
 		body.pack.errataFoundSince = [{ id: 'ER-999', summary: 'A bug found after this pack was issued' }];
+		expect(body.pack.statementVersion).toBe('pack-signoff-1');
+		expect(body.pack.signers[0]).toMatchObject({ statementVersion: 'pack-signoff-1', earlierStatement: false });
+		body.pack.signers = [{ ...body.pack.signers[0], fullName: 'Dr B. Earlier', statementVersion: 'pack-signoff-0', earlierStatement: true }, ...body.pack.signers];
 		await route.fulfill({ response: res, json: body });
 	});
 	await pub.reload();
 	await expect(result).toHaveAttribute('data-status', 'issued');
 	await expect(since.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
 	await expect(since).toContainText('its manifest and hash are fixed');
+	await expect(pub.getByTestId('verify-signer-earlier')).toHaveCount(1);
+	await expect(pub.getByLabel('Sign-off by Dr B. Earlier').getByTestId('verify-signer-earlier').getByRole('definition')).toHaveText(
+		'Signed against an earlier statement: version pack-signoff-0. The pack was issued on version pack-signoff-1.'
+	);
+	await expect(pub.getByLabel('Sign-off by Dr A. Hydrologist').getByRole('definition').filter({ hasText: 'Dr A. Hydrologist' })).toBeVisible();
+	await expect(pub.getByTestId('verify-earlier-note')).toContainText('It stays on the record');
 	await expectNoViolations(pub);
 	await verifyErrata.unroute();
 

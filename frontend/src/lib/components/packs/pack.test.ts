@@ -6,7 +6,7 @@ import { packManifestText, type PackManifest } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Pack, PackReproductionState } from '#lib/api/index.js';
-import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, issueChecklist, issuedOf, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, reproductionNote, sha256Hex, verifyUrl } from './pack';
+import { checkableAccept, checkableFiles, checkFile, earlierStatementNote, errataFoundSinceNote, issueChecklist, issuedOf, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, reproductionNote, sha256Hex, verifyUrl } from './pack';
 import { latestOnly } from '#lib/api/latest.js';
 
 const tz = process.env.TZ;
@@ -258,6 +258,26 @@ describe('the verify page’s lookup (lookUpCode, latestOnly)', () => {
 		failures.get('cccc')!(new Error('network down'));
 		await third;
 		expect(shown).toEqual(['bbbb', 'dddd']);
+	});
+});
+
+describe('earlierStatementNote (314, issue #670)', () => {
+	it('marks nothing on a sign-off of the statement the issue rested on, or from an API older than the mark', () => {
+		expect(earlierStatementNote({ earlierStatement: false, statementVersion: 'pack-signoff-1' }, 'pack-signoff-2')).toBeNull();
+		expect(earlierStatementNote({}, null)).toBeNull();
+	});
+
+	it('names both versions when they differ', () => {
+		expect(earlierStatementNote({ earlierStatement: true, statementVersion: 'pack-signoff-1' }, 'pack-signoff-2')).toBe(
+			'Signed against an earlier statement: version pack-signoff-1. The pack was issued on version pack-signoff-2.'
+		);
+	});
+
+	it('says an earlier text of the same version, and copes with no version recorded', () => {
+		expect(earlierStatementNote({ earlierStatement: true, statementVersion: 'pack-signoff-2' }, 'pack-signoff-2')).toBe(
+			'Signed against an earlier statement: an earlier text of version pack-signoff-2, before a newly found erratum or limitation changed it. The pack was issued on a later text.'
+		);
+		expect(earlierStatementNote({ earlierStatement: true, statementVersion: null }, null)).toMatch(/^Signed against an earlier statement: an earlier text, before/);
 	});
 });
 
