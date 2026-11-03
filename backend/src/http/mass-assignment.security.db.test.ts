@@ -211,7 +211,19 @@ async function plantFutureJob(kind: 'future_yield' | 'climate_factors', payload:
 	return withUser(ctx.owner.id, async (db) => (await enqueueJob(db, { projectId: ctx.projectId, kind, payload, dedupeKey: `mass-${crypto.randomUUID()}`, maxAttempts: 1 })).job.id);
 }
 
+/**
+ * Sub-catchments refuse a click outside the project's catchment boundary (clicks.ts readWithin), and
+ * earlier recipes leave one 50 km from the synthetic DEM the sample clicks sit on: clear it, as the
+ * feed recipes clear the feeds in their way, so the legit body reaches the routing.
+ */
+async function noBoundary(route: string): Promise<Req> {
+	await asOwner(`DELETE FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary'`, [ctx.projectId]);
+	return SAMPLE[route]!(ctx) as Req;
+}
+
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
+	'POST /projects/:id/map/subcatchments': () => noBoundary('POST /projects/:id/map/subcatchments'),
+	'POST /projects/:id/map/subcatchments/save': () => noBoundary('POST /projects/:id/map/subcatchments/save'),
 	// A fresh parcel each time: a split one is half the shape it was (issue #326 C2).
 	'POST /projects/:id/map/features/:fid/split': async () => {
 		const square = [[[21.36, -33.66], [21.37, -33.66], [21.37, -33.65], [21.36, -33.65], [21.36, -33.66]]];
