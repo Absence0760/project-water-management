@@ -20,6 +20,7 @@ import { actForAuthority, anon, app, asOwner, confirmAsOperator, DECISION, lastM
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticEvaporationStations } from '../../scripts/import-evaporation-stations.js';
+import { loadSyntheticQuaternaries } from '../../scripts/import-quaternaries.js';
 import { loadSyntheticDonors } from '../../scripts/import-gr4j-donors.js';
 import { loadSyntheticSoils } from '../../scripts/import-soils.js';
 import { fileURLToPath } from 'node:url';
@@ -809,6 +810,18 @@ const WRITE_ROUTES: Entry[] = [
 			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
 			await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
 			return c.owner.call('POST', `${at(c)}/evaporation-from-station`, { station: 'Z1E001', daily: false });
+		}
+	},
+	{
+		// WR2012's S-pan (310): a settings revision whose reason names the dataset, the quaternaries, zones, MAEs and the
+		// equation (the boundary from an entry above, or drawn here when it runs alone).
+		route: `POST ${P}/evaporation-from-wr2012`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticQuaternaries(process.env.TEST_MIGRATION_DATABASE_URL!);
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			return c.owner.call('POST', `${at(c)}/evaporation-from-wr2012`, { conversion: 'taljaard2023' });
 		}
 	},
 	{

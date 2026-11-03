@@ -3826,12 +3826,22 @@ outside the repo (nothing real is ever committed):
    `Quaternary`, `QUAT` or `QCODE`.
 2. Transcribe the WR2012 tables you use to a CSV keyed by code,
    `code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end`
-   (monthly means in Mm³, October first; maps.md § Quaternary dataset).
+   (monthly means in Mm³, October first; maps.md § Quaternary dataset). For
+   the WR2012 S-pan proposal, add `mae_mm,evap_zone` (each quaternary's
+   mean annual S-pan evaporation, mm, and its evaporation zone), and
+   transcribe the zones' monthly distribution to a second CSV,
+   `zone,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep` in % of MAE
+   (each zone adding up to 95–105 %). Both are optional: without them the
+   quaternaries load with no evaporation.
 3. Look at it locally:
-   `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --source "WR2012 (WRC 2015), <volume, table>" --values wr2012.csv`,
+   `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --source "WR2012 (WRC 2015), <volume, table>" --values wr2012.csv --evap-zones zones.csv`,
    then write the production file:
-   `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --values wr2012.csv --out quaternaries.geojson.gz`
-   (it prints how many it wrote and every feature it skipped, with why).
+   `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --values wr2012.csv --evap-zones zones.csv --out quaternaries.geojson.gz`
+   (it prints how many it wrote and every feature, zone and quaternary's
+   evaporation it skipped, with why). The file carries the MAE and zone on
+   each feature and the zones as its `evapZones` member, so the one load
+   replaces both (the WR2012 evaporation is allowed by the operator's
+   decision of 2026-11-03, maps.md § Sources).
 4. Keep the shapefile and the CSV under `originals/quaternaries/`, then
    upload and load:
 
@@ -3848,7 +3858,8 @@ instead, on every row. Quaternary codes are unique across datasets, so a
 load takes over any code an earlier dataset held. To withdraw it (the
 publishers object): take `quaternaries` out of `REFERENCE_KINDS` and the
 gate's `LOADABLE`, and delete the rows with a forward migration (`DELETE
-FROM quaternary_reference WHERE dataset = 'WR2012'`).
+FROM quaternary_reference WHERE dataset = 'WR2012'`, and the same from
+`quaternary_evap_zone`).
 
 #### Refreshing a dataset
 

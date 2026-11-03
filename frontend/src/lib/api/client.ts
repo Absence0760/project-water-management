@@ -207,6 +207,7 @@ import type {
 	EvaporationProposals,
 	Gr4jPrior,
 	EvaporationStationProposals,
+	Wr2012SpanProposal,
 	SpanConversionId,
 	EvaporationTarget
 } from './types';
@@ -1417,6 +1418,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<EvaporationStationProposals>('GET', `${p(id)}/evaporation-stations${withinKm ? `?${new URLSearchParams({ within: String(withinKm) })}` : ''}`),
 			fromStation: (id: string, body: { station: string; conversion?: SpanConversionId; daily?: boolean }) =>
 				request<{ station: string; apanMm: number[]; conversion: SpanConversionId | null; series: string | null; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-station`, body)
+		},
+		/** WR2012's S-pan per quaternary under the boundary, proposed as the A-pan through the S→A equation picked (docs/maps.md § WR2012 S-pan). */
+		evaporationWr2012: {
+			get: (id: string) => request<Wr2012SpanProposal>('GET', `${p(id)}/evaporation-wr2012`),
+			use: (id: string, body: { conversion: SpanConversionId }) =>
+				request<{ apanMm: number[]; spanMm: number[]; conversion: SpanConversionId; quaternaries: string[]; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-wr2012`, body)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

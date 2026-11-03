@@ -2145,8 +2145,20 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `max_lon`, `max_lat`, indexed for the lookup's first pass), `area_km2`,
   `map_mm`, `mar_mm3`, `monthly_mm3` (12, Oct … Sep), `period_start`,
   `period_end`, `source` (1–500, shown with every proposed value),
-  `loaded_at`. Global (no project): loaded by the operator as the schema
-  owner (`pnpm import:quaternaries`), read-only to `water_app`.
+  `loaded_at`; since 310 `mae_mm` (WR2012's mean annual S-pan evaporation,
+  mm, above 0 and below 5000) and `evap_zone` (its WR2012 evaporation zone,
+  `^[A-Z0-9]{1,8}$`), both or neither (`quaternary_reference_evaporation_pair`).
+  Global (no project): loaded by the operator as the schema owner
+  (`pnpm import:quaternaries`), read-only to `water_app`.
+- **`quaternary_evap_zone`** (`310_quaternary_evaporation.sql`): WR2012's
+  evaporation zones, per load. `dataset` and `zone` (the primary key; a zone
+  is its dataset's own), `pct` (12 monthly percentages of MAE, Oct … Sep,
+  none NULL, each ≥ 0, adding up to 95–105 by `CHECK`), `loaded_at`. Joined
+  to `quaternary_reference` on `(dataset, evap_zone)`, no foreign key (the
+  two are replaced together by `loadQuaternaries.ts` `replaceDataset`).
+  Loaded with the quaternaries; SELECT for anyone signed in, read-only to
+  `water_app` (the catalogue guard's `READ_ONLY`). Read by the WR2012 S-pan
+  proposal ([maps.md § WR2012 S-pan](./maps.md#wr2012-s-pan)).
 - **`gauge_station_reference`** (`156_gauge_stations.sql`, issue #326
   B-gauge): the gauging stations the nearest-gauge proposal reads. `code`
   (primary key, a DWS station code `^[A-Z][0-9][A-Z][0-9]{3}$`, e.g.

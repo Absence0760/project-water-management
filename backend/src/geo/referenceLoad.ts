@@ -108,9 +108,9 @@ export const REFERENCE_KINDS = {
 	// QUATERNARY_SOURCE, or the load's own source, never the file's.
 	quaternaries: {
 		status: 'allowed',
-		sourcesRows: ['Quaternary catchment outlines', 'WR2012 reference values'],
+		sourcesRows: ['Quaternary catchment outlines', 'WR2012 reference values', 'WR2012 evaporation'],
 		file: /\.(geo)?json(\.gz)?$/,
-		what: 'the GeoJSON `pnpm import:quaternaries <boundaries.geojson> … --values <values.csv> --out <file>` writes (the outlines, each with its values)'
+		what: 'the GeoJSON `pnpm import:quaternaries <boundaries.geojson> … --values <values.csv> [--evap-zones <zones.csv>] --out <file>` writes (the outlines, each with its values, and the evaporation zones)'
 	},
 	'dam-register': {
 		status: 'blocked',
@@ -541,7 +541,7 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		if (!got.records.length) throw new LoadError(`${req.key}: no quaternary to load`, 'empty', 'the file has no quaternary polygon with a code (a GeoJSON FeatureCollection, `code` on each feature)');
 		const records = got.records.map((r) => ({ ...r, source }));
 		try {
-			const written = await replaceQuaternaries(client, req.dataset, records, origin);
+			const written = await replaceQuaternaries(client, req.dataset, { records, zones: got.zones }, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');

@@ -75,6 +75,7 @@ describe('settingsElsewhere (issue #586)', () => {
 			'WR2012 check',
 			'Evaporation from the map',
 			'Evaporation stations',
+			'WR2012 S-pan by quaternary',
 			'Regional prior'
 		]);
 	});
@@ -93,10 +94,12 @@ describe('SETTINGS_ELSEWHERE (issue #521)', () => {
 			['pan coefficient', '?tab=calibration#set-flow'],
 			['exclusions', '?tab=calibration#set-record'],
 			['fit automatically', '?tab=calibration#set-fit'],
-			['quaternary', '?tab=calibration#set-wr2012']
+			['MAE', '?tab=calibration#set-evaporation-wr2012']
 		] as const) {
 			expect(findElsewhere(SETTINGS_ELSEWHERE, q).map((e) => [e.href, e.page]), q).toEqual([[href, 'Calibration']]);
 		}
+		// A quaternary's values: the WR2012 check's flows and WR2012's S-pan.
+		expect(findElsewhere(SETTINGS_ELSEWHERE, 'quaternary').map((e) => e.href)).toEqual(['?tab=calibration#set-wr2012', '?tab=calibration#set-evaporation-wr2012']);
 	});
 
 	it('finds the three panels that moved away at their new homes (issue #586 round 1)', () => {
@@ -126,6 +129,8 @@ describe('SETTINGS_ELSEWHERE (issue #521)', () => {
 			['dPET', 'set-evaporation'],
 			['Symons', 'set-evaporation-station'],
 			['evaporation station', 'set-evaporation-station'],
+			['MAE', 'set-evaporation-wr2012'],
+			['evaporation zone', 'set-evaporation-wr2012'],
 			['donors', 'set-prior'],
 			['ungauged', 'set-prior'],
 			['calibration record', 'set-record'],

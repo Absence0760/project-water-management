@@ -280,8 +280,9 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 	},
 	{
 		id: 'wrc-water-resources',
-		name: 'WR2012 reference values (MAP, MAR, monthly flows per quaternary)',
-		usedFor: 'Calibration → WR2012 check: the quaternary’s mean annual precipitation, runoff and monthly naturalised flows the lookup proposes.',
+		name: 'WR2012 reference values (MAP, MAR, monthly flows and S-pan evaporation per quaternary)',
+		usedFor:
+			'Calibration → WR2012 check: the quaternary’s mean annual precipitation, runoff and monthly naturalised flows the lookup proposes; and Calibration → Flow calibration, its WR2012 S-pan by quaternary: each quaternary’s mean annual S-pan evaporation (MAE) and evaporation zone, and the zones’ monthly share of MAE.',
 		publisher: 'Water Research Commission (WRC), Water Resources of South Africa 2012 Study',
 		licence: 'No open licence is published: a free registered download, copyright reserved by its authors (the site’s disclaimer); used on the operator’s decision',
 		licenceUrl: 'https://waterresourceswr2012.co.za/disclaimer/',

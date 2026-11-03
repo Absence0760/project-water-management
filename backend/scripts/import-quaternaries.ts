@@ -2,8 +2,13 @@
 // 2; docs/maps.md § Quaternary dataset):
 //
 //   pnpm import:quaternaries                         the committed synthetic dataset (dev, e2e)
-//   pnpm import:quaternaries <boundaries.geojson> --dataset WR2012 --source "<study, volume, table>" [--values <values.csv>]
+//   pnpm import:quaternaries <boundaries.geojson> --dataset WR2012 --source "<study, volume, table>" [--values <values.csv>] [--evap-zones <zones.csv>]
 //   … --out <file.geojson[.gz]>                    write the outlines with their values for a production load instead
+//
+// --values may carry each quaternary's MAE and evaporation zone (mae_mm,
+// evap_zone), and --evap-zones the zones' monthly distribution (zone,oct,…,sep,
+// % of MAE; docs/maps.md § Quaternary dataset). --out writes both into the
+// one file.
 //
 // Runs as the schema owner (MIGRATION_DATABASE_URL), like migrate.ts: the app
 // role only reads quaternary_reference. A load replaces every row of its
@@ -21,7 +26,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import pg from 'pg';
-import { parseValuesCsv, QUATERNARY_SOURCE, quaternaryFeatureCollection, quaternaryRecords, replaceDataset, type QuaternaryRecord } from '../src/geo/loadQuaternaries.js';
+import { parseEvapZonesCsv, parseValuesCsv, QUATERNARY_SOURCE, quaternaryFeatureCollection, quaternaryRecords, replaceDataset, type EvapZone, type QuaternaryRecord } from '../src/geo/loadQuaternaries.js';
 import { SYNTHETIC_DATASET } from '../src/geo/quaternary.js';
 
 /** The committed synthetic dataset. */
@@ -34,6 +39,8 @@ export interface Args {
 	dataset: string;
 	source: string;
 	values: string | null;
+	/** The evaporation zones' monthly distribution (zone,oct,…,sep in % of MAE); null = the boundaries file's own `evapZones`. */
+	evapZones: string | null;
 	/** Write the outlines with their values to this GeoJSON file (gzipped when it ends .gz) instead of loading them. */
 	out: string | null;
 }
@@ -49,20 +56,30 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
 	const out = outText === null ? null : cliPath(outText, env);
 	if (positional.length === 0) {
 		if (out) return '--out needs a boundaries file: the synthetic fixture is never loaded in production';
-		return { file: SYNTHETIC_FILE, dataset: SYNTHETIC_DATASET, source: '', values: null, out: null };
+		return { file: SYNTHETIC_FILE, dataset: SYNTHETIC_DATASET, source: '', values: null, evapZones: null, out: null };
 	}
 	const dataset = flag('--dataset');
 	if (!dataset) return 'give the dataset a label with --dataset (e.g. WR2012)';
 	if (dataset === SYNTHETIC_DATASET) return `"${SYNTHETIC_DATASET}" is the committed fixture's label; pick another`;
 	const values = flag('--values');
-	return { file: cliPath(positional[0]!, env), dataset, source: flag('--source') ?? '', values: values ? cliPath(values, env) : null, out };
+	const evapZones = flag('--evap-zones');
+	if (evapZones === '') return '--evap-zones takes a CSV file (zone,oct,nov,…,sep in % of MAE)';
+	return {
+		file: cliPath(positional[0]!, env),
+		dataset,
+		source: flag('--source') ?? '',
+		values: values ? cliPath(values, env) : null,
+		evapZones: evapZones ? cliPath(evapZones, env) : null,
+		out
+	};
 }
 
-/** The records `args` describes (boundaries, values, source), with the features skipped. */
-function readRecords(args: Args): { records: QuaternaryRecord[]; problems: string[] } {
+/** The records `args` describes (boundaries, values, evaporation zones, source), with the features and zones skipped. */
+function readRecords(args: Args): { records: QuaternaryRecord[]; zones: EvapZone[]; problems: string[] } {
 	const csv = args.values ? parseValuesCsv(readFileSync(args.values, 'utf8')) : { values: new Map(), problems: [] };
-	const { records, problems } = quaternaryRecords(JSON.parse(readFileSync(args.file, 'utf8')), args.source, csv.values);
-	return { records, problems: [...csv.problems, ...problems] };
+	const zones = args.evapZones ? parseEvapZonesCsv(readFileSync(args.evapZones, 'utf8')) : null;
+	const { records, zones: loaded, problems } = quaternaryRecords(JSON.parse(readFileSync(args.file, 'utf8')), args.source, csv.values, zones?.zones);
+	return { records, zones: loaded, problems: [...csv.problems, ...(zones?.problems ?? []), ...problems] };
 }
 
 /**
@@ -72,31 +89,34 @@ function readRecords(args: Args): { records: QuaternaryRecord[]; problems: strin
  * file carries that one rather than skipping every feature.
  */
 export function writeQuaternariesJson(args: Args & { out: string }): { written: number; problems: string[] } {
-	const { records, problems } = readRecords({ ...args, source: args.source || QUATERNARY_SOURCE });
-	const json = JSON.stringify(quaternaryFeatureCollection(records));
+	const { records, zones, problems } = readRecords({ ...args, source: args.source || QUATERNARY_SOURCE });
+	const json = JSON.stringify(quaternaryFeatureCollection(records, zones));
 	if (records.length) writeFileSync(args.out, /\.gz$/i.test(args.out) ? gzipSync(json) : json);
 	return { written: records.length, problems };
 }
 
 /** Load `args` into the database at `url`; returns the rows written and the features skipped. */
 export async function importQuaternaries(url: string, args: Args): Promise<{ written: number; problems: string[] }> {
-	const { records, problems } = readRecords(args);
+	const { records, zones, problems } = readRecords(args);
 	const client = new pg.Client({ connectionString: url });
 	await client.connect();
 	try {
-		const written = records.length ? await replaceDataset(client, args.dataset, records) : 0;
+		const written = records.length ? await replaceDataset(client, args.dataset, { records, zones }) : 0;
 		return { written, problems };
 	} finally {
 		await client.end();
 	}
 }
 
+/** Load the committed synthetic dataset (its outlines, values and evaporation zones) into the database at `url`. */
+export const loadSyntheticQuaternaries = (url: string) => importQuaternaries(url, parseArgs([]) as Args);
+
 if (import.meta.url === `file://${process.argv[1]}`) {
 	loadDevEnv();
 	const url = process.env.MIGRATION_DATABASE_URL;
 	const args = parseArgs(process.argv.slice(2));
 	if (typeof args === 'string') {
-		console.error(`${args}\nusage: pnpm import:quaternaries [<boundaries.geojson> --dataset <label> --source "<study>" [--values <values.csv>] [--out <file.geojson[.gz]>]]`);
+		console.error(`${args}\nusage: pnpm import:quaternaries [<boundaries.geojson> --dataset <label> --source "<study>" [--values <values.csv>] [--evap-zones <zones.csv>] [--out <file.geojson[.gz]>]]`);
 		process.exit(2);
 	}
 	const out = args.out;

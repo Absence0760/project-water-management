@@ -626,6 +626,27 @@ and `ENGINE_VERSION` stays where it was.
   http://hdl.handle.net/10019.1/127336 (the same pages §2.7a checked on
   2026-09-30).
 
+**WR2012's S-pan per quaternary** (2026-11-03; [maps.md § WR2012
+S-pan](./maps.md#wr2012-s-pan)). WR2012 gives each quaternary catchment a
+**MAE**, its mean annual Symons-pan evaporation in mm, and an **evaporation
+zone**, and each zone a monthly distribution as a percentage of MAE (12
+values, October first, about 100 in total). A quaternary's S-pan in month m
+is **S[m] = MAE × pct[zone][m] ÷ 100**, each month rounded to 0.1 mm (so a
+row's 12 months can differ from the MAE by up to 0.6 mm, and by the zone's
+own rounding when its percentages don't add up to exactly 100; a load takes
+95–105 %). A catchment over several quaternaries takes the mean of their
+unrounded months weighted by the share of its area in each (then rounded),
+over the quaternaries with evaporation only; the part in none is reported,
+not filled. That S-pan becomes A-pan exactly as a Symons station's means do
+(above): the inverted WR90 or Taljaard (2023) equation the user picks, with
+the same floors and warning, written as the 12 values of `settings.apanMm`
+with a revision citing the dataset, the quaternaries with their shares,
+zones and MAEs, and the equation. `backend/src/geo/wr2012Span.ts` computes
+it; the engine gains nothing (it reuses `spanToApan.ts`), so results
+and `ENGINE_VERSION` are unchanged. §2.7a's WR90 lake-factor presets convert
+A-pan back to S-pan with the forward equation, so the same equation in both
+places gives lake evaporation = WR90 factor × WR2012 S-pan, to the rounding.
+
 **Where a modelled A-pan comes from, and its limits** (issue #646 item 7).
 With no pan station near, the A-pan row can be proposed from a **modelled**
 Class-A pan grid: PenPan (Rotstayn et al. 2006, as McMahon et al. 2013

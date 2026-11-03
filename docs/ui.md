@@ -7397,10 +7397,11 @@ other sections.
   "PDF"), and the fit's panels that moved in round 3, each **…, on
   Calibration** (`?tab=calibration#set-flow`, `#set-record`, `#set-fit`,
   `#set-wr2012`, the Evaporation from the map card's `#set-evaporation`,
-  the Evaporation stations card's `#set-evaporation-station` and the
+  the Evaporation stations card's `#set-evaporation-station`, the WR2012
+  S-pan card's `#set-evaporation-wr2012` and the
   Regional prior's `#set-prior`; also by the settings they hold: "X3", "pan
   coefficient", "exclusions", "fit automatically", "quaternary", "dPET",
-  "Symons", "donors", "ungauged"). Every `#set-…` the Calibration page draws
+  "Symons", "MAE", "evaporation zone", "donors", "ungauged"). Every `#set-…` the Calibration page draws
   is in `CALIBRATION_SETTINGS_ANCHORS` (settings/sections.ts), so a link to
   it stays there; one missing reads as a Model settings anchor to
   `nav/anchorMoves.ts`, which sends the link to Model settings
@@ -8445,6 +8446,14 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   Taljaard's "cannot be inverted" warning, an equation that can't be used
   disabled with its reason, and no A-pan or **Use as the A-pan** until one
   is picked ([maps.md § Evaporation stations](./maps.md#evaporation-stations)).
+  **WR2012 S-pan by quaternary**, the card under that (`Wr2012SpanProposal.svelte`,
+  `#set-evaporation-wr2012`), works the same way: a table of the quaternaries
+  under the boundary (code, zone, MAE, share of the catchment), the choice of
+  S→A equation with the same warning and disabled-with-reason rows, then the
+  monthly table: each quaternary's S-pan (when there are several), the
+  catchment's area-weighted S-pan, the proposed A-pan (**Pick an equation
+  above** until one is) and the saved A-pan, with **Use as the A-pan** once
+  an equation is picked ([maps.md § WR2012 S-pan](./maps.md#wr2012-s-pan)).
   The **rain threshold for demand**
   moved to Demand (it only affects irrigation demand under GR4J). The
   explanations under the rain-for-each-unit fields, the FAO-56 helper and

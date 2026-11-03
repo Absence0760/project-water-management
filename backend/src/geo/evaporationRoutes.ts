@@ -6,6 +6,8 @@
 //   POST /projects/:id/evaporation-from-map         accept it into the settings it belongs to (editor)
 //   GET  /projects/:id/evaporation-stations         the nearest DWS evaporation stations to the boundary, with each one's monthly means (viewer)
 //   POST /projects/:id/evaporation-from-station     accept a station's pan record as the A-pan (editor; issue #646 item 6)
+//   GET  /projects/:id/evaporation-wr2012           WR2012's S-pan for each quaternary the boundary overlaps, and the catchment's (viewer)
+//   POST /projects/:id/evaporation-from-wr2012      accept the catchment's WR2012 S-pan, converted, as the A-pan (editor)
 //
 // The map proposes, the modeller decides. What the 12 values go into is the
 // dataset's kind, never converted: a reference-ET grid (FAO-56 ET₀) becomes
@@ -25,6 +27,14 @@
 // A Symons pan needs the S→A equation the user picks, and never writes the
 // daily series. A project holding another daily A-pan series is refused (409):
 // the engine reads one series of a kind, so two would leave one unused.
+//
+// WR2012's S-pan (wr2012Span.ts; 310): each quaternary the boundary overlaps,
+// with its zone, MAE, share of the catchment and 12 months of MAE × the zone's
+// % ÷ 100, and the catchment's S-pan as their area-weighted mean. Like a
+// Symons station, it reaches the A-pan row only through the inverted S→A
+// equation the user picks (none by default); an accept is one settings
+// revision whose reason names the dataset, the quaternaries with their
+// shares, zones and MAEs, and the equation.
 import { PE_SOURCE_MAX, type SpanConversionId } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { Hono } from 'hono';
@@ -68,6 +78,8 @@ import {
 } from './evaporationStations.js';
 import type { Geometry } from './geojson.js';
 import { EVAP_STATION_CODE } from './loadEvaporationStations.js';
+import { quaternaryDatasets } from './quaternary.js';
+import { quaternariesText, wr2012SpanFor } from './wr2012Span.js';
 
 export const EvaporationFromMap = z.object({ dataset: z.string().trim().min(1).max(50) }).strict();
 
@@ -137,6 +149,9 @@ export const EvaporationFromStation = z
 		daily: z.boolean().optional()
 	})
 	.strict();
+
+/** POST …/evaporation-from-wr2012: the S→A equation, which the user must pick. */
+export const EvaporationFromWr2012 = z.object({ conversion: z.enum(['wr90', 'taljaard2023']) }).strict();
 
 /** The daily A-pan series a station's record is written as. */
 export const stationSeriesName = (code: string) => `DWS ${code}`;
@@ -320,4 +335,48 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 		});
 		await wakeForRerun(res.queued);
 		return c.json(res.out);
+	})
+	.get('/:id/evaporation-wr2012', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			const boundary = await boundaryOf(db, id);
+			const datasets = await quaternaryDatasets(db);
+			const { merged } = await settingsOf(db, id);
+			const settings = { apanMm: [...merged.apanMm], dailyApan: await dailyApanOf(db, id) };
+			if (!boundary) return c.json({ boundary: null, datasets, span: null, settings });
+			const span = await wr2012SpanFor(db, boundary.geometry);
+			return c.json({ boundary: { featureId: boundary.id, name: boundary.name }, datasets, span, settings });
+		});
+	})
+	.post('/:id/evaporation-from-wr2012', async (c) => {
+		const body = EvaporationFromWr2012.parse(await readJson(c));
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const boundary = await boundaryOf(db, id);
+			if (!boundary) throw new ApiError(400, 'There is no catchment boundary on the map: draw or import it on the Map first.');
+			// Re-derived here from the loaded quaternaries and the boundary as they are now.
+			const span = await wr2012SpanFor(db, boundary.geometry);
+			if (!span.spanMm) throw new ApiError(400, `WR2012’s S-pan can’t be proposed for the catchment: ${span.problem ?? 'no quaternary has its evaporation'}.`);
+			const conv = span.conversions.find((x) => x.id === body.conversion)!;
+			if (!conv.result.ok) throw new ApiError(400, `The catchment’s WR2012 S-pan can’t be converted that way: ${conv.result.reason}.`);
+			const apanMm = conv.result.values;
+			const before = await beginSettingsChange(db, id);
+			const { stored } = await settingsOf(db, id);
+			await db.query('UPDATE project SET settings = $2::jsonb, updated_at = now() WHERE id = $1', [id, JSON.stringify(patchSettings(stored, { apanMm }))]);
+			const used = span.quaternaries.filter((q) => q.spanMm);
+			const datasets = [...new Set(used.map((q) => q.dataset))].map((d) => `“${d}”`).join(', ');
+			const annual = (row: readonly number[]) => Math.round(row.reduce((a, b) => a + b, 0));
+			const left = 1 - span.coverage;
+			const reason = [
+				`A-pan evaporation from WR2012 S-pan (dataset ${datasets}): ${annual(apanMm)} mm a year from ${annual(span.spanMm)} mm of S-pan, `,
+				used.length === 1 ? 'the quaternary' : 'the area-weighted mean of the quaternaries',
+				` under the catchment boundary “${boundary.name || 'unnamed'}”: ${quaternariesText(used)}`,
+				left >= 0.005 ? `; ${Math.round(left * 100)} % of the catchment has no WR2012 evaporation and is left out of the mean` : '',
+				`; MAE × the zone’s monthly % of MAE; ${conv.result.note}.`
+			].join('');
+			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: reason.slice(0, 500) });
+			return c.json({ apanMm, spanMm: span.spanMm, conversion: body.conversion, quaternaries: used.map((q) => q.code), revisionId: revision?.id ?? null });
+		});
 	});

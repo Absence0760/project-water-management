@@ -34,7 +34,7 @@ beforeAll(async () => {
 	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 	await client.connect();
 	try {
-		await replaceDataset(client, SYNTHETIC_DATASET, quaternaryRecords(JSON.parse(readFileSync(SYNTHETIC_FILE, 'utf8')), '').records);
+		await replaceDataset(client, SYNTHETIC_DATASET, quaternaryRecords(JSON.parse(readFileSync(SYNTHETIC_FILE, 'utf8')), ''));
 	} finally {
 		await client.end();
 	}

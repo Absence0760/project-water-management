@@ -187,6 +187,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/evaporation-from-map': () => ({ body: { dataset: 'synthetic' } }),
 	// A DWS evaporation station (issue #646 item 6): refused (400) past the role check unless the synthetic stations are loaded and a boundary drawn.
 	'POST /projects/:id/evaporation-from-station': () => ({ body: { station: 'Z1E001', daily: false } }),
+	// WR2012's S-pan (310): refused (400) past the role check unless the synthetic quaternaries are loaded and a boundary drawn.
+	'POST /projects/:id/evaporation-from-wr2012': () => ({ body: { conversion: 'taljaard2023' } }),
 	// Needs the synthetic MAP grid loaded (scripts/import-map-grid.ts); the ladder's parcel lies in its region Z.
 	'POST /projects/:id/map/unit-map': () => ({ body: { dataset: 'synthetic' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),

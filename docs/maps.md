@@ -1352,8 +1352,9 @@ as the schema owner; the app never writes it.
 - **Committed: synthetic only.** `backend/fixtures/geo/quaternaries.synthetic.geojson`
   is six invented 0.25° cells in drainage region **Z** (DWS has none), codes
   `Z01A`–`Z02C`, with invented MAP, MAR and monthly means (the monthly means
-  add up to the MAR, the MAR is below the rain on the area). Every source
-  says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
+  add up to the MAR, the MAR is below the rain on the area), invented MAEs
+  and two invented evaporation zones (`evapZones`, each adding up to 100 %).
+  Every source and zone note says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
   (`pnpm run setup` does), as dataset `synthetic`. The repo is public: no real
   quaternary values are committed.
 - **Seeded example map.** `pnpm seed:examples` gives the Sandspruit example
@@ -1374,10 +1375,21 @@ as the schema owner; the app never writes it.
      (monthly means in Mm³, October first; the period in water years). Or put
      the same values on each feature's properties (`areaKm2`, `mapMm`,
      `marMm3`, `monthlyMm3`, `periodStart`, `periodEnd`, `source`).
-  3. `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --source "WR2012 (WRC 2015), <volume, table>" --values wr2012.csv`.
-     A load replaces every row of its dataset in one transaction; features it
-     can't take are listed as skipped. Without an area, the polygon's own is
-     used.
+     For [§ WR2012 S-pan](#wr2012-s-pan), two more optional columns,
+     `mae_mm,evap_zone` (properties `maeMm`, `evapZone`): the quaternary's
+     mean annual S-pan evaporation, mm, and its WR2012 evaporation zone.
+  3. Evaporation zones (optional): WR2012's monthly distribution of each
+     zone, as a CSV `zone,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep`
+     in % of MAE, passed with `--evap-zones zones.csv`. Each zone needs 12
+     percentages, each 0 or more, adding up to 95–105 %, or it is skipped,
+     named (310's CHECKs hold the same). A quaternary whose MAE or zone is
+     missing, or whose zone has no distribution in the load, is listed as
+     skipped *for evaporation* and loaded without its MAE and zone (both or
+     neither). Zone labels are upper-cased (`7a` is `7A`).
+  4. `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --source "WR2012 (WRC 2015), <volume, table>" --values wr2012.csv [--evap-zones zones.csv]`.
+     A load replaces every row of its dataset (quaternaries and zones) in one
+     transaction; features it can't take are listed as skipped. Without an
+     area, the polygon's own is used.
 - **Decision: production may load both (the operator, 2026-11-02).** The
   operator decided that the DWS quaternary outlines and the WR2012 reference
   values may be used in production, on the publishers' published terms
@@ -1395,8 +1407,10 @@ as the schema owner; the app never writes it.
   bucket, through `load-reference.yml` kind `quaternaries` (the `production`
   environment; [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
   `pnpm import:quaternaries <boundaries.geojson> --dataset WR2012 --values
-  <values.csv> --out quaternaries.geojson.gz` writes the one file it reads:
-  the outlines with their values on each feature. Every row is stored with
+  <values.csv> [--evap-zones <zones.csv>] --out quaternaries.geojson.gz`
+  writes the one file it reads: the outlines with their values (MAE and zone
+  included) on each feature, and the zones as the collection's `evapZones`
+  member (`[{ zone, pct: [12] }]`). Every row is stored with
   the recorded credit, "Quaternary catchments: Department of Water and Sanitation (DWS). Reference values: WR2012, Water Resources of South Africa 2012 Study (Water Research Commission, 2015).",
   shown with every value the lookup proposes, unless the load gives a source
   of its own (`geo/referenceLoad.ts`, `geo/loadQuaternaries.ts`
@@ -2853,9 +2867,10 @@ grid's kind, and **nothing is converted between them**:
   values. For a reference-ET grid the panel shows **ET₀ ÷ saved A-pan** per
   month, the pan coefficient the two rows imply, as a cross-check only
   (flagged outside FAO-56's typical Class A range, 0.6–0.85); nothing is
-  written from it. A Symons-pan (S-pan) grid, WR2012's kind, has no kind
-  here: the loader refuses it, since turning S-pan into A-pan needs the
-  modeller's own monthly factors.
+  written from it. A Symons-pan (S-pan) grid has no kind here: the loader
+  refuses it, since turning S-pan into A-pan needs an equation the modeller
+  picks. WR2012's S-pan per quaternary is proposed by its own panel, with
+  that choice ([§ WR2012 S-pan](#wr2012-s-pan)).
 - **Pre-summarised at import, local-first.** The app never reads NetCDF. The
   operator's `pnpm import:evaporation` (`backend/scripts/import-evaporation.ts`,
   `geo/loadEvaporation.ts`) reads the daily product a year at a time (dPET:
@@ -3006,7 +3021,9 @@ only reads them.
   PenPan or A-pan key or label before the approval. The attribution, stored on the
   dataset row, is shown under every proposal (§ Sources).
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
-  monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
+  monthly distribution) is not a grid here: it is loaded with the
+  quaternaries and proposed per quaternary by [§ WR2012 S-pan](#wr2012-s-pan)
+  (the operator's decision of 2026-11-03, § Sources).
 
 ## Evaporation stations
 
@@ -3098,6 +3115,64 @@ verified daily record (one array of mm a day, `NULL` for a day not read). The
   code and a flow table, so a pan record can't arrive as flow
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets);
   followups.md, *Decision: DWS evaporation station records*).
+
+## WR2012 S-pan
+
+**WR2012 S-pan by quaternary**, in Calibration → Flow calibration under
+"Evaporation stations" (`Wr2012SpanProposal.svelte`), proposes the A-pan row
+from WR2012's Symons-pan (S-pan) evaporation for the quaternaries the
+catchment boundary overlaps. WR2012 publishes, per quaternary, its **MAE**
+(mean annual S-pan evaporation, mm) and its **evaporation zone**, and, per
+zone, the **monthly distribution as a percentage of MAE** (12 values,
+October first, about 100 in total). So for each quaternary
+
+    S-pan[m] = MAE × pct[zone][m] ÷ 100      (mm, to 0.1 mm)
+
+([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45),
+*WR2012's S-pan per quaternary*; `backend/src/geo/wr2012Span.ts`).
+
+- **What is listed.** One row per quaternary the boundary overlaps: its code,
+  zone, MAE, the share of the catchment's area inside it and its 12 months
+  of S-pan, then the **catchment's S-pan**, the area-weighted mean of those
+  rows (with one quaternary, just its row). The shares come from a grid of
+  128 cells along the boundary's longer side: each cell's part inside the
+  boundary goes to the quaternary its centre lies in, so a share is good to
+  about one cell's width along each quaternary divide inside the catchment.
+  A quaternary loaded without evaporation is listed and left out of the
+  mean; the panel says what share of the catchment that leaves, and a
+  catchment with none proposes nothing. The S-pan rows are shown even
+  though the model takes A-pan: they are what WR2012 gives "for each
+  region".
+- **S-pan → A-pan is the user's pick**, as for a Symons station
+  ([§ Evaporation stations](#evaporation-stations)): the WR90 or Taljaard
+  (2023) monthly equation inverted, A = (S − b) ÷ a, none picked for them,
+  Taljaard's warning that they "cannot be inverted" shown beside the choice,
+  and an equation disabled with the month named where the catchment's S-pan
+  falls under its floor (the engine's `apanMonthlyFromSpan`, shared with the
+  stations).
+- **Use** (editors; "Saves now") asks first, then
+  `POST /projects/:id/evaporation-from-wr2012` with the equation
+  ([api.md § Catchment map](./api.md#catchment-map)): the server re-reads the
+  quaternaries and the boundary and re-derives the shares, the S-pan and the
+  A-pan (it never takes the browser's numbers), and writes `settings.apanMm`
+  as one settings revision whose reason names the dataset, each quaternary
+  with its share, zone and MAE, the part left out, and the equation. While
+  Settings has unsaved changes, Use waits.
+- **Round trip with the dams.** Dam evaporation's WR90 lake-factor presets
+  (Settings → Demand) convert each month's A-pan back to S-pan with the
+  forward equation, S = a × A + b. Picking the **same** equation there as
+  here gives lake evaporation = WR90 lake factor × the WR2012 S-pan, to the
+  rounding (A-pan to 0.1 mm, factors to 3 decimals); different equations
+  don't cancel.
+- **Catchment-wide only.** The A-pan row is one row for the catchment, as the
+  engine reads it; a unit in a quaternary with a different MAE gets the
+  catchment's mean.
+- **Who sees it.** A viewer's read; a farmer gets 403 and a non-member 404.
+- **Data.** The MAE and zone are columns of `quaternary_reference`, and the
+  zones' distributions the `quaternary_evap_zone` table, both loaded with
+  the quaternaries ([§ Quaternary dataset](#quaternary-dataset)). The
+  committed synthetic dataset gives the six region Z quaternaries invented
+  MAEs (1450–1620 mm) and two invented zones, `Z1` and `Z2`.
 
 ## Hydrological units layer
 
@@ -3381,7 +3456,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | HydroATLAS v1.0 (BasinATLAS attributes: aridity, precipitation, slope, clay, sand, forest, regulation): the donors' similarity attributes | WWF / McGill University (HydroSHEDS); Linke, S. et al. (2019), Sci. Data 6 | **CC BY 4.0** (hydrosheds.org/hydroatlas, read 2026-10-28) | "Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0." | 1.0 | none | allowed (with GRDC-Caravan, kind `gr4j-donors`) |
 | Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
 | Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
-| WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: no licence published; the operator's decision of 2026-11-02 covers the MAP, MAR and monthly flows only | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+| WR2012 evaporation (MAE, S-pan, per quaternary, and the evaporation zones' monthly distribution as % of MAE): [§ WR2012 S-pan](#wr2012-s-pan) | WRC (Water Research Commission), with Royal HaskoningDHV, [waterresourceswr2012.co.za](https://waterresourceswr2012.co.za/) | as WR2012 above: no licence published (read 2026-11-02), copyright reserved by its authors | as WR2012 above, on every row and on `/data-sources#wrc-water-resources` | WR2012 (WRC 2015) | none (a 2012 study) | allowed (the operator's decision, 2026-11-03, extending the 2026-11-02 WR2012 decision to its evaporation values on the same published terms, [legal/map-data-licences.md § 3.3d](./legal/map-data-licences.md#33d-the-dws-quaternary-outlines-and-the-wr2012-values-the-operators-decision-added-2026-11-02)); S-pan reaches the A-pan row only through the S → A equation the user picks; loaded with the outlines above; never committed |
 | Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)", and the proposal and its revision call its values "modelled Class-A pan evaporation (PenPan, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
 
 **Which version is in use.** The table's Version column is the version the

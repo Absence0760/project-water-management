@@ -327,7 +327,7 @@ describe('quaternaries, from the file `import:quaternaries --out` writes (the op
 		const [geojson, values, out] = ['b.geojson', 'v.csv', 'q.geojson.gz'].map((f) => join(dir, f)) as [string, string, string];
 		writeFileSync(geojson, JSON.stringify(boundaries));
 		writeFileSync(values, csv);
-		expect(writeQuaternariesJson({ file: geojson, dataset: QT, source, values, out })).toEqual({ written: 2, problems: [] });
+		expect(writeQuaternariesJson({ file: geojson, dataset: QT, source, values, evapZones: null, out })).toEqual({ written: 2, problems: [] });
 		return readFileSync(out);
 	};
 	const rows = () => asOwner('SELECT code, area_km2, map_mm, mar_mm3, monthly_mm3, period_start, period_end, source FROM quaternary_reference WHERE dataset = $1 ORDER BY code', [QT]);
@@ -363,7 +363,7 @@ describe('quaternaries, from the file `import:quaternaries --out` writes (the op
 		expect((err as LoadError).code).toBe('empty');
 		expect(await rows()).toEqual(before);
 		expect(await recorded('quaternaries', QT)).toBeDefined();
-		await replaceQuaternaries(client, QT, []);
+		await replaceQuaternaries(client, QT, { records: [], zones: [] });
 		expect(await recorded('quaternaries', QT)).toBeUndefined();
 	});
 });

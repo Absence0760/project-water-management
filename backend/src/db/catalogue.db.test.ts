@@ -215,6 +215,8 @@ const READ_ONLY = new Set([
 	'erratum_notice',
 	'erratum_sweep',
 	'quaternary_reference',
+	// WR2012's evaporation zones (310), loaded with the quaternaries by the operator.
+	'quaternary_evap_zone',
 	'pack_reproduction',
 	// A pack's server re-run in parts (302): written only by the pack_reproduce and pack_reproduce_part jobs through
 	// 302's SECURITY DEFINER functions, each from the caller's own running job of it.

@@ -3768,6 +3768,45 @@ export interface EvaporationStationProposals {
 	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
 }
 
+/** One quaternary the catchment boundary overlaps, with WR2012's S-pan for it (GET /projects/:id/evaporation-wr2012; docs/maps.md § WR2012 S-pan). */
+export interface Wr2012SpanQuaternary {
+	code: string;
+	dataset: string;
+	/** The repo's invented quaternaries: never real values. */
+	synthetic: boolean;
+	/** Share of the catchment's area inside it, 0–1, and that area, km². */
+	share: number;
+	areaKm2: number;
+	/** WR2012's evaporation zone, MAE (mm a year) and the zone's 12 monthly % of MAE; null when the dataset has no evaporation for it. */
+	zone: string | null;
+	maeMm: number | null;
+	pct: number[] | null;
+	/** MAE × pct ÷ 100, mm, Oct … Sep, to 0.1; null without evaporation. */
+	spanMm: number[] | null;
+	source: string;
+}
+
+/** An inverted S→A equation's A-pan from the catchment's S-pan (engine apanMonthlyFromSpan), or why it refuses. */
+export type SpanToApanResult = { ok: true; values: number[]; note: string } | { ok: false; reason: string };
+
+/** GET /projects/:id/evaporation-wr2012: WR2012's S-pan for the quaternaries under the boundary, beside the saved A-pan. */
+export interface Wr2012SpanProposal {
+	boundary: { featureId: string; name: string } | null;
+	/** The quaternary datasets loaded (none: no quaternary can be proposed). */
+	datasets: { dataset: string; count: number }[];
+	/** Null with no boundary. */
+	span: {
+		quaternaries: Wr2012SpanQuaternary[];
+		/** Share of the catchment in quaternaries with WR2012 evaporation: the mean is over that part. */
+		coverage: number;
+		/** The catchment's S-pan, the quaternaries' area-weighted mean; null with none. */
+		spanMm: number[] | null;
+		problem: string | null;
+		conversions: { id: SpanConversionId; label: string; result: SpanToApanResult }[];
+	} | null;
+	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
+}
+
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
 export interface RegisterDamProposal {
 	registerNo: string;
