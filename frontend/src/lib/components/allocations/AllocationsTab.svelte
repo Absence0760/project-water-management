@@ -61,6 +61,7 @@
 		capYearsText,
 		comparisonRows,
 		conditionsSummary,
+		emptyBandNote,
 		foldYears,
 		MODE_NOTE,
 		pickUnit,
@@ -110,6 +111,16 @@
 		notice = null;
 		actionError = msg(err);
 	}
+	/**
+	 * The next action starts (an import or a volume sheet opened, a delete, a removed import, the
+	 * viewers' switch, the band typed or saved): the last one's outcome goes, its success notice, its
+	 * error and the band's Saved alike, so a notice never stays to read as this action's (issue #670).
+	 */
+	function startAction() {
+		notice = null;
+		actionError = null;
+		bandStatus = null;
+	}
 	async function load() {
 		loading = true;
 		error = null;
@@ -152,7 +163,8 @@
 	let version = $state(0);
 	async function changed(message?: string) {
 		actionError = null;
-		if (message) notice = message;
+		// A change with nothing to say (a volume saved or deleted) leaves no older notice behind either.
+		notice = message ?? null;
 		await load();
 		version++;
 	}
@@ -308,6 +320,10 @@
 	$effect(() => {
 		formOpen = canEdit && !!data && (volumeParam === 'new' || !!editing);
 	});
+	// Opening a sheet is the next action: the last one's notice goes (issue #670).
+	$effect(() => {
+		if (formOpen || importOpen) untrack(startAction);
+	});
 	$effect(() => {
 		// Closed (Save, Cancel, Esc, the ✕): drop `volume` in place, so Back goes to where it was opened from.
 		if (!formOpen && data && untrack(() => volumeParam)) void goto(withoutParam(url, 'volume'), { replace: true, reset: false });
@@ -338,6 +354,7 @@
 			danger: true
 		});
 		if (!ok) return;
+		startAction();
 		try {
 			await api.allocations.remove(projectId, a.id);
 			await changed();
@@ -356,6 +373,7 @@
 			danger: true
 		});
 		if (!ok) return;
+		startAction();
 		try {
 			await api.allocations.removeSource(projectId, id);
 			await changed(`Removed the import of ${fileName}.`);
@@ -373,11 +391,20 @@
 	const bandDirty = $derived(bandTyped !== null && bandTyped !== savedBand);
 	let bandSaving = $state(false);
 	let bandStatus = $state<{ ok: boolean; text: string } | null>(null);
+	/**
+	 * The band field changed: a number is the band typed; an empty field (null) isn't a band, so the
+	 * saved one stays (the field shows it again on blur) and the card says so (issue #670).
+	 */
+	function typeBand(v: number | null) {
+		startAction();
+		bandTyped = v;
+		if (v === null) bandStatus = { ok: true, text: emptyBandNote(savedBand) };
+	}
 	async function saveBand() {
 		if (!bandDirty || bandSaving) return;
 		const sent = bandTyped!;
 		bandSaving = true;
-		bandStatus = null;
+		startAction();
 		try {
 			const p = await api.projects.update(projectId, { settings: { allocationTolerance: sent } });
 			onProjectChange?.(p);
@@ -394,6 +421,7 @@
 	let unitsSaving = $state(false);
 	async function setViewerUnits(box: HTMLInputElement) {
 		const on = box.checked;
+		startAction();
 		unitsSaving = true;
 		try {
 			await api.allocations.setViewerUnits(projectId, on);
@@ -740,7 +768,9 @@
 							scale={100}
 							disabled={!canEdit}
 							value={band}
-							onchange={(v) => (bandTyped = v ?? null)}
+							nullable
+							invalidMessage="Enter a number from 0 to 99, or leave it empty for the saved band"
+							onchange={typeBand}
 							aria-describedby="alloc-band-h1 alloc-band-h2"
 						/>
 					</div>

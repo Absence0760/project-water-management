@@ -11891,10 +11891,21 @@ revision check, as for every settings save), reloads the comparison and
 hands the project to the page (`onProjectChange`), whose settings draft
 rebases on it, so a later Settings save keeps the new band. A viewer reads
 it, read-only, with no Save. The band is a model setting: saving it makes
-the latest run out of date.
+the latest run out of date. Left empty, the field isn't a band: the saved
+one stays (Save has nothing to send), the card's status line says so ("Left
+empty, so the comparison keeps the saved band, ±10 %.", `emptyBandNote`),
+and the field shows the saved band again when it loses the focus (issue
+#670).
 The import sheet asks a WARMS extract **How you obtained this extract (the
 DWS or CMA letter or terms)**, required, and refuses the file until it is
-filled; a CSV's reference stays optional.
+filled; a CSV's reference stays optional. Closed and reopened, the sheet
+drops its file and preview but keeps what the file is and the reference, for
+a retry (issue #670).
+A success notice above the page ("Imported 9 rows from …", "Removed the
+import of …", the viewers' switch) and an action's error stay only until the
+next action: opening the import or a volume sheet, a delete, removing an
+import, the viewers' switch, or typing or saving the band (which clears the
+band card's *Saved* too; issue #670).
 
 **Section header.** The context counts the registered volumes, the ones not
 matched to a unit, and the units above registered in the run shown ("40
