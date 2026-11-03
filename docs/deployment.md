@@ -3388,7 +3388,7 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 | `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
 | `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
 | `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
-| `tiles/channels.pmtiles` (the DEM rivers precomputed from `terrain.pmtiles`, ~10–12 MB for the Western Cape, ~80 MB for South Africa) | `backend/scripts/channels-build.ts` (below) | `PUBLIC_CHANNELS_URL=/tiles/channels.pmtiles` | the same Art. 6(c) sentence as the relief (the lines are derived from the Copernicus DEM) |
+| `tiles/channels.pmtiles` (the DEM rivers precomputed from `terrain.pmtiles`, down to 0.1 km²: ~30–40 MB for the Western Cape, ~250 MB for South Africa, estimated) | `backend/scripts/channels-build.ts` (below) | `PUBLIC_CHANNELS_URL=/tiles/channels.pmtiles` | the same Art. 6(c) sentence as the relief (the lines are derived from the Copernicus DEM) |
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
 Upload them with your own SSO session (no workflow or Lambda can write the
@@ -3430,10 +3430,16 @@ only while its DEM fingerprint matches the server's. Build it on your
 laptop from the cached extract (same bytes, same fingerprint) with the
 region the catchments are in, then upload it; it records no provenance row
 of its own (it is derived, its metadata names the DEM's label and
-fingerprint, and `terrain`'s record stands). About 0.35 s a 0.2° tile, so
-the Western Cape (~800 tiles) takes about 5 minutes and makes about 10–12 MB,
-all of South Africa (~5 500) about half an hour and 80 MB, at about 300 MB
-of memory. From `backend/`:
+fingerprint, and `terrain`'s record stands). The lines go down to 0.1 km²
+(the Map shows the small ones only zoomed in), about 0.7–1.1 s and 42–56 KB
+(gzip) a 0.2° tile on the relief DEM, so the Western Cape (~800 tiles) takes
+about 10–15 minutes and makes about 30–40 MB, all of South Africa (~5 500)
+about 1–1.5 hours and about 250 MB: estimated from measured tiles (maps.md §
+The elevation model's channels), not from a full build; at 1 km² it was
+10–12 MB and 80 MB. The builder holds the archive in memory, so allow about
+300 MB plus its size. An archive built before the tiles went to 0.1 km²
+(format `water-management-channels/1`) is refused by the Map, which then
+computes every tile on request: rebuild and re-upload it. From `backend/`:
 
 ```bash
 pnpm exec tsx scripts/channels-build.ts --dem $C/terrain.pmtiles --bbox 17.6,-35.0,24.4,-30.4 --out $C/channels.pmtiles
@@ -3589,6 +3595,7 @@ Lambda's list against the Sources table):
 | `soils` | SoilGrids 2.0 and iSDAsoil, CC BY 4.0: allowed (their attribution is stored on the dataset row) | the soil water capacity grid `ingest/soils.py` writes (JSON, gzipped), never the GeoTIFFs; at most 32 MiB (64 MiB unzipped) | the GDAL steps below, then `python3 ingest/soils.py … --out soils-d1.json.gz` |
 | `gr4j-donors` | GRDC-Caravan and HydroATLAS, CC BY 4.0: allowed (only fitted parameters, scores and attributes are in the file, no flow; the recorded attribution `GR4J_DONORS` is stored whatever the file says) | the donor file `pnpm fit-donors` writes (JSON, gzipped); at most 4 MiB (8 MiB unzipped) | the donor fit below (offline, on our own forcing) |
 | `quaternaries` | the DWS quaternary outlines and the WR2012 reference values: allowed by the operator's decision of 2026-11-02, citing the publishers' published terms (no open licence found for either; maps.md § Sources quotes them). Every row is stored with the recorded credit, `QUATERNARY_SOURCE` ("Quaternary catchments: Department of Water and Sanitation (DWS). Reference values: WR2012, …"), unless `-f source=…` gives one | the outlines with their values on each feature, the GeoJSON `--out` writes (gzipped), never the shapefile or the values CSV on their own | `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --values wr2012.csv --out quaternaries.geojson.gz` (steps below) |
+| `quaternary-evaporation` | WR2012's monthly S-pan and A-pan per quaternary from its WRSM2000 network configurations (WMAs 16–19): allowed by the operator's decision of 2026-11-03, extending the WR2012 decision to these evaporation values (maps.md § Sources). Every row is stored with the recorded credit, `QUATERNARY_EVAPORATION_SOURCE`, unless `-f source=…` gives one | the CSV `scripts/wbt-import/wrsm_evaporation.py` writes (at most 4 MiB), never the module files | `python scripts/wbt-import/wrsm_evaporation.py <network folders or zips> --out evaporation.csv` (below) |
 | `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 | `evaporation-stations` | blocked: DWS's permission (2026-10-28, data-sources.md § dws-flow) covers verified daily flow only, not evaporation station records (data-sources.md § dws-evaporation) | the station list and the stations' DWS daily evaporation replies, once allowed | refused by the gate (not in its allowed kinds) and by the Lambda (`REFERENCE_KINDS` status `blocked`) until followups.md *Decision: DWS evaporation station records* is made and the Sources row says allowed; a pan record can't arrive as `dws` either (a river gauge's `H` code and a flow table only). Until then the live site's Calibration page lists no evaporation stations ([maps.md § Evaporation stations](./maps.md#evaporation-stations)) |
 | `crop-types` | blocked: SANLC's terms not yet recorded (issue #604 R5-D, #618 step 8b) | the orchard and vine summary `pnpm import:crop-types … --out` writes, once allowed | refused until followups.md *Decision: SANLC's licence* is made; the live site shows no orchards or vines until then |
@@ -3824,7 +3831,14 @@ outside the repo (nothing real is ever committed):
    `ogr2ogr -t_srs EPSG:4326 -f GeoJSON quaternaries.geojson <file>.shp`.
    The loader takes the code from `code`, `QUATERNARY`, `QUATERN`,
    `Quaternary`, `QUAT` or `QCODE`.
-2. Transcribe the WR2012 tables you use to a CSV keyed by code,
+2. Turn WR2012's per-WMA quaternary spreadsheets into the values CSV:
+   `soffice --headless --convert-to xlsx "WR2012 <Basin> Quat Info WMA nn_Jul2015.xls"` for each,
+   then `python scripts/wbt-import/wr2012_quat_info.py <the .xlsx files> --out wr2012.csv`
+   (`--mae wr90` for WR90's MAE; it prints the `--source` line naming the
+   MAE). It refuses two files for one WMA: for WMA 17 list only the
+   original `…WMA 17_Jul2015`, not the `-2` copy (the client's local
+   correction; the operator's decision of 2026-11-03), or `--exclude` it.
+   Or transcribe the WR2012 tables you use to a CSV keyed by code,
    `code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end`
    (monthly means in Mm³, October first; maps.md § Quaternary dataset).
 3. Look at it locally:
@@ -3849,6 +3863,34 @@ load takes over any code an earlier dataset held. To withdraw it (the
 publishers object): take `quaternaries` out of `REFERENCE_KINDS` and the
 gate's `LOADABLE`, and delete the rows with a forward migration (`DELETE
 FROM quaternary_reference WHERE dataset = 'WR2012'`).
+
+**WR2012's evaporation per quaternary** (Model settings → Demand → A-pan
+from → WR2012 Pitman configuration; [maps.md § Quaternary
+evaporation](./maps.md#quaternary-evaporation)), allowed by the operator's
+decision of 2026-11-03. From the unzipped (or zipped) WRSM2000 network
+folders, outside the repo:
+
+1. `python scripts/wbt-import/wrsm_evaporation.py "<16 Gouritz WMA>" "<17 …>" "<18 …>" "<19 …>" --out evaporation.csv`
+   (it prints how many quaternaries have S-pan and A-pan, those whose modules
+   disagree, and every module file skipped, with why).
+2. Look at it locally: `pnpm import:quaternary-evaporation evaporation.csv --dataset WR2012-WRSM2000`,
+   with the quaternary outlines loaded, then the A-pan source on a project
+   whose boundary lies in those WMAs.
+3. Keep the network zips under `originals/quaternary-evaporation/`, then
+   upload and load:
+
+```bash
+sha256sum evaporation.csv
+aws s3 cp evaporation.csv s3://<reference_bucket>/reference/quaternary-evaporation/wrsm2000-wma16-19.csv --profile water-management
+gh workflow run load-reference.yml -f kind=quaternary-evaporation -f key=reference/quaternary-evaporation/wrsm2000-wma16-19.csv -f sha256=<hex> -f dataset=WR2012-WRSM2000
+```
+
+Approve it in the `production` environment. Every row is stored with the
+recorded credit, "WR2012 (WRC 2015), WRSM2000 network configurations, WMAs
+16–19: …", unless `-f source=` gives one. A load replaces its dataset; the
+outlines are separate and stay. To withdraw it: take `quaternary-evaporation`
+out of `REFERENCE_KINDS` and the gate's `LOADABLE`, and delete the rows with a
+forward migration (`DELETE FROM quaternary_evaporation WHERE dataset = 'WR2012-WRSM2000'`).
 
 #### Refreshing a dataset
 

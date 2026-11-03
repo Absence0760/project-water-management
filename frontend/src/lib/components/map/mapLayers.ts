@@ -68,19 +68,44 @@ export function demRiversLine(s: DemRiversState): { text: string; kind: 'note' |
 	return { text: DEM_RIVERS_NOTE, kind: 'note' };
 }
 
-/** The layers `layers=` turns on (unknown names ignored). */
+/**
+ * The layers on unless the URL turns them off: the DEM rivers (where they are offered, demRiversOffered), so an editor
+ * delineating sees the rivers a click goes to. Off is `-channels` in `layers=`; `channels` there (turned on by its toggle,
+ * or a view saved or shared before the default) means on, as it always did.
+ */
+export const DEFAULT_LAYERS: ReadonlySet<MapLayer> = new Set<MapLayer>(['channels']);
+
+/** The names `layers=` lists, as written (`-channels` included). */
+const layerTokens = (params: ReadonlyURLSearchParams) => new Set((params.get('layers') ?? '').split(',').map((s) => s.trim()));
+
+/** The layers on: those `layers=` names, and the default ones it doesn't turn off with `-<id>` (unknown names ignored). */
 export function layersOn(params: ReadonlyURLSearchParams): Set<MapLayer> {
-	const asked = new Set((params.get('layers') ?? '').split(',').map((s) => s.trim()));
-	return new Set(MAP_LAYERS.filter((l) => asked.has(l)));
+	const asked = layerTokens(params);
+	return new Set(MAP_LAYERS.filter((l) => asked.has(l) || (DEFAULT_LAYERS.has(l) && !asked.has(`-${l}`))));
 }
 
-/** The URL's query with `layer` turned on or off, every other param kept; `layers` dropped when none is on. */
+/**
+ * Whether `layers=` names the layer itself: turned on by its toggle (or a view saved that way), not only on by default.
+ * A default layer's status is said only then (MapLayers' live region), so a page that opens with it on says nothing of it.
+ */
+export const layerAsked = (params: ReadonlyURLSearchParams, layer: MapLayer) => layerTokens(params).has(layer);
+
+/**
+ * The URL's query with `layer` turned on or off, every other param kept; `layers` dropped when none is listed. A default
+ * layer toggled is written either way (`channels` on, `-channels` off), so Back undoes the toggle; otherwise it keeps what
+ * the URL said of it, nothing meaning the default.
+ */
 export function withLayer(search: string, layer: MapLayer, on: boolean): string {
 	const q = new URLSearchParams(search);
+	const asked = layerTokens(q);
 	const now = layersOn(q);
 	if (on) now.add(layer);
 	else now.delete(layer);
-	const list = MAP_LAYERS.filter((l) => now.has(l));
+	const list = MAP_LAYERS.flatMap((l) => {
+		if (!DEFAULT_LAYERS.has(l)) return now.has(l) ? [l] : [];
+		if (l === layer) return [on ? l : `-${l}`];
+		return asked.has(l) ? [l] : asked.has(`-${l}`) ? [`-${l}`] : [];
+	});
 	if (list.length) q.set('layers', list.join(','));
 	else q.delete('layers');
 	return `?${q}`;

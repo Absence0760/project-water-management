@@ -40,7 +40,8 @@
 		pannable = true,
 		print = false,
 		printWidth = 680,
-		ready = $bindable(false)
+		ready = $bindable(false),
+		onview
 	}: {
 		series: ChartSeries[];
 		unit?: string;
@@ -128,6 +129,12 @@
 		printWidth?: number;
 		/** True once the chart has drawn (or has nothing to draw); also the figure's data-ready. */
 		ready?: boolean;
+		/**
+		 * Called with the visible x range (epoch seconds on a daily chart) whenever it changes: a zoom, a pan, a
+		 * window button, a rebuild. The accumulated flow panel's numbers cover the days in view by it
+		 * (runs/AccumulatedFlows.svelte).
+		 */
+		onview?: (view: { min: number; max: number }) => void;
 	} = $props();
 
 	let host: HTMLDivElement | undefined = $state();
@@ -253,6 +260,7 @@
 						if (key !== 'x') return;
 						const { min, max } = u.scales.x!;
 						view = min != null && max != null ? { min, max } : null;
+						if (view) onview?.(view);
 					}
 				],
 				setSeries: [

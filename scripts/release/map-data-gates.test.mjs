@@ -68,7 +68,10 @@ describe('load: a reference load’s inputs', () => {
 		// The DWS quaternary outlines with their WR2012 values: allowed by the operator's decision of 2026-11-02 (docs/maps.md § Sources).
 		const quaternaries = { ...landCover, LOAD_KIND: 'quaternaries', LOAD_KEY: 'reference/quaternaries/wr2012.geojson.gz', LOAD_DATASET: 'WR2012' };
 		assert.deepEqual(loadProblems(quaternaries, lacks), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors', 'quaternaries']);
+		// WR2012's monthly evaporation per quaternary (WRSM2000 configurations): the operator's decision of 2026-11-03.
+		const quaternaryEvaporation = { ...landCover, LOAD_KIND: 'quaternary-evaporation', LOAD_KEY: 'reference/quaternary-evaporation/wrsm2000-wma16-19.csv', LOAD_DATASET: 'WR2012-WRSM2000' };
+		assert.deepEqual(loadProblems(quaternaryEvaporation, lacks), []);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'map-grid', 'tiles', 'waterbodies', 'dws', 'soils', 'gr4j-donors', 'quaternaries', 'quaternary-evaporation']);
 	});
 
 	it('a DWS flow table needs its reference, takes a station only as a river gauge code, and no other kind takes one', () => {

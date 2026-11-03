@@ -13,8 +13,10 @@ import {
 	doubleNode,
 	initialDivideTicks,
 	NEW_GAUGE,
+	NEW_UNIT,
 	NONE,
 	nodeOptions,
+	offersNewUnit,
 	outflowOf,
 	sameAsNow,
 	tickAllDivide
@@ -112,6 +114,59 @@ describe('the points', () => {
 	});
 });
 
+describe('a new hydrological unit from an area no node has (#670)', () => {
+	it('is offered for an unlinked area only, sent as no node, and never counted as a node two points stand for', () => {
+		expect(offersNewUnit(feature('piece', 'other', null, AREA))).toBe(true);
+		expect(offersNewUnit(feature('linked', 'other', 'dam', AREA))).toBe(false);
+		expect(offersNewUnit(feature('pt', 'other'))).toBe(false);
+		// Not by default: an area drawn for some other reason stays out until the editor (or the Save hand-off) says so.
+		expect(defaultDivideChoice(feature('piece', 'other', null, AREA), nodes)).toBe(NONE);
+		// The Map tab writes the choice out as its literal, to keep this module out of the tab's chunk.
+		expect(NEW_UNIT).toBe('new-unit');
+		expect(divideBody({ a: NEW_UNIT, b: NEW_UNIT, d: 'dam' }, '').points).toEqual([
+			{ featureId: 'a', nodeId: null },
+			{ featureId: 'b', nodeId: null },
+			{ featureId: 'd', nodeId: 'dam' }
+		]);
+		expect(doubleNode({ a: NEW_UNIT, b: NEW_UNIT }, '')).toBeNull();
+	});
+
+	const p = plan([
+		unit('top', { drainsInto: 'piece' }),
+		unit('piece', { nodeId: null, name: 'Sub-catchment 2', featureName: 'Sub-catchment 2', current: null })
+	]);
+
+	it('opens named as its feature, ticks Add with its area, and says what the server would refuse in a unit’s words', () => {
+		const names = nodes.map((n) => n.name);
+		const t = initialDivideTicks(p);
+		expect(t.units[1]).toEqual({ key: 'piece', area: false, drainsInto: false, runoffToDam: false, add: false, name: 'Sub-catchment 2' });
+		expect(divideOffers(p.units[1]!)).toEqual({ add: true, area: true, drainsInto: true });
+		expect(tickAllDivide(p, t).units[1]).toMatchObject({ add: true, area: true, drainsInto: true });
+		t.units[0]!.drainsInto = true;
+		expect(divideProblem(p, t, names)).toMatch(/would drain into the new unit Sub-catchment 2, which isn’t being added/);
+		t.units[0]!.drainsInto = false;
+		t.units[1]!.area = true;
+		expect(divideProblem(p, t, names)).toBe('Sub-catchment 2 is a new unit: tick Add it before taking its area or its order.');
+		t.units[1] = { ...t.units[1]!, add: true, name: 'dam unit' };
+		expect(divideProblem(p, t, names)).toMatch(/give the new unit a name of its own/);
+		t.units[1]!.name = '';
+		expect(divideProblem(p, t, names)).toBe('Name the new unit at “Sub-catchment 2”.');
+		t.units[1]!.name = 'Sub-catchment 2';
+		expect(divideProblem(p, t, names)).toBeNull();
+		// The rest of the catchment can't drain into a new unit that isn't added either.
+		const r = initialDivideTicks({ ...p, rest: { ...p.rest, drainsInto: 'piece', drainsIntoProposed: true } });
+		r.rest = { to: 'new', name: 'Rest', drainsInto: true };
+		expect(divideProblem({ ...p, rest: { ...p.rest, drainsInto: 'piece', drainsIntoProposed: true } }, r, names)).toMatch(/^The rest of the catchment would drain into the new unit Sub-catchment 2/);
+	});
+
+	it('counts the new units apart from the new gauges', () => {
+		const t = tickAllDivide(p, initialDivideTicks(p));
+		expect(divideSummary(p, t)).toBe(
+			'The model takes 2 areas (a unit’s is its boundary on the map) and 2 drains-into, and 1 new hydrological unit. The unlinked dams and pumps inside each unit’s boundary are linked to it. Every value not ticked stays as it is.'
+		);
+	});
+});
+
 describe('the ticks', () => {
 	const p = plan([unit('top', { drainsInto: 'gauge' }), unit('gauge', { nodeId: null, name: 'G4', role: 'gauge', areaM2: null, geometry: null, current: null })]);
 
@@ -179,7 +234,7 @@ describe('the ticks', () => {
 	it('says what apply will do in counts', () => {
 		const t = tickAllDivide(p, initialDivideTicks(p));
 		t.rest = { to: 'new', name: 'Rest' };
-		expect(divideSummary(t)).toBe(
+		expect(divideSummary(p, t)).toBe(
 			'The model takes 2 areas (a unit’s is its boundary on the map) and 2 drains-into, and 1 new gauge, and a new unit for the rest of the catchment. The unlinked dams and pumps inside each unit’s boundary are linked to it. Every value not ticked stays as it is.'
 		);
 	});
@@ -196,7 +251,7 @@ describe('the ticks', () => {
 			['gauge', undefined]
 		]);
 		expect(body.rest).toEqual({ to: 'new', name: 'Rest', areaBasis: 'effective' });
-		expect(divideSummary(t)).toMatch(/^The model takes 2 areas \(a unit’s is its boundary on the map; 2 without what drains into pans\) /);
+		expect(divideSummary(p, t)).toMatch(/^The model takes 2 areas \(a unit’s is its boundary on the map; 2 without what drains into pans\) /);
 	});
 });
 

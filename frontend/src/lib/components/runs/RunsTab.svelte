@@ -879,7 +879,7 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder}>
+			<RunCharts {projectId} run={shownRun} refs={runSeries} {nodeNames} {nodeOrder} liveNodes={editor.model.nodes}>
 				{#snippet waterBalance()}
 					<!-- The water balance per water year (issue #137): the table a hydrologist hands a client first. -->
 					<div class="panel" id="res-water-balance">

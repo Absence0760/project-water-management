@@ -4379,7 +4379,9 @@ map" card) stays the schematic; this is the geography.
   / the nodes its kind may stand for: an area only a unit, a dam or other
   point only an other water user (or a gauge), since a dam or abstraction
   point never divides, `start-16` / A new gauge node for an unlinked
-  gauge), a linked feature on its node by default, "Two points stand for
+  gauge / A new hydrological unit for an area linked to no node, issue
+  #670), a linked feature on its node by default (a piece handed over by
+  the Sub-catchments Save on A new hydrological unit), "Two points stand for
   …" refusing a node twice, **Place a point**, the outlet,
   the count ("3 points in the division."), **Propose the division**; **the
   proposal**: the warnings (dropped points, "No point stands for …: it keeps
@@ -4389,7 +4391,12 @@ map" card) stays the schematic; this is the geography.
   `divideOverlap`, past 1 %), **Tick every value**, the problem the server would refuse
   (`role="alert"`, Apply disabled while it stands), one card a point with
   its number badge, the node's name (or "A new gauge" with **Add it to the
-  model as a gauge node** and its name), and a tick for each value with the
+  model as a gauge node** and its name, or "A new hydrological unit" with
+  **Add it to the model as a new hydrological unit, draining into the
+  outflow until its order is ticked**, its name, and "Its land isn’t taken
+  from any unit already in the model: a unit whose area holds it keeps that
+  area until you redraw its boundary or type a smaller one. The rest of the
+  catchment is proposed without it."), and a tick for each value with the
   value now beside it (Area …, its boundary on the map (the elevation model
   gives … draining to its outflow). Now: 12.00 km², typed; Drains into …
   Now: …), "(the same)" when equal, then "Joins its composite dam: …" and
@@ -4404,7 +4411,7 @@ map" card) stays the schematic; this is the geography.
   model takes 2 areas (a unit’s is its boundary on the map) and 2
   drains-into, and 1 new gauge. The unlinked dams and pumps inside each
   unit’s boundary are linked to it. Every value not ticked stays as it
-  is."). Without a DEM the sheet says
+  is.", "… and 2 new hydrological units." for new units). Without a DEM the sheet says
   dividing needs one; with no single outflow, that the Network must set it.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
@@ -4522,12 +4529,20 @@ map" card) stays the schematic; this is the geography.
   width, so the panel is in the DOM once). It has how ("Click a terrain
   channel for each outlet, or press Enter at the crosshair. Each gets the
   land that drains to it before any other click, following the terrain.")
-  with the lines on the map in words under it (as Delineate's bar), a polite line for the last change ("2 sub-catchments.", "Click 3
+  with the lines on the map in words under it (as Delineate's bar); with a
+  catchment boundary on the map, a line naming it ("Within “Valley”: its
+  delineated outlet is the lowest point, so the land between your lowest
+  click and the outlet is the outlet’s piece (O). A click outside the
+  boundary is refused.", or for a boundary drawn by hand "… drawn by hand,
+  it has no delineated outlet, so your lowest click is the outlet. …"); a polite line for the last change ("2 sub-catchments.", "Click 3
   is not a piece: it …", "Took back click 3.", "Moved the click back."), and
+  first, within a delineated boundary, the outlet's piece under badge O
+  ("The outlet’s piece: 212.40 km² · the catchment’s outlet: the rest
+  drains out here · …"; no click, so Undo never takes it), then
   one line per click under its badge (`PieceBadge`, the number and tint its
   piece has on the map, so the list is the map's key): its area, where its
-  water goes ("drains into 2", or "the lowest point: the rest drains out
-  here"), the area upstream in all (or "more upstream than was routed"),
+  water goes ("drains into 2", "drains into the outlet’s piece (O)", or
+  "the lowest point: the rest drains out here"), the area upstream in all (or "more upstream than was routed"),
   the inflow points entering it, how far it moved ("· moved 128 m to the
   nearest terrain channel", from 50 m), and a much larger terrain channel
   beside it ("· a much larger terrain channel (620 km²) runs 504 m north:
@@ -4537,7 +4552,7 @@ map" card) stays the schematic; this is the geography.
   with no terrain channel within 150 m is refused and taken back with the
   reason. Since issue #472 there is no confluence box, no river-reach
   warning and no "very little drains here" warning: a click always lands
-  on a channel with at least 1 km² draining through it. A line with the focus or the pointer lights
+  on a terrain channel the map drew at the zoom it was made at (1 km² or more below zoom 13, down to 0.1 km² from zoom 15; maps.md § The elevation model's channels). A line with the focus or the pointer lights
   its piece, and a piece under the pointer lights itself. Under the lines:
   the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
   piece against the map before you save."). **Enter coordinates** (folded,
@@ -4548,10 +4563,20 @@ map" card) stays the schematic; this is the geography.
   all the pieces (tinted apart from their neighbours, every click's outlet
   a ringed dot); the map is framed on the first answer and then stays where
   the editor is clicking. A click the server refuses is taken back with the
-  reason ("Click not added: …"). **Save the *n* as areas** (primary) saves
-  each piece as an *other* polygon ("Saved 2 sub-catchments, 547.19 km² in
-  all on the map as areas. Link each to its unit and Use its area, or
-  rename it on its card.", the first one picked), **Undo** goes back to the
+  reason ("Click not added: …", among them a click outside the catchment
+  boundary: "Click 2 is outside “Valley”, the catchment boundary: …").
+  **Save the *n* as areas** (primary) saves each piece as an *other*
+  polygon and goes straight on to the network: on an empty model the Start
+  sheet opens at its points with each piece marked a hydrological unit
+  ("Saved 2 sub-catchments, 547.19 km² in all on the map as areas, each a
+  hydrological unit in the Start sheet: check them, propose the model, then
+  check each unit’s name and area and apply."), on a model with nodes the
+  Divide sheet with each piece picked as a new hydrological unit ("… on the
+  map as areas, each a new hydrological unit in the Divide sheet (or pick
+  the unit it stands for): propose the division, then check each unit’s
+  name and area and apply."); nothing reaches the model before
+  the sheet's Apply. Without either, the first piece is picked ("… Link
+  each to its unit and Use its area, or rename it on its card."). **Undo** goes back to the
   answer before the last click or move at once, **Clear** drops them all,
   and **Done** (or Escape in the panel) leaves the mode, asking first
   ("Drop these clicks?": Keep clicking / Drop them) when there are clicks;
@@ -4666,10 +4691,12 @@ map" card) stays the schematic; this is the geography.
   map as a river, from the river network.") or "On the map as a river." and
   **Show it**. The key's Lines gain "river network" while it is on
   ([maps.md § River network](./maps.md#river-network)).
-  **DEM rivers** (`layers=channels`, a solid swatch in the terrain
+  **DEM rivers** (on by default where offered, `layers=-channels` off and
+  `layers=channels` on from its toggle; a solid swatch in the terrain
   channels' red, with a help tip; right after HydroRIVERS, so the two read
   as a pair; an editor's, offered once their delineation check finds an
-  elevation model): on, the terrain channels Delineate draws are drawn with
+  elevation model; counted on the Layers button only where offered, and
+  said in the live region only once turned on from its toggle): on, the terrain channels Delineate draws are drawn with
   no tool on, and the panel says what they are ("The rivers delineation
   follows, worked out from the elevation model (the terrain channels in the
   Key): wider for a larger area upstream. The HydroRIVERS lines can sit a
@@ -7518,7 +7545,27 @@ unit on a line of its own, so about four months show beside it rather than
 two.
 
 
-- **Demand**: A-pan (Oct–Sep), with **Paste from a spreadsheet…** above it
+- **Demand**: above the A-pan row, **A-pan from** (a select beside **Paste
+  from a spreadsheet…**; a view choice, never saved; `evaporation/spanEntry.ts`
+  `APAN_SOURCES`): **Typed or pasted A-pan (the row below)** (the default, as
+  before, with the paste button); **WR2012 Pitman configuration, per
+  quaternary** (`Wr2012EvaporationProposal.svelte`, lazy): the quaternaries
+  under the boundary (code, share, zone, MAE, S-pan and A-pan totals, A ÷ S,
+  each module kind's agreement, flagged where they disagree), then the
+  monthly table (each quaternary's A-pan, the catchment's S-pan, the
+  proposed A-pan, the saved A-pan) and **Use as the A-pan** ("Saves now",
+  asks first, waits while the form has unsaved changes); a quaternary with
+  S-pan only shows "None: no irrigation module gives its A-pan, only S-pan";
+  **Typed or pasted S-pan, converted (WR90 / Taljaard)** (`SpanEntry.svelte`,
+  lazy): 12 S-pan months typed, or pasted with **Fill the months**, the
+  equation picked (Taljaard's warning; one under its floor disabled with the
+  month named), an optional note, and **Use as the A-pan**; and **A DWS
+  evaporation station** and **An evaporation grid**, each a link to its card
+  on Calibration ([maps.md § WR2012 evaporation by
+  quaternary](./maps.md#wr2012-evaporation-by-quaternary)). The month inputs
+  show 0.1 mm (`NumberInput` `decimals`); the stored value keeps its
+  precision until edited. Then the A-pan (Oct–Sep), with **Paste from a
+  spreadsheet…** while the typed A-pan is picked
   (editors; a block pasted into a month of the row opens it too): **Paste
   monthly A-pan evaporation** (`settings/monthlyPaste.ts`, issue #477) takes
   a row named A-pan evaporation (or A-pan; mm, 0–10 000), months Oct … Sep.
@@ -9778,7 +9825,7 @@ read it before.
   results (`railSide="right"`: the runs list is the page's left column),
   every group named over its links, each link named as its panel's heading
   (**Water balance by water year**, **Run notes**, **Evidence**, **Reproduction**, **Validation
-  statement**, **Chart any daily series**), with a line for two sub-headings a reader looks for, each
+  statement**, **Accumulated flow at each unit**, **Chart any daily series**), with a line for two sub-headings a reader looks for, each
   under its panel and on its heading's id (**Changes since this run**, `#res-changes`, under
   Reproduction; **Trace a day**, `#res-trace`, under Arithmetic checks; `RUN_SUBSECTIONS`, issue #586 D4),
   and three last groups for the panels that moved to their own pages
@@ -9979,11 +10026,65 @@ read it before.
      computed twice: both call the engine's `validationStatement`.
   4. **The model’s working** (was *Dig deeper*): **Arithmetic checks** (the
      engine's self-checks, was *Self-checks*; with Trace a day, and a line
-     linking to the water balance), **Chart any daily series** (was *Explore
+     linking to the water balance), **Accumulated flow at each unit**
+     (`#res-cumulative`, below), **Chart any daily series** (was *Explore
      any output*). #586 E14 named the group and its panels in plain words, apart
      from Calibration's **Plausibility checks** and the Summary's things to
      check; their ids (`#res-checks`, `#res-explore`) are unchanged, so old
      links land.
+
+     **Accumulated flow at each unit** (`runs/AccumulatedFlows.svelte`, the
+     arithmetic in `runs/accumulated.ts`; operator, 2026-11-03: "20 from hydro
+     unit 1 and 25 from the incremental hydro unit 2 downstream means 45 is
+     actually at hydro unit 2"; its first draft was a running total over time,
+     replaced the same day, the `#res-cumulative` id kept) is one daily chart
+     with a line per hydrological unit (a node of kind `farm` with a stored
+     outflow; network order, today's names) and the **Catchment outlet**
+     first, in the page's flow unit (the m³/s ↔ m³/day switch in its
+     toolbar, a Log scale switch). **Flow shown** picks what each line is:
+     - **Natural, accumulated** (the default): the unit's own `runoff`
+       (column I, model.md § 2.7: its fragmented natural flow less any
+       land-cover reduction, m³/day like H and U) plus the `runoff` of every
+       hydrological unit upstream of it, found by walking the drains-into
+       links of the run's own model snapshot (today's model for a run whose
+       snapshot lacks them) through gauges and other water users, which add
+       no runoff, every branch summed (`network/reorder.ts` `upstreamOf`,
+       which a loop can't trap). The outlet adds up every unit, which is the
+       catchment's `natural_flow` when no unit has land cover or a base-flow
+       loss or gain (`runs-accumulated.spec.ts` checks it on the sample
+       network's branch; `accumulated.test.ts` on a three-unit chain).
+     - **Modelled, arriving at the unit**: `inflow_upstream` (H) + `runoff`
+       (I), what reaches the unit after the dams and abstractions above it,
+       before its own; the outlet is the simulated outflow.
+     - **Modelled, leaving the unit**: `outflow` (U); the outlet is the
+       simulated outflow.
+     - **Incremental only**: `runoff` alone, the pieces; no outlet line.
+
+     A day missing from any series a line adds up is no value on that line,
+     never a smaller sum; the note under the chart names the lines with such
+     days and how many, or says the run had none. A line whose series the run
+     didn't store is left out. The series come through the Runs cache, four
+     at a time (`eachAtOnce`), "Loading the units' flows… n of N" while they
+     come, **Try again** if one fails; another choice fetches only what it
+     adds. Colours are `LINE_TOKENS`: the categorical palette's tokens that
+     hold 3:1 as a line on the card in both themes (`--series-5` and `-6`
+     don't on the light card), ordered so neighbours stay ΔE00 ≥ 12 apart for
+     every reader (`accumulated.test.ts` computes both from `app.css`); past
+     the seventh line they repeat dashed, and a unit keeps its colour across
+     the choices. **Lines shown** is a box per line (its swatch beside its
+     name; **Show all** / **Show none** past four lines). Zoom is the chart's
+     own (a drag box, Shift+drag, **Earlier** / **Later**; it opens on the
+     whole run), and **Show the numbers** is a table of each shown line's
+     mean, lowest and highest over the days in view (`LineChart`'s `onview`
+     reports the visible range), and for the natural flow the share of the
+     line that is the unit's own runoff. A forecast run's forecast days are
+     hatched as on Chart any daily series (`band`;
+     `scripts/guards/check_forecast_cut.mjs` lists it as `band`). The wrapper
+     carries `data-flow`, `data-lines`, `data-view-from`, `data-view-to` and
+     `data-ready`, and each table row's mean its unrounded `data-mean`
+     (`e2e/tests/runs-accumulated.spec.ts`). Hydrological units links here
+     under its results table (**Accumulated flow at each unit → Runs &
+     results**, for the run shown).
 
   The run summary no longer draws the land-cover, groundwater,
   demand-object and other-user tables, which had no menu entry: they are
@@ -10529,7 +10630,7 @@ read it before.
   for 1 September. Every daily chart has the same moves
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
-  demand, Chart any daily series, the model stores, the Data tab's series chart and
+  demand, Accumulated flow at each unit, Chart any daily series, the model stores, the Data tab's series chart and
   the run comparison's daily series overlay. Every chart's legend swatch is
   its series' colour and line style: a dashed or stepped line has a dashed
   swatch, a points-only series (recessions, double mass) a filled one, where

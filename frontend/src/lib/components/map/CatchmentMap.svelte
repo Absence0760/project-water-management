@@ -176,8 +176,8 @@
 		draft?: Draft | null;
 		/** The map's state, for the tab (no WebGL: drawing falls back to pasting and typed coordinates). */
 		onstatus?: (s: 'loading' | 'ready' | 'failed') => void;
-		/** The map's view (west, south, east, north) on load and after every move: the River network layer asks for it while the project has no features. */
-		onview?: (bbox: [number, number, number, number]) => void;
+		/** The map's view (west, south, east, north) and its zoom, on load and after every move: the River network layer asks for the view while the project has no features, a click for the zoom's channels. */
+		onview?: (bbox: [number, number, number, number], zoom: number) => void;
 		/** What the map says, for a translated page (the farm view); English by default. */
 		words?: MapWords;
 		/** The glyphs URL, absolute (mapStyle.ts glyphsUrl): place and water names and the quaternaries' codes. Null: no labels, no glyphs fetched. */
@@ -538,7 +538,7 @@
 					const b = m.getBounds();
 					const v: [number, number, number, number] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
 					view = v.map((x) => x.toFixed(4)).join(',');
-					onview?.(v);
+					onview?.(v, m.getZoom());
 				};
 				m.on('moveend', reportView);
 				m.on('load', () => {

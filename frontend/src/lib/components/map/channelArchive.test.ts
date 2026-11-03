@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { PMTiles, type Source } from 'pmtiles';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChannelTileAnswer } from '#lib/api/types.js';
-import { staticChannels, type ChannelArchiveReader } from './channelArchive';
+import { CHANNEL_ARCHIVE_FORMAT, staticChannels, type ChannelArchiveReader } from './channelArchive';
 
 const FIXTURE = readFileSync(fileURLToPath(new URL('../../../../../backend/fixtures/channels/synthetic-channels.pmtiles', import.meta.url)));
 
@@ -37,7 +37,7 @@ describe('the DEM rivers’ static source', () => {
 				const a = await load('p', [i, j]);
 				expect(a.tile).toEqual([i, j]);
 				if (a.dataset.label !== 'route') {
-					expect(a).toMatchObject({ cached: true, minKm2: 1, dataset: { fingerprint: dem.fingerprint } });
+					expect(a).toMatchObject({ cached: true, minKm2: 0.1, dataset: { fingerprint: dem.fingerprint } });
 					if (a.lines.length) withLines++;
 				}
 			}
@@ -64,6 +64,18 @@ describe('the DEM rivers’ static source', () => {
 			await load('p', [tiles[0] + 1, tiles[1] + 1]);
 			expect(load.counts).toEqual({ archive: 0, route: 1 });
 		}
+	});
+
+	it('asks the route for every tile of an archive in the old format (built at 1 km², without the small channels)', async () => {
+		const { dem } = await meta;
+		const real = fixtureReader();
+		expect(((await real.getMetadata()) as { format: string }).format).toBe(CHANNEL_ARCHIVE_FORMAT);
+		const old: ChannelArchiveReader = { getMetadata: async () => ({ ...((await real.getMetadata()) as object), format: 'water-management-channels/1', minKm2: 1 }), getZxy: vi.fn((z, x, y) => real.getZxy(z, x, y)) };
+		const fallback = vi.fn(async (_p: string, t: readonly [number, number]) => routeAnswer(t));
+		const load = staticChannels({ open: async () => old, fingerprint: () => dem.fingerprint, fallback });
+		await load('p', [102, -169]);
+		expect(old.getZxy).not.toHaveBeenCalled();
+		expect(load.counts).toEqual({ archive: 0, route: 1 });
 	});
 
 	it('asks the route when the file is not a channels archive, or can’t be read, and opens it once', async () => {

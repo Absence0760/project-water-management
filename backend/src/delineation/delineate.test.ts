@@ -104,7 +104,7 @@ describe('delineate (synthetic DEM)', () => {
 		const e = await refusal(delineate(dem, at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120)));
 		expect(e.code).toBe('off_channel');
 		expect(e.message).toBe(
-			`No terrain channel runs within ${SNAP_RADIUS_M} m of that point. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows.`
+			`No terrain channel runs within ${SNAP_RADIUS_M} m of that point. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows. Zoom in further to see smaller channels.`
 		);
 	});
 
@@ -165,7 +165,13 @@ describe('delineate: on the terrain channel nearest the click (issue #472)', () 
 		expect(d.snapDistanceM).toBeLessThanOrEqual(SNAP_RADIUS_M);
 		expect(d.areaM2 / 1e6).toBeGreaterThan(400);
 		expect(d.method).toMatch(/outlet placed on the terrain channel \(at least 1 km² draining through it\) nearest the point, within 150 m; the mapped river network not used to place it;/);
-		expect(d.methodVersion).toBe('delineate-13');
+		expect(d.methodVersion).toBe('delineate-14');
+	});
+
+	it('records the least channel area the click was made at (minKm2), held to [0.1, 1] km²', async () => {
+		expect((await delineate(dem, onRiver, { minKm2: 0.25 })).method).toMatch(/outlet placed on the terrain channel \(at least 0\.25 km² draining through it\)/);
+		expect((await delineate(dem, onRiver, { minKm2: 0.01 })).method).toMatch(/\(at least 0\.1 km² draining through it\)/);
+		expect((await delineate(dem, onRiver, { minKm2: 7 })).method).toMatch(/\(at least 1 km² draining through it\)/);
 	});
 
 	it('refuses beside a much larger channel, naming it: where, how far, and both areas', async () => {
@@ -311,7 +317,7 @@ describe('delineate: pans (the hydrologist’s review, finding 8)', () => {
 });
 
 describe('the method fits delineation_proposal.method (175: at most 1 000 characters)', () => {
-	const worst = (kept: boolean): DelineationMethodFacts => ({ cellM: 99_999, zoom: 30, snapRadiusM: 99_999, kept, checked: true });
+	const worst = (kept: boolean): DelineationMethodFacts => ({ cellM: 99_999, zoom: 30, snapRadiusM: 99_999, minKm2: 0.25, kept, checked: true });
 
 	it('fits in full in the worst case of either placement', () => {
 		for (const kept of [false, true]) {

@@ -493,15 +493,52 @@ export function channelData(lines: readonly ChannelLineData[] | null | undefined
 	};
 }
 
-/** The channels: solid, 1 px at 1 km² up to 3.5 px at 10 000 km², dimmed behind a proposal; over the river network, under the features. */
+/**
+ * The least upstream area (km²) of the channels drawn from each zoom, in order: below the first, 1 km². The tiles carry lines
+ * down to the last (the backend's CHANNEL_FLOOR_KM2), so zooming in shows the small channels a hydrological unit needs.
+ */
+export const CHANNEL_ZOOM_STEPS: readonly (readonly [zoom: number, km2: number])[] = [
+	[13, 0.5],
+	[14, 0.25],
+	[15, 0.1]
+];
+/** The channels drawn below the first step's zoom (km²): the backend's default placement threshold (place.ts ON_CHANNEL_KM2). */
+export const CHANNEL_KM2_FAR = 1;
+
+/**
+ * The least area (km²) of the channels the map draws at zoom `z`: 1 km² below 13, 0.5 at 13, 0.25 at 14, 0.1 from 15 (the
+ * layer's filter is this table, `channelMinKm2Expression`). A click sends it (`minKm2`), so it goes on a line it could see. Pure.
+ */
+export function channelMinKm2AtZoom(z: number): number {
+	let km2 = CHANNEL_KM2_FAR;
+	for (const [zoom, k] of CHANNEL_ZOOM_STEPS) if (z >= zoom) km2 = k;
+	return km2;
+}
+
+/** channelMinKm2AtZoom as a MapLibre expression on the zoom (a step: the filter is evaluated at each tile's whole zoom). */
+export const channelMinKm2Expression = () => ['step', ['zoom'], CHANNEL_KM2_FAR, ...CHANNEL_ZOOM_STEPS.flat()];
+
+/** A channel's width (px) at one zoom, by its area: `small` at 0.1 km² up to `big` at 10 000 km² (log scale). */
+const channelWidth = (small: number, big: number) => ['interpolate', ['linear'], ['log10', ['max', 0.1, ['get', 'km2']]], -1, small, 4, big];
+
+/**
+ * The channels: solid, wider for a larger area and, like the basemap's waterways, for a closer zoom (0.5–2.5 px at zoom 10, to
+ * 1.5–5 px from 16); only the ones channelMinKm2AtZoom shows at the zoom; dimmed behind a proposal; over the river network,
+ * under the features.
+ */
 export function channelLayers(dark: boolean): Layer[] {
 	return [
 		{
 			id: 'dem-channels',
 			type: 'line',
 			source: 'channels',
+			filter: ['>=', ['get', 'km2'], channelMinKm2Expression()],
 			layout: { 'line-cap': 'round', 'line-join': 'round' },
-			paint: { 'line-color': channelColour(dark), 'line-width': ['interpolate', ['linear'], ['log10', ['max', 1, ['get', 'km2']]], 0, 1, 2, 2, 4, 3.5], 'line-opacity': ['case', ['==', ['get', 'dim'], true], CHANNEL_OPACITY.dim, CHANNEL_OPACITY.on] }
+			paint: {
+				'line-color': channelColour(dark),
+				'line-width': ['interpolate', ['linear'], ['zoom'], 10, channelWidth(0.5, 2.5), 16, channelWidth(1.5, 5)],
+				'line-opacity': ['case', ['==', ['get', 'dim'], true], CHANNEL_OPACITY.dim, CHANNEL_OPACITY.on]
+			}
 		}
 	];
 }

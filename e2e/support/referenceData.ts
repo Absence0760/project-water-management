@@ -23,6 +23,7 @@ export const REFERENCE_FAMILIES: readonly ReferenceFamily[] = [
 	{ what: 'the register of dams', testIds: /['"]dam-proposals?-[a-z-]+['"]/, loader: 'loadSyntheticDamRegister' },
 	{ what: 'evaporation', testIds: /['"]evaporation-(rows|accepted|implied|same|problem)['"]/, loader: 'loadSyntheticEvaporation' },
 	{ what: 'quaternaries', testIds: /['"](map-quaternar[a-z-]*|quaternary-(code|rows|synthetic|none|proposal|no-dataset))['"]/, loader: 'loadSyntheticQuaternaries' },
+	{ what: 'WR2012’s evaporation per quaternary', testIds: /['"]wr2012-evaporation-[a-z-]+['"]/, loader: 'loadSyntheticQuaternaryEvaporation' },
 	{ what: 'the river network', testIds: /['"]map-rivers[a-z-]*['"]/, loader: 'loadSyntheticRivers' },
 	{ what: 'gauging stations', testIds: /['"]nearest-gauges-table['"]/, loader: 'loadSyntheticStations' },
 	{ what: 'the regional prior’s donors and soil grid', testIds: /['"]prior-[a-z-]+['"]/, loader: 'loadSyntheticPrior' },

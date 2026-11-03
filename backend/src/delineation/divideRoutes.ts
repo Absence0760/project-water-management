@@ -135,23 +135,24 @@ export const divideRoutes = new Hono<AuthEnv>()
 				names.add(k);
 				return name.trim();
 			};
-			// Each point's node: an existing one (still there), or a new gauge when ticked to be added.
+			// Each point's node: an existing one (still there), or a new gauge or a new hydrological unit (#670) when ticked to be added.
 			let sort = Math.max(0, ...model.nodes.map((n) => n.sortOrder));
 			const nodeOf = new Map<string, string | null>();
 			const added: NetworkNode[] = [];
 			for (const u of plan.units) {
 				const t = ticks.get(u.key)!;
 				if (u.nodeId) {
-					if (t.add || t.name !== undefined) throw new ApiError(400, `${u.name} is in the model already; only a new gauge is added or named.`);
+					if (t.add || t.name !== undefined) throw new ApiError(400, `${u.name} is in the model already; only a new gauge or a new unit is added or named.`);
 					if (!nodes.has(u.nodeId)) throw new ApiError(409, `${u.name} is no longer in the model; propose again.`);
 					nodeOf.set(u.key, u.nodeId);
 				} else if (t.add) {
-					const n: NetworkNode = { ...newNetworkNode(crypto.randomUUID(), ++sort, outflow.id), name: fresh(t.name ?? u.name), kind: 'gauge' };
+					// A new unit drains into the outflow until its drains-into is ticked, as Start's units do; its area and links follow below.
+					const n: NetworkNode = { ...newNetworkNode(crypto.randomUUID(), ++sort, outflow.id), name: fresh(t.name ?? u.name), kind: u.role === 'unit' ? 'farm' : 'gauge' };
 					added.push(n);
 					nodes.set(n.id, n);
 					nodeOf.set(u.key, n.id);
 				} else {
-					if (t.area || t.drainsInto || t.runoffToDam || t.upstreamToDam) throw new ApiError(400, `${u.name} is a new gauge: tick Add it before taking its order.`);
+					if (t.area || t.drainsInto || t.runoffToDam || t.upstreamToDam || t.areaBasis) throw new ApiError(400, `${u.name} is a new ${u.role === 'unit' ? 'unit' : 'gauge'}: tick Add it before taking its ${u.role === 'unit' ? 'area or its order' : 'order'}.`);
 					nodeOf.set(u.key, null);
 				}
 			}
@@ -184,7 +185,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 					const target = u.drainsInto ? nodeOf.get(u.drainsInto) : outflow.id;
 					if (u.drainsInto && !target) {
 						const g = plan.units.find((x) => x.key === u.drainsInto);
-						throw new ApiError(400, `${u.name} would drain into the new gauge ${g?.name ?? ''}, which isn’t being added: tick Add it too.`);
+						throw new ApiError(400, `${u.name} would drain into the new ${g?.role === 'unit' ? 'unit' : 'gauge'} ${g?.name ?? ''}, which isn’t being added: tick Add it too.`);
 					}
 					n.downstreamNodeId = target!;
 				}
@@ -210,7 +211,8 @@ export const divideRoutes = new Hono<AuthEnv>()
 						const key = plan.rest.drainsIntoProposed ? plan.rest.drainsInto : null;
 						if (!key) throw new ApiError(400, 'The rest of the catchment has no proposed order to take.');
 						const target = nodeOf.get(key);
-						if (!target) throw new ApiError(400, `The rest of the catchment would drain into the new gauge ${plan.units.find((x) => x.key === key)?.name ?? ''}, which isn’t being added: tick Add it too.`);
+						const g = plan.units.find((x) => x.key === key);
+						if (!target) throw new ApiError(400, `The rest of the catchment would drain into the new ${g?.role === 'unit' ? 'unit' : 'gauge'} ${g?.name ?? ''}, which isn’t being added: tick Add it too.`);
 						down = target;
 					}
 					restNode = { ...newNetworkNode(crypto.randomUUID(), ++sort, down), name: fresh(body.rest.name) };
@@ -276,7 +278,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 				if (nid) await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND node_id IS NULL`, [u.key, id, nid]);
 				// Its unlinked dams (the composite dam) and abstraction points (the river pump) stand for it too.
 				if (nid && u.members?.length) await linkMembers(db, id, nid, u.members);
-				decisionUnits.push({ key: u.key, nodeId: nid, area: t.area, ...(t.area ? { areaBasis: basis } : {}), drainsInto: t.drainsInto, runoffToDam: false, add: t.add, parcelId, ...(bounded ? { boundaryId: u.key } : {}) });
+				decisionUnits.push({ key: u.key, nodeId: nid, role: u.role, area: t.area, ...(t.area ? { areaBasis: basis } : {}), drainsInto: t.drainsInto, runoffToDam: false, add: t.add, parcelId, ...(bounded ? { boundaryId: u.key } : {}) });
 			}
 			const restBasis = body.rest.to === 'none' ? 'gross' : (body.rest.areaBasis ?? 'gross');
 			const restParcel = restNode && plan.rest.geometry ? await parcel(restNode.id, restNode.name, plan.rest.geometry, plan.rest.areaM2, plan.rest.nonContributingM2, restBasis) : null;
@@ -284,7 +286,8 @@ export const divideRoutes = new Hono<AuthEnv>()
 
 			const areas = decisionUnits.filter((u) => u.area && u.nodeId).length + (restNode ? 1 : 0);
 			const orders = decisionUnits.filter((u) => u.drainsInto).length;
-			const gauges = decisionUnits.filter((u) => u.add).length;
+			const gauges = decisionUnits.filter((u) => u.add && u.role !== 'unit').length;
+			const newUnits = decisionUnits.filter((u) => u.add && u.role === 'unit').length;
 			// Which areas were taken effective (without what drains into pans), so the run's inputs say so (195).
 			const effective = [
 				...decisionUnits.filter((u) => u.parcelId && u.areaBasis === 'effective').map((u) => nodes.get(u.nodeId!)!.name),
@@ -294,7 +297,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Divided from the map: ${s(areas, 'area')}${areaBasisNote(areas, effective)}, ${s(orders, 'drains-into', 'drains-into')}${gauges ? `, ${s(gauges, 'gauge')} added` : ''}${body.rest.to === 'new' ? ', the rest of the catchment added' : ''} from ${p.dataset}, ${p.method_version}`.slice(0, 500)
+				reason: `Divided from the map: ${s(areas, 'area')}${areaBasisNote(areas, effective)}, ${s(orders, 'drains-into', 'drains-into')}${gauges ? `, ${s(gauges, 'gauge')} added` : ''}${newUnits ? `, ${s(newUnits, 'unit')} added` : ''}${body.rest.to === 'new' ? ', the rest of the catchment added' : ''} from ${p.dataset}, ${p.method_version}`.slice(0, 500)
 			});
 			const decision: DivideDecision = {
 				units: decisionUnits,
@@ -306,7 +309,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 				id,
 				JSON.stringify(decision)
 			]);
-			await recordAudit(db, id, 'map.divide_applied', { proposalId: spid, areas, orders, gauges, revisionId: decision.revisionId });
+			await recordAudit(db, id, 'map.divide_applied', { proposalId: spid, areas, orders, gauges, units: newUnits, revisionId: decision.revisionId });
 			return c.json({ proposal: toProposal(await loadProposal<DividePlan, DivideDecision>(db, id, spid)), model: await loadModel(db, id) });
 		});
 	});

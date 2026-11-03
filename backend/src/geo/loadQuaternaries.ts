@@ -9,8 +9,15 @@
 // reference values either as properties of the same feature (areaKm2, mapMm,
 // marMm3, monthlyMm3 [12, Oct … Sep, Mm³], periodStart, periodEnd, source)
 // or from a CSV keyed by code (the WR2012 tables, transcribed:
-// code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end).
-// A load replaces every row of its dataset, in one transaction.
+// code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end,
+// and optionally mae_mm,evap_zone; any column may be missing). Since 310 each
+// quaternary may carry WR2012's MAE (mean annual S-pan evaporation, mm;
+// `maeMm` / `mae_mm`) and evaporation zone (`evapZone` / `evap_zone`), both or
+// neither: context beside the monthly evaporation the WRSM2000 configurations
+// give (loadQuaternaryEvaporation.ts). `scripts/wbt-import/wr2012_quat_info.py`
+// writes this CSV from WR2012's per-WMA spreadsheets. A value missing from the
+// CSV comes from the feature's own property, else is none. A load replaces
+// every row of its dataset, in one transaction, so it keeps only what it gives.
 //
 // Production (decided 2026-11-02, docs/maps.md § Sources, Quaternary dataset):
 // `pnpm import:quaternaries … --out <file>` writes the boundaries with the
@@ -42,8 +49,21 @@ export interface QuaternaryRecord {
 	monthlyMm3: number[] | null;
 	periodStart: number | null;
 	periodEnd: number | null;
+	/** WR2012's mean annual S-pan evaporation, mm a year, and evaporation zone (310): both or neither. */
+	maeMm: number | null;
+	evapZone: string | null;
 	source: string;
 }
+
+/** An evaporation zone's label: WR2012's are a number and a letter (e.g. 7A); upper-cased on load. */
+export const EVAP_ZONE = /^[A-Z0-9]{1,8}$/;
+/** The largest MAE a load takes, mm a year (the column's CHECK). */
+export const MAE_MAX_MM = 5000;
+const zoneLabel = (v: unknown): string | null => {
+	if (v === null || v === undefined) return null;
+	const z = String(v).trim().toUpperCase();
+	return z ? z : null;
+};
 
 export const CODE = /^[A-Z][0-9]{2}[A-Z]$/;
 const CODE_KEYS = ['code', 'QUATERNARY', 'QUATERN', 'Quaternary', 'quaternary', 'QUAT', 'QCODE'];
@@ -95,7 +115,9 @@ export function parseValuesCsv(text: string): { values: Map<string, Partial<Quat
 			marMm3: get('mar_mm3'),
 			monthlyMm3: monthly.every((v) => v !== null) ? (monthly as number[]) : null,
 			periodStart: get('period_start'),
-			periodEnd: get('period_end')
+			periodEnd: get('period_end'),
+			maeMm: get('mae_mm'),
+			evapZone: col('evap_zone') >= 0 ? zoneLabel(cells[col('evap_zone')]) : null
 		});
 	}
 	return { values, problems };
@@ -130,6 +152,26 @@ export function quaternaryRecords(
 		const source = typeof p.source === 'string' && p.source.trim() ? p.source.trim().slice(0, 500) : defaultSource;
 		if (!source) return problems.push(`feature ${i + 1} (${code}): no source (give the feature a "source" or pass --source)`);
 		const areaKm2 = v.areaKm2 ?? num(p.areaKm2) ?? geometryAreaM2(checked.geometry)! / 1e6;
+		// WR2012's MAE and zone: both or neither (the columns' pair CHECK).
+		let maeMm = v.maeMm ?? num(p.maeMm);
+		let evapZone = v.evapZone ?? zoneLabel(p.evapZone);
+		if (maeMm !== null || evapZone !== null) {
+			const why =
+				maeMm === null
+					? `evaporation zone ${evapZone} but no MAE`
+					: !(maeMm > 0 && maeMm < MAE_MAX_MM)
+						? `MAE ${maeMm} mm is not above 0 and below ${MAE_MAX_MM}`
+						: evapZone === null
+							? 'an MAE but no evaporation zone'
+							: !EVAP_ZONE.test(evapZone)
+								? `evaporation zone "${evapZone}" is not a zone label`
+								: null;
+			if (why) {
+				problems.push(`${code}: ${why}; loaded without its MAE and zone`);
+				maeMm = null;
+				evapZone = null;
+			}
+		}
 		seen.add(code);
 		records.push({
 			code,
@@ -141,6 +183,8 @@ export function quaternaryRecords(
 			monthlyMm3: v.monthlyMm3 ?? monthlyProp,
 			periodStart: v.periodStart ?? num(p.periodStart),
 			periodEnd: v.periodEnd ?? num(p.periodEnd),
+			maeMm,
+			evapZone,
 			source
 		});
 	});
@@ -169,6 +213,8 @@ export function quaternaryFeatureCollection(records: readonly QuaternaryRecord[]
 				monthlyMm3: r.monthlyMm3,
 				periodStart: r.periodStart,
 				periodEnd: r.periodEnd,
+				maeMm: r.maeMm,
+				evapZone: r.evapZone,
 				source: r.source
 			},
 			geometry: r.geometry
@@ -188,13 +234,14 @@ export async function replaceDataset(client: pg.ClientBase, dataset: string, rec
 		await client.query('DELETE FROM quaternary_reference WHERE dataset = $1', [dataset]);
 		for (const r of records) {
 			await client.query(
-				`INSERT INTO quaternary_reference (code, dataset, geometry, min_lon, min_lat, max_lon, max_lat, area_km2, map_mm, mar_mm3, monthly_mm3, period_start, period_end, source)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+				`INSERT INTO quaternary_reference (code, dataset, geometry, min_lon, min_lat, max_lon, max_lat, area_km2, map_mm, mar_mm3, monthly_mm3, period_start, period_end, mae_mm, evap_zone, source)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 				 ON CONFLICT (code) DO UPDATE SET dataset = EXCLUDED.dataset, geometry = EXCLUDED.geometry,
 					min_lon = EXCLUDED.min_lon, min_lat = EXCLUDED.min_lat, max_lon = EXCLUDED.max_lon, max_lat = EXCLUDED.max_lat,
 					area_km2 = EXCLUDED.area_km2, map_mm = EXCLUDED.map_mm, mar_mm3 = EXCLUDED.mar_mm3, monthly_mm3 = EXCLUDED.monthly_mm3,
-					period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end, source = EXCLUDED.source, loaded_at = now()`,
-				[r.code, dataset, JSON.stringify(r.geometry), ...r.bbox, r.areaKm2, r.mapMm, r.marMm3, r.monthlyMm3, r.periodStart, r.periodEnd, r.source]
+					period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end, mae_mm = EXCLUDED.mae_mm, evap_zone = EXCLUDED.evap_zone,
+					source = EXCLUDED.source, loaded_at = now()`,
+				[r.code, dataset, JSON.stringify(r.geometry), ...r.bbox, r.areaKm2, r.mapMm, r.marMm3, r.monthlyMm3, r.periodStart, r.periodEnd, r.maeMm, r.evapZone, r.source]
 			);
 		}
 		await recordReferenceOrigin(client, 'quaternaries', dataset, origin);

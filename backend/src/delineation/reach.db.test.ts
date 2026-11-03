@@ -100,7 +100,7 @@ describe('Delineate: the mapped river never places the outlet (issue #472)', () 
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		expect(r.body.proposal.snapDistanceM).toBeLessThanOrEqual(150);
 		expect(r.body.proposal.method).toMatch(/outlet placed on the terrain channel \(at least 1 km² draining through it\) nearest the point, within 150 m; the mapped river network not used to place it/);
-		expect(r.body.proposal.methodVersion).toBe('delineate-13');
+		expect(r.body.proposal.methodVersion).toBe('delineate-14');
 		expect(r.body).not.toHaveProperty('check');
 	});
 
@@ -151,7 +151,7 @@ describe('Sub-catchments: the mapped river never places a click (issue #472)', (
 		await clearReaches();
 		const without = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, { clicks });
 		expect(without.status, JSON.stringify(without.body)).toBe(200);
-		expect(without.body.methodVersion).toBe('start-17');
+		expect(without.body.methodVersion).toBe('start-18');
 		for (const p of without.body.pieces) {
 			expect(p).not.toHaveProperty('reach');
 			expect(p).not.toHaveProperty('unmatched');

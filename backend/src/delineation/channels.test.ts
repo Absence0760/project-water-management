@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseTile } from './channelRoutes.js';
-import { channelTile, CHANNEL_TILE_DEG, tileBounds, traceChannels, withSea } from './channels.js';
+import { channelTile, CHANNEL_FLOOR_KM2, CHANNEL_TILE_DEG, tileBounds, traceChannels, withSea } from './channels.js';
 import { openDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
 import { DAM_CELL, fixtureLonLat } from './fixture.js';
@@ -99,8 +99,22 @@ describe('channelTile (synthetic DEM)', () => {
 			const [x, y] = l.coordinates[0]!;
 			expect(x >= w - 0.002 && x <= e + 0.002 && y >= s - 0.002 && y <= n + 0.002).toBe(true);
 		}
-		expect(t.minKm2).toBe(1);
+		expect(t.minKm2).toBe(CHANNEL_FLOOR_KM2);
 		expect(t.dataset.fingerprint).toMatch(/^[0-9a-f]{16}$/);
+	});
+
+	it('carries every channel down to the floor (0.1 km²), each with its area, so the Map can show the small ones zoomed in', async () => {
+		const t = await channelTile(dem, tile, { window: 1024 });
+		expect(CHANNEL_FLOOR_KM2).toBe(0.1);
+		for (const l of t.lines) expect(l.km2).toBeGreaterThanOrEqual(CHANNEL_FLOOR_KM2 - 0.005);
+		const small = t.lines.filter((l) => l.km2 < 1);
+		// Positive control: lines under 1 km² are there (the Map drew none of them before), and lines over it still are.
+		expect(small.length).toBeGreaterThan(0);
+		expect(t.lines.some((l) => l.km2 >= 1)).toBe(true);
+		// The 1 km² tile (what zoom 12 shows) is the same network's larger lines: fewer of them, none under 1 km².
+		const far = await channelTile(dem, tile, { window: 1024, minKm2: 1 });
+		expect(far.lines.length).toBeLessThan(t.lines.length);
+		for (const l of far.lines) expect(l.km2).toBeGreaterThanOrEqual(1 - 0.005);
 	});
 
 	it('refuses a tile outside the DEM', async () => {

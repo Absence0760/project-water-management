@@ -18,7 +18,8 @@ import { CHANNEL_TILE_DEG } from './channelLayer.svelte';
 /** As the backend's (delineation/channelArchive.ts): tile (i, j) is stored at zoom 11, x = i + 1024, y = j + 1024. */
 export const CHANNEL_ARCHIVE_ZOOM = 11;
 export const CHANNEL_ARCHIVE_OFFSET = 1024;
-export const CHANNEL_ARCHIVE_FORMAT = 'water-management-channels/1';
+/** /2 since the lines go down to 0.1 km² (the backend's CHANNEL_FLOOR_KM2): a /1 archive, built at 1 km², is refused, so the route draws the small channels. */
+export const CHANNEL_ARCHIVE_FORMAT = 'water-management-channels/2';
 
 /** What the layer needs of a PMTiles archive (the `pmtiles` package's PMTiles; a fake in the tests). */
 export interface ChannelArchiveReader {

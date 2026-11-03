@@ -1252,6 +1252,7 @@
 								rainRecords={series ? rainRecordOptions(series, (id) => editor.model.nodes.find((n) => n.id === id)?.name) : null}
 								readonly={!canEdit}
 								onModelChanged={reloadInputs}
+								{onProjectChange}
 							/>
 						{/snippet}
 					</Lazy>

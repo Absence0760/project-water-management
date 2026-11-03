@@ -31,6 +31,7 @@
 		"list:ewr-rules": "tsx scripts/ewr-rules.ts",
 		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts",
 		"import:quaternaries": "tsx scripts/import-quaternaries.ts",
+		"import:quaternary-evaporation": "tsx scripts/import-quaternary-evaporation.ts",
 		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts",
 		"import:evaporation-stations": "tsx scripts/import-evaporation-stations.ts",
 		"import:rivers": "tsx scripts/import-rivers.ts",

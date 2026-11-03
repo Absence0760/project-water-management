@@ -37,7 +37,7 @@ import {
 	type LargerChannel,
 	type WindowAim
 } from './delineate.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, place } from './place.js';
+import { clampMinKm2, GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, place } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport } from './pans.js';
@@ -76,8 +76,10 @@ import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport 
  * the catchment that no unit's boundary holds) drains into the first unit, water user or gauge its flow path meets, from where
  * most of its area drains (`restDrains`), not always straight into the outflow; the areas unchanged. A request whose routing
  * stops at its last window says where it stopped, so the worker can go on from the next (the plan job).
+ * start-18: a click of Sub-catchments goes on the channel the Map drew at its zoom (its `minKm2`, 1 km² below zoom 13 down to
+ * 0.1 km² from zoom 15), named in the method; Start's and Divide's points still on 1 km² channels.
  */
-export const START_METHOD_VERSION = 'start-17';
+export const START_METHOD_VERSION = 'start-18';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -100,6 +102,11 @@ export interface PlacementHints {
 	useLarger?: boolean;
 	/** Already on the DEM's channel (a delineated outlet): its own cell, not moved. */
 	exact?: boolean;
+	/**
+	 * The least area (km²) of the channel it may go on: a click's, what the Map drew at its zoom (place.ts clampMinKm2's range).
+	 * Absent (Start, Divide), ON_CHANNEL_KM2.
+	 */
+	minKm2?: number;
 }
 /**
  * Where a dam stands against its river, as the editor marked it on the map (194, map_feature.dam_position): `on_channel`, a
@@ -529,7 +536,8 @@ export function placementText(
 	outletPlaced: PlacedBy | null,
 	snapRadiusM: number,
 	brief = false,
-	positions: readonly DamPosition[] = []
+	positions: readonly DamPosition[] = [],
+	channelKm2: readonly number[] = []
 ): string {
 	const short: Record<PlacedBy, string> = {
 		snapped: 'on the nearest terrain channel',
@@ -571,10 +579,19 @@ export function placementText(
 	if (ran.has('unit')) defs.push('a unit’s boundary: its most-accumulating cell above the outlet, its area the boundary’s own, the cells reaching it a check');
 	if (ran.has('snapped') || ran.has('larger'))
 		defs.push(
-			`the nearest terrain channel: the nearest cell within ${snapRadiusM} m with at least ${ON_CHANNEL_KM2} km² draining through it, the mapped river network not used; a ${LARGER_FACTOR}× larger channel within ${GUARD_RADIUS_M} m named`
+			`the nearest terrain channel: the nearest cell within ${snapRadiusM} m with at least ${channelKm2Text(channelKm2)} draining through it, the mapped river network not used; a ${LARGER_FACTOR}× larger channel within ${GUARD_RADIUS_M} m named`
 		);
 	if (brief && defs.length) return `placed on the channel: ${parts.join(', ')} (each rule as ${START_METHOD_VERSION} defines it, docs/maps.md)`;
 	return `placed on the channel: ${parts.join(', ')}${defs.length ? ` (${defs.join('; ')})` : ''}`;
+}
+
+/**
+ * The least channel areas the snapped points went on, in words: "1 km²", or for clicks made at several zooms "0.25 or 1 km² (the
+ * channels the Map drew at each click's zoom)". Pure.
+ */
+export function channelKm2Text(used: readonly number[]): string {
+	const km = [...new Set(used.length ? used : [ON_CHANNEL_KM2])].sort((a, b) => a - b);
+	return km.length === 1 ? `${km[0]} km²` : `${km.join(' or ')} km² (the channels the Map drew at each click’s zoom)`;
 }
 
 /** The whole method sentence for a division: the routing, where the points went (placementText) and the partition. Pure. */
@@ -727,6 +744,8 @@ export async function delineateUnits(
 		const OUTLET = '';
 		/** The points (by key) with no terrain channel within the snap radius (place.ts): never placed. */
 		const offChannel = new Set<string>();
+		/** The least channel area each snapped point (by key) went on, for the method (placementText). */
+		const usedKm2 = new Map<string, number>();
 		const snapAt = (p: Position, key?: string, hints: PlacementHints = {}): number | null => {
 			const [x, y] = toGrid(p);
 			if (x < 0 || y < 0 || x >= nCells || y >= nCells) return null;
@@ -737,7 +756,9 @@ export async function delineateUnits(
 				record({ placedBy: 'exact' });
 				return c;
 			}
-			const placed = place({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, x, y, { snapRadiusM });
+			const minKm2 = clampMinKm2(hints.minKm2);
+			if (key !== undefined) usedKm2.set(key, minKm2);
+			const placed = place({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, x, y, { snapRadiusM, minKm2 });
 			if (!placed) {
 				if (key !== undefined) offChannel.add(key);
 				return null;
@@ -1180,7 +1201,11 @@ export async function delineateUnits(
 						lowest ? (outletId !== undefined ? (how.get(outletId)?.placedBy ?? null) : null) : (how.get(OUTLET)?.placedBy ?? null),
 						snapRadiusM,
 						brief,
-						req.points.flatMap((p) => (p.id === outletId ? [] : (how.get(p.id)?.damPosition ?? [])))
+						req.points.flatMap((p) => (p.id === outletId ? [] : (how.get(p.id)?.damPosition ?? []))),
+						[...usedKm2.entries()].flatMap(([k, v]) => {
+							const by = how.get(k)?.placedBy;
+							return by === 'snapped' || by === 'larger' ? [v] : [];
+						})
 					) + (lowest ? ' (the outlet: the click most water drains through)' : '')
 			),
 			methodVersion: START_METHOD_VERSION

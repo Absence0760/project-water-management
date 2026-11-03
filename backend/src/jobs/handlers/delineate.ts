@@ -26,7 +26,7 @@ import { delineate, DelineationRefused, tooLargeText, type LargerChannel, type W
 import { panReferenceLoader } from '../../delineation/panReference.js';
 import { storeProposal } from '../../delineation/proposals.js';
 import { nearestReach } from '../../delineation/reach.js';
-import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
+import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, MinKm2, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
 import { ApiError } from '../../http/errors.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
@@ -34,7 +34,8 @@ import { JobError, JobRelease } from '../errors.js';
 import { defineHandler } from '../registry.js';
 import { runPlanJob } from './delineate-plan.js';
 
-export const DelineatePayload = z.object({ requestId: z.string().uuid() }).strict();
+/** `minKm2`: the click's channel threshold (requests.ts MinKm2); absent (a plan, or a job queued before it), 1 km². */
+export const DelineatePayload = z.object({ requestId: z.string().uuid(), minKm2: MinKm2.optional() }).strict();
 
 /** The request's stored aim, checked (it is jsonb): anything else is no aim, and the job's first window is centred again. */
 const AimShape = z
@@ -98,6 +99,7 @@ export const delineateHandler = defineHandler({
 				budgetMs,
 				mapped,
 				keepPoint: req.keep_point,
+				minKm2: payload.minKm2,
 				// The request's last window cut the catchment here: the first window is placed over it, not centred on the click.
 				aim: parseAim(req.aim),
 				// Read in this job's own transaction, as the editor who clicked (the handler's role).

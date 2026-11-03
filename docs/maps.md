@@ -1352,8 +1352,8 @@ as the schema owner; the app never writes it.
 - **Committed: synthetic only.** `backend/fixtures/geo/quaternaries.synthetic.geojson`
   is six invented 0.25° cells in drainage region **Z** (DWS has none), codes
   `Z01A`–`Z02C`, with invented MAP, MAR and monthly means (the monthly means
-  add up to the MAR, the MAR is below the rain on the area). Every source
-  says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
+  add up to the MAR, the MAR is below the rain on the area), and invented
+  MAEs and zones. Every source says "SYNTHETIC". `pnpm import:quaternaries` with no argument loads it
   (`pnpm run setup` does), as dataset `synthetic`. The repo is public: no real
   quaternary values are committed.
 - **Seeded example map.** `pnpm seed:examples` gives the Sandspruit example
@@ -1368,12 +1368,35 @@ as the schema owner; the app never writes it.
      `ogr2ogr -t_srs EPSG:4326 -f GeoJSON quaternaries.geojson <file>.shp`.
      The loader reads the code from `code`, `QUATERNARY`, `QUATERN`,
      `Quaternary`, `QUAT` or `QCODE`.
-  2. Values: the WR2012 tables (WRC; a free registered download),
-     transcribed to a CSV keyed by code:
+  2. Values: the WR2012 tables (WRC; a free registered download). WR2012's
+     per-WMA spreadsheets ("WR2012 <Basin> Quat Info WMA nn_*.xls": area,
+     evaporation zone, MAE of WR2005 and WR90, MAP, MAR; no monthly flows)
+     convert with `scripts/wbt-import/wr2012_quat_info.py` (Python +
+     openpyxl, the importer's venv): convert each `.xls` to `.xlsx` with
+     LibreOffice (`soffice --headless --convert-to xlsx <file>.xls`), then
+     `python scripts/wbt-import/wr2012_quat_info.py <files>.xlsx --out wr2012.csv [--mae wr2005|wr90] [--exclude <file>]`.
+     It finds the columns by their header text (one WMA's file is shifted
+     by a column), takes the gross area, the MAP of WR2005 where there is
+     one, the WR2012 MAR and the MAE picked (WR2005's by default, the newer),
+     skips a split quaternary's bracketed part rows, refuses a code with two
+     different rows, and refuses **two files for one WMA** (by "WMA nn" in
+     the name) unless one is left off the list or `--exclude`d: WMA 17 has a
+     "-2" copy, the client's local correction of one quaternary's MAR, which
+     is not WR2012 (the operator's decision, 2026-11-03: load the original).
+     It prints the `--source` line naming the MAE. Otherwise, transcribe to
+     a CSV keyed by code:
      `code,area_km2,map_mm,mar_mm3,oct,nov,dec,jan,feb,mar,apr,may,jun,jul,aug,sep,period_start,period_end`
-     (monthly means in Mm³, October first; the period in water years). Or put
+     (monthly means in Mm³, October first; the period in water years),
+     optionally with `mae_mm,evap_zone`: the quaternary's MAE (mean annual
+     S-pan evaporation, mm) and WR2012 evaporation zone, both or neither
+     (310), shown as context beside [§ WR2012 evaporation by
+     quaternary](#wr2012-evaporation-by-quaternary)'s monthly rows. Or put
      the same values on each feature's properties (`areaKm2`, `mapMm`,
-     `marMm3`, `monthlyMm3`, `periodStart`, `periodEnd`, `source`).
+     `marMm3`, `monthlyMm3`, `periodStart`, `periodEnd`, `maeMm`, `evapZone`,
+     `source`). Any column may be missing, or a cell empty: the value then
+     comes from the feature's property, or is none. A load replaces the whole
+     dataset, so a value is kept only if this load gives it (the spreadsheets
+     give no monthly flows).
   3. `pnpm import:quaternaries quaternaries.geojson --dataset WR2012 --source "WR2012 (WRC 2015), <volume, table>" --values wr2012.csv`.
      A load replaces every row of its dataset in one transaction; features it
      can't take are listed as skipped. Without an area, the polygon's own is
@@ -1605,14 +1628,21 @@ to a point on a river. The design, the method and its accuracy are in
   elevation model's channels](#the-elevation-models-channels)) at the
   catchment's outlet, or just below a dam wall (the draw bar's point; or
   **Enter coordinates**). The server puts the point on the nearest cell
-  within 150 m that has at least 1 km² draining through it (`place.ts`,
+  within 150 m that has at least `minKm2` draining through it (`place.ts`,
   issue #472), measured from the exact click to each cell's centre, the
-  larger area winning a tie. Nearest, not most-drained: a click on a
+  larger area winning a tie. `minKm2` is the least area of the channels
+  the map drew at the zoom of the click ([§ The elevation model's
+  channels](#the-elevation-models-channels): 1 km² below zoom 13, 0.5 at
+  13, 0.25 at 14, 0.1 km² from 15), sent with the click, so it lands on a
+  line the editor could see; the server holds it to 0.1–1 km², and without
+  it (Enter coordinates typed with no click, an older client) it is 1 km²
+  (`delineate-14`; 1 km² always in `delineate-13`). Nearest, not most-drained: a click on a
   tributary beside the main river stays on the tributary. With no terrain
   channel within 150 m the click is refused (`off_channel`): "No terrain
   channel runs within 150 m of that point. Zoom in until the terrain
   channels show (they're in the map's key), and click on one: they are the elevation
-  model's rivers, which the outline follows." The mapped river network
+  model's rivers, which the outline follows. Zoom in further to see
+  smaller channels." The mapped river network
   (HydroRIVERS, the basemap's waterways) never moves or chooses the
   outlet: the elevation model's rivers often run hundreds of metres from
   the mapped lines, and the outline follows the elevation model's
@@ -1747,19 +1777,54 @@ to a point on a river. The design, the method and its accuracy are in
 ## The elevation model's channels
 
 While **Delineate** or **Sub-catchments** is on, or the **DEM rivers** layer
-is ticked (`layers=channels`, below), the Map draws the DEM's own
+is (on by default for an editor, `layers=-channels` off, below), the Map draws the DEM's own
 channels in solid red, wider for a larger area (issue #374;
 `delineation/channels.ts`, `channelRoutes.ts`, the Map's
 `channelLayer.svelte.ts`). River lines sit hundreds of metres off the
 channel the DEM routes along ([design/delineation-snapping.md](./design/delineation-snapping.md)),
 so these are the lines to click: a click goes on the nearest one within
 150 m, and a click with none that near is refused (`place.ts`; every cell
-these lines draw is one a click can go on, both at 1 km²).
+the lines drawn at the click's zoom pass through is one the click can go
+on: the click sends that zoom's threshold, `minKm2`).
+
+- **Smaller channels as you zoom in.** The tiles carry every channel down
+  to 0.1 km² (`CHANNEL_FLOOR_KM2`, `place.ts`), each line with its area,
+  and the layer draws only those its zoom shows (`mapStyle.ts`
+  `channelMinKm2AtZoom`, the layer's filter a step on the zoom, which
+  MapLibre evaluates at each tile's whole zoom):
+
+  | Zoom | Channels drawn |
+  | --- | --- |
+  | below 13 | 1 km² or more |
+  | 13 | 0.5 km² or more |
+  | 14 | 0.25 km² or more |
+  | 15 and closer | 0.1 km² or more |
+
+  So the headwaters the basemap's OpenStreetMap streams reach (they go much
+  further up than the 1 km² channels did, so small hydrological units
+  couldn't be picked) have a terrain channel to click once zoomed in. The
+  lines also widen with the zoom, like the basemap's waterways (0.5–2.5 px
+  at zoom 10 to 1.5–5 px from 16, wider for a larger area at every zoom).
+  Below about 0.25 km² a delineated outline is only a few hundred cells
+  (a 0.1 km² catchment is about 100 cells of 32 m), so its shape and area
+  are coarse, and on flat ground the DEM can draw spurious parallel
+  channels where the fill's ε slope, not the terrain, decides the route:
+  check a small catchment against the relief and the basemap before using it.
+  Measured per 0.2° tile on the relief DEM (Mapterhorn, about 32 m cells):
+
+  | Least area | Channel per km² | Lines | Size (gzip) | Time |
+  | --- | --- | --- | --- | --- |
+  | 1 km² | 0.66–0.82 km | 200–250 | 12–16 KB | 0.7–1.1 s |
+  | 0.25 km² | 1.3–1.5 km | 800–970 | 25–32 KB | about the same |
+  | 0.1 km² (the tiles) | 1.9–2.3 km | 1 900–2 500 | 42–56 KB | about the same |
+
+  The routing dominates the time, so going down to 0.1 km² costs a tile
+  three to four times the bytes and almost no CPU.
 
 - **How.** The map's view is cut into fixed 0.2° tiles; each is routed in a
   1 024-cell window centred on it (Delineate's first window, about 6 km of
   margin) with the same fill, D8 and accumulation as Delineate, and every
-  cell with at least 1 km² draining through it is traced into lines from
+  cell with at least 0.1 km² draining through it is traced into lines from
   each stream head or confluence down to the next confluence, carrying the
   area at its lower end (window-local: a river entering from beyond the
   window carries less than it drains). A tile keeps the steps that start
@@ -1772,7 +1837,7 @@ these lines draw is one a click can go on, both at 1 km²).
 - **Precomputed** (`delineation/channelArchive.ts`,
   `backend/scripts/channels-build.ts`, the Map's `channelArchive.ts`). The
   same tiles, built once per DEM by the same `channelTile` with the same
-  window and threshold, into one PMTiles archive, `channels.pmtiles`, that
+  window and threshold (0.1 km²), into one PMTiles archive, `channels.pmtiles`, that
   the tiles bucket serves beside the relief (`/tiles/channels.pmtiles`;
   locally MinIO's `tiles` bucket). Each entry is one tile's answer as the
   route gives it (its lines, their areas, the DEM's label and fingerprint),
@@ -1783,7 +1848,9 @@ these lines draw is one a click can go on, both at 1 km²).
   loads, one byte range per tile). With `PUBLIC_CHANNELS_URL` set the layer
   reads each tile from it first and asks the route only for a tile it lacks
   (outside the region it was built for), for every tile if it can't be read
-  or isn't a channels archive, and for every tile if its DEM fingerprint
+  or isn't a channels archive of the current format
+  (`water-management-channels/2` since the lines go down to 0.1 km²; a `/1`
+  archive, built at 1 km², is refused, so rebuild it), and for every tile if its DEM fingerprint
   isn't the one the server's delineation check reports, so a file left from
   an older DEM never draws channels a click wouldn't snap to. Unset (the
   default, CI and e2e), everything is as before. A tile from the file costs
@@ -1798,11 +1865,12 @@ these lines draw is one a click can go on, both at 1 km²).
   (from the cached relief DEM over `CHANNELS_BBOX`, default the Western
   Cape, else from the synthetic DEM) and uploads it to MinIO, and `pnpm
   dev:tiles:up` then sets `PUBLIC_CHANNELS_URL`; the DEM must be the one the
-  backend's `DEM_URL` names, or every tile falls back. Measured on GLO-30:
-  about 0.35 s and 15 KB (gzip; 60–90 KB as JSON) a tile, so the Western
-  Cape (~800 tiles) builds in about 5 minutes into about 10–12 MB, and all of
-  South Africa (~5 500) in about half an hour into about 80 MB. Production:
-  deployment.md § Map tiles.
+  backend's `DEM_URL` names, or every tile falls back. At 0.1 km² a tile is
+  about 0.7–1.1 s and 42–56 KB (gzip) on the relief DEM (the table above),
+  so the Western Cape (~800 tiles) builds in about 10–15 minutes into about
+  30–40 MB, and all of South Africa (~5 500) in about 1–1.5 hours into about
+  250 MB: estimated from the measured tiles, not a full build (at 1 km² they
+  were about 10–12 MB and 80 MB). Production: deployment.md § Map tiles.
 - **When.** While one of the two tools is on, while a delineated
   proposal waits for a decision (dimmed then, so the outline reads first
   and can be checked against the channels it follows; they go once it is
@@ -1812,7 +1880,8 @@ these lines draw is one a click can go on, both at 1 km²).
   in to about 35 km across to draw the DEM rivers." while the layer does
   (tiles already fetched stay drawn). Tiles are fetched one at a time and
   kept for the session; the server keeps the last 128 in memory per
-  instance.
+  instance, keyed by the DEM's fingerprint and the 0.1 km² floor (so a
+  change of the floor never serves a tile cut at another).
 - **The DEM rivers layer** (`layers=channels`, confirmed by the client's
   hydrologist 2026-11-02; `mapLayers.ts` `demRiversOffered`,
   `channelsWanted`). A toggle in the Layers panel right after HydroRIVERS'
@@ -1826,6 +1895,16 @@ these lines draw is one a click can go on, both at 1 km²).
   editor's); without `DEM_URL` (the local default) or for a viewer it isn't
   offered, as the DEM grid and the relief aren't. Kept in the URL with the
   other layers.
+- **On by default** (`mapLayers.ts` `DEFAULT_LAYERS`), wherever it is
+  offered: an editor delineating sees the rivers a click goes to without
+  looking for the toggle. Off is written into the URL as `-channels` in
+  `layers=`; turned on again from the toggle it is written as `channels`,
+  so Back undoes either toggle, and a view saved or shared as
+  `layers=channels` before the default still means on. With no `layers=`
+  (or one that doesn't name it) it is on. The Layers button counts it among
+  the layers on only where it is offered; the panel's live region says
+  "DEM rivers drawn." only once its toggle turned it on (`layerAsked`), so
+  a page that opens with it on by default announces nothing of it.
 - **Requests while panning.** The layer asks nothing new for a view it has
   already drawn: a tile is fetched once a session, the map reports its view
   only at the end of a move (`moveend`), and each new view replaces the
@@ -1869,8 +1948,9 @@ these lines draw is one a click can go on, both at 1 km²).
   map, so the bar's lines and the Key's sit side by side without covering the
   map). A pill over the map's top appears only when there
   is something to say: "Drawing the terrain channels…", "Zoom in to see …",
-  that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
-  309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
+  that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington
+  at 1 km² (before the tiles went down to 0.1 km²): 309 lines, about 1 km of
+  channel per km², 86 KB, 0.4 s.
 
 ## Search
 
@@ -2112,8 +2192,13 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   boundaries too: **Draw a unit's boundary** (an *other* area) and
   **Sub-catchments, one per click** (with a DEM) sit beside Place a point,
   and the sheet comes back once the area or the pieces are saved (#646
-  F13). Typing the model in on the Network stays the other way; upload
-  works at every step.
+  F13). Sub-catchments started from the Map's own tools lands here too:
+  after its Save, an empty model's Start sheet opens at the points with
+  each saved piece marked *a hydrological unit*, so what is left is to
+  propose, check each unit's name and area in the proposal, and Apply (a
+  model with nodes gets the Divide sheet instead; [§ Sub-catchments from
+  clicks](#sub-catchments-from-clicks)). Typing the model in on the
+  Network stays the other way; upload works at every step.
 - **Data and the first run: a to-do list** (issue #646 item 2, the
   hydrologist's review F2–F4; `startData.ts`). Every data proposal a run
   needs, in the order a run reads them: the units' areas and order, how
@@ -2378,7 +2463,22 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Divide the model** (a model that has nodes, with a DEM; `divide=1`,
   migration 182): each unit's boundary (an area on the map) stands for its
   unit, a point for an other water user, a gauge for a gauge node (or an
-  unlinked gauge for a new gauge node); a dam or an abstraction point never
+  unlinked gauge for a new gauge node), and an area no node has (a saved
+  sub-catchment, issue #670) for **a new hydrological unit**, proposed as
+  Start proposes a unit (its boundary's geodesic area, checked against the
+  elevation model; its drains-into the first unit or gauge its flow path
+  meets; its unlinked dams and abstraction points its composite dam and
+  river pump) and named as its feature ("Sub-catchment 2", editable). Its
+  **Add** makes a `farm` node in the same revision, draining into the
+  outflow until its drains-into is ticked, its ticked area its boundary,
+  linked as Start links one, and the feature and its members linked to it.
+  A new unit's land is **not taken from the units around it**: a unit whose
+  area holds it keeps that area until its own boundary is redrawn or a
+  smaller area typed, the proposal warns when the new boundary overlaps a
+  unit's area on the map ("… is a new unit, and its boundary overlaps …’s
+  area on the map. That unit keeps its area …", `newUnitOverlaps`), and the
+  sheet's overlap sentence counts the typed areas kept; the rest of the
+  catchment is proposed without it. A dam or an abstraction point never
   stands for a unit (400: "a dam or an abstraction point is part of its
   unit …, not where the unit ends"), and the unlinked ones inside a unit's
   boundary are listed on its card ("Joins its composite dam: …", "Joins its
@@ -2404,8 +2504,29 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 `backend/src/delineation/clicks.ts`, the Map's `ClickBar.svelte`; the screen
 in [ui.md § Map](./ui.md#map-tabmap), the API in [api.md § Sub-catchments
 from clicks](./api.md#sub-catchments-from-clicks)) divides the land by
-clicking the rivers, with no boundary, no points to place and no roles to
-pick first.
+clicking the rivers, with no points to place and no roles to pick first.
+
+- **Within the catchment.** With a catchment boundary on the map, every
+  piece lies within it, and the bar says so ("Within “Valley”: …"). A click
+  outside the boundary polygon is refused before any elevation-model work,
+  naming it ("Click 2 is outside “Valley”, the catchment boundary: every
+  sub-catchment lies within it. …"; 422, no attempt counted). When the
+  boundary came from Delineate, its accepted delineation's snapped outlet
+  (`delineation_proposal.outlet_lon`/`outlet_lat`, as Start from the map
+  reads it) is the **lowest point**, ahead of every click and on its own
+  cell: its piece is the land between the lowest clicks and the outlet,
+  listed first under badge **O** ("The outlet’s piece: …"), click `-1` in
+  the answer, saved as "Sub-catchment at the outlet". It is no click, so
+  Undo never takes it away (it goes only with the last click, when there is
+  nothing to divide). A click that drains more than that outlet (on another
+  river just inside the boundary's edge) is refused too. A boundary drawn
+  or uploaded by hand has no stored outlet, so there the lowest click stays
+  the outlet, as without a boundary, and the bar says so: its outflow (its
+  most-drained cell, as Start places a unit at its boundary's) would need
+  the outlet mode of `delineateUnits`, which refuses a catchment past the
+  window instead of keeping inflow points, so it isn't used. The server
+  reads the boundary and its outlet on every preview and Save, never from
+  the browser. With no boundary at all, nothing changes.
 
 - **What a click is.** An outlet on a terrain channel: the server puts it
   on the nearest terrain channel within 150 m, as Delineation does. Its piece is
@@ -2439,7 +2560,16 @@ pick first.
   that missed the river is the usual cause (finding 11).
 - **Clicking on the channel** (the same rule as Delineation's, [§
   Delineation](#delineation); `start-15`, issue #472). Each click goes on
-  the nearest cell within 150 m with at least 1 km² draining through it
+  the nearest cell within 150 m with at least its own `minKm2` draining
+  through it: the least area of the channels the map drew at the zoom it
+  was clicked at (1 km² below zoom 13 down to 0.1 km² from 15, [§ The
+  elevation model's channels](#the-elevation-models-channels); `start-18`),
+  so a click made zoomed in on a small headwater channel stays on it,
+  and each click keeps its own when the clicks are routed again after a
+  zoom. The method names the areas used ("at least 0.25 or 1 km² (the
+  channels the Map drew at each click's zoom)"). Start from the map and
+  Divide place their gauges and points on 1 km² channels as before: they
+  place from map points, not clicks made at a zoom
   (measured from the click itself to each cell's centre); its line says how
   far it moved from 50 m ("· moved 72 m to the nearest terrain channel").
   A click with no terrain channel within 150 m is refused, naming it ("No
@@ -2465,10 +2595,20 @@ pick first.
   catchment past the largest window) is taken back with the reason.
 - **Save** routes the same clicks again on the server (never trusting a
   geometry from the browser) and saves each piece as an *other* polygon,
-  "Sub-catchment *n*" by its click's number, its description the outlet,
-  where it drains, the area upstream (or "more upstream than was routed"),
-  the inflow points entering it, the dataset and the method version.
-  Link each to its unit and **Use** its area as with any other polygon.
+  "Sub-catchment *n*" by its click's number ("Sub-catchment at the outlet"
+  for the outlet's piece), its description the outlet, where it drains, the
+  area upstream (or "more upstream than was routed"), the inflow points
+  entering it, the dataset and the method version.
+- **Then straight on to the network.** After a Save the Map opens the
+  network step with the new pieces: **Start from the map** on an empty
+  model (`start=1`, at its points, each saved piece marked a hydrological
+  unit), or **Divide the model** on one with nodes and a DEM (`divide=1`,
+  each piece picked as a new hydrological unit there, issue #670; the
+  editor may pick a unit already in the model instead). Nothing is
+  written to the model there until the sheet's Apply, its one confirmation
+  ([§ Start from the map](#start-from-the-map)). Without either (the
+  Start state can't be read), the first piece's card opens as before: link
+  each to its unit and **Use** its area as with any other polygon.
 - **Limits.** The clicks and every whole piece must fit the largest window
   (about 100 km across, 20 s); pieces past it are inflow points (above). At
   most 50 clicks a request. Inflow points are not saved: model what comes
@@ -2853,9 +2993,11 @@ grid's kind, and **nothing is converted between them**:
   values. For a reference-ET grid the panel shows **ET₀ ÷ saved A-pan** per
   month, the pan coefficient the two rows imply, as a cross-check only
   (flagged outside FAO-56's typical Class A range, 0.6–0.85); nothing is
-  written from it. A Symons-pan (S-pan) grid, WR2012's kind, has no kind
-  here: the loader refuses it, since turning S-pan into A-pan needs the
-  modeller's own monthly factors.
+  written from it. A Symons-pan (S-pan) grid has no kind here: the loader
+  refuses it, since turning S-pan into A-pan needs an equation the modeller
+  picks. WR2012's own monthly A-pan and S-pan per quaternary are proposed on
+  Model settings → Demand instead ([§ WR2012 evaporation by
+  quaternary](#wr2012-evaporation-by-quaternary)).
 - **Pre-summarised at import, local-first.** The app never reads NetCDF. The
   operator's `pnpm import:evaporation` (`backend/scripts/import-evaporation.ts`,
   `geo/loadEvaporation.ts`) reads the daily product a year at a time (dPET:
@@ -3005,8 +3147,10 @@ only reads them.
   until its source has an allowed row here. The release gate also refuses a
   PenPan or A-pan key or label before the approval. The attribution, stored on the
   dataset row, is shown under every proposal (§ Sources).
-- **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
-  monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
+- **WR2012's evaporation** is not a grid here: its WRSM2000 configurations'
+  monthly A-pan and S-pan per quaternary are proposed by [§ WR2012
+  evaporation by quaternary](#wr2012-evaporation-by-quaternary) (the
+  operator's decision of 2026-11-03, § Sources).
 
 ## Evaporation stations
 
@@ -3098,6 +3242,119 @@ verified daily record (one array of mm a day, `NULL` for a day not read). The
   code and a flow table, so a pan record can't arrive as flow
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets);
   followups.md, *Decision: DWS evaporation station records*).
+
+## WR2012 evaporation by quaternary
+
+Model settings → **Demand** → **A-pan from**, beside the A-pan row's
+**Paste from a spreadsheet…**, chooses how the row is filled
+(`evaporation/spanEntry.ts` `APAN_SOURCES`; a view choice, never saved):
+**Typed or pasted A-pan** (as before), **WR2012 Pitman configuration, per
+quaternary** (`Wr2012EvaporationProposal.svelte`), **Typed or pasted S-pan,
+converted (WR90 / Taljaard)** (`SpanEntry.svelte`), and links to
+[§ Evaporation stations](#evaporation-stations) and [§ Evaporation from the
+map](#evaporation-from-the-map), which stay on Calibration. The two panels are
+lazy: they load only when picked.
+
+**WR2012 Pitman configuration, per quaternary.** WR2012's WRSM2000 (Pitman)
+network configurations give, per quaternary, the runoff module's 12 monthly
+Symons-pan (S-pan) depths and the irrigation module's 12 monthly Class-A pan
+(A-pan) depths ([§ Quaternary evaporation](#quaternary-evaporation)).
+
+- **What is listed.** One row per quaternary the catchment boundary
+  overlaps: its code, share of the catchment's area, WR2012's evaporation
+  zone and MAE (context from the quaternary spreadsheets: the MAE against
+  the S-pan total is a check of the two sources), the S-pan and A-pan
+  totals, A ÷ S, and how its runoff and irrigation modules agree ("2 of 3
+  agree; others 1 620 mm", flagged; the row most modules give is used).
+  Then the monthly table: each quaternary's A-pan (when there are several),
+  the catchment's S-pan and **proposed A-pan**, the area-weighted means over
+  the quaternaries that have each row, and the saved A-pan. The shares come
+  from a grid of 128 cells along the boundary's longer side: each cell's
+  part inside the boundary goes to the quaternary its centre lies in, so a
+  share is good to about one cell's width along each divide inside the
+  catchment (`backend/src/geo/wr2012Evaporation.ts`). The part of the
+  catchment in quaternaries without an irrigation module, or in none, is
+  said and left out of the mean.
+- **A-pan as it stands.** The irrigation modules give A-pan, the model's own
+  input, so nothing is converted. A quaternary with S-pan but no irrigation
+  module (about 10 of the 327 in WMAs 16–19) proposes no A-pan: the row says
+  "None: no irrigation module gives its A-pan, only S-pan", and a catchment
+  with no A-pan at all is told to convert the S-pan under **Typed or pasted
+  S-pan, converted**, with the equation the user picks; it is never
+  converted silently.
+- **Use** (editors; "Saves now") asks first, then
+  `POST /projects/:id/evaporation-from-wr2012`
+  ([api.md § Catchment map](./api.md#catchment-map)): the server re-reads the
+  quaternaries, their evaporation and the boundary and re-derives the shares
+  and the means (it takes no numbers from the browser), and writes
+  `settings.apanMm` as one settings revision whose reason names the dataset,
+  each quaternary with its share (and where its irrigation modules
+  disagree), how many module files the rows came from, any part left out,
+  the S-pan total and the source. While Settings has unsaved changes, Use
+  waits.
+- **Dam evaporation.** The WR90 lake-factor presets (Settings → Demand)
+  start from the A-pan row and turn it back into S-pan with the WR90 or
+  Taljaard (2023) equation (`lakeFactorPresets.ts`, S = a × A + b), not with
+  the runoff modules' S-pan, so the S-pan they assume differs from the row
+  shown here by those equations' fit (the inverted equations give A ÷ S of
+  about 1.2 at summer depths and more in winter; the synthetic rows are
+  about 1.27 over the year).
+- **Catchment-wide only.** The A-pan row is one row for the catchment, as the
+  engine reads it.
+
+**Typed or pasted S-pan, converted.** Twelve S-pan months (a WR90 table, a
+report), typed or pasted from a spreadsheet row or column (**Fill the
+months**), become A-pan only by the inverted equation the user picks, WR90 or
+Taljaard (2023), with the same floors and warning as a Symons station
+([§ Evaporation stations](#evaporation-stations)); an optional note says
+where they come from. **Use** saves through
+`POST /projects/:id/evaporation-from-span` as one revision giving the months,
+the note and the equation.
+
+- **Who sees them.** A viewer's read; a farmer gets 403 and a non-member 404.
+
+### Quaternary evaporation
+
+`quaternary_evaporation` (310) holds, per dataset and quaternary code, the
+12 monthly S-pan and 12 monthly A-pan depths (either may be missing) and their
+provenance: how many modules named the quaternary, how many agree with the row
+kept, the others' annual totals and the module file names. The **operator**
+loads it as the schema owner; the app only reads it. It is joined to the
+outlines by code, so either can be reloaded alone.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/quaternary-evaporation.synthetic.csv`
+  gives the six region Z quaternaries invented rows (A ÷ S about 1.27);
+  `Z01B`'s runoff modules disagree (2 of 3) and `Z02C` has S-pan only.
+  `pnpm import:quaternary-evaporation` with no argument loads it as dataset
+  `synthetic` (`pnpm run setup` does).
+- **Real data: the WRSM2000 network configurations** (WR2012, WRC 2015; the
+  operator's copy for WMAs 16–19). `scripts/wbt-import/wrsm_evaporation.py`
+  (Python stdlib) walks the network folders and zips, nested ones included:
+  `python scripts/wbt-import/wrsm_evaporation.py <folders or zips> --out evaporation.csv`.
+  It reads each runoff module (`…RU<n>.DAT`, line 4: 12 S-pan months, October
+  first) and irrigation module (`…RR<n>.DAT`, line 8: 12 A-pan months; line 7
+  is a factor row, line 9 crop factors), the quaternaries from line 1's label
+  (`'Z40A,B'`, `'CR Z24G-K'`, `'Runoff Z22F High MAP'`, `'forestry Z10Da'`,
+  lower-case `'fdam irrg z40b'`: lists, ranges, a lower-case part letter).
+  It skips, counting each: a flat placeholder row (all 12 the same), a total
+  outside 300–4000 mm, a row that isn't 12 numbers, a label naming no
+  quaternary (forestry, alien vegetation sub-modules), and the same file met
+  twice (by content). Where modules disagree it keeps the row most give
+  (ties: the first by file name) and lists the others. The other modules
+  (reservoirs, river reaches) repeat the S-pan with lake factors and are not
+  read. Then
+  `pnpm import:quaternary-evaporation evaporation.csv --dataset WR2012-WRSM2000`.
+  The CSV's columns: `code,wma,span_total_mm,span_oct…span_sep,apan_total_mm,apan_oct…apan_sep,apan_over_span,span_modules,span_agree,span_other_totals,apan_modules,apan_agree,apan_other_totals,span_files,apan_files`;
+  the loader needs `code` and the 24 month columns, refuses a row (named)
+  with a bad or repeated code, a month missing or outside 0–1000 mm, or
+  neither row, and replaces the dataset in one transaction
+  (`backend/src/geo/loadQuaternaryEvaporation.ts`). Never commit the CSV.
+- **Production loading**: `load-reference.yml` kind
+  `quaternary-evaporation` reads the same CSV from the private reference
+  bucket ([deployment.md § Reference datasets](./deployment.md#reference-datasets));
+  every row is stored with the recorded credit, "WR2012 (WRC 2015), WRSM2000
+  network configurations, WMAs 16–19: monthly S-pan (runoff modules) and
+  A-pan (irrigation modules).", unless the load gives its own source.
 
 ## Hydrological units layer
 
@@ -3381,7 +3638,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | HydroATLAS v1.0 (BasinATLAS attributes: aridity, precipitation, slope, clay, sand, forest, regulation): the donors' similarity attributes | WWF / McGill University (HydroSHEDS); Linke, S. et al. (2019), Sci. Data 6 | **CC BY 4.0** (hydrosheds.org/hydroatlas, read 2026-10-28) | "Basin attributes: HydroATLAS v1.0 (BasinATLAS; Linke et al. 2019, Lehner et al. 2022), CC BY 4.0." | 1.0 | none | allowed (with GRDC-Caravan, kind `gr4j-donors`) |
 | Synthetic soil water capacity grid (`backend/fixtures/soils/soils.synthetic.json`) | this repo (invented soil over region Z) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
 | Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
-| WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: no licence published; the operator's decision of 2026-11-02 covers the MAP, MAR and monthly flows only | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+| WR2012 evaporation (monthly S-pan and A-pan per quaternary from the WRSM2000 network configurations, WMAs 16–19; the MAE and evaporation zone from the quaternary spreadsheets): [§ WR2012 evaporation by quaternary](#wr2012-evaporation-by-quaternary) | WRC (Water Research Commission), with Royal HaskoningDHV, [waterresourceswr2012.co.za](https://waterresourceswr2012.co.za/) | as WR2012 above: no licence published (read 2026-11-02), copyright reserved by its authors | "WR2012 (WRC 2015), WRSM2000 network configurations, WMAs 16–19" on every row and on `/data-sources#wrc-water-resources` | WR2012 (WRC 2015) | none (a 2012 study) | allowed (the operator's decision, 2026-11-03, extending the 2026-11-02 WR2012 decision to its evaporation values on the same published terms, [legal/map-data-licences.md § 3.3d](./legal/map-data-licences.md#33d-the-dws-quaternary-outlines-and-the-wr2012-values-the-operators-decision-added-2026-11-02)): loaded as kind `quaternary-evaporation`; never committed |
 | Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)", and the proposal and its revision call its values "modelled Class-A pan evaporation (PenPan, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
 
 **Which version is in use.** The table's Version column is the version the

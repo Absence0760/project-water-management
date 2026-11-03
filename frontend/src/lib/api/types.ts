@@ -3768,6 +3768,57 @@ export interface EvaporationStationProposals {
 	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
 }
 
+/** A WRSM2000 module row's provenance: how many modules named the quaternary, how many give the row kept, the others' annual totals (mm). */
+export interface ModuleAgreement {
+	modules: number;
+	agree: number;
+	othersMm: number[];
+}
+
+/** One quaternary the catchment boundary overlaps, with WR2012's monthly evaporation (GET /projects/:id/evaporation-wr2012; docs/maps.md § WR2012 evaporation by quaternary). */
+export interface Wr2012EvaporationQuaternary {
+	code: string;
+	dataset: string;
+	evaporationDataset: string | null;
+	/** The repo's invented data: never real values. */
+	synthetic: boolean;
+	/** Share of the catchment's area inside it, 0–1, and that area, km². */
+	share: number;
+	areaKm2: number;
+	/** WR2012's evaporation zone and MAE (mean annual S-pan, mm), context from its quaternary spreadsheets; null if not loaded. */
+	zone: string | null;
+	maeMm: number | null;
+	/** Monthly S-pan (runoff modules) and A-pan (irrigation modules), mm, Oct … Sep; null where the configurations have none. */
+	spanMm: number[] | null;
+	apanMm: number[] | null;
+	span: ModuleAgreement | null;
+	apan: ModuleAgreement | null;
+	files: number;
+	/** Some module named it with another row than the one kept. */
+	disagree: boolean;
+	/** Why it proposes no A-pan, or null. */
+	why: string | null;
+	source: string | null;
+}
+
+/** GET /projects/:id/evaporation-wr2012: WR2012's monthly S-pan and A-pan for the quaternaries under the boundary, beside the saved A-pan. */
+export interface Wr2012EvaporationProposal {
+	boundary: { featureId: string; name: string } | null;
+	/** The quaternary outline datasets loaded (none: nothing can be proposed). */
+	datasets: { dataset: string; count: number }[];
+	/** Null with no boundary. */
+	evaporation: {
+		quaternaries: Wr2012EvaporationQuaternary[];
+		/** The catchment's rows, area-weighted over the quaternaries that have each; null with none. */
+		spanMm: number[] | null;
+		apanMm: number[] | null;
+		spanCoverage: number;
+		apanCoverage: number;
+		problem: string | null;
+	} | null;
+	settings: { apanMm: number[]; dailyApan: { name: string; source: string | null; from: string; to: string }[] };
+}
+
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
 export interface RegisterDamProposal {
 	registerNo: string;
@@ -4154,7 +4205,7 @@ export interface DivideCurrent {
 	pctUpstreamToDam?: number;
 }
 
-/** One point of a division: the node it stands for (null: a new gauge), its own piece, the point below it, and the node's values now. */
+/** One point of a division: the node it stands for (null: a new gauge, or with role `unit` a new hydrological unit from an area, #670), its own piece, the point below it, and the node's values now. */
 export interface DivideUnit {
 	key: string;
 	featureName: string;
@@ -4203,6 +4254,7 @@ export interface DividePlan {
 /** The ticks an editor sends to apply a division: every point once. */
 export interface DivideTicks {
 	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
+	/** `add` and `name`: a new gauge or a new hydrological unit (#670) made, and its name. */
 	units: { key: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; name?: string }[];
 	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis; drainsInto?: boolean };
 }
@@ -4243,12 +4295,12 @@ export interface PlanRequest {
 
 /** One click's piece (POST …/map/subcatchments): its incremental catchment, the land draining to it before any other click. */
 export interface ClickPiece {
-	/** The click's index in the request. */
+	/** The click's index in the request; -1 (OUTLET_CLICK) for the catchment's delineated outlet's piece. */
 	click: number;
 	/** The click, snapped onto the channel. */
 	point: MapPosition;
 	snapDistanceM: number | null;
-	/** The click whose piece this one flows into next; null for the lowest click. */
+	/** The click whose piece this one flows into next (-1: the outlet's piece); null for the lowest. */
 	drainsInto: number | null;
 	/** Null when it is open, or its cells couldn't be outlined as a valid polygon (the area still counts them). */
 	geometry: { type: 'Polygon'; coordinates: MapPosition[][] } | null;
@@ -4292,8 +4344,13 @@ export interface LargerChannel {
 export interface ClickPieces {
 	pieces: ClickPiece[];
 	dropped: { click: number; reason: string }[];
-	/** The lowest click's index: it owns what drains to it through no other click. */
+	/** The lowest click's index (-1 when the catchment's delineated outlet is): it owns what drains to it through no other click. */
 	lowest: number;
+	/**
+	 * The catchment boundary the clicks are within (a click outside it is refused); null with none on the map. `delineation`:
+	 * its delineated outlet is the lowest point, below every click; `lowest`: drawn or uploaded by hand, the lowest click is.
+	 */
+	within: { featureId: string; name: string; outlet: 'delineation' | 'lowest' } | null;
 	cellSizeM: number;
 	dataset: { label: string; fingerprint: string };
 	method: string;

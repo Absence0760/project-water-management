@@ -290,6 +290,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Validation statement',
 		'Publication',
 		'Arithmetic checks',
+		'Accumulated flow at each unit',
 		'Chart any daily series'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
@@ -299,7 +300,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(menu.getByRole('list', { name: 'River & Reserve' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Units & users' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Model quality' })).toHaveCount(0);
-	await expect(menu.getByRole('list', { name: 'The model’s working' }).getByRole('link')).toHaveText(['Arithmetic checks', 'Chart any daily series']);
+	await expect(menu.getByRole('list', { name: 'The model’s working' }).getByRole('link')).toHaveText(['Arithmetic checks', 'Accumulated flow at each unit', 'Chart any daily series']);
 	// The summary opens with the model checks, each linking to its panel.
 	const checks = page.getByRole('list', { name: 'Model checks' });
 	await expect(checks.getByRole('link', { name: /^Arithmetic checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');

@@ -1,0 +1,7 @@
+code,wma,span_total_mm,span_oct,span_nov,span_dec,span_jan,span_feb,span_mar,span_apr,span_may,span_jun,span_jul,span_aug,span_sep,apan_total_mm,apan_oct,apan_nov,apan_dec,apan_jan,apan_feb,apan_mar,apan_apr,apan_may,apan_jun,apan_jul,apan_aug,apan_sep,apan_over_span,span_modules,span_agree,span_other_totals,apan_modules,apan_agree,apan_other_totals,span_files,apan_files
+Z01A,99 Synthetic WMA (invented),1530,150,180,205,210,170,150,100,70,55,55,75,110,1943,190,229,260,267,216,190,127,89,70,70,95,140,1.270,2,2,,2,2,,Z1RU1.DAT Z1RU11.DAT,Z1RR4.DAT Z1RR5.DAT
+Z01B,99 Synthetic WMA (invented),1590,156,187,213,218,177,156,104,73,57,57,78,114,2036,200,239,273,279,227,200,133,93,73,73,100,146,1.281,3,2,1620,1,1,,Z1RU2.DAT Z1RU21.DAT,Z1RR24.DAT
+Z01C,99 Synthetic WMA (invented),1652,162,194,221,227,184,162,108,76,59,59,81,119,2148,211,252,287,295,239,211,140,99,77,77,105,155,1.300,1,1,,1,1,,Z1RU3.DAT,Z1RR34.DAT
+Z02A,99 Synthetic WMA (invented),1486,146,175,199,204,165,146,97,68,53,53,73,107,1856,182,219,249,255,206,182,121,85,66,66,91,134,1.249,1,1,,1,1,,Z2RU1.DAT,Z2RR4.DAT
+Z02B,99 Synthetic WMA (invented),1548,152,182,207,212,172,152,101,71,56,56,76,111,1952,192,229,261,267,217,192,127,89,71,71,96,140,1.261,1,1,,2,1,1950,Z2RU2.DAT,Z2RR24.DAT
+Z02C,99 Synthetic WMA (invented),1622,159,191,217,223,180,159,106,74,58,58,80,117,,,,,,,,,,,,,,,1,1,,,,,Z2RU3.DAT,

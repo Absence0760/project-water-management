@@ -7,7 +7,7 @@ import { delineate, DelineationRefused, worldPx } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN, valleyUnitRing } from './fixture.js';
 import { accumulate, OUT } from './flow.js';
 import { LARGER_FACTOR } from './place.js';
-import { cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, offChannelOutflow, ownsLand, riverBelow, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
+import { cellRowAreaM2, channelKm2Text, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, offChannelOutflow, ownsLand, riverBelow, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -682,6 +682,14 @@ describe('placementText and startMethod', () => {
 		expect(placementText(['larger'], 'boundary', 150)).toBe(`placed on the channel: the outlet at the boundary’s most-accumulating cell, 1 point on the larger channel chosen (${NEAREST})`);
 		expect(placementText(['polygon'], 'exact', 150)).not.toMatch(/terrain channel:/);
 		expect(placementText([], null, 150)).toBe('no points placed');
+	});
+
+	it('names the least channel areas the clicks went on (start-18): one figure for one zoom, each for several, 1 km² by default', () => {
+		expect(channelKm2Text([])).toBe('1 km²');
+		expect(channelKm2Text([0.1, 0.1])).toBe('0.1 km²');
+		expect(channelKm2Text([1, 0.25, 1])).toBe('0.25 or 1 km² (the channels the Map drew at each click’s zoom)');
+		expect(placementText(['snapped'], null, 150, false, [], [0.25])).toMatch(/with at least 0\.25 km² draining through it/);
+		expect(placementText(['snapped'], null, 150)).toContain(NEAREST);
 	});
 
 	it('names a dam’s marked position only when one was marked (194), the unmarked rule only while a dam is unmarked', () => {

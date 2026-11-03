@@ -18,12 +18,20 @@
 // window to the same job (272_plan_request, planRequests.ts): a request row
 // with a plan kind instead of a click, under the same cap and dedupe key.
 // The click views here (loadRequest, waitingRequest) never show one.
+import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { UUID } from '../projects/access.js';
 import { JOB_TIME_BUDGET_MS, JOB_WINDOWS, type LargerChannel, WINDOWS, type WindowAim } from './delineate.js';
+import { clampMinKm2 } from './place.js';
 import { type DelineationProposal, loadProposal, toProposal } from './proposals.js';
+
+/**
+ * A click's channel threshold (km²): the least area of the channels the Map drew at the zoom it was made at (the frontend's
+ * channelMinKm2AtZoom). Any finite number, held to [0.1, 1] (place.ts clampMinKm2) rather than refused; absent, 1 km².
+ */
+export const MinKm2 = z.number().finite().transform((v) => clampMinKm2(v));
 
 /**
  * The windows the request and the job try, and the job's time budget.
@@ -196,6 +204,8 @@ export interface QueueOptions {
 	lon: number;
 	lat: number;
 	keepPoint?: boolean;
+	/** The click's channel threshold (km², MinKm2): carried in the job's payload; absent, 1 km². */
+	minKm2?: number;
 	/** The smallest window the job tries. */
 	fromWindow: number;
 	/** Where the request's last window cut the catchment (DelineationRefused.aim), for the job's first window. */
@@ -261,7 +271,8 @@ export async function queueDelineation(db: Db, o: QueueOptions): Promise<{ reque
 	const { job, created } = await enqueueJob(db, {
 		projectId: o.projectId,
 		kind: 'delineate',
-		payload: { requestId },
+		// The click's threshold rides in the payload, not the request row: a job queued before it (no minKm2) places at 1 km².
+		payload: o.minKm2 === undefined ? { requestId } : { requestId, minKm2: o.minKm2 },
 		// The account's one pending delineation in this project (the cap above holds it across projects).
 		dedupeKey: `delineate:${o.userId}`,
 		maxAttempts: DELINEATE_MAX_ATTEMPTS

@@ -5463,8 +5463,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       and Try again) and each panel's own spec, which now also checks the
       focus move after a Use for land cover and the dams. A new proposal
       panel starts from `ProposalPanel` (ui-playbook.md § 4).
-- [ ] **Decision: WR2012's evaporation, and an A-pan source** (operator;
-      maps.md § Sources, issue #326 B-evap, decision D-B). The map proposes
+- [x] **Decision: WR2012's evaporation, and an A-pan source** (operator;
+      maps.md § Sources, issue #326 B-evap, decision D-B). **Decided
+      2026-11-03:** the operator extended the 2026-11-02 WR2012 decision to
+      its evaporation values, and supplied the WRSM2000 network
+      configurations for WMAs 16–19, whose irrigation modules give A-pan
+      per quaternary directly (no S → A factors needed). Built as Model
+      settings → Demand → A-pan from → WR2012 Pitman configuration (maps.md
+      § WR2012 evaporation by quaternary). The original note: The map proposes
       reference ET (dPET) as GR4J's PE, never as A-pan, so demand and dam
       evaporation still take the A-pan row typed from WR90/WR2012 or a
       station. WR2012's evaporation (S-pan per quaternary) is blocked with

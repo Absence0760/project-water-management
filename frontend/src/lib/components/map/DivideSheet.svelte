@@ -3,8 +3,9 @@
 	sheet over the Map (`divide=1`; #326 C3's follow-up,
 	docs/design/start-from-map.md § Dividing a model that has nodes, docs/ui.md
 	§ Map). Two steps, read from the server's state: the points (which node
-	each dam, other point and gauge on the map stands for, or a new gauge, and
-	the outlet), then the proposal (each point's own area, what it drains
+	each unit's boundary, other point and gauge on the map stands for, or a new
+	gauge, or for an area no node has a new hydrological unit, #670, and the
+	outlet), then the proposal (each point's own area, what it drains
 	into and, for a dam, all of its runoff to the dam, each shown beside the
 	node's value now and taken only when ticked; the rest of the catchment
 	given to a unit, a new unit or nobody). Each card carries its piece's number
@@ -35,7 +36,9 @@
 		km2,
 		km2Now,
 		NEW_GAUGE,
+		NEW_UNIT,
 		NONE,
+		offersNewUnit,
 		nodeOptions,
 		outflowOf,
 		sameAsNow,
@@ -184,7 +187,7 @@
 
 	async function apply(p: DivideProposal) {
 		if (!ticks || problem) return;
-		const ok = await confirmDialog({ title: 'Apply the ticked values?', message: `${divideSummary(ticks)}${overlap ? ` ${overlap}` : ''} It is saved now as one change in History.`, confirmLabel: 'Apply' });
+		const ok = await confirmDialog({ title: 'Apply the ticked values?', message: `${divideSummary(p.plan, ticks)}${overlap ? ` ${overlap}` : ''} It is saved now as one change in History.`, confirmLabel: 'Apply' });
 		if (!ok) return;
 		busy = 'apply';
 		error = null;
@@ -249,7 +252,7 @@
 		{:else if step === 'points'}
 			<form id="{uid}-points" onsubmit={propose} novalidate data-testid="divide-points">
 				<p class="lead">
-					Say which hydrological unit each unit’s boundary on the map stands for. Each unit’s area is its boundary’s, and the elevation model proposes what it drains into, beside its values now; nothing changes until you tick it. A dam or an abstraction point never divides a unit: the unlinked ones inside a unit’s boundary become its composite dam and its river pump. A point can stand for an other water user, and a gauge with no node can be added as a new gauge node. <HelpTip key="divide-model" />
+					Say which hydrological unit each unit’s boundary on the map stands for. Each unit’s area is its boundary’s, and the elevation model proposes what it drains into, beside its values now; nothing changes until you tick it. A dam or an abstraction point never divides a unit: the unlinked ones inside a unit’s boundary become its composite dam and its river pump. An area that stands for no unit yet (a sub-catchment you saved) can become a new hydrological unit, a point can stand for an other water user, and a gauge with no node can be added as a new gauge node. <HelpTip key="divide-model" />
 				</p>
 				{#if candidates.length}
 					<ul class="points">
@@ -263,6 +266,7 @@
 									<select id="{uid}-node-{f.id}" value={choiceOf(f)} onchange={(e) => (draft.picked[f.id] = e.currentTarget.value)} aria-invalid={twice && choiceOf(f) === twice ? 'true' : undefined}>
 										<option value={NONE}>Not in the division</option>
 										{#if f.kind === 'gauge' && f.geometry.type === 'Point' && !f.nodeId}<option value={NEW_GAUGE}>A new gauge</option>{/if}
+										{#if offersNewUnit(f)}<option value={NEW_UNIT}>A new hydrological unit</option>{/if}
 										{#each options as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 									</select>
 								{/if}
@@ -335,14 +339,18 @@
 						>
 							<p class="named">
 								<PieceBadge label={pieceOf.get(u.key)?.label ?? String(i + 1)} tint={pieceOf.get(u.key)?.tint ?? -1} />
-								<strong>{u.nodeId ? u.name : 'A new gauge'}</strong>
+								<strong>{u.nodeId ? u.name : u.role === 'unit' ? 'A new hydrological unit' : 'A new gauge'}</strong>
 								<span class="muted small">from “{u.featureName}”</span>
 							</p>
 							{#if offer.add}
 								<label class="check">
 									<input type="checkbox" bind:checked={t.add} data-testid="divide-tick-add" />
-									<span>Add it to the model as a gauge node{u.totalAreaM2 !== null ? `, measuring ${km2(u.totalAreaM2)} above it` : ''}</span>
+									<span>{#if u.role === 'unit'}Add it to the model as a new hydrological unit, draining into the outflow until its order is ticked{:else}Add it to the model as a gauge node{u.totalAreaM2 !== null ? `, measuring ${km2(u.totalAreaM2)} above it` : ''}{/if}</span>
 								</label>
+								{#if u.role === 'unit'}
+									<!-- A new unit's land is not taken from the units around it (#670): nothing is reduced unseen. -->
+									<p class="hint" data-testid="divide-new-unit-land">Its land isn’t taken from any unit already in the model: a unit whose area holds it keeps that area until you redraw its boundary or type a smaller one. The rest of the catchment is proposed without it.</p>
+								{/if}
 								{#if t.add}
 									<div class="field">
 										<label for="{uid}-name-{u.key}">Its name</label>

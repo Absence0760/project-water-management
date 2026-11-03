@@ -25,6 +25,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, confirmAsOperator, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticEvaporationStations } from '../../scripts/import-evaporation-stations.js';
+import { loadSyntheticQuaternaries } from '../../scripts/import-quaternaries.js';
+import { loadSyntheticQuaternaryEvaporation } from '../../scripts/import-quaternary-evaporation.js';
 import { loadSyntheticDonors } from '../../scripts/import-gr4j-donors.js';
 import { loadSyntheticSoils } from '../../scripts/import-soils.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
@@ -209,7 +211,19 @@ async function plantFutureJob(kind: 'future_yield' | 'climate_factors', payload:
 	return withUser(ctx.owner.id, async (db) => (await enqueueJob(db, { projectId: ctx.projectId, kind, payload, dedupeKey: `mass-${crypto.randomUUID()}`, maxAttempts: 1 })).job.id);
 }
 
+/**
+ * Sub-catchments refuse a click outside the project's catchment boundary (clicks.ts readWithin), and
+ * earlier recipes leave one 50 km from the synthetic DEM the sample clicks sit on: clear it, as the
+ * feed recipes clear the feeds in their way, so the legit body reaches the routing.
+ */
+async function noBoundary(route: string): Promise<Req> {
+	await asOwner(`DELETE FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary'`, [ctx.projectId]);
+	return SAMPLE[route]!(ctx) as Req;
+}
+
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
+	'POST /projects/:id/map/subcatchments': () => noBoundary('POST /projects/:id/map/subcatchments'),
+	'POST /projects/:id/map/subcatchments/save': () => noBoundary('POST /projects/:id/map/subcatchments/save'),
 	// A fresh parcel each time: a split one is half the shape it was (issue #326 C2).
 	'POST /projects/:id/map/features/:fid/split': async () => {
 		const square = [[[21.36, -33.66], [21.37, -33.66], [21.37, -33.65], [21.36, -33.65], [21.36, -33.66]]];
@@ -397,6 +411,14 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
 		await ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } });
 		return SAMPLE['POST /projects/:id/evaporation-from-station']!(ctx);
+	},
+	// WR2012's A-pan per quaternary (310, geo/evaporationRoutes.ts): the synthetic quaternaries loaded, a boundary inside them.
+	'POST /projects/:id/evaporation-from-wr2012': async () => {
+		await loadSyntheticQuaternaries(process.env.TEST_MIGRATION_DATABASE_URL!);
+		await loadSyntheticQuaternaryEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
+		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+		await ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+		return SAMPLE['POST /projects/:id/evaporation-from-wr2012']!(ctx);
 	},
 	// Start from the regional prior (issue #622, calibration/prior.ts): the synthetic donors and soil grid loaded, a
 	// boundary near them.

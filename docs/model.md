@@ -626,6 +626,26 @@ and `ENGINE_VERSION` stays where it was.
   http://hdl.handle.net/10019.1/127336 (the same pages §2.7a checked on
   2026-09-30).
 
+**WR2012's A-pan per quaternary** (2026-11-03; [maps.md § WR2012
+evaporation by quaternary](./maps.md#wr2012-evaporation-by-quaternary)).
+WR2012's WRSM2000 (Pitman) network configurations give each quaternary 12
+monthly A-pan depths (its irrigation module's) and 12 monthly S-pan depths
+(its runoff module's). Model settings → Demand proposes the A-pan as it
+stands: for a catchment over several quaternaries, each month is the mean of
+their A-pan weighted by the share of the catchment's area in each (then
+rounded to 0.1 mm), over the quaternaries that have an irrigation module; the
+part with none is reported, not filled. It is written as the 12 values of
+`settings.apanMm` with a revision naming the dataset, the quaternaries, their
+shares and the module files; the S-pan is shown beside it and never read by
+the model. A quaternary with S-pan only proposes no A-pan; its S-pan, or any
+12 S-pan months the hydrologist has, can be typed or pasted on the same card
+and converted exactly as a Symons station's means are (above), the revision
+giving the months, their note and the equation. `backend/src/geo/wr2012Evaporation.ts`
+computes the means; the engine gains nothing, so results and
+`ENGINE_VERSION` are unchanged. §2.7a's WR90 lake-factor presets turn the
+A-pan row back into S-pan with the forward equation, not with the runoff
+modules' S-pan, so the two S-pans differ by the equation's fit.
+
 **Where a modelled A-pan comes from, and its limits** (issue #646 item 7).
 With no pan station near, the A-pan row can be proposed from a **modelled**
 Class-A pan grid: PenPan (Rotstayn et al. 2006, as McMahon et al. 2013

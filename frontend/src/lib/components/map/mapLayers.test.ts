@@ -20,6 +20,7 @@ import {
 	demRiversOffered,
 	HYDRORIVERS_LAYER_LABEL,
 	MAP_LAYERS,
+	layerAsked,
 	layersOn,
 	layersStatus,
 	MAP_GRID_BBOX_MAX_DEG,
@@ -42,9 +43,11 @@ const poly = (x: number, y: number, d: number) =>
 
 describe('layers in the URL', () => {
 	it('reads the known layers from `layers=`, ignoring others', () => {
-		expect([...layersOn(new URLSearchParams('layers=quaternaries'))]).toEqual(['quaternaries']);
-		expect([...layersOn(new URLSearchParams('layers=satellite,quaternaries'))]).toEqual(['quaternaries']);
-		expect(layersOn(new URLSearchParams('tab=map')).size).toBe(0);
+		// The DEM rivers are on by default (DEFAULT_LAYERS): `-channels` turns them off.
+		expect([...layersOn(new URLSearchParams('layers=quaternaries'))]).toEqual(['quaternaries', 'channels']);
+		expect([...layersOn(new URLSearchParams('layers=satellite,quaternaries,-channels'))]).toEqual(['quaternaries']);
+		expect([...layersOn(new URLSearchParams('tab=map'))]).toEqual(['channels']);
+		expect(layersOn(new URLSearchParams('layers=-channels')).size).toBe(0);
 	});
 
 	it('turns a layer on and off keeping every other param, and drops `layers` when none is on', () => {
@@ -57,7 +60,7 @@ describe('layers in the URL', () => {
 	it('keeps the relief and the quaternaries apart, listed in a fixed order whichever went on first', () => {
 		const both = withLayer(withLayer('?tab=map', 'relief', true), 'quaternaries', true);
 		expect(new URLSearchParams(both).get('layers')).toBe('quaternaries,relief');
-		expect([...layersOn(new URLSearchParams(both))]).toEqual(['quaternaries', 'relief']);
+		expect([...layersOn(new URLSearchParams(both))]).toEqual(['quaternaries', 'channels', 'relief']);
 		expect(new URLSearchParams(withLayer(both, 'quaternaries', false)).get('layers')).toBe('relief');
 		const three = withLayer(both, 'rivers', true);
 		expect(new URLSearchParams(three).get('layers')).toBe('quaternaries,rivers,relief');
@@ -67,7 +70,7 @@ describe('layers in the URL', () => {
 		const all = ['chirps', 'mapgrid', 'units'].reduce((q, l) => withLayer(q, l as 'units', true), '?tab=map');
 		expect(new URLSearchParams(all).get('layers')).toBe('units,mapgrid,chirps');
 		expect(new URLSearchParams(withLayer(all, 'mapgrid', false)).get('layers')).toBe('units,chirps');
-		expect([...layersOn(new URLSearchParams('layers=chirps,units'))]).toEqual(['units', 'chirps']);
+		expect([...layersOn(new URLSearchParams('layers=chirps,units,-channels'))]).toEqual(['units', 'chirps']);
 	});
 });
 
@@ -75,10 +78,27 @@ describe('the DEM rivers beside HydroRIVERS', () => {
 	it('is its own layer, `channels`, listed after the HydroRIVERS one, whose stored id stays `rivers`', () => {
 		expect(MAP_LAYERS.indexOf('channels')).toBe(MAP_LAYERS.indexOf('rivers') + 1);
 		// A saved or shared `layers=rivers` still turns HydroRIVERS on, whatever its toggle is called now.
-		expect([...layersOn(new URLSearchParams('layers=rivers'))]).toEqual(['rivers']);
+		expect([...layersOn(new URLSearchParams('layers=rivers,-channels'))]).toEqual(['rivers']);
 		const both = withLayer(withLayer('?tab=map', 'channels', true), 'rivers', true);
 		expect(new URLSearchParams(both).get('layers')).toBe('rivers,channels');
 		expect(new URLSearchParams(withLayer(both, 'rivers', false)).get('layers')).toBe('channels');
+	});
+
+	it('is on by default: off is `-channels` in the URL, on again `channels`, and a view saved as `layers=channels` before the default still means on', () => {
+		expect(layersOn(new URLSearchParams('tab=map')).has('channels')).toBe(true);
+		expect(layerAsked(new URLSearchParams('tab=map'), 'channels')).toBe(false);
+		const off = withLayer('?tab=map', 'channels', false);
+		expect(new URLSearchParams(off).get('layers')).toBe('-channels');
+		expect(layersOn(new URLSearchParams(off)).has('channels')).toBe(false);
+		// Another layer toggled keeps what the URL said of the default one.
+		expect(new URLSearchParams(withLayer(off, 'relief', true)).get('layers')).toBe('-channels,relief');
+		expect(new URLSearchParams(withLayer('?tab=map', 'relief', true)).get('layers')).toBe('relief');
+		const again = withLayer(off, 'channels', true);
+		expect(new URLSearchParams(again).get('layers')).toBe('channels');
+		expect(layerAsked(new URLSearchParams(again), 'channels')).toBe(true);
+		const saved = new URLSearchParams('layers=channels,units');
+		expect([...layersOn(saved)]).toEqual(['channels', 'units']);
+		expect(new URLSearchParams(withLayer('?layers=channels,units', 'units', false)).get('layers')).toBe('channels');
 	});
 
 	it('reads as a pair: the DEM’s rivers and HydroRIVERS’, the first saying it is what delineation follows', () => {
