@@ -63,8 +63,8 @@ export function pieceLine(r: ClickPieces, click: number): string {
 /** The pieces Save keeps: whole and outlined. */
 export const savable = (r: ClickPieces | null) => (r ? r.pieces.filter((p) => !p.open && p.geometry && p.areaM2 !== null) : []);
 
-/** A click, on a terrain channel. */
-type Click = { lon: number; lat: number };
+/** A click, on a terrain channel: `minKm2`, the least area of the channels the map drew at its zoom (mapStyle.ts channelMinKm2AtZoom). */
+type Click = { lon: number; lat: number; minKm2?: number };
 type Fetch = (clicks: Click[]) => Promise<ClickPieces>;
 type Save = (clicks: Click[]) => Promise<{ features: MapFeature[]; summary: string }>;
 
@@ -95,17 +95,21 @@ export class ClickDivider {
 		return this.clicks.length > 0;
 	}
 
-	/** A click on the map (or typed): routed with the others; refused, it is taken back with the reason. */
-	async add(at: MapPosition) {
+	/**
+	 * A click on the map (or typed): routed with the others; refused, it is taken back with the reason. `minKm2`: the channels the
+	 * map drew at the click's zoom, so it goes on one of those (absent, the server's 1 km²).
+	 */
+	async add(at: MapPosition, minKm2?: number) {
 		if (this.busy === 'save') return;
-		await this.#route([...this.clicks, { lon: at[0], lat: at[1] }], this.clicks.length);
+		await this.#route([...this.clicks, { lon: at[0], lat: at[1], ...(minKm2 === undefined ? {} : { minKm2 }) }], this.clicks.length);
 	}
 
 	/** Move click `i` to `at` (the larger channel its piece names), routed again; Undo moves it back. */
 	async replace(i: number, at: MapPosition) {
 		if (this.busy === 'save' || !this.clicks[i]) return;
 		await this.#route(
-			this.clicks.map((c, k) => (k === i ? { lon: at[0], lat: at[1] } : c)),
+			// Its threshold kept: the larger channel is a hundred times its own.
+			this.clicks.map((c, k) => (k === i ? { ...c, lon: at[0], lat: at[1] } : c)),
 			i
 		);
 	}

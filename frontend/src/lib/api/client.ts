@@ -1309,11 +1309,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
 			/**
 			 * `keepPoint`: keep the point even beside a much larger channel (otherwise 422 `larger_channel`, its `details.larger` the channel).
+			 * `minKm2`: the least area of the channels the map drew at the click's zoom (channelMinKm2AtZoom); the server holds it to [0.1, 1], default 1.
 			 * A catchment too large for the request, or `background`, comes back as a request the worker answers (202): follow it with `request`.
 			 */
 			propose: (
 				id: string,
-				body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; background?: boolean }
+				body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; minKm2?: number; background?: boolean }
 			) => request<{ proposal: DelineationProposal } | { request: DelineationRequest }>('POST', `${p(id)}/map/delineation`, body),
 			/** A delineation the worker has: waiting, running, or what came of it (viewer). */
 			request: (id: string, rid: string) => request<{ request: DelineationRequest }>('GET', `${p(id)}/map/delineation/requests/${enc(rid)}`),
@@ -1326,8 +1327,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		/** Sub-catchments from clicks on the rivers: each click's incremental catchment; save routes them again and saves each as an area. */
 		subcatchments: {
-			pieces: (id: string, clicks: { lon: number; lat: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
-			save: (id: string, clicks: { lon: number; lat: number }[]) =>
+			pieces: (id: string, clicks: { lon: number; lat: number; minKm2?: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
+			save: (id: string, clicks: { lon: number; lat: number; minKm2?: number }[]) =>
 				request<{ features: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
 		},
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */

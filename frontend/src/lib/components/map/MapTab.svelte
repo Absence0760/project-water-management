@@ -87,7 +87,7 @@
 	import { restOfCatchment, staleValues } from './stale';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
-	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
+	import { channelColour, channelMinKm2AtZoom, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { channelsWanted, chirpsCells, demRiversOffered, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
@@ -373,12 +373,15 @@
 	});
 	/** Where the delineation's point was clicked, kept for the sheet once the draft is gone. */
 	let delineateAt = $state<MapPosition | null>(null);
+	/** The channels the map drew where it was clicked (channelMinKm2AtZoom), sent with it; null when typed. */
+	let delineateMinKm2 = $state<number | null>(null);
 	/** Which step the sheet opens at: asking for a point (from the header's mode), else deciding a waiting proposal (Review it, a link). */
 	let delineateStep = $state<'ask' | 'decide'>('decide');
 	let delineateWasOpen = false;
 	$effect(() => {
 		if (!delineateSheet.open) {
 			delineateAt = null;
+			delineateMinKm2 = null;
 			delineateStep = 'decide';
 			if (delineateWasOpen) void untrack(focusAfterDelineate);
 		}
@@ -400,6 +403,7 @@
 	}
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
+		delineateMinKm2 = at ? (shownChannelKm2() ?? null) : null;
 		delineateStep = 'ask';
 		await goto(withParam(page.url, 'delineate', '1'), { reset: false });
 	}
@@ -587,7 +591,7 @@
 		untrack(() => {
 			draft.place('other');
 			draft.snapOn = false;
-			void divider.add(g.coordinates);
+			void divider.add(g.coordinates, shownChannelKm2());
 		});
 	});
 	// Another tool took the map (Draw, Place, Cancel in a sheet): the mode ends, its clicks kept until it is opened again.
@@ -869,6 +873,10 @@
 	// --- the river network (#345): its reaches around the catchment, on while `layers=rivers` ---
 	/** The map's view, for the River network layer while the project has no features. */
 	let mapView = $state<[number, number, number, number] | null>(null);
+	/** The map's zoom after its last move: a click sends the channels drawn at it. */
+	let mapZoom = $state<number | null>(null);
+	/** The least area of the terrain channels drawn at the map's zoom (mapStyle.ts channelMinKm2AtZoom), or undefined before the map reports one. */
+	const shownChannelKm2 = () => (mapZoom === null ? undefined : channelMinKm2AtZoom(mapZoom));
 	const rivers = new RiverLayer({
 		projectId: () => projectId,
 		on: () => layersOn(params).has('rivers'),
@@ -1593,7 +1601,10 @@
 									{relief}
 									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
-									onview={(b) => (mapView = b)}
+									onview={(b, z) => {
+										mapView = b;
+										mapZoom = z;
+									}}
 									proposal={clickPieces ?? pendingProposal ?? pieces}
 									onpiecehover={(k) => (dividing ? (clickLit = k) : (pieceLit = k))}
 									onpiecepick={canEdit && !dividing ? pickPiece : undefined}
@@ -1712,6 +1723,7 @@
 					{projectId}
 					info={delineation!}
 					at={delineateAt}
+					minKm2={delineateMinKm2}
 					step={delineateStep}
 					{boundary}
 					onproposed={proposed}

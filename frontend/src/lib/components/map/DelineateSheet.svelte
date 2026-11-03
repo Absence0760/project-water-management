@@ -31,6 +31,7 @@
 		projectId,
 		info,
 		at = null,
+		minKm2 = null,
 		step = 'decide',
 		boundary,
 		onproposed,
@@ -43,6 +44,8 @@
 		info: DelineationState;
 		/** Where the point was clicked (lon, lat), or null: typed. */
 		at?: MapPosition | null;
+		/** The least area (km²) of the terrain channels the map drew where `at` was clicked: the server puts the point on one of those. Null: typed (the server's 1 km²). */
+		minKm2?: number | null;
 		/** Where the sheet opens: asking for a point (from Delineate), or deciding the waiting proposal (Review it); with none waiting, it asks. */
 		step?: 'ask' | 'decide';
 		/** The project's catchment boundary, if it has one: accepting as the boundary then needs the tick. */
@@ -115,6 +118,7 @@
 				lat: at[1],
 				from,
 				...(keepPoint ? { keepPoint } : {}),
+				...(minKm2 !== null && minKm2 !== undefined ? { minKm2 } : {}),
 				...(background ? { background } : {})
 			});
 			if ('request' in r) {

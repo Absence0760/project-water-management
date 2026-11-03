@@ -105,6 +105,21 @@ describe('ClickDivider', () => {
 		expect(d.said).toBe('2 sub-catchments.');
 	});
 
+	it('sends each click with the channels the map drew at its zoom (minKm2), and keeps it when the click moves to the larger channel', async () => {
+		const { d, fetch } = make();
+		await d.add([20, -33], 0.25);
+		await d.add([20.1, -33.1]);
+		expect(fetch).toHaveBeenLastCalledWith([
+			{ lon: 20, lat: -33, minKm2: 0.25 },
+			{ lon: 20.1, lat: -33.1 }
+		]);
+		await d.replace(0, [20.005, -33]);
+		expect(fetch).toHaveBeenLastCalledWith([
+			{ lon: 20.005, lat: -33, minKm2: 0.25 },
+			{ lon: 20.1, lat: -33.1 }
+		]);
+	});
+
 	it('undoes to the answer it had, without asking the server again', async () => {
 		const { d, fetch } = make();
 		await d.add([20, -33]);
