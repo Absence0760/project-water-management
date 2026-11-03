@@ -2,14 +2,14 @@
 // valid project document, every engine field present, every self-check
 // passing, and each feature it exists to show actually in the model and
 // doing something in a run.
-import { applyScenario, classifyScenario, compareSeriesNames, proposedRiverWorks, runModelChecked, unboundedRiverWorks, upgradeLegacyModel, validateScenarioOps, type ModelOutput, type ScenarioOp } from '@water-management/engine';
+import { allocationStatus, applyScenario, classifyScenario, compareAllocations, compareSeriesNames, proposedRiverWorks, runModelChecked, unboundedRiverWorks, upgradeLegacyModel, validateScenarioOps, withIrrigatedAreas, type AllocationEntry, type ModelOutput, type ScenarioOp } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { modelProblems } from '../../src/model/validate.js';
 import { ProjectFile } from '../../src/projects/document.js';
 import { inputOf, type ExampleProject } from './catchments.js';
 import { buildShowcase, OWN_SYSTEM_ID, SHOWCASE_NAME, showcaseNodeId, UNITS } from './showcase.js';
 import { showcaseMap } from './showcaseMap.js';
-import { SHOWCASE_DWS_FEED_TARGET, showcaseApplication, showcaseScenarios } from './showcaseSeed.js';
+import { SHOWCASE_DWS_FEED_TARGET, showcaseAllocations, showcaseApplication, showcaseScenarios } from './showcaseSeed.js';
 
 let ex: ExampleProject;
 let out: ModelOutput;
@@ -148,4 +148,51 @@ describe('the showcase seed', () => {
 		expect(observed.length).toBeGreaterThan(0);
 		for (const name of observed) expect(compareSeriesNames(SHOWCASE_DWS_FEED_TARGET, name), name).toBeGreaterThan(0);
 	});
+
+	it('registers ten demo farmers, each “(invented)”, whose totals read within the band on Kransdal, above on Vleiplaas and below on Rivieroewer', () => {
+		// The calibrated baseline, as the seed runs it (the stored fit), compared as the Allocations route compares it.
+		const fitted = buildShowcase();
+		const run = runModelChecked(inputOf(fitted));
+		const get = (nodeId: string, key: string) => run.series.find((x) => x.nodeId === nodeId && x.key === key)?.values ?? null;
+		const allocations = showcaseAllocations(fitted.model);
+		expect(new Set(allocations.map((a) => a.holder)).size).toBe(10);
+		expect(allocations.every((a) => a.holder.endsWith('(invented)'))).toBe(true);
+		expect(new Set(allocations.map((a) => a.authorisation))).toEqual(new Set(['licence', 'registration', 'existing_lawful_use', 'existing_lawful_use_claimed', 'general_authorisation', 'schedule_1']));
+		const entries: AllocationEntry[] = allocations.map((a, i) => ({ ...a, id: String(i), storageM3: (a.storageM3 as number | undefined) ?? null, waterUse: (a.waterUse as '21b' | undefined) ?? null }));
+		const users = fitted.model.nodes.filter((n) => (n.kind === 'farm' || n.kind === 'user') && get(n.id, 'supplied'));
+		const c = withIrrigatedAreas(
+			compareAllocations({
+				startDate: fitted.series.find((x) => x.kind === 'rain_catchment_mm')!.startDate,
+				nodes: users.map((n) => ({
+					nodeId: n.id,
+					name: n.name,
+					kind: n.kind as 'farm' | 'user',
+					supplied: get(n.id, 'supplied')!,
+					groundwater: get(n.id, 'groundwater_used'),
+					groundwaterToDam: get(n.id, 'groundwater_to_dam'),
+					riverAbstraction: get(n.id, 'river_abstraction'),
+					riverTakes: run.series.filter((x) => x.nodeId === n.id && (x.key === 'offtake_used' || x.key.startsWith('river_take@'))).map((x) => x.values),
+					intakeTake: get(n.id, 'intake_take'),
+					receivedAtIntake: get(n.id, 'received_at_intake'),
+					damCapacityM3: n.damCapacityM3
+				})),
+				allocations: entries
+			}),
+			fitted.model.cropAreas,
+			entries
+		);
+		const statuses = (name: string) => {
+			const n = c.nodes.find((x) => x.name === name)!;
+			const use = allocationStatus(
+				(n.surface.meanModelledM3PerYear ?? 0) + (n.groundwater.meanModelledM3PerYear ?? 0),
+				(n.surface.meanRegisteredM3PerYear ?? 0) + (n.groundwater.meanRegisteredM3PerYear ?? 0),
+				c.tolerance
+			);
+			return { area: n.irrigatedArea!.status, use, storage: n.storage.status };
+		};
+		expect(statuses(UNITS.upper)).toEqual({ area: 'within', use: 'within', storage: 'within' });
+		expect(statuses(UNITS.middle)).toEqual({ area: 'over', use: 'over', storage: 'over' });
+		expect(statuses(UNITS.lower)).toEqual({ area: 'under', use: 'under', storage: 'under' });
+		expect(statuses(UNITS.town)).toEqual({ area: 'none', use: 'unregistered', storage: 'none' });
+	}, 60_000);
 });

@@ -40,7 +40,7 @@ export async function seedLicenceMap(d: LicenceMapDeps): Promise<string | null> 
 	// The baseline, then its use per unit (no volumes yet), then the volumes from that use.
 	const runId = (await api('POST', `${at}/runs`, { label: 'Baseline' })).run.id as string;
 	const { comparison } = (await api('GET', `${at}/runs/${runId}/allocations`)) as { comparison: AllocationComparison };
-	for (const a of licenceAllocations(comparison)) await api('POST', `${at}/allocations`, { ...a, purpose: 'irrigation' });
+	for (const a of licenceAllocations(comparison, stored)) await api('POST', `${at}/allocations`, { ...a, purpose: 'irrigation' });
 	await api('PUT', `${at}/allocations/viewer-units`, { on: true });
 	await d.publish(d.demo.email, id, runId);
 	await d.share(d.demo.email, id, d.viewer.email, 'viewer');
