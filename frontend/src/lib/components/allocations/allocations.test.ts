@@ -1,7 +1,7 @@
-import { compareAllocations } from '@water-management/engine';
+import { compareAllocations, withIrrigatedAreas } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '#lib/api/types.js';
-import { allocationsContext, areaHa, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, judgementSentence, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
+import { allocationsContext, areaHa, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, judgementSentence, MEASURE_STATUS_LABEL, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitMeasures, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
 import { fmtNum } from '#lib/format/number.js';
 
 const comparison = () =>
@@ -332,5 +332,88 @@ describe('a viewer’s totals (162, decision D3)', () => {
 	it('tells an owner who viewers must be before they see each farm', () => {
 		expect(VIEWER_UNITS_NOTE).toContain('works for, or was appointed by, your organisation');
 		expect(VIEWER_UNITS_NOTE).toContain('5 or more registered users');
+	});
+});
+
+describe('unitMeasures: each unit’s irrigated area, water use and dam, and the catchment’s totals', () => {
+	// Two whole water years. A: 36 500 m³ a year against 30 000, 30 ha planted against 25, a 120 000 m³ dam against 100 000.
+	// B: 7 300 m³ a year (half groundwater) against 8 000 in all, 10 ha planted with none registered, a dam with no storage.
+	// C: nothing at all. U: a water user with use and nothing registered.
+	const measured = () =>
+		withIrrigatedAreas(
+			compareAllocations({
+				startDate: '2001-10-01',
+				nodes: [
+					{ nodeId: 'A', name: 'Farm A', kind: 'farm', supplied: new Array(730).fill(100), damCapacityM3: 120_000 },
+					{ nodeId: 'B', name: 'Farm B', kind: 'farm', supplied: new Array(730).fill(20), groundwater: new Array(730).fill(10), damCapacityM3: 50_000 },
+					{ nodeId: 'C', name: 'Farm C', kind: 'farm', supplied: new Array(730).fill(0) },
+					{ nodeId: 'U', name: 'Works', kind: 'user', supplied: new Array(730).fill(10) }
+				],
+				allocations: [
+					{ id: 'a', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 30_000, storageM3: 100_000 },
+					{ id: 'b1', nodeId: 'B', waterSource: 'surface', volumeM3PerYear: 4_000 },
+					{ id: 'b2', nodeId: 'B', waterSource: 'groundwater', volumeM3PerYear: 4_000 }
+				]
+			}),
+			[
+				{ nodeId: 'A', areaM2: 300_000 },
+				{ nodeId: 'B', areaM2: 100_000 }
+			],
+			[{ nodeId: 'A', irrigatedAreaHa: 25 }]
+		);
+
+	it('a row per unit with something to compare, each measure banded as the comparison bands it', () => {
+		const { rows } = unitMeasures(measured());
+		expect(rows.map((r) => r.name)).toEqual(['Farm A', 'Farm B', 'Works']);
+		const [a, b, u] = rows as [ReturnType<typeof unitMeasures>['rows'][number], ReturnType<typeof unitMeasures>['rows'][number], ReturnType<typeof unitMeasures>['rows'][number]];
+		expect(a.area).toEqual({ registered: 25, modelled: 30, status: 'over' });
+		expect(a.use).toEqual({ registered: 30_000, modelled: 36_500, status: 'over' });
+		expect(a.storage).toEqual({ registered: 100_000, modelled: 120_000, status: 'over' });
+		expect(b.area).toEqual({ registered: null, modelled: 10, status: 'unregistered' });
+		// Both sources added: 7 300 against 8 000, within ±10 %.
+		expect(b.use).toEqual({ registered: 8_000, modelled: 7_300, status: 'within' });
+		expect(b.storage).toMatchObject({ registered: null, modelled: 50_000, status: 'unregistered' });
+		expect(u.use).toMatchObject({ registered: 0, status: 'unregistered' });
+		expect(u.storage.status).toBe('none');
+	});
+
+	it('the catchment total adds each measure up and bands the sums', () => {
+		const { total } = unitMeasures(measured());
+		expect(total.area).toEqual({ registered: 25, modelled: 40, status: 'over' });
+		expect(total.use).toEqual({ registered: 38_000, modelled: 36_500 + 7_300 + 3_650, status: 'over' });
+		expect(total.storage).toEqual({ registered: 100_000, modelled: 170_000, status: 'over' });
+	});
+
+	it('a run with no whole water year has no use to total; no dam anywhere is no comparison', () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [{ nodeId: 'A', name: 'Farm A', kind: 'farm', supplied: new Array(30).fill(100) }],
+			allocations: [{ id: 'a', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 30_000, storageM3: 5_000 }]
+		});
+		const { rows, total } = unitMeasures(c);
+		expect(rows[0]!.use).toBeNull();
+		expect(rows[0]!.area).toBeNull();
+		expect(total.use).toBeNull();
+		expect(total.area).toBeNull();
+		expect(total.storage).toEqual({ registered: 5_000, modelled: null, status: 'none' });
+	});
+
+	it('leads with the units to look into: a measure above registered, then one with nothing registered, then one below', () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: ['within', 'under', 'unreg', 'over'].map((id) => ({ nodeId: id, name: id, kind: 'farm' as const, supplied: new Array(730).fill(10) })),
+			allocations: [
+				{ id: 'w', nodeId: 'within', waterSource: 'surface', volumeM3PerYear: 3650 },
+				{ id: 'u', nodeId: 'under', waterSource: 'surface', volumeM3PerYear: 7300 },
+				{ id: 'o', nodeId: 'over', waterSource: 'surface', volumeM3PerYear: 1000 }
+			]
+		});
+		expect(unitMeasures(c).rows.map((r) => r.nodeId)).toEqual(['over', 'unreg', 'under', 'within']);
+	});
+
+	it('words every status per measure, never a legal finding', () => {
+		const all = Object.values(MEASURE_STATUS_LABEL).flatMap((m) => Object.values(m));
+		expect(all.every(Boolean)).toBe(true);
+		expect(all.join(' ')).not.toMatch(/lawful|illegal|legal|complian|violat|breach/i);
 	});
 });

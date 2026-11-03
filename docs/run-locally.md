@@ -193,8 +193,14 @@ registered (grey, hatched); Stilwater has no demand and nothing registered
 it. The volumes aren't fixed numbers: after the baseline run the seed reads
 each unit's modelled mean surface use per whole water year from the
 comparison and registers that use ÷ its target ratio, so the bands hold
-whatever the engine's numbers do. `licenceMap.test.ts` asserts each unit's
-band. Seeded after the showcase and skipped with it (`SEED_SHOWCASE=0`);
+whatever the engine's numbers do. Each unit's volume is shared by two or
+three invented registered users (`backend/scripts/examples/farmers.ts`: Jim
+Bean, Joe Bloggs, Jack Daniels …, each "(invented)"), each with an irrigated
+area and, but on Brandvlei, a share of the dam's storage, set from the
+unit's planted area and its dam ÷ targets of their own, so **Shade by ›
+Irrigated area** and **Dam capacity** show every band too (Randhoek's area
+sits exactly on the orange band's edge). `licenceMap.test.ts` asserts each
+unit's band for every measure. Seeded after the showcase and skipped with it (`SEED_SHOWCASE=0`);
 built under a working name and renamed when complete, so an interrupted seed
 is replaced by the next one.
 
@@ -223,7 +229,7 @@ aside by name, once its evidence nomination keeps it for good).
 | **Runs & results / Compare** | *Before calibration (GR4J defaults)*, *Calibrated baseline* (pinned, with notes, **published** with a 20 % restriction notice in English and Afrikaans, nominated as **evidence**, with an uncertainty **ensemble**) and *Forecast (next 10 days)*: compare the first two to see the fit's effect. A **sensitivity sweep** and a **seasonal outlook** (demand at 100, 90 and 80 %). |
 | **Scenarios** | Five on the calibrated baseline, each with its run: a bigger dam, a new feedlot (a new demand), WUA **drought restrictions**, a crop change, and a drier climate (−15 % rain); and a cumulative **assessment** of the dam raise and the feedlot together. |
 | **Applications** | applicant@'s submitted *Raise the Vleiplaas dam*, run, with its prompts answered, for demo@ or analyst@ to assess: the dam raised by half, with a **pass-inflow release** that lets the EWR required at Vleiplaas through its on-channel dam before it stores (a hands-off flow would bind nothing there: the unit has no river pump and no River to dam). The seeds confirm nobody as acting for the responsible authority, so nobody can record the decision locally until you confirm one, as the operator does on the authority's letter: `pnpm dev:authority:confirm <project-id> <email> --reference "<letter>"` (an editor or owner of the project, e.g. demo@example.com; 229, docs/deployment.md runbook). |
-| **Allocations** | Five registered water uses: a licence with months and a condition, an existing lawful use, a registration, a groundwater general authorisation and a dam's storage (21b); shown to viewers by unit. |
+| **Allocations** | Ten invented registered users (`farmers.ts`: Jim Bean, Joe Bloggs, Jane Doe on Kransdal; Jack Daniels, Piet Pompies, Sarel Seemsaadjie, Jan Rap on Vleiplaas; Joe Soap, Tannie Sannie, Johnny Walker on Rivieroewer, each "(invented)"), eleven rows held every way the app knows: a licence with months and a condition, registrations, an existing lawful use claimed and one verified, two groundwater general authorisations, a Schedule 1 use and a dam's storage (21b). Each take states its registered volume and most an irrigated area and a share of the unit's dam. Against the calibrated baseline, **Registered against the run, per hydrological unit** reads Kransdal within the band on all three, Vleiplaas above (more planted, used and dammed than registered) and Rivieroewer below; the town's water works use water with nothing registered (`showcase.test.ts` holds them there). Shown to viewers by unit. |
 | **Report / Evidence pack** | The evidence report of the calibrated baseline, and an evidence **pack** left a draft (signing and issuing need two-step sign-in). |
 | **Notes / History / Alerts / Share** | Notes on the project, a unit, a run and a scenario; the history of everything above; alert rules (a dam below 30 %, an EWR forecast failure, farms short) and demo@'s own subscription; a share link to the published baseline. |
 

@@ -1,8 +1,11 @@
 // The Allocations tab's map (issue #510, docs/allocations.md § The map, docs/ui.md § Allocations): "On the map"
 // folds until Show the map (`map=1`), then shades each unit's area on the Map tab by its band of modelled use ÷
 // registered volume, each unit carrying its % as a button, a key naming every band in words, and every unit with
-// no area listed under the map with its band. The water source and year are in the URL (`mapSource=`, `mapYear=`), so a
-// reload keeps them. A click on a unit opens its comparison (`unit=`). A viewer who sees
+// no area listed under the map with its band. Shade by picks the measure (`mapMeasure=`): water use, irrigated area
+// (planted in the run ÷ registered) or dam capacity (the dam in the run ÷ registered storage), each with its own key and
+// every unit's figures listed. The water source and year are in the URL (`mapSource=`, `mapYear=`), so a
+// reload keeps them. A click on a unit opens its comparison (`unit=`). Above the map, every unit's three measures against
+// the run with the catchment's totals. A viewer who sees
 // totals only (162, D3) isn't offered it; with What viewers see on, they are. Synthetic data only.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -16,13 +19,16 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 const section = (page: Page) => page.getByTestId('allocation-use-map');
 const detail = (page: Page) => page.getByTestId('allocation-unit');
 
-/** What each unit is for: a ratio of modelled use to registered volume, nothing registered, and whether it has an area. */
+/**
+ * What each unit is for: a ratio of modelled use to registered volume, nothing registered, and whether it has an area;
+ * and, against its 15 ha planted and its 80 000 m³ dam, the irrigated area (ha) and storage (m³) its volume registers.
+ */
 const UNITS = [
-	{ name: 'Green kloof', ratio: 0.8, area: true },
-	{ name: 'Red ridge', ratio: 1.3, area: true },
-	{ name: 'Bright vlei', ratio: 2, area: true },
-	{ name: 'Grey flats', ratio: null, area: true },
-	{ name: 'Mapless corner', ratio: 1.05, area: false }
+	{ name: 'Green kloof', ratio: 0.8, area: true, ha: 10, storage: 80_000 },
+	{ name: 'Red ridge', ratio: 1.3, area: true, ha: 15, storage: 40_000 },
+	{ name: 'Bright vlei', ratio: 2, area: true, ha: 30, storage: 100_000 },
+	{ name: 'Grey flats', ratio: null, area: true, ha: null, storage: null },
+	{ name: 'Mapless corner', ratio: 1.05, area: false, ha: 5, storage: null }
 ] as const;
 
 /**
@@ -63,7 +69,9 @@ async function seedBands(request: APIRequestContext, name: string) {
 			holder: `Invented Map Holder ${i + 1}`,
 			authorisation: 'licence',
 			waterSource: 'surface',
-			volumeM3PerYear: Math.round(use / u.ratio)
+			volumeM3PerYear: Math.round(use / u.ratio),
+			irrigatedAreaHa: u.ha,
+			storageM3: u.storage
 		});
 	}
 	const poly = (nm: string, ring: [number, number][]) => ({ type: 'Feature', properties: { name: nm }, geometry: { type: 'Polygon', coordinates: [ring] } });
@@ -84,6 +92,25 @@ test('the map shades each unit by its band, labels its %, keys every band in wor
 	const project = await seedBands(page.request, 'Allocations map');
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await openAllocations(page, project.id);
+
+	// Above the map: each unit's irrigated area, water use and dam against the run, and the catchment's totals.
+	const totals = page.getByTestId('allocation-unit-totals');
+	await expect(totals.getByRole('heading', { name: 'Registered against the run, per hydrological unit' })).toBeVisible();
+	const unitRow = totals.locator(`tbody tr[data-node="${project.units['Green kloof']}"]`);
+	await expect(unitRow.getByRole('cell').nth(0)).toHaveText('10 ha');
+	await expect(unitRow.getByRole('cell').nth(1)).toHaveText(/^15 ha\s*More than registered$/);
+	await expect(unitRow.getByRole('cell').nth(5)).toHaveText(/^80\s000\s*Within band$/);
+	const total = totals.getByTestId('allocation-unit-totals-total');
+	await expect(total.getByRole('rowheader')).toHaveText(/^Catchment total\s*5 units$/);
+	// 60 ha registered against 75 planted; 220 000 m³ of storage against five 80 000 m³ dams.
+	await expect(total.getByRole('cell').nth(0)).toHaveText('60 ha');
+	await expect(total.getByRole('cell').nth(1)).toHaveText(/^75 ha\s*More than registered$/);
+	await expect(total.getByRole('cell').nth(4)).toHaveText(/^220\s000$/);
+	await expect(total.getByRole('cell').nth(5)).toHaveText(/^400\s000\s*Larger than registered$/);
+	// A unit's name opens its comparison above.
+	await unitRow.getByRole('link', { name: 'Green kloof' }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]unit=${project.units['Green kloof']}`));
+	await expect(detail(page).getByRole('heading', { level: 2 })).toHaveText('Green kloof');
 
 	// Folded until asked for: no map code, nothing fetched.
 	await expect(section(page).getByRole('heading', { name: 'On the map' })).toBeVisible();
@@ -181,6 +208,65 @@ test('the map shades each unit by its band, labels its %, keys every band in wor
 	await expect(year).toHaveValue('2020');
 
 	await expectNoViolations(page);
+
+	// Shade by the irrigated area: the run's planted crop areas (15 ha each) ÷ the registered irrigated area. The source and
+	// year only read the water use, so they go; the key has that measure's words and counts, and every unit's figures are listed.
+	const shadeBy = (name: string) => section(page).getByRole('radio', { name });
+	await shadeBy('Irrigated area').check();
+	await expect(page).toHaveURL(/[?&]mapMeasure=area(&|$)/);
+	await expect(key.getByRole('heading')).toHaveText('Key: irrigated area in the run ÷ registered irrigated area');
+	await expect(section(page).getByRole('radio', { name: 'Groundwater' })).toHaveCount(0);
+	await expect(year).toHaveCount(0);
+	for (const [band, words, n] of [
+		['under', 'Less planted than registered (under 100 %)', '1 unit'],
+		['near', 'The same, up to 10 % more (100–110 %)', '1 unit'],
+		['over', '10–50 % more planted than registered (110–150 %)', '1 unit'],
+		['far', 'More than 50 % more planted than registered (over 150 %)', '1 unit'],
+		['unregistered', 'Planted, but no irrigated area registered', '1 unit'],
+		['none', 'Nothing planted, no area registered', 'none']
+	] as const) {
+		const row = key.locator(`li[data-band="${band}"]`);
+		await expect(row).toContainText(words);
+		await expect(row).toContainText(n);
+	}
+	const figures = section(page).getByTestId('allocation-map-figures');
+	await expect(figures).toHaveAttribute('data-measure', 'area');
+	const figure = (name: string) => figures.getByRole('row').filter({ has: page.getByRole('rowheader', { name: new RegExp(`^${name}`) }) });
+	await expect(figures.locator('tbody tr')).toHaveCount(5);
+	await expect(figure('Green kloof')).toHaveAttribute('data-band', 'over');
+	await expect(figure('Green kloof').getByRole('cell')).toHaveText(['10 ha', '15 ha', '150 %', /10–50 % more/]);
+	await expect(figure('Mapless corner')).toHaveAttribute('data-band', 'far');
+	await expect(figure('Mapless corner').getByRole('rowheader')).toContainText('no area on the map');
+	await expect(unplaced.first()).toContainText('300 %');
+	if ((await map.getAttribute('data-status')) === 'ready') {
+		const label = (name: string) => map.getByRole('button', { name: new RegExp(`^${name}: `) });
+		await expect(label('Bright vlei')).toHaveText('50 %');
+		await expect(label('Bright vlei')).toHaveAttribute('data-band', 'under');
+		await expect(label('Bright vlei')).toHaveAccessibleName('Bright vlei: 50 % of registered, 15 ha planted in the run against 30 ha registered. Less than registered.');
+		await expect(label('Grey flats')).toHaveText('None registered');
+	}
+	await expectNoViolations(page);
+
+	// Shade by the dam: the 80 000 m³ dam in the run ÷ the storage registered for it.
+	await shadeBy('Dam capacity').check();
+	await expect(page).toHaveURL(/[?&]mapMeasure=storage(&|$)/);
+	await expect(key.getByRole('heading')).toHaveText('Key: dam capacity in the run ÷ registered storage');
+	await expect(figures).toHaveAttribute('data-measure', 'storage');
+	await expect(figure('Red ridge')).toHaveAttribute('data-band', 'far');
+	await expect(figure('Red ridge').getByRole('cell')).toHaveText([/^40\s000 m³$/, /^80\s000 m³$/, '200 %', /Over 50 % larger/]);
+	await expect(figure('Green kloof')).toHaveAttribute('data-band', 'near');
+	await expect(figure('Bright vlei')).toHaveAttribute('data-band', 'under');
+	await expect(key.locator('li[data-band="unregistered"]')).toContainText('2 units');
+	// A reload keeps the measure; Back returns to the one before.
+	await page.reload();
+	await expect(page.getByTestId('allocations-page')).toHaveAttribute('aria-busy', 'false');
+	await expect(shadeBy('Dam capacity')).toBeChecked();
+	await page.goBack();
+	await expect(shadeBy('Irrigated area')).toBeChecked();
+	await shadeBy('Water use').check();
+	await expect(page).not.toHaveURL(/[?&]mapMeasure=/);
+	await expect(key.getByRole('heading')).toHaveText(/^Key: modelled use ÷ registered volume, /);
+
 	// Hide the map folds it in place, and its choices go with it.
 	await section(page).getByRole('button', { name: 'Hide the map' }).click();
 	await expect(page).not.toHaveURL(/[?&]map=1/);
@@ -192,6 +278,9 @@ test('the map shades each unit by its band, labels its %, keys every band in wor
 	await openAllocations(page, project.id, '&map=1');
 	await expect(section(page).getByTestId('allocation-map-legend')).toBeVisible();
 	await expectNoSidewaysScroll(page);
+	// The tables stack rather than scroll inside their boxes (the page check skips a box that holds its own overflow).
+	for (const box of [page.getByTestId('allocation-unit-totals').locator('.table-wrap'), section(page).getByTestId('allocation-map-figures').locator('xpath=ancestor::div[contains(@class, "table-wrap")][1]')])
+		expect(await box.evaluate((e) => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(0);
 });
 
 test('a viewer who sees totals only is not offered the map; with What viewers see on, they are, with no holder named', async ({ page, owner, signIn }) => {

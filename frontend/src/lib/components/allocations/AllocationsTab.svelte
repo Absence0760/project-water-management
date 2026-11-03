@@ -12,11 +12,15 @@
 	// list shows its first few (the ones that matter most) with a "Show all"
 	// that opens the rest in place, and nothing scrolls inside a card. Under
 	// them, "On the map" (issue #510, AllocationUseMap; `map=1`): each unit's
-	// area shaded by its use ÷ registered band, its code loaded when opened,
+	// area shaded by its band of use, irrigated area or dam capacity ÷
+	// registered, its code loaded when opened,
 	// and offered only where the per-unit comparison is (never to a viewer
 	// who sees totals). Below:
 	// every registered volume with its source file and the imported files;
-	// then the over/under-use chart (UsePlot, shared with the evidence
+	// then "Registered against the run, per hydrological unit"
+	// (AllocationUnitTotals): each unit's irrigated area, water use and dam
+	// against the run, the first few until "Show all", with the catchment's
+	// totals; then the over/under-use chart (UsePlot, shared with the evidence
 	// report; its first ten rows until "Show all"), and every unit's water
 	// years (the WUA manager's cross-unit view), that table folded whole
 	// behind "Show all units' water years" since issue #175: it is the picked
@@ -50,6 +54,7 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import AllocationImport from './AllocationImport.svelte';
 	import AllocationTotals from './AllocationTotals.svelte';
+	import AllocationUnitTotals from './AllocationUnitTotals.svelte';
 	import AllocationUseMap from './AllocationUseMap.svelte';
 	import type { AllocationComparisonTotals } from '#lib/api/index.js';
 	import UsePlot from './UsePlot.svelte';
@@ -670,6 +675,10 @@
 			{/if}
 		</LoadState>
 	</section>
+
+	{#if comparison && units.length}
+		<AllocationUnitTotals {comparison} picked={pickedId} onpick={pickFromMap} />
+	{/if}
 
 	{#if comparison && rows.length}
 		<section class="panel" aria-labelledby="alloc-years-h">

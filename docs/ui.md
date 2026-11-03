@@ -12127,7 +12127,8 @@ turns into cards below 48rem of its own width (the picked unit's column at
 opened list scrolls the page back to its detail.
 
 **On the map** (issue #510, `AllocationUseMap.svelte`, under the first
-block; [allocations.md § The map](./allocations.md#the-map)): folded until
+block;
+[allocations.md § The map](./allocations.md#the-map)): folded until
 **Show the map** (`map=1`, a link, so Back folds it; **Hide the map** drops
 it in place). Only then are the Map tab's features fetched and the map's code
 loaded (`AllocationMap.svelte`, a chunk of its own, MapLibre after it). Each
@@ -12139,15 +12140,24 @@ outline for a unit with no whole water year or one the run doesn't have.
 Each unit carries a button over its area with its % ("132 %", or *None
 registered* / *No use*), named with its figures for a screen reader; a click
 opens its comparison above (`unit=`) and scrolls to it. Above the map a
+**Shade by** choice: **Water use** (the default), **Irrigated area** (the
+run's planted crop areas ÷ the registered irrigated area) or **Dam
+capacity** (the dam in the run ÷ the registered storage), the same bands
+with each measure's words (`MEASURE_BAND_LABEL`; labels *No area* / *No
+dam* where *No use* would be). For water use only, a
 **Water source** choice (Surface water, the default; Groundwater; Both
 together, total use ÷ total registered) and a **Water year** picker (the
-mean of the whole water years, or one; part years are never offered). Both
-are in the URL (`mapSource=groundwater|both`, `mapYear=<first year>`, the
+mean of the whole water years, or one; part years are never offered); the
+area and the dam are the run's inputs and have neither. All three
+are in the URL (`mapMeasure=area|storage`, `mapSource=groundwater|both`, `mapYear=<first year>`, the
 defaults left out), so a reload or a shared link keeps them; each choice is
 a step Back returns from, and **Hide the map** drops them with `map`. Under
 it the **Key** names every band in words with a swatch and how many units
 are in it, and says the bands are fixed for the map, apart from the
-comparison's ±10 % band; then **Hydrological units with no area on the
+comparison's ±10 % band; then **Every hydrological unit's figures**, a
+table of each unit's registered and run figures for the measure, its share
+and its band, in the order to look into them, a unit with no area on the
+map marked so (`.table-stack` on a phone); then **Hydrological units with no area on the
 map**, each with its band, so none is missing silently. With no area on the
 Map tab at all it says so and links to the Hydrological units layer. Not
 offered to a viewer who sees totals only. Tests: `allocations/useMap.test.ts`,
@@ -12170,6 +12180,25 @@ API's order (unmatched first), until **Show all N registered volumes** /
 scrolling in its box. Viewers see "Names of registered
 users are shown to editors only." Under it, **Imported files**: each with its
 full hash, reference, row count, who and when, and **Remove this import**.
+
+**Registered against the run, per hydrological unit**
+(`AllocationUnitTotals.svelte`, under **Registered volumes**, so the first
+screen still ends on that card's top edge;
+[allocations.md § Per unit, all three](./allocations.md#per-unit-all-three)):
+one row per unit with anything to compare and a **Catchment total** row,
+three column pairs: **Irrigated area (ha)** registered and planted in the
+run, **Water use (m³ a year)** registered and modelled (the mean whole water
+year, surface and groundwater added), **Dam (m³)** registered storage and in
+the run, each run-side figure with its status word against the project's
+band (*More than registered* / *Within band* / *Less than registered* /
+*None registered*; the dam *Larger* / *Smaller than registered*; pure,
+`unitMeasures` in `allocations.ts`). The units to look into first lead (a
+measure more than registered, then one with nothing registered, then one
+less), the first eight until **Show all** (the picked unit's row stays), the
+total always shown. A unit's name opens its comparison above (`unit=`). A read-only table in app.css's `.table-stack`, so below
+50rem each row is a block of labelled values rather than a table scrolling
+sideways. Not offered to a viewer who sees totals only. Tests:
+`allocations/allocations.test.ts`, `e2e/tests/allocations-map.spec.ts`.
 
 **Every hydrological unit and water year**: first the **over/under-use
 chart** (`allocations/UsePlot.svelte`, the evidence report's § 5 chart, shared
