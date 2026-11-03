@@ -12904,6 +12904,50 @@ month of the classed years is counted exactly once.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `DEFAULT_OUTCOME_RISK_CUTOFFS` (months met ≥ 0.90 / ≥ 0.75; days below the EWR ≤ 0.05 / ≤ 0.20) and the portfolio traffic lights' 5 % / 20 % of the last 30 days (D11). `OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST` stays true, and the badges read "provisional".
 
+### 2.14b Where breaches start, by demand level (issue #53 R8)
+
+A view over the outcome matrix (§2.14), in the frontend
+(`frontend/src/lib/components/outcomes/irrigationSupport.ts`): no run output
+changes, so `ENGINE_VERSION` doesn't move. The screen is EWR's **How much
+irrigation can the catchment support?** ([ui.md](./ui.md#irrigation-the-catchment-supports)).
+
+- **Years.** Per demand level, the matrix's own years: the classed complete
+  water years its run covers, each with its natural flow at the outlet over
+  the year (the year classes' `naturalM3`) and whether it met the
+  requirement **in full** by the matrix's measure (`OutcomeYear.met`: every
+  Reserve month met at the site, or no day below the EWR at the outlet).
+- **Threshold** (`supportThreshold`): the natural volume of the **wettest
+  year that failed**. Every wetter year met the requirement, so it is where
+  breaches start in the record; at or below it at least one year failed. A
+  fact about the record, not a fitted curve (**judgement**: a midpoint up to
+  the next year, or a logistic fit, would state an edge the record doesn't
+  show). Shown as "about" its value in million m³ to two significant
+  figures, with the spread: the next wetter year (which met it) and the count
+  of years at or below it that met it anyway (timing within the year, §2 of
+  planning-outputs.md finding 5).
+- **Ties.** Sorted by volume then water year, so input order never matters;
+  equal volumes are never split: a passing year level with the threshold
+  counts as "met at or below", and the next met year is strictly wetter.
+- **No threshold**: no year failed (`neverFailed`); the wettest year failed
+  (`wettestFailed`: nothing above it shows where breaches stop, every year
+  failing included); fewer than `IRRIGATION_SUPPORT_MIN_YEARS` = 9 years
+  (`tooFewYears`; **judgement, pending the hydrologist**: as many as the
+  matrix needs to fill three tercile classes of 3).
+- **Monotonicity.** Each level is read on its own and never smoothed. A
+  lower level with a higher threshold is reported as a note: less
+  irrigation can mean less return flow on dry days (the seasonal outlook's
+  caveat, §2.15).
+- **Hectares.** The base run's planted area (its stored model's crop areas)
+  × the level, marked ≈: the sweep scales demand, not area (R1). None on a
+  full-allocation run, where a level is a share of the registered volume
+  (§2.12a).
+
+**Tests** (`irrigationSupport.test.ts`): the threshold and its spread,
+drier years that met, ties and input order, no failing year, every year
+failing, the wettest failing, 8 vs 9 years, the rounding, the axis, the Key
+message, and end to end from a stored sweep through `buildMatrixView` under
+a skewed `TZ`.
+
 ### 2.14a Licence impact by year class (issue #53 R7, engine and report)
 
 A derived view over two saved runs, not part of `runModel`: no run output

@@ -9531,7 +9531,10 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   **Uncertainty bands** (`#res-uncertainty`), the **Sensitivity runs**
   (`#res-sensitivity`, a card of its own since issue #521 § 14, so each
   card's actions are its own; [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
-  (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)) and the **Seasonal
+  (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), **How much
+  irrigation can the catchment support?** (`#res-irrigation`, beside the
+  matrix since it reads the matrix's sweep, [§ Irrigation the catchment
+  supports](#irrigation-the-catchment-supports)) and the **Seasonal
   outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)). A
   tool that hasn't run is **one row** (`common/ToolRow.svelte`,
   `data-testid="tool-row"`): its name and ⓘ, one line saying what it
@@ -11302,6 +11305,68 @@ without the gauge's results), `backend/src/projects/outcomeSettings.db.test.ts`
 `e2e/tests/outcome-matrix.spec.ts` (settings, sweep, worker, the rendered
 matrix against the stored series; a gauge's matrix against its stored
 Reserve months, the viewer, the fallback).
+
+### Irrigation the catchment supports
+
+Issue #53 ([planning-outputs.md §3.8](./design/planning-outputs.md#38-r8-how-much-irrigation-the-catchment-supports-s-presentation-only),
+[model.md §2.14b](./model.md#214b-where-breaches-start-by-demand-level-issue-53-r8)).
+A panel on [EWR](#ewr) straight after the outcome matrix (`#res-irrigation`,
+`outcomes/IrrigationSupportPanel.svelte`, in the EWR page's chunk, view model
+`outcomes/irrigationSupport.ts`), headed **How much irrigation can the
+catchment support?** It reads the outcome matrix's sweep and matrix, shared
+by `OutcomeMatrixPanel`'s `onview` (no second lookup), so the two always
+read the same years under the same measure and site.
+
+- **No sweep** (or one pending, or stuck): one row (`common/ToolRow`), whose
+  **Run…** (editors) opens the outcome matrix's sweep form with focus on its
+  levels (`OutcomeMatrixPanel`'s exported `open()`); a viewer reads "Not run
+  yet: an editor can run a demand sweep."; pending, "Waiting for the demand
+  sweep…". `data-state` as the matrix's.
+- **Key message** first (`role="note"`), written from the numbers
+  (`keyMessage`): the 100 % level (else the first) in a sentence ("At
+  today’s irrigation demand (≈ 1 200 ha planted), the river’s requirement was
+  not met in some years with about 12 million m³ of natural water or less,
+  and was met in every wetter year."), then each other level against it
+  ("falls to", "stays at", "rises to", "was met in every year"). It answers
+  the panel's question before the bars, so it leads (the operator's mock-up
+  had it under them).
+- **The bars**: one per level in sweep order, named in words ("Today’s
+  irrigation", "15 % less irrigation", `levelName`), with the hectares it is
+  equivalent to (the base run's planted area from its stored model ×
+  the level, "≈ 1 020 ha"; none without an area or on a full-allocation run,
+  where a level is a share of the registered volume) and "Not met in N of M
+  years". Each bar spans a shared axis of natural water available in the
+  water year (million m³, natural flow at the outlet; MAR, the years' mean,
+  marked under it; "← Drier years (less water)", "Wetter years (more water)
+  →"). Every classed year is a mark at its volume: a filled `--danger` dot
+  where the requirement failed that year, a `--success` ring where it held
+  (shape as well as colour). The bar's tint runs `--danger-soft` → 
+  `--warning-soft` → `--success-soft` from the driest year that met to the
+  marker to the next wetter year, so the blend is where the record mixes,
+  not decoration; no text sits on the tint. The **marker** (a dashed
+  `--text` line) is at the wettest year that failed, labelled above the bar
+  "Breaches start at about 12 million m³"; with no failing year, the wettest
+  failing, or fewer than 9 years, no marker and the label says why. Each
+  level also has a sentence for a screen reader carrying the same numbers.
+  From a 36rem container the label sits beside the bar; narrower it stacks
+  over it.
+- **Notes**: a lower level whose breaches start in wetter years than a
+  higher one is said ("… less irrigation can mean less water draining back to
+  the river on dry days. Shown as run, not smoothed."). A level that didn't
+  run is named, not drawn.
+- **Show the numbers**: per level the area, the threshold (about, million
+  m³), the spread (between the wettest year not met and the next wetter one,
+  and how many drier years met it anyway), years not met and met.
+- **No recommendation**, as the matrix: "Historical, not a forecast; the
+  choice of level is the WUA’s."
+
+Tests: `outcomes/irrigationSupport.test.ts` (the threshold, ties, no failing
+year, every year failing, too few years, rounding, the axis, the Key message
+and through `buildMatrixView` from a stored sweep under a skewed TZ),
+`river/river.test.ts` (the menu entry) and
+`e2e/tests/irrigation-support.spec.ts` (Run… opens the matrix's form, the
+markers and counts against the stored series, the hectares, the table, a
+viewer, the empty row, a11y and the phone).
 
 ### Seasonal outlook
 

@@ -12,6 +12,7 @@ export const RIVER_ANCHORS = [
 	'res-uncertainty',
 	'res-sensitivity',
 	'res-outcomes',
+	'res-irrigation',
 	'res-outlook'
 ] as const;
 

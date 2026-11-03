@@ -14,6 +14,7 @@ import { headlines } from '#lib/components/overview/latestRun.js';
 import { flowHeading } from '#lib/components/overview/summaryChart.js';
 import { fmtNum } from '#lib/format/number.js';
 import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
+import { IRRIGATION_SUPPORT_HEADING } from '#lib/components/outcomes/irrigationSupport.js';
 
 const created = (r: RunMeta) => {
 	const t = Date.parse(r.createdAt);
@@ -203,6 +204,7 @@ export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, da
 				{ id: 'res-uncertainty', label: 'Uncertainty bands' },
 				{ id: 'res-sensitivity', label: 'Sensitivity runs' },
 				{ id: 'res-outcomes', label: 'Outcome matrix' },
+				{ id: 'res-irrigation', label: IRRIGATION_SUPPORT_HEADING },
 				{ id: 'res-outlook', label: 'Seasonal outlook' }
 			]
 		}

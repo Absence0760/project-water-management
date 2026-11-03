@@ -127,13 +127,14 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 		'res-uncertainty',
 		'res-sensitivity',
 		'res-outcomes',
+		'res-irrigation',
 		'res-outlook'
 	]);
 	const tools = page.getByRole('region', { name: 'How sure, and what if' });
 	const rows = tools.getByTestId('tool-row');
-	await expect(rows.getByRole('heading', { level: 3 })).toHaveText([/^Uncertainty bands/, /^Sensitivity runs/, /^Outcome matrix/, /^Seasonal outlook/]);
-	await expect(rows.getByRole('button', { name: /^Run/ })).toHaveText(['Run…', 'Run sensitivity', 'Run…', 'Run…']);
-	await expect(rows.getByRole('button', { name: /^About / })).toHaveCount(4);
+	await expect(rows.getByRole('heading', { level: 3 })).toHaveText([/^Uncertainty bands/, /^Sensitivity runs/, /^Outcome matrix/, /^How much irrigation can the catchment support\?/, /^Seasonal outlook/]);
+	await expect(rows.getByRole('button', { name: /^Run/ })).toHaveText(['Run…', 'Run sensitivity', 'Run…', 'Run…', 'Run…']);
+	await expect(rows.getByRole('button', { name: /^About / })).toHaveCount(5);
 	for (const row of await rows.all()) expect((await row.boundingBox())!.height).toBeLessThan(60);
 	await expect(tools.getByLabel(/^Demand levels/)).toHaveCount(0);
 

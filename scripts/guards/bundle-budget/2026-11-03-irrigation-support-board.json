@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Issue #53 R8, How much irrigation can the catchment support? on the EWR page: IrrigationSupportPanel.svelte, outcomes/irrigationSupport.ts and its help article, tip and guide step. Measured 2359 KB on main @ 680315f77 and 2365 KB with the change (+6 KB). Headroom under 1 KB."
+}

@@ -14,9 +14,10 @@ settings and the matrix screen), R5 in full (§3.5: the engine core, engine
 0.44.0; the `outlook` job, its settings and the WUA screen; the farmer view
 E3, engine 1.19.0, migration 106), R6 in full (§3.6: the engine,
 engine 0.46.0; the job, the review-date setting and the screen; WP-3.8's
-rule, engine 1.54.0) and R7
+rule, engine 1.54.0), R7
 (§3.7: the impact report's board; existing *authorised* use when its
-baseline is a full-allocation run).
+baseline is a full-allocation run) and R8 (§3.8: how much irrigation the
+catchment supports, from R4's sweep).
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from
@@ -355,6 +356,39 @@ Still to build: the full-allocation background (WP-3.10 `allocationMode:
 the baseline's full-allocation run and the label "existing authorised use"
 ([followups.md § Allocations](../followups.md#allocations-wp-310)); the
 evidence report's page 1 (issue #15, Phase C) takes the same board.
+
+### 3.8 R8: how much irrigation the catchment supports (**S**, presentation only)
+
+A fifth sketch, from the operator (2026-11-03; AI-drawn, with invented
+figures, **not committed**: it names the client catchment): one horizontal
+bar per demand level (today, −15 %, −30 %, with the hectares each implies) on
+an axis of annual natural water availability, a marker where the catchment
+"begins to breach" the EWR at that level, and a Key message sentence. It
+reads R4's demand sweep, so it adds no job, no setting and no engine
+change.
+
+**Built** (EWR → **How much irrigation can the catchment support?**,
+`#res-irrigation`, beside the outcome matrix; [ui.md § Irrigation the
+catchment supports](../ui.md#irrigation-the-catchment-supports); the rule in
+[model.md §2.14b](../model.md#214b-where-breaches-start-by-demand-level-issue-53-r8)).
+What the build changed from the sketch, and why:
+
+- **The marker is a year of the record**, the wettest that failed, not an
+  interpolated edge **(judgement)**: above it every year met the
+  requirement. The sketch's single number hid how failing and passing years
+  mix below it (§2 finding 5), so each year is a mark on the bar and the
+  spread is in the table.
+- **No marker** when the record can't place one: no year failed, the wettest
+  failed, or fewer than 9 years (**judgement, pending the hydrologist**).
+- **The colour is the record's, not a decoration**: the bar's tint follows
+  the failing, mixed and passing zones in the band colours, the marks are
+  dot and ring, and every number is in words, so the gradient is never the
+  only cue.
+- **Hectares are equivalents** (≈): the sweep scales demand, not area (R1).
+- **The Key message leads** and is written from the numbers; it reports,
+  never recommends (as R4).
+- **Monotonicity is reported, not smoothed** (as R6): a lower level can start
+  failing in wetter years when return flows fall.
 
 ### Order
 

@@ -23,6 +23,7 @@ import {
 	OUTCOME_RISK_LABEL,
 	outcomeMatrix,
 	type OutcomeLevelInput,
+	type OutcomeMatrix,
 	type OutcomeMetric,
 	type OutcomeRisk,
 	type OutcomeRiskCutoffs,
@@ -227,6 +228,20 @@ export interface MatrixView {
 	cutoffsPending: boolean;
 	cutoffsText: string | null;
 	warnings: string[];
+	/** The engine's matrix (null without one: no done member, no complete year, or siteMissing), for views over its years (irrigationSupport.ts). */
+	outcome: OutcomeMatrix | null;
+	/** The base run's year classes: each classed year's natural volume. */
+	classes: WaterYearClasses;
+}
+
+/** What the outcome matrix panel shares with the boards that read its sweep (OutcomeMatrixPanel onview). */
+export interface MatrixShare {
+	/** The panel's data-state: loading, empty, pending, stuck, complete. */
+	state: string;
+	view: MatrixView | null;
+	sweep: Sweep | null;
+	/** A sweep can run on this run (an ordinary run with its natural flow). */
+	runnable: boolean;
 }
 
 export interface MatrixInput {
@@ -307,6 +322,8 @@ export function buildMatrixView(input: MatrixInput): MatrixView {
 		rows,
 		cutoffsPending: metric !== null && OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST && input.settings.riskCutoffs[metric] === null,
 		cutoffsText: metric ? cutoffsText(metric, cutoffs) : null,
-		warnings
+		warnings,
+		outcome: matrix,
+		classes
 	};
 }
