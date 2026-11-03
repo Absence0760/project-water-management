@@ -120,6 +120,8 @@ class CrossCheck(unittest.TestCase):
             "land_cover_units", "land_cover_scaled", "land_cover_above_q",
             # Development during the run (§2.7g).
             "dev_dams", "dev_no_capacity_days", "dev_shrink_spill_days", "abstraction_from_units",
+            # Splits between destinations and a maximum or a formula by month (§2.6, §2.6a, engine >= 1.114.0).
+            "split_days", "formula_month_days", "maximum_month_days",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 
