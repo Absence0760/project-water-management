@@ -8,6 +8,8 @@
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
 import { withMonthlyRates } from '../network/transferRates';
+import { withMonthlyDiversion } from '../network/offtake';
+import { transferDestinations } from '../network/transferSplits';
 import type { AllocationEntry } from '../allocations/compare';
 import { DEMAND_PARTS, irrigationFromReturnFlow, LAND_COVER_CLASSES, type DemandPart, type DroughtRestrictionRule, type Borehole, type DemandObject, type LandCoverPatch, type CropArea, type CropDef, DEFAULT_IRRIGATION_SYSTEMS, type IrrigationSystemDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
@@ -441,6 +443,9 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addCalibrationLocations(new Rng(seed ^ 0x6f4a3c21), nodes, settings);
 	// Diversion curves on river off-takes (engine 1.113.0), from their own stream, last of all.
 	addDiversionCurves(new Rng(seed ^ 0x7a3c91e5), transfers);
+	// A maximum or a formula by month, and splits between destinations (engine 1.114.0), from their own streams, last of all.
+	addMonthlyDiversions(new Rng(seed ^ 0x2d4f6a81), transfers);
+	addTransferSplits(new Rng(seed ^ 0x5c1e9b37), nodes, transfers, opts.externalTransfers === true);
 	return {
 		settings,
 		model: {
@@ -620,6 +625,59 @@ function addDiversionCurves(g: Rng, transfers: Transfer[]): void {
 		t.diversionMaxPct = g.bool(0.4) ? null : g.pick([1, 0.95, g.float(0.01, 1)]);
 		t.diversionFlowUnit = g.pick(['L/s', 'm3/s', 'm3/day', 'Ml/day'] as const);
 		t.diversionFlowBasis = g.bool(0.25) ? 'natural' : g.pick([null, 'modelled'] as const);
+	}
+}
+
+/**
+ * A maximum or a formula by month (engine ≥ 1.114.0, docs/model.md §2.6a): half
+ * the rules sized by a curve take it by month instead, each month its own curve
+ * (the rule's, or another drawn as addDiversionCurves draws one) or none (a
+ * month up to its rate), at least one month with a curve; the rule's one curve
+ * then empty. Now and then a month's curve is incomplete (the rule takes
+ * nothing, with a warning).
+ */
+function addMonthlyDiversions(g: Rng, transfers: Transfer[]): void {
+	for (const t of transfers) {
+		if (t.sizing !== 'diversionCurve' || !g.bool(0.5)) continue;
+		const own = { coefficient: t.diversionCoefficient ?? g.logFloat(0.01, 1e5), exponent: t.diversionExponent ?? -0.9, maxPct: t.diversionMaxPct ?? null };
+		const list = Array.from({ length: 12 }, () =>
+			g.bool(0.35) ? null : g.bool(0.5) ? { ...own } : { coefficient: g.bool(0.02) ? 0 : g.logFloat(0.01, 1e5), exponent: g.pick([0, g.float(-1.5, 0.5), -0.9]), maxPct: g.bool(0.4) ? null : g.float(0.01, 1) }
+		);
+		if (!list.some((m) => m)) list[g.int(0, 11)] = { ...own };
+		Object.assign(t, withMonthlyDiversion(list));
+	}
+}
+
+/**
+ * Splits between destinations (engine ≥ 1.114.0, docs/model.md §2.6): a third
+ * of the rules send their water to two to five destinations, the rule's own
+ * first and other farms after it (now and then, from a dam rule, outside the
+ * catchment, with `externalTransfers` only, so the default seeds keep every
+ * rule inside it), with random shares adding up to 100 %. Now and then a split the
+ * run can't use (the shares off, a destination twice): it runs as all of it
+ * to the first destination, with a warning.
+ */
+function addTransferSplits(g: Rng, nodes: NetworkNode[], transfers: Transfer[], outside: boolean): void {
+	const farms = nodes.filter((n) => n.kind === 'farm').map((n) => n.id);
+	for (const t of transfers) {
+		if (!g.bool(0.33)) continue;
+		const pool = farms.filter((id) => id !== t.fromNodeId && id !== t.toNodeId);
+		const out = outside && t.source !== 'river';
+		const n = Math.min(g.int(2, 5), pool.length + 1 + (out ? 1 : 0));
+		if (n < 2) continue;
+		const ends: (string | null)[] = [t.toNodeId];
+		while (ends.length < n) {
+			const next = out && !ends.includes(null) && g.bool(0.15) ? null : g.pick(pool);
+			if (!ends.includes(next)) ends.push(next);
+			else if (pool.every((id) => ends.includes(id))) break;
+		}
+		if (ends.length < 2) continue;
+		const w = ends.map(() => g.float(0.05, 1));
+		const sum = w.reduce((a, x) => a + x, 0);
+		const destinations = ends.map((nodeId, k) => ({ nodeId, pct: w[k]! / sum }));
+		if (g.bool(0.04)) destinations[0]!.pct *= 0.5;
+		else if (g.bool(0.03)) destinations[1]!.nodeId = destinations[0]!.nodeId;
+		t.destinations = destinations;
 	}
 }
 
@@ -1293,7 +1351,7 @@ export function* shrinkCandidates(input: ModelInput): Generator<ModelInput> {
 		const x = cloneInput(input);
 		x.model.nodes = x.model.nodes.filter((y) => y.id !== nd.id);
 		x.model.cropAreas = x.model.cropAreas.filter((a) => a.nodeId !== nd.id);
-		x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nd.id && t.toNodeId !== nd.id);
+		x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nd.id && !transferDestinations(t).some((d) => d.nodeId === nd.id));
 		yield x;
 	}
 	// Splice out a node with exactly one upstream node: its upstream drains past it.
@@ -1304,7 +1362,7 @@ export function* shrinkCandidates(input: ModelInput): Generator<ModelInput> {
 		x.model.nodes = x.model.nodes.filter((y) => y.id !== nd.id);
 		x.model.nodes.find((y) => y.id === ups[0]!.id)!.downstreamNodeId = nd.downstreamNodeId;
 		x.model.cropAreas = x.model.cropAreas.filter((a) => a.nodeId !== nd.id);
-		x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nd.id && t.toNodeId !== nd.id);
+		x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nd.id && !transferDestinations(t).some((d) => d.nodeId === nd.id));
 		yield x;
 	}
 	for (let c = 0; c < m.crops.length; c++) {

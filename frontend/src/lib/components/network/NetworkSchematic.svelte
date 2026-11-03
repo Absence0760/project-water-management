@@ -7,8 +7,8 @@
 	// the list below the drawing is its text equivalent.
 	import { onFontsLoaded } from '#lib/components/common/fontsLoaded.js';
 	import { MediaQuery } from 'svelte/reactivity';
-	import type { NetworkNode, Transfer } from '@water-management/engine';
-	import { fmtNum } from '#lib/format/number.js';
+	import { expandTransferSplits, type NetworkNode, type Transfer, type TransferPiece } from '@water-management/engine';
+	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { drainageTree } from '#lib/model/tree.js';
 	import { fmtVolume, hasDam, KIND_WORD } from './fields';
 	import { keepInView } from './scroll';
@@ -334,7 +334,9 @@
 	});
 
 	// Worked out once per layout, not on every redraw (a drag redraws on every pointer move).
-	const transferPaths = $derived(new Map(transfers.map((t) => [t.id, transferPath(t)])));
+	// A rule split between destinations (engine ≥ 1.114.0) draws an arrow to each, its share in the arrow's title.
+	const drawn = $derived(expandTransferSplits(transfers) as (Transfer & Partial<TransferPiece>)[]);
+	const transferPaths = $derived(new Map(drawn.map((t) => [t.id, transferPath(t)])));
 
 	function transferPath(t: Transfer): string {
 		const a = pos.get(t.fromNodeId);
@@ -431,11 +433,11 @@
 			<path class="river" d={edgePath(e.from, e.to, e.via)} stroke-width={strokeFor(e.from)} marker-end="url(#{id}-flow)" />
 		{/each}
 
-		{#each transfers as t (t.id)}
+		{#each drawn as t (t.id)}
 			{@const d = transferPaths.get(t.id)}
 			{#if d}
 				<path class="transfer" class:off={!t.enabled} d={d} marker-end="url(#{id}-transfer)">
-					<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId!)}{t.enabled ? '' : ' (disabled)'}</title>
+					<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId!)}{t.splitPct !== undefined ? ` (${fmtPct(t.splitPct, 0)} of it)` : ''}{t.enabled ? '' : ' (disabled)'}</title>
 				</path>
 			{/if}
 		{/each}

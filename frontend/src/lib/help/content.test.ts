@@ -51,7 +51,8 @@ const TRANSFER: Record<keyof Transfer, true> = {
 	id: true, fromNodeId: true, toNodeId: true, months: true, maxRateM3s: true, dailyCapM3: true, minStoragePct: true, enabled: true,
 	priority: true, monthlyRateM3s: true, source: true, handsOffM3Day: true, handsOffEwr: true, lossPct: true, sizing: true, topUpDam: true,
 	lossReturnPct: true, lossReturnNodeId: true,
-	diversionCoefficient: true, diversionExponent: true, diversionMaxPct: true, diversionFlowUnit: true, diversionFlowBasis: true
+	diversionCoefficient: true, diversionExponent: true, diversionMaxPct: true, diversionFlowUnit: true, diversionFlowBasis: true,
+	monthlyDiversion: true, destinations: true
 };
 const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,

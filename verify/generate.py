@@ -271,6 +271,8 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_land_cover(random.Random(seed * 49979693 + 37), doc, dense)
     add_development(random.Random(seed * 67867979 + 41), doc, start, days, dense)
     add_diversion_curves(random.Random(seed * 86028157 + 43), doc, dense)
+    add_monthly_diversions(random.Random(seed * 15485927 + 47), doc, dense)
+    add_transfer_splits(random.Random(seed * 32452939 + 53), doc, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
@@ -857,6 +859,88 @@ def add_diversion_curves(rng: random.Random, doc: dict, dense: bool = False) -> 
         t["diversionMaxPct"] = rng.choice([None, 1, 0.95, round(rng.uniform(0.01, 1), 2)])
         t["diversionFlowUnit"] = rng.choice(["L/s", "m3/s", "m3/day", "Ml/day"])
         t["diversionFlowBasis"] = "natural" if rng.random() < 0.25 else rng.choice([None, "modelled"])
+
+
+def add_monthly_diversions(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """A maximum or a formula by month (§2.6a, engine >= 1.114.0), from its own stream so the rest of a network is
+    unchanged: half the rules sized by a curve (two thirds dense) take it month by month instead, each month the
+    rule's curve, another curve, or none (a month up to its rate), at least one month a curve; the rule's one curve
+    is then emptied. Now and then a month's curve is incomplete (the rule diverts nothing)."""
+    for t in doc["model"]["transfers"]:
+        if t.get("sizing") != "diversionCurve" or rng.random() >= (0.67 if dense else 0.5):
+            continue
+        own = {"coefficient": t.get("diversionCoefficient") or 2000, "exponent": t.get("diversionExponent") if t.get("diversionExponent") is not None else -0.9,
+               "maxPct": t.get("diversionMaxPct")}
+        months = []
+        for _ in range(12):
+            r = rng.random()
+            if r < 0.35:
+                months.append(None)
+            elif r < 0.7:
+                months.append(dict(own))
+            else:
+                months.append({"coefficient": 0 if rng.random() < 0.02 else round(10 ** rng.uniform(-2, 5), 4),
+                               "exponent": rng.choice([0, -0.9, round(rng.uniform(-1.5, 0.5), 3)]),
+                               "maxPct": rng.choice([None, 1, round(rng.uniform(0.01, 1), 2)])})
+        if all(x is None for x in months):
+            months[rng.randrange(12)] = dict(own)
+        t["monthlyDiversion"] = months
+        t["diversionCoefficient"] = t["diversionExponent"] = t["diversionMaxPct"] = None
+
+
+def add_transfer_splits(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """Splits between destinations (§2.6, engine >= 1.114.0), from their own stream so the rest of a network is
+    unchanged: a third of the rules (two thirds dense) send to two to five destinations, their own first and other
+    units after it (a dam rule now and then outside the catchment; a river off-take never to a unit that drains
+    back into its source), with random shares adding up to 100 %. Now and then a split the run can't use (the shares
+    off, or a destination twice): it runs as all of it to the first."""
+    m = doc["model"]
+    by_id = {x["id"]: x for x in m["nodes"]}
+    farms = [x["id"] for x in m["nodes"] if x["kind"] == "farm"]
+    succ = {x["id"]: ({x["downstreamNodeId"]} if x["downstreamNodeId"] else set()) for x in m["nodes"]}
+    for t in m["transfers"]:
+        if t.get("source") == "river" and t.get("toNodeId") in succ:
+            succ[t["fromNodeId"]].add(t["toNodeId"])
+
+    def reach(a, b):
+        st, seen = [a], set()
+        while st:
+            k = st.pop()
+            if k == b:
+                return True
+            if k in seen:
+                continue
+            seen.add(k)
+            st.extend(succ.get(k, ()))
+        return False
+
+    for t in m["transfers"]:
+        if t["fromNodeId"] not in by_id or rng.random() >= (0.67 if dense else 0.33):
+            continue
+        river = t.get("source") == "river"
+        want = rng.randint(2, 5)
+        ends = [t.get("toNodeId")]
+        pool = [f for f in farms if f != t["fromNodeId"] and f not in ends and not (river and reach(f, t["fromNodeId"]))]
+        rng.shuffle(pool)
+        while len(ends) < want and (pool or (not river and None not in ends)):
+            if not river and None not in ends and (not pool or rng.random() < 0.15):
+                ends.append(None)
+            else:
+                ends.append(pool.pop())
+        if len(ends) < 2:
+            continue
+        if river:
+            for e in ends[1:]:
+                succ[t["fromNodeId"]].add(e)
+        w = [rng.uniform(0.05, 1) for _ in ends]
+        tot = sum(w)
+        dest = [{"nodeId": e, "pct": x / tot} for e, x in zip(ends, w)]
+        r = rng.random()
+        if r < 0.04:
+            dest[0]["pct"] *= 0.5
+        elif r < 0.07:
+            dest[1]["nodeId"] = dest[0]["nodeId"]
+        t["destinations"] = dest
 
 
 def add_irrigation_systems(rng: random.Random, doc: dict, dense: bool = False) -> None:

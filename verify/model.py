@@ -1555,6 +1555,35 @@ def station_catchment_rain(st: Stations, rain: dict, farms: list[dict]) -> dict:
 DIVERSION_UNIT_M3_DAY = {"L/s": 86.4, "m3/s": 86400.0, "m3/day": 1.0, "Ml/day": 1000.0}
 
 
+def diversion_curves(t: dict):
+    """The rule's curve in each water-year month (Oct-Sep, §2.6a, engine >= 1.114.0), None in a month that takes up
+    to its rate (a maximum month); or None for the whole rule when it can't run: a monthly list that isn't twelve
+    entries, has no curve, sits beside the one-curve fields, or has an incomplete month, or without a list an
+    incomplete one curve. Such a rule takes nothing. Without a list, the one curve in every month (engine 1.113.0)."""
+    ml = t.get("monthlyDiversion")
+    if ml is None:
+        c = diversion_curve(t)
+        return None if c is None else [c] * 12
+    if not isinstance(ml, list) or len(ml) != 12 or not any(x is not None for x in ml):
+        return None
+    if any(t.get(k) is not None for k in ("diversionCoefficient", "diversionExponent", "diversionMaxPct")):
+        return None
+    out = []
+    for x in ml:
+        if x is None:
+            out.append(None)
+            continue
+        if not isinstance(x, dict):
+            return None
+        c = diversion_curve({"diversionCoefficient": x.get("coefficient"), "diversionExponent": x.get("exponent"),
+                             "diversionMaxPct": x.get("maxPct"), "diversionFlowUnit": t.get("diversionFlowUnit"),
+                             "diversionFlowBasis": t.get("diversionFlowBasis")})
+        if c is None:
+            return None
+        out.append(c)
+    return out
+
+
 def diversion_curve(t: dict):
     """(a, b, largest share, m3/day per unit, reads the natural flow) of a rule's diversion curve, or None when it
     is incomplete (a <= 0, b not a number, a largest share outside (0, 1], an unknown unit or basis): such a rule
@@ -1586,11 +1615,78 @@ def diversion_share(c, x: float) -> float:
     return min(c[2], s) if s > 0 else 0.0
 
 
+def split_destinations(t: dict):
+    """A transfer's destinations as (nodeId, share) pairs when it splits between two or more that can run (§2.6,
+    engine >= 1.114.0): one to five, each share in (0, 1], together 100 % within 0.01 %, none twice, none the source,
+    the first one its toNodeId. None for a rule with one destination, or a list the run can't use (it then runs as all
+    of it to toNodeId)."""
+    d = t.get("destinations")
+    if not isinstance(d, list) or len(d) < 2 or len(d) > 5:
+        return None
+    pairs = []
+    for x in d:
+        if not isinstance(x, dict):
+            return None
+        nid, p = x.get("nodeId"), x.get("pct")
+        if not (nid is None or isinstance(nid, str)):
+            return None
+        if not (isinstance(p, (int, float)) and not isinstance(p, bool) and math.isfinite(p) and 0 < p <= 1):
+            return None
+        pairs.append((nid, float(p)))
+    ids = [nid for nid, _ in pairs]
+    if len(set(ids)) != len(ids) or t["fromNodeId"] in ids or ids[0] != t.get("toNodeId"):
+        return None
+    if abs(sum(p for _, p in pairs) - 1) > 1e-4:
+        return None
+    return pairs
+
+
+def split_transfers(transfers: list[dict]) -> list[dict]:
+    """Each transfer split between destinations as one rule per destination (§2.6, engine >= 1.114.0): the piece
+    "<id>#<k>" sends to destination k, with share p of the rule's rates and daily cap and, sized by a curve, p of
+    the curve's share of the river (a and the largest share, which is 1 when unset, times p), so the pieces
+    together take what the one rule would and each its share. Every other field is the rule's. A rule sized to its
+    destinations' need marks its pieces (_split_of, _split_pct): they ask their share of the sum of their
+    destinations' needs (the need-sharing below)."""
+    out = []
+    for t in transfers:
+        pairs = split_destinations(t)
+        if pairs is None:
+            out.append(t)
+            continue
+        for k, (nid, p) in enumerate(pairs):
+            q = dict(t)
+            q["id"] = f"{t['id']}#{k}"
+            q["toNodeId"] = nid
+            q["destinations"] = None
+            q["maxRateM3s"] = t["maxRateM3s"] * p
+            if t.get("monthlyRateM3s"):
+                q["monthlyRateM3s"] = [r * p for r in t["monthlyRateM3s"]]
+            if t.get("dailyCapM3") is not None:
+                q["dailyCapM3"] = t["dailyCapM3"] * p
+            if t.get("sizing") == "diversionCurve":
+                if isinstance(t.get("monthlyDiversion"), list):
+                    q["monthlyDiversion"] = [
+                        None if c is None else {"coefficient": c["coefficient"] * p, "exponent": c["exponent"],
+                                                "maxPct": (1.0 if c.get("maxPct") is None else c["maxPct"]) * p}
+                        for c in t["monthlyDiversion"]]
+                elif isinstance(t.get("diversionCoefficient"), (int, float)):
+                    q["diversionCoefficient"] = t["diversionCoefficient"] * p
+                    top = t.get("diversionMaxPct")
+                    q["diversionMaxPct"] = (1.0 if top is None else top) * p
+            q["_split_of"] = t["id"]
+            q["_split_pct"] = p
+            out.append(q)
+    return out
+
+
 def run(doc: dict) -> dict:
     doc = apply_scenario_ops(doc)
     settings = merge_settings(doc.get("settings") or {})
     # A copy: the run sets each day's dam capacity and survey curve on its nodes (§2.7g).
     model = copy.deepcopy(doc["model"])
+    # A rule split between destinations runs as one rule per destination (§2.6, engine >= 1.114.0).
+    model["transfers"] = split_transfers(model.get("transfers") or [])
     series = doc.get("series") or {}
     rain = prepare_rain(settings, series)
     # §2.4i: the catchment's station replaces its rain; the stations' records and pairings, built once.
@@ -1615,6 +1711,9 @@ def run(doc: dict) -> dict:
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
                 divert_by_month_days=0, reach_loss_days=0, baseflow_days=0,
+                # Engine >= 1.114.0: piece-days a split rule moved water, days a formula month and a maximum month of a
+                # rule sized by a curve by month took water.
+                split_days=0, formula_month_days=0, maximum_month_days=0,
                 # Phase 2b: land cover's units, the units whose patches were scaled to the unit, unit-days above q.
                 land_cover_units=0, land_cover_scaled=0, land_cover_above_q=0,
                 # Phase 2b: development during the run (§2.7g): dams whose capacity changes, unit-days with no capacity,
@@ -2713,6 +2812,8 @@ def run(doc: dict) -> dict:
             for t, _ in group:
                 v = vol[t["id"]]
                 rule_vol[t["id"]][i] = v
+                if v > 0 and t.get("_split_of") is not None:
+                    diag["split_days"] += 1
                 J[t["fromNodeId"]] -= v
                 drawn[t["fromNodeId"]] += v
                 # Out of the catchment: it leaves the source's dam and the model, the source's surface use (X1).
@@ -2752,6 +2853,15 @@ def run(doc: dict) -> dict:
                 # Less what it sent out of the catchment today (X1).
                 need = min(dam_dem(dst, i), max(0.0, sr_[0] - ext_out[dst]) if sr_ else math.inf) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
+        # A rule split between destinations and sized to their need (§2.6, engine >= 1.114.0): its need is the sum
+        # of its pieces' needs, and each piece asks its share of it, so the split holds whatever each needs.
+        split_need: dict[str, float] = {}
+        for t in offtakes:
+            if t.get("_split_of") is not None and t["id"] in ot_need:
+                split_need[t["_split_of"]] = split_need.get(t["_split_of"], 0.0) + ot_need[t["id"]]
+        for t in offtakes:
+            if t.get("_split_of") in split_need and t["id"] in ot_need:
+                ot_need[t["id"]] = t["_split_pct"] * split_need[t["_split_of"]]
         arrived: dict[str, list[float]] = {}
         back_to: dict[str, list[tuple[str, float]]] = {}
 
@@ -3229,9 +3339,14 @@ def run(doc: dict) -> dict:
                     # issue #90 Q25); the bands keep it above its keep.
                     v = lim
                     if t.get("sizing", "demand") == "diversionCurve":
-                        # Its share of the river here, read at that flow or at the natural flow here (§2.6a).
-                        dc = diversion_curve(t)
-                        v = 0.0 if dc is None else min(v, diversion_share(dc, NAT[xid] if dc[4] else U0) * U0) if U0 > 0 else 0.0
+                        # Its share of the river here, read at that flow or at the natural flow here (§2.6a); this
+                        # month's curve (engine >= 1.114.0), and in a month without one up to its capacity.
+                        dcs = diversion_curves(t)
+                        dc = None if dcs is None else dcs[m]
+                        if dcs is None:
+                            v = 0.0
+                        elif dc is not None:
+                            v = min(v, diversion_share(dc, NAT[xid] if dc[4] else U0) * U0) if U0 > 0 else 0.0
                     elif t.get("sizing", "demand") != "capacity":
                         v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))
                     wants[t["id"]] = max(0.0, v)
@@ -3260,6 +3375,10 @@ def run(doc: dict) -> dict:
                 for t in grp:
                     v = vs[t["id"]]
                     rule_vol[t["id"]][i] = v
+                    if v > 0 and t.get("_split_of") is not None:
+                        diag["split_days"] += 1
+                    if v > 0 and t.get("sizing") == "diversionCurve" and isinstance(t.get("monthlyDiversion"), list):
+                        diag["formula_month_days" if t["monthlyDiversion"][m] is not None else "maximum_month_days"] += 1
                     taken += v
                     lp = t.get("lossPct") or 0.0
                     arrived.setdefault(t["toNodeId"], []).append((t, v * (1 - lp)))

@@ -31,6 +31,7 @@ import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { attributeEwrShortfall, bindingSite, type AttributionResult } from '../network/attribution';
 import { bindingFromCharge, EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
+import { expandTransferSplits } from '../network/transferSplits';
 import {
 	computeCurtailment,
 	DEMAND_PCT_FLOOR_M3_DAY,
@@ -354,7 +355,8 @@ function transferVolumes(
 	const perRule = storedRules(run, days);
 	if (perRule) return { rules: perRule.rules.map((r, k) => ({ from: index.get(r.fromNodeId)!, to: index.get(r.toNodeId!)!, volume: perRule.volumes[k]! })), approximate: false };
 	const pairs = new Map<string, [number, number]>();
-	for (const tr of run.transfers) {
+	// A rule split between destinations (engine ≥ 1.114.0) has a leg to each (./network/transferSplits.ts).
+	for (const tr of expandTransferSplits(run.transfers)) {
 		if (!tr.enabled) continue;
 		const a = index.get(tr.fromNodeId);
 		// A rule out of the catchment (engine ≥ 1.86.0) is never a leg: the engine charges it to its source as an export.
@@ -624,7 +626,7 @@ export function curtailmentSeriesKeys(
 	// The farms whose net transfer series transferVolumes reads, or (given `has`, for a run
 	// that stores them, engine ≥ 1.6.0) the per-rule volumes it reads in their place.
 	const inRule = new Set<string>();
-	for (const tr of transfers) {
+	for (const tr of expandTransferSplits(transfers)) {
 		const a = byId.get(tr.fromNodeId);
 		const b = tr.toNodeId === null ? undefined : byId.get(tr.toNodeId);
 		if (tr.enabled && a && b && a !== b && a.kind === 'farm' && b.kind === 'farm') inRule.add(a.id).add(b.id);

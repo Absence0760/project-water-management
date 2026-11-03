@@ -63,13 +63,21 @@ export async function loadIdNames(db: Db, projectId: string, runId: string | nul
 		names.set(n.id, nodeWords(n));
 		nodes.add(n.id);
 	}
-	const { rows: transfers } = await db.query<{ id: string; from_name: string | null; to_name: string | null }>(
-		`SELECT t.id::text AS id, f.name AS from_name, d.name AS to_name
+	// A split between destinations (engine ≥ 1.114.0, migration 311): every destination with its share, in order.
+	const { rows: transfers } = await db.query<{ id: string; from_name: string | null; to_name: string | null; split: { name: string | null; pct: number }[] | null }>(
+		`SELECT t.id::text AS id, f.name AS from_name, d.name AS to_name,
+			CASE WHEN t.split_node_ids IS NULL THEN NULL ELSE (
+				SELECT json_agg(json_build_object('name', n.name, 'pct', u.p) ORDER BY u.i)
+				FROM unnest(t.split_node_ids, t.split_pct) WITH ORDINALITY AS u(id, p, i) LEFT JOIN node n ON n.id = u.id
+			) END AS split
 		 FROM transfer t LEFT JOIN node f ON f.id = t.from_node_id LEFT JOIN node d ON d.id = t.to_node_id
 		 WHERE t.project_id = $1`,
 		[projectId]
 	);
-	for (const t of transfers) names.set(t.id, `the transfer '${t.from_name ?? 'a node that no longer exists'} → ${t.to_name ?? 'outside the catchment'}'`);
+	for (const t of transfers) {
+		const to = t.split ? t.split.map((x) => `${x.name ?? 'outside the catchment'} ${Math.round(x.pct * 10_000) / 100} %`).join(', ') : (t.to_name ?? 'outside the catchment');
+		names.set(t.id, `the transfer '${t.from_name ?? 'a node that no longer exists'} → ${to}'`);
+	}
 	const { rows: series } = await db.query<{ id: string; name: string; kind: string }>('SELECT id::text AS id, name, kind FROM time_series WHERE project_id = $1', [projectId]);
 	for (const s of series) names.set(s.id, `the series '${s.name || s.kind.replace(/_/g, ' ')}'`);
 	return { names, nodes };

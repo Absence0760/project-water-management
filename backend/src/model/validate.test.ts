@@ -267,6 +267,30 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(ModelBody.parse(body({ ...curve, sizing: 'capacity', diversionFlowUnit: null })) as never)).toEqual([]);
 	});
 
+	it('splits and a curve by month (engine 1.114.0): none by default, toNodeId from the first destination, one row as that destination alone', () => {
+		const out = node('Gauge', null);
+		const up = node('Up', out.id);
+		const a = node('A', out.id);
+		const b = node('B', out.id);
+		const t = { id: crypto.randomUUID(), fromNodeId: up.id, toNodeId: a.id, months: [1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river', sizing: 'capacity' };
+		const body = (tr: object) => ({ nodes: [out, up, a, b], crops: [], cropAreas: [], transfers: [tr] });
+		expect(ModelBody.parse(body(t)).transfers[0]).toMatchObject({ toNodeId: a.id, destinations: null, monthlyDiversion: null });
+		const split = [
+			{ nodeId: b.id, pct: 0.4 },
+			{ nodeId: a.id, pct: 0.6 }
+		];
+		const { toNodeId: _, ...noTo } = { ...t, destinations: split };
+		const parsed = ModelBody.parse(body(noTo));
+		expect(parsed.transfers[0]).toMatchObject({ toNodeId: b.id, destinations: split });
+		expect(modelProblems(parsed as never)).toEqual([]);
+		expect(ModelBody.parse(body({ ...t, destinations: [{ nodeId: a.id, pct: 1 }] })).transfers[0]).toMatchObject({ toNodeId: a.id, destinations: null });
+		for (const bad of [{ destinations: [{ nodeId: 'x', pct: 1 }] }, { destinations: [{ nodeId: a.id }] }, { monthlyDiversion: [null] }, { monthlyDiversion: new Array(12).fill({ coefficient: 0, exponent: 0 }) }])
+			expect(ModelBody.safeParse(body({ ...t, ...bad })).success, JSON.stringify(bad)).toBe(false);
+		const monthly = [{ coefficient: 2000, exponent: -0.9, maxPct: 0.97 }, ...new Array(11).fill(null)];
+		expect(modelProblems(ModelBody.parse(body({ ...t, sizing: 'diversionCurve', diversionFlowUnit: 'm3/s', monthlyDiversion: monthly })) as never)).toEqual([]);
+		expect(modelProblems(ModelBody.parse(body({ ...t, source: 'dam', sizing: 'diversionCurve', diversionFlowUnit: 'm3/s', monthlyDiversion: monthly })) as never).join()).toMatch(/needs the river as its source/);
+	});
+
 	it('canal seepage back to the river (engine 1.42.0): none by default, a share 0–1, rejoining below the source or a farm below it', () => {
 		const out = node('Gauge', null);
 		const low = node('Low', out.id);

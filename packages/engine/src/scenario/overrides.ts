@@ -6,6 +6,7 @@
 // stochastic transforms (WP-4.11) will sit beside them.
 import { toEpochDay } from '../calendar';
 import { withMonthlyRates } from '../network/transferRates';
+import { isSplitTransfer, transferDestinations, withDestinations } from '../network/transferSplits';
 import { DAM_AREA_EXPONENT, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_PARTS, estimatedDamAreaM2, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type DemandFactorWindow, type IrrigationSystemDef, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
@@ -600,7 +601,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 				return kept;
 			};
 			m.cropAreas = drop(m.cropAreas, (a) => a.nodeId === n.id, 'crop area(s)', (a) => see.node(a.nodeId) && see.item(a.cropId));
-			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || t.toNodeId === n.id, 'transfer(s)', (t) => see.item(t.id));
+			// A rule split between destinations (engine ≥ 1.114.0) goes with any of them, as a rule goes with its one.
+			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || transferDestinations(t).some((x) => x.nodeId === n.id), 'transfer(s)', (t) => see.item(t.id));
 			// An off-take whose seepage rejoined below it (engine ≥ 1.42.0) returns none now: the conservative side, said in a note.
 			for (const t of m.transfers) {
 				if (t.lossReturnNodeId !== n.id) continue;
@@ -687,6 +689,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (!m.nodes.some((n) => n.id === t.fromNodeId)) fail(`fromNodeId ${t.fromNodeId} not found`);
 			// null: out of the catchment (engine ≥ 1.86.0).
 			if (t.toNodeId !== null && !m.nodes.some((n) => n.id === t.toNodeId)) fail(`toNodeId ${t.toNodeId} not found`);
+			// Split between destinations (engine ≥ 1.114.0): each must exist; the first is toNodeId (set below).
+			for (const x of Array.isArray(t.destinations) ? t.destinations : []) if (x?.nodeId != null && !m.nodes.some((n) => n.id === x.nodeId)) fail(`destination ${String(x.nodeId)} not found`);
 			for (const k of ['months', 'maxRateM3s', 'dailyCapM3', 'minStoragePct', 'enabled', 'priority'] as const) {
 				const e = transferFieldError(k, t[k]);
 				if (e) fail(`${k} ${e}`);
@@ -706,7 +710,9 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 				'diversionExponent',
 				'diversionMaxPct',
 				'diversionFlowUnit',
-				'diversionFlowBasis'
+				'diversionFlowBasis',
+				'monthlyDiversion',
+				'destinations'
 			] as const) {
 				if (t[k] === undefined) continue;
 				const e = transferFieldError(k, t[k]);
@@ -716,6 +722,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			// Monthly rates (engine ≥ 1.14.0) set the months and max rate kept beside them.
 			const added: Transfer = { ...cloneData(t), months: monthSet(t.months), monthlyRateM3s: t.monthlyRateM3s ?? null };
 			if (t.monthlyRateM3s) Object.assign(added, withMonthlyRates(t.monthlyRateM3s));
+			// Destinations (engine ≥ 1.114.0) set the toNodeId kept beside them; one is all of it to toNodeId.
+			if (Array.isArray(t.destinations)) Object.assign(added, withDestinations(t.destinations));
 			m.transfers.push(added);
 			break;
 		}
@@ -725,9 +733,20 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const e = transferFieldError(field, op.value);
 			if (e) fail(`${field} ${e}`);
 			if ((field === 'fromNodeId' || ((field === 'toNodeId' || field === 'lossReturnNodeId') && op.value !== null)) && !m.nodes.some((n) => n.id === op.value)) fail(`hydrological unit ${String(op.value)} not found`);
+			if (field === 'destinations' && Array.isArray(op.value))
+				for (const x of op.value as { nodeId: string | null }[]) if (x.nodeId !== null && !m.nodes.some((n) => n.id === x.nodeId)) fail(`hydrological unit ${x.nodeId} not found`);
 			// Monthly rates (engine ≥ 1.14.0) also set the months and max rate kept beside them; months or a max rate
 			// on a rule with monthly rates would disagree with them, which the save rules (modelRuleIssues) refuse.
-			if (field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
+			if (field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value as number[]));
+			// Destinations (engine ≥ 1.114.0) set the toNodeId kept beside them; a new toNodeId on a split rule moves its
+			// first destination, so the two stay in step.
+			else if (field === 'destinations') Object.assign(t, Array.isArray(op.value) ? withDestinations(op.value as Transfer['destinations'] & object) : { destinations: null });
+			else if (field === 'toNodeId' && isSplitTransfer(t)) Object.assign(t, withDestinations(t.destinations!.map((x, k) => (k === 0 ? { ...x, nodeId: op.value as string | null } : x))));
+			// A curve by month (engine ≥ 1.114.0) is a curve rule's: setting a list sizes the rule by it (its one curve emptied),
+			// and sizing it any other way drops the list, so the two never disagree (each op is checked on its own).
+			else if (field === 'monthlyDiversion' && Array.isArray(op.value))
+				Object.assign(t, { sizing: 'diversionCurve', monthlyDiversion: cloneData(op.value), diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null });
+			else if (field === 'sizing' && op.value !== 'diversionCurve' && Array.isArray(t.monthlyDiversion)) Object.assign(t, { sizing: op.value, monthlyDiversion: null });
 			else (t as unknown as Record<string, unknown>)[field] = field === 'months' ? monthSet(op.value as number[]) : cloneData(op.value);
 			break;
 		}
@@ -1207,15 +1226,21 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 		case 'transfer.add':
 			// The unit its seepage rejoins below (engine ≥ 1.42.0) is credited that water, so it must be the proposal's too.
 			// Out of the catchment (engine ≥ 1.86.0, toNodeId null): no other unit is reached.
-			return ok(mine(op.transfer.fromNodeId) && (op.transfer.toNodeId === null || mine(op.transfer.toNodeId)) && (!op.transfer.lossReturnNodeId || mine(op.transfer.lossReturnNodeId)));
+			// Every destination of a split rule (engine ≥ 1.114.0) must be the proposal's, as its one is.
+			return ok(mine(op.transfer.fromNodeId) && transferDestinations(op.transfer).every((x) => x.nodeId === null || mine(x.nodeId)) && (!op.transfer.lossReturnNodeId || mine(op.transfer.lossReturnNodeId)));
 		case 'transfer.set': {
 			const t = input?.model.transfers.find((x) => x.id === op.transferId);
-			const newEnd = op.field === 'fromNodeId' || ((op.field === 'toNodeId' || op.field === 'lossReturnNodeId') && op.value !== null) ? mine(op.value as string) : true;
-			return ok(!!t && mine(t.fromNodeId) && (t.toNodeId === null || mine(t.toNodeId)) && newEnd);
+			const newEnd =
+				op.field === 'fromNodeId' || ((op.field === 'toNodeId' || op.field === 'lossReturnNodeId') && op.value !== null)
+					? mine(op.value as string)
+					: op.field === 'destinations' && Array.isArray(op.value)
+						? (op.value as { nodeId: string | null }[]).every((x) => x.nodeId === null || mine(x.nodeId))
+						: true;
+			return ok(!!t && mine(t.fromNodeId) && transferDestinations(t).every((x) => x.nodeId === null || mine(x.nodeId)) && newEnd);
 		}
 		case 'transfer.remove': {
 			const t = input?.model.transfers.find((x) => x.id === op.transferId);
-			return ok(!!t && mine(t.fromNodeId) && (t.toNodeId === null || mine(t.toNodeId)));
+			return ok(!!t && mine(t.fromNodeId) && transferDestinations(t).every((x) => x.nodeId === null || mine(x.nodeId)));
 		}
 		case 'landCover.add':
 			return ok(mine(op.patch.nodeId));

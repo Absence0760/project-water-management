@@ -1035,7 +1035,17 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const otCapInto = new Float64Array(nodes.length);
 	// The natural flow at each node today (engine ≥ 1.113.0): its own natural runoff and every node's above it, before
 	// any use. Only a diversion-curve off-take reading the natural flow (docs/model.md §2.6a) needs it.
-	const natAt = offtakes.some((o) => o.diversion?.natural) ? new Float64Array(nodes.length) : null;
+	const natAt = offtakes.some((o) => o.curves?.some((c) => c?.natural)) ? new Float64Array(nodes.length) : null;
+	// The pieces of each split rule sized to its destinations' need (engine ≥ 1.114.0, ./transferSplits.ts): they
+	// ask their share of the sum of what their destinations need, so the split holds whatever each needs.
+	const otGroupOf = new Map<string, number[]>();
+	offtakes.forEach((o, k) => {
+		if (!o.split || o.sizing !== 0) return;
+		const g = otGroupOf.get(o.split.of);
+		if (g) g.push(k);
+		else otGroupOf.set(o.split.of, [k]);
+	});
+	const otGroups = [...otGroupOf.values()];
 	const trOut = transfers.map(() => new Float64Array(days));
 	// A rule out of the catchment (EXTERNAL_TO, engine ≥ 1.86.0) settles into an extra receiver slot after the
 	// nodes, one per source unit (XS + its index). Water pumped out of the catchment is its source unit's surface
@@ -1394,6 +1404,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					need += Math.max(0, dstCap - (q + g.Pd + intoToday[o.to]! - E - Sp) + rel);
 				}
 				otShare[k] = (need * cap) / otCapInto[o.to]!;
+			}
+			for (const g of otGroups) {
+				let sum = 0;
+				for (const k of g) sum += otShare[k]!;
+				for (const k of g) otShare[k] = offtakes[k]!.split!.pct * sum;
 			}
 		}
 
@@ -1859,13 +1874,17 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						// proportion to the asks alone gives a licence split into several rules the same total.
 						// A diversion-curve rule (engine ≥ 1.113.0) asks its share of the river here, U₀, read off its curve at
 						// U₀ or at the natural flow here; never more than U₀, and the bands hold it above its keep.
+						// A curve by month (engine ≥ 1.114.0): a month without one takes up to capacity.
+						const curve = o.sizing === 2 && o.curves ? o.curves[month[t]!]! : null;
 						const w =
 							o.sizing === 0
 								? Math.min(cap, otShare[k]! / (1 - o.loss))
 								: o.sizing === 2
-									? o.diversion
-										? Math.min(cap, diversionWant(o.diversion, U0, o.diversion.natural ? natAt![i]! : U0))
-										: 0
+									? !o.curves
+										? 0
+										: curve
+											? Math.min(cap, diversionWant(curve, U0, curve.natural ? natAt![i]! : U0))
+											: cap
 									: cap;
 						if (!(w > 0)) continue;
 						// Insert into the active rules, highest keep first, ties in id order (a level lists its rules in id order).

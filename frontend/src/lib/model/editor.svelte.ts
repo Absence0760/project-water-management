@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { NEW_FARM_IRRIGATION_SYSTEM, newNetworkNode, OFFTAKE_DEFAULTS, type IrrigationSystemDef, transferRatesM3s, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { NEW_FARM_IRRIGATION_SYSTEM, newNetworkNode, OFFTAKE_DEFAULTS, type IrrigationSystemDef, transferDestinations, transferRatesM3s, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { renumberSupplyOrder } from '#lib/components/network/demandObjectOrder.js';
 import { systemsOf } from './systems';
@@ -49,7 +49,8 @@ export function newTransfer(fromNodeId: string, toNodeId: string | null): Transf
 export function transferIsBlank(t: Transfer): boolean {
 	const d: Record<string, unknown> = { ...OFFTAKE_DEFAULTS, dailyCapM3: null, minStoragePct: 0, enabled: true };
 	const rec = t as unknown as Record<string, unknown>;
-	return transferRatesM3s(t).every((r) => !(r > 0)) && Object.keys(d).every((k) => (rec[k] ?? d[k]) === d[k]);
+	// A split or a curve by month (engine ≥ 1.114.0) is something typed in too.
+	return transferRatesM3s(t).every((r) => !(r > 0)) && Object.keys(d).every((k) => (rec[k] ?? d[k]) === d[k]) && !t.destinations?.length && !t.monthlyDiversion;
 }
 
 /**
@@ -184,7 +185,8 @@ export class ModelEditor {
 		}
 		m.nodes = m.nodes.filter((n) => n.id !== id);
 		m.cropAreas = m.cropAreas.filter((a) => a.nodeId !== id);
-		m.transfers = m.transfers.filter((t) => t.fromNodeId !== id && t.toNodeId !== id);
+		// A rule split between destinations (engine ≥ 1.114.0) goes with any of them, as a scenario's node.remove does.
+		m.transfers = m.transfers.filter((t) => t.fromNodeId !== id && !transferDestinations(t).some((d) => d.nodeId === id));
 		// An off-take whose seepage rejoined below it returns none now, as a scenario's node.remove leaves it (engine ≥ 1.42.0).
 		for (const t of m.transfers) {
 			if (t.lossReturnNodeId !== id) continue;

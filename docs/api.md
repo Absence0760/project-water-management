@@ -1798,7 +1798,26 @@ allocation comparison (`GET …/runs/:runId/allocations`, the evidence
 report's § 5) reads it from the rules with `toNodeId` `null` in the run's
 stored inputs, and under `allocationMode` `cap` it is limited by the
 source's surface room. A scenario's `transfer.add` and `transfer.set` take `toNodeId`
-`null` the same way;
+`null` the same way. A rule may be split between destinations (engine ≥
+1.114.0, migration 311, [model.md §2.6](./model.md)): `destinations`, one to
+five `{ "nodeId": <uuid or null>, "pct": <0 < p ≤ 1> }`, the shares adding up
+to 1, no destination twice and none the source; `null` (the default) is all
+of it to `toNodeId`. `toNodeId` may be left out when `destinations` is given
+(it becomes the first destination's), and a body with `toNodeId` alone, as
+every older client sends, is one destination at 100 %; a one-row list is
+stored as that destination alone, so `GET` returns `destinations` `null` for
+it. `PUT` refuses (400, the reason in a sentence) shares that don't add up
+to 100 %, more than five destinations, one twice, the source among them, a
+first that isn't `toNodeId`, and, from a river off-take, a share outside the
+catchment. A run stores each destination's piece as
+`transfer_rule@<id>#<k>` (k from 0, in the list's order) in place of
+`transfer_rule@<id>`. A river off-take sized by a diversion curve may take a
+maximum or a formula by month (engine ≥ 1.114.0): `monthlyDiversion`, twelve
+entries Oct–Sep, each `{ "coefficient", "exponent", "maxPct" }` (`maxPct`
+`null` = 1) or `null` (a month up to its rate), with the one curve's fields
+`null`; `PUT` refuses one with no formula month, an incomplete month, the list
+on another sizing, and a formula (the list or `sizing` `"diversionCurve"`) on a
+rule from the dam;
 nodes carry `irrigationEfficiency`, `returnFlowFraction` (engine ≥ 1.71.0: the share of the water supplied returning, at most 1 − the unit's blended efficiency, accepted above it and capped by the run, which warns; a document with 0.16.0–1.70.0's `lossReturnFraction` β, a share of the losses, is read as β(1 − e)), `damAreaFullM2`
 (nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node
 with a larger value from before loads and runs, with a warning, and must be

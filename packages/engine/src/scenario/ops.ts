@@ -162,6 +162,32 @@ const months: Check = (v) => {
 const isoDate: Check = (v) => (isIsoDate(v) ? null : 'must be an ISO date (YYYY-MM-DD)');
 /** Ids: the backend stores UUIDs; the engine only needs a non-empty string. */
 const id: Check = (v) => (typeof v === 'string' && v.length >= 1 && v.length <= 100 ? null : 'must be an id (1–100 characters)');
+/** Twelve entries, Oct–Sep: each null (a month up to its rate) or a curve { coefficient > 0, exponent, maxPct 0 < m ≤ 1 or null } (engine ≥ 1.114.0). */
+const monthDiversionList: Check = (v) => {
+	if (!Array.isArray(v) || v.length !== 12) return 'must be twelve entries, Oct–Sep';
+	for (const m of v) {
+		if (m === null) continue;
+		if (!m || typeof m !== 'object' || Array.isArray(m)) return 'each month must be null or { coefficient, exponent, maxPct }';
+		const c = m as Record<string, unknown>;
+		if (Object.keys(c).some((k) => k !== 'coefficient' && k !== 'exponent' && k !== 'maxPct')) return 'each month must be null or { coefficient, exponent, maxPct }';
+		if (!(isNum(c.coefficient) && c.coefficient > 0)) return 'each month’s coefficient must be a number above 0';
+		if (!isNum(c.exponent)) return 'each month’s exponent must be a number';
+		if (!(c.maxPct === null || c.maxPct === undefined || (isNum(c.maxPct) && c.maxPct > 0 && c.maxPct <= 1))) return 'each month’s largest share must be above 0 and at most 1, or null';
+	}
+	return null;
+};
+/** One to five { nodeId (an id, or null: outside the catchment), pct 0 < p ≤ 1 } (engine ≥ 1.114.0). */
+const destinationList: Check = (v) => {
+	if (!Array.isArray(v) || v.length < 1 || v.length > 5) return 'must list one to five destinations';
+	for (const d of v) {
+		if (!d || typeof d !== 'object' || Array.isArray(d)) return 'each destination must be { nodeId, pct }';
+		const x = d as Record<string, unknown>;
+		if (Object.keys(x).some((k) => k !== 'nodeId' && k !== 'pct')) return 'each destination must be { nodeId, pct }';
+		if (!(x.nodeId === null || id(x.nodeId) === null)) return 'each destination’s nodeId must be an id or null';
+		if (!(isNum(x.pct) && x.pct > 0 && x.pct <= 1)) return 'each destination’s share must be above 0 and at most 1';
+	}
+	return null;
+};
 /**
  * Texts with a control character that the op list being checked may keep: those already in the scenario's
  * stored ops (validateScenarioOps' `stored`), set only while that call runs. A scenario saved before issue
@@ -387,7 +413,9 @@ export const TRANSFER_SET_FIELDS = [
 	'diversionExponent',
 	'diversionMaxPct',
 	'diversionFlowUnit',
-	'diversionFlowBasis'
+	'diversionFlowBasis',
+	'monthlyDiversion',
+	'destinations'
 ] as const;
 export type TransferSetField = (typeof TRANSFER_SET_FIELDS)[number];
 
@@ -419,7 +447,12 @@ const TRANSFER_FIELD_CHECKS: Record<TransferSetField, Check> = {
 	diversionExponent: nullable(range(-Number.MAX_VALUE, Number.MAX_VALUE)),
 	diversionMaxPct: nullable(range(0, 1, { loOpen: true })),
 	diversionFlowUnit: nullable(oneOf(DIVERSION_FLOW_UNITS)),
-	diversionFlowBasis: nullable(oneOf(DIVERSION_FLOW_BASES))
+	diversionFlowBasis: nullable(oneOf(DIVERSION_FLOW_BASES)),
+	// Engine ≥ 1.114.0: a curve per water-year month (null = a month up to its rate), and the destinations a
+	// rule splits between (setting them also sets toNodeId to the first, applyScenario); modelRuleIssues checks
+	// the rest (shares adding up to 100 %, no destination twice) on the model the ops give.
+	monthlyDiversion: nullable(monthDiversionList),
+	destinations: nullable(destinationList)
 };
 
 /** The transfer fields a new transfer may leave out (engine ≥ 1.14.0 and 1.42.0 additions). */
@@ -437,7 +470,9 @@ export const TRANSFER_OPTIONAL = new Set<string>([
 	'diversionExponent',
 	'diversionMaxPct',
 	'diversionFlowUnit',
-	'diversionFlowBasis'
+	'diversionFlowBasis',
+	'monthlyDiversion',
+	'destinations'
 ]);
 
 const TRANSFER_FIELD_CHECK = checksOf(TRANSFER_FIELD_CHECKS);

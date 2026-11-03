@@ -138,14 +138,16 @@ describe('diversionCurveProblem', () => {
 		const w: string[] = [];
 		const ok = offtakeOf(rule({ diversionFlowUnit: 'Ml/day', diversionFlowBasis: 'natural' }), 0, 1, 'River', 'Canal', w);
 		expect(ok.sizing).toBe(2);
-		expect(ok.diversion).toEqual({ a: 2000, b: -0.9, maxShare: 0.95, m3DayPerUnit: 1000, natural: true });
+		// The one curve in every calendar month (engine ≥ 1.114.0 reads a rule by month; index 0 is unused).
+		expect(ok.curves).toHaveLength(13);
+		for (let m = 1; m <= 12; m++) expect(ok.curves![m]).toEqual({ a: 2000, b: -0.9, maxShare: 0.95, m3DayPerUnit: 1000, natural: true });
 		expect(diversionCurveOf(rule({ diversionMaxPct: null })).maxShare).toBe(1);
 		expect(w).toEqual([]);
 		const bad = offtakeOf(rule({ diversionFlowUnit: null }), 0, 1, 'River', 'Canal', w);
 		expect(bad.sizing).toBe(2);
-		expect(bad.diversion).toBeNull();
+		expect(bad.curves).toBeNull();
 		expect(w).toEqual(['river off-take River → Canal: sized by a diversion curve, but its flow unit must be one of L/s, m3/s, m3/day, Ml/day; it takes nothing']);
 		// On any other sizing the curve's fields are inert.
-		expect(offtakeOf(rule({ sizing: 'capacity', diversionCoefficient: null }), 0, 1, 'a', 'b', w).diversion).toBeNull();
+		expect(offtakeOf(rule({ sizing: 'capacity', diversionCoefficient: null }), 0, 1, 'a', 'b', w).curves).toBeNull();
 	});
 });

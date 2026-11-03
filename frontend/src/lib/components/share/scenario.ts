@@ -169,8 +169,17 @@ function describe(op: ScenarioOp, unit: (id: string | null | undefined) => strin
 			return t('A new crop, “{name}”', { name: op.crop.name });
 		case 'transfer.add':
 			// Out of the catchment (engine ≥ 1.86.0): no unit receives it.
-			if (op.transfer.toNodeId === null) return t('A new transfer from {from} out of the catchment', { from: unit(op.transfer.fromNodeId) });
-			return t('A new transfer from {from} to {to}', { from: unit(op.transfer.fromNodeId), to: unit(op.transfer.toNodeId) });
+			if (op.transfer.toNodeId === null && !op.transfer.destinations?.length) return t('A new transfer from {from} out of the catchment', { from: unit(op.transfer.fromNodeId) });
+			// A split between destinations (engine ≥ 1.114.0): each unit it delivers to, and whether a share leaves the catchment.
+			{
+				const ends = op.transfer.destinations?.length ? op.transfer.destinations.map((d) => d.nodeId) : [op.transfer.toNodeId];
+				const to = ends
+					.filter((x): x is string => x !== null)
+					.map(unit)
+					.join(', ');
+				if (ends.includes(null)) return t('A new transfer from {from} to {to}, and some of it out of the catchment', { from: unit(op.transfer.fromNodeId), to });
+				return t('A new transfer from {from} to {to}', { from: unit(op.transfer.fromNodeId), to });
+			}
 		case 'transfer.set':
 			return t('A transfer changed: {field}', { field: op.field });
 		case 'transfer.remove':

@@ -5778,8 +5778,40 @@ paste: a rule's ends are set on its card), with an
 [Expected format](#expected-format) note and example file. A paste can't
 add a rule.
 
+**Split** (beside To, editors) splits the rule between destinations (engine
+≥ 1.114.0, [model.md §2.6](./model.md),
+`transfers/TransferDestinations.svelte`): half to its destination, half to
+the next hydrological unit, and the new row's unit is focused. A split
+rule's head says where each share goes ("To Lower farm 40%, Town 60%", in
+place of the To select), and a **Destinations, shares of what arrives**
+table sits across the card above the groups: a row each, its unit (not the
+source, none twice; *Outside the catchment* on a dam rule) and its share in
+%, **Remove**, and **+ Add a destination** up to five (the new row takes
+what the shares are short of 100 %, or half the last row's). Under them the
+**Total**, said live (`aria-live`) and in danger red with ", must be 100 %"
+while the shares don't add up; the card's problems say the same. Removing
+rows down to one makes it a plain transfer again, its To select back.
+
 The card's body holds three top-aligned groups:
 
+- **Takes**, how much it takes (engine ≥ 1.114.0), a pull-down on the
+  rates' title line (its name "Takes, transfer N"; the short word keeps the
+  months' summary on the same line, so a dam rule's card stays 147 px at
+  1440): *Up to a maximum*, *What the destination needs* (a river off-take
+  only) or *A formula by month*. The last turns the month
+  fields into a table (`transfers/TakesByMonth.svelte`): a row per month,
+  Oct to Sep, each with **Takes** (*A maximum* or *A formula*), its rate
+  (*Max rate*, or *Canal capacity* in a formula month; blank = off) and, in a
+  formula month, **a**, **b** and **Largest share, %** (blank = 100); a new
+  formula month starts from the nearest month's formula. On the title's line
+  the months in words ("A formula in 3 months, a maximum in 9") and **Apply
+  [month] to every month**, which copies that month's rule, rate and formula
+  to all twelve. Picking it on a rule from the dam switches **Takes from** to
+  the river and says so under the title ("A formula takes a share of the
+  river’s flow, so this transfer now takes from the river…"); a rule out of
+  the catchment can't (the option says it needs a unit to deliver to). A
+  rule saved with one curve (engine 1.113.0) shows that formula in every
+  month; its first edit writes the rule's own monthly list.
 - **Max rate by month** (engine ≥ 1.14.0, `transfers/MonthRates.svelte`):
   twelve m³/s fields in water-year order, six to a row (four in a phone's
   card, all twelve in one row where the group is 58rem wide), each wide
@@ -5809,21 +5841,25 @@ The card's body holds three top-aligned groups:
   below the source*, and the model check refuses it), and switches for leaving
   the EWR in the river (a scenario's, issue #523 B4: disabled while off,
   with the scenario-only note) and topping up the destination’s dam. The fields sit
-  two to a row, not one tall column. **Takes** has a third choice (engine ≥
-  1.113.0), *A share of the river’s flow*, a diversion curve ([model.md
-  §2.6a](./model.md)): under the off-take's fields a "Share of the river
-  diverted: a × x^b %" group (`transfers/DiversionCurveFields.svelte`) with
-  **Coefficient a**, **Exponent b**, **Largest share, %** (blank = 100),
-  **x in** (L/s, m³/s, m³/day or Ml/day; *— choose —* until picked) and
-  **x is** (*The river at the off-take* or *The natural flow there*), each
-  with its ⓘ, and a four-column table of what the rule diverts at seven
-  example river flows (0.005–10 m³/s, shown in the curve's unit): the share,
-  what is diverted, and what limits it (*the largest share*, *the curve* or
-  *the canal’s capacity*, the rule's largest rate within its daily cap),
-  read off the engine's own curve (`transfers/diversionPreview.ts`), so a
-  wrong unit shows at once. Until the curve is complete the table is a
-  prompt, and the card lists the problem the save refuses. The table stays a
-  table on a phone (its headings wrap), inside the card.
+  two to a row, not one tall column. **Takes** moved to the rates'
+  title line in engine 1.114.0 (it was here, shown only on a river
+  off-take). With a formula in any month (engine ≥ 1.113.0, by month
+  1.114.0, [model.md §2.6a](./model.md)), under the off-take's fields a
+  "The formula: a × x^b % of the river" group
+  (`transfers/DiversionCurveFields.svelte`) with **x in** (L/s, m³/s,
+  m³/day or Ml/day; *— choose —* until picked) and **x is** (*The river at
+  the off-take* or *The natural flow there*), each with its ⓘ, one for every
+  month, and for each distinct formula a table of what the rule diverts at
+  seven example river flows (0.005–10 m³/s, shown in the curve's unit), its
+  caption naming its months: the share, what is diverted, on a split rule
+  what each destination gets after the losses ("To Town (60%)"), and what
+  limits it (*the largest share*, *the curve* or *the canal’s capacity*,
+  the largest rate of its months within the daily cap), read off the
+  engine's own curve (`transfers/diversionPreview.ts`), so a wrong unit
+  shows at once. Until a month has a complete formula the table is a
+  prompt, and the card lists the problem the save refuses. The tables sit
+  in focusable scroll boxes, so a split's wider table scrolls inside the
+  card on a phone, never the page.
 
 Every field keeps its visible label and its ⓘ tip, and its accessible name
 starts with that label, then the rule ("From, transfer 3", "Losses on the

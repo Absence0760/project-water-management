@@ -1064,6 +1064,22 @@ export const TIPS: HelpTipText[] = [
 		fields: ['transfer.diversionCoefficient', 'transfer.diversionExponent', 'transfer.diversionMaxPct', 'transfer.diversionFlowUnit', 'transfer.diversionFlowBasis']
 	},
 	{
+		id: 'transfer-takes-by-month',
+		term: 'How much a transfer takes',
+		short: 'Each month up to a maximum rate, or a formula: a × x^b % of the river, at most its largest share and the rate. Needs a river off-take.',
+		units: 'm³/s per month; a, b and largest share % per formula month',
+		category: 'transfers',
+		fields: ['transfer.monthlyDiversion']
+	},
+	{
+		id: 'transfer-split',
+		term: 'Split between destinations',
+		short: 'What a transfer delivers, after its losses, shared between one to five units by %, adding up to 100 %. One unit at 100 % is the usual.',
+		units: '% of what arrives, per destination',
+		category: 'transfers',
+		fields: ['transfer.destinations']
+	},
+	{
 		id: 'transfer-min-storage',
 		term: 'Transfer minimum storage',
 		short: 'The source dam is not drawn below this fraction of its capacity by this transfer, nor below the dam’s own minimum operating level.',

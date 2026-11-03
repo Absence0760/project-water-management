@@ -80,7 +80,7 @@ const node = (id: string) => `node:${id}`;
 
 /** The item's own node(s), in the base or added by an earlier op of the same scenario: what an op on the item depends on. */
 function itemNodes(model: ProjectModel, earlier: readonly ScenarioOp[], kind: string, id: string): string[] {
-	type Ends = { nodeId?: string | null; fromNodeId?: string; toNodeId?: string | null; lossReturnNodeId?: string | null };
+	type Ends = { nodeId?: string | null; fromNodeId?: string; toNodeId?: string | null; lossReturnNodeId?: string | null; destinations?: { nodeId: string | null }[] | null };
 	const fromModel = (): Ends | undefined => {
 		switch (kind) {
 			case 'transfer':
@@ -109,7 +109,10 @@ function itemNodes(model: ProjectModel, earlier: readonly ScenarioOp[], kind: st
 	};
 	const x: Ends | undefined = fromModel() ?? fromOps();
 	if (!x) return [];
-	return [x.nodeId, x.fromNodeId, x.toNodeId, x.lossReturnNodeId].filter((v): v is string => typeof v === 'string' && v.length > 0).map(node);
+	// Every destination of a split transfer (engine ≥ 1.114.0) is one of its nodes.
+	return [x.nodeId, x.fromNodeId, x.toNodeId, x.lossReturnNodeId, ...(Array.isArray(x.destinations) ? x.destinations.map((d) => d?.nodeId) : [])]
+		.filter((v): v is string => typeof v === 'string' && v.length > 0)
+		.map(node);
 }
 
 /** The farms (or other users) a demand.scale op reaches: its own list, else every node of its category in the base. */
@@ -178,12 +181,16 @@ function touches(model: ProjectModel, ops: readonly ScenarioOp[], index: number)
 			break;
 		case 'transfer.add':
 			w(`transfer:${op.transfer.id}`);
-			u(nodeUse(op.transfer.fromNodeId), nodeUse(op.transfer.toNodeId), nodeUse(op.transfer.lossReturnNodeId));
+			u(nodeUse(op.transfer.fromNodeId), nodeUse(op.transfer.toNodeId), nodeUse(op.transfer.lossReturnNodeId), ...(op.transfer.destinations ?? []).map((d) => nodeUse(d.nodeId)));
 			break;
 		case 'transfer.set':
 			w(`transfer:${op.transferId}`, op.field);
+			// The destinations and toNodeId are kept in step (engine ≥ 1.114.0): setting either writes both.
+			if (op.field === 'destinations') w(`transfer:${op.transferId}`, 'toNodeId');
+			if (op.field === 'toNodeId') w(`transfer:${op.transferId}`, 'destinations');
 			u(...itemNodes(model, earlier, 'transfer', op.transferId));
 			if ((op.field === 'fromNodeId' || op.field === 'toNodeId' || op.field === 'lossReturnNodeId') && typeof op.value === 'string') u(node(op.value));
+			if (op.field === 'destinations' && Array.isArray(op.value)) u(...op.value.map((d) => nodeUse(d.nodeId)));
 			break;
 		case 'transfer.remove':
 			t.removes.push(`transfer:${op.transferId}`);

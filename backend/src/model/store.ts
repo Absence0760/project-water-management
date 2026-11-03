@@ -1,4 +1,4 @@
-import { BASEFLOW_DEFAULTS, CROP_SUPPLY_DEFAULTS, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, REACH_LOSS_DEFAULTS, WATER_SOURCE_DEFAULTS, type ProjectModel } from '@water-management/engine';
+import { BASEFLOW_DEFAULTS, CROP_SUPPLY_DEFAULTS, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, REACH_LOSS_DEFAULTS, WATER_SOURCE_DEFAULTS, type ProjectModel, type Transfer } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
@@ -54,7 +54,16 @@ const MODEL_JSON = `json_build_object(
 			loss_pct AS "lossPct", sizing, top_up_dam AS "topUpDam",
 			loss_return_pct AS "lossReturnPct", loss_return_node_id AS "lossReturnNodeId",
 			diversion_coefficient AS "diversionCoefficient", diversion_exponent AS "diversionExponent",
-			diversion_max_pct AS "diversionMaxPct", diversion_flow_unit AS "diversionFlowUnit", diversion_flow_basis AS "diversionFlowBasis"
+			diversion_max_pct AS "diversionMaxPct", diversion_flow_unit AS "diversionFlowUnit", diversion_flow_basis AS "diversionFlowBasis",
+			-- A curve by month and the split between destinations (engine ≥ 1.114.0, migration 311), rebuilt from their arrays.
+			CASE WHEN monthly_diversion_coefficient IS NULL THEN NULL ELSE (
+				SELECT json_agg(CASE WHEN u.a IS NULL THEN NULL ELSE json_build_object('coefficient', u.a, 'exponent', u.b, 'maxPct', u.m) END ORDER BY u.i)
+				FROM unnest(monthly_diversion_coefficient, monthly_diversion_exponent, monthly_diversion_max_pct) WITH ORDINALITY AS u(a, b, m, i)
+			) END AS "monthlyDiversion",
+			CASE WHEN split_node_ids IS NULL THEN NULL ELSE (
+				SELECT json_agg(json_build_object('nodeId', u.n, 'pct', u.p) ORDER BY u.i)
+				FROM unnest(split_node_ids, split_pct) WITH ORDINALITY AS u(n, p, i)
+			) END AS destinations
 		FROM transfer WHERE project_id = $1) r), '[]'),
 	'landCover', coalesce((SELECT json_agg(r ORDER BY r."nodeId", r."coverClass", r.id) FROM (
 		SELECT id, node_id AS "nodeId", cover_class AS "coverClass", area_km2 AS "areaKm2", density_pct AS "densityPct", factors
@@ -320,10 +329,12 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, months, max_rate_m3s, daily_cap_m3,
 			min_storage_pct, enabled, priority, monthly_rate_m3s, source, hands_off_m3_day, hands_off_ewr, loss_pct, sizing,
 			top_up_dam, loss_return_pct, loss_return_node_id, diversion_coefficient, diversion_exponent, diversion_max_pct,
-			diversion_flow_unit, diversion_flow_basis)
+			diversion_flow_unit, diversion_flow_basis, monthly_diversion_coefficient, monthly_diversion_exponent,
+			monthly_diversion_max_pct, split_node_ids, split_pct)
 		 SELECT id, $1, from_node_id, to_node_id, months, max_rate_m3s, daily_cap_m3, min_storage_pct, enabled, priority,
 			monthly_rate_m3s, source, hands_off_m3_day, hands_off_ewr, loss_pct, sizing, top_up_dam, loss_return_pct, loss_return_node_id,
-			diversion_coefficient, diversion_exponent, diversion_max_pct, diversion_flow_unit, diversion_flow_basis
+			diversion_coefficient, diversion_exponent, diversion_max_pct, diversion_flow_unit, diversion_flow_basis,
+			monthly_diversion_coefficient, monthly_diversion_exponent, monthly_diversion_max_pct, split_node_ids, split_pct
 		 FROM jsonb_populate_recordset(NULL::transfer, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET from_node_id = EXCLUDED.from_node_id, to_node_id = EXCLUDED.to_node_id,
 			months = EXCLUDED.months, max_rate_m3s = EXCLUDED.max_rate_m3s, daily_cap_m3 = EXCLUDED.daily_cap_m3,
@@ -333,7 +344,11 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			top_up_dam = EXCLUDED.top_up_dam, loss_return_pct = EXCLUDED.loss_return_pct,
 			loss_return_node_id = EXCLUDED.loss_return_node_id, diversion_coefficient = EXCLUDED.diversion_coefficient,
 			diversion_exponent = EXCLUDED.diversion_exponent, diversion_max_pct = EXCLUDED.diversion_max_pct,
-			diversion_flow_unit = EXCLUDED.diversion_flow_unit, diversion_flow_basis = EXCLUDED.diversion_flow_basis
+			diversion_flow_unit = EXCLUDED.diversion_flow_unit, diversion_flow_basis = EXCLUDED.diversion_flow_basis,
+			monthly_diversion_coefficient = EXCLUDED.monthly_diversion_coefficient,
+			monthly_diversion_exponent = EXCLUDED.monthly_diversion_exponent,
+			monthly_diversion_max_pct = EXCLUDED.monthly_diversion_max_pct,
+			split_node_ids = EXCLUDED.split_node_ids, split_pct = EXCLUDED.split_pct
 		 WHERE transfer.project_id = EXCLUDED.project_id`,
 		m.transfers.map((t) => ({
 			id: t.id,
@@ -362,7 +377,12 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			diversion_exponent: t.diversionExponent ?? null,
 			diversion_max_pct: t.diversionMaxPct ?? null,
 			diversion_flow_unit: t.diversionFlowUnit ?? null,
-			diversion_flow_basis: t.diversionFlowBasis ?? null
+			diversion_flow_basis: t.diversionFlowBasis ?? null,
+			// A curve by month (engine ≥ 1.114.0, migration 311): three arrays of twelve, NULL where a month has none.
+			...monthlyDiversionColumns(t.monthlyDiversion),
+			// Split between destinations (engine ≥ 1.114.0): two to five, in order; NULL = all of it to to_node_id.
+			split_node_ids: t.destinations && t.destinations.length > 1 ? t.destinations.map((d) => d.nodeId) : null,
+			split_pct: t.destinations && t.destinations.length > 1 ? t.destinations.map((d) => d.pct) : null
 		})),
 		'transfer'
 	);
@@ -499,3 +519,17 @@ async function saveIrrigationSystems(db: Db, projectId: string, m: ProjectModel)
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A rule's curve by month as its three columns (migration 311): twelve elements each, NULL where a month takes up to its rate. */
+function monthlyDiversionColumns(list: Transfer['monthlyDiversion']): {
+	monthly_diversion_coefficient: (number | null)[] | null;
+	monthly_diversion_exponent: (number | null)[] | null;
+	monthly_diversion_max_pct: (number | null)[] | null;
+} {
+	if (!Array.isArray(list)) return { monthly_diversion_coefficient: null, monthly_diversion_exponent: null, monthly_diversion_max_pct: null };
+	return {
+		monthly_diversion_coefficient: list.map((m) => m?.coefficient ?? null),
+		monthly_diversion_exponent: list.map((m) => m?.exponent ?? null),
+		monthly_diversion_max_pct: list.map((m) => (m ? (m.maxPct ?? null) : null))
+	};
+}

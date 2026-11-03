@@ -1,0 +1,4 @@
+{
+	"addKb": 9,
+	"why": "Transfers: the destinations table and the month-by-month maximum-or-formula table (TransferDestinations, TakesByMonth), the per-formula preview, and engine 1.114.0's split/curve-by-month code in every bundle that runs the model; measured total 2367 KB gzipped against the 2359 KB ceiling"
+}

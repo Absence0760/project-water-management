@@ -209,10 +209,28 @@ describe('validateModel', () => {
 		const t = { id: 't', fromNodeId: 'f', toNodeId: 'h', months: [1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const };
 		const curve = { ...t, sizing: 'diversionCurve' as const, diversionCoefficient: 2000, diversionExponent: -0.9, diversionMaxPct: 0.95, diversionFlowUnit: 'L/s' as const };
 		expect(messages(model([g, f, h], { transfers: [curve] }))).toEqual([]);
-		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionFlowUnit: null }] }))).toContain('Transfer 1: a share of the river’s flow needs a complete curve: its flow unit must be one of L/s, m3/s, m3/day, Ml/day.');
-		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionCoefficient: null }] }))).toContain('Transfer 1: a share of the river’s flow needs a complete curve: its coefficient a must be a number above 0.');
-		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionMaxPct: 1.2 }] }))).toContain('Transfer 1: a share of the river’s flow needs a complete curve: its largest share must be above 0 % and at most 100 %.');
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionFlowUnit: null }] }))).toContain('Transfer 1: a formula needs a complete curve: its flow unit must be one of L/s, m3/s, m3/day, Ml/day.');
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionCoefficient: null }] }))).toContain('Transfer 1: a formula needs a complete curve: its coefficient a must be a number above 0.');
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, diversionMaxPct: 1.2 }] }))).toContain('Transfer 1: a formula needs a complete curve: its largest share must be above 0 % and at most 100 %.');
 		expect(messages(model([g, f, h], { transfers: [{ ...curve, sizing: 'capacity', diversionFlowUnit: null }] }))).toEqual([]);
+		// By month (engine 1.114.0): each formula month's curve, named by its month; a formula from the dam refused.
+		const list = [{ coefficient: 0, exponent: 0, maxPct: null }, ...new Array(11).fill(null)];
+		const monthly = { ...curve, diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null, monthlyDiversion: list };
+		expect(messages(model([g, f, h], { transfers: [monthly] }))).toContain('Transfer 1: a formula needs a complete curve: in October its coefficient a must be a number above 0.');
+		expect(messages(model([g, f, h], { transfers: [{ ...curve, source: 'dam' as const }] }))).toContain('Transfer 1: a formula takes a share of the river’s flow, so it needs Takes from: The river (an off-take).');
+	});
+
+	it('checks a split between destinations (engine 1.114.0): shares adding up to 100 %, every destination a unit', () => {
+		const g = node('g', 'G', null);
+		const f = node('f', 'F', 'g');
+		const h = node('h', 'H', 'g');
+		const k = node('k', 'K', 'g');
+		const t = { id: 't', fromNodeId: 'f', toNodeId: 'h', months: [1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 };
+		const split = (d: [string | null, number][]) => ({ ...t, toNodeId: d[0]![0], destinations: d.map(([nodeId, pct]) => ({ nodeId, pct })) });
+		expect(messages(model([g, f, h, k], { transfers: [split([['h', 0.4], ['k', 0.6]])] }))).toEqual([]);
+		expect(messages(model([g, f, h, k], { transfers: [split([['h', 0.4], ['k', 0.5]])] }))).toContain('Transfer 1: its destinations’ shares must add up to 100 % (they add up to 90 %).');
+		expect(messages(model([g, f, h, k], { transfers: [split([['h', 0.5], ['g', 0.5]])] }))).toContain('Transfer 1: "G" is a gauge, which can\'t send or receive water; choose a hydrological unit.');
+		expect(messages(model([g, f, h, k], { transfers: [split([['h', 0.5], ['f', 0.5]])] }))).toContain('Transfer 1: source and destination are the same hydrological unit.');
 	});
 
 	it('checks canal seepage back to the river: a share 0–100 %, rejoining below the source or a unit below it (engine 1.42.0)', () => {

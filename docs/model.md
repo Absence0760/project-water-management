@@ -4083,6 +4083,89 @@ nothing, the dam at 500 m³; with a second rule of the same priority into
 another unit, both keeping 80 % and asking 100 and 300, the 200 m³ free is
 shared 50 : 150.
 
+**Split between destinations (engine ≥ 1.114.0, migration 311).** A rule
+may send what it moves to **one to five destinations**, each a share of it:
+`destinations`, a list of `{ nodeId, pct }` (a unit, or null: outside the
+catchment, a dam rule only, as above), the shares 0 < pct ≤ 1 adding up to 1
+(within 0.0001), no destination twice and none the source. Absent (every
+stored rule, every b023 import) = all of it to `toNodeId`, as before; when
+set, `toNodeId` is the first destination's, kept in step as `months` is with
+monthly rates, so an older reader (an old export, a scenario op, an API
+client sending `toNodeId` alone) still sees the main destination; a list of
+one row is stored as that destination alone. The API refuses a split it
+can't run with a sentence (`modelRuleIssues`: the shares don't add up to
+100 %, more than five, one twice, the source, a first that isn't
+`toNodeId`); a run given one anyway runs it as all of it to `toNodeId`,
+with a warning. Not a departure from the workbook: b023's InOut formulas
+are written by hand and can split a draw any way, which this states as a
+rule.
+
+*How it runs.* The run reads a split rule as **one rule per destination, a
+piece** (`network/transferSplits.ts`, `transfer_rule@<id>#<k>` for each
+piece's daily volume, k in the list's order), each with its destination and
+that share of the rule's capacity: its rates (or monthly rates) and daily
+cap × pct, and for a curve (§2.6a) the coefficient a and the largest share
+m × pct, so its share of the river is pct × s. Everything else is the
+rule's: source, months, priority, the reserve or keeps, losses and their
+return, sizing and top-up. Pieces of one rule share every keep and ask in
+the proportion of their shares, and the rules of one priority share a short
+source band by band in proportion to what each asks (§2.6, §2.6a
+"proportional rationing"), so each piece gets the same fraction of its ask:
+together they take exactly what the one rule would, and each destination
+its share. **The order of operations** for a river off-take is: diverted
+(what the rule takes, MIN(capacity, its ask, what the keeps leave)) →
+conveyance losses (the same share l of every piece) → split (each
+destination gets pct × v × (1 − l)); seepage back is unchanged, Σ pct × v ×
+l × r = v × l × r, rejoining where the rule says. So the split is of what
+arrives, after the losses, every day. A rule with one destination is never
+split and runs to the bit as before.
+
+*Sized to what the destinations need* (a river off-take, `sizing: 'demand'`,
+provisional decision 2026-11-03, pending the hydrologist): the rule takes for
+**the sum of its destinations' needs**, each destination's need being, as
+for any rule into it, its share of that unit's need pro rata to the
+capacities into it today (the piece's capacity is pct × the rule's), and the
+**split still applies**: piece k asks pct_k × MIN(capacity, Σ need ÷ (1 −
+l)). A destination that needs less than its share gets its share anyway;
+what it doesn't use flows on below it (or, with `topUpDam`, into its dam,
+spilling what doesn't fit), as a capacity-sized rule's surplus does. Why: a
+split is a fixed division (a division box or the canal's own branches), the
+operator's rule says each unit gets its percentage, and sizing each share to
+its own destination would be several rules, which the model already has.
+Priority sharing is unchanged: the pieces sit at the rule's priority. Under
+an allocation cap each destination's need is its capped need (Q28, above),
+so the rule never takes more than its destinations can use together, but a
+share can be more than its own destination can use (a destination whose
+licence leaves it no room still gets its share, which flows on): the open
+question for the hydrologist, with the other readings, is
+[engine-audit.md SP1](./engine-audit.md#findings). The self-check
+(`checkOfftakes`) holds a capped destination's demand-sized deliveries to
+its room only where no split share feeds it. Shares within the tolerance
+of 100 % (three of 33.33 %) are scaled to add up exactly before the run.
+
+*A dam rule's split* moves each share only as far as its destination has
+room (§2.6 `dstRoom`, never overfilling a dam): a destination with no room
+takes less than its share, and what it can't take stays in the source dam;
+the others still get no more than their share of the rule's limit. Keeping
+the percentages strictly would either overfill a dam or hold back the other
+destinations' water. Out of the catchment, a share leaves as a rule out of
+the catchment does (`externalTransferM3`, the source's surface use, its
+`transfer_rule@<id>#<k>`).
+
+*Checks.* Every self-check runs on the pieces, the rules the run ran
+(`verifyRun` expands them, as do the per-rule series readers and the farm
+projection): each held to its capacity, keep and source as any rule, the
+balance closing with each destination's inflow from its piece. And
+`checkTransferLimits` (its `checkOfftakes`) holds a river split's pieces to the proportion of
+their shares, every day (v_k ÷ pct_k equal across the rule's pieces), when
+each ran. The fuzz generator gives a third of the rules two to five
+destinations (outside the catchment only with `externalTransfers`), now and
+then a split the run can't use; hand examples:
+`run.transferSplits.test.ts` (a 40/60 canal with losses, 3 600 and 5 400 of
+10 000 arriving; a three-way 20/30/50 curve against the one rule; a 50/50
+split sized to the need where one destination needs nothing; a dam rule
+whose receiver has 100 m³ of room); the cross-check's probes (verify/).
+
 ### 2.6a River off-takes (engine ≥ 1.14.0, issue #54)
 
 **Why.** A §2.6 transfer draws on the source's *dam* (yesterday's storage)
@@ -4118,6 +4201,7 @@ the destination is simulated after its source.
 | `diversionMaxPct` | `diversionCurve` only: the largest share it diverts, 0 < m ≤ 1; null = 1 (all of the flow) |
 | `diversionFlowUnit` | `diversionCurve` only: the unit x is read in, `L/s`, `m3/s`, `m3/day` or `Ml/day`; required |
 | `diversionFlowBasis` | `diversionCurve` only: which flow x is, `modelled` (null, the default: the river at the off-take that day) or `natural` (the natural flow there) |
+| `monthlyDiversion` | engine ≥ 1.114.0, migration 311, `diversionCurve` only: twelve entries Oct–Sep, each a month's curve `{ coefficient, exponent, maxPct }` or null (a month that takes up to its rate); null = the one curve above in every month. With it the one curve is null ("A maximum or a formula by month" below) |
 | `topUpDam` | what arrives beyond the destination's demand goes into its dam (spilling what doesn't fit) rather than flowing on below it; default false |
 | `lossReturnPct` | engine ≥ 1.42.0, migration 126: the share 0 ≤ r ≤ 1 of the conveyance losses that seeps back to the river the same day, like a dam's seepage return (§2.7b, WP-3.5); default 0: all the losses leave the catchment |
 | `lossReturnNodeId` | engine ≥ 1.42.0: the unit whose outflow the returned seepage joins; null (the default) = the source itself, just below the off-take; otherwise a farm downstream of the source along the river (the API refuses any other; a run given one returns none, with a warning) |
@@ -4329,6 +4413,37 @@ of −1, caps, every unit, the natural flow now and then, an incomplete curve
 now and then). Hand examples: `run.offtakeDiversion.test.ts`,
 `network/diversionCurve.test.ts`; the cross-check's probe
 `diversion-curve-canal` (verify/).
+
+**A maximum or a formula by month (engine ≥ 1.114.0, migration 311; the
+operator's ask of 2026-11-03).** A rule sized by a curve may take,
+month by month, either **a maximum** (up to the month's rate, as a rule
+sized to capacity) or **a formula** (that month's own curve, a · x^b % of the
+river, at most its largest share and the month's rate): `monthlyDiversion`,
+twelve entries Oct–Sep, each a curve or null. The unit of x and which flow
+it reads are the rule's (`diversionFlowUnit`, `diversionFlowBasis`), one for
+every month; the month's rate stays the canal's capacity in a formula month,
+and a month with no rate is off, as for any rule. So in calendar month m
+
+```
+ask = MIN(cap[m], s_m × U₀)    when month m has a curve (s_m read off it, as above)
+ask = cap[m]                   when it hasn't: up to its maximum
+```
+
+A rule stored by engine 1.113.0 (one curve, no list) runs as that curve in
+every month, to the bit; a rule with the same curve written in every month
+runs the same (`run.transferSplits.test.ts`). Storage: the list is three
+float8[12] columns, a NULL coefficient a month without a curve; the one curve
+is NULL when the list is set (CHECK `transfer_monthly_diversion_sizing`), so
+a rule has one form. The save refuses a list with no curve in any month, an
+incomplete month's curve (named by its month), the list on a rule not sized
+by a curve, and **a formula on a rule from the dam** (a curve is a share of
+the river's flow, so it needs `source: 'river'`; the Transfers tab switches
+the source and says so). A run given an incomplete month takes nothing all
+year, with a warning, as an incomplete curve does. `checkTransferLimits`
+reads each month's curve (a month without one is held as a capacity-sized
+rule); the fuzz generator turns half its curve rules into a monthly mix (a
+third of the months a maximum, the rest the rule's curve or another, now and
+then an incomplete one); the cross-check models the same (verify/).
 
 **Rules of one priority: proportional rationing (engine ≥ 1.70.0,
 provisional decision 2026-10-03, issue #90 Q25, to be confirmed by the
