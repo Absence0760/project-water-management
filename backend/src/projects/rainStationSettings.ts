@@ -233,3 +233,37 @@ export function remapRainStations(raw: unknown, nodeIds: ReadonlyMap<string, str
 			: raw.pinnedFactors;
 	return out;
 }
+
+/**
+ * Refuse (400) a save whose CHIRPS drivers (settings.unitRain.chirpsUnits, engine ≥ 1.114.0, docs/model.md §2.4h)
+ * name a unit that isn't a land unit of this project, or a unit that settings.rainStations.units also gives a station
+ * (a unit has one driver; the engine would run the station). `settings` is the setting as it will be stored (the
+ * patch over the stored one), so a save of either key is checked against the other. Only units the stored setting
+ * doesn't already name are checked against the network, as checkRainStations does. A unit without CHIRPS of its own is
+ * allowed, as a station without a record is: the run says so, and Run readiness lists it.
+ */
+export async function checkUnitChirpsDrivers(db: Db, projectId: string, settings: unknown, stored?: unknown): Promise<void> {
+	const drivers = (s: unknown) => {
+		const c = isObj(s) && isObj(s.unitRain) ? s.unitRain.chirpsUnits : null;
+		return isObj(c) ? Object.keys(c) : [];
+	};
+	const ids = drivers(settings);
+	if (!ids.length) return;
+	const stations = isObj(settings) && isObj(settings.rainStations) && isObj(settings.rainStations.units) ? settings.rainStations.units : {};
+	const both = ids.filter((id) => stations[id] != null);
+	const kept = new Set(drivers(stored));
+	const fresh = ids.filter((id) => !kept.has(id));
+	const look = [...new Set([...both, ...fresh])];
+	if (!look.length) return;
+	const { rows } = await db.query<{ id: string; name: string; land: boolean }>(
+		`SELECT id::text, name, (kind = 'farm' AND area_km2 > 0) AS land FROM node WHERE project_id = $1 AND id = ANY($2::uuid[])`,
+		[projectId, look]
+	);
+	const byId = new Map(rows.map((r) => [r.id, r]));
+	const notLand = fresh.find((id) => !byId.get(id)?.land);
+	if (notLand) throw new ApiError(400, 'unit rain: a unit given CHIRPS as its driver is not a land unit of this project (a farm with an area)');
+	if (both.length) {
+		const name = byId.get(both[0]!)?.name;
+		throw new ApiError(400, `unit rain: ${name ? `“${name}”` : 'a unit'} has both a rainfall station and CHIRPS as its driver; give it one`);
+	}
+}

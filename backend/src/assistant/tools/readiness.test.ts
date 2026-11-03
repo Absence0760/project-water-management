@@ -33,6 +33,22 @@ describe('readinessView', () => {
 		expect(note).toContain('and 3 more');
 	});
 
+	it('notes a CHIRPS driver with no CHIRPS of its own, and a bias-corrected one with no point record (engine ≥ 1.114.0)', () => {
+		const settings = { unitRain: { mode: 'perUnit', chirpsUnits: { a: { correction: 'bias' }, b: { correction: 'raw' } } } };
+		const series = [
+			{ kind: 'rain_chirps_mm', siteNodeId: 'a', station: null },
+			{ kind: 'rain_catchment_mm', siteNodeId: 'c', station: null }
+		];
+		const notes = readinessView({ nodes: [farm('a'), farm('b'), farm('c')] }, settings, series, opts).notes;
+		expect(notes).toContain(
+			'1 unit has CHIRPS as the driver rainfall but no CHIRPS series of its own, so it runs on the rain it would without the choice: Unit b. A note, not a blocker.'
+		);
+		expect(notes.some((n) => n.startsWith('1 unit has CHIRPS, bias-corrected, as the driver rainfall, but there is no point rainfall record') && n.includes(': Unit a.'))).toBe(true);
+		// With a reference gauge there is a point record: no fallback note.
+		const withRef = { unitRain: { ...settings.unitRain, reference: { gauge: 'rain_catchment_mm', unitId: 'a' } } };
+		expect(readinessView({ nodes: [farm('a'), farm('b'), farm('c')] }, withRef, series, opts).notes.some((n) => n.includes('point rainfall record'))).toBe(false);
+	});
+
 	it('a unit with its own rain gauge gets no note', () => {
 		const series = [
 			{ kind: 'rain_catchment_mm', siteNodeId: null, station: null },

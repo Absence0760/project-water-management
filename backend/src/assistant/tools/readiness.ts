@@ -7,7 +7,7 @@
 // decides what it sees. It reads only the series' kinds, units and station
 // MAPs, never their values or names, and names only land units, as the
 // network does.
-import { hasForecastRain, runBlockers, unitsOnCatchmentRain, type NetworkNode } from '@water-management/engine';
+import { hasForecastRain, runBlockers, unitChirpsChoiceNotes, unitsOnCatchmentRain, type NetworkNode } from '@water-management/engine';
 import { z } from 'zod';
 import { loadSettingsAndModel } from '../../model/store.js';
 import { rank } from '../../projects/access.js';
@@ -49,6 +49,20 @@ export function readinessView(
 			`${one ? '1 unit has' : `${onCatchmentRain.length} units have`} no rain of ${one ? 'its' : 'their'} own, so ${one ? 'its' : 'their'} share of the flow and of the EWR follows ${one ? 'its' : 'their'} area: ${named.join(', ')}${more > 0 ? ` and ${more} more` : ''}. Their rain is set up in Model settings → Flow generation. A note, not a blocker.`
 		);
 	}
+	// The units whose CHIRPS driver won't run as chosen (engine ≥ 1.114.0, docs/model.md §2.4h): the same words as Settings.
+	const chirps = unitChirpsChoiceNotes(model.nodes, s as Parameters<typeof unitChirpsChoiceNotes>[1], series);
+	const list = (units: readonly NetworkNode[]) => {
+		const named = units.slice(0, MAX_NAMED_UNITS).map((n) => n.name || 'unnamed');
+		return `${named.join(', ')}${units.length > named.length ? ` and ${units.length - named.length} more` : ''}`;
+	};
+	if (chirps.noChirps.length)
+		notes.push(
+			`${chirps.noChirps.length === 1 ? '1 unit has' : `${chirps.noChirps.length} units have`} CHIRPS as the driver rainfall but no CHIRPS series of ${chirps.noChirps.length === 1 ? 'its' : 'their'} own, so ${chirps.noChirps.length === 1 ? 'it runs' : 'they run'} on the rain ${chirps.noChirps.length === 1 ? 'it' : 'they'} would without the choice: ${list(chirps.noChirps)}. A note, not a blocker.`
+		);
+	if (chirps.rawInstead.length)
+		notes.push(
+			`${chirps.rawInstead.length === 1 ? '1 unit has' : `${chirps.rawInstead.length} units have`} CHIRPS, bias-corrected, as the driver rainfall, but there is no point rainfall record to correct it against (no reference gauge, and no catchment gauge with CHIRPS for the bias factors), so raw CHIRPS is used, levelled to the unit’s MAP: ${list(chirps.rawInstead)}. A note, not a blocker.`
+		);
 	return {
 		canStart: missing.length === 0,
 		// The Run model button's own words: "A run needs a network and a rainfall series."
