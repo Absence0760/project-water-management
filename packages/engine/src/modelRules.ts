@@ -10,7 +10,8 @@ import { damCurveProblem } from './network/damCurve';
 import { cropSupplyIssues } from './network/cropSupply';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
-import { diversionCurveProblem, isRiverOfftake, offtakeReturnAt } from './network/offtake';
+import { diversionMonthsProblem, hasMonthlyDiversion, isRiverOfftake, offtakeReturnAt } from './network/offtake';
+import { destinationsProblem, transferDestinations } from './network/transferSplits';
 import { DEMAND_SCHEDULE_MAX_WINDOWS, scheduleWindowProblem } from './network/demandSchedule';
 
 /**
@@ -106,7 +107,8 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	// The crop supply tables (engine ≥ 1.73.0, docs/model.md §2.7k): shares that add up, and a remote dam the run can draw on.
 	cropSupplyIssues(
 		m.nodes,
-		m.transfers.filter((tr): tr is typeof tr & { toNodeId: string } => tr.enabled && tr.source === 'river' && tr.toNodeId !== null),
+		// Each destination of a split off-take (engine ≥ 1.114.0) is a link, as the run plans its pieces.
+		m.transfers.flatMap((tr) => (tr.enabled && tr.source === 'river' ? transferDestinations(tr).flatMap((d) => (d.nodeId !== null ? [{ fromNodeId: tr.fromNodeId, toNodeId: d.nodeId }] : [])) : [])),
 		add
 	);
 	for (const n of m.nodes) {
@@ -181,13 +183,21 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	}
 	const nodeIndex = new Map(m.nodes.map((n, i) => [n.id, i]));
 	for (const t of m.transfers) {
+		// Split between destinations (engine ≥ 1.114.0, docs/model.md §2.6): one to five, shares adding up to 100 %,
+		// each checked below as a rule's one destination is.
+		const split = destinationsProblem(t);
+		if (split) add(`trSplit:${t.id}`, `transfer ${t.id}: ${split}`);
+		const ends = transferDestinations(t).map((d) => d.nodeId);
 		// A destination outside the catchment (engine ≥ 1.86.0, issue #523 B5): toNodeId null, a dam rule only.
-		if (!byId.has(t.fromNodeId) || (t.toNodeId !== null && !byId.has(t.toNodeId))) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown hydrological unit`);
-		if (t.toNodeId === null && isRiverOfftake(t)) add(`trExternalRiver:${t.id}`, `transfer ${t.id}: a river off-take delivers to a unit, so it can't send water out of the catchment; send it from the dam instead`);
+		if (!byId.has(t.fromNodeId) || ends.some((e) => e !== null && !byId.has(e))) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown hydrological unit`);
+		if (ends.includes(null) && isRiverOfftake(t)) add(`trExternalRiver:${t.id}`, `transfer ${t.id}: a river off-take delivers to a unit, so it can't send water out of the catchment; send it from the dam instead`);
 		// A user has no dam to send from or fill (WP-1.33).
-		if (byId.get(t.fromNodeId)?.kind === 'user' || (t.toNodeId !== null && byId.get(t.toNodeId)?.kind === 'user'))
+		if (byId.get(t.fromNodeId)?.kind === 'user' || ends.some((e) => e !== null && byId.get(e)?.kind === 'user'))
 			add(`trUser:${t.id}`, `transfer ${t.id} involves an other water user: transfers run between farm dams`);
-		if (t.fromNodeId === t.toNodeId) add(`trSelf:${t.id}`, `transfer ${t.id} goes from a hydrological unit to itself`);
+		if (ends.includes(t.fromNodeId)) add(`trSelf:${t.id}`, `transfer ${t.id} goes from a hydrological unit to itself`);
+		// A formula takes a share of the river's flow (engine ≥ 1.113.0, by month 1.114.0): only from the river.
+		if (!isRiverOfftake(t) && (t.sizing === 'diversionCurve' || hasMonthlyDiversion(t)))
+			add(`trDamFormula:${t.id}`, `transfer ${t.id}: a formula takes a share of the river’s flow, so it needs the river as its source (Takes from: The river, an off-take); a transfer from the dam takes up to a maximum`);
 		// Monthly rates (engine ≥ 1.14.0): what runs, so the months and max rate kept beside them must agree.
 		const monthly = monthlyRatesMismatch(t);
 		if (monthly) add(`trMonthly:${t.id}`, `transfer ${t.id}: ${monthly}`);
@@ -195,19 +205,22 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// source (the engine simulates the destination after its source), losses below 100 %.
 		if (isRiverOfftake(t)) {
 			const a = byId.get(t.fromNodeId);
-			const b = t.toNodeId === null ? undefined : byId.get(t.toNodeId);
-			if (a && b && (a.kind !== 'farm' || b.kind !== 'farm')) add(`trRiverKind:${t.id}`, `river off-take ${t.id}: it runs from one unit to another, not from or to a ${a.kind !== 'farm' ? a.kind : b.kind}`);
-			else if (t.enabled && a && b && a !== b && drainsInto(m, b.id, a.id, t.id)) add(`trRiverLoop:${t.id}`, `river off-take "${a.name}" → "${b.name}": its destination drains into its source (along the river or through other off-takes), so it would take water before it arrives`);
+			for (const e of ends) {
+				const b = e === null ? undefined : byId.get(e);
+				if (a && b && (a.kind !== 'farm' || b.kind !== 'farm')) add(`trRiverKind:${t.id}`, `river off-take ${t.id}: it runs from one unit to another, not from or to a ${a.kind !== 'farm' ? a.kind : b.kind}`);
+				else if (t.enabled && a && b && a !== b && drainsInto(m, b.id, a.id, t.id)) add(`trRiverLoop:${t.id}`, `river off-take "${a.name}" → "${b.name}": its destination drains into its source (along the river or through other off-takes), so it would take water before it arrives`);
+			}
 			const loss = t.lossPct ?? 0;
 			if (!(loss >= 0 && loss < 1)) add(`trRiverLoss:${t.id}`, `river off-take ${t.id}: conveyance losses must be at least 0 % and below 100 %`);
 			// Canal seepage back to the river (engine ≥ 1.42.0): a share 0–100 %, rejoining below the source or a farm below it.
 			const back = t.lossReturnPct ?? 0;
 			if (!(back >= 0 && back <= 1)) add(`trRiverReturn:${t.id}`, `river off-take ${t.id}: the share of the losses seeping back must be between 0 % and 100 %`);
 			// Sized by a share of the river's flow (engine ≥ 1.113.0, docs/model.md §2.6a): a complete curve.
+			// A formula by month (engine ≥ 1.114.0): each month's curve complete, and only on a rule sized by one.
 			if (t.sizing === 'diversionCurve') {
-				const fs = diversionCurveProblem(t);
+				const fs = diversionMonthsProblem(t);
 				if (fs) add(`trRiverDiversion:${t.id}`, `river off-take ${t.id}: sized by a diversion curve, ${fs}`);
-			}
+			} else if (hasMonthlyDiversion(t)) add(`trRiverDiversion:${t.id}`, `river off-take ${t.id}: it has a formula by month, so it must be sized by a diversion curve`);
 			const at = t.lossReturnNodeId;
 			if (a && at !== null && at !== undefined) {
 				if (offtakeReturnAt(t, nodeIndex.get(a.id)!, m.nodes, nodeIndex) === undefined)
@@ -243,7 +256,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
  */
 function drainsInto(m: ProjectModel, from: string, to: string, except: string): boolean {
 	const next = new Map<string, string[]>(m.nodes.map((n) => [n.id, n.downstreamNodeId ? [n.downstreamNodeId] : []]));
-	for (const t of m.transfers) if (t.enabled && isRiverOfftake(t) && t.id !== except && t.toNodeId !== null) next.get(t.fromNodeId)?.push(t.toNodeId);
+	for (const t of m.transfers) if (t.enabled && isRiverOfftake(t) && t.id !== except) for (const d of transferDestinations(t)) if (d.nodeId !== null) next.get(t.fromNodeId)?.push(d.nodeId);
 	const seen = new Set<string>();
 	const stack = [from];
 	while (stack.length) {

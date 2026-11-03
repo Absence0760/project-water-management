@@ -8,8 +8,9 @@
 // (../verify/checks.ts) read a unit's table through these, so a stored table
 // means the same thing to each.
 import { cmpStr } from '../order';
-import type { NetworkNode } from '../project';
+import type { NetworkNode, Transfer } from '../project';
 import { reaches } from './offtake';
+import { destinationsProblem, isSplitTransfer } from './transferSplits';
 
 /** A unit's crop demand split between its sources: three shares ≥ 0 that sum to 1. */
 export interface PlanCropShare {
@@ -216,13 +217,16 @@ export function cropRiverShareOf(n: NetworkNode): number {
  * enabled river off-takes as links): for each, the supplying and receiving node's index. For views that read
  * a saved run's remote_dam_in series (only these units have one).
  */
-export function plannedRemoteLegs(nodes: readonly NetworkNode[], transfers: readonly { enabled: boolean; source?: unknown; fromNodeId: string; toNodeId: string | null }[]): { from: number; to: number }[] {
+export function plannedRemoteLegs(nodes: readonly NetworkNode[], transfers: readonly Pick<Transfer, 'enabled' | 'source' | 'fromNodeId' | 'toNodeId' | 'destinations'>[]): { from: number; to: number }[] {
 	const index = new Map(nodes.map((n, i) => [n.id, i]));
-	const links = transfers.flatMap((tr) => {
-		const from = index.get(tr.fromNodeId);
-		const to = tr.toNodeId === null ? undefined : index.get(tr.toNodeId);
-		return tr.enabled && tr.source === 'river' && from !== undefined && to !== undefined && from !== to && nodes[from]!.kind === 'farm' && nodes[to]!.kind === 'farm' ? [{ from, to }] : [];
-	});
+	// Every destination of a split off-take (engine ≥ 1.114.0) is a link, as runModel plans its pieces.
+	const links = transfers.flatMap((tr) =>
+		(isSplitTransfer(tr) && !destinationsProblem(tr) ? tr.destinations!.map((d) => d.nodeId) : [tr.toNodeId]).flatMap((toId) => {
+			const from = index.get(tr.fromNodeId);
+			const to = toId === null ? undefined : index.get(toId);
+			return tr.enabled && tr.source === 'river' && from !== undefined && to !== undefined && from !== to && nodes[from]!.kind === 'farm' && nodes[to]!.kind === 'farm' ? [{ from, to }] : [];
+		})
+	);
 	const remotes = planRemoteSupply(nodes, nodes.map((n) => cropSharesOf(n, []).shares), links, []);
 	return remotes.flatMap((x, to) => (x ? [{ from: x.from, to }] : []));
 }

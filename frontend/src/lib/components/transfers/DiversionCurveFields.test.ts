@@ -31,7 +31,8 @@ const rule = (over: Partial<Transfer> = {}): Transfer => ({
 describe('DiversionCurveFields', () => {
 	it('names each field for its rule and shows what it diverts at a few flows, and which limit binds', () => {
 		const html = render(DiversionCurveFields, { props: { rule: rule(), label: 'transfer 2' } }).body;
-		for (const name of ['Coefficient a of transfer 2', 'Exponent b of transfer 2', 'Largest share of transfer 2, %', 'x in, flow unit of transfer 2', 'x is, the flow the curve of transfer 2 reads'])
+		// Each month's a, b and largest share are in the month table (TakesByMonth, engine 1.114.0); the unit and basis are here.
+		for (const name of ['x in, flow unit of transfer 2', 'x is, the flow the curve of transfer 2 reads'])
 			expect(html, name).toContain(`aria-label="${name}"`);
 		expect(html).toContain('data-testid="diversion-preview"');
 		expect(html).toMatch(/the canal takes\s+up to 0\.25 m³\/s/);
@@ -40,6 +41,34 @@ describe('DiversionCurveFields', () => {
 		expect(html).toContain('the canal’s capacity');
 		expect(html).toContain('the largest share');
 		expect(html).not.toContain('data-testid="diversion-preview-empty"');
+	});
+
+	it('previews each formula of a rule by month, naming its months, and what each destination of a split gets', () => {
+		const m = (coefficient: number) => ({ coefficient, exponent: -0.9, maxPct: 0.95 });
+		const html = render(DiversionCurveFields, {
+			props: {
+				rule: rule({
+					diversionCoefficient: null,
+					diversionExponent: null,
+					diversionMaxPct: null,
+					monthlyDiversion: [m(2000), m(2000), m(2000), m(1000), m(1000), m(1000), null, null, null, null, null, null],
+					lossPct: 0.1,
+					toNodeId: 'b',
+					destinations: [
+						{ nodeId: 'b', pct: 0.4 },
+						{ nodeId: 'c', pct: 0.6 }
+					]
+				}),
+				label: 'transfer 1',
+				name: (id: string | null) => (id === 'b' ? 'Canal farmers' : 'Town')
+			}
+		}).body;
+		expect(html.match(/data-testid="diversion-preview"/g)).toHaveLength(2);
+		expect(html).toContain('(Oct–Dec)');
+		expect(html).toContain('(Jan–Mar)');
+		expect(html).toContain('then after its losses split between its destinations');
+		expect(html).toMatch(/<th scope="col"(?: class="[^"]*")?>To Canal farmers \(40%\), m³\/s<\/th>/);
+		expect(html).toMatch(/<th scope="col"(?: class="[^"]*")?>To Town \(60%\), m³\/s<\/th>/);
 	});
 
 	it('says the preview reads the river itself when x is the natural flow', () => {

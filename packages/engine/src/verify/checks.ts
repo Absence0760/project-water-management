@@ -21,6 +21,7 @@ import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, externalRuleKeys, externalRules, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { diversionWant, isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
+import { expandTransferSplits, splitPieceOf } from '../network/transferSplits';
 import { reachLossDay, reachLossOf, REACH_LOSS_SERIES, SENIOR_REACH_LOSS_SERIES } from '../network/reachLoss';
 import { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES, baseflowLossDay, baseflowOf } from '../network/baseflow';
 import { cmpStr } from '../order';
@@ -83,7 +84,7 @@ const capRoomOn = (c: ArrayLike<number> | undefined, t: number): number => {
  * docs/engine-audit.md X1). Null without such a rule (or its series).
  */
 function externalSent(input: ModelInput, nodeId: string, get: SeriesMap, days: number): Float64Array | null {
-	const list = externalRuleKeys(input.model.transfers, nodeId).flatMap((k) => {
+	const list = externalRuleKeys(expandTransferSplits(input.model.transfers), nodeId).flatMap((k) => {
 		const v = get.get(`${nodeId}|${k}`);
 		return v ? [v] : [];
 	});
@@ -576,7 +577,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	const outletU = get.get(`${outlet.id}|outflow`)!;
 	const farmJ = nodes.filter((n) => n.kind === 'farm').map((n) => get.get(`${n.id}|transfer`)!);
 	// Transfers out of the catchment (engine ≥ 1.86.0): each rule's own volume, which its source's J counts out.
-	const extVol = externalRules(input.model.transfers, nodes)
+	const extVol = externalRules(expandTransferSplits(input.model.transfers), nodes)
 		.filter(canMove)
 		.map((tr) => get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`));
 	if (extVol.some((v) => !v)) return 'a transfer rule out of the catchment has no stored volume';
@@ -814,7 +815,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const byId = new Map(input.model.nodes.map((n) => [n.id, n]));
 	const rules: Rule[] = [];
 	const ruleDefs: Transfer[] = [];
-	for (const tr of input.model.transfers) {
+	for (const tr of expandTransferSplits(input.model.transfers)) {
 		const a = byId.get(tr.fromNodeId);
 		// Out of the catchment (engine ≥ 1.86.0): a destination with endless room, so only the source's limits apply.
 		const b = tr.toNodeId === null ? OUTSIDE_NODE : byId.get(tr.toNodeId);
@@ -1064,7 +1065,7 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
 function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): string | null {
 	const byId = new Map(input.model.nodes.map((n) => [n.id, n]));
 	const warnings: string[] = [];
-	const rules = input.model.transfers
+	const rules = expandTransferSplits(input.model.transfers)
 		.filter((tr): tr is Transfer & { toNodeId: string } => tr.enabled && isRiverOfftake(tr) && tr.toNodeId !== null && byId.get(tr.fromNodeId)?.kind === 'farm' && byId.get(tr.toNodeId)?.kind === 'farm' && tr.fromNodeId !== tr.toNodeId)
 		.map((tr) => ({ tr, o: offtakeOf(tr, 0, 0, '', '', warnings), volume: get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`) }));
 	if (!rules.length) return null;
@@ -1078,6 +1079,15 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 	// Each source's release rule (a pass-inflow target is kept, engine ≥ 1.70.0), in force on a day its dam has capacity.
 	const srcRelease = new Map(sources.map((id) => [id, resolveRelease(byId.get(id)!, [])]));
 	const dests = [...new Set(rules.filter((r) => r.volume).map((r) => r.tr.toNodeId))];
+	// The pieces of each split rule (engine ≥ 1.114.0), when every piece ran (none skipped, each with its series).
+	const byRule = new Map<string, typeof rules>();
+	for (const r of rules) if (r.o.split) byRule.set(r.o.split.of, [...(byRule.get(r.o.split.of) ?? []), r]);
+	const splitCount = new Map<string, number>();
+	for (const tr of expandTransferSplits(input.model.transfers)) {
+		const p = splitPieceOf(tr.id);
+		if (p && tr.enabled) splitCount.set(p.ruleId, (splitCount.get(p.ruleId) ?? 0) + 1);
+	}
+	const splits = [...byRule.entries()].filter(([id, g]) => g.length > 1 && g.length === splitCount.get(id) && g.every((r) => r.volume)).map(([, g]) => g);
 	// A rule without a stored volume moved nothing: it can never take water, or the run skipped it (its
 	// destination drains into its source); a planned rule's missing series shows in offtake_out / offtake_in.
 	for (let t = 0; t < out.days; t++) {
@@ -1103,13 +1113,14 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 				if (!(v >= -tol(0)) || v > cap + tol(cap)) return `${where}: river off-take ${r.tr.id} took ${v}, outside [0, its capacity today ${cap}]`;
 				// A diversion-curve rule takes at most its share of U₀: read off its curve at U₀ when it reads the modelled
 				// flow, else (it reads the natural flow, which no series carries) at most its largest share of U₀.
-				if (r.o.sizing === 2) {
-					const fs = r.o.diversion;
+				// A curve by month (engine ≥ 1.114.0): a month without one takes up to capacity, as a rule sized to it.
+				const fs = r.o.sizing === 2 && r.o.curves ? r.o.curves[month]! : null;
+				if (r.o.sizing === 2 && (!r.o.curves || fs)) {
 					const want = fs ? (fs.natural ? fs.maxShare * U0all : diversionWant(fs, U0all, U0all)) : 0;
 					if (v > want + tol(Math.max(want, U0all))) return `${where}: river off-take ${r.tr.id} took ${v}, more than its share of the river's flow ${U0all} (${want})`;
 				}
 				sum += v;
-				caps += r.o.sizing === 2 ? (r.o.diversion && !r.o.diversion.natural ? Math.min(cap, diversionWant(r.o.diversion, U0all, U0all)) : 0) : cap;
+				caps += r.o.sizing === 2 ? (!r.o.curves ? 0 : !fs ? cap : !fs.natural ? Math.min(cap, diversionWant(fs, U0all, U0all)) : 0) : cap;
 				const keep = Math.max(Zs, rt, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
 				keepMax = Math.max(keepMax, cap > 0 ? keep : 0);
 				if (v > 0 && v > Math.max(0, U + sumAll(mine, t) - keep) + tol(Math.max(U, keep))) return `${where}: river off-take ${r.tr.id} took ${v}, more than the flow above what it must leave (${keep})`;
@@ -1133,10 +1144,17 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			}
 			if (sum > 0 && U < -tol(sum)) return `${where}: the river off-takes left ${U} in the river`;
 			// Rules sized to capacity, or to a share of the modelled flow (engine ≥ 1.113.0: what they ask is known here).
-			if (mine.every((r) => r.o.sizing === 1 || (r.o.sizing === 2 && r.o.diversion !== null && !r.o.diversion.natural))) {
+			if (mine.every((r) => r.o.sizing === 1 || (r.o.sizing === 2 && r.o.curves !== null && !r.o.curves[month]?.natural))) {
 				const floor = Math.min(caps, Math.max(0, U + sum - keepMax));
 				if (sum < floor - tol(Math.max(floor, U + sum))) return `${where}: the river off-takes took only ${sum}; their capacity and the flow allowed ${floor}`;
 			}
+		}
+		// A rule split between destinations (engine ≥ 1.114.0) takes for each its share: its pieces' volumes are in
+		// the proportion of their shares, every day (they ask in it and share every keep, ./network/transferSplits.ts).
+		for (const g of splits) {
+			const per = g.map((r) => r.volume![t]! / r.o.split!.pct);
+			const hi = Math.max(...per);
+			if (hi - Math.min(...per) > tol(hi)) return `day ${t}: river off-take ${g[0]!.o.split!.of} split between destinations took ${g.map((r) => r.volume![t]!).join(', ')}, not in the proportion of its shares ${g.map((r) => r.o.split!.pct).join(', ')}`;
 		}
 		for (const dst of dests) {
 			let got = 0;
@@ -1144,9 +1162,11 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			const xin = get.get(`${dst}|offtake_in`)?.[t];
 			if (xin === undefined || Math.abs(xin - got) > tol(got)) return `${dst} day ${t}: offtake_in ${xin} ≠ what its river off-takes delivered, ${got}`;
 			// Into a capped unit, rules sized to its demand deliver at most the demand its cap still allows (engine ≥
-			// 1.70.0, #90 Q28), so at most its surface room today, when none of them also tops up its dam.
+			// 1.70.0, #90 Q28), so at most its surface room today, when none of them also tops up its dam. A share of a
+			// split (engine ≥ 1.114.0) is its rule's share of the destinations' needs together, which a destination with
+			// less room than its share still gets (engine-audit.md SP1): such a destination isn't held to its room.
 			const room = get.get(`${dst}|${ALLOCATION_SERIES.surfaceRoom.key}`)?.[t];
-			if (room !== undefined && Number.isFinite(room) && rules.every((r) => r.tr.toNodeId !== dst || (r.o.sizing === 0 && !r.o.topUpDam)) && got > room + tol(Math.max(room, got)))
+			if (room !== undefined && Number.isFinite(room) && rules.every((r) => r.tr.toNodeId !== dst || (r.o.sizing === 0 && !r.o.topUpDam && !r.o.split)) && got > room + tol(Math.max(room, got)))
 				return `${dst} day ${t}: its demand-sized river off-takes delivered ${got}, more than its surface allocation room today ${room}`;
 		}
 		for (const unit of returnUnits) {
@@ -1979,7 +1999,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 function offtakeInto(input: ModelInput, nodeId: string, get: SeriesMap): { volume: number[]; loss: number; topUp: boolean }[] | string {
 	const out: { volume: number[]; loss: number; topUp: boolean }[] = [];
 	const warnings: string[] = [];
-	for (const tr of input.model.transfers) {
+	for (const tr of expandTransferSplits(input.model.transfers)) {
 		if (!tr.enabled || !isRiverOfftake(tr) || tr.toNodeId !== nodeId || !canMove(tr)) continue;
 		const v = get.get(`${tr.fromNodeId}|${transferRuleKey(tr.id)}`);
 		if (!v) continue;
@@ -2455,9 +2475,9 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		}
 		return set;
 	};
-	const rules = farmRules(input.model.transfers, nodes);
+	const rules = farmRules(expandTransferSplits(input.model.transfers), nodes);
 	// Rules out of the catchment (engine ≥ 1.86.0), after the farm-to-farm ones so a rule's index k is the same in both.
-	const outside = externalRules(input.model.transfers, nodes);
+	const outside = externalRules(expandTransferSplits(input.model.transfers), nodes);
 	const allRules = [...rules, ...outside];
 	const col = (id: string, k: string) => get.get(`${id}|${k}`)!;
 	// Each rule's daily volume (engine ≥ 1.6.0: a series for every rule that can move water; null for an older run, which stores none).
@@ -3189,7 +3209,7 @@ function checkIntakeTake(input: ModelInput, out: ModelOutput, get: SeriesMap): s
 	// Units measured at the intake are those with the take; whether the rule picked the right ones is checked below.
 	const atIntake = new Set(nodes.filter((n) => get.has(`${n.id}|${INTAKE_SERIES.take.key}`)).map((n) => n.id));
 	if (!atIntake.size) return nodes.some((n) => get.has(`${n.id}|${INTAKE_SERIES.received.key}`)) ? `${INTAKE_SERIES.received.key} in a run with no ${INTAKE_SERIES.take.key}` : null;
-	const rules = farmRules(input.model.transfers, nodes).filter((r) => !isRiverOfftake(r));
+	const rules = farmRules(expandTransferSplits(input.model.transfers), nodes).filter((r) => !isRiverOfftake(r));
 	const vol = readRuleVolumes(rules, out.days, (id, k) => get.get(`${id}|${k}`));
 	if (!vol) return `${INTAKE_SERIES.take.key} in a run without its transfer rules' volumes`;
 	const fromDams = (id: string, intake: boolean) => {
@@ -3429,7 +3449,7 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					intakeTake: get.get(`${n.id}|${INTAKE_SERIES.take.key}`) ?? null,
 					receivedAtIntake: get.get(`${n.id}|${INTAKE_SERIES.received.key}`) ?? null,
 					// What its dam rules sent out of the catchment (engine ≥ 1.88.0, X1), from their own series.
-					externalTransfers: externalRuleKeys(input.model.transfers, n.id).map((k) => get.get(`${n.id}|${k}`) ?? null),
+					externalTransfers: externalRuleKeys(expandTransferSplits(input.model.transfers), n.id).map((k) => get.get(`${n.id}|${k}`) ?? null),
 					// A unit's dam losses (engine ≥ 1.83.0): its own dam_evaporation and dam_seepage_lost columns, when it has a dam.
 					...(n.kind === 'farm' && n.damCapacityM3 > 0 ? { damEvaporation: get.get(`${n.id}|dam_evaporation`) ?? null, damSeepageLost: get.get(`${n.id}|dam_seepage_lost`) ?? null } : {})
 				}

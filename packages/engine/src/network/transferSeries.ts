@@ -19,6 +19,7 @@
 import type { NetworkNode, Transfer } from '../project';
 import { isRiverOfftake, planOfftakes } from './offtake';
 import { transferDailyLimit } from './transferRates';
+import { destinationsProblem, expandTransferSplits, isSplitTransfer, SPLIT_PIECE_SEPARATOR, splitPieceOf } from './transferSplits';
 
 export const TRANSFER_RULE_SERIES = {
 	prefix: 'transfer_rule@',
@@ -39,13 +40,25 @@ export const transferRuleKey = (ruleId: string): string => `${TRANSFER_RULE_SERI
  * ../allocations/compare.ts externalTransfers). A rule that can't move water
  * has no series; a reader skips a key it doesn't find.
  */
-export function externalRuleKeys(transfers: readonly Pick<Transfer, 'id' | 'fromNodeId' | 'toNodeId'>[] | null | undefined, nodeId: string): string[] {
-	return (transfers ?? []).filter((tr) => tr.toNodeId === null && tr.fromNodeId === nodeId).map((tr) => transferRuleKey(tr.id));
+export function externalRuleKeys(transfers: readonly Pick<Transfer, 'id' | 'fromNodeId' | 'toNodeId' | 'destinations'>[] | null | undefined, nodeId: string): string[] {
+	// A rule split between destinations (engine ≥ 1.114.0) stores each destination's piece under `<rule id>#<k>`
+	// (./transferSplits.ts): its piece out of the catchment is the one to read.
+	return (transfers ?? []).flatMap((tr) => {
+		if (tr.fromNodeId !== nodeId) return [];
+		if (isSplitTransfer(tr) && !destinationsProblem(tr)) return tr.destinations!.flatMap((d, k) => (d.nodeId === null ? [transferRuleKey(`${tr.id}${SPLIT_PIECE_SEPARATOR}${k}`)] : []));
+		return tr.toNodeId === null ? [transferRuleKey(tr.id)] : [];
+	});
 }
 
-/** The rule id of a transfer_rule@ key; null for any other key. */
+/**
+ * The rule id of a transfer_rule@ key; null for any other key. A split rule's
+ * piece (engine ≥ 1.114.0, `transfer_rule@<rule id>#<k>`, ./transferSplits.ts)
+ * gives its rule's id.
+ */
 export function parseTransferRuleKey(key: string): string | null {
-	return key.startsWith(TRANSFER_RULE_SERIES.prefix) && key.length > TRANSFER_RULE_SERIES.prefix.length ? key.slice(TRANSFER_RULE_SERIES.prefix.length) : null;
+	if (!(key.startsWith(TRANSFER_RULE_SERIES.prefix) && key.length > TRANSFER_RULE_SERIES.prefix.length)) return null;
+	const id = key.slice(TRANSFER_RULE_SERIES.prefix.length);
+	return splitPieceOf(id)?.ruleId ?? id;
 }
 
 /**
@@ -64,7 +77,9 @@ export function canMove(tr: Pick<Transfer, 'months' | 'maxRateM3s' | 'dailyCapM3
  * (engine ≥ 1.14.0) one the run doesn't skip (./offtake.ts planOfftakes: its
  * destination doesn't drain into its source).
  */
-export function farmRules(transfers: readonly Transfer[], nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'>[]): (Transfer & { toNodeId: string })[] {
+export function farmRules(all: readonly Transfer[], nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'>[]): (Transfer & { toNodeId: string })[] {
+	// A rule split between destinations (engine ≥ 1.114.0) as its pieces, the rules the run ran (./transferSplits.ts).
+	const transfers = expandTransferSplits(all);
 	const kind = new Map(nodes.map((n) => [n.id, n.kind]));
 	const river = transfers.some((tr) => tr.enabled && isRiverOfftake(tr)) ? new Set(planOfftakes(transfers, nodes, [], () => undefined).map((o) => o.id)) : null;
 	// A rule from a unit to itself runs nowhere (engine ≥ 1.69.0 skips it, as planOfftakes skips such an off-take).
@@ -82,7 +97,7 @@ export function farmRules(transfers: readonly Transfer[], nodes: readonly Pick<N
  */
 export function externalRules(transfers: readonly Transfer[], nodes: readonly Pick<NetworkNode, 'id' | 'kind'>[]): Transfer[] {
 	const kind = new Map(nodes.map((n) => [n.id, n.kind]));
-	return transfers.filter((tr) => tr.enabled && tr.toNodeId === null && !isRiverOfftake(tr) && kind.get(tr.fromNodeId) === 'farm');
+	return expandTransferSplits(transfers).filter((tr) => tr.enabled && tr.toNodeId === null && !isRiverOfftake(tr) && kind.get(tr.fromNodeId) === 'farm');
 }
 
 /**

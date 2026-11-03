@@ -38,6 +38,8 @@ export interface RunUseTransfer {
 	id: string;
 	fromNodeId: string;
 	toNodeId: string | null;
+	/** A split's destinations (engine ≥ 1.114.0): its piece out of the catchment, when it has one, is the unit's use. */
+	destinations?: { nodeId: string | null; pct: number }[] | null;
 }
 
 /** The run's farms and water users with a `supplied` series, each with its use series. */
@@ -50,7 +52,8 @@ export async function runUseNodes(
 	transfers: readonly RunUseTransfer[] | null = null
 ): Promise<AllocationUseNode[]> {
 	const users = (nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
-	const external = Array.isArray(transfers) ? transfers.filter((t) => t && typeof t.id === 'string' && t.toNodeId === null) : [];
+	// The rules with a destination out of the catchment: toNodeId null, or a share of a split (engine ≥ 1.114.0).
+	const external = Array.isArray(transfers) ? transfers.filter((t) => t && typeof t.id === 'string' && (t.toNodeId === null || (Array.isArray(t.destinations) && t.destinations.some((d: { nodeId: string | null } | null) => d?.nodeId === null)))) : [];
 	const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
 		`SELECT node_id AS "nodeId", key, "values" FROM run_series
 		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used', 'intake_take', 'received_at_intake', 'dam_evaporation', 'dam_seepage_lost') OR key LIKE 'river\\_take@%' OR key = ANY($3::text[])) AND node_id = ANY($2::uuid[])`,

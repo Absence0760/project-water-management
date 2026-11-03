@@ -1,6 +1,6 @@
 // Pure helpers for the change history (030_history.sql): which nodes a model
 // change touched, and what a series change did day by day. No I/O.
-import { fromEpochDay, toEpochDay, type ProjectModel } from '@water-management/engine';
+import { fromEpochDay, toEpochDay, transferDestinations, type ProjectModel } from '@water-management/engine';
 
 /** What a node is, as far as a change to it goes: its own row, crop areas, land cover, boreholes, demand objects, transfers at either end and the off-takes whose seepage rejoins below it. */
 function nodeFacts(m: ProjectModel | null | undefined): Map<string, string> {
@@ -16,10 +16,11 @@ function nodeFacts(m: ProjectModel | null | undefined): Map<string, string> {
 	for (const b of m?.boreholes ?? []) add(b.nodeId, ['borehole', b]);
 	for (const o of m?.demandObjects ?? []) add(o.nodeId, ['demandObject', o]);
 	for (const t of m?.transfers ?? []) {
-		add(t.fromNodeId, ['transfer', t]);
-		if (t.toNodeId !== null) add(t.toNodeId, ['transfer', t]);
+		// Every destination of a split rule (engine ≥ 1.114.0) is touched by it, as its one destination is.
+		const ends = new Set([t.fromNodeId, ...transferDestinations(t).flatMap((d) => (d.nodeId !== null ? [d.nodeId] : []))]);
 		// The unit an off-take's canal seepage rejoins below (engine ≥ 1.42.0) is touched by it too.
-		if (t.lossReturnNodeId && t.lossReturnNodeId !== t.fromNodeId && t.lossReturnNodeId !== t.toNodeId) add(t.lossReturnNodeId, ['transfer', t]);
+		if (t.lossReturnNodeId) ends.add(t.lossReturnNodeId);
+		for (const id of ends) add(id, ['transfer', t]);
 	}
 	// Order-insensitive: crop areas and patches come back from the database in any order.
 	return new Map([...facts].map(([id, list]) => [id, list.map((x) => stableJson(x)).sort().join('\n')]));

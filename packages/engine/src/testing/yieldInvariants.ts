@@ -3,6 +3,7 @@
 import type { ModelInput } from '../project';
 import { simulateNetwork } from '../network/simulate';
 import { firmYield, isMonotone, prepareYield, storageYieldCapacities, YIELD_DEFAULT_TOLERANCE } from '../network/yield';
+import { transferDestinations } from '../network/transferSplits';
 
 /**
  * The input with the dam made lossless (no area, no seepage, no survey curve)
@@ -20,7 +21,7 @@ export function isolateDam(input: ModelInput, nodeId: string): ModelInput {
 		// Lossless also means no survey curve (its area would evaporate) and no
 		// release rule (WP-3.5): a release is a second draft ahead of the yield.
 		if (n.id === nodeId) Object.assign(n, { damAreaFullM2: 0, damSeepagePerDay: 0, damInitialPct: Math.max(n.damInitialPct, n.damMinPct), damCurve: null, damReleaseRule: 'none', damReleaseM3Day: null });
-	x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nodeId && t.toNodeId !== nodeId);
+	x.model.transfers = x.model.transfers.filter((t) => t.fromNodeId !== nodeId && !transferDestinations(t).some((d) => d.nodeId === nodeId));
 	return x;
 }
 

@@ -72,7 +72,33 @@ export { buildTopology, ewrSiteNodes, isEwrSite, type Topology } from './network
 export { EWR_BINDING_SERIES } from './network/bindingSeries';
 export { externalRuleKeys, parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 export { hasMonthlyRates, monthlyRatesMismatch, transferRatesM3s, validMonthlyRates, WATER_YEAR_MONTHS, withMonthlyRates } from './network/transferRates';
-export { diversionCurveOf, diversionShareOf, diversionCurveProblem, diversionWant, isRiverOfftake, OFFTAKE_SERIES, offtakeReturnAt, type DiversionCurve } from './network/offtake';
+export {
+	diversionCurveOf,
+	diversionCurvesOf,
+	diversionMonthsOf,
+	diversionMonthsProblem,
+	diversionShareOf,
+	diversionCurveProblem,
+	diversionWant,
+	hasMonthlyDiversion,
+	isRiverOfftake,
+	OFFTAKE_SERIES,
+	offtakeReturnAt,
+	withMonthlyDiversion,
+	type DiversionCurve
+} from './network/offtake';
+export {
+	destinationsProblem,
+	expandModelTransfers,
+	expandTransferSplits,
+	isSplitTransfer,
+	MAX_TRANSFER_DESTINATIONS,
+	SPLIT_SUM_TOLERANCE,
+	splitPieceOf,
+	transferDestinations,
+	withDestinations,
+	type TransferPiece
+} from './network/transferSplits';
 export { REACH_LOSS_FRAC_MAX, REACH_LOSS_SERIES, reachLossDay } from './network/reachLoss';
 export { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES } from './network/baseflow';
 export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, fromSupplyOrder, objectMonthlyM3Day, objectRank, objectSuppliedKey, parseDemandObjectKey, supplyLevels, supplyOrder } from './network/demandObjects';

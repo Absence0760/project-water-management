@@ -2635,8 +2635,45 @@ export interface Transfer {
 	 * taken of the modelled flow at the off-take.
 	 */
 	diversionFlowBasis?: DiversionFlowBasis | null;
+	/**
+	 * river, sizing 'diversionCurve': a curve per water-year month (Oct–Sep,
+	 * engine ≥ 1.114.0, docs/model.md §2.6a *A maximum or a formula by month*).
+	 * Each entry is that month's curve (its own a, b and largest share; the
+	 * unit and basis are the rule's `diversionFlowUnit` and
+	 * `diversionFlowBasis`), or null: a month that takes up to its rate, as a
+	 * capacity-sized rule. The month's rate stays the canal's capacity in a
+	 * formula month. null / absent = the one curve above (`diversionCoefficient`
+	 * …) in every month, as engine 1.113.0 ran it; when set, those three are
+	 * null (modelRuleIssues).
+	 */
+	monthlyDiversion?: (MonthDiversion | null)[] | null;
 	/** river: what is left once the destination's demand is met tops up its dam (true) or flows on below it (false, the default). */
 	topUpDam?: boolean;
+	/**
+	 * Where the water goes, split between one to five destinations (engine ≥
+	 * 1.114.0, docs/model.md §2.6 *Split between destinations*): each a unit
+	 * (or null, outside the catchment: a dam rule only) and its share 0 < pct ≤
+	 * 1, the shares adding up to 1, no destination twice and none the source.
+	 * null / absent = all of it to `toNodeId`, as every rule before. When set,
+	 * `toNodeId` is the first destination's (kept in step, as `months` with
+	 * monthly rates, so an older reader sees where most rules go). The rule
+	 * runs as one rule per destination, each with that share of its capacity
+	 * (and of a curve's share of the river); ./network/transferSplits.ts.
+	 */
+	destinations?: TransferDestination[] | null;
+}
+
+/** One destination of a split transfer (engine ≥ 1.114.0): a unit, or null (outside the catchment), and its share 0 < pct ≤ 1. */
+export interface TransferDestination {
+	nodeId: string | null;
+	pct: number;
+}
+
+/** A month's diversion curve (engine ≥ 1.114.0): `coefficient · x^exponent` percent of the river, at most `maxPct` (0 < m ≤ 1; null = 1). */
+export interface MonthDiversion {
+	coefficient: number;
+	exponent: number;
+	maxPct: number | null;
 }
 
 export const TRANSFER_SOURCES = ['dam', 'river'] as const;

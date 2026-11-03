@@ -173,7 +173,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				id: uuid,
 				fromNodeId: uuid,
 				// null: out of the catchment (engine ≥ 1.86.0, migration 224, docs/model.md §2.6); a dam rule only (modelRuleIssues).
-				toNodeId: uuid.nullable(),
+				// May be left out when `destinations` is given (engine ≥ 1.114.0): it is the first destination's.
+				toNodeId: uuid.nullable().optional(),
 				months: z.array(z.number().int().min(1).max(12)).max(12),
 				maxRateM3s: nonNeg,
 				dailyCapM3: nonNeg.nullable(),
@@ -201,7 +202,31 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				diversionExponent: z.number().finite().nullable().default(null),
 				diversionMaxPct: z.number().finite().gt(0).max(1).nullable().default(null),
 				diversionFlowUnit: z.enum(DIVERSION_FLOW_UNITS).nullable().default(null),
-				diversionFlowBasis: z.enum(DIVERSION_FLOW_BASES).nullable().default(null)
+				diversionFlowBasis: z.enum(DIVERSION_FLOW_BASES).nullable().default(null),
+				// A curve per water-year month (engine ≥ 1.114.0, migration 311): null = a month up to its rate. Only
+				// with sizing 'diversionCurve', and then the one curve above is null (modelRuleIssues).
+				monthlyDiversion: z
+					.array(z.object({ coefficient: z.number().finite().gt(0), exponent: z.number().finite(), maxPct: z.number().finite().gt(0).max(1).nullable().default(null) }).nullable())
+					.length(12)
+					.nullable()
+					.default(null),
+				// Split between destinations (engine ≥ 1.114.0, migration 311): one to five, shares adding up to 100 %,
+				// none twice, none the source (modelRuleIssues says which). The bound here only limits the size.
+				destinations: z
+					.array(z.object({ nodeId: uuid.nullable(), pct: z.number().finite() }))
+					.max(20)
+					.nullable()
+					.default(null)
+			})
+			.superRefine((t, ctx) => {
+				if (t.toNodeId === undefined && !t.destinations?.length) ctx.addIssue({ code: 'custom', path: ['toNodeId'], message: 'a transfer needs a destination: toNodeId or destinations' });
+			})
+			// toNodeId from the destinations when left out (an API client's split), and a one-row split stored as
+			// that destination alone (engine withDestinations), so one rule has one shape.
+			.transform((t) => {
+				const toNodeId = t.toNodeId === undefined ? (t.destinations?.[0]?.nodeId ?? null) : t.toNodeId;
+				const one = t.destinations?.length === 1 && t.destinations[0]!.nodeId === toNodeId && t.destinations[0]!.pct === 1;
+				return { ...t, toNodeId, destinations: one ? null : t.destinations };
 			})
 		)
 		.max(500),

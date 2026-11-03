@@ -2967,7 +2967,38 @@
 			],
 			"url": "/help/glossary/transfers#transfer-diversion-curve",
 			"summary": "An off-take taking a × x^b % of the river, x its flow at the off-take in the unit you pick; at most the largest share and the canal. (a and b as given; largest share %; x in L/s, m³/s, m³/day or Ml/day)",
-			"text": "Pick A share of the river’s flow under Takes on a river off-take. Each day the off-take wants the share y = a × x^b percent of the river at the off-take, where x is that flow in the flow unit you pick (L/s, m³/s, m³/day or Ml/day), never more than the largest share (100 % when left blank), and never more than the rule’s rate × 86 400 (the canal’s capacity) or its daily cap. With b below 0 the share falls as the river rises: most of a low flow, a small part of a flood. The unit of x changes everything. The same a and b read in L/s give a falling share over a small river’s whole range, so the canal may never fill; read in m³/s or Ml/day they give the largest share at every ordinary flow, so the rule becomes “the largest share, up to the canal”. The card shows the share and what is diverted at a few example flows, and which limit binds, so check it against what the curve’s author meant. x is the river at the off-take that day, after the use upstream (the default: the flow the off-take sees), or the natural flow there (the runoff from the source and every hydrological unit above it, as if nobody took water). Either way the share is taken of the river actually at the off-take. Everything else is an off-take’s: the flow it must leave (hands-off flow, the EWR when asked, the priority users’ requirement), its priority beside other off-takes, its losses on the way, and what the destination does with the water."
+			"text": "Pick A formula by month under Takes, then A formula for a month in the month table. Each day of that month the off-take wants the share y = a × x^b percent of the river at the off-take, where x is that flow in the flow unit you pick (L/s, m³/s, m³/day or Ml/day), never more than the month’s largest share (100 % when left blank), and never more than the month’s rate × 86 400 (the canal’s capacity) or its daily cap. Each month has its own a, b and largest share. With b below 0 the share falls as the river rises: most of a low flow, a small part of a flood. The unit of x changes everything. The same a and b read in L/s give a falling share over a small river’s whole range, so the canal may never fill; read in m³/s or Ml/day they give the largest share at every ordinary flow, so the rule becomes “the largest share, up to the canal”. The card shows the share and what is diverted at a few example flows, and which limit binds, so check it against what the curve’s author meant. x is the river at the off-take that day, after the use upstream (the default: the flow the off-take sees), or the natural flow there (the runoff from the source and every hydrological unit above it, as if nobody took water). Either way the share is taken of the river actually at the off-take. Everything else is an off-take’s: the flow it must leave (hands-off flow, the EWR when asked, the priority users’ requirement), its priority beside other off-takes, its losses on the way, and what the destination does with the water."
+		},
+		{
+			"kind": "glossary",
+			"id": "transfer-takes-by-month",
+			"title": "How much a transfer takes",
+			"aliases": [
+				"formula",
+				"by month",
+				"maximum or formula",
+				"transfer capacity",
+				"canal formula"
+			],
+			"url": "/help/glossary/transfers#transfer-takes-by-month",
+			"summary": "Each month up to a maximum rate, or a formula: a × x^b % of the river, at most its largest share and the rate. Needs a river off-take. (m³/s per month; a, b and largest share % per formula month)",
+			"text": "The pull-down Takes at the top of a transfer’s rates sets how much it moves each day. Up to a maximum: up to the month’s rate (a transfer from a dam moves what fits in its destination; a river off-take takes it whatever the destination needs, like a canal that runs full). What the destination needs (a river off-take only): its demand that day, and its dam’s room when it tops the dam up. A formula by month: a row per month, each either A maximum (up to its rate) or A formula, a × x^b % of the river at the off-take, at most the month’s largest share and its rate, the canal’s capacity. Apply to every month copies one month’s rule, rate and formula to the rest. A formula is a share of the river’s flow, so it needs the river as its source: picking it on a transfer from a dam makes it a river off-take, and the card says so. The unit of x and which flow it reads are one for the whole rule, under the off-take’s fields, with what each formula diverts at a few river flows. A rule saved before engine 1.114.0 with one curve shows it in every month."
+		},
+		{
+			"kind": "glossary",
+			"id": "transfer-split",
+			"title": "Split between destinations",
+			"aliases": [
+				"split",
+				"several destinations",
+				"divide",
+				"percentage",
+				"share between units",
+				"division box"
+			],
+			"url": "/help/glossary/transfers#transfer-split",
+			"summary": "What a transfer delivers, after its losses, shared between one to five units by %, adding up to 100 %. One unit at 100 % is the usual. (% of what arrives, per destination)",
+			"text": "Press Split beside a transfer’s destination to send what it moves to more than one hydrological unit: a row each, up to five, with its share of what arrives. The shares must add up to 100 % (the total under them says so as you type). The water is taken first, then the losses on the way come off, then what arrives is split by the shares, every day. A rule sized to What the destination needs takes for all its destinations together (the sum of their needs) and still splits by the shares, so a destination that needs less than its share passes the rest on down its river. A transfer from a dam moves each share only as far as its destination has room; what a full dam can’t take stays in the source dam. Remove rows down to one and it is a plain transfer again."
 		},
 		{
 			"kind": "glossary",

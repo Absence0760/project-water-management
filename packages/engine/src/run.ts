@@ -33,6 +33,7 @@ import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribu
 import { noFlowDays, servedWhileEwrFails } from './reserve/riverMeasures';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
 import { canMove, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
+import { expandModelTransfers } from './network/transferSplits';
 import { transferActiveMonths, transferDailyLimit, validMonthlyRates } from './network/transferRates';
 import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOfftakes } from './network/offtake';
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
@@ -1724,8 +1725,9 @@ export function buildNetworkPlan(
 	// Dated demand factors (engine ≥ 1.82.0, demand.scale with from/to) on one part of a node's demand, day by day; null = none.
 	if (start === undefined && input.model.nodes.some(hasDatedDemandFactor)) throw new Error('buildNetworkPlan: a dated demand factor needs the run start');
 	const datedOf: DatedFactorOf = (n, part, w) => (start === undefined || !hasDatedDemandFactor(n) ? null : datedDemandFactorOf(n, part, start, days, w));
-	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
-	const model = upgradeLegacyInput(input.model, input.settings?.apanMm);
+	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it, and a rule split
+	// between destinations (engine ≥ 1.114.0) as one rule per destination (./network/transferSplits.ts).
+	const model = expandModelTransfers(upgradeLegacyInput(input.model, input.settings?.apanMm), warnings);
 	const nodes = model.nodes;
 	// Shares of 0–1, as the API and the database hold them: 80 meant as a percent would start a dam at 80 × its
 	// capacity and spill water that never existed, with every self-check passing (engine ≥ 1.69.0: refused).

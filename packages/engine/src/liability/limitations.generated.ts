@@ -179,6 +179,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Built, pending the hydrologist"
 	},
 	{
+		"id": "SP1",
+		"source": "finding",
+		"severity": "Medium (river off-takes split between destinations and sized to what the destinations need)",
+		"title": "A split sized to its destinations' need takes for the sum of their needs and still splits by its shares, so a destination can get more than it needs, or than its allocation cap allows, while another is short",
+		"status": "Provisional (operator 2026-11-03); Needs hydrologist"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,
