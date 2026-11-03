@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 import type { OutcomeSettings, Sweep, SweepMember } from '#lib/api/types.js';
 import {
 	boundsText,
+	boundsShort,
 	buildMatrixView,
+	levelDescription,
+	riskPhrase,
 	chooseSite,
 	demandLevelOf,
 	demandSweepRequest,
@@ -187,6 +190,45 @@ describe('buildMatrixView', () => {
 		const v = view([member(0, '100 %')], settings(), natural.slice(0, 200));
 		expect(v.nYears).toBe(0);
 		expect(v.warnings).toContain('The base run has no complete water year (1 October to 30 September), so its years cannot be classed.');
+	});
+
+	it('reads like the matrix a WUA expects: flow ranges in million m³, plain row descriptions, a risk phrase per cell', () => {
+		const v = view([member(0, '100 %', {}, (y) => (y < 3 ? 0.1 : y < 6 ? 0.3 : 0)), member(1, '85 %', { ops: [{ op: 'demand.scale', factor: 0.85 }] })]);
+		// Annual totals 0.37 … 3.29 million m³: the columns' ranges are in million m³ a year.
+		expect(v.boundsUnit).toBe('million m³ a year');
+		expect(v.columns.map((c) => c.range)).toEqual([expect.stringMatching(/^≤ \d\.\d\d$/), expect.stringMatching(/^\d\.\d\d – \d\.\d\d$/), expect.stringMatching(/^> \d\.\d\d$/)]);
+		expect(v.rows.map((r) => r.description)).toEqual(['Today’s demand', '15 % less demand']);
+		expect(cellsOf(v, 0).map((c) => `${c.riskLabel} · ${c.phrase}`)).toEqual(['Increasing risk · EWR may not be met', 'High risk · EWR often not met', 'Lower risk · EWR generally met']);
+		// The legend is the cut-offs in use, in words, one row per risk.
+		expect(v.legend).toEqual([
+			{ risk: 'lower', label: 'Lower risk', phrase: 'EWR generally met', rule: 'Below the EWR on at most 5 % of days' },
+			{ risk: 'increasing', label: 'Increasing risk', phrase: 'EWR may not be met', rule: 'Below the EWR on at most 20 % of days' },
+			{ risk: 'high', label: 'High risk', phrase: 'EWR often not met', rule: 'Below the EWR on more than 20 % of days' }
+		]);
+		// The model context, from the run itself.
+		expect(v.context).toEqual({
+			period: '2010/11 – 2018/19',
+			years: '9 complete water years',
+			assessment: 'Days below the pragmatic EWR at the outlet',
+			availability: 'Annual natural flow at the outlet in the base run, split into terciles of its own years'
+		});
+	});
+
+	it('words the Reserve measure’s risks as the Reserve', () => {
+		expect((['lower', 'increasing', 'high'] as const).map((r) => riskPhrase('reserveMonthsMet', r))).toEqual(['Reserve generally met', 'Reserve may not be met', 'Reserve often not met']);
+	});
+
+	it('a level above, at and below today', () => {
+		expect([120, 100, 85, 0].map(levelDescription)).toEqual(['20 % more demand', 'Today’s demand', '15 % less demand', 'No irrigation demand']);
+		expect(levelDescription(null)).toBeNull();
+	});
+
+	it('boundsShort: million m³ for large flows, m³ below a million', () => {
+		expect(boundsShort({ lowerM3: null, upperM3: 20_300_000 }, 1e6)).toBe('≤ 20.3');
+		expect(boundsShort({ lowerM3: 20_300_000, upperM3: 145_000_000 }, 1e6)).toBe('20.3 – 145');
+		expect(boundsShort({ lowerM3: 2_340_000, upperM3: null }, 1e6)).toBe('> 2.34');
+		expect(boundsShort({ lowerM3: 120_000, upperM3: 480_000 }, 1)).toBe('120\u202f000 – 480\u202f000');
+		expect(boundsShort({ lowerM3: null, upperM3: null }, 1)).toBe('all years');
 	});
 
 	it('never words a result as the app choosing a level', () => {
