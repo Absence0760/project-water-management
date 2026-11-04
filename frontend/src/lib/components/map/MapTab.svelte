@@ -87,9 +87,9 @@
 	import { restOfCatchment, staleValues } from './stale';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
-	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
+	import { channelColour, channelMinKm2AtZoom, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
-	import { channelsWanted, chirpsCells, demRiversOffered, layersOn, unitLabels } from './mapLayers';
+	import { channelsWanted, chirpsCells, demRiversOffered, layerAsked, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
 	import { AreaFill } from './areaFill.svelte';
@@ -107,7 +107,7 @@
 	import { openChannelArchive, staticChannels } from './channelArchive';
 	import { openProposal } from './delineation';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
-	import type { DivideDraft } from './divideFlow';
+	import type { DivideChoice, DivideDraft } from './divideFlow';
 	import { emptyPlacement } from './placement';
 	import { litPieces, piecesShape } from './pieces';
 	import type { MapAreaBasis, MapGeometry, MapPosition } from '#lib/api/types.js';
@@ -373,12 +373,15 @@
 	});
 	/** Where the delineation's point was clicked, kept for the sheet once the draft is gone. */
 	let delineateAt = $state<MapPosition | null>(null);
+	/** The channels the map drew where it was clicked (channelMinKm2AtZoom), sent with it; null when typed. */
+	let delineateMinKm2 = $state<number | null>(null);
 	/** Which step the sheet opens at: asking for a point (from the header's mode), else deciding a waiting proposal (Review it, a link). */
 	let delineateStep = $state<'ask' | 'decide'>('decide');
 	let delineateWasOpen = false;
 	$effect(() => {
 		if (!delineateSheet.open) {
 			delineateAt = null;
+			delineateMinKm2 = null;
 			delineateStep = 'decide';
 			if (delineateWasOpen) void untrack(focusAfterDelineate);
 		}
@@ -400,6 +403,7 @@
 	}
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
+		delineateMinKm2 = at ? (shownChannelKm2() ?? null) : null;
 		delineateStep = 'ask';
 		await goto(withParam(page.url, 'delineate', '1'), { reset: false });
 	}
@@ -538,7 +542,7 @@
 	);
 	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {}, placement: emptyPlacement() });
 	async function divideApplied() {
-		notice = 'Divided the model from the map. The ticked areas, order and gauges are in the model, each area saved as its unit’s parcel.';
+		notice = 'Divided the model from the map. The ticked areas, order, gauges and new units are in the model, each unit’s area its boundary on the map.';
 		await Promise.all([load(), loadStart(), onModelChanged()]);
 	}
 	async function divideDiscarded() {
@@ -567,6 +571,13 @@
 	const wide = $derived(pageWidth >= 784);
 	let clickLit = $state<string | null>(null);
 	const clickPieces = $derived(dividing ? clickShape(divider.result, clickLit) : null);
+	/**
+	 * The catchment boundary the clicks are within, as the map knows it before the server's first answer (which then says):
+	 * its delineated outlet when an accepted delineation made it, else the lowest click.
+	 */
+	const clickWithin = $derived(
+		boundary ? { name: boundary.name, outlet: delineation?.proposals.some((p) => p.status === 'accepted' && p.featureId === boundary.id) ? ('delineation' as const) : ('lowest' as const) } : null
+	);
 	function startDividing() {
 		if (dividing) return void doneDividing();
 		notice = null;
@@ -587,7 +598,7 @@
 		untrack(() => {
 			draft.place('other');
 			draft.snapOn = false;
-			void divider.add(g.coordinates);
+			void divider.add(g.coordinates, shownChannelKm2());
 		});
 	});
 	// Another tool took the map (Draw, Place, Cancel in a sheet): the mode ends, its clicks kept until it is opened again.
@@ -637,12 +648,24 @@
 		clickLit = null;
 		draft.cancel();
 		await load();
-		if (r.features[0]) await pickInPlace(r.features[0].id);
-		// Opened from the Start sheet's points step (#646 F13): each saved area is a unit's boundary there, and the sheet comes back.
-		notice =
-			backToSheet === 'start'
-				? `Saved ${r.summary} on the map as areas: each is a unit’s boundary in the Start sheet.`
-				: `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		// Straight on to the network: the Start sheet on an empty model (each saved piece marked a hydrological unit there),
+		// the Divide sheet on one with nodes (each piece listed to say which unit it stands for). Nothing is written to the
+		// model until the sheet's Apply; opened from the Start sheet's points step (#646 F13), it is the same sheet coming back.
+		const sheet = canStart ? 'start' : canDivide ? 'divide' : null;
+		if (sheet === 'start') {
+			for (const f of r.features) startDraft.picked[f.id] = 'unit';
+			startDraft.pointsAsked = true;
+			notice = `Saved ${r.summary} on the map as areas, each a hydrological unit in the Start sheet: check them, propose the model, then check each unit’s name and area and apply.`;
+		} else if (sheet === 'divide') {
+			// Each saved piece a new hydrological unit there (#670; divideFlow's NEW_UNIT, written out so that module stays in
+			// the sheet's chunk): the editor may pick a unit already in the model instead.
+			for (const f of r.features) divideDraft.picked[f.id] = 'new-unit' satisfies DivideChoice;
+			notice = `Saved ${r.summary} on the map as areas, each a new hydrological unit in the Divide sheet (or pick the unit it stands for): propose the division, then check each unit’s name and area and apply.`;
+		} else {
+			if (r.features[0]) await pickInPlace(r.features[0].id);
+			notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		}
+		backToSheet = sheet;
 		await returnToStart();
 	}
 	async function pickPiece(key: string) {
@@ -869,6 +892,10 @@
 	// --- the river network (#345): its reaches around the catchment, on while `layers=rivers` ---
 	/** The map's view, for the River network layer while the project has no features. */
 	let mapView = $state<[number, number, number, number] | null>(null);
+	/** The map's zoom after its last move: a click sends the channels drawn at it. */
+	let mapZoom = $state<number | null>(null);
+	/** The least area of the terrain channels drawn at the map's zoom (mapStyle.ts channelMinKm2AtZoom), or undefined before the map reports one. */
+	const shownChannelKm2 = () => (mapZoom === null ? undefined : channelMinKm2AtZoom(mapZoom));
 	const rivers = new RiverLayer({
 		projectId: () => projectId,
 		on: () => layersOn(params).has('rivers'),
@@ -921,6 +948,8 @@
 	const reviewingProposal = $derived(!!pendingProposal && !draft.active && !measure.active && !dividing);
 	/** The DEM rivers toggle: an editor's, once their delineation check finds an elevation model. */
 	const demRiversShown = $derived(demRiversOffered(canEdit, !!delineation?.available));
+	/** The layers on, as the Layers button counts them: the DEM rivers (on by default) only where their toggle is offered. */
+	const layersCount = $derived([...layersOn(params)].filter((l) => l !== 'channels' || demRiversShown).length);
 	/** A tool needs the channels (not the layer): the pill over the map speaks for them; the Layers box speaks for the layer. */
 	const toolChannels = $derived(delineating || dividing || reviewingProposal);
 	/** The channels precomputed into a static file (PUBLIC_CHANNELS_URL), read before the route, which stays the fallback tile by tile (channelArchive.ts). */
@@ -1119,6 +1148,8 @@
 	}
 	/** The tool palette's size: the picked name and the Key panel keep clear of it. */
 	let toolsW = $state(0);
+	/** The Layers button's width (its count badge widens it): on a narrow map the picked name stops short of it (--layers-clear). */
+	let layersW = $state(0);
 	let toolsH = $state(0);
 	/** The map's bottom-left corner (Show everything, Key, and the Key's panel while it is open over the map), which the attribution keeps clear of (.map-body's --foot-w, --foot-h). */
 	let footW = $state(0);
@@ -1416,7 +1447,7 @@
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
 		demGrid={demGridOffered ? demGrid : null}
-		demRivers={demRiversShown ? { on: layersOn(params).has('channels'), layer: channels } : null}
+		demRivers={demRiversShown ? { on: layersOn(params).has('channels'), announce: layerAsked(params, 'channels'), layer: channels } : null}
 		{areaFill}
 	/>
 {/snippet}
@@ -1462,12 +1493,12 @@
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
 					{#if canEdit && dividing && !wide}
-						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
+						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} within={clickWithin} />{/snippet}</Lazy>
 					{:else if canEdit && draft.active && !dividing && !wide}
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:--foot-w={footW ? `calc(${footW}px + 0.6rem + 6px)` : null} style:--foot-h={footH ? `calc(${footH}px + 0.6rem + 6px)` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:--layers-clear={layersW ? `${layersW + 26}px` : null} style:--map-inset-top={mapState === 'ready' && searchH ? `${searchH - searchListH + 6}px` : null} style:--foot-w={footW ? `calc(${footW}px + 0.6rem + 6px)` : null} style:--foot-h={footH ? `calc(${footH}px + 0.6rem + 6px)` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
 						<!-- At least the tools' height and the key row under them, so the tool column stays inside the card while the map's chunk loads or when it fails (on a phone it ran over the Features list, issue #521). -->
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
@@ -1533,9 +1564,9 @@
 						<!-- Layers (#326 A6, #345; a box in the side column until 2026-10-02): under the zoom buttons, its panel over the map's right edge. -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="layers-at ov" onkeydown={(e) => panelKey(e, 'layers')}>
-							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersShown} aria-controls={panelsInSide ? `${uid}-panel-layers` : `${uid}-layers`} bind:this={layersBtn} onclick={() => openPanel('layers', !layersShown)} data-testid="map-layers-toggle">
+							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersShown} aria-controls={panelsInSide ? `${uid}-panel-layers` : `${uid}-layers`} bind:this={layersBtn} bind:offsetWidth={layersW} onclick={() => openPanel('layers', !layersShown)} data-testid="map-layers-toggle">
 								<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" class="ctl-ic"><path d="m10 3 7 3.8-7 3.8-7-3.8z" /><path d="m3 10.4 7 3.8 7-3.8" /><path d="m3 13.8 7 3.8 7-3.8" /></svg>
-								Layers{#if layersOn(params).size}<span class="ctl-count" aria-hidden="true">{layersOn(params).size}</span><span class="visually-hidden">{` (${layersOn(params).size} on)`}</span>{/if}
+								Layers{#if layersCount}<span class="ctl-count" aria-hidden="true">{layersCount}</span><span class="visually-hidden">{` (${layersCount} on)`}</span>{/if}
 							</button>
 							{#if canEdit && !tilesUrl && !layersShown}
 								<!-- An operator's matter (docs/maps.md says how to serve a basemap): a small note under Layers, never a line above the map. Owners and editors only. -->
@@ -1593,7 +1624,10 @@
 									{relief}
 									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
-									onview={(b) => (mapView = b)}
+									onview={(b, z) => {
+										mapView = b;
+										mapZoom = z;
+									}}
 									proposal={clickPieces ?? pendingProposal ?? pieces}
 									onpiecehover={(k) => (dividing ? (clickLit = k) : (pieceLit = k))}
 									onpiecepick={canEdit && !dividing ? pickPiece : undefined}
@@ -1621,7 +1655,7 @@
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
-							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />{/snippet}</Lazy>
+							<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} within={clickWithin} />{/snippet}</Lazy>
 						</div>
 
 					{:else if !features.length}
@@ -1712,6 +1746,7 @@
 					{projectId}
 					info={delineation!}
 					at={delineateAt}
+					minKm2={delineateMinKm2}
 					step={delineateStep}
 					{boundary}
 					onproposed={proposed}
@@ -2019,7 +2054,8 @@
 		}
 		/* The picked name, under the search too, stops short of the Layers button beside it (CatchmentMap's --map-inset-right). */
 		.map-body > :global(:not(.ov)) {
-			--map-inset-right: 7.5rem;
+			/* The button's measured width + its 10px from the edge + a 6px gap + the name's own 0.6rem start (7.5rem until measured). */
+			--map-inset-right: var(--layers-clear, 7.5rem);
 		}
 	}
 	/* The corners' boxes pass clicks through between their controls (a feature under the gap stays clickable). */

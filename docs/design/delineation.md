@@ -231,9 +231,11 @@ All in `backend/src/delineation/`, pure functions over typed arrays
 5. **Accumulation**: upstream cell counts, in topological order.
 6. **Placing the outlet** (`place.ts`, since `delineate-13`, issue #472).
    The outlet is a point **on a terrain channel**: a cell the DEM's own
-   routing drains at least **1 km²** through (`ON_CHANNEL_KM2`, the same
-   threshold as the red lines the Map draws, `channels.ts`
-   `CHANNEL_MIN_KM2`, kept equal by a test). The click goes on the
+   routing drains at least the request's `minKm2` through: the least area
+   of the red lines the Map drew at the zoom of the click (1 km² below
+   zoom 13 down to 0.1 km², `CHANNEL_FLOOR_KM2`, from zoom 15; held to that
+   range; without it **1 km²**, `ON_CHANNEL_KM2`; since `delineate-14`,
+   [maps.md § The elevation model's channels](../maps.md#the-elevation-models-channels)). The click goes on the
    **nearest** such cell within **150 m**, measured from the exact click
    to each cell's centre (so the distance moved never exceeds it; since
    `delineate-4`, issue #387), a tie going to the larger area. Nearest,

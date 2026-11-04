@@ -100,7 +100,7 @@ describe('with the synthetic DEM', () => {
 		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		const p = res.body.proposal;
-		expect(p).toMatchObject({ status: 'proposed', from: 'outlet', zoom: 10, methodVersion: 'delineate-13', featureId: null, createdBy: 'Leditor', decidedAt: null });
+		expect(p).toMatchObject({ status: 'proposed', from: 'outlet', zoom: 10, methodVersion: 'delineate-14', featureId: null, createdBy: 'Leditor', decidedAt: null });
 		expect(Math.abs(p.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
 		expect(p.geometry.type).toBe('Polygon');
 		expect(p.dataset).toMatch(/Synthetic DEM/);
@@ -115,7 +115,7 @@ describe('with the synthetic DEM', () => {
 		expect(stored[0]!.pans).toEqual(p.pans);
 		firstId = p.id;
 		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.delineation_proposed'`, [projectId]);
-		expect(audit[0]!.subject).toMatchObject({ proposalId: firstId, from: 'outlet', methodVersion: 'delineate-13' });
+		expect(audit[0]!.subject).toMatchObject({ proposalId: firstId, from: 'outlet', methodVersion: 'delineate-14' });
 		expect(JSON.stringify(audit[0]!.subject)).not.toMatch(/coordinates/);
 	});
 
@@ -232,6 +232,19 @@ describe('with the synthetic DEM', () => {
 		expect((await editor.call('POST', at(`/map/delineation/${p.id}/reject`))).status).toBe(409);
 		const kinds = await asOwner(`SELECT kind FROM audit_event WHERE project_id = $1 AND kind LIKE 'map.delineation_%' ORDER BY id`, [projectId]);
 		expect(new Set(kinds.map((k) => k.kind))).toEqual(new Set(['map.delineation_proposed', 'map.delineation_accepted', 'map.delineation_rejected']));
+	});
+
+	it('puts the click on the channels the Map drew at its zoom (minKm2), held to [0.1, 1] km², and refuses a non-number', async () => {
+		const zoomedIn = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet', minKm2: 0.25 });
+		expect(zoomedIn.status, JSON.stringify(zoomedIn.body)).toBe(201);
+		expect(zoomedIn.body.proposal.method).toMatch(/\(at least 0\.25 km² draining through it\)/);
+		const below = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet', minKm2: 0.001 });
+		expect(below.body.proposal.method).toMatch(/\(at least 0\.1 km² draining through it\)/);
+		// Positive control: without it, the 1 km² of an older client, of Enter coordinates.
+		const none = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
+		expect(none.body.proposal.method).toMatch(/\(at least 1 km² draining through it\)/);
+		const bad = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet', minKm2: 'small' });
+		expect(bad.status).toBe(400);
 	});
 
 	it('keeps strangers and other projects out', async () => {

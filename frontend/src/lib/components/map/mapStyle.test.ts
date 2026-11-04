@@ -35,7 +35,10 @@ import {
 	RIVER_NETWORK_HIT_LAYER,
 	riverNetworkColour,
 	CHANNEL_OPACITY,
+	CHANNEL_ZOOM_STEPS,
 	channelColour,
+	channelMinKm2AtZoom,
+	channelMinKm2Expression,
 	channelData,
 	channelLayers,
 	riverNetworkData,
@@ -424,6 +427,42 @@ describe('the elevation model’s channels', () => {
 		expect(paint['line-opacity']).toEqual(['case', ['==', ['get', 'dim'], true], CHANNEL_OPACITY.dim, CHANNEL_OPACITY.on]);
 		expect(CHANNEL_OPACITY.dim).toBeLessThan(CHANNEL_OPACITY.on);
 		expect(CHANNEL_OPACITY.dim).toBeGreaterThan(0);
+	});
+
+	it('reveals smaller channels as the map zooms in: 1 km² below 13, 0.5 at 13, 0.25 at 14, 0.1 from 15', () => {
+		const at: [number, number][] = [[0, 1], [11, 1], [12.99, 1], [13, 0.5], [13.7, 0.5], [14, 0.25], [14.99, 0.25], [15, 0.1], [18, 0.1], [22, 0.1]];
+		for (const [z, km2] of at) expect(channelMinKm2AtZoom(z), `zoom ${z}`).toBe(km2);
+		// The smallest drawn is the tiles' floor (backend place.ts CHANNEL_FLOOR_KM2), which the server's clamp allows.
+		expect(CHANNEL_ZOOM_STEPS.at(-1)![1]).toBe(0.1);
+		// The layer's filter is the same table, as a step on the zoom (MapLibre evaluates it at each tile's whole zoom).
+		const layer = channelLayers(false)[0];
+		expect(layer.filter).toEqual(['>=', ['get', 'km2'], channelMinKm2Expression()]);
+		const step = channelMinKm2Expression() as [string, unknown, number, ...number[]];
+		expect(step.slice(0, 2)).toEqual(['step', ['zoom']]);
+		const evalStep = (z: number) => {
+			let v = step[2];
+			for (let i = 3; i < step.length; i += 2) if (z >= (step[i] as number)) v = step[i + 1] as number;
+			return v;
+		};
+		for (const [z] of at) expect(evalStep(z), `zoom ${z}`).toBe(channelMinKm2AtZoom(z));
+	});
+
+	it('widens the lines with the zoom, as the basemap’s waterways, and with the area at every zoom', () => {
+		const width = (channelLayers(false)[0].paint as Record<string, unknown>)['line-width'] as unknown[];
+		expect(width.slice(0, 3)).toEqual(['interpolate', ['linear'], ['zoom']]);
+		// [zoom, by-area expression] pairs: each by-area one thin at 0.1 km² and wide at 10 000 km², and each wider than the last zoom's.
+		const stops = width.slice(3) as unknown[];
+		let last: [number, number] | null = null;
+		for (let i = 0; i < stops.length; i += 2) {
+			const byArea = stops[i + 1] as unknown[];
+			expect(byArea.slice(0, 3)).toEqual(['interpolate', ['linear'], ['log10', ['max', 0.1, ['get', 'km2']]]]);
+			const [, , , lo, small, hi, big] = byArea as [string, unknown, unknown, number, number, number, number];
+			expect([lo, hi]).toEqual([-1, 4]);
+			expect(big).toBeGreaterThan(small);
+			if (last) expect(small).toBeGreaterThan(last[0]), expect(big).toBeGreaterThan(last[1]);
+			last = [small, big];
+		}
+		expect(stops.length).toBeGreaterThanOrEqual(4);
 	});
 
 	it('keeps the line at least 3:1 on the basemap and apart from every other stroke, the river network’s included', () => {

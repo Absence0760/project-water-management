@@ -442,7 +442,12 @@ second row, nor the side column, whose height the feature list needs) opens
 
 1. **The points.** Each dam, other point and gauge on the map with a select:
    *Not in the division*, a node its kind may stand for (never the outflow),
-   or for an unlinked gauge *A new gauge node*. A point linked to a node
+   or for an unlinked gauge *A new gauge node*, and for an area linked to
+   no node *A new hydrological unit* (issue #670; the default for the
+   pieces a Sub-catchments Save hands over), proposed and made as Start
+   makes a unit from its boundary. Its land is taken from no unit: one
+   whose area holds it keeps that area until its boundary changes, and the
+   proposal says so. A point linked to a node
    stands for it by default; two points can't stand for one node. The
    outlet is a gauge linked to the outflow (or unlinked), or the boundary's
    own; the outflow node is the model's one node that drains nowhere.

@@ -25,6 +25,8 @@
     ],
     "periodStart": 1920,
     "periodEnd": 2009,
+    "maeMm": 1500,
+    "evapZone": "Z1",
     "source": "SYNTHETIC test data, invented for this repository (not DWS or WR2012): quaternary Z01A"
    },
    "geometry": {
@@ -78,6 +80,8 @@
     ],
     "periodStart": 1920,
     "periodEnd": 2009,
+    "maeMm": 1560,
+    "evapZone": "Z1",
     "source": "SYNTHETIC test data, invented for this repository (not DWS or WR2012): quaternary Z01B"
    },
    "geometry": {
@@ -131,6 +135,8 @@
     ],
     "periodStart": 1920,
     "periodEnd": 2009,
+    "maeMm": 1620,
+    "evapZone": "Z1",
     "source": "SYNTHETIC test data, invented for this repository (not DWS or WR2012): quaternary Z01C"
    },
    "geometry": {
@@ -184,6 +190,8 @@
     ],
     "periodStart": 1920,
     "periodEnd": 2009,
+    "maeMm": 1450,
+    "evapZone": "Z2",
     "source": "SYNTHETIC test data, invented for this repository (not DWS or WR2012): quaternary Z02A"
    },
    "geometry": {
@@ -237,6 +245,8 @@
     ],
     "periodStart": 1920,
     "periodEnd": 2009,
+    "maeMm": 1520,
+    "evapZone": "Z2",
     "source": "SYNTHETIC test data, invented for this repository (not DWS or WR2012): quaternary Z02B"
    },
    "geometry": {
@@ -290,6 +300,8 @@
     ],
     "periodStart": 1920,
     "periodEnd": 2009,
+    "maeMm": 1600,
+    "evapZone": "Z2",
     "source": "SYNTHETIC test data, invented for this repository (not DWS or WR2012): quaternary Z02C"
    },
    "geometry": {

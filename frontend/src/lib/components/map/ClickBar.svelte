@@ -10,13 +10,16 @@
 	piece. Undo takes back the last change (without asking the server again),
 	Clear drops them all, Save keeps each piece as an "other" polygon (routed
 	again on the server), Done leaves the mode (asking first when unsaved
-	clicks would be lost).
+	clicks would be lost). Within a catchment boundary the panel says so
+	(withinLine), and a boundary from Delineate puts its outlet's piece first,
+	under badge O: the land between the lowest clicks and the outlet, never
+	taken back by Undo since it is no click.
 -->
 <script lang="ts">
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { MapPosition } from '#lib/api/types.js';
 	import { parseDegrees } from './mapData';
-	import { pieceLine, savable, type ClickDivider } from './clickPieces.svelte';
+	import { clickLabel, OUTLET_CLICK, pieceLine, savable, withinLine, type ClickDivider } from './clickPieces.svelte';
 	import PieceBadge from './PieceBadge.svelte';
 	import DelineateChoice from './DelineateChoice.svelte';
 	import DelineationLines from './DelineationLines.svelte';
@@ -32,7 +35,8 @@
 		onsave,
 		onlit,
 		onone,
-		lines = null
+		lines = null,
+		within = null
 	}: {
 		divider: ClickDivider;
 		/** The map's pieces (clickShape), for each line's tint. */
@@ -49,6 +53,8 @@
 		onone: () => void;
 		/** The lines on the map in words (mapList.ts delineationLines): the terrain channels, and the river network while it is on. */
 		lines?: KeyItem[] | null;
+		/** The catchment boundary on the map, as the Map tab knows it before the first answer (the server's answer then says). */
+		within?: { name: string; outlet: 'delineation' | 'lowest' } | null;
 	} = $props();
 
 	const uid = $props.id();
@@ -58,6 +64,10 @@
 	const totalKm2 = $derived(kept.reduce((s, p) => s + p.areaM2!, 0) / 1e6);
 	const inflows = $derived(r ? r.pieces.filter((p) => p.open).length : 0);
 	const tintOf = (i: number) => pieces.find((p) => p.key === String(i))?.tint ?? -1;
+	/** The catchment the clicks are within: the server's word once it has answered, the map's before. */
+	const withinText = $derived(withinLine(r ? r.within : within));
+	/** The delineated outlet's piece: first, under its own badge. */
+	const outletPiece = $derived(r?.pieces.find((p) => p.click === OUTLET_CLICK) ?? null);
 
 	const mapReady = $derived(mapStatus === 'ready');
 	const mapFailed = $derived(mapStatus === 'failed');
@@ -107,12 +117,30 @@
 			? `${phone ? 'Tap' : 'Click'} a terrain channel for each outlet, or press Enter at the crosshair. Each gets the land that drains to it before any other ${phone ? 'tap' : 'click'}, following the terrain.`
 			: 'The map can’t be drawn here: enter each outlet’s coordinates.'}
 	</p>
+	{#if withinText}<p class="within small" data-testid="map-click-within">{withinText}</p>{/if}
 	{#if lines?.length && mapReady}<DelineationLines {lines} />{/if}
 	<p class="said small muted" role="status" data-testid="map-click-said">{divider.said}</p>
 	{#if divider.error}<p class="problem small" role="alert" data-testid="map-click-error">{divider.error}</p>{/if}
 
 	{#if divider.clicks.length}
 		<ol class="pieces small" data-testid="map-click-pieces">
+			{#if r && outletPiece}
+				{@const isPiece = !outletPiece.open}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex (focusable so a keyboard user can light its piece; it says the same in words) -->
+				<li
+					class:dropped={!isPiece}
+					tabindex={isPiece ? 0 : undefined}
+					onmouseenter={() => isPiece && onlit(String(OUTLET_CLICK))}
+					onmouseleave={() => onlit(null)}
+					onfocus={() => isPiece && onlit(String(OUTLET_CLICK))}
+					onblur={() => onlit(null)}
+					data-testid="map-click-outlet"
+					data-click={OUTLET_CLICK}
+				>
+					<PieceBadge label={clickLabel(OUTLET_CLICK)} tint={isPiece ? tintOf(OUTLET_CLICK) : -1} />
+					<span class="line" data-testid="map-click-line">The outlet’s piece: {pieceLine(r, OUTLET_CLICK)}</span>
+				</li>
+			{/if}
 			{#each divider.clicks as _, i (i)}
 				{@const isPiece = r?.pieces.some((p) => p.click === i && !p.open)}
 				{@const larger = r?.pieces.find((p) => p.click === i)?.larger}
@@ -193,6 +221,7 @@
 		font-size: 1rem;
 	}
 	.how,
+	.within,
 	.said,
 	.problem,
 	.pieces,

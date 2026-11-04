@@ -5,16 +5,22 @@
 // DEM agrees with instead. Each tile is a fixed CHANNEL_TILE_DEG square,
 // routed in a CHANNEL_WINDOW-cell window centred on it with the same fill,
 // D8 and accumulation as Delineate (so a click on a drawn channel snaps onto
-// it), and every cell with at least CHANNEL_MIN_KM2 draining through it is
+// it), and every cell with at least CHANNEL_FLOOR_KM2 draining through it is
 // traced into lines: from each stream head or confluence down to the next
 // confluence, each carrying the upstream area at its lower end. A tile keeps
 // the steps that start inside it, so neighbouring tiles meet without
-// overlapping. Pure but for the DEM reads; tiles are cached by the caller.
+// overlapping. Each line keeps its area, and the Map draws only the ones its
+// zoom shows (1 km² below zoom 13, down to the floor from zoom 15; the
+// frontend's channelMinKm2AtZoom), so a tile carries every zoom's lines.
+// Pure but for the DEM reads; tiles are cached by the caller.
 import type { Position } from '../geo/geojson.js';
 import type { Dem, DemInfo } from './dem.js';
 import { DelineationRefused, EARTH_RADIUS_M, readWindow, TARGET_ZOOM, toLonLat, toPx, worldPx } from './delineate.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT } from './flow.js';
 import { simplifyLine, type Pt } from './outline.js';
+import { CHANNEL_FLOOR_KM2 } from './place.js';
+
+export { CHANNEL_FLOOR_KM2 };
 
 /** A tile's side (degrees): about 22 km, so a view of a few rivers is one to four tiles. */
 export const CHANNEL_TILE_DEG = 0.2;
@@ -26,8 +32,6 @@ export const CHANNEL_TILE_DEG = 0.2;
  * carry, not where the channels run.
  */
 export const CHANNEL_WINDOW = 1024;
-/** The least upstream area a drawn channel has (km²): below it, cells are hillside, not channel. */
-export const CHANNEL_MIN_KM2 = 1;
 /** At or below this (m) a cell is sea: the DEM's ocean is 0 m, and no land in the region lies below sea level. */
 export const SEA_LEVEL_M = 0;
 
@@ -126,7 +130,7 @@ export function withSea(edge: Uint8Array, z: Float64Array): Uint8Array {
 export async function channelTile(dem: Dem, tile: [number, number], opts: { window?: number; minKm2?: number } = {}): Promise<ChannelTile> {
 	const info: DemInfo = await dem.info();
 	const nCells = opts.window ?? CHANNEL_WINDOW;
-	const minKm2 = opts.minKm2 ?? CHANNEL_MIN_KM2;
+	const minKm2 = opts.minKm2 ?? CHANNEL_FLOOR_KM2;
 	const bounds = tileBounds(tile);
 	const [w, s, e, n] = bounds;
 	const [dw, ds, de, dn] = info.bounds;

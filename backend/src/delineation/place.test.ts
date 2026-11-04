@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CHANNEL_MIN_KM2 } from './channels.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, place, type PlaceGrid } from './place.js';
+import { CHANNEL_FLOOR_KM2 } from './channels.js';
+import { clampMinKm2, GUARD_RADIUS_M, LARGER_FACTOR, MIN_ON_CHANNEL_KM2, ON_CHANNEL_KM2, place, type PlaceGrid } from './place.js';
 
 // Hand-made accumulation grids with 100 m cells (0.01 km² each, so a terrain
 // channel, ON_CHANNEL_KM2, is 100 cells or more): a river down column 20 whose
@@ -67,8 +67,49 @@ describe('place: on the terrain channel nearest the click (issue #472)', () => {
 		expect(place(g, 20.5, 20.5, { snapRadiusM: 150 })).toBeNull();
 	});
 
-	it('the channel threshold is the Map’s red lines’ (channels.ts)', () => {
-		expect(ON_CHANNEL_KM2).toBe(CHANNEL_MIN_KM2);
+	it('the least a request may ask for is the smallest channel the tiles carry (channels.ts), the default the 1 km² the Map draws below zoom 13', () => {
+		expect(MIN_ON_CHANNEL_KM2).toBe(CHANNEL_FLOOR_KM2);
+		expect(CHANNEL_FLOOR_KM2).toBe(0.1);
+		expect(ON_CHANNEL_KM2).toBe(1);
+	});
+});
+
+describe('place: the threshold the click was made at (minKm2)', () => {
+	it('goes on a 0.25 km² channel the Map drew zoomed in, which the default refuses', () => {
+		const g = grid();
+		// A 0.3 km² stream (30 cells) at the click; the river 400 m off.
+		g.acc[g.at(24, 20)] = 30;
+		expect(place(g, 24.5, 20.5, { snapRadiusM: 150 })).toBeNull();
+		expect(place(g, 24.5, 20.5, { snapRadiusM: 150, minKm2: 0.25 })!.cell).toBe(g.at(24, 20));
+		// Positive control at the edge: 0.5 km² refuses it again.
+		expect(place(g, 24.5, 20.5, { snapRadiusM: 150, minKm2: 0.5 })).toBeNull();
+	});
+
+	it('holds minKm2 to [0.1, 1]: below the floor is the floor, above 1 is 1, absent or not a number is 1', () => {
+		expect(clampMinKm2(0.01)).toBe(0.1);
+		expect(clampMinKm2(0.25)).toBe(0.25);
+		expect(clampMinKm2(5)).toBe(1);
+		expect(clampMinKm2(undefined)).toBe(1);
+		expect(clampMinKm2(null)).toBe(1);
+		expect(clampMinKm2(Number.NaN)).toBe(1);
+		const g = grid();
+		// 0.05 km² (5 cells): under the floor, so never a channel however small the ask.
+		g.acc[g.at(24, 20)] = 5;
+		expect(place(g, 24.5, 20.5, { snapRadiusM: 150, minKm2: 0.01 })).toBeNull();
+		g.acc[g.at(24, 20)] = 10;
+		expect(place(g, 24.5, 20.5, { snapRadiusM: 150, minKm2: 0.01 })!.cell).toBe(g.at(24, 20));
+		// Asked for more than 1 km²: held to 1, so a 1 km² channel is still one.
+		g.acc[g.at(24, 20)] = 100;
+		expect(place(g, 24.5, 20.5, { snapRadiusM: 150, minKm2: 50 })!.cell).toBe(g.at(24, 20));
+	});
+
+	it('still names a channel 100× the small one it placed on', () => {
+		const g = grid();
+		// A 0.2 km² stream (20 cells) 500 m from the river (10 000+ cells, well over 100 × 20).
+		g.acc[g.at(25, 20)] = 20;
+		const p = place(g, 25.5, 20.5, { snapRadiusM: 150, minKm2: 0.1 })!;
+		expect(p.cell).toBe(g.at(25, 20));
+		expect(p.larger?.cell).toBe(g.at(20, 20));
 	});
 });
 

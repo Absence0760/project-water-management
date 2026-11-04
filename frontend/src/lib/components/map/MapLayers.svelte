@@ -96,8 +96,12 @@
 		labels?: boolean;
 		/** The DEM grid layer's state. Null: no toggle (the server has no elevation model). */
 		demGrid?: DemGridLayer | null;
-		/** The DEM rivers layer: whether its toggle is on, and the channels' state (drawn for the tools too). Null: no toggle (a viewer, or no elevation model). */
-		demRivers?: { on: boolean; layer: Pick<ChannelLayer, 'noView' | 'zoomIn' | 'error' | 'loading' | 'tileCount' | 'retry' | 'paused'> } | null;
+		/**
+		 * The DEM rivers layer: whether its toggle is on, whether the URL asked for it (on by default, it is said in the
+		 * status only once turned on by its toggle, mapLayers.ts layerAsked), and the channels' state (drawn for the tools
+		 * too). Null: no toggle (a viewer, or no elevation model).
+		 */
+		demRivers?: { on: boolean; announce?: boolean; layer: Pick<ChannelLayer, 'noView' | 'zoomIn' | 'error' | 'loading' | 'tileCount' | 'retry' | 'paused'> } | null;
 		/** The Area fill slider's state (areaFill.svelte.ts): how strongly the polygons are filled. Null: no slider. */
 		areaFill?: AreaFill | null;
 	} = $props();
@@ -168,10 +172,10 @@
 							: `${mg.cells.length} MAP grid ${mg.cells.length === 1 ? 'point' : 'points'} shown.`
 						: 'Loading the MAP grid…'
 					: null,
-				demRivers?.on && demRivers.layer.paused && !demRivers.layer.zoomIn
+				demRivers?.on && demRivers.announce !== false && demRivers.layer.paused && !demRivers.layer.zoomIn
 					? DEM_RIVERS_PAUSED
 					: null,
-				demRivers?.on && !demRivers.layer.zoomIn && !demRivers.layer.noView && !demRivers.layer.error && !demRivers.layer.paused
+				demRivers?.on && demRivers.announce !== false && !demRivers.layer.zoomIn && !demRivers.layer.noView && !demRivers.layer.error && !demRivers.layer.paused
 					? demRivers.layer.loading
 						? 'Drawing the DEM rivers…'
 						: demRivers.layer.tileCount

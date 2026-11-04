@@ -207,6 +207,7 @@ import type {
 	EvaporationProposals,
 	Gr4jPrior,
 	EvaporationStationProposals,
+	Wr2012EvaporationProposal,
 	SpanConversionId,
 	EvaporationTarget
 } from './types';
@@ -1309,11 +1310,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
 			/**
 			 * `keepPoint`: keep the point even beside a much larger channel (otherwise 422 `larger_channel`, its `details.larger` the channel).
+			 * `minKm2`: the least area of the channels the map drew at the click's zoom (channelMinKm2AtZoom); the server holds it to [0.1, 1], default 1.
 			 * A catchment too large for the request, or `background`, comes back as a request the worker answers (202): follow it with `request`.
 			 */
 			propose: (
 				id: string,
-				body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; background?: boolean }
+				body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; minKm2?: number; background?: boolean }
 			) => request<{ proposal: DelineationProposal } | { request: DelineationRequest }>('POST', `${p(id)}/map/delineation`, body),
 			/** A delineation the worker has: waiting, running, or what came of it (viewer). */
 			request: (id: string, rid: string) => request<{ request: DelineationRequest }>('GET', `${p(id)}/map/delineation/requests/${enc(rid)}`),
@@ -1326,8 +1328,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		/** Sub-catchments from clicks on the rivers: each click's incremental catchment; save routes them again and saves each as an area. */
 		subcatchments: {
-			pieces: (id: string, clicks: { lon: number; lat: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
-			save: (id: string, clicks: { lon: number; lat: number }[]) =>
+			pieces: (id: string, clicks: { lon: number; lat: number; minKm2?: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
+			save: (id: string, clicks: { lon: number; lat: number; minKm2?: number }[]) =>
 				request<{ features: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
 		},
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
@@ -1417,6 +1419,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<EvaporationStationProposals>('GET', `${p(id)}/evaporation-stations${withinKm ? `?${new URLSearchParams({ within: String(withinKm) })}` : ''}`),
 			fromStation: (id: string, body: { station: string; conversion?: SpanConversionId; daily?: boolean }) =>
 				request<{ station: string; apanMm: number[]; conversion: SpanConversionId | null; series: string | null; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-station`, body)
+		},
+		/** WR2012's monthly S-pan and A-pan per quaternary under the boundary; Use writes the A-pan as it stands (docs/maps.md § WR2012 evaporation by quaternary). */
+		evaporationWr2012: {
+			get: (id: string) => request<Wr2012EvaporationProposal>('GET', `${p(id)}/evaporation-wr2012`),
+			use: (id: string) => request<{ apanMm: number[]; spanMm: number[] | null; quaternaries: string[]; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-wr2012`, {})
+		},
+		/** 12 S-pan months typed or pasted, converted to the A-pan row by the equation picked (Model settings → Demand). */
+		evaporationSpan: {
+			use: (id: string, body: { spanMm: number[]; conversion: SpanConversionId; note?: string }) =>
+				request<{ apanMm: number[]; spanMm: number[]; conversion: SpanConversionId; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-span`, body)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

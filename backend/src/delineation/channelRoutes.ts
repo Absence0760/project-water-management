@@ -3,7 +3,8 @@
 //   GET /projects/:id/map/channels?tile=i,j   one tile's channel lines (editor; off without a DEM)
 //
 // A tile is routed once per DEM and kept in an in-memory LRU of CACHE_TILES,
-// keyed by the DEM's fingerprint, so panning back asks nothing new. A tile
+// keyed by the DEM's fingerprint and the least area its lines go down to
+// (CHANNEL_FLOOR_KM2), so panning back asks nothing new. A tile
 // computed (not cached) counts against the per-account cap on elevation-model
 // work (delineation/attempt.ts) in the channel tiles' own pool (307,
 // CHANNEL_ATTEMPTS), never delineation's, counted before the work, as every
@@ -20,11 +21,11 @@ import { logEvent } from '../logging/logEvent.js';
 import { safeError } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
-import { channelTile, CHANNEL_TILE_DEG, type ChannelTile } from './channels.js';
+import { channelTile, CHANNEL_FLOOR_KM2, CHANNEL_TILE_DEG, type ChannelTile } from './channels.js';
 import { DelineationRefused } from './delineate.js';
 import { configuredDem } from './dem.js';
 
-/** Tiles kept in memory: each is a few hundred KB of lines at most. */
+/** Tiles kept in memory: each is a few hundred KB of lines at most (about 2 000 lines down to 0.1 km²). */
 export const CACHE_TILES = 128;
 const cache = new Map<string, ChannelTile>();
 /** Tiles being computed, so two requests for one tile share the work. */
@@ -66,7 +67,7 @@ export const channelRoutes = new Hono<AuthEnv>().get('/:id/map/channels', async 
 		logEvent('error', { event: 'channels_failed', ...safeError(err) });
 		throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
 	}
-	const key = `${fingerprint}:${tile[0]},${tile[1]}`;
+	const key = `${fingerprint}:${CHANNEL_FLOOR_KM2}:${tile[0]},${tile[1]}`;
 	const hit = cache.get(key);
 	if (hit) {
 		// Most recently used last.

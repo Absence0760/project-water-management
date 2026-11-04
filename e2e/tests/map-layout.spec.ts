@@ -191,7 +191,8 @@ test('beside the map, Layers and Key are side-column tabs the map’s buttons pi
 	const layersBtn = page.getByTestId('map-layers-toggle');
 	// Over the map only small buttons: no panel boxes.
 	await expect(page.locator('.map-body .panel-over')).toHaveCount(0);
-	// With the kinds' colours (no run) the key starts folded; open, it lists only what the map draws.
+	// With the kinds' colours (no run) the key starts folded; open, it lists only what the map draws: the features' kinds and,
+	// with the DEM rivers layer on by default for an editor where the server has a DEM (docs/maps.md § The elevation model's channels), the terrain channels.
 	await expect(keyBtn).toHaveAttribute('aria-expanded', 'false');
 	await expect(page.getByTestId('map-side-tabs').getByRole('tab')).toHaveText(['Details', /^Features/, /^Checks/, 'Layers', 'Key']);
 	await showTab(page, 'features');
@@ -199,8 +200,8 @@ test('beside the map, Layers and Key are side-column tabs the map’s buttons pi
 	await expect(page.getByTestId('map-tab-key')).toHaveAttribute('aria-selected', 'true');
 	await expect(keyBtn).toHaveAttribute('aria-controls', (await page.getByTestId('map-tab-key').getAttribute('aria-controls'))!);
 	const key = page.getByTestId('map-key');
-	await expect(key.locator('.key-h')).toHaveText(['Areas']);
-	await expect(key.locator('.key-item')).toHaveText(['catchment boundary', 'parcel']);
+	await expect(key.locator('.key-h')).toHaveText(['Areas', 'Lines']);
+	await expect(key.locator('.key-item')).toHaveText(['catchment boundary', 'parcel', /^terrain channels/]);
 	// In the side column, not over the map.
 	const side = (await page.locator('.map-side').boundingBox())!;
 	const k = (await page.locator('.key-tab').boundingBox())!;

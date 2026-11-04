@@ -91,7 +91,7 @@ describe('the rest of the catchment drains where its flow path meets a unit (F10
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		expect(r.body.request).toBeNull();
 		const { plan, methodVersion } = r.body.proposal;
-		expect(methodVersion).toBe('start-17');
+		expect(methodVersion).toBe('start-18');
 		expect(plan.units.map((u: { key: string; drainsInto: string | null }) => [u.key, u.drainsInto])).toEqual([
 			[v.middle, v.lower],
 			[v.lower, null]
@@ -149,7 +149,7 @@ describe('a Start too large to route within the request (F11, #646 item 3)', () 
 		const r = await editor.call('POST', v.at('/map/start'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const quick = r.body.proposal;
-		expect(quick).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-17' });
+		expect(quick).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-18' });
 		expect(quick.method).toMatch(/^Too large to route on the elevation model in a request/);
 		expect(quick.plan.warnings[0]).toMatch(/too large to route on the elevation model within a request, so the order wasn’t proposed and no unit’s area was checked against it\. Each unit’s area is its own boundary’s/);
 		// Each unit is its boundary, with its area; the order is the user's (the outflow gauge) until the routed plan comes.

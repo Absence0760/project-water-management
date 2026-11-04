@@ -36,7 +36,7 @@ import { configuredDem } from './dem.js';
 import { tileProvenance, withProvenance } from '../geo/referenceOrigin.js';
 import { delineate, DelineationRefused, type WindowAim } from './delineate.js';
 import { loadProposal, SELECT, storeProposal, toProposal, type ProposalRow } from './proposals.js';
-import { delineationLimits, jobWindowsFrom, loadRequest, nextJobWindow, queueDelineation, waitingRequest } from './requests.js';
+import { delineationLimits, jobWindowsFrom, loadRequest, MinKm2, nextJobWindow, queueDelineation, waitingRequest } from './requests.js';
 import { nearestReach } from './reach.js';
 
 /** Delineations one project may ask for in an hour: each is seconds of CPU on the API (docs/design/delineation.md § Where it runs). */
@@ -53,6 +53,8 @@ export const DelineateBody = z
 		from: z.enum(['outlet', 'dam_wall']),
 		/** Keep the point even beside a much larger channel (otherwise 422 `larger_channel`, naming it; place.ts). */
 		keepPoint: z.boolean().optional(),
+		/** The least area (km²) of the channels the Map drew at the click's zoom: the click goes on one of those (place.ts). */
+		minKm2: MinKm2.optional(),
 		/** A catchment the editor knows is large: straight to the worker (202 with the request), skipping the request's own attempt. */
 		background: z.boolean().optional()
 	})
@@ -104,7 +106,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const userId = c.get('userId');
 		const queue = (db: Db, fromWindow: number, aim: WindowAim | null = null) =>
-			queueDelineation(db, { projectId: id, userId, from: body.from, lon: body.lon, lat: body.lat, keepPoint: body.keepPoint, fromWindow, aim });
+			queueDelineation(db, { projectId: id, userId, from: body.from, lon: body.lon, lat: body.lat, keepPoint: body.keepPoint, minKm2: body.minKm2, fromWindow, aim });
 		const attempt = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			const { rows } = await db.query<{ n: number }>(
@@ -136,6 +138,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 					windows: delineationLimits.requestWindows,
 					mapped: attempt.mapped,
 					keepPoint: body.keepPoint,
+					minKm2: body.minKm2,
 					panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id)
 				});
 			} catch (err) {

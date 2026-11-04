@@ -1,9 +1,10 @@
 // Divide a model that has nodes from the map (#326 C3's follow-up,
 // docs/design/start-from-map.md § Dividing a model that has nodes, docs/ui.md
 // § Map): the pure parts of the Map's Divide sheet. What each feature on the
-// map can stand for (a unit's boundary for its unit, a point for an other
-// water user, a gauge for a gauge node or a new one; a dam or an abstraction
-// point never divides, start-16, #523 C1), the ticks (every value unticked
+// map can stand for (a unit's boundary for its unit, an area no node has for
+// a new hydrological unit, #670, a point for an other water user, a gauge for
+// a gauge node or a new one; a dam or an abstraction point never divides,
+// start-16, #523 C1), the ticks (every value unticked
 // until the editor ticks it), the problems the server would refuse, and what
 // apply will do.
 import type { NetworkNode } from '@water-management/engine';
@@ -13,9 +14,10 @@ import { KIND_NODES } from './mapData';
 import { candidatePoints, isUnitBoundary } from './startFlow';
 import type { PlacementChoices } from './placement';
 
-/** A point's choice: a node's id, a new gauge node, or not in the division. */
-export type DivideChoice = string | 'new-gauge' | 'none';
+/** A point's choice: a node's id, a new gauge node, a new hydrological unit (an area no node has, #670), or not in the division. */
+export type DivideChoice = string | 'new-gauge' | 'new-unit' | 'none';
 export const NEW_GAUGE = 'new-gauge';
+export const NEW_UNIT = 'new-unit';
 export const NONE = 'none';
 
 /** What the editor chose and ticked, kept by the Map tab (as the Start sheet's draft): each point's node, the outlet, the ticks per proposal. */
@@ -43,7 +45,14 @@ export function nodeOptions<N extends Pick<NetworkNode, 'id' | 'kind' | 'downstr
 	return nodes.filter((n) => n.id !== outflow && KIND_NODES[f.kind].includes(n.kind) && (n.kind === 'farm') === area);
 }
 
-/** A point's default: the node it stands for on the map (if it may), else a new gauge for a gauge, else not in the division. */
+/** Whether a feature may become a new hydrological unit (#670): an area on the map that stands for no node. */
+export const offersNewUnit = (f: MapFeature): boolean => isUnitBoundary(f) && !f.nodeId;
+
+/**
+ * A point's default: the node it stands for on the map (if it may), else a new gauge for a gauge, else not in the division.
+ * A piece handed over from the Sub-catchments Save is picked as a new unit by the Map tab (#670), never by default here: an
+ * area drawn for some other reason stays out until the editor says what it is.
+ */
 export function defaultDivideChoice(f: MapFeature, nodes: readonly Pick<NetworkNode, 'id' | 'kind' | 'downstreamNodeId'>[]): DivideChoice {
 	if (f.nodeId && nodeOptions(f, nodes).some((n) => n.id === f.nodeId)) return f.nodeId;
 	return f.kind === 'gauge' && !f.nodeId && f.geometry.type === 'Point' ? NEW_GAUGE : NONE;
@@ -56,7 +65,7 @@ export const dividePoints = candidatePoints;
 export function divideBody(choices: Record<string, DivideChoice>, outlet: string): { outletFeatureId: string | null; points: { featureId: string; nodeId: string | null }[] } {
 	const points = Object.entries(choices)
 		.filter(([id, c]) => c !== NONE && id !== outlet)
-		.map(([featureId, c]) => ({ featureId, nodeId: c === NEW_GAUGE ? null : c }));
+		.map(([featureId, c]) => ({ featureId, nodeId: c === NEW_GAUGE || c === NEW_UNIT ? null : c }));
 	return { outletFeatureId: outlet || null, points };
 }
 
@@ -64,7 +73,7 @@ export function divideBody(choices: Record<string, DivideChoice>, outlet: string
 export function doubleNode(choices: Record<string, DivideChoice>, outlet: string): string | null {
 	const seen = new Set<string>();
 	for (const [id, c] of Object.entries(choices)) {
-		if (c === NONE || c === NEW_GAUGE || id === outlet) continue;
+		if (c === NONE || c === NEW_GAUGE || c === NEW_UNIT || id === outlet) continue;
 		if (seen.has(c)) return c;
 		seen.add(c);
 	}
@@ -78,7 +87,10 @@ export const divideOffers = (u: DivideUnit) => ({
 	drainsInto: true
 });
 
-/** The ticks a division opens with: every value unticked, a new gauge named as its point. */
+/** A new node's word: a unit (from an area, #670) or a gauge. */
+const newWord = (u: Pick<DivideUnit, 'role'>) => (u.role === 'unit' ? 'unit' : 'gauge');
+
+/** The ticks a division opens with: every value unticked, a new gauge or unit named as its feature. */
 export function initialDivideTicks(p: DividePlan): DivideTicks {
 	return {
 		units: p.units.map((u) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, add: false, ...(u.nodeId ? {} : { name: u.name }) })),
@@ -123,15 +135,19 @@ export function divideProblem(p: DividePlan, t: DivideTicks, nodeNames: readonly
 		const x = tick.get(u.key)!;
 		if (!u.nodeId && x.add) {
 			const n = x.name?.trim() ?? '';
-			if (!n) return `Name the new gauge at “${u.featureName || 'its point'}”.`;
-			if (names.has(n.toLowerCase())) return `Two hydrological units would be called “${n}”: give the new gauge a name of its own.`;
+			if (!n) return `Name the new ${newWord(u)} at “${u.featureName || (u.role === 'unit' ? 'its area' : 'its point')}”.`;
+			if (names.has(n.toLowerCase())) return `Two hydrological units would be called “${n}”: give the new ${newWord(u)} a name of its own.`;
 			names.add(n.toLowerCase());
 		}
-		if (!u.nodeId && !x.add && (x.drainsInto || x.area)) return `${u.name} is a new gauge: tick Add it before taking its order.`;
+		if (!u.nodeId && !x.add && (x.drainsInto || x.area)) return `${u.name} is a new ${newWord(u)}: tick Add it before taking its ${u.role === 'unit' ? 'area or its order' : 'order'}.`;
 		if (x.drainsInto && u.drainsInto) {
 			const target = p.units.find((y) => y.key === u.drainsInto);
-			if (target && !target.nodeId && !tick.get(target.key)?.add) return `${u.name} would drain into the new gauge ${tick.get(target.key)?.name?.trim() || target.name}, which isn’t being added: tick Add it too.`;
+			if (target && !target.nodeId && !tick.get(target.key)?.add) return `${u.name} would drain into the new ${newWord(target)} ${tick.get(target.key)?.name?.trim() || target.name}, which isn’t being added: tick Add it too.`;
 		}
+	}
+	if (t.rest.to === 'new' && t.rest.drainsInto && p.rest.drainsInto) {
+		const target = p.units.find((y) => y.key === p.rest.drainsInto);
+		if (target && !target.nodeId && !tick.get(target.key)?.add) return `The rest of the catchment would drain into the new ${newWord(target)} ${tick.get(target.key)?.name?.trim() || target.name}, which isn’t being added: tick Add it too.`;
 	}
 	if (t.rest.to === 'new') {
 		const n = t.rest.name.trim();
@@ -149,14 +165,16 @@ export function divideApplyTicks(t: DivideTicks): DivideTicks {
 	};
 }
 
-/** What the confirm says will happen: counts of the ticked values. */
-export function divideSummary(t: DivideTicks): string {
+/** What the confirm says will happen: counts of the ticked values, the new gauges and the new units (#670) apart. */
+export function divideSummary(p: DividePlan, t: DivideTicks): string {
+	const role = new Map(p.units.map((u) => [u.key, u.role]));
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 	const areas = t.units.filter((u) => u.area).length + (t.rest.to === 'none' ? 0 : 1);
 	const orders = t.units.filter((u) => u.drainsInto).length;
-	const gauges = t.units.filter((u) => u.add).length;
+	const gauges = t.units.filter((u) => u.add && role.get(u.key) !== 'unit').length;
+	const units = t.units.filter((u) => u.add && role.get(u.key) === 'unit').length;
 	const effective = t.units.filter((u) => u.area && u.areaBasis === 'effective').length + (t.rest.to !== 'none' && t.rest.areaBasis === 'effective' ? 1 : 0);
-	return `The model takes ${s(areas, 'area')} (a unit’s is its boundary on the map${effective ? `; ${effective} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. The unlinked dams and pumps inside each unit’s boundary are linked to it. Every value not ticked stays as it is.`;
+	return `The model takes ${s(areas, 'area')} (a unit’s is its boundary on the map${effective ? `; ${effective} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${units ? `, and ${s(units, 'new hydrological unit')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. The unlinked dams and pumps inside each unit’s boundary are linked to it. Every value not ticked stays as it is.`;
 }
 
 /** How far over the catchment the units may add up before the sheet says so: the pieces' own rounding stays under it. */

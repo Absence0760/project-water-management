@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ClickPiece, ClickPieces } from '#lib/api/types.js';
-import { ClickDivider, clickShape, pieceLine, savable } from './clickPieces.svelte';
+import { ClickDivider, clickLabel, clickPieceName, clickShape, OUTLET_CLICK, pieceLine, savable, withinLine } from './clickPieces.svelte';
 
 const sq = (x: number): ClickPiece['geometry'] => ({ type: 'Polygon', coordinates: [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 1], [x, 0]]] });
 const piece = (click: number, drainsInto: number | null, km2: number, totalKm2 = km2): ClickPiece => ({
@@ -20,6 +20,7 @@ const answer = (pieces: ClickPiece[], lowest: number, dropped: ClickPieces['drop
 	pieces,
 	dropped,
 	lowest,
+	within: null,
 	cellSizeM: 30,
 	dataset: { label: 'Synthetic DEM 1', fingerprint: '0123456789abcdef' },
 	method: 'D8',
@@ -49,6 +50,37 @@ describe('clickShape', () => {
 		expect(clickShape(null)).toBeNull();
 		expect(clickShape(answer([], 0))).toBeNull();
 		expect(clickShape(answer([{ ...piece(0, null, 2), geometry: null }], 0))).toBeNull();
+	});
+});
+
+describe('within a delineated catchment: the outlet’s piece', () => {
+	const r = { ...answer([piece(OUTLET_CLICK, null, 5, 7), piece(0, OUTLET_CLICK, 2)], OUTLET_CLICK), within: { featureId: 'b', name: 'Valley', outlet: 'delineation' as const } };
+
+	it('badges it O and names it as Save does, the clicks still by their numbers', () => {
+		expect(clickLabel(OUTLET_CLICK)).toBe('O');
+		expect(clickLabel(0)).toBe('1');
+		expect(clickPieceName(OUTLET_CLICK)).toBe('Sub-catchment at the outlet');
+		const s = clickShape(r)!;
+		expect(s.pieces.map((p) => [p.key, p.label, p.name])).toEqual([
+			['-1', 'O', 'Sub-catchment at the outlet'],
+			['0', '1', 'Sub-catchment 1']
+		]);
+		// The outlet is the outlet marker; the click is marked as every other click.
+		expect(s.outlet).toEqual([-0.5, 0]);
+		expect(s.outlets).toEqual([[0.5, 0]]);
+	});
+
+	it('says where each piece’s water goes: the click’s into the outlet’s piece, the outlet’s out of the catchment', () => {
+		expect(pieceLine(r, OUTLET_CLICK)).toBe('5.00 km² · the catchment’s outlet: the rest drains out here · 7.00 km² upstream in all');
+		expect(pieceLine(r, 0)).toBe('2.00 km² · drains into the outlet’s piece (O) · 2.00 km² upstream in all');
+	});
+
+	it('says the catchment in a sentence: its outlet when delineated, the lowest click when drawn by hand, nothing without one', () => {
+		expect(withinLine(r.within)).toBe(
+			'Within “Valley”: its delineated outlet is the lowest point, so the land between your lowest click and the outlet is the outlet’s piece (O). A click outside the boundary is refused.'
+		);
+		expect(withinLine({ name: '', outlet: 'lowest' })).toBe('Within the catchment boundary: drawn by hand, it has no delineated outlet, so your lowest click is the outlet. A click outside the boundary is refused.');
+		expect(withinLine(null)).toBeNull();
 	});
 });
 
@@ -103,6 +135,21 @@ describe('ClickDivider', () => {
 		]);
 		expect(d.result!.pieces).toHaveLength(2);
 		expect(d.said).toBe('2 sub-catchments.');
+	});
+
+	it('sends each click with the channels the map drew at its zoom (minKm2), and keeps it when the click moves to the larger channel', async () => {
+		const { d, fetch } = make();
+		await d.add([20, -33], 0.25);
+		await d.add([20.1, -33.1]);
+		expect(fetch).toHaveBeenLastCalledWith([
+			{ lon: 20, lat: -33, minKm2: 0.25 },
+			{ lon: 20.1, lat: -33.1 }
+		]);
+		await d.replace(0, [20.005, -33]);
+		expect(fetch).toHaveBeenLastCalledWith([
+			{ lon: 20.005, lat: -33, minKm2: 0.25 },
+			{ lon: 20.1, lat: -33.1 }
+		]);
 	});
 
 	it('undoes to the answer it had, without asking the server again', async () => {

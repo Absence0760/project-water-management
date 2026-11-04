@@ -10,7 +10,11 @@
 // Each feature on the map the editor names stands for a node of the model: a
 // unit's own boundary (an area on the map) for its unit (start-16, #523 C1),
 // a point for an other water user, a gauge for a gauge node, or, for a gauge
-// point, a new gauge node. A dam or an abstraction point never divides: the
+// point, a new gauge node, and for an area no node has (a saved sub-catchment,
+// issue #670), a new hydrological unit, proposed and made as Start makes its
+// units from their boundaries. A new unit's land is not taken from the units
+// around it: one whose area holds it keeps its area unless its own boundary
+// changes, and the proposal says so (newUnitOverlaps). A dam or an abstraction point never divides: the
 // unlinked ones inside a unit's boundary become parts of its composite dam and
 // its river pump, linked to it on apply (their sizes stay the user's). The
 // same routing as starting from the map (subcatchments.ts) proposes the order
@@ -21,7 +25,7 @@
 import { oneLineName, type NetworkNode, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
-import { KIND_NODES, NODE_KIND_WORD, type Geometry, type Position } from '../geo/geojson.js';
+import { KIND_NODES, NODE_KIND_WORD, pointInGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { loadModel } from '../model/store.js';
@@ -62,7 +66,7 @@ export const DivideBody = z
 				z
 					.object({
 						featureId: z.string().uuid(),
-						/** The node the point stands for; null = a new gauge node (a gauge point only). */
+						/** The node the point stands for; null = a new node: a gauge node for a gauge point, a new hydrological unit for an area no node has (#670). */
 						nodeId: z.string().uuid().nullable(),
 						...PlacementChoice
 					})
@@ -97,9 +101,9 @@ export const DivideApplyBody = z
 						runoffToDam: z.boolean(),
 						/** A dam marked on or off the river (194): take its Upstream inflow to dam (damShares.pctUpstreamToDam). */
 						upstreamToDam: z.boolean().optional(),
-						/** A new gauge: add it to the model (its other values need it). */
+						/** A new gauge or a new hydrological unit (#670): add it to the model (its other values need it). */
 						add: z.boolean(),
-						/** A new gauge's name. */
+						/** A new gauge's or a new unit's name. */
 						name: Name.optional()
 					})
 					.strict()
@@ -140,9 +144,9 @@ export interface DivideUnit {
 	/** The map feature's id. */
 	key: string;
 	featureName: string;
-	/** The node it stands for; null = a new gauge node. */
+	/** The node it stands for; null = a new node: a gauge (role gauge) or a hydrological unit (role unit, #670). */
 	nodeId: string | null;
-	/** The node's name (a new gauge's proposed one). */
+	/** The node's name (a new gauge's or a new unit's proposed one: its feature's name, else a numbered one). */
 	name: string;
 	role: UnitRole;
 	point: Position;
@@ -157,7 +161,7 @@ export interface DivideUnit {
 	members?: UnitMember[];
 	/** The point it drains into (its key), or null for the outflow. */
 	drainsInto: string | null;
-	/** The node's values now (null for a new gauge). */
+	/** The node's values now (null for a new node). */
 	current: DivideCurrent | null;
 	/** How its point was put on the channel (start-7). */
 	placement: PointPlacement;
@@ -202,7 +206,8 @@ export interface DividePlan {
 export interface DivideDecision {
 	/** `areaBasis`: which area was taken (195), with `area`; absent on a decision before 195 (gross, the only choice then). */
 	/** `boundaryId`: a unit's own boundary, linked to it as its area (start-16; never a parcel a later division may redraw). */
-	units: { key: string; nodeId: string | null; area: boolean; areaBasis?: AreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; parcelId: string | null; boundaryId?: string | null }[];
+	/** `add`: a new gauge or (`role: 'unit'`, #670) a new hydrological unit was made; `role` absent on decisions before #670. */
+	units: { key: string; nodeId: string | null; role?: UnitRole; area: boolean; areaBasis?: AreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; parcelId: string | null; boundaryId?: string | null }[];
 	rest: { to: 'none' | 'node' | 'new'; areaBasis?: AreaBasis; drainsInto?: boolean; nodeId: string | null; parcelId: string | null };
 	revisionId: string | null;
 }
@@ -246,7 +251,10 @@ export interface DivideInputs {
 	outflow: NetworkNode;
 	model: ProjectModel;
 	areaSource: Map<string, 'typed' | 'map'>;
-	points: { featureId: string; featureKind: string; name: string; node: NetworkNode | null; geometry: Geometry; damPosition: DamPosition | null; areaM2: number | null }[];
+	/** `role`: from its node (roleOf), or for a new one a gauge (a gauge point) or a unit (an area, #670). */
+	points: { featureId: string; featureKind: string; name: string; role: UnitRole; node: NetworkNode | null; geometry: Geometry; damPosition: DamPosition | null; areaM2: number | null }[];
+	/** The model's units whose area is an outline on the map (node.area_feature_id): what a new unit's boundary is checked against (#670). */
+	unitAreas: { nodeId: string; featureId: string; name: string; geometry: Polygonal }[];
 	/** The dams and abstraction points (other points) linked to no node: parts of the unit whose boundary holds them (start-16). */
 	members: { featureId: string; name: string; role: 'dam' | 'abstraction'; geometry: Geometry }[];
 }
@@ -285,15 +293,19 @@ export async function readDivideInputs(db: Db, projectId: string, body: z.infer<
 		outlet = d[0] ? { featureId: null, point: [d[0].outlet_lon, d[0].outlet_lat], foundIn: 'delineation' } : { featureId: null, point: null, foundIn: 'boundary' };
 	}
 	let gauges = 0;
-	const points = body.points.map((p) => {
+	let newUnits = 0;
+	const points = body.points.map((p): DivideInputs['points'][number] => {
 		const f = byId.get(p.featureId);
 		if (!f) throw new ApiError(400, 'A point is not on this catchment’s map (deleted since?). Reload the map and propose again.');
 		const label = `“${f.name || 'A feature'}”`;
 		const polygon = f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon';
 		if (p.nodeId === null) {
-			if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, `${label} is not a gauge point, so it can’t be a new gauge.`);
-			if (f.node_id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'a hydrological unit'} already.`);
-			return { featureId: f.id, featureKind: f.kind, name: oneLineName(f.name) || `Gauge ${++gauges}`, node: null, geometry: f.geometry, damPosition: f.dam_position, areaM2: null };
+			// An area no node has is a new hydrological unit, its boundary its area (start-16, as Start makes one; #670).
+			const area = polygon && (f.kind === 'other' || f.kind === 'farm_parcel');
+			if (!area && (f.kind !== 'gauge' || f.geometry.type !== 'Point')) throw new ApiError(400, `${label} is not a gauge point or an area on the map, so it can’t be a new gauge or a new hydrological unit.`);
+			if (f.node_id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'a hydrological unit'} already: pick it for that unit instead.`);
+			if (area) return { featureId: f.id, featureKind: f.kind, name: oneLineName(f.name) || `Unit ${++newUnits}`, role: 'unit', node: null, geometry: f.geometry, damPosition: f.dam_position, areaM2: f.area_m2 };
+			return { featureId: f.id, featureKind: f.kind, name: oneLineName(f.name) || `Gauge ${++gauges}`, role: 'gauge', node: null, geometry: f.geometry, damPosition: f.dam_position, areaM2: null };
 		}
 		const n = nodes.get(p.nodeId);
 		if (!n) throw new ApiError(400, `${label} is matched to a hydrological unit that isn’t in the model (deleted since?). Reload and propose again.`);
@@ -306,7 +318,16 @@ export async function readDivideInputs(db: Db, projectId: string, body: z.infer<
 			}
 		} else if (!(f.geometry.type === 'Point' || (polygon && f.kind === 'dam'))) throw new ApiError(400, `${label} is not a point or a dam, so it can’t stand for ${n.name}.`);
 		if (f.node_id && f.node_id !== n.id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'another hydrological unit'} on the map, not ${n.name}.`);
-		return { featureId: f.id, featureKind: f.kind, name: f.name, node: n, geometry: f.geometry, damPosition: f.dam_position, areaM2: f.area_m2 };
+		return { featureId: f.id, featureKind: f.kind, name: f.name, role: roleOf(n), node: n, geometry: f.geometry, damPosition: f.dam_position, areaM2: f.area_m2 };
+	});
+	// The units' areas drawn on the map, to say when a new unit's boundary overlaps one (#670).
+	const { rows: ua } = await db.query<{ node_id: string; feature_id: string; geometry: Geometry }>(
+		`SELECT n.id AS node_id, f.id AS feature_id, f.geometry FROM node n JOIN map_feature f ON f.id = n.area_feature_id AND f.project_id = n.project_id WHERE n.project_id = $1 AND n.kind = 'farm'`,
+		[projectId]
+	);
+	const unitAreas = ua.flatMap((r) => {
+		const n = nodes.get(r.node_id);
+		return n && (r.geometry.type === 'Polygon' || r.geometry.type === 'MultiPolygon') ? [{ nodeId: n.id, featureId: r.feature_id, name: n.name, geometry: r.geometry as Polygonal }] : [];
 	});
 	// The dams and abstraction points no node has yet: each becomes part of the unit whose boundary holds it (start-16).
 	const { rows: ms } = await db.query<{ id: string; kind: string; name: string; geometry: Geometry }>(
@@ -317,8 +338,8 @@ export async function readDivideInputs(db: Db, projectId: string, body: z.infer<
 		.filter((m) => m.geometry.type !== 'LineString' && m.geometry.type !== 'MultiLineString')
 		.map((m) => ({ featureId: m.id, name: oneLineName(m.name) || (m.kind === 'dam' ? 'A dam' : 'A point'), role: m.kind === 'dam' ? ('dam' as const) : ('abstraction' as const), geometry: m.geometry }));
 	// The units first, so a gauge at a unit's outflow drains below it (subcatchments.ts).
-	const ordered = [...points.filter((p) => p.node?.kind === 'farm'), ...points.filter((p) => p.node?.kind !== 'farm')];
-	return { boundary, outlet, outflow, model, areaSource: new Map(src.map((r) => [r.id, r.area_source])), points: ordered, members };
+	const ordered = [...points.filter((p) => p.role === 'unit'), ...points.filter((p) => p.role !== 'unit')];
+	return { boundary, outlet, outflow, model, areaSource: new Map(src.map((r) => [r.id, r.area_source])), points: ordered, unitAreas, members };
 }
 
 /**
@@ -390,6 +411,11 @@ export function dividePlanFrom(inputs: DivideInputs, r: Subcatchments): DividePl
 			`Of the rest of the catchment (${km2(r.restDrains.areaM2)} on the elevation model), ${Math.round(r.restDrains.share * 100)} % drains into ${to}, as proposed; the rest of it reaches other units first. Check where it drains on the Network, or draw its parts as units’ boundaries.`
 		);
 	}
+	for (const w of newUnitOverlaps(
+		units.filter((u) => u.role === 'unit' && !u.nodeId && u.geometry).map((u) => ({ key: u.key, name: u.name, geometry: u.geometry! })),
+		inputs.unitAreas
+	))
+		warnings.push(w);
 	const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
 	const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
 	const panSentence = panWarning(r.pans, r.catchment.areaM2, [
@@ -414,6 +440,25 @@ export function dividePlanFrom(inputs: DivideInputs, r: Subcatchments): DividePl
 	return plan;
 }
 
+/**
+ * A new unit's land is not taken from the units around it (#670): for each new unit (its boundary) whose outline and an existing
+ * unit's area on the map overlap (a point inside either lies in the other), the sentence saying that unit keeps its area, so
+ * the land they share counts twice until its boundary is redrawn or a smaller area typed. Nothing is changed silently. Pure.
+ */
+export function newUnitOverlaps(fresh: readonly { key: string; name: string; geometry: Polygonal }[], existing: readonly { featureId: string; name: string; geometry: Polygonal }[]): string[] {
+	const out: string[] = [];
+	for (const u of fresh) {
+		const inU = pointOf(u.geometry);
+		const hit = existing.filter((e) => e.featureId !== u.key && (pointInGeometry(inU, e.geometry) || pointInGeometry(pointOf(e.geometry), u.geometry))).map((e) => e.name);
+		if (!hit.length) continue;
+		const one = hit.length === 1;
+		out.push(
+			`${u.name} is a new unit, and its boundary overlaps ${one ? `${hit[0]}’s area` : `the areas of ${hit.slice(0, -1).join(', ')} and ${hit.at(-1)}`} on the map. ${one ? 'That unit keeps its area' : 'Those units keep their areas'}: dividing never takes land from a unit unseen, so the land they share counts twice until ${one ? 'its boundary is' : 'their boundaries are'} redrawn on the map or a smaller area typed on the Network.`
+		);
+	}
+	return out;
+}
+
 /** The routing request for a division (the route's and the plan job's). */
 export function divideRouting(inputs: DivideInputs, placing: PointChoices): SubcatchmentRequest {
 	return {
@@ -421,7 +466,7 @@ export function divideRouting(inputs: DivideInputs, placing: PointChoices): Subc
 		outletHints: outletHints(inputs.outlet.foundIn, placing),
 		outletMappedKm2: placing.outletMappedKm2,
 		boundary: inputs.boundary?.geometry ?? null,
-		points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node), geometry: p.geometry, damPosition: p.damPosition, ...placing.hints.get(p.featureId) }))
+		points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry, damPosition: p.damPosition, ...placing.hints.get(p.featureId) }))
 	};
 }
 

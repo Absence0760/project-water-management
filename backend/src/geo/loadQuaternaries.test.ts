@@ -69,6 +69,30 @@ describe('quaternaryRecords', () => {
 	});
 });
 
+describe('WR2012’s MAE and evaporation zone (context, 310)', () => {
+	it('reads mae_mm and evap_zone from the values CSV, keeps both or neither, and names what it drops', () => {
+		const features = ['A21B', 'A21C', 'A21D'].map((code, i) => ({ type: 'Feature', properties: { code }, geometry: square(28 + i / 10, -26) }));
+		const csv = parseValuesCsv('code,map_mm,mae_mm,evap_zone\nA21B,650,1700,7a\nA21C,600,1650,\nA21D,600,,8B\n');
+		const got = quaternaryRecords({ type: 'FeatureCollection', features }, 'src', csv.values);
+		expect(got.records.map((r) => [r.code, r.maeMm, r.evapZone])).toEqual([
+			['A21B', 1700, '7A'],
+			['A21C', null, null],
+			['A21D', null, null]
+		]);
+		expect(got.problems).toEqual(['A21C: an MAE but no evaporation zone; loaded without its MAE and zone', 'A21D: evaporation zone 8B but no MAE; loaded without its MAE and zone']);
+	});
+
+	it('the synthetic fixture gives every quaternary an invented MAE and zone, and --out carries them', () => {
+		const { records } = quaternaryRecords(fixture, '');
+		for (const r of records) {
+			expect(r.maeMm).toBeGreaterThan(1000);
+			expect(r.evapZone).toMatch(/^Z[12]$/);
+		}
+		const back = quaternaryRecords(JSON.parse(JSON.stringify(quaternaryFeatureCollection(records))), 'unused').records;
+		expect(back.map((r) => [r.maeMm, r.evapZone])).toEqual(records.map((r) => [r.maeMm, r.evapZone]));
+	});
+});
+
 describe('import-quaternaries arguments', () => {
 	it('loads the synthetic fixture with no arguments, and needs a dataset label (not "synthetic") for a file', () => {
 		expect(parseArgs([])).toEqual({ file: SYNTHETIC_FILE, dataset: SYNTHETIC_DATASET, source: '', values: null, out: null });

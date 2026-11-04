@@ -58,7 +58,7 @@ test('an editor delineates the valley from its outlet, reviews it and accepts it
 	await expect(r.getByRole('heading', { name: 'The delineated catchment' })).toBeFocused();
 	await r.getByText('How it was made').click();
 	await expect(r.getByTestId('delineate-fact-dataset')).toContainText('Synthetic DEM');
-	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-13]');
+	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-14]');
 	await expect(r.getByTestId('delineate-fact-pans')).toContainText('Non-contributing (pans)');
 	await expect(r.getByRole('heading', { name: 'Before you accept it' })).toBeVisible();
 	for (const scheme of ['light', 'dark'] as const) {
@@ -135,7 +135,8 @@ test('while delineating, the bar and the Key say which line is which; the channe
 	// The River network layer on (its key entry and the bar's line show while the layer is; no reach is loaded near
 	// the valley, since river datasets are global to the e2e database and a reach there moves other specs' clicks).
 	const project = await seedRunnableProject(page.request, 'Delineate lines');
-	await openMap(page, project.id, '&layers=rivers');
+	// The DEM rivers layer off (it is on by default, `-channels`), so the channels drawn are the tool's alone.
+	await openMap(page, project.id, '&layers=rivers,-channels');
 	await uploadThroughSheet(page, 'other', 'square.geojson', squareAround([FIXTURE_MID_GAUGE[0], -33.515]));
 	await expect(page.locator('.map-wrap[data-status="ready"]')).toBeVisible();
 	await page.getByTestId('map-show-everything').click();
@@ -315,7 +316,7 @@ test('a point with no terrain channel within 150 m is refused with what to do, t
 	await openMap(page, project.id);
 	await delineateAt(page, FIXTURE_OFF_TERRAIN);
 	await expect(sheet(page).getByTestId('delineate-error')).toHaveText(
-		"No terrain channel runs within 150 m of that point. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows."
+		"No terrain channel runs within 150 m of that point. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows. Zoom in further to see smaller channels."
 	);
 	await expect(sheet(page).getByTestId('delineate-larger')).toHaveCount(0);
 	await expect(review(page)).toHaveCount(0);
