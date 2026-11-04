@@ -136,7 +136,9 @@ test('on a desktop the crop table keeps its column headers and a transfer card i
 	await expect(factors.getByRole('columnheader', { name: 'Sep', exact: true }).first()).toBeVisible();
 	await page.goto(`/projects/${project.id}?tab=transfers`);
 	const rule = page.getByTestId('transfer-rule');
-	await expect(rule.getByText('Max rate by month', { exact: true })).toBeVisible();
+	// The rates' title is the Takes pull-down's label (engine 1.114.0), named with its rule.
+	await expect(rule.getByText('Takes', { exact: true })).toBeVisible();
+	await expect(rule.getByLabel('Takes, transfer 1', { exact: true })).toBeVisible();
 	// Wide, the dividers mark the Limits and Source groups and each field names itself, so their titles go.
 	await expect(rule.getByText('Limits', { exact: true })).toBeHidden();
 	await expect(rule.getByText('Daily cap, m³', { exact: true })).toBeVisible();

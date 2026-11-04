@@ -354,6 +354,8 @@
 											<option value="capacity">Up to a maximum</option>
 											<option value="byMonth" disabled={!river && outsideTo}>A formula by month{!river && outsideTo ? ' (needs a unit to deliver to)' : ''}</option>
 										</select>
+										<!-- Each rule's title names the unit its rates show in (the picker is the list's, in its heading). -->
+										<span class="u">{transferUnit.label}</span>
 										<HelpTip key="transfer.monthlyDiversion" />
 									</div>
 								{/snippet}
@@ -766,6 +768,12 @@
 	/* The rates' title sits on MonthRates' own head line, which spaces it. */
 	.g-rates .grp-t {
 		margin-bottom: 0;
+	}
+	.grp-t .u {
+		font-weight: 400;
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-muted);
 	}
 	.fields {
 		display: grid;

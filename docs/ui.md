@@ -5795,7 +5795,8 @@ rows down to one makes it a plain transfer again, its To select back.
 The card's body holds three top-aligned groups:
 
 - **Takes**, how much it takes (engine ≥ 1.114.0), a pull-down on the
-  rates' title line (its name "Takes, transfer N"; the short word keeps the
+  rates' title line, then the unit the rates show in (its name "Takes,
+  transfer N"; the short word keeps the
   months' summary on the same line, so a dam rule's card stays 147 px at
   1440): *Up to a maximum*, *What the destination needs* (a river off-take
   only) or *A formula by month*. The last turns the month
