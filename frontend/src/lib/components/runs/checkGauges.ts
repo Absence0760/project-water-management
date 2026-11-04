@@ -8,6 +8,7 @@
 import {
 	beforeForecast,
 	CHECK_GAUGE_FLOW_KEY,
+	OBSERVED_SERIES_LABEL,
 	flowDurationCurves,
 	onDaysOf,
 	type CalibrationFlowKind,
@@ -58,6 +59,42 @@ export function checksOnlyGauges(
 			...(g.fit !== undefined ? { fit: g.fit } : {})
 		}))
 		.sort((a, b) => rank(a.nodeId) - rank(b.nodeId));
+}
+
+/** A ticked calibration location that isn't the headline, drawn as a calibration hydrograph (CalibrationLocationFlows). */
+export interface LocationGauge {
+	nodeId: string;
+	name: string;
+	/** The record the run stored there (`observed_flow_check`), read from its label. */
+	flowKind: CalibrationFlowKind;
+}
+
+/**
+ * The run's other calibration locations (summary.calibrationZones: each ticked gauge but the headline): the run
+ * scores them, so the checks-only list leaves them out (checksOnlyGauges), and before this they had no hydrograph
+ * anywhere though the run stores each one's record (`observed_flow_check`, engine ≥ 1.90.0) beside its `outflow`.
+ * Only the gauges whose record was stored, in the network's order.
+ */
+export function calibrationLocationGauges(
+	summary: { calibration?: { siteNodeId?: string | null } | null; calibrationZones?: readonly { siteNodeId?: string | null }[] | null },
+	refs: readonly (RefLike & { label?: string })[],
+	names: ReadonlyMap<string, string>,
+	order: ReadonlyMap<string, number> = new Map()
+): LocationGauge[] {
+	const headline = summary.calibration?.siteNodeId ?? null;
+	const rank = (id: string) => order.get(id) ?? Number.MAX_SAFE_INTEGER;
+	const out: LocationGauge[] = [];
+	const seen = new Set<string>();
+	for (const z of summary.calibrationZones ?? []) {
+		const id = z.siteNodeId;
+		if (typeof id !== 'string' || id === headline || seen.has(id)) continue;
+		const ref = refs.find((r) => r.key === CHECK_GAUGE_FLOW_KEY && r.nodeId === id);
+		if (!ref) continue;
+		seen.add(id);
+		const logger = (ref.label ?? '').startsWith(OBSERVED_SERIES_LABEL.flow_logger_m3s);
+		out.push({ nodeId: id, name: names.get(id) ?? 'a calibration location', flowKind: logger ? 'flow_logger_m3s' : 'flow_observed_m3s' });
+	}
+	return out.sort((a, b) => rank(a.nodeId) - rank(b.nodeId));
 }
 
 /** The statistics in a line: "NSE 0.62 · KGE 0.71 · PBIAS −4.2 % over 1 204 days". */

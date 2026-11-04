@@ -32,7 +32,7 @@ export async function openRuns(page: Page, projectId: string, query = '') {
 export async function openCalibration(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=calibration${query}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Calibration', exact: true })).toBeVisible();
-	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge/ }).locator('canvas')).toBeVisible();
+	await expect(page.getByRole('img', { name: /^(Calibration hydrograph at |Flow at the outflow gauge)/ }).first().locator('canvas')).toBeVisible();
 }
 
 /** How the shown run fits' run picker on Calibration. */

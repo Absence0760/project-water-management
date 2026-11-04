@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVED_SERIES_LABEL } from '@water-management/engine';
-import { calibrationSiteOf, ewrChartCaption, ewrChartSeries, ewrLineLabel, ewrLineWords, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
+import { calibrationHydrographTitle, calibrationSiteOf, outletNameOf, ewrChartCaption, ewrChartSeries, ewrLineLabel, ewrLineWords, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
 
 const d = (v: number) => ({ startDate: '2020-01-01', values: [v, v] });
 const conv = (s: { values: (number | null)[] }) => s.values.map((v) => (v == null ? null : v * 10));
@@ -132,5 +132,32 @@ describe('ewrLineLabel (the engine’s own series label)', () => {
 		expect(ewrLineLabel({ method: 'tab' })).toBe('EWR from the DRM TAB file (scaled)');
 		expect(ewrLineLabel({ method: 'percentile' })).toBe('EWR from the DRM percentile tables (scaled)');
 		expect(ewrLineLabel({ method: 'percentile', reserveTable: 'withoutHighFlows' })).toBe('EWR from the DRM percentile tables, without high flows (scaled)');
+	});
+});
+
+describe('calibrationHydrographTitle', () => {
+	it('names the location and its record', () => {
+		expect(calibrationHydrographTitle('Upper', 'logger')).toBe('Calibration hydrograph at the Upper logger');
+		expect(calibrationHydrographTitle('Lower', 'gauge')).toBe('Calibration hydrograph at the Lower gauge');
+	});
+	it("doesn't repeat what the name already says", () => {
+		expect(calibrationHydrographTitle('Upper Logger', 'logger')).toBe('Calibration hydrograph at the Upper Logger');
+		expect(calibrationHydrographTitle('Upper weir', 'gauge')).toBe('Calibration hydrograph at the Upper weir');
+		expect(calibrationHydrographTitle('The Kloof gauge', 'gauge')).toBe('Calibration hydrograph at The Kloof gauge');
+	});
+	it('says only the name when the record is unknown, and the outflow gauge when there is no name', () => {
+		expect(calibrationHydrographTitle('Upper', undefined)).toBe('Calibration hydrograph at the Upper');
+		expect(calibrationHydrographTitle(null, 'logger')).toBe('Calibration hydrograph at the outflow logger');
+		expect(calibrationHydrographTitle('  ', undefined)).toBe('Calibration hydrograph at the outflow gauge');
+	});
+});
+
+describe('outletNameOf', () => {
+	it("reads the node with nothing downstream from the run's model", () => {
+		expect(outletNameOf({ nodes: [{ name: 'A', downstreamNodeId: 'b' }, { name: 'B', downstreamNodeId: null }] })).toBe('B');
+	});
+	it('is null for a run that kept no model, or nodes without the link', () => {
+		expect(outletNameOf(undefined)).toBeNull();
+		expect(outletNameOf({ nodes: [{ name: 'A' }] })).toBeNull();
 	});
 });

@@ -1,7 +1,7 @@
 import { CHECK_GAUGE_FLOW_KEY, type DailySeries } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { scoredGaugeIds } from './modelQuality';
-import { checkFdc, checkHydrograph, checksOnlyGauges, gaugeStatsLine, gaugeStatsText, recordHref } from './checkGauges';
+import { calibrationLocationGauges, checkFdc, checkHydrograph, checksOnlyGauges, gaugeStatsLine, gaugeStatsText, recordHref } from './checkGauges';
 
 const g = (nodeId: string, flowKind: 'flow_observed_m3s' | 'flow_logger_m3s' = 'flow_observed_m3s') => ({ nodeId, name: `Weir ${nodeId}`, flowKind });
 const day = (values: (number | null)[], startDate = '2020-10-01'): DailySeries => ({ startDate, values });
@@ -83,5 +83,38 @@ describe('recordHref', () => {
 	it('is null when the project no longer has it', () => {
 		expect(recordHref(series, 'b', 'flow_observed_m3s')).toBeNull();
 		expect(recordHref(null, 'a', 'flow_observed_m3s')).toBeNull();
+	});
+});
+
+describe('calibrationLocationGauges', () => {
+	const names = new Map([
+		['up', 'Upper'],
+		['mid', 'Middle weir'],
+		['head', 'Headline weir']
+	]);
+	const ref = (nodeId: string, label = 'Observed flow (checks only)') => ({ key: CHECK_GAUGE_FLOW_KEY, nodeId, label });
+	it('lists each ticked location but the headline whose record the run stored, with its record, in network order', () => {
+		const got = calibrationLocationGauges(
+			{ calibration: { siteNodeId: 'head' }, calibrationZones: [{ siteNodeId: 'up' }, { siteNodeId: 'mid' }, { siteNodeId: 'head' }] },
+			[ref('up', 'Observed flow (logger) (checks only)'), ref('mid'), ref('head')],
+			names,
+			new Map([
+				['mid', 1],
+				['up', 2]
+			])
+		);
+		expect(got).toEqual([
+			{ nodeId: 'mid', name: 'Middle weir', flowKind: 'flow_observed_m3s' },
+			{ nodeId: 'up', name: 'Upper', flowKind: 'flow_logger_m3s' }
+		]);
+	});
+	it('leaves out a location without a stored record (a run before engine 1.90.0) and the outlet (no site)', () => {
+		expect(calibrationLocationGauges({ calibration: { siteNodeId: null }, calibrationZones: [{ siteNodeId: 'up' }, { siteNodeId: null }] }, [], names)).toEqual([]);
+	});
+	it('positive control: a location the checks-only list leaves out (scored) is the one listed here', () => {
+		const summary = { calibration: { siteNodeId: null }, calibrationZones: [{ siteNodeId: 'up' }] };
+		const refs = [ref('up')];
+		expect(checksOnlyGauges([{ nodeId: 'up', name: 'Upper', flowKind: 'flow_observed_m3s' }], refs, scoredGaugeIds(summary))).toEqual([]);
+		expect(calibrationLocationGauges(summary, refs, names).map((g) => g.nodeId)).toEqual(['up']);
 	});
 });

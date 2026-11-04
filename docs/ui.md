@@ -9987,9 +9987,22 @@ read it before.
      is no better than the mean flow, as the NSE card flags it; "not scored:
      no observed flow in the run" without one.
   2. **Model quality** (on Calibration, under How the shown run fits): the hydrograph with the flow-duration curve under it
-     (compared together on every calibration iteration; a run scored at a
+     (compared together on every calibration iteration). Each calibration
+     hydrograph is titled by its location and record, **Calibration
+     hydrograph at the &lt;name&gt; logger** (or gauge; just "at the
+     &lt;name&gt;" when the name already says logger, gauge, weir or
+     station), the outlet's name read from the run's own model
+     (`flowSeries.ts` `calibrationHydrographTitle`); a run with no observed
+     record at the outlet keeps "Flow at the outflow gauge: natural and
+     simulated (no observed record in this run)". A run scored at a
      gauge inside the network, engine ≥ 1.41.0, adds under the outlet's
-     hydrograph "Flow at &lt;gauge&gt;, the calibration site": that gauge's
+     hydrograph that gauge's own calibration hydrograph (its caption says it
+     is the headline calibration location), and then one for each other
+     ticked calibration location (`runs/CalibrationLocationFlows.svelte`,
+     `checkGauges.ts` `calibrationLocationGauges`: its stored
+     `observed_flow_check` against its `outflow`; the checks-only list leaves
+     scored gauges out, so before this a non-headline location's record was
+     drawn nowhere): that gauge's
      record against the simulated flow there, `runs/ModelQuality.svelte` from
      the node's `observed_flow` and `outflow` series; and under the
      flow-duration curve, **Flow at gauges in the network (checks only)**,

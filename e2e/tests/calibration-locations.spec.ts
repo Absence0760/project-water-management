@@ -140,6 +140,27 @@ test('the outlet and a gauge each keep their own period; the headline picks whos
 	await expect(page.getByTestId('calibration-locations-ticked')).toContainText('Headline: Outflow gauge (picked automatically');
 });
 
+test('each ticked location has its own calibration hydrograph, named by its location and record, the headline first', async ({ page, owner }) => {
+	void owner;
+	const { project } = await seed(page.request, 'Locations hydrographs', { outletRecord: true });
+	await page.goto(`/projects/${project.id}?tab=calibration`);
+	await locations(page).getByRole('checkbox', { name: 'Calibrate here: Middle weir' }).check();
+	await expect(page.getByTestId('calibration-locations-ticked')).toContainText('Headline: Outflow gauge (picked automatically');
+	await saveSettings(page);
+	const runId = await createRun(page.request, project.id, 'Two locations');
+	await page.goto(`/projects/${project.id}?tab=calibration&run=${runId}`);
+	const hydro = page.locator('#res-hydrograph');
+	// The headline (the outlet), then the other ticked location: its record against the simulated flow there.
+	await expect(hydro.getByRole('img', { name: 'Calibration hydrograph at the Outflow gauge: line chart of Observed gauge, Natural, Simulated outflow' })).toBeVisible();
+	const weirChart = hydro.getByRole('img', { name: 'Calibration hydrograph at the Middle weir: line chart of Observed gauge, Simulated flow' });
+	await expect(weirChart.locator('canvas')).toBeVisible();
+	await expect(hydro.getByTestId('calibration-location-flows')).toHaveCount(1);
+	// The unticked Low weir stays a checks-only gauge, not a calibration hydrograph.
+	await expect(hydro.getByRole('img', { name: /^Calibration hydrograph at the Low weir/ })).toHaveCount(0);
+	await expect(page.locator('#res-gauges').getByRole('img', { name: /^Flow at Low weir \(checks only\)/ })).toBeVisible();
+	await expectNoViolations(page, { include: '#res-hydrograph' });
+});
+
 test('Fit automatically fits each ticked location in dependency order, and Apply writes each one', async ({ page, owner }) => {
 	void owner;
 	const { project, weir, upper } = await seed(page.request, 'Locations fit', { outletRecord: true });

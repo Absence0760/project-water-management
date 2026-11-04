@@ -29,7 +29,7 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '#lib/series/provenance.js';
 	import { cachedSeries } from './cache';
-	import { calibrationSiteOf, CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
+	import { calibrationHydrographTitle, calibrationSiteOf, outletNameOf, CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '#lib/components/forecast/forecast.js';
 	import { toDisplayUnit } from './results';
 	import { clipExclusions, exclusionKeyText, runExclusions, seriesSpan } from './exclusionShading';
@@ -37,7 +37,8 @@
 	import { flowFlagLanes, lanesLooksNote } from '#lib/calibration/flowFlags.js';
 	import FlowUnitSwitch from './FlowUnitSwitch.svelte';
 	import GaugeCheckFlows from './GaugeCheckFlows.svelte';
-	import { checksOnlyGauges, recordHref } from './checkGauges';
+	import CalibrationLocationFlows from './CalibrationLocationFlows.svelte';
+	import { calibrationLocationGauges, checksOnlyGauges, recordHref } from './checkGauges';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import PlausibilityPanel from './PlausibilityPanel.svelte';
 	import { unitRainOf } from './unitRain';
@@ -100,6 +101,8 @@
 	const flagUse = $derived(hs ? resolveQualityFlags(hs.qualityFlags) : null);
 	/** The gauges inside the network whose records the run checks but doesn't score (issue #554): a hydrograph and FDC each, after the outlet's. */
 	const checkGauges = $derived(checksOnlyGauges(summary.plausibility?.gauges, refs, scoredGaugeIds(summary), nodeOrder));
+	/** The other ticked calibration locations (not the headline): a calibration hydrograph each, after the headline's. */
+	const locationGauges = $derived(calibrationLocationGauges(summary, refs, nodeNames, nodeOrder));
 
 	const has = (key: string, nodeId: string | null = null) => refs.some((r) => r.key === key && r.nodeId === nodeId);
 	const get = (key: string, nodeId: string | null = null): Promise<DailySeries> =>
@@ -194,6 +197,12 @@
 	const siteSources = $derived(siteId ? observedSources(refs, siteId) : {});
 	const siteSeries = $derived(siteId ? hydrographSeries(site, conv, true, siteSources) : []);
 	const siteName = $derived(siteId ? (nodeNames.get(siteId) ?? 'the headline calibration location') : '');
+	// Each calibration chart is named by its location and record (the outlet's from the run's own model, so a node
+	// renamed since keeps the run's name): "Calibration hydrograph at the <name> logger".
+	const outletTitle = $derived(
+		hasObserved ? calibrationHydrographTitle(outletNameOf(run.model), sources.observed) : `Flow at the outflow gauge: ${flowsDrawn}`
+	);
+	const siteTitle = $derived(calibrationHydrographTitle(siteId ? (nodeNames.get(siteId) ?? null) : null, siteSources.observed));
 	// The run's calibration exclusions over the hydrograph's days, each with its reason in the key under it.
 	const excluded = $derived(clipExclusions(exclusions, seriesSpan(hydroSeries)));
 	const excludedKey = $derived(excluded.length ? { label: 'Excluded from calibration', items: excluded.map(exclusionKeyText) } : undefined);
@@ -303,7 +312,7 @@
 			<div class="chart-ph" style:height="390px" role="status">Loading flows…</div>
 		{:else}
 			<LineChart
-				title="Flow at the outflow gauge: {flowsDrawn}"
+				title={outletTitle}
 				toolsLabel="Hydrograph controls"
 				unit={flowUnit}
 				series={hydroSeries}
@@ -331,7 +340,7 @@
 				{@render loadFailed(`the flows at ${siteName}`, siteError)}
 			{:else if siteSeries.length}
 				<LineChart
-					title="Flow at {siteName}, the headline calibration location: simulated and observed"
+					title={siteTitle}
 					toolsLabel="Headline location hydrograph controls"
 					unit={flowUnit}
 					series={siteSeries}
@@ -345,11 +354,14 @@
 					lanes={siteLanes}
 					lanesLabel={LANES_LABEL}
 					lanesNote={lanesLooksNote(siteLanes)}
-					caption="{observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Calibration record → Scored at, above)."
+					caption="The headline calibration location. {observedCaption(site, siteSources)} The run's calibration statistics score this gauge's record against the simulated flow here (Calibration record → Scored at, above)."
 				/>
 			{:else}
 				<div class="chart-ph" style:height="390px" role="status">Loading flows at the headline calibration location…</div>
 			{/if}
+		{/if}
+		{#if locationGauges.length}
+			<CalibrationLocationFlows {projectId} {runId} gauges={locationGauges} {flowUnit} toolbar={unitToggle} {band} />
 		{/if}
 	</section>
 

@@ -77,7 +77,7 @@ test('a chart per gauge with a record: observed, simulated, natural and upstream
 	// The page's one unit switch (the hydrograph's too) converts every line, demand included.
 	await figure(outletChart).getByRole('button', { name: 'm³/day' }).click();
 	await expect(check.getByRole('img', { name: /^Calibration check at the outflow gauge: .*, in m³\/day/ })).toBeVisible();
-	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge: .*, in m³\/day/ })).toBeVisible();
+	await expect(page.getByRole('img', { name: /^Calibration hydrograph at the Outflow gauge: .*, in m³\/day/ })).toBeVisible();
 	await expectNoViolations(page);
 });
 
