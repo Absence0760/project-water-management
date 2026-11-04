@@ -1083,6 +1083,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const rem = new Float64Array(transfers.length);
 	const roomLeft = new Float64Array(2 * nodes.length);
 	const roomFull = new Uint8Array(2 * nodes.length);
+	// A receiver's room left after an earlier priority today (engine ≥ 1.114.0): carried to the next priority
+	// rather than worked out again from its storage less what came in, which is the same number but for the float
+	// noise of the subtraction, and a receiver an earlier priority filled exactly could then show 1e-14 of room
+	// and draw band shares from its rules' sources it can never take (verify/ dense-55).
+	const roomCarry = new Float64Array(nodes.length);
+	const roomCarried = new Uint8Array(nodes.length);
 	const srcTaken = new Float64Array(nodes.length);
 	// The receiving nodes of each priority (the outside slots apart).
 	const levelDests = levels.map((level) => Int32Array.from(new Set(level.flatMap((k) => (toSlot[k]! >= XS ? [] : [toSlot[k]!])))));
@@ -1196,6 +1202,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// to its own limit and each only above its own reserve (engine 1.36.0,
 		// audit N6, step 3 below), so the result never depends on the list order.
 		jToday.fill(0);
+		roomCarried.fill(0);
 		drawnToday.fill(0);
 		intoToday.fill(0);
 		if (anyExternal) extToday.fill(0);
@@ -1223,7 +1230,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// in-service date); a dam with no capacity today is no dam: it releases nothing.
 				const kd = capacityK(dst, t);
 				const rel = dst.damCapacityM3 * kd > 0 ? fixedReleaseRoom(dst.release, month[t]!) : 0;
-				roomLeft[d] = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[d]!);
+				roomLeft[d] = roomCarried[d] ? roomCarry[d]! : Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[d]!);
 				roomFull[d] = roomLeft[d]! > 0 ? 0 : 1;
 			}
 			// The outside slot of each unit sending out of the catchment at this priority (engine-audit.md X1): the
@@ -1357,6 +1364,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				jToday[toSlot[k]!]! += v;
 				jToday[tr.from]! -= v;
 				if (toSlot[k]! >= XS) extToday[tr.from]! += v;
+			}
+			// What room each receiver has left for the next priority (none once full).
+			for (let a = 0; a < dests.length; a++) {
+				const d = dests[a]!;
+				roomCarry[d] = roomFull[d] ? 0 : roomLeft[d]!;
+				roomCarried[d] = 1;
 			}
 		}
 

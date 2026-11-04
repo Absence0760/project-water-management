@@ -2755,6 +2755,9 @@ def run(doc: dict) -> dict:
         J = {f["id"]: 0.0 for f in farms}
         drawn = {f["id"]: 0.0 for f in farms}
         sched = {f["id"]: 0.0 for f in farms}
+        # §2.6 (engine >= 1.114.0): a receiver's room left by an earlier priority today is what the next priority
+        # shares; once full it has none.
+        room_carry: dict[str, float] = {}
         active = []
         for t in rules:
             lim = rule_limit(t, o, m)
@@ -2783,7 +2786,7 @@ def run(doc: dict) -> dict:
                     outlet_c = f.get("damOutletCapacityM3Day")
                     floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))
                 rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
-                room_left[dst] = max(0.0, rm)
+                room_left[dst] = room_carry[dst] if dst in room_carry else max(0.0, rm)
             # Outside the catchment (engine-audit.md X1): each source's own receiver, whose room is its surface
             # allocation room today less a remote share it asked for and what it sent out at lower priorities;
             # endless without a cap.
@@ -2843,6 +2846,9 @@ def run(doc: dict) -> dict:
                 # (3) Room a source couldn't fill is offered again, while a receiver filled this round.
                 if not filled:
                     break
+            for dst, v in room_left.items():
+                if not isinstance(dst, tuple):
+                    room_carry[dst] = 0.0 if dst in full else v
             if any(vol[t["id"]] > 0 for t, _ in group):
                 diag["transfer_days"] += 1
             for t, _ in group:

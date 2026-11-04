@@ -4075,6 +4075,14 @@ The workbook has two blocks of columns:
   receiver's **yesterday's** storage, as the formula says, even when the
   receiver sends water at a lower priority the same day: what it sends first
   makes no room for what it receives (probe `room-while-sending`).
+  **Engine ≥ 1.114.0:** what one priority leaves of a receiver's room is
+  carried to the next (none once a priority filled it), not worked out again
+  from its storage less what came in. The two are the same number but for
+  float noise, and a receiver filled exactly at a lower priority could show
+  10⁻¹⁴ m³ of room: its rules at the next priority then drew band shares from
+  their source they could never take, and the source's other receiver's room
+  was shared by those diluted shares (the cross-check's dense-55 moved 12.7
+  m³ between two rules; `network/roomCarry.test.ts`).
   Transfers are still settled first from yesterday's storage, before any farm
   irrigates: the source does **not** irrigate first (a deliberate choice, no
   per-rule option). Migration 006 set each rule's priority to its old
