@@ -1171,6 +1171,40 @@ describe('a firing event follows its figure, and stops with its rule', () => {
 		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
 	});
 
+	it('the mail and the event list quote the level the event crossed, not a level edited since (issue #670); an event from before 312 falls back to the rule’s', async () => {
+		const name = 'Crossed level';
+		const { pid } = await failing(name, [5]);
+		expect((await failingRule(pid, true)).status).toBe(200);
+		await withUser(owner.id, (db) => evaluateAlerts(db, pid));
+		const [e] = await firing(pid);
+		expect(await asOwner('SELECT threshold FROM alert_event WHERE id = $1', [e.id])).toEqual([{ threshold: 3 }]);
+		// The WUA raises the level to 4 before the mail goes: 5 failures are still past it, so the event keeps firing.
+		expect((await rules(owner, [{ kind: 'feed_failing', threshold: 4, enabled: true }], pid)).status).toBe(200);
+		await asOwner(`DELETE FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid]);
+		await sendAlerts();
+		const [m] = mailsAbout(name);
+		expect(m!.text).toContain('These data feeds have failed 3 or more times in a row:');
+		expect(m!.text).not.toContain('failed 4 or more');
+		const listed = (await owner.call('GET', `/projects/${pid}/alert-events`)).body.events;
+		expect(listed).toMatchObject([{ id: e.id, threshold: 3 }]);
+		// The recorded level is fixed: the evaluator's column grant leaves it out, and the guard refuses even the owner.
+		await expect(withUser(owner.id, (db) => db.query('UPDATE alert_event SET threshold = 4 WHERE id = $1', [e.id]))).rejects.toThrow(/permission denied/);
+		await expect(asOwner('UPDATE alert_event SET threshold = 4 WHERE id = $1', [e.id])).rejects.toThrow(/only an alert event's state, value and detail change/);
+		// An event opened before 312 has no recorded level: it quotes the rule's (positive control above: a recorded one wins).
+		// One transaction, so the guard can't be left off: the id is a uuid the database gave.
+		await asOwner(
+			`DO $$ BEGIN
+				ALTER TABLE alert_event DISABLE TRIGGER alert_event_guard;
+				UPDATE alert_event SET threshold = NULL WHERE id = '${e.id}';
+				ALTER TABLE alert_event ENABLE TRIGGER alert_event_guard;
+			END $$`
+		);
+		expect((await owner.call('GET', `/projects/${pid}/alert-events`)).body.events).toMatchObject([{ id: e.id, threshold: 4 }]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+		// Give the owner's mail back to the daily cap, which the next tests count on.
+		await asOwner(`DELETE FROM alert_delivery WHERE project_id = $1`, [pid]);
+	});
+
 	it('switching every rule off clears what was firing at once, though no check is queued (positive control: on, it fires)', async () => {
 		const { pid } = await failing('Off clears', [5]);
 		expect((await failingRule(pid, true)).status).toBe(200);

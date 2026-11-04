@@ -61,6 +61,23 @@ export function errataFoundSinceNote(p: { issuedAt: string | null }): { heading:
 			};
 }
 
+/**
+ * The mark on a verify sign-off made against an earlier statement than the one
+ * the pack's issue rested on (314, issue #670), or null for one that wasn't.
+ * Every sign-off stays listed, so the record is complete. The statement names
+ * its version when that differs; with the same version (a newly listed
+ * erratum or limitation changes the text, not the version) it says so.
+ */
+export function earlierStatementNote(
+	signer: Pick<PackVerification['signers'][number], 'earlierStatement' | 'statementVersion'>,
+	issued: string | null | undefined
+): string | null {
+	if (!signer.earlierStatement) return null;
+	const was = signer.statementVersion ?? null;
+	if (was && issued && was !== issued) return `Signed against an earlier statement: version ${was}. The pack was issued on version ${issued}.`;
+	return `Signed against an earlier statement: an earlier text${was ? ` of version ${was}` : ''}, before a newly found erratum or limitation changed it. The pack was issued on a later text.`;
+}
+
 /** The public verify page of a short code, on this site: `{origin}{base}/verify/{code}`. */
 export const verifyUrl = (origin: string, base: string, shortCode: string) => `${origin}${base}/verify/${encodeURIComponent(shortCode)}`;
 

@@ -1650,6 +1650,10 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   "Flow — logger"; `seriesKeyFed` whether an API key still writes it, false once a person wrote over the
   key's days).
 - `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail, forecastOutOfDate }`.
+  `threshold` is the level the event crossed, recorded when it opened (312,
+  issue #670), not the rule's level now, so a level edited since never
+  contradicts the figures; the alert emails quote the same. An event opened
+  before 312 has none recorded and gives the rule's current level.
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
@@ -2357,7 +2361,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, fromScenario, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, fromScenario, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, fitEngineVersions, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
@@ -2367,10 +2371,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   (`run_fit_engine_version`, 289: the headline gauge's row's
   `fitRecord.engineVersion` when `summary.unitRain.zones` marks a gauge the
   headline, engine 1.110.0, else `settings.fitRecord.engineVersion`), else
-  `null`; `errata` the ids of the
+  `null`; `fitEngineVersions` the engines of every fit its parameters came
+  from, each applied calibration location's (`run_fit_engine_versions`,
+  313, issue #670), sorted, `[]` for entered parameters; `errata` the ids of the
   known engine bugs that may affect the run (issue #103,
   [engine-errata.md](./engine-errata.md)): the errata whose range holds its
-  engine, or its fit's for a `fit` erratum, `[]` for none. The list and
+  engine, or any of its fits' (`fitEngineVersions`) for a `fit` erratum,
+  `[]` for none. The list and
   `GET …/runs/:runId` carry it; other routes answering with a run may not.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed): a run of the legacy runoff model, which
@@ -3278,9 +3285,14 @@ reproduction bundle).
   successorSha256, withdrawnReason, methodology: { version, sha256 },
   errata: { id, summary }[], errataFoundSince: { id, summary }[], signers: { fullName, registrationBody,
   registrationCategory, registrationField, registrationNo, signedAt, kind,
-  registrationCheck }[] }`, and nothing else (`kind` 167: `specialist` or
+  registrationCheck, statementVersion, earlierStatement }[],
+  statementVersion }`, and nothing else (`kind` 167: `specialist` or
   `review`; `registrationCheck`: `{ checkedAt, checkedByOrg }` bound at
-  issue, or `null`: self-declared) (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
+  issue, or `null`: self-declared; 314, issue #670: each sign-off's
+  `statementVersion` and `earlierStatement`, true when it was made against
+  an earlier statement than the one the issue rested on, and the pack's
+  `statementVersion`, that statement's version or `null`, [evidence-pack.md
+  § Verification](./evidence-pack.md#verification)) (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
   `errata` is what the manifest recorded when the pack was drafted, never
   changed; `errataFoundSince` (132) lists the errata of the current list
   (engine-errata.md) that apply to either run's engine, or to the engine of

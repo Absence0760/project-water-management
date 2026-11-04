@@ -131,7 +131,7 @@ describe('toApplicantPack', () => {
 
 	it('answers verify’s errata found since issue from the runs’ engines (132), never the runs themselves', () => {
 		const r = row();
-		const v = toApplicantPack({ ...r, verify: { ...r.verify, runs: [{ engineVersion: '1.50.0', fitEngineVersion: '9.9.9-secret' }] } }, naming);
+		const v = toApplicantPack({ ...r, verify: { ...r.verify, runs: [{ engineVersion: '1.50.0', fitEngineVersions: ['9.9.9-secret'] }] } }, naming);
 		expect(Array.isArray(v.verify.errataFoundSince)).toBe(true);
 		expect(v.verify).not.toHaveProperty('runs');
 		expect(JSON.stringify(v)).not.toContain('9.9.9-secret');

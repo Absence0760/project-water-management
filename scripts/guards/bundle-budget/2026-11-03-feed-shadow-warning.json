@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #670, Run readiness and the Data rows warn when a data feed writes a series runs don't read (series/feedShadow.ts, shared by the Runs and Data chunks, which pulls the station helpers into a shared chunk): measured +1.8 KB gzip by building HEAD with and without the change (2359 -> 2361 KB); main sat at its ceiling before it."
+}

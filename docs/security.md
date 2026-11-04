@@ -4960,7 +4960,9 @@ nothing else.
   version, issue date, catchment name, engine and report versions, the
   manifest, PDF and bundle hashes, the successor's hash, a withdrawal reason, the
   methodology cited, the errata recorded, and the signers' names and
-  registrations; and the runs' engine versions and their fits' (132), which
+  registrations, with the version of the statement each signed and whether
+  it was earlier than the one the issue rested on (314: a version name and a
+  flag, never the statement's hash); and the runs' engine versions and their fits' (132), which
   the route maps field by field (`toVerify`) into the errata found since
   issue and never returns. The withdrawal reason is the editor's own words and is
   public too: the withdraw action must say so (it is printed where the pack

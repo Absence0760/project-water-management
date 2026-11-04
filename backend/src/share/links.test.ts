@@ -384,8 +384,9 @@ describe('toSharePack', () => {
 		const raw = verify('issued', {
 			errata: [{ id: 'ER-90', summary: 'Recorded at draft' }],
 			runs: [
-				{ engineVersion: '1.50.0', fitEngineVersion: '1.44.0' },
-				{ engineVersion: '1.50.0', fitEngineVersion: null }
+				// The fit bug is at a location other than the headline's (issue #670): any fit counts.
+				{ engineVersion: '1.50.0', fitEngineVersions: ['1.46.0', '1.44.0'] },
+				{ engineVersion: '1.50.0', fitEngineVersions: [] }
 			]
 		});
 		const out = toVerify(raw, list);
@@ -401,5 +402,32 @@ describe('toSharePack', () => {
 		// No runs (a lookup from before 132, or a malformed row): nothing found since, never a throw.
 		expect(toVerify(verify('issued', { runs: [{ engineVersion: 7 }, null] }), list).errataFoundSince).toEqual([]);
 		expect(toVerify(verify(), list).errataFoundSince).toEqual([]);
+	});
+
+	it('carries each sign-off’s statement version and the earlier-statement mark, strictly (314, issue #670)', () => {
+		const signer = { fullName: 'Signer', registrationBody: 'sacnasp', registrationNo: '1', signedAt: '2026-09-29T09:00:00Z' };
+		const out = toVerify(
+			verify('issued', {
+				statementVersion: 'pack-signoff-2',
+				signers: [
+					{ ...signer, statementVersion: 'pack-signoff-1', earlierStatement: true, statementSha256: SHA },
+					{ ...signer, statementVersion: 'pack-signoff-2', earlierStatement: false },
+					// Only a real true marks one; a string from a malformed row doesn't.
+					{ ...signer, statementVersion: 7, earlierStatement: 'true' }
+				]
+			})
+		);
+		expect(out.statementVersion).toBe('pack-signoff-2');
+		expect(out.signers.map((s) => [s.statementVersion, s.earlierStatement])).toEqual([
+			['pack-signoff-1', true],
+			['pack-signoff-2', false],
+			[null, false]
+		]);
+		// The statement's hash never leaves, nor anything else the row carries.
+		expect(JSON.stringify(out)).not.toContain('statementSha256');
+		// A lookup from before 314: nothing marked, no version.
+		const before = toVerify(verify());
+		expect(before.statementVersion).toBeNull();
+		expect(before.signers[0]).toMatchObject({ statementVersion: null, earlierStatement: false });
 	});
 });

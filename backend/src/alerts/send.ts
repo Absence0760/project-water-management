@@ -175,7 +175,9 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 	if (!mode[0]?.mode) return 'no longer gets this alert';
 	if (mode[0].mode === 'off') return 'turned this alert off';
 	const { rows } = await db.query<EventRow>(
-		`SELECT e.id, e.kind, e.state, e.value, e.detail, e.node_id, r.threshold, r.enabled
+		// The level the event crossed (312), not the rule's level now, which a WUA may have edited
+		// since; an event opened before 312 has none and quotes the rule's (issue #670).
+		`SELECT e.id, e.kind, e.state, e.value, e.detail, e.node_id, COALESCE(e.threshold, r.threshold) AS threshold, r.enabled
 		 FROM alert_event e JOIN alert_rule r ON r.id = e.rule_id WHERE e.id = $1`,
 		[c.event_id]
 	);

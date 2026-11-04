@@ -1,7 +1,7 @@
 import { compareAllocations, withIrrigatedAreas } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '#lib/api/types.js';
-import { allocationsContext, areaHa, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, judgementSentence, MEASURE_STATUS_LABEL, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitMeasures, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
+import { allocationsContext, areaHa, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, emptyBandNote, foldYears, judgementSentence, MEASURE_STATUS_LABEL, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitMeasures, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
 import { fmtNum } from '#lib/format/number.js';
 
 const comparison = () =>
@@ -40,6 +40,14 @@ describe('allocation wording', () => {
 		expect(statusSentence({ status: 'under', ratio: 0.5, modelledM3: 1, registeredM3: 2 }, 0.1)).toMatch(/50 % below/);
 		expect(waterYearLabel(2009)).toBe('2009/10');
 		expect(waterYearLabel(1999)).toBe('1999/00');
+	});
+
+	it('says an empty band field keeps the saved band, in the field\'s own percent (#670)', () => {
+		expect(emptyBandNote(0.1)).toBe('Left empty, so the comparison keeps the saved band, ±10 %.');
+		expect(emptyBandNote(0.125)).toBe('Left empty, so the comparison keeps the saved band, ±12.5 %.');
+		// A float product (0.07 × 100 = 7.000000000000001) reads as the number typed.
+		expect(emptyBandNote(0.07)).toBe('Left empty, so the comparison keeps the saved band, ±7 %.');
+		expect(emptyBandNote(0)).toBe('Left empty, so the comparison keeps the saved band, ±0 %.');
 	});
 });
 

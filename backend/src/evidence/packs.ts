@@ -213,8 +213,8 @@ async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManife
 	// The mitigation alternatives' runs too (evidence-26): page 1 prints their figures, so their errata reach the pack.
 	const alternatives = (manifest.report.alternatives ?? []).filter((x) => typeof x?.runId === 'string');
 	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : []), ...alternatives.map((x) => x.runId)];
-	const { rows } = await db.query<{ id: string; engineVersion: string; fitEngineVersion: string | null }>(
-		`SELECT id, engine_version AS "engineVersion", run_fit_engine_version(inputs, summary) AS "fitEngineVersion" FROM model_run WHERE id = ANY($1::uuid[])`,
+	const { rows } = await db.query<{ id: string; engineVersion: string; fitEngineVersions: string[] }>(
+		`SELECT id, engine_version AS "engineVersion", run_fit_engine_versions(inputs, summary) AS "fitEngineVersions" FROM model_run WHERE id = ANY($1::uuid[])`,
 		[ids]
 	);
 	const identity = manifest.report.identity;
@@ -225,9 +225,9 @@ async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManife
 	};
 	const runs: PackRunEngines[] = ids.flatMap((id) => {
 		const r = rows.find((x) => x.id === id);
-		if (r) return [{ engineVersion: r.engineVersion, fitEngineVersion: r.fitEngineVersion }];
+		if (r) return [{ engineVersion: r.engineVersion, fitEngineVersions: r.fitEngineVersions }];
 		const v = named[id];
-		return v ? [{ engineVersion: v, fitEngineVersion: null }] : [];
+		return v ? [{ engineVersion: v, fitEngineVersions: [] }] : [];
 	});
 	return errataFoundSince(manifest.report.verification.errata ?? [], runs);
 }
@@ -300,7 +300,7 @@ async function specialistPack(db: Db, projectId: string, packId: string): Promis
 				id: String(r.id),
 				engineVersion: String(r.engineVersion),
 				scenario: r.scenario === true,
-				fitEngineVersion: typeof r.fitEngineVersion === 'string' ? r.fitEngineVersion : null
+				fitEngineVersion: Array.isArray(r.fitEngineVersions) ? r.fitEngineVersions.filter((v): v is string => typeof v === 'string') : null
 			},
 			legacy: r.legacy === true,
 			forecast: r.forecast === true,
@@ -921,7 +921,16 @@ export interface PackVerification {
 		 * an owner of the project in the app (167_signers); null: the registration is self-declared.
 		 */
 		registrationCheck: { checkedAt: string; checkedByOrg: string } | null;
+		/** The sign-off statement version it was made against (e.g. pack-signoff-1; 314), or null if not recorded. */
+		statementVersion: string | null;
+		/**
+		 * Made against an earlier statement than the one the issue rested on (314): still listed, so the record is
+		 * complete, and marked. Compared by the statement's hash, so a new erratum counts though the version is the same.
+		 */
+		earlierStatement: boolean;
 	}[];
+	/** The version of the statement the issue rested on (its latest specialist sign-off's; 314), or null with none. */
+	statementVersion: string | null;
 }
 
 /**

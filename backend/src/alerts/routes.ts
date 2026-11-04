@@ -363,6 +363,7 @@ export interface AlertEventView {
 	kind: AlertKind;
 	state: 'firing' | 'cleared';
 	value: number | null;
+	/** The level the event crossed (312, issue #670), not the rule's level now; the rule's for an event opened before 312. */
 	threshold: number;
 	nodeId: string | null;
 	nodeName: string | null;
@@ -505,7 +506,8 @@ export const alertProjectRoutes = new Hono<AuthEnv>()
 				cleared_at: Date | null;
 				detail: Record<string, unknown>;
 			}>(
-				`SELECT e.id, e.kind, e.state, e.value, r.threshold, e.node_id, n.name AS node_name, r.feed_id, r.series_id, e.opened_at, e.cleared_at, e.detail - 'signature' AS detail
+				// The level the event crossed (312); the rule's level only for an event opened before 312 (issue #670).
+				`SELECT e.id, e.kind, e.state, e.value, COALESCE(e.threshold, r.threshold) AS threshold, e.node_id, n.name AS node_name, r.feed_id, r.series_id, e.opened_at, e.cleared_at, e.detail - 'signature' AS detail
 				 FROM alert_event e JOIN alert_rule r ON r.id = e.rule_id LEFT JOIN node n ON n.id = e.node_id
 				 WHERE e.project_id = $1 AND ($2 = 'all' OR e.state = 'firing')
 				 ORDER BY e.opened_at DESC, e.id DESC LIMIT 100`,

@@ -636,7 +636,13 @@ English only: its readers are licensing assessors, like the methods page's.
   off by** lists each signer's name, date and registration as the report
   prints it (*self-declared*), with the professional body's register as a
   link and its address in full; the register URLs are the engine's, never the
-  database's. **Errata recorded in the pack** are those the manifest
+  database's. Every sign-off stays listed; one made against an earlier
+  statement than the one the issue rested on is marked *Signed against an
+  earlier statement*, naming both versions when they differ, else saying it
+  was an earlier text of the same version (a newly found erratum or
+  limitation changes the text, not the version), with a note under the list
+  (`earlierStatement`, 314, issue #670; `packs/pack.ts`
+  `earlierStatementNote`). **Errata recorded in the pack** are those the manifest
   recorded when it was drafted; under them, **Errata found since issue**
   lists those added to the errata list later for the engines its runs (or
   their fits) used (`errataFoundSince`, 132), or says none has been found.
@@ -6304,7 +6310,11 @@ a strip showing coverage per year. Series a run won't read (not the first of
 their kind by name, in byte order as runs pick: `lib/series/pick.ts`) are marked. The role badge carries its reason in its own
 words, and the kind's role is an ⓘ `HelpTip` beside it (`series.<kind>`); a
 gauge record adds a line saying where it is checked and scored
-(`roles.ts` `roleBadge`). None of it is a hover title any more, which
+(`roles.ts` `roleBadge`). A series a data feed writes that runs don't
+read adds a line naming the series they read instead, and the series read,
+when no feed writes it and it ends first, a line saying how far each reaches
+(`series-feed-shadow`, `feedShadow.ts` `feedShadowWhy`, issue #670), the
+same pairs Run readiness lists. None of it is a hover title any more, which
 keyboard, touch and screen-reader users never got. **Series details**
 (issue #464, `series/details.ts`): under the chart, one labelled row for the
 charted series (a group named *Series details*, a `<dl>` whose terms are the
@@ -9794,7 +9804,17 @@ read it before.
   `run-chirps-driver`, the engine's `unitChirpsChoiceNotes`, also in the
   assistant's get_run_readiness): no CHIRPS series of their own (they run
   as Not set), or bias-corrected with no point rainfall record to correct
-  against (raw CHIRPS, levelled to the unit's MAP). A run the header started on
+  against (raw CHIRPS, levelled to the unit's MAP). It also
+  names each series a data feed writes that runs don't read, because another
+  of its kind sorts first by name (`run-feed-shadow`, issue #670,
+  `series/feedShadow.ts`): both series with their spans, in warning colour
+  when the one runs read has no feed and ends before the feed's ("… so the
+  feed’s days after 22 Oct 2025 never reach a run"), with a link to the
+  series read (its Series details, to rename it; a feed's own series keeps
+  its name) and, for CHIRPS, to Rain from the boundary, whose **Replace**
+  points a feed at that record ([maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)); otherwise a plain note
+  linking to Data. A note, never a blocker. A run the header started on
   another section and still going when the page opens shows here the same
   way, the form waiting for it. A viewer gets no form, and
   the inputs-changed note as before.
@@ -12214,10 +12234,21 @@ revision check, as for every settings save), reloads the comparison and
 hands the project to the page (`onProjectChange`), whose settings draft
 rebases on it, so a later Settings save keeps the new band. A viewer reads
 it, read-only, with no Save. The band is a model setting: saving it makes
-the latest run out of date.
+the latest run out of date. Left empty, the field isn't a band: the saved
+one stays (Save has nothing to send), the card's status line says so ("Left
+empty, so the comparison keeps the saved band, ±10 %.", `emptyBandNote`),
+and the field shows the saved band again when it loses the focus (issue
+#670).
 The import sheet asks a WARMS extract **How you obtained this extract (the
 DWS or CMA letter or terms)**, required, and refuses the file until it is
-filled; a CSV's reference stays optional.
+filled; a CSV's reference stays optional. Closed and reopened, the sheet
+drops its file and preview but keeps what the file is and the reference, for
+a retry (issue #670).
+A success notice above the page ("Imported 9 rows from …", "Removed the
+import of …", the viewers' switch) and an action's error stay only until the
+next action: opening the import or a volume sheet, a delete, removing an
+import, the viewers' switch, or typing or saving the band (which clears the
+band card's *Saved* too; issue #670).
 
 **Section header.** The context counts the registered volumes, the ones not
 matched to a unit, and the units above registered in the run shown ("40
@@ -13685,8 +13716,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     not validated" for a location with none; from the document's
     `calibrationZones`, `zoneStats.ts` `evidenceZoneRows`), then
     validation (the headline location's fit record, `FitProvenance`, or
-    *Not assessed* without a stored fit), WR2012, the validation statement,
-    and the nomination history.
+    *Not assessed* without a stored fit), WR2012, the validation statement
+    (its errata keyed on every location's fit, `runFitEngineVersions`,
+    issue #670), and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
     days and years fully met, baseline and application, the change with its
     paired band and "worse in"; then *Served in full while an EWR site below
@@ -15091,7 +15123,9 @@ the catalogue, [§ Language](#language)); both unit-tested.
 - **Farm view**: while the farm's own dam alert fires, an **Alerts** card
   under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
   alert level of 30 %: about 8 % on 20 Sep 2026" (or, on the forecast, "may
-  fall below … around …"), with *Choose your alert emails*. Nothing shows
+  fall below … around …"; the level is the one the alert crossed, as its
+  email says, even if the WUA has changed it since), with *Choose your alert
+  emails*. Nothing shows
   otherwise, or when the alerts can't be loaded.
 - **Portfolio**: an **Alerts** column (and card row): "None" or "2 firing"
   (a warning badge), from `alertsFiring`.

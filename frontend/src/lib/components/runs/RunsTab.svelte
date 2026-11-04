@@ -8,7 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { runFitEngineVersions, toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { rebuildingNote } from '#lib/series/provenance.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
@@ -46,6 +46,8 @@
 	import { riverHref } from '#lib/components/river/links.js';
 	import { hasForecastRain, runBlockers } from './runReady';
 	import { unitChirpsChoiceNotes, unitsOnCatchmentRain } from '#lib/components/settings/flowGeneration.js';
+	import { boundaryFixes, feedShadows, feedShadowText } from '#lib/components/series/feedShadow.js';
+	import { rainSourceKinds } from '#lib/components/series/roles.js';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
@@ -57,7 +59,6 @@
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '#lib/components/history/RunInputsPanel.svelte';
 	import { FORMER_MEMBER } from '#lib/format/maker.js';
-	import { runHeadlineSettings } from '#lib/calibration/zones.js';
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to EWR (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -529,6 +530,11 @@
 	// Run readiness (issue #615): the land units with no rain of their own run on the catchment rain, so their EWR share
 	// follows their area. A note, not a blocker: the run says so too.
 	const onCatchmentRain = $derived(series ? unitsOnCatchmentRain(editor.model.nodes, project.settings, series) : []);
+	// Run readiness (issue #670): a data feed writes a series no run reads, because another of its kind sorts first; a
+	// warning when the one read has no feed and stops while the feed's runs on (its new days never reach a run).
+	const shadows = $derived(
+		series ? feedShadows(series, { periodKinds: rainSourceKinds(project.settings?.rainSource), settings: project.settings, nodes: editor.model.nodes }) : []
+	);
 	// CHIRPS as a unit's driver (engine ≥ 1.114.0): the units whose choice won't run as chosen. Notes, not blockers.
 	const chirpsNotes = $derived(series ? unitChirpsChoiceNotes(editor.model.nodes, project.settings, series) : { noChirps: [], rawInstead: [] });
 	const unitNames = (units: readonly { name: string }[]) => `${units.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}${units.length > 6 ? ` and ${units.length - 6} more` : ''}`;
@@ -643,6 +649,19 @@
 				{onCatchmentRain.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}{onCatchmentRain.length > 6 ? ` and ${onCatchmentRain.length - 6} more` : ''}. Set up their rain in
 				<a href="?tab=settings#set-share">Model settings</a>.
 			</p>
+		{/if}
+		{#if !runBusy}
+			{#each shadows as x (x.fed.id)}
+				<p class={x.stalled ? 'note warn' : 'note'} data-testid="run-feed-shadow" data-stalled={x.stalled ? 'true' : undefined}>
+					{feedShadowText(x)}
+					{#if x.stalled}
+						Rename or remove <a href="?tab=series&series={encodeURIComponent(x.read.id)}#data-chart">{x.read.name || 'that series'}</a> so runs read the feed’s series{#if boundaryFixes(x)}, or replace it in
+							<a href="?tab=series&rain=boundary#data-feeds">Rain from the boundary</a>{/if}.
+					{:else}
+						See both in <a href="?tab=series&series={encodeURIComponent(x.fed.id)}#data-chart">Data</a>.
+					{/if}
+				</p>
+			{/each}
 		{/if}
 		{#if !runBusy && (chirpsNotes.noChirps.length || chirpsNotes.rawInstead.length)}
 			<p class="note" data-testid="run-chirps-driver">
@@ -935,7 +954,7 @@
 							{summary}
 							engineVersion={shownRun.engineVersion}
 							legacy={shownRun.legacy}
-							fitEngineVersion={runHeadlineSettings(shownRun)?.fitRecord?.engineVersion ?? null}
+							fitEngineVersion={runFitEngineVersions(shownRun.settings, summary)}
 							bind:open={validationOpen}
 						/>
 					</div>

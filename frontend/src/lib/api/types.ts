@@ -669,6 +669,7 @@ export interface AlertEvent {
 	kind: AlertKind;
 	state: 'firing' | 'cleared';
 	value: number | null;
+	/** The level the event crossed, not the rule's level now (issue #670). */
 	threshold: number;
 	nodeId: string | null;
 	nodeName: string | null;
@@ -839,12 +840,14 @@ export interface RunMeta {
 	 * from an older API (= manual).
 	 */
 	trigger?: RunTrigger;
-	/** The engine of the automatic fit its parameters came from (settings.fitRecord); null for entered parameters. Absent from an older API. */
+	/** The engine of the automatic fit its headline parameters came from (settings.fitRecord, or the headline gauge's row's); null for entered parameters. Absent from an older API. */
 	fitEngineVersion?: string | null;
+	/** The engines of every automatic fit its parameters came from, each applied calibration location's (issue #670), sorted; empty for entered parameters. Absent from an older API. */
+	fitEngineVersions?: string[];
 	/**
 	 * The known engine bugs that may affect it (issue #103, docs/engine-errata.md):
-	 * the ids of the errata whose range holds its engine, or its fit's for a `fit`
-	 * erratum, computed by the API (backend errata/runs.ts). Empty for none; absent
+	 * the ids of the errata whose range holds its engine, or any of its fits' for a
+	 * `fit` erratum, computed by the API (backend errata/runs.ts). Empty for none; absent
 	 * from an older API.
 	 */
 	errata?: string[];
@@ -2394,7 +2397,13 @@ export interface PackVerification {
 		kind?: SignoffKind;
 		/** The check bound when the pack was issued; null or absent: the registration is self-declared (167). */
 		registrationCheck?: { checkedAt: string; checkedByOrg: string } | null;
+		/** The sign-off statement version it was made against (314); null or absent: not recorded, or an older API. */
+		statementVersion?: string | null;
+		/** Made against an earlier statement than the one the issue rested on (314): listed and marked; absent from an older API. */
+		earlierStatement?: boolean;
 	}[];
+	/** The version of the statement the issue rested on (314); null or absent: none recorded, or an older API. */
+	statementVersion?: string | null;
 }
 
 /** POST /projects/:id/runs/:runId/signoffs. */

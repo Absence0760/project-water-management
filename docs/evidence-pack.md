@@ -1440,7 +1440,26 @@ the pack prints:
   hash and `errata` never change: an erratum added to engine-errata.md
   after issue shows here, apart and marked "found since issue";
 - `signers` `[{ fullName, registrationBody, registrationCategory,
-  registrationField, registrationNo, signedAt }]`.
+  registrationField, registrationNo, signedAt, kind, registrationCheck,
+  statementVersion, earlierStatement }]`, every sign-off of the pack, in the
+  order they were made;
+- `statementVersion`: the version of the statement the issue rested on
+  (null for a pack with no `specialist` sign-off).
+
+**Sign-offs of an earlier statement (314, issue #670).** A pack keeps every
+sign-off made while it was a draft, and verify lists them all, so the record
+stays complete. A sign-off made against an earlier statement than the one
+the issue rested on carries `earlierStatement: true` and its own
+`statementVersion`, and the page marks it *Signed against an earlier
+statement*. The statement the issue rested on is the pack's latest
+`specialist` sign-off's: issue needs a specialist sign-off of the current
+statement, only a draft is signed, a sign-off is refused unless it is of the
+statement current then, and that statement only moves forward (a new
+version, or a newly found erratum or limitation, or a new disclaimer
+version, which it lists). The comparison is by the statement's SHA-256, so
+a sign-off of the same version before a new erratum changed its text is
+marked too. Neither the hash nor anything else of the sign-off leaves: the
+version is a name such as `pack-signoff-1`, never personal.
 
 No ids, no inputs or results, no account, no email. A draft, a pack withdrawn
 before it was issued, an unknown code and a malformed one are all `404`, the

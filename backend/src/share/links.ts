@@ -697,7 +697,8 @@ export function toVerify(raw: Record<string, unknown>, errata: readonly Erratum[
 	const runs = arr(raw.runs).flatMap((x) => {
 		const r = obj(x);
 		const engineVersion = str(r.engineVersion);
-		return engineVersion ? [{ engineVersion, fitEngineVersion: str(r.fitEngineVersion) }] : [];
+		const fits = Array.isArray(r.fitEngineVersions) ? r.fitEngineVersions.filter((v): v is string => typeof v === 'string') : [];
+		return engineVersion ? [{ engineVersion, fitEngineVersions: fits }] : [];
 	});
 	const status = raw.status === 'superseded' || raw.status === 'withdrawn' ? raw.status : 'issued';
 	const manifest = sha(raw.manifestSha256) ?? '';
@@ -727,9 +728,12 @@ export function toVerify(raw: Record<string, unknown>, errata: readonly Erratum[
 				registrationNo: str(s.registrationNo) ?? '',
 				signedAt: str(s.signedAt) ?? '',
 				kind: s.kind === 'review' ? 'review' : 'specialist',
-				registrationCheck: toRegistrationCheck(s.registrationCheck)
+				registrationCheck: toRegistrationCheck(s.registrationCheck),
+				statementVersion: str(s.statementVersion),
+				earlierStatement: s.earlierStatement === true
 			};
-		})
+		}),
+		statementVersion: str(raw.statementVersion)
 	};
 }
 

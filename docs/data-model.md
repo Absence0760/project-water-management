@@ -287,6 +287,20 @@ An upload of a new series that would sort first says so before it is saved
 ("this one will replace “…” in runs", frontend `lib/series/pick.ts`
 `newSeriesEffect`), so no path adds a series that takes over unseen.
 
+The other way round goes unseen too: the series sorting second keeps
+everything a feed writes into it out of the runs. A feed writing a series
+"(boundary)" beside a workbook's gap-filler that no feed writes fills the
+feed's series, while runs read the gap-filler, which stops at its last day,
+and the run's span check stays quiet because the gap-filler still covers
+every day of the run (issue #670). So Run readiness and the Data rows name
+both whenever a feed's series (the outlet's, with days still the feed's own,
+031_feed_days) is not the one read, and warn when the one read has no feed
+and ends before the feed's (frontend `lib/components/series/feedShadow.ts`;
+[ui.md § Runs & results](./ui.md#runs--results)). The fix stays the pick by
+name: rename or remove the series read (a feed's own series keeps its name),
+or, for CHIRPS, **Replace** it from Rain from the boundary
+([maps.md](./maps.md#rain-from-the-boundary)).
+
 ### Series provenance (032_series_provenance.sql)
 
 `time_series.product` and `product_version` say what the values are, e.g.
@@ -1892,10 +1906,11 @@ were swept and who was mailed.
   your own rows (`erratum_notice_own`); `water_app` holds `SELECT` only.
 - **`app_erratum_sweep(errata jsonb)`**: the worker's context only. For each
   erratum not yet swept with its range, finds the projects with a run whose
-  engine (`model_run.engine_version`, or for a `fit` erratum
-  `run_fit_engine_version(inputs, summary)`, the headline location's fit's
-  engine, [289](#calibration-locations-289_calibration_locationssql); before
-  289 `inputs.settings.fitRecord.engineVersion`) is in [first affected, fixed
+  engine (`model_run.engine_version`, or for a `fit` erratum any of
+  `run_fit_engine_versions(inputs, summary)`, every applied calibration
+  location's fit's engine, 313 below; from 289 to 313 only the headline
+  location's, `run_fit_engine_version`; before 289
+  `inputs.settings.fitRecord.engineVersion`) is in [first affected, fixed
   in), compared numerically (`engine_version_key`), and queues each owner
   (project owner or team admin) with a confirmed, unsuppressed address.
 - **`app_erratum_notice_claim`**, **`app_erratum_notice_finish`**,
@@ -4602,6 +4617,35 @@ to the API's conversion on the same settings, network and records) and
 `backend/src/model/examples.zones.test.ts` (every example catchment and the
 Showcase run and fit the same in both shapes).
 
+### A `fit` erratum at any location (313_fit_errata_every_location.sql)
+
+Issue #670: 289 keyed a `fit` erratum on the headline location's fit alone,
+though a run calibrated at several gauges takes each unit's parameters from
+its own location's fit. 313 adds `run_fit_engine_versions(inputs jsonb,
+summary jsonb) text[]` (IMMUTABLE, reads only its arguments): the engines of
+every fit the run's parameters came from, distinct and sorted. For each group
+in `summary.unitRain.zones`: a gauge's location (a string `nodeId`) its
+`settings.calibrationZones` row's `fitRecord.engineVersion` (the first row for
+that node), plus the top-level `settings.fitRecord` when the group had no
+parameters of its own (`fitted: false`); the outlet's location and the units
+on `settings.gr4j` (`nodeId` null) the top-level one. The top level too when
+no group is the headline (no gauge location, or a run before engine 1.110.0),
+so `run_fit_engine_version`'s value is always in the list. The engine's
+`runFitEngineVersions` (`liability/errata.ts`) is the same rule, which the
+frontend's validation statements use.
+
+`app_erratum_sweep` keys a `fit` erratum on any element;
+`app_verify_pack` and `app_specialist_pack` carry `fitEngineVersions` (a JSON
+array) in place of `fitEngineVersion`, each redefined from 289 with only that
+changed (CREATE OR REPLACE keeps the grants). The API's run list, sign-off
+statements and packs' errata found since issue read the list the same way.
+`run_fit_engine_version` stays for the run list's `fitEngineVersion`. No
+table, policy or grant change, so no RLS change. Errata swept before 313
+aren't swept again, and none needs to be: the only `fit` erratum (ER-6) was
+fixed in 1.22.0, long before a fit at a non-headline location existed
+(1.106.0). Tested in `backend/src/db/migration-313.db.test.ts` (every case
+asserted equal to the engine's answer) and `backend/src/errata/notices.db.test.ts`.
+
 ### Calibration zones (270_calibration_sites.sql)
 
 Engine 1.106.0 calibrates at several gauges, upstream units first (issue
@@ -5608,7 +5652,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 | Table | Holds |
 | --- | --- |
 | `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`, `farms_short` (141)), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `feed_id` (057: the data feed, `data_stale` only; `ON DELETE CASCADE`), `series_id` (141: the series an API key writes, `data_stale` only, never with a `feed_id`; a composite foreign key `(project_id, series_id)` onto `time_series`, `ON DELETE CASCADE`), `threshold` (a per-kind CHECK `alert_rule_threshold`: a dam fraction 0–1, whole days, failures, jobs or farms, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id, feed_id, series_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`); once staleness alerts are on for any feed, a feed added later gets a rule at its source's default (`ensureFeedRules`, `SOURCES[source].staleAlertDays`), and a series an API key writes (a `series_key_days` row) gets one at 2 days (`ensureSeriesRules`, 141). Only key-fed series get a rule (a hand-uploaded series is stale by nature, issue #120); once made, it stays with the series even after a person writes over the key's days. 057 turned 051's catchment-wide `data_stale` rules into one per feed **in place**: the old row became the first feed's rule (keeping its events and deliveries, the 180-day history and the export's), and each other feed got a new rule at the same level, switch and creator. A catchment with no feed then kept its row with `feed_id` NULL, its pending choice: it never fires, the rule editor doesn't list it, the API never makes one, and `ensureFeedRules` gives it the first feed added (the one change of feed a rule may make; `migration-057.db.test.ts`) |
-| `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
+| `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `threshold` (312, issue #670: the rule's level when the event opened, copied by the guard, never changed; the mail and the pages quote it rather than the rule's level now, which a WUA may have edited before the mail went; NULL for an event opened before 312, whose readers fall back to the rule's level, `COALESCE(e.threshold, r.threshold)`), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
 | `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
 | `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
 | `alert_feedback` | "Was this useful?" on an alert email (151, issue #74): one row per email a person got, made when the worker builds it (`app_alert_answer_slot`, as the recipient, only for a delivery of theirs being sent). `project_id`, `user_id` (`ON DELETE CASCADE`), `event_id` (the alert, a digest's first line; `SET NULL` when the alert is purged), `kind` (the alert's, or `digest`), `nonce` (32 random bytes), `token_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, `"wm-alert-feedback/v1/"` + nonce); unique), `sent_at`, then once answered `useful`, `comment` (1–500 characters, optional) and `answered_at`. Unique `(user_id, event_id)`: a retried mail reuses the row and its link. **Retention**: unanswered 30 days after `sent_at` (the link stops working then), an answer 365 days after `answered_at` (`app_purge_alert_answers`, from the tick). No open or click is ever recorded: a row says only that the email offered the question, which `alert_delivery` already holds |
@@ -5626,8 +5670,8 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     for editors (the `alert_eval` job's acting user). `water_app` may update
     only `state`, `cleared_at`, `value` and `detail` (a column grant; the
     catalogue test lists it), and `alert_event_guard` refuses reopening a
-    cleared event, moving one to another rule, or (069) citing another
-    project's run. No DELETE policy.
+    cleared event, moving one to another rule, (069) citing another
+    project's run, or (312) changing the level it recorded. No DELETE policy.
   - `alert_subscription`: one policy for everything: your own rows, for a
     project you can still open (not as an applicant), and a farmer's
     `node_id` must be one of their farms (`app_farm_nodes`).

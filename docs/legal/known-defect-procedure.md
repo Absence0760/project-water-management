@@ -32,8 +32,9 @@ failing test that shows the wrong figure, not a suspicion.
 ## What the app does
 
 - **The flag.** Every run carries the ids of the errata whose range holds
-  its engine version (or, for a `fit` erratum, the engine of the automatic
-  calibration its parameters came from), from the engine's list
+  its engine version (or, for a `fit` erratum, the engine of an automatic
+  calibration its parameters came from: any calibration location's fit the
+  run applied, not only the headline's, issue #670), from the engine's list
   (`ENGINE_ERRATA`, backend `errata/runs.ts`). The run list tags such a run
   **May be affected** (the ids in its tooltip), and its header shows **May
   be affected by a known bug** (or *by n known bugs*), which opens the

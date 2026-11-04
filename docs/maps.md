@@ -1178,6 +1178,11 @@ boundary itself rather than over a box around it.
   - a run whose CHIRPS series spans less of it than another CHIRPS series
     warns, naming both ([model.md § Which CHIRPS series the run
     reads](./model.md#which-chirps-series-the-run-reads-engine--1900-issue-561)).
+  - when a feed's series is not the one runs read while the record they
+    read has no feed and stops before it (the span check stays quiet, as the
+    record still covers the run), Run readiness and the Data rows say so,
+    naming both, and link here for **Replace** (issue #670, [data-model.md §
+    Which series a run reads](./data-model.md#which-series-a-run-reads)).
 - **Reference ET from the boundary.** The same proposal and Apply for the
   daily reference evapotranspiration feed (`agera5_et0`): **Attach a feed**
   → **Source** *AgERA5 daily reference evapotranspiration* → **Area** *The
