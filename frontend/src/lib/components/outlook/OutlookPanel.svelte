@@ -36,6 +36,8 @@
 	import { fmtDate, fmtDay } from '#lib/format/number.js';
 	import { monthName } from '#lib/format/months.js';
 	import { resolveOutlook } from './settings';
+	import { buildBriefing, INFLOW_CLASS_LABEL, naturalContext } from './briefing';
+	import { cachedSeries } from '#lib/components/runs/cache.js';
 	import type { DailyEwrSource } from '#lib/components/ewr/notMet.js';
 	import {
 		buildOutlookView,
@@ -106,6 +108,21 @@
 		if (!outlook || shown?.kind !== 'complete' || !outlook.result) return null;
 		return buildOutlookView({ ...outlook, result: outlook.result }, daily);
 	});
+	// The briefing (./briefing.ts): the outlook's parts in the order a WUA reads them, and the base run's natural flow around the season.
+	const briefing = $derived(view && outlook?.result ? buildBriefing({ ...outlook, result: outlook.result }, months) : null);
+	let natural = $state.raw<{ startDate: string; values: (number | null)[] } | null>(null);
+	let naturalFor = '';
+	$effect(() => {
+		if (!view || naturalFor === run.id) return;
+		naturalFor = run.id;
+		cachedSeries(run.id, 'natural_flow', null, () => api.runs.series(projectId, run.id, 'natural_flow', null))
+			.then((s) => {
+				if (live) natural = { startDate: s.startDate, values: s.values as (number | null)[] };
+			})
+			// No natural flow stored (an older run): part 1 shows the storage alone.
+			.catch(() => {});
+	});
+	const around = $derived(natural && outlook?.result ? naturalContext(natural, outlook.decisionDate, outlook.result.analogues) : null);
 	const climateView = $derived(view && outlook?.result ? buildClimateView(outlook.result) : null);
 	const forecastView = $derived(view && outlook?.result ? buildForecastView(outlook.result.forecast) : null);
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
@@ -407,12 +424,61 @@
 			{#if view.start}<p class="small">{view.start}</p>{/if}
 			{#if view.tooFewYears}<div class="alert alert-warning" data-testid="outlook-too-few">{view.tooFewYears}</div>{/if}
 
+			{#if briefing}
+				{#if briefing.risk}
+					<p class="risk risk-{briefing.risk.level}" data-testid="outlook-risk" data-risk={briefing.risk.level}>
+						<strong>{briefing.risk.label}:</strong>
+						{briefing.risk.text}
+					</p>
+				{/if}
+				<div class="parts">
+					<section class="part" aria-labelledby="outlook-start-h" data-testid="outlook-start">
+						<h4 id="outlook-start-h"><span class="step" aria-hidden="true">1</span> Where the season starts</h4>
+						<dl class="facts">
+							<div>
+								<dt>Dam storage on {briefing.decision}</dt>
+								<dd>{#if briefing.storage}<strong>{briefing.storage.text}</strong> {#if briefing.storage.share}<span class="band">{briefing.storage.share} of the hydrological units’ dam capacity</span>{/if}{:else}No farm dam{/if}</dd>
+							</div>
+							<div data-testid="outlook-inflow">
+								<dt>Natural flow before it{#if around?.inflow}{' '}({around.inflow.months}){/if}</dt>
+								<dd>
+									{#if around?.inflow}
+										<strong>{around.inflow.text}</strong>
+										<span class="band">{around.inflow.ofMedian ? `${around.inflow.ofMedian} of the median of the same months in ${around.inflow.nYears} earlier years` : 'Too few earlier years to compare with'}{#if around.inflow.cls}: <span class="tag" data-class={around.inflow.cls}>{INFLOW_CLASS_LABEL[around.inflow.cls]}</span>{/if}</span>
+									{:else}
+										<span class="muted">{natural ? 'The record doesn’t hold the six months before the decision date.' : 'Loading the base run’s natural flow…'}</span>
+									{/if}
+								</dd>
+							</div>
+							<div data-testid="outlook-season-flow">
+								<dt>Natural flow over the season in past years</dt>
+								<dd>
+									{#if around?.season}
+										<strong>{around.season.median}</strong>
+										<span class="band">median of {around.season.nYears} analogue years as they happened; 10–90 %: {around.season.band}</span>
+									{:else}
+										<span class="muted">{natural ? 'Not in the record.' : 'Loading…'}</span>
+									{/if}
+								</dd>
+							</div>
+						</dl>
+					</section>
+					<section class="part" aria-labelledby="outlook-planning-h" data-testid="outlook-planning-part">
+						<h4 id="outlook-planning-h"><span class="step" aria-hidden="true">2</span> Planning figure <HelpTip key="planning-figure" /></h4>
+						{#if briefing.planning}<p class="big" data-testid="outlook-planning-level">{briefing.planning.label} <span class="u">of today’s irrigation demand</span></p>{/if}
+						<p data-testid="outlook-planning">{view.planning}</p>
+						<p class="hint">This counts past years; it is not a decision. The WUA decides the season’s level and publishes it as the restriction notice.</p>
+					</section>
+				</div>
+				<h4 id="outlook-levels-h"><span class="step" aria-hidden="true">3</span> What if more or less</h4>
+			{/if}
 			<div class="scroll">
 				<table class="levels" data-testid="outlook-table">
 					<caption class="visually-hidden">Season outcome by demand level: medians with the 10–90 % range across analogue years</caption>
 					<thead>
 						<tr>
 							<th scope="col">Demand level</th>
+							<th scope="col">Irrigation supplied over the season</th>
 							<th scope="col">Dam storage at season end</th>
 							<th scope="col">Hydrological unit demand met</th>
 							<th scope="col">{view.ewrHeading}</th>
@@ -421,18 +487,25 @@
 					</thead>
 					<tbody>
 						{#each view.rows as r (r.id)}
+							{@const b = briefing?.levels.find((l) => l.id === r.id)}
 							<tr data-level={r.id}>
 								<th scope="row">
 									{r.label}
+									{#if b?.description}<span class="band">{b.description}</span>{/if}
+									{#if b?.plan}<span class="band" data-testid="outlook-plan-months">{b.plan}</span>{/if}
 									{#if r.planning}<span class="badge small" data-testid="planning-level">Planning figure</span>{/if}
 								</th>
 								{#if r.kind === 'ran'}
+									<td class="stat"><strong>{b?.supplied ?? '–'}</strong><span class="band">median</span></td>
 									{#each [r.storage, r.demandMet, r.ewr] as st, i (i)}
-										<td class="stat"><strong>{st.median}</strong>{#if st.band}<span class="band">10–90 %: {st.band}</span>{/if}</td>
+										<td class="stat"><strong>{st.median}</strong>{#if i === 0 && b?.endShare}<span class="band">{b.endShare} of capacity</span>{/if}{#if st.band}<span class="band">10–90 %: {st.band}</span>{/if}</td>
 									{/each}
-									<td class="stat">{r.yearsMet}</td>
+									<td class="stat">
+										{r.yearsMet}
+										{#if b}<span class="tag" data-meets={b.meetsShare}>{b.meetsShare ? 'Meets the planning share' : 'Under the planning share'}</span>{/if}
+									</td>
 								{:else}
-									<td colspan="4" class="not-run"><strong>Could not be run:</strong> {r.problems.join(' ')}</td>
+									<td colspan="5" class="not-run"><strong>Could not be run:</strong> {r.problems.join(' ')}</td>
 								{/if}
 							</tr>
 						{/each}
@@ -444,16 +517,27 @@
 				water irrigated from a dam drains back to the river, so taking less from the dam can leave the river lower on dry days.
 			</p>
 
-			<h4>Planning figure <HelpTip key="planning-figure" /></h4>
-			<p data-testid="outlook-planning">{view.planning}</p>
-			<p class="hint">
-				This counts past years; it is not a decision. The WUA decides the season’s level and publishes it as the restriction notice.
-			</p>
+			{#if briefing}
+				<section aria-labelledby="outlook-plan-h" data-testid="outlook-monthly-plan">
+					<h4 id="outlook-plan-h"><span class="step" aria-hidden="true">4</span> Monthly operating plan</h4>
+					{#if briefing.plans.length}
+						{#each briefing.plans as pl (pl.label)}
+							<p class="small"><strong>{pl.label}</strong>, as the WUA typed it:</p>
+							<ol class="plan-months">
+								{#each pl.months as m (m.month)}<li><span>{m.month}</span> <strong>{m.pct}</strong></li>{/each}
+							</ol>
+						{/each}
+						<p class="hint">Its outcome is its row in the table above. The outlook tests a plan; it doesn’t work one out.</p>
+					{:else}
+						<p class="hint">No monthly plan in this outlook. An editor can test one beside the levels (<em>Add a monthly plan</em> on the form); the outlook tests a plan the WUA types in and doesn’t work one out.</p>
+					{/if}
+				</section>
+			{/if}
 			{#if climateView}<ClimateAnalogues view={climateView} />{/if}
 			{#if forecastView}<ForecastChances view={forecastView} />{/if}
 
 			{#if triggers && triggers.kind !== 'none'}
-				<h4 id="triggers-h">Review triggers <HelpTip key="review-triggers" /></h4>
+				<h4 id="triggers-h"><span class="step" aria-hidden="true">5</span> Reassess and adjust: review triggers <HelpTip key="review-triggers" /></h4>
 				<div data-testid="outlook-triggers">
 					{#if triggers.kind === 'notDrawn'}
 						<p class="muted" data-testid="triggers-not-drawn">Review on {triggers.reviewDate}: no trigger table. {triggers.problem}</p>
@@ -471,15 +555,18 @@
 									<tr>
 										<th scope="col">Dam storage on the review date</th>
 										<th scope="col">Demand level</th>
+										<th scope="col">Beside the planning figure</th>
 										<th scope="col">Years met in full</th>
 										<th scope="col">Every level</th>
 									</tr>
 								</thead>
 								<tbody>
-									{#each triggers.rows as r (r.band)}
-										<tr>
+									{#each triggers.rows as r, i (r.band)}
+										{@const a = briefing?.triggers[i]}
+										<tr data-tone={a?.tone ?? 'none'}>
 											<th scope="row">{r.band}<span class="band">{r.fromShare} of capacity and up</span></th>
 											<td class="stat"><strong>{r.level ?? 'No level'}</strong></td>
+											<td class="stat" data-testid="trigger-vs-planning">{a?.vsPlanning ?? '–'}</td>
 											<td class="stat">{r.met}</td>
 											<td class="stat">
 												{#each r.perLevel as l (l.label)}<span class="band">{l.label}: {l.met}{l.meets ? '' : ' (below the share)'}</span>{/each}
@@ -535,6 +622,22 @@
 						{/if}
 					{/if}
 				</div>
+			{/if}
+
+			{#if briefing}
+				<section aria-labelledby="outlook-balance-h" data-testid="outlook-balance">
+					<h4 id="outlook-balance-h"><span class="step" aria-hidden="true">6</span> Projected water balance by month</h4>
+					<p class="hint">
+						Not drawn yet: an outlook keeps each past season’s totals, not its months, so there is no month-by-month balance or storage line to show.
+						The season’s totals are in the table above (irrigation supplied, dam storage at the end).
+					</p>
+				</section>
+				<section class="messages" aria-labelledby="outlook-messages-h" data-testid="outlook-messages">
+					<h4 id="outlook-messages-h">Key messages for farmers</h4>
+					<ul>
+						{#each briefing.messages as m (m)}<li>{m}</li>{/each}
+					</ul>
+				</section>
 			{/if}
 
 			<h4 id="publish-h">Farmers <HelpTip key="outlook-publish" /></h4>
@@ -726,6 +829,109 @@
 	}
 	h4 {
 		margin: 0.75rem 0 0.25rem;
+	}
+	.step {
+		display: inline-grid;
+		place-items: center;
+		width: 1.4rem;
+		height: 1.4rem;
+		margin-right: 0.2rem;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		color: var(--text);
+		font-size: var(--font-xs);
+		font-weight: 600;
+		vertical-align: 0.05rem;
+	}
+	.risk {
+		margin: 0.5rem 0;
+		padding: 0.5rem 0.75rem;
+		border-radius: var(--radius);
+		border-left: 4px solid var(--border);
+		max-width: 80ch;
+	}
+	.risk-lower {
+		background: var(--success-soft);
+		border-left-color: var(--success);
+	}
+	.risk-increasing {
+		background: var(--warning-soft);
+		border-left-color: var(--warning);
+	}
+	.risk-high {
+		background: var(--danger-soft);
+		border-left-color: var(--danger);
+	}
+	.parts {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		gap: 0.75rem;
+	}
+	.part {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0 0.75rem 0.6rem;
+	}
+	.facts {
+		margin: 0;
+		display: grid;
+		gap: 0.45rem;
+	}
+	.facts dt {
+		font-size: var(--font-sm);
+		color: var(--text-muted);
+	}
+	.facts dd {
+		margin: 0;
+	}
+	.big {
+		font-size: 1.5rem;
+		font-weight: 600;
+		margin: 0.25rem 0;
+	}
+	.big .u {
+		font-size: 0.9rem;
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	.tag {
+		display: inline-block;
+		margin-top: 0.15rem;
+		font-size: var(--font-xs);
+		padding: 0 0.35rem;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+	}
+	.tag[data-meets='true'] {
+		background: var(--success-soft);
+	}
+	.tag[data-meets='false'] {
+		background: var(--warning-soft);
+	}
+	.stat .tag {
+		display: block;
+		width: fit-content;
+	}
+	.plan-months {
+		list-style: none;
+		padding: 0;
+		margin: 0.25rem 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem 0.9rem;
+		font-size: 0.85rem;
+	}
+	.messages {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0 0.75rem 0.5rem;
+		margin-top: 0.75rem;
+		max-width: 90ch;
+	}
+	.messages ul {
+		margin: 0;
+		padding-left: 1.2rem;
+		font-size: 0.9rem;
 	}
 	.words {
 		font-size: 0.85rem;

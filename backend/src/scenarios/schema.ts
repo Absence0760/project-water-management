@@ -55,10 +55,18 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 				// null: out of the catchment (engine ≥ 1.86.0), no unit to name.
 				...(op.transfer.toNodeId !== null ? ([['transfer.toNodeId', op.transfer.toNodeId]] as [string, unknown][]) : []),
 				// The unit an off-take's seepage rejoins below (engine ≥ 1.42.0), when named.
-				...(op.transfer.lossReturnNodeId ? ([['transfer.lossReturnNodeId', op.transfer.lossReturnNodeId]] as [string, unknown][]) : [])
+				...(op.transfer.lossReturnNodeId ? ([['transfer.lossReturnNodeId', op.transfer.lossReturnNodeId]] as [string, unknown][]) : []),
+				// A split's destinations (engine ≥ 1.114.0), but null: out of the catchment.
+				...(Array.isArray(op.transfer.destinations) ? op.transfer.destinations.flatMap((d, k) => (d?.nodeId != null ? [[`transfer.destinations[${k}].nodeId`, d.nodeId] as [string, unknown]] : [])) : [])
 			];
 		case 'transfer.set':
-			return [['transferId', op.transferId], ...(op.field === 'fromNodeId' || ((op.field === 'toNodeId' || op.field === 'lossReturnNodeId') && op.value !== null) ? ([['value', op.value]] as [string, unknown][]) : [])];
+			return [
+				['transferId', op.transferId],
+				...(op.field === 'fromNodeId' || ((op.field === 'toNodeId' || op.field === 'lossReturnNodeId') && op.value !== null) ? ([['value', op.value]] as [string, unknown][]) : []),
+				...(op.field === 'destinations' && Array.isArray(op.value)
+					? op.value.flatMap((d, k) => (d?.nodeId != null ? [[`value[${k}].nodeId`, d.nodeId] as [string, unknown]] : []))
+					: [])
+			];
 		case 'transfer.remove':
 			return [['transferId', op.transferId]];
 		case 'landCover.add':

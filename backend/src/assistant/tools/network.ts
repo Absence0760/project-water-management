@@ -118,6 +118,10 @@ export function networkView(model: ModelLike) {
 			id: t.id,
 			from: byId.get(t.fromNodeId)?.name ?? t.fromNodeId,
 			to: t.toNodeId === null ? 'outside the catchment' : (byId.get(t.toNodeId)?.name ?? t.toNodeId),
+			// Split between destinations (engine ≥ 1.114.0): every one and its share; `to` is the first.
+			...(t.destinations && t.destinations.length > 1
+				? { destinations: t.destinations.map((d) => ({ to: d.nodeId === null ? 'outside the catchment' : (byId.get(d.nodeId)?.name ?? d.nodeId), pct: r4(d.pct) })) }
+				: {}),
 			months: t.months,
 			maxRateM3s: r4(t.maxRateM3s),
 			dailyCapM3: r4(t.dailyCapM3),

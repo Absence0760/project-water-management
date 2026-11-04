@@ -23,6 +23,7 @@ import {
 	OUTCOME_RISK_LABEL,
 	outcomeMatrix,
 	type OutcomeLevelInput,
+	type OutcomeMatrix,
 	type OutcomeMetric,
 	type OutcomeRisk,
 	type OutcomeRiskCutoffs,
@@ -34,7 +35,10 @@ import {
 } from '@water-management/engine';
 import type { OutcomeSettings, StoredRunSeries, Sweep, SweepMember, SweepRequest } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
+import { levelDescription } from '#lib/format/demandLevel.js';
 import { effectiveCutoffs } from './outcomeSettings';
+
+export { levelDescription };
 import { dailyEwrName, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
 
 /** The demand levels a new sweep starts with, % of today's demand (planning-outputs.md S2). */
@@ -170,6 +174,15 @@ export function metricLabel(metric: OutcomeMetric, site: Pick<MatrixSite, 'where
 
 const pct = (v: number) => `${fmtNum(v * 100, 1, true)} %`;
 
+/** The cut-offs as the legend's three rules, for the metric. */
+export function legendRows(metric: OutcomeMetric, c: OutcomeRiskCutoffs): LegendRow[] {
+	const rule =
+		metric === 'reserveMonthsMet'
+			? { lower: `At least ${pct(c.reserveMonthsMet.lower)} of months met`, increasing: `At least ${pct(c.reserveMonthsMet.increasing)} of months met`, high: `Under ${pct(c.reserveMonthsMet.increasing)} of months met` }
+			: { lower: `Below the EWR on at most ${pct(c.daysBelowEwr.lower)} of days`, increasing: `Below the EWR on at most ${pct(c.daysBelowEwr.increasing)} of days`, high: `Below the EWR on more than ${pct(c.daysBelowEwr.increasing)} of days` };
+	return (['lower', 'increasing', 'high'] as const).map((risk) => ({ risk, label: OUTCOME_RISK_LABEL[risk], phrase: riskPhrase(metric, risk), rule: rule[risk] }));
+}
+
 /** The cut-offs in words, for the metric the matrix uses. */
 export function cutoffsText(metric: OutcomeMetric, c: OutcomeRiskCutoffs): string {
 	if (metric === 'reserveMonthsMet') {
@@ -189,10 +202,39 @@ export function boundsText(c: Pick<YearClassBand, 'lowerM3' | 'upperM3'>): strin
 	return `${f(c.lowerM3)} – ${f(c.upperM3)} m³`;
 }
 
+/**
+ * A class's bounds as the column head's short range, in `scale` m³ (1e6:
+ * million m³, two significant decimals below 10, one below 100):
+ * "≤ 20.3", "20.3 – 145", "> 2.34"; "all years" when unbounded.
+ */
+export function boundsShort(c: Pick<YearClassBand, 'lowerM3' | 'upperM3'>, scale: 1 | 1e6): string {
+	const f = (v: number) => {
+		if (scale === 1) return fmtNum(v);
+		const m = v / 1e6;
+		return fmtNum(m, Math.abs(m) < 10 ? 2 : Math.abs(m) < 100 ? 1 : 0);
+	};
+	if (c.lowerM3 === null && c.upperM3 === null) return 'all years';
+	if (c.lowerM3 === null) return `≤ ${f(c.upperM3!)}`;
+	if (c.upperM3 === null) return `> ${f(c.lowerM3)}`;
+	return `${f(c.lowerM3)} – ${f(c.upperM3)}`;
+}
+
+/**
+ * A risk in a few plain words beside its label ("High risk · EWR often not
+ * met"), for the measure in use. Words of degree, not of chance: the cell's
+ * sentence counts the years, and the legend gives the cut-offs.
+ */
+export function riskPhrase(metric: OutcomeMetric, risk: OutcomeRisk): string {
+	const what = metric === 'reserveMonthsMet' ? 'Reserve' : 'EWR';
+	return risk === 'lower' ? `${what} generally met` : risk === 'increasing' ? `${what} may not be met` : `${what} often not met`;
+}
+
 export interface MatrixColumn {
 	id: string;
 	label: string;
 	bounds: string;
+	/** The bounds in the view's `boundsUnit`, for the column head (boundsShort). */
+	range: string;
 	nYears: number;
 }
 
@@ -200,14 +242,33 @@ export interface MatrixCellView {
 	risk: OutcomeRisk | null;
 	/** "Lower risk", …; "Not enough years" when there are fewer than OUTCOME_MIN_YEARS. */
 	riskLabel: string;
+	/** riskPhrase; null without a risk. */
+	phrase: string | null;
 	/** describeOutcomeCell's sentence, counting years. */
 	text: string;
 	nYears: number;
 }
 
 export type MatrixRow =
-	| { kind: 'cells'; id: string; label: string; cells: MatrixCellView[] }
-	| { kind: 'notRun'; id: string; label: string; status: 'problems' | 'failed' | 'pending'; lines: string[] };
+	| { kind: 'cells'; id: string; label: string; description: string | null; cells: MatrixCellView[] }
+	| { kind: 'notRun'; id: string; label: string; description: string | null; status: 'problems' | 'failed' | 'pending'; lines: string[] };
+
+/** One row of the matrix's key: a risk, its phrase, and the cut-off that gives it, in words. */
+export interface LegendRow {
+	risk: OutcomeRisk;
+	label: string;
+	phrase: string;
+	rule: string;
+}
+
+/** The run behind the matrix, for its Model context box. */
+export interface MatrixContext {
+	/** First and last classed water year: "2010/11 – 2018/19". */
+	period: string;
+	years: string;
+	assessment: string;
+	availability: string;
+}
 
 export interface MatrixView {
 	metric: OutcomeMetric | null;
@@ -222,11 +283,31 @@ export interface MatrixView {
 	/** Water years the base run touches but that aren't classed (part years, or a missing day). */
 	excluded: WaterYearClasses['excluded'];
 	columns: MatrixColumn[];
+	/** The unit of the columns' ranges: "million m³ a year", or "m³ a year" for a small catchment. */
+	boundsUnit: string;
 	rows: MatrixRow[];
+	/** The key, for the metric in use; empty without one. */
+	legend: LegendRow[];
+	/** Null without a classed year. */
+	context: MatrixContext | null;
 	/** The metric in use still has the engine's placeholder cut-offs, pending the hydrologist. */
 	cutoffsPending: boolean;
 	cutoffsText: string | null;
 	warnings: string[];
+	/** The engine's matrix (null without one: no done member, no complete year, or siteMissing), for views over its years (irrigationSupport.ts). */
+	outcome: OutcomeMatrix | null;
+	/** The base run's year classes: each classed year's natural volume. */
+	classes: WaterYearClasses;
+}
+
+/** What the outcome matrix panel shares with the boards that read its sweep (OutcomeMatrixPanel onview). */
+export interface MatrixShare {
+	/** The panel's data-state: loading, empty, pending, stuck, complete. */
+	state: string;
+	view: MatrixView | null;
+	sweep: Sweep | null;
+	/** A sweep can run on this run (an ordinary run with its natural flow). */
+	runnable: boolean;
 }
 
 export interface MatrixInput {
@@ -249,7 +330,10 @@ export interface MatrixInput {
  */
 export function buildMatrixView(input: MatrixInput): MatrixView {
 	const classes = classifyWaterYears({ startDate: input.baseStartDate, naturalM3Day: toNaN(input.baseNatural) }, { method: input.settings.yearClassMethod });
-	const columns: MatrixColumn[] = classes.classes.map((c) => ({ id: c.id, label: c.label, bounds: boundsText(c), nYears: c.waterYears.length }));
+	// Million m³ once the wettest class starts above a million m³ a year, as a WUA reads catchment flows.
+	const top = classes.classes.at(-1)?.lowerM3 ?? classes.classes[0]?.upperM3 ?? 0;
+	const scale: 1 | 1e6 = top >= 1e6 ? 1e6 : 1;
+	const columns: MatrixColumn[] = classes.classes.map((c) => ({ id: c.id, label: c.label, bounds: boundsText(c), range: boundsShort(c, scale), nYears: c.waterYears.length }));
 	const members = [...input.members].sort((a, b) => a.position - b.position);
 	const done = members.filter((m) => m.status === 'done');
 	const cutoffs = effectiveCutoffs(input.settings.riskCutoffs);
@@ -271,18 +355,21 @@ export function buildMatrixView(input: MatrixInput): MatrixView {
 
 	const rows: MatrixRow[] = siteMissing ? [] : members.map((m) => {
 		const cells = cellsOf.get(m.id);
+		const description = levelDescription(demandLevelOf(m));
 		if (m.status !== 'done' || !cells || !matrix) {
 			const status = m.status === 'done' ? 'failed' : m.status;
 			const lines = m.status === 'pending' ? ['Not run yet.'] : m.problems.length ? m.problems : ['This demand level could not be run.'];
-			return { kind: 'notRun', id: m.id, label: m.name, status, lines };
+			return { kind: 'notRun', id: m.id, label: m.name, description, status, lines };
 		}
 		return {
 			kind: 'cells',
 			id: m.id,
 			label: m.name,
+			description,
 			cells: cells.map((cell) => ({
 				risk: cell.risk,
 				riskLabel: cell.risk ? OUTCOME_RISK_LABEL[cell.risk] : 'Not enough years',
+				phrase: cell.risk ? riskPhrase(matrix.metric, cell.risk) : null,
 				text: describeOutcomeCell(matrix.metric, cell, labelOf.get(cell.classId) ?? cell.classId),
 				nYears: cell.nYears
 			}))
@@ -295,18 +382,32 @@ export function buildMatrixView(input: MatrixInput): MatrixView {
 	else if (classes.years.length < OUTCOME_MIN_YEARS * columns.length) {
 		warnings.push(`Only ${classes.years.length} complete water years: some classes have fewer than ${OUTCOME_MIN_YEARS} years, and their cells say so instead of a risk.`);
 	}
+	const yearLabels = [...classes.years].sort((a, b) => a.waterYear - b.waterYear).map((y) => y.label);
+	const label = metric ? metricLabel(metric, site, input.daily) : null;
 	return {
 		metric,
-		metricLabel: metric ? metricLabel(metric, site, input.daily) : null,
+		metricLabel: label,
 		site,
 		siteMissing,
 		method: classes.method,
 		nYears: classes.years.length,
 		excluded: classes.excluded,
 		columns,
+		boundsUnit: scale === 1e6 ? 'million m³ a year' : 'm³ a year',
 		rows,
+		legend: metric ? legendRows(metric, cutoffs) : [],
+		context: yearLabels.length
+			? {
+					period: yearLabels.length === 1 ? yearLabels[0]! : `${yearLabels[0]} – ${yearLabels.at(-1)}`,
+					years: `${yearLabels.length} complete water ${yearLabels.length === 1 ? 'year' : 'years'}`,
+					assessment: label ?? '–',
+					availability: `Annual natural flow at the outlet in the base run, split into ${classes.method} of its own years`
+				}
+			: null,
 		cutoffsPending: metric !== null && OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST && input.settings.riskCutoffs[metric] === null,
 		cutoffsText: metric ? cutoffsText(metric, cutoffs) : null,
-		warnings
+		warnings,
+		outcome: matrix,
+		classes
 	};
 }

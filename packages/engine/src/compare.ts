@@ -17,7 +17,8 @@ import { EWR_DAILY_SOURCE_LABEL, ewrDailySourceChanges } from './reserve/dailySo
 import { isEwrSite } from './network/topology';
 import { EWR_SPLIT_LABEL, EWR_SPLIT_RETIRED_IN } from './network/ewrSplit';
 import { hasMonthlyRates, transferRatesM3s } from './network/transferRates';
-import { isRiverOfftake } from './network/offtake';
+import { diversionMonthsOf, hasMonthlyDiversion, isRiverOfftake } from './network/offtake';
+import { isSplitTransfer, transferDestinations } from './network/transferSplits';
 import { droughtRestrictionChanges } from './network/restriction';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
@@ -57,6 +58,7 @@ import {
 	DEMAND_PARTS,
 	type FarmSummary,
 	type LandCoverPatch,
+	type MonthDiversion,
 	type NetworkNode,
 	type ArealRain,
 	type PeInput,
@@ -769,7 +771,10 @@ export function unitRainText(raw: unknown): string {
 	const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	// The reference gauge and unit (engine ≥ 1.80.0), only when set, so a setting without one reads as before.
 	const ref = u.reference ? `; reference gauge ${u.reference.gauge} at the unit ${u.reference.unitId}` : '';
-	return `on (${gauge}; MAP period ${dayText(p.start)} to ${dayText(p.end)}${ref})`;
+	// The units' CHIRPS drivers (engine ≥ 1.114.0), only when set, so a setting without them reads as before.
+	const drivers = Object.entries(u.chirpsUnits ?? {});
+	const chirps = drivers.length ? `; CHIRPS as the driver of ${drivers.map(([id, c]) => `the unit ${id} (${c.correction === 'raw' ? 'raw' : 'bias-corrected'})`).join(', ')}` : '';
+	return `on (${gauge}; MAP period ${dayText(p.start)} to ${dayText(p.end)}${ref}${chirps})`;
 }
 
 /** The change of settings.unitRain between two runs, or null. A run saved without it (engine < 1.78.0) ran on the catchment rain. */
@@ -2062,9 +2067,11 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 	// --- transfers: by id, then by "from → to" route (A's route in B's names) ---
 	// A rule out of the catchment (engine ≥ 1.86.0) has no destination unit.
 	const OUTSIDE = 'outside the catchment';
-	const route = (m: typeof na, t: Transfer) => `${m.node(t.fromNodeId)} → ${t.toNodeId === null ? OUTSIDE : m.node(t.toNodeId)}`;
-	const routeInB = (t: Transfer) =>
-		`${nodeRename.get(t.fromNodeId) ?? na.node(t.fromNodeId)} → ${t.toNodeId === null ? OUTSIDE : (nodeRename.get(t.toNodeId) ?? na.node(t.toNodeId))}`;
+	// Split between destinations (engine ≥ 1.114.0): each with its share, "A → B 40 %, C 60 %".
+	const ends = (t: Transfer, name: (id: string) => string) =>
+		isSplitTransfer(t) ? transferDestinations(t).map((d) => `${d.nodeId === null ? OUTSIDE : name(d.nodeId)} ${pct(d.pct)}`).join(', ') : t.toNodeId === null ? OUTSIDE : name(t.toNodeId);
+	const route = (m: typeof na, t: Transfer) => `${m.node(t.fromNodeId)} → ${ends(t, (id) => m.node(id) ?? id)}`;
+	const routeInB = (t: Transfer) => `${nodeRename.get(t.fromNodeId) ?? na.node(t.fromNodeId)} → ${ends(t, (id) => nodeRename.get(id) ?? na.node(id) ?? id)}`;
 	const tm = matchByIdThenName(
 		a.transfers.map((t) => ({ t, key: routeInB(t) })),
 		b.transfers.map((t) => ({ t, key: route(nb, t) })),
@@ -2093,9 +2100,18 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		// A share of the river's flow (engine ≥ 1.113.0): its curve, each field as it differs.
 		if (x.sizing === 'diversionCurve' || y.sizing === 'diversionCurve') {
 			const num = (v: number | null | undefined) => (v === null || v === undefined ? 'none' : fmtValue(v));
-			if ((x.diversionCoefficient ?? null) !== (y.diversionCoefficient ?? null)) parts.push(`diversion curve coefficient a ${num(x.diversionCoefficient)} → ${num(y.diversionCoefficient)}`);
-			if ((x.diversionExponent ?? null) !== (y.diversionExponent ?? null)) parts.push(`diversion curve exponent b ${num(x.diversionExponent)} → ${num(y.diversionExponent)}`);
-			if ((x.diversionMaxPct ?? 1) !== (y.diversionMaxPct ?? 1)) parts.push(`largest share of the flow ${pct(x.diversionMaxPct ?? 1)} → ${pct(y.diversionMaxPct ?? 1)}`);
+			if (hasMonthlyDiversion(x) || hasMonthlyDiversion(y)) {
+				// A formula by month (engine ≥ 1.114.0): each month whose rule differs, a curve or a maximum.
+				const curve = (c: MonthDiversion | null) => (c ? `${num(c.coefficient)} × x^${num(c.exponent)} %, at most ${pct(c.maxPct ?? 1)}` : 'a maximum');
+				const cx = diversionMonthsOf(x);
+				const cy = diversionMonthsOf(y);
+				const changed = WY_MONTHS.flatMap((m, k) => (curve(cx[k]!) !== curve(cy[k]!) ? [`${m} ${curve(cx[k]!)} → ${curve(cy[k]!)}`] : []));
+				if (changed.length) parts.push(`takes by month ${changed.join('; ')}`);
+			} else {
+				if ((x.diversionCoefficient ?? null) !== (y.diversionCoefficient ?? null)) parts.push(`diversion curve coefficient a ${num(x.diversionCoefficient)} → ${num(y.diversionCoefficient)}`);
+				if ((x.diversionExponent ?? null) !== (y.diversionExponent ?? null)) parts.push(`diversion curve exponent b ${num(x.diversionExponent)} → ${num(y.diversionExponent)}`);
+				if ((x.diversionMaxPct ?? 1) !== (y.diversionMaxPct ?? 1)) parts.push(`largest share of the flow ${pct(x.diversionMaxPct ?? 1)} → ${pct(y.diversionMaxPct ?? 1)}`);
+			}
 			if ((x.diversionFlowUnit ?? null) !== (y.diversionFlowUnit ?? null)) parts.push(`flow unit of the curve ${x.diversionFlowUnit ?? 'none'} → ${y.diversionFlowUnit ?? 'none'}`);
 			const basis = (t: Transfer) => (t.diversionFlowBasis === 'natural' ? 'the natural flow' : 'the modelled flow');
 			if ((x.diversionFlowBasis ?? 'modelled') !== (y.diversionFlowBasis ?? 'modelled')) parts.push(`the curve reads ${basis(x)} → ${basis(y)}`);

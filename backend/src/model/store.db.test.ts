@@ -8,8 +8,11 @@ import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser, type Db } from '../db/tx.js';
 import { loadModel, loadSettingsAndModel, saveModel } from './store.js';
 
-/** A transfer without a diversion curve (engine 1.113.0, migration 308) loads with the curve's fields null. */
-const NO_CURVE = { diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null, diversionFlowUnit: null, diversionFlowBasis: null };
+/**
+ * A transfer without a diversion curve (engine 1.113.0, migration 308) loads with the curve's fields null, and
+ * without a curve by month or a split (engine 1.114.0, migration 311) with those null too.
+ */
+const NO_CURVE = { diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null, diversionFlowUnit: null, diversionFlowBasis: null, monthlyDiversion: null, destinations: null };
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -188,7 +191,9 @@ describe('model store', () => {
 					diversionExponent: -0.9,
 					diversionMaxPct: 0.95,
 					diversionFlowUnit: 'Ml/day',
-					diversionFlowBasis: 'natural'
+					diversionFlowBasis: 'natural',
+					monthlyDiversion: null,
+					destinations: null
 				}
 			],
 			landCover: [

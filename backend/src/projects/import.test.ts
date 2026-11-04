@@ -82,6 +82,21 @@ describe('freshIds', () => {
 		expect(model.transfers[1]!.lossReturnNodeId).toBeNull();
 	});
 
+	it('moves a split’s destinations with the nodes (engine 1.114.0), outside the catchment staying null', () => {
+		const [a, b, c, t] = [u(), u(), u(), u()];
+		const { model, ids } = freshIds({
+			nodes: [
+				{ id: a, downstreamNodeId: null },
+				{ id: b, downstreamNodeId: a },
+				{ id: c, downstreamNodeId: a }
+			] as never,
+			crops: [],
+			cropAreas: [],
+			transfers: [{ id: t, fromNodeId: a, toNodeId: b, destinations: [{ nodeId: b, pct: 0.3 }, { nodeId: c, pct: 0.5 }, { nodeId: null, pct: 0.2 }] }] as never
+		});
+		expect(model.transfers[0]).toMatchObject({ toNodeId: ids.get(b), destinations: [{ nodeId: ids.get(b), pct: 0.3 }, { nodeId: ids.get(c), pct: 0.5 }, { nodeId: null, pct: 0.2 }] });
+	});
+
 	it('moves the unit a crop supply table pipes from with the nodes (engine 1.73.0), so a copy never points into the original', () => {
 		const [a, b] = [u(), u()];
 		const { model, ids } = freshIds({

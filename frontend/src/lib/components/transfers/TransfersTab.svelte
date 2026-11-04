@@ -35,11 +35,14 @@
 	import { transferAnchor } from '#lib/model/validate.js';
 	import MonthRates from './MonthRates.svelte';
 	import DiversionCurveFields from './DiversionCurveFields.svelte';
+	import TakesByMonth from './TakesByMonth.svelte';
+	import TransferDestinations from './TransferDestinations.svelte';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '#lib/spreadsheet/paste/grid.js';
 	import { applyTransferPaste, planTransferPaste, transferRows, transfersCsv, TRANSFERS_FORMAT } from './transfersPaste';
-	import type { Transfer, TransferSizing, TransferSource } from '@water-management/engine';
+	import { diversionMonthsOf, hasMonthlyDiversion, isSplitTransfer, transferDestinations, withDestinations, type Transfer, type TransferSource } from '@water-management/engine';
+	import { fmtPct } from '#lib/format/number.js';
 	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from '#lib/components/network/ewrScenarioOnly.js';
 
 	let {
@@ -60,6 +63,11 @@
 	const transfers = $derived(editor.model.transfers);
 	// null: a rule out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6).
 	const name = (id: string | null) => (id === null ? 'Outside the catchment' : nodes.find((n) => n.id === id)?.name || '(unnamed)');
+	const ENDS = [['From', 'fromNodeId'], ['To', 'toNodeId']] as const;
+	/** The route's selects: From and To, or From alone on a rule split between destinations (its table edits them). */
+	const endsOf = (t: Transfer) => (isSplitTransfer(t) ? ENDS.slice(0, 1) : ENDS);
+	/** Where a rule sends its water: its destination, or each of a split's with its share (engine ≥ 1.114.0), "B 40 %, C 60 %". */
+	const routeTo = (t: Transfer) => (isSplitTransfer(t) ? transferDestinations(t).map((d) => `${name(d.nodeId)} ${fmtPct(d.pct, 0)}`).join(', ') : name(t.toNodeId));
 	// A transfer runs between hydrological units' dams (or a unit's river): a gauge or an other water user can't take part.
 	const units = $derived(nodes.filter((n) => n.kind === 'farm'));
 	// A rule needs two units, or one unit with a dam to send water out of the catchment (engine ≥ 1.86.0).
@@ -107,7 +115,7 @@
 	 * Add transfer.
 	 */
 	async function remove(t: Transfer, n: number) {
-		const route = `${name(t.fromNodeId)} → ${name(t.toNodeId)}`;
+		const route = `${name(t.fromNodeId)} → ${routeTo(t)}`;
 		if (
 			!transferIsBlank(t) &&
 			!(await confirmDialog({
@@ -125,6 +133,40 @@
 		const next = heads?.[Math.min(i, heads.length - 1)];
 		if (next) next.focus();
 		else root?.querySelector<HTMLButtonElement>('.empty button')?.focus();
+	}
+
+	// --- How much it takes (engine ≥ 1.114.0, docs/model.md §2.6a): one pull-down at the top of the rates ---
+	type Takes = 'demand' | 'capacity' | 'byMonth';
+	/** What the pull-down shows: a river rule's sizing; a dam rule up to a maximum (one with a formula, refused on save, shows it). */
+	const takesOf = (t: Transfer): Takes => (t.sizing === 'diversionCurve' || hasMonthlyDiversion(t) ? 'byMonth' : (t.source ?? 'dam') === 'river' && t.sizing === 'capacity' ? 'capacity' : (t.source ?? 'dam') === 'river' ? 'demand' : 'capacity');
+	/** The rules a formula switched to the river, so the card says why its source changed. */
+	let movedToRiver = $state<string[]>([]);
+	function setTakes(t: Transfer, v: Takes) {
+		if (v === 'byMonth') {
+			// A formula is a share of the river's flow: a rule from the dam becomes a river off-take, and says so.
+			if ((t.source ?? 'dam') !== 'river') {
+				t.source = 'river';
+				movedToRiver = [...movedToRiver, t.id];
+			}
+			// A rule with one curve (engine 1.113.0) keeps it in every month; any other starts with a maximum in every month.
+			Object.assign(t, { sizing: 'diversionCurve', monthlyDiversion: diversionMonthsOf(t), diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null });
+		} else Object.assign(t, { sizing: v, monthlyDiversion: null });
+	}
+	/** The unit a split's second row starts at: the next unit not at either end, else (a dam rule) outside the catchment; undefined: none. */
+	function splitTo(t: Transfer): string | null | undefined {
+		const next = units.find((u) => u.id !== t.fromNodeId && u.id !== t.toNodeId);
+		return next ? next.id : (t.source ?? 'dam') !== 'river' && t.toNodeId !== null ? null : undefined;
+	}
+	/** Split a rule between its destination and the next unit, half each; the new row's unit is focused. */
+	async function split(t: Transfer, n: number) {
+		const other = splitTo(t);
+		if (other === undefined) return;
+		Object.assign(t, withDestinations([
+			{ nodeId: t.toNodeId, pct: 0.5 },
+			{ nodeId: other, pct: 0.5 }
+		]));
+		await tick();
+		root?.querySelector<HTMLSelectElement>(`[aria-label="Destination 2 of transfer ${n}"]`)?.focus();
 	}
 
 	// --- paste the max rates from a spreadsheet (issue #477): into a rate field, or from the button ---
@@ -229,6 +271,8 @@
 					{@const label = `transfer ${i + 1}`}
 					{@const river = (t.source ?? 'dam') === 'river'}
 					{@const problems = problemsOf.get(t.id) ?? []}
+					{@const takes = takesOf(t)}
+					{@const outsideTo = transferDestinations(t).some((d) => d.nodeId === null)}
 					<li
 						class="rule"
 						class:off={!t.enabled}
@@ -251,7 +295,7 @@
 								</h3>
 							</div>
 							<div class="route">
-								{#each [['From', 'fromNodeId'], ['To', 'toNodeId']] as const as [word, key], k (key)}
+								{#each endsOf(t) as [word, key], k (key)}
 									{@const outside = key === 'toNodeId' && t.toNodeId === null}
 									{#if k}<span class="arrow" aria-hidden="true">→</span>{/if}
 									<label class="end">
@@ -266,8 +310,17 @@
 										</select>
 									</label>
 								{/each}
+								<!-- Split between destinations (engine ≥ 1.114.0): the route says where each share goes; the table under the head edits them. -->
+								{#if isSplitTransfer(t)}
+									<span class="arrow" aria-hidden="true">→</span>
+									<span class="end split-to" data-testid="transfer-route"><span class="end-l">To</span> <span class="split-names">{routeTo(t)}</span></span>
+								{/if}
 								<HelpTip key="transfer.fromNodeId" />
 								<HelpTip key="transfer.toNodeId" />
+								<!-- Only where there is another destination to split into (a river off-take needs another unit). -->
+								{#if !readonly && !isSplitTransfer(t) && splitTo(t) !== undefined}
+									<button type="button" class="btn btn-sm btn-ghost split-btn" aria-label="Split {label} between destinations" onclick={() => split(t, i + 1)}>Split</button>
+								{/if}
 							</div>
 							<div class="rule-acts">
 								<!-- A switch with its word beside it, "Enabled", which its name starts with; the off state is said in words in the rule's heading. -->
@@ -277,17 +330,43 @@
 									<span class="state" aria-hidden="true">Enabled</span>
 								</label>
 								{#if !readonly}
-									<button type="button" class="btn btn-sm btn-ghost btn-danger remove" aria-label="Remove {label} ({name(t.fromNodeId)} → {name(t.toNodeId)})" onclick={() => remove(t, i + 1)}>Remove</button>
+									<button type="button" class="btn btn-sm btn-ghost btn-danger remove" aria-label="Remove {label} ({name(t.fromNodeId)} → {routeTo(t)})" onclick={() => remove(t, i + 1)}>Remove</button>
 								{/if}
 							</div>
 						</div>
 
-						<div class="rule-body">
+						<div class="rule-body" class:split={isSplitTransfer(t)}>
+							{#if isSplitTransfer(t)}
+								<div class="grp g-dest">
+									<TransferDestinations rule={t} {label} {units} {name} disabled={readonly} onremoved={() => root?.querySelector<HTMLElement>(`[id="${CSS.escape(transferAnchor(t.id))}"]`)?.focus()} />
+								</div>
+							{/if}
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="grp g-rates" onpaste={readonly ? undefined : (e) => onRatesPaste(e, i)}>
-								<MonthRates rule={t} {label} disabled={readonly}>
-									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> <span class="u">{transferUnit.label}</span> <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
-								</MonthRates>
+								<!-- How much it takes (engine ≥ 1.114.0, §2.6a), on the rates' title line: what the destination needs, up to a
+								     maximum, or by month a maximum or a formula. "Takes" is its visible label (short, so the months' summary
+								     still shares the line and a dam rule's card stays ~147 px at 1440); the name adds the rule. -->
+								{#snippet takesTitle()}
+									<div class="grp-t takes">
+										<span aria-hidden="true">Takes</span>
+										<select aria-label="Takes, {label}" disabled={readonly} value={takes} onchange={(e) => setTakes(t, e.currentTarget.value as Takes)}>
+											{#if river}<option value="demand">What the destination needs</option>{/if}
+											<option value="capacity">Up to a maximum</option>
+											<option value="byMonth" disabled={!river && outsideTo}>A formula by month{!river && outsideTo ? ' (needs a unit to deliver to)' : ''}</option>
+										</select>
+										<!-- Each rule's title names the unit its rates show in (the picker is the list's, in its heading). -->
+										<span class="u">{transferUnit.label}</span>
+										<HelpTip key="transfer.monthlyDiversion" />
+									</div>
+								{/snippet}
+								{#if movedToRiver.includes(t.id) && river}
+									<p class="moved small" data-testid="takes-moved-to-river">A formula takes a share of the river’s flow, so this transfer now takes from the river (an off-take), set under Takes from.</p>
+								{/if}
+								{#if takes === 'byMonth'}
+									<TakesByMonth rule={t} {label} disabled={readonly} title={takesTitle} />
+								{:else}
+									<MonthRates rule={t} {label} disabled={readonly} title={takesTitle} />
+								{/if}
 							</div>
 
 							<div class="grp g-limits">
@@ -312,18 +391,10 @@
 										<!-- The source's dam (§2.6) or the river leaving the source unit today: a river off-take (engine ≥ 1.14.0, §2.6a). -->
 										<select aria-label="Takes from, {label}" disabled={readonly} value={t.source ?? 'dam'} onchange={(e) => (t.source = e.currentTarget.value as TransferSource)}>
 											<option value="dam">The source’s dam</option>
-											<option value="river" disabled={t.toNodeId === null}>The river (an off-take){t.toNodeId === null ? ', needs a unit to deliver to' : ''}</option>
+											<option value="river" disabled={outsideTo}>The river (an off-take){outsideTo ? ', needs a unit to deliver to' : ''}</option>
 										</select>
 									</div>
 									{#if river}
-										<div class="fld sel">
-											<span class="fld-l"><span aria-hidden="true">Takes</span> <HelpTip key="transfer.sizing" /></span>
-											<select aria-label="Takes, {label}" disabled={readonly} value={t.sizing ?? 'demand'} onchange={(e) => (t.sizing = e.currentTarget.value as TransferSizing)}>
-												<option value="demand">What the destination needs</option>
-												<option value="capacity">Up to capacity</option>
-												<option value="diversionCurve">A share of the river’s flow</option>
-											</select>
-										</div>
 										<div class="fld">
 											<span class="fld-l"><span aria-hidden="true">Hands-off flow, m³/day</span> <HelpTip key="transfer.handsOffM3Day" /></span>
 											<NumberInput label="Hands-off flow for {label}, m³/day" min={0} nullable grouped placeholder="none" disabled={readonly} value={t.handsOffM3Day ?? null} onchange={(v) => (t.handsOffM3Day = v)} />
@@ -349,7 +420,7 @@
 											</div>
 										{/if}
 										<!-- Sized by a diversion curve (engine ≥ 1.113.0, §2.6a): its curve and what it diverts at a few flows. -->
-										{#if t.sizing === 'diversionCurve'}<DiversionCurveFields rule={t} {label} disabled={readonly} />{/if}
+										{#if t.sizing === 'diversionCurve'}<DiversionCurveFields rule={t} {label} {name} disabled={readonly} />{/if}
 										<div class="checks">
 											<span class="check-row">
 												<label class="check">
@@ -637,6 +708,40 @@
 	.g-rates {
 		grid-area: rates;
 	}
+	/* Split between destinations (engine ≥ 1.114.0): the table across the card, above the rates. */
+	.g-dest {
+		grid-area: dest;
+	}
+	.rule-body.split {
+		grid-template-areas: 'dest' 'rates' 'limits' 'source';
+	}
+	/* As wide as its option, not the line: the months' summary shares the line where there's room. */
+	.takes select {
+		width: auto;
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: 100%;
+		min-height: 24px;
+		padding-block: 0;
+		font-size: var(--font-sm);
+		font-weight: 400;
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text);
+	}
+	.moved {
+		margin: 0 0 0.45rem;
+		color: var(--text-2);
+	}
+	.split-to {
+		flex: 0 1 auto;
+	}
+	.split-names {
+		overflow-wrap: anywhere;
+	}
+	.split-btn {
+		min-height: 28px;
+	}
 	.g-limits {
 		grid-area: limits;
 	}
@@ -733,6 +838,9 @@
 			grid-template-columns: minmax(0, 1fr) 12rem;
 			grid-template-areas: 'rates limits' 'source source';
 		}
+		.rule-body.split {
+			grid-template-areas: 'dest dest' 'rates limits' 'source source';
+		}
 		.g-limits .fields {
 			grid-template-columns: minmax(0, 1fr);
 		}
@@ -784,6 +892,9 @@
 		.rule-body {
 			grid-template-columns: minmax(27rem, 1fr) 9rem 13.5rem;
 			grid-template-areas: 'rates limits source';
+		}
+		.rule-body.split {
+			grid-template-areas: 'dest dest dest' 'rates limits source';
 		}
 		.g-source .fields {
 			grid-template-columns: minmax(0, 1fr);

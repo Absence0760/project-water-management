@@ -5,7 +5,7 @@
 // m³/day, `scale` shown units per stored m³/s). A blank or a dash leaves a
 // month as it is; 0 turns it off. The block is mapped by
 // $lib/spreadsheet/paste/monthlyRows.ts.
-import { transferRatesM3s, withMonthlyRates, type Transfer } from '@water-management/engine';
+import { isSplitTransfer, transferDestinations, transferRatesM3s, withMonthlyRates, type Transfer } from '@water-management/engine';
 import type { GridFormat, PasteAnchor, PastePlan } from '#lib/spreadsheet/paste/grid.js';
 import { applyMonthlyPaste, monthlyRowsCsv, planMonthlyPaste, type MonthlyRow } from '#lib/spreadsheet/paste/monthlyRows.js';
 
@@ -14,12 +14,20 @@ const NAME_HEADINGS = ['Transfer', 'Rule', 'Name'];
 /** The CSV's route columns: set on each card, so a paste of the CSV leaves them out quietly. */
 const INFO_HEADINGS = ['From', 'To'];
 
-type Rule = Pick<Transfer, 'id' | 'fromNodeId' | 'toNodeId' | 'months' | 'maxRateM3s' | 'monthlyRateM3s'>;
+type Rule = Pick<Transfer, 'id' | 'fromNodeId' | 'toNodeId' | 'months' | 'maxRateM3s' | 'monthlyRateM3s' | 'destinations'>;
+
+/** Where a rule sends its water, by name: its destination, or each of a split's with its share (engine ≥ 1.114.0). */
+const toNames = (t: Rule, nodeName: (id: string | null) => string) =>
+	isSplitTransfer(t)
+		? transferDestinations(t)
+				.map((d) => `${nodeName(d.nodeId)} ${Math.round(d.pct * 10_000) / 100}%`)
+				.join(', ')
+		: nodeName(t.toNodeId);
 
 /** Each rule as a row of the paste: "Transfer N", also matched by "From → To" (or "From -> To"). */
 export function transferRows(transfers: readonly Rule[], nodeName: (id: string | null) => string, scale: number, unit: string): MonthlyRow[] {
 	return transfers.map((t, i) => {
-		const [from, to] = [nodeName(t.fromNodeId), nodeName(t.toNodeId)];
+		const [from, to] = [nodeName(t.fromNodeId), toNames(t, nodeName)];
 		return { id: t.id, name: `Transfer ${i + 1}`, aliases: [`${from} → ${to}`, `${from} -> ${to}`], unit, values: transferRatesM3s(t).map((r) => r * scale) };
 	});
 }
@@ -51,7 +59,7 @@ export function transfersCsv(transfers: readonly Rule[], nodeName: (id: string |
 		NAME_HEADINGS[0]!,
 		[
 			{ heading: 'From', value: (r) => nodeName(rule(r).fromNodeId) },
-			{ heading: 'To', value: (r) => nodeName(rule(r).toNodeId) }
+			{ heading: 'To', value: (r) => toNames(rule(r), nodeName) }
 		],
 		unit
 	);

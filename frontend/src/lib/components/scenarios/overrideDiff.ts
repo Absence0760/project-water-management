@@ -28,7 +28,8 @@ import {
 	type LandCoverSetField,
 	type ProjectModel,
 	type ScenarioOp,
-	type TransferSetField
+	type TransferSetField,
+	transferDestinations
 } from '@water-management/engine';
 import { CROP_FIELD_SPECS, DEMAND_OBJECT_FIELD_SPECS, LAND_COVER_FIELD_SPECS, NODE_FIELD_SPECS, TRANSFER_FIELD_SPECS, type DemandObjectFormField } from './fields';
 import { checkOp, nameIds, namesOf } from './ops';
@@ -220,7 +221,8 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	}
 
 	// --- transfers: remove, add, then each changed field
-	const bTransfers = new Map(b.transfers.filter((t) => !removed.has(t.fromNodeId) && (t.toNodeId === null || !removed.has(t.toNodeId))).map((t) => [t.id, t]));
+	// A rule split between destinations (engine ≥ 1.114.0) goes with any of them, as node.remove drops it.
+	const bTransfers = new Map(b.transfers.filter((t) => !removed.has(t.fromNodeId) && transferDestinations(t).every((d) => d.nodeId === null || !removed.has(d.nodeId))).map((t) => [t.id, t]));
 	const aTransfers = new Map(after.transfers.map((t) => [t.id, t]));
 	for (const id of bTransfers.keys()) if (!aTransfers.has(id)) ops.push({ op: 'transfer.remove', transferId: id });
 	for (const t of after.transfers)
@@ -234,8 +236,19 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		const nowRates = t.monthlyRateM3s ?? null;
 		const ratesChanged = !same(was.monthlyRateM3s ?? null, nowRates);
 		if (ratesChanged) ops.push({ op: 'transfer.set', transferId: t.id, field: 'monthlyRateM3s', value: plain(nowRates) } as ScenarioOp);
+		// Destinations (engine ≥ 1.114.0) set the toNodeId kept beside them: a changed split goes first, as one op, and a
+		// split's toNodeId isn't set apart from it (a plain rule's new destination, after it, is).
+		const splitChanged = !same(was.destinations ?? null, t.destinations ?? null);
+		if (splitChanged) ops.push({ op: 'transfer.set', transferId: t.id, field: 'destinations', value: plain(t.destinations ?? null) } as ScenarioOp);
+		// A curve by month (engine ≥ 1.114.0) sizes the rule by it, and any other sizing drops it (applyScenario keeps the
+		// two in step): the list alone when it is set, the sizing alone when it is cleared.
+		const nowCurves = t.monthlyDiversion ?? null;
+		const curvesChanged = !same(was.monthlyDiversion ?? null, nowCurves);
 		for (const f of TRANSFER_SET_FIELDS) {
 			if (f === 'monthlyRateM3s' || (ratesChanged && nowRates && (f === 'months' || f === 'maxRateM3s'))) continue;
+			if (f === 'destinations' || (f === 'toNodeId' && splitChanged && t.destinations)) continue;
+			if (curvesChanged && nowCurves && (f === 'sizing' || f === 'diversionCoefficient' || f === 'diversionExponent' || f === 'diversionMaxPct')) continue;
+			if (f === 'monthlyDiversion' && curvesChanged && !nowCurves && t.sizing !== 'diversionCurve') continue;
 			const nowV = f === 'months' ? sortedMonths(t.months) : t[f];
 			const wasV = f === 'months' ? sortedMonths(was.months) : was[f];
 			if (!same(wasV, nowV)) ops.push({ op: 'transfer.set', transferId: t.id, field: f, value: plain(nowV) } as ScenarioOp);
@@ -391,7 +404,7 @@ function sameModel(x: ProjectModel, y: ProjectModel, opSets: (key: string) => bo
 			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor, c.irrigationSystemId ?? null, c.irrigationEfficiency ?? null]),
 			areas: [...areaMap(m.cropAreas)].filter(([, v]) => v !== 0).sort(),
 			systems: [...systemMap(m.cropAreas)].filter(([k]) => !opSets(k)).sort(),
-			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam, t.lossReturnPct ?? 0, t.lossReturnNodeId ?? null, t.diversionCoefficient ?? null, t.diversionExponent ?? null, t.diversionMaxPct ?? null, t.diversionFlowUnit ?? null, t.diversionFlowBasis ?? null]),
+			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam, t.lossReturnPct ?? 0, t.lossReturnNodeId ?? null, t.diversionCoefficient ?? null, t.diversionExponent ?? null, t.diversionMaxPct ?? null, t.diversionFlowUnit ?? null, t.diversionFlowBasis ?? null, t.monthlyDiversion ?? null, t.destinations ?? null]),
 			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors]),
 			boreholes: byId(m.boreholes ?? [], (x) => Object.entries(plain(x)).sort(([k], [l]) => (k < l ? -1 : 1))),
 			objects: byId(m.demandObjects ?? [], (x) => [x.id, x.nodeId, ...DEMAND_OBJECT_SET_FIELDS.map((f) => objectField(x, f))])

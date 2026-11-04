@@ -27,7 +27,7 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Water use | the NWA s21 water use (142, issue #72): `21a` taking water (the default) or `21b` storing water. A `21b` row is a dam's registered storage only: volume 0, a storage, surface water; it is never compared, capped or scaled as a take (engine 1.59.0) |
 | Volume | m³ per year, ≥ 0 (0 on a `21b` row) |
 | Storage | registered storage (s21b), m³; optional on a take, required on a `21b` row. A WARMS "Dam capacity" column reads as it |
-| Irrigated area | the area the authorisation registers for irrigation, ha (244); optional, and on a take (`21a`) only. A record of what the authorisation says: the model never reads it (a unit's irrigated area in a run is its planted crop areas), so changing it leaves the latest run current |
+| Irrigated area | the area the authorisation registers for irrigation, ha (244); optional, and on a take (`21a`) only. A record of what the authorisation says: the model never reads it (a unit's irrigated area in a run is its planted crop areas), so changing it leaves the latest run current. The Allocations page sets it beside the run's planted area ([Per unit, all three](#per-unit-all-three)) |
 | Valid from / to | inclusive ISO dates; either may be open |
 | Registration number, property | used to match the row to a node, and shown in the list |
 | Registered user | the holder's name; see [Who sees what](#who-sees-what) |
@@ -267,8 +267,46 @@ For a run, per farm or water user, per water source and per **water year**
   page says it in words. Arithmetic only: whether filling the dam is also a
   s21(a) take is the hydrologist's question (issue #90). A 21(b) row is
   never part of the registered volume a year's use is compared with.
+- **Irrigated area**: the sum of the irrigated areas stated on the unit's
+  takes in force on any of the run's days (like the storage, a row that
+  lapsed before the run or starts after it isn't counted; a 21(b) row has
+  none) beside the crop areas the run planted on the unit (its stored
+  inputs' `cropAreas`, m² → ha: every crop the engine models is irrigated),
+  with the difference (planted − registered) and a status banded like a
+  year's use: *over* is more planted than registered, *under* less,
+  *unregistered* planted with none registered (engine
+  `allocations/area.ts`, `withIrrigatedAreas`). The Allocations route adds
+  it to each unit of the comparison; `compareAllocations` and `runModel`
+  never compute it, so no run's summary carries it and `ENGINE_VERSION`
+  doesn't move. The model still never reads a registered area.
 - Allocations not matched to a node, or matched to a node the run doesn't
   have, are counted and named, not compared.
+
+### Per unit, all three
+
+The operator asked (2026-11-03) for each unit's registered figures added up
+over its registered users and set against the model, on one table:
+**Registered against the run, per hydrological unit**
+(`AllocationUnitTotals.svelte`, under **Registered volumes**, the units to
+look into first leading, the first eight until **Show all**;
+`unitMeasures` in `frontend/src/lib/components/allocations/allocations.ts`).
+Per unit, three pairs:
+
+| Measure | Registered | The run's |
+| --- | --- | --- |
+| Irrigated area (ha) | Σ irrigated area on its takes in force (above) | its planted crop areas |
+| Water use (m³ a year) | the mean whole water year's registered volume, surface and groundwater added | the mean whole water year's modelled use, both sources added (the comparison's means; a run with no whole water year has none) |
+| Dam (m³) | its registered storage (the storage line above) | the dam capacity it modelled |
+
+Each run-side figure carries its status against the project's band, in that
+measure's words (*More than registered*, *Within band*, *Less than
+registered*, *None registered*; the dam *Larger* / *Smaller than
+registered*, *No dam*), and the **Catchment total** row adds each measure up
+over the units and judges the sums the same way (a total with no dam
+anywhere in the run reads *No dam*). A unit with nothing in any measure is
+left out; volumes not matched to a unit of the run are in no total. It is
+the same reader's data as the per-unit comparison, so the same people see
+it ([Who sees what](#who-sees-what)).
 
 ### The allocation mode (engine ≥ 1.18.0)
 
@@ -493,7 +531,11 @@ existing lawful use beside the application's numbers.
 The Allocations tab's **On the map** (issue #510, from the #507 Q&A) draws
 the comparison: each hydrological unit's area shaded by how its modelled use
 in the compared run (the baseline the user picks) stands against its
-registered volume. It is the separate output the operator's rule asks for:
+registered volume, or, picked under **Shade by** (2026-11-03,
+`mapMeasure=area|storage` in the URL), how the crop areas the run planted
+stand against its registered irrigated area, or the dam the run modelled
+against its registered storage ([Per unit, all three](#per-unit-all-three)).
+It is the separate output the operator's rule asks for:
 registered and licensed volumes never drive the baseline, they are only
 compared with it (#507 § Principle). The map only reads the run and the
 volumes; no engine behaviour changes.
@@ -503,6 +545,14 @@ volumes; no engine behaviour changes.
   comparison counts for it (for a dam beside the river, the take at the
   intake once #509's intake series lands; the map reads whatever the
   comparison computes and repeats no rule of its own).
+- **Measure**: *Water use* (the default, below), *Irrigated area* (r =
+  planted ÷ registered irrigated area) or *Dam capacity* (r = the dam in the
+  run ÷ registered storage; a registered storage on a unit with no dam in
+  the run reads 0 %). The bands are the same; the key and every label use
+  that measure's words (*Less planted than registered*, *A smaller dam than
+  registered* …, `MEASURE_BAND_LABEL` in `useMap.ts`). The area and the dam
+  are the run's inputs, so the period and the water source below apply to
+  the water use only.
 - **Period**: the mean over the run's whole water years by default (the
   comparison's means), or one whole water year picked. Part years are
   never offered, as in the comparison's summary.
@@ -540,6 +590,10 @@ volumes; no engine behaviour changes.
   with no area is listed under the map with its band, so none goes missing;
   an area linked to a unit the run doesn't have is a dashed outline, named
   under the map.
+- **Every unit's figures** are listed under the key for the measure picked
+  (registered, the run's, the share and the band, in the order to look into
+  them; a unit with no area on the map is marked so), so the shading is
+  readable as numbers too.
 - **Clicking a unit** opens its comparison row above (`unit=`): use,
   registered, % and every water year.
 - **Who sees it**: whoever sees the per-unit comparison ([Who sees
@@ -551,9 +605,11 @@ volumes; no engine behaviour changes.
   …/map/features`, viewer and up).
 - **The example**: `pnpm seed:examples` seeds *Example · Licence comparison
   map* (`backend/scripts/examples/licenceMap.ts`), eight invented units whose
-  volumes are set from the baseline's own use ÷ a target ratio, so every
-  band is on screen whatever the engine's numbers ([run-locally.md §
-  Example catchments](./run-locally.md#example-catchments)).
+  volumes are set from the baseline's own use ÷ a target ratio, and their
+  irrigated areas and storage from the planted area and the dam ÷ targets of
+  their own, each held by two or three invented registered users, so every
+  band is on screen for each measure whatever the engine's numbers
+  ([run-locally.md § Example catchments](./run-locally.md#example-catchments)).
 
 ## Who sees what
 

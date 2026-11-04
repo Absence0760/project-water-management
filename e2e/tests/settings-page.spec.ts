@@ -430,7 +430,7 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	expect(await names('set-share')).toEqual([
 		'Flow generation',
 		'The catchment’s rainfall station',
-		'Each unit’s rainfall station',
+		'Each unit’s driver rainfall',
 		'MAP from the grid',
 		'Flow share and the EWR split'
 	]);

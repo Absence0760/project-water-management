@@ -111,6 +111,13 @@ describe('field specs cover the engine’s op catalogue', () => {
 					return { reviewDates: ['01-01'], liftDates: ['05-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3, domestic: 0.1 } }] };
 				case 'ewrDaily':
 					return { method: 'tab', scaling: 'mar', tableMarMm3: 12.5, tableAreaKm2: null, tabM3s: new Array(12).fill(0.2), naturalPctM3s: null, reservePctM3s: null };
+				case 'destinations':
+					return [
+						{ nodeId: 'n1', pct: 0.4 },
+						{ nodeId: 'n2', pct: 0.6 }
+					];
+				case 'diversionMonths':
+					return [{ coefficient: 2000, exponent: -0.9, maxPct: 0.97 }, ...new Array(11).fill(null)];
 			}
 		};
 		const check = (table: Record<string, { spec: ValueSpec }>, err: (k: string, v: unknown) => string | null, skip: string[] = []) => {

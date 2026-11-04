@@ -304,6 +304,33 @@ describe('rainfall stations in a run’s input', () => {
 		expect((await save(owner, null)).status).toBe(200);
 	});
 
+	it('a unit’s CHIRPS driver (engine ≥ 1.114.0): a land unit only, never beside its station; saved, it reaches the run’s input', async () => {
+		const unitRain = (chirpsUnits: unknown) => ({ mode: 'perUnit', chirpsUnits });
+		const saveBoth = (u: unknown, rs: unknown) => owner.call('PATCH', `/projects/${pid}`, { settings: { unitRain: u, rainStations: rs } });
+		// The outlet has no land; an unknown node isn't one at all.
+		for (const id of [outlet, crypto.randomUUID()]) {
+			const r = await owner.call('PATCH', `/projects/${pid}`, { settings: { unitRain: unitRain({ [id]: { correction: 'raw' } }) } });
+			expect(r.status).toBe(400);
+			expect(errorOf(r)).toMatch(/a unit given CHIRPS as its driver is not a land unit of this project/);
+		}
+		// A station and CHIRPS for one unit, in one save or across two (each checked against the other as stored).
+		const both = await saveBoth(unitRain({ [units[0]!]: { correction: 'bias' } }), { units: { [units[0]!]: { stationId: ridge } } });
+		expect(both.status).toBe(400);
+		expect(errorOf(both)).toMatch(/has both a rainfall station and CHIRPS as its driver; give it one/);
+		expect((await save(owner, { units: { [units[0]!]: { stationId: ridge } } })).status).toBe(200);
+		const later = await owner.call('PATCH', `/projects/${pid}`, { settings: { unitRain: unitRain({ [units[0]!]: { correction: 'raw' } }) } });
+		expect(later.status).toBe(400);
+		// The positive control: the station moved to CHIRPS in one save (the form's), and another unit raw.
+		const ok = await saveBoth(unitRain({ [units[0]!]: { correction: 'bias' }, [units[1]!]: { correction: 'raw' } }), null);
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const got = (await input()).settings.unitRain!;
+		expect(got.chirpsUnits).toEqual({ [units[0]!]: { correction: 'bias' }, [units[1]!]: { correction: 'raw' } });
+		expect(got.mode).toBe('perUnit');
+		// A viewer can't change it.
+		expect((await viewer.call('PATCH', `/projects/${pid}`, { settings: { unitRain: unitRain(null) } })).status).toBe(403);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { unitRain: unitRain(null) } })).status).toBe(200);
+	});
+
 	it('reads a station’s cell in the product of the CHIRPS series the run reads, not of the first catchment feed (issue #561)', async () => {
 		// A `sat` feed added first writes "CHIRPS boundary"; an uploaded `rnl` record, "CHIRPS (uploaded)", sorts ahead of
 		// it, so the run reads the record and never the feed's series (feeds/fromBoundary.ts).

@@ -11,6 +11,7 @@ import {
 	AREAL_RAIN_FACTOR_WARN_MIN,
 	catchmentMapOf,
 	landUnits,
+	unitChirpsChoiceNotes,
 	unitsOnCatchmentRain,
 	type LandUnitNode,
 	MAP_MM_MAX,
@@ -22,8 +23,12 @@ import {
 	type RainPatchSource,
 	type RainStationAssignment,
 	type RainStationSettings,
-	type SeriesMeta
+	type SeriesMeta,
+	type UnitChirpsCorrection,
+	type UnitChirpsLevel,
+	type UnitRainSettings
 } from '@water-management/engine';
+import { fmtNum } from '#lib/format/number.js';
 
 /**
  * The one method, Per unit: `short` the plain words shown beside its name, always (issue #586 E14), `help` the
@@ -32,7 +37,7 @@ import {
 export const FLOW_METHOD = {
 	label: 'Per unit',
 	short: 'a runoff run for each unit with land, on its own rain',
-	help: 'GR4J runs on each unit with land, on the rain of the rainfall station it is assigned, else on its own gauge, the catchment gauge scaled to its MAP, or its own CHIRPS (below). A unit with none of these runs on the catchment rain, and Run readiness lists it. Demand and the dams keep the catchment rain.'
+	help: 'GR4J runs on each unit with land, on its driver rainfall: the rainfall station it is assigned, or its own CHIRPS, bias-corrected or raw; else on its own gauge, the catchment gauge scaled to its MAP, or its own CHIRPS (below). A unit with none of these runs on the catchment rain, and Run readiness lists it. Demand and the dams keep the catchment rain.'
 } as const;
 
 /** A rainfall station as the form lists it: a catchment rain series with no site (SeriesMeta with its station details). */
@@ -44,7 +49,7 @@ export type UnitNode = LandUnitNode;
  * The land units that run on the catchment rain, and the land units the table lists: the engine's
  * (packages/engine/src/runReady.ts), shared with Run readiness and the assistant's get_run_readiness.
  */
-export { landUnits, unitsOnCatchmentRain };
+export { landUnits, unitChirpsChoiceNotes, unitsOnCatchmentRain };
 
 /** The project's rainfall stations from its series list: every catchment rain series without a site, by name. */
 export function stationOptions<S extends StationOption & Pick<SeriesMeta, 'kind'> & { siteNodeId?: string | null }>(series: readonly S[]): StationOption[] {
@@ -243,9 +248,97 @@ export function unitRatio(unitMapMm: number | null | undefined, stationMapMm: nu
 	return { ratio, own, clamped: ratio !== own, outsideBand: own < AREAL_RAIN_FACTOR_WARN_MIN || own > AREAL_RAIN_FACTOR_WARN_MAX };
 }
 
+// ---------------------------------------------------------------------------
+// A unit's driver rainfall (engine ≥ 1.114.0, docs/model.md §2.4h *CHIRPS as a unit's driver*): one select per unit
+// for a station (settings.rainStations.units) or its own CHIRPS (settings.unitRain.chirpsUnits), never both.
+// ---------------------------------------------------------------------------
+
+/** The driver select's value: a station's id, `chirps:bias`, `chirps:raw`, or '' (not set: the §2.4h rule). */
+export type DriverValue = string;
+export const CHIRPS_DRIVER: Readonly<Record<UnitChirpsCorrection, DriverValue>> = { bias: 'chirps:bias', raw: 'chirps:raw' };
+/** The CHIRPS choice a driver value names, or null (a station, or not set). */
+export const chirpsOfDriver = (v: DriverValue): UnitChirpsCorrection | null => (v === CHIRPS_DRIVER.bias ? 'bias' : v === CHIRPS_DRIVER.raw ? 'raw' : null);
+/** The option words, shared by the row and the select-several action. */
+export const DRIVER_LABEL = {
+	none: 'Not set: as before',
+	bias: 'CHIRPS, bias-corrected',
+	raw: 'CHIRPS, raw (levelled to the unit’s MAP)'
+} as const;
+
+/** The unit-rain setting with a unit's CHIRPS driver set, or taken away (null); an emptied map stored as none. */
+export function withUnitChirps(ur: UnitRainSettings | null | undefined, unitId: string, correction: UnitChirpsCorrection | null): UnitRainSettings {
+	const chirpsUnits = { ...(ur?.chirpsUnits ?? {}) };
+	if (correction) chirpsUnits[unitId] = { correction };
+	else delete chirpsUnits[unitId];
+	const { chirpsUnits: _c, ...rest } = ur ?? { mode: 'perUnit' as const };
+	return { ...rest, mode: 'perUnit', ...(Object.keys(chirpsUnits).length ? { chirpsUnits } : {}) };
+}
+
+/**
+ * Both settings with each of `unitIds` given `driver`: a station (its CHIRPS choice taken away), CHIRPS (its station
+ * taken away), or not set (both). With `patch` a station also takes that patching priority (the select-several action).
+ * The unit-rain setting is only rewritten when a unit's choice changes, so a form that never touches CHIRPS leaves it.
+ */
+export function withUnitsDriver(
+	rs: RainStationSettings | null | undefined,
+	ur: UnitRainSettings | null | undefined,
+	unitIds: readonly string[],
+	driver: DriverValue,
+	patch?: readonly RainPatchSource[]
+): { rainStations: RainStationSettings | null | undefined; unitRain: UnitRainSettings | null | undefined } {
+	const chirps = chirpsOfDriver(driver);
+	const station = chirps || !driver ? null : driver;
+	let rainStations = rs;
+	let unitRain = ur;
+	for (const id of unitIds) {
+		if (station || rainStations?.units?.[id]) rainStations = withUnitsStation(rainStations, [id], station, patch);
+		if ((unitRain?.chirpsUnits?.[id]?.correction ?? null) !== chirps) unitRain = withUnitChirps(unitRain, id, chirps);
+	}
+	return { rainStations, unitRain };
+}
+
+/** What a unit's CHIRPS driver runs as (the engine's UnitChirpsPreview, or null before it loads). */
+export interface ChirpsDriverPreview {
+	applies: boolean;
+	level: UnitChirpsLevel | null;
+}
+
+/**
+ * The line beside a CHIRPS driver: the unit's MAP, its CHIRPS mean annual rain and the factor (k_unit), from the
+ * engine's preview; `fallback` when the choice won't run as chosen (bias-corrected with no point record runs raw,
+ * no CHIRPS of its own runs as not set). Before the preview loads, `rawInstead` / `noChirps` (the engine's
+ * unitChirpsChoiceNotes, from the setup) give the fallback alone.
+ */
+export function chirpsDriverLine(
+	choice: UnitChirpsCorrection,
+	mapMm: number | null | undefined,
+	preview: ChirpsDriverPreview | null,
+	setup: { rawInstead: boolean; noChirps: boolean } = { rawInstead: false, noChirps: false }
+): { text: string | null; fallback: string | null } {
+	const noChirps = 'It has no CHIRPS series of its own, so it runs as Not set until it has one (Data → Data feeds → Rain for each unit).';
+	const noPoint = 'There is no point rainfall record to correct its CHIRPS against (no reference gauge, and no catchment CHIRPS bias factors), so it runs on raw CHIRPS, levelled to its MAP.';
+	if (!preview) return { text: null, fallback: setup.noChirps ? noChirps : choice === 'bias' && setup.rawInstead ? noPoint : null };
+	const l = preview.level;
+	if (!preview.applies || !l || l.source === 'unusable')
+		return { text: null, fallback: l?.source === 'unusable' ? 'Its CHIRPS totals 0 mm in every complete year, so it can’t be used: the unit runs as Not set.' : noChirps };
+	const map = mapMm != null ? `${fmtNum(mapMm, 0)} mm` : null;
+	const k = (x: { factor: number; ownFactor: number; clamped: boolean; meanAnnualMm: number; years: number[] }, of: string) =>
+		`MAP ${map} ÷ ${of} ${fmtNum(x.meanAnnualMm, 0)} mm a year (${x.years[0]}–${x.years[x.years.length - 1]}) = × ${fmtNum(x.factor, 3, true)}${x.clamped ? ` (clamped from ${fmtNum(x.ownFactor, 3, true)})` : ''}`;
+	if (l.source === 'map') return { text: k(l, 'its CHIRPS'), fallback: choice === 'bias' ? noPoint : null };
+	if (l.source === 'reference')
+		return { text: l.kUnit ? `Corrected month by month against the reference gauge, then ${k(l.kUnit, 'its corrected CHIRPS')}` : 'Corrected month by month against the reference gauge; no MAP (or no complete year) to level it to.', fallback: null };
+	if (l.source === 'bias')
+		return { text: l.kUnit ? `Corrected by the catchment’s CHIRPS bias factors, then ${k(l.kUnit, 'its corrected CHIRPS')}` : 'Corrected by the catchment’s CHIRPS bias factors; no MAP (or no complete year) to level it to.', fallback: null };
+	return { text: map ? 'Raw, as published: its CHIRPS has no complete calendar year to compare its MAP with.' : 'Raw, as published: the unit has no MAP to level it to.', fallback: null };
+}
+
 /** One row of the Per unit table. */
 export interface UnitStationRow<N extends UnitNode = UnitNode> {
 	unit: N;
+	/** Its CHIRPS driver (settings.unitRain.chirpsUnits), or null; a unit with a station has none. */
+	chirps: UnitChirpsCorrection | null;
+	/** The driver select's value: the station, the CHIRPS choice, or ''. */
+	driver: DriverValue;
 	/** The unit's assignment, or null (the §2.4h rule). */
 	assignment: RainStationAssignment | null;
 	/** The assigned station, or null: none, or one the project no longer has (`missing`). */
@@ -261,16 +354,25 @@ export interface UnitStationRow<N extends UnitNode = UnitNode> {
 	patch: PatchValue[];
 }
 
-export function unitStationRows<N extends UnitNode>(nodes: readonly N[], rs: RainStationSettings | null | undefined, stations: readonly StationOption[]): UnitStationRow<N>[] {
+export function unitStationRows<N extends UnitNode>(
+	nodes: readonly N[],
+	rs: RainStationSettings | null | undefined,
+	stations: readonly StationOption[],
+	ur?: Pick<UnitRainSettings, 'chirpsUnits'> | null
+): UnitStationRow<N>[] {
 	const byId = new Map(stations.map((s) => [s.id, s]));
 	return landUnits(nodes).map((unit) => {
 		const assignment = rs?.units?.[unit.id] ?? null;
+		const c = assignment ? null : (ur?.chirpsUnits?.[unit.id]?.correction ?? null);
+		const chirps = c === 'bias' || c === 'raw' ? c : null;
 		const station = assignment ? (byId.get(assignment.stationId) ?? null) : null;
 		const scale = assignment?.scaleToMap !== false;
 		const sMap = stationMap(station ?? undefined);
 		const noRatioWhy = !assignment || !station || !scale ? null : sMap === null ? 'the station has no MAP' : unit.mapMm == null ? 'the unit has no MAP' : null;
 		return {
 			unit,
+			chirps,
+			driver: assignment ? assignment.stationId : chirps ? CHIRPS_DRIVER[chirps] : '',
 			assignment,
 			station,
 			missing: !!assignment && !station,
@@ -305,8 +407,9 @@ export function namesLine(names: readonly string[], shown = 4): string {
 export function assignmentLine(rows: readonly UnitStationRow[]): string {
 	if (!rows.length) return 'No unit has land yet: give a unit an area in Network to list it here.';
 	const assigned = rows.filter((r) => r.station).length;
+	const chirps = rows.filter((r) => r.chirps).length;
 	const of = rows.length === 1 ? '1 unit' : `${rows.length} units`;
-	return `${assigned} of ${of} with land ${assigned === 1 ? 'has' : 'have'} a rainfall station.`;
+	return `${assigned} of ${of} with land ${assigned === 1 ? 'has' : 'have'} a rainfall station${chirps ? `, and ${chirps} ${chirps === 1 ? 'runs' : 'run'} on ${chirps === 1 ? 'its' : 'their'} own CHIRPS` : ''}.`;
 }
 
 

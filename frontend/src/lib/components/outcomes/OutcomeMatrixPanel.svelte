@@ -39,6 +39,7 @@
 		parseDemandLevels,
 		SWEEP_MEMBERS_MAX,
 		sweepState,
+		type MatrixShare,
 		type MatrixView
 	} from './matrix';
 	import { resolveOutcomes } from './outcomeSettings';
@@ -53,6 +54,7 @@
 		ewrRules = [],
 		daily,
 		onProjectChange,
+		onview,
 		canEdit
 	}: {
 		projectId: string;
@@ -70,6 +72,8 @@
 		daily?: DailyEwrSource;
 		/** The project after the site was saved. */
 		onProjectChange?: (p: Project) => void;
+		/** The panel's sweep and matrix whenever they change: the irrigation support board reads the same years (IrrigationSupportPanel). */
+		onview?: (v: MatrixShare) => void;
 		canEdit: boolean;
 	} = $props();
 
@@ -201,7 +205,12 @@
 	let opened = $state(false);
 	const runnable = $derived(ordinary && hasNaturalFlow);
 	const collapsed = $derived(!opened && !submitting && !submitError && !loadError && (!runnable || loading || !sweep));
-	async function open() {
+	// Shared with the irrigation support board, which reads this sweep rather than looking it up again.
+	$effect(() => {
+		onview?.({ state: dataState, view, sweep, runnable });
+	});
+	/** Open the sweep form, focus on the levels (also the irrigation support board's Run…). */
+	export async function open() {
 		opened = true;
 		await tick();
 		document.getElementById('outcome-levels')?.focus();
@@ -320,41 +329,95 @@
 			{#if view.siteMissing}
 				<p class="alert alert-warning" data-testid="outcome-site-missing">{view.siteMissing}</p>
 			{:else if view.columns.length && view.nYears}
-				<div class="scroll">
-					<table class="matrix" data-testid="outcome-table">
-						<caption class="visually-hidden">Outcome by demand level (rows) and class of water year (columns)</caption>
-						<thead>
-							<tr>
-								<th scope="col">Demand level</th>
-								{#each view.columns as c (c.id)}
-									<th scope="col">
-										{c.label}
-										<span class="bounds">{fmtBound(c)}</span>
-									</th>
-								{/each}
-							</tr>
-						</thead>
-						<tbody>
-							{#each view.rows as r (r.id)}
+				<div class="matrix-box">
+				<div class="matrix-layout">
+					<div class="scroll">
+						<table class="matrix" data-testid="outcome-table">
+							<caption class="visually-hidden">Outcome by demand level (rows) and class of water year (columns)</caption>
+							<thead>
 								<tr>
-									<th scope="row">{r.label}</th>
-									{#if r.kind === 'cells'}
-										{#each r.cells as cell, i (i)}
-											<td class="cell {cell.risk ? `risk-${cell.risk}` : 'risk-none'}" data-risk={cell.risk ?? 'none'}>
-												<strong>{cell.riskLabel}</strong>
-												<span>{cell.text}</span>
-											</td>
-										{/each}
-									{:else}
-										<td colspan={view.columns.length} class="not-run" data-status={r.status}>
-											<strong>{r.status === 'problems' ? 'Could not be applied' : r.status === 'failed' ? 'Run failed' : 'Not run'}:</strong>
-											{r.lines.join(' ')}
-										</td>
-									{/if}
+									<th scope="col" rowspan="2" class="corner">Demand level <span class="bounds">% of today’s hydrological unit demand</span></th>
+									<th scope="colgroup" colspan={view.columns.length} class="flow-head">
+										Annual natural flow at the outlet <span class="u">({view.boundsUnit})</span>
+									</th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
+								<tr>
+									{#each view.columns as c (c.id)}
+										<th scope="col" data-class={c.id} data-bounds={c.bounds}>
+											<span class="range" title={c.bounds}>{c.range}</span>
+											({c.label})
+											<span class="bounds">{c.nYears} {c.nYears === 1 ? 'year' : 'years'}</span>
+										</th>
+									{/each}
+								</tr>
+							</thead>
+							<tbody>
+								{#each view.rows as r (r.id)}
+									<tr>
+										<th scope="row">
+											{r.label}
+											{#if r.description}<span class="bounds">{r.description}</span>{/if}
+										</th>
+										{#if r.kind === 'cells'}
+											{#each r.cells as cell, i (i)}
+												<td class="cell {cell.risk ? `risk-${cell.risk}` : 'risk-none'}" data-risk={cell.risk ?? 'none'}>
+													<strong>{cell.riskLabel}{#if cell.phrase}{' '}<span class="phrase">· {cell.phrase}</span>{/if}</strong>
+													<span>{cell.text}</span>
+												</td>
+											{/each}
+										{:else}
+											<td colspan={view.columns.length} class="not-run" data-status={r.status}>
+												<strong>{r.status === 'problems' ? 'Could not be applied' : r.status === 'failed' ? 'Run failed' : 'Not run'}:</strong>
+												{r.lines.join(' ')}
+											</td>
+										{/if}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					{#if view.legend.length}
+						<aside class="legend" aria-labelledby="outcome-legend-h" data-testid="outcome-legend">
+							<h4 id="outcome-legend-h">Ecological outcome <span class="u">(modelled)</span></h4>
+							<ul>
+								{#each view.legend as l (l.risk)}
+									<li class="risk-{l.risk}" data-risk={l.risk}><strong>{l.label}</strong> {l.phrase}{' '}<span class="bounds">{l.rule}{view.cutoffsPending ? ' (provisional)' : ''}</span></li>
+								{/each}
+							</ul>
+						</aside>
+					{/if}
+				</div>
+				</div>
+				<div class="boxes">
+					{#if view.context}
+						<section class="box" aria-labelledby="outcome-context-h" data-testid="outcome-context">
+							<h4 id="outcome-context-h">Model context</h4>
+							<dl>
+								<div><dt>Base run’s years</dt><dd>{view.context.period} ({view.context.years})</dd></div>
+								<div><dt>Ecological assessment</dt><dd>{view.context.assessment}</dd></div>
+								<div><dt>Water availability</dt><dd>{view.context.availability}</dd></div>
+								<div><dt>Demand levels</dt><dd>Each a demand sweep member: every hydrological unit’s irrigation demand scaled, crop areas unchanged</dd></div>
+							</dl>
+						</section>
+					{/if}
+					<section class="box" aria-labelledby="outcome-read-h" data-testid="outcome-how-to-read">
+						<h4 id="outcome-read-h">How to read this matrix</h4>
+						<ol>
+							<li>Pick a column: a kind of year, by how much natural flow the river had in it.</li>
+							<li>Pick a row: a demand level, as a share of today’s demand.</li>
+							<li>The cell says how often the river’s requirement was met in past years of that kind at that level, and the risk that gives.</li>
+						</ol>
+					</section>
+					<section class="box" aria-labelledby="outcome-notes-h" data-testid="outcome-notes">
+						<h4 id="outcome-notes-h">Important notes</h4>
+						<ul>
+							<li>Past years of this run’s record, at each level: indicative, not a forecast.</li>
+							<li>The requirement is assessed {view.metric === 'reserveMonthsMet' ? 'month by month' : 'day by day'}, so a cell depends on when the flow came, not only on the year’s total.</li>
+							<li>Less demand is not the same as less irrigated area: efficiency, crop choice and timing change it too.</li>
+							<li>Lower demand can still leave the river lower on some days, where water irrigated from a dam drains back to it.</li>
+							<li>For comparing levels and supporting the WUA’s decision; the app doesn’t pick a level.</li>
+						</ul>
+					</section>
 				</div>
 			{/if}
 			{#if view.cutoffsText}<p class="hint">{view.cutoffsText}{view.cutoffsPending ? ' These are placeholders until the hydrologist confirms them (Settings → Outcome matrix).' : ''}</p>{/if}
@@ -441,6 +504,83 @@
 	.cell strong {
 		display: block;
 		font-size: 0.85rem;
+	}
+	.phrase {
+		font-weight: 400;
+	}
+	.flow-head {
+		text-align: center;
+	}
+	.corner {
+		vertical-align: bottom;
+	}
+	.range {
+		display: block;
+		font-variant-numeric: tabular-nums;
+	}
+	/* The matrix and its key side by side where there is room; the key under it on a phone. */
+	.matrix-box {
+		container: outcome-matrix / inline-size;
+	}
+	.matrix-layout {
+		display: grid;
+		gap: 0.75rem;
+	}
+	@container outcome-matrix (min-width: 56rem) {
+		.matrix-layout:has(.legend) {
+			grid-template-columns: minmax(0, 1fr) 15rem;
+			align-items: start;
+		}
+	}
+	.legend h4,
+	.box h4 {
+		margin: 0 0 0.35rem;
+		font-size: 0.9rem;
+	}
+	.legend ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.35rem;
+	}
+	.legend li {
+		font-size: var(--font-sm);
+		padding: 0.3rem 0.5rem;
+		/* The colour is the risk's (.risk-*), as on its cells. */
+		border-left-width: 4px;
+		border-left-style: solid;
+	}
+	.legend li strong {
+		display: block;
+	}
+	.boxes {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		gap: 0.75rem;
+		margin-top: 0.75rem;
+	}
+	.box {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.6rem 0.75rem;
+		font-size: var(--font-sm);
+	}
+	.box ol,
+	.box ul {
+		margin: 0;
+		padding-left: 1.2rem;
+	}
+	.box dl {
+		margin: 0;
+		display: grid;
+		gap: 0.3rem;
+	}
+	.box dt {
+		color: var(--text-muted);
+	}
+	.box dd {
+		margin: 0;
 	}
 	.risk-lower {
 		background: var(--success-soft);

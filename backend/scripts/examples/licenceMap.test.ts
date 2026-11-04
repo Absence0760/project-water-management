@@ -2,7 +2,7 @@
 // builds it: a valid project, a map with an area for every unit but one, and
 // registered volumes that put each unit in its band of the Allocations tab's
 // map, read the way the backend reads a stored run (allocations/runUse.ts).
-import { compareAllocations, runModelChecked, useBand, type AllocationComparison, type AllocationUseNode, type ModelOutput } from '@water-management/engine';
+import { compareAllocations, runModelChecked, useBand, withIrrigatedAreas, type AllocationComparison, type AllocationUseNode, type ModelOutput } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { checkGeometry } from '../../src/geo/geojson.js';
 import { modelProblems } from '../../src/model/validate.js';
@@ -34,12 +34,17 @@ beforeAll(() => {
 		}));
 });
 
+/** As the Allocations route compares them: the volumes and storage, then each unit's irrigated area beside its planted crops. */
 const compare = (allocations: ReturnType<typeof licenceAllocations>): AllocationComparison =>
-	compareAllocations({
-		startDate: ex.series.find((s) => s.kind === 'rain_catchment_mm')!.startDate,
-		nodes: useNodes,
-		allocations: allocations.map((a, i) => ({ id: String(i), nodeId: a.nodeId, waterSource: a.waterSource, volumeM3PerYear: a.volumeM3PerYear }))
-	});
+	withIrrigatedAreas(
+		compareAllocations({
+			startDate: ex.series.find((s) => s.kind === 'rain_catchment_mm')!.startDate,
+			nodes: useNodes,
+			allocations: allocations.map((a, i) => ({ id: String(i), nodeId: a.nodeId, waterSource: a.waterSource, volumeM3PerYear: a.volumeM3PerYear, storageM3: a.storageM3 ?? null }))
+		}),
+		ex.model.cropAreas,
+		allocations
+	);
 
 describe('the licence comparison map example', () => {
 	it('parses as a project document with no model problems, and runs with every self-check passing', () => {
@@ -64,7 +69,7 @@ describe('the licence comparison map example', () => {
 	});
 
 	it('registers volumes that put each unit in its band of the map, whatever the engine’s numbers', () => {
-		const allocations = licenceAllocations(compare([]));
+		const allocations = licenceAllocations(compare([]), ex.model);
 		expect(allocations.every((a) => a.holder.endsWith('(invented)'))).toBe(true);
 		const c = compare(allocations);
 		const bandOf = (name: string, source: 'surface' | 'groundwater' = 'surface') => {
@@ -94,6 +99,56 @@ describe('the licence comparison map example', () => {
 	it('refuses to seed when a unit meant to use water uses none', () => {
 		const c = compare([]);
 		const broken = { nodes: c.nodes.map((n) => (n.name === 'Brandvlei' ? { ...n, surface: { ...n.surface, meanModelledM3PerYear: 0 } } : n)) };
-		expect(() => licenceAllocations(broken)).toThrow(/Brandvlei modelled no surface use/);
+		expect(() => licenceAllocations(broken, ex.model)).toThrow(/Brandvlei modelled no surface use/);
+		// A unit meant to register an area with no crops planted: refused, not a quiet 0 ha.
+		const bare = { cropAreas: ex.model.cropAreas.filter((a) => a.nodeId !== c.nodes.find((n) => n.name === 'Rooiheuwel')!.nodeId) };
+		expect(() => licenceAllocations(c, bare)).toThrow(/Rooiheuwel plants no crops/);
+	});
+
+	it('holds each unit’s volume, irrigated area and storage under two or three demo registered users', () => {
+		const allocations = licenceAllocations(compare([]), ex.model);
+		const takes = allocations.filter((a) => a.waterSource === 'surface');
+		const byUnit = (name: string) => takes.filter((a) => a.nodeId === useNodes.find((n) => n.name === name)!.nodeId);
+		for (const u of LICENCE_UNITS) expect(byUnit(u.name), u.name).toHaveLength(u.holders);
+		// Every take has its own holder, all invented, with a mix of how they are held.
+		expect(new Set(takes.map((a) => a.holder)).size).toBe(takes.length);
+		expect(takes.map((a) => a.holder)).toContain('Jim Bean (invented)');
+		expect(new Set(takes.map((a) => a.authorisation)).size).toBeGreaterThanOrEqual(3);
+		for (const a of takes) {
+			expect(a.irrigatedAreaHa, a.registrationNo).toBeGreaterThan(0);
+			expect(Object.hasOwn(a, 'storageM3'), a.registrationNo).toBe(!byUnit('Brandvlei').includes(a));
+		}
+	});
+
+	it('registers areas and storage that put the units in every band of the map’s Irrigated area and Dam capacity shading', () => {
+		const c = compare(licenceAllocations(compare([]), ex.model));
+		const band = (name: string, measure: 'area' | 'storage') => {
+			const n = c.nodes.find((x) => x.name === name)!;
+			return measure === 'area' ? useBand(n.irrigatedArea!.modelledHa, n.irrigatedArea!.registeredHa ?? 0) : useBand(n.storage.modelledCapacityM3 ?? 0, n.storage.registeredM3 ?? 0);
+		};
+		const bands = (m: 'area' | 'storage') => Object.fromEntries(LICENCE_UNITS.map((u) => [u.name, band(u.name, m)]));
+		expect(bands('area')).toEqual({
+			Groenkloof: 'over',
+			Oranjedraai: 'far',
+			Randhoek: 'near',
+			Rooiheuwel: 'under',
+			Brandvlei: 'near',
+			Grysvlakte: 'unregistered',
+			Stilwater: 'none',
+			Sonderkaart: 'under'
+		});
+		expect(bands('storage')).toEqual({
+			Groenkloof: 'under',
+			Oranjedraai: 'near',
+			Randhoek: 'over',
+			Rooiheuwel: 'far',
+			Brandvlei: 'unregistered',
+			Grysvlakte: 'unregistered',
+			Stilwater: 'none',
+			Sonderkaart: 'near'
+		});
+		// The r = 1 area sits on the edge, not just inside it.
+		const edge = c.nodes.find((n) => n.name === 'Randhoek')!.irrigatedArea!;
+		expect(edge.modelledHa / edge.registeredHa!).toBeCloseTo(1, 9);
 	});
 });

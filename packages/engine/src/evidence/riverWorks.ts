@@ -12,6 +12,7 @@ import { toEpochDay } from '../calendar';
 import { damPresence } from '../network/development';
 import { onRiverDam } from '../network/supply';
 import { transferRatesM3s } from '../network/transferRates';
+import { isSplitTransfer, transferDestinations } from '../network/transferSplits';
 
 /**
  * One river abstraction in a model:
@@ -125,7 +126,16 @@ export function offtakeRiverWorks(t: Transfer, nodes: readonly Pick<NetworkNode,
 	return {
 		kind: 'offtake',
 		id: t.id,
-		name: `${nameOf(t.fromNodeId)} → ${t.toNodeId === null ? 'outside the catchment' : nameOf(t.toNodeId)}`,
+		// Split between destinations (engine ≥ 1.114.0): every one, with its share.
+		name: `${nameOf(t.fromNodeId)} → ${
+			isSplitTransfer(t)
+				? transferDestinations(t)
+						.map((d) => `${d.nodeId === null ? 'outside the catchment' : nameOf(d.nodeId)} ${Math.round(d.pct * 10_000) / 100} %`)
+						.join(', ')
+				: t.toNodeId === null
+					? 'outside the catchment'
+					: nameOf(t.toNodeId)
+		}`,
 		// Its capacity is the month's rate × 86 400, capped by the daily cap (§2.6a): always a limit unless a rate isn't a number.
 		bounded: size(t.dailyCapM3) || rates.every(size),
 		// One hands-off flow for every month (§2.6a); one the run reads as none (not a number ≥ 0) isn't one.
@@ -188,7 +198,7 @@ export function riverWorksTouched(op: ScenarioOp, model: RiverWorksLookup): { no
 			return nodes((model.boreholes ?? []).find((x) => x.id === op.boreholeId)?.nodeId);
 		case 'transfer.remove': {
 			const t = (model.transfers ?? []).find((x) => x.id === op.transferId);
-			return t && t.source !== 'river' ? nodes(t.toNodeId) : none;
+			return t && t.source !== 'river' ? nodes(...transferDestinations(t).map((d) => d.nodeId)) : none;
 		}
 		case 'allocation.set':
 			return nodes(op.allocation.nodeId, (model.allocations ?? []).find((x) => x.id === op.allocation.id)?.nodeId);

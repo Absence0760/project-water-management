@@ -10,6 +10,7 @@ import { capacityScaleOf } from '../network/development';
 import { CROPS_TAKE_KEY, RIVER_TAKE_SERIES } from '../network/riverSource';
 import { REACH_LOSS_SERIES } from '../network/reachLoss';
 import { canMove, externalRules, transferRuleKey } from '../network/transferSeries';
+import { expandModelTransfers } from '../network/transferSplits';
 import { BASEFLOW_GAIN_SERIES, BASEFLOW_LOSS_SERIES } from '../network/baseflow';
 import {
 	type ModelInput,
@@ -48,7 +49,8 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 
 export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
 	// Read the model as the run did (runModel upgrades a model saved by an older engine).
-	const input = { ...raw, model: upgradeLegacyInput(raw.model, raw.settings?.apanMm) };
+	// A rule split between destinations (engine ≥ 1.114.0) is checked as its pieces, the rules the run ran.
+	const input = { ...raw, model: expandModelTransfers(upgradeLegacyInput(raw.model, raw.settings?.apanMm)) };
 	const names = new Map(input.model.nodes.map((n) => [n.id, n.name]));
 	const d0 = toEpochDay(out.startDate);
 	// "<uuid> day 12" → "Farm A on 2001-10-13", so the detail points at something the user can open.

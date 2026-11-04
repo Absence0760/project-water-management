@@ -1076,6 +1076,18 @@ describe('diffInputs', () => {
 		const c = structuredClone(b);
 		Object.assign(c.model.transfers[0]!, { diversionFlowUnit: 'm3/s' });
 		expect(texts(b, c)).toEqual(['Transfer Rooikloof → Bergwater: flow unit of the curve L/s → m3/s']);
+		// A curve by month (engine 1.114.0): each month whose rule differs, a formula or a maximum.
+		const d = structuredClone(c);
+		Object.assign(d.model.transfers[0]!, { diversionCoefficient: null, diversionExponent: null, diversionMaxPct: null, monthlyDiversion: [{ coefficient: 2000, exponent: -0.9, maxPct: 0.95 }, null, ...new Array(10).fill({ coefficient: 2000, exponent: -0.9, maxPct: 0.95 })] });
+		expect(texts(c, d)).toEqual(['Transfer Rooikloof → Bergwater: takes by month Nov 2\u202f000 × x^-0.9 %, at most 95% → a maximum']);
+	});
+
+	it('names each destination of a split with its share (engine 1.114.0)', () => {
+		const t = { id: 't1', fromNodeId: 'f1', toNodeId: 'f2', months: [12, 1], maxRateM3s: 0.25, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 };
+		const a = snapshot({ model: { ...snapshot().model, transfers: [t] } });
+		const b = structuredClone(a);
+		Object.assign(b.model.transfers[0]!, { destinations: [{ nodeId: 'f2', pct: 0.4 }, { nodeId: null, pct: 0.6 }] });
+		expect(texts(a, b)).toEqual(['Transfer Rooikloof → Bergwater 40%, outside the catchment 60%: route was Rooikloof → Bergwater']);
 	});
 
 	it('names the calibration site by its gauge, never its node id (issue #610)', () => {

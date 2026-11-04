@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "The Allocations tab's per-unit totals (AllocationUnitTotals) and the map's Shade by measures with their words and figures table, plus the help text. Measured locally: 2359 KB on main @ 680315f7, 2363 KB with this branch (+4 KB). Headroom 0 KB."
+}

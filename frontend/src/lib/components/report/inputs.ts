@@ -3,7 +3,7 @@
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
 import { gapRainChoiceText } from '#lib/components/series/gapRain.js';
-import { arealRainText, resolveGapRain, runRainCredits, type RainCredit, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, describeEwrDailySource, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer, type EwrSplitInfo } from '@water-management/engine';
+import { arealRainText, resolveGapRain, runRainCredits, type RainCredit, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, describeEwrDailySource, diversionMonthsOf, diversionMonthsProblem, fitPeriodText, hasMonthlyDiversion, hasMonthlyRates, isRiverOfftake, isSplitTransfer, transferDestinations, type MonthDiversion, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer, type EwrSplitInfo } from '@water-management/engine';
 import { findSystem, systemLabel } from '#lib/model/systems.js';
 import { describeWindow, FLOW_KIND_LABEL } from '#lib/components/calibration/metrics.js';
 import { describeMonths, WATER_YEAR_MONTHS } from '#lib/format/months.js';
@@ -220,7 +220,10 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
 		.sort((a, b) => a.priority - b.priority)
 		.map((t) => [
 			`${name.get(t.fromNodeId) ?? '–'}${isRiverOfftake(t) ? (t.sizing === 'diversionCurve' ? ` (river off-take, ${diversionText(t)})` : ' (river off-take)') : ''}`,
-			t.toNodeId === null ? 'Outside the catchment' : (name.get(t.toNodeId) ?? '–'),
+			// Split between destinations (engine ≥ 1.114.0): each with its share.
+			transferDestinations(t)
+				.map((d) => `${d.nodeId === null ? 'Outside the catchment' : (name.get(d.nodeId) ?? '–')}${isSplitTransfer(t) ? ` ${fmtPct(d.pct, 0)}` : ''}`)
+				.join(', '),
 			describeMonths(t.months),
 			// A rule with its own rate per month (engine ≥ 1.14.0) lists each month it runs in with its rate.
 			hasMonthlyRates(t) && new Set(transferRatesM3s(t).filter((r) => r > 0)).size > 1
@@ -240,12 +243,25 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
  * (the river there), at most 95%". An incomplete curve (the run took nothing on it) says so.
  */
 export function diversionText(t: Transfer): string {
-	const a = t.diversionCoefficient;
-	const b = t.diversionExponent;
-	if (a == null || b == null || !t.diversionFlowUnit) return 'a diversion curve left incomplete, so it took nothing';
+	if (diversionMonthsProblem(t)) return 'a diversion curve left incomplete, so it took nothing';
 	const unit = t.diversionFlowUnit === 'm3/s' ? 'm³/s' : t.diversionFlowUnit === 'm3/day' ? 'm³/day' : t.diversionFlowUnit;
 	const basis = t.diversionFlowBasis === 'natural' ? 'the natural flow there' : 'the river there';
-	return `${fmtNum(a, 6, true)} × x^${fmtNum(b, 6, true)} % of the river, x in ${unit} (${basis}), at most ${fmtPct(t.diversionMaxPct ?? 1, 0)}`;
+	const curve = (c: MonthDiversion) => `${fmtNum(c.coefficient, 6, true)} × x^${fmtNum(c.exponent, 6, true)} % of the river, at most ${fmtPct(c.maxPct ?? 1, 0)}`;
+	// A maximum or a formula by month (engine ≥ 1.114.0): each run of months with the same rule, in water-year order.
+	if (hasMonthlyDiversion(t)) {
+		const months = diversionMonthsOf(t);
+		const parts: string[] = [];
+		for (let k = 0; k < 12; ) {
+			const say = months[k] ? curve(months[k]!) : 'up to its maximum';
+			let j = k;
+			while (j + 1 < 12 && (months[j + 1] ? curve(months[j + 1]!) : 'up to its maximum') === say) j++;
+			parts.push(`${WATER_YEAR_MONTHS[k]}${j > k ? `–${WATER_YEAR_MONTHS[j]}` : ''} ${say}`);
+			k = j + 1;
+		}
+		return `${parts.join('; ')}; x in ${unit} (${basis})`;
+	}
+	const one = diversionMonthsOf(t)[0]!;
+	return `${fmtNum(one.coefficient, 6, true)} × x^${fmtNum(one.exponent, 6, true)} % of the river, x in ${unit} (${basis}), at most ${fmtPct(one.maxPct ?? 1, 0)}`;
 }
 
 /** A river off-take's canal seepage back to the river (engine ≥ 1.42.0): its share of the losses and where it rejoins (null = below the source). */

@@ -42,6 +42,9 @@
 	import UncertaintyPanel from '#lib/components/uncertainty/UncertaintyPanel.svelte';
 	import SensitivityPanel from '#lib/components/uncertainty/SensitivityPanel.svelte';
 	import OutcomeMatrixPanel from '#lib/components/outcomes/OutcomeMatrixPanel.svelte';
+	import IrrigationSupportPanel from '#lib/components/outcomes/IrrigationSupportPanel.svelte';
+	import { plantedHaOf } from '#lib/components/outcomes/irrigationSupport.js';
+	import type { MatrixShare } from '#lib/components/outcomes/matrix.js';
 	import OutlookPanel from '#lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '#lib/components/reliability/WaterAccountPanel.svelte';
 	import { RIVER_STRIP_ANCHOR, riverAnchor } from './links';
@@ -74,6 +77,10 @@
 		/** The outcome matrix saved a project setting (its Reserve site): the page takes the new project. */
 		onProjectChange?: (p: Project) => void;
 	} = $props();
+
+	// The outcome matrix's sweep and matrix, for the irrigation support board beside it (one lookup, one set of years).
+	let matrixShare = $state.raw<MatrixShare | null>(null);
+	let matrixPanel = $state<ReturnType<typeof OutcomeMatrixPanel> | undefined>();
 
 	const pick = $derived(pickRiverRun(runs, page.url.searchParams.get('run')));
 	// Newest first, for the picker.
@@ -416,7 +423,21 @@
 							ewrRules={project.settings.ewrRules}
 							daily={summary?.catchment.outletEwr}
 							{onProjectChange}
+							onview={(v) => (matrixShare = v)}
+							bind:this={matrixPanel}
 							canEdit={canEdit}
+						/>
+					{/key}
+				</div>
+				<!-- Reads the outcome matrix's sweep (shared through onview, not looked up again); its Run… opens the matrix's form. -->
+				<div class="panel" id="res-irrigation">
+					{#key shownRun.id}
+						<IrrigationSupportPanel
+							source={matrixShare}
+							plantedHa={plantedHaOf(shownRun.model)}
+							fullAllocation={shownRun.settings?.allocationMode === 'fullAllocation'}
+							canEdit={canEdit}
+							onRun={() => matrixPanel?.open()}
 						/>
 					{/key}
 				</div>

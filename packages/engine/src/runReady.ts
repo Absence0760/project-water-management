@@ -52,3 +52,39 @@ export function unitsOnCatchmentRain<N extends LandUnitNode & { mapMm?: number |
 	const stations = settings?.rainStations?.units ?? {};
 	return landUnits(nodes).filter((n) => !stations[n.id] && !own.has(n.id) && !(gaugeMap && (n.mapMm ?? 0) > 0));
 }
+
+/**
+ * The land units whose CHIRPS driver (settings.unitRain.chirpsUnits, engine ≥ 1.114.0, docs/model.md §2.4h) won't run
+ * as chosen, in the model's order: `noChirps`, no CHIRPS series of their own, so they run on the rain they would without
+ * the choice; `rawInstead`, CHIRPS bias-corrected with no point record to correct it against (no reference gauge, and
+ * no catchment rain gauge for the §2.4b factors), so they run on their raw CHIRPS, levelled to their MAP where they have one. A unit with a
+ * rainfall station runs on it and isn't listed. Notes, never blockers; read from the setup, as unitsOnCatchmentRain is:
+ * the run decides from the records (a series with no reading, a §2.4b fit with too little) and says so.
+ */
+export function unitChirpsChoiceNotes<N extends LandUnitNode>(
+	nodes: readonly N[],
+	settings:
+		| {
+				unitRain?: { chirpsUnits?: Record<string, { correction?: string }> | null; reference?: unknown } | null;
+				rainStations?: Pick<RainStationSettings, 'units' | 'catchment'> | null;
+				chirpsBiasCorrection?: unknown;
+		  }
+		| null
+		| undefined,
+	series: readonly (Pick<SeriesMeta, 'kind'> & { siteNodeId?: string | null })[]
+): { noChirps: N[]; rawInstead: N[] } {
+	const choices = settings?.unitRain?.chirpsUnits ?? {};
+	const stations = settings?.rainStations?.units ?? {};
+	const own = new Set(series.filter((s) => s.siteNodeId && s.kind === 'rain_chirps_mm').map((s) => s.siteNodeId!));
+	// A point record to correct against: the reference gauge, or the catchment's §2.4b factors, which need a catchment rain
+	// gauge and CHIRPS with the correction on, and no catchment station (§2.4b is off under one, so only a reference corrects).
+	const gauge = series.some((s) => s.kind === 'rain_catchment_mm' && !s.siteNodeId);
+	const chirps = series.some((s) => s.kind === 'rain_chirps_mm' && !s.siteNodeId);
+	const bias = !settings?.rainStations?.catchment && gauge && chirps && settings?.chirpsBiasCorrection !== 'none';
+	const point = !!settings?.unitRain?.reference || bias;
+	const chose = landUnits(nodes).filter((n) => !stations[n.id] && (choices[n.id]?.correction === 'bias' || choices[n.id]?.correction === 'raw'));
+	return {
+		noChirps: chose.filter((n) => !own.has(n.id)),
+		rawInstead: chose.filter((n) => own.has(n.id) && choices[n.id]!.correction === 'bias' && !point)
+	};
+}

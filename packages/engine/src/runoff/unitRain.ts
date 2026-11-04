@@ -61,6 +61,7 @@ import {
 	type NetworkNode,
 	type ProjectSettings,
 	type SeriesKind,
+	type UnitChirpsCorrection,
 	type UnitChirpsLevel,
 	type UnitRainReferenceFit,
 	type UnitRainReferenceMonth,
@@ -130,6 +131,12 @@ export interface UnitRainRecipe {
 	chirps: UnitChirpsLevel | null;
 	/** Rule 'station' (engine ≥ 1.91.0, §2.4i): the unit's station, its ratio and the pairing's factors; absent on the other rules. */
 	station?: UnitStationRecipe;
+	/**
+	 * The unit's CHIRPS driver (settings.unitRain.chirpsUnits, engine ≥ 1.114.0): rule 'unitChirps' whatever other
+	 * records it has, its CHIRPS corrected against the reference gauge (`bias`) or never (`raw`). Absent when it has
+	 * none, or when the choice couldn't apply (a station, or no usable CHIRPS).
+	 */
+	chirpsChoice?: UnitChirpsCorrection;
 }
 
 /** One land unit's daily forcing over the run. */
@@ -364,18 +371,24 @@ export function unitRainRecipes(
 	if (fit) fit.reference = reference;
 	const refFactors = reference ? reference.months.map((x) => x.factor) : null;
 	const assigned = ctx.settings.rainStations?.units ?? null;
+	const choices = u.chirpsUnits ?? null;
 	return units.map((n) => {
 		const pin = pinned?.find((p) => p.nodeId === n.id);
 		if (pin) return structuredClone(pin);
+		const unit = `unit rain: "${n.name}"`;
 		// Rule 'station' (engine ≥ 1.91.0, §2.4i): a unit with a station whose record the input holds.
 		const a = assigned?.[n.id];
+		// Its CHIRPS driver (engine ≥ 1.114.0): a station assigned to the unit takes precedence (the API refuses both).
+		const c = choices?.[n.id]?.correction;
+		const asked: UnitChirpsCorrection | null = c === 'bias' || c === 'raw' ? c : null;
+		if (asked && a) warnings.push(`${unit}: it has both a rainfall station and CHIRPS as its driver, so the CHIRPS choice is ignored`);
+		const choice = a ? null : asked;
 		const sc = a ? stationsOf(ctx, warnings) : null;
 		const station = a && sc ? unitStationRecipe(sc, n, a, warnings) : null;
 		if (station) return { nodeId: n.id, rule: 'station' as const, hasGauge: false, gaugeMapFactor: null, gaugeMapOwnFactor: null, gaugeMapClamped: false, gaugeMapOutsideBand: false, chirps: null, station };
 		const map = usableMap(n.mapMm);
 		const hasGauge = hasReading(series[unitRainSeriesKey('rain_catchment_mm', n.id)]);
 		const chirpsSeries = series[unitRainSeriesKey('rain_chirps_mm', n.id)];
-		const unit = `unit rain: "${n.name}"`;
 		// Rule 2's ratio, whenever its conditions hold: it also scales the catchment rain and forecast filling the unit's gaps.
 		let gaugeMapFactor: number | null = null;
 		let gaugeMapOwnFactor: number | null = null;
@@ -405,7 +418,7 @@ export function unitRainRecipes(
 				warnings.push(
 					`${unit}: its CHIRPS totals 0 mm in every complete calendar year (${raw.years.length}, ${raw.years[0]}–${raw.years[raw.years.length - 1]}), which looks broken: it is not used, and the unit's days fall to the next source of its rule`
 				);
-			} else if (reference && refFactors) {
+			} else if (choice !== 'raw' && reference && refFactors) {
 				// The reference factors set the season's shape, then k_unit its level: the unit's MAP ÷ its mean annual CHIRPS × factor
 				// (§2.4h, decision 1a), after the factors so a clamped or defaulted month is made up in the yearly total. Without a
 				// MAP, or without a complete year to average, the factors alone (kUnit null): there is no level to rescale to.
@@ -421,6 +434,22 @@ export function unitRainRecipes(
 				} else if (map === null) warnings.push(`${unit}: it has no MAP, so its CHIRPS takes the reference factors without k_unit to level it`);
 				else warnings.push(`${unit}: its CHIRPS has no complete calendar year to compare its MAP with, so it takes the reference factors without k_unit to level it`);
 				chirps = { source: 'reference', factors: [...refFactors], kUnit };
+			} else if (choice === 'bias' && bias && map !== null) {
+				// CHIRPS, bias-corrected, as the unit's driver (engine ≥ 1.114.0) with no reference gauge: the catchment's §2.4b
+				// factors set the season's shape and bias, then k_unit its level, as the reference's do (clamp(unit MAP ÷ the
+				// mean annual of CHIRPS × the §2.4b factor of each day)). Without a complete year, the factors alone.
+				const mean = chirpsMeanAnnual(chirpsSeries!, period, (day) => chirpsFactorOn(ctx.chirpsCorrection, day) ?? 1);
+				if (mean && mean.meanAnnualMm > 0) {
+					const own = map / mean.meanAnnualMm;
+					const factor = clampFactor(own);
+					chirps = { source: 'bias', kUnit: { factor, ownFactor: own, clamped: factor !== own, outsideBand: outsideArealRainBand(own), meanAnnualMm: mean.meanAnnualMm, years: mean.years, inPeriod: mean.inPeriod } };
+					tooFew(mean, 'its k_unit');
+					const w = factorWarning(`${unit}: its k_unit (its MAP ÷ its mean annual CHIRPS × the catchment's bias factors)`, own, factor, `${map} ÷ ${Math.round(mean.meanAnnualMm)} mm`);
+					if (w) warnings.push(w);
+				} else {
+					chirps = { source: 'bias' };
+					warnings.push(`${unit}: its CHIRPS has no complete calendar year to compare its MAP with, so it takes the catchment's bias factors without k_unit to level it`);
+				}
 			} else {
 				const mean = map !== null ? raw : null;
 				if (map !== null && mean && mean.meanAnnualMm > 0) {
@@ -432,12 +461,31 @@ export function unitRainRecipes(
 					if (w) warnings.push(w);
 				} else {
 					if (map !== null) warnings.push(`${unit}: its CHIRPS has no complete calendar year with rain to compare its MAP with, so the MAP doesn't level it`);
-					chirps = bias ? { source: 'bias' } : { source: 'raw' };
-					if (!bias) warnings.push(`${unit}: its CHIRPS runs raw: ${map !== null ? 'its MAP can’t level it' : 'it has no MAP to level it'} and the catchment has no CHIRPS bias factors (§2.4b) to correct it with`);
+					// Raw CHIRPS as its driver (engine ≥ 1.114.0) is never bias-corrected, not even by the catchment's §2.4b factors.
+					const useBias = bias && choice !== 'raw';
+					chirps = useBias ? { source: 'bias' } : { source: 'raw' };
+					if (!useBias)
+						warnings.push(
+							`${unit}: its CHIRPS runs raw: ${map !== null ? 'its MAP can’t level it' : 'it has no MAP to level it'}${choice === 'raw' ? ', and its driver is raw CHIRPS, which is never bias-corrected' : ' and the catchment has no CHIRPS bias factors (§2.4b) to correct it with'}`
+						);
 				}
 			}
 		}
 		const hasChirps = chirps !== null && chirps.source !== 'unusable';
+		// CHIRPS as the unit's driver (engine ≥ 1.114.0, §2.4h): rule 3 whatever other records the unit has, its own gauge
+		// not read. Bias-corrected with no point record to correct it against runs raw levelled to its MAP (the operator,
+		// 2026-11-03). Without usable CHIRPS the choice can't apply, and the unit runs on the rule it would without it.
+		if (choice && hasChirps) {
+			if (choice === 'bias' && chirps!.source === 'map')
+				warnings.push(
+					`${unit}: its driver is CHIRPS, bias-corrected, but there is no point rainfall record to correct it against (no reference gauge, and the catchment has no CHIRPS bias factors), so it runs on its raw CHIRPS levelled to its MAP (× ${fmt(chirps!.factor)})`
+				);
+			return { nodeId: n.id, rule: 'unitChirps' as const, hasGauge: false, gaugeMapFactor, gaugeMapOwnFactor, gaugeMapClamped, gaugeMapOutsideBand, chirps, chirpsChoice: choice };
+		}
+		if (choice)
+			warnings.push(
+				`${unit}: its driver is CHIRPS (${choice === 'bias' ? 'bias-corrected' : 'raw'}), but it has no ${chirps?.source === 'unusable' ? 'usable CHIRPS' : 'CHIRPS series of its own'}, so it runs on the rain it would without the choice`
+			);
 		// An unusable CHIRPS (decision 7a) is skipped: a unit with nothing else falls to rule 4, the catchment rain.
 		const rule: UnitRainRule = hasGauge ? 'unitGauge' : gaugeMapFactor !== null ? 'gaugeMap' : hasChirps ? 'unitChirps' : 'catchment';
 		if (rule === 'catchment')
@@ -590,14 +638,14 @@ export function unitRainForcing(
 		// The level on a unit's CHIRPS day t: its MAP factor, the §2.4b factor of the day, or the reference factor of its month × k_unit.
 		const levelOn = (t: number): number => {
 			if (level!.source === 'map') return level!.factor;
-			if (level!.source === 'bias') return chirpsFactorOn(ctx.chirpsCorrection, d0 + t) ?? 1;
+			if (level!.source === 'bias') return (chirpsFactorOn(ctx.chirpsCorrection, d0 + t) ?? 1) * (level!.kUnit?.factor ?? 1);
 			if (level!.source === 'reference') return level!.factors[monthOfEpochDay(d0 + t) - 1]! * (level!.kUnit?.factor ?? 1);
 			return 1;
 		};
 		// A level that reaches the unit's MAP (its MAP factor, or f × k_unit) stands alone. One that only shapes it (the §2.4b
 		// factors, which bring CHIRPS to the catchment gauge; f without k_unit, the season) keeps the gauge MAP ratio on top
 		// (engine ≥ 1.85.0), so a unit whose gauge days read at gauge × ratio has no step where a gap, or the forecast, starts.
-		const shapeOnly = level !== null && (level.source === 'bias' || (level.source === 'reference' && !level.kUnit));
+		const shapeOnly = level !== null && ((level.source === 'bias' && !level.kUnit) || (level.source === 'reference' && !level.kUnit));
 		const levelled = (t: number): number => levelOn(t) * (shapeOnly ? kFill : 1);
 		const chirpsAt = (t: number): number | null => {
 			const v = chirps![t];
@@ -745,6 +793,8 @@ export function unitRainSummary(
 				gaugeMapClamped: r.gaugeMapClamped,
 				gaugeMapOutsideBand: r.gaugeMapOutsideBand ?? false,
 				chirps: r.chirps ? structuredClone(r.chirps) : null,
+				// Only on a unit that ran on its CHIRPS driver (engine ≥ 1.114.0), so a summary without one is as before.
+				...(r.chirpsChoice ? { chirpsChoice: r.chirpsChoice } : {}),
 				days,
 				rainMm,
 				petMm: petTotal,

@@ -1035,7 +1035,17 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const otCapInto = new Float64Array(nodes.length);
 	// The natural flow at each node today (engine ≥ 1.113.0): its own natural runoff and every node's above it, before
 	// any use. Only a diversion-curve off-take reading the natural flow (docs/model.md §2.6a) needs it.
-	const natAt = offtakes.some((o) => o.diversion?.natural) ? new Float64Array(nodes.length) : null;
+	const natAt = offtakes.some((o) => o.curves?.some((c) => c?.natural)) ? new Float64Array(nodes.length) : null;
+	// The pieces of each split rule sized to its destinations' need (engine ≥ 1.114.0, ./transferSplits.ts): they
+	// ask their share of the sum of what their destinations need, so the split holds whatever each needs.
+	const otGroupOf = new Map<string, number[]>();
+	offtakes.forEach((o, k) => {
+		if (!o.split || o.sizing !== 0) return;
+		const g = otGroupOf.get(o.split.of);
+		if (g) g.push(k);
+		else otGroupOf.set(o.split.of, [k]);
+	});
+	const otGroups = [...otGroupOf.values()];
 	const trOut = transfers.map(() => new Float64Array(days));
 	// A rule out of the catchment (EXTERNAL_TO, engine ≥ 1.86.0) settles into an extra receiver slot after the
 	// nodes, one per source unit (XS + its index). Water pumped out of the catchment is its source unit's surface
@@ -1073,6 +1083,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const rem = new Float64Array(transfers.length);
 	const roomLeft = new Float64Array(2 * nodes.length);
 	const roomFull = new Uint8Array(2 * nodes.length);
+	// A receiver's room left after an earlier priority today (engine ≥ 1.114.0): carried to the next priority
+	// rather than worked out again from its storage less what came in, which is the same number but for the float
+	// noise of the subtraction, and a receiver an earlier priority filled exactly could then show 1e-14 of room
+	// and draw band shares from its rules' sources it can never take (verify/ dense-55).
+	const roomCarry = new Float64Array(nodes.length);
+	const roomCarried = new Uint8Array(nodes.length);
 	const srcTaken = new Float64Array(nodes.length);
 	// The receiving nodes of each priority (the outside slots apart).
 	const levelDests = levels.map((level) => Int32Array.from(new Set(level.flatMap((k) => (toSlot[k]! >= XS ? [] : [toSlot[k]!])))));
@@ -1186,6 +1202,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// to its own limit and each only above its own reserve (engine 1.36.0,
 		// audit N6, step 3 below), so the result never depends on the list order.
 		jToday.fill(0);
+		roomCarried.fill(0);
 		drawnToday.fill(0);
 		intoToday.fill(0);
 		if (anyExternal) extToday.fill(0);
@@ -1213,7 +1230,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// in-service date); a dam with no capacity today is no dam: it releases nothing.
 				const kd = capacityK(dst, t);
 				const rel = dst.damCapacityM3 * kd > 0 ? fixedReleaseRoom(dst.release, month[t]!) : 0;
-				roomLeft[d] = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[d]!);
+				roomLeft[d] = roomCarried[d] ? roomCarry[d]! : Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[d]!);
 				roomFull[d] = roomLeft[d]! > 0 ? 0 : 1;
 			}
 			// The outside slot of each unit sending out of the catchment at this priority (engine-audit.md X1): the
@@ -1348,6 +1365,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				jToday[tr.from]! -= v;
 				if (toSlot[k]! >= XS) extToday[tr.from]! += v;
 			}
+			// What room each receiver has left for the next priority (none once full).
+			for (let a = 0; a < dests.length; a++) {
+				const d = dests[a]!;
+				roomCarry[d] = roomFull[d] ? 0 : roomLeft[d]!;
+				roomCarried[d] = 1;
+			}
 		}
 
 		// River off-takes sized to their destination's need (sizing 'demand'): its demand today, plus its
@@ -1394,6 +1417,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					need += Math.max(0, dstCap - (q + g.Pd + intoToday[o.to]! - E - Sp) + rel);
 				}
 				otShare[k] = (need * cap) / otCapInto[o.to]!;
+			}
+			for (const g of otGroups) {
+				let sum = 0;
+				for (const k of g) sum += otShare[k]!;
+				for (const k of g) otShare[k] = offtakes[k]!.split!.pct * sum;
 			}
 		}
 
@@ -1859,13 +1887,17 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						// proportion to the asks alone gives a licence split into several rules the same total.
 						// A diversion-curve rule (engine ≥ 1.113.0) asks its share of the river here, U₀, read off its curve at
 						// U₀ or at the natural flow here; never more than U₀, and the bands hold it above its keep.
+						// A curve by month (engine ≥ 1.114.0): a month without one takes up to capacity.
+						const curve = o.sizing === 2 && o.curves ? o.curves[month[t]!]! : null;
 						const w =
 							o.sizing === 0
 								? Math.min(cap, otShare[k]! / (1 - o.loss))
 								: o.sizing === 2
-									? o.diversion
-										? Math.min(cap, diversionWant(o.diversion, U0, o.diversion.natural ? natAt![i]! : U0))
-										: 0
+									? !o.curves
+										? 0
+										: curve
+											? Math.min(cap, diversionWant(curve, U0, curve.natural ? natAt![i]! : U0))
+											: cap
 									: cap;
 						if (!(w > 0)) continue;
 						// Insert into the active rules, highest keep first, ties in id order (a level lists its rules in id order).

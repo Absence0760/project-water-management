@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, diversionCurveProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, destinationsProblem, diversionMonthsProblem, GA538_GROUNDWATER_RATES, hasMonthlyDiversion, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, transferDestinations, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -95,7 +95,8 @@ export function operatingIssues(n: Pick<NetworkNode, 'kind' | 'handsOffM3Day' | 
  */
 export function cropSupplyProblems(model: Pick<ProjectModel, 'nodes' | 'transfers'>): { nodeId: string; message: string }[] {
 	const out: { nodeId: string; message: string }[] = [];
-	const offtakes = model.transfers.filter((t): t is typeof t & { toNodeId: string } => t.enabled && isRiverOfftake(t) && t.toNodeId !== null);
+	// Each destination of a split off-take (engine ≥ 1.114.0) is a link, as the engine plans its pieces.
+	const offtakes = model.transfers.flatMap((t) => (t.enabled && isRiverOfftake(t) ? transferDestinations(t).flatMap((d) => (d.nodeId !== null ? [{ fromNodeId: t.fromNodeId, toNodeId: d.nodeId }] : [])) : []));
 	cropSupplyIssues(model.nodes, offtakes, (key, message) => {
 		const nodeId = key.slice(key.indexOf(':') + 1);
 		const n = model.nodes.find((x) => x.id === nodeId);
@@ -405,18 +406,21 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 	// Transfers
 	transfers.forEach((t, i) => {
 		const label = `Transfer ${i + 1}`;
-		// To null: out of the catchment (engine ≥ 1.86.0, docs/model.md §2.6), a dam rule only.
-		const outside = t.toNodeId === null;
-		if (!nodeIds.has(t.fromNodeId) || (!outside && !nodeIds.has(t.toNodeId!))) {
+		// Every destination of a split (engine ≥ 1.114.0, docs/model.md §2.6) as a rule's one; null: out of the
+		// catchment (engine ≥ 1.86.0), a dam rule only.
+		const ends = transferDestinations(t).map((d) => d.nodeId);
+		const split = destinationsProblem(t);
+		if (split) issues.push({ area: 'transfers', itemId: t.id, message: `${label}: ${split}.` });
+		if (!nodeIds.has(t.fromNodeId) || ends.some((e) => e !== null && !nodeIds.has(e))) {
 			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: choose both a source and a destination hydrological unit.` });
-		} else if (outside && isRiverOfftake(t)) {
+		} else if (ends.includes(null) && isRiverOfftake(t)) {
 			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: a river off-take delivers to a hydrological unit, so it can't send water outside the catchment; take it from the source’s dam instead.` });
-		} else if (t.fromNodeId === t.toNodeId) {
+		} else if (ends.includes(t.fromNodeId)) {
 			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: source and destination are the same hydrological unit.` });
 		} else {
 			// Both ends a hydrological unit (the API refuses an other water user; the engine skips a gauge's rule
 			// with only a run warning, so it is refused here before it saves as a rule that does nothing).
-			for (const id of outside ? [t.fromNodeId] : [t.fromNodeId, t.toNodeId!]) {
+			for (const id of [t.fromNodeId, ...ends.filter((e): e is string => e !== null)]) {
 				const end = nodes.find((n) => n.id === id)!;
 				if (end.kind === 'user') issues.push({ area: 'transfers', itemId: t.id, message: `${label}: "${nodeName(id)}" is an other water user; transfers run between hydrological units’ dams.` });
 				else if (end.kind === 'gauge') issues.push({ area: 'transfers', itemId: t.id, message: `${label}: "${nodeName(id)}" is a gauge, which can't send or receive water; choose a hydrological unit.` });
@@ -445,9 +449,12 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 			if (!inRange(t.lossReturnPct ?? 0, 0, 1)) issues.push({ area: 'transfers', itemId: t.id, message: `${label}: the share of the losses seeping back is 0–100%.` });
 			if (t.lossReturnNodeId && nodes.some((n) => n.id === t.fromNodeId) && offtakeReturnAt(t, nodes.findIndex((n) => n.id === t.fromNodeId), nodes) === undefined)
 				issues.push({ area: 'transfers', itemId: t.id, message: `${label}: the seepage can rejoin the river only below the source or a hydrological unit downstream of it.` });
-			// Sized by a diversion curve (engine ≥ 1.113.0): a complete curve, as the save refuses one without.
-			const curve = t.sizing === 'diversionCurve' ? diversionCurveProblem(t) : null;
-			if (curve) issues.push({ area: 'transfers', itemId: t.id, message: `${label}: a share of the river’s flow needs a complete curve: ${curve}.` });
+			// Sized by a diversion curve (engine ≥ 1.113.0; by month, 1.114.0): a complete curve in each formula month.
+			const curve = t.sizing === 'diversionCurve' ? diversionMonthsProblem(t) : null;
+			if (curve) issues.push({ area: 'transfers', itemId: t.id, message: `${label}: a formula needs a complete curve: ${curve}.` });
+		} else if (t.sizing === 'diversionCurve' || hasMonthlyDiversion(t)) {
+			// A formula takes a share of the river's flow, so not from a dam (the API refuses it too).
+			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: a formula takes a share of the river’s flow, so it needs Takes from: The river (an off-take).` });
 		}
 	});
 

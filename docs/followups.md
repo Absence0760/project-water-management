@@ -982,6 +982,20 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **CHIRPS as a unit's driver, bias-corrected (engine 1.114.0, model.md
+      §2.4h *CHIRPS as a unit's driver*).** Built from the operator's ask
+      (2026-11-03). Two calls were made without the hydrologist: with no
+      reference gauge, a unit with a MAP is corrected by the catchment's
+      §2.4b monthly factors (catchment gauge ÷ catchment CHIRPS) and then
+      levelled by k_unit, as the reference's factors are; and a station
+      pairing (`correctAgainst`, §2.4i) is not a source of the correction
+      here, so a project whose only point records are rainfall stations, with
+      no reference gauge and its catchment on a station (§2.4b off), runs a
+      bias-corrected unit raw. Ask: is §2.4b's catchment-wide bias a fair
+      correction for a unit's own cells, and should the choice name a
+      station to correct against (its pairing, at the unit's MAP)? Trigger:
+      the next hydrologist round, or a client project with stations and no
+      reference gauge.
 - [ ] **A canal sized by a diversion curve (engine 1.113.0, model.md
       §2.6a *Sized by a diversion curve*).** The hydrologist's rule for one
       of the client's canals (2026-11-02) is built as a river off-take with
@@ -994,12 +1008,19 @@ runs and accumulations are real) can't be decided without the client.
          default). The canal's own unit has no irrigation.
       3. *Where the water goes*: the canal splits 50/50, half to the
          farmers and half to a dam in the town's unit; above the canal's
-         take the river spills on. No split field exists: model it as
-         **two curve rules from the same source**, each with a/2, m/2 and
-         half the canal (0.118 m³/s). Both read the same U₀ (the flow
-         before the source's off-takes), so together they take exactly
-         MIN(0.236 m³/s, MIN(97 %, a · x^b) × U₀). Still to ask: which
-         unit the farmers' half goes to, and the canal's losses.
+         take the river spills on. Engine 1.114.0 (migration 311, model.md
+         §2.6 *Split between destinations*) models it as **one rule split
+         between two destinations, 50 % each** (its one curve, its 0.236
+         m³/s canal): the run reads it as the two half rules this entry
+         first suggested (a/2, m/2, half the canal), so it takes exactly
+         MIN(0.236 m³/s, MIN(97 %, a · x^b) × U₀) and splits what arrives.
+         A curve can also differ by month, or be a plain maximum in some
+         months (§2.6a *A maximum or a formula by month*), if the
+         hydrologist's rule is seasonal. Still to ask: which unit the
+         farmers' half goes to, and the canal's losses. For a split sized
+         to what the destinations need, ask how a share a destination
+         can't use should be read (engine-audit.md SP1: the operator's
+         fixed split now, or each share sized to its own destination).
       4. *The EWR*: **none** (`handsOffEwr` off): the curve already keeps a
          low-flow release. Its priority against other users at the source
          is still open.
@@ -8012,3 +8033,30 @@ editor's and a large boundary's notes in step 4
       so a rename or relink (which bump `updated_at`) isn't flagged. Durable
       fix: a geometry hash in the stamp (and in the feed marks). Trigger: a
       client report of a reshaped boundary not flagged.
+
+## Planning outputs against the mock-ups (2026-11-03)
+
+The four planning outputs were brought to the operator's mock-ups
+([planning-outputs.md §3.8](./design/planning-outputs.md#38-against-the-operators-mock-ups-2026-11-03)).
+Two parts of the seasonal outlook's mock-up need figures the app doesn't store:
+
+- [ ] **A projected water balance by month** (part 6: irrigation, town,
+  EWR and losses as stacked bars per month of the season, with the
+  projected storage at each month's end). An outlook member stores its
+  season's totals (`OutlookMember`: demand, supplied, season-end storage,
+  days below the EWR), not its months. Durable fix: the engine's
+  `outlookMember` also sums each month of the season (supplied, user
+  supplied, outflow, the EWR shortfall, dam storage at each month's end),
+  the job stores it per member, and the panel draws the median month by
+  month, with its 10–90 % range. It grows each member by about 7 × 5
+  numbers, so `seasonal_outlook_member` needs a migration and the stored
+  result grows with it; an `ENGINE_VERSION` bump for the new member field.
+  Trigger: the WUA asks to see the season month by month, or the
+  hydrologist wants the monthly storage path for the review date.
+- [ ] **A derived monthly operating plan** (part 4: a % per month the app
+  works out). The outlook tests a plan the WUA types in (R1's `months`
+  form) and doesn't derive one, by design (§3.5: the WUA decides). If it is
+  wanted, the honest form is a search over monthly plans scored by the same
+  planning rule, reported as data; needs the client's decision first
+  (plan.md § Decision-support outputs).
+
