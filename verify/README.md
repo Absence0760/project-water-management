@@ -44,7 +44,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 245 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 266 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
@@ -64,7 +64,7 @@ no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
 case is `model.py`'s run plus `diff.compare` over every column and day
 (about half each; 0.1–2 s a case), while the engine runs all ~90 default
 cases in one tsx process in about 5 s. The mutation self-test is the bulk:
-245 mutants, each running the cases in order until its first disagreement
+266 mutants, each running the cases in order until its first disagreement
 (about a third of them on average), about 35 min on one core, against about
 3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
 the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
@@ -134,7 +134,9 @@ The core daily chain, with every setting of it the generator varies:
   of one source share its surface room pro rata as an outside receiver of
   their own and the volume counts against the year's volume
   ([engine-audit.md X1](../docs/engine-audit.md), probe
-  `transfer-out-of-catchment-cap`).
+  `transfer-out-of-catchment-cap`), and a river abstraction beside the dam
+  shares only the room its rules out left (probe
+  `transfer-out-of-catchment-cap-river`).
 - **EWR** (§2.7, §2.7b): Y, Z, AA and AB; the outlet and gauge EWR sites
   (`ewrSite` on or off); the attribution with J_int, Σ A + N = D, the charge
   as the largest share, its irrigation part and the binding site.
@@ -517,6 +519,31 @@ of a seed is unchanged), with probes and mutants:
   Probe `diversion-curve-canal` (a canal of the client's shape, invented numbers, in L/s and in
   m³/s, and reading the natural flow below an irrigating farm, beside a
   demand-sized off-take into the same canal head).
+- **A transfer split between destinations** (§2.6, engine ≥ 1.114.0;
+  `generate.py` `add_transfer_splits`, a third of the random networks'
+  rules and two thirds of the dense ones'): `model.py` `split_transfers`
+  runs a rule with two to five valid destinations as one rule per
+  destination, `<id>#<k>` (its own `transfer_rule@<id>#<k>` series), with
+  that share of the rule's rates and daily cap and, for a curve, of a and the
+  largest share; a demand-sized split's pieces each ask their share of the
+  sum of their destinations' needs. A list the run can't use (shares off
+  100 %, one twice, the source, more than five, a first that isn't
+  toNodeId) runs as all of it to toNodeId; one destination is the rule
+  itself. Probes `split-40-60-canal` (a capacity canal 40/60 after 15 %
+  losses and a hands-off flow; a dam rule 30/70 whose first receiver is
+  nearly full; a one-curve rule 25/75 whose largest share binds) and
+  `split-demand` (50/50 sized to the need, one destination needing nothing,
+  beside an unsplit off-take into the same unit).
+- **A maximum or a formula by month** (§2.6a, engine ≥ 1.114.0;
+  `add_monthly_diversions`, half the curve rules, two thirds dense):
+  `model.py` `diversion_curves` reads `monthlyDiversion`, twelve entries
+  Oct–Sep, each a curve (with the rule's unit and basis) or none (a month up
+  to its rate, as a capacity-sized rule); without the list, the one curve in
+  every month; any incomplete month, no curve at all, or the one-curve fields
+  set beside the list, and the rule takes nothing. Probe
+  `monthly-formula-mix` (January and March formulas around a February
+  maximum, split 20/30/50, beside a one-curve rule and one with an
+  incomplete month).
 
 ## Phase 2b (not covered yet)
 
@@ -584,7 +611,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (245
+`test_verify.py` breaks `model.py` one documented rule at a time (260
 mutants; phase 2b's 43 are listed under its features in `mutants.py`:
 the daily A-pan record's 7, the demand factors by part and dated windows' 8,
 land cover's 9 and development during a run's 19). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
@@ -683,7 +710,17 @@ flipped, x read in m³/day whatever its unit, L/s taken at the m³/s factor,
 the natural flow never read, the share taken of the natural flow rather than
 the river at the off-take, the natural flow without the units above, the
 share a fraction rather than a percent, and a curve rule taking a share of
-its destination's need. Each mutant must disagree with the engine somewhere on the examples,
+its destination's need. Splits and a maximum or a formula by month's 15
+(§2.6, §2.6a, engine 1.114.0; `split_transfers`, `diversion_curves`, the
+probes `split-40-60-canal`, `split-demand` and `monthly-formula-mix`): the
+shares ignored on the rates, the daily cap, the monthly rates, the curve's a
+and largest share or the largest share alone; everything to the first
+destination; a demand-sized split's pieces sized to their own destination's
+need, or each asking the whole need; a split adding up to less than 100 % or
+naming a destination twice run as written; a formula month read as a
+maximum; a maximum month taking nothing; the calendar month's index read
+for the water year's; January's curve in every month; and an incomplete
+month read as a maximum rather than the rule taking nothing. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
@@ -838,6 +875,7 @@ open.
 | Probe | What it pins |
 | --- | --- |
 | `unit-rain-reference-kunit` | k_unit = clamp(unit MAP ÷ mean annual CHIRPS × f): over the ten MAP-period years when there are ten (p), every complete year with nine (q), the factors alone with no complete year (n), unusable CHIRPS under a reference (z), k_unit clamped to 0.25 (t), the reference unit levelled to its own MAP (r); a clamped (May) and a defaulted (June) month |
+| `unit-rain-chirps-driver-reference`, `-bias`, `-none` | CHIRPS as a unit's driver (§2.4h, engine 1.114.0) under a reference gauge, under the catchment's §2.4b factors, and with no point record: raw never corrected (a, with a gauge of its own, not read; d without a MAP; e with k_unit clamped), bias-corrected with a MAP (b: f × k_unit, §2.4b × k_unit, or raw × k_unit) and without one (c), and a unit not set (r) |
 | `unit-rain-unusable-chirps` | Without a reference, CHIRPS averaging 0 mm is skipped: rule 3 with a MAP (c3) and without one (c0) run on the catchment's rain, a unit gauge's gaps (c1) fill from it |
 | `unit-rain-forecast-gefs` | A CHIRPS-GEFS forecast under a reference: × f[month] × k_unit on units with usable CHIRPS (two months' factors), × the MAP ratio on a unit without CHIRPS and one whose CHIRPS is unusable |
 | `unit-rain-forecast-gefs-noref` | The same without a reference: × rule 3's levelling (MAP factor, or the §2.4b factor without a MAP) |
@@ -947,3 +985,13 @@ networks:
   wholly before the date "asks for none", so the independence rule was
   broken for that one point: the behaviour itself is what the outputs show
   (factor 0, the row), and the demand is 0 either way. No engine change.
+- **A river abstraction under a cap beside a dam that sends water out of
+  the catchment** (§2.7j, §2.12a, engine-audit.md X1; a harness bug, found
+  by CI's dense seed 174 on 2026-11-03): §2.12a says water a unit's dam
+  rules send out of the catchment is surface use settled before the unit's
+  own sources, which share what it leaves. `model.py` took it off the room
+  its draws used but not off the room its river abstractions share, so a
+  demand object on the river took the day's whole rate (388.8 m³ against
+  the engine's 39.3 m³, after the rule's 349.5 m³ out) and the unit used
+  25 851 m³ of a 25 805 m³ volume. Fixed in `model.py`; probe
+  `transfer-out-of-catchment-cap-river` and a mutant. No engine change.

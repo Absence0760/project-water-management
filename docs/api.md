@@ -873,7 +873,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23).
   `unitRain` (issue #482) is `null` or absent (Per unit's defaults) or
   `{ mode: "perUnit" | "catchment", gaugeMapMm?, gaugeMapSource?, mapPeriod?,
-  reference? }`, replaced whole by a `PATCH`. Every land unit runs on its own
+  reference?, chirpsUnits? }`, replaced whole by a `PATCH`. Every land unit runs on its own
   rain (its rain series, below; [model.md §2.4h](./model.md)): Per unit is
   the only flow generation method from engine 1.109.0 (issue #658). The
   retired `"catchment"` (Fragmentation) is still accepted, for an older
@@ -889,7 +889,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   gauge*](./model.md#reference-gauge-engine--1800-issue-500)); a run's input
   then carries the CHIRPS of the cell under that unit's centre, from the
   cell cache, as `rain_chirps_cell_mm@<unit id>` (stored with the run's
-  input, no series of its own). No other key (the engine-only
+  input, no series of its own). `chirpsUnits` (engine ≥ 1.114.0; `null`,
+  absent or `{}` = none) is land unit node id → `{ correction: "bias" |
+  "raw" }`, the units whose driver rainfall is their own CHIRPS, at most
+  500 ([model.md §2.4h *CHIRPS as a unit's
+  driver*](./model.md#chirps-as-a-units-driver-engine--11140)). The save
+  refuses a unit that isn't a land unit of the project (a unit the stored
+  setting already names is not checked again, so one deleted since doesn't
+  block other saves) and a unit `rainStations.units` also gives a station,
+  checked over the patch and the stored settings together (`400`, "… has
+  both a rainfall station and CHIRPS as its driver; give it one"); a unit
+  without CHIRPS of its own is allowed, the run warns. A project copy moves
+  the keys onto the new node ids. No other key (the engine-only
   `pinnedFactors` included). Anything else is a `400` (the engine's
   `unitRainError`, which the save also applies).
   `rainStations` (engine ≥ 1.91.0, issue #553, [model.md
@@ -1798,7 +1809,26 @@ allocation comparison (`GET …/runs/:runId/allocations`, the evidence
 report's § 5) reads it from the rules with `toNodeId` `null` in the run's
 stored inputs, and under `allocationMode` `cap` it is limited by the
 source's surface room. A scenario's `transfer.add` and `transfer.set` take `toNodeId`
-`null` the same way;
+`null` the same way. A rule may be split between destinations (engine ≥
+1.114.0, migration 311, [model.md §2.6](./model.md)): `destinations`, one to
+five `{ "nodeId": <uuid or null>, "pct": <0 < p ≤ 1> }`, the shares adding up
+to 1, no destination twice and none the source; `null` (the default) is all
+of it to `toNodeId`. `toNodeId` may be left out when `destinations` is given
+(it becomes the first destination's), and a body with `toNodeId` alone, as
+every older client sends, is one destination at 100 %; a one-row list is
+stored as that destination alone, so `GET` returns `destinations` `null` for
+it. `PUT` refuses (400, the reason in a sentence) shares that don't add up
+to 100 %, more than five destinations, one twice, the source among them, a
+first that isn't `toNodeId`, and, from a river off-take, a share outside the
+catchment. A run stores each destination's piece as
+`transfer_rule@<id>#<k>` (k from 0, in the list's order) in place of
+`transfer_rule@<id>`. A river off-take sized by a diversion curve may take a
+maximum or a formula by month (engine ≥ 1.114.0): `monthlyDiversion`, twelve
+entries Oct–Sep, each `{ "coefficient", "exponent", "maxPct" }` (`maxPct`
+`null` = 1) or `null` (a month up to its rate), with the one curve's fields
+`null`; `PUT` refuses one with no formula month, an incomplete month, the list
+on another sizing, and a formula (the list or `sizing` `"diversionCurve"`) on a
+rule from the dam;
 nodes carry `irrigationEfficiency`, `returnFlowFraction` (engine ≥ 1.71.0: the share of the water supplied returning, at most 1 − the unit's blended efficiency, accepted above it and capped by the run, which warns; a document with 0.16.0–1.70.0's `lossReturnFraction` β, a share of the losses, is read as β(1 − e)), `damAreaFullM2`
 (nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node
 with a larger value from before loads and runs, with a warning, and must be
@@ -3399,7 +3429,7 @@ what](./allocations.md#who-sees-what)).
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
 | GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `, `water_use` `21a` / `21b`) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'`. `403` for a viewer while `viewerUnits` is off | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison \| null, capYears, totals }`; for a viewer while `viewerUnits` is off, `comparison` is `null`, `capYears` `[]` and `totals` is `{ tolerance, sources: [{ waterSource, holders, units, years: [{ waterYear, partial, modelledM3 }], judgement: { wholeYears, within, outside } | null }] }` (no status per year, #523 round 6, provisional, #92; `judgement` only when the run's rows in force are the same all through it and exactly today's total's, passing the 5-holder and dominance rules) at the run's own band (`inputs.settings.allocationTolerance`; that viewer's `?tolerance=` is ignored, #523 round 5), or `null` with `totalsWithheld: 'allocation_mode'` for a cap or full-allocation run, whose modelled use is the registered volume where supply met demand; the modelled use summed per water source over the units with a volume on it and how it compares with their registered volume, never the registered m³ itself (#523 K/L/M: a year less today's total, or less the next year, would give the rows between them), only for a source 5 or more registered users hold (`totals` is `null` for everyone else); `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A dam beside the river's surface side carries `measuredAt: 'intake'` and each year a `damDrawM3`, its use being the run's `intake_take` series (engine ≥ 1.82.0, issue #513; a run before it has neither and reads by the draws). A dam on the river's surface side carries each year a `damLossesM3` (its `dam_evaporation` + `dam_seepage_lost`, beside the use, never in it) and `meanDamLossesM3PerYear` (issue #507 item 7). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison \| null, capYears, totals }`; for a viewer while `viewerUnits` is off, `comparison` is `null`, `capYears` `[]` and `totals` is `{ tolerance, sources: [{ waterSource, holders, units, years: [{ waterYear, partial, modelledM3 }], judgement: { wholeYears, within, outside } | null }] }` (no status per year, #523 round 6, provisional, #92; `judgement` only when the run's rows in force are the same all through it and exactly today's total's, passing the 5-holder and dominance rules) at the run's own band (`inputs.settings.allocationTolerance`; that viewer's `?tolerance=` is ignored, #523 round 5), or `null` with `totalsWithheld: 'allocation_mode'` for a cap or full-allocation run, whose modelled use is the registered volume where supply met demand; the modelled use summed per water source over the units with a volume on it and how it compares with their registered volume, never the registered m³ itself (#523 K/L/M: a year less today's total, or less the next year, would give the rows between them), only for a source 5 or more registered users hold (`totals` is `null` for everyone else); `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A dam beside the river's surface side carries `measuredAt: 'intake'` and each year a `damDrawM3`, its use being the run's `intake_take` series (engine ≥ 1.82.0, issue #513; a run before it has neither and reads by the draws). A dam on the river's surface side carries each year a `damLossesM3` (its `dam_evaporation` + `dam_seepage_lost`, beside the use, never in it) and `meanDamLossesM3PerYear` (issue #507 item 7). Each node of `comparison` carries `irrigatedArea: { registeredHa, modelledHa, differenceHa, status }`: the irrigated areas stated on its takes in force on any of the run's days, summed (`null` when none states one), against the run's planted crop areas in ha (`inputs.model.cropAreas`), `differenceHa` = modelled − registered, `status` banded at the same tolerance (engine `withIrrigatedAreas`, [allocations.md § Per unit, all three](./allocations.md#per-unit-all-three); never in a run's summary). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,

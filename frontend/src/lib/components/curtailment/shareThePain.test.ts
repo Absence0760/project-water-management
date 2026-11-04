@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEMAND_PCT_FLOOR_M3_DAY, runModel, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser, type ModelOutput } from '@water-management/engine';
 import { randomInput } from '@water-management/engine/testing';
-import { shareThePain, stageCell, userLeftM3Day } from './shareThePain';
+import { change, shareBand, shareThePain, stageCell, userLeftM3Day } from './shareThePain';
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',
@@ -61,7 +61,7 @@ const summary = (farms: CurtailmentFarm[], equitableFraction: number | null, oth
 
 describe('stageCell', () => {
 	it('is the volume as a share of demand, as a whole %', () => {
-		expect(stageCell(75, 100)).toEqual({ volumeM3Day: 75, fraction: 0.75, pct: '75%', pctTitle: null, volume: '75' });
+		expect(stageCell(75, 100)).toEqual({ volumeM3Day: 75, fraction: 0.75, pct: '75%', pctTitle: null, volume: '75', band: 'short' });
 	});
 	it('never goes below 0 or above 100 %', () => {
 		// A run before engine 0.17.0 could store a negative volume left (U = M + R).
@@ -77,31 +77,58 @@ describe('stageCell', () => {
 	});
 });
 
+describe('shareBand and change', () => {
+	it('bands a share as every supply view does: 95 % and up, 70–95 %, under 70 %, none without demand', () => {
+		expect([1, 0.95, 0.9499, 0.7, 0.6999, 0].map(shareBand)).toEqual(['met', 'met', 'short', 'short', 'low', 'low']);
+		expect(shareBand(null)).toBe('none');
+	});
+	it('signs a change and points its arrow: down to reduce, up below the share, none when it rounds to 0', () => {
+		expect(change(-197.54)).toEqual({ m3Day: -197.54, text: '−197.5', direction: 'down' });
+		expect(change(314.9)).toEqual({ m3Day: 314.9, text: '+314.9', direction: 'up' });
+		expect(change(0.01).direction).toBe('none');
+		expect(change(Number.NaN)).toEqual({ m3Day: 0, text: '0', direction: 'none' });
+	});
+});
+
 describe('shareThePain: farms', () => {
 	// Supplied 150 of 200 m³/day in all: the equal share is 75 % of each farm's demand.
-	const upper = farm({ nodeId: 'a', name: 'Upper', demandM3Day: 100, suppliedM3Day: 100, targetM3Day: 75, volumeLeftM3Day: 60, ewrChargeStorageM3Day: 0 });
-	const lower = farm({ nodeId: 'b', name: 'Lower', demandM3Day: 100, suppliedM3Day: 50, targetM3Day: 75, volumeLeftM3Day: 75 });
+	const upper = farm({ nodeId: 'a', name: 'Upper', demandM3Day: 100, suppliedM3Day: 100, targetM3Day: 75, reduceGainM3Day: -25, ewrShortfallM3Day: -20, totalChangeM3Day: -40, volumeLeftM3Day: 60, ewrChargeStorageM3Day: 0 });
+	const lower = farm({ nodeId: 'b', name: 'Lower', demandM3Day: 100, suppliedM3Day: 50, targetM3Day: 75, reduceGainM3Day: 25, totalChangeM3Day: 25, volumeLeftM3Day: 75 });
 	const board = shareThePain(summary([upper, lower], 0.75));
 
-	it('reads the two stages from the engine summary', () => {
-		expect(board.farms.map((r) => [r.name, r.today.pct, r.ewr.pct])).toEqual([
-			['Upper', '100%', '60%'],
-			['Lower', '50%', '75%']
+	it('reads the three stages from the engine summary', () => {
+		expect(board.farms.map((r) => [r.name, r.today.pct, r.share?.target.volume, r.share?.change.text, r.share?.target.pct, r.ewrStage.charge, r.ewrStage.totalChange.text, r.ewr.pct])).toEqual([
+			['Upper', '100%', '75', '−25', '75%', '20', '−40', '60%'],
+			['Lower', '50%', '75', '+25', '75%', '0', '+25', '75%']
+		]);
+		expect(board.farms.map((r) => [r.today.band, r.ewr.band])).toEqual([
+			['met', 'low'],
+			['low', 'short']
 		]);
 	});
 
-	it('states the equal share once, as the equitable fraction', () => {
+	it('states the equal share once, as the equitable fraction, and every farm has it at stage 2', () => {
 		expect(board.sharePct).toBe('75%');
-		expect(board.farms[0]).not.toHaveProperty('share');
+		expect(board.farms.map((r) => r.share?.target.pct)).toEqual(['75%', '75%']);
 	});
 
 	it('totals each stage over the farms', () => {
 		expect(board.farmTotals.demand).toBe('200');
 		expect(board.farmTotals.today).toMatchObject({ volumeM3Day: 150, pct: '75%' });
-		expect(board.farmTotals).not.toHaveProperty('share');
+		expect(board.farmTotals.share).toMatchObject({ target: { volumeM3Day: 150, pct: '75%' }, change: { text: '0', direction: 'none' } });
+		expect(board.farmTotals.ewrStage).toMatchObject({ charge: '20', totalChange: { text: '−15' } });
 		expect(board.farmTotals.ewr).toMatchObject({ volumeM3Day: 135, pct: '68%' });
 		expect(board.userTotals).toBeNull();
 		expect(board.users).toEqual([]);
+	});
+
+	it('cards each stage: short of demand today, what the equal share moves (net 0), the further cut for the EWR', () => {
+		expect(board.cards).toEqual({
+			deficit: { m3Day: 50, volume: '50', pct: '25%' },
+			moved: { m3Day: 25, volume: '25', net: '0' },
+			// 150 at the share, 135 left: 15 more for the EWR.
+			ewrCut: { m3Day: 15, volume: '15', pct: '8%', storeLess: null }
+		});
 	});
 
 	it('uses current names for renamed farms', () => {
@@ -169,6 +196,14 @@ describe('shareThePain: farms', () => {
 		expect(b.shareTooSmall).toBe(false);
 		expect(b.farmTotals.today.pct).toBe('no demand');
 		expect(b.farmTotals.ewr.pct).toBe('no demand');
+		expect(b.cards.moved).toBeNull();
+		expect(b.cards.deficit.pct).toBeNull();
+	});
+
+	it('cards the charge met by storing less, which takes no supply', () => {
+		const c = summary([farm({ ewrShortfallM3Day: -12, ewrChargeStorageM3Day: -12 })], 1);
+		c.totals.ewrChargeStorageM3Day = -12;
+		expect(shareThePain(c).cards.ewrCut).toMatchObject({ m3Day: 0, storeLess: '12' });
 	});
 });
 
@@ -228,6 +263,18 @@ describe('shareThePain: other water users', () => {
 		expect(board.userTotals).toMatchObject({ demand: '1\u202f100', today: { volumeM3Day: 880, pct: '80%' }, ewr: { volumeM3Day: 650, pct: '59%' } });
 		expect(board.farmTotals.demand).toBe('100');
 	});
+
+	it('has no stage 2 for a user (outside the share); stage 3 is its charge and its cut from today', () => {
+		expect(board.users.map((r) => [r.name, r.share, r.ewrStage.charge, r.ewrStage.totalChange.text])).toEqual([
+			['Town', null, '50', '0'],
+			['Mill', null, '300', '−200'],
+			['Packer', null, '20', '−30']
+		]);
+		expect(board.userTotals!.share).toBeNull();
+		// The cards count the users too: 220 of 1 200 short today, and the users' 230 cut on top of the farm's 0.
+		expect(board.cards.deficit).toMatchObject({ m3Day: 220, pct: '18%' });
+		expect(board.cards.ewrCut).toMatchObject({ m3Day: 230 });
+	});
 });
 
 describe('shareThePain over seeded engine runs', () => {
@@ -255,8 +302,17 @@ describe('shareThePain over seeded engine runs', () => {
 					expect(/^[-−]/.test(cell.pct)).toBe(false);
 				}
 			}
-			// The identity that made the equal share one sentence rather than a stage (issue #177): its total is today's.
+			// The identity issue #177 noted: the equal share's total is today's, so stage 2 moves water between farms and its net change is 0.
 			expect(c.totals.targetM3Day).toBeCloseTo(c.totals.suppliedM3Day, 6);
+			expect(b.farmTotals.share!.target.volumeM3Day).toBeCloseTo(c.totals.targetM3Day, 6);
+			expect(b.farmTotals.share!.change.m3Day).toBeCloseTo(0, 6);
+			for (const r of b.farms) {
+				expect(r.share!.target.volumeM3Day).toBeGreaterThanOrEqual(0);
+				// U = I + S: the volume left is today's supply plus the total change (bounded at 0).
+				expect(r.ewr.volumeM3Day).toBeCloseTo(Math.max(r.today.volumeM3Day + r.ewrStage.totalChange.m3Day, 0), 6);
+			}
+			expect(b.cards.ewrCut.m3Day).toBeGreaterThanOrEqual(0);
+			expect(b.cards.deficit.m3Day).toBeGreaterThanOrEqual(0);
 			if (b.shareTooSmall) expect([b.sharePct, b.farmTotals.today.pct]).toEqual([null, '—']);
 			else expect(b.sharePct).toBe(b.farmTotals.today.pct);
 			expect(b.farmTotals.today.volumeM3Day).toBeCloseTo(c.totals.suppliedM3Day, 6);

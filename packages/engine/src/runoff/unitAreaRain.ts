@@ -108,10 +108,10 @@ export function unitAreaRain(input: ModelInput, nodeId: string, prep: PreparedRu
 	let chirpsLevelled: (number | null)[] | null = null;
 	if (level && chirpsRaw) {
 		const kFill = k2 ?? 1;
-		const shapeOnly = level.source === 'bias' || (level.source === 'reference' && !level.kUnit);
+		const shapeOnly = (level.source === 'bias' && !level.kUnit) || (level.source === 'reference' && !level.kUnit);
 		const levelOn = (t: number): number => {
 			if (level.source === 'map') return level.factor;
-			if (level.source === 'bias') return chirpsFactorOn(prep.chirpsCorrection, d0 + t) ?? 1;
+			if (level.source === 'bias') return (chirpsFactorOn(prep.chirpsCorrection, d0 + t) ?? 1) * (level.kUnit?.factor ?? 1);
 			if (level.source === 'reference') return level.factors[monthOfEpochDay(d0 + t) - 1]! * (level.kUnit?.factor ?? 1);
 			return 1;
 		};

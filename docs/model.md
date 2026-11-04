@@ -2628,7 +2628,9 @@ the migration moved until the hydrologist set each unit up.
 calibration](./ui.md)) the panel is **Flow generation** (named Model
 selection for flow generation from issue #614 to #658, while it held the
 Fragmentation / Per unit radio). Each land unit takes its rainfall station
-if `settings.rainStations.units` assigns one (§2.4i), else the chain below
+if `settings.rainStations.units` assigns one (§2.4i), its own CHIRPS if
+`settings.unitRain.chirpsUnits` makes it its driver (engine ≥ 1.114.0,
+[below](#chirps-as-a-units-driver-engine--11140)), else the chain below
 (*Units without a station* in Settings). A fit records the forcing it ran
 under (`forcing.unitRain`). A fit from an engine before 1.109.0 without it
 ran under Fragmentation and reads "Parameters not fitted for this method:
@@ -2743,6 +2745,10 @@ not the run window, so the rule doesn't depend on the window):
    corrected CHIRPS, else forecast (§2.4a), × the areal correction (§2.4g),
    with a warning naming the unit.
 
+A unit whose **driver rainfall is CHIRPS** (`settings.unitRain.chirpsUnits`,
+engine ≥ 1.114.0) takes rule 3 whatever other records it has, with its CHIRPS
+bias-corrected or raw as chosen ([below](#chirps-as-a-units-driver-engine--11140)).
+
 A day the rule's record has no value takes the next source of its chain,
 in this order:
 
@@ -2798,6 +2804,7 @@ on the catchment's rain warns how many.
   | `reference` with k_unit | f[month] × k_unit |
   | `reference` without k_unit (no MAP, or no complete year) | f[month] × the MAP ratio |
   | `bias` (the catchment's §2.4b factors) | the day's §2.4b factor × the MAP ratio |
+  | `bias` with k_unit (a CHIRPS driver, bias-corrected, below) | the day's §2.4b factor × k_unit |
   | `raw` | the MAP ratio |
   | `unusable` (7a), or no CHIRPS of its own | the MAP ratio |
 
@@ -3059,10 +3066,13 @@ columns unchanged.
   null when it varies by day: the §2.4b factors or rule 4), factorSource
   ('gauge' | 'gaugeMap' | 'chirpsMap' | 'chirpsBias' | 'chirpsRaw' |
   'catchment'), gaugeMapFactor, gaugeMapOwnFactor, gaugeMapClamped,
-  gaugeMapOutsideBand, chirps (null, { source: 'bias' | 'raw' }, { source:
+  gaugeMapOutsideBand, chirps (null, { source: 'bias', kUnit? } (kUnit only
+  on a CHIRPS driver, below), { source: 'raw' }, { source:
   'map', factor, ownFactor, clamped, outsideBand, meanAnnualMm, years,
   inPeriod }, { source: 'unusable', meanAnnualMm: 0, years } for CHIRPS
-  that averages 0 mm a year, or the reference level above), days: { unitGauge, gaugeMap,
+  that averages 0 mm a year, or the reference level above), chirpsChoice
+  ('bias' | 'raw', only on a unit that ran on its CHIRPS driver, engine ≥
+  1.114.0), days: { unitGauge, gaugeMap,
   unitChirps, catchment, forecast, none }, rainMm, petMm, aetMm, flowMm,
   exchangeMm, storageStartMm, storageEndMm, runoffM3, runoffCoefficient }`.
   The mm figures are over the unit's area; runoffCoefficient = flowMm ÷
@@ -3126,8 +3136,10 @@ at the levels its season was made at and its season is the snapshot
 member's to the bit. `verify/` (the independent cross-check) models
 this section from the text above, in random and dense networks and the
 probes `unit-rain-rules`, `unit-rain-forecast-warmup`, `unit-rain-map-period`,
-`unit-rain-no-land-unit` and `fragmentation-retired-unset` (a project that
-never set `unitRain`, engine 1.109.0); the outlook's engine-only inputs (a unit's
+`unit-rain-no-land-unit`, `fragmentation-retired-unset` (a project that
+never set `unitRain`, engine 1.109.0) and `unit-rain-chirps-driver-reference`,
+`-bias` and `-none` (a unit's CHIRPS driver under each point record, engine
+1.114.0); the outlook's engine-only inputs (a unit's
 `rain_forecast_mm@<unit>`, `settings.unitRain.pinned`) are outside it, with
 forecast mode.
 
@@ -3154,6 +3166,10 @@ for each unit](./maps.md#map-for-each-unit).
   own period*, above);
 - the reference cell: the reference unit's centre, until a rain gauge can
   be placed on the map and the fit can use the gauge's own cell (1b);
+- a unit whose driver is CHIRPS, bias-corrected, with a MAP and no
+  reference gauge takes the catchment's §2.4b factors × k_unit, and a
+  station pairing is not a source of that correction (*CHIRPS as a unit's
+  driver*, below; [followups.md § Hydrologist](./followups.md#hydrologist));
 - a unit's CHIRPS without a MAP or a reference takes the catchment's §2.4b
   factors, which were fitted against the catchment gauge on the catchment
   CHIRPS, not on the unit's cells;
@@ -3175,6 +3191,74 @@ checked own gauge, the catchment rain × k2, the unit's CHIRPS × its level)
 beside the rain used and each day's link, which are `unitRainForcing`'s own,
 so they match the run's `rain_unit` to the bit. It is read-only and changes
 no run output, so it needs no `ENGINE_VERSION` bump.
+
+#### CHIRPS as a unit's driver (engine ≥ 1.114.0)
+
+`settings.unitRain.chirpsUnits`: land unit id → `{ correction: 'bias' |
+'raw' }`, the unit's **driver rainfall** chosen in Settings → Flow generation
+beside the rainfall stations (§2.4i). Absent, null or `{}` = none, and a unit
+left out runs on rules 1–4 above, to the bit (the §2.4h golden cases are
+unchanged). The operator asked for it on 2026-11-03: a unit's driver may be a
+rainfall station, CHIRPS bias-corrected or CHIRPS raw, and "raw CHIRPS will be
+used if there is no point rainfall data to perform a bias correction", then
+"qualify for an adjustment based on the MAP in each hydro unit vs the MAP of
+the CHIRPS data (averaged for each hydro unit)". That adjustment is k_unit.
+
+A unit with a CHIRPS driver takes **rule 3** whatever other records it has: its
+own gauge (rule 1) is not read, and rule 2's scaled gauge is not its record.
+Rule 2's MAP ratio, when its conditions hold, still scales the catchment's
+rain and forecast on the days its CHIRPS has none, and a level that only
+shapes the season (below), as on any unit. Its CHIRPS is its own
+(`rain_chirps_mm@<unit>`, area-weighted over its polygon), levelled as follows:
+
+| Driver | Reference gauge set | No reference, the catchment has §2.4b factors | No point record |
+| --- | --- | --- | --- |
+| **CHIRPS, bias-corrected** (`bias`) | × f[month] × k_unit, as rule 3 with a reference (`reference`) | × the day's §2.4b factor × k_unit, k_unit = clamp(unit MAP ÷ the mean annual of CHIRPS × the §2.4b factor of each day) (`bias` with `kUnit`) | raw × k_unit (`map`), with a warning naming the unit |
+| **CHIRPS, raw** (`raw`) | raw × k_unit (`map`): the reference is not applied | raw × k_unit (`map`): the §2.4b factors are not applied | raw × k_unit (`map`) |
+
+k_unit for raw CHIRPS is rule 3's MAP factor: clamp(unit MAP ÷ the unit's
+mean annual CHIRPS), the mean over the complete calendar years of its stored
+series inside the MAP period, with rule 3's minimum (`UNIT_MAP_MIN_YEARS`),
+clamp (0.25–4) and warning band (0.5–2). On the bias-corrected row, the
+§2.4b factors with k_unit are new in 1.114.0: without a CHIRPS driver a unit
+with a MAP and no reference levels its CHIRPS by the MAP factor alone, and
+takes the §2.4b factors only without a MAP. With a choice of bias correction
+the unit is corrected against the catchment gauge's point record, then
+levelled to its MAP, as the reference's factors are: the factors set the
+season's shape and CHIRPS's bias, k_unit the level. Without a MAP (or with
+no complete calendar year) there is no k_unit: the corrected CHIRPS without
+it (the reference's factors, or the §2.4b factors × rule 2's MAP ratio when
+its conditions hold), and raw CHIRPS as published, each with a warning as
+rule 3 gives them. **A point record** is the reference gauge
+(`settings.unitRain.reference`) or the catchment's §2.4b factors, which a
+catchment rain gauge and CHIRPS make with the correction on
+(`chirpsBiasCorrection` `monthly`); under a catchment station (§2.4i) §2.4b is
+off, so only a reference gauge corrects. `correctAgainst` (a station's
+pairing, §2.4i) is not a source here: it belongs to a station assignment.
+"Never bias-corrected" is about the unit's own CHIRPS: on the days it has
+no value the unit falls to the catchment's rain (catchment gauge, else the
+catchment's corrected CHIRPS, else the forecast, × rule 2's MAP ratio when
+its conditions hold), as every rule-3 unit does.
+
+**Where it can't apply.** A unit with no CHIRPS series of its own, or with
+CHIRPS that averages 0 mm a year (unusable, decision 7a), runs on the rule it
+would without the choice, with a warning naming it. A unit that
+`settings.rainStations.units` also assigns runs on its station (the API
+refuses a save that sets both) and the choice is ignored, with a warning. The
+API refuses a unit that isn't a land unit of the project; a unit without
+CHIRPS is allowed at save, as a station without a record is, and Run readiness
+and Settings list it before a run (`unitChirpsChoiceNotes`, with the
+bias-corrected units that would fall back to raw).
+
+**What the run records.** The unit's `chirpsChoice` (`bias` | `raw`) in
+`summary.unitRain.units[]`, only when it ran on it, and its level as above
+(`chirps`, `factorSource` `chirpsReference`, `chirpsBias` or `chirpsMap`).
+The fit's per-unit fingerprint records `chirpsChoice` too: another choice, or
+one on a side only, is "Forcing changed since fit", from the settings alone
+(Settings' form) as from a run; a choice for a unit that had no usable CHIRPS
+at the fit is not a change from the settings alone. A model-state snapshot
+pins it with the recipe. Run comparison writes the setting's words ("…; CHIRPS
+as the driver of the unit <id> (raw)").
 
 ### 2.4i Rainfall stations (engine ≥ 1.91.0, issue #553; patching priority and per-area pairing ≥ 1.105.0, issue #612)
 
@@ -3254,9 +3338,15 @@ An assignment without a station id is dropped with a warning
 
 **Where it is set** (issue #553 round 3, [ui.md § Settings &
 calibration](./ui.md)): Model settings → Flow generation
-lists every land unit with its **Station** (the project's stations, or *No
-station*, which keeps the unit on §2.4h's chain; satellite rain is never an
-option, CHIRPS only fills gaps), **Then patch gaps from** (`patch`, issue
+lists every land unit with its **Driver rainfall** (named Station until
+engine 1.114.0): the project's stations; *CHIRPS, bias-corrected* or
+*CHIRPS, raw (levelled to the unit's MAP)*, the unit's own CHIRPS as its
+driver (`settings.unitRain.chirpsUnits`, §2.4h *CHIRPS as a unit's driver*,
+with the unit's MAP, its CHIRPS mean annual rain and the factor shown beside
+it, and a line when a bias-corrected one would run raw); or *Not set*, which
+keeps the unit on §2.4h's chain. A station's area never takes satellite rain
+as its driver: CHIRPS only fills its gaps. Choosing a station clears the
+unit's CHIRPS driver and the other way round. **Then patch gaps from** (`patch`, issue
 #612: an ordered list of pull-downs, each another station or *CHIRPS,
 corrected*, with Up, Down, Remove and Add a source; each station shows how
 many of the main station's gap days in the run's history it fills, which
@@ -3985,6 +4075,14 @@ The workbook has two blocks of columns:
   receiver's **yesterday's** storage, as the formula says, even when the
   receiver sends water at a lower priority the same day: what it sends first
   makes no room for what it receives (probe `room-while-sending`).
+  **Engine ≥ 1.114.0:** what one priority leaves of a receiver's room is
+  carried to the next (none once a priority filled it), not worked out again
+  from its storage less what came in. The two are the same number but for
+  float noise, and a receiver filled exactly at a lower priority could show
+  10⁻¹⁴ m³ of room: its rules at the next priority then drew band shares from
+  their source they could never take, and the source's other receiver's room
+  was shared by those diluted shares (the cross-check's dense-55 moved 12.7
+  m³ between two rules; `network/roomCarry.test.ts`).
   Transfers are still settled first from yesterday's storage, before any farm
   irrigates: the source does **not** irrigate first (a deliberate choice, no
   per-rule option). Migration 006 set each rule's priority to its old
@@ -4083,6 +4181,89 @@ nothing, the dam at 500 m³; with a second rule of the same priority into
 another unit, both keeping 80 % and asking 100 and 300, the 200 m³ free is
 shared 50 : 150.
 
+**Split between destinations (engine ≥ 1.114.0, migration 311).** A rule
+may send what it moves to **one to five destinations**, each a share of it:
+`destinations`, a list of `{ nodeId, pct }` (a unit, or null: outside the
+catchment, a dam rule only, as above), the shares 0 < pct ≤ 1 adding up to 1
+(within 0.0001), no destination twice and none the source. Absent (every
+stored rule, every b023 import) = all of it to `toNodeId`, as before; when
+set, `toNodeId` is the first destination's, kept in step as `months` is with
+monthly rates, so an older reader (an old export, a scenario op, an API
+client sending `toNodeId` alone) still sees the main destination; a list of
+one row is stored as that destination alone. The API refuses a split it
+can't run with a sentence (`modelRuleIssues`: the shares don't add up to
+100 %, more than five, one twice, the source, a first that isn't
+`toNodeId`); a run given one anyway runs it as all of it to `toNodeId`,
+with a warning. Not a departure from the workbook: b023's InOut formulas
+are written by hand and can split a draw any way, which this states as a
+rule.
+
+*How it runs.* The run reads a split rule as **one rule per destination, a
+piece** (`network/transferSplits.ts`, `transfer_rule@<id>#<k>` for each
+piece's daily volume, k in the list's order), each with its destination and
+that share of the rule's capacity: its rates (or monthly rates) and daily
+cap × pct, and for a curve (§2.6a) the coefficient a and the largest share
+m × pct, so its share of the river is pct × s. Everything else is the
+rule's: source, months, priority, the reserve or keeps, losses and their
+return, sizing and top-up. Pieces of one rule share every keep and ask in
+the proportion of their shares, and the rules of one priority share a short
+source band by band in proportion to what each asks (§2.6, §2.6a
+"proportional rationing"), so each piece gets the same fraction of its ask:
+together they take exactly what the one rule would, and each destination
+its share. **The order of operations** for a river off-take is: diverted
+(what the rule takes, MIN(capacity, its ask, what the keeps leave)) →
+conveyance losses (the same share l of every piece) → split (each
+destination gets pct × v × (1 − l)); seepage back is unchanged, Σ pct × v ×
+l × r = v × l × r, rejoining where the rule says. So the split is of what
+arrives, after the losses, every day. A rule with one destination is never
+split and runs to the bit as before.
+
+*Sized to what the destinations need* (a river off-take, `sizing: 'demand'`,
+provisional decision 2026-11-03, pending the hydrologist): the rule takes for
+**the sum of its destinations' needs**, each destination's need being, as
+for any rule into it, its share of that unit's need pro rata to the
+capacities into it today (the piece's capacity is pct × the rule's), and the
+**split still applies**: piece k asks pct_k × MIN(capacity, Σ need ÷ (1 −
+l)). A destination that needs less than its share gets its share anyway;
+what it doesn't use flows on below it (or, with `topUpDam`, into its dam,
+spilling what doesn't fit), as a capacity-sized rule's surplus does. Why: a
+split is a fixed division (a division box or the canal's own branches), the
+operator's rule says each unit gets its percentage, and sizing each share to
+its own destination would be several rules, which the model already has.
+Priority sharing is unchanged: the pieces sit at the rule's priority. Under
+an allocation cap each destination's need is its capped need (Q28, above),
+so the rule never takes more than its destinations can use together, but a
+share can be more than its own destination can use (a destination whose
+licence leaves it no room still gets its share, which flows on): the open
+question for the hydrologist, with the other readings, is
+[engine-audit.md SP1](./engine-audit.md#findings). The self-check
+(`checkOfftakes`) holds a capped destination's demand-sized deliveries to
+its room only where no split share feeds it. Shares within the tolerance
+of 100 % (three of 33.33 %) are scaled to add up exactly before the run.
+
+*A dam rule's split* moves each share only as far as its destination has
+room (§2.6 `dstRoom`, never overfilling a dam): a destination with no room
+takes less than its share, and what it can't take stays in the source dam;
+the others still get no more than their share of the rule's limit. Keeping
+the percentages strictly would either overfill a dam or hold back the other
+destinations' water. Out of the catchment, a share leaves as a rule out of
+the catchment does (`externalTransferM3`, the source's surface use, its
+`transfer_rule@<id>#<k>`).
+
+*Checks.* Every self-check runs on the pieces, the rules the run ran
+(`verifyRun` expands them, as do the per-rule series readers and the farm
+projection): each held to its capacity, keep and source as any rule, the
+balance closing with each destination's inflow from its piece. And
+`checkTransferLimits` (its `checkOfftakes`) holds a river split's pieces to the proportion of
+their shares, every day (v_k ÷ pct_k equal across the rule's pieces), when
+each ran. The fuzz generator gives a third of the rules two to five
+destinations (outside the catchment only with `externalTransfers`), now and
+then a split the run can't use; hand examples:
+`run.transferSplits.test.ts` (a 40/60 canal with losses, 3 600 and 5 400 of
+10 000 arriving; a three-way 20/30/50 curve against the one rule; a 50/50
+split sized to the need where one destination needs nothing; a dam rule
+whose receiver has 100 m³ of room); the cross-check's probes (verify/).
+
 ### 2.6a River off-takes (engine ≥ 1.14.0, issue #54)
 
 **Why.** A §2.6 transfer draws on the source's *dam* (yesterday's storage)
@@ -4118,6 +4299,7 @@ the destination is simulated after its source.
 | `diversionMaxPct` | `diversionCurve` only: the largest share it diverts, 0 < m ≤ 1; null = 1 (all of the flow) |
 | `diversionFlowUnit` | `diversionCurve` only: the unit x is read in, `L/s`, `m3/s`, `m3/day` or `Ml/day`; required |
 | `diversionFlowBasis` | `diversionCurve` only: which flow x is, `modelled` (null, the default: the river at the off-take that day) or `natural` (the natural flow there) |
+| `monthlyDiversion` | engine ≥ 1.114.0, migration 311, `diversionCurve` only: twelve entries Oct–Sep, each a month's curve `{ coefficient, exponent, maxPct }` or null (a month that takes up to its rate); null = the one curve above in every month. With it the one curve is null ("A maximum or a formula by month" below) |
 | `topUpDam` | what arrives beyond the destination's demand goes into its dam (spilling what doesn't fit) rather than flowing on below it; default false |
 | `lossReturnPct` | engine ≥ 1.42.0, migration 126: the share 0 ≤ r ≤ 1 of the conveyance losses that seeps back to the river the same day, like a dam's seepage return (§2.7b, WP-3.5); default 0: all the losses leave the catchment |
 | `lossReturnNodeId` | engine ≥ 1.42.0: the unit whose outflow the returned seepage joins; null (the default) = the source itself, just below the off-take; otherwise a farm downstream of the source along the river (the API refuses any other; a run given one returns none, with a warning) |
@@ -4329,6 +4511,37 @@ of −1, caps, every unit, the natural flow now and then, an incomplete curve
 now and then). Hand examples: `run.offtakeDiversion.test.ts`,
 `network/diversionCurve.test.ts`; the cross-check's probe
 `diversion-curve-canal` (verify/).
+
+**A maximum or a formula by month (engine ≥ 1.114.0, migration 311; the
+operator's ask of 2026-11-03).** A rule sized by a curve may take,
+month by month, either **a maximum** (up to the month's rate, as a rule
+sized to capacity) or **a formula** (that month's own curve, a · x^b % of the
+river, at most its largest share and the month's rate): `monthlyDiversion`,
+twelve entries Oct–Sep, each a curve or null. The unit of x and which flow
+it reads are the rule's (`diversionFlowUnit`, `diversionFlowBasis`), one for
+every month; the month's rate stays the canal's capacity in a formula month,
+and a month with no rate is off, as for any rule. So in calendar month m
+
+```
+ask = MIN(cap[m], s_m × U₀)    when month m has a curve (s_m read off it, as above)
+ask = cap[m]                   when it hasn't: up to its maximum
+```
+
+A rule stored by engine 1.113.0 (one curve, no list) runs as that curve in
+every month, to the bit; a rule with the same curve written in every month
+runs the same (`run.transferSplits.test.ts`). Storage: the list is three
+float8[12] columns, a NULL coefficient a month without a curve; the one curve
+is NULL when the list is set (CHECK `transfer_monthly_diversion_sizing`), so
+a rule has one form. The save refuses a list with no curve in any month, an
+incomplete month's curve (named by its month), the list on a rule not sized
+by a curve, and **a formula on a rule from the dam** (a curve is a share of
+the river's flow, so it needs `source: 'river'`; the Transfers tab switches
+the source and says so). A run given an incomplete month takes nothing all
+year, with a warning, as an incomplete curve does. `checkTransferLimits`
+reads each month's curve (a month without one is held as a capacity-sized
+rule); the fuzz generator turns half its curve rules into a monthly mix (a
+third of the months a maximum, the rest the rule's curve or another, now and
+then an incomplete one); the cross-check models the same (verify/).
 
 **Rules of one priority: proportional rationing (engine ≥ 1.70.0,
 provisional decision 2026-10-03, issue #90 Q25, to be confirmed by the
@@ -12788,6 +13001,50 @@ wording; and on random fuzz runs, every day below the EWR and every Reserve
 month of the classed years is counted exactly once.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `DEFAULT_OUTCOME_RISK_CUTOFFS` (months met ≥ 0.90 / ≥ 0.75; days below the EWR ≤ 0.05 / ≤ 0.20) and the portfolio traffic lights' 5 % / 20 % of the last 30 days (D11). `OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST` stays true, and the badges read "provisional".
+
+### 2.14b Where breaches start, by demand level (issue #53 R8)
+
+A view over the outcome matrix (§2.14), in the frontend
+(`frontend/src/lib/components/outcomes/irrigationSupport.ts`): no run output
+changes, so `ENGINE_VERSION` doesn't move. The screen is EWR's **How much
+irrigation can the catchment support?** ([ui.md](./ui.md#irrigation-the-catchment-supports)).
+
+- **Years.** Per demand level, the matrix's own years: the classed complete
+  water years its run covers, each with its natural flow at the outlet over
+  the year (the year classes' `naturalM3`) and whether it met the
+  requirement **in full** by the matrix's measure (`OutcomeYear.met`: every
+  Reserve month met at the site, or no day below the EWR at the outlet).
+- **Threshold** (`supportThreshold`): the natural volume of the **wettest
+  year that failed**. Every wetter year met the requirement, so it is where
+  breaches start in the record; at or below it at least one year failed. A
+  fact about the record, not a fitted curve (**judgement**: a midpoint up to
+  the next year, or a logistic fit, would state an edge the record doesn't
+  show). Shown as "about" its value in million m³ to two significant
+  figures, with the spread: the next wetter year (which met it) and the count
+  of years at or below it that met it anyway (timing within the year, §2 of
+  planning-outputs.md finding 5).
+- **Ties.** Sorted by volume then water year, so input order never matters;
+  equal volumes are never split: a passing year level with the threshold
+  counts as "met at or below", and the next met year is strictly wetter.
+- **No threshold**: no year failed (`neverFailed`); the wettest year failed
+  (`wettestFailed`: nothing above it shows where breaches stop, every year
+  failing included); fewer than `IRRIGATION_SUPPORT_MIN_YEARS` = 9 years
+  (`tooFewYears`; **judgement, pending the hydrologist**: as many as the
+  matrix needs to fill three tercile classes of 3).
+- **Monotonicity.** Each level is read on its own and never smoothed. A
+  lower level with a higher threshold is reported as a note: less
+  irrigation can mean less return flow on dry days (the seasonal outlook's
+  caveat, §2.15).
+- **Hectares.** The base run's planted area (its stored model's crop areas)
+  × the level, marked ≈: the sweep scales demand, not area (R1). None on a
+  full-allocation run, where a level is a share of the registered volume
+  (§2.12a).
+
+**Tests** (`irrigationSupport.test.ts`): the threshold and its spread,
+drier years that met, ties and input order, no failing year, every year
+failing, the wettest failing, 8 vs 9 years, the rounding, the axis, the Key
+message, and end to end from a stored sweep through `buildMatrixView` under
+a skewed `TZ`.
 
 ### 2.14a Licence impact by year class (issue #53 R7, engine and report)
 

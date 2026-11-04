@@ -41,7 +41,10 @@ import {
 	type SettingsPath,
 	type CropSetField,
 	type LandCoverSetField,
-	type TransferSetField
+	type TransferSetField,
+	type Transfer,
+	isSplitTransfer,
+	transferDestinations
 } from '@water-management/engine';
 import type { DroughtRestrictionRule, EwrDailySource } from '@water-management/engine';
 import { newNode } from '#lib/model/editor.svelte.js';
@@ -77,6 +80,14 @@ import {
  * nothing): the editor only reads names and current values from it; which
  * ops apply is the server's check, made on the run's stored series.
  */
+/** A transfer's destination, or each of a split's with its share (engine ≥ 1.114.0): "B" or "B 40 %, C 60 %". */
+function routeEnds(t: Pick<Transfer, 'toNodeId' | 'destinations'>, nodeName: (id: string) => string): string {
+	if (!isSplitTransfer(t)) return outsideOr(t.toNodeId, nodeName);
+	return transferDestinations(t)
+		.map((d) => `${outsideOr(d.nodeId, nodeName)} ${fmtNum(d.pct * 100, 2, true)} %`)
+		.join(', ');
+}
+
 export function snapshotInput(model: unknown, settings: unknown): ModelInput {
 	const m = (model && typeof model === 'object' ? model : {}) as Partial<ProjectModel>;
 	return {
@@ -239,7 +250,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 	const cropName = (id: string) => m?.crops.find((c) => c.id === id)?.name ?? names.get(id) ?? UNKNOWN_CROP;
 	const transferName = (id: string) => {
 		const t = m?.transfers.find((x) => x.id === id);
-		return t ? `the transfer ${nodeName(t.fromNodeId)} → ${outsideOr(t.toNodeId, nodeName)}` : 'a transfer';
+		return t ? `the transfer ${nodeName(t.fromNodeId)} → ${routeEnds(t, nodeName)}` : 'a transfer';
 	};
 	switch (op.op) {
 		case 'node.set': {
@@ -289,7 +300,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'transfer.add': {
 			const t = op.transfer;
 			const cap = t.dailyCapM3 != null ? `, at most ${fmtNum(t.dailyCapM3)} m³/day` : '';
-			return `Add a transfer ${nodeName(t.fromNodeId)} → ${outsideOr(t.toNodeId, nodeName)} (${monthsText(t.months)}, up to ${fmtNum(t.maxRateM3s, 4, true)} m³/s${cap})`;
+			return `Add a transfer ${nodeName(t.fromNodeId)} → ${routeEnds(t, nodeName)} (${monthsText(t.months)}, up to ${fmtNum(t.maxRateM3s, 4, true)} m³/s${cap})`;
 		}
 		case 'transfer.set': {
 			const f = TRANSFER_FIELD_SPECS[op.field as TransferSetField];

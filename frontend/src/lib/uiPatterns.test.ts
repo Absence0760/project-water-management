@@ -87,6 +87,7 @@ const SMALL_TEXT_EXCEPTIONS: Record<string, string[]> = {
 	'lib/components/network/NetworkSchematic.svelte': ['.meta'],
 	'lib/components/overview/SetupSteps.svelte': ['.icon text'],
 	'lib/components/report/evidence/FdcPlot.svelte': ['.axis'],
+	'lib/components/report/LicenceWaterfall.svelte': ['.val, .lbl, .unit'],
 	'lib/components/report/evidence/IntervalPlot.svelte': ['.lbl, .axis'],
 	'lib/components/runs/EwrAssurancePanel.svelte': ['.v, .m', '.axis'],
 	'lib/components/runs/EwrFdcOverlay.svelte': ['.tick', '.axis-title'],

@@ -361,6 +361,105 @@ def diversion_curve_canal() -> dict:
     return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": transfers}, "series": series}
 
 
+def _canal_rule(i, src, dst, **kw) -> dict:
+    t = {
+        "id": i, "fromNodeId": src, "toNodeId": dst, "months": list(range(1, 13)), "maxRateM3s": 0.1,
+        "dailyCapM3": None, "minStoragePct": 0, "enabled": True, "priority": 0, "source": "river",
+        "handsOffM3Day": None, "handsOffEwr": False, "lossPct": 0, "sizing": "capacity", "topUpDam": False,
+    }
+    t.update(kw)
+    return t
+
+
+def split_40_60_canal() -> dict:
+    """A canal split between two destinations (§2.6, engine 1.114.0): a capacity-sized off-take of 0.1 m³/s with 15 %
+    conveyance losses, 40 % to one unit and 60 % to another, and a hands-off flow of 300 m³/day; beside it a dam rule
+    from a full dam split 30/70 into a nearly full dam and an empty one, so the first receiver's room cuts its share;
+    and a one-curve rule split 25/75 whose largest share (70 %) always binds, so each piece takes its share of it.
+    The rain rises over the run, so the river runs from below the hands-off flow to past the canal. Each piece is
+    its own transfer_rule@<id>#<k> series: diverted, then the losses, then the split."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=8),
+        _node("a", "farm", "o"),
+        _node("b", "farm", "o"),
+        _node("d", "farm", "o", damCapacityM3=20000, damInitialPct=1),
+        _node("e", "farm", "o", damCapacityM3=2000, damInitialPct=0.95),
+        _node("f", "farm", "o", damCapacityM3=20000, damInitialPct=0),
+        _node("g", "farm", "o", areaKm2=4),
+        _node("h", "farm", "o"),
+        _node("i", "farm", "o"),
+    ]
+    transfers = [
+        _canal_rule("k", "s", "a", lossPct=0.15, handsOffM3Day=300, destinations=[{"nodeId": "a", "pct": 0.4}, {"nodeId": "b", "pct": 0.6}]),
+        _canal_rule("p", "d", "e", source="dam", sizing="demand", maxRateM3s=0.01, minStoragePct=0.2,
+                    destinations=[{"nodeId": "e", "pct": 0.3}, {"nodeId": "f", "pct": 0.7}]),
+        # One curve (as engine 1.113.0 stores it) whose largest share always binds (150 %, at most 70 %), split 25/75.
+        _canal_rule("w", "g", "h", sizing="diversionCurve", diversionCoefficient=150, diversionExponent=0, diversionMaxPct=0.7,
+                    diversionFlowUnit="m3/s", maxRateM3s=1, destinations=[{"nodeId": "h", "pct": 0.25}, {"nodeId": "i", "pct": 0.75}]),
+    ]
+    days = 120
+    series = {"rain_catchment_mm": {"startDate": "2020-01-01", "values": [round(0.2 * k, 2) for k in range(days)]}}
+    return {"settings": _settings(effectiveRainFraction=0), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": series}
+
+
+def split_demand() -> dict:
+    """A demand-sized off-take split 50/50 (§2.6, engine 1.114.0) between a unit with crops and one with none: the
+    demand is the sum of the destinations' needs and the split still applies, so the cropped unit gets half of what
+    its crops need from the canal and the other half arrives where nobody needs it and flows on. A second, unsplit
+    demand-sized off-take also feeds the cropped unit, so its need is shared between the two by capacity first."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=10),
+        _node("a", "farm", "o"),
+        _node("b", "farm", "o"),
+        _node("t", "farm", "o", areaKm2=2),
+    ]
+    transfers = [
+        _canal_rule("k", "s", "a", sizing="demand", maxRateM3s=0.05, destinations=[{"nodeId": "a", "pct": 0.5}, {"nodeId": "b", "pct": 0.5}]),
+        _canal_rule("q", "t", "a", sizing="demand", maxRateM3s=0.01),
+    ]
+    crops, areas = _crop("a", 300000)
+    days = 120
+    series = {"rain_catchment_mm": {"startDate": "2020-01-01", "values": [round(0.15 * k, 2) for k in range(days)]}}
+    return {"settings": _settings(effectiveRainFraction=0), "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": transfers}, "series": series}
+
+
+def monthly_formula_mix() -> dict:
+    """A maximum or a formula by month (§2.6a, engine 1.114.0): a canal of 0.2 m³/s whose January and March take a
+    formula (60 · x^-0.2 % of the river, x in m³/day, at most 90 %; and 150 % held to its largest share, 70 %) and
+    whose February takes up to its maximum, split three ways 20/30/50; the run spans the three months, the rain
+    rising each month, so each sees low and high flows. Beside it a rule stored as engine 1.113.0 did (one curve,
+    every month) for comparison, and one whose March curve is incomplete (a = 0): it takes nothing all run."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=6),
+        _node("a", "farm", "o"),
+        _node("b", "farm", "o"),
+        _node("c", "farm", "o"),
+        _node("r", "farm", "o", areaKm2=6),
+        _node("x", "farm", "o"),
+        _node("q", "farm", "o", areaKm2=6),
+        _node("y", "farm", "o"),
+    ]
+    jan = {"coefficient": 60, "exponent": -0.2, "maxPct": 0.9}
+    mar = {"coefficient": 150, "exponent": 0, "maxPct": 0.7}
+    months = [None] * 12
+    months[3], months[5] = jan, mar  # water-year months: Oct = 0, so January = 3, March = 5; February (4) a maximum
+    transfers = [
+        _canal_rule("k", "s", "a", maxRateM3s=0.2, sizing="diversionCurve", monthlyDiversion=months, diversionFlowUnit="m3/day",
+                    diversionFlowBasis="modelled",
+                    destinations=[{"nodeId": "a", "pct": 0.2}, {"nodeId": "b", "pct": 0.3}, {"nodeId": "c", "pct": 0.5}]),
+        _canal_rule("m", "r", "x", maxRateM3s=0.2, sizing="diversionCurve", diversionCoefficient=60, diversionExponent=-0.2,
+                    diversionMaxPct=0.9, diversionFlowUnit="m3/day"),
+        _canal_rule("z", "q", "y", maxRateM3s=0.2, sizing="diversionCurve", diversionFlowUnit="m3/day",
+                    monthlyDiversion=[None, None, None, jan, None, {"coefficient": 0, "exponent": 0, "maxPct": None}] + [None] * 6),
+    ]
+    days = 90
+    series = {"rain_catchment_mm": {"startDate": "2020-01-01", "values": [round(0.3 * (k % 30), 2) for k in range(days)]}}
+    return {"settings": _settings(effectiveRainFraction=0), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": series}
+
+
 def cap_before_licence() -> dict:
     """An allocation cap (§2.12a) on a farm whose only surface licence starts
     on 1 October 2020, the second of two water years: the first year has none
@@ -641,6 +740,36 @@ def transfer_out_of_catchment_cap() -> dict:
     ]
     return {"settings": _settings(allocationMode="cap"), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": rules, "allocations": alloc},
             "series": _dry(14, "2020-10-01")}
+
+
+def transfer_out_of_catchment_cap_river() -> dict:
+    """Engine-audit.md X1 beside the river (§2.7j): water a dam rule pumps out
+    of the catchment is surface use settled before the unit's own sources, so
+    a river abstraction under the cap shares only what the rule out left. s
+    (1 000 m³, full, keeping 50 %, off the river) has 400 m³ a year; its rule
+    out takes 300 m³ on day 0, and its houses (200 m³/day from the river,
+    which its runoff keeps running) get the 100 m³ left, then nothing, the
+    volume spent. Counting the river take against the room without the water
+    sent out would give them 200 m³ on day 0 and spend 500 m³ of a 400 m³
+    licence."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=5, damCapacityM3=1000, damInitialPct=1),
+    ]
+    objs = [
+        {"id": "h", "nodeId": "s", "name": "houses", "category": "domestic", "sizing": "perUnit", "monthlyM3Day": None,
+         "count": 1000, "litresPerUnitDay": 200, "lossPct": 0, "monthlyFactor": None, "population": None,
+         "returnPct": 0, "priority": "first", "destination": "internal", "enabled": True, "note": "",
+         "waterSource": "river", "riverPumpM3Day": None, "riverPoolM3": None},
+    ]
+    alloc = [
+        {"id": "as", "nodeId": "s", "waterSource": "surface", "volumeM3PerYear": 400, "storageM3": None,
+         "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None},
+    ]
+    return {"settings": _settings(allocationMode="cap"),
+            "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": [_rule("xo", "s", None, 300, 0.5)],
+                      "demandObjects": objs, "allocations": alloc},
+            "series": {"rain_catchment_mm": {"startDate": "2020-10-01", "values": [20.0] * 6}}}
 
 
 # Runoff from each unit's own rain (§2.4h, engine >= 1.78.0).
@@ -952,6 +1081,46 @@ def unit_rain_reference_kunit() -> dict:
         _node("t", "farm", "o", areaKm2=0.5, mapMm=40, **src),
     ]
     ur = {"mode": "perUnit", "mapPeriod": {"start": "2010-01-01", "end": "2019-12-31"}, "reference": {"gauge": "rain_catchment_mm", "unitId": "r"}}
+    return _net(nodes, series, unitRain=ur)
+
+
+def unit_rain_chirps_driver(point: str = "reference") -> dict:
+    """CHIRPS as a unit's driver (§2.4h, engine 1.114.0, the operator
+    2026-11-03). Eight years (2012–2019), MAP period 2012–2019. `point`:
+    'reference', a reference gauge at r (the cell the gauge × 0.5);
+    'bias', the catchment's CHIRPS (the gauge × 0.5 in the wet months, × 0.8
+    in the rest) for §2.4b's factors, no reference; 'none', neither. Units:
+    a raw, with a gauge of its own too (not read); b bias with a MAP; c bias
+    without a MAP; d raw without a MAP; e raw with a MAP 40 mm (k clamped);
+    r not set, the control (the reference unit under 'reference')."""
+    start = dt.date(2012, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    gauge = _season(start, n, 0)
+    series: dict = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge}}
+    if point == "reference":
+        series["rain_chirps_cell_mm@r"] = {"startDate": start.isoformat(), "values": [round(g * 0.5, 2) for g in gauge]}
+    if point == "bias":
+        series["rain_chirps_mm"] = {"startDate": start.isoformat(), "values": [round(g * (0.5 if (start + dt.timedelta(days=i)).month in WET else 0.8), 2) for i, g in enumerate(gauge)]}
+    for k, u in enumerate("abcder"):
+        series[f"rain_chirps_mm@{u}"] = {"startDate": start.isoformat(), "values": _season(start, n, k + 1, 0.6 + 0.1 * k)}
+    series["rain_catchment_mm@a"] = {"startDate": start.isoformat(), "values": _season(start, n, 9, 1.4)}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("a", "farm", "o", areaKm2=2, mapMm=700, **src),
+        _node("b", "farm", "o", areaKm2=3, mapMm=850, **src),
+        _node("c", "farm", "o", areaKm2=1),
+        _node("d", "farm", "o", areaKm2=1),
+        _node("e", "farm", "o", areaKm2=0.5, mapMm=40, **src),
+        _node("r", "farm", "o", areaKm2=2, mapMm=650, **src),
+    ]
+    ur: dict = {
+        "mode": "perUnit",
+        "mapPeriod": {"start": "2012-01-01", "end": "2019-12-31"},
+        "chirpsUnits": {"a": {"correction": "raw"}, "b": {"correction": "bias"}, "c": {"correction": "bias"}, "d": {"correction": "raw"}, "e": {"correction": "raw"}},
+    }
+    if point == "reference":
+        ur["reference"] = {"gauge": "rain_catchment_mm", "unitId": "r"}
     return _net(nodes, series, unitRain=ur)
 
 
@@ -2196,6 +2365,10 @@ PROBES = {
     "offtake-keep-bands": offtake_keep_bands(),
     # Off-takes sized by a diversion curve (engine 1.113.0).
     "diversion-curve-canal": diversion_curve_canal(),
+    # Splits between destinations and a maximum or a formula by month (engine 1.114.0).
+    "split-40-60-canal": split_40_60_canal(),
+    "split-demand": split_demand(),
+    "monthly-formula-mix": monthly_formula_mix(),
     "cap-before-licence": cap_before_licence(),
     "offtake-into-capped-unit": offtake_into_capped_unit(),
     "cap-licence-from-september": cap_licence_from_september(),
@@ -2204,6 +2377,7 @@ PROBES = {
     "dam-rules-rationing-and-release": dam_rules_rationing_and_release(),
     "transfer-out-of-catchment": transfer_out_of_catchment(),
     "transfer-out-of-catchment-cap": transfer_out_of_catchment_cap(),
+    "transfer-out-of-catchment-cap-river": transfer_out_of_catchment_cap_river(),
     "unit-rain-rules": unit_rain_rules(),
     "unit-rain-forecast-warmup": unit_rain_forecast_warmup(),
     "unit-rain-map-period": unit_rain_map_period(),
@@ -2213,6 +2387,9 @@ PROBES = {
     "baseflow-loss-and-gain": baseflow_loss_and_gain(),
     # Issue #500's decisions.
     "unit-rain-reference-kunit": unit_rain_reference_kunit(),
+    "unit-rain-chirps-driver-reference": unit_rain_chirps_driver("reference"),
+    "unit-rain-chirps-driver-bias": unit_rain_chirps_driver("bias"),
+    "unit-rain-chirps-driver-none": unit_rain_chirps_driver("none"),
     "unit-rain-unusable-chirps": unit_rain_unusable_chirps(),
     "unit-rain-forecast-gefs": unit_rain_forecast_gefs(),
     "unit-rain-forecast-gefs-noref": unit_rain_forecast_gefs_noref(),

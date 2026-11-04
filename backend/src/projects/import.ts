@@ -262,7 +262,11 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 	for (const n of m.nodes) old.add(n.id), n.downstreamNodeId && old.add(n.downstreamNodeId), n.cropRemoteNodeId && old.add(n.cropRemoteNodeId);
 	for (const c of m.crops) old.add(c.id);
 	for (const a of m.cropAreas) old.add(a.nodeId), old.add(a.cropId);
-	for (const t of m.transfers) old.add(t.id), old.add(t.fromNodeId), t.toNodeId && old.add(t.toNodeId), t.lossReturnNodeId && old.add(t.lossReturnNodeId);
+	for (const t of m.transfers) {
+		old.add(t.id), old.add(t.fromNodeId), t.toNodeId && old.add(t.toNodeId), t.lossReturnNodeId && old.add(t.lossReturnNodeId);
+		// A split's destinations (engine ≥ 1.114.0).
+		for (const d of t.destinations ?? []) if (d.nodeId) old.add(d.nodeId);
+	}
 	for (const p of m.landCover ?? []) old.add(p.id), old.add(p.nodeId);
 	for (const b of m.boreholes ?? []) old.add(b.id), old.add(b.nodeId);
 	for (const o of m.demandObjects ?? []) old.add(o.id), old.add(o.nodeId);
@@ -283,7 +287,15 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 			crops: m.crops.map((c) => ({ ...c, id: id(c.id), ...(c.irrigationSystemId != null ? { irrigationSystemId: sys(c.irrigationSystemId) } : {}) })),
 			cropAreas: m.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId), ...(a.irrigationSystemId != null ? { irrigationSystemId: sys(a.irrigationSystemId) } : {}) })),
 			// The unit an off-take's seepage rejoins below (engine ≥ 1.42.0) moves with the nodes; absent stays absent.
-			transfers: m.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: t.toNodeId === null ? null : id(t.toNodeId), ...(t.lossReturnNodeId ? { lossReturnNodeId: id(t.lossReturnNodeId) } : {}) })),
+			// A split's destinations (engine ≥ 1.114.0) move with the nodes too.
+			transfers: m.transfers.map((t) => ({
+				...t,
+				id: id(t.id),
+				fromNodeId: id(t.fromNodeId),
+				toNodeId: t.toNodeId === null ? null : id(t.toNodeId),
+				...(t.lossReturnNodeId ? { lossReturnNodeId: id(t.lossReturnNodeId) } : {}),
+				...(Array.isArray(t.destinations) ? { destinations: t.destinations.map((d) => ({ ...d, nodeId: d.nodeId === null ? null : id(d.nodeId) })) } : {})
+			})),
 			landCover: (m.landCover ?? []).map((p) => ({ ...p, id: id(p.id), nodeId: id(p.nodeId) })),
 			...(m.boreholes?.length ? { boreholes: m.boreholes.map((b) => ({ ...b, id: id(b.id), nodeId: id(b.nodeId) })) } : {}),
 			...(m.demandObjects?.length ? { demandObjects: m.demandObjects.map((o) => ({ ...o, id: id(o.id), nodeId: id(o.nodeId) })) } : {}),

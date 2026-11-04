@@ -3,7 +3,7 @@
 // numbers of the shape the client's hydrologist gave: 2000 × x^−0.9 %, at most 95 %, a canal of 0.25 m³/s.
 import { describe, expect, it } from 'vitest';
 import type { Transfer } from '@water-management/engine';
-import { canalM3Day, diversionPreview, PREVIEW_FLOWS_M3S } from './diversionPreview';
+import { canalM3Day, diversionPreview, diversionPreviews, PREVIEW_FLOWS_M3S } from './diversionPreview';
 
 const rule = (over: Partial<Transfer> = {}): Transfer => ({
 	id: 't',
@@ -53,6 +53,37 @@ describe('diversionPreview', () => {
 		const off = diversionPreview(rule({ maxRateM3s: 0 }))!;
 		expect(off.canalM3Day).toBe(0);
 		expect(off.rows.every((r) => r.diverted === 0 && r.limit === 'canal')).toBe(true);
+	});
+
+	it('by month (engine 1.114.0): one preview per formula, its canal the largest rate of its months, a split’s shares after the losses', () => {
+		const a = { coefficient: 2000, exponent: -0.9, maxPct: 0.95 };
+		const b = { coefficient: 50, exponent: 0, maxPct: null };
+		const t = rule({
+			diversionCoefficient: null,
+			diversionExponent: null,
+			diversionMaxPct: null,
+			diversionFlowUnit: 'm3/s',
+			monthlyRateM3s: [0.25, 0.25, 0.1, 0.1, 0.1, 0.1, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
+			months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+			maxRateM3s: 0.3,
+			monthlyDiversion: [a, a, b, b, { ...b, coefficient: 0 }, null, null, null, null, null, null, null],
+			lossPct: 0.2,
+			destinations: [
+				{ nodeId: 'b', pct: 0.4 },
+				{ nodeId: 'c', pct: 0.6 }
+			]
+		});
+		const ps = diversionPreviews(t);
+		// February's incomplete formula and the months up to their maximum have no preview.
+		expect(ps.map((p) => p.months)).toEqual([[0, 1], [2, 3]]);
+		expect(ps[0]!.canal).toBeCloseTo(0.25, 12);
+		expect(ps[1]!.canal).toBeCloseTo(0.1, 12);
+		// 50 % of 0.2 m³/s is 0.1, the canal: delivered 0.1 × 0.8, split 40/60.
+		const r = ps[1]!.rows[3]!;
+		expect(r.diverted).toBeCloseTo(0.1, 12);
+		expect(r.delivered[0]).toBeCloseTo(0.032, 12);
+		expect(r.delivered[1]).toBeCloseTo(0.048, 12);
+		expect(diversionPreviews(rule({ diversionFlowUnit: null }))).toEqual([]);
 	});
 
 	it('is null while the curve is incomplete', () => {

@@ -54,7 +54,8 @@ test('River to dam, a river pump and a transfer entered in l/s are stored in the
 	// One picker for every rule, in the Transfer rules heading; each rule's title names the unit.
 	await expect(page.getByLabel('Unit of transfer rates')).toHaveCount(1);
 	await page.getByLabel('Unit of transfer rates').selectOption('ls');
-	await expect(page.getByTestId('transfer-rule').first().locator('.g-rates .grp-t')).toContainText('l/s');
+	// The rates' title line is the Takes pull-down (engine 1.114.0), then the unit.
+	await expect(page.getByTestId('transfer-rule').first().locator('.g-rates .grp-t .u')).toHaveText('l/s');
 	await expect(page.getByLabel('Max rate of transfer 1 in Nov, l/s', { exact: true })).toHaveValue('10');
 	await expect(page.getByRole('group', { name: /^Max rate of transfer 1 by month/ })).toContainText('up to 10 l/s');
 	await page.getByLabel('Max rate of transfer 1 in Oct, l/s', { exact: true }).fill('20');

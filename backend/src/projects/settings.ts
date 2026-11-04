@@ -42,6 +42,8 @@ import {
 	MAP_MM_MAX,
 	MAP_MM_MIN,
 	UNIT_RAIN_MODES,
+	UNIT_CHIRPS_CORRECTIONS,
+	UNIT_CHIRPS_UNITS_MAX,
 	unitRainError,
 	unitRainFingerprintError,
 	catchmentStationFingerprintError,
@@ -111,7 +113,7 @@ import { checkOutcomeSite, OutcomesPatch, resolveOutcomes } from './outcomeSetti
 import { OutlookPatch } from './outlookSettings.js';
 import { ResponsibleAuthorityPatch } from './authoritySettings.js';
 import { checkEwrHeadline, EwrHeadlinePatch } from './ewrHeadlineSettings.js';
-import { checkRainStations, RainStations, remapRainStations } from './rainStationSettings.js';
+import { checkRainStations, checkUnitChirpsDrivers, RainStations, remapRainStations } from './rainStationSettings.js';
 import { checkFlowMissing } from './flowMissingSettings.js';
 import { localDate } from './timeZone.js';
 
@@ -212,6 +214,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 		const at = typeof ref.gauge === 'string' ? ref.gauge.indexOf('@') : -1;
 		if (at > 0 && ids.has((ref.gauge as string).slice(at + 1))) ref.gauge = `${(ref.gauge as string).slice(0, at)}@${ids.get((ref.gauge as string).slice(at + 1))}`;
 		s.unitRain = { ...s.unitRain, reference: ref };
+	}
+	// The units whose driver is their own CHIRPS (engine ≥ 1.114.0): keyed by node id.
+	if (isObj(s.unitRain) && isObj(s.unitRain.chirpsUnits)) {
+		s.unitRain = { ...s.unitRain, chirpsUnits: Object.fromEntries(Object.entries(s.unitRain.chirpsUnits).map(([id, c]) => [ids.get(id) ?? id, c])) };
 	}
 	// The rainfall stations' units (issue #553): the units given a station and the unit each station stands in.
 	if (isObj(s.rainStations)) s.rainStations = remapRainStations(s.rainStations, ids);
@@ -772,7 +778,14 @@ export const UnitRain = z
 		mapPeriod: z.object({ start: isoDate, end: isoDate }).strict().nullable().optional(),
 		// The reference gauge and unit (engine ≥ 1.80.0, issue #500): the gauge's series key and the unit whose centre picks the
 		// CHIRPS cell. pinnedFactors is engine-only, so strict() refuses it here.
-		reference: z.object({ gauge: z.string().max(250), unitId: z.string().min(1).max(200) }).strict().nullable().optional()
+		reference: z.object({ gauge: z.string().max(250), unitId: z.string().min(1).max(200) }).strict().nullable().optional(),
+		// Each land unit whose driver rainfall is its own CHIRPS (engine ≥ 1.114.0, §2.4h): unit id → its correction. The
+		// units are checked against the network by checkUnitChirpsDrivers (rainStationSettings.ts) on the save.
+		chirpsUnits: z
+			.record(z.string().uuid('a land unit is named by its node id'), z.object({ correction: z.enum(UNIT_CHIRPS_CORRECTIONS) }).strict())
+			.refine((r) => Object.keys(r).length <= UNIT_CHIRPS_UNITS_MAX, `at most ${UNIT_CHIRPS_UNITS_MAX} units can have CHIRPS as their driver`)
+			.nullable()
+			.optional()
 	})
 	.strict()
 	.superRefine((v, ctx) => {
@@ -1550,6 +1563,8 @@ export async function checkedSettingsPatch(
 	}
 	// The rainfall stations (engine ≥ 1.91.0, issue #553): each named station a station of this project, each unit a land unit.
 	if (patch.rainStations) await checkRainStations(db, projectId, patch.rainStations, (stored as { rainStations?: unknown } | null)?.rainStations);
+	// The units whose driver is their own CHIRPS (engine ≥ 1.114.0): each a land unit, and none also given a station.
+	if (patch.unitRain !== undefined || patch.rainStations !== undefined) await checkUnitChirpsDrivers(db, projectId, settings, stored);
 	// One flow record's missing periods (engine ≥ 1.102.0, issue #611): each named record a flow record of this project.
 	if (patch.flowMissing) await checkFlowMissing(db, projectId, patch.flowMissing, (stored as { flowMissing?: unknown } | null)?.flowMissing);
 	// The calibration locations (engine 1.110.0, issue #659): each new row's gauge, the rows and the headline pointer against the

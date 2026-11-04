@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { dayText, toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
-import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, type RainStationAssignment, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolveGapRain, resolvePe, type GapRainSettings, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, stationSeriesKey, type RainStationAssignment, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolveGapRain, resolvePe, type GapRainSettings, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type UnitRainSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import { unitRainFingerprintChanged, unitRainFingerprintOfSummary, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
@@ -951,7 +951,27 @@ function unitRainSettingChanged(now: unknown, then: UnitRainFingerprint | null, 
 	const ref = u.reference ?? null;
 	const was = then.reference ?? null;
 	const refChanged = !ref || !was ? !ref !== !was : ref.gauge !== was.gauge || ref.unitId !== was.unitId;
-	return gauge !== then.gaugeMapMm || period.start !== then.mapPeriod.start || period.end !== then.mapPeriod.end || refChanged || unitStationsChanged(stations, then);
+	return gauge !== then.gaugeMapMm || period.start !== then.mapPeriod.start || period.end !== then.mapPeriod.end || refChanged || unitStationsChanged(stations, then) || unitChirpsChoicesChanged(u.chirpsUnits, stations, then);
+}
+
+/**
+ * Whether the land units' CHIRPS drivers (settings.unitRain.chirpsUnits, engine ≥ 1.114.0) differ from the ones the
+ * fit's units ran on: another correction, or one on a side only. A unit with a station runs on it, so its choice is
+ * none. A choice the fit's unit couldn't run on (it had no usable CHIRPS: chirpsSource null or unusable) isn't a
+ * change from the settings alone; a run's own fingerprint compares what ran.
+ */
+function unitChirpsChoicesChanged(choices: UnitRainSettings['chirpsUnits'], stations: unknown, then: UnitRainFingerprint): boolean {
+	const units = stations && typeof stations === 'object' ? (stations as { units?: unknown }).units : null;
+	const assigned = units && typeof units === 'object' && !Array.isArray(units) ? (units as Record<string, unknown>) : {};
+	for (const u of then.units) {
+		const c = assigned[u.nodeId] ? null : (choices?.[u.nodeId]?.correction ?? null);
+		const now = c === 'bias' || c === 'raw' ? c : null;
+		const was = u.chirpsChoice ?? null;
+		if (now === was) continue;
+		if (now !== null && was === null && (u.chirpsSource === null || u.chirpsSource === 'unusable')) continue;
+		return true;
+	}
+	return false;
 }
 
 /**

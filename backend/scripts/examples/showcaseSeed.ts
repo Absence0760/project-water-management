@@ -19,6 +19,7 @@ import { claimJobs } from '../../src/jobs/queue.js';
 import { DEFAULT_LEASE_SECONDS, runJob } from '../../src/jobs/runner.js';
 import { findOwnedProject, importProjectData } from '../import-project.js';
 import { apiAs } from './api.js';
+import { DEMO_FARMERS } from './farmers.js';
 import type { ExampleMapFeature } from './map.js';
 import { buildShowcase, SHOWCASE_NAME, SHOWCASE_UNCERTAINTY_RULE, showcaseNodeId, UNITS } from './showcase.js';
 import { SHOWCASE_MAP_FILE, showcaseMap } from './showcaseMap.js';
@@ -143,6 +144,56 @@ export function showcaseApplication(model: Pick<ProjectModel, 'nodes'>): { name:
 	};
 }
 
+/** One registered water use as POST …/allocations takes it. */
+export type ShowcaseAllocation = { nodeId: string; registrationNo: string; holder: string; authorisation: string; waterSource: 'surface' | 'groundwater'; volumeM3PerYear: number } & Record<string, unknown>;
+
+/**
+ * The showcase's registered water uses (docs/run-locally.md § The showcase):
+ * ten demo farmers (./farmers.ts), three or four on each of the three units,
+ * each with a registered volume and most with an irrigated area (ha) and a
+ * share of the unit's dam (m³), held in every way the app knows (a licence
+ * with months and a condition, a registration, an existing lawful use claimed
+ * and verified, a general authorisation for a borehole, a Schedule 1 use) plus
+ * a dam's storage-only (21b) row. Fixed numbers, chosen against the calibrated
+ * baseline (showcase.test.ts) so the per-unit totals read differently on each
+ * unit: Kransdal within the band on all three, Vleiplaas above (more planted,
+ * more used and a larger dam than registered), Rivieroewer below; the town's
+ * water works use water with nothing registered.
+ */
+export function showcaseAllocations(model: Pick<ProjectModel, 'nodes'>): ShowcaseAllocation[] {
+	const id = (name: string) => model.nodes.find((n) => n.name === name)!.id;
+	const [upper, middle, lower] = [id(UNITS.upper), id(UNITS.middle), id(UNITS.lower)];
+	const f = (i: number) => DEMO_FARMERS[i]!;
+	const take = (nodeId: string, no: number, holder: string, authorisation: string, volumeM3PerYear: number, irrigatedAreaHa: number | null, storageM3: number | null, extra: Record<string, unknown> = {}): ShowcaseAllocation => ({
+		nodeId,
+		registrationNo: `DEMO-${String(no).padStart(4, '0')}`,
+		holder,
+		authorisation,
+		waterSource: 'surface',
+		volumeM3PerYear,
+		purpose: 'irrigation',
+		...(irrigatedAreaHa !== null ? { irrigatedAreaHa } : {}),
+		...(storageM3 !== null ? { storageM3 } : {}),
+		...extra
+	});
+	return [
+		// Kransdal: 70 ha planted, a 600 000 m³ dam.
+		take(upper, 1, f(0), 'licence', 300_000, 40, null, { validFrom: '2008-07-01', validTo: '2038-06-30', months: [10, 11, 12, 1, 2, 3], conditions: ['Pass the EWR before storing (invented condition)'] }),
+		{ nodeId: upper, registrationNo: 'DEMO-0002', holder: f(0), authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 0, storageM3: 400_000, waterUse: '21b' },
+		take(upper, 3, f(1), 'registration', 220_000, 25, 200_000),
+		take(upper, 4, f(3), 'general_authorisation', 10_000, null, null, { waterSource: 'groundwater', purpose: 'livestock' }),
+		// Vleiplaas: 90 ha planted, a 300 000 m³ dam.
+		take(middle, 5, f(2), 'existing_lawful_use', 300_000, 30, 150_000),
+		take(middle, 6, f(4), 'existing_lawful_use_claimed', 150_000, 15, 50_000),
+		take(middle, 7, f(5), 'registration', 50_000, 10, 50_000),
+		take(middle, 8, f(9), 'schedule_1', 2_000, null, null, { purpose: 'domestic' }),
+		// Rivieroewer: 55 ha planted, a 200 000 m³ dam.
+		take(lower, 9, f(6), 'licence', 400_000, 40, 140_000),
+		take(lower, 10, f(7), 'registration', 300_000, 30, 100_000),
+		take(lower, 11, f(8), 'general_authorisation', 40_000, null, null, { waterSource: 'groundwater', purpose: 'livestock' })
+	];
+}
+
 /** Run the project's queued jobs (sweep, outlook, yield, alert checks) here, as the worker would. */
 async function runProjectJobs(projectId: string): Promise<number> {
 	let n = 0;
@@ -244,13 +295,8 @@ export async function seedShowcase(d: ShowcaseDeps): Promise<string | null> {
 	await api('POST', `${at}/outlooks`, { name: 'Coming season', baseRunId: r2, levels: levels('label') });
 	await api('POST', `${at}/yield`, { nodeId: nodeId(UNITS.upper), runId: r2, kind: 'firm' });
 
-	// Registered water use: a licence, a registration, a general authorisation for a borehole and a dam's storage.
-	const alloc = (b: Record<string, unknown>) => api('POST', `${at}/allocations`, b);
-	await alloc({ nodeId: nodeId(UNITS.upper), registrationNo: 'DEMO-0001', holder: 'Kransdal Boerdery (invented)', authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 420_000, validFrom: '2015-01-01', validTo: '2035-12-31', months: [10, 11, 12, 1, 2, 3], conditions: ['Pass the EWR before storing (invented condition)'] });
-	await alloc({ nodeId: middle, registrationNo: 'DEMO-0002', holder: 'Vleiplaas Trust (invented)', authorisation: 'existing_lawful_use', waterSource: 'surface', volumeM3PerYear: 380_000 });
-	await alloc({ nodeId: nodeId(UNITS.lower), registrationNo: 'DEMO-0003', holder: 'Rivieroewer (invented)', authorisation: 'registration', waterSource: 'surface', volumeM3PerYear: 300_000 });
-	await alloc({ nodeId: nodeId(UNITS.lower), registrationNo: 'DEMO-0004', holder: 'Rivieroewer (invented)', authorisation: 'general_authorisation', waterSource: 'groundwater', volumeM3PerYear: 40_000, purpose: 'livestock' });
-	await alloc({ nodeId: nodeId(UNITS.upper), registrationNo: 'DEMO-0005', holder: 'Kransdal Boerdery (invented)', authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 0, storageM3: 600_000, waterUse: '21b' });
+	// Registered water use: ten demo farmers on the three units, each with a volume, most with an irrigated area and storage.
+	for (const a of showcaseAllocations(stored)) await api('POST', `${at}/allocations`, a);
 	await api('PUT', `${at}/allocations/viewer-units`, { on: true });
 
 	// Notes on the project, a unit, a run and a scenario.

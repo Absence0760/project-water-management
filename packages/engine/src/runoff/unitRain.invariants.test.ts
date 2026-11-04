@@ -2,13 +2,14 @@
 // random networks (./testing/fuzz.ts withUnitRain): every invariant, order
 // invariance, the forecast prefix and resuming from a snapshot hold, and
 // every rule of the forcing turns up; the same with a reference gauge
-// (k_unit, engine ≥ 1.85.0) and a CHIRPS-GEFS forecast levelled per unit.
+// (k_unit, engine ≥ 1.85.0) and a CHIRPS-GEFS forecast levelled per unit, and with
+// CHIRPS chosen as units' driver, bias-corrected or raw (engine ≥ 1.114.0).
 // Soak: UNIT_RAIN_CASES=2000.
 import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { referenceCellSeriesKey, type DailySeries, type ModelInput } from '../project';
 import { runModel } from '../run';
-import { randomInput, withUnitRain } from '../testing/fuzz';
+import { randomInput, withUnitChirpsChoice, withUnitRain } from '../testing/fuzz';
 import { checkForecastPrefix, withForecastTail } from '../testing/forecastInvariants';
 import { checkAll } from '../testing/invariants';
 import { checkResume } from '../testing/warmstartInvariants';
@@ -86,5 +87,37 @@ describe('per-unit rain on the reference factors, on random networks', () => {
 		}
 		expect(fails.slice(0, 10)).toEqual([]);
 		expect(kUnits).toBeGreaterThan(0);
+	}, 600_000);
+});
+
+describe('CHIRPS as units’ driver, bias-corrected or raw, on random networks', () => {
+	it('every invariant holds, both choices run, raw is never corrected, and a resumed run is the uninterrupted one', () => {
+		const fails: string[] = [];
+		const seen = new Set<string>();
+		for (let seed = 1; seed <= Math.ceil(CASES / 2); seed++) {
+			const plain = withUnitChirpsChoice(withUnitRain(randomInput(seed), seed), seed);
+			for (const input of [plain, withReference(structuredClone(plain), seed)]) {
+				if (!input) continue;
+				try {
+					const out = runModel(input);
+					for (const u of out.summary.unitRain?.units ?? []) {
+						if (!u.chirpsChoice) continue;
+						seen.add(`${u.chirpsChoice}:${u.chirps?.source}${u.chirps?.source === 'bias' && u.chirps.kUnit ? ':k' : ''}`);
+						if (u.rule !== 'unitChirps') fails.push(`${seed}: ${u.nodeId} chose CHIRPS but ran rule ${u.rule}`);
+						if (u.chirpsChoice === 'raw' && u.chirps?.source !== 'map' && u.chirps?.source !== 'raw') fails.push(`${seed}: ${u.nodeId} raw but levelled ${u.chirps?.source}`);
+					}
+					if (seed <= 6) {
+						const r = checkResume(input, Math.floor(out.days / 2));
+						if (r) fails.push(`${seed} (resume): ${r}`);
+					}
+				} catch {
+					// checkAll judges a refused input.
+				}
+				const r = checkAll(input, seed);
+				if (r) fails.push(`${seed}: ${r}`);
+			}
+		}
+		expect(fails.slice(0, 10)).toEqual([]);
+		for (const k of ['raw:map', 'bias:reference', 'bias:map', 'bias:bias:k']) expect([...seen], k).toContain(k);
 	}, 600_000);
 });

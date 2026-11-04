@@ -14,8 +14,9 @@
 // self-checks (../verify/checks.ts) read a rule through these functions, so a
 // stored rule means the same thing to each.
 import { cmpStr } from '../order';
-import { DIVERSION_FLOW_BASES, DIVERSION_FLOW_UNIT_M3_DAY, DIVERSION_FLOW_UNITS, type DiversionFlowUnit, type NetworkNode, type Transfer } from '../project';
-import { transferDailyLimit } from './transferRates';
+import { DIVERSION_FLOW_BASES, DIVERSION_FLOW_UNIT_M3_DAY, DIVERSION_FLOW_UNITS, type DiversionFlowUnit, type MonthDiversion, type NetworkNode, type Transfer } from '../project';
+import { transferDailyLimit, WATER_YEAR_MONTHS } from './transferRates';
+import type { TransferPiece } from './transferSplits';
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -59,8 +60,20 @@ export interface PlanOfftake {
 	returnAt: number;
 	/** 0 = sized to the destination's need, 1 = up to capacity, 2 = a share of the river's flow (engine ≥ 1.113.0). */
 	sizing: 0 | 1 | 2;
-	/** sizing 2: the curve that sets the share; null on any other sizing, or when the curve is incomplete (it then takes nothing). */
-	diversion: DiversionCurve | null;
+	/**
+	 * sizing 2: the curve that sets the share in each calendar month (index
+	 * 1–12; engine ≥ 1.114.0 a month may have its own, or none: null, a month
+	 * that takes up to capacity as sizing 1). null on any other sizing, or when
+	 * a curve is incomplete (the rule then takes nothing).
+	 */
+	curves: (DiversionCurve | null)[] | null;
+	/**
+	 * A piece of a split rule (engine ≥ 1.114.0, ./transferSplits.ts): the
+	 * rule's id and this destination's share. Sized to the need, the pieces of
+	 * one rule ask their share of the sum of their destinations' needs, so the
+	 * split holds; null for a rule with one destination.
+	 */
+	split: { of: string; pct: number } | null;
 	topUpDam: boolean;
 	/** Lower takes first at its source; equal priorities share the flow pro rata to their limits. */
 	priority: number;
@@ -124,7 +137,7 @@ export function diversionCurveProblem(tr: Pick<Transfer, 'diversionCoefficient' 
 }
 
 /** The curve a valid diversion-curve rule runs with (diversionCurveProblem null first). */
-export function diversionCurveOf(tr: Transfer): DiversionCurve {
+export function diversionCurveOf(tr: Pick<Transfer, 'diversionCoefficient' | 'diversionExponent' | 'diversionMaxPct' | 'diversionFlowUnit' | 'diversionFlowBasis'>): DiversionCurve {
 	return {
 		a: tr.diversionCoefficient!,
 		b: tr.diversionExponent!,
@@ -132,6 +145,79 @@ export function diversionCurveOf(tr: Transfer): DiversionCurve {
 		m3DayPerUnit: DIVERSION_FLOW_UNIT_M3_DAY[tr.diversionFlowUnit as DiversionFlowUnit],
 		natural: tr.diversionFlowBasis === 'natural'
 	};
+}
+
+type CurveFields = Pick<Transfer, 'sizing' | 'monthlyDiversion' | 'diversionCoefficient' | 'diversionExponent' | 'diversionMaxPct' | 'diversionFlowUnit' | 'diversionFlowBasis'>;
+
+/** Whether the rule has a curve per month (engine ≥ 1.114.0): a `monthlyDiversion` list. */
+export const hasMonthlyDiversion = (tr: Pick<Transfer, 'monthlyDiversion'>): boolean => Array.isArray(tr.monthlyDiversion);
+
+/**
+ * A rule's curve in each water-year month (Oct–Sep), or null in a month that
+ * takes up to its rate (engine ≥ 1.114.0, docs/model.md §2.6a *A maximum or a
+ * formula by month*): its monthly list when it has one; else, sized by a
+ * curve, its one curve in every month (engine 1.113.0); else null in every
+ * month. What the Transfers tab shows and edits.
+ */
+export function diversionMonthsOf(tr: CurveFields): (MonthDiversion | null)[] {
+	if (Array.isArray(tr.monthlyDiversion)) return WATER_YEAR_MONTHS.map((_, k) => {
+		const m = tr.monthlyDiversion![k];
+		return m ? { coefficient: m.coefficient, exponent: m.exponent, maxPct: m.maxPct ?? null } : null;
+	});
+	if (tr.sizing !== 'diversionCurve') return WATER_YEAR_MONTHS.map(() => null);
+	const one = tr.diversionCoefficient == null && tr.diversionExponent == null ? null : { coefficient: tr.diversionCoefficient as number, exponent: tr.diversionExponent as number, maxPct: tr.diversionMaxPct ?? null };
+	return WATER_YEAR_MONTHS.map(() => (one ? { ...one } : null));
+}
+
+/**
+ * The fields a river rule taking up to a maximum or by a formula, month by
+ * month, stores (engine ≥ 1.114.0): sized by a curve with the monthly list
+ * when any month has a formula (the one-curve fields null), else sized to
+ * capacity with no list. What the Transfers tab writes.
+ */
+export function withMonthlyDiversion(list: readonly (MonthDiversion | null)[]): Pick<Transfer, 'sizing' | 'monthlyDiversion' | 'diversionCoefficient' | 'diversionExponent' | 'diversionMaxPct'> {
+	if (list.length !== 12) throw new Error('a curve by month needs twelve entries, Oct–Sep');
+	const any = list.some((m) => m !== null);
+	return {
+		sizing: any ? 'diversionCurve' : 'capacity',
+		monthlyDiversion: any ? list.map((m) => (m ? { coefficient: m.coefficient, exponent: m.exponent, maxPct: m.maxPct ?? null } : null)) : null,
+		diversionCoefficient: null,
+		diversionExponent: null,
+		diversionMaxPct: null
+	};
+}
+
+/**
+ * Why a rule sized by a curve can't run, or null when it can (engine ≥
+ * 1.114.0 checks each month's curve): with a monthly list, twelve entries,
+ * at least one a curve, each curve complete (diversionCurveProblem), and the
+ * one-curve fields null; without one, its one curve. The unit and basis are
+ * the rule's, for every month.
+ */
+export function diversionMonthsProblem(tr: CurveFields): string | null {
+	if (!Array.isArray(tr.monthlyDiversion)) return diversionCurveProblem(tr);
+	const list = tr.monthlyDiversion;
+	if (list.length !== 12) return 'its curves by month must be twelve entries, Oct–Sep';
+	if (!list.some((m) => m)) return 'no month has a formula';
+	if (tr.diversionCoefficient != null || tr.diversionExponent != null || tr.diversionMaxPct != null) return 'with a curve by month its one curve (a, b and largest share) must be empty';
+	for (const [k, m] of list.entries()) {
+		if (m === null) continue;
+		if (!m || typeof m !== 'object') return `its curve in month ${k + 1} of the water year must be a, b and a largest share, or none`;
+		const p = diversionCurveProblem({ diversionCoefficient: m.coefficient, diversionExponent: m.exponent, diversionMaxPct: m.maxPct, diversionFlowUnit: tr.diversionFlowUnit, diversionFlowBasis: tr.diversionFlowBasis });
+		if (p) return `in ${MONTH_NAMES[WATER_YEAR_MONTHS[k]!]!} ${p}`;
+	}
+	return null;
+}
+
+const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** The curves a valid curve rule runs with, by calendar month (index 1–12; diversionMonthsProblem null first). */
+export function diversionCurvesOf(tr: CurveFields): (DiversionCurve | null)[] {
+	const out: (DiversionCurve | null)[] = new Array<DiversionCurve | null>(13).fill(null);
+	diversionMonthsOf(tr).forEach((m, k) => {
+		if (m) out[WATER_YEAR_MONTHS[k]!] = diversionCurveOf({ diversionCoefficient: m.coefficient, diversionExponent: m.exponent, diversionMaxPct: m.maxPct, diversionFlowUnit: tr.diversionFlowUnit, diversionFlowBasis: tr.diversionFlowBasis });
+	});
+	return out;
 }
 
 /** Is this rule a river off-take? */
@@ -162,14 +248,15 @@ export function offtakeOf(tr: Transfer, from: number, to: number, fromName: stri
 	}
 	const sizing = tr.sizing === 'capacity' ? 1 : tr.sizing === 'diversionCurve' ? 2 : 0;
 	if (tr.sizing !== undefined && tr.sizing !== 'capacity' && tr.sizing !== 'demand' && tr.sizing !== 'diversionCurve') warnings.push(`${who}: unknown sizing "${String(tr.sizing)}"; sized to the destination's need`);
-	// A share of the river's flow (engine ≥ 1.113.0): a rule whose curve is incomplete takes nothing, with a warning
-	// (the API refuses one on save, modelRules).
-	let diversion: DiversionCurve | null = null;
+	// A share of the river's flow (engine ≥ 1.113.0; a curve per month, engine ≥ 1.114.0): a rule whose curve is
+	// incomplete takes nothing, with a warning (the API refuses one on save, modelRules).
+	let curves: (DiversionCurve | null)[] | null = null;
 	if (sizing === 2) {
-		const problem = diversionCurveProblem(tr);
+		const problem = diversionMonthsProblem(tr);
 		if (problem) warnings.push(`${who}: sized by a diversion curve, but ${problem}; it takes nothing`);
-		else diversion = diversionCurveOf(tr);
+		else curves = diversionCurvesOf(tr);
 	}
+	const piece = tr as Partial<TransferPiece>;
 	return {
 		from,
 		to,
@@ -180,7 +267,8 @@ export function offtakeOf(tr: Transfer, from: number, to: number, fromName: stri
 		lossReturn: loss > 0 ? lossReturn : 0,
 		returnAt: from,
 		sizing,
-		diversion,
+		curves,
+		split: typeof piece.splitOf === 'string' && finite(piece.splitPct) ? { of: piece.splitOf, pct: piece.splitPct } : null,
 		topUpDam: tr.topUpDam === true,
 		priority: Number.isFinite(tr.priority) ? tr.priority : 0
 	};
@@ -321,7 +409,7 @@ export function splitLicenceWarnings(offtakes: readonly PlanOfftake[], nodes: re
 		if (meet.length < 2) continue;
 		const o = meet[0]!;
 		warnings.push(
-			`river off-take ${nodes[o.from]!.name} → ${nodes[o.to]!.name}: ${meet.length} rules of priority ${o.priority} (${meet.map((x) => x.id).join(', ')}) take from the same river for the same unit. ` +
+			`river off-take ${nodes[o.from]!.name} → ${nodes[o.to]!.name}: ${meet.length} rules of priority ${o.priority} (${meet.map((x) => (x.split ? `${x.split.of}, its share to ${nodes[x.to]!.name}` : x.id)).join(', ')}) take from the same river for the same unit. ` +
 				'If they are one licence entered more than once at its full size, it takes that many times its licence: enter each licence once (a licence split into parts runs the same as one rule)'
 		);
 	}

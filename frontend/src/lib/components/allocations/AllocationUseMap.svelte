@@ -1,15 +1,20 @@
 <script lang="ts">
 	// "On the map" (issue #510, docs/allocations.md § The map, docs/ui.md §
-	// Allocations): the compared run's modelled use against the registered
-	// volumes, each hydrological unit's polygon shaded by band. Folded until
+	// Allocations): the compared run against what is registered, each
+	// hydrological unit's polygon shaded by band, for the measure picked
+	// (`mapMeasure=`): its water use (the default: modelled use ÷ registered
+	// volume), its irrigated area (planted in the run ÷ registered) or its dam
+	// (capacity in the run ÷ registered storage). Every unit's figures for that
+	// measure are listed under the key. Folded until
 	// asked for (`map=1`, so Back closes it); only then are the Map tab's
 	// features fetched and the map's code loaded (AllocationMap.svelte, a chunk
 	// of its own, and MapLibre after it). The source (surface by default) and
 	// the period (the mean of the whole water years, or one) are picked here;
 	// the legend names every band in words, and every unit with no polygon is
 	// listed under the map with its band, so none is silently missing. The
-	// source and the year are in the URL (`mapSource=groundwater|both`,
-	// `mapYear=<first year>`; the defaults leave them out), so a reload or a
+	// measure, the source and the year are in the URL (`mapMeasure=area|storage`,
+	// `mapSource=groundwater|both`, `mapYear=<first year>`; the defaults leave
+	// them out; the source and year only read the water use), so a reload or a
 	// shared link keeps them, and each choice is a step Back returns from. A
 	// click on a unit opens its comparison above (`onpick`). It reads only
 	// what the comparison already gives this reader: AllocationsTab doesn't
@@ -27,7 +32,23 @@
 	import { glyphsUrl } from '#lib/components/map/mapStyle.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { waterYearLabel } from './allocations';
-	import { BAND_LABEL, BAND_SHORT, bandColours, useSentence, useShading, USE_BANDS, USE_SOURCES, wholeWaterYears, type UseBand, type UseSource } from './useMap';
+	import {
+		bandColours,
+		MAP_MEASURES,
+		MEASURE_BAND_LABEL,
+		MEASURE_BAND_SHORT,
+		MEASURE_RATIO,
+		measureFigure,
+		useSentence,
+		useShading,
+		USE_BANDS,
+		USE_SOURCES,
+		wholeWaterYears,
+		type MapMeasure,
+		type ShadedUnit,
+		type UseBand,
+		type UseSource
+	} from './useMap';
 
 	let {
 		projectId,
@@ -67,19 +88,21 @@
 
 	// The source and the year, from the URL (ui-playbook § "A pick is a step in history": every filter is in the URL,
 	// so a reload keeps it); anything unknown reads as the default.
+	const measureParam = $derived(url.searchParams.get('mapMeasure'));
+	const measure = $derived<MapMeasure>(MAP_MEASURES.find((m) => m.id === measureParam)?.id ?? 'use');
 	const sourceParam = $derived(url.searchParams.get('mapSource'));
 	const source = $derived<UseSource>(USE_SOURCES.find((s) => s.id === sourceParam)?.id ?? 'surface');
 	const yearParam = $derived(url.searchParams.get('mapYear'));
 	/** null: the mean of the whole water years. */
 	const year = $derived(yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : null);
 	/** The page with one of the map's choices set (null or the default: left out). A choice pushes, so Back returns to the one before. */
-	function choose(name: 'mapSource' | 'mapYear', value: string | null) {
+	function choose(name: 'mapMeasure' | 'mapSource' | 'mapYear', value: string | null) {
 		void goto(value === null ? withoutParam(url, name) : withParam(url, name, value), { reset: false });
 	}
 	/** Hide the map: its choices go with it. */
 	function hide() {
 		const q = new URLSearchParams(url.search);
-		for (const k of ['map', 'mapSource', 'mapYear']) q.delete(k);
+		for (const k of ['map', 'mapMeasure', 'mapSource', 'mapYear']) q.delete(k);
 		const s = q.toString();
 		void goto(`${url.pathname}${s ? `?${s}` : ''}${url.hash}`, { reset: false });
 	}
@@ -89,7 +112,21 @@
 	const period = $derived(
 		shownYear !== null ? `water year ${waterYearLabel(shownYear)}` : `the mean of ${years.length} whole water year${years.length === 1 ? '' : 's'}`
 	);
-	const shading = $derived(features ? useShading(comparison, features, source, shownYear) : null);
+	/** The key's heading: what it divides, and for the water use the period (the area and the dam are the run's inputs). */
+	const keyTitle = $derived(`Key: ${MEASURE_RATIO[measure]}${measure === 'use' ? `, ${period}` : ''}`);
+	const shading = $derived(features ? useShading(comparison, features, source, shownYear, measure) : null);
+	const BAND_RANK: Record<UseBand, number> = { far: 0, over: 1, unregistered: 2, near: 3, under: 4, none: 5 };
+	/** Every unit with its figures for the measure, in the order to look into them (the list under the key). */
+	const figures = $derived.by(() => {
+		if (!shading) return [];
+		const placed = new Set(shading.drawn.map((u) => u.nodeId));
+		const rank = (u: ShadedUnit) => (u.band ? BAND_RANK[u.band] : 6);
+		return [...shading.drawn, ...shading.unplaced]
+			.map((u) => ({ ...u, placed: placed.has(u.nodeId) }))
+			.sort((a, b) => rank(a) - rank(b) || (b.use?.ratio ?? 0) - (a.use?.ratio ?? 0) || a.name.localeCompare(b.name));
+	});
+	const figureCell = (v: number | undefined) => (v === undefined ? '–' : measureFigure(measure, v));
+	const modelledHead = $derived(measure === 'use' ? 'Modelled use' : measure === 'area' ? 'Planted in the run' : 'Dam in the run');
 	const counts = $derived.by(() => {
 		const c: Partial<Record<UseBand, number>> = {};
 		for (const u of [...(shading?.drawn ?? []), ...(shading?.unplaced ?? [])]) if (u.band) c[u.band] = (c[u.band] ?? 0) + 1;
@@ -114,41 +151,56 @@
 		{/if}
 	</div>
 	<p class="small muted lead">
-		Each hydrological unit’s area on the Map tab, shaded by its modelled use as a share of its registered volume. Modelled, not metered: a difference is
-		something to look into, not a finding.
+		Each hydrological unit’s area on the Map tab, shaded by what the run has as a share of what is registered for it: its water use, its irrigated area or
+		its dam. Modelled, not metered: a difference is something to look into, not a finding.
 	</p>
 	<div id="alloc-map-body">
 		{#if open}
 			<div class="controls">
 				<fieldset class="seg-field">
-					<legend class="small">Water source</legend>
+					<legend class="small">Shade by</legend>
 					<div class="seg">
-						{#each USE_SOURCES as s (s.id)}
-							<label class:on={source === s.id}>
-								<input type="radio" name="alloc-map-source" value={s.id} checked={source === s.id} onchange={() => choose('mapSource', s.id === 'surface' ? null : s.id)} />
-								{s.label}
+						{#each MAP_MEASURES as m (m.id)}
+							<label class:on={measure === m.id}>
+								<input type="radio" name="alloc-map-measure" value={m.id} checked={measure === m.id} onchange={() => choose('mapMeasure', m.id === 'use' ? null : m.id)} />
+								{m.label}
 							</label>
 						{/each}
 					</div>
 				</fieldset>
-				<label class="year">
-					<span class="small">Water year</span>
-					<select value={shownYear === null ? '' : String(shownYear)} onchange={(e) => choose('mapYear', e.currentTarget.value || null)} disabled={!years.length}>
-						<option value="">Mean of the whole water years</option>
-						{#each years as y (y)}<option value={String(y)}>{waterYearLabel(y)}</option>{/each}
-					</select>
-				</label>
+				{#if measure === 'use'}
+					<fieldset class="seg-field">
+						<legend class="small">Water source</legend>
+						<div class="seg">
+							{#each USE_SOURCES as s (s.id)}
+								<label class:on={source === s.id}>
+									<input type="radio" name="alloc-map-source" value={s.id} checked={source === s.id} onchange={() => choose('mapSource', s.id === 'surface' ? null : s.id)} />
+									{s.label}
+								</label>
+							{/each}
+						</div>
+					</fieldset>
+					<label class="year">
+						<span class="small">Water year</span>
+						<select value={shownYear === null ? '' : String(shownYear)} onchange={(e) => choose('mapYear', e.currentTarget.value || null)} disabled={!years.length}>
+							<option value="">Mean of the whole water years</option>
+							{#each years as y (y)}<option value={String(y)}>{waterYearLabel(y)}</option>{/each}
+						</select>
+					</label>
+				{/if}
 			</div>
-			{#if source === 'both'}<p class="small muted note">Both together: the unit’s total modelled use ÷ its total registered volume, surface and groundwater added.</p>{/if}
+			{#if measure === 'area'}<p class="small muted note">Irrigated area: the crop areas the run planted on the unit against the irrigated areas its registered users’ takes state (in force on any of the run’s days). The model never reads a registered area.</p>{/if}
+			{#if measure === 'storage'}<p class="small muted note">Dam capacity: the unit’s dam in the run against the storage registered for it (s21b rows and storage stated on a take).</p>{/if}
+			{#if measure === 'use' && source === 'both'}<p class="small muted note">Both together: the unit’s total modelled use ÷ its total registered volume, surface and groundwater added.</p>{/if}
 
 			<LoadState loading={loading && !features} {error} retry={loadFeatures}>
 				{#if shading}
-					{#if !years.length}
+					{#if measure === 'use' && !years.length}
 						<p class="alert alert-info slim" role="note">This run covers no whole water year (October–September), so the map has nothing to shade. Part years are left out, as in the comparison.</p>
 					{/if}
 					{#if shading.drawn.length || shading.notInRun.length}
 						{#await import('./AllocationMap.svelte') then { default: AllocationMap }}
-							<AllocationMap {shading} {tilesUrl} {glyphs} {picked} {period} {onpick} />
+							<AllocationMap {shading} {tilesUrl} {glyphs} {picked} {period} {measure} {onpick} />
 						{:catch}
 							<ChunkFailed what="The map" />
 						{/await}
@@ -160,22 +212,55 @@
 					{/if}
 
 					<div class="legend" data-testid="allocation-map-legend">
-						<h3 class="sub-h">Key: modelled use ÷ registered volume, {period}</h3>
+						<h3 class="sub-h">{keyTitle}</h3>
 						<ul>
 							{#each USE_BANDS as b (b)}
 								<li data-band={b}>
 									<span class="sw sw-{b}" style:--sw={swatch(b)} aria-hidden="true"></span>
-									<span>{BAND_LABEL[b]}</span>
+									<span>{MEASURE_BAND_LABEL[measure][b]}</span>
 									<span class="muted small">{counts[b] ? `${counts[b]} unit${counts[b] === 1 ? '' : 's'}` : 'none'}</span>
 								</li>
 							{/each}
-							<li data-band="dashed"><span class="sw sw-dashed" aria-hidden="true"></span><span>Dashed outline: no whole water year to compare, or a unit this run doesn’t have</span></li>
+							<li data-band="dashed"><span class="sw sw-dashed" aria-hidden="true"></span><span>Dashed outline: {measure === 'use' ? 'no whole water year to compare' : 'no figures to compare'}, or a unit this run doesn’t have</span></li>
 						</ul>
 						<p class="small muted">
-							Each unit carries its share of the registered volume (“132 %”). These bands are fixed for this map. The comparison above judges against the
+							Each unit carries its share of what is registered for it (“132 %”). These bands are fixed for this map. The comparison above judges against the
 							project’s ±{fmtNum(comparison.tolerance * 100, 0)} % band, so 90–100 % counts as “within band” there and green here.
 						</p>
 					</div>
+
+					{#if figures.length}
+						<h3 class="sub-h" id="alloc-map-figures-h">Every hydrological unit’s figures</h3>
+						<div class="table-stack">
+							<div class="table-wrap figures-wrap">
+								<table class="data" aria-labelledby="alloc-map-figures-h" data-testid="allocation-map-figures" data-measure={measure}>
+									<thead>
+										<tr>
+											<th scope="col">Hydrological unit or user</th>
+											<th scope="col" class="num">Registered</th>
+											<th scope="col" class="num">{modelledHead}</th>
+											<th scope="col" class="num">Share of registered</th>
+											<th scope="col">Band</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each figures as u (u.nodeId)}
+											<tr data-node={u.nodeId} data-band={u.band ?? 'nodata'}>
+												<th scope="row">{u.name}{#if !u.placed}<span class="sub muted">no area on the map</span>{/if}</th>
+												<td class="num" data-label="Registered">{figureCell(u.use?.registered)}</td>
+												<td class="num" data-label={modelledHead}>{figureCell(u.use?.modelled)}</td>
+												<td class="num" data-label="Share of registered">{u.label}</td>
+												<td data-label="Band"
+													><span class="sw sw-{u.band ?? 'dashed'}" style:--sw={u.band ? swatch(u.band) : 'transparent'} aria-hidden="true"></span>
+													{u.band ? MEASURE_BAND_SHORT[measure][u.band] : measure === 'use' ? 'No whole water year' : 'No figures'}</td
+												>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					{/if}
 
 					{#if shading.unplaced.length}
 						<h3 class="sub-h" id="alloc-map-unplaced-h">Hydrological units with no area on the map</h3>
@@ -188,8 +273,8 @@
 										onpick(u.nodeId);
 									}}>{u.name}</a>
 									<span class="chip" style:--sw={u.band ? swatch(u.band) : 'transparent'} style:color={u.band && u.band !== 'none' ? colours[u.band].text : undefined} data-band={u.band ?? 'nodata'}>{u.label}</span>
-									<span class="small muted">{u.band ? BAND_SHORT[u.band] : 'No whole water year'}</span>
-									<span class="visually-hidden">{useSentence(u.name, u.use, period)}</span>
+									<span class="small muted">{u.band ? MEASURE_BAND_SHORT[measure][u.band] : measure === 'use' ? 'No whole water year' : 'No figures'}</span>
+									<span class="visually-hidden">{useSentence(u.name, u.use, period, measure)}</span>
 								</li>
 							{/each}
 						</ul>
@@ -277,6 +362,18 @@
 		align-items: center;
 		gap: 0.2rem 0.5rem;
 		font-size: 0.85rem;
+	}
+	.figures-wrap {
+		max-height: none;
+	}
+	.figures-wrap .sub {
+		display: block;
+		font-weight: 400;
+		font-size: var(--font-xs);
+	}
+	.figures-wrap td .sw {
+		vertical-align: middle;
+		margin-right: 0.3rem;
 	}
 	.legend p {
 		margin: 0.5rem 0 0;

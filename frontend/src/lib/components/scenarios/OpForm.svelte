@@ -6,7 +6,7 @@
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, type FutureFactorTable, resolveCatchmentAreaKm2 } from '@water-management/engine';
+	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, type FutureFactorTable, resolveCatchmentAreaKm2, isSplitTransfer, transferDestinations } from '@water-management/engine';
 	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { guardUnsaved } from '#lib/nav/unsaved.js';
@@ -17,7 +17,7 @@
 	import DemandScheduleFields from '#lib/components/network/DemandScheduleFields.svelte';
 	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, rescaleText, settingsValue, valueText, type ValueSpec } from './fields';
 	import FlowUnitSelect from '#lib/components/network/FlowUnitSelect.svelte';
-	import { fmtDay, tidyDay } from '#lib/format/number.js';
+	import { fmtDay, fmtNum, tidyDay } from '#lib/format/number.js';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
 
 	let {
@@ -399,7 +399,9 @@
 					}}
 				>
 					<option value="" disabled>Pick a transfer</option>
-					{#each input.model.transfers as t, i (t.id)}<option value={t.id}>{i + 1}: {nodeName(t.fromNodeId)} → {t.toNodeId === null ? 'Outside the catchment' : nodeName(t.toNodeId)}</option>{/each}
+					{#each input.model.transfers as t, i (t.id)}<option value={t.id}>{i + 1}: {nodeName(t.fromNodeId)} → {transferDestinations(t)
+								.map((d) => `${d.nodeId === null ? 'Outside the catchment' : nodeName(d.nodeId)}${isSplitTransfer(t) ? ` ${fmtNum(d.pct * 100, 2, true)} %` : ''}`)
+								.join(', ')}</option>{/each}
 				</select>
 			</div>
 		{:else if d.kind === 'borehole.add'}

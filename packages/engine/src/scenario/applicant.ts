@@ -21,6 +21,7 @@
 //    end is an anonymised node).
 import type { CropDef, ModelInput, NetworkNode, NodeKind, ProjectModel } from '../project';
 import type { ScenarioMask } from './overrides';
+import { transferDestinations } from '../network/transferSplits';
 
 export interface ApplicantBase {
 	settings: ModelInput['settings'];
@@ -122,7 +123,8 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 			nodes,
 			crops,
 			cropAreas,
-			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || (t.toNodeId !== null && own.has(t.toNodeId))),
+			// A split rule (engine ≥ 1.114.0) by any of its destinations, as a rule by its one.
+			transfers: m.transfers.filter((t) => own.has(t.fromNodeId) || transferDestinations(t).some((d) => d.nodeId !== null && own.has(d.nodeId))),
 			landCover: (m.landCover ?? []).filter((p) => own.has(p.nodeId)),
 			// Their own farm's boreholes are theirs to see (as the table's RLS lets them, 045).
 			boreholes: (m.boreholes ?? []).filter((b) => own.has(b.nodeId)),

@@ -10,6 +10,7 @@
 // model by hand (`pnpm list:ewr-rules <project.json>`, docs/run-locally.md
 // § Which rules keep water for the EWR). Pure: reads the model and settings,
 // runs nothing; never part of a run, so not a model change.
+import { transferDestinations } from '../network/transferSplits';
 import type { DroughtRestrictionRule, NetworkNode, ProjectModel, Transfer } from '../project';
 import { isRiverOfftake } from '../network/offtake';
 
@@ -110,7 +111,9 @@ export function ewrReleaseRules(project: EwrReleaseRulesInput): EwrReleaseRule[]
 		const flow = positive(tr.handsOffM3Day) ? (tr.handsOffM3Day as number) : null;
 		const keepsEwr = tr.handsOffEwr === true;
 		if (!flow && !keepsEwr) continue;
-		const where = `transfer "${nameOf(byId.get(tr.fromNodeId), tr.fromNodeId)} → ${tr.toNodeId === null ? 'outside the catchment' : nameOf(byId.get(tr.toNodeId), tr.toNodeId)}"`;
+		// Every destination of a split rule (engine ≥ 1.114.0).
+		const to = transferDestinations(tr).map((d) => (d.nodeId === null ? 'outside the catchment' : nameOf(byId.get(d.nodeId), d.nodeId)));
+		const where = `transfer "${nameOf(byId.get(tr.fromNodeId), tr.fromNodeId)} → ${to.join(', ')}"`;
 		const inert = !isRiverOfftake(tr) ? 'a dam transfer: the hands-off fields apply to a river off-take only' : tr.enabled === false ? 'the transfer is switched off' : null;
 		push(out, { kind: 'offtakeHandsOff', id: tr.id, where, target: keepsEwr ? (flow ? 'ewrOrSetFlow' : 'ewr') : 'setFlow', setFlowM3Day: flow, inert });
 	}

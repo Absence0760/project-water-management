@@ -470,6 +470,32 @@ describe('SettingsPatch.unitRain (issue #482)', () => {
 		expect(ok({ ...full, reference: { ...reference, extra: 1 } })).toBe(false);
 	});
 
+	it('takes each unit’s CHIRPS driver, bias-corrected or raw, keyed by node id (engine ≥ 1.114.0); agrees with unitRainError', () => {
+		const unit = '6f9b3c1e-7a51-4d1a-9a55-1d0d3f0b1e2a';
+		for (const good of [{ ...full, chirpsUnits: { [unit]: { correction: 'bias' } } }, { ...full, chirpsUnits: { [unit]: { correction: 'raw' } } }, { ...full, chirpsUnits: {} }, { ...full, chirpsUnits: null }]) {
+			expect(ok(good), JSON.stringify(good)).toBe(true);
+			expect(unitRainError(good)).toBeNull();
+		}
+		for (const [name, bad] of [
+			['another correction', { ...full, chirpsUnits: { [unit]: { correction: 'quantile' } } }],
+			['a bare word', { ...full, chirpsUnits: { [unit]: 'raw' } }],
+			['a list', { ...full, chirpsUnits: [unit] }]
+		] as [string, unknown][]) {
+			expect(ok(bad), name).toBe(false);
+			expect(unitRainError(bad), name).not.toBeNull();
+		}
+		// The API names a unit by its node id; the engine reads any id, so these are the API's own.
+		expect(ok({ ...full, chirpsUnits: { 'not-a-node': { correction: 'raw' } } })).toBe(false);
+		expect(ok({ ...full, chirpsUnits: { [unit]: { correction: 'raw', extra: 1 } } })).toBe(false);
+		expect(SettingsPatch.parse({ unitRain: { ...full, mode: 'catchment', chirpsUnits: { [unit]: { correction: 'raw' } } } }).unitRain).toEqual({ ...full, chirpsUnits: { [unit]: { correction: 'raw' } } });
+	});
+
+	it('a copy remaps the CHIRPS drivers to the copy’s node ids', () => {
+		const ids = new Map([['old-unit', 'new-unit']]);
+		const out = remapSettingNodeIds({ unitRain: { mode: 'perUnit', chirpsUnits: { 'old-unit': { correction: 'bias' }, other: { correction: 'raw' } } } }, ids) as { unitRain: { chirpsUnits: unknown } };
+		expect(out.unitRain.chirpsUnits).toEqual({ 'new-unit': { correction: 'bias' }, other: { correction: 'raw' } });
+	});
+
 	it('is replaced whole by a patch, and kept by a patch of anything else', () => {
 		const stored = patchSettings({}, { unitRain: full });
 		expect(stored.unitRain).toEqual(full);

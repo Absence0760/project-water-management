@@ -81,7 +81,7 @@ test('the curtailment table and the board show what the basic-needs floor keeps 
 	const upperRow = (await rowsOf(farms)).find((r) => r[0]!.startsWith('Upper farm'))!;
 	expect(upperRow[left]).toBe('500');
 
-	// The board says the same under stage 2, and that stage 2 never goes below a floor.
+	// The board says the same under stage 3 (EWR met), and that it never goes below a floor.
 	const board = panel.getByRole('region', { name: 'Share the pain' });
 	await expect(board.getByText(note)).toBeVisible();
 	await expect(board).toContainText("or below a hydrological unit's basic-needs floor");

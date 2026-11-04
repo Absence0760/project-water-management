@@ -1,14 +1,18 @@
 <!--
 	The impact report's licence-impact board (issue #53 R7, docs/ui.md
 	§ Report): one column per water-year class of the baseline's natural flow,
-	two rows, the annual waterfall and the months below the Reserve (baseline
-	vs this run), then the verdict in words. The verdict comes from the
-	months, never from the annual totals. No verdict colour: it reports data.
-	View model: ./licenceImpact.ts.
+	two rows, the annual waterfall (drawn as floating bars, LicenceWaterfall,
+	beside its list) and the months below the Reserve (baseline vs this run),
+	then the verdict in words with a mark for its direction. A summary of what
+	is compared leads it (the runs, the proposed use, the years, the
+	requirement). The verdict comes from the months, never from the annual
+	totals, so there is no EWR line on the waterfall. No verdict colour: it
+	reports data. View model: ./licenceImpact.ts.
 -->
 <script lang="ts">
 	import type { BoardView } from './licenceImpact';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import LicenceWaterfall from './LicenceWaterfall.svelte';
 
 	let { view }: { view: BoardView } = $props();
 	const METHOD = { terciles: 'terciles', quintiles: 'quintiles' } as const;
@@ -24,6 +28,14 @@
 			column sets the baseline {view.background} beside {view.application} over the same years. The verdict is from the months below the requirement, not
 			from the annual totals.
 		</p>
+		<table class="data summary" data-testid="board-summary">
+			<caption class="visually-hidden">What the board compares</caption>
+			<tbody>
+				{#each view.summary as r (r.label)}
+					<tr><th scope="row">{r.label}</th><td>{r.value}</td></tr>
+				{/each}
+			</tbody>
+		</table>
 		<div class="table-wrap">
 			<table class="data board-table">
 				<caption class="visually-hidden">Impact by year class: the annual waterfall, the requirement not met and the verdict, baseline and {view.application}</caption>
@@ -32,7 +44,8 @@
 						<th scope="col"><span class="visually-hidden">Measure</span></th>
 						{#each view.columns as c (c.id)}
 							<th scope="col" data-testid="board-class-{c.id}">
-								{c.label}
+								{c.label} years
+								{#if c.share}<span class="sub">{c.share}</span>{/if}
 								<span class="sub">{c.bounds} · {c.nYears} {c.nYears === 1 ? 'year' : 'years'}</span>
 							</th>
 						{/each}
@@ -44,6 +57,7 @@
 						{#each view.columns as c (c.id)}
 							<td data-testid="board-waterfall-{c.id}">
 								{#if c.waterfall}
+									<LicenceWaterfall steps={c.waterfall} />
 									<dl class="steps">
 										{#each c.waterfall as s (s.id)}
 											<div class="step step-{s.id}"><dt>{s.label}</dt><dd class="num">{s.text}</dd></div>
@@ -76,7 +90,7 @@
 						<th scope="row">Verdict</th>
 						{#each view.columns as c (c.id)}
 							<td data-testid="board-verdict-{c.id}" data-verdict={c.verdict}>
-								<strong>{c.verdictLabel}</strong>
+								<strong><span class="mark" aria-hidden="true">{c.mark}</span> {c.verdictLabel}</strong>
 								<span class="text">{c.text}</span>
 							</td>
 						{/each}
@@ -153,5 +167,24 @@
 	}
 	h3 {
 		margin: 0 0 0.5rem;
+	}
+	.summary {
+		width: auto;
+		max-width: 48rem;
+		margin: 0 0 0.75rem;
+	}
+	.summary th {
+		font-weight: 500;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	@media (max-width: 640px) {
+		.summary th {
+			white-space: normal;
+		}
+	}
+	.mark {
+		display: inline-block;
+		min-width: 1em;
 	}
 </style>

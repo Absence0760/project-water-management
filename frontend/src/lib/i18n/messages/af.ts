@@ -1615,6 +1615,8 @@ export const af: Catalogue = {
 	'687a8dd0': '’n Nuwe gewas, “{name}”',
 	// A new transfer from {from} out of the catchment
 	'5e2256ee': '’n Nuwe oordrag van {from} uit die opvanggebied',
+	// A new transfer from {from} to {to}, and some of it out of the catchment
+	'0c69a78d': '’n Nuwe oordrag van {from} na {to}, en ’n deel daarvan uit die opvanggebied',
 	// A new transfer from {from} to {to}
 	'9c9dcc15': '’n Nuwe oordrag van {from} na {to}',
 	// A transfer changed: {field}

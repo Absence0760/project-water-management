@@ -14,8 +14,11 @@
 // top-up's room counts its destination's fixed release, MIN(amount, outlet) (Q26). A destination with a river abstraction (§2.7j) is sized to its dam
 // side, which no series publishes, so the sources feeding one by demand are
 // left out, as are the sources with a diversion curve reading the natural flow (engine ≥ 1.113.0), which no
-// series publishes. Synthetic values only.
+// series publishes. A rule split between destinations (engine ≥ 1.114.0) is replayed as its pieces, and a
+// split sized to the need as each piece asking its share of the sum of its destinations' needs. Synthetic
+// values only.
 import { isRiverOfftake } from '../network/offtake';
+import { expandTransferSplits, type TransferPiece } from '../network/transferSplits';
 import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput, ModelOutput, NetworkNode, Transfer } from '../project';
@@ -27,14 +30,27 @@ const opt = (out: ModelOutput, id: string, key: string) => out.series.find((x) =
 /** m³/day in one of a diversion curve's flow units (docs/model.md §2.6a). */
 const PER: Record<string, number> = { 'L/s': 86.4, 'm3/s': 86_400, 'm3/day': 1, 'Ml/day': 1_000 };
 
-/** What a rule sized by a diversion curve asks when the river at the off-take is U0 (§2.6a); 0 for an incomplete curve. */
-function curveAsk(tr: Transfer, U0: number, cap: number): number {
-	const a = tr.diversionCoefficient;
-	const b = tr.diversionExponent;
-	const m = tr.diversionMaxPct ?? 1;
+const completeCurve = (a: unknown, b: unknown, m: unknown) => typeof a === 'number' && a > 0 && Number.isFinite(a) && typeof b === 'number' && Number.isFinite(b) && typeof m === 'number' && m > 0 && m <= 1;
+
+/**
+ * What a rule sized by a diversion curve asks in calendar month `month` when the river at the off-take is U0
+ * (§2.6a); 0 for an incomplete curve. By month (engine ≥ 1.114.0): the month's own curve, or its capacity in a
+ * month without one; one incomplete month and the rule asks nothing.
+ */
+function curveAsk(tr: Transfer, U0: number, cap: number, month: number): number {
 	const per = tr.diversionFlowUnit ? PER[tr.diversionFlowUnit] : undefined;
-	if (!(typeof a === 'number' && a > 0 && Number.isFinite(a)) || !(typeof b === 'number' && Number.isFinite(b)) || !(m > 0 && m <= 1) || per === undefined || !(U0 > 0)) return 0;
-	const s = Math.min(m, (a * Math.pow(U0 / per, b)) / 100);
+	if (per === undefined) return 0;
+	let a = tr.diversionCoefficient;
+	let b = tr.diversionExponent;
+	let m = tr.diversionMaxPct ?? 1;
+	if (Array.isArray(tr.monthlyDiversion)) {
+		if (!tr.monthlyDiversion.some((c) => c) || tr.monthlyDiversion.some((c) => c && !completeCurve(c.coefficient, c.exponent, c.maxPct ?? 1))) return 0;
+		const c = tr.monthlyDiversion[(month + 2) % 12];
+		if (!c) return cap;
+		[a, b, m] = [c.coefficient, c.exponent, c.maxPct ?? 1];
+	}
+	if (!completeCurve(a, b, m) || !(U0 > 0)) return 0;
+	const s = Math.min(m, ((a as number) * Math.pow(U0 / per, b as number)) / 100);
 	return Math.min(cap, (s > 0 ? s : 0) * U0);
 }
 
@@ -90,14 +106,17 @@ function share(rules: { id: string; priority: number; cap: number; keep: number;
 }
 
 /** Rule-days where a source's pass-inflow target set a rule's keep, and where a top-up's room counted a fixed release floor. */
-const reach = { target: 0, floor: 0, curve: 0 };
+const reach = { target: 0, floor: 0, curve: 0, split: 0 };
 
 function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: string | null } {
 	const nodes = new Map(input.model.nodes.map((n) => [n.id, n]));
 	const priorityOf = (tr: Transfer) => (Number.isFinite(tr.priority) ? tr.priority : 0);
+	// A rule split between destinations (engine ≥ 1.114.0, §2.6) runs as one rule per destination, each with its
+	// share of the capacity and of a curve's share: its pieces, with their own volume series.
+	const transfers = expandTransferSplits(input.model.transfers) as (Transfer & Partial<TransferPiece>)[];
 	// The rules the run planned and that can take water: those with a volume series.
-	const rules = input.model.transfers.filter((tr) => tr.enabled && tr.source === 'river' && opt(out, tr.fromNodeId, `transfer_rule@${tr.id}`));
-	const planned = input.model.transfers.filter((tr) => tr.enabled && tr.source === 'river');
+	const rules = transfers.filter((tr) => tr.enabled && tr.source === 'river' && opt(out, tr.fromNodeId, `transfer_rule@${tr.id}`));
+	const planned = transfers.filter((tr) => tr.enabled && tr.source === 'river');
 	const onRiver = (id: string) => {
 		const n = nodes.get(id)!;
 		return n.cropWaterSource === 'river' || (input.model.demandObjects ?? []).some((o) => o.nodeId === id && o.enabled && o.waterSource === 'river');
@@ -126,12 +145,13 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 			const zs = Zs ? Zs[t]! : 0;
 			// A top-up destination that both sends and receives by dam rules today: the run's `transfer` column is
 			// the net, so the receipts its room counts (engine ≥ 1.69.0, deep.regressions) can't be read back.
-			const sendsToo = (id: string) => input.model.transfers.some((x) => x.enabled && x.fromNodeId === id && !isRiverOfftake(x));
+			const sendsToo = (id: string) => transfers.some((x) => x.enabled && x.fromNodeId === id && !isRiverOfftake(x));
 			const dubious = mine.some((tr) => tr.sizing === 'demand' && tr.topUpDam && sendsToo(tr.toNodeId!) && (opt(out, tr.toNodeId!, 'transfer')?.[t] ?? 0) !== 0);
 			if (dubious) continue;
 			const spec = mine.map((tr) => {
 				const cap = capOf(tr, m);
 				let limit = cap;
+				let needShare = 0;
 				if (tr.sizing === 'demand') {
 					// need × cap ÷ Σ cap of the demand-sized rules into the destination today (every source's).
 					const into = planned.filter((x) => x.toNodeId === tr.toNodeId && x.sizing === 'demand' && nodes.get(x.fromNodeId)?.kind === 'farm');
@@ -152,17 +172,28 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 						if (floor > 0) reach.floor++;
 						need += Math.max(0, capNow - (q + g('rain_on_dam') + Math.max(0, g('transfer')) - g('dam_evaporation') - g('dam_seepage')) + floor);
 					}
-					limit = cap > 0 ? Math.min(cap, (need * cap) / capInto / (1 - lossOf(tr))) : 0;
+					needShare = cap > 0 ? (need * cap) / capInto : 0;
+					limit = cap > 0 ? Math.min(cap, needShare / (1 - lossOf(tr))) : 0;
 				} else if (tr.sizing === 'diversionCurve') {
 					// A share of the river (engine ≥ 1.113.0, §2.6a): MIN(capacity, s × U₀), s = MIN(m, a · x^b ÷ 100), x = U₀ in
 					// the curve's unit; an incomplete curve asks nothing.
-					limit = curveAsk(tr, U0, cap);
+					limit = curveAsk(tr, U0, cap, m);
 					if (limit > 0) reach.curve++;
 				}
 				const keep = Math.max(zs, target, handsOf(tr), tr.handsOffEwr ? Z[t]! : 0);
 				if (target > 0 && target === keep && cap > 0) reach.target++;
-				return { id: tr.id, priority: priorityOf(tr), cap, keep, limit };
+				return { id: tr.id, priority: priorityOf(tr), cap, keep, limit, needShare, tr };
 			});
+			// A split sized to its destinations' need (engine ≥ 1.114.0): each piece asks its share of the sum of its
+			// destinations' needs, so the split holds.
+			for (const x of spec) {
+				if (x.tr.sizing !== 'demand' || !x.tr.splitOf || !(x.cap > 0)) continue;
+				const sum = planned
+					.filter((y) => y.splitOf === x.tr.splitOf)
+					.reduce((acc, y) => acc + (spec.find((z) => z.id === y.id)?.needShare ?? 0), 0);
+				x.limit = Math.min(x.cap, (x.tr.splitPct! * sum) / (1 - lossOf(x.tr)));
+				reach.split++;
+			}
 			const ref = share(spec, U0);
 			for (const tr of mine) {
 				const v = opt(out, src, `transfer_rule@${tr.id}`)![t]!;
@@ -203,5 +234,7 @@ describe('deep: the off-take bands on the engine’s own random networks (§2.6a
 		expect(reach.floor).toBeGreaterThan(30);
 		// …and engine 1.113.0's diversion curves asking a share of the river.
 		expect(reach.curve, String(reach.curve)).toBeGreaterThan(500);
+		// …and engine 1.114.0's splits sized to their destinations' need.
+		expect(reach.split, String(reach.split)).toBeGreaterThan(5_000);
 	});
 });

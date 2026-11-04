@@ -1,5 +1,5 @@
 // The board's markup (issue #53 R3), rendered to HTML with Svelte's server
-// renderer: the two stages, the equal share in the intro, the footnote, a no-demand farm and the other
+// renderer: the three stages and their cards, the equal share in the intro, the legend, the footnote, a no-demand farm and the other
 // water users' priority / non-priority rows. The browser behaviour is pinned by
 // e2e/tests/share-the-pain.spec.ts.
 import { render } from 'svelte/server';
@@ -53,8 +53,8 @@ const c: CurtailmentSummary = {
 	days: 61,
 	equitableFraction: 0.75,
 	farms: [
-		farm({ nodeId: 'a', name: 'Upper', demandM3Day: 100, suppliedM3Day: 100, targetM3Day: 75, volumeLeftM3Day: 60 }),
-		farm({ nodeId: 'b', name: 'Lower', demandM3Day: 100, suppliedM3Day: 50, targetM3Day: 75, volumeLeftM3Day: 75 }),
+		farm({ nodeId: 'a', name: 'Upper', demandM3Day: 100, suppliedM3Day: 100, targetM3Day: 75, reduceGainM3Day: -25, ewrShortfallM3Day: -20, totalChangeM3Day: -40, volumeLeftM3Day: 60 }),
+		farm({ nodeId: 'b', name: 'Lower', demandM3Day: 100, suppliedM3Day: 50, targetM3Day: 75, reduceGainM3Day: 25, totalChangeM3Day: 25, volumeLeftM3Day: 75 }),
 		farm({
 			nodeId: 'z',
 			name: 'Dam only',
@@ -80,8 +80,9 @@ const c: CurtailmentSummary = {
 		targetM3Day: 150,
 		reduceGainM3Day: 0,
 		reduceGainLs: 0,
-		ewrShortfallM3Day: -12,
-		totalChangeM3Day: 0,
+		ewrShortfallM3Day: -32,
+		ewrChargeStorageM3Day: -12,
+		totalChangeM3Day: -15,
 		volumeLeftM3Day: 135
 	}
 };
@@ -106,13 +107,19 @@ function row(html: string, name: string): string {
 describe('ShareThePainBoard', () => {
 	const { body } = render(ShareThePainBoard, { props: { curtailment: c, names: { a: 'Upper (renamed)' }, period: 'Project window' } });
 
-	it('shows the two stages with the farm totals, and no equitable share stage', () => {
+	it('cards the three stages over every group, with the farm totals', () => {
 		const stages = text(body.match(/<ol[\s\S]*?<\/ol>/)![0]);
-		expect(stages).toBe(
-			"1 Today 75% of hydrological unit demand supplied (150 of 200 m³/day) 2 EWR met 68% of hydrological unit demand left once each hydrological unit's EWR charge is met (135 m³/day)"
-		);
-		expect(body).not.toContain('stage-share');
-		expect(text(body)).not.toContain('Equitable share');
+		// Short today: 50 of the farms' 200 plus 220 of the users' 900 (270 of 1 100).
+		expect(stages).toContain('1 Today Short of demand 270 m³/day 25% of all groups\' demand. Hydrological units got 75% of their demand.');
+		expect(stages).toContain('2 Equitable share Moved between hydrological units 25 m³/day Every hydrological unit at 75% of its demand');
+		expect(stages).toContain('(net 0 m³/day)');
+		// Beyond the share: 15 from the farms (150 → 135) and 30 from the mill (80 → 50); 12 more met by storing less.
+		expect(stages).toContain('3 EWR met Further cut for the EWR 45 m³/day 4% of all groups\' demand. Hydrological units keep 68% of their demand. A further 12 m³/day of the charge is met by storing less / passing inflow.');
+	});
+
+	it('keys the supply bands and the arrows in words', () => {
+		const key = text(body.match(/<ul[^>]*data-testid="share-legend"[\s\S]*?<\/ul>/)![0]);
+		expect(key).toBe("95 % of demand or more 70–95 % Under 70 % ↓ − reduce supply ↑ + below the equitable share Bars: share of the group's own demand");
 	});
 
 	it('says the equal share once, in the intro', () => {
@@ -135,25 +142,31 @@ describe('ShareThePainBoard', () => {
 		expect(text(b)).not.toContain('the same —');
 	});
 
-	it('shows each farm at the two stages, a renamed farm by its current name', () => {
-		expect(row(body, 'Group')).toBe('Group Demand m³/day 1. Today supplied, % of demand 2. EWR met left after the EWR charge, % of demand');
-		expect(row(body, 'Upper (renamed)')).toBe('Upper (renamed) 100 100% 100 m³/day 60% 60 m³/day');
-		expect(row(body, 'Lower')).toBe('Lower 100 50% 50 m³/day 75% 75 m³/day');
-		expect(row(body, 'All hydrological units')).toBe('All hydrological units 200 75% 150 m³/day 68% 135 m³/day');
+	it('shows each farm at the three stages, a renamed farm by its current name', () => {
+		expect(row(body, 'Group')).toBe('Group Demand m³/day 1. Today 2. Equitable share (hydrological units, ex EWR) 3. EWR met');
+		expect(row(body, 'Supplied')).toBe(
+			'Supplied % of demand, m³/day Equitable share volume m³/day Change from today m³/day Share % of demand EWR charge m³/day charged Total change from today, m³/day Left % of demand, m³/day'
+		);
+		expect(row(body, 'Upper (renamed)')).toBe('Upper (renamed) 100 100% 100 m³/day 75 ↓ −25 75% 20 ↓ −40 60% 60 m³/day');
+		expect(row(body, 'Lower')).toBe('Lower 100 50% 50 m³/day 75 ↑ +25 75% 0 ↑ +25 75% 75 m³/day');
+		expect(row(body, 'All hydrological units')).toBe('All hydrological units 200 75% 150 m³/day 150 0 75% 32 ↓ −15 68% 135 m³/day');
+		// Each % carries its supply band, beside the % in words.
+		expect(body).toMatch(/data-band="met"[\s\S]*?100%/);
+		expect(body).toMatch(/class="fill low\b/);
 	});
 
 	it('shows a farm with no demand as no demand, with its charge as store less, never a negative demand', () => {
 		const r = row(body, 'Dam only');
-		expect(r).toBe('Dam only 0 no demand 0 m³/day no demand 0 m³/day store less / pass inflow 12 m³/day');
-		// No negative figure anywhere (dates aside).
-		expect(text(body)).not.toMatch(/(^|\s)[-−]\d/);
+		expect(r).toBe('Dam only 0 no demand 0 m³/day 0 0 no demand 12 0 no demand 0 m³/day store less / pass inflow 12 m³/day');
+		// No negative figure but a signed change (dates aside): never a negative demand, supply or volume left.
+		expect(text(body).replace(/[↓↑] [−+][\d\u202f.]+/g, '')).not.toMatch(/(^|\s)[-−]\d/);
 	});
 
 	it('lists the other water users on their own rows, priority or non-priority, outside the share', () => {
 		expect(text(body)).toContain('Other water users (outside the equitable share)');
-		expect(row(body, 'Town')).toBe('Town priority, not curtailed 800 75% 600 m³/day 75% 600 m³/day not curtailed: its EWR charge of 50 m³/day stands');
-		expect(row(body, 'Mill')).toBe('Mill non-priority, curtailed 100 80% 80 m³/day 50% 50 m³/day');
-		expect(row(body, 'All other users')).toBe('All other users 900 76% 680 m³/day 72% 650 m³/day');
+		expect(row(body, 'Town')).toBe('Town priority, not curtailed 800 75% 600 m³/day outside the share 50 0 75% 600 m³/day not curtailed: its EWR charge of 50 m³/day stands');
+		expect(row(body, 'Mill')).toBe('Mill non-priority, curtailed 100 80% 80 m³/day outside the share 20 ↓ −30 50% 50 m³/day');
+		expect(row(body, 'All other users')).toBe('All other users 900 76% 680 m³/day outside the share 70 ↓ −30 72% 650 m³/day');
 	});
 
 	it('carries the fairness-benchmark footnote', () => {

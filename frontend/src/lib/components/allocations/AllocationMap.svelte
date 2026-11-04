@@ -15,7 +15,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { appIsDark, watchAppTheme } from '#lib/components/map/appTheme.js';
 	import { basemapLayerIds, basemapStyle, labelLayers, type Style } from '#lib/components/map/mapStyle.js';
-	import { bandColours, HATCH_IMAGE, hatchPixels, useBounds, useLayers, useMapData, useSentence, USE_SOURCE_ID, type UseShading } from './useMap';
+	import { bandColours, HATCH_IMAGE, hatchPixels, useBounds, useLayers, useMapData, useSentence, USE_SOURCE_ID, type MapMeasure, type UseShading } from './useMap';
 
 	let {
 		shading,
@@ -23,6 +23,7 @@
 		glyphs = null,
 		picked = null,
 		period,
+		measure = 'use',
 		onpick
 	}: {
 		shading: UseShading;
@@ -34,6 +35,8 @@
 		picked?: string | null;
 		/** The period in words ("the mean of 3 whole water years"), for each label's accessible name. */
 		period: string;
+		/** What the shading reads (water use, irrigated area or dam capacity), for each label's accessible name. */
+		measure?: MapMeasure;
 		onpick: (nodeId: string) => void;
 	} = $props();
 
@@ -77,7 +80,7 @@
 		for (const u of units) {
 			if (!u.at) continue;
 			const c = u.band ? colours[u.band] : colours.none;
-			const name = u.notInRun ? `${u.name}: not in this run (added since it ran)` : useSentence(u.name, u.use, period);
+			const name = u.notInRun ? `${u.name}: not in this run (added since it ran)` : useSentence(u.name, u.use, period, measure);
 			const key = `${u.label}|${name}|${u.at.join(',')}|${c.fill}|${c.text}|${u.band}`;
 			const had = markers.get(u.nodeId);
 			if (had && had.key === key) {
@@ -176,11 +179,12 @@
 		};
 	});
 
-	// A new source, period or run: new shading. Reframe only when the polygons themselves change.
+	// A new measure, source, period or run: new shading. Reframe only when the polygons themselves change.
 	let framed = '';
 	$effect(() => {
 		void shading;
 		void period;
+		void measure;
 		void status;
 		untrack(syncData);
 		const b = useBounds(shading);

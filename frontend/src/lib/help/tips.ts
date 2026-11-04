@@ -1064,6 +1064,22 @@ export const TIPS: HelpTipText[] = [
 		fields: ['transfer.diversionCoefficient', 'transfer.diversionExponent', 'transfer.diversionMaxPct', 'transfer.diversionFlowUnit', 'transfer.diversionFlowBasis']
 	},
 	{
+		id: 'transfer-takes-by-month',
+		term: 'How much a transfer takes',
+		short: 'Each month up to a maximum rate, or a formula: a × x^b % of the river, at most its largest share and the rate. Needs a river off-take.',
+		units: 'm³/s per month; a, b and largest share % per formula month',
+		category: 'transfers',
+		fields: ['transfer.monthlyDiversion']
+	},
+	{
+		id: 'transfer-split',
+		term: 'Split between destinations',
+		short: 'What a transfer delivers, after its losses, shared between one to five units by %, adding up to 100 %. One unit at 100 % is the usual.',
+		units: '% of what arrives, per destination',
+		category: 'transfers',
+		fields: ['transfer.destinations']
+	},
+	{
 		id: 'transfer-min-storage',
 		term: 'Transfer minimum storage',
 		short: 'The source dam is not drawn below this fraction of its capacity by this transfer, nor below the dam’s own minimum operating level.',
@@ -1167,8 +1183,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'rain-stations',
-		term: 'A unit’s rainfall station',
-		short: 'A unit runs on its station’s rain × unit MAP ÷ station MAP; on the station’s gaps its CHIRPS, corrected against a station.',
+		term: 'A unit’s driver rainfall',
+		short: 'A station’s rain × unit MAP ÷ station MAP, or the unit’s own CHIRPS, bias-corrected or raw, levelled to its MAP; not set = as before.',
 		units: 'mm/day',
 		category: 'flow',
 		fields: ['settings.rainStations']
@@ -2216,6 +2232,13 @@ export const TIPS: HelpTipText[] = [
 		id: 'outcome-matrix',
 		term: 'Outcome matrix',
 		short: 'For each demand level and water-year class, how the river fared in those years of the record: a historical tally, not a forecast.',
+		category: 'results'
+	},
+	{
+		id: 'irrigation-support',
+		term: 'Irrigation the catchment supports',
+		short: 'Per demand level, the natural water in a year below which the river’s requirement started to fail: the wettest year not met.',
+		units: 'million m³ a year',
 		category: 'results'
 	},
 	{

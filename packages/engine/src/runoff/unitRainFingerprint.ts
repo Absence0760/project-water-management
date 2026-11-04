@@ -1,7 +1,7 @@
 // What a fit records of the per-unit rain (engine ≥ 1.78.0, docs/model.md
 // §2.4h, §2.10b), apart from ./unitRain.ts so the fit-provenance code the
 // Settings forms load doesn't pull in the runoff model (issue #9).
-import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, resolveUnitRain, stationSeriesKey, unitRainSeriesKey, type RainStationSummary, type UnitRainRule, type UnitRainSettings, type UnitRainSummary, type UnitChirpsLevel, type UnitRainUnit } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, resolveUnitRain, stationSeriesKey, unitRainSeriesKey, type RainStationSummary, type UnitRainRule, type UnitRainSettings, type UnitRainSummary, type UnitChirpsCorrection, type UnitChirpsLevel, type UnitRainUnit } from '../project';
 import type { UnitRainRecipe } from './unitRain';
 import { patchChainOfForcing } from './stationFingerprint';
 
@@ -10,7 +10,7 @@ const chirpsLevel = (c: UnitChirpsLevel | null): { chirpsSource: UnitChirpsLevel
 	c
 		? {
 				chirpsSource: c.source,
-				chirpsFactor: c.source === 'map' ? c.factor : c.source === 'reference' ? (c.kUnit?.factor ?? null) : null,
+				chirpsFactor: c.source === 'map' ? c.factor : c.source === 'reference' || c.source === 'bias' ? (c.kUnit?.factor ?? null) : null,
 				// The reference's monthly factors (engine ≥ 1.80.0), only on such a unit, so a fingerprint without them is as before.
 				...(c.source === 'reference' ? { chirpsFactors: [...c.factors] } : {})
 			}
@@ -57,6 +57,8 @@ export interface UnitRainFingerprint {
 		stationFit?: 'adjusted';
 		/** Rule 'station': its patching priority (stationFingerprint.ts patchChainOfSetting's form, engine ≥ 1.105.0); compared only when both sides have it. */
 		stationPatch?: string[];
+		/** Its CHIRPS driver as it ran (engine ≥ 1.114.0, settings.unitRain.chirpsUnits); absent = none, so a fit from before reads as none. */
+		chirpsChoice?: UnitChirpsCorrection;
 	}[];
 }
 
@@ -99,6 +101,7 @@ export function unitRainFingerprint(raw: UnitRainSettings | null | undefined, re
 			gaugeMapFactor: r.gaugeMapFactor,
 			...chirpsLevel(r.chirps),
 			...gaugeChecked(r.rule),
+			...(r.chirpsChoice ? { chirpsChoice: r.chirpsChoice } : {}),
 			...(r.station
 				? {
 						stationCorrectAgainst: r.station.correctAgainst,
@@ -131,6 +134,7 @@ export function unitRainFingerprintOfSummary(s: UnitRainSummary | null | undefin
 			gaugeMapFactor: x.gaugeMapFactor,
 			...chirpsLevel(x.chirps),
 			...gaugeChecked(x.rule),
+			...(x.chirpsChoice ? { chirpsChoice: x.chirpsChoice } : {}),
 			...stationOfSummary(x.nodeId, stations)
 		}))
 	};
@@ -179,7 +183,9 @@ export function unitRainFingerprintChanged(a: UnitRainFingerprint | null | undef
 			(x.stationCorrectAgainst !== y.stationCorrectAgainst || !x.stationFactors !== !y.stationFactors || (!!x.stationFactors && months(x.stationFactors, y.stationFactors ?? undefined)));
 		// The pairing rule's marker on one side only (a fit from before engine 1.105.0, issue #612), or another patching priority.
 		const fitRule = x.stationFit !== y.stationFit || (!!x.stationPatch && !!y.stationPatch && (x.stationPatch.length !== y.stationPatch.length || x.stationPatch.some((k, j) => k !== y.stationPatch![j])));
-		return x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps || checks || pairing || fitRule;
+		// Its CHIRPS driver (engine ≥ 1.114.0): on one side only, or another correction.
+		const choice = (x.chirpsChoice ?? null) !== (y.chirpsChoice ?? null);
+		return choice || x.nodeId !== y.nodeId || x.rule !== y.rule || x.rainKey !== y.rainKey || x.factorSource !== y.factorSource || !near(x.factor, y.factor) || !near(x.gaugeMapFactor, y.gaugeMapFactor) || chirps || checks || pairing || fitRule;
 	});
 }
 
@@ -212,6 +218,7 @@ export function unitRainFingerprintError(raw: unknown): string | null {
 		if (x.stationFit !== undefined && x.stationFit !== 'adjusted') return 'a unit has a bad pairing rule marker';
 		if (x.stationPatch !== undefined && !(Array.isArray(x.stationPatch) && x.stationPatch.length <= 8 && x.stationPatch.every((k) => typeof k === 'string' && k.length > 0 && k.length <= 210)))
 			return 'a unit has a bad patching priority';
+		if (x.chirpsChoice !== undefined && x.chirpsChoice !== 'bias' && x.chirpsChoice !== 'raw') return 'a unit has an unknown CHIRPS driver';
 	}
 	return null;
 }
