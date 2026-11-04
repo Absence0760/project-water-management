@@ -33,6 +33,7 @@ export {
 } from './stationFingerprint';
 export { stationAreaRain, stationPatchChoices, type StationAreaRain, type StationRainDaySource } from './stationAreaRain';
 export { unitAreaRain, type UnitAreaRain, type UnitRainDaySource } from './unitAreaRain';
+export { unitChirpsChoicePreview, type UnitChirpsPreview } from './unitChirpsPreview';
 export {
 	catchmentMapOf,
 	resolvePatch,

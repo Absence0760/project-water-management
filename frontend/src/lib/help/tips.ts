@@ -1183,8 +1183,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'rain-stations',
-		term: 'A unit’s rainfall station',
-		short: 'A unit runs on its station’s rain × unit MAP ÷ station MAP; on the station’s gaps its CHIRPS, corrected against a station.',
+		term: 'A unit’s driver rainfall',
+		short: 'A station’s rain × unit MAP ÷ station MAP, or the unit’s own CHIRPS, bias-corrected or raw, levelled to its MAP; not set = as before.',
 		units: 'mm/day',
 		category: 'flow',
 		fields: ['settings.rainStations']

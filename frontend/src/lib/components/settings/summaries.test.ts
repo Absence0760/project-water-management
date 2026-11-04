@@ -78,6 +78,10 @@ describe('settingsSummaries', () => {
 			expect(settingsSummaries(base({ unitRain }))['set-share']).toBe('Per unit · no unit on a rainfall station · EWR by each unit’s natural MAR');
 		const units = { a: { stationId: 's' }, b: { stationId: 's' } };
 		expect(settingsSummaries(base({ rainStations: { units } }))['set-share']).toBe('Per unit · 2 units on a rainfall station · EWR by each unit’s natural MAR');
+		// CHIRPS as a unit's driver (engine ≥ 1.114.0), only when set; a unit with a station runs on the station.
+		expect(settingsSummaries(base({ rainStations: { units }, unitRain: { mode: 'perUnit', chirpsUnits: { c: { correction: 'raw' }, [Object.keys(units)[0]!]: { correction: 'bias' } } } }))['set-share']).toBe(
+			'Per unit · 2 units on a rainfall station · 1 unit on its own CHIRPS · EWR by each unit’s natural MAR'
+		);
 		expect(settingsSummaries(base({ rainStations: { catchment: { stationId: 's' }, units } }))['set-share']).toBe(
 			'Per unit · catchment rain from a station · 2 units on a rainfall station · EWR by each unit’s natural MAR'
 		);

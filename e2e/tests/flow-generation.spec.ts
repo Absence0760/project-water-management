@@ -1,9 +1,13 @@
 // Model settings → Flow generation (issue #553 round 3, issue #658; docs/ui.md § Model settings; docs/model.md §2.4h,
 // §2.4i, §2.5). On the sample model with two invented rainfall stations beside its catchment rain series:
 // - The panel leads Model settings with Per unit, the only method (issue #658: the Fragmentation / Per unit radio is
-//   gone): a row per land unit, its station (stations only, no satellite option), Scale to unit MAP with the ratio it
-//   gives, and the station correcting its CHIRPS; and each station in use once, with its MAP. Ticking units gives them
-//   one station at once. Saved, the settings hold the rows as settings.rainStations.units, and a reload shows them again.
+//   gone): a row per land unit, its driver rainfall (not set, CHIRPS bias-corrected or raw, or a station), Scale to unit
+//   MAP with the ratio it gives, and the station correcting its CHIRPS; and each station in use once, with its MAP.
+//   Ticking units gives them one driver at once. Saved, the settings hold the rows as settings.rainStations.units, and a
+//   reload shows them again.
+// - CHIRPS as a unit's driver (engine ≥ 1.114.0, §2.4h): each choice picked and saved into settings.unitRain.chirpsUnits,
+//   the unit's MAP, its CHIRPS mean annual rain and the factor beside it, the line when bias-corrected runs raw (no point
+//   record) or a unit has no CHIRPS of its own, Run readiness's note, and the choices back after a reload.
 // - A fit made under Fragmentation (an engine before 1.109.0, its forcing recording no per-unit rain) reads
 //   "Parameters not fitted for this method" in the panel, linking to Fit the parameters on Calibration, and in the
 //   fit record there, until it is refitted.
@@ -65,14 +69,13 @@ test('Flow generation is Per unit, with no choice, and assigns each unit a rainf
 	await expect(panel(page).getByRole('heading', { name: 'Flow share and the EWR split' })).toBeVisible();
 	await expect(panel(page).getByTestId('flowgen-row')).toHaveCount(2);
 	await expect(panel(page).getByTestId('flowgen-assigned')).toHaveText('0 of 2 units with land have a rainfall station.');
-	const upperStation = row(page, 'Upper farm').getByLabel('Station for Upper farm');
-	// Stations only (and none): satellite rain is a gap fill, never a unit's station.
+	const upperStation = row(page, 'Upper farm').getByLabel('Driver rainfall for Upper farm');
+	// Not set, the unit's own CHIRPS bias-corrected or raw (engine ≥ 1.114.0), then the stations.
 	const options = await upperStation.locator('option').allTextContents();
-	expect(options[0]).toBe('No station: as before stations');
+	expect(options.slice(0, 3)).toEqual(['Not set: as before', 'CHIRPS, bias-corrected', 'CHIRPS, raw (levelled to the unit’s MAP)']);
 	expect(options).toEqual(expect.arrayContaining(['Ridge station', 'Vlei station']));
-	// The catchment rain series is a station too; three stations in all, and no satellite option.
-	expect(options).toHaveLength(4);
-	expect(options.filter((o) => /chirps|satellite/i.test(o))).toEqual([]);
+	// The catchment rain series is a station too; three stations in all.
+	expect(options).toHaveLength(6);
 	await expect(row(page, 'Upper farm').getByTestId('flowgen-unit-map')).toHaveText('MAP: 900 mm (invented grid, 1991–2020)');
 
 	// One unit at a time: Ridge for Upper farm, × 900 ÷ 600.
@@ -83,10 +86,10 @@ test('Flow generation is Per unit, with no choice, and assigns each unit a rainf
 	await row(page, 'Lower farm').getByRole('checkbox', { name: 'Tick Lower farm' }).check();
 	const bulk = panel(page).getByTestId('flowgen-bulk');
 	await expect(bulk).toContainText('2 units ticked');
-	await bulk.getByLabel('Station for the ticked units').selectOption({ label: 'Vlei station' });
+	await bulk.getByLabel('Driver rainfall for the ticked units').selectOption({ label: 'Vlei station' });
 	await bulk.getByRole('button', { name: 'Assign to the ticked units' }).click();
 	await expect(upperStation).toHaveValue(vlei);
-	await expect(row(page, 'Lower farm').getByLabel('Station for Lower farm')).toHaveValue(vlei);
+	await expect(row(page, 'Lower farm').getByLabel('Driver rainfall for Lower farm')).toHaveValue(vlei);
 	await expect(row(page, 'Upper farm').getByTestId('flowgen-ratio')).toHaveText('× 1.8');
 	await expect(panel(page).getByTestId('flowgen-assigned')).toHaveText('2 of 2 units with land have a rainfall station.');
 	// Back to Ridge for Upper farm, corrected against Vlei; Lower farm on Vlei as recorded.
@@ -119,17 +122,75 @@ test('saved stations come back after a reload, and stack on a phone', async ({ p
 		rainStations: { units: { [upper.id]: { stationId: ridge, correctAgainst: vlei }, [lower.id]: { stationId: vlei, scaleToMap: false } } }
 	});
 	await openSettings(page, id);
-	const upperStation = row(page, 'Upper farm').getByLabel('Station for Upper farm');
+	const upperStation = row(page, 'Upper farm').getByLabel('Driver rainfall for Upper farm');
 	await expect(upperStation).toHaveValue(ridge);
 	await expect(row(page, 'Upper farm').getByLabel('Station correcting Upper farm’s CHIRPS')).toHaveValue(vlei);
 	await expect(row(page, 'Lower farm').getByRole('checkbox', { name: 'Scale to unit MAP: Lower farm' })).not.toBeChecked();
 
 	// On a phone the rows stack: nothing scrolls sideways.
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect(row(page, 'Upper farm').getByLabel('Station for Upper farm')).toBeVisible();
+	await expect(row(page, 'Upper farm').getByLabel('Driver rainfall for Upper farm')).toBeVisible();
 	await expectNoSidewaysScroll(page);
 	const box = panel(page).getByTestId('flowgen-rows').locator('xpath=..');
 	expect(await box.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
+
+test('CHIRPS as a unit’s driver: raw or bias-corrected, with its MAP, CHIRPS mean and factor, saved and back after a reload', async ({ page, owner }) => {
+	void owner;
+	const { id, upper, lower, ridge } = await seed(page.request, 'Flow generation CHIRPS');
+	// Upper farm's own CHIRPS, six whole calendar years (invented: 4 mm every fifth day); Lower farm has none.
+	const res = await page.request.put(`${API_URL}/projects/${id}/series`, {
+		data: { kind: 'rain_chirps_mm', name: 'CHIRPS Upper farm', unit: 'mm', startDate: '2015-01-01', values: Array.from({ length: 2192 }, (_, i) => (i % 5 === 0 ? 4 : 0)) }
+	});
+	expect(res.status(), await res.text()).toBe(200);
+	const chirpsId = ((await res.json()) as { id: string }).id;
+	expect((await page.request.patch(`${API_URL}/projects/${id}/series/${chirpsId}`, { data: { siteNodeId: upper.id } })).status()).toBe(200);
+	// Upper farm starts on Ridge, so picking CHIRPS takes its station away.
+	await updateSettings(page.request, id, { unitRain: { mode: 'perUnit' }, rainStations: { units: { [upper.id]: { stationId: ridge } } } });
+	await openSettings(page, id);
+	const upperDriver = row(page, 'Upper farm').getByLabel('Driver rainfall for Upper farm');
+	const lowerDriver = row(page, 'Lower farm').getByLabel('Driver rainfall for Lower farm');
+	await expect(upperDriver).toHaveValue(ridge);
+
+	// Raw: × its MAP ÷ its CHIRPS mean annual rain, shown beside the choice; a station's controls go.
+	await upperDriver.selectOption({ label: 'CHIRPS, raw (levelled to the unit’s MAP)' });
+	const level = row(page, 'Upper farm').getByTestId('flowgen-chirps-level');
+	await expect(level).toHaveText(/^MAP 900 mm ÷ its CHIRPS 29\d mm a year \(2015–2020\) = × 3\.\d+\.$/);
+	await expect(row(page, 'Upper farm').getByTestId('flowgen-chirps-fallback')).toHaveCount(0);
+	await expect(row(page, 'Upper farm').getByRole('checkbox', { name: 'Scale to unit MAP: Upper farm' })).toHaveCount(0);
+	await expect(upperDriver).toHaveAccessibleDescription(/MAP 900 mm ÷ its CHIRPS/);
+	// Bias-corrected, with no reference gauge and no catchment CHIRPS to correct it against: it runs raw, and says so.
+	await upperDriver.selectOption({ label: 'CHIRPS, bias-corrected' });
+	await expect(row(page, 'Upper farm').getByTestId('flowgen-chirps-fallback')).toHaveText(
+		'There is no point rainfall record to correct its CHIRPS against (no reference gauge, and no catchment CHIRPS bias factors), so it runs on raw CHIRPS, levelled to its MAP.'
+	);
+	await expect(level).toHaveText(/^MAP 900 mm ÷ its CHIRPS 29\d mm a year/);
+	// A unit with no CHIRPS of its own says it runs as Not set.
+	await lowerDriver.selectOption({ label: 'CHIRPS, raw (levelled to the unit’s MAP)' });
+	await expect(row(page, 'Lower farm').getByTestId('flowgen-chirps-fallback')).toHaveText(
+		'It has no CHIRPS series of its own, so it runs as Not set until it has one (Data → Data feeds → Rain for each unit).'
+	);
+	await expect(panel(page).getByTestId('flowgen-assigned')).toHaveText('0 of 2 units with land have a rainfall station, and 2 run on their own CHIRPS.');
+	await expectNoViolations(page, { include: '#set-share' });
+	await saveSettings(page);
+	await expect(page.getByTestId('summary-share')).toHaveText('Per unit · no unit on a rainfall station · 2 units on their own CHIRPS · EWR by each unit’s natural MAR');
+	const stored = (await storedSettings(page.request, id)) as { unitRain: { chirpsUnits?: unknown }; rainStations: unknown };
+	expect(stored.unitRain.chirpsUnits).toEqual({ [upper.id]: { correction: 'bias' }, [lower.id]: { correction: 'raw' } });
+	expect(stored.rainStations).toBeNull();
+
+	// Back after a reload; Not set takes the choice away.
+	await openSettings(page, id);
+	await expect(upperDriver).toHaveValue('chirps:bias');
+	await expect(lowerDriver).toHaveValue('chirps:raw');
+	// Run readiness names both units whose choice won't run as chosen.
+	await page.goto(`/projects/${id}?tab=runs`);
+	const note = page.getByTestId('run-chirps-driver');
+	await expect(note).toContainText('1 unit has CHIRPS as the driver rainfall but no CHIRPS series of its own, so it runs as Not set: Lower farm.');
+	await expect(note).toContainText('so raw CHIRPS is used, levelled to the unit’s MAP: Upper farm.');
+	await openSettings(page, id);
+	await lowerDriver.selectOption({ label: 'Not set: as before' });
+	await saveSettings(page);
+	expect(((await storedSettings(page.request, id)) as { unitRain: { chirpsUnits?: unknown } }).unitRain.chirpsUnits).toEqual({ [upper.id]: { correction: 'bias' } });
 });
 
 async function fitAndApply(page: Page) {

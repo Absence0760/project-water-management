@@ -6,17 +6,27 @@
 	the unit it stands in, settings.rainStations.sites). Satellite rain is never a unit's station: it only fills the
 	station's gaps. Each unit's gaps follow its patching priority (issue #612, settings.rainStations.units[id].patch):
 	an ordered list of pull-downs, other stations and CHIRPS, each station with how many of the main station's gaps
-	it fills or why it can't help (patchChoices.ts, loaded when a unit has a station). "No station" keeps the unit on the rule it ran on before stations (§2.4h), so a project from
-	before them runs as it did. Several units may share a station; ticking rows sets one station for all of them.
-	Bind the setting (null = none). Its own chunk (lazySections.ts): the Settings tab chunk sits at its ceiling.
+	it fills or why it can't help (patchChoices.ts, loaded when a unit has a station). The unit's Driver rainfall
+	(engine ≥ 1.114.0, §2.4h *CHIRPS as a unit's driver*) is a station, or its own CHIRPS bias-corrected or raw
+	(settings.unitRain.chirpsUnits, the second bound setting), never both; a CHIRPS driver shows the unit's MAP, its
+	CHIRPS mean annual rain and the factor (chirpsDriverPreview.ts, loaded when a unit has one), and says when it won't
+	run as chosen. "Not set" keeps the unit on the rule it ran on before stations (§2.4h), so a project from
+	before them runs as it did. Several units may share a station; ticking rows sets one driver for all of them.
+	Bind the settings (null = none). Its own chunk (lazySections.ts): the Settings tab chunk sits at its ceiling.
 -->
 <script lang="ts">
-	import type { RainStationSettings } from '@water-management/engine';
+	import { unitChirpsChoiceNotes, type RainStationSettings, type SeriesMeta, type UnitChirpsChoice, type UnitRainSettings } from '@water-management/engine';
 	import { fmtNum } from '#lib/format/number.js';
 	import { stationHref } from './unitRain';
 	import PatchChain from './PatchChain.svelte';
 	import {
 		assignmentLine,
+		CHIRPS_DRIVER,
+		chirpsDriverLine,
+		chirpsOfDriver,
+		DRIVER_LABEL,
+		withUnitsDriver,
+		type ChirpsDriverPreview,
 		CHIRPS_PATCH,
 		namesLine,
 		patchFromValues,
@@ -26,8 +36,6 @@
 		withStationSite,
 		withUnitCorrectAgainst,
 		withUnitScale,
-		withUnitStation,
-		withUnitsStation,
 		type PatchUsability,
 		type PatchValue,
 		type StationOption,
@@ -36,12 +44,21 @@
 
 	let {
 		value = $bindable(),
+		unitRain = $bindable(),
 		readonly = false,
 		nodes = [],
 		stations,
-		projectId
+		projectId,
+		rainSeries,
+		chirpsBiasCorrection
 	}: {
 		value: RainStationSettings | null | undefined;
+		/** settings.unitRain: its chirpsUnits holds each unit's CHIRPS driver (engine ≥ 1.114.0). */
+		unitRain?: UnitRainSettings | null | undefined;
+		/** The project's rain series (kind and site), for the lines saying a CHIRPS driver won't run as chosen; without it they wait for the preview. */
+		rainSeries?: readonly (Pick<SeriesMeta, 'kind'> & { siteNodeId?: string | null })[];
+		/** settings.chirpsBiasCorrection: `none` makes no §2.4b factors to correct a unit's CHIRPS with. */
+		chirpsBiasCorrection?: string;
 		readonly?: boolean;
 		nodes?: readonly UnitNode[];
 		/** The project's rainfall stations (flowGeneration.ts stationOptions); undefined until the series list loads. */
@@ -52,13 +69,14 @@
 
 	const uid = $props.id();
 	const list = $derived(stations ?? []);
-	const rows = $derived(unitStationRows(nodes, value, list));
+	const rows = $derived(unitStationRows(nodes, value, list, unitRain));
 	const inUse = $derived(stationsInUse(rows, list));
 	const land = $derived(rows.map((r) => r.unit));
 	/** The rows ticked for the select-several action (node ids); forgotten for a unit that is no longer one. */
 	let picked = $state<string[]>([]);
 	const pickedNow = $derived(picked.filter((id) => rows.some((r) => r.unit.id === id)));
 	let bulkStation = $state('');
+	const bulkChirps = $derived(chirpsOfDriver(bulkStation));
 	/** The patching priority the select-several action gives (issue #612): the default, the corrected CHIRPS alone. */
 	let bulkPatch = $state<PatchValue[]>([CHIRPS_PATCH]);
 
@@ -90,6 +108,56 @@
 	const usabilityOf = (r: (typeof rows)[number]) => (r.station ? (usability[`${choiceKey(r.station.id, r.scale)}|${list.map((st) => st.id).join(',')}`] ?? null) : null);
 	const allPicked = $derived(rows.length > 0 && pickedNow.length === rows.length);
 
+	// Each CHIRPS driver's MAP, CHIRPS mean annual rain and factor (engine ≥ 1.114.0): the engine's preview over the stored
+	// model input with the form's choices, unit-rain setting and CHIRPS bias mode, asked for again when any changes.
+	const choices = $derived(Object.fromEntries(rows.filter((r) => r.chirps).map((r) => [r.unit.id, { correction: r.chirps! }])) as Record<string, UnitChirpsChoice>);
+	const choicesKey = $derived(JSON.stringify([choices, unitRain ?? null, chirpsBiasCorrection ?? null]));
+	const anyChirps = $derived(rows.some((r) => r.chirps));
+	let previews = $state<{ key: string; byUnit: Record<string, ChirpsDriverPreview> } | null>(null);
+	/** The key whose preview failed (no model input to run on yet): its rows say so, and a change of the choices asks again. */
+	let previewFailed = $state<string | null>(null);
+	let previewForgot = false;
+	$effect(() => {
+		const key = choicesKey;
+		if (!projectId || !anyChirps || previews?.key === key || previewFailed === key) return;
+		const [c, ur, bias] = JSON.parse(key) as [Record<string, UnitChirpsChoice>, UnitRainSettings | null, string | null];
+		import('./chirpsDriverPreview')
+			.then((m) => {
+				if (!previewForgot) m.forgetChirpsDriverPreview(projectId), (previewForgot = true);
+				return m.chirpsDriverPreview(projectId, c, { unitRain: ur, ...(bias ? { chirpsBiasCorrection: bias } : {}) });
+			})
+			.then((byUnit) => {
+				if (key === choicesKey) previews = { key, byUnit };
+			})
+			.catch((e: unknown) => {
+				// Shown on the rows (a project with no rain to run on yet), and logged, never silent.
+				console.warn('the CHIRPS driver preview could not be worked out', e);
+				previewFailed = key;
+			});
+	});
+	const previewState = $derived(!projectId ? 'none' : previews?.key === choicesKey ? 'ready' : previewFailed === choicesKey ? 'failed' : 'loading');
+	const notes = $derived(rainSeries ? unitChirpsChoiceNotes(nodes, { unitRain, rainStations: value, chirpsBiasCorrection }, rainSeries) : { noChirps: [], rawInstead: [] });
+	const driverLine = (r: (typeof rows)[number]) =>
+		chirpsDriverLine(r.chirps!, r.unit.mapMm, previewState === 'ready' ? (previews!.byUnit[r.unit.id] ?? null) : null, {
+			noChirps: notes.noChirps.some((n) => n.id === r.unit.id),
+			rawInstead: notes.rawInstead.some((n) => n.id === r.unit.id)
+		});
+	/** While the preview loads, or when it failed, what a CHIRPS row says in place of its figures (none for a unit with no CHIRPS). */
+	const pendingText = (r: (typeof rows)[number]) =>
+		notes.noChirps.some((n) => n.id === r.unit.id)
+			? null
+			: previewState === 'loading'
+				? 'Working out its MAP ÷ its CHIRPS mean annual rain…'
+				: previewState === 'failed'
+					? 'Its MAP and CHIRPS mean annual rain show once the project has rain to run on.'
+					: null;
+	/** Give `ids` the driver `v` (a station, a CHIRPS choice, or '' for none), in both settings. */
+	function setDriver(ids: readonly string[], v: string, patch?: Parameters<typeof withUnitsDriver>[4]) {
+		const next = withUnitsDriver(value, unitRain, ids, v, patch);
+		value = next.rainStations;
+		if (next.unitRain !== unitRain) unitRain = next.unitRain;
+	}
+
 	const ratioText = (r: (typeof rows)[number]) => {
 		if (!r.station) return '';
 		if (!r.scale) return '× 1, as recorded';
@@ -102,7 +170,7 @@
 		picked = on ? [...pickedNow.filter((x) => x !== id), id] : pickedNow.filter((x) => x !== id);
 	}
 	function assignPicked() {
-		value = withUnitsStation(value, pickedNow, bulkStation || null, patchFromValues(bulkPatch));
+		setDriver(pickedNow, bulkStation, patchFromValues(bulkPatch));
 		picked = [];
 	}
 </script>
@@ -129,16 +197,22 @@
 		</p>
 	{/if}
 	{#if rows.length}
-		{#if !readonly && list.length}
+		{#if !readonly}
 			<div class="bulk" role="group" aria-labelledby="{uid}-bulk-l" data-testid="flowgen-bulk">
-				<span class="lbl" id="{uid}-bulk-l">{pickedNow.length ? `${pickedNow.length === 1 ? '1 unit' : `${pickedNow.length} units`} ticked` : 'Tick units to give them one station'}</span>
-				<label class="visually-hidden" for="{uid}-bulk">Station for the ticked units</label>
+				<span class="lbl" id="{uid}-bulk-l">{pickedNow.length ? `${pickedNow.length === 1 ? '1 unit' : `${pickedNow.length} units`} ticked` : 'Tick units to give them one driver'}</span>
+				<label class="visually-hidden" for="{uid}-bulk">Driver rainfall for the ticked units</label>
 				<select id="{uid}-bulk" bind:value={bulkStation} disabled={!pickedNow.length}>
-					<option value="">No station</option>
-					{#each list as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+					<option value="">{DRIVER_LABEL.none}</option>
+					<option value={CHIRPS_DRIVER.bias}>{DRIVER_LABEL.bias}</option>
+					<option value={CHIRPS_DRIVER.raw}>{DRIVER_LABEL.raw}</option>
+					{#if list.length}
+						<optgroup label="Rainfall stations">
+							{#each list as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+						</optgroup>
+					{/if}
 				</select>
 				<button type="button" class="btn btn-sm" disabled={!pickedNow.length} onclick={assignPicked}>Assign to the ticked units</button>
-				{#if bulkStation}
+				{#if bulkStation && !bulkChirps}
 					<div class="bulk-chain">
 						<span class="lbl">Then patch gaps from</span>
 						{@render chain(bulkPatch, (v) => (bulkPatch = v), bulkStation, 'the ticked units', null)}
@@ -149,17 +223,17 @@
 		<div class="rows-box">
 			<div class="table-wrap">
 				<table class="data compact" data-testid="flowgen-rows">
-					<caption class="visually-hidden">Each land unit’s rainfall station</caption>
+					<caption class="visually-hidden">Each land unit’s driver rainfall</caption>
 					<thead>
 						<tr>
-							{#if !readonly && list.length}
+							{#if !readonly}
 								<th scope="col" class="pick">
 									<label class="visually-hidden" for="{uid}-all">Tick every unit</label>
 									<input id="{uid}-all" type="checkbox" checked={allPicked} onchange={(e) => (picked = e.currentTarget.checked ? rows.map((r) => r.unit.id) : [])} />
 								</th>
 							{/if}
 							<th scope="col">Unit and its MAP</th>
-							<th scope="col">Station</th>
+							<th scope="col">Driver rainfall</th>
 							<th scope="col">Then patch gaps from</th>
 							<th scope="col">Scale to unit MAP</th>
 							<th scope="col">Gaps: CHIRPS corrected against</th>
@@ -167,8 +241,10 @@
 					</thead>
 					<tbody>
 						{#each rows as r (r.unit.id)}
+							{@const line = r.chirps ? driverLine(r) : null}
+							{@const pending = line && !line.text ? pendingText(r) : null}
 							<tr data-testid="flowgen-row" data-unit={r.unit.id}>
-								{#if !readonly && list.length}
+								{#if !readonly}
 									<td class="pick">
 										<input type="checkbox" aria-label="Tick {r.unit.name}" checked={pickedNow.includes(r.unit.id)} onchange={(e) => togglePick(r.unit.id, e.currentTarget.checked)} />
 									</td>
@@ -177,19 +253,33 @@
 									<span class="name">{r.unit.name}</span>
 									<span class="small" data-testid="flowgen-unit-map">MAP: {mapText(r.unit.mapMm, r.unit.mapSource)}</span>
 								</th>
-								<td data-label="Station">
+								<td data-label="Driver rainfall">
 									<select
-										aria-label="Station for {r.unit.name}"
+										aria-label="Driver rainfall for {r.unit.name}"
+										aria-describedby={line && (line.text || line.fallback || pending) ? `${uid}-driver-${r.unit.id}` : undefined}
 										disabled={readonly}
-										value={r.assignment?.stationId ?? ''}
+										value={r.driver}
 										aria-invalid={r.missing || undefined}
-										onchange={(e) => (value = withUnitStation(value, r.unit.id, e.currentTarget.value || null))}
+										onchange={(e) => setDriver([r.unit.id], e.currentTarget.value)}
 									>
-										<option value="">No station: as before stations</option>
-										{#if r.missing}<option value={r.assignment?.stationId}>A station the project no longer has</option>{/if}
-										{#each list as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+										<option value="">{DRIVER_LABEL.none}</option>
+										<option value={CHIRPS_DRIVER.bias}>{DRIVER_LABEL.bias}</option>
+										<option value={CHIRPS_DRIVER.raw}>{DRIVER_LABEL.raw}</option>
+										{#if list.length || r.missing}
+											<optgroup label="Rainfall stations">
+												{#if r.missing}<option value={r.assignment?.stationId}>A station the project no longer has</option>{/if}
+												{#each list as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+											</optgroup>
+										{/if}
 									</select>
 									{#if r.missing}<span class="err small" data-testid="flowgen-missing">Its station was deleted: runs keep the unit on the rule before stations until another is picked.</span>{/if}
+									{#if line && (line.text || line.fallback || pending)}
+										<span class="small block" id="{uid}-driver-{r.unit.id}">
+											{#if line.text}<span data-testid="flowgen-chirps-level">{line.text}.</span>{/if}
+											{#if pending}<span class="muted" data-testid="flowgen-chirps-pending">{pending}</span>{/if}
+											{#if line.fallback}<span class="warn block" data-testid="flowgen-chirps-fallback">{line.fallback}</span>{/if}
+										</span>
+									{/if}
 								</td>
 								<td data-label="Then patch gaps from">
 									{#if r.station}
@@ -243,8 +333,10 @@
 			On a station’s days the unit runs on its rain × unit MAP ÷ station MAP (held between 0.25 and 4), or as recorded with scaling off. On its gaps and
 			unreliable days the first source in its patching priority with a reading fills in: another station × unit MAP ÷ that station’s MAP, or the unit’s
 			own CHIRPS, corrected month by month against the chosen station’s rain at the unit’s MAP, so a filled day sits at the unit’s MAP like a station day.
-			A station that has no reading on any of the main station’s gaps can’t help, and says so. Satellite rain is never a unit’s station. A unit with no
-			station keeps the rule it ran on before stations (Units without a station, below).
+			A station that has no reading on any of the main station’s gaps can’t help, and says so. A unit can instead run on its own CHIRPS: bias-corrected
+			against the reference gauge (or the catchment’s CHIRPS bias factors) and levelled to its MAP, or raw, levelled only by its MAP ÷ its CHIRPS mean
+			annual rain; bias-corrected runs raw when there is no point rainfall record to correct against. A unit left Not set keeps the rule it ran on
+			before stations (Units without a station, below).
 		</span>
 	{/if}
 	{#if inUse.length}
@@ -309,6 +401,9 @@
 	.err {
 		display: block;
 		color: var(--danger);
+	}
+	.warn {
+		color: var(--warning);
 	}
 	.bulk {
 		display: flex;

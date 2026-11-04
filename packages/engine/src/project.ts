@@ -1193,6 +1193,17 @@ export interface UnitRainSettings {
 	 */
 	reference?: UnitRainReference | null;
 	/**
+	 * Each land unit whose driver rainfall is its own CHIRPS, chosen in
+	 * Settings (engine ≥ 1.114.0, docs/model.md §2.4h *CHIRPS as a unit's
+	 * driver*): land unit id → how the CHIRPS is corrected. `bias`: against
+	 * the reference gauge (f × k_unit), falling back to raw levelled to the
+	 * unit's MAP when there is no point record to correct it against; `raw`:
+	 * never bias-corrected, only × k_unit. A unit with a rainfall station
+	 * (settings.rainStations.units) runs on the station; a unit left out runs
+	 * on rules 1–4 as before. Absent or null = none.
+	 */
+	chirpsUnits?: Record<string, UnitChirpsChoice> | null;
+	/**
 	 * Engine-only (never stored by the API): each unit's rule and factors to
 	 * use instead of fitting them on the input's records. A seasonal outlook's
 	 * re-run member sets it to the base input's, so a history cut at the
@@ -1202,6 +1213,16 @@ export interface UnitRainSettings {
 }
 
 export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' } as const;
+
+/** How a unit's CHIRPS driver is corrected (settings.unitRain.chirpsUnits, engine ≥ 1.114.0): against a point record, or raw. */
+export const UNIT_CHIRPS_CORRECTIONS = ['bias', 'raw'] as const;
+export type UnitChirpsCorrection = (typeof UNIT_CHIRPS_CORRECTIONS)[number];
+/** One unit's CHIRPS driver (settings.unitRain.chirpsUnits[unit id]). */
+export interface UnitChirpsChoice {
+	correction: UnitChirpsCorrection;
+}
+/** Most units settings.unitRain.chirpsUnits may name (the rainfall stations' own limit). */
+export const UNIT_CHIRPS_UNITS_MAX = 500;
 
 /**
  * `settings.rainStations` (issue #553, engine ≥ 1.91.0, docs/model.md §2.4i).
@@ -1435,6 +1456,18 @@ export function unitRainError(raw: unknown): string | null {
 				return `pinned reference factors must be 12 numbers from ${AREAL_RAIN_FACTOR_MIN} to ${AREAL_RAIN_FACTOR_MAX}`;
 		}
 	}
+	const chirps = (raw as { chirpsUnits?: unknown }).chirpsUnits;
+	if (chirps !== null && chirps !== undefined) {
+		if (typeof chirps !== 'object' || Array.isArray(chirps)) return 'the CHIRPS drivers must be a map of unit → correction';
+		const entries = Object.entries(chirps as Record<string, unknown>);
+		if (entries.length > UNIT_CHIRPS_UNITS_MAX) return `at most ${UNIT_CHIRPS_UNITS_MAX} units can have CHIRPS as their driver`;
+		for (const [id, c] of entries) {
+			if (!id || id.length > 200) return 'a CHIRPS driver needs its unit';
+			const x = c as { correction?: unknown } | null;
+			if (!x || typeof x !== 'object' || Array.isArray(x) || !(UNIT_CHIRPS_CORRECTIONS as readonly unknown[]).includes(x.correction))
+				return `a unit's CHIRPS driver must be corrected one of ${UNIT_CHIRPS_CORRECTIONS.join(', ')}`;
+		}
+	}
 	return null;
 }
 
@@ -1465,6 +1498,10 @@ export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSetti
 		// Only when set, so a setting without it resolves as before 1.80.0.
 		...(r.reference
 			? { reference: { gauge: r.reference.gauge, unitId: r.reference.unitId, ...(Array.isArray(r.reference.pinnedFactors) ? { pinnedFactors: [...r.reference.pinnedFactors] } : {}) } }
+			: {}),
+		// Only when set (engine ≥ 1.114.0), so a setting without it resolves as before.
+		...(r.chirpsUnits && Object.keys(r.chirpsUnits).length
+			? { chirpsUnits: Object.fromEntries(Object.keys(r.chirpsUnits).sort().map((id) => [id, { correction: r.chirpsUnits![id]!.correction }])) }
 			: {}),
 		...(Array.isArray(r.pinned) ? { pinned: structuredClone(r.pinned) } : {})
 	};
@@ -4029,7 +4066,15 @@ export type UnitChirpsLevel =
 			/** Whether `years` all lie inside the MAP period (false: too few did, so every complete year of the record was used). */
 			inPeriod: boolean;
 	  }
-	| { source: 'bias' }
+	| {
+			source: 'bias';
+			/**
+			 * k_unit on the §2.4b factors (engine ≥ 1.114.0): clamp(unit MAP ÷ the unit's mean annual CHIRPS × the §2.4b
+			 * factor of each day), only on a unit whose driver is CHIRPS, bias-corrected (settings.unitRain.chirpsUnits),
+			 * with a MAP and no reference gauge. Absent (the factors only) otherwise, as before.
+			 */
+			kUnit?: UnitChirpsKUnit;
+	  }
 	| { source: 'raw' }
 	| {
 			/** The unit's CHIRPS totals 0 mm in every complete year it was averaged over (engine ≥ 1.85.0): unusable, so not read. */
@@ -4049,22 +4094,25 @@ export type UnitChirpsLevel =
 			 * null (factors only) when the unit has no MAP or its CHIRPS no complete
 			 * calendar year.
 			 */
-			kUnit: {
-				/** The factor applied (clamped to AREAL_RAIN_FACTOR_MIN–MAX). */
-				factor: number;
-				/** unit MAP ÷ meanAnnualMm before the clamp. */
-				ownFactor: number;
-				clamped: boolean;
-				/** ownFactor lies outside the soft band AREAL_RAIN_FACTOR_WARN_MIN–MAX. */
-				outsideBand: boolean;
-				/** The mean annual of the unit's CHIRPS × the monthly factors, mm, over `years`. */
-				meanAnnualMm: number;
-				/** The complete calendar years it was averaged over. */
-				years: number[];
-				/** Whether `years` all lie inside the MAP period (false: too few did, so every complete year of the record was used). */
-				inPeriod: boolean;
-			} | null;
+			kUnit: UnitChirpsKUnit | null;
 	  };
+
+/** A unit's k_unit (§2.4h): its MAP ÷ the mean annual of its CHIRPS × the correction's factors, clamped. */
+export interface UnitChirpsKUnit {
+	/** The factor applied (clamped to AREAL_RAIN_FACTOR_MIN–MAX). */
+	factor: number;
+	/** unit MAP ÷ meanAnnualMm before the clamp. */
+	ownFactor: number;
+	clamped: boolean;
+	/** ownFactor lies outside the soft band AREAL_RAIN_FACTOR_WARN_MIN–MAX. */
+	outsideBand: boolean;
+	/** The mean annual of the unit's CHIRPS × the factors (the reference's monthly, or §2.4b's of the day), mm, over `years`. */
+	meanAnnualMm: number;
+	/** The complete calendar years it was averaged over. */
+	years: number[];
+	/** Whether `years` all lie inside the MAP period (false: too few did, so every complete year of the record was used). */
+	inPeriod: boolean;
+}
 
 /** One calendar month of the reference gauge's fit (engine ≥ 1.80.0, §2.4h *Reference gauge*). */
 export interface UnitRainReferenceMonth {
@@ -4141,6 +4189,12 @@ export interface UnitRainUnit {
 	gaugeMapOutsideBand: boolean;
 	/** How the unit's own CHIRPS is levelled; null without one. */
 	chirps: UnitChirpsLevel | null;
+	/**
+	 * The unit's CHIRPS driver as it ran (settings.unitRain.chirpsUnits, engine
+	 * ≥ 1.114.0): `bias` or `raw`. Absent when the unit has none, or when the
+	 * choice couldn't apply (a station, or no usable CHIRPS: the run warns).
+	 */
+	chirpsChoice?: UnitChirpsCorrection;
 	/**
 	 * Run days by where the day's rain came from: the unit's gauge, the
 	 * catchment gauge × the MAP ratio, the unit's CHIRPS, the catchment's rain

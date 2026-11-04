@@ -105,6 +105,8 @@ class CrossCheck(unittest.TestCase):
             "unit_rule_gauge", "unit_rule_gauge_map", "unit_rule_chirps", "unit_rule_catchment", "unit_clamped",
             "unit_map_all_years", "unit_chirps_bias", "unit_link_days", "unit_catchment_days",
             "unit_chirps_reference", "unit_ref_months_fitted", "unit_ref_not_land",
+            # CHIRPS as a unit's driver (engine 1.114.0).
+            "unit_choice_bias", "unit_choice_raw", "unit_choice_bias_k",
             # Issue #500's decisions.
             "unit_k_from_map", "unit_chirps_unusable", "unit_forecast_levelled", "unit_forecast_shape_ratio", "unit_gauge_set_aside",
             "unit_gauge_windows", "unit_ref_days_checked_out", "unit_ref_window_days_out",

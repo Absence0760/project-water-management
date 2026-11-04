@@ -873,7 +873,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `null`. [model.md §2.4b *Quantile map*](./model.md#quantile-map-engine--1530-cr-23).
   `unitRain` (issue #482) is `null` or absent (Per unit's defaults) or
   `{ mode: "perUnit" | "catchment", gaugeMapMm?, gaugeMapSource?, mapPeriod?,
-  reference? }`, replaced whole by a `PATCH`. Every land unit runs on its own
+  reference?, chirpsUnits? }`, replaced whole by a `PATCH`. Every land unit runs on its own
   rain (its rain series, below; [model.md §2.4h](./model.md)): Per unit is
   the only flow generation method from engine 1.109.0 (issue #658). The
   retired `"catchment"` (Fragmentation) is still accepted, for an older
@@ -889,7 +889,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   gauge*](./model.md#reference-gauge-engine--1800-issue-500)); a run's input
   then carries the CHIRPS of the cell under that unit's centre, from the
   cell cache, as `rain_chirps_cell_mm@<unit id>` (stored with the run's
-  input, no series of its own). No other key (the engine-only
+  input, no series of its own). `chirpsUnits` (engine ≥ 1.114.0; `null`,
+  absent or `{}` = none) is land unit node id → `{ correction: "bias" |
+  "raw" }`, the units whose driver rainfall is their own CHIRPS, at most
+  500 ([model.md §2.4h *CHIRPS as a unit's
+  driver*](./model.md#chirps-as-a-units-driver-engine--11140)). The save
+  refuses a unit that isn't a land unit of the project (a unit the stored
+  setting already names is not checked again, so one deleted since doesn't
+  block other saves) and a unit `rainStations.units` also gives a station,
+  checked over the patch and the stored settings together (`400`, "… has
+  both a rainfall station and CHIRPS as its driver; give it one"); a unit
+  without CHIRPS of its own is allowed, the run warns. A project copy moves
+  the keys onto the new node ids. No other key (the engine-only
   `pinnedFactors` included). Anything else is a `400` (the engine's
   `unitRainError`, which the save also applies).
   `rainStations` (engine ≥ 1.91.0, issue #553, [model.md

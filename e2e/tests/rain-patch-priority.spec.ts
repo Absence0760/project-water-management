@@ -46,7 +46,7 @@ test('a unit’s gaps are patched from an ordered list of stations, then CHIRPS,
 	const { id, upper, ridge, vlei } = await seed(page.request);
 	await openSettings(page, id);
 	const upperRow = row(page, 'Upper farm');
-	await upperRow.getByLabel('Station for Upper farm').selectOption(ridge);
+	await upperRow.getByLabel('Driver rainfall for Upper farm').selectOption(ridge);
 	const chain = upperRow.getByRole('list', { name: 'Then patch gaps from, for Upper farm' });
 	// The default: the corrected CHIRPS alone.
 	await expect(chain.getByTestId('flowgen-patch-entry')).toHaveCount(1);

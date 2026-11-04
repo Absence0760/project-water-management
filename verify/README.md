@@ -873,6 +873,7 @@ open.
 | Probe | What it pins |
 | --- | --- |
 | `unit-rain-reference-kunit` | k_unit = clamp(unit MAP ÷ mean annual CHIRPS × f): over the ten MAP-period years when there are ten (p), every complete year with nine (q), the factors alone with no complete year (n), unusable CHIRPS under a reference (z), k_unit clamped to 0.25 (t), the reference unit levelled to its own MAP (r); a clamped (May) and a defaulted (June) month |
+| `unit-rain-chirps-driver-reference`, `-bias`, `-none` | CHIRPS as a unit's driver (§2.4h, engine 1.114.0) under a reference gauge, under the catchment's §2.4b factors, and with no point record: raw never corrected (a, with a gauge of its own, not read; d without a MAP; e with k_unit clamped), bias-corrected with a MAP (b: f × k_unit, §2.4b × k_unit, or raw × k_unit) and without one (c), and a unit not set (r) |
 | `unit-rain-unusable-chirps` | Without a reference, CHIRPS averaging 0 mm is skipped: rule 3 with a MAP (c3) and without one (c0) run on the catchment's rain, a unit gauge's gaps (c1) fill from it |
 | `unit-rain-forecast-gefs` | A CHIRPS-GEFS forecast under a reference: × f[month] × k_unit on units with usable CHIRPS (two months' factors), × the MAP ratio on a unit without CHIRPS and one whose CHIRPS is unusable |
 | `unit-rain-forecast-gefs-noref` | The same without a reference: × rule 3's levelling (MAP factor, or the §2.4b factor without a MAP) |

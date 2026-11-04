@@ -967,7 +967,7 @@ def unit_chirps_mean(hu: Series, period: tuple[int, int], weight, diag: dict):
     return mean / len(use)
 
 
-def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, diag: dict):
+def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, diag: dict, choice=None):
     """How a unit's CHIRPS reading v on day o is levelled (§2.4h rule 3 and
     *Reference gauge*, as decided on issue #500): a function (v, o) → rain,
     or None when the CHIRPS is unusable (item 7a: complete years averaging
@@ -982,12 +982,22 @@ def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, d
     The function's `kind` says what its level reaches, for a CHIRPS-GEFS
     forecast day (item 5): 'map' (a MAP factor, or f × k_unit) brings the
     unit to its MAP; 'shape' (the §2.4b factors, or f without k_unit) does
-    not, so the MAP ratio still applies on top; 'raw' knows no level."""
+    not, so the MAP ratio still applies on top; 'raw' knows no level.
+
+    `choice` is the unit's CHIRPS driver (§2.4h *CHIRPS as a unit's driver*,
+    engine 1.114.0): 'raw' takes neither the reference nor the §2.4b factors
+    (the MAP factor, else raw); 'bias' without a reference but with §2.4b
+    factors and a MAP takes the §2.4b factor of the day × k_unit, k_unit =
+    clamp(MAP ÷ the mean annual of CHIRPS × that factor), else the factors
+    alone; otherwise as without a choice."""
 
     def kinded(fn, kind):
         fn.kind = kind
         return fn
 
+    if choice == "raw":
+        ref = None
+        has_bias = False
     if ref is not None:
         f = ref[0]
         diag["unit_chirps_reference"] += 1
@@ -1006,6 +1016,18 @@ def unit_chirps_level(own_c: Series, map_mm, period, ref, fac, has_bias: bool, d
     if mean is not None and not mean > 0:
         diag["unit_chirps_unusable"] += 1
         return None
+    if choice == "bias" and has_bias and map_mm is not None:
+        def fb(o):
+            fm = fac[cal_month(o)]
+            return fm if fm is not None else 1.0
+
+        biased_mean = unit_chirps_mean(own_c, period, fb, diag)
+        diag["unit_chirps_bias"] += 1
+        if biased_mean is not None and biased_mean > 0:
+            k = _clamp(map_mm / biased_mean, diag)
+            diag["unit_choice_bias_k"] += 1
+            return kinded(lambda v, o, k=k: v * fb(o) * k, "map")
+        return kinded(lambda v, o: v * fb(o), "shape")
     if mean is not None and map_mm is not None:
         lev_f = _clamp(map_mm / mean, diag)
         return kinded(lambda v, o: v * lev_f, "map")
@@ -1132,10 +1154,15 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
     ref = reference_factors(ur, settings, series, rain, units, diag)
     # Issue #500 item 5: a CHIRPS-GEFS forecast is levelled like the unit's CHIRPS.
     gefs = forecast_source == "chirps_gefs"
+    # §2.4h *CHIRPS as a unit's driver* (engine 1.114.0): unit id → 'bias' | 'raw'.
+    choices = ur.get("chirpsUnits") or {}
     out: dict[str, list[float]] = {}
     for u in units:
         uid = u["id"]
         a = st.rs["units"].get(uid) if st is not None else None
+        c = choices.get(uid) if isinstance(choices, dict) else None
+        # A unit a station assignment names runs on the station (or as without it): the choice is ignored.
+        choice = c.get("correction") if isinstance(c, dict) and c.get("correction") in ("bias", "raw") and a is None else None
         if a is not None and st.record(a["stationId"]) is not None:
             # §2.4i: the unit's station × r, its CHIRPS × the pairing's factors, then the catchment forcing × 1.
             diag["station_units"] += 1
@@ -1163,7 +1190,9 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
         cond2 = gauge_map is not None and gauge_level is not None and map_mm is not None and has_catchment
         ratio = _clamp(map_mm / gauge_level, diag) if cond2 else 1.0
         # The unit's CHIRPS, levelled (rule 3, or the reference's f × k_unit); None = unusable (item 7a).
-        level = unit_chirps_level(own_c, map_mm, period, ref, fac, has_bias, diag) if has_c else None
+        level = unit_chirps_level(own_c, map_mm, period, ref, fac, has_bias, diag, choice) if has_c else None
+        # The choice applies only with usable CHIRPS of its own; else the rule as without it.
+        driven = choice is not None and level is not None
 
         def lev(o, own_c=own_c, level=level, ratio=ratio):
             # A level that only shapes the unit's CHIRPS (§2.4b factors, f without k_unit) keeps the MAP ratio on top,
@@ -1179,7 +1208,12 @@ def unit_rain_forcing(ur: dict, settings: dict, series: dict, rain: dict, days: 
             v, src = rain["pick"](o)
             return v if src == 0 else None
 
-        if has_g:
+        if driven:
+            # Rule 3 whatever else the unit has: its own gauge isn't read.
+            rule = 3
+            chain = [lev]
+            diag["unit_choice_" + choice] += 1
+        elif has_g:
             rule = 1
             chain = [own, lev] + ([lambda o, r=ratio: None if (v := gauge(o)) is None else v * r] if cond2 else [])
             diag["unit_rule_gauge"] += 1
@@ -1726,6 +1760,8 @@ def run(doc: dict) -> dict:
                 unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0,
                 # The reference gauge (§2.4h, engine >= 1.80.0): units levelled by it, months fitted, references not on a land unit.
                 unit_chirps_reference=0, unit_ref_months_fitted=0, unit_ref_not_land=0,
+                # CHIRPS as a unit's driver (engine 1.114.0).
+                unit_choice_bias=0, unit_choice_raw=0, unit_choice_bias_k=0,
                 # Issue #500's decisions: k_unit from a MAP, unusable CHIRPS (7a), CHIRPS-GEFS forecast days levelled (5),
                 # a unit gauge's days set aside and accumulation windows (6), reference fit days the checks left out (1c).
                 unit_k_from_map=0, unit_chirps_unusable=0, unit_forecast_levelled=0, unit_forecast_shape_ratio=0, unit_gauge_set_aside=0,

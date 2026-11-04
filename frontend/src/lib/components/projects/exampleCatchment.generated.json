@@ -46,7 +46,7 @@
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.113.0",
+			"engineVersion": "1.114.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",

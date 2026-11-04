@@ -149,6 +149,11 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 				const n = Object.keys(s.rainStations?.units ?? {}).length;
 				return n ? `${plural(n, 'unit')} on a rainfall station` : 'no unit on a rainfall station';
 			})(),
+			// CHIRPS as a unit's driver (engine ≥ 1.114.0): said only when set, as the catchment's station is.
+			(() => {
+				const n = Object.keys(s.unitRain?.chirpsUnits ?? {}).filter((id) => !s.rainStations?.units?.[id]).length;
+				return n ? (n === 1 ? '1 unit on its own CHIRPS' : `${n} units on their own CHIRPS`) : null;
+			})(),
 			'EWR by each unit’s natural MAR'
 		]
 			.filter(Boolean)

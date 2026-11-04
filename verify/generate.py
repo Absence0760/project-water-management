@@ -273,6 +273,8 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_diversion_curves(random.Random(seed * 86028157 + 43), doc, dense)
     add_monthly_diversions(random.Random(seed * 15485927 + 47), doc, dense)
     add_transfer_splits(random.Random(seed * 32452939 + 53), doc, dense)
+    # Its own stream (both branches had taken 15485927 + 47), so the CHIRPS choice draws apart from the monthly diversions.
+    add_unit_chirps_choice(random.Random(seed * 49979687 + 59), doc, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
@@ -617,6 +619,23 @@ def add_unit_rain_reference(rng: random.Random, doc: dict, start: dt.date, days:
     if cell["values"] and rng.random() < 0.2:
         cell["values"][rng.randrange(len(cell["values"]))] = -9999.0
     series[f"rain_chirps_cell_mm@{ref_unit['id']}"] = cell
+
+
+def add_unit_chirps_choice(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """CHIRPS as a unit's driver (§2.4h, engine >= 1.114.0), from its own
+    stream so the rest of a network is unchanged: in 60 % of the per-unit
+    networks (90 % dense), about 60 % of the farms (a farm without area too,
+    which isn't a land unit) get settings.unitRain.chirpsUnits[id], `bias`
+    or `raw`; a farm without CHIRPS of its own or with a station keeps it,
+    which the run ignores."""
+    s = doc["settings"]
+    ur = s.get("unitRain")
+    if not isinstance(ur, dict) or rng.random() >= (0.9 if dense else 0.6):
+        return
+    farms = [x for x in doc["model"]["nodes"] if x["kind"] == "farm"]
+    choices = {f["id"]: {"correction": rng.choice(["bias", "raw"])} for f in farms if rng.random() < 0.6}
+    if choices:
+        ur["chirpsUnits"] = choices
 
 
 def add_unit_rain_decisions(rng: random.Random, doc: dict) -> None:
