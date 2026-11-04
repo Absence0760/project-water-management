@@ -742,6 +742,36 @@ def transfer_out_of_catchment_cap() -> dict:
             "series": _dry(14, "2020-10-01")}
 
 
+def transfer_out_of_catchment_cap_river() -> dict:
+    """Engine-audit.md X1 beside the river (§2.7j): water a dam rule pumps out
+    of the catchment is surface use settled before the unit's own sources, so
+    a river abstraction under the cap shares only what the rule out left. s
+    (1 000 m³, full, keeping 50 %, off the river) has 400 m³ a year; its rule
+    out takes 300 m³ on day 0, and its houses (200 m³/day from the river,
+    which its runoff keeps running) get the 100 m³ left, then nothing, the
+    volume spent. Counting the river take against the room without the water
+    sent out would give them 200 m³ on day 0 and spend 500 m³ of a 400 m³
+    licence."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=5, damCapacityM3=1000, damInitialPct=1),
+    ]
+    objs = [
+        {"id": "h", "nodeId": "s", "name": "houses", "category": "domestic", "sizing": "perUnit", "monthlyM3Day": None,
+         "count": 1000, "litresPerUnitDay": 200, "lossPct": 0, "monthlyFactor": None, "population": None,
+         "returnPct": 0, "priority": "first", "destination": "internal", "enabled": True, "note": "",
+         "waterSource": "river", "riverPumpM3Day": None, "riverPoolM3": None},
+    ]
+    alloc = [
+        {"id": "as", "nodeId": "s", "waterSource": "surface", "volumeM3PerYear": 400, "storageM3": None,
+         "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None},
+    ]
+    return {"settings": _settings(allocationMode="cap"),
+            "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": [_rule("xo", "s", None, 300, 0.5)],
+                      "demandObjects": objs, "allocations": alloc},
+            "series": {"rain_catchment_mm": {"startDate": "2020-10-01", "values": [20.0] * 6}}}
+
+
 # Runoff from each unit's own rain (§2.4h, engine >= 1.78.0).
 
 
@@ -2347,6 +2377,7 @@ PROBES = {
     "dam-rules-rationing-and-release": dam_rules_rationing_and_release(),
     "transfer-out-of-catchment": transfer_out_of_catchment(),
     "transfer-out-of-catchment-cap": transfer_out_of_catchment_cap(),
+    "transfer-out-of-catchment-cap-river": transfer_out_of_catchment_cap_river(),
     "unit-rain-rules": unit_rain_rules(),
     "unit-rain-forecast-warmup": unit_rain_forecast_warmup(),
     "unit-rain-map-period": unit_rain_map_period(),

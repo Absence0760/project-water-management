@@ -40,7 +40,11 @@ MUTANTS = [
         "if n > ACC_MAX_BLANK_DAYS:",
         "if n >= ACC_MAX_BLANK_DAYS:",
     ),
-    ("transfers ignore the receiver's room (N4)", "room_left[dst] = max(0.0, rm)", "room_left[dst] = math.inf"),
+    (
+        "transfers ignore the receiver's room (N4)",
+        "room_left[dst] = room_carry[dst] if dst in room_carry else max(0.0, rm)",
+        "room_left[dst] = math.inf",
+    ),
     ("a transfer out of the catchment moves nothing, as if outside had no room (engine 1.86.0, issue #523 B5)", 'room_left[("out", src)] = math.inf', 'room_left[("out", src)] = 0.0'),
     (
         "an allocation cap doesn't hold back a transfer out of the catchment (engine-audit.md X1)",
@@ -51,6 +55,11 @@ MUTANTS = [
         "a transfer out of the catchment isn't counted against its source's cap (engine-audit.md X1)",
         'spend(xid, "surface", G - GW + g_riv + gin + gx)',
         'spend(xid, "surface", G - GW + g_riv + gin)',
+    ),
+    (
+        "a river abstraction beside the dam shares the cap's room as if its unit had sent nothing out of the catchment (X1)",
+        "rroom = (sroom[0] if sroom else math.inf) - gx - gin - (G - GW)",
+        "rroom = (sroom[0] if sroom else math.inf) - gin - (G - GW)",
     ),
     (
         "a source's rules share one pool down to the lowest reserve (N6, before engine 1.36.0)",

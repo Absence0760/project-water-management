@@ -44,7 +44,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 260 mutants)
+pnpm test:verify                                   # the guard: ~11 min locally on 4 workers (examples, probes, 12 random + 12 dense networks, 266 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 VERIFY_SHARD=2/3 pnpm test:verify                  # one of CI's 3 shards: every 3rd mutant from the 2nd (shard 1 also runs the agreement sweep)
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
@@ -64,7 +64,7 @@ no network. CI runs it as the `verify` job (`.github/workflows/ci.yml`), in
 case is `model.py`'s run plus `diff.compare` over every column and day
 (about half each; 0.1–2 s a case), while the engine runs all ~90 default
 cases in one tsx process in about 5 s. The mutation self-test is the bulk:
-260 mutants, each running the cases in order until its first disagreement
+266 mutants, each running the cases in order until its first disagreement
 (about a third of them on average), about 35 min on one core, against about
 3 min for the agreement sweep of 200 + 200 networks. So the engine runs,
 the agreement sweep and the mutants run on `VERIFY_WORKERS` processes
@@ -134,7 +134,9 @@ The core daily chain, with every setting of it the generator varies:
   of one source share its surface room pro rata as an outside receiver of
   their own and the volume counts against the year's volume
   ([engine-audit.md X1](../docs/engine-audit.md), probe
-  `transfer-out-of-catchment-cap`).
+  `transfer-out-of-catchment-cap`), and a river abstraction beside the dam
+  shares only the room its rules out left (probe
+  `transfer-out-of-catchment-cap-river`).
 - **EWR** (§2.7, §2.7b): Y, Z, AA and AB; the outlet and gauge EWR sites
   (`ewrSite` on or off); the attribution with J_int, Σ A + N = D, the charge
   as the largest share, its irrigation part and the binding site.
@@ -983,3 +985,13 @@ networks:
   wholly before the date "asks for none", so the independence rule was
   broken for that one point: the behaviour itself is what the outputs show
   (factor 0, the row), and the demand is 0 either way. No engine change.
+- **A river abstraction under a cap beside a dam that sends water out of
+  the catchment** (§2.7j, §2.12a, engine-audit.md X1; a harness bug, found
+  by CI's dense seed 174 on 2026-11-03): §2.12a says water a unit's dam
+  rules send out of the catchment is surface use settled before the unit's
+  own sources, which share what it leaves. `model.py` took it off the room
+  its draws used but not off the room its river abstractions share, so a
+  demand object on the river took the day's whole rate (388.8 m³ against
+  the engine's 39.3 m³, after the rule's 349.5 m³ out) and the unit used
+  25 851 m³ of a 25 805 m³ volume. Fixed in `model.py`; probe
+  `transfer-out-of-catchment-cap-river` and a mutant. No engine change.

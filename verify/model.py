@@ -3287,7 +3287,9 @@ def run(doc: dict) -> dict:
                 ts = riv[xid]
                 past = R + S - Gr + Sp * ret + X + passed_on
                 free = max(0.0, past - keep)
-                rroom = (sroom[0] if sroom else math.inf) - gin - (G - GW)
+                # Under a cap they share what the remote share, the draws and its rules out of the catchment
+                # left (X1: water sent out is surface use, settled before the unit's own sources, §2.12a).
+                rroom = (sroom[0] if sroom else math.inf) - gx - gin - (G - GW)
                 q = pool_q[xid]
                 # A pool is storage only (engine ≥ 1.86.0): it starts the day holding what it ended the last with.
                 held = list(q)
