@@ -33,7 +33,7 @@ test('Run readiness and the Data rows say when a feed’s series is not the one 
 
 	await openData(page, project.id);
 	// By the name cell alone: each row's words name the other series.
-	const row = (name: string) => page.locator('tr[data-series]').filter({ has: page.locator('.nm', { hasText: new RegExp(`^${name.replace(/[()]/g, '\\$&')} \\(mm\\)$`) }) });
+	const row = (name: string) => page.locator('tr[data-series]').filter({ has: page.locator('.nm', { hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(mm\\)$`) }) });
 	const fed = row('Rainfall CHIRPS gap-filler (boundary)');
 	await expect(fed.getByTestId('series-feed-shadow')).toContainText('A data feed writes this series, but runs read “Rainfall CHIRPS gap-filler”');
 	await expect(fed.getByTestId('series-role')).toHaveText('Not used (another series of this kind is)');
