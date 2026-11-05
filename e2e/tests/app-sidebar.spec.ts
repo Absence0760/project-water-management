@@ -1,8 +1,9 @@
 // The app sidebar's height (issue #17, option A; docs/ui.md § App frame):
 // with a project open, every section an owner sees fits a 1440×960 window
 // with the account block at the foot in view. Calibration (issue #586) took the
-// last spare row, so there is no room for another: a new section must free one
-// (hide one by default, as History is) or this fails. On a
+// last spare row, and Outputs got its row by rows of 30 px (32 before), so there
+// is no room for another: a new section must free one (make one linked-only, as
+// Compare runs is) or this fails. On a
 // shorter window the project's sections scroll inside the sidebar on their
 // own, so the account block still never leaves the screen, and the open
 // section is scrolled into view. The slot never scrolls sideways (the
@@ -31,6 +32,7 @@ const OWNER_TABS = [
 	'Calibration',
 	'Summary',
 	'EWR',
+	'Outputs',
 	'Hydrological units',
 	'Runs & results',
 	'Dams',
@@ -39,8 +41,8 @@ const OWNER_TABS = [
 ];
 /** Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS). */
 const DEFAULT_HIDDEN = ['Applications', 'History'];
-/** One sidebar row (32 px since the Map took a spare one, #326 D3; Calibration took the last, #586). */
-const ROW = 32;
+/** One sidebar row (32 px since the Map took a spare one, #326 D3; Calibration took the last, #586; 30 px since Outputs took a row). */
+const ROW = 30;
 
 const sidebar = (page: Page) => page.locator('aside.app-sidebar');
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
@@ -92,7 +94,7 @@ test.describe('1440×960', () => {
 		expect(m.asideOverflow).toBeLessThanOrEqual(0);
 		expect(m.slotOverflow).toBeLessThanOrEqual(0);
 		expect(m.slotOverflowX).toBeLessThanOrEqual(0);
-		// Calibration took the last spare row (issue #586): every row still fits, with nothing left for another. Should
+		// Calibration took the last spare row (issue #586), Outputs one more at 30 px a row: every row still fits, with nothing left for another. Should
 		// a change free a row, the second check says so: this budget is then one row again.
 		expect(m.spare).toBeGreaterThanOrEqual(0);
 		expect(m.spare, 'a row is free again: the budget can allow one more section').toBeLessThan(ROW);

@@ -340,6 +340,39 @@ export const PAGE_GUIDES: Guide[] = [
 		related: ['set-the-ewr', 'run-and-read-results', 'read-the-uncertainty', 'plan-the-season']
 	},
 	{
+		id: 'outputs-page',
+		title: 'Outputs: the planning outputs for one run',
+		summary: 'The five planning outputs on one page: the irrigation the catchment supports, share the pain, the outcome matrix, the seasonal outlook and the licence impact.',
+		kind: 'page',
+		tab: 'outputs',
+		sections: [
+			{
+				heading: 'What the page shows',
+				blocks: [
+					{
+						type: 'p',
+						text: 'One run’s planning outputs, each a section of its own under a short index at the top: **How much irrigation can the catchment support?** ([[irrigation-support]]), **Share the pain** ([[share-the-pain]]), the **Outcome matrix** ([[outcome-matrix]]), the **Seasonal outlook** ([[seasonal-outlook]]) and the **Impact by year class** of a licence application ([[licence-impact-year-class]]). Each is also where it was: the irrigation support, the matrix and the outlook on EWR, share the pain on Hydrological units with the table per hydrological unit, and the impact in the impact report and the evidence report.'
+					},
+					{
+						type: 'p',
+						text: 'The page shows the newest run; pick another with the **Run** menu in the header (Back returns to the one before). **Open in Runs & results** opens the same run there.'
+					}
+				]
+			},
+			{
+				heading: 'When an output is empty',
+				blocks: [
+					{
+						type: 'p',
+						text: 'An output that can’t show for the run says why in one line. The irrigation support and the outcome matrix read one demand sweep: until there is one, an editor presses **Run…** to start it, and the seasonal outlook the same. They need an ordinary run of the model, not a scenario or forecast run. Share the pain needs a run with hydrological units. The impact by year class compares a scenario’s run with the run its scenario is based on: on a run of the model it lists the scenarios’ runs based on it to pick from, and none is chosen for you ([[guide:plan-the-season|Weigh a season’s demand level]]).'
+					}
+				]
+			}
+		],
+		terms: ['irrigation-support', 'share-the-pain', 'equitable-share', 'outcome-matrix', 'seasonal-outlook', 'licence-impact-year-class'],
+		related: ['river-page', 'units-page', 'scenarios-page', 'plan-the-season']
+	},
+	{
 		id: 'units-page',
 		title: 'Hydrological units: how much demand each run supplied',
 		summary: 'Each unit’s irrigation demand against what a run supplied, who is short this week, and the curtailment and assurance of supply panels.',

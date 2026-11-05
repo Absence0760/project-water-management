@@ -15,6 +15,7 @@
 		calibration: () => import('#lib/components/calibration/CalibrationTab.svelte'),
 		runs: () => import('#lib/components/runs/RunsTab.svelte'),
 		river: () => import('#lib/components/river/RiverTab.svelte'),
+		outputs: () => import('#lib/components/outputs/OutputsTab.svelte'),
 		supply: () => import('#lib/components/supply/SupplyTab.svelte'),
 		dams: () => import('#lib/components/dams/DamsTab.svelte'),
 		compare: () => import('#lib/components/compare/CompareView.svelte'),
@@ -131,6 +132,7 @@
 		// The EWR page (issue #558) keeps its old id, so a saved choice of sections and old links still work.
 		ewr: 'river',
 		reserve: 'river',
+		'planning-outputs': 'outputs',
 		units: 'supply',
 		farms: 'supply',
 		changes: 'history',
@@ -1337,6 +1339,10 @@
 					<Lazy load={LOAD.river}>
 						{#snippet children(RiverTab)}<RiverTab {projectId} project={project!} {editor} {runs} {canEdit} {onProjectChange} />{/snippet}
 					</Lazy>
+				{:else if tab === 'outputs'}
+					<Lazy load={LOAD.outputs}>
+						{#snippet children(OutputsTab)}<OutputsTab {projectId} project={project!} {editor} {runs} {canEdit} {onProjectChange} />{/snippet}
+					</Lazy>
 				{:else if tab === 'supply'}
 					<Lazy load={LOAD.supply}>
 						{#snippet children(SupplyTab)}<SupplyTab {projectId} {editor} {runs} readonly={!canEdit} showAllocations={roleIds.includes('allocations')} />{/snippet}
@@ -1725,9 +1731,9 @@
 		line-height: 1.3;
 		overflow-wrap: anywhere;
 	}
-	/* Budgeted to fit every section an owner can show (17 with the Map's row, #326 D3) and the account
-	   block in 1440×960 with a row to spare: 32 px rows (still past the 24 px target size) and 0.5rem
-	   between the groups (app-sidebar.spec.ts). */
+	/* Budgeted to fit every section an owner can show (19 with the Outputs row) and the account block in
+	   1440×960: 30 px rows since Outputs took a row (32 px since the Map took one, #326 D3; still past the
+	   24 px target size) and 0.5rem between the groups (app-sidebar.spec.ts). */
 	.project-side .tabs {
 		gap: 0.5rem;
 	}
@@ -1735,14 +1741,14 @@
 		padding-bottom: 0.1rem;
 	}
 	.project-side .tabs a {
-		min-height: 32px;
+		min-height: 30px;
 	}
-	/* A viewer's toggle takes one 32 px row in the sidebar, as a link does: Calibration took the sidebar's last
+	/* A viewer's toggle takes one row in the sidebar (30 px), as a link does: Calibration took the sidebar's last
 	   spare row (issue #586), and a viewer, who has no Applications row, has the toggle in its place, so with the
 	   inputs shown they fit 1440×960 exactly as an owner's sections do (app-sidebar.spec.ts). Its taller 40 px
 	   row and gap above had cost 16 px more. */
 	.project-side .inputs-toggle {
-		min-height: 32px;
+		min-height: 30px;
 		margin-top: 0;
 		padding-top: 0;
 	}
