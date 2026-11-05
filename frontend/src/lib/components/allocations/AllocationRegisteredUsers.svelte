@@ -222,6 +222,12 @@
 	.more {
 		margin: 0.5rem 0 0;
 	}
+	/* Its words name the units and the table, longer than a phone's row at 320 px: they wrap inside the button. */
+	.more {
+		max-width: 100%;
+		white-space: normal;
+		text-align: left;
+	}
 	.sub {
 		display: block;
 		font-weight: 400;

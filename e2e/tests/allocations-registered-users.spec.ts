@@ -137,7 +137,7 @@ test('an editor loads demo registered users; the table groups them by unit with 
 	await expect(mapSection(page).getByRole('radio', { name: 'Against the run' })).toHaveCount(0);
 	const key = mapSection(page).getByTestId('allocation-map-legend');
 	await expect(key).toHaveAttribute('data-view', 'registered');
-	await expect(key.getByRole('heading')).toHaveText('Key: registered water use, m³ a year, in force today');
+	await expect(key.getByRole('heading')).toHaveText('Key: registered water use, m³ a year, in force today'); // clock-free: fixed wording (the key names what it counts), not a day from a clock.
 	await expect(key.locator('li')).toHaveCount(6);
 	await expect(key.locator('li[data-band="s1"]')).toContainText('Up to');
 	await expect(key.locator('li[data-band="none"]')).toContainText('Nothing registered');
@@ -155,7 +155,7 @@ test('an editor loads demo registered users; the table groups them by unit with 
 		const label = map.getByRole('button', { name: /^Kloof farm: / });
 		await expect(label).toHaveText(/m³\/a$/);
 		await expect(label).toHaveAttribute('data-band', /^s[1-5]$/);
-		await expect(label).toHaveAccessibleName(/^Kloof farm: .* m³\/a registered water use, in force today\.$/);
+		await expect(label).toHaveAccessibleName(/^Kloof farm: .* m³\/a registered water use, in force today\.$/); // clock-free: fixed wording (the key names what it counts), not a day from a clock.
 		// A unit picked on the map shows its registered users in the table.
 		await label.click();
 		await expect(table(page).locator(`tbody[data-group="${project.units['Kloof farm']}"]`)).toBeInViewport();
@@ -164,7 +164,7 @@ test('an editor loads demo registered users; the table groups them by unit with 
 	}
 	// Shade by the dam: only the farm with one registers any.
 	await mapSection(page).getByRole('radio', { name: 'Dam capacity' }).check();
-	await expect(key.getByRole('heading')).toHaveText('Key: registered farm dam capacity, m³, in force today');
+	await expect(key.getByRole('heading')).toHaveText('Key: registered farm dam capacity, m³, in force today'); // clock-free: fixed wording (the key names what it counts), not a day from a clock.
 	await expect(key.locator('li[data-band="none"]')).toContainText('2 units');
 	await expectNoViolations(page);
 
