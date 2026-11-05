@@ -92,8 +92,11 @@ section it belongs to, with the example that taught it.
   it as `main`, rendered last after a plain Add data in place of the page's
   Run model button: Runs & results' run form (label, Run forecast, Run model) went there from a full-width panel
   that pushed the results 110 px down, its status one slim line under the
-  header. Elsewhere Run model (`workspace/RunButton.svelte`, issue #444)
-  opens a small form so the run can still be named. A popover in the header
+  header. On Calibration Run model (`workspace/RunButton.svelte`, issue #444)
+  opens a small form so the run can still be named, and the run opens on How
+  the shown run fits. No other section has a Run model: issue #444 put
+  RunButton on every section, it crashed the app off Calibration and Runs &
+  results, and the operator had it removed there (2026-11-05). A popover in the header
   must close on navigation as well as on Escape and a click outside: the
   header stays mounted across sections, so a form whose status line links
   to the Network sat over the Network once followed (`afterNavigate`).

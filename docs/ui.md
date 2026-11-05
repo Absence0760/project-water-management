@@ -1104,9 +1104,9 @@ follows the bar's measured height, so a focused field is never under it
 360 and 320 px.
 
 **Run model with unsaved edits.** A run uses the saved model, so the
-header's **Run model** on every other tab (its form's **Run model** and
+header's **Run model** on Calibration (its form's **Run model** and
 **Run forecast**, `workspace/RunButton.svelte`, through the page's
-`runModel`), Runs & results' own **Run model** and **Run forecast** (and the
+`runModel`), Warnings' **Run now**, Runs & results' own **Run model** and **Run forecast** (and the
 new-data line's **Re-run model**) with unsaved edits ask "Save your changes and run?"
 (**Save and run**), save them (`saveAll`) and run once they are saved: the
 page passes its `saveBeforeRun` to the Runs tab as `beforeRun`, and the run
@@ -1295,15 +1295,18 @@ role, freshness, Add data) and each tab's own header:
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
   longest waiting**), then for editors **Add data** on the sections it adds
-  data to (below) and **Run model**, the primary action, on every section
-  (issue #444: the client looked for a way to run the model from where they
-  had just changed it). On every section
-  but Runs & results, **Run model** (`workspace/RunButton.svelte`) doesn't
+  data to (below) and **Run model**, the primary action, on Calibration and
+  Runs & results only. Issue #444 had put it on every section (the client
+  looked for a way to run the model from where they had just changed it);
+  off those two it crashed the app, and the operator had it removed there
+  (2026-11-05), so the other sections end on Add data (where they have it)
+  or on their own controls. On
+  Calibration, **Run model** (`workspace/RunButton.svelte`, rendered only
+  there: `+page.svelte` `headerRun`) doesn't
   run at once: it opens a small form under it (a non-modal `role="dialog"`,
   *Run the model*; the button has `aria-expanded` and `aria-haspopup`,
   Escape closes it and returns focus, a click outside or a navigation (its
-  links go to other sections, where the same button stays mounted) closes
-  it, the Setup complete pill's pattern) with the **Run label** field (focused, optional), **Run
+  links go to other sections) closes it, the Setup complete pill's pattern) with the **Run label** field (focused, optional), **Run
   forecast** (with forecast rain) and **Run model**, so every run can still
   be named, and one status line: what a run still needs or why the flow
   shares stop it (`runs/runReady.ts` `runBlockers`, the same reasons and
@@ -1312,21 +1315,20 @@ role, freshness, Add data) and each tab's own header:
   run waits for them), that unsaved changes are saved first, the progress with the seconds while it runs, else what
   it runs. The page runs it (`runModel`: unsaved edits go through the same
   **Save your changes and run?** confirm, and a problem that blocks the
-  save stops it with the reason) and opens the run in Runs & results,
-  except on Calibration, where it opens on the page itself
+  save stops it with the reason) and opens the run on the page itself
   (`?tab=calibration&run=<id>#cal-fit`, landing on *How the shown run fits*,
   focused, and the form says "shows its fit below"), so the calibration loop
   stays on one page (issue #586 round 3, `calibration-journey.spec.ts`);
-  a run that didn't start says so in the notice line. On Runs & results the
-  tab's own run form (**Run label**, Run forecast, Run model) takes its
-  place, last, with no Add data there (`fillHeader({ main })`, the header slot's
+  a run that didn't start says so in the notice line. Runs & results has
+  the tab's own run form (**Run label**, Run forecast, Run model) instead,
+  last, with no Add data there (`fillHeader({ main })`, the header slot's
   `main` part), so a page never has two Run models; while a run the page
   started is going, that form waits for it (`busy`). Viewers get neither:
-  a run needs an editor. Until issue #444 a run started from the header only
-  on Runs & results: the other sections' unlabelled **Run model** had been
-  removed so every run could be named, which the form now does. The
-  new-data line's **Re-run model** still runs from any section, labelled
-  with the data's end. A tab shown inside the grid modal or scenario
+  a run needs an editor. Runs & results' form says when unsaved edits from
+  any section (model, settings, project details) will be saved first
+  (`unsaved`). The new-data line's **Re-run model** still runs from any
+  section, labelled with the data's end, and opens the run in Runs &
+  results (on Calibration, on the page). A tab shown inside the grid modal or scenario
   override mode fills nothing.
 - **Notices, one slim line** under the title row, instead of full-width
   banners: the viewer's **View only** note (every section), the upload
@@ -1338,7 +1340,8 @@ role, freshness, Add data) and each tab's own header:
   their own `ModelSaveRow`.
 - **The groups:** `SectionHeader` takes the pill as `status`, the tab's
   controls as `actions` and the page's main box (Add data where the tab has
-  it, then the tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
+  it, then Run model on Calibration or the tab's `main`) as `main`; the box
+  is always drawn for an editor, and takes no room when it is empty. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
   on Allocations at 1440); the main box is one box, so a wrap never splits it.
   The title column asks for its context's full one-line width (and no more:
@@ -1371,20 +1374,26 @@ role, freshness, Add data) and each tab's own header:
   there; a control inside one of the list's own menus leaves it open;
   Escape (after a menu inside it), a click elsewhere or leaving it closes
   it. Without pills the ⋯ starts the main box's row. Add data (where the tab
-  has it) and Run model then share the last row, a lone Run model filling it
-  (the main box never splits; Run model's form is nudged to stay on the
-  screen); on Runs & results the run label and its field fill a row, then
+  has it) then fills the last row, beside Run model on Calibration (the main
+  box never splits; Run model's form is nudged to stay on the screen); on
+  Runs & results the run label and its field fill a row, then
   Run forecast and Run model share the next
   in equal parts (the form draws no box of its own there). While new data is
-  waiting the header's button reads **Re-run model** and the notice line is
-  words only ("New data since the last run (…)."), since the two buttons did
-  the same thing 8 px apart; a wide screen keeps both. A viewer's **View
+  waiting on Calibration, the header's button reads **Re-run model** and the
+  notice line is words only ("New data since the last run (…)."), since the
+  two buttons did the same thing 8 px apart (the line's `header-run` class);
+  a wide screen keeps both. On the other sections, with no header button,
+  the notice line keeps its **Re-run model** on a phone too, on one line
+  with "New data since the last run." (the series' names read by screen
+  readers only there): a 36 px button whose target reaches 44 px (`::after`,
+  as the "?"), in a note with no padding, so the header still ends in the
+  first half of a 360 × 740 screen. A viewer's **View
   only** note is one line ("View only. Ask the owner to edit."; the role
   badge in the bar says it too), the full sentence still read by screen
   readers. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
   on every section at 360, 390 and 320 px with a big catchment (the header's
   foot at most 370 px down at 360 × 740, the ⋯ on the pills' row, the last
-  row filled, Re-run model), More actions' list (names, on the screen,
+  row filled, the Re-run model in the header or the notice line), More actions' list (names, on the screen,
   Escape, focus back from a sheet, a menu inside it), the viewer, plus the
   overlays' phone scans (node sheet, node table, Allocations' sheets, New
   scenario, Add data, the Sections menu).
