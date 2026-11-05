@@ -84,7 +84,7 @@ test('a rule table pasted from a spreadsheet is checked, saved and reloaded', as
 	await table.getByRole('button', { name: 'Paste… into the rule table at Outlet (Outflow gauge)' }).click();
 	await paste.getByLabel('Cells copied from a spreadsheet').fill(tsv);
 	await expect(paste.getByTestId('paste-summary')).toHaveText('120 values change.');
-	await expectNoViolations(page, { include: '[role="dialog"]' });
+	await expectNoViolations(page, { include: 'dialog[open]' });
 	await paste.getByRole('button', { name: 'Apply 120 changes' }).click();
 	await expect(paste).toBeHidden();
 	await expect(table.getByRole('status', { name: 'Paste result', exact: true })).toHaveText('Filled the EWR values: 12 months × 10 % points (rows matched by month name).');

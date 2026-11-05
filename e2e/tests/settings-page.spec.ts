@@ -40,8 +40,8 @@ test('Model settings’ header points at Calibration for the fit, and its side i
 	await expect(fitSummary(page)).toHaveCount(0);
 	await expect(header(page).getByRole('link', { name: /^Fit (the parameters|record)$/ })).toHaveCount(0);
 	await expect(header(page).getByTestId('settings-context').getByRole('link', { name: 'Calibration', exact: true })).toHaveAttribute('href', '?tab=calibration');
-	// The header's Run model opens a form to name the run (the one on every section but Runs & results).
-	await expect(header(page).getByTestId('header-run')).toHaveAttribute('aria-expanded', 'false');
+	// No Run model here: it is on Runs & results only.
+	await expect(header(page).getByRole('button', { name: 'Run model', exact: true })).toHaveCount(0);
 	// The old intro paragraph is gone: the header and the menu's groups say it.
 	await expect(page.getByText(/^Grouped by what each setting drives/)).toHaveCount(0);
 

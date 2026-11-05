@@ -354,8 +354,13 @@ test('another run: the page stays, marked busy, while its record loads, then swa
 	const account = page.getByRole('region', { name: 'Water account' });
 	await account.scrollIntoViewIfNeeded();
 	await expect(account).toBeInViewport();
-	const scrolled = await page.evaluate(() => scrollY);
-	expect(scrolled).toBeGreaterThan(0);
+	expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+	// Where the reader sees it: the account's place in the window. Not scrollY: the header above can change height
+	// with the run it names (its controls fit beside a shorter context line), and the browser's scroll anchoring then
+	// moves scrollY to keep what is in view where it was, which is the point.
+	// Within a pixel: scroll anchoring sets a whole-pixel scrollY.
+	const onScreen = async () => (await account.boundingBox())!.y;
+	const seen = await onScreen();
 	let release!: () => void;
 	const held = new Promise<void>((r) => (release = r));
 	let holding!: () => void;
@@ -372,7 +377,7 @@ test('another run: the page stays, marked busy, while its record loads, then swa
 	await expect(body).toHaveAttribute('data-run', newest);
 	await expect(account).toBeInViewport();
 	await expect(riverTiles(page)).toHaveCount(2);
-	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+	expect(Math.abs((await onScreen()) - seen)).toBeLessThanOrEqual(1);
 	// The tools are the newest run's, not the first's the header now names: inert until the swap, so none of their
 	// Run buttons can start a job on the wrong run (a click can't reach one, nor can focus).
 	const tools = page.locator('section[aria-labelledby="river-tools-h"]');
@@ -390,7 +395,7 @@ test('another run: the page stays, marked busy, while its record loads, then swa
 	await expect(page.locator('#res-ewr figure.chart')).toHaveAttribute('data-ready', 'true');
 	// Swapped and drawn: the panels' remount (keyed on the run) didn't move the page, and the tools are the first run's, usable.
 	await expect(account).toBeInViewport();
-	expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+	expect(Math.abs((await onScreen()) - seen)).toBeLessThanOrEqual(1);
 	await expect(tools).not.toHaveAttribute('inert');
 	expect(await takesFocus()).toBe(true);
 
