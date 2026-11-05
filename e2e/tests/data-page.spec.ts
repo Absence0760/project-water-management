@@ -31,9 +31,9 @@ test('the series are grouped, the series behind come first in their group and ar
 	await expect(sections(page).getByRole('link', { name: /^Data/ })).toContainText('(2 series behind)');
 	const header = page.getByTestId('section-header');
 	await expect(header.getByRole('button', { name: 'Preview all data' })).toBeVisible();
-	// Run model is the header's primary action on every section; Add data sits beside it.
+	// Add data ends the header, a plain button; Run model is on Runs & results only.
 	await expect(header.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
-	await expect(header.getByTestId('header-run')).toHaveClass(/btn-primary/);
+	await expect(header.getByRole('button', { name: 'Run model', exact: true })).toHaveCount(0);
 	// The feeds that fill series daily are Data feeds, further down this page (issue #586: it was on Settings).
 	await expect(page.getByTestId('data-feeds-link')).toHaveAttribute('href', '#data-feeds');
 

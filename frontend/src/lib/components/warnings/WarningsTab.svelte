@@ -114,9 +114,9 @@
 		blockers?: readonly SaveBlocker[];
 		/** The series behind today (the Data row's count). */
 		behind?: readonly BehindSeries[];
-		/** A run the page started is out (its Run model). */
+		/** A run the page started is out (Run now, or the new-data line's Re-run model). */
 		running?: boolean;
-		/** Start a run, as the header's Run model does (it opens back here). */
+		/** Start a run: the page's runModel (it opens back here). */
 		onRun?: () => void;
 		onProjectChange: (p: Project) => void;
 	} = $props();

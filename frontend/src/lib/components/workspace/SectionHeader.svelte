@@ -5,8 +5,9 @@
 	// Summary's "Setup complete" pill), the
 	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's main
 	// box: Add data (on the tabs it adds data to, TAB_ADDS_DATA, issue #601),
-	// then Run model (the page's RunButton, or the tab's main action in its
-	// place: `main`, Runs & results' run form).
+	// then Run model on Calibration (the page's RunButton) or the tab's main
+	// action in its place (`main`: Runs & results' run form). No other section
+	// has a Run model.
 	// Under them, one slim line of notices (view only, new data) instead of
 	// full-width banners.
 	//
@@ -470,5 +471,11 @@
 		.actions :global(.btn) {
 			min-height: 44px;
 		}
+	}
+	/* The main box is always drawn for an editor (the page's sign that the header is there, add-data-tabs.spec.ts),
+	   but with nothing in it (a section with neither Add data nor a Run model) it takes no room and adds no gap, on
+	   a phone too (after the container query's display, and more specific than it). */
+	.group.main:not(:has(> *)) {
+		display: none;
 	}
 </style>

@@ -90,7 +90,7 @@ test.describe('at 1440×900', () => {
 		const dialog = page.getByRole('dialog', { name: 'Paste the TAB flows' });
 		await dialog.getByLabel('Cells copied from a spreadsheet').fill('0.5 0.31 0.22 0.12 0.06 0.09 0.2 0.55 0.9 1.2 0.95 0.7');
 		await expect(dialog.getByTestId('paste-summary')).toHaveText('2 values change; 10 already have the pasted value.');
-		await expectNoViolations(page, { include: '[role="dialog"]' });
+		await expectNoViolations(page, { include: 'dialog[open]' });
 		await dialog.getByRole('button', { name: 'Apply 2 changes' }).click();
 		await expect(dialog).toBeHidden();
 		await expect(daily.getByRole('status', { name: 'Paste result', exact: true })).toHaveText('Filled the 12 TAB flows.');
