@@ -2543,7 +2543,8 @@ export interface Allocation {
 /** An imported file: the provenance of its rows. */
 export interface AllocationSource {
 	id: string;
-	kind: AllocationImportKind;
+	/** `demo`: invented registered users an editor loaded (315, POST …/allocations/demo), not a file. */
+	kind: AllocationImportKind | 'demo';
 	fileName: string;
 	sha256: string;
 	reference: string;

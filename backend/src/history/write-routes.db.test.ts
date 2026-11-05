@@ -449,6 +449,17 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
 	},
 	{
+		// Demo registered users (315): the farm is a farm, so the load has a unit to put them on.
+		route: `POST ${P}/allocations/demo`,
+		records: ['allocation.demo_loaded'],
+		call: (c) => c.owner.call('POST', `${at(c)}/allocations/demo`, {})
+	},
+	{
+		route: `DELETE ${P}/allocations/demo`,
+		records: ['allocation.demo_removed'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/demo`)
+	},
+	{
 		route: `PUT ${P}/allocations/viewer-units`,
 		records: ['allocation.viewer_units'],
 		call: (c) => c.owner.call('PUT', `${at(c)}/allocations/viewer-units`, { on: true })

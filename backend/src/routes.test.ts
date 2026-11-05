@@ -97,6 +97,14 @@ describe('route auth inventory', () => {
 		expect(PUBLIC.has('GET /projects/:id/import-report')).toBe(false);
 	});
 
+	// Demo registered users (315): loaded and removed by editors, auth-gated (allocations/demo.db.test.ts).
+	it('inventories the demo registered users routes as auth-gated', () => {
+		for (const r of ['POST /projects/:id/allocations/demo', 'DELETE /projects/:id/allocations/demo']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// The restriction log (the WUA persona's log of restriction decisions): auth-gated, viewer and above (publish/restrictionLog.db.test.ts).
 	it('inventories the restriction log and its CSV export as auth-gated', () => {
 		for (const r of ['GET /projects/:id/restriction-log', 'GET /projects/:id/restriction-log/export.csv']) {

@@ -25,6 +25,12 @@
 	// years (the WUA manager's cross-unit view), that table folded whole
 	// behind "Show all units' water years" since issue #175: it is the picked
 	// unit's table for every unit, so the page leads with the one.
+	// Between the comparison and the volumes: "Registered users by hydrological
+	// unit" (AllocationRegisteredUsers, the operator's table: one row per
+	// registered user per farm, each unit's subtotal, the catchment total; no run
+	// needed), then "On the map", which shades the units by those subtotals with
+	// no run, or against the run when there is one to compare. Editors load and
+	// remove invented demo users from the table's panel (315).
 	// Viewers never see holder names (decision D3; the API leaves them out, RLS
 	// enforces it), and see each volume only when an owner allows it (162):
 	// otherwise totals per water source (AllocationTotals). Owners switch that
@@ -48,18 +54,20 @@
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import { foldList } from '#lib/components/common/fold.js';
 	import { fillHeader } from '#lib/components/workspace/headerSlot.svelte.js';
-	import { fmtDate, fmtNum } from '#lib/format/number.js';
+	import { fmtDate, fmtNum, localIsoDate } from '#lib/format/number.js';
 	import { withoutParam, withParam } from '#lib/workspace/overlays.js';
 	import AllocationForm from './AllocationForm.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import AllocationImport from './AllocationImport.svelte';
 	import AllocationTotals from './AllocationTotals.svelte';
+	import AllocationRegisteredUsers from './AllocationRegisteredUsers.svelte';
 	import AllocationUnitTotals from './AllocationUnitTotals.svelte';
 	import AllocationUseMap from './AllocationUseMap.svelte';
 	import type { AllocationComparisonTotals } from '#lib/api/index.js';
 	import UsePlot from './UsePlot.svelte';
 	import YearTable from './YearTable.svelte';
 	import { comparisonUseRows } from './usePlot';
+	import { registeredUsers, unitSubtotals } from './registeredUsers';
 	import {
 		allocationsContext,
 		AUTHORISATION_LABEL,
@@ -163,6 +171,8 @@
 		return () => release();
 	});
 	const sourceById = $derived(new Map((data?.sources ?? []).map((s) => [s.id, s])));
+	/** The files imported: the demo users (315) are listed with their notice and Remove demo users, not as a file. */
+	const importedFiles = $derived((data?.sources ?? []).filter((s) => s.kind !== 'demo'));
 	const unmatchedCount = $derived(data?.allocations.filter((a) => a.nodeId === null).length ?? 0);
 	/** Bumped on every change so the comparison reloads. */
 	let version = $state(0);
@@ -317,6 +327,14 @@
 	function pickFromMap(id: string) {
 		void goto(withParam(url, 'unit', id), { reset: false }).then(() => detailEl?.scrollIntoView({ block: 'start' }));
 	}
+	// A unit picked while the map shades what is registered: its registered users in the table above.
+	let usersFocus = $state<{ id: string; at: number } | null>(null);
+	const pickRegistered = (id: string) => (usersFocus = { id, at: Date.now() });
+
+	// --- what is registered per unit, in force today: the map's run-free shading (the Registered users table's subtotals) ---
+	const registeredByUnit = $derived(
+		data && !data.unitsHidden ? { units: data.nodes, subtotals: unitSubtotals(registeredUsers(data.allocations, data.nodes, localIsoDate(), data.canSeeHolders)) } : null
+	);
 
 	// --- the sheets: add or change a volume (`volume=new|<id>`), import (`import=1`); editors only ---
 	const volumeParam = $derived(url.searchParams.get('volume'));
@@ -609,13 +627,6 @@
 								</div>
 							</section>
 						</div>
-						<AllocationUseMap
-							{projectId}
-							{comparison}
-							open={mapOpen}
-							picked={pickedId}
-							onpick={pickFromMap}
-						/>
 					{:else}
 						<section class="panel" aria-labelledby="alloc-compare-h">
 							<h2 id="alloc-compare-h">Modelled use vs registered volume <HelpTip key="registered-vs-modelled" /></h2>
@@ -625,6 +636,22 @@
 				{/if}
 			</LoadState>
 		</div>
+	{/if}
+
+	<!-- A viewer who reads only totals per water source (162) reads no row, so no table: AllocationTotals says what they see. -->
+	{#if data && !data.unitsHidden}
+		<AllocationRegisteredUsers {projectId} {data} {canEdit} focusUnit={usersFocus} onstart={startAction} onchanged={changed} onfailed={failed} />
+	{/if}
+	{#if registeredByUnit && (data?.allocations.length || (comparison && units.length))}
+		<AllocationUseMap
+			{projectId}
+			comparison={comparison && units.length ? comparison : null}
+			registered={registeredByUnit}
+			open={mapOpen}
+			picked={pickedId}
+			onpick={pickFromMap}
+			onpickRegistered={pickRegistered}
+		/>
 	{/if}
 
 	<section class="panel" aria-labelledby="alloc-list-h">
@@ -687,10 +714,10 @@
 					</p>
 				{/if}
 
-				{#if data.sources.length}
+				{#if importedFiles.length}
 					<h3 class="sub-h">Imported files <HelpTip key="warms-import" label="About importing registered volumes" /></h3>
 					<ul class="sources" id="alloc-sources">
-						{#each data.sources as s (s.id)}
+						{#each importedFiles as s (s.id)}
 							<li>
 								<span><strong>{s.fileName}</strong> · {s.rows} row{s.rows === 1 ? '' : 's'} · {fmtDate(s.importedAt, true)}{s.importedBy ? ` by ${s.importedBy}` : ''}</span>
 								<span class="mono small" title="SHA-256 of the file">{s.sha256}</span>

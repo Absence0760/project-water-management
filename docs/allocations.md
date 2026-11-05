@@ -308,6 +308,73 @@ left out; volumes not matched to a unit of the run are in no total. It is
 the same reader's data as the per-unit comparison, so the same people see
 it ([Who sees what](#who-sees-what)).
 
+### Registered users by hydrological unit
+
+The operator asked (2026-11-05, again after #717's per-unit table, which
+sets each unit against a run) for a table of the registered users
+themselves, with what each is registered for, added up per unit: the
+**Registered users by hydrological unit** table on the Allocations page
+(`AllocationRegisteredUsers.svelte`, `registeredUsers.ts`). It reads no run,
+so it shows before the model has run.
+
+| Farm no. | Registered user | Hydrological unit | Registered irrigated area (ha) | Registered farm dam capacity (m³) | Registered water use (m³/a) |
+| --- | --- | --- | --- | --- | --- |
+
+- **One row per registered user per farm**: the allocations with the same
+  unit, property (the *Farm no.*, the allocation's `property_ref`; WARMS
+  states a farm as "123/456", farm number and portion) and holder name
+  (case and spacing ignored), added up.
+- **The rules are the comparison's**, read on one day, today, as a viewer's
+  totals per water source are: a row counts while `valid_from ≤ today ≤
+  valid_to` (either open); the water use is its takes' (21a) volumes,
+  surface and groundwater added; the irrigated area the areas its takes
+  state; the dam capacity its registered storage, 21b rows and the storage
+  stated on a take. A figure no row states reads "–", never 0. Rows not in
+  force today are counted under the table and in no figure.
+- **Grouped by unit** (by name, as the page's lists are), each group ending
+  in its **subtotal**; volumes not matched to a unit are the last group,
+  **Not matched to a unit**; the **Catchment total** adds up every group,
+  the not-matched one included.
+- **Who sees what** is the list's: the table is offered wherever each volume
+  is (not to a viewer who sees totals only), and the **Registered user**
+  column only to a reader who may see names (`canSeeHolders`); without it
+  the rows are per unit and farm number.
+- **Download this table (CSV)** writes its rows, subtotals and total
+  (`registeredUsersCsv`, cells defused against spreadsheet formulas).
+- The map below it shades the units by these subtotals with no run ([The
+  map](#the-map), *What is registered*).
+
+### Demo registered users
+
+So the table and map can be shown on a project before a WARMS extract
+arrives (the operator's own project in production included), an editor can
+press **Load demo registered users** (`POST /projects/:id/allocations/demo`,
+[api.md § Allocations](./api.md#allocations)): two or three invented
+registered users on every farm and water user of the current model, named
+from `DEMO_FARMERS` (`backend/src/allocations/demoFarmers.ts`, each
+"… (invented)", the list the example seeds use), with invented farm numbers
+(`123/456`) and figures from the unit's own inputs (`demo.ts`): an irrigated
+area ≈ its planted crop area × 0.8–1.15 and a volume ≈ that area × 6 000–9 000
+m³/ha a year (a farm with no crops a volume only; a water user's volume from
+its demand), and a farm with a dam its capacity × 0.85–1.1 as storage, about
+60 % on a 21b row of its first user and the rest on the second user's take.
+The factors are drawn from a generator seeded by the project's id, so a
+project's demo reads the same each time, and no figure is anyone's.
+
+- **Marked for removal**: the rows are one `allocation_source` of kind
+  `demo` (315). **Remove demo users** (`DELETE …/allocations/demo`) deletes
+  that source and, by its cascade, exactly its rows and names; nothing
+  typed in or imported (`demo.db.test.ts`). Loading again replaces the demo,
+  never duplicates it.
+- While a demo is loaded the table says *Demo registered users (invented)
+  are shown*, with **Remove demo users** for editors; it isn't listed with
+  the imported files, and an import never matches a row by a demo row's
+  registration or farm number.
+- The rows are allocations like any other (they reach a run's inputs and the
+  comparison, so the latest run reads out of date), and the History records
+  `allocation.demo_loaded` and `allocation.demo_removed` by counts, never a
+  name.
+
 ### The allocation mode (engine ≥ 1.18.0)
 
 `settings.allocationMode` decides what the volumes do to a run
@@ -527,6 +594,17 @@ existing lawful use beside the application's numbers.
   filling, s21b, compared with storage instead, issue #90).
 
 ### The map
+
+**What is registered** (2026-11-05): the map needs no run to shade the
+units. With no run, or one with nothing to compare, and with **Show › What
+is registered** (`mapShade=registered`) beside a run, each unit is shaded
+by what its registered users in force today register for the measure picked
+(water use, irrigated area or dam capacity): the [Registered users
+table](#registered-users-by-hydrological-unit)'s subtotals, on a five-step
+sequential scale from 0 to a round number at or above the largest unit,
+with a key of each step's range and count, a unit with nothing registered
+outlined only, and each unit's figure as its label (`registeredMap.ts`). The
+compared-to-run shading below is unchanged.
 
 The Allocations tab's **On the map** (issue #510, from the #507 Q&A) draws
 the comparison: each hydrological unit's area shaded by how its modelled use

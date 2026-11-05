@@ -26,6 +26,8 @@ import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { mergeSettings } from '../projects/settings.js';
+import { loadModel } from '../model/store.js';
+import { DEMO_SOURCE_NAME, demoAllocations } from './demo.js';
 import {
 	AUTHORISATIONS,
 	CONDITION_MAX_CHARS,
@@ -270,6 +272,77 @@ async function setHolder(db: Db, projectId: string, aid: string, holder: string)
 		);
 }
 
+/** One row as the import and the demo load insert it (the template's fields; the holder's name goes to allocation_holder). */
+type InsertRow = Pick<
+	ParsedRow,
+	'registrationNo' | 'propertyRef' | 'holder' | 'authorisation' | 'purpose' | 'waterSource' | 'volumeM3PerYear' | 'storageM3' | 'validFrom' | 'validTo' | 'reference' | 'months' | 'maxRateM3s' | 'conditions' | 'waterUse' | 'irrigatedAreaHa'
+> & { nodeId: string | null };
+
+/**
+ * Insert `rows` under the source `sourceId`: one statement for the rows and one
+ * for the names, not one per row. The ids are made here so each name finds its
+ * row.
+ */
+async function insertRows(db: Db, projectId: string, sourceId: string, rows: readonly InsertRow[]) {
+	const ids = rows.map(() => crypto.randomUUID());
+	await db.query(
+		`INSERT INTO allocation (id, project_id, source_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
+			volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use, irrigated_area_ha)
+		 SELECT x.id, $1, $2, x.node_id, x.registration_no, x.property_ref, x.authorisation, x.purpose, x.water_source,
+			x.volume_m3_year, x.storage_m3, x.valid_from, x.valid_to, x.reference,
+			CASE WHEN jsonb_typeof(x.months) = 'array' THEN (SELECT array_agg(m::smallint ORDER BY m::int) FROM jsonb_array_elements_text(x.months) m) END, x.max_rate_m3s, x.conditions,
+			x.water_use, x.irrigated_area_ha
+		 FROM jsonb_to_recordset($3::jsonb) AS x(id uuid, node_id uuid, registration_no text, property_ref text, authorisation text, purpose text,
+			water_source text, volume_m3_year double precision, storage_m3 double precision, valid_from date, valid_to date, reference text,
+			months jsonb, max_rate_m3s double precision, conditions jsonb, water_use text, irrigated_area_ha double precision)`,
+		[
+			projectId,
+			sourceId,
+			JSON.stringify(
+				rows.map((r, i) => ({
+					id: ids[i],
+					node_id: r.nodeId,
+					registration_no: r.registrationNo,
+					property_ref: r.propertyRef,
+					authorisation: r.authorisation,
+					purpose: r.purpose,
+					water_source: r.waterSource,
+					volume_m3_year: r.volumeM3PerYear,
+					storage_m3: r.storageM3,
+					valid_from: r.validFrom,
+					valid_to: r.validTo,
+					reference: r.reference,
+					months: r.months,
+					max_rate_m3s: r.maxRateM3s,
+					conditions: r.conditions,
+					water_use: r.waterUse,
+					irrigated_area_ha: r.irrigatedAreaHa
+				}))
+			)
+		]
+	);
+	const holders = ids.map((aid, i) => ({ allocation_id: aid, user_display: rows[i]!.holder })).filter((h) => h.user_display.trim() !== '');
+	if (holders.length)
+		await db.query(
+			`INSERT INTO allocation_holder (allocation_id, project_id, user_display)
+			 SELECT x.allocation_id, $1, btrim(x.user_display) FROM jsonb_to_recordset($2::jsonb) AS x(allocation_id uuid, user_display text)`,
+			[projectId, JSON.stringify(holders)]
+		);
+}
+
+/** Remove the project's demo registered users (315: the `demo` source and, by its cascade, its rows and names); how many rows went. */
+async function removeDemo(db: Db, projectId: string): Promise<number> {
+	const { rows } = await db.query<{ n: number }>(
+		`SELECT count(*)::int AS n FROM allocation a JOIN allocation_source s ON s.id = a.source_id WHERE s.project_id = $1 AND s.kind = 'demo'`,
+		[projectId]
+	);
+	await db.query(`DELETE FROM allocation_source WHERE project_id = $1 AND kind = 'demo'`, [projectId]);
+	return rows[0]?.n ?? 0;
+}
+
+/** Rows that aren't demo registered users (315): an import never matches by an invented registration number or farm number. */
+const NOT_DEMO = `(source_id IS NULL OR source_id NOT IN (SELECT id FROM allocation_source WHERE project_id = $1 AND kind = 'demo'))`;
+
 export interface PreviewRow extends ParsedRow {
 	nodeId: string | null;
 	matchedBy: MatchedBy | 'manual';
@@ -296,10 +369,10 @@ async function prepareImport(db: Db, projectId: string, body: Omit<z.infer<typeo
 		throw new ApiError(409, `this file was already imported (as “${dup[0].fileName}” on ${dayText(localDate(new Date(dup[0].importedAt), dup[0].timeZone ?? DEFAULT_TIME_ZONE))}); delete that import first to re-import it`);
 	const nodes = await matchNodes(db, projectId);
 	const { rows: known } = await db.query<KnownMatch>(
-		'SELECT registration_no AS "registrationNo", property_ref AS "propertyRef", node_id AS "nodeId" FROM allocation WHERE project_id = $1 AND node_id IS NOT NULL',
+		`SELECT registration_no AS "registrationNo", property_ref AS "propertyRef", node_id AS "nodeId" FROM allocation WHERE project_id = $1 AND node_id IS NOT NULL AND ${NOT_DEMO}`,
 		[projectId]
 	);
-	const { rows: regs } = await db.query<{ r: string }>("SELECT DISTINCT lower(registration_no) AS r FROM allocation WHERE project_id = $1 AND registration_no <> ''", [
+	const { rows: regs } = await db.query<{ r: string }>(`SELECT DISTINCT lower(registration_no) AS r FROM allocation WHERE project_id = $1 AND registration_no <> '' AND ${NOT_DEMO}`, [
 		projectId
 	]);
 	const existing = new Set(regs.map((x) => x.r));
@@ -372,6 +445,53 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			await setHolder(db, id, aid, body.holder);
 			await recordAudit(db, id, 'allocation.created', { allocationId: aid, registrationNo: body.registrationNo, nodeId: body.nodeId, waterSource: body.waterSource, volumeM3PerYear: body.volumeM3PerYear, waterUse: body.waterUse });
 			return c.json({ allocation: await loadAllocation(db, id, aid) }, 201);
+		});
+	})
+	// Demo registered users (315, docs/allocations.md § Demo registered users): two or three invented users on every farm
+	// and water user of the current model, as one `demo` source. Loading again replaces them; registered before the
+	// /:aid routes so "demo" is never read as an allocation's id.
+	.post('/:id/allocations/demo', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const rows = demoAllocations(await loadModel(db, id), id);
+			if (!rows.length) throw new ApiError(422, 'the model has no farm or water user to load demo registered users onto');
+			const replaced = await removeDemo(db, id);
+			if ((await countAllocations(db, id)) + rows.length > ALLOCATIONS_PER_PROJECT_MAX)
+				throw new ApiError(409, `loading ${rows.length} demo rows would pass the limit of ${ALLOCATIONS_PER_PROJECT_MAX} allocations per project`);
+			const text = JSON.stringify(rows);
+			const { rows: src } = await db.query<{ id: string }>(
+				`INSERT INTO allocation_source (project_id, kind, file_name, sha256, reference, imported_by)
+				 VALUES ($1, 'demo', $2, $3, $4, app_current_user_id()) RETURNING id`,
+				[id, DEMO_SOURCE_NAME, createHash('sha256').update(text, 'utf8').digest('hex'), 'Invented for display only: remove them with Remove demo users']
+			);
+			const sourceId = src[0]!.id;
+			await insertRows(
+				db,
+				id,
+				sourceId,
+				rows.map((r) => ({ ...r, validFrom: null, validTo: null, months: null, maxRateM3s: null, conditions: [] }))
+			);
+			await touchRunInputs(db, id);
+			const users = new Set(rows.map((r) => `${r.nodeId}|${r.holder}`)).size;
+			const units = new Set(rows.map((r) => r.nodeId)).size;
+			// Counts only, never a name (the history is readable by viewers).
+			await recordAudit(db, id, 'allocation.demo_loaded', { sourceId, rows: rows.length, users, units, replaced });
+			const { rows: source } = await db.query(`${SOURCE_SELECT} WHERE s.id = $1`, [sourceId]);
+			return c.json({ source: source[0], loaded: rows.length, users, units }, 201);
+		});
+	})
+	// Remove the demo registered users: the demo source and every row it brought, nothing else.
+	.delete('/:id/allocations/demo', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const removed = await removeDemo(db, id);
+			if (removed) {
+				await touchRunInputs(db, id);
+				await recordAudit(db, id, 'allocation.demo_removed', { rows: removed });
+			}
+			return c.json({ removed });
 		});
 	})
 	.patch('/:id/allocations/:aid', async (c) => {
@@ -469,53 +589,8 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				[id, body.kind, body.fileName, p.sha256, body.reference]
 			);
 			const sourceId = src[0]!.id;
-			// One statement for the rows and one for the names, not one per row.
-			// The ids are made here so each name finds its row.
-			const ids = valid.map(() => crypto.randomUUID());
-			await db.query(
-				`INSERT INTO allocation (id, project_id, source_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
-					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions, water_use, irrigated_area_ha)
-				 SELECT x.id, $1, $2, x.node_id, x.registration_no, x.property_ref, x.authorisation, x.purpose, x.water_source,
-					x.volume_m3_year, x.storage_m3, x.valid_from, x.valid_to, x.reference,
-					CASE WHEN jsonb_typeof(x.months) = 'array' THEN (SELECT array_agg(m::smallint ORDER BY m::int) FROM jsonb_array_elements_text(x.months) m) END, x.max_rate_m3s, x.conditions,
-					x.water_use, x.irrigated_area_ha
-				 FROM jsonb_to_recordset($3::jsonb) AS x(id uuid, node_id uuid, registration_no text, property_ref text, authorisation text, purpose text,
-					water_source text, volume_m3_year double precision, storage_m3 double precision, valid_from date, valid_to date, reference text,
-					months jsonb, max_rate_m3s double precision, conditions jsonb, water_use text, irrigated_area_ha double precision)`,
-				[
-					id,
-					sourceId,
-					JSON.stringify(
-						valid.map((r, i) => ({
-							id: ids[i],
-							node_id: r.nodeId,
-							registration_no: r.registrationNo,
-							property_ref: r.propertyRef,
-							authorisation: r.authorisation,
-							purpose: r.purpose,
-							water_source: r.waterSource,
-							volume_m3_year: r.volumeM3PerYear,
-							storage_m3: r.storageM3,
-							valid_from: r.validFrom,
-							valid_to: r.validTo,
-							reference: r.reference,
-							months: r.months,
-							max_rate_m3s: r.maxRateM3s,
-							conditions: r.conditions,
-							water_use: r.waterUse,
-							irrigated_area_ha: r.irrigatedAreaHa
-						}))
-					)
-				]
-			);
+			await insertRows(db, id, sourceId, valid);
 			await touchRunInputs(db, id);
-			const holders = ids.map((aid, i) => ({ allocation_id: aid, user_display: valid[i]!.holder })).filter((h) => h.user_display.trim() !== '');
-			if (holders.length)
-				await db.query(
-					`INSERT INTO allocation_holder (allocation_id, project_id, user_display)
-					 SELECT x.allocation_id, $1, btrim(x.user_display) FROM jsonb_to_recordset($2::jsonb) AS x(allocation_id uuid, user_display text)`,
-					[id, JSON.stringify(holders)]
-				);
 			await recordAudit(db, id, 'allocation.imported', {
 				sourceId,
 				fileName: body.fileName,

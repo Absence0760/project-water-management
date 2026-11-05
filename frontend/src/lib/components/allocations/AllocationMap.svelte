@@ -1,8 +1,10 @@
 <!--
 	The Allocations tab's map (issue #510, docs/allocations.md § The map): each
 	hydrological unit's polygon (its linked farm_parcel on the Map tab, docs/maps.md
-	§ Hydrological units layer) shaded by its band of modelled use ÷ registered
-	volume (useMap.ts). This component is a dynamic import of AllocationsTab, and
+	§ Hydrological units layer) shaded by the scheme it is given: its band of
+	modelled use ÷ registered volume (useMap.ts useScheme), or, with no run
+	needed, what its registered users register on a sequential scale
+	(registeredMap.ts registeredScheme). This component is a dynamic import of AllocationsTab, and
 	MapLibre a dynamic import of it (map/maplibre.ts, as CatchmentMap loads it),
 	so neither weighs on the tab until the map is opened. The basemap is the Map
 	tab's own (mapStyle.ts basemapStyle); it follows the app's theme.
@@ -15,28 +17,25 @@
 	import { onMount, untrack } from 'svelte';
 	import { appIsDark, watchAppTheme } from '#lib/components/map/appTheme.js';
 	import { basemapLayerIds, basemapStyle, labelLayers, type Style } from '#lib/components/map/mapStyle.js';
-	import { bandColours, HATCH_IMAGE, hatchPixels, useBounds, useLayers, useMapData, useSentence, USE_SOURCE_ID, type MapMeasure, type UseShading } from './useMap';
+	import { HATCH_IMAGE, hatchPixels, useBounds, useMapData, USE_SOURCE_ID, type MapScheme, type MapShading } from './useMap';
 
 	let {
 		shading,
 		tilesUrl,
 		glyphs = null,
 		picked = null,
-		period,
-		measure = 'use',
+		scheme,
 		onpick
 	}: {
-		shading: UseShading;
+		shading: MapShading;
 		/** The PMTiles basemap's URL; empty = a plain background. */
 		tilesUrl: string | null;
 		/** The glyphs URL (mapStyle.ts glyphsUrl): the basemap's place names. Null: none. */
 		glyphs?: string | null;
 		/** The unit whose comparison is open: its label is pressed. */
 		picked?: string | null;
-		/** The period in words ("the mean of 3 whole water years"), for each label's accessible name. */
-		period: string;
-		/** What the shading reads (water use, irrigated area or dam capacity), for each label's accessible name. */
-		measure?: MapMeasure;
+		/** How the units are coloured and named: the run's bands or the registered scale (with the period and measure in its sentences). */
+		scheme: MapScheme;
 		onpick: (nodeId: string) => void;
 	} = $props();
 
@@ -60,7 +59,7 @@
 		const style: Style = {
 			...base,
 			sources: { ...base.sources, [USE_SOURCE_ID]: { type: 'geojson', data: useMapData(shading) } },
-			layers: [...base.layers, ...useLayers(dark), ...(glyphs && tilesUrl && !tilesNote ? labelLayers(dark) : [])]
+			layers: [...base.layers, ...scheme.layers(dark), ...(glyphs && tilesUrl && !tilesNote ? labelLayers(dark) : [])]
 		};
 		if (glyphs && tilesUrl && !tilesNote) style.glyphs = glyphs;
 		return style;
@@ -69,8 +68,8 @@
 	/** Each unit's label, a button at a point inside its polygon. */
 	function syncMarkers() {
 		if (!map || !lib) return;
-		const colours = bandColours(dark);
-		const units = [...shading.drawn.map((u) => ({ ...u, notInRun: false })), ...shading.notInRun.map((u) => ({ ...u, use: null, band: null, label: 'Not in this run', notInRun: true }))];
+		const colours = scheme.colours(dark);
+		const units = [...shading.drawn.map((u) => ({ ...u, notInRun: false })), ...shading.notInRun.map((u) => ({ ...u, band: null, label: 'Not in this run', notInRun: true }))];
 		const keep = new Set(units.filter((u) => u.at).map((u) => u.nodeId));
 		for (const [id, m] of markers)
 			if (!keep.has(id)) {
@@ -79,8 +78,8 @@
 			}
 		for (const u of units) {
 			if (!u.at) continue;
-			const c = u.band ? colours[u.band] : colours.none;
-			const name = u.notInRun ? `${u.name}: not in this run (added since it ran)` : useSentence(u.name, u.use, period, measure);
+			const c = (u.band ? colours[u.band] : undefined) ?? colours.none!;
+			const name = u.notInRun ? `${u.name}: not in this run (added since it ran)` : scheme.sentence(u);
 			const key = `${u.label}|${name}|${u.at.join(',')}|${c.fill}|${c.text}|${u.band}`;
 			const had = markers.get(u.nodeId);
 			if (had && had.key === key) {
@@ -179,13 +178,22 @@
 		};
 	});
 
-	// A new measure, source, period or run: new shading. Reframe only when the polygons themselves change.
+	// A new measure, source, period, run or scheme: new shading. Reframe only when the polygons themselves change.
 	let framed = '';
+	let drawnScheme = untrack(() => scheme.id);
 	$effect(() => {
 		void shading;
-		void period;
-		void measure;
 		void status;
+		// Another scheme (the run's bands ⇄ the registered scale) has other layers: restyle, not just new data.
+		const id = scheme.id;
+		if (map && status === 'ready' && id !== drawnScheme) {
+			const m = map;
+			untrack(() => {
+				if (m.hasImage(HATCH_IMAGE)) m.removeImage(HATCH_IMAGE);
+				m.setStyle(styleNow() as never);
+			});
+		}
+		drawnScheme = id;
 		untrack(syncData);
 		const b = useBounds(shading);
 		const sig = JSON.stringify(b);
@@ -201,7 +209,7 @@
 </script>
 
 <div class="map-wrap" data-status={status} data-theme-drawn={dark ? 'dark' : 'light'} data-testid="allocation-map">
-	<div class="map" role="region" aria-label="Hydrological units shaded by modelled use against the registered volume" bind:this={el}></div>
+	<div class="map" role="region" aria-label={scheme.ariaLabel} bind:this={el}></div>
 	{#if status === 'loading'}
 		<p class="map-state muted" role="status">Drawing the map…</p>
 	{:else if status === 'failed'}

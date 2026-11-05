@@ -19,6 +19,7 @@ import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { grouped } from '../support/format.ts';
+import { volumesCard } from '../support/allocations.ts';
 
 const CSV = [
 	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference',
@@ -130,7 +131,8 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await expect(vList.getByRole('row', { name: /Upper farm/ })).toContainText('50\u202f000');
 	await expect(vList).not.toContainText('Invented Holder');
 	await expect(vList.getByRole('columnheader', { name: 'Registered user' })).toHaveCount(0);
-	await expect(v.getByText('Names of registered users are shown to editors only.')).toBeVisible();
+	// Said in the volumes card (and in the Registered users panel's lead, allocations-registered-users.spec.ts).
+	await expect(volumesCard(v).getByText('Names of registered users are shown to editors only.', { exact: true })).toBeVisible();
 	await expect(v.getByRole('link', { name: 'Import', exact: true })).toHaveCount(0);
 	await expect(v.getByRole('link', { name: '+ Add volume' })).toHaveCount(0);
 	await expectNoViolations(v);

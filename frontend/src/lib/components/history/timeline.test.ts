@@ -329,6 +329,9 @@ describe('what an item says', () => {
 		expect(eventLine(ev('allocation.deleted', { registrationNo: 'R-2' }))).toBe('Deleted a registered volume (R-2)');
 		expect(eventLine(ev('allocation.imported', { fileName: 'extract.csv', rows: 12 }))).toBe('Imported 12 registered volumes from extract.csv');
 		expect(eventLine(ev('allocation.import_deleted', { fileName: 'extract.csv', rows: 1 }))).toBe('Removed the import of extract.csv and its 1 registered volume');
+		expect(eventLine(ev('allocation.demo_loaded', { rows: 9, users: 7, units: 3, replaced: 0 }))).toBe('Loaded 7 demo registered users (invented) on 3 hydrological units');
+		expect(eventLine(ev('allocation.demo_loaded', { rows: 9, users: 7, units: 3, replaced: 9 }))).toBe('Loaded 7 demo registered users (invented) on 3 hydrological units, replacing the earlier demo');
+		expect(eventLine(ev('allocation.demo_removed', { rows: 9 }))).toBe('Removed the demo registered users (invented) and their 9 registered volumes');
 		expect(eventLine(ev('licence.outcome', { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28', reason: 'DWS letter' }))).toBe(
 			'Recorded the licence outcome: granted on 1 Mar 2026, expiring 28 Feb 2046; the record may be deleted from 28 Feb 2049'
 		);
