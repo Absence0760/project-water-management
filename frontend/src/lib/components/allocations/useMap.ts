@@ -220,18 +220,48 @@ export function useLabel(u: Pick<UnitUse, 'ratio' | 'band'> | null, measure: Map
 type Polygonal = Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }>;
 const isPolygonal = (g: MapGeometry): g is Polygonal => g.type === 'Polygon' || g.type === 'MultiPolygon';
 
-/** One unit as the map and its list show it. */
-export interface ShadedUnit {
+/**
+ * A unit AllocationMap draws, whichever shading it is in: its band (a key of
+ * the scheme's colours; null: nothing to read, a dashed outline), the words on
+ * its label, its polygons and where the label sits.
+ */
+export interface DrawnUnit {
 	nodeId: string;
 	name: string;
-	/** Null: the run covers no whole year of the picked period. */
-	use: UnitUse | null;
-	band: UseBand | null;
+	band: string | null;
 	label: string;
 	/** Its polygons (each linked farm_parcel); empty when it has none on the Map tab. */
 	polygons: { featureId: string; geometry: Polygonal }[];
 	/** Where its label sits: inside its largest polygon; null without one. */
 	at: MapPosition | null;
+}
+
+/** What AllocationMap draws: the units with an area, and the areas of units the run doesn't have. */
+export interface MapShading {
+	drawn: readonly DrawnUnit[];
+	notInRun: readonly UnitNotInRun[];
+}
+
+/**
+ * How AllocationMap colours and names the units: the compared-to-run bands
+ * (useScheme, below) or the run-free registered scale (registeredMap.ts).
+ */
+export interface MapScheme {
+	/** Which shading: another id has other layers, so the map restyles. */
+	id: 'use' | 'registered';
+	layers: (dark: boolean) => Layer[];
+	colours: (dark: boolean) => Record<string, { fill: string; text: string }>;
+	/** A unit's label's accessible name. */
+	sentence: (u: DrawnUnit) => string;
+	/** The map region's accessible name. */
+	ariaLabel: string;
+}
+
+/** One unit as the map and its list show it. */
+export interface ShadedUnit extends DrawnUnit {
+	/** Null: the run covers no whole year of the picked period. */
+	use: UnitUse | null;
+	band: UseBand | null;
 }
 
 /** A polygon linked to a unit the run doesn't have (added since it ran): drawn as an outline, listed as not in this run. */
@@ -292,7 +322,7 @@ export function useShading(c: AllocationComparison, features: readonly MapFeatur
 }
 
 /** The map's GeoJSON: each drawn unit's polygons with its band, and the polygons of units not in the run. */
-export function useMapData(s: UseShading) {
+export function useMapData(s: MapShading) {
 	return {
 		type: 'FeatureCollection' as const,
 		features: [
@@ -360,7 +390,7 @@ export function hatchPixels(dark: boolean, size = 8): { width: number; height: n
 }
 
 /** The bounds of every polygon drawn ([[w, s], [e, n]]), or null with none. */
-export function useBounds(s: UseShading): [[number, number], [number, number]] | null {
+export function useBounds(s: MapShading): [[number, number], [number, number]] | null {
 	let w = Infinity,
 		so = Infinity,
 		e = -Infinity,
@@ -376,6 +406,17 @@ export function useBounds(s: UseShading): [[number, number], [number, number]] |
 	for (const u of [...s.drawn, ...s.notInRun])
 		for (const p of u.polygons) for (const poly of p.geometry.type === 'Polygon' ? [p.geometry.coordinates] : p.geometry.coordinates) visit(poly[0] ?? []);
 	return Number.isFinite(w) ? [[w, so], [e, n]] : null;
+}
+
+/** The scheme AllocationMap draws the compared-to-run bands with: their layers, colours and each label's sentence. */
+export function useScheme(period: string, measure: MapMeasure): MapScheme {
+	return {
+		id: 'use',
+		layers: useLayers,
+		colours: bandColours,
+		sentence: (u) => useSentence(u.name, (u as ShadedUnit).use, period, measure),
+		ariaLabel: 'Hydrological units shaded by modelled use against the registered volume'
+	};
 }
 
 /**

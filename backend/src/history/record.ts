@@ -254,6 +254,9 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
+	// Demo registered users (315): loaded, { sourceId, rows, users, units, replaced } (rows a load replaced), or removed, { rows }. Counts, never a name.
+	| 'allocation.demo_loaded'
+	| 'allocation.demo_removed'
 	// Whether viewers read each registered volume (162, D3): { on }.
 	| 'allocation.viewer_units'
 	// The licence record (161_licence_record): the outcome an owner recorded (with its dates and reason), or a review confirmed.

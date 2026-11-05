@@ -179,6 +179,19 @@ export const PAGE_GUIDES: Guide[] = [
 				]
 			},
 			{
+				heading: 'Registered users by hydrological unit',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The **Registered users by hydrological unit** table lists each registered user per farm (Farm no.), with what their authorisations in force today register: irrigated area, farm dam capacity and water use. Each unit ends in a subtotal and the catchment total comes last. It needs no run. **On the map** shades the units by those subtotals (pick **What is registered** when there is a run to compare too).'
+					},
+					{
+						type: 'p',
+						text: 'Editors can press **Load demo registered users** to show the table and map with invented users (“… (invented)”) on every farm and water user. **Remove demo users** takes them all away and leaves every volume entered or imported.'
+					}
+				]
+			},
+			{
 				heading: 'Who sees names',
 				blocks: [
 					{

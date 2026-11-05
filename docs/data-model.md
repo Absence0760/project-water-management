@@ -1131,6 +1131,7 @@ the result change?", and put back any earlier version.
   by the migration),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
   registration numbers, file name and hash, counts; never a holder's name;
+  `allocation.demo_loaded/demo_removed`, 315, counts only;
   a viewer reads `allocation.created/changed/deleted` without the
   registration number and volume until an owner lets viewers read each
   volume: the History reads every subject through `app_audit_subject`, 190),
@@ -1962,7 +1963,10 @@ Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
 water-use volumes per farm or water user.
 
 - **`allocation_source`**: an imported file. `id`, `project_id` (→ `project`,
-  cascade), `kind` (`warms_extract` | `csv`), `file_name` (1–255), `sha256`
+  cascade), `kind` (`warms_extract` | `csv` | `demo`; `demo`, 315: invented
+  registered users an editor loaded through `POST …/allocations/demo`, so
+  `DELETE …/allocations/demo` removes exactly the rows whose source it is),
+  `file_name` (1–255), `sha256`
   (hex of the file's UTF-8 text), `reference` (≤ 500), `imported_by` (→
   `app_user`, `SET NULL`), `imported_at`. Unique `(project_id, sha256)`: a
   file is imported once per project (the index also covers the project key).

@@ -1216,6 +1216,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ source: AllocationSource; imported: number; skipped: number; unmatched: number }>('POST', `${p(id)}/allocations/import/commit`, body),
 			/** Undo an import: the file's record and every allocation it brought. */
 			removeSource: (id: string, sourceId: string) => request<void>('DELETE', `${p(id)}/allocations/sources/${enc(sourceId)}`),
+			/** Load invented registered users on every farm and water user (315; editors): replaces an earlier demo. */
+			loadDemo: (id: string) => request<{ source: AllocationSource; loaded: number; users: number; units: number }>('POST', `${p(id)}/allocations/demo`, {}),
+			/** Remove the demo registered users and nothing else (editors). */
+			removeDemo: (id: string) => request<{ removed: number }>('DELETE', `${p(id)}/allocations/demo`),
 			/** Whether viewers read each registered volume (162, D3): owners only. */
 			setViewerUnits: (id: string, on: boolean) => request<{ viewerUnits: boolean }>('PUT', `${p(id)}/allocations/viewer-units`, { on }),
 			/** The allocations as CSV (a plain link: the cookie goes with it). */

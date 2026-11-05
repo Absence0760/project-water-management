@@ -1,0 +1,4 @@
+{
+	"addKb": 8,
+	"why": "The Allocations page's Registered users by hydrological unit table (AllocationRegisteredUsers, registeredUsers.ts), the map's run-free registered shading (registeredMap.ts, the scheme in AllocationMap/AllocationUseMap) and the demo load/remove controls and help text. Measured 2412 KB locally on main @ 9b5ece5e6, 2418 KB with this change (+6 KB). Headroom ~2 KB."
+}

@@ -20,6 +20,11 @@
 	// what the comparison already gives this reader: AllocationsTab doesn't
 	// offer it to a viewer who sees totals only (D3), and no holder's name
 	// is anywhere in it.
+	// Show (`mapShade=registered`): beside the compared-to-run bands, "What is
+	// registered" shades each unit by what its registered users in force today
+	// register for the measure, on a sequential scale (registeredMap.ts), from
+	// the Registered users table's subtotals: no run needed, so with no run (or
+	// a run with nothing to compare) it is the only shading offered.
 	import { PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$app/env/public';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -32,6 +37,8 @@
 	import { glyphsUrl } from '#lib/components/map/mapStyle.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { waterYearLabel } from './allocations';
+	import { registeredColours, registeredScheme, registeredShading, REGISTERED_STEPS, REGISTERED_TITLE, stepLabel, type RegisteredStep } from './registeredMap';
+	import type { RegisteredFigures } from './registeredUsers';
 	import {
 		bandColours,
 		MAP_MEASURES,
@@ -40,8 +47,10 @@
 		MEASURE_RATIO,
 		measureFigure,
 		useSentence,
+		useScheme,
 		useShading,
 		USE_BANDS,
+		USE_SOURCE_ID,
 		USE_SOURCES,
 		wholeWaterYears,
 		type MapMeasure,
@@ -53,15 +62,22 @@
 	let {
 		projectId,
 		comparison,
+		registered,
 		open,
 		picked = null,
-		onpick
+		onpick,
+		onpickRegistered
 	}: {
 		projectId: string;
-		comparison: AllocationComparison;
+		/** The compared run's comparison; null with no run, or nothing in it to compare: then only what is registered is shaded. */
+		comparison: AllocationComparison | null;
+		/** The project's units and each one's registered figures in force today (the Registered users table's subtotals). */
+		registered: { units: readonly { id: string; name: string }[]; subtotals: ReadonlyMap<string, RegisteredFigures> };
 		open: boolean;
 		picked?: string | null;
 		onpick: (nodeId: string) => void;
+		/** A unit picked while what is registered is shaded (its registered users); `onpick` when absent. */
+		onpickRegistered?: (nodeId: string) => void;
 	} = $props();
 
 	const url = $derived(page.url);
@@ -95,33 +111,46 @@
 	const yearParam = $derived(url.searchParams.get('mapYear'));
 	/** null: the mean of the whole water years. */
 	const year = $derived(yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : null);
+	// What is shaded: against the run (the default when there is one to compare) or what is registered (`mapShade=registered`).
+	const shadeParam = $derived(url.searchParams.get('mapShade'));
+	const view = $derived<'run' | 'registered'>(comparison && shadeParam !== 'registered' ? 'run' : 'registered');
 	/** The page with one of the map's choices set (null or the default: left out). A choice pushes, so Back returns to the one before. */
-	function choose(name: 'mapMeasure' | 'mapSource' | 'mapYear', value: string | null) {
+	function choose(name: 'mapMeasure' | 'mapSource' | 'mapYear' | 'mapShade', value: string | null) {
 		void goto(value === null ? withoutParam(url, name) : withParam(url, name, value), { reset: false });
 	}
 	/** Hide the map: its choices go with it. */
 	function hide() {
 		const q = new URLSearchParams(url.search);
-		for (const k of ['map', 'mapMeasure', 'mapSource', 'mapYear']) q.delete(k);
+		for (const k of ['map', 'mapMeasure', 'mapSource', 'mapYear', 'mapShade']) q.delete(k);
 		const s = q.toString();
 		void goto(`${url.pathname}${s ? `?${s}` : ''}${url.hash}`, { reset: false });
 	}
-	const years = $derived(wholeWaterYears(comparison));
+	const years = $derived(comparison ? wholeWaterYears(comparison) : []);
 	// A year the newly compared run doesn't cover falls back to the mean.
 	const shownYear = $derived(year !== null && years.includes(year) ? year : null);
 	const period = $derived(
 		shownYear !== null ? `water year ${waterYearLabel(shownYear)}` : `the mean of ${years.length} whole water year${years.length === 1 ? '' : 's'}`
 	);
 	/** The key's heading: what it divides, and for the water use the period (the area and the dam are the run's inputs). */
-	const keyTitle = $derived(`Key: ${MEASURE_RATIO[measure]}${measure === 'use' ? `, ${period}` : ''}`);
-	const shading = $derived(features ? useShading(comparison, features, source, shownYear, measure) : null);
+	const keyTitle = $derived(view === 'registered' ? `Key: ${REGISTERED_TITLE[measure]}, in force today` : `Key: ${MEASURE_RATIO[measure]}${measure === 'use' ? `, ${period}` : ''}`);
+	const runShading = $derived(features && comparison && view === 'run' ? useShading(comparison, features, source, shownYear, measure) : null);
+	const regShading = $derived(features && view === 'registered' ? registeredShading(registered.units, registered.subtotals, features, measure) : null);
+	const shading = $derived(runShading ?? regShading);
+	const pick = $derived(view === 'registered' ? (onpickRegistered ?? onpick) : onpick);
+	const scheme = $derived(view === 'registered' ? registeredScheme(measure, USE_SOURCE_ID) : useScheme(period, measure));
+	const regCounts = $derived.by(() => {
+		const c: Partial<Record<RegisteredStep, number>> = {};
+		for (const u of [...(regShading?.drawn ?? []), ...(regShading?.unplaced ?? [])]) c[u.band] = (c[u.band] ?? 0) + 1;
+		return c;
+	});
+
 	const BAND_RANK: Record<UseBand, number> = { far: 0, over: 1, unregistered: 2, near: 3, under: 4, none: 5 };
 	/** Every unit with its figures for the measure, in the order to look into them (the list under the key). */
 	const figures = $derived.by(() => {
-		if (!shading) return [];
-		const placed = new Set(shading.drawn.map((u) => u.nodeId));
+		if (!runShading) return [];
+		const placed = new Set(runShading.drawn.map((u) => u.nodeId));
 		const rank = (u: ShadedUnit) => (u.band ? BAND_RANK[u.band] : 6);
-		return [...shading.drawn, ...shading.unplaced]
+		return [...runShading.drawn, ...runShading.unplaced]
 			.map((u) => ({ ...u, placed: placed.has(u.nodeId) }))
 			.sort((a, b) => rank(a) - rank(b) || (b.use?.ratio ?? 0) - (a.use?.ratio ?? 0) || a.name.localeCompare(b.name));
 	});
@@ -129,7 +158,7 @@
 	const modelledHead = $derived(measure === 'use' ? 'Modelled use' : measure === 'area' ? 'Planted in the run' : 'Dam in the run');
 	const counts = $derived.by(() => {
 		const c: Partial<Record<UseBand, number>> = {};
-		for (const u of [...(shading?.drawn ?? []), ...(shading?.unplaced ?? [])]) if (u.band) c[u.band] = (c[u.band] ?? 0) + 1;
+		for (const u of [...(runShading?.drawn ?? []), ...(runShading?.unplaced ?? [])]) if (u.band) c[u.band] = (c[u.band] ?? 0) + 1;
 		return c;
 	});
 	let dark = $state(false);
@@ -138,6 +167,7 @@
 		return watchAppTheme(() => (dark = appIsDark()));
 	});
 	const colours = $derived(bandColours(dark));
+	const regColours = $derived(registeredColours(dark));
 	const swatch = (b: UseBand) => (b === 'none' ? 'transparent' : colours[b].fill);
 </script>
 
@@ -151,12 +181,32 @@
 		{/if}
 	</div>
 	<p class="small muted lead">
-		Each hydrological unit’s area on the Map tab, shaded by what the run has as a share of what is registered for it: its water use, its irrigated area or
-		its dam. Modelled, not metered: a difference is something to look into, not a finding.
+		{#if comparison}
+			Each hydrological unit’s area on the Map tab, shaded by what the run has as a share of what is registered for it (its water use, its irrigated area or
+			its dam; modelled, not metered: a difference is something to look into, not a finding), or by what is registered alone, with no run needed.
+		{:else}
+			Each hydrological unit’s area on the Map tab, shaded by what its registered users register in force today: their water use, irrigated area or farm dam
+			capacity, the Registered users table’s subtotals. No run is needed.
+		{/if}
 	</p>
 	<div id="alloc-map-body">
 		{#if open}
 			<div class="controls">
+				{#if comparison}
+					<fieldset class="seg-field">
+						<legend class="small">Show</legend>
+						<div class="seg">
+							<label class:on={view === 'run'}>
+								<input type="radio" name="alloc-map-view" value="run" checked={view === 'run'} onchange={() => choose('mapShade', null)} />
+								Against the run
+							</label>
+							<label class:on={view === 'registered'}>
+								<input type="radio" name="alloc-map-view" value="registered" checked={view === 'registered'} onchange={() => choose('mapShade', 'registered')} />
+								What is registered
+							</label>
+						</div>
+					</fieldset>
+				{/if}
 				<fieldset class="seg-field">
 					<legend class="small">Shade by</legend>
 					<div class="seg">
@@ -168,7 +218,7 @@
 						{/each}
 					</div>
 				</fieldset>
-				{#if measure === 'use'}
+				{#if view === 'run' && measure === 'use'}
 					<fieldset class="seg-field">
 						<legend class="small">Water source</legend>
 						<div class="seg">
@@ -189,18 +239,26 @@
 					</label>
 				{/if}
 			</div>
-			{#if measure === 'area'}<p class="small muted note">Irrigated area: the crop areas the run planted on the unit against the irrigated areas its registered users’ takes state (in force on any of the run’s days). The model never reads a registered area.</p>{/if}
-			{#if measure === 'storage'}<p class="small muted note">Dam capacity: the unit’s dam in the run against the storage registered for it (s21b rows and storage stated on a take).</p>{/if}
-			{#if measure === 'use' && source === 'both'}<p class="small muted note">Both together: the unit’s total modelled use ÷ its total registered volume, surface and groundwater added.</p>{/if}
+			{#if view === 'registered'}
+				<p class="small muted note" data-testid="allocation-map-registered-note">
+					What is registered: each unit’s registered users added up, their authorisations in force today
+					({measure === 'use' ? 'the volumes of their takes, surface and groundwater added' : measure === 'area' ? 'the irrigated areas their takes state' : 's21b rows and the storage stated on a take'}).
+					No run is read. The figures are the Registered users table’s subtotals.
+				</p>
+			{:else}
+				{#if measure === 'area'}<p class="small muted note">Irrigated area: the crop areas the run planted on the unit against the irrigated areas its registered users’ takes state (in force on any of the run’s days). The model never reads a registered area.</p>{/if}
+				{#if measure === 'storage'}<p class="small muted note">Dam capacity: the unit’s dam in the run against the storage registered for it (s21b rows and storage stated on a take).</p>{/if}
+				{#if measure === 'use' && source === 'both'}<p class="small muted note">Both together: the unit’s total modelled use ÷ its total registered volume, surface and groundwater added.</p>{/if}
+			{/if}
 
 			<LoadState loading={loading && !features} {error} retry={loadFeatures}>
 				{#if shading}
-					{#if measure === 'use' && !years.length}
+					{#if view === 'run' && measure === 'use' && !years.length}
 						<p class="alert alert-info slim" role="note">This run covers no whole water year (October–September), so the map has nothing to shade. Part years are left out, as in the comparison.</p>
 					{/if}
 					{#if shading.drawn.length || shading.notInRun.length}
 						{#await import('./AllocationMap.svelte') then { default: AllocationMap }}
-							<AllocationMap {shading} {tilesUrl} {glyphs} {picked} {period} {measure} {onpick} />
+							<AllocationMap {shading} {tilesUrl} {glyphs} picked={view === 'run' ? picked : null} {scheme} onpick={pick} />
 						{:catch}
 							<ChunkFailed what="The map" />
 						{/await}
@@ -211,22 +269,40 @@
 						</p>
 					{/if}
 
-					<div class="legend" data-testid="allocation-map-legend">
+					<div class="legend" data-testid="allocation-map-legend" data-view={view}>
 						<h3 class="sub-h">{keyTitle}</h3>
-						<ul>
-							{#each USE_BANDS as b (b)}
-								<li data-band={b}>
-									<span class="sw sw-{b}" style:--sw={swatch(b)} aria-hidden="true"></span>
-									<span>{MEASURE_BAND_LABEL[measure][b]}</span>
-									<span class="muted small">{counts[b] ? `${counts[b]} unit${counts[b] === 1 ? '' : 's'}` : 'none'}</span>
+						{#if regShading}
+							<ul>
+								{#each REGISTERED_STEPS as b (b)}
+									<li data-band={b}>
+										<span class="sw" style:--sw={regColours[b].fill} aria-hidden="true"></span>
+										<span>{stepLabel(b, regShading.breaks, measure)}</span>
+										<span class="muted small">{regCounts[b] ? `${regCounts[b]} unit${regCounts[b] === 1 ? '' : 's'}` : 'none'}</span>
+									</li>
+								{/each}
+								<li data-band="none">
+									<span class="sw" style:--sw="transparent" aria-hidden="true"></span>
+									<span>Nothing registered (outline only)</span>
+									<span class="muted small">{regCounts.none ? `${regCounts.none} unit${regCounts.none === 1 ? '' : 's'}` : 'none'}</span>
 								</li>
-							{/each}
-							<li data-band="dashed"><span class="sw sw-dashed" aria-hidden="true"></span><span>Dashed outline: {measure === 'use' ? 'no whole water year to compare' : 'no figures to compare'}, or a unit this run doesn’t have</span></li>
-						</ul>
-						<p class="small muted">
-							Each unit carries its share of what is registered for it (“132 %”). These bands are fixed for this map. The comparison above judges against the
-							project’s ±{fmtNum(comparison.tolerance * 100, 0)} % band, so 90–100 % counts as “within band” there and green here.
-						</p>
+							</ul>
+							<p class="small muted">Each unit carries its registered figure. Five equal steps from 0 to the largest unit’s figure, rounded up; darker is more.</p>
+						{:else}
+							<ul>
+								{#each USE_BANDS as b (b)}
+									<li data-band={b}>
+										<span class="sw sw-{b}" style:--sw={swatch(b)} aria-hidden="true"></span>
+										<span>{MEASURE_BAND_LABEL[measure][b]}</span>
+										<span class="muted small">{counts[b] ? `${counts[b]} unit${counts[b] === 1 ? '' : 's'}` : 'none'}</span>
+									</li>
+								{/each}
+								<li data-band="dashed"><span class="sw sw-dashed" aria-hidden="true"></span><span>Dashed outline: {measure === 'use' ? 'no whole water year to compare' : 'no figures to compare'}, or a unit this run doesn’t have</span></li>
+							</ul>
+							<p class="small muted">
+								Each unit carries its share of what is registered for it (“132 %”). These bands are fixed for this map. The comparison above judges against the
+								project’s ±{fmtNum((comparison?.tolerance ?? 0.1) * 100, 0)} % band, so 90–100 % counts as “within band” there and green here.
+							</p>
+						{/if}
 					</div>
 
 					{#if figures.length}
@@ -262,10 +338,10 @@
 						</div>
 					{/if}
 
-					{#if shading.unplaced.length}
+					{#if runShading?.unplaced.length}
 						<h3 class="sub-h" id="alloc-map-unplaced-h">Hydrological units with no area on the map</h3>
 						<ul class="unplaced" aria-labelledby="alloc-map-unplaced-h" data-testid="allocation-map-unplaced">
-							{#each shading.unplaced as u (u.nodeId)}
+							{#each runShading.unplaced as u (u.nodeId)}
 								<li data-node={u.nodeId} data-band={u.band ?? 'nodata'}>
 									<a href={withParam(url, 'unit', u.nodeId)} onclick={(e) => {
 										if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -275,6 +351,21 @@
 									<span class="chip" style:--sw={u.band ? swatch(u.band) : 'transparent'} style:color={u.band && u.band !== 'none' ? colours[u.band].text : undefined} data-band={u.band ?? 'nodata'}>{u.label}</span>
 									<span class="small muted">{u.band ? MEASURE_BAND_SHORT[measure][u.band] : measure === 'use' ? 'No whole water year' : 'No figures'}</span>
 									<span class="visually-hidden">{useSentence(u.name, u.use, period, measure)}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					{#if regShading?.unplaced.length}
+						<h3 class="sub-h" id="alloc-map-unplaced-h">Hydrological units with no area on the map</h3>
+						<ul class="unplaced" aria-labelledby="alloc-map-unplaced-h" data-testid="allocation-map-unplaced">
+							{#each regShading.unplaced as u (u.nodeId)}
+								<li data-node={u.nodeId} data-band={u.band}>
+									<a href="#alloc-users-{u.nodeId}" onclick={(e) => {
+										if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+										e.preventDefault();
+										pick(u.nodeId);
+									}}>{u.name}</a>
+									<span class="chip" style:--sw={u.band === 'none' ? 'transparent' : regColours[u.band].fill} style:color={u.band === 'none' ? undefined : regColours[u.band].text} data-band={u.band}>{u.label}</span>
 								</li>
 							{/each}
 						</ul>

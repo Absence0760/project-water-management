@@ -498,6 +498,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.on ? 'Let viewers see each farm’s registered volumes' : 'Showed viewers registered volumes as totals only';
 		case 'allocation.import_deleted':
 			return `Removed the import of ${str(s.fileName)} and its ${plural(num(s.rows) ?? 0, 'registered volume')}`;
+		// Demo registered users (315): counts only.
+		case 'allocation.demo_loaded':
+			return `Loaded ${plural(num(s.users) ?? 0, 'demo registered user')} (invented) on ${plural(num(s.units) ?? 0, 'hydrological unit')}${num(s.replaced) ? ', replacing the earlier demo' : ''}`;
+		case 'allocation.demo_removed':
+			return `Removed the demo registered users (invented) and their ${plural(num(s.rows) ?? 0, 'registered volume')}`;
 		case 'scenario.submitted':
 			return s.application ? 'An applicant submitted an application' : `Submitted the scenario “${str(s.name)}”`;
 		case 'scenario.withdrawn':

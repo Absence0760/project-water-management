@@ -629,13 +629,20 @@
 		{
 			"kind": "guide",
 			"id": "allocations-page#3",
+			"title": "Allocations: registered volumes against modelled use: Registered users by hydrological unit",
+			"url": "/help/guides/allocations-page",
+			"text": "The Registered users by hydrological unit table lists each registered user per farm (Farm no.), with what their authorisations in force today register: irrigated area, farm dam capacity and water use. Each unit ends in a subtotal and the catchment total comes last. It needs no run. On the map shades the units by those subtotals (pick What is registered when there is a run to compare too). Editors can press Load demo registered users to show the table and map with invented users (“… (invented)”) on every farm and water user. Remove demo users takes them all away and leaves every volume entered or imported."
+		},
+		{
+			"kind": "guide",
+			"id": "allocations-page#4",
 			"title": "Allocations: registered volumes against modelled use: Who sees names",
 			"url": "/help/guides/allocations-page",
 			"text": "Owners and editors see every volume. Viewers see only catchment totals per water source held by five or more users, until an owner ticks Viewers see each farm’s registered volumes under What viewers see."
 		},
 		{
 			"kind": "guide",
-			"id": "allocations-page#4",
+			"id": "allocations-page#5",
 			"title": "Allocations: registered volumes against modelled use: Reading the comparison",
 			"url": "/help/guides/allocations-page",
 			"text": "The list puts first the units to look into: each unit and water source with its status over a mean water year. Pick one to see its water years, the band and its registered volumes. Each water year reads above registered, within band, below registered, or no registered volume (Modelled use vs registered volume). A part year is compared with the volume prorated to its days and isn’t counted with the whole years. The comparison band is set at the foot of the page, in the Comparison band card beside What viewers see: editors change it and press that card’s Save. It changes how the comparison reads, never a run’s water. A dam’s registered storage (a s21(b) row) is set against the dam’s modelled capacity, never against the year’s use (Registered storage vs dam capacity). After a cap run, the picked unit says on how many days the cap held use back, and why (What the cap held back). Registered against the run, per hydrological unit adds up each unit’s registered users: its registered irrigated area beside the crop areas the run planted (Registered irrigated area), its registered water use beside its modelled use in the mean whole water year (surface and groundwater together), and its registered storage beside the dam in the run (Registered storage vs dam capacity), each read against the band, with a Catchment total row for each. On the map opens a map of the hydrological units, each unit’s polygon shaded by what the run has as a share of what is registered for it. Shade by picks the measure: Water use (modelled use against the registered volume, for the water source and the period you pick: the mean of the whole water years, or one), Irrigated area (planted in the run against the registered irrigated area) or Dam capacity (the dam in the run against the registered storage). The key names each band in that measure’s words, every unit’s figures are listed under it, a unit with no polygon on the Map is marked there, and a click on a unit opens its comparison. Viewers who see only totals don’t get it. Every hydrological unit and water year charts modelled use ÷ the registered volume for each whole water year, one row per unit and source, with the table under it. Under Registered volumes, Imported files lists each import with its rows, who imported it and its SHA-256; an editor can Remove this import, which takes its rows out again."

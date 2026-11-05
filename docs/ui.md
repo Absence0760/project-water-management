@@ -12431,7 +12431,28 @@ turns into cards below 48rem of its own width (the picked unit's column at
 1280 px), so it never scrolls sideways there. Picking a unit far down an
 opened list scrolls the page back to its detail.
 
-**On the map** (issue #510, `AllocationUseMap.svelte`, under the first
+**Registered users by hydrological unit** (`AllocationRegisteredUsers.svelte`,
+`registeredUsers.ts`; [allocations.md § Registered users by hydrological
+unit](./allocations.md#registered-users-by-hydrological-unit)), between the
+comparison and the Registered volumes list, run or no run: columns **Farm
+no.** (the allocation's property field) | **Registered user** (only for a
+reader who may see names, `canSeeHolders`) | **Hydrological unit** |
+**Registered irrigated area (ha)** | **Registered farm dam capacity (m³)** |
+**Registered water use (m³/a)**, one row per registered user per farm, from
+their authorisations in force today. One `tbody` per unit (its name and how
+many users as a group row, then the users, then *Subtotal, <unit>*), the
+not-matched group last, then **Catchment total**. The first five units show
+until **Show all N hydrological units' registered users**; a unit picked on
+the map while it shades what is registered opens the fold and scrolls to
+its group. `.table-stack` below 50rem: each user a block, the unit cell left
+out (the group row names it). **Download this table (CSV)** writes the same
+rows client-side (`registeredUsersCsv`). Editors get **Load demo registered
+users** (a confirm saying they are invented and removable); while a demo
+source exists a notice reads *Demo registered users (invented) are shown …*
+with **Remove demo users** (a danger confirm); the demo source isn't listed
+under Imported files. Pinned by `e2e/tests/allocations-registered-users.spec.ts`.
+
+**On the map** (issue #510, `AllocationUseMap.svelte`; since the registered users table, right under that table rather than under the first
 block;
 [allocations.md § The map](./allocations.md#the-map)): folded until
 **Show the map** (`map=1`, a link, so Back folds it; **Hide the map** drops
@@ -12465,8 +12486,20 @@ and its band, in the order to look into them, a unit with no area on the
 map marked so (`.table-stack` on a phone); then **Hydrological units with no area on the
 map**, each with its band, so none is missing silently. With no area on the
 Map tab at all it says so and links to the Hydrological units layer. Not
-offered to a viewer who sees totals only. Tests: `allocations/useMap.test.ts`,
-`e2e/tests/allocations-map.spec.ts`.
+offered to a viewer who sees totals only. **What is registered** (no run
+needed): with a run to compare, a **Show** choice (**Against the run**, the
+default, or **What is registered**, `mapShade=registered`) comes first;
+with no run, or nothing in it to compare, it is the only shading and the
+Show choice isn't there. It shades each unit by its Registered users
+subtotal for the measure picked on a five-step sequential blue scale
+(`registeredMap.ts`: equal steps from 0 to a round number at or above the
+largest unit; no fill for nothing registered), each label its figure
+("92 400 m³/a"), the key every step's range and how many units are in it;
+no water source or year, and no figures table (the table above holds
+them). The map draws either through a scheme (`MapScheme`: layers,
+colours, each label's sentence) and restyles when it changes. Tests:
+`allocations/useMap.test.ts`, `allocations/registeredMap.test.ts`,
+`e2e/tests/allocations-map.spec.ts`, `e2e/tests/allocations-registered-users.spec.ts`.
 
 **Registered volumes** (below the first screen): the list, stacked so it
 fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)

@@ -44,13 +44,14 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 	await expect(page.getByTestId('allocation-compare')).toContainText('modelled, not metered');
 
 	// The five to look into first beside the picked unit, then "Show all"; the page flows, nothing scrolls inside a
-	// card, and the Registered volumes card's top edge shows inside the window, so it's plain there is more below.
+	// card, and the next card's top edge (Registered users by hydrological unit, between the comparison and the
+	// Registered volumes since that table came) shows inside the window, so it's plain there is more below.
 	await expect(units(page)).toHaveCount(5);
 	const more = compareCard(page).getByRole('button', { name: 'Show all 36 hydrological units and sources' });
 	await expect(more).toHaveAttribute('aria-expanded', 'false');
 	await expect(more).toHaveAttribute('aria-controls', 'alloc-units');
 	expect(await innerScrollers(page)).toEqual([]);
-	await expect(volumesCard(page).getByRole('heading', { name: 'Registered volumes' })).toBeInViewport();
+	await expect(page.getByTestId('allocation-registered-users-panel').getByRole('heading', { name: 'Registered users by hydrological unit' })).toBeInViewport();
 	const firstName = (await units(page).first().getByRole('link').textContent())!.trim();
 	await expect(detail(page).getByRole('heading', { level: 2 })).toHaveText(firstName);
 	await expect(detail(page)).toBeInViewport();
