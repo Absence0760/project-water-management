@@ -21,13 +21,19 @@
 	let {
 		curtailment,
 		names = {},
-		period
+		period,
+		headingLevel = 4,
+		tableHref
 	}: {
 		curtailment: CurtailmentSummary;
 		/** Current node names by id, for nodes renamed since the run. */
 		names?: Record<string, string>;
 		/** The name of the period shown ("Last 7 days"), for the table's caption. */
 		period?: string;
+		/** Its heading's level: h4 under the curtailment panel's h3 (Hydrological units), h3 as a section of its own (the Outputs page). */
+		headingLevel?: 3 | 4;
+		/** Where the table per hydrological unit is, when it isn't under the board (the Outputs page links to Hydrological units). */
+		tableHref?: string;
 	} = $props();
 
 	const board = $derived(shareThePain(curtailment, names));
@@ -50,7 +56,7 @@
 {/snippet}
 
 <section class="share-board" aria-labelledby="share-board-heading" data-testid="share-the-pain">
-	<h4 id="share-board-heading">Share the pain <HelpTip key="share-the-pain" /></h4>
+	<svelte:element this={`h${headingLevel}`} id="share-board-heading" class="share-h">Share the pain <HelpTip key="share-the-pain" /></svelte:element>
 	<p class="muted small" data-testid="share-intro">
 		Each group's supply as a share of its own demand over the same days, in three steps: what it got, what the equitable share would give
 		it, and what is left once the EWR is met too.
@@ -65,7 +71,7 @@
 				aria-label="see the footnote">*</a
 			>: the same water in total as today, shared equally.
 		{/if}
-		The table per hydrological unit below has the volumes behind it.
+		{#if tableHref}The <a href={tableHref}>table per hydrological unit</a> on Hydrological units has the volumes behind it.{:else}The table per hydrological unit below has the volumes behind it.{/if}
 	</p>
 
 	<ol class="stages" aria-label="The three stages, every group">
@@ -222,7 +228,7 @@
 </section>
 
 <style>
-	.share-board h4 {
+	.share-board .share-h {
 		margin-top: 0.9rem;
 	}
 	.note {

@@ -17,7 +17,10 @@ engine 0.46.0; the job, the review-date setting and the screen; WP-3.8's
 rule, engine 1.54.0), R7
 (§3.7: the impact report's board; existing *authorised* use when its
 baseline is a full-allocation run) and R8 (§3.8: how much irrigation the
-catchment supports, from R4's sweep).
+catchment supports, from R4's sweep). The five (R3, R4, R5 with R6, R7 and
+R8) are also gathered on one page for one run, the workspace's **Outputs**
+section ([ui.md § Outputs](../ui.md#outputs), 2026-11-05), each still where
+it was as well.
 
 As in [calibration-research.md](../calibration-research.md), a claim backed
 by a source is marked **(evidence)** with a key from

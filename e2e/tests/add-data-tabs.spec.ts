@@ -9,7 +9,7 @@ import { addDataDialog, dropCsv } from '../support/addData.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const ADDS_DATA = ['overview', 'crops', 'series', 'settings', 'calibration'];
-const NO_ADD_DATA = ['network', 'map', 'transfers', 'warnings', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'];
+const NO_ADD_DATA = ['network', 'map', 'transfers', 'warnings', 'runs', 'river', 'outputs', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'];
 
 const header = (page: Page) => page.getByTestId('section-header');
 const addButton = (page: Page) => header(page).getByRole('button', { name: 'Add data', exact: true });

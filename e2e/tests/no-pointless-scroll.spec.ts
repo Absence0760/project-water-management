@@ -12,7 +12,7 @@ const GUTTER = 14;
 
 const TABS = [
 	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration', 'runs', 'river',
-	'supply', 'dams', 'scenarios', 'allocations', 'project', 'applications', 'history'
+	'outputs', 'supply', 'dams', 'scenarios', 'allocations', 'project', 'applications', 'history'
 ];
 /** Views opened from links, never sidebar rows (tabs.ts LINKED_ONLY): measured too, not counted among the links. */
 const LINKED = ['compare'];

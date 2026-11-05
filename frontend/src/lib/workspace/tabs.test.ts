@@ -41,7 +41,7 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'warnings', 'calibration', 'runs', 'river', 'supply', 'dams', 'scenarios', 'allocations', 'project']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'warnings', 'calibration', 'runs', 'river', 'outputs', 'supply', 'dams', 'scenarios', 'allocations', 'project']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
@@ -222,8 +222,21 @@ describe('navSections', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history', 'restrictions'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'outputs', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }
 		]);
+	});
+
+	it('lists Outputs (the planning outputs page) for owners, editors and viewers, after EWR, carrying the run picked', () => {
+		for (const role of ['owner', 'editor', 'viewer'] as const) {
+			const shown = visibleTabs(role, { hidden: [] });
+			expect(shown, role).toContain('outputs');
+			const outcomes = navSections(shown).find((s) => s.id === 'outcomes')!.tabs;
+			expect(outcomes.indexOf('outputs'), role).toBe(outcomes.indexOf('river') + 1);
+		}
+		expect(TAB_LABELS.outputs).toBe('Outputs');
+		expect(DEFAULT_HIDDEN_TABS).not.toContain('outputs');
+		expect(LINKED_ONLY).not.toContain('outputs');
+		expect(visibleTabs('farmer')).not.toContain('outputs');
 	});
 
 	it('opens the Restriction log from its links for owners, editors and viewers, and shows it under Review only while open', () => {
@@ -354,7 +367,7 @@ describe('TAB_ADDS_DATA', () => {
 	it('shows Add data on Summary, Crops & demand, Data, Model settings and Calibration only, in workflow order', () => {
 		expect(ADD_DATA_TABS).toEqual(['overview', 'crops', 'series', 'settings', 'calibration']);
 		// Allocations has its own + Add volume, which a header Add data beside it read as.
-		for (const id of ['allocations', 'runs', 'network', 'map', 'river', 'supply', 'dams', 'compare', 'scenarios', 'project', 'warnings'])
+		for (const id of ['allocations', 'runs', 'network', 'map', 'river', 'outputs', 'supply', 'dams', 'compare', 'scenarios', 'project', 'warnings'])
 			expect(addsData(id), id).toBe(false);
 	});
 

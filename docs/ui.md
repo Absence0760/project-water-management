@@ -18,11 +18,12 @@ session exists. A **Skip to content** link comes first.
   account menu at the foot. It is spaced so that, with a project open, every
   section an owner sees fits a 1440 × 960 window with the account menu in
   view (a two-line catchment name included; `app-sidebar.spec.ts`), and a
-  viewer's with the model inputs shown, whose **Show model inputs** row (32 px,
+  viewer's with the model inputs shown, whose **Show model inputs** row (30 px,
   as a link) stands in for the Applications row they don't have. Calibration
-  took the last spare row (issue #586): a new section must free one first
-  (hide one by default, as History is), and the spec fails on either side, a
-  row too many or a row free again. On a shorter window (1280 × 800) the slot scrolls
+  took the last spare row (issue #586), and Outputs got its row by rows of 30 px
+  instead of 32 ([§ Outputs](#outputs)): a new section must free one first
+  (make a page linked-only, as Compare runs is), and the spec fails on either
+  side, a row too many or a row free again. On a shorter window (1280 × 800) the slot scrolls
   on its own instead of the whole sidebar, so the brand, Main and the account
   menu stay on screen, and the open section is scrolled into view in it (the
   slot's `scroll-padding` keeps it clear of the edges). Only below about
@@ -883,7 +884,7 @@ the standard "Loading…" state in the meantime
 The tabs are grouped into three sections, in this order: **Review**
 (Project, Applications, History, and the Restriction log while it is open), **Build the model** (Network, Map, Crops &
 demand, Transfers, Data, Model settings, Calibration) and **Outcomes** (Summary,
-EWR, Hydrological units, Runs & results, Dams, Compare runs,
+EWR, Outputs, Hydrological units, Runs & results, Dams, Compare runs,
 Scenarios, Allocations). The operator chose this order on 2026-10-05 (before
 it, Outcomes led: issue #17's option A, and issue #162). A project still
 opens on its Summary, the first tab under Outcomes, and Help's "Getting
@@ -973,7 +974,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, EWR, Hydrological units, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Calibration, Project; Network, Crops, Transfers, Model settings and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
+| viewer | Summary, EWR, Outputs, Hydrological units, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Calibration, Project; Network, Crops, Transfers, Model settings and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -9618,6 +9619,71 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **No run yet:** the header, a "No run yet" panel saying what the page will
   show, and (editors) **Run the model** (`?tab=runs`); a viewer reads that an
   editor can run it.
+
+## Outputs
+
+`?tab=outputs` (alias `?tab=planning-outputs`), under *Outcomes* right after
+EWR: the five planning outputs of issue #53
+([design/planning-outputs.md](./design/planning-outputs.md)) on one page for
+one run, as the operator asked ("put them all on one outputs page for now",
+2026-11-05). `outputs/OutputsTab.svelte`, its own lazy chunk; its logic is
+`outputs/outputs.ts` (pure, `outputs.test.ts`). Each output is its own
+component, reused as is and **still where it was**: this page only picks the
+run and lays them out.
+
+| Section | Anchor | Component | Also on |
+| --- | --- | --- | --- |
+| How much irrigation can the catchment support? | `#out-irrigation` | `outcomes/IrrigationSupportPanel.svelte` ([§ Irrigation the catchment supports](#irrigation-the-catchment-supports)) | EWR, `#res-irrigation` |
+| Share the pain | `#out-share` | `curtailment/ShareThePainBoard.svelte` ([§ Share the pain](#share-the-pain)) | Hydrological units, `#res-curtailment`, over the reporting window picked there |
+| Outcome matrix | `#out-matrix` | `outcomes/OutcomeMatrixPanel.svelte` ([§ Outcome matrix](#outcome-matrix)) | EWR, `#res-outcomes` |
+| Seasonal outlook | `#out-outlook` | `outlook/OutlookPanel.svelte` ([§ Seasonal outlook](#seasonal-outlook)) | EWR, `#res-outlook` |
+| Impact by year class | `#out-licence` | `report/LicenceImpactBoard.svelte` through `outputs/LicenceImpactOutput.svelte` | the impact report and the evidence report ([§ Report](#report)) |
+
+- **One run**, `?run=` or else the newest (`river.ts` `pickRiverRun`, as EWR
+  picks it), chosen with the header's **Run** menu (a pick is a step in
+  history), beside **Open in Runs & results**. Like the other run pages it is
+  in `tabLinks.ts` `RUN_TABS`, so the sidebar carries a run picked elsewhere.
+  Another run picked keeps the page on screen, `aria-busy`, its controls
+  inert, until its record is in (through `runs/cache.ts` `runDetail`).
+- **An index at the top** (`common/SectionNav`, one group, *Planning
+  outputs*), each link its section's heading word for word. Under it the five
+  sections, one card each in one column, in the index's order; on a phone
+  they stack the same way. A loaded `#out-…` link lands on its section once
+  the run's record is in, focus on its heading (`help/anchor.ts`
+  `landOnAnchor`).
+- **The irrigation support and the matrix share one sweep**, as on EWR: the
+  matrix reports its sweep through `onview`, and the irrigation board's
+  **Run…** opens the matrix's form.
+- **Where an output can't show, its section says why in one line.** The
+  irrigation support, the matrix and the outlook do it in their own row
+  (`common/ToolRow`): no demand sweep or outlook yet (an editor's **Run…**
+  starts one; a viewer reads that an editor can), or the run is a scenario
+  or forecast run. Share the pain names the run made before curtailment
+  targets (with **Run the model again** for editors) or the network with no
+  hydrological units (a link to the Network). On this page the board's intro
+  links to the table per hydrological unit on Hydrological units instead of
+  pointing below it (its `tableHref`), and its heading is an h3 like the
+  other sections' (`headingLevel`).
+- **The licence impact never invents a pairing** (`outputs.ts`
+  `licencePair`). On a scenario's run it compares the run with the base run
+  its scenario names, followed to the base the run recorded when the scenario
+  was rebased since (as Scenarios' *Scenario against its base* does), through
+  `GET /compare/runs`, and draws the impact report's board from the same three
+  series (`report/impactSeries.ts`), with links to the **Impact report** and
+  the **Evidence report** of that pair under it. On a run of the model it
+  lists the newest run of each scenario based on this run, each a link that
+  picks it (`?tab=outputs&run=<id>#out-licence`), or says none has been run,
+  with **open Scenarios**. A scenario's run whose scenario was deleted or
+  isn't shared says its base isn't known here and links to its evidence
+  report.
+- **Viewers read every section**; the run controls (Run…, the sweep and
+  outlook forms, the Reserve site and saving the triggers) are the editors',
+  as each component already gates them.
+- **No run yet:** one "No run yet" panel and, for editors, **Run the model**.
+- Pinned by `e2e/tests/outputs-page.spec.ts` (the sidebar row, the index
+  links, each output with a positive control, the empty states, a viewer, a
+  phone, axe). Its sidebar row fits the 1440 × 960 budget (`app-sidebar.spec.ts`)
+  because the rows went from 32 px to 30 px (§ App shell).
 
 ## Hydrological units
 

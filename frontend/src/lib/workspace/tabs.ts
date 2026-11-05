@@ -38,6 +38,9 @@ export const TAB_GROUP = {
 	// One run's river against its EWR (issue #17, option A): the Runs tab's River & Reserve group, moved; named EWR
 	// since issue #558 (?tab=ewr and ?tab=reserve open it too), the id kept so saved section choices still hold.
 	river: 'core',
+	// The five planning outputs of issue #53 on one page for one run (docs/ui.md § Outputs): each is still on its own
+	// page too (EWR, Hydrological units, the impact report). Core: viewers read them; their run controls are editors'.
+	outputs: 'core',
 	// Each unit's supply against its demand, curtailment and assurance of supply for a run (issue #17 option A · Outcomes): anyone who can read runs.
 	supply: 'core',
 	// Each dam's level and storage in the latest run (issue #17 option A · Outcomes): anyone who can read runs.
@@ -80,6 +83,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	calibration: 'Calibration',
 	runs: 'Runs & results',
 	river: 'EWR',
+	outputs: 'Outputs',
 	supply: 'Hydrological units',
 	dams: 'Dams',
 	compare: 'Compare runs',
@@ -153,6 +157,7 @@ export const TAB_ADDS_DATA: Readonly<Record<TabId, boolean>> = {
 	calibration: true,
 	runs: false,
 	river: false,
+	outputs: false,
 	supply: false,
 	dams: false,
 	compare: false,
@@ -195,6 +200,7 @@ export const TAB_GUIDE: Readonly<Record<TabId, string>> = {
 	calibration: 'calibration-page',
 	runs: 'run-and-read-results',
 	river: 'river-page',
+	outputs: 'outputs-page',
 	supply: 'units-page',
 	dams: 'dams-page',
 	compare: 'compare-runs',
@@ -332,7 +338,8 @@ export const NAV_SECTIONS = [
 	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history', 'restrictions'] },
 	// Calibration after Settings (issue #586): fitting the runoff parameters is the last step of building the model.
 	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'warnings', 'settings', 'calibration'] },
-	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }
+	// Outputs after EWR (the planning outputs, three of which are EWR's tools as well).
+	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'outputs', 'supply', 'runs', 'compare', 'dams', 'scenarios', 'allocations'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 
 export type NavSectionId = (typeof NAV_SECTIONS)[number]['id'];
