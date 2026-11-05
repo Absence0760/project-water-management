@@ -496,7 +496,11 @@ section it belongs to, with the example that taught it.
   gap) was 16 px taller than the Applications row it stands in for. In the
   sidebar it is a 32 px row now, so both roles fit with the same few pixels
   and no row to spare; the spec fails on a row too many and on a row free
-  again. Count every role's rows, not just the owner's, when you budget.
+  again. Outputs (the planning outputs page) took a row the same way the Map
+  did: the rows went to 30 px (still past the 24 px target), which fits 19
+  rows where 18 fitted, and both roles again have a few pixels and no row to
+  spare. The next section has to free a row (a linked-only page, as Compare
+  runs became for Warnings); there is little left to shrink. Count every role's rows, not just the owner's, when you budget.
   Below that height the slot scrolls on its own
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
   never leaves the screen; `app-sidebar.spec.ts` pins both. The slot also

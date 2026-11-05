@@ -42,6 +42,7 @@ const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'series', ready: 'Preview all data' },
 	{ tab: 'runs', ready: 'Run model' },
 	{ tab: 'river', ready: 'Open in Runs & results' },
+	{ tab: 'outputs', ready: 'Open in Runs & results' },
 	{ tab: 'supply', ready: 'Open in Runs & results' },
 	{ tab: 'dams', ready: 'Open in Runs & results' },
 	// No actions of its own yet and no Add data (issue #601): the new-data notice line's Re-run model, once the series load.

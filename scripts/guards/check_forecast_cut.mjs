@@ -74,6 +74,14 @@ export const INVENTORY = [
 	{ path: 'frontend/src/lib/components/network/NetworkTab.svelte', reads: 2, how: 'cut', evidence: ['latestRun?.forecastFrom ?? null', 'damLevel(dam, s, latestRun?.forecastFrom'] },
 	{ path: 'frontend/src/lib/components/outcomes/OutcomeMatrixPanel.svelte', reads: 1, how: 'never', evidence: ['!run.forecastFrom'], note: 'a demand sweep is based on an ordinary run only' },
 	{ path: 'frontend/src/lib/components/outlook/OutlookPanel.svelte', reads: 1, how: 'never', evidence: ['!run.forecastFrom'], note: 'an outlook (and the natural flow its briefing reads around the season) is based on an ordinary run only' },
+	{
+		path: 'frontend/src/lib/components/outputs/LicenceImpactOutput.svelte',
+		reads: 1,
+		how: 'cut',
+		evidence: ['beforeForecast(s.values, s.startDate, forecastFrom)'],
+		in: 'frontend/src/lib/components/report/licenceImpact.ts',
+		note: 'the Outputs page’s licence-impact board, as the impact report’s (licenceImpact.ts); its pair is a scenario’s run and its base, never forecast runs'
+	},
 	{ path: 'frontend/src/lib/components/overview/DroughtIndex.svelte', reads: 1, how: 'cut', evidence: ['droughtBadge({ rain, pet, lastDay })'], note: 'lastDay is droughtLastDay over historyEnd(pick.latest) (OverviewTab): the day before the forecast, or an ordinary run’s last recorded rain day (summary.forecastRain), as the stored summary.drought counts to; the engine’s monthlyTotals stops there (drought/spi.ts, drought/summary.ts)' },
 	{ path: 'frontend/src/lib/components/overview/FlowVsReserve.svelte', reads: 1, how: 'cut+band', evidence: ['belowReserve(record(flows.shortfall))', '{band}'] },
 	{ path: 'frontend/src/lib/components/overview/OverviewTab.svelte', reads: 1, how: 'cut', evidence: ['const forecastFrom = run.summary.forecast?.from ?? null;'], note: 'loadDamLevels cuts (overview/damLevels.ts)' },

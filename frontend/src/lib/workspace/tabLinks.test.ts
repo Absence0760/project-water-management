@@ -29,6 +29,8 @@ describe('tabHref', () => {
 	});
 
 	it('keeps the picked run on every tab that shows one', () => {
+		// Outputs shows one run's planning outputs, so a run picked on EWR or Runs & results opens there too.
+		expect(RUN_TABS).toContain('outputs');
 		for (const id of RUN_TABS) expect(tabHref(id, '/projects/p', 'old')).toBe(`?tab=${id}&run=old`);
 		expect(tabHref('runs', '/projects/p', null)).toBe('?tab=runs');
 	});

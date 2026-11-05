@@ -127,7 +127,7 @@ SvelteKit already gives every route its own chunk. The catchment workspace
 (`routes/projects/[id]`) is split further, because it carries most of the app:
 only the Overview tab (the default view) ships in the route's chunk, and each
 other tab (Network, Crops & demand, Transfers, Data, Model settings, Calibration,
-EWR, Hydrological units, Runs & results, Scenarios, History, Map) is a dynamic `import()` of its component, as are the two
+EWR, Outputs, Hydrological units, Runs & results, Scenarios, History, Map) is a dynamic `import()` of its component, as are the two
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and the EWR page's compliance panel, loaded for a

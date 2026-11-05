@@ -18,11 +18,11 @@ const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
 // Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
 // In sidebar order: Review, Build the model, Outcomes (lib/workspace/tabs.ts NAV_SECTIONS).
-const EVERY_TAB = ['Project', 'Applications', 'History', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Warnings', 'Model settings', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations'];
+const EVERY_TAB = ['Project', 'Applications', 'History', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Warnings', 'Model settings', 'Calibration', 'Summary', 'EWR', 'Outputs', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations'];
 const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
 // The Map is a core tab since #326 D3: a viewer sees it without the inputs.
 // Calibration is core too (issue #586): a viewer reads the fit's results.
-const SHORT = ['Project', 'Map', 'Data', 'Warnings', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations'];
+const SHORT = ['Project', 'Map', 'Data', 'Warnings', 'Calibration', 'Summary', 'EWR', 'Outputs', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations'];
 // What each shows by default: the role's set less the sections hidden until chosen.
 const DEFAULT_HIDDEN = ['Applications', 'History'];
 const byDefault = (tabs: string[]) => tabs.filter((t) => !DEFAULT_HIDDEN.includes(t));
@@ -98,7 +98,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();
-	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Network', 'Map', 'Data', 'Warnings', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations']);
+	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Network', 'Map', 'Data', 'Warnings', 'Calibration', 'Summary', 'EWR', 'Outputs', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations']);
 	await expect(strip(v).getByRole('link', { name: 'Network' })).toHaveAttribute('aria-current', 'page');
 	await strip(v).getByRole('link', { name: 'Summary' }).click();
 	await expect.poll(() => tabNames(v)).toEqual(SHORT);
@@ -115,7 +115,7 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body (Allocations shows by default, issue #444).
-	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Map', 'Data', 'Warnings', 'Model settings', 'Calibration', 'Summary', 'EWR', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations']);
+	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Map', 'Data', 'Warnings', 'Model settings', 'Calibration', 'Summary', 'EWR', 'Outputs', 'Hydrological units', 'Runs & results', 'Dams', 'Scenarios', 'Allocations']);
 	const current = strip(v).getByRole('link', { name: 'Model settings' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Model settings', exact: true })).toBeVisible();

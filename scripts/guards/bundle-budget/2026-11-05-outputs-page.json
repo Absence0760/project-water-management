@@ -1,0 +1,4 @@
+{
+	"addKb": 10,
+	"why": "The Outputs page (?tab=outputs): its own tab chunk (~5 KB gz) and the outputs it shares with EWR, Hydrological units and the impact report (outcome matrix, irrigation support, outlook, share the pain, licence impact board) now split into shared chunks instead of living inside one tab's chunk. Measured 2412 KB on origin/main 9b5ece5e6 vs 2422 KB on this branch after build:frontend."
+}
