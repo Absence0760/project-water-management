@@ -50,6 +50,25 @@ export function calibrationSiteOf(refs: readonly { key: string; nodeId: string |
 	return refs.find((r) => r.key === 'observed_flow' && r.nodeId !== null)?.nodeId ?? null;
 }
 
+/**
+ * The title of a calibration hydrograph, named by the location's own name and record (the operator asked for
+ * "Calibration hydrograph at the <name> logger"): "at the <name> logger" or "… gauge" when the record is known and the
+ * name doesn't already say what it is, "at the <name>" when it does ("Upper weir", "Dam gauge"), and the outflow gauge
+ * when the run kept no name for it (an older run).
+ */
+export function calibrationHydrographTitle(name: string | null | undefined, record: FlowRecord | undefined): string {
+	const n = (name ?? '').trim();
+	if (!n) return `Calibration hydrograph at the outflow ${record ?? 'gauge'}`;
+	const the = /^the\s/i.test(n) ? '' : 'the ';
+	if (/\b(logger|gauge|weir|station)\b/i.test(n) || !record) return `Calibration hydrograph at ${the}${n}`;
+	return `Calibration hydrograph at ${the}${n} ${record}`;
+}
+
+/** The outlet's name in the run's own model (the node with nothing downstream), or null when the run kept no model. */
+export function outletNameOf(model: { nodes?: readonly { name: string; downstreamNodeId?: string | null }[] } | null | undefined): string | null {
+	return model?.nodes?.find((n) => n.downstreamNodeId === null)?.name ?? null;
+}
+
 /** Converts a series' m³/day values to the chart's unit. */
 type Convert = (d: DailySeries) => (number | null)[];
 

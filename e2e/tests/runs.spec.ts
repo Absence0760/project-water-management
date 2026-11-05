@@ -83,7 +83,7 @@ test('the results dashboard renders long records without locking the page', asyn
 	await createRun(page.request, project.id, 'Long');
 	// The flow charts on Calibration (Model quality, issue #586 Round 3), the explorer on Runs & results.
 	for (const [tab, names] of [
-		['calibration', [/^Flow at the outflow gauge/, /^Flow-duration curve/]],
+		['calibration', [/^Calibration hydrograph at the Outflow gauge/, /^Flow-duration curve/]],
 		['runs', [/^Catchment · /]]
 	] as const) {
 		await page.goto(`/projects/${project.id}?tab=${tab}`);
@@ -106,7 +106,7 @@ test('the hydrograph starts with natural flow hidden and keeps a legend toggle a
 	await createRun(page.request, project.id, 'Legend');
 	await page.goto(`/projects/${project.id}?tab=calibration`);
 
-	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Calibration hydrograph at the Outflow gauge/ }) });
 	await expect(chart.locator('canvas')).toBeVisible();
 	const entry = (name: RegExp) => chart.locator('.u-legend tr.u-series', { has: page.locator('.u-label', { hasText: name }) });
 	await expect(entry(/^Natural/)).toHaveClass(/u-off/);
@@ -127,7 +127,7 @@ test('the hydrograph names the gauge and the logger, and shows both when a proje
 	const gaugeOnly = await createRun(page.request, project.id, 'Gauge only');
 	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', gaugeOnly);
-	await expect(page.getByRole('img', { name: 'Flow at the outflow gauge: natural, simulated and observed: line chart of Observed gauge, Natural, Simulated outflow' })).toBeVisible();
+	await expect(page.getByRole('img', { name: 'Calibration hydrograph at the Outflow gauge: line chart of Observed gauge, Natural, Simulated outflow' })).toBeVisible();
 
 	// A logger beside the gauge, chosen as the calibration record.
 	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(60) });
@@ -135,9 +135,9 @@ test('the hydrograph names the gauge and the logger, and shows both when a proje
 	const both = await createRun(page.request, project.id, 'Both records');
 	await page.goto(`/projects/${project.id}?tab=calibration`);
 	await expect(page.getByTestId('calibration-results')).toHaveAttribute('data-run', both);
-	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Calibration hydrograph at the Outflow gauge/ }) });
 	await expect(
-		chart.getByRole('img', { name: 'Flow at the outflow gauge: natural, simulated and observed: line chart of Observed logger (calibration record), Observed gauge, Natural, Simulated outflow' })
+		chart.getByRole('img', { name: 'Calibration hydrograph at the Outflow gauge: line chart of Observed logger (calibration record), Observed gauge, Natural, Simulated outflow' })
 	).toBeVisible();
 	await expect(chart.locator('canvas')).toBeVisible();
 	await expect(chart.getByText(/^Observed logger \(calibration record\) is the solid line and Observed gauge the dashed one, shown but not scored/).first()).toBeVisible();
@@ -154,7 +154,7 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 	await createRun(page.request, project.id, 'Pan');
 	await page.goto(`/projects/${project.id}?tab=calibration`);
 
-	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+	const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Calibration hydrograph at the Outflow gauge/ }) });
 	await expect(chart.locator('canvas')).toBeVisible();
 	const earlier = chart.getByRole('button', { name: /Earlier/ });
 	const later = chart.getByRole('button', { name: /Later/ });
@@ -246,7 +246,7 @@ test('every daily results chart moves through the record like the hydrograph, an
 
 	// The hydrograph and the flow-duration curve are on Calibration (Model quality, issue #586 Round 3).
 	await page.goto(`/projects/${project.id}?tab=calibration`);
-	const hydro = figure(/^Flow at the outflow gauge/);
+	const hydro = figure(/^Calibration hydrograph at the Outflow gauge/);
 	const fdc = figure(/^Flow-duration curve/);
 	await expect(hydro.locator('canvas')).toBeVisible();
 	// The flow-duration curve has no dates to move through.
@@ -502,7 +502,7 @@ test('when a run’s series fail to load, each chart says what failed with Try a
 	// Try again loads them again.
 	fail = false;
 	await hydro.getByRole('button', { name: 'Try again' }).click();
-	await expect(hydro.getByRole('img', { name: /^Flow at the outflow gauge/ }).locator('canvas')).toBeVisible();
+	await expect(hydro.getByRole('img', { name: /^Calibration hydrograph at the Outflow gauge/ }).locator('canvas')).toBeVisible();
 	await expect(fdc.getByRole('img', { name: /^Flow-duration curve/ })).toBeVisible();
 	await runoff.getByRole('button', { name: 'Try again' }).click();
 	await expect(runoff.getByRole('img', { name: /^Model stores/ }).locator('canvas')).toBeVisible();
@@ -575,7 +575,7 @@ test.describe('on a touch screen', () => {
 		const project = await seedRunnableProject(page.request, 'Touch hint');
 		await createRun(page.request, project.id, 'Touch');
 		await page.goto(`/projects/${project.id}?tab=calibration`);
-		const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Flow at the outflow gauge/ }) });
+		const chart = page.locator('figure', { has: page.getByRole('img', { name: /^Calibration hydrograph at the Outflow gauge/ }) });
 		await expect(chart.locator('canvas')).toBeVisible();
 		await expect(chart.locator('[data-hint="touch"]')).toHaveText('Tap the chart to read its values; Earlier / Later move through the record.');
 		await expect(chart.locator('[data-hint="fine"]')).toBeHidden();

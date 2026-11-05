@@ -82,6 +82,7 @@ export const INVENTORY = [
 	{ path: 'frontend/src/lib/components/runs/RecessionDiagnostics.svelte', reads: 1, how: 'never', evidence: ['check.segments'], note: 'only the summary’s recession segments: observed-flow days, which a forecast has none of' },
 	{ path: 'frontend/src/lib/components/runs/ReportWindowPanel.svelte', reads: 1, how: 'cut', evidence: ['resolveWindow(choice, run, stored)'], note: 'reportWindow.ts ends a forecast run’s windows before the forecast' },
 	{ path: 'frontend/src/lib/components/runs/AccumulatedFlows.svelte', reads: 1, how: 'band', evidence: ['{band}'] },
+	{ path: 'frontend/src/lib/components/runs/CalibrationLocationFlows.svelte', reads: 1, how: 'band', evidence: ['{band}'], note: 'the other calibration locations’ hydrographs band the forecast (their statistics are the summary’s)' },
 	{ path: 'frontend/src/lib/components/runs/RunChart.svelte', reads: 1, how: 'band', evidence: ['{band}'] },
 	{
 		path: 'frontend/src/lib/components/runs/GaugeCheckFlows.svelte',
