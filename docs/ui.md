@@ -1339,7 +1339,8 @@ role, freshness, Add data) and each tab's own header:
   their own `ModelSaveRow`.
 - **The groups:** `SectionHeader` takes the pill as `status`, the tab's
   controls as `actions` and the page's main box (Add data where the tab has
-  it, then the tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
+  it, then Run model on Calibration or the tab's `main`) as `main`; the box
+  is always drawn for an editor, and takes no room when it is empty. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
   on Allocations at 1440); the main box is one box, so a wrap never splits it.
   The title column asks for its context's full one-line width (and no more:

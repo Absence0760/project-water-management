@@ -1217,7 +1217,7 @@
 				status={fresh || series || headerSlot.status ? headerStatus : null}
 				assist={assistantOn ? assistButton : null}
 				actions={headerSlot.actions}
-				main={showsAddData || headerRun || headerSlot.main ? headerMain : null}
+				main={canEdit || headerSlot.main ? headerMain : null}
 				notices={headerNotices}
 			/>
 

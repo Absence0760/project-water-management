@@ -472,4 +472,10 @@
 			min-height: 44px;
 		}
 	}
+	/* The main box is always drawn for an editor (the page's sign that the header is there, add-data-tabs.spec.ts),
+	   but with nothing in it (a section with neither Add data nor a Run model) it takes no room and adds no gap, on
+	   a phone too (after the container query's display, and more specific than it). */
+	.group.main:not(:has(> *)) {
+		display: none;
+	}
 </style>

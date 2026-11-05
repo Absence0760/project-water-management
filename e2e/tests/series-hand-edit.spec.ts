@@ -140,7 +140,7 @@ test('a bad pasted row is named by its line, and closing asks before the rows ar
 	await dialog.getByLabel('Dates and values').fill('2021-10-02\t1\nyesterday\t2');
 	await expect(dialog.getByRole('alert')).toContainText('Pasted rows: Line 2: "yesterday" is not a date'); // clock-free: the pasted text, echoed.
 	await dialog.getByLabel('Dates and values').fill('2021-10-11\t1');
-	await expectNoViolations(page, { include: '[role="dialog"]' });
+	await expectNoViolations(page, { include: 'dialog[open]' });
 	await dialog.getByRole('button', { name: 'Cancel' }).click();
 	await expect(page.getByRole('alertdialog')).toContainText('Discard the pasted rows?');
 });

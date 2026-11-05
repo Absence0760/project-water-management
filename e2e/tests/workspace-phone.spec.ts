@@ -390,7 +390,11 @@ test.describe('desktop', () => {
 			// Add data only on Model settings of the three (issue #601), and no Run model on any: it is on Runs & results only.
 			await expect(h.getByRole('button', { name: 'Run model', exact: true }), tab).toHaveCount(0);
 			if (tab === 'settings') expect((await h.getByTestId('header-main').getByRole('button').allTextContents()).map((t) => t.trim()), tab).toEqual(['Add data']);
-			else await expect(h.getByTestId('header-main'), tab).toHaveCount(0);
+			else {
+				// The main box is drawn but empty, and takes no room.
+				await expect(h.getByTestId('header-main'), tab).toBeAttached();
+				await expect(h.getByTestId('header-main'), tab).toBeHidden();
+			}
 		}
 	});
 });
