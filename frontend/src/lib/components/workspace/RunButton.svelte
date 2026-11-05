@@ -1,12 +1,13 @@
 <script lang="ts">
-	// The section header's Run model on every section but Runs & results (docs/ui.md
-	// § Section header), for editors: last (after Add data on the tabs that have it). A run is named, so the
+	// The section header's Run model on Calibration (docs/ui.md § Section header), for
+	// editors: last, after Add data. Runs & results has its own run form in the header;
+	// no other section has a Run model (the button there crashed the app and was
+	// removed at the operator's request, 2026-11-05). A run is named, so the
 	// button doesn't run at once; it opens a small form under it with the Run label,
 	// Run forecast (with forecast rain) and Run model, and says why a run can't start
 	// yet (runs/runReady.ts, the same reasons Runs & results' run form gives). The
 	// page runs it (saving unsaved edits first, with the person's say) and opens it
-	// in Runs & results, or on Calibration below, under How the shown run fits
-	// (`opensHere`). The popover follows the Setup complete pill's pattern
+	// on Calibration below, under How the shown run fits (`opensHere`). The popover follows the Setup complete pill's pattern
 	// (overview/SetupPill.svelte): a button with aria-expanded, Escape closes it and
 	// returns focus, a click outside closes it, nudged to stay inside the window.
 	import { tick } from 'svelte';

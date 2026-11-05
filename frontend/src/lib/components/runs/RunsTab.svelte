@@ -77,6 +77,7 @@
 		runs: initialRuns = null,
 		canRun,
 		modelDirty,
+		unsaved = modelDirty,
 		busy = false,
 		beforeRun,
 		onRunsChange,
@@ -91,6 +92,11 @@
 		runs?: RunMeta[] | null;
 		canRun: boolean;
 		modelDirty: boolean;
+		/**
+		 * Anything unsaved a run would leave out (model, settings, project details, a field to fix: the page's
+		 * `unsaved`): the run form's status says Run model saves it first, whichever section the edits were made on.
+		 */
+		unsaved?: boolean;
 		/** A run the page started (the new-data line's Re-run model) is still going: this form waits for it. */
 		busy?: boolean;
 		/** Asked before a run starts: the page saves unsaved edits first (with the person's say); false stops the run. */
@@ -522,7 +528,7 @@
 		return reasons.length ? reasons : null;
 	});
 	// What a run still needs, and whether forecast rain allows a forecast run (runReady.ts, shared with
-	// the section header's Run model on the other sections). The editor's model, like the Network tab's
+	// Calibration's header Run model and the assistant's get_run_readiness). The editor's model, like the Network tab's
 	// total (unsaved edits have their own note).
 	const hasForecast = $derived(hasForecastRain(series));
 	const blockers = $derived(runBlockers(editor.model, series));
@@ -633,8 +639,8 @@
 					A run needs {missing.join(' and ')}. Set up the <a href="?tab=network">network</a> and upload
 					<a href="?tab=series">rainfall data</a> first.
 				</span>
-			{:else if modelDirty}
-				<span class="warn">The model has unsaved changes: Run model asks to save them first, since a run uses the saved model.</span>
+			{:else if unsaved}
+				<span class="warn">You have unsaved changes: Run model asks to save them first, since a run uses the saved model.</span>
 			{:else if stale}
 				<span class="warn">Inputs changed since the latest run ({stale.join('; ')}). Run again to update the results.</span>
 			{:else}
