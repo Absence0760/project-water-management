@@ -21,7 +21,8 @@
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import type { MapPosition } from '#lib/api/types.js';
 	import { ApiError } from '#lib/api/client.js';
-	import { afterPollError, CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, unitInsideBoundary, waitingText } from './delineation';
+	import { afterPollError, CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, waitingText } from './delineation';
+	import { unitInsideBoundary } from './unitHint';
 	import { parseDegrees, positionText } from './mapData';
 	import { largerChannelOf } from './largerChannel';
 	import { fmtNum } from '#lib/format/number.js';

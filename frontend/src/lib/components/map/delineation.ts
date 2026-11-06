@@ -1,7 +1,7 @@
 // The Map's delineation (issue #326 B-delineate; docs/design/delineation.md,
 // docs/ui.md § Map): what the sheet says about a proposal, pure so it is
 // tested without a browser.
-import type { DelineationProposal, DelineationRequest, DelineationState, MapFeature, MapPosition } from '#lib/api/types.js';
+import type { DelineationProposal, DelineationRequest, DelineationState } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
 
 /** The proposal waiting for a decision, if any (at most one: a new one supersedes it). */
@@ -118,29 +118,3 @@ export const CAVEATS = [
 	'Flats, dams and pans drain towards their outlet by construction: the area draining into pans is reported beside it, not taken out. A dam drawn down below its spillway, or a pond behind an embankment, can count as a pan if it holds a lot over its catchment, unless a mapped river flows out of it over a wall or the register or the map has a dam there (then it is listed as storage on a river). Canals, pipelines, culverts and transfers between basins are invisible to it.',
 	'Check it against the map before accepting: its outline follows the terrain channels, drawn dimmed behind it, and the Relief layer, the mapped rivers and the quaternary outlines help you judge it. Close this sheet to look (Review it brings it back); you can edit the shape afterwards.'
 ] as const;
-
-/** The point is inside a polygon's rings (even-odd, holes included), or inside any part of a multipolygon. */
-function insidePolygon([x, y]: MapPosition, rings: readonly (readonly MapPosition[])[]): boolean {
-	let n = false;
-	for (const r of rings)
-		for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-			const [xi, yi] = r[i]!;
-			const [xj, yj] = r[j]!;
-			if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) n = !n;
-		}
-	return n;
-}
-
-/**
- * One catchment above a point whose outlet lies inside the project's catchment boundary: most likely a hydrological
- * unit meant (the operator drew a unit this way and the next one replaced it, 2026-11-06), so the sheet says that
- * this is the whole catchment above the point, what accepting it as the boundary replaces, and offers Sub-catchments,
- * one per click. Null when there's no boundary or the outlet is outside it.
- */
-export function unitInsideBoundary(p: Pick<DelineationProposal, 'outlet'>, boundary: Pick<MapFeature, 'name' | 'areaM2' | 'geometry'> | null): { name: string; areaKm2: number | null } | null {
-	const g = boundary?.geometry;
-	if (!boundary || !g) return null;
-	const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-	if (!polys.some((rings) => insidePolygon(p.outlet, rings))) return null;
-	return { name: boundary.name || 'the catchment boundary', areaKm2: boundary.areaM2 === null ? null : boundary.areaM2 / 1e6 };
-}

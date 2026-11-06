@@ -1722,7 +1722,7 @@ to a point on a river. The design, the method and its accuracy are in
   unit upstream included) and that accepting it as the boundary replaces the
   named one with its area, and offers **Use Sub-catchments instead**, which
   closes the sheet and turns on Sub-catchments, one per click, the proposal
-  left waiting (`delineation.ts` `unitInsideBoundary`). **Accept as the catchment boundary** (replacing the current one
+  left waiting (`unitHint.ts` `unitInsideBoundary`). **Accept as the catchment boundary** (replacing the current one
   only with **Replace the current boundary** ticked; the server refuses
   otherwise), **Accept as an area** (an *other* polygon, e.g. a dam's
   upstream area, which can then be linked to a unit and Used), or
