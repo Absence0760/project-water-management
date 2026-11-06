@@ -620,6 +620,16 @@ alongside teams, e.g. to give an outside client `viewer` access.
   moves the site to the copy's gauge. It never sets `ewrChargeSource`. Like
   `outcomes` it is no model input: runs don't record it, saving only it
   leaves `updatedAt` alone, and every run is read by the current choice.
+  `settings.referenceGauge` (`projects/referenceGaugeSettings.ts`,
+  [ui.md § Calibration](./ui.md#calibration), *Verification against a
+  reference gauge*) is the areas Calibration scales the project's reference
+  gauge record (`flow_reference_m3s`, a neighbouring river) by to compare it
+  with a run at the outlet: always present, `null` = none, else `{ areaKm2,
+  targetAreaKm2, name }` (the gauge's catchment area in km², over 0 and at
+  most 1 000 000; the area at the outlet, null = the model's catchment area;
+  a name of at most 80 characters, `''` = none). `PATCH` takes it whole or
+  `null` (no other shape or key; `400`). Like `outcomes` it is no model
+  input: runs don't record it and saving only it leaves `updatedAt` alone.
   `settings.droughtRestriction` (engine ≥ 1.54.0, WP-3.8,
   [model.md §2.7i](./model.md), [ui.md § Drought restrictions](./ui.md#drought-restrictions))
   is the model's drought restriction rule: `{ reviewDates: ['MM-DD', …]
@@ -4332,7 +4342,8 @@ sends it with `reason: "Assistant suggestion: <title>"`; or it sends `POST
 `fitRecord`, `calibrationRules`, `evidenceUncertaintyRule` and
 `responsibleAuthority` (a person's own acts), `checksKept` and `warningsKept`
 (a person's judgement on the Warnings page), and `autoRun`, `outcomes`,
-`outlook` and `ewrHeadline` (run policy and display, not model inputs).
+`outlook`, `ewrHeadline` and `referenceGauge` (run policy and display, not
+model inputs).
 
 A turn is counted (one message, hourly and monthly) when it starts and
 charged its tokens when it ends, whatever the outcome, a client that went

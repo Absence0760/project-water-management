@@ -11,7 +11,8 @@
 // and the sections' reported `errors` (blockers.ts), so it holds whichever
 // page is shown; the page saves `snapshot()`.
 import type { CalibrationParams, ChirpsQuantileMap, ProjectSettings } from '@water-management/engine';
-import type { AutoRunSettings, EwrHeadline, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
+import type { AutoRunSettings, EwrHeadline, OutcomeSettings, OutlookSettings, ReferenceGauge } from '#lib/api/types.js';
+import { resolveReferenceGauge } from '#lib/calibration/referenceGauge.js';
 import { resolveAutoRun } from '#lib/components/autorun/autoRun.js';
 import { resolveOutcomes } from '#lib/components/outcomes/outcomeSettings.js';
 import { resolveOutlook } from '#lib/components/outlook/settings.js';
@@ -38,9 +39,11 @@ export type EditableSettings = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3P
 	outlook: OutlookSettings;
 	/** Which EWR test the results are judged by (issue #444); `auto` for an older API. */
 	ewrHeadline: EwrHeadline;
+	/** The reference gauge's areas for Calibration's verification against it; null = none (and for an older API). */
+	referenceGauge: ReferenceGauge | null;
 };
 
-type SavedSettings = ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings; ewrHeadline?: EwrHeadline };
+type SavedSettings = ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings; ewrHeadline?: EwrHeadline; referenceGauge?: ReferenceGauge | null };
 
 /** A deep copy the form can edit, with the defaults an older API leaves out filled in. */
 export function editableSettings(v: SavedSettings): EditableSettings {
@@ -49,6 +52,7 @@ export function editableSettings(v: SavedSettings): EditableSettings {
 	c.outcomes = resolveOutcomes(v);
 	c.outlook = resolveOutlook(v);
 	c.ewrHeadline = resolveEwrHeadline(v);
+	c.referenceGauge = resolveReferenceGauge(v);
 	return c;
 }
 
@@ -94,6 +98,7 @@ export const PATCH_REPLACED_WHOLE: ReadonlySet<string> = new Set([
 	'evidenceUncertaintyRule',
 	'droughtRestriction',
 	'ewrHeadline',
+	'referenceGauge',
 	'ewrDailySource',
 	'unitRain',
 	'rainStations',

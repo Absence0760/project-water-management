@@ -72,7 +72,7 @@
 		/** The project's input series: a checks-only gauge links to its record on Data. */
 		series?: readonly { id: string; kind: string; name?: string; siteNodeId?: string | null }[] | null;
 		/** The project's settings: a run that kept no snapshot of its own is scored on their calibration window. */
-		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
+		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null; referenceGauge?: unknown } | null;
 		project: Project;
 		/** The model being edited (the catchment area's default, the gauges, unsaved edits a fit runs on). */
 		editor?: ModelEditor;

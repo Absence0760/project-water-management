@@ -225,6 +225,19 @@ export interface OutcomeSettings {
  */
 export type EwrHeadline = { source: 'auto' } | { source: 'pragmatic' } | { source: 'ruleTable'; siteNodeId: string | null };
 
+/**
+ * settings.referenceGauge (backend projects/referenceGaugeSettings.ts): a gauge on a neighbouring river (the project's
+ * `flow_reference_m3s` record), scaled by area to the outlet for Calibration's verification. No model input. null = none.
+ */
+export interface ReferenceGauge {
+	/** The reference gauge's own catchment area, km². */
+	areaKm2: number;
+	/** The area at the outlet it is compared at, km²; null = the model's catchment area. */
+	targetAreaKm2: number | null;
+	/** What to call it; '' = "the reference gauge". */
+	name: string;
+}
+
 /** A season as a month and day each end (settings.outlook.season): the decision date and the season end. */
 export interface OutlookSeasonSetting {
 	startMonth: number;
@@ -262,7 +275,7 @@ export interface Project extends ProjectSummary {
 	timeZone?: string;
 	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
 	wuaName?: string | null;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline; referenceGauge?: ReferenceGauge | null };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
 	/** The caller acts for the responsible authority (163, 229): a confirmed delegate holding editor or above, so they record its decisions and endorse a baseline. */

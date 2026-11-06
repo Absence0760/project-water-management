@@ -1,3 +1,4 @@
+import { resolveReferenceGauge } from './referenceGaugeSettings.js';
 import { readFileSync } from 'node:fs';
 import { chirpsQuantileMapError, dayQuality, gapRainError, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays, unitRainError } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
@@ -1803,6 +1804,27 @@ describe('settings.ewrHeadline (issue #444)', () => {
 		expect(remapSettingNodeIds({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'g1' } }, ids)).toEqual({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'new-g1' } });
 		expect(remapSettingNodeIds({ ewrHeadline: { source: 'ruleTable', siteNodeId: null } }, ids)).toEqual({ ewrHeadline: { source: 'ruleTable', siteNodeId: null } });
 		expect(remapSettingNodeIds({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'gone' } }, ids)).toEqual({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'gone' } });
+	});
+});
+
+describe('settings.referenceGauge (Calibration’s verification against a neighbouring gauge)', () => {
+	it('parses the areas and a name, or null; refuses a missing or non-positive area and any other field', () => {
+		for (const ok of [{ areaKm2: 266, targetAreaKm2: null, name: '' }, { areaKm2: 266, targetAreaKm2: 205, name: 'Upper weir' }, null]) {
+			expect(SettingsPatch.safeParse({ referenceGauge: ok }).success, JSON.stringify(ok)).toBe(true);
+		}
+		for (const bad of [{ areaKm2: 0, targetAreaKm2: null, name: '' }, { areaKm2: 266, targetAreaKm2: -1, name: '' }, { areaKm2: 266, name: '' }, { areaKm2: 266, targetAreaKm2: null, name: '', factor: 2 }, { areaKm2: 266, targetAreaKm2: null, name: 'x'.repeat(81) }]) {
+			expect(SettingsPatch.safeParse({ referenceGauge: bad }).success, JSON.stringify(bad)).toBe(false);
+		}
+	});
+	it('is replaced whole: an outlet area set before doesn’t outlive a new setting', () => {
+		const stored = patchSettings({}, { referenceGauge: { areaKm2: 266, targetAreaKm2: 205, name: 'A' } });
+		expect(patchSettings(stored, { referenceGauge: { areaKm2: 300, targetAreaKm2: null, name: '' } })).toHaveProperty('referenceGauge', { areaKm2: 300, targetAreaKm2: null, name: '' });
+		expect(patchSettings(stored, { referenceGauge: null })).toHaveProperty('referenceGauge', null);
+	});
+	it('reads back null when absent or not valid', () => {
+		expect(resolveReferenceGauge({})).toBeNull();
+		expect(resolveReferenceGauge({ referenceGauge: { areaKm2: 'x' } })).toBeNull();
+		expect(resolveReferenceGauge({ referenceGauge: { areaKm2: 266, targetAreaKm2: null, name: ' A ' } })).toEqual({ areaKm2: 266, targetAreaKm2: null, name: 'A' });
 	});
 });
 
