@@ -52,7 +52,7 @@ describe('statusLine: the Calibration page’s first line', () => {
 
 	it('no run: what to do first, a record on Data before a run', () => {
 		expect(statusLine({ kind: 'none' }, false, true)).toMatchObject({ lead: 'No observed flow record yet.', link: { href: '?tab=series', label: 'add one on Data' } });
-		expect(statusLine({ kind: 'none' }, true, true)).toMatchObject({ lead: 'No run yet.', text: 'Run the model to see how its flows fit the observed record.', link: null });
+		expect(statusLine({ kind: 'none' }, true, true)).toMatchObject({ lead: 'No run yet.', text: 'Run the model on Runs & results to see how its flows fit the observed record.', link: { href: '?tab=runs', label: 'Go to Runs & results' } });
 		expect(statusLine({ kind: 'none' }, true, false).text).toBe('An editor can run the model.');
 	});
 

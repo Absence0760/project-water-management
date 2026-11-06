@@ -14,7 +14,7 @@
 	through `landing`. The run shown is told to the page (`onshown`), for its
 	side index. With no run, the part's one empty state says what to do first:
 	add an observed flow record on Data when there is none, else run the
-	model (the header's Run model, as on Runs & results).
+	model on Runs & results (Calibration has no Run model of its own).
 -->
 <script lang="ts">
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
@@ -290,7 +290,7 @@
 	{/if}
 {:else if !run}
 	<!-- The part's one empty state (ui-playbook.md § 2): what to do first. With no record to compare with, a run
-	     would show no fit, so that comes first; then a run, which the header's Run model starts (as on Runs & results). -->
+	     would show no fit, so that comes first; then a run, which Runs & results' Run model starts (Calibration has none). -->
 	<div class="empty" data-testid="calibration-no-run">
 		{#if hasRecord === false}
 			<p>
@@ -298,7 +298,10 @@
 				<a href="?tab=series">Data</a>{canEdit ? ', then run the model.' : '.'}
 			</p>
 		{:else}
-			<p><strong>No run yet.</strong> {canEdit ? 'Run the model to see how its flows fit the observed record.' : 'An editor can run the model.'}</p>
+			<p>
+				<strong>No run yet.</strong>
+				{#if canEdit}Run the model on <a href="?tab=runs">Runs &amp; results</a> to see how its flows fit the observed record.{:else}An editor can run the model.{/if}
+			</p>
 		{/if}
 		<p class="muted small">A run shows here with its hydrograph, flow-duration curve, calibration scores and plausibility checks.</p>
 	</div>

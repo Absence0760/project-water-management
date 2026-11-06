@@ -66,7 +66,7 @@ export function statusLine(state: CalState, hasRecord: boolean | null, canEdit: 
 	if (state.kind === 'none') {
 		if (hasRecord === false)
 			return { lead: 'No observed flow record yet.', text: 'A fit needs a flow record measured at a gauge:', link: { href: '?tab=series', label: 'add one on Data' }, tone: 'none' };
-		return { lead: 'No run yet.', text: canEdit ? 'Run the model to see how its flows fit the observed record.' : 'An editor can run the model.', link: null, tone: 'none' };
+		return { lead: 'No run yet.', text: canEdit ? 'Run the model on Runs & results to see how its flows fit the observed record.' : 'An editor can run the model.', link: canEdit ? { href: '?tab=runs', label: 'Go to Runs & results' } : null, tone: 'none' };
 	}
 	const after = changed.length ? ` The form’s GR4J parameters differ from this run’s: ${canEdit ? 'run the model' : 'an editor can run the model'} to score them.` : '';
 	const cal = state.calibration;

@@ -167,8 +167,11 @@ test.describe('1440×960', () => {
 		void owner;
 		const p = await seedRunnableProject(page.request, 'Calibration no run');
 		await page.goto(`/projects/${p.id}?tab=calibration`);
-		await expect(page.getByTestId('calibration-no-run')).toContainText('No run yet. Run the model to see how its flows fit the observed record.');
-		await expect(sectionHeader(page).getByRole('button', { name: /^Run model/ })).toBeVisible();
+		await expect(page.getByTestId('calibration-no-run')).toContainText('No run yet. Run the model on Runs & results to see how its flows fit the observed record.');
+		// Calibration has no Run model of its own (operator request, 2026-11-06): the link goes to Runs & results' form.
+		await expect(sectionHeader(page).getByRole('button', { name: /^Run model/ })).toHaveCount(0);
+		await page.getByTestId('calibration-no-run').getByRole('link', { name: 'Runs & results' }).click();
+		await expect(sectionHeader(page).getByRole('button', { name: 'Run model', exact: true })).toBeVisible();
 	});
 
 	test('the runs list fails: the part says so with Try again, which brings the run back', async ({ page, owner }) => {
