@@ -12,7 +12,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, putSeries, sampleModel, seedRunnableProject, syntheticRain, updateSettings } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
-import { API_URL } from '../support/env.ts';
+import { API_URL, WEB_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { loadSyntheticPrior } from '../support/gr4jPrior.ts';
 import { box } from '../support/map.ts';
@@ -132,4 +132,40 @@ test('Fit automatically uses the prior as a penalty and its box, and the fit rec
 	await fit.getByRole('button', { name: 'Apply to form' }).click();
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
 	await expect(record.getByTestId('fit-prior')).toContainText(/Regional prior: penalty weight 0\.10, searched its p10–p90 box; 7 of 14 donors from “synthetic” \(invented donors\), SHA-256 [0-9a-f]{12}…/);
+});
+
+test('with no position for the donors, Fit automatically offers only Off, and a prior chosen before goes back to Off', async ({ page, owner }) => {
+	void owner;
+	// Production had no donor basins loaded and the choice only refused at Fit (operator report, 2026-11-06). The same
+	// project-wide refusal here is the missing boundary: the donors are loaded, the catchment has no position.
+	const project = await seedRunnableProject(page.request, 'Regional prior, nowhere');
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, {
+		data: { kind: 'catchment_boundary', name: 'Catchment', geometry: { type: 'Polygon', coordinates: [box(21.26, -33.74, 0.18)] } }
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	const featureId = (await made.json()).feature.id as string;
+	await openPanel(page, project.id);
+	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	const choice = fit.getByLabel(/^Regional prior/);
+	// Positive control: with a boundary every use is offered.
+	await expect(choice.locator('option[value="both"]')).toBeEnabled();
+	await expect(fit.getByTestId('fit-prior-unavailable')).toHaveCount(0);
+	await choice.selectOption('both');
+
+	const del = await page.request.delete(`${API_URL}/projects/${project.id}/map/features/${featureId}`, { headers: { Origin: WEB_URL } });
+	expect(del.status(), await del.text()).toBeLessThan(300);
+	// Another section and back: the fit's choices are the workspace's, so 'both' comes back with the page.
+	const tabs = page.getByRole('navigation', { name: 'Project sections' });
+	await tabs.getByRole('link', { name: 'Model settings', exact: true }).click();
+	await expect(page).toHaveURL(/tab=settings/);
+	await tabs.getByRole('link', { name: 'Calibration', exact: true }).click();
+	await expect(fit.getByTestId('fit-prior-unavailable')).toHaveText(/^Set back to Off: the regional prior can’t be used on this project\. There is no catchment boundary on the map/);
+	await expect(choice).toHaveValue('off');
+	for (const u of ['penalty', 'bounds', 'both']) await expect(choice.locator(`option[value="${u}"]`)).toBeDisabled();
+	await expect(choice).toHaveAccessibleDescription(/regional prior can’t be used on this project/);
+
+	// A fresh page: offered only Off, nothing to set back.
+	await page.reload();
+	await expect(fit.getByTestId('fit-prior-unavailable')).toHaveText(/^The regional prior can’t be used on this project\. There is no catchment boundary on the map/);
+	await expect(choice).toHaveValue('off');
 });
