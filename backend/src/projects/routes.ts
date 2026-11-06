@@ -26,6 +26,7 @@ import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { resolveOutcomes } from './outcomeSettings.js';
 import { resolveEwrHeadline } from './ewrHeadlineSettings.js';
+import { resolveReferenceGauge } from './referenceGaugeSettings.js';
 import { resolveOutlook } from './outlookSettings.js';
 import { resolveResponsibleAuthority } from './authoritySettings.js';
 import { readJson } from '../http/body.js';
@@ -80,7 +81,7 @@ const summary = (r: ProjectRow) => ({
 	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null,
 	publishedAt: r.published_at ? r.published_at.toISOString() : null
 });
-// settings.autoRun, settings.outcomes, settings.outlook, settings.responsibleAuthority and settings.ewrHeadline aren't in the engine's defaults (they're no model inputs), so they are resolved here: clients see every field.
+// settings.autoRun, settings.outcomes, settings.outlook, settings.responsibleAuthority, settings.ewrHeadline and settings.referenceGauge aren't in the engine's defaults (they're no model inputs), so they are resolved here: clients see every field.
 // rerunQueuedFor: when the pending re-run is due (the header's "Re-run queued for 14:05"), or null.
 const full = (r: ProjectRow) => ({
 	...summary(r),
@@ -92,7 +93,8 @@ const full = (r: ProjectRow) => ({
 		outcomes: resolveOutcomes(r.settings),
 		outlook: resolveOutlook(r.settings),
 		responsibleAuthority: resolveResponsibleAuthority(r.settings),
-		ewrHeadline: resolveEwrHeadline(r.settings)
+		ewrHeadline: resolveEwrHeadline(r.settings),
+		referenceGauge: resolveReferenceGauge(r.settings)
 	},
 	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null,
 	// Whether the caller may record the authority's decision and endorse a baseline (163).
@@ -236,7 +238,7 @@ const stableJson = (v: unknown): string =>
 		x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x
 	);
 const withoutRunPolicy = (settings: unknown) => {
-	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ewrHeadline: _headline, ...rest } = settings as Record<string, unknown>;
+	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ewrHeadline: _headline, referenceGauge: _reference, ...rest } = settings as Record<string, unknown>;
 	return rest;
 };
 
@@ -245,7 +247,8 @@ const withoutRunPolicy = (settings: unknown) => {
  * itself, not how), settings.outcomes (how the outcome matrix reads a
  * sweep), settings.outlook (how a seasonal outlook is set up) or
  * settings.responsibleAuthority (who decides its applications, 163) or
- * settings.ewrHeadline (which EWR test results are judged by, issue #444) leaves
+ * settings.ewrHeadline (which EWR test results are judged by, issue #444) or
+ * settings.referenceGauge (the areas Calibration scales a neighbouring gauge by) leaves
  * updated_at alone: updated_at is "the inputs changed since the latest run"
  * to the Runs tab, and none of them changes an input. The Settings
  * form sends every setting, so this compares the settings as they'd be

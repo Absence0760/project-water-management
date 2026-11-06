@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Calibration's verification against a reference gauge: ReferenceGaugeCheck.svelte (its table and monthly volume chart), lib/calibration/referenceGauge.ts and the Calibration record fields (total 2434 KB measured against 2430 KB before this change's entry)"
+}

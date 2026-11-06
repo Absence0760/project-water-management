@@ -37,6 +37,7 @@
 	import { calShown, isCalSubsection, shownRun, type CalShown } from './page';
 	import type { CalState } from './status';
 	import { followRetry } from '#lib/components/common/loadState.js';
+	import { resolveReferenceGauge } from '#lib/calibration/referenceGauge.js';
 
 	type Land = (id: string) => (() => void) | void;
 
@@ -62,7 +63,7 @@
 		/** The project's input series: a checks-only gauge links to its record on Data. */
 		series?: readonly { id: string; kind: string; siteNodeId?: string | null }[] | null;
 		/** The project's settings, for a run that kept no snapshot of its own (its calibration window). */
-		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
+		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null; referenceGauge?: unknown } | null;
 		/** The project has an observed or logger flow record a run can be scored against: null while not known. */
 		hasRecord?: boolean | null;
 		/** The form's GR4J parameters that differ from the shown run's (status.ts gr4jChanges), said under the run line. */
@@ -367,7 +368,7 @@
 		{/if}
 		<!-- data-run: the run whose details are on screen; aria-busy while another run picked is loading (both for the tests). -->
 		<div class="results" data-testid="calibration-results" data-run={detail.run.id} aria-busy={busy || detailLoading}>
-			<ModelQuality {projectId} run={detail.run} refs={detail.series} {nodeNames} {nodeOrder} runs={list} {series} {projectSettings} bind:flowUnit />
+			<ModelQuality {projectId} run={detail.run} refs={detail.series} {nodeNames} {nodeOrder} runs={list} {series} {projectSettings} referenceGauge={resolveReferenceGauge(projectSettings)} bind:flowUnit />
 		</div>
 	{:else}
 		<div class="chart-ph retry-line" role="status" data-loading data-testid="calibration-run-loading">Loading the run…</div>

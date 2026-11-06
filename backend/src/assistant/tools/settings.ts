@@ -81,7 +81,7 @@ export const MODEL_INPUT = [
 ] as const;
 
 /** Stored settings that are no model input (projects/routes.ts withoutRunPolicy): never sent. */
-export const NOT_MODEL_INPUT = ['autoRun', 'outcomes', 'outlook', 'responsibleAuthority', 'ewrHeadline'] as const;
+export const NOT_MODEL_INPUT = ['autoRun', 'outcomes', 'outlook', 'responsibleAuthority', 'ewrHeadline', 'referenceGauge'] as const;
 
 const SENT: ReadonlySet<string> = new Set(MODEL_INPUT);
 

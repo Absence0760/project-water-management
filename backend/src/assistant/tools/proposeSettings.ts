@@ -79,7 +79,8 @@ export const NOT_PROPOSED: Readonly<Record<string, string>> = {
 	autoRun: 'when the model runs by itself is run policy, not a modelling setting',
 	outcomes: 'the outcome settings choose what the results pages show, not how the model runs',
 	outlook: 'the seasonal outlook settings choose what the outlook shows, not how the model runs',
-	ewrHeadline: 'the EWR headline chooses what the results pages lead with, not how the model runs'
+	ewrHeadline: 'the EWR headline chooses what the results pages lead with, not how the model runs',
+	referenceGauge: 'the reference gauge’s areas scale a neighbouring record for Calibration’s comparison, not how the model runs'
 };
 
 /**

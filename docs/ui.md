@@ -8479,6 +8479,38 @@ The page has:
   `MODEL_QUALITY_ANCHORS`, `modelQualitySections`); Model quality draws its
   panels after the flow-duration curve at once only for a link to one of
   them (`isLowerAnchor`, issue #586 R3-B).
+  **Verification against a reference gauge** (`calibration/ReferenceGaugeCheck.svelte`,
+  `lib/calibration/referenceGauge.ts`), under the outlet's hydrograph when
+  the project has a reference gauge record (`flow_reference_m3s`, a gauge on
+  a neighbouring river) or its area is set: the record × the **area factor**
+  (the area at the outlet ÷ the gauge's own, `settings.referenceGauge`; the
+  outlet's is the model's catchment area unless set: the units' areas, else
+  the catchment area setting), drawn on the hydrograph as a dashed line
+  named "<name> × <factor> (verification)", and a table of the shown run's
+  **Simulated (current day)** and **Natural** flow at the outlet against it
+  over the days both have a value before any forecast: KGE′, volume bias
+  (Σ model ÷ Σ record − 1, %), correlation r and the days compared with
+  their dates. Under the table, **Monthly volume** (`monthlyVolumes`): a
+  chart (LineChart over the month list) of each calendar month's volume of
+  the scaled record (dashed, as on the hydrograph), simulated and natural
+  flow, over the whole compared period, counting only the days all three
+  have a value, so they are like with like; a month with fewer than 20 such
+  days (`MONTH_MIN_DAYS`) is a gap in every line, not a low value, and the
+  caption says how many. Thousand m³, or million m³ once a month reaches
+  one. **Show the monthly volumes** opens its table (each month's three
+  volumes, "Gap: too few days in common", and the days compared of the
+  month's days). A caption says it is verification only, a neighbouring
+  catchment scaled by area, never scored by a fit. Without the gauge's area
+  it says to set it, linking to Calibration record (`#set-record`); with an
+  area but no record, to add one on Data; and a record whose unit isn't a
+  flow, or a run whose area isn't known, says so (`reference-check`'s
+  `data-state`). Natural flow is stored at the outlet only, so the
+  comparison is at the outlet. The areas are set under **Calibration record
+  → Reference gauge for verification** (its catchment area, km², blank = no
+  comparison; the area at the outlet, blank = the model's, shown as the
+  placeholder; an optional name), with the factor as the form stands; saved
+  from the save bar, no model input (a run doesn't record it, and a save of
+  only it leaves the "inputs changed" time alone). `reference-gauge.spec.ts`.
 - **Side index** (`SectionNav`, "Calibration sections"; `calibration/page.ts`
   `calibrationNavGroups`, issue #586 round 3): a group for each part, named
   by its heading, listing its panels by theirs, word for word on the bar too
