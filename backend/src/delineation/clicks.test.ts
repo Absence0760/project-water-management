@@ -1,7 +1,28 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInGeometry, type Geometry } from '../geo/geojson.js';
-import { clickRequest, ClicksBody, CLICKS_MAX, OUTLET_CLICK, OUTLET_KEY, outsideClick, outsideText, pastOutletText, pieceDescription, pieceName, saveSummary, toClickPieces, type ClickPieces, type Within } from './clicks.js';
+import {
+	clickRequest,
+	ClicksBody,
+	CLICKS_MAX,
+	firstClickNumber,
+	OUTLET_CLICK,
+	OUTLET_KEY,
+	outsideClick,
+	outsideText,
+	pastOutletText,
+	pieceDescription,
+	pieceLabel,
+	pieceName,
+	savedClick,
+	savedOutlet,
+	saveSummary,
+	subcatchmentProperty,
+	toClickPieces,
+	type ClickPieces,
+	type SavedPiece,
+	type Within
+} from './clicks.js';
 import { openDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
@@ -128,12 +149,14 @@ describe('the request and the names', () => {
 	it('describes a saved piece and sums up a save, naming the inflow points it leaves out', () => {
 		const sq = { type: 'Polygon' as const, coordinates: [[[20, -33], [20.1, -33], [20.1, -33.1], [20, -33]]] as [number, number][][] };
 		const base = { snapDistanceM: 10, geometry: sq, open: false, larger: null, nonContributingM2: 0 };
+		const named = (click: number) => ({ name: pieceName(click), label: String(click + 1), feature: null });
 		const r: ClickPieces = {
 			pieces: [
-				{ ...base, click: 0, point: [20.123456, -33.5], drainsInto: 2, areaM2: null, totalAreaM2: null, geometry: null, open: true },
-				{ ...base, click: 1, point: [20.2, -33.6], drainsInto: 2, areaM2: 3e6, totalAreaM2: 3e6 },
-				{ ...base, click: 2, point: [20.3, -33.7], drainsInto: null, areaM2: 12e6, totalAreaM2: null }
+				{ ...base, ...named(0), click: 0, point: [20.123456, -33.5], drainsInto: 2, areaM2: null, totalAreaM2: null, geometry: null, open: true },
+				{ ...base, ...named(1), click: 1, point: [20.2, -33.6], drainsInto: 2, areaM2: 3e6, totalAreaM2: 3e6 },
+				{ ...base, ...named(2), click: 2, point: [20.3, -33.7], drainsInto: null, areaM2: 12e6, totalAreaM2: null }
 			],
+			firstNumber: 1,
 			dropped: [],
 			lowest: 2,
 			within: null,
@@ -220,3 +243,100 @@ describe('within the catchment boundary', () => {
 		expect(r.dropped).toEqual([{ click: 1, reason: expect.stringMatching(/same place on the river as the catchment’s outlet/) }]);
 	});
 });
+
+describe('what is already on the map (sub-catchments saved inside the boundary)', () => {
+	const ring = (x0: number, y0: number, x1: number, y1: number) => [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), at(x0, y0)];
+	const box = (outlet: [number, number]): Within => ({ featureId: 'b', name: 'Valley', geometry: { type: 'Polygon', coordinates: [ring(OUTLET_CELL.x - 100, OUTLET_CELL.y - 250, OUTLET_CELL.x + 100, OUTLET_CELL.y + 2)] }, outlet });
+	const lonLat = (x: number, y: number) => {
+		const [lon, lat] = at(x, y);
+		return { lon, lat };
+	};
+	const answer = { featureId: 'b', name: 'Valley', outlet: 'delineation' as const };
+	/** Just below the dam wall (upstream), and on the river halfway from the dam to the outlet (downstream). */
+	const UP = lonLat(DAM_CELL.x, DAM_CELL.y + 1);
+	const DOWN = lonLat(OUTLET_CELL.x, OUTLET_CELL.y - 50);
+	/** Land only the upstream piece drains (the river above the reservoir), and land only the downstream one does (the flank between the dam and DOWN). */
+	const ABOVE = at(DAM_CELL.x, DAM_CELL.y - 60);
+	const BETWEEN = at(DAM_CELL.x + 30, DAM_CELL.y + 30);
+	const OUTLET_PIECE: SavedPiece = { featureId: 'o', name: 'Sub-catchment at the outlet', outlet: 'catchment' };
+
+	it('divides the land the same whichever is clicked first: a later click upstream carves its piece out of a saved one, a later click downstream stops at it', async () => {
+		const whole = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y));
+		const w = box(whole.outlet);
+		const run = async (clicks: { lon: number; lat: number }[], saved: SavedPiece[] = []) => toClickPieces(await delineateUnits(dem, clickRequest(clicks, w, saved)), answer, saved);
+		const area = (r: ClickPieces, click: number) => r.pieces.find((p) => p.click === click)!.areaM2!;
+
+		// The reference: both clicked in one go.
+		const both = await run([DOWN, UP]);
+		const [refDown, refUp] = [area(both, 0), area(both, 1)];
+		expect(both.pieces.find((p) => p.click === 1)!.drainsInto).toBe(0);
+
+		// Downstream first and saved: its piece holds the upstream land too, as nothing above it was clicked yet.
+		const downFirst = await run([DOWN]);
+		const down1 = downFirst.pieces.find((p) => p.click === 0)!;
+		near(down1.areaM2!, refDown + refUp, 0.01);
+		expect(pointInGeometry(ABOVE, down1.geometry as Geometry)).toBe(true);
+		// Then upstream: the saved downstream piece is split, its upstream land the new piece's, as if both were clicked at once.
+		const savedDown: SavedPiece[] = [OUTLET_PIECE, { featureId: 'd', name: 'Sub-catchment 1', outlet: down1.point }];
+		const upSecond = await run([UP], savedDown);
+		const down2 = upSecond.pieces.find((p) => p.feature?.id === 'd')!;
+		const up2 = upSecond.pieces.find((p) => p.click === 0)!;
+		expect(down2.click).toBe(savedClick(1));
+		near(down2.areaM2!, refDown, 0.01);
+		near(up2.areaM2!, refUp, 0.01);
+		expect(up2.drainsInto).toBe(down2.click);
+		expect(pointInGeometry(ABOVE, up2.geometry as Geometry)).toBe(true);
+		expect(pointInGeometry(ABOVE, down2.geometry as Geometry)).toBe(false);
+		expect(pointInGeometry(BETWEEN, down2.geometry as Geometry)).toBe(true);
+		// Named after what is on the map, the outlet's piece is the saved one, and nothing is dropped.
+		expect([up2.name, up2.label, upSecond.firstNumber]).toEqual(['Sub-catchment 2', '2', 2]);
+		expect([down2.name, down2.label]).toEqual(['Sub-catchment 1', '1']);
+		expect(upSecond.pieces.find((p) => p.click === OUTLET_CLICK)!.feature).toEqual({ id: 'o', name: 'Sub-catchment at the outlet' });
+		expect(upSecond.dropped).toEqual([]);
+
+		// Upstream first and saved, then downstream: the new downstream piece stops at the saved one, which keeps its land.
+		const upFirst = await run([UP]);
+		const up1 = upFirst.pieces.find((p) => p.click === 0)!;
+		near(up1.areaM2!, refUp, 0.01);
+		const downSecond = await run([DOWN], [OUTLET_PIECE, { featureId: 'u', name: 'Sub-catchment 1', outlet: up1.point }]);
+		const down3 = downSecond.pieces.find((p) => p.click === 0)!;
+		const up3 = downSecond.pieces.find((p) => p.feature?.id === 'u')!;
+		near(down3.areaM2!, refDown, 0.01);
+		near(up3.areaM2!, up1.areaM2!, 0.001);
+		expect(up3.drainsInto).toBe(down3.click);
+		expect(pointInGeometry(ABOVE, down3.geometry as Geometry)).toBe(false);
+		expect(pointInGeometry(BETWEEN, down3.geometry as Geometry)).toBe(true);
+
+		// Either way the pieces tile the delineated catchment once: no land counted twice.
+		for (const r of [upSecond, downSecond]) near(r.pieces.reduce((s, p) => s + p.areaM2!, 0), whole.areaM2, 0.02);
+	});
+
+	it('gives way to a saved piece when a click lands on its outlet, saying so', async () => {
+		const whole = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y));
+		const first = toClickPieces(await delineateUnits(dem, clickRequest([UP], box(whole.outlet))), answer);
+		const saved: SavedPiece[] = [{ featureId: 'u', name: 'Sub-catchment 1', outlet: first.pieces.find((p) => p.click === 0)!.point }];
+		const r = toClickPieces(await delineateUnits(dem, clickRequest([UP], box(whole.outlet), saved)), answer, saved);
+		expect(r.pieces.map((p) => p.click)).toEqual([savedClick(0), OUTLET_CLICK]);
+		expect(r.dropped).toEqual([{ click: 0, reason: expect.stringMatching(/as another click or a sub-catchment already on the map/) }]);
+	});
+
+	it('reads a saved piece’s outlet from its property, or from the description an older save wrote; anything else is no saved piece', () => {
+		expect(savedOutlet({ subcatchment: { outlet: [19.1, -33.2] } })).toEqual([19.1, -33.2]);
+		expect(savedOutlet({ subcatchment: { outlet: 'catchment' } })).toBe('catchment');
+		expect(savedOutlet({ description: 'The land draining to 19.12345° E, 33.54321° S before any other click; drains into sub-catchment 2; 3.00 km² upstream in all.' })).toEqual([19.12345, -33.54321]);
+		expect(savedOutlet({ description: 'The land draining to 19.12345° E, 33.54321° S before any other click; the catchment’s delineated outlet; 9.00 km² upstream in all.' })).toBe('catchment');
+		expect(savedOutlet({ description: 'Hand-drawn farm' })).toBeNull();
+		expect(savedOutlet({ subcatchment: { outlet: ['x', 1] } })).toBeNull();
+		expect(savedOutlet(null)).toBeNull();
+		expect(subcatchmentProperty({ click: OUTLET_CLICK, point: [1, 2] })).toEqual({ outlet: 'catchment' });
+		expect(subcatchmentProperty({ click: 3, point: [1, 2] })).toEqual({ outlet: [1, 2] });
+	});
+
+	it('numbers new pieces after those on the map, and badges a piece by the number in its name', () => {
+		expect(firstClickNumber([])).toBe(1);
+		expect(firstClickNumber([{ name: 'Sub-catchment 3' }, { name: 'Sub-catchment at the outlet' }, { name: 'Upper Twee' }])).toBe(4);
+		expect(pieceName(0, 4)).toBe('Sub-catchment 4');
+		expect([pieceLabel('Sub-catchment 12'), pieceLabel('Sub-catchment at the outlet'), pieceLabel('upper Twee')]).toEqual(['12', 'O', 'U']);
+	});
+});
+

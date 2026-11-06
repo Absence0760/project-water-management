@@ -652,14 +652,18 @@
 		// the Divide sheet on one with nodes (each piece listed to say which unit it stands for). Nothing is written to the
 		// model until the sheet's Apply; opened from the Start sheet's points step (#646 F13), it is the same sheet coming back.
 		const sheet = canStart ? 'start' : canDivide ? 'divide' : null;
+		// A sub-catchment already on the map that the clicks took land from was redrawn (docs/maps.md § Sub-catchments from clicks):
+		// in the sheet too, as the unit it stands for, so the editor sees its new area beside the unit's area now and ticks it.
+		const redrew = r.redrawn ?? [];
 		if (sheet === 'start') {
-			for (const f of r.features) startDraft.picked[f.id] = 'unit';
+			for (const f of [...r.features, ...redrew]) startDraft.picked[f.id] = 'unit';
 			startDraft.pointsAsked = true;
 			notice = `Saved ${r.summary} on the map as areas, each a hydrological unit in the Start sheet: check them, propose the model, then check each unit’s name and area and apply.`;
 		} else if (sheet === 'divide') {
 			// Each saved piece a new hydrological unit there (#670; divideFlow's NEW_UNIT, written out so that module stays in
 			// the sheet's chunk): the editor may pick a unit already in the model instead.
 			for (const f of r.features) divideDraft.picked[f.id] = 'new-unit' satisfies DivideChoice;
+			for (const f of redrew) if (f.nodeId) divideDraft.picked[f.id] = f.nodeId satisfies DivideChoice;
 			notice = `Saved ${r.summary} on the map as areas, each a new hydrological unit in the Divide sheet (or pick the unit it stands for): propose the division, then check each unit’s name and area and apply.`;
 		} else {
 			if (r.features[0]) await pickInPlace(r.features[0].id);

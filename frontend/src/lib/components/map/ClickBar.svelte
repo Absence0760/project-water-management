@@ -19,7 +19,7 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import type { MapPosition } from '#lib/api/types.js';
 	import { parseDegrees } from './mapData';
-	import { clickLabel, OUTLET_CLICK, pieceLine, savable, withinLine, type ClickDivider } from './clickPieces.svelte';
+	import { clickLabel, OUTLET_CLICK, pieceLine, savable, savedPieces, withinLine, type ClickDivider } from './clickPieces.svelte';
 	import PieceBadge from './PieceBadge.svelte';
 	import DelineateChoice from './DelineateChoice.svelte';
 	import DelineationLines from './DelineationLines.svelte';
@@ -68,6 +68,9 @@
 	const withinText = $derived(withinLine(r ? r.within : within));
 	/** The delineated outlet's piece: first, under its own badge. */
 	const outletPiece = $derived(r?.pieces.find((p) => p.click === OUTLET_CLICK) ?? null);
+	/** The sub-catchments already inside the boundary, routed with the clicks: a click above one takes its land, and Save redraws it. */
+	const onMap = $derived(savedPieces(r));
+	const first = $derived(r?.firstNumber ?? 1);
 
 	const mapReady = $derived(mapStatus === 'ready');
 	const mapFailed = $derived(mapStatus === 'failed');
@@ -138,9 +141,26 @@
 					data-click={OUTLET_CLICK}
 				>
 					<PieceBadge label={clickLabel(OUTLET_CLICK)} tint={isPiece ? tintOf(OUTLET_CLICK) : -1} />
-					<span class="line" data-testid="map-click-line">The outlet’s piece: {pieceLine(r, OUTLET_CLICK)}</span>
+					<span class="line" data-testid="map-click-line">The outlet’s piece{outletPiece.feature ? ' (on the map)' : ''}: {pieceLine(r, OUTLET_CLICK)}</span>
 				</li>
 			{/if}
+			{#each onMap as p (p.click)}
+				{@const isPiece = !p.open && !!p.geometry}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex (focusable so a keyboard user can light its piece; it says the same in words) -->
+				<li
+					class:dropped={!isPiece}
+					tabindex={isPiece ? 0 : undefined}
+					onmouseenter={() => isPiece && onlit(String(p.click))}
+					onmouseleave={() => onlit(null)}
+					onfocus={() => isPiece && onlit(String(p.click))}
+					onblur={() => onlit(null)}
+					data-testid="map-click-saved"
+					data-click={p.click}
+				>
+					<PieceBadge label={p.label} tint={isPiece ? tintOf(p.click) : -1} />
+					<span class="line" data-testid="map-click-line">{p.name} (on the map): {pieceLine(r!, p.click)}</span>
+				</li>
+			{/each}
 			{#each divider.clicks as _, i (i)}
 				{@const isPiece = r?.pieces.some((p) => p.click === i && !p.open)}
 				{@const larger = r?.pieces.find((p) => p.click === i)?.larger}
@@ -155,7 +175,7 @@
 					data-testid="map-click-piece"
 					data-click={i}
 				>
-					<PieceBadge label={String(i + 1)} tint={isPiece ? tintOf(i) : -1} />
+					<PieceBadge label={clickLabel(i, first)} tint={isPiece ? tintOf(i) : -1} />
 					<span class="line" data-testid="map-click-line">{r ? pieceLine(r, i) : 'working it out…'}</span>{#if larger}<button
 							type="button"
 							class="btn btn-sm use"
@@ -172,6 +192,12 @@
 					? `, and ${inflows === 1 ? '1 inflow point' : `${inflows} inflow points`} (not saved: model what comes from above as an inflow)`
 					: ''}. A proposal from {r.dataset.label}: check each piece against the map before you save.
 			</p>
+			{#if onMap.length || outletPiece?.feature}
+				<p class="total small" data-testid="map-click-onmap">
+					The sub-catchments already inside the boundary are divided with your clicks: a click above one takes its land from it, and Save
+					redraws it (its area too), so no land is counted twice. A unit that uses one takes the new area when you tick it in the Divide sheet.
+				</p>
+			{/if}
 		{/if}
 	{/if}
 

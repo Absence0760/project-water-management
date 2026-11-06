@@ -2483,7 +2483,11 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   unit's area on the map ("… is a new unit, and its boundary overlaps …’s
   area on the map. That unit keeps its area …", `newUnitOverlaps`), and the
   sheet's overlap sentence counts the typed areas kept; the rest of the
-  catchment is proposed without it. A dam or an abstraction point never
+  catchment is proposed without it. Pieces from Sub-catchments don't
+  overlap this way: a later Save redraws the saved piece it takes land from
+  and hands it to this sheet as its unit, its new area to tick ([§
+  Sub-catchments from clicks](#sub-catchments-from-clicks)); the warning is
+  for areas drawn, uploaded or delineated as one catchment. A dam or an abstraction point never
   stands for a unit (400: "a dam or an abstraction point is part of its
   unit …, not where the unit ends"), and the unlinked ones inside a unit's
   boundary are listed on its card ("Joins its composite dam: …", "Joins its
@@ -2533,6 +2537,32 @@ clicking the rivers, with no points to place and no roles to pick first.
   reads the boundary and its outlet on every preview and Save, never from
   the browser. With no boundary at all, nothing changes.
 
+- **What is already on the map** (inside a catchment boundary). The
+  sub-catchments an earlier Save left inside the boundary are divided again
+  with every new set of clicks, each from its own outlet (kept on the saved
+  area as `properties.subcatchment.outlet`; an area saved before that is
+  read from the outlet its description names), so the land is divided the
+  same **whichever was clicked first**. A click upstream of a saved piece
+  carves its piece out of that one (a downstream unit drawn first is split
+  when an upstream one is added later); a click downstream of a saved piece
+  stops at it, which keeps its land. The bar lists them apart, under their
+  own names and badges ("Sub-catchment 1 (on the map): …"), and the clicks'
+  pieces are numbered on from the highest "Sub-catchment *n*" already
+  there, so no two share a name. **Save** inserts the clicks' new pieces
+  and **redraws** a saved piece whose land changed by more than a cell
+  (its outline, area and pans figure; "… in all; Sub-catchment 1 redrawn
+  (540.12 km² → 210.30 km²)"), never deleting one. A unit whose area is
+  that piece (*Use this area*, Start, Divide) keeps the area it has in the
+  model until the editor takes the new one: Save opens the Divide sheet
+  with the redrawn piece picked as its unit, its new area beside the
+  unit's area now, to tick. A click on a saved piece's own outlet gives
+  way to it ("snaps to the same place on the river as another click or a
+  sub-catchment already on the map"), and a saved piece that no longer
+  drains to the outlet is left as it is. Without a catchment boundary
+  nothing on the map is read: the clicks alone divide the land, as before.
+  The plain **Delineate** (one catchment above a point) and areas drawn or
+  uploaded by hand are never cut: only Sub-catchments' own saved pieces
+  are routed again (`clicks.ts` `readSaved`).
 - **What a click is.** An outlet on a terrain channel: the server puts it
   on the nearest terrain channel within 150 m, as Delineation does. Its piece is
   its **incremental catchment**: the cells whose water reaches it before
@@ -2599,11 +2629,13 @@ clicking the rivers, with no points to place and no roles to pick first.
   asking again. A click the server refuses (off the DEM, the lowest click's
   catchment past the largest window) is taken back with the reason.
 - **Save** routes the same clicks again on the server (never trusting a
-  geometry from the browser) and saves each piece as an *other* polygon,
-  "Sub-catchment *n*" by its click's number ("Sub-catchment at the outlet"
-  for the outlet's piece), its description the outlet, where it drains, the
+  geometry from the browser) and saves each new piece as an *other* polygon,
+  "Sub-catchment *n*" by its click's number, after those already on the map
+  ("Sub-catchment at the outlet" for the outlet's piece), its description the outlet, where it drains, the
   area upstream (or "more upstream than was routed"), the inflow points
-  entering it, the dataset and the method version.
+  entering it, the dataset and the method version, and its outlet in
+  `properties.subcatchment`; the saved pieces whose land changed it redraws
+  (above).
 - **Then straight on to the network.** After a Save the Map opens the
   network step with the new pieces: **Start from the map** on an empty
   model (`start=1`, at its points, each saved piece marked a hydrological
