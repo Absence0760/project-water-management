@@ -5041,8 +5041,11 @@ farmer view E3, migration 106).
   `problems`, `nYears`, `meanDemandM3`, `seasonEndStorageM3`, `demandMet`,
   `userDemandMet`, `ewr` as `{ p10, p50, p90 }` or null, `yearsEwrMet`,
   `storageByDam`, `demandMetByFarm` (engine ≥ 1.19.0: each farm's own share
-  of demand met, `{ nodeId, name, nYears, stat }`), and every year's values,
-  each with its `farms` (node id → season demand and supply)), `planning` (`share`,
+  of demand met, `{ nodeId, name, nYears, stat }`), `months` (engine ≥
+  1.115.0: the season month by month, each figure's `{ p10, p50, p90 }`, or
+  null; absent on an outlook stored before it; model.md §2.15e), and every
+  year's values, each with its `farms` (node id → season demand and supply)
+  and `months`), `planning` (`share`,
   `shareIsDefault`, `reason` `met` / `noLevelMeets` / `notEnoughYears` /
   `noLevels`, the level, `yearsMet`, `ranked`) and `warnings`; plus
   `excluded` (each `{ waterYear, reason }`: the engine's `outsideRecord`,

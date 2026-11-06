@@ -12,11 +12,11 @@ import {
 	forecastMemberBaseRun,
 	rankAnalogues,
 	runForecastOutlook,
-	seasonMonths,
 	type RankedAnalogue,
 	type SeasonalForecastSystem,
 	type SeasonalHindcastSystem
 } from './forecast';
+import { seasonMonths } from './season';
 import { monthRain, syntheticSystem, type SyntheticKind } from './forecastFixture';
 import { outlookAnalogues, runSeasonalOutlook, type OutlookBaseRun } from './outlook';
 import { applyQuantileMap, fitQuantileMap } from './qm';

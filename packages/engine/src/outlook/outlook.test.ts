@@ -475,3 +475,68 @@ describe('outlookMember reads the Reserve over the season’s whole months only'
 		expect(() => outlookMember({ ...out, days: days + 1 }, { nodes: [], crops: [], cropAreas: [], transfers: [] }, season, a)).toThrow(/does not end on the season end/);
 	});
 });
+
+describe('the season month by month (engine 1.115.0, the briefing’s water balance)', () => {
+	const o = runSeasonalOutlook(input, { ...SEASON, baseRun: base, levels: levels([1, 0.7]) });
+
+	it('each member’s months cover the season’s calendar months and add up to its totals', () => {
+		for (const l of o.levels) {
+			for (const y of l.years) {
+				const ms = y.months!;
+				expect(ms.map((m) => m.month)).toEqual(['2012-10', '2012-11', '2012-12', '2013-01', '2013-02', '2013-03', '2013-04']);
+				expect(ms.reduce((a, m) => a + m.days, 0)).toBe(212);
+				expect(ms.reduce((a, m) => a + m.demandM3, 0)).toBeCloseTo(y.demandM3, 3);
+				expect(ms.reduce((a, m) => a + m.suppliedM3, 0)).toBeCloseTo(y.suppliedM3, 3);
+				expect(ms.reduce((a, m) => a + m.userSuppliedM3, 0)).toBeCloseTo(y.userSuppliedM3, 3);
+				// The last month's storage is the season end's; the river carries no more of the EWR than it asks.
+				expect(ms.at(-1)!.storageEndM3).toBeCloseTo(y.seasonEndStorageM3!, 6);
+				for (const m of ms) {
+					expect(m.suppliedM3).toBeLessThanOrEqual(m.demandM3 + 1e-6);
+					expect(m.ewrMetM3).toBeLessThanOrEqual(m.ewrM3 + 1e-6);
+					expect(m.ewrMetM3).toBeGreaterThanOrEqual(0);
+					expect(m.damLossM3).toBeGreaterThanOrEqual(0);
+				}
+			}
+		}
+	});
+
+	it('a month’s storage is the dams on its last day, and its EWR the outlet’s series summed', () => {
+		const y = o.levels[0]!.years[0]!;
+		// Re-run that member and read its series directly.
+		const a = o.analogues[0]!;
+		const m = outlookMemberInput(input, base, SEASON, a, scale(1));
+		const out = runModelWithoutChecks(m.input);
+		const d0 = toEpochDay(out.startDate);
+		const at = (key: string, node: string | null, day: string) => col(out, node, key)![toEpochDay(day) - d0]!;
+		expect(y.months![0]!.storageEndM3).toBeCloseTo(at('dam_storage', 'a', '2012-10-31') + at('dam_storage', 'b', '2012-10-31'), 6);
+		let ewr = 0;
+		let met = 0;
+		for (let t = toEpochDay('2012-11-01') - d0; t <= toEpochDay('2012-11-30') - d0; t++) {
+			const req = Math.max(0, col(out, null, 'ewr')![t]!);
+			ewr += req;
+			met += Math.max(0, req + Math.min(0, col(out, null, 'ewr_shortfall')![t]!));
+		}
+		expect(y.months![1]!.ewrM3).toBeCloseTo(ewr, 3);
+		expect(y.months![1]!.ewrMetM3).toBeCloseTo(met, 3);
+	});
+
+	it('summarises each month across the years, and a lower level takes no more in any month', () => {
+		const [l1, l70] = o.levels;
+		expect(l1!.months).toHaveLength(7);
+		for (const [k, m] of l1!.months!.entries()) {
+			for (const st of [m.suppliedM3, m.ewrMetM3, m.storageEndM3!]) {
+				expect(st.p10).toBeLessThanOrEqual(st.p50);
+				expect(st.p50).toBeLessThanOrEqual(st.p90);
+			}
+			expect(l70!.months![k]!.demandM3.p50).toBeLessThanOrEqual(m.demandM3.p50 + 1e-6);
+		}
+	});
+
+	it('is null for members stored before 1.115.0 (no months) and below the minimum of years', () => {
+		const old = summariseOutlook(summary([{ id: 'x', label: 'x', problems: [], members: years(10).map((w) => member(w)) }]));
+		expect(old.levels[0]!.months).toBeNull();
+		const short = runSeasonalOutlook(input, { ...SEASON, baseRun: base, levels: levels([1]), analogueYears: o.analogues.slice(0, 3).map((a) => a.waterYear) });
+		expect(short.levels[0]!.months).toBeNull();
+		expect(short.levels[0]!.years[0]!.months).toHaveLength(7);
+	});
+});

@@ -74,6 +74,16 @@ function check(c: Case, seed: number, plain: boolean): number {
 			const out = runModelWithoutChecks(m.input);
 			return { out, member: outlookMember(out, m.input.model, c.season, a) };
 		});
+		// The season's months add up to its totals (engine 1.115.0), and the river never carries more of the EWR than it asks.
+		for (const { member: m } of runs) {
+			const ms = m.months!;
+			const near = (x: number, y: number) => Math.abs(x - y) <= 1e-6 * Math.max(1, Math.abs(y));
+			expect(ms.reduce((t, x) => t + x.days, 0), `seed ${seed} ${a.label} days`).toBe(m.ewrDays.days);
+			expect(near(ms.reduce((t, x) => t + x.demandM3 + x.userDemandM3, 0), m.demandM3 + m.userDemandM3), `seed ${seed} ${a.label} monthly demand`).toBe(true);
+			expect(near(ms.reduce((t, x) => t + x.suppliedM3 + x.userSuppliedM3, 0), m.suppliedM3 + m.userSuppliedM3), `seed ${seed} ${a.label} monthly supply`).toBe(true);
+			if (m.seasonEndStorageM3 !== null) expect(near(ms.at(-1)!.storageEndM3!, m.seasonEndStorageM3), `seed ${seed} ${a.label} storage`).toBe(true);
+			for (const x of ms) expect(x.ewrMetM3, `seed ${seed} ${a.label} ${x.month}`).toBeLessThanOrEqual(x.ewrM3 + 1e-6 * Math.max(1, x.ewrM3));
+		}
 		for (const x of runs[0]!.out.series) {
 			for (const r of runs.slice(1)) expect(r.out.series.find((y) => y.nodeId === x.nodeId && y.key === x.key)!.values.slice(0, i0), `seed ${seed} ${a.label} ${x.nodeId}/${x.key}`).toEqual(x.values.slice(0, i0));
 		}

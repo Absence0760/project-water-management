@@ -48,7 +48,7 @@ import type { ScenarioOp } from '../scenario/ops';
 import { applyScenario } from '../scenario/overrides';
 import { quantileSorted } from '../uncertainty/bands';
 import type { OutcomeMetric } from '../views/outcomeMatrix';
-import { outlookAnalogue, resolveSeason, seasonWaterYear, type OutlookAnalogue, type OutlookSeason, type ResolvedSeason } from './season';
+import { outlookAnalogue, resolveSeason, seasonMonths, seasonWaterYear, type OutlookAnalogue, type OutlookSeason, type ResolvedSeason } from './season';
 import { climateConditionedOutlook, selectClimateAnalogues, type ClimateOutlook, type MonthlyIndexSeries } from './climate';
 
 /** A demand level: an id, a label ("85 %") and its ops (demand.scale only, e.g. one at factor 0.85, or R1's `months` form for a monthly plan). */
@@ -406,6 +406,62 @@ export interface OutlookMember {
 	ewrDays: { days: number; below: number };
 	/** The Reserve at the site: whole calendar months inside the season, and months met; null without a rule table there. */
 	reserve: { months: number; met: number } | null;
+	/**
+	 * The season month by month (engine ≥ 1.115.0; members stored before it
+	 * have none): each calendar month the season's days fall in, the first and
+	 * last cut to the season (docs/model.md §2.15e).
+	 */
+	months?: OutlookMonth[];
+}
+
+/** One month of a level across the analogue years: each OutlookMonth figure as an OutlookStat. */
+export interface OutlookMonthStat {
+	month: string;
+	days: number;
+	demandM3: OutlookStat;
+	suppliedM3: OutlookStat;
+	userDemandM3: OutlookStat;
+	userSuppliedM3: OutlookStat;
+	damLossM3: OutlookStat;
+	ewrM3: OutlookStat;
+	ewrMetM3: OutlookStat;
+	storageEndM3: OutlookStat | null;
+}
+
+const MONTH_FIGURES = ['demandM3', 'suppliedM3', 'userDemandM3', 'userSuppliedM3', 'damLossM3', 'ewrM3', 'ewrMetM3'] as const;
+
+/** The levels' months across its years; null without enough years or when a year has no months. */
+function monthStats(years: readonly OutlookMember[], enough: boolean): OutlookMonthStat[] | null {
+	if (!enough || !years.length || years.some((y) => !y.months)) return null;
+	const first = years[0]!.months!;
+	if (years.some((y) => y.months!.length !== first.length || y.months!.some((m, k) => m.month !== first[k]!.month))) return null;
+	return first.map((m0, k) => {
+		const at = years.map((y) => y.months![k]!);
+		const out = { month: m0.month, days: m0.days, storageEndM3: stat(at.map((m) => m.storageEndM3), true) } as OutlookMonthStat;
+		for (const key of MONTH_FIGURES) out[key] = stat(at.map((m) => m[key]), true)!;
+		return out;
+	});
+}
+
+/** One calendar month of a member's season. Volumes m³ over the month's season days. */
+export interface OutlookMonth {
+	/** 'YYYY-MM' of the season (not of the analogue year). */
+	month: string;
+	/** Season days in the month. */
+	days: number;
+	/** The farms' irrigation demand and supply (as OutlookMember.demandM3 / suppliedM3). */
+	demandM3: number;
+	suppliedM3: number;
+	/** The other water users' (as userDemandM3 / userSuppliedM3). */
+	userDemandM3: number;
+	userSuppliedM3: number;
+	/** Lost from the farm dams: evaporation, and seepage that leaves the catchment (dam_seepage_lost); the rest of the seepage joins the river. */
+	damLossM3: number;
+	/** The outlet's pragmatic EWR (the `ewr` series), and the part of it the river carried (EWR less its shortfall). */
+	ewrM3: number;
+	ewrMetM3: number;
+	/** Σ farm dam storage on the month's last season day; null without a dam. */
+	storageEndM3: number | null;
 }
 
 const fin = (v: number | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
@@ -435,25 +491,48 @@ export function outlookMember(
 	let supplied = 0;
 	let userDemand = 0;
 	let userSupplied = 0;
+	// The season's months, summed in the same pass as its totals: day t of the run is in month monthAt[t − i0].
+	const cal = seasonMonths(season);
+	const monthAt = new Uint8Array(i1 - i0 + 1);
+	for (const [k, sm] of cal.entries()) monthAt.fill(k, sm.firstDay, sm.lastDay + 1);
+	const nm = cal.length;
+	// Per month: farm demand, farm supply, other users' demand and supply, dam losses, EWR, EWR carried, storage at the end.
+	const acc = { fd: new Float64Array(nm), fs: new Float64Array(nm), ud: new Float64Array(nm), us: new Float64Array(nm), loss: new Float64Array(nm), ewr: new Float64Array(nm), ewrMet: new Float64Array(nm), store: new Float64Array(nm) };
 	for (const n of model.nodes) {
 		if (n.kind === 'gauge') continue;
+		const farm = n.kind === 'farm';
 		const d = seriesOf(output, n.id, 'demand');
 		const g = seriesOf(output, n.id, 'supplied');
+		const mD = farm ? acc.fd : acc.ud;
+		const mG = farm ? acc.fs : acc.us;
 		let dn = 0;
 		let gn = 0;
 		for (let t = i0; t <= i1; t++) {
-			dn += fin(d?.[t]);
-			gn += fin(g?.[t]);
+			const dv = fin(d?.[t]);
+			const gv = fin(g?.[t]);
+			dn += dv;
+			gn += gv;
+			const k = monthAt[t - i0]!;
+			mD[k] = mD[k]! + dv;
+			mG[k] = mG[k]! + gv;
 		}
-		if (n.kind === 'farm') {
+		if (farm) {
 			demand += dn;
 			supplied += gn;
 			if (dn > 0) farms[n.id] = { demandM3: dn, suppliedM3: gn };
 			if (n.damCapacityM3 > 0) {
-				const v = fin(seriesOf(output, n.id, 'dam_storage')?.[i1]);
+				const st = seriesOf(output, n.id, 'dam_storage');
+				const v = fin(st?.[i1]);
 				storageM3ByDam[n.id] = v;
 				storage += v;
 				dams++;
+				const ev = seriesOf(output, n.id, 'dam_evaporation');
+				const sl = seriesOf(output, n.id, 'dam_seepage_lost');
+				if (ev || sl) for (let t = i0; t <= i1; t++) {
+					const k = monthAt[t - i0]!;
+					acc.loss[k] = acc.loss[k]! + fin(ev?.[t]) + fin(sl?.[t]);
+				}
+				for (const [k, sm] of cal.entries()) acc.store[k] = acc.store[k]! + fin(st?.[i0 + sm.lastDay]);
 			}
 		} else {
 			userDemand += dn;
@@ -462,8 +541,28 @@ export function outlookMember(
 	}
 	const short = seriesOf(output, null, 'ewr_shortfall');
 	if (!short) throw new Error('the member run has no ewr_shortfall series');
+	const ewr = seriesOf(output, null, 'ewr');
 	let below = 0;
-	for (let t = i0; t <= i1; t++) if (short[t]! < 0) below++;
+	for (let t = i0; t <= i1; t++) {
+		if (short[t]! < 0) below++;
+		const req = Math.max(0, fin(ewr?.[t]));
+		const k = monthAt[t - i0]!;
+		acc.ewr[k] = acc.ewr[k]! + req;
+		// The part of the requirement the river carried: the requirement less the day's shortfall.
+		acc.ewrMet[k] = acc.ewrMet[k]! + Math.max(0, req + Math.min(0, fin(short[t])));
+	}
+	const months: OutlookMonth[] = cal.map((sm, k) => ({
+		month: sm.month,
+		days: sm.lastDay - sm.firstDay + 1,
+		demandM3: acc.fd[k]!,
+		suppliedM3: acc.fs[k]!,
+		userDemandM3: acc.ud[k]!,
+		userSuppliedM3: acc.us[k]!,
+		damLossM3: acc.loss[k]!,
+		ewrM3: acc.ewr[k]!,
+		ewrMetM3: acc.ewrMet[k]!,
+		storageEndM3: dams ? acc.store[k]! : null
+	}));
 	const site = output.summary.ewrAssurance?.find((x) => (siteNodeId === null ? x.isOutlet : x.nodeId === siteNodeId));
 	let reserve: OutlookMember['reserve'] = null;
 	if (site) {
@@ -492,7 +591,8 @@ export function outlookMember(
 		userSuppliedM3: userSupplied,
 		userDemandMet: userDemand > 0 ? userSupplied / userDemand : null,
 		ewrDays: { days: s.days, below },
-		reserve
+		reserve,
+		months
 	};
 }
 
@@ -543,6 +643,13 @@ export interface OutlookLevelResult {
 	 * null below OUTLOOK_MIN_YEARS of them.
 	 */
 	demandMetByFarm: { nodeId: string; name: string; nYears: number; stat: OutlookStat | null }[];
+	/**
+	 * The season month by month across the years (engine ≥ 1.115.0): each
+	 * figure's own median and 10th–90th percentiles, so the medians of a month
+	 * need not add up to any one year's. Null when a member has no months (one
+	 * stored before 1.115.0) or below OUTLOOK_MIN_YEARS (docs/model.md §2.15e).
+	 */
+	months: OutlookMonthStat[] | null;
 	/** In the order of the analogues. */
 	years: OutlookYear[];
 }
@@ -758,7 +865,7 @@ export function summariseOutlook(x: OutlookSummaryInput): EspOutlook {
 
 	const levels: OutlookLevelResult[] = x.levels.map((l) => {
 		if (l.problems.length) {
-			return { id: l.id, label: l.label, problems: l.problems, nYears: 0, enoughYears: false, meanDemandM3: null, seasonEndStorageM3: null, demandMet: null, userDemandMet: null, ewr: null, yearsEwrMet: 0, storageByDam: [], demandMetByFarm: [], years: [] };
+			return { id: l.id, label: l.label, problems: l.problems, nYears: 0, enoughYears: false, meanDemandM3: null, seasonEndStorageM3: null, demandMet: null, userDemandMet: null, ewr: null, yearsEwrMet: 0, storageByDam: [], demandMetByFarm: [], months: null, years: [] };
 		}
 		if (l.members.length !== nYears) throw new Error(`level ${l.id} has ${l.members.length} members for ${nYears} analogue years`);
 		const years: OutlookYear[] = l.members.map((m) => {
@@ -785,6 +892,7 @@ export function summariseOutlook(x: OutlookSummaryInput): EspOutlook {
 				});
 				return got.length ? [{ nodeId: n.id, name: n.name, nYears: got.length, stat: stat(got, got.length >= OUTLOOK_MIN_YEARS) }] : [];
 			}),
+			months: monthStats(years, enoughYears),
 			years
 		};
 	});

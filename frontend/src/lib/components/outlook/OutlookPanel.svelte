@@ -31,6 +31,7 @@
 	import ClimateAnalogues from './ClimateAnalogues.svelte';
 	import { buildClimateView } from './climate';
 	import ForecastChances from './ForecastChances.svelte';
+	import OutlookBalance from './OutlookBalance.svelte';
 	import { buildForecastView } from './forecast';
 	import NumberInput from '#lib/components/common/NumberInput.svelte';
 	import { fmtDate, fmtDay } from '#lib/format/number.js';
@@ -627,10 +628,7 @@
 			{#if briefing}
 				<section aria-labelledby="outlook-balance-h" data-testid="outlook-balance">
 					<h4 id="outlook-balance-h"><span class="step" aria-hidden="true">6</span> Projected water balance by month</h4>
-					<p class="hint">
-						Not drawn yet: an outlook keeps each past season’s totals, not its months, so there is no month-by-month balance or storage line to show.
-						The season’s totals are in the table above (irrigation supplied, dam storage at the end).
-					</p>
+					<OutlookBalance result={outlook!.result!} />
 				</section>
 				<section class="messages" aria-labelledby="outlook-messages-h" data-testid="outlook-messages">
 					<h4 id="outlook-messages-h">Key messages for farmers</h4>

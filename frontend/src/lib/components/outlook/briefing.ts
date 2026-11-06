@@ -15,8 +15,11 @@
 //      outlook doesn't work one out (planning-outputs.md: R1's months form is
 //      the WUA's own plan), so with none the part says so.
 //   5. The review triggers, each band set beside the planning figure.
-//   6. A month-by-month water balance: not stored (an outlook member keeps
-//      its season's totals only), so the part says so; docs/followups.md.
+//   6. A month-by-month water balance (engine ≥ 1.115.0, buildBalance): for
+//      one level, each month's median irrigation and other users supplied,
+//      EWR carried and dam losses, and the dams at its end (median, 10–90 %).
+//      An outlook from before that engine has no months, so the part asks for
+//      it to be run again.
 //
 // Plus a risk line from the planning rule (at the highest level run) and key
 // messages for farmers, each a sentence about past seasons. The parts that
@@ -302,3 +305,86 @@ export function buildBriefing(
 		messages
 	};
 }
+
+// ─── 6. The projected water balance by month (engine ≥ 1.115.0) ─────────────
+
+/** What the month-by-month part draws for one level, or why it can't. */
+export type BalanceView =
+	| {
+			ok: true;
+			levelId: string;
+			label: string;
+			/** The planning figure's level (the default shown). */
+			planning: boolean;
+			/** The axis unit: million m³ when the biggest month reaches a million, else thousand m³. */
+			unit: { div: number; text: string };
+			months: BalanceMonth[];
+			/** The dams' capacity on the season's last day; 0 without a dam. */
+			capacityM3: number;
+	  }
+	| { ok: false; reason: 'old' | 'fewYears' | 'none'; text: string };
+
+/** One month: each figure's median across the analogue years (so the parts need not add up to one year's), and the storage's 10–90 % range. */
+export interface BalanceMonth {
+	month: string;
+	/** "Oct", or "Oct (from 15th)" for a month the season only partly covers. */
+	name: string;
+	days: number;
+	irrigation: number;
+	irrigationDemand: number;
+	otherUsers: number;
+	ewr: number;
+	ewrRequired: number;
+	damLoss: number;
+	storage: { p10: number; p50: number; p90: number } | null;
+}
+
+/** The parts drawn, bottom to top, with their words: the legend and the table read from this. */
+export const BALANCE_PARTS = [
+	{ key: 'irrigation', label: 'Irrigation supplied' },
+	{ key: 'otherUsers', label: 'Other water users supplied' },
+	{ key: 'ewr', label: 'EWR the river carried' },
+	{ key: 'damLoss', label: 'Lost from the dams' }
+] as const;
+
+/**
+ * The month-by-month balance of one level: `levelId` when given and run, else
+ * the planning figure's, else the highest level run. Not drawn for an outlook
+ * computed before engine 1.115.0 (its members have no months: run it again),
+ * or with fewer than the minimum of years (no percentiles, as the rest).
+ */
+export function buildBalance(outlook: { result: OutlookResult }, levelId: string | null): BalanceView {
+	const r = outlook.result;
+	const ran = r.levels.filter((l) => !l.problems.length);
+	if (!ran.length) return { ok: false, reason: 'none', text: 'No level ran, so there is no month to show.' };
+	const planningId = r.planning.reason === 'met' ? r.planning.levelId : null;
+	const l = ran.find((x) => x.id === levelId) ?? ran.find((x) => x.id === planningId) ?? ran[0]!;
+	if (!r.enoughYears) return { ok: false, reason: 'fewYears', text: 'Too few analogue years for a median month by month, as for the rest of the outlook.' };
+	// `months` is absent (not null) on a level stored before engine 1.115.0.
+	const months = l.months ?? null;
+	if (!months) return { ok: false, reason: 'old', text: 'This outlook was worked out before the app kept each season’s months. Run it again to see them.' };
+	const rows: BalanceMonth[] = months.map((m, k) => {
+		const mm = Number(m.month.slice(5, 7));
+		const first = k === 0 && m.days < daysIn(m.month) ? Number(r.decisionDate.slice(8, 10)) : null;
+		const last = k === months.length - 1 && m.days < daysIn(m.month) && first === null ? Number(r.seasonEnd.slice(8, 10)) : null;
+		const name = monthName(mm) + (first !== null && first > 1 ? ` (from the ${ordinal(first)})` : last !== null ? ` (to the ${ordinal(last)})` : '');
+		return {
+			month: m.month,
+			name,
+			days: m.days,
+			irrigation: m.suppliedM3.p50,
+			irrigationDemand: m.demandM3.p50,
+			otherUsers: m.userSuppliedM3.p50,
+			ewr: m.ewrMetM3.p50,
+			ewrRequired: m.ewrM3.p50,
+			damLoss: m.damLossM3.p50,
+			storage: m.storageEndM3
+		};
+	});
+	const top = Math.max(...rows.map((m) => Math.max(m.irrigation + m.otherUsers + m.ewr + m.damLoss, m.storage?.p90 ?? 0, r.capacityM3)), 0);
+	const unit = top >= 1e6 ? { div: 1e6, text: 'million m³' } : { div: 1e3, text: 'thousand m³' };
+	return { ok: true, levelId: l.id, label: l.label, planning: l.id === planningId, unit, months: rows, capacityM3: r.capacityM3 };
+}
+
+const daysIn = (ym: string) => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
+const ordinal = (d: number) => `${d}${d % 10 === 1 && d !== 11 ? 'st' : d % 10 === 2 && d !== 12 ? 'nd' : d % 10 === 3 && d !== 13 ? 'rd' : 'th'}`;
