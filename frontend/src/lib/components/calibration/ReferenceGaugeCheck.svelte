@@ -55,7 +55,6 @@
 	const km = (v: number) => fmtNum(v, v >= 100 || Number.isInteger(v) ? 0 : 1);
 	const num = (v: number | null, d = 2) => (v === null ? '–' : fmtNum(v, d));
 	const pct = (v: number | null) => (v === null ? '–' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmtNum(Math.abs(v), 0)} %`);
-	const SET = '#set-record';
 </script>
 
 <div class="ref-check" data-testid="reference-check" data-state={view}>
@@ -63,7 +62,7 @@
 	{#if view === 'no-area'}
 		<p class="hint" data-testid="reference-needs">
 			The project has a reference gauge record (another catchment’s gauge). To compare it here, scaled by area, set its catchment area under
-			<a href={SET}>Calibration record → Reference gauge for verification</a>.
+			<a href="#set-record">Calibration record → Reference gauge for verification</a>.
 		</p>
 	{:else if view === 'no-record'}
 		<p class="hint" data-testid="reference-needs">
@@ -73,7 +72,7 @@
 	{:else if view === 'no-model-area'}
 		<p class="hint" data-testid="reference-needs">
 			This run’s catchment area isn’t known, so the record can’t be scaled to it: set the area at the outlet under
-			<a href={SET}>Calibration record → Reference gauge for verification</a>.
+			<a href="#set-record">Calibration record → Reference gauge for verification</a>.
 		</p>
 	{:else if view === 'unit'}
 		<p class="hint" data-testid="reference-needs">The reference gauge record’s unit can’t be read as a flow, so it isn’t compared.</p>
