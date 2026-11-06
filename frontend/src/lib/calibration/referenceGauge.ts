@@ -126,3 +126,79 @@ export function verificationRow(ref: DailySeries, model: DailySeries, forecastFr
 	const ss = s.reduce((x, v) => x + v, 0);
 	return { days: o.length, from: fromEpochDay(first), to: fromEpochDay(last), kge: kgePrime(o, s), biasPct: so > 0 ? (ss / so - 1) * 100 : null, r: pearson(o, s) };
 }
+
+/** A month with fewer shared days than this is a gap in the monthly comparison, not a low value. */
+export const MONTH_MIN_DAYS = 20;
+
+/** One calendar month of the monthly comparison: each flow's volume (m³) over the days all of them have a value. */
+export interface MonthVolumes {
+	/** YYYY-MM. */
+	month: string;
+	/** Days every compared flow has a value (before any forecast). */
+	days: number;
+	daysInMonth: number;
+	/** Volumes in m³ over those days; null when the month has fewer than MONTH_MIN_DAYS of them (a gap). */
+	reference: number | null;
+	simulated: number | null;
+	natural: number | null;
+}
+
+/**
+ * The scaled record and the model's flows (all m³/day) as monthly volumes, from the first to the last month their
+ * spans share, counting only the days every flow given has a finite value (a flow not given, null, is left out of
+ * that test and its volumes are null). A month with under `minDays` such days is a gap: every volume null.
+ */
+export function monthlyVolumes(
+	ref: DailySeries,
+	simulated: DailySeries | null,
+	natural: DailySeries | null,
+	forecastFrom: string | null = null,
+	minDays = MONTH_MIN_DAYS
+): MonthVolumes[] {
+	const flows = [ref, simulated, natural];
+	const starts = flows.map((f) => (f ? toEpochDay(f.startDate) : 0));
+	let lo = -Infinity;
+	let hi = forecastFrom ? toEpochDay(forecastFrom) : Infinity;
+	flows.forEach((f, i) => {
+		if (!f) return;
+		lo = Math.max(lo, starts[i]!);
+		hi = Math.min(hi, starts[i]! + f.values.length);
+	});
+	const out: MonthVolumes[] = [];
+	if (!(hi > lo)) return out;
+	let cur: { month: string; days: number; daysInMonth: number; sums: [number, number, number] } | null = null;
+	const close = () => {
+		if (!cur) return;
+		const ok = cur.days >= minDays;
+		const v = (i: number) => (ok && flows[i] ? cur!.sums[i]! : null);
+		out.push({ month: cur.month, days: cur.days, daysInMonth: cur.daysInMonth, reference: v(0), simulated: v(1), natural: v(2) });
+	};
+	for (let d = lo; d < hi; d++) {
+		const iso = fromEpochDay(d);
+		const month = iso.slice(0, 7);
+		if (!cur || cur.month !== month) {
+			close();
+			const [y, m] = month.split('-').map(Number) as [number, number];
+			cur = { month, days: 0, daysInMonth: new Date(Date.UTC(y, m, 0)).getUTCDate(), sums: [0, 0, 0] };
+		}
+		const vals = flows.map((f, i) => (f ? f.values[d - starts[i]!] : undefined));
+		if (vals.some((v, i) => flows[i] && (v === null || v === undefined || !Number.isFinite(v)))) continue;
+		cur.days++;
+		vals.forEach((v, i) => {
+			if (flows[i]) cur!.sums[i as 0 | 1 | 2] += v as number;
+		});
+	}
+	close();
+	return out;
+}
+
+/** A volume unit for the monthly chart: million m³ when the largest month reaches one, else thousand m³. */
+export function volumeUnit(rows: readonly MonthVolumes[]): { text: string; div: number } {
+	let max = 0;
+	for (const r of rows) for (const v of [r.reference, r.simulated, r.natural]) if (v !== null && v > max) max = v;
+	return max >= 1e6 ? { text: 'million m³', div: 1e6 } : { text: 'thousand m³', div: 1e3 };
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "2021-10" → "Oct 2021". */
+export const monthLabel = (ym: string): string => `${MONTH_NAMES[Number(ym.slice(5, 7)) - 1] ?? ym.slice(5, 7)} ${ym.slice(0, 4)}`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaFactor, modelCatchmentAreaKm2, perDay, referenceName, resolveReferenceGauge, scaledReference, verificationRow } from './referenceGauge';
+import { areaFactor, modelCatchmentAreaKm2, monthLabel, monthlyVolumes, perDay, referenceName, resolveReferenceGauge, scaledReference, verificationRow, volumeUnit } from './referenceGauge';
 
 describe('the reference gauge setting (resolveReferenceGauge)', () => {
 	it('reads a valid setting, trimming the name; a blank outlet area is the model’s', () => {
@@ -74,5 +74,56 @@ describe('the model against the scaled record (verificationRow)', () => {
 	});
 	it('no shared day: none', () => {
 		expect(verificationRow(ref, { startDate: '2021-01-01', values: [1, 2] })).toBeNull();
+	});
+});
+
+describe('the monthly volumes (monthlyVolumes)', () => {
+	const day = (n: number, v: number | null = 1) => Array.from({ length: n }, () => v);
+
+	it('cuts at month boundaries, from the first to the last shared month, a month’s volume the sum of its days', () => {
+		// 20 Jan – 10 Mar 2021 for all three: Jan has 12 days, Feb 28, Mar 10.
+		const ref = { startDate: '2021-01-20', values: day(50, 2) };
+		const sim = { startDate: '2021-01-01', values: day(100, 3) };
+		const nat = { startDate: '2021-01-20', values: day(60, 5) };
+		const rows = monthlyVolumes(ref, sim, nat, null, 10);
+		expect(rows.map((r) => [r.month, r.days, r.daysInMonth])).toEqual([
+			['2021-01', 12, 31],
+			['2021-02', 28, 28],
+			['2021-03', 10, 31]
+		]);
+		expect(rows[1]).toMatchObject({ reference: 56, simulated: 84, natural: 140 });
+	});
+	it('a partial month under the minimum is a gap, not a low value', () => {
+		const ref = { startDate: '2021-01-20', values: day(50, 2) };
+		const sim = { startDate: '2021-01-20', values: day(50, 3) };
+		const rows = monthlyVolumes(ref, sim, null);
+		expect(rows[0]).toMatchObject({ month: '2021-01', days: 12, reference: null, simulated: null, natural: null });
+		expect(rows[1]).toMatchObject({ month: '2021-02', days: 28, reference: 56, simulated: 84, natural: null });
+		expect(rows[2]).toMatchObject({ month: '2021-03', days: 10, reference: null });
+	});
+	it('counts only the days every flow has a value: a missing day in one drops it from all', () => {
+		const refVals = day(28, 1);
+		for (let i = 0; i < 10; i++) refVals[i] = null;
+		const ref = { startDate: '2021-02-01', values: refVals };
+		const sim = { startDate: '2021-02-01', values: day(28, 2) };
+		const natVals = day(28, 4);
+		natVals[27] = null;
+		const nat = { startDate: '2021-02-01', values: natVals };
+		const [feb] = monthlyVolumes(ref, sim, nat, null, 15);
+		expect(feb).toMatchObject({ days: 17, reference: 17, simulated: 34, natural: 68 });
+		// With 20 needed, the same month is a gap.
+		expect(monthlyVolumes(ref, sim, nat)[0]).toMatchObject({ days: 17, reference: null, simulated: null, natural: null });
+	});
+	it('stops before a forecast run’s first forecast day; no shared span, no months', () => {
+		const ref = { startDate: '2021-01-01', values: day(90, 1) };
+		const sim = { startDate: '2021-01-01', values: day(90, 1) };
+		expect(monthlyVolumes(ref, sim, null, '2021-03-01').map((r) => r.month)).toEqual(['2021-01', '2021-02']);
+		expect(monthlyVolumes(ref, { startDate: '2022-01-01', values: day(5) }, null)).toEqual([]);
+	});
+	it('the volume unit and the month label', () => {
+		const row = (v: number) => ({ month: '2021-01', days: 31, daysInMonth: 31, reference: v, simulated: null, natural: null });
+		expect(volumeUnit([row(2.5e6)])).toEqual({ text: 'million m³', div: 1e6 });
+		expect(volumeUnit([row(4e5)])).toEqual({ text: 'thousand m³', div: 1e3 });
+		expect(monthLabel('2021-10')).toBe('Oct 2021');
 	});
 });

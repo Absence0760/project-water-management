@@ -29,7 +29,7 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '#lib/series/provenance.js';
 	import ReferenceGaugeCheck from '#lib/components/calibration/ReferenceGaugeCheck.svelte';
-	import { areaFactor, modelCatchmentAreaKm2, REFERENCE_KIND, referenceName, scaledReference, verificationRow } from '#lib/calibration/referenceGauge.js';
+	import { areaFactor, modelCatchmentAreaKm2, monthlyVolumes, REFERENCE_KIND, referenceName, scaledReference, verificationRow } from '#lib/calibration/referenceGauge.js';
 	import type { ReferenceGauge } from '#lib/api/types.js';
 	import { cachedSeries } from './cache';
 	import { calibrationHydrographTitle, calibrationSiteOf, outletNameOf, CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
@@ -244,11 +244,11 @@
 		simulated: refScaled && catchment.simulated ? verificationRow(refScaled, catchment.simulated, forecastFrom) : null,
 		natural: refScaled && catchment.natural ? verificationRow(refScaled, catchment.natural, forecastFrom) : null
 	});
+	const refMonthly = $derived(refScaled && catchment.simulated ? monthlyVolumes(refScaled, catchment.simulated, catchment.natural ?? null, forecastFrom) : []);
+	const refLine = $derived(refFactor ? `${refName[0]!.toUpperCase()}${refName.slice(1)} × ${fmtNum(refFactor.factor, 3)} (verification)` : '');
 	const hydroSeries = $derived([
 		...hydrographSeries(catchment, conv, true, sources),
-		...(refScaled && refFactor
-			? [{ label: `${refName[0]!.toUpperCase()}${refName.slice(1)} × ${fmtNum(refFactor.factor, 3)} (verification)`, startDate: refScaled.startDate, values: conv(refScaled), color: '--series-3', width: 1.25, style: 'dashed' as const }]
-			: [])
+		...(refScaled && refFactor ? [{ label: refLine, startDate: refScaled.startDate, values: conv(refScaled), color: '--series-3', width: 1.25, style: 'dashed' as const }] : [])
 	]);
 	// A run with no observed record at the outlet (none in the project, or none read): the titles and the caption say
 	// what is drawn, not "observed" over two lines (issue #586 R4-A).
@@ -395,7 +395,7 @@
 			{@render loadFailed("the observed flow's quality flags", qualityError)}
 		{/if}
 		{#if refRecord || referenceGauge}
-			<ReferenceGaugeCheck name={refName} state={refState} factor={refFactor} rows={refRows} error={refError} retry={() => refAttempt++} />
+			<ReferenceGaugeCheck name={refName} state={refState} factor={refFactor} rows={refRows} error={refError} retry={() => refAttempt++} monthly={refMonthly} lineLabel={refLine} />
 		{/if}
 		{#if siteId}
 			<!-- The headline calibration location (engine ≥ 1.41.0 the calibration site; issue #659): the pair the run's calibration statistics score. -->

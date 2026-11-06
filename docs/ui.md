@@ -8482,7 +8482,16 @@ The page has:
   **Simulated (current day)** and **Natural** flow at the outlet against it
   over the days both have a value before any forecast: KGE′, volume bias
   (Σ model ÷ Σ record − 1, %), correlation r and the days compared with
-  their dates. A caption says it is verification only, a neighbouring
+  their dates. Under the table, **Monthly volume** (`monthlyVolumes`): a
+  chart (LineChart over the month list) of each calendar month's volume of
+  the scaled record (dashed, as on the hydrograph), simulated and natural
+  flow, over the whole compared period, counting only the days all three
+  have a value, so they are like with like; a month with fewer than 20 such
+  days (`MONTH_MIN_DAYS`) is a gap in every line, not a low value, and the
+  caption says how many. Thousand m³, or million m³ once a month reaches
+  one. **Show the monthly volumes** opens its table (each month's three
+  volumes, "Gap: too few days in common", and the days compared of the
+  month's days). A caption says it is verification only, a neighbouring
   catchment scaled by area, never scored by a fit. Without the gauge's area
   it says to set it, linking to Calibration record (`#set-record`); with an
   area but no record, to add one on Data; and a record whose unit isn't a
