@@ -21,9 +21,10 @@
 	import Dialog from '#lib/components/common/Dialog.svelte';
 	import type { MapPosition } from '#lib/api/types.js';
 	import { ApiError } from '#lib/api/client.js';
-	import { afterPollError, CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, waitingText } from './delineation';
+	import { afterPollError, CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, unitInsideBoundary, waitingText } from './delineation';
 	import { parseDegrees, positionText } from './mapData';
 	import { largerChannelOf } from './largerChannel';
+	import { fmtNum } from '#lib/format/number.js';
 	import type { LargerChannel } from '#lib/api/index.js';
 
 	let {
@@ -36,7 +37,8 @@
 		boundary,
 		onproposed,
 		onaccepted,
-		onrejected
+		onrejected,
+		onsubcatchments = null
 	}: {
 		open?: boolean;
 		projectId: string;
@@ -53,11 +55,15 @@
 		onproposed: (p: DelineationProposal) => Promise<void> | void;
 		onaccepted: (f: MapFeature, summary: string) => Promise<void> | void;
 		onrejected: () => Promise<void> | void;
+		/** Switch Delineate to Sub-catchments, one per click (with an elevation model); null: not offered. */
+		onsubcatchments?: (() => Promise<void> | void) | null;
 	} = $props();
 
 	const uid = $props.id();
 	const formId = `${uid}-form`;
 	const pending = $derived(openProposal(info));
+	// One catchment clicked inside the boundary: most likely a unit meant (unitInsideBoundary).
+	const unit = $derived(pending ? unitInsideBoundary(pending, boundary) : null);
 	/** A delineation the background worker has (a catchment too large for the request): seeded from the state, so a reopened sheet picks it up. */
 	// svelte-ignore state_referenced_locally
 	let waiting = $state<DelineationRequest | null>(info.request && isWaiting(info.request) ? info.request : null);
@@ -302,6 +308,18 @@
 				</ul>
 			</section>
 			{#if notice}<p class="hint notice">{notice}</p>{/if}
+			{#if unit}
+				<div class="offer" role="note" data-testid="delineate-unit-hint">
+					<p>
+						<strong>Adding a hydrological unit?</strong> This is the whole catchment above the point, so it takes in every unit upstream of it, and accepting it as the catchment boundary replaces “{unit.name}”{unit.areaKm2 !== null ? ` (${fmtNum(unit.areaKm2, 2)} km²)` : ''}. For units inside the boundary, use Sub-catchments, one per click: each click takes the land above it out of the pieces below.
+					</p>
+					{#if onsubcatchments}
+						<div class="offer-actions">
+							<button type="button" class="btn btn-primary" disabled={!!busy} onclick={() => onsubcatchments()} data-testid="delineate-use-subcatchments">Use Sub-catchments instead</button>
+						</div>
+					{/if}
+				</div>
+			{/if}
 			{#if boundary}
 				<label class="check">
 					<input type="checkbox" bind:checked={replace} data-testid="delineate-replace" />

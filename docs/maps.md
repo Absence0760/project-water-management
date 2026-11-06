@@ -1714,7 +1714,15 @@ to a point on a river. The design, the method and its accuracy are in
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
   the cells, what drains into pans and the effective area (below), the
-  dataset (with its fingerprint) and the method, and the caveats. **Accept as the catchment boundary** (replacing the current one
+  dataset (with its fingerprint) and the method, and the caveats. When the
+  proposal's outlet lies inside the project's catchment boundary, a unit was
+  most likely meant (the operator drew units one catchment at a time and the
+  second replaced the first, 2026-11-06): the sheet says "Adding a
+  hydrological unit?", that this is the whole catchment above the point (every
+  unit upstream included) and that accepting it as the boundary replaces the
+  named one with its area, and offers **Use Sub-catchments instead**, which
+  closes the sheet and turns on Sub-catchments, one per click, the proposal
+  left waiting (`delineation.ts` `unitInsideBoundary`). **Accept as the catchment boundary** (replacing the current one
   only with **Replace the current boundary** ticked; the server refuses
   otherwise), **Accept as an area** (an *other* polygon, e.g. a dam's
   upstream area, which can then be linked to a unit and Used), or

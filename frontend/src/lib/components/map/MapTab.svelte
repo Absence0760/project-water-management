@@ -578,6 +578,11 @@
 	const clickWithin = $derived(
 		boundary ? { name: boundary.name, outlet: delineation?.proposals.some((p) => p.status === 'accepted' && p.featureId === boundary.id) ? ('delineation' as const) : ('lowest' as const) } : null
 	);
+	/** The delineated catchment's sheet: a unit meant inside the boundary, so switch to Sub-catchments, one per click (the proposal stays waiting). */
+	async function subcatchmentsFromSheet() {
+		await goto(withoutParam(page.url, 'delineate'), { replace: true, reset: false });
+		startDividing();
+	}
 	function startDividing() {
 		if (dividing) return void doneDividing();
 		notice = null;
@@ -1756,6 +1761,7 @@
 					onproposed={proposed}
 					onaccepted={delineationAccepted}
 					onrejected={delineationRejected}
+					onsubcatchments={delineation?.available ? () => subcatchmentsFromSheet() : null}
 				/>
 					{/snippet}
 				</Lazy>
