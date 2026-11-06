@@ -1334,7 +1334,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		subcatchments: {
 			pieces: (id: string, clicks: { lon: number; lat: number; minKm2?: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
 			save: (id: string, clicks: { lon: number; lat: number; minKm2?: number }[]) =>
-				request<{ features: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
+				request<{ features: MapFeature[]; redrawn: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
 		},
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
 		start: {

@@ -15,18 +15,26 @@
 // refused by the server; when the boundary came from Delineate, its outlet is
 // the lowest point and its piece (click -1, badge O) is the land between the
 // lowest clicks and the outlet: it is no click, so Undo never takes it back.
+// The sub-catchments an earlier Save left inside the boundary come back with
+// every answer (`feature`, click −2 − k), routed again with the clicks: a click
+// above one takes its land, and Save redraws it. They are no clicks either, and
+// the clicks' pieces are numbered on from them (`firstNumber`).
 import type { ClickPieces, MapFeature, MapPosition } from '#lib/api/types.js';
 import { largerLine } from './largerChannel';
 import { interiorPoint, pieceTintsFor, type PiecesShape, type ProposalPiece } from './pieces';
 
 /** The catchment's delineated outlet's piece, in place of a click's index. */
 export const OUTLET_CLICK = -1;
-/** A piece's badge: its click's number, O for the outlet's. */
-export const clickLabel = (click: number) => (click === OUTLET_CLICK ? 'O' : String(click + 1));
-/** A piece's name, as Save names its area (the server's pieceName, delineation/clicks.ts). */
-export const clickPieceName = (click: number) => (click === OUTLET_CLICK ? 'Sub-catchment at the outlet' : `Sub-catchment ${click + 1}`);
-/** Where a piece's water goes, in a line: the outlet's piece, or the click's number. */
-const intoWords = (click: number) => (click === OUTLET_CLICK ? 'the outlet’s piece (O)' : String(click + 1));
+/** A piece's badge: its click's number (numbered on from `first`, the answer's firstNumber), O for the outlet's. */
+export const clickLabel = (click: number, first = 1) => (click === OUTLET_CLICK ? 'O' : String(click + first));
+/** Where a piece's water goes, in a line: the outlet's piece, a saved piece by name, or the click's number. */
+function intoWords(r: ClickPieces, click: number): string {
+	if (click === OUTLET_CLICK) return 'the outlet’s piece (O)';
+	const p = r.pieces.find((x) => x.click === click);
+	return p?.feature ? `${p.feature.name} (${p.label})` : (p?.label ?? clickLabel(click, r.firstNumber));
+}
+/** The sub-catchments already on the map routed with the clicks, the outlet's apart (it has its own row). Pure. */
+export const savedPieces = (r: ClickPieces | null) => (r ? r.pieces.filter((p) => p.feature && p.click !== OUTLET_CLICK) : []);
 
 /** The catchment the clicks are within, in a sentence (the bar's), or null with no boundary. Pure. */
 export function withinLine(w: { name: string; outlet: 'delineation' | 'lowest' } | null): string | null {
@@ -44,8 +52,8 @@ export function clickShape(r: ClickPieces | null, highlight: string | null = nul
 	const tints = pieceTintsFor(r.pieces.map((p) => p.geometry));
 	const pieces: ProposalPiece[] = r.pieces.map((p, i) => ({
 		key: String(p.click),
-		label: clickLabel(p.click),
-		name: clickPieceName(p.click),
+		label: p.label,
+		name: p.name,
 		geometry: p.geometry,
 		at: (p.geometry && interiorPoint(p.geometry)) ?? p.point,
 		tint: tints[i]!
@@ -72,9 +80,9 @@ export function pieceLine(r: ClickPieces, click: number): string {
 	}
 	const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
 	const into =
-		p.drainsInto !== null ? `drains into ${intoWords(p.drainsInto)}` : p.click === OUTLET_CLICK ? 'the catchment’s outlet: the rest drains out here' : 'the lowest point: the rest drains out here';
-	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : intoWords(p.drainsInto)} as an inflow`;
-	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => clickLabel(q.click));
+		p.drainsInto !== null ? `drains into ${intoWords(r, p.drainsInto)}` : p.click === OUTLET_CLICK ? 'the catchment’s outlet: the rest drains out here' : 'the lowest point: the rest drains out here';
+	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : intoWords(r, p.drainsInto)} as an inflow`;
+	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => q.label);
 	const upstream = p.totalAreaM2 === null ? ' · more upstream than was routed' : p.drainsInto !== null || r.pieces.length > 1 ? ` · ${km2(p.totalAreaM2)} upstream in all` : '';
 	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the nearest terrain channel` : '';
 	// A much larger channel nearby: the click may be on a hillside stream beside the river meant.
@@ -84,13 +92,13 @@ export function pieceLine(r: ClickPieces, click: number): string {
 	return `${km2(p.areaM2)} · ${into}${upstream}${pans}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${moved}${warn}`;
 }
 
-/** The pieces Save keeps: whole and outlined. */
-export const savable = (r: ClickPieces | null) => (r ? r.pieces.filter((p) => !p.open && p.geometry && p.areaM2 !== null) : []);
+/** The new pieces Save adds: whole and outlined, and not already on the map (those it redraws). */
+export const savable = (r: ClickPieces | null) => (r ? r.pieces.filter((p) => !p.feature && !p.open && p.geometry && p.areaM2 !== null) : []);
 
 /** A click, on a terrain channel: `minKm2`, the least area of the channels the map drew at its zoom (mapStyle.ts channelMinKm2AtZoom). */
 type Click = { lon: number; lat: number; minKm2?: number };
 type Fetch = (clicks: Click[]) => Promise<ClickPieces>;
-type Save = (clicks: Click[]) => Promise<{ features: MapFeature[]; summary: string }>;
+type Save = (clicks: Click[]) => Promise<{ features: MapFeature[]; redrawn: MapFeature[]; summary: string }>;
 
 export class ClickDivider {
 	/** The clicks, in order: the badges' numbers are their places here, plus one. */
@@ -195,7 +203,7 @@ export class ClickDivider {
 	}
 
 	/** Save every piece as an area; the clicks are cleared once saved. */
-	async save(): Promise<{ features: MapFeature[]; summary: string } | null> {
+	async save(): Promise<{ features: MapFeature[]; redrawn: MapFeature[]; summary: string } | null> {
 		if (!savable(this.result).length || this.busy) return null;
 		this.busy = 'save';
 		this.error = null;

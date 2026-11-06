@@ -4318,8 +4318,17 @@ export interface PlanRequest {
 
 /** One click's piece (POST …/map/subcatchments): its incremental catchment, the land draining to it before any other click. */
 export interface ClickPiece {
-	/** The click's index in the request; -1 (OUTLET_CLICK) for the catchment's delineated outlet's piece. */
+	/**
+	 * The click's index in the request; -1 (OUTLET_CLICK) for the catchment's delineated outlet's piece; -2 − k for the k-th
+	 * sub-catchment already on the map inside the boundary (`feature`), routed again with the clicks.
+	 */
 	click: number;
+	/** What Save names it: its click's number after those on the map, or the saved piece's own name. */
+	name: string;
+	/** Its badge: the number in its name, O for the outlet's piece. */
+	label: string;
+	/** The sub-catchment already on the map it redraws; null for a click's new piece. */
+	feature: { id: string; name: string } | null;
 	/** The click, snapped onto the channel. */
 	point: MapPosition;
 	snapDistanceM: number | null;
@@ -4366,6 +4375,8 @@ export interface LargerChannel {
 /** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */
 export interface ClickPieces {
 	pieces: ClickPiece[];
+	/** The number the first click's piece is named by: one past the highest "Sub-catchment n" already inside the boundary. */
+	firstNumber: number;
 	dropped: { click: number; reason: string }[];
 	/** The lowest click's index (-1 when the catchment's delineated outlet is): it owns what drains to it through no other click. */
 	lowest: number;

@@ -3956,12 +3956,17 @@ a sentence naming it and `details.reason: 'outside_boundary'`, before any
 elevation-model work (no attempt counted); when the boundary came from an
 accepted delineation, its snapped outlet is the lowest point, below every
 click (its piece `click: -1`), and a click draining more than it is the
-same `422`.
+same `422`. Within a boundary the sub-catchments an earlier save left inside
+it are routed again with the clicks, each from its outlet (`click: -2 − k`,
+`feature: { id, name }`), so a click upstream of one takes its land; each
+piece carries its `name` and `label` (badge), and `firstNumber` is the
+number the first click's piece is named by ([maps.md § Sub-catchments from
+clicks](./maps.md#sub-catchments-from-clicks)).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/map/subcatchments` | `{ clicks: { lon, lat, minKm2? }[] }` (1 to 50; each click's `minKm2` the channels the Map drew at its zoom, held to 0.1–1 km², absent 1, as Delineation's; `start-18`) | `200 ClickPieces`; nothing is stored. `422 { error }` with a sentence when the DEM refuses (the clicks outside it, a click with no terrain channel within 150 m, naming it, the lowest click's catchment past the largest window, about 100 km, almost nothing draining to it, no valid outline); `409` when it is off; `429` past the account's elevation-model cap (shared with delineate, start and divide, counted as delineation); `503` when the DEM can't be read | editor |
-| POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], dropped, summary }`: one `other` polygon per whole piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number; "Sub-catchment at the outlet" for the delineated outlet's piece), its area from the polygon and its description the outlet, where it drains, the area upstream, the dataset and the method version. The same refusals; `422` when no piece could be outlined | editor |
+| POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], redrawn: MapFeature[], dropped, summary }`: one `other` polygon per whole new piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number after `firstNumber` − 1 already on the map; "Sub-catchment at the outlet" for the delineated outlet's piece), its area from the polygon, its description the outlet, where it drains, the area upstream, the dataset and the method version, and `properties.subcatchment.outlet` (its outlet, or `'catchment'`); `redrawn` the saved pieces whose land changed by more than a cell, their outline, area and pans figure replaced (audited as `redrawn` on `map.subcatchments_saved`; never deleted). The same refusals; `422` when no new piece could be outlined | editor |
 
 - `ClickPieces = { pieces: ClickPiece[], dropped: { click, reason }[],
   lowest, within, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;

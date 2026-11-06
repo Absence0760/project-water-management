@@ -4554,8 +4554,12 @@ map" card) stays the schematic; this is the geography.
   is not a piece: it …", "Took back click 3.", "Moved the click back."), and
   first, within a delineated boundary, the outlet's piece under badge O
   ("The outlet’s piece: 212.40 km² · the catchment’s outlet: the rest
-  drains out here · …"; no click, so Undo never takes it), then
-  one line per click under its badge (`PieceBadge`, the number and tint its
+  drains out here · …"; no click, so Undo never takes it; "(on the map)" when an
+  earlier Save made it), then each sub-catchment already on the map inside
+  the boundary under its own name and badge ("Sub-catchment 1 (on the map):
+  210.30 km² · drains into the outlet’s piece (O) · …", `map-click-saved`:
+  routed again with the clicks, so a click above it takes its land), then
+  one line per click under its badge, numbered on from those on the map (`PieceBadge`, the number and tint its
   piece has on the map, so the list is the map's key): its area, where its
   water goes ("drains into 2", "drains into the outlet’s piece (O)", or
   "the lowest point: the rest drains out here"), the area upstream in all (or "more upstream than was routed"),
@@ -4571,7 +4575,11 @@ map" card) stays the schematic; this is the geography.
   on a terrain channel the map drew at the zoom it was made at (1 km² or more below zoom 13, down to 0.1 km² from zoom 15; maps.md § The elevation model's channels). A line with the focus or the pointer lights
   its piece, and a piece under the pointer lights itself. Under the lines:
   the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
-  piece against the map before you save."). **Enter coordinates** (folded,
+  piece against the map before you save."), and with pieces on the map a
+  line saying Save redraws them ("… a click above one takes its land from
+  it, and Save redraws it (its area too), so no land is counted twice. A
+  unit that uses one takes the new area when you tick it in the Divide
+  sheet."). **Enter coordinates** (folded,
   open when the map can't be drawn, though not while it is still loading;
   folded again after an outlet is added)
   adds one by latitude and longitude. While a click is being routed a pill
