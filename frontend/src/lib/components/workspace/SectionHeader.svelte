@@ -5,9 +5,8 @@
 	// Summary's "Setup complete" pill), the
 	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's main
 	// box: Add data (on the tabs it adds data to, TAB_ADDS_DATA, issue #601),
-	// then Run model on Calibration (the page's RunButton) or the tab's main
-	// action in its place (`main`: Runs & results' run form). No other section
-	// has a Run model.
+	// then the tab's main action (`main`: Runs & results' run form, the one
+	// Run model in any header).
 	// Under them, one slim line of notices (view only, new data) instead of
 	// full-width banners.
 	//

@@ -520,7 +520,7 @@ export const PAGE_GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**How the shown run fits** shows the Model quality panels for one run: **Hydrograph**, **Flow-duration curve**, **Calibration against observed flow** and **EWR test: model against observed flow**, with **Runoff model**, **WR2012 check** and **Plausibility checks** when the run has them. Pick the run under its heading: it starts on the run picked on Runs & results, or the latest (a viewer’s, the published one), and **Open in Runs & results** goes to that run’s own page. With no observed flow record yet it says to add one on **Data**; with a record but no run, to run the model with **Run model** at the top. Viewers see every result, without the fit controls.'
+						text: '**How the shown run fits** shows the Model quality panels for one run: **Hydrograph**, **Flow-duration curve**, **Calibration against observed flow** and **EWR test: model against observed flow**, with **Runoff model**, **WR2012 check** and **Plausibility checks** when the run has them. Pick the run under its heading: it starts on the run picked on Runs & results, or the latest (a viewer’s, the published one), and **Open in Runs & results** goes to that run’s own page. With no observed flow record yet it says to add one on **Data**; with a record but no run, to run the model on **Runs & results**, then come back to read its fit. Viewers see every result, without the fit controls.'
 					},
 					{
 						type: 'p',

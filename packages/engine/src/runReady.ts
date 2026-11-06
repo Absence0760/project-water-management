@@ -1,8 +1,7 @@
 // Run readiness: what a run still needs before it can start, and what only
 // warns. One module for every caller, so they refuse for the same reasons and
 // say them the same way: Runs & results' run form (frontend RunsTab.svelte),
-// Calibration's header Run model (workspace/RunButton.svelte,
-// routes/projects/[id]/+page.svelte), Model settings' Flow generation panel,
+// Model settings' Flow generation panel,
 // and the assistant's get_run_readiness tool
 // (backend/src/assistant/tools/readiness.ts, issue #610). Pure, no I/O.
 import type { NetworkNode, ProjectModel, RainStationSettings, SeriesMeta } from './project';

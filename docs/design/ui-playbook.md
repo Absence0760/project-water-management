@@ -89,19 +89,16 @@ section it belongs to, with the example that taught it.
   (the header's `h1` and its own `h2`, 65 px) until it filled the header
   with its context and actions when inside a tab and kept its own `h1`
   only on `/compare`. A section with a main action of its own passes
-  it as `main`, rendered last after a plain Add data in place of the page's
-  Run model button: Runs & results' run form (label, Run forecast, Run model) went there from a full-width panel
+  it as `main`, rendered last after a plain Add data: Runs & results' run form (label, Run forecast, Run model) went there from a full-width panel
   that pushed the results 110 px down, its status one slim line under the
-  header. On Calibration Run model (`workspace/RunButton.svelte`, issue #444)
-  opens a small form so the run can still be named, and the run opens on How
-  the shown run fits. No other section has a Run model: issue #444 put
-  RunButton on every section, it crashed the app off Calibration and Runs &
-  results, and the operator had it removed there (2026-11-05). A popover in the header
-  must close on navigation as well as on Escape and a click outside: the
-  header stays mounted across sections, so a form whose status line links
-  to the Network sat over the Network once followed (`afterNavigate`).
-  RunButton copies the Setup complete pill's `fit()` nudge; a third
-  popover should extract it rather than copy it again. Notices (viewer, new data, upload result) are one slim
+  header. No other section has a Run model: issue #444 put one
+  (`workspace/RunButton.svelte`) on every section, it crashed the app off
+  Calibration and Runs & results and the operator had it removed there
+  (2026-11-05), then from Calibration too, where it didn't work either
+  (2026-11-06). A popover in the header must close on navigation as well as
+  on Escape and a click outside: the header stays mounted across sections,
+  so a form whose status line links to another section sits over it once
+  followed (`afterNavigate`). Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Network,
   Crops, the Projects list) is
