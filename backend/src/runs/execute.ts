@@ -134,7 +134,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// (projects/outlookSettings.ts) how a seasonal outlook is set up, and settings.responsibleAuthority
 	// (projects/authoritySettings.ts) who decides its applications, and settings.ewrHeadline (projects/ewrHeadlineSettings.ts)
 	// which EWR test its results are judged by: none is a model input, so runs don't record them.
-	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ewrHeadline: _headline, ...settings } = mergeSettings(
+	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ewrHeadline: _headline, referenceGauge: _reference, ...settings } = mergeSettings(
 		p[0]?.settings
 	) as unknown as Record<string, unknown>;
 	// A rainfall station's MAP (239_rain_stations.sql, issue #553) is the catchment gauge's: the catchment rain

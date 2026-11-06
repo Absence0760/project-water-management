@@ -77,6 +77,7 @@
 	import Fold from '#lib/components/common/Fold.svelte';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import { fmtNum } from '#lib/format/number.js';
+	import { areaFactor, REFERENCE_KIND } from '#lib/calibration/referenceGauge.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
 	import { GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
@@ -171,6 +172,10 @@
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
+	// The reference gauge for verification (settings.referenceGauge): the project has its record, and the factor as the form stands.
+	const hasReference = $derived(!!seriesKinds?.includes(REFERENCE_KIND));
+	const refModelAreaKm2 = $derived(farmAreaKm2 > 0 ? farmAreaKm2 : cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : null);
+	const refFactorNow = $derived(areaFactor(s.referenceGauge ?? null, refModelAreaKm2)?.factor ?? null);
 	const apanAnnual = $derived(s.apanMm.reduce((t, v) => t + (v || 0), 0));
 	const panOutOfRange = $derived(panCoefficientOutOfRange(s.panCoefficient));
 
@@ -681,6 +686,69 @@
 			</Lazy>
 		{/if}
 	</Fold>
+	<!-- A neighbouring river's gauge (the `flow_reference_m3s` record), scaled by area to the outlet, compared with the shown
+	     run's simulated and natural flow under How the shown run fits (settings.referenceGauge: no model input, a run never
+	     reads the record; lib/calibration/referenceGauge.ts). Emptying its area takes the setting away. -->
+	<h4 class="sub" id="fld-reference-gauge" data-testid="reference-gauge-h">Reference gauge for verification</h4>
+	{#if !hasReference && !s.referenceGauge}
+		<p class="hint" data-testid="reference-gauge-none">
+			A gauge on a neighbouring river can be compared with the model, scaled by area, as a check: add its record on <a href="?tab=series">Data</a> as
+			“Reference gauge (other catchment)”.
+		</p>
+	{:else}
+		<div class="fields" data-testid="reference-gauge-fields">
+			<div class="field">
+				<label for="ref-area">Its catchment area <span class="u">(km²)</span></label>
+				<NumberInput
+					id="ref-area"
+					min={0.01}
+					max={1000000}
+					nullable
+					disabled={readonly}
+					bind:value={
+						() => s.referenceGauge?.areaKm2 ?? null,
+						(v) => (s.referenceGauge = v === null ? null : { areaKm2: v, targetAreaKm2: s.referenceGauge?.targetAreaKm2 ?? null, name: s.referenceGauge?.name ?? '' })
+					}
+					aria-describedby="ref-area-h"
+				/>
+				<span class="hint" id="ref-area-h">The area draining to the reference gauge. Blank: no comparison.</span>
+			</div>
+			<div class="field">
+				<label for="ref-target">Area at the outlet <span class="u">(km²)</span></label>
+				<NumberInput
+					id="ref-target"
+					min={0.01}
+					max={1000000}
+					nullable
+					placeholder={refModelAreaKm2 !== null ? `${fmtNum(refModelAreaKm2, 2)} (the model’s)` : ''}
+					disabled={readonly || !s.referenceGauge}
+					bind:value={() => s.referenceGauge?.targetAreaKm2 ?? null, (v) => s.referenceGauge && (s.referenceGauge = { ...s.referenceGauge, targetAreaKm2: v })}
+					aria-describedby="ref-target-h"
+				/>
+				<span class="hint" id="ref-target-h">Where the model is compared. Blank: the model’s catchment area.</span>
+			</div>
+			<div class="field">
+				<label for="ref-name">Name <span class="u">(optional)</span></label>
+				<input
+					id="ref-name"
+					maxlength="80"
+					disabled={readonly || !s.referenceGauge}
+					value={s.referenceGauge?.name ?? ''}
+					oninput={(e) => s.referenceGauge && (s.referenceGauge = { ...s.referenceGauge, name: e.currentTarget.value })}
+				/>
+			</div>
+		</div>
+		<p class="hint" data-testid="reference-gauge-factor">
+			{#if refFactorNow !== null}
+				Its record × <strong>{fmtNum(refFactorNow, 3)}</strong> (outlet area ÷ its area) is compared with the shown run’s simulated and natural flow at the
+				outlet, under How the shown run fits. Verification only: no fit scores it.
+			{:else if !hasReference}
+				The project has no reference gauge record on Data, so there is nothing to compare yet.
+			{:else}
+				Set its catchment area to compare its record, scaled by area, with the shown run under How the shown run fits.
+			{/if}
+		</p>
+	{/if}
 </section>
 
 <section class="panel" id="set-fit" aria-labelledby="fit-h">

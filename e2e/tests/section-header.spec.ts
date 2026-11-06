@@ -3,10 +3,10 @@
 // the server has it on, the Assistant after it), a one-line context, and on
 // the right the rain-freshness pill, the section's own actions and Add data (on
 // the tabs it adds data to, issue #601: add-data-tabs.spec.ts). Run model is
-// on Calibration (a button that opens the Run label form, the run opening on
-// How the shown run fits) and Runs & results (the tab's own run form) only:
-// the header's Run model on every other section crashed the app and was
-// removed (operator request, 2026-11-05).
+// on Runs & results only (the tab's own run form): the header's Run model
+// crashed the app off Calibration and was removed (operator request,
+// 2026-11-05), then from Calibration too, where it didn't work either
+// (2026-11-06).
 // The notices (view only, new data) are one slim line under it; the
 // project's name and your role are at the top of the sidebar (a compact line
 // on a phone); Data carries a badge counting the series behind. Synthetic
@@ -100,66 +100,19 @@ test.describe('desktop', () => {
 		await expect(context.getByRole('link', { name: 'Open in Runs' })).toBeVisible();
 	});
 
-	test('Run model is on Calibration and Runs & results only: no other section’s header has one', async ({ page, owner }) => {
+	test('Run model is on Runs & results only: no other section’s header has one, Calibration included', async ({ page, owner }) => {
 		void owner;
-		const project = await seedRunnableProject(page.request, 'Header run only two');
-		// Positive controls: the run form's Run model is in the header on Runs & results, once, and Calibration has
-		// the header's own button.
+		const project = await seedRunnableProject(page.request, 'Header run only runs');
+		// Positive control: the run form's Run model is in the header on Runs & results, once.
 		await page.goto(`/projects/${project.id}?tab=runs`);
 		const h = header(page);
 		await expect(h.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
 		await expect(h.getByRole('button', { name: 'Run model', exact: true })).toHaveCount(1);
-		await expect(h.getByTestId('header-run')).toHaveCount(0);
-		await nav(page).getByRole('link', { name: 'Calibration', exact: true }).click();
-		await expect(h.getByRole('heading', { level: 1, name: 'Calibration' })).toBeVisible();
-		await expect(h.getByTestId('header-run')).toHaveAccessibleName('Run model');
-		for (const name of ['Network', 'Model settings', 'Transfers', 'Summary'] as const) {
+		for (const name of ['Calibration', 'Network', 'Model settings', 'Transfers', 'Summary'] as const) {
 			await nav(page).getByRole('link', { name, exact: true }).click();
 			await expect(h.getByRole('heading', { level: 1, name }), name).toBeVisible();
-			await expect(h.getByRole('button', { name: 'Run model', exact: true }), name).toHaveCount(0);
-			await expect(h.getByTestId('header-run'), name).toHaveCount(0);
+			await expect(h.getByRole('button', { name: /^(Re-)?Run model$/ }), name).toHaveCount(0);
 		}
-	});
-
-	test('Run model on Calibration opens a form to name the run, runs it and opens it on How the shown run fits', async ({ page, owner }) => {
-		void owner;
-		const project = await seedRunnableProject(page.request, 'Header run calibration');
-		await page.goto(`/projects/${project.id}?tab=calibration`);
-		// The button, not the form's Run model inside the header once it is open.
-		const toggle = header(page).getByTestId('header-run');
-		await expect(toggle).toHaveAccessibleName('Run model');
-		await toggle.click();
-		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-		const form = page.getByRole('dialog', { name: 'Run the model' });
-		// The label field takes focus; Escape closes the form and puts focus back on the button.
-		await expect(form.getByLabel(/^Run label/)).toBeFocused();
-		await expect(form.getByRole('status')).toHaveText(/^Runs the saved network, crops, transfers, settings and time series, and shows its fit below\.$/);
-		await expectNoViolations(page);
-		await page.keyboard.press('Escape');
-		await expect(form).toBeHidden();
-		await expect(toggle).toBeFocused();
-
-		await toggle.click();
-		await form.getByLabel(/^Run label/).fill('From Calibration');
-		const ran = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/projects/${project.id}/runs`));
-		await form.getByRole('button', { name: 'Run model' }).click();
-		const res = await ran;
-		expect(res.status()).toBeLessThan(300);
-		const id = ((await res.json()) as { run: { id: string } }).run.id;
-		await expect(page).toHaveURL(new RegExp(`[?&]tab=calibration&run=${id}#cal-fit$`));
-		await expect(page.locator('#cal-fit').getByRole('heading', { level: 2, name: 'How the shown run fits' })).toBeFocused();
-	});
-
-	test('the header’s Run model on Calibration waits for rain too, and says why in its form', async ({ page, owner }) => {
-		void owner;
-		const project = await createProject(page.request, 'Header run calibration needs');
-		await putModel(page.request, project.id, sampleModel());
-		await page.goto(`/projects/${project.id}?tab=calibration`);
-		await header(page).getByTestId('header-run').click();
-		const form = page.getByRole('dialog', { name: 'Run the model' });
-		const run = form.getByRole('button', { name: 'Run model' });
-		await expect(run).toBeDisabled();
-		await expect(run).toHaveAccessibleDescription(/^A run needs a rainfall series\. /);
 	});
 
 	test('Run model waits for rain, and says why', async ({ page, owner }) => {

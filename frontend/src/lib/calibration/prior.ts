@@ -54,6 +54,19 @@ export function priorWeightError(use: PriorUse, weight: number | null): string |
 	return weight !== null && Number.isFinite(weight) && weight > 0 && weight <= PRIOR_MAX_WEIGHT ? null : `The penalty weight must be over 0 and at most ${PRIOR_MAX_WEIGHT}.`;
 }
 
+/**
+ * Why no fit on this project can use the regional prior at all, or null when one can: no GR4J donor basins are
+ * loaded, or the catchment has no position to compare donors by (no boundary on the map, no gauge). Read from the
+ * route's structured answer (`dataset`, `target`), not its words. A prior that can't be built for one location
+ * isn't here: Fit automatically says so when it asks for each location's.
+ */
+export function priorUnavailable(p: Pick<Gr4jPrior, 'dataset' | 'target' | 'problem'> | null | undefined): string | null {
+	if (!p) return null;
+	if (!p.dataset) return p.problem ?? 'No GR4J donor basins are loaded.';
+	if (p.target && (p.target.lon === null || p.target.lat === null)) return p.problem ?? 'The catchment has no position to compare donors by.';
+	return null;
+}
+
 /** The prior as the engine's calibrate() takes it, from the route's answer; null when there is no prior to use or the fit doesn't use one. */
 export function calibrationPriorOf(p: Pick<Gr4jPrior, 'ranges' | 'provenance'> | null | undefined, use: PriorUse, weight: number | null): CalibrationPrior | null {
 	if (use === 'off' || !p?.ranges || !p.provenance) return null;

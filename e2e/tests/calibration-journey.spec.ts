@@ -1,5 +1,5 @@
 // The journeys the Calibration page exists for (issue #586 Round 3, docs/ui.md § Calibration): the calibration loop
-// on one page (fit, save with an edit on Model settings, run from the header, read the new run's fit here), the one
+// (fit, save with an edit on Model settings, run on Runs & results, read the new run's fit back here), the one
 // save bar across Model settings and Calibration as a person moves between them (history included) and the leave
 // guard only when leaving the project, old links that land on the moved panels (the ones calibration-forwards.spec.ts
 // doesn't pin: an old Runs link with no run, a note's link), and a viewer reading the fit with no fit controls. The
@@ -32,7 +32,7 @@ async function savedSettings(page: Page, projectId: string) {
 	return ((await res.json()) as { project: { settings: { apanMm: number[]; gr4j: { x1: number }; fitRecord?: { auto?: unknown } | null } } }).project.settings;
 }
 
-test('the calibration loop on one page: fit, an edit on Model settings, one save, run from the header, the new run’s fit read here', async ({ page, owner }) => {
+test('the calibration loop: fit, an edit on Model settings, one save, run on Runs & results, the new run’s fit read back here', async ({ page, owner }) => {
 	void owner;
 	test.setTimeout(120_000); // a fit in the browser and a run
 	const project = await seedRunnableProject(page.request, 'Calibration loop');
@@ -76,17 +76,18 @@ test('the calibration loop on one page: fit, an edit on Model settings, one save
 	expect(ungroup(await x1Field(page).inputValue())).toBe(applied);
 	await expect(anySaveBar(page)).toHaveCount(1);
 
-	// Run model from the header: it asks to save both edits first, in one request, then runs.
+	// Calibration has no Run model of its own (operator request, 2026-11-06): the run starts on Runs & results, whose
+	// run form asks to save both edits first, in one request, then runs.
+	await expect(sectionHeader(page).getByRole('button', { name: /^(Re-)?Run model$/ })).toHaveCount(0);
 	const patches: string[] = [];
 	page.on('request', (r) => {
 		if (isProjectPatch(r.method(), r.url())) patches.push(r.postData() ?? '');
 	});
-	await sectionHeader(page).getByTestId('header-run').click();
-	const form = page.getByRole('dialog', { name: 'Run the model' });
-	await expect(form.getByRole('status')).toHaveText(/^You have unsaved changes: Run model asks to save them first/);
-	await form.getByLabel(/^Run label/).fill('After the fit');
+	await sections(page).getByRole('link', { name: 'Runs & results', exact: true }).click();
+	await expect(anySaveBar(page)).toHaveCount(1);
+	await sectionHeader(page).getByLabel(/^Run label/).fill('After the fit');
 	const ran = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/projects/${project.id}/runs`));
-	await form.getByRole('button', { name: 'Run model' }).click();
+	await sectionHeader(page).getByRole('button', { name: 'Run model', exact: true }).click();
 	await answerConfirm(page, true, 'A run uses the saved model.');
 	const res = await ran;
 	expect(res.status()).toBeLessThan(300);
@@ -97,21 +98,17 @@ test('the calibration loop on one page: fit, an edit on Model settings, one save
 	expect(saved.apanMm[0]).toBe(152);
 	expect(saved.gr4j.x1).toBeCloseTo(applied, 0);
 
-	// The run opens here, on How the shown run fits, focused: the picker follows it and its fit is the one applied.
-	await expect(page).toHaveURL(new RegExp(`\\?tab=calibration&run=${after}#cal-fit$`));
+	// The run opens in Runs & results; back on Calibration (the sidebar carries the run, RUN_TABS) the picker shows it
+	// and its fit is the one applied.
+	await expect(page).toHaveURL(new RegExp(`\\?tab=runs&run=${after}$`));
+	await sections(page).getByRole('link', { name: 'Calibration', exact: true }).click();
 	await expect(calTitle(page)).toBeVisible();
-	await expect(page.locator('#cal-fit').getByRole('heading', { level: 2, name: 'How the shown run fits' })).toBeFocused();
 	await expect(calibrationRunPicker(page).locator('option:checked')).toHaveText(/^After the fit · .* · latest$/);
 	await expect(results(page)).toHaveAttribute('data-run', after);
 	// The fit applied is the new run's record; the A-pan edit on Model settings after it is the forcing it flags.
 	await expect(provenance(page).locator('strong').first()).toHaveText(/^GR4J fit of /);
 	await expect(provenance(page).getByText('Forcing changed since fit', { exact: true })).toBeVisible();
 	await expect(page.locator('#res-hydrograph').getByRole('heading', { name: 'Hydrograph' })).toBeVisible();
-	// The header's run form says so on this page.
-	await sectionHeader(page).getByTestId('header-run').click();
-	await expect(form.getByRole('status')).toHaveText(/^Runs the saved network, crops, transfers, settings and time series, and shows its fit below\.$/);
-	await page.keyboard.press('Escape');
-	await expect(form).toBeHidden();
 
 	// The run before, picked, still reads as set by hand; Back returns to the new one.
 	await calibrationRunPicker(page).selectOption(before);
@@ -262,7 +259,7 @@ test('a viewer reads the fit of the published run and of another, with no fit co
 	await expect(x1Field(v)).not.toBeEditable();
 	await expect(v.locator('#cal-setup').getByRole('button', { name: /^Apply to form/ })).toHaveCount(0);
 	await expect(sectionHeader(v).getByRole('link', { name: 'Fit the parameters', exact: true })).toHaveCount(0);
-	await expect(sectionHeader(v).getByTestId('header-run')).toHaveCount(0);
+	await expect(sectionHeader(v).getByRole('button', { name: /^(Re-)?Run model$/ })).toHaveCount(0);
 	await expect(sectionHeader(v).getByRole('button', { name: 'Add data' })).toHaveCount(0);
 	await expect(anySaveBar(v)).toHaveCount(0);
 });

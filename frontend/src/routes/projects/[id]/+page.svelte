@@ -97,8 +97,6 @@
 	import { fillPhoneTitle, fillSidebar } from '#lib/components/layout/sidebar.svelte.js';
 	import SectionHeader from '#lib/components/workspace/SectionHeader.svelte';
 	import SectionsMenu from '#lib/components/workspace/SectionsMenu.svelte';
-	import RunButton from '#lib/components/workspace/RunButton.svelte';
-	import { hasForecastRain, runBlockers } from '#lib/components/runs/runReady.js';
 	import { headerSlot } from '#lib/components/workspace/headerSlot.svelte.js';
 	import { sectionContext } from '#lib/components/workspace/context.js';
 	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '#lib/workspace/overlays.js';
@@ -471,12 +469,10 @@
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
-	// Run model is on Calibration and Runs & results only: Calibration's is the header's RunButton (after Add data),
-	// which opens a small form so the run can be named and opens the run on How the shown run fits; Runs & results'
-	// is the tab's own run form (headerSlot.main: Run label, Run forecast, Run model). The other sections end on Add
-	// data, on the tabs that have it (TAB_ADDS_DATA): their header Run model crashed the app and was removed
-	// (operator request, 2026-11-05).
-	const headerRun = $derived(canEdit && tab === 'calibration');
+	// Run model is on Runs & results only: the tab's own run form (headerSlot.main: Run label, Run forecast, Run
+	// model). The other sections end on Add data, on the tabs that have it (TAB_ADDS_DATA). The header's Run model
+	// (RunButton) crashed the app off Calibration and was removed there (operator request, 2026-11-05), then from
+	// Calibration too, where it didn't work either (operator request, 2026-11-06).
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
 	const behindCount = $derived(fresh?.behind.length ?? 0);
 	// The Warnings row's count (issue #611): the page's Open chip with no filter, by the same helpers, so the two
@@ -755,8 +751,6 @@
 		if (rerunning) return;
 		if (await saveBeforeRun()) await startRun(label, forecast);
 	}
-	// What Calibration's header Run model needs before a run can start (runs/runReady.ts, as Runs & results' form).
-	const runReady = $derived(runBlockers(editor.model, series));
 
 	// --- the farm drawer: open while the URL names a farm ---------------------
 	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
@@ -1097,8 +1091,8 @@
 		><span class="assist-text">Assistant</span>
 	</button>
 {/snippet}
-<!-- Add data (on the tabs it adds data to, TAB_ADDS_DATA), then Run model on Calibration (RunButton) or the tab's
-     main action (Runs & results' run form): what a section ends on. -->
+<!-- Add data (on the tabs it adds data to, TAB_ADDS_DATA), then the tab's main action (Runs & results' run form):
+     what a section ends on. -->
 {#snippet headerMain()}
 	{#if showsAddData}
 		<button
@@ -1114,26 +1108,13 @@
 	{/if}
 	{#if headerSlot.main}
 		{@render headerSlot.main()}
-	{:else if headerRun}
-		<RunButton
-			missing={runReady.missing}
-			hasForecast={hasForecastRain(series)}
-			modelDirty={unsaved}
-			problems={unsaved ? saveProblems.length : 0}
-			running={rerunning}
-			error={rerunError}
-			behind={!banner && behindRun.length > 0}
-			opensHere={runOpensHere}
-			onrun={runModel}
-		/>
 	{/if}
 {/snippet}
 <!-- The notices: one slim line under the header, not full-width banners. -->
 {#snippet headerNotices()}
 	{@const behind = !banner && behindRun.length > 0 && tab !== 'runs'}
 	{#if !canEdit || banner || behind || rerunError}
-		<!-- header-run: Calibration's header button says Re-run model on a phone while new data waits, so the line drops its own there. -->
-		<div class="notice-line" class:header-run={headerRun} data-testid="notice-line">
+		<div class="notice-line" data-testid="notice-line">
 			{#if !canEdit}
 				<span class="note readonly-note" role="note">
 					<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
@@ -1612,8 +1593,7 @@
 		display: none;
 	}
 	/* A phone (the header's container, SectionHeader): View only is one line, and so is the new-data line (the series'
-	   names read by screen readers only, so its words and Re-run model share the line); on Calibration that line is
-	   words only, since the header's own button says Re-run model there (RunButton's behind). */
+	   names read by screen readers only, so its words and Re-run model share the line). */
 	@container section-header (max-width: 640px) {
 		.ro-long,
 		.behind-list {
@@ -1627,10 +1607,7 @@
 		.ro-short {
 			display: inline;
 		}
-		.header-run .behind .rerun {
-			display: none;
-		}
-		/* Off Calibration the line keeps its Re-run model: a 36 px button whose target reaches 44 px (::after, the
+		/* The line keeps its Re-run model: a 36 px button whose target reaches 44 px (::after, the
 		   section header's "?" pattern), in a note with no padding of its own, so the header still ends in the first
 		   half of a 360 × 740 screen (workspace-phone.spec.ts). */
 		.note.behind {

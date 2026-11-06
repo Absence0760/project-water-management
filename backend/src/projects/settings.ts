@@ -113,6 +113,7 @@ import { checkOutcomeSite, OutcomesPatch, resolveOutcomes } from './outcomeSetti
 import { OutlookPatch } from './outlookSettings.js';
 import { ResponsibleAuthorityPatch } from './authoritySettings.js';
 import { checkEwrHeadline, EwrHeadlinePatch } from './ewrHeadlineSettings.js';
+import { ReferenceGaugePatch } from './referenceGaugeSettings.js';
 import { checkRainStations, checkUnitChirpsDrivers, RainStations, remapRainStations } from './rainStationSettings.js';
 import { checkFlowMissing } from './flowMissingSettings.js';
 import { localDate } from './timeZone.js';
@@ -291,7 +292,7 @@ function remapFitRecordNodes(r: Json, ids: ReadonlyMap<string, string>): Json {
  * And the units' Parameters from (issue #659): a unit left out takes its own
  * zone's.
  */
-export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing', 'unitParamsFrom']);
+export const REPLACED_WHOLE: ReadonlySet<string> = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'gapRain', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain', 'rainStations', 'flowMissing', 'unitParamsFrom', 'referenceGauge']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -1510,7 +1511,10 @@ export const SettingsPatch = z
 		// Who decides the project's applications (authoritySettings.ts, 163): the whole authority, or null. Not a model input.
 		responsibleAuthority: ResponsibleAuthorityPatch,
 		// Which EWR test the results are judged by (ewrHeadlineSettings.ts, issue #444): one whole choice. Not a model input.
-		ewrHeadline: EwrHeadlinePatch
+		ewrHeadline: EwrHeadlinePatch,
+		// The reference gauge's areas for Calibration's verification against it (referenceGaugeSettings.ts): replaced whole,
+		// null = none. Not a model input.
+		referenceGauge: ReferenceGaugePatch
 	})
 	.partial()
 	.refine((s) => JSON.stringify(s).length <= 64_000, 'settings too large');

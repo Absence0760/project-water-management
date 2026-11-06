@@ -1103,10 +1103,8 @@ follows the bar's measured height, so a focused field is never under it
 (WCAG 2.4.11). `e2e/tests/phone-edit-controls.spec.ts` pins both at 390,
 360 and 320 px.
 
-**Run model with unsaved edits.** A run uses the saved model, so the
-header's **Run model** on Calibration (its form's **Run model** and
-**Run forecast**, `workspace/RunButton.svelte`, through the page's
-`runModel`), Warnings' **Run now**, Runs & results' own **Run model** and **Run forecast** (and the
+**Run model with unsaved edits.** A run uses the saved model, so
+Warnings' **Run now** (through the page's `runModel`), Runs & results' own **Run model** and **Run forecast** (and the
 new-data line's **Re-run model**) with unsaved edits ask "Save your changes and run?"
 (**Save and run**), save them (`saveAll`) and run once they are saved: the
 page passes its `saveBeforeRun` to the Runs tab as `beforeRun`, and the run
@@ -1295,37 +1293,21 @@ role, freshness, Add data) and each tab's own header:
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
   longest waiting**), then for editors **Add data** on the sections it adds
-  data to (below) and **Run model**, the primary action, on Calibration and
-  Runs & results only. Issue #444 had put it on every section (the client
-  looked for a way to run the model from where they had just changed it);
-  off those two it crashed the app, and the operator had it removed there
+  data to (below) and **Run model**, the primary action, on Runs & results
+  only. Issue #444 had put it on every section (the client looked for a way
+  to run the model from where they had just changed it); off Calibration and
+  Runs & results it crashed the app, and the operator had it removed there
   (2026-11-05), so the other sections end on Add data (where they have it)
-  or on their own controls. On
-  Calibration, **Run model** (`workspace/RunButton.svelte`, rendered only
-  there: `+page.svelte` `headerRun`) doesn't
-  run at once: it opens a small form under it (a non-modal `role="dialog"`,
-  *Run the model*; the button has `aria-expanded` and `aria-haspopup`,
-  Escape closes it and returns focus, a click outside or a navigation (its
-  links go to other sections) closes it, the Setup complete pill's pattern) with the **Run label** field (focused, optional), **Run
-  forecast** (with forecast rain) and **Run model**, so every run can still
-  be named, and one status line: what a run still needs or why the flow
-  shares stop it (`runs/runReady.ts` `runBlockers`, the same reasons and
-  words as Runs & results' form, which uses it too), why the last run
-  didn't start, that problems stop the unsaved changes being saved (so the
-  run waits for them), that unsaved changes are saved first, the progress with the seconds while it runs, else what
-  it runs. The page runs it (`runModel`: unsaved edits go through the same
-  **Save your changes and run?** confirm, and a problem that blocks the
-  save stops it with the reason) and opens the run on the page itself
-  (`?tab=calibration&run=<id>#cal-fit`, landing on *How the shown run fits*,
-  focused, and the form says "shows its fit below"), so the calibration loop
-  stays on one page (issue #586 round 3, `calibration-journey.spec.ts`);
-  a run that didn't start says so in the notice line. Runs & results has
-  the tab's own run form (**Run label**, Run forecast, Run model) instead,
+  or on their own controls. Calibration kept it (`workspace/RunButton.svelte`,
+  a button opening a small Run label form, the run opening on *How the
+  shown run fits*) until the operator reported it didn't work there either
+  and had it removed too (2026-11-06; the component is gone). Runs & results
+  has the tab's own run form (**Run label**, Run forecast, Run model),
   last, with no Add data there (`fillHeader({ main })`, the header slot's
-  `main` part), so a page never has two Run models; while a run the page
-  started is going, that form waits for it (`busy`). Viewers get neither:
-  a run needs an editor. Runs & results' form says when unsaved edits from
-  any section (model, settings, project details) will be saved first
+  `main` part); while a run the page started is going, that form waits for
+  it (`busy`). Viewers don't get it: a run needs an editor. Runs & results'
+  form says when unsaved edits from any section (model, settings, project
+  details) will be saved first
   (`unsaved`). The new-data line's **Re-run model** still runs from any
   section, labelled with the data's end, and opens the run in Runs &
   results (on Calibration, on the page). A tab shown inside the grid modal or scenario
@@ -1340,7 +1322,7 @@ role, freshness, Add data) and each tab's own header:
   their own `ModelSaveRow`.
 - **The groups:** `SectionHeader` takes the pill as `status`, the tab's
   controls as `actions` and the page's main box (Add data where the tab has
-  it, then Run model on Calibration or the tab's `main`) as `main`; the box
+  it, then the tab's `main`) as `main`; the box
   is always drawn for an editor, and takes no room when it is empty. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
   on Allocations at 1440); the main box is one box, so a wrap never splits it.
@@ -1374,16 +1356,11 @@ role, freshness, Add data) and each tab's own header:
   there; a control inside one of the list's own menus leaves it open;
   Escape (after a menu inside it), a click elsewhere or leaving it closes
   it. Without pills the ⋯ starts the main box's row. Add data (where the tab
-  has it) then fills the last row, beside Run model on Calibration (the main
-  box never splits; Run model's form is nudged to stay on the screen); on
+  has it) then fills the last row (the main box never splits); on
   Runs & results the run label and its field fill a row, then
   Run forecast and Run model share the next
-  in equal parts (the form draws no box of its own there). While new data is
-  waiting on Calibration, the header's button reads **Re-run model** and the
-  notice line is words only ("New data since the last run (…)."), since the
-  two buttons did the same thing 8 px apart (the line's `header-run` class);
-  a wide screen keeps both. On the other sections, with no header button,
-  the notice line keeps its **Re-run model** on a phone too, on one line
+  in equal parts (the form draws no box of its own there). With no header
+  Run model off Runs & results, the notice line keeps its **Re-run model** on a phone too, on one line
   with "New data since the last run." (the series' names read by screen
   readers only there): a 36 px button whose target reaches 44 px (`::after`,
   as the "?"), in a note with no padding, so the header still ends in the
@@ -4554,8 +4531,12 @@ map" card) stays the schematic; this is the geography.
   is not a piece: it …", "Took back click 3.", "Moved the click back."), and
   first, within a delineated boundary, the outlet's piece under badge O
   ("The outlet’s piece: 212.40 km² · the catchment’s outlet: the rest
-  drains out here · …"; no click, so Undo never takes it), then
-  one line per click under its badge (`PieceBadge`, the number and tint its
+  drains out here · …"; no click, so Undo never takes it; "(on the map)" when an
+  earlier Save made it), then each sub-catchment already on the map inside
+  the boundary under its own name and badge ("Sub-catchment 1 (on the map):
+  210.30 km² · drains into the outlet’s piece (O) · …", `map-click-saved`:
+  routed again with the clicks, so a click above it takes its land), then
+  one line per click under its badge, numbered on from those on the map (`PieceBadge`, the number and tint its
   piece has on the map, so the list is the map's key): its area, where its
   water goes ("drains into 2", "drains into the outlet’s piece (O)", or
   "the lowest point: the rest drains out here"), the area upstream in all (or "more upstream than was routed"),
@@ -4571,7 +4552,11 @@ map" card) stays the schematic; this is the geography.
   on a terrain channel the map drew at the zoom it was made at (1 km² or more below zoom 13, down to 0.1 km² from zoom 15; maps.md § The elevation model's channels). A line with the focus or the pointer lights
   its piece, and a piece under the pointer lights itself. Under the lines:
   the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
-  piece against the map before you save."). **Enter coordinates** (folded,
+  piece against the map before you save."), and with pieces on the map a
+  line saying Save redraws them ("… a click above one takes its land from
+  it, and Save redraws it (its area too), so no land is counted twice. A
+  unit that uses one takes the new area when you tick it in the Divide
+  sheet."). **Enter coordinates** (folded,
   open when the map can't be drawn, though not while it is still loading;
   folded again after an outlet is added)
   adds one by latitude and longitude. While a click is being routed a pill
@@ -8379,7 +8364,8 @@ The page has:
   changed; it follows the unsaved form), or "GR4J · no fit record: the
   parameters were set by hand or imported". The actions add **Fit the
   parameters** for editors (a link to `#set-fit`), or **Fit record** for a
-  viewer when there is one, before Add data and Run model. The header carries
+  viewer when there is one, before Add data. There is no Run model here
+  (operator request, 2026-11-06): runs start on Runs & results. The header carries
   the line and the jump once (issue #586 C19): Fit the parameters' own panel
   line is its calibration rules' state ("Calibration rules revision 1 ·
   draft, not signed off", `settings/summaries.ts`), and the GR4J card has no
@@ -8449,8 +8435,8 @@ The page has:
   **Try again** if that fails), the part's one empty state (a dashed box as
   Runs & results' no-runs card: **No observed flow record yet.** with a link
   to Data when the project has no observed or logger flow record, else **No
-  run yet.** "Run the model to see how its flows fit the observed record." for
-  an editor, whose Run model is the header's, or "An editor can run the
+  run yet.** "Run the model on Runs & results to see how its flows fit the
+  observed record." for an editor, linking there, or "An editor can run the
   model." for a viewer; then a line on what a run shows), loading the run,
   and a failed run with **Try again** (or **Show the newest run** for a run
   that's gone). Each **Try again** here (the runs list's, the run's, and the
@@ -8471,6 +8457,38 @@ The page has:
   `MODEL_QUALITY_ANCHORS`, `modelQualitySections`); Model quality draws its
   panels after the flow-duration curve at once only for a link to one of
   them (`isLowerAnchor`, issue #586 R3-B).
+  **Verification against a reference gauge** (`calibration/ReferenceGaugeCheck.svelte`,
+  `lib/calibration/referenceGauge.ts`), under the outlet's hydrograph when
+  the project has a reference gauge record (`flow_reference_m3s`, a gauge on
+  a neighbouring river) or its area is set: the record × the **area factor**
+  (the area at the outlet ÷ the gauge's own, `settings.referenceGauge`; the
+  outlet's is the model's catchment area unless set: the units' areas, else
+  the catchment area setting), drawn on the hydrograph as a dashed line
+  named "<name> × <factor> (verification)", and a table of the shown run's
+  **Simulated (current day)** and **Natural** flow at the outlet against it
+  over the days both have a value before any forecast: KGE′, volume bias
+  (Σ model ÷ Σ record − 1, %), correlation r and the days compared with
+  their dates. Under the table, **Monthly volume** (`monthlyVolumes`): a
+  chart (LineChart over the month list) of each calendar month's volume of
+  the scaled record (dashed, as on the hydrograph), simulated and natural
+  flow, over the whole compared period, counting only the days all three
+  have a value, so they are like with like; a month with fewer than 20 such
+  days (`MONTH_MIN_DAYS`) is a gap in every line, not a low value, and the
+  caption says how many. Thousand m³, or million m³ once a month reaches
+  one. **Show the monthly volumes** opens its table (each month's three
+  volumes, "Gap: too few days in common", and the days compared of the
+  month's days). A caption says it is verification only, a neighbouring
+  catchment scaled by area, never scored by a fit. Without the gauge's area
+  it says to set it, linking to Calibration record (`#set-record`); with an
+  area but no record, to add one on Data; and a record whose unit isn't a
+  flow, or a run whose area isn't known, says so (`reference-check`'s
+  `data-state`). Natural flow is stored at the outlet only, so the
+  comparison is at the outlet. The areas are set under **Calibration record
+  → Reference gauge for verification** (its catchment area, km², blank = no
+  comparison; the area at the outlet, blank = the model's, shown as the
+  placeholder; an optional name), with the factor as the form stands; saved
+  from the save bar, no model input (a run doesn't record it, and a save of
+  only it leaves the "inputs changed" time alone). `reference-gauge.spec.ts`.
 - **Side index** (`SectionNav`, "Calibration sections"; `calibration/page.ts`
   `calibrationNavGroups`, issue #586 round 3): a group for each part, named
   by its heading, listing its panels by theirs, word for word on the bar too
@@ -8492,11 +8510,10 @@ The page has:
   when the run doesn't draw it).
 
 The two parts are stacked: the settings panels' monthly rows and the charts
-need the page's width. The header's **Run model**, started here, opens the
-new run here (`+page.svelte` `startRun`, [§ Section header](#section-header)):
-the picker follows it and the page lands on *How the shown run fits*, so
-set the fit, run and read it without leaving the page
-(`calibration-journey.spec.ts` walks that loop, the save bar across the two
+need the page's width. A run starts on Runs & results (Calibration's own
+header Run model was removed, 2026-11-06); the Calibration row then carries
+the run picked there, so the fit is read back here
+(`calibration-journey.spec.ts` walks that loop, the save bar across the
 pages, the old links and a viewer's read). The Calibration row's link carries a run picked on Runs & results
 (`workspace/tabLinks.ts` `RUN_TABS`). Old links to the moved panels come
 here (rows of `nav/anchorMoves.ts`, issue #586 round 3), replacing the
@@ -8993,7 +9010,14 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   the fit fetches the prior for each step's target (the catchment, or each
   calibration zone's own) before it runs, and the result's notes and the fit
   record (**Regional prior** row) name it, its donors and the donor set's
-  SHA-256. Its card
+  SHA-256. When no fit on the project can have a prior (no donor basins
+  loaded, or no position to compare donors by: `priorUnavailable`, read from
+  the prior route's `dataset` and `target`, asked once as the card opens), the
+  choice offers only Off, and the hint under it says why
+  (`fit-prior-unavailable`); a choice carried in from an earlier fit's record
+  or another visit goes back to Off and says "Set back to Off" (production
+  refused only at Fit, operator report 2026-11-06). A prior that can't be
+  built for one location is still refused when the fit asks for it. Its card
   shows the choices that decide the fit in one row (**Objective**,
   **Parameters to fit**, **Validation**), then one **Search:** line with the
   bounds, model runs, starts and seed ("Wide bounds · 1 500 runs × 5 starts ·

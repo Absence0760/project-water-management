@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ClickPiece, ClickPieces } from '#lib/api/types.js';
-import { ClickDivider, clickLabel, clickPieceName, clickShape, OUTLET_CLICK, pieceLine, savable, withinLine } from './clickPieces.svelte';
+import { ClickDivider, clickLabel, clickShape, OUTLET_CLICK, pieceLine, savable, savedPieces, withinLine } from './clickPieces.svelte';
 
 const sq = (x: number): ClickPiece['geometry'] => ({ type: 'Polygon', coordinates: [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 1], [x, 0]]] });
+/** The server's name and badge for a click's piece (delineation/clicks.ts pieceName, pieceLabel). */
+const named = (click: number) => (click === OUTLET_CLICK ? { name: 'Sub-catchment at the outlet', label: 'O' } : { name: `Sub-catchment ${click + 1}`, label: String(click + 1) });
 const piece = (click: number, drainsInto: number | null, km2: number, totalKm2 = km2): ClickPiece => ({
 	click,
+	...named(click),
+	feature: null,
 	point: [click + 0.5, 0],
 	snapDistanceM: 10,
 	drainsInto,
@@ -18,6 +22,7 @@ const piece = (click: number, drainsInto: number | null, km2: number, totalKm2 =
 const inflow = (click: number, drainsInto: number | null): ClickPiece => ({ ...piece(click, drainsInto, 0), geometry: null, areaM2: null, totalAreaM2: null, open: true });
 const answer = (pieces: ClickPiece[], lowest: number, dropped: ClickPieces['dropped'] = []): ClickPieces => ({
 	pieces,
+	firstNumber: 1,
 	dropped,
 	lowest,
 	within: null,
@@ -59,7 +64,6 @@ describe('within a delineated catchment: the outlet’s piece', () => {
 	it('badges it O and names it as Save does, the clicks still by their numbers', () => {
 		expect(clickLabel(OUTLET_CLICK)).toBe('O');
 		expect(clickLabel(0)).toBe('1');
-		expect(clickPieceName(OUTLET_CLICK)).toBe('Sub-catchment at the outlet');
 		const s = clickShape(r)!;
 		expect(s.pieces.map((p) => [p.key, p.label, p.name])).toEqual([
 			['-1', 'O', 'Sub-catchment at the outlet'],
@@ -121,7 +125,7 @@ describe('pieceLine', () => {
 describe('ClickDivider', () => {
 	const make = () => {
 		const fetch = vi.fn(async (clicks: { lon: number; lat: number }[]) => answer(clicks.map((_, i) => piece(i, i === 0 ? null : i - 1, 1)), 0));
-		const save = vi.fn(async () => ({ features: [], summary: '2 sub-catchments' }));
+		const save = vi.fn(async () => ({ features: [], redrawn: [], summary: '2 sub-catchments' }));
 		return { d: new ClickDivider(fetch, save), fetch, save };
 	};
 
@@ -244,9 +248,34 @@ describe('ClickDivider', () => {
 		expect(await d.save()).toBeNull();
 		expect(d.error).toBe('Too many');
 		expect(d.clicks).toHaveLength(1);
-		expect(await d.save()).toEqual({ features: [], summary: '2 sub-catchments' });
+		expect(await d.save()).toEqual({ features: [], redrawn: [], summary: '2 sub-catchments' });
 		expect(save).toHaveBeenLastCalledWith([{ lon: 20, lat: -33 }]);
 		expect(d.clicks).toEqual([]);
 		expect(d.result).toBeNull();
 	});
 });
+
+describe('sub-catchments already on the map', () => {
+	/** "Sub-catchment 1" saved earlier (click −2), split by click 0, now Sub-catchment 2, above it. */
+	const saved: ClickPiece = { ...piece(-2, OUTLET_CLICK, 4, 6), name: 'Sub-catchment 1', label: '1', feature: { id: 'f1', name: 'Sub-catchment 1' } };
+	const outlet: ClickPiece = { ...piece(OUTLET_CLICK, null, 5, 11), feature: { id: 'fo', name: 'Sub-catchment at the outlet' } };
+	const fresh: ClickPiece = { ...piece(0, -2, 2), name: 'Sub-catchment 2', label: '2' };
+	const r: ClickPieces = { ...answer([saved, outlet, fresh], OUTLET_CLICK), firstNumber: 2, within: { featureId: 'b', name: 'Valley', outlet: 'delineation' } };
+
+	it('draws each under its own name and badge, the clicks numbered on from them', () => {
+		expect(clickShape(r)!.pieces.map((p) => [p.key, p.label, p.name])).toEqual([
+			['-2', '1', 'Sub-catchment 1'],
+			['-1', 'O', 'Sub-catchment at the outlet'],
+			['0', '2', 'Sub-catchment 2']
+		]);
+		expect(clickLabel(0, r.firstNumber)).toBe('2');
+	});
+
+	it('says a click’s piece drains into the saved one by name, lists the saved ones apart from the outlet’s, and saves only the new', () => {
+		expect(pieceLine(r, 0)).toBe('2.00 km² · drains into Sub-catchment 1 (1) · 2.00 km² upstream in all');
+		expect(savedPieces(r).map((p) => p.click)).toEqual([-2]);
+		expect(savable(r).map((p) => p.click)).toEqual([0]);
+		expect(savedPieces(null)).toEqual([]);
+	});
+});
+

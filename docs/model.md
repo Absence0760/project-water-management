@@ -8651,7 +8651,12 @@ calibrates on the logger with no default-pick warning. The only thing a run does
 with it is list data-quality checks (outliers, flat stretches) under its own
 name, and, only when `settings.flowGapFill` names it as a donor (engine ≥
 1.23.0, §2.10i), scale it into the gaps of the gauge or logger record. It can be charted on the Time series tab, where it serves as a regional
-wet/dry index. From engine 1.19.0 automatic calibration's dry → wet test
+wet/dry index. Calibration also compares it, scaled by area (outlet area ÷
+its own, `settings.referenceGauge`, no model input), with the shown run's
+simulated and natural flow at the outlet (KGE′, volume bias, r and the days
+compared): a display worked out in the browser from the stored record and
+the run's series, so it is verification only, never scored by a fit, and a
+run still never reads the record ([ui.md § Calibration](./ui.md#calibration)). From engine 1.19.0 automatic calibration's dry → wet test
 ranks its water years by it (§2.10b) — its only use in the engine, and never
 as something scored.
 `reference-series.test.ts` pins all of this. If the workbook's `rUseFlow`

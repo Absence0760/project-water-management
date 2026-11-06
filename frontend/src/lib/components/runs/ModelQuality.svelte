@@ -28,6 +28,9 @@
 	import AgreementTable from '#lib/components/series/AgreementTable.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, runChirpsFactors } from '#lib/series/provenance.js';
+	import ReferenceGaugeCheck from '#lib/components/calibration/ReferenceGaugeCheck.svelte';
+	import { areaFactor, modelCatchmentAreaKm2, monthlyVolumes, REFERENCE_KIND, referenceName, scaledReference, verificationRow } from '#lib/calibration/referenceGauge.js';
+	import type { ReferenceGauge } from '#lib/api/types.js';
 	import { cachedSeries } from './cache';
 	import { calibrationHydrographTitle, calibrationSiteOf, outletNameOf, CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '#lib/components/forecast/forecast.js';
@@ -60,6 +63,7 @@
 		runs,
 		series = null,
 		projectSettings = null,
+		referenceGauge = null,
 		flowUnit = $bindable('m³/s'),
 		settled = $bindable(false)
 	}: {
@@ -76,6 +80,8 @@
 		series?: readonly { id: string; kind: string; siteNodeId?: string | null }[] | null;
 		/** The project's settings, read for the calibration window asked for when the run kept no settings snapshot (an older run). */
 		projectSettings?: { calibrationStart?: string | null; calibrationEnd?: string | null } | null;
+		/** The project's reference gauge areas (settings.referenceGauge, no model input): its record, scaled, is compared at the outlet. */
+		referenceGauge?: ReferenceGauge | null;
 		/** The page's flow unit, for every flow chart on it: bind it to share the switch with charts outside Model quality. */
 		flowUnit?: 'm³/s' | 'm³/day';
 		/**
@@ -189,7 +195,61 @@
 	const conv = (d: DailySeries | undefined) => (d ? toDisplayUnit(d.values, 'm³/day', flowUnit).values : []);
 	// Gauge or logger, and which one the run is scored against (issue #45).
 	const sources = $derived(observedSources(refs));
-	const hydroSeries = $derived(hydrographSeries(catchment, conv, true, sources));
+
+	// --- the reference gauge: a neighbouring river's record, scaled by area to the outlet (verification only) ---------
+	// The project's `flow_reference_m3s` record (a run never reads it) × outlet area ÷ its area (settings.referenceGauge),
+	// beside the run's simulated and natural flow at the outlet (lib/calibration/referenceGauge.ts).
+	const refRecord = $derived(series?.find((x) => x.kind === REFERENCE_KIND) ?? null);
+	let refData = $state.raw<{ id: string; startDate: string; unit: string; values: (number | null)[] } | null>(null);
+	let refError = $state<string | null>(null);
+	let refAttempt = $state(0);
+	$effect(() => {
+		const rec = refRecord;
+		void refAttempt;
+		refError = null;
+		if (!rec || !referenceGauge) return;
+		if (untrack(() => refData?.id) === rec.id) return;
+		let live = true;
+		api.series.get(projectId, rec.id).then(
+			(d) => {
+				if (live) refData = { id: rec.id, startDate: d.startDate, unit: d.unit, values: d.values };
+			},
+			(e) => {
+				if (live) refError = reason(e);
+			}
+		);
+		return () => {
+			live = false;
+		};
+	});
+	const refFactor = $derived(areaFactor(referenceGauge, modelCatchmentAreaKm2(run.model as { nodes?: readonly { kind: string; areaKm2?: number | null }[] } | undefined, run.settings?.calibration as { catchmentAreaKm2?: number | null } | undefined)));
+	const refScaled = $derived(refData && refRecord && refData.id === refRecord.id && refFactor ? scaledReference(refData, refFactor.factor) : null);
+	const refName = $derived(referenceName(referenceGauge));
+	const refState = $derived(
+		!referenceGauge
+			? 'no-area'
+			: !refRecord
+				? 'no-record'
+				: !refFactor
+					? 'no-model-area'
+					: refError
+						? 'error'
+						: !refData || refData.id !== refRecord.id
+							? 'loading'
+							: !refScaled
+								? 'unit'
+								: 'ready'
+	);
+	const refRows = $derived({
+		simulated: refScaled && catchment.simulated ? verificationRow(refScaled, catchment.simulated, forecastFrom) : null,
+		natural: refScaled && catchment.natural ? verificationRow(refScaled, catchment.natural, forecastFrom) : null
+	});
+	const refMonthly = $derived(refScaled && catchment.simulated ? monthlyVolumes(refScaled, catchment.simulated, catchment.natural ?? null, forecastFrom) : []);
+	const refLine = $derived(refFactor ? `${refName[0]!.toUpperCase()}${refName.slice(1)} × ${fmtNum(refFactor.factor, 3)} (verification)` : '');
+	const hydroSeries = $derived([
+		...hydrographSeries(catchment, conv, true, sources),
+		...(refScaled && refFactor ? [{ label: refLine, startDate: refScaled.startDate, values: conv(refScaled), color: '--series-3', width: 1.25, style: 'dashed' as const }] : [])
+	]);
 	// A run with no observed record at the outlet (none in the project, or none read): the titles and the caption say
 	// what is drawn, not "observed" over two lines (issue #586 R4-A).
 	const hasObserved = $derived(!!catchment.observed);
@@ -333,6 +393,9 @@
 		{/if}
 		{#if qualityError}
 			{@render loadFailed("the observed flow's quality flags", qualityError)}
+		{/if}
+		{#if refRecord || referenceGauge}
+			<ReferenceGaugeCheck name={refName} state={refState} factor={refFactor} rows={refRows} error={refError} retry={() => refAttempt++} monthly={refMonthly} lineLabel={refLine} />
 		{/if}
 		{#if siteId}
 			<!-- The headline calibration location (engine ≥ 1.41.0 the calibration site; issue #659): the pair the run's calibration statistics score. -->

@@ -225,6 +225,19 @@ export interface OutcomeSettings {
  */
 export type EwrHeadline = { source: 'auto' } | { source: 'pragmatic' } | { source: 'ruleTable'; siteNodeId: string | null };
 
+/**
+ * settings.referenceGauge (backend projects/referenceGaugeSettings.ts): a gauge on a neighbouring river (the project's
+ * `flow_reference_m3s` record), scaled by area to the outlet for Calibration's verification. No model input. null = none.
+ */
+export interface ReferenceGauge {
+	/** The reference gauge's own catchment area, km². */
+	areaKm2: number;
+	/** The area at the outlet it is compared at, km²; null = the model's catchment area. */
+	targetAreaKm2: number | null;
+	/** What to call it; '' = "the reference gauge". */
+	name: string;
+}
+
 /** A season as a month and day each end (settings.outlook.season): the decision date and the season end. */
 export interface OutlookSeasonSetting {
 	startMonth: number;
@@ -262,7 +275,7 @@ export interface Project extends ProjectSummary {
 	timeZone?: string;
 	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
 	wuaName?: string | null;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline; referenceGauge?: ReferenceGauge | null };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
 	/** The caller acts for the responsible authority (163, 229): a confirmed delegate holding editor or above, so they record its decisions and endorse a baseline. */
@@ -4305,8 +4318,17 @@ export interface PlanRequest {
 
 /** One click's piece (POST …/map/subcatchments): its incremental catchment, the land draining to it before any other click. */
 export interface ClickPiece {
-	/** The click's index in the request; -1 (OUTLET_CLICK) for the catchment's delineated outlet's piece. */
+	/**
+	 * The click's index in the request; -1 (OUTLET_CLICK) for the catchment's delineated outlet's piece; -2 − k for the k-th
+	 * sub-catchment already on the map inside the boundary (`feature`), routed again with the clicks.
+	 */
 	click: number;
+	/** What Save names it: its click's number after those on the map, or the saved piece's own name. */
+	name: string;
+	/** Its badge: the number in its name, O for the outlet's piece. */
+	label: string;
+	/** The sub-catchment already on the map it redraws; null for a click's new piece. */
+	feature: { id: string; name: string } | null;
 	/** The click, snapped onto the channel. */
 	point: MapPosition;
 	snapDistanceM: number | null;
@@ -4353,6 +4375,8 @@ export interface LargerChannel {
 /** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */
 export interface ClickPieces {
 	pieces: ClickPiece[];
+	/** The number the first click's piece is named by: one past the highest "Sub-catchment n" already inside the boundary. */
+	firstNumber: number;
 	dropped: { click: number; reason: string }[];
 	/** The lowest click's index (-1 when the catchment's delineated outlet is): it owns what drains to it through no other click. */
 	lowest: number;

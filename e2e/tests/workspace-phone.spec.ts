@@ -2,7 +2,7 @@
 // every workspace section at 360 × 740, 390 × 844 and 320 × 640 on a big catchment (30
 // units with dams, two runs, scenarios and registered volumes). The section header puts
 // the tab's own controls in one More actions list at the end of the pills' row, with Add
-// data (where the tab has it) and, on Calibration, Run model (on Runs & results the run form) on the row that ends it, so the
+// data (where the tab has it) and, on Runs & results, the run form on the row that ends it, so the
 // tab's content starts in the first half of a 360 × 740 screen (issue #521 round 5); the
 // pill's list opens on screen; Compare runs has one title; and the sheets, dialogs and
 // the Sections menu the per-page specs don't scan on a phone are scanned here.
@@ -83,7 +83,7 @@ test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
 	for (const size of PHONES)
-		test(`every section at ${size.width} px: the pills and More actions on one row, Add data (where the tab has it) and Run model (Calibration) or the run form last${size.width === 360 ? ', ending in the first half of the screen' : ''}`, async ({ page, owner }) => {
+		test(`every section at ${size.width} px: the pills and More actions on one row, Add data (where the tab has it) or the run form last${size.width === 360 ? ', ending in the first half of the screen' : ''}`, async ({ page, owner }) => {
 			test.setTimeout(180_000);
 			void owner;
 			await page.setViewportSize(size);
@@ -116,21 +116,16 @@ test.describe('phone', () => {
 					expect(Math.abs(m.more!.right - m.right), at).toBeLessThan(2);
 					expect(m.more!.width, at).toBeGreaterThanOrEqual(44);
 				}
-				// Add data (where the tab has it), then Run model on Calibration, or on Runs & results the run form, end the
-				// header, on one row that fills it (Runs: under the run label's row). No other section has a Run model.
+				// Add data (where the tab has it), or on Runs & results the run form, ends the header, on one row that fills
+				// it (Runs: under the run label's row). No other section has a Run model, Calibration included.
 				const adds = ADDS_DATA.has(s.tab);
-				const cal = s.tab === 'calibration';
-				if (!cal && s.tab !== 'runs') {
-					await expect(h.getByRole('button', { name: 'Run model', exact: true, includeHidden: true }), at).toHaveCount(0);
-					await expect(h.getByTestId('header-run'), at).toHaveCount(0);
-				}
+				if (s.tab !== 'runs') await expect(h.getByRole('button', { name: 'Run model', exact: true, includeHidden: true }), at).toHaveCount(0);
 				if (adds || s.tab === 'runs') {
 					const last = m.main.filter((c) => c.top === m.main.at(-1)!.top);
-					expect(last.length, `${at}: ${m.main.map((c) => c.text).join(' | ')}`).toBeGreaterThanOrEqual(cal ? 2 : 1);
+					expect(last.length, `${at}: ${m.main.map((c) => c.text).join(' | ')}`).toBeGreaterThanOrEqual(1);
 					expect(Math.abs(last[0]!.left - m.left), at).toBeLessThan(2);
 					expect(Math.abs(last.at(-1)!.right - m.right), at).toBeLessThan(2);
-					// Calibration: with data since the last run its button says Re-run model.
-					if (adds) expect(m.main.map((c) => c.text), at).toEqual(cal ? ['Add data', 'Re-run model'] : ['Add data']);
+					if (adds) expect(m.main.map((c) => c.text), at).toEqual(['Add data']);
 					else {
 						expect(last.at(-1)!.text, at).toBe('Run model');
 						// The label and its name fill the row above.
@@ -144,20 +139,14 @@ test.describe('phone', () => {
 					const line = h.getByTestId('notice-line');
 					await expect(line, at).toContainText('New data since the last run');
 					const rerun = line.getByRole('button', { name: 'Re-run model' });
-					if (cal) {
-						// The header's button says it, so the notice line has no button of its own (they did the same 8 px apart).
-						await expect(rerun, at).toBeHidden();
-						expect((await h.getByTestId('header-run').boundingBox())!.height, at).toBeGreaterThanOrEqual(44);
-					} else {
-						// No header button here: the notice line keeps its own Re-run model, 36 px with its target at 44 px
-						// (::after, as the "?" beside the title).
-						await expect(rerun, at).toBeVisible();
-						expect((await rerun.boundingBox())!.height, at).toBeGreaterThanOrEqual(36);
-						const target = await rerun.evaluate((b) => b.getBoundingClientRect().height - 2 * parseFloat(getComputedStyle(b, '::after').top));
-						expect(target, at).toBeGreaterThanOrEqual(44);
-						// One line from 360 px: the words (the series' names for screen readers only) beside the button.
-						if (size.width >= 360) expect((await line.boundingBox())!.height, at).toBeLessThan(48);
-					}
+					// No header button: the notice line keeps its own Re-run model, 36 px with its target at 44 px
+					// (::after, as the "?" beside the title).
+					await expect(rerun, at).toBeVisible();
+					expect((await rerun.boundingBox())!.height, at).toBeGreaterThanOrEqual(36);
+					const target = await rerun.evaluate((b) => b.getBoundingClientRect().height - 2 * parseFloat(getComputedStyle(b, '::after').top));
+					expect(target, at).toBeGreaterThanOrEqual(44);
+					// One line from 360 px: the words (the series' names for screen readers only) beside the button.
+					if (size.width >= 360) expect((await line.boundingBox())!.height, at).toBeLessThan(48);
 				}
 			}
 		});

@@ -620,6 +620,16 @@ alongside teams, e.g. to give an outside client `viewer` access.
   moves the site to the copy's gauge. It never sets `ewrChargeSource`. Like
   `outcomes` it is no model input: runs don't record it, saving only it
   leaves `updatedAt` alone, and every run is read by the current choice.
+  `settings.referenceGauge` (`projects/referenceGaugeSettings.ts`,
+  [ui.md § Calibration](./ui.md#calibration), *Verification against a
+  reference gauge*) is the areas Calibration scales the project's reference
+  gauge record (`flow_reference_m3s`, a neighbouring river) by to compare it
+  with a run at the outlet: always present, `null` = none, else `{ areaKm2,
+  targetAreaKm2, name }` (the gauge's catchment area in km², over 0 and at
+  most 1 000 000; the area at the outlet, null = the model's catchment area;
+  a name of at most 80 characters, `''` = none). `PATCH` takes it whole or
+  `null` (no other shape or key; `400`). Like `outcomes` it is no model
+  input: runs don't record it and saving only it leaves `updatedAt` alone.
   `settings.droughtRestriction` (engine ≥ 1.54.0, WP-3.8,
   [model.md §2.7i](./model.md), [ui.md § Drought restrictions](./ui.md#drought-restrictions))
   is the model's drought restriction rule: `{ reviewDates: ['MM-DD', …]
@@ -3946,12 +3956,17 @@ a sentence naming it and `details.reason: 'outside_boundary'`, before any
 elevation-model work (no attempt counted); when the boundary came from an
 accepted delineation, its snapped outlet is the lowest point, below every
 click (its piece `click: -1`), and a click draining more than it is the
-same `422`.
+same `422`. Within a boundary the sub-catchments an earlier save left inside
+it are routed again with the clicks, each from its outlet (`click: -2 − k`,
+`feature: { id, name }`), so a click upstream of one takes its land; each
+piece carries its `name` and `label` (badge), and `firstNumber` is the
+number the first click's piece is named by ([maps.md § Sub-catchments from
+clicks](./maps.md#sub-catchments-from-clicks)).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/map/subcatchments` | `{ clicks: { lon, lat, minKm2? }[] }` (1 to 50; each click's `minKm2` the channels the Map drew at its zoom, held to 0.1–1 km², absent 1, as Delineation's; `start-18`) | `200 ClickPieces`; nothing is stored. `422 { error }` with a sentence when the DEM refuses (the clicks outside it, a click with no terrain channel within 150 m, naming it, the lowest click's catchment past the largest window, about 100 km, almost nothing draining to it, no valid outline); `409` when it is off; `429` past the account's elevation-model cap (shared with delineate, start and divide, counted as delineation); `503` when the DEM can't be read | editor |
-| POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], dropped, summary }`: one `other` polygon per whole piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number; "Sub-catchment at the outlet" for the delineated outlet's piece), its area from the polygon and its description the outlet, where it drains, the area upstream, the dataset and the method version. The same refusals; `422` when no piece could be outlined | editor |
+| POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], redrawn: MapFeature[], dropped, summary }`: one `other` polygon per whole new piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number after `firstNumber` − 1 already on the map; "Sub-catchment at the outlet" for the delineated outlet's piece), its area from the polygon, its description the outlet, where it drains, the area upstream, the dataset and the method version, and `properties.subcatchment.outlet` (its outlet, or `'catchment'`); `redrawn` the saved pieces whose land changed by more than a cell, their outline, area and pans figure replaced (audited as `redrawn` on `map.subcatchments_saved`; never deleted). The same refusals; `422` when no new piece could be outlined | editor |
 
 - `ClickPieces = { pieces: ClickPiece[], dropped: { click, reason }[],
   lowest, within, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
@@ -4332,7 +4347,8 @@ sends it with `reason: "Assistant suggestion: <title>"`; or it sends `POST
 `fitRecord`, `calibrationRules`, `evidenceUncertaintyRule` and
 `responsibleAuthority` (a person's own acts), `checksKept` and `warningsKept`
 (a person's judgement on the Warnings page), and `autoRun`, `outcomes`,
-`outlook` and `ewrHeadline` (run policy and display, not model inputs).
+`outlook`, `ewrHeadline` and `referenceGauge` (run policy and display, not
+model inputs).
 
 A turn is counted (one message, hourly and monthly) when it starts and
 charged its tokens when it ends, whatever the outcome, a client that went
