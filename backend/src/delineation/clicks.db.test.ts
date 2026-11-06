@@ -11,10 +11,15 @@
 //  - within a catchment boundary: a click outside it is refused naming it
 //    (before any elevation-model work), one inside works (positive control);
 //    a boundary from Delineate puts its outlet's piece below the clicks, and
-//    Save saves it too; a boundary drawn by hand keeps the lowest click.
+//    Save saves it too; a boundary drawn by hand keeps the lowest click;
+//  - what is already on the map: a later Save routes the saved pieces again
+//    with its clicks, so a downstream piece saved first is redrawn without the
+//    upstream land a later click takes (its area too), and a downstream click
+//    after an upstream piece stops at it, leaving it as it was.
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
+import { pointInGeometry } from '../geo/geojson.js';
 import { DEM_ATTEMPTS } from './attempt.js';
 import { BASIN_AREA_M2, DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 
@@ -232,3 +237,97 @@ describe('sub-catchments within the catchment boundary (synthetic DEM)', () => {
 		expect(res.body.lowest).toBe(1);
 	});
 });
+
+describe('sub-catchments already on the map (synthetic DEM)', () => {
+	beforeAll(() => {
+		process.env.DEM_URL = FIXTURE;
+	});
+	/** Just below the dam wall, and on the river halfway from the dam to the outlet. */
+	const UP = DAM;
+	const DOWN = point(OUTLET_CELL.x, OUTLET_CELL.y - 50);
+	const ABOVE = (() => {
+		const p = point(DAM_CELL.x, DAM_CELL.y - 60);
+		return [p.lon, p.lat] as [number, number];
+	})();
+	const delineated = async (name: string) => {
+		const pid = (await editor.call('POST', '/projects', { name })).body.project.id as string;
+		const q = (p: string) => `/projects/${pid}${p}`;
+		const d = await editor.call('POST', q('/map/delineation'), { ...OUTLET, from: 'outlet' });
+		expect(d.status, JSON.stringify(d.body)).toBe(201);
+		expect((await editor.call('POST', q(`/map/delineation/${d.body.proposal.id}/accept`), { as: 'catchment_boundary' })).status).toBe(200);
+		return { pid, q, areaM2: d.body.proposal.areaM2 as number };
+	};
+	type Row = { id: string; name: string; area_m2: number; geometry: { type: 'Polygon'; coordinates: [number, number][][] }; properties: { subcatchment?: unknown } };
+	const pieces = async (pid: string) =>
+		(await asOwner(`SELECT id, name, area_m2, geometry, properties FROM map_feature WHERE project_id = $1 AND kind = 'other' ORDER BY name`, [pid])) as Row[];
+
+	it('downstream first, upstream second: the saved downstream piece is redrawn without the upstream land, its area with it', async () => {
+		const { pid, q, areaM2 } = await delineated('Clicks, down then up');
+		const reference = (await editor.call('POST', q('/map/subcatchments'), { clicks: [DOWN, UP] })).body as { pieces: { click: number; areaM2: number }[] };
+		const [refDown, refUp] = [0, 1].map((k) => reference.pieces.find((p) => p.click === k)!.areaM2) as [number, number];
+
+		const first = await editor.call('POST', q('/map/subcatchments/save'), { clicks: [DOWN] });
+		expect(first.status, JSON.stringify(first.body)).toBe(201);
+		expect(first.body.redrawn).toEqual([]);
+		const down = first.body.features.find((f: { name: string }) => f.name === 'Sub-catchment 1');
+		near(down.areaM2, refDown + refUp, 0.01);
+		expect(pointInGeometry(ABOVE, down.geometry)).toBe(true);
+		expect((await pieces(pid)).find((r) => r.id === down.id)!.properties.subcatchment).toEqual({ outlet: expect.any(Array) });
+
+		// The preview already shows it split, named after it, with the new click numbered on from it.
+		const preview = await editor.call('POST', q('/map/subcatchments'), { clicks: [UP] });
+		expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+		expect(preview.body.firstNumber).toBe(2);
+		expect(preview.body.pieces.map((p: { name: string; feature: { id: string } | null }) => [p.name, p.feature !== null])).toEqual([
+			['Sub-catchment 1', true],
+			['Sub-catchment at the outlet', true],
+			['Sub-catchment 2', false]
+		]);
+
+		const second = await editor.call('POST', q('/map/subcatchments/save'), { clicks: [UP] });
+		expect(second.status, JSON.stringify(second.body)).toBe(201);
+		expect(second.body.features.map((f: { name: string }) => f.name)).toEqual(['Sub-catchment 2']);
+		expect(second.body.redrawn.map((f: { id: string }) => f.id)).toEqual([down.id]);
+		expect(second.body.summary).toMatch(/^1 sub-catchment, [\d.]+ km² in all; Sub-catchment 1 redrawn \([\d.]+ km² → [\d.]+ km²\)$/);
+		const rows = await pieces(pid);
+		expect(rows.map((r) => r.name)).toEqual(['Sub-catchment 1', 'Sub-catchment 2', 'Sub-catchment at the outlet']);
+		const [d2, u2, o2] = rows as [Row, Row, Row];
+		near(d2.area_m2, refDown, 0.01);
+		near(u2.area_m2, refUp, 0.01);
+		expect(pointInGeometry(ABOVE, d2.geometry)).toBe(false);
+		expect(pointInGeometry(ABOVE, u2.geometry)).toBe(true);
+		// No land counted twice: the three tile the delineated catchment.
+		near(d2.area_m2 + u2.area_m2 + o2.area_m2, areaM2, 0.02);
+		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.subcatchments_saved' ORDER BY created_at DESC LIMIT 1`, [pid]);
+		expect(audit[0]!.subject).toMatchObject({ pieces: 1, redrawn: [{ featureId: down.id }] });
+	});
+
+	it('upstream first, downstream second: the new downstream piece stops at the saved one, which is left as it was', async () => {
+		const { pid, q, areaM2 } = await delineated('Clicks, up then down');
+		const first = await editor.call('POST', q('/map/subcatchments/save'), { clicks: [UP] });
+		expect(first.status, JSON.stringify(first.body)).toBe(201);
+		const up = first.body.features.find((f: { name: string }) => f.name === 'Sub-catchment 1');
+		const second = await editor.call('POST', q('/map/subcatchments/save'), { clicks: [DOWN] });
+		expect(second.status, JSON.stringify(second.body)).toBe(201);
+		expect(second.body.features.map((f: { name: string }) => f.name)).toEqual(['Sub-catchment 2']);
+		// The outlet's piece gave up the land between the dam and DOWN: it is redrawn; the upstream piece isn't.
+		expect(second.body.redrawn.map((f: { name: string }) => f.name)).toEqual(['Sub-catchment at the outlet']);
+		const rows = await pieces(pid);
+		const u = rows.find((r) => r.id === up.id)!;
+		const d = rows.find((r) => r.name === 'Sub-catchment 2')!;
+		expect(u.area_m2).toBe(up.areaM2);
+		expect(pointInGeometry(ABOVE, d.geometry)).toBe(false);
+		near(rows.reduce((s, r) => s + r.area_m2, 0), areaM2, 0.02);
+	});
+
+	it('leaves pieces alone without a catchment boundary (positive control: the same clicks there save afresh)', async () => {
+		const pid = (await editor.call('POST', '/projects', { name: 'Clicks, no boundary' })).body.project.id as string;
+		const q = (p: string) => `/projects/${pid}${p}`;
+		expect((await editor.call('POST', q('/map/subcatchments/save'), { clicks: [DOWN, OUTLET] })).status).toBe(201);
+		const again = await editor.call('POST', q('/map/subcatchments'), { clicks: [UP, OUTLET] });
+		expect(again.status, JSON.stringify(again.body)).toBe(200);
+		expect(again.body.pieces.every((p: { feature: unknown }) => p.feature === null)).toBe(true);
+		expect(again.body.firstNumber).toBe(1);
+	});
+});
+

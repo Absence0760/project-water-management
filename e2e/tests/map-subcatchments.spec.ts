@@ -14,7 +14,9 @@
 // the DEM is taken back with the reason; Done with unsaved clicks asks first;
 // a viewer gets no button. Within a delineated catchment boundary its outlet
 // is the lowest piece (O), a click outside the boundary is refused, and Save
-// opens Start from the map with the pieces as hydrological units.
+// opens Start from the map with the pieces as hydrological units. A
+// sub-catchment saved earlier inside the boundary is divided with the next
+// clicks: a later click upstream of it takes its land, and Save redraws it.
 // Axe-scanned with the pieces drawn, light and dark.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -268,6 +270,44 @@ test('within a delineated catchment: its outlet is the lowest piece, a click out
 	await expect(roles.nth(1)).toHaveValue('unit');
 	await expect(page.getByTestId('start-points')).toContainText('Sub-catchment at the outlet');
 	await expect(page.getByTestId('start-points')).toContainText('Sub-catchment 1');
+});
+
+test('within a delineated catchment, a piece saved earlier downstream is split by a later click upstream of it, and Save redraws it', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(60_000);
+	const { id } = await createProject(page.request, 'Sub-catchments in two goes');
+	const d = await page.request.post(`${API_URL}/projects/${id}/map/delineation`, { data: { lon: FIXTURE_OUTLET[0], lat: FIXTURE_OUTLET[1], from: 'outlet' } });
+	expect(d.status(), await d.text()).toBe(201);
+	const accepted = await page.request.post(`${API_URL}/projects/${id}/map/delineation/${(await d.json()).proposal.id}/accept`, { data: { as: 'catchment_boundary' } });
+	expect(accepted.status(), await accepted.text()).toBe(200);
+	// The first go, downstream (the API, as the bar's Save does): Sub-catchment 1 at the mid-valley point holds everything above it.
+	const first = await page.request.post(`${API_URL}/projects/${id}/map/subcatchments/save`, { data: { clicks: [{ lon: FIXTURE_MID_GAUGE[0], lat: FIXTURE_MID_GAUGE[1] }] } });
+	expect(first.status(), await first.text()).toBe(201);
+	const before = ((await first.json()).features as { name: string; areaM2: number }[]).find((f) => f.name === 'Sub-catchment 1')!.areaM2;
+
+	await openMap(page, id);
+	await mapReady(page);
+	await startClicks(page);
+	await typeOutlet(page, FIXTURE_DAM);
+	await expect(bar(page)).not.toHaveAttribute('data-busy');
+	// The saved piece is listed apart, by its own name and badge, now without the land above the dam; the click is number 2 and drains into it.
+	const saved = bar(page).getByTestId('map-click-saved');
+	await expect(saved).toHaveCount(1);
+	await expect(saved.getByTestId('piece-badge')).toHaveText('Piece 1: 1');
+	await expect(saved.getByTestId('map-click-line')).toHaveText(/^Sub-catchment 1 \(on the map\): \d+\.\d\d km² · drains into the outlet’s piece \(O\) · /);
+	await expect(lines(page).nth(0).getByTestId('piece-badge')).toHaveText('Piece 2: 2');
+	await expect(line(page, 0)).toHaveText(/^3[34]\d\.\d\d km² · drains into Sub-catchment 1 \(1\) · /);
+	await expect(bar(page).getByTestId('map-click-onmap')).toContainText('a click above one takes its land from it, and Save redraws it');
+	await expectNoViolations(page);
+
+	await bar(page).getByTestId('map-click-save').click();
+	await expect(page.getByTestId('map-notice')).toContainText(/^Saved 1 sub-catchment, 3[34]\d\.\d\d km² in all; Sub-catchment 1 redrawn \([\d.]+ km² → [\d.]+ km²\) on the map as areas/);
+	const after = await page.request.get(`${API_URL}/projects/${id}/map/features`);
+	const features = (await after.json()).features as { name: string; areaM2: number }[];
+	const down = features.find((f) => f.name === 'Sub-catchment 1')!;
+	const up = features.find((f) => f.name === 'Sub-catchment 2')!;
+	// The downstream piece gave up exactly the upstream one's land: nothing counted twice.
+	expect(Math.abs(down.areaM2 + up.areaM2 - before) / before).toBeLessThan(0.01);
 });
 
 test('Use this area on a saved piece holding a pan asks which area: gross by default, the effective one when picked (195)', async ({ page, owner }) => {

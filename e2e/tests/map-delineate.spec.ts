@@ -22,7 +22,7 @@ import { addMember, createProject, seedRunnableProject } from '../support/api.ts
 import { FIXTURE_DAM, FIXTURE_MID_GAUGE, FIXTURE_OFF_CHANNEL, FIXTURE_OFF_TERRAIN, FIXTURE_OUTLET } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { boundaryGeoJson, openKey, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
+import { box, boundaryGeoJson, openKey, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
 
 const sheet = (page: Page, name = 'Delineate a catchment') => page.getByRole('dialog', { name });
 const review = (page: Page) => sheet(page, 'The delineated catchment');
@@ -235,6 +235,8 @@ test('a boundary is replaced only with the tick; Reject changes nothing; a point
 	// From the dam wall, then Reject.
 	await delineateAt(page, FIXTURE_DAM, 'Just below a dam wall');
 	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^3[2-5]\d\.\d\d km²$/);
+	// The boundary here is elsewhere (round 21.3° E): an outlet outside it says nothing about units.
+	await expect(review(page).getByTestId('delineate-unit-hint')).toHaveCount(0);
 	await review(page).getByTestId('delineate-reject').click();
 	await expect(page.getByTestId('map-notice')).toHaveText(/Rejected the delineated catchment; nothing on the map changed\./);
 	await expect(page.getByTestId('map-summary')).toContainText('1 feature');
@@ -340,4 +342,25 @@ test('a viewer gets no Delineate', async ({ page, owner, signIn }) => {
 	await expect(viewer.page.locator('.map-page[data-ready]')).toBeVisible();
 	await expect(viewer.page).not.toHaveURL(/delineate=/);
 	await expect(viewer.page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('one catchment clicked inside the boundary offers Sub-catchments, one per click, and switches to it', async ({ page, owner }) => {
+	void owner;
+	// The operator drew units one catchment at a time and the second replaced the first (2026-11-06).
+	const project = await seedRunnableProject(page.request, 'Delineate a unit');
+	await openMap(page, project.id);
+	// A boundary round the elevation model's catchment, the dam inside it.
+	const around = JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'Upper catchment' }, geometry: { type: 'Polygon', coordinates: [box(20.55, -33.65, 0.4)] } }] });
+	await uploadThroughSheet(page, null, 'boundary.geojson', around);
+	await delineateAt(page, FIXTURE_DAM, 'Just below a dam wall');
+	await expect(review(page).getByTestId('delineate-unit-hint')).toContainText(
+		/^Adding a hydrological unit\? This is the whole catchment above the point, so it takes in every unit upstream of it, and accepting it as the catchment boundary replaces “Upper catchment” \([\d\s]+\.\d\d km²\)\. For units inside the boundary, use Sub-catchments, one per click/
+	);
+	await review(page).getByTestId('delineate-use-subcatchments').click();
+	await expect(page.getByTestId('map-click-bar')).toBeVisible();
+	await expect(page.getByTestId('map-delineate-clicks')).toBeChecked();
+	await expect(page).not.toHaveURL(/[?&]delineate=1/);
+	// The proposal still waits for a decision; nothing on the map changed.
+	await expect(page.getByTestId('map-delineation-pending')).toContainText('waiting for your decision');
+	await expect(page.getByTestId('map-summary')).toContainText('1 feature');
 });
