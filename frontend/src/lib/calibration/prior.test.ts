@@ -4,7 +4,7 @@
 // range rows beside the parameters now, and the fit record's line.
 import { describe, expect, it } from 'vitest';
 import type { ParamPriors, PriorProvenance } from '@water-management/engine';
-import { calibrationPriorOf, donorLine, fitBoundsOf, priorKey, priorRecordLine, priorUseOfRecord, priorWeightError, rangeRows, skillText } from './prior';
+import { calibrationPriorOf, donorLine, fitBoundsOf, priorKey, priorRecordLine, priorUnavailable, priorUseOfRecord, priorWeightError, rangeRows, skillText } from './prior';
 
 const RANGES: ParamPriors = {
 	x1: { p10: 200, p50: 300, p90: 500 },
@@ -88,5 +88,26 @@ describe('what the panel shows', () => {
 		expect(priorRecordLine({ weight: 0.1, bounded: true, provenance: PROV })).toBe(
 			'Regional prior: penalty weight 0.10, searched its p10–p90 box; 7 of 14 donors from “synthetic” (invented donors), SHA-256 cdcdcdcdcdcd…; skill 0.42 (leave-one-out over 14 donors).'
 		);
+	});
+});
+
+describe('when no fit can use the prior (priorUnavailable)', () => {
+	const target = { lon: 19.2, lat: -32.7 } as const;
+	const dataset = { dataset: 'GRDC-Caravan', version: '1', source: '', method: '', attribution: '', synthetic: false, donorSetSha256: '', donors: 40 };
+
+	it('no donor basins loaded: the route’s problem, else a plain line', () => {
+		expect(priorUnavailable({ dataset: null, target: null, problem: 'No GR4J donor basins are loaded (the operator loads them).' })).toBe('No GR4J donor basins are loaded (the operator loads them).');
+		expect(priorUnavailable({ dataset: null, target: null, problem: null })).toBe('No GR4J donor basins are loaded.');
+	});
+	it('no position to compare donors by', () => {
+		const t = { ...target, lon: null, lat: null } as never;
+		expect(priorUnavailable({ dataset, target: t, problem: 'There is no catchment boundary on the map.' })).toBe('There is no catchment boundary on the map.');
+	});
+	it('donors and a position: available, even when this location’s prior can’t be built (the fit says so per location)', () => {
+		expect(priorUnavailable({ dataset, target: target as never, problem: null })).toBeNull();
+		expect(priorUnavailable({ dataset, target: target as never, problem: 'The prior can’t be built: too few donors.' })).toBeNull();
+	});
+	it('not known yet (no answer): not refused', () => {
+		expect(priorUnavailable(null)).toBeNull();
 	});
 });

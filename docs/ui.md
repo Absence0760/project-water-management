@@ -8993,7 +8993,14 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
   the fit fetches the prior for each step's target (the catchment, or each
   calibration zone's own) before it runs, and the result's notes and the fit
   record (**Regional prior** row) name it, its donors and the donor set's
-  SHA-256. Its card
+  SHA-256. When no fit on the project can have a prior (no donor basins
+  loaded, or no position to compare donors by: `priorUnavailable`, read from
+  the prior route's `dataset` and `target`, asked once as the card opens), the
+  choice offers only Off, and the hint under it says why
+  (`fit-prior-unavailable`); a choice carried in from an earlier fit's record
+  or another visit goes back to Off and says "Set back to Off" (production
+  refused only at Fit, operator report 2026-11-06). A prior that can't be
+  built for one location is still refused when the fit asks for it. Its card
   shows the choices that decide the fit in one row (**Objective**,
   **Parameters to fit**, **Validation**), then one **Search:** line with the
   bounds, model runs, starts and seed ("Wide bounds · 1 500 runs × 5 starts ·

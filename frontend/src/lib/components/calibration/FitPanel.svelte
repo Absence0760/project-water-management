@@ -65,7 +65,7 @@
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
 	import { wr2012FitPeriods } from '#lib/calibration/wr2012Fit.js';
 	import { startStepwiseFit } from '#lib/calibration/runner.js';
-	import { calibrationPriorOf, fitBoundsOf, priorKey, priorUseHint, priorWeightError, PRIOR_USE_LABEL, PRIOR_USES } from '#lib/calibration/prior.js';
+	import { calibrationPriorOf, fitBoundsOf, priorKey, priorUnavailable, priorUseHint, priorWeightError, PRIOR_USE_LABEL, PRIOR_USES } from '#lib/calibration/prior.js';
 	import { afterText, fitPlanOf, locationSettings, stepRows } from '#lib/calibration/zones.js';
 	import type { FitSession } from '#lib/calibration/fitSession.svelte.js';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
@@ -145,6 +145,33 @@
 	// The regional prior (issue #622): a penalty, the search box or both; its weight only matters with the penalty.
 	const priorProblem = $derived(priorWeightError(session.priorUse, session.priorWeight));
 	const priorBox = $derived(session.priorUse === 'bounds' || session.priorUse === 'both');
+	// Whether the project can have a regional prior at all (no donor basins loaded, no position): asked once, so the
+	// choice offers only Off with the reason, rather than refusing at Fit. A choice carried over from an earlier fit's
+	// record goes back to Off, saying so (operator report, 2026-11-06). Not asked for a viewer, who can't fit.
+	let priorNo = $state<string | null>(null);
+	let priorReset = $state(false);
+	$effect(() => {
+		void projectId;
+		if (readonly) return;
+		let live = true;
+		api.gr4jPrior.get(projectId).then(
+			(got) => {
+				if (live) priorNo = priorUnavailable(got);
+			},
+			() => {
+				// Not known: the choice stays open, and Fit asks again per location.
+				if (live) priorNo = null;
+			}
+		);
+		return () => {
+			live = false;
+		};
+	});
+	$effect(() => {
+		if (priorNo === null || untrack(() => session.priorUse) === 'off' || untrack(() => session.status) === 'running') return;
+		session.priorUse = 'off';
+		priorReset = true;
+	});
 	// The fit's plan, from the form and the network as they stand (issue #659): the ticked locations in dependency order,
 	// or why none can be fitted (none ticked, a group with no unit draining through it, a borrowing cycle), shown
 	// before any worker starts.
@@ -331,9 +358,15 @@
 			<div class="field" data-testid="fit-prior">
 				<label for="{uid}-prior">Regional prior <HelpTip key="regional-prior" label="About the regional prior" /></label>
 				<select id="{uid}-prior" bind:value={session.priorUse} disabled={status === 'running'} aria-describedby="{uid}-prior-h">
-					{#each PRIOR_USES as u (u)}<option value={u}>{PRIOR_USE_LABEL[u]}</option>{/each}
+					{#each PRIOR_USES as u (u)}<option value={u} disabled={u !== 'off' && priorNo !== null}>{PRIOR_USE_LABEL[u]}</option>{/each}
 				</select>
-				<span class="hint" id="{uid}-prior-h">{priorUseHint(session.priorUse)}</span>
+				{#if priorNo !== null}
+					<span class="hint" id="{uid}-prior-h" data-testid="fit-prior-unavailable"
+						>{priorReset ? 'Set back to Off: the' : 'The'} regional prior can’t be used on this project. {priorNo}</span
+					>
+				{:else}
+					<span class="hint" id="{uid}-prior-h">{priorUseHint(session.priorUse)}</span>
+				{/if}
 				{#if session.priorUse === 'penalty' || session.priorUse === 'both'}
 					<label for="{uid}-prior-w">Penalty weight</label>
 					<NumberInput id="{uid}-prior-w" min={0.01} max={PRIOR_MAX_WEIGHT} step={0.05} bind:value={session.priorWeight} disabled={status === 'running'} aria-describedby="{uid}-prior-w-h" aria-invalid={priorProblem ? 'true' : undefined} />
