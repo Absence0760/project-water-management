@@ -89,6 +89,7 @@ export const SECTIONS: Record<string, string> = {
 	'landing.audiences': 'Landing page: “Who it’s for”, four kinds of user.',
 	'landing.how': 'Landing page: “How it works”, three steps.',
 	'landing.trust': 'Landing page: “Why trust it”, and three figures from the example catchment.',
+	crash: 'The error page: shown in place of a page that crashed (with an error id the person can quote when they report it) or an address that matches no page. Plain and calm; it is not the person’s fault.',
 	error: 'A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.',
 	'error.minutes': 'Error messages: a number of minutes inside “Try again in {wait}”.',
 	'error.status': 'Error messages for a problem the server gave no reason for.'
