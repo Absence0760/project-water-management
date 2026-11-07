@@ -8038,21 +8038,12 @@ editor's and a large boundary's notes in step 4
 
 The four planning outputs were brought to the operator's mock-ups
 ([planning-outputs.md §3.8](./design/planning-outputs.md#38-against-the-operators-mock-ups-2026-11-03)).
-Two parts of the seasonal outlook's mock-up need figures the app doesn't store:
+Two parts of the seasonal outlook's mock-up needed figures the app didn't store:
 
-- [ ] **A projected water balance by month** (part 6: irrigation, town,
-  EWR and losses as stacked bars per month of the season, with the
-  projected storage at each month's end). An outlook member stores its
-  season's totals (`OutlookMember`: demand, supplied, season-end storage,
-  days below the EWR), not its months. Durable fix: the engine's
-  `outlookMember` also sums each month of the season (supplied, user
-  supplied, outflow, the EWR shortfall, dam storage at each month's end),
-  the job stores it per member, and the panel draws the median month by
-  month, with its 10–90 % range. It grows each member by about 7 × 5
-  numbers, so `seasonal_outlook_member` needs a migration and the stored
-  result grows with it; an `ENGINE_VERSION` bump for the new member field.
-  Trigger: the WUA asks to see the season month by month, or the
-  hydrologist wants the monthly storage path for the review date.
+- [x] **A projected water balance by month** (part 6): built in engine
+  1.115.0 (2026-11-06): each member keeps its months, each level their
+  medians and 10–90 % ranges, and the briefing draws them (model.md §2.15e,
+  ui.md § Seasonal outlook). No migration: a member is stored as JSON.
 - [ ] **A derived monthly operating plan** (part 4: a % per month the app
   works out). The outlook tests a plan the WUA types in (R1's `months`
   form) and doesn't derive one, by design (§3.5: the WUA decides). If it is

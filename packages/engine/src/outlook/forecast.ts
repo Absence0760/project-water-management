@@ -56,7 +56,7 @@ import {
 	type OutlookMember
 } from './outlook';
 import { applyQuantileMap, fitQuantileMap, type QuantileMap } from './qm';
-import { resolveSeason, type OutlookAnalogue, type OutlookSeason, type ResolvedSeason } from './season';
+import { resolveSeason, seasonMonths, type OutlookAnalogue, type OutlookSeason, type ResolvedSeason } from './season';
 import { crpsEnsemble, crpss } from './skill';
 import { defaultReviewDate, reviewStorageHistory, storageBands, tercileEdges } from './triggers';
 
@@ -98,27 +98,6 @@ function parseMonth(v: unknown): number | null {
 	if (typeof v !== 'string' || !/^\d{4}-\d{2}$/.test(v)) return null;
 	const m = Number(v.slice(5, 7));
 	return m >= 1 && m <= 12 ? Number(v.slice(0, 4)) * 12 + m - 1 : null;
-}
-
-/** One calendar month of a season: its month and its first and last season day (0-based, inclusive). */
-export interface SeasonMonth {
-	month: string;
-	index: number;
-	firstDay: number;
-	lastDay: number;
-}
-
-/** The calendar months a season's days fall in, in order. */
-export function seasonMonths(season: OutlookSeason): SeasonMonth[] {
-	const s = resolveSeason(season);
-	const out: SeasonMonth[] = [];
-	for (let i = 0; i < s.days; ) {
-		const index = monthOfDay(s.from + i);
-		const last = Math.min(s.days - 1, monthFirstDay(index + 1) - 1 - s.from);
-		out.push({ month: monthText(index), index, firstDay: i, lastDay: last });
-		i = last + 1;
-	}
-	return out;
 }
 
 const rainOf = (run: OutlookBaseRun) => {

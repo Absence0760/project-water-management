@@ -52,7 +52,9 @@ async function seedTwelveYears(request: APIRequestContext, name: string) {
 }
 
 type Year = { waterYear: number; label: string; seasonEndStorageM3: number | null; demandM3: number; suppliedM3: number; userDemandM3: number; demandMet: number | null; ewrDays: { days: number; below: number } };
-type Level = { id: string; label: string; problems: string[]; nYears: number; years: Year[] };
+type Stat = { p10: number; p50: number; p90: number };
+type MonthStat = { month: string; demandM3: Stat; suppliedM3: Stat; ewrM3: Stat; ewrMetM3: Stat; storageEndM3: Stat | null };
+type Level = { id: string; label: string; problems: string[]; nYears: number; years: Year[]; seasonEndStorageM3: Stat | null; months: MonthStat[] | null };
 type OutlookBody = {
 	outlook: {
 		id: string;
@@ -210,8 +212,26 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await expect(panel.getByTestId('outlook-monthly-plan').locator('li')).toHaveText(['Oct 100 %', 'Nov 100 %', 'Dec 100 %', 'Jan 80 %', 'Feb 80 %', 'Mar 80 %', 'Apr 80 %']);
 	await expect(table.locator('tbody th').nth(1)).toContainText('15 % less demand');
 	await expect(table.locator('tbody th').nth(3).getByTestId('outlook-plan-months')).toHaveText('Oct 100 %, Nov 100 %, Dec 100 %, Jan 80 %, Feb 80 %, Mar 80 %, Apr 80 %');
-	// No month-by-month balance is stored: the part says so rather than drawing one.
-	await expect(panel.getByTestId('outlook-balance')).toContainText('Not drawn yet: an outlook keeps each past season’s totals, not its months');
+	// 6. The season month by month (engine 1.115.0) at the planning figure: the chart, and the table it pictures from the stored medians.
+	const balance = panel.getByTestId('outlook-balance');
+	await expect(balance.getByTestId('outlook-balance-level')).toHaveValue(pick!.id);
+	await expect(balance.getByTestId('outlook-balance-chart').locator('rect[data-part="irrigation"]')).toHaveCount(7);
+	const months = pick!.months!;
+	expect(months.map((m) => m.month)).toEqual(['2018-10', '2018-11', '2018-12', '2019-01', '2019-02', '2019-03', '2019-04']);
+	const rows = balance.getByTestId('outlook-balance-table').locator('tbody tr');
+	await expect(rows.locator('th')).toHaveText(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr']);
+	for (const [k, m] of months.entries()) {
+		const cells = rows.nth(k).locator('td');
+		await expect(cells.nth(0)).toHaveText(`${vol(m.suppliedM3.p50)} (${vol(m.demandM3.p50)})`);
+		await expect(cells.nth(2)).toHaveText(`${vol(m.ewrMetM3.p50)} (${vol(m.ewrM3.p50)})`);
+		await expect(cells.nth(4)).toHaveText(`${vol(m.storageEndM3!.p50)} (${vol(m.storageEndM3!.p10)} – ${vol(m.storageEndM3!.p90)})`);
+	}
+	// The last month's dams are the season end's, as the table above has them.
+	expect(months.at(-1)!.storageEndM3!.p50).toBeCloseTo(pick!.seasonEndStorageM3!.p50, 3);
+	// Another level redraws it.
+	const other = r.levels.find((l) => l.id !== pick!.id)!;
+	await balance.getByTestId('outlook-balance-level').selectOption(other.id);
+	await expect(rows.first().locator('td').first()).toHaveText(`${vol(other.months![0]!.suppliedM3.p50)} (${vol(other.months![0]!.demandM3.p50)})`);
 	const messages = panel.getByTestId('outlook-messages').locator('li');
 	await expect(messages.first()).toHaveText(`In past seasons from this start, ${pick!.label} met the EWR in full in ${metIn(pick!)} of ${n} years: the highest level to do so in at least 55 % of them.`);
 	await expect(messages.last()).toHaveText('All of this is worked out from past weather, not a forecast or a promise. The WUA decides the season’s level and publishes it as the restriction notice.');

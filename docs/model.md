@@ -13991,6 +13991,42 @@ data mirror's 1° daily arrays (`c3s/<YYYY-MM>/tp_mm`,
   (`FarmOutlookProjection.forecast`), and the farm's figures are the
   analogue years' as before.
 
+### 2.15e The season month by month (engine 1.115.0, the briefing's water balance)
+
+The briefing's part 6 (planning-outputs.md §3.8, the operator's mock-up)
+draws one level's season month by month. A member (`outlookMember`) also
+carries `months`: each calendar month the season's days fall in
+(`seasonMonths`, the first and last cut to the season; months of the
+season's calendar, not the analogue year's), with, over its season days:
+
+- `demandM3` / `suppliedM3`: the farms' irrigation demand and supply, and
+  `userDemandM3` / `userSuppliedM3` the other water users', as the season
+  totals; the months add up to them.
+- `damLossM3`: what left the farm dams for good, `dam_evaporation` plus
+  `dam_seepage_lost`. The rest of the seepage joins the river (§2.5), so it
+  is not a loss.
+- `ewrM3`: the outlet's pragmatic EWR (the `ewr` series, ≥ 0), and
+  `ewrMetM3` the part the river carried, Σ max(0, ewr + min(0,
+  ewr_shortfall)) day by day, so never above `ewrM3`.
+- `storageEndM3`: Σ farm dam storage on the month's last season day; the
+  last month's is `seasonEndStorageM3`. Null without a dam.
+
+Each level then has `months`: per month, every figure's own median and
+10th–90th percentiles across the years (`OutlookMonthStat`). The medians of
+a month are medians one by one, so they need not add up to any one year's
+month; the view says so. `months` is null below `OUTLOOK_MIN_YEARS` (as
+every statistic) and for members without months: an outlook stored before
+1.115.0 has none, and the view asks for it to be run again. Nothing the
+outlook already reported changes: the months are summed in the same pass as
+the season totals.
+
+Tests: `outlook.test.ts` (*the season month by month*: the calendar and the
+days, the months adding up to the totals, a month's storage and EWR read
+from the member run's own series, the statistics' order, a lower level never
+asking for more in a month, null for old members and too few years),
+`outlook.invariants.test.ts` (on random networks: the months add up to the
+season and the EWR carried never exceeds the requirement).
+
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 
 A run can stop at the start of any day and a later run carry on from

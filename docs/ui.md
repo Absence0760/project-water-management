@@ -11658,9 +11658,20 @@ confirmed farmers see the outlook, O5, issue #90).
   none, that the outlook tests a plan the WUA types in and doesn't work one
   out. **5. Reassess and adjust** heads the review triggers (below), each
   band's level set beside the planning figure. **6. Projected water balance
-  by month** (`outlook-balance`): not drawn, since an outlook keeps each
-  past season's totals, not its months; the part says so (followups.md §
-  Planning outputs against the mock-ups). Last, **Key messages for
+  by month** (`outlook-balance`, `outlook/OutlookBalance.svelte`, view model
+  `briefing.ts` `buildBalance`; engine ≥ 1.115.0, model.md §2.15e): one
+  level, the planning figure's by default, else the highest run, with a
+  **Demand level** picker when there are several. Stacked bars per month
+  (irrigation supplied, other water users supplied, the EWR the river
+  carried, lost from the dams) and the dams at each month's end as a line in
+  its shaded 10–90 % range, every figure its own median over the analogue
+  years (the intro says the parts need not add up to one year's); a month
+  the season only partly covers is named so (*Oct (from the 15th)*). The
+  chart is aria-hidden; the table under it is what a screen reader reads:
+  per month, irrigation supplied (of demand), other users, the EWR carried
+  (of required), the dams' losses and their storage (10–90 %). An outlook
+  from before 1.115.0 has no months and the part asks for it to be run
+  again; too few years, that there is no median month by month. Last, **Key messages for
   farmers** (`outlook-messages`), each a sentence about past seasons: the
   planning figure's count, what the highest level gave the units (median and
   10–90 %), the review date, and that it is worked out from past weather and

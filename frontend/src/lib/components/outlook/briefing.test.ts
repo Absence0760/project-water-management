@@ -6,7 +6,7 @@ import { summariseOutlook, type OutlookMember, type ProjectModel } from '@water-
 import { describe, expect, it } from 'vitest';
 import type { OutlookResult } from '#lib/api/types.js';
 import { levelDescription } from '#lib/format/demandLevel.js';
-import { buildBriefing, levelWords, naturalContext, planMonths, volume, windowTotal } from './briefing';
+import { buildBalance, buildBriefing, levelWords, naturalContext, planMonths, volume, windowTotal } from './briefing';
 
 const SEASON = { decisionDate: '2012-10-01', seasonEnd: '2013-04-30' };
 const MONTHS = [10, 11, 12, 1, 2, 3, 4];
@@ -184,5 +184,60 @@ describe('buildBriefing', () => {
 		for (const m of [[11, 12, 12], [7, 10, 12], [2, 3, 4]] as const) {
 			expect(JSON.stringify(buildBriefing(outlook(result([...m])), MONTHS))).not.toMatch(/recommend|likely|should|best|optimal/i);
 		}
+	});
+});
+
+describe('6. the water balance by month (buildBalance)', () => {
+	// Every year the same months, scaled by the level's factor; the season starts mid-October in `mid`.
+	const monthsOf = (factor: number, wy: number, from = 1) =>
+		MONTHS.map((m, k) => {
+			const y = m >= 10 ? 2012 : 2013;
+			const ym = `${y}-${String(m).padStart(2, '0')}`;
+			const days = k === 0 ? 32 - from : new Date(Date.UTC(y, m, 0)).getUTCDate();
+			return { month: ym, days, demandM3: 20_000 * factor, suppliedM3: 18_000 * factor + (wy % 3), userDemandM3: 1_000, userSuppliedM3: 1_000, damLossM3: 500, ewrM3: 4_000, ewrMetM3: 3_000, storageEndM3: 60_000 - 3_000 * k - (wy - 2000) * 100 };
+		});
+	const withMonths = (n = 12, from = 1): OutlookResult => {
+		const analogues = years(n).map((wy) => ({ waterYear: wy, label: label(wy), from: `${wy}-10-01`, to: `${wy + 1}-04-30` }));
+		const level = (id: string, l: string, factor: number) => ({ id, label: l, problems: [], members: years(n).map((wy, i) => ({ ...member(wy, i < 10 ? 0 : 5, factor), months: monthsOf(factor, wy, from) })) });
+		const season = from === 1 ? SEASON : { decisionDate: `2012-10-${String(from).padStart(2, '0')}`, seasonEnd: SEASON.seasonEnd };
+		return { ...summariseOutlook({ season, model, analogues, excluded: [], levels: [level('a', '100 %', 1), level('b', '85 %', 0.85)], startStorageM3: 52_000 }), failures: [] };
+	};
+
+	it('draws the planning figure’s level by default, each month’s medians and the storage range', () => {
+		const r = withMonths();
+		expect(r.planning).toMatchObject({ reason: 'met', levelId: 'a' });
+		const v = buildBalance({ result: r }, null);
+		if (!v.ok) throw new Error(v.text);
+		expect(v).toMatchObject({ levelId: 'a', label: '100 %', planning: true, capacityM3: 80_000, unit: { div: 1e3, text: 'thousand m³' } });
+		expect(v.months.map((m) => m.name)).toEqual(['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr']);
+		const oct = v.months[0]!;
+		expect(oct).toMatchObject({ irrigationDemand: 20_000, otherUsers: 1_000, ewr: 3_000, ewrRequired: 4_000, damLoss: 500 });
+		expect(oct.irrigation).toBeCloseTo(18_001, 6);
+		// Storage falls 100 m³ a year: 12 years from 60 000 to 58 900; type-7 percentiles.
+		expect(oct.storage!.p50).toBeCloseTo(59_450, 6);
+		expect(oct.storage!.p10).toBeCloseTo(59_010, 6);
+		expect(oct.storage!.p90).toBeCloseTo(59_890, 6);
+	});
+
+	it('draws another level when picked, and falls back from one that isn’t there', () => {
+		const r = withMonths();
+		const b = buildBalance({ result: r }, 'b');
+		expect(b.ok && b.levelId).toBe('b');
+		expect(b.ok && b.planning).toBe(false);
+		expect(b.ok && b.months[0]!.irrigationDemand).toBeCloseTo(17_000, 6);
+		expect(buildBalance({ result: r }, 'gone').ok && (buildBalance({ result: r }, 'gone') as { levelId: string }).levelId).toBe('a');
+	});
+
+	it('names a month the season only partly covers', () => {
+		const v = buildBalance({ result: withMonths(12, 15) }, null);
+		expect(v.ok && v.months[0]!.name).toBe('Oct (from the 15th)');
+	});
+
+	it('says why it can’t draw: an outlook stored before engine 1.115.0, or too few years', () => {
+		const old = result([12, 12, 12]);
+		// Stored results from before 1.115.0 have no `months` key at all.
+		for (const l of old.levels) delete (l as { months?: unknown }).months;
+		expect(buildBalance({ result: old }, null)).toMatchObject({ ok: false, reason: 'old' });
+		expect(buildBalance({ result: withMonths(5) }, null)).toMatchObject({ ok: false, reason: 'fewYears' });
 	});
 });

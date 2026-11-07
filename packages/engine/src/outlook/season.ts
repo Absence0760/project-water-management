@@ -111,3 +111,34 @@ export function outlookAnalogue(season: ResolvedSeason, waterYear: number): Outl
 
 /** The water year the season itself is in (its decision date's): the analogue that is the season. */
 export const seasonWaterYear = (season: OutlookSeason) => waterYearOf(toEpochDay(season.decisionDate));
+
+// ─── Calendar months ────────────────────────────────────────────────────────
+
+/** A month as one integer: year × 12 + month − 1. */
+const monthIndexOfDay = (day: number) => {
+	const s = fromEpochDay(day);
+	return Number(s.slice(0, 4)) * 12 + Number(s.slice(5, 7)) - 1;
+};
+const monthIndexText = (i: number) => `${String(Math.floor(i / 12)).padStart(4, '0')}-${String((i % 12) + 1).padStart(2, '0')}`;
+
+/** One calendar month of a season: its month and its first and last season day (0-based, inclusive). */
+export interface SeasonMonth {
+	month: string;
+	index: number;
+	firstDay: number;
+	lastDay: number;
+}
+
+/** The calendar months a season's days fall in, in order. */
+export function seasonMonths(season: OutlookSeason): SeasonMonth[] {
+	const s = resolveSeason(season);
+	const out: SeasonMonth[] = [];
+	for (let i = 0; i < s.days; ) {
+		const index = monthIndexOfDay(s.from + i);
+		const last = Math.min(s.days - 1, toEpochDay(`${monthIndexText(index + 1)}-01`) - 1 - s.from);
+		out.push({ month: monthIndexText(index), index, firstDay: i, lastDay: last });
+		i = last + 1;
+	}
+	return out;
+}
+

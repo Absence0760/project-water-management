@@ -128,20 +128,29 @@ test('a number field showing its error leaves its neighbour’s input where it w
 	await expectRowStays(page, wr.getByLabel('From', { exact: true }), wr.getByLabel('To', { exact: true }), '1500');
 });
 
-/** `field` and `neighbour` side by side in one row; `text` makes `field` show its error, which moves neither input. */
+/**
+ * `field` and `neighbour` side by side in one row; `text` makes `field` show its error, which moves neither input.
+ * Positions are measured from the row's own top: a note loading further up the page (the MAP grid's, say) moves the
+ * whole row, which isn't what this checks, and measuring from the page raced it.
+ */
 async function expectRowStays(page: Page, field: Locator, neighbour: Locator, text: string): Promise<void> {
 	await neighbour.scrollIntoViewIfNeeded();
-	const before = (await neighbour.boundingBox())!;
+	const row = neighbour.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " form-row ")][1]');
+	const inRow = async (l: Locator) => {
+		const [b, r] = [(await l.boundingBox())!, (await row.boundingBox())!];
+		return { x: b.x - r.x, y: b.y - r.y };
+	};
+	const before = await inRow(neighbour);
 	// Side by side in one row at 1440.
-	expect(Math.round((await field.boundingBox())!.y)).toBe(Math.round(before.y));
+	expect(Math.round((await inRow(field)).y)).toBe(Math.round(before.y));
 	await field.fill(text);
 	await field.blur();
 	await expect(field).toHaveAttribute('aria-invalid', 'true');
 	const err = page.locator(`#${await field.getAttribute('id')}-err`);
 	await expect(err).toBeVisible();
-	const after = (await neighbour.boundingBox())!;
+	const after = await inRow(neighbour);
 	expect(after.y).toBeCloseTo(before.y, 0);
 	expect(after.x).toBeCloseTo(before.x, 0);
 	// The field's own input stays level with it too.
-	expect((await field.boundingBox())!.y).toBeCloseTo(before.y, 0);
+	expect((await inRow(field)).y).toBeCloseTo(before.y, 0);
 }
