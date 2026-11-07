@@ -2,7 +2,12 @@
 // for information about these interfaces
 declare global {
 	namespace App {
-		// interface Error {}
+		/** What the error page (routes/+error.svelte) shows; `id` is the crash's error id (hooks.client.ts). */
+		interface Error {
+			status: number;
+			message: string;
+			id?: string;
+		}
 		// interface Locals {}
 		// interface PageData {}
 		// interface Platform {}

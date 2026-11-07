@@ -257,6 +257,8 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /auth/logout': async () => ({ as: await freshUser('Mlogout') }),
 	'POST /auth/logout-everywhere': async () => ({ as: await freshUser('Meverywhere') }),
 	'PATCH /auth/me': () => ({ body: { displayName: 'Mass Owner' } }),
+	// A page crash's report (logging/clientErrors.ts): a strict body, logged and never stored.
+	'POST /client-errors': () => ({ body: { id: '0a1b2c3d', status: 500, name: 'TypeError', message: 'Mass crash', stack: 'at mass', path: '/', version: '1' } }),
 	'POST /auth/me/farm-notice': async () => ({ as: await freshUser('Mnotice'), body: { version: FARMER_NOTICE_VERSION } }),
 	'POST /auth/me/accept-terms': async () => ({ as: await freshUser('Mterms'), body: { version: LEGAL_VERSION } }),
 	'POST /auth/change-password': async () => ({ as: await freshUser('Mpassword'), body: { currentPassword: 'correct horse', newPassword: 'correct horse battery' } }),

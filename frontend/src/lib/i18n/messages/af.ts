@@ -1833,6 +1833,24 @@ export const af: Catalogue = {
 	'45db8d33': 'Te veel pogings. Wag ’n minuut en probeer weer.',
 	// Something went wrong. Try again.
 	'9df7013d': 'Iets het verkeerd geloop. Probeer weer.',
+	// Something went wrong on this page
+	'23143c0c': 'Iets het op hierdie bladsy verkeerd geloop',
+	// Page not found
+	'7e991d37': 'Bladsy nie gevind nie',
+	// This page could not be shown
+	'fd8964a0': 'Hierdie bladsy kon nie gewys word nie',
+	// Check the address, or go back and follow a link.
+	'7c2ff5f3': 'Kyk die adres na, of gaan terug en volg ’n skakel.',
+	// Error id
+	'07e81bce': 'Fout-ID',
+	// If you report this, quote the error id: it tells us exactly what went wrong.
+	'c6f4d76f': 'As jy dit rapporteer, noem die fout-ID: dit sê vir ons presies wat verkeerd geloop het.',
+	// Reload the page
+	'5d734c26': 'Herlaai die bladsy',
+	// Back to your projects
+	'5b46b440': 'Terug na jou projekte',
+	// Back to your hydrological units
+	'4482783c': 'Terug na jou hidrologiese eenhede',
 	// The reminder to confirm your email address could not be loaded. Check your connection, then reload the page.
 	'25601c1d': 'Die herinnering om jou e-posadres te bevestig kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
 	// Email
@@ -2273,8 +2291,6 @@ export const af: Catalogue = {
 	'8c040ccc': 'Ten minste 8 karakters. As jy dit verander, word jy op elke toestel uitgeteken.',
 	// Set new password
 	'4a62d996': 'Stel nuwe wagwoord',
-	// Back to your projects
-	'5b46b440': 'Terug na jou projekte',
 	// Shared application
 	'28c82702': 'Gedeelde aansoek',
 	// Shared evidence pack
