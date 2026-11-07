@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { addedLines, compileTerms, isReleasedMigration, parseTerms, scanText, termsFileCandidates } from './check_client_terms.mjs';
+import { addedLines, compileTerms, isReleasedMigration, parseTerms, redact, scanText, termsFileCandidates } from './check_client_terms.mjs';
 
 // Synthetic terms only: the real list lives outside the repo.
 const patterns = compileTerms(parseTerms('# invented client\nMadeup River\nFakefarm  # a farm\n\n'));
@@ -109,6 +109,23 @@ function repo() {
 	commit('init');
 	return { dir, g, put, commit, run, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
+
+test('redact replaces every spelling of every term in a path', () => {
+	const patterns = compileTerms(parseTerms('Madeup River\nFakefarm\n'));
+	assert.equal(redact('data/madeup-river/Fakefarm_dams.json', patterns), 'data/[term #1]/[term #2]_dams.json');
+	assert.equal(redact('data/fakefarm/fakefarm.csv', patterns), 'data/[term #2]/[term #2].csv');
+	assert.equal(redact('docs/ok.md', patterns), 'docs/ok.md');
+});
+
+test('a term in a file path fails the full scan, and the path is printed redacted', (t) => {
+	const r = repo();
+	t.after(r.done);
+	r.put('data/fakefarm-dams/notes.md', 'nothing here\n');
+	r.commit('p');
+	const res = r.run();
+	assert.equal(res.status, 1);
+	assert.match(res.stderr, /::error file=data\/\[term #1\]-dams\/notes\.md::client term #1/);
+});
 
 const MIGRATION = 'backend/migrations/001_a.sql';
 
