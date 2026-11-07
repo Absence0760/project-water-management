@@ -1283,6 +1283,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/resend-verification', exempt: 'resends the caller’s verification email; changes no project' },
 	{ route: 'POST /auth/resend-confirmation', exempt: 'emails an unconfirmed account a new confirmation link, signed out; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/login', exempt: 'starts a session (auth rate limits and lockout cover abuse); changes no project' },
+	{ route: 'POST /client-errors', exempt: 'logs the caller’s own page crash report (logging/clientErrors.ts); writes nothing to the database or any project' },
 	{ route: 'POST /auth/logout', exempt: 'ends the caller’s session; changes no project or its history' },
 	{ route: 'POST /auth/logout-everywhere', exempt: 'ends every session of the caller’s account; changes no project' },
 	{ route: 'POST /auth/me/farm-notice', exempt: 'records the caller’s own acknowledgement of the farm view notice on their account (093); changes no project' },
