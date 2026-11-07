@@ -67,8 +67,12 @@ on:
 permissions:
   contents: read
 
+# Only this component's deploys share the queue. Every published release starts both
+# workflows, and the other's skips itself; in the shared group that skipped run replaced
+# a queued deploy (GitHub keeps one pending run per group) and cancelled it: backend@0.21.0
+# was cancelled by web@0.17.0's run of this workflow. Any other release gets a group of its own.
 concurrency:
-  group: deploy-backend
+  group: ${{ (github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'backend@')) && 'deploy-backend' || format('deploy-backend-other-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:

@@ -1127,6 +1127,15 @@ nothing. Step by step:
    the run and clicks **Review deployments → Approve and deploy**. Only then
    can the job get an OIDC token with the `environment:production` subject
    the deploy role trusts.
+
+   Each component's deploys queue one at a time (the workflow's
+   `concurrency` group). GitHub keeps one waiting run per group, so a newer
+   release of the same component replaces one still waiting behind a deploy
+   (it shows as cancelled; the newer one ships its commits anyway). The other
+   component's release, which starts this workflow too and skips, gets a group
+   of its own, so it never cancels a waiting deploy. Until 2026-11-07 it
+   shared the group and did: backend@0.21.0 was cancelled by web@0.17.0 and
+   re-run by hand (`gh run rerun <run id>`).
 8. **attach** adds what shipped to the Release (`backend-X.Y.Z-lambda.zip`,
    `-migrate.zip`, `-worker.zip` and `-fetcher.zip`, or
    `web-X.Y.Z-build.zip`). The renderer image is not attached: it stays in
