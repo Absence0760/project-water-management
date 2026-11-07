@@ -4013,7 +4013,7 @@ PDF someone else asked for kept the person as a recipient
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
 | The Map's records of who made them: a map import, a feature, a delineation proposed or decided (175) | `geo_source.imported_by`, `map_feature.created_by`, `delineation_proposal.created_by` and `decided_by` | With the project (superseded and rejected proposals past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); a proposal's polygon, dataset and method hold nothing about the person; its decision stays final (175 `delineation_proposal_final`, only the foreign key clears `decided_by`) | Deleted |
 | A model proposed from the map (178): who proposed and decided it | `start_proposal.created_by` and `decided_by` | With the project (superseded and discarded ones past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); the plan (units, areas, outlines from the project's map) and the decision hold nothing about the person; the decision stays final (178 `start_proposal_final`) | Deleted |
-| Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
+| Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person, except a page crash's `client_error` line, which names the user's id (§ Client error reports); it ages out with the log group | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out, never restored into use without re-applying erasures: a restore re-reads `erasure_log` and the audit log's revocations on the old instance and deletes them again before traffic is back ([deployment.md § Restoring the database](./deployment.md#restoring-the-database), step 6a). The old instance's final snapshot, which never expires, is taken only if needed and deleted within 30 days | Same |
 | Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down: 90 days after the shutdown notice, so an organisation can ask for its projects back, then deleted (Privacy §7, operator agreement 10.2) | Stays in it | Stays in it |
 
@@ -4111,6 +4111,37 @@ same way.
   POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
 - **Correction:** a person edits their own name (Account); an owner fixes
   anything else in the project.
+
+### Client error reports
+
+A page that crashes in the browser (an exception while it loaded or
+rendered, or a 5xx; never a 404) is reported by the SPA's `handleError` hook
+(`frontend/src/hooks.client.ts`) to `POST /client-errors` ([api.md § Client
+error reports](./api.md#client-error-reports)), so the operator can see what
+threw from the error id the error page shows the user ([ui.md § Error
+page](./ui.md#error-page)).
+
+- **What is sent:** the error id, the status, the error's name, message
+  (500 characters) and stack (4000), the page's path and query string (500)
+  and the web build's version. No form data, no page content, no request or
+  response bodies, no cookies or headers. The message is the exception's own
+  text, which can quote a value the code was handling (a field's text, a
+  catchment name), and the query string is the page's own address, so treat
+  the line as personal information about the user.
+- **Who can send:** signed-in users only (`requireUser`, `401` signed out;
+  a report renderer's session is refused, `403`). The server adds the user
+  id from the session, never from the body. The body is `.strict()`, every
+  string length-capped, read through `readJson`, and a refusal echoes
+  nothing back.
+- **Where it goes:** one `client_error` line in the API Lambda's log group
+  (`logEvent('error', …)`), nothing in the database. It ages out with the
+  log group (`lambda_log_retention_days`, 30 days), and an erased account's
+  lines are not deleted early. Not in "Download my data", which reads the
+  database only.
+- **Abuse:** a signed-in user could send made-up reports; they can only add
+  log lines under their own user id, at most 5 a page load from the app and
+  otherwise under the WAF's per-IP rate limit. The `client-error` alarm
+  (`infra/alarms.tf`, essential tier) pages on any line, so a flood is seen.
 
 ## Public repo hygiene
 
