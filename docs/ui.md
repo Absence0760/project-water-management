@@ -218,9 +218,10 @@ threw.
 - **Language.** Kit loads the error page with the app's first download, so
   it stays off the message catalogue: its words are `msg()`s (sheet section
   `crash`), worded through the i18n module only on the translated routes,
-  where the root layout has already loaded it, and English elsewhere. No
-  Afrikaans for them yet: they show in English until the sheet's rows are
-  translated (§ Language).
+  where the root layout has already loaded it, and English elsewhere. Their
+  Afrikaans went through the translator and checker agents ("Fout-ID" for
+  the error id; not yet reviewed by a native speaker, like the rest of
+  `af.ts`).
 - Tests: `clientErrors.test.ts` (truncation, the id, what is reported and
   shown), `e2e/tests/error-page.spec.ts` (a real render crash, the projects
   list's answer changed so a cell's date code throws, shows the message and
