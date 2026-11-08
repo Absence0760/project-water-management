@@ -197,6 +197,20 @@ resource "aws_vpc_security_group_egress_rule" "nat_https" {
 
 # --- The NAT instance ---------------------------------------------------------
 
+# The first version declared the NAT's ENI as a resource of its own and
+# attached it as the instance's primary interface. That ENI is still the
+# instance's primary interface (and holds the Elastic IP), so it is dropped
+# from state, not destroyed: deleting it would cut the NAT off (2026-11-08,
+# the plan for #737 wanted to). Its attachment is set to delete on
+# termination, so a future replacement leaves nothing behind.
+removed {
+  from = aws_network_interface.nat
+
+  lifecycle {
+    destroy = false
+  }
+}
+
 # The fixed address CHC sees (output public_ip; tell them it is ours).
 # Associated with whichever instance is current: replacing the instance moves
 # the same allocation onto the new one.

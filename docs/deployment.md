@@ -1858,7 +1858,11 @@ addresses.
   pins it to the AMI's release, which would never get newer fixes). The
   instance boots with a temporary public IP (dnf needs the internet), and
   the Elastic IP is then associated with it; a replacement instance takes
-  the same allocation, so the address never changes. A failed EC2 system check
+  the same allocation, so the address never changes. (Production's instance
+  still has the first version's ENI as its primary interface: the module
+  drops that ENI from state with a `removed` block, `destroy = false`,
+  rather than deleting it under the running NAT, and its attachment deletes
+  on termination like any primary interface's.) A failed EC2 system check
   recovers it onto other hardware and a failed instance check reboots it
   (`water-management-egress-nat-system-check` and `-nat-instance-check`,
   paging at the essential tier).
