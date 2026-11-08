@@ -7,7 +7,7 @@
 // (mapLayers.test.ts).
 import type { MapFeature, MapPosition } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
-import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from '#lib/components/legal/dataCredits.js';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, LYNCH_MAP_MAP_ATTRIBUTION, LYNCH_MAP_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from '#lib/components/legal/dataCredits.js';
 import { boundsOfAll } from './mapData';
 import { interiorPoint } from './pieces';
 import type { ReadonlyURLSearchParams } from '$app/state';
@@ -209,13 +209,14 @@ export const jrcCreditedFeature = (f: Pick<MapFeature, 'properties'>) => {
 };
 
 /** A licensed source the map credits while its data is drawn; its id is also its section on the data sources page (`/data-sources#<id>`). */
-export type MapCredit = 'hydrorivers' | 'jrc-water' | 'waas-map';
+export type MapCredit = 'hydrorivers' | 'jrc-water' | 'waas-map' | 'lynch-map';
 
 /** Each credit's line on the map's attribution control (English: the workspace's map; the farm map words its own, farmMap.ts). */
 export const MAP_CREDIT_TEXT: Readonly<Record<MapCredit, string>> = {
 	hydrorivers: HYDRORIVERS_MAP_ATTRIBUTION,
 	'jrc-water': JRC_WATER_MAP_ATTRIBUTION,
-	'waas-map': WAAS_MAP_MAP_ATTRIBUTION
+	'waas-map': WAAS_MAP_MAP_ATTRIBUTION,
+	'lynch-map': LYNCH_MAP_MAP_ATTRIBUTION
 };
 
 /**
@@ -223,8 +224,8 @@ export const MAP_CREDIT_TEXT: Readonly<Record<MapCredit, string>> = {
  * (docs/maps.md § Sources): HydroRIVERS while the River network layer draws
  * its reaches (`riversDrawn`) or a river added from one is drawn, then JRC
  * Global Surface Water while a traced outline is, then the Southwestern Cape
- * MAP surface while the MAP grid layer draws points of a grid stored with its
- * credit line (`mapGridAttribution`: the drawn grid's attribution, null while
+ * MAP surface or the Lynch (2004) grid while the MAP grid layer draws points
+ * of a grid stored with that surface's credit line (`mapGridAttribution`: the drawn grid's attribution, null while
  * the layer draws nothing). Empty when nothing drawn is licensed data. The
  * basemap's and the relief's credits are their own sources' and are not
  * listed here.
@@ -234,6 +235,7 @@ export function mapCredits(features: readonly Pick<MapFeature, 'kind' | 'propert
 	if (riversDrawn || features.some(creditedFeature)) out.push('hydrorivers');
 	if (features.some(jrcCreditedFeature)) out.push('jrc-water');
 	if (mapGridAttribution === WAAS_MAP_STATEMENT) out.push('waas-map');
+	if (mapGridAttribution === LYNCH_MAP_STATEMENT) out.push('lynch-map');
 	return out;
 }
 

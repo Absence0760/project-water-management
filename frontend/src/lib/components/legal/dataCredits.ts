@@ -96,6 +96,29 @@ export const WAAS_MAP_STATEMENT = 'Mean annual rainfall surface for the Southwes
  */
 export const WAAS_MAP_MAP_ATTRIBUTION = 'MAP grid: WAAS (2007), Beuster Clarke & Associates';
 
+/**
+ * The Lynch (2004) MAP grid's credit, as the WRC Atlas asks it to be cited:
+ * the backend's `LYNCH_MAP_ATTRIBUTION` (geo/rainMap.ts), word for word,
+ * which a production load stores as the grid's attribution.
+ */
+export const LYNCH_MAP_STATEMENT =
+	'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
+
+/** The map's attribution control while the MAP grid layer draws the Lynch grid's points: short, linking to the full citation on /data-sources#lynch-map. */
+export const LYNCH_MAP_MAP_ATTRIBUTION = 'MAP grid: Lynch (2004), WRC Atlas';
+
+/**
+ * The WRC Atlas's A-pan grid's credit: the backend's `ATLAS_APAN_ATTRIBUTION`
+ * (geo/evaporationGrid.ts), word for word, stored on the dataset row and shown
+ * under every evaporation proposal from it.
+ */
+export const ATLAS_APAN_STATEMENT =
+	'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06';
+
+/** The licence line both Atlas grids share: what the portal says, and on whose decision they are used. */
+const ATLAS_LICENCE =
+	'The Water Research Observatory’s dataset page lists Creative Commons Attribution-ShareAlike 4.0 and “No License Provided” at once; used on the operator’s decision of 8 November 2026 accepting that risk';
+
 /** The map's attribution control while real HydroRIVERS reaches are drawn: short, linking to the full statement. */
 export const HYDRORIVERS_MAP_ATTRIBUTION = 'Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license';
 
@@ -266,6 +289,26 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licence: 'No licence terms came with the copy used; it is shown with the credit its authors give',
 		read: '2026-10-23',
 		statements: [WAAS_MAP_STATEMENT]
+	},
+	{
+		id: 'lynch-map',
+		name: 'Lynch (2004) mean annual precipitation, from the South African Atlas of Climatology and Agrohydrology',
+		usedFor: 'The map’s MAP grid layer, and the mean annual rainfall a unit’s MAP is proposed from.',
+		publisher: 'Water Research Commission (WRC): S.D. Lynch, WRC Report 1156/1/04 (2004), in R.E. Schulze (ed.), WRC Report 1489/1/06 (2007), from the Water Research Observatory',
+		licence: ATLAS_LICENCE,
+		licenceUrl: 'https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip',
+		read: '2026-10-09',
+		statements: [LYNCH_MAP_STATEMENT]
+	},
+	{
+		id: 'atlas-apan',
+		name: 'A-pan equivalent reference potential evaporation (modelled), from the South African Atlas of Climatology and Agrohydrology',
+		usedFor: 'Calibration → Evaporation from the map: the monthly A-pan row it proposes. These are modelled values, not measured pans.',
+		publisher: 'Water Research Commission (WRC): R.E. Schulze and M. Maharaj, in R.E. Schulze (ed.), WRC Report 1489/1/06 (2007), from the Water Research Observatory',
+		licence: ATLAS_LICENCE,
+		licenceUrl: 'https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip',
+		read: '2026-10-09',
+		statements: [ATLAS_APAN_STATEMENT]
 	},
 	{
 		id: 'dws-quaternaries',

@@ -304,6 +304,14 @@ describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
 		expect(MAP_CREDIT_TEXT['waas-map']).toBe('MAP grid: WAAS (2007), Beuster Clarke & Associates');
 	});
 
+	it('credits the Lynch (2004) grid while the MAP grid layer draws a grid stored with the Atlas’s citation', () => {
+		const lynch = 'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
+		expect(mapCredits([], false, lynch)).toEqual(['lynch-map']);
+		expect(mapCredits([dam, reach], false, lynch)).toEqual(['hydrorivers', 'jrc-water', 'lynch-map']);
+		expect(mapCredits([], false, `${lynch}.`)).toEqual([]);
+		expect(MAP_CREDIT_TEXT['lynch-map']).toBe('MAP grid: Lynch (2004), WRC Atlas');
+	});
+
 	it('words each credit for the attribution control: the JRC line names the source as JRC asks and says the outline was modified', () => {
 		expect(MAP_CREDIT_TEXT['jrc-water']).toBe('Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified');
 		expect(MAP_CREDIT_TEXT.hydrorivers).toMatch(/^Rivers: HydroRIVERS/);
