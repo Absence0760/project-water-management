@@ -848,8 +848,24 @@ security fix that can't wait the week goes under
 An advisory with no fixed release is patched locally instead
 (`pnpm patch`, listed under `patchedDependencies` in `pnpm-workspace.yaml`
 with a guard test), and `osv-scanner.toml` records it with an expiry so
-Scorecard's Vulnerabilities check reads it as handled: deepmerge 4.3.1
-(GHSA-gcqx-w48m-w2h4) is the one today.
+Scorecard's Vulnerabilities check and `supply-chain-scan.yml` read it as
+handled: deepmerge 4.3.1 (GHSA-gcqx-w48m-w2h4) is the one today.
+
+**`supply-chain-scan.yml` is advisory and outside `CI gate`.** On every PR,
+push to `main` and weekly, zizmor (pinned 1.31.1) audits `.github/workflows`
+and `dependabot.yml`, and osv-scanner (pinned 2.7.0, the release binary
+checked against a sha256) walks every lockfile -- `pnpm-lock.yaml`,
+`backend/renderer-deps/package-lock.json` and the `requirements*.txt` under
+`ingest/`, `brand/` and `scripts/wbt-import/` -- with `osv-scanner.toml`
+passed explicitly. Both upload SARIF to code scanning (categories `zizmor`,
+`osv-scanner`) and write a job summary, and neither fails on a finding. The
+code-scanning ruleset names only CodeQL, so their alerts don't block a merge.
+osv-scanner runs `--offline-vulnerabilities`: it downloads the public OSV
+database and sends no package list anywhere. Making them blocking waits on
+the current zizmor findings being fixed and a CISO / Security Analyst
+sign-off; the change then is adding both tools to that ruleset. The shared
+security workflows come from the `templates` repo's `base` branch, so this
+one is to be proposed there too.
 
 There is **no credentialed `terraform plan` in CI**. The only role CI can
 assume is the deploy role, which trusts `environment:production` only and
