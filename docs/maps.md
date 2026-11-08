@@ -3128,7 +3128,8 @@ grid's kind, and **nothing is converted between them**:
 
 `evaporation_dataset` and `evaporation_cell_reference` (180) are global
 reference data: the **operator** loads them as the schema owner and the app
-only reads them.
+only reads them. Its A-pan and S-pan grids are also drawn on the Map tab
+([§ A-pan and S-pan grids](#a-pan-and-s-pan-grids)).
 
 - **Committed: synthetic only.** `backend/fixtures/geo/evaporation.synthetic.json`
   is an invented 0.1° reference-ET grid around the seeded Sandspruit map
@@ -3658,6 +3659,65 @@ units' `mapMm` / `mapSource` only when an editor uses it.
 - **The synthetic grid** proposes invented values, marked as such; the
   units' MAP from it is for development and tests only.
 
+## A-pan and S-pan grids
+
+The Map tab's **A-pan grid** and **S-pan grid** layers (`layers=apangrid`,
+`layers=spangrid`, beside **MAP grid**, each toggled on its own) draw one
+loaded evaporation grid of their kind ([§ The evaporation
+grid](#the-evaporation-grid): `evaporation_dataset.kind` `apan` or `span`)
+the way the MAP grid layer draws its grid ([§ MAP grid](#map-grid)): a dot
+per cell centre in view, coloured by its value, labelled with it in whole mm
+from the zoom where a label clears the next row (`mapGridLabelMinZoom`, from
+the grid's cell size), with the same view snapping, caps and messages.
+
+- **The year or a month.** The Layers box's **Show** picker offers **Year
+  (total)** (the default: the 12 monthly means summed) and then the months
+  October to September, the water-year order the rest of the app shows months
+  in. The dots are coloured by the value a year (a month's value × 12), so a
+  month reads on the same ramp (`mapStyle.ts` `APAN_RAMP`, yellow to dark
+  orange; `SPAN_RAMP`, lilac to purple; both apart from the MAP grid's blues
+  and ringed in the halo colour). The summary names what the values are ("mm a
+  year", "mm in January (mean)"), the grid, its cell size and period, and the
+  range in view.
+- **What the values are, said under them.** The source line starts with the
+  server's words for the grid's values (`evaporation.ts` `evaporationLabel`):
+  for the WRC Atlas's grid, "Modelled A-pan equivalent reference potential
+  evaporation (WRC Atlas, not a measured pan)."; an S-pan grid adds "a
+  cross-check only, never used by the model." (`mapLayers.ts`
+  `evaporationGridWhat`). Then the source and, when it differs, the credit.
+- **Drawn together.** Grids on the same cells (the Atlas's MAP, A-pan and
+  S-pan grids are all its 1′ grid) draw as rings round one centre: the S-pan
+  dot is the largest and lowest, the A-pan dot over it, the MAP dot on top;
+  the A-pan value sits above its dot, the S-pan value to its right, the MAP
+  value under its own.
+- **The view decides what is asked.** `GET
+  …/map/evaporation-grid?kind=&bbox=&dataset=&month=` ([api.md § Catchment
+  map](./api.md#catchment-map), `geo/evaporationLayerRoutes.ts`) with the view
+  snapped out as the MAP grid's (`mapGridViewBbox`), at most 2° a side and
+  5 000 points an answer (the MAP grid's caps; the Atlas's 1′ grid fits about
+  1.2° each way); a view, dataset or month asked once is answered from the
+  layer's cache (`evaporationGridLayer.svelte.ts`). Viewer and up, as the MAP
+  grid.
+- **One grid at a time.** With more than one of a kind loaded, a **Grid**
+  picker chooses; the default is the proposals' (a real one before the
+  synthetic, then the newest load).
+- **None loaded.** The toggle is offered either way; turned on, it says "No
+  A-pan grid is loaded, so there is nothing to draw" (and how to load one).
+  The repo ships no A-pan or S-pan grid that setup loads: locally, load the
+  invented monthly grids with `pnpm import:evaporation --apan-asc
+  backend/fixtures/geo/apan-asc/apan-{01..12}.synthetic.asc --dataset
+  synthetic-apan --years 1950-1999 --source "Invented" --attribution
+  "Invented"` (and `--span-asc … span-asc/span-{01..12}…` for S-pan). A real
+  (not `synthetic`) A-pan label becomes the default of every A-pan proposal,
+  so drop it again (`DELETE FROM evaporation_dataset WHERE dataset = …` as
+  `pnpm dev:db:psql`) before working on Evaporation from the map.
+- **Reference ET isn't drawn.** An `et0` grid (dPET) is no pan, and a layer of
+  it beside the pans would read as one more: it stays on Evaporation from the
+  map, where its proposal says what it is.
+- **Credits.** While a layer draws points of the WRC Atlas's grid (its stored
+  attribution), the map credits it ([§ Credits on the map](#credits-on-the-map):
+  `atlas-apan`, `atlas-span`).
+
 ## CHIRPS grid
 
 The Map tab's **CHIRPS grid** layer (`layers=chirps`) draws CHIRPS v3's
@@ -3830,6 +3890,8 @@ also its section on the **Data sources and credits** page:
 | `jrc-water` | an outline traced from JRC Global Surface Water is drawn (`jrcCreditedFeature`: its description carries the archive's "Source: EC JRC/Google", which tracing writes, [§ Assisted drawing](#assisted-drawing); a trace from the synthetic raster names no source and is credited nothing) | "Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified": JRC's attribution for a published map, and that the data was modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3)) |
 | `waas-map` | the MAP grid layer draws points of a grid whose attribution is the Southwestern Cape surface's credit line (`mapCredits`' `mapGridAttribution`, from the drawn grid's dataset row; [§ MAP grid](#map-grid)) | "MAP grid: WAAS (2007), Beuster Clarke & Associates": the study and its authors, short, linking to their credit line whole on the data sources page ("Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1."; terms not stated, the operator's decision, [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23)). The whole line wrapped along the map's foot under its Show everything and Key buttons, at 1280 px as on a phone (PR #570) |
 | `lynch-map` | the MAP grid layer draws points of a grid whose attribution is the Lynch (2004) grid's citation (`mapGridAttribution`, as above) | "MAP grid: Lynch (2004), WRC Atlas", linking to the Atlas's citation whole on the data sources page ("Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2"; the operator's decision, [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08)) |
+| `atlas-apan` | the A-pan grid layer draws points of a grid whose attribution is the WRC Atlas A-pan grid's citation (`mapCredits`' `evaporationAttributions`; [§ A-pan and S-pan grids](#a-pan-and-s-pan-grids)) | "A-pan grid: WRC Atlas (modelled)", linking to the citation whole on `/data-sources#atlas-apan` ("Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. …"; the operator's decision, [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08)) |
+| `atlas-span` | the S-pan grid layer draws points of a grid whose attribution is the CCWR S-pan grid's line (as above) | "S-pan grid: WRC Atlas", linking to its line whole on `/data-sources#atlas-span` |
 
 On the Map tab each is its own empty source with an invisible layer, so the
 always-expanded attribution control lists it beside the basemap's
@@ -3849,7 +3911,7 @@ credited feature (`credit: 'hydrorivers' | 'jrc-water'`, `farms/view.ts`,
 `geo/credits.ts` `jrcTraced`; never the description it reads). A traced dam
 split in two keeps the credit on both parts (the new part's description
 ends with the statement, `geo/routes.ts`). The GeoJSON download carries the
-first two credits ([§ Download GeoJSON](#download-geojson)); it holds no MAP grid.
+first two credits ([§ Download GeoJSON](#download-geojson)); it holds no grid layer's points.
 
 ### Checksums
 

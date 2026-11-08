@@ -4770,6 +4770,15 @@ map" card) stays the schematic; this is the geography.
   points are drawn), a **Grid** picker when
   more than one is loaded, and "Zoom in to see the MAP grid" or "This view
   holds more than 5 000 of the grid’s points" when the view is too wide.
+  **A-pan grid** and **S-pan grid** (`layers=apangrid`, `layers=spangrid`,
+  each its own toggle with its ramp as its swatch): on, one loaded A-pan or
+  S-pan evaporation grid's points in view the same way, the year's total by
+  default or a month picked under **Show** (Year (total), then October to
+  September); the source line says what the values are ("Modelled A-pan
+  equivalent … (WRC Atlas, not a measured pan)."; the S-pan grid "a
+  cross-check only, never used by the model."), the WRC Atlas grids are
+  credited on the map while drawn, and with none loaded the box says so
+  ([maps.md § A-pan and S-pan grids](./maps.md#a-pan-and-s-pan-grids)).
   **DEM grid** (`layers=demgrid`, the elevation ramp as its swatch; not
   offered when an editor's delineation check finds no DEM): on, every 10th
   elevation-model cell each way in view, coloured and labelled with its
