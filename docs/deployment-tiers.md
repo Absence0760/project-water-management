@@ -245,7 +245,7 @@ Anomaly Detection once it is turned on after the first apply
 | --- | --- | --- |
 | Drop WAF | ~$10 | It is the API's rate limit and the brute-force guard on sign-in. |
 | API Lambda outside the VPC, public RDS | ~$29–38 (no endpoints) | Puts the database on the internet behind only a password. Conflicts with [security.md](./security.md). |
-| NAT gateway instead of endpoints | Costs *more* (~$33 + data) | The fetcher and renderer run outside the VPC so the private VPC needs no NAT. The fetcher and mirror-ingest get one fixed address through a NAT *instance* in a VPC of their own (`fixed_egress_enabled`, about $10/month, on in production: CHC limits by address; [deployment.md § Fixed egress](./deployment.md#fixed-egress)). |
+| NAT gateway instead of endpoints | Costs *more* (~$33 + data) | The fetcher and renderer run outside the VPC so the private VPC needs no NAT. The fetcher and mirror-ingest get one fixed address through a NAT *instance* in a VPC of their own (`fixed_egress_enabled`, about $13/month, on in production: CHC limits by address; [deployment.md § Fixed egress](./deployment.md#fixed-egress)). |
 | Stop RDS when idle | Up to ~$12 | AWS restarts a stopped instance after 7 days; not a production pattern. |
 | Region us-east-1 instead of af-south-1 | ~$14–33 depending on tier | Adds a POPIA cross-border transfer and ~200 ms to every API call ([deployment.md § Region](./deployment.md#region-recommendation)). |
 

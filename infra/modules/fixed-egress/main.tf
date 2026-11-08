@@ -18,12 +18,12 @@
 # files; this module is pinned by tests/egress.tftest.hcl instead):
 #
 #   two private subnets (the Lambdas' ENIs, two AZs)
-#     └─ 0.0.0.0/0 ──► the NAT instance's ENI (public subnet, Elastic IP)
+#     └─ 0.0.0.0/0 ──► the NAT instance's primary ENI (public subnet, Elastic IP)
 #                         └─► internet gateway ──► CHC, DWS, ECMWF, …
 #   S3 in this region (the mirror bucket, DE Africa's buckets) through a free
 #   gateway endpoint, off the NAT instance.
 #
-# A NAT instance, not a managed NAT gateway: about $10 a month (t4g.nano,
+# A NAT instance, not a managed NAT gateway: about $13 a month (t4g.micro,
 # the Elastic IP, 8 GB of gp3) against about $45 plus $0.06 a GB processed,
 # and the ingest job downloads hundreds of MB a day. The trade is one EC2
 # instance in one AZ: an AZ or instance failure stops the two Lambdas'
@@ -31,10 +31,15 @@
 # and the mirror lag and feed alarms page meanwhile. Nothing user-facing runs
 # through it.
 #
-# The ENI is its own resource and carries the Elastic IP, so the address is
-# ready before the instance boots (its first-boot script needs the internet)
-# and survives the instance being replaced (patching: see
-# docs/deployment.md § Fixed egress).
+# The instance owns its primary ENI, with source/destination checking off on
+# the instance. (A separate ENI attached as primary_network_interface can't
+# carry that setting: the provider refuses source_dest_check beside it, and on
+# 2026-11-08 an in-place update of the instance turned checking back on with
+# ModifyInstanceAttribute, so the NAT dropped every forwarded packet.) The
+# Elastic IP is associated with the instance; a replacement instance gets the
+# same allocation, so the address never changes (patching: see
+# docs/deployment.md § Fixed egress). While it boots, before the Elastic IP is
+# moved onto it, a temporary public IP gives its first-boot script the internet.
 # ----------------------------------------------------------------------------
 
 terraform {
@@ -121,7 +126,7 @@ resource "aws_route_table" "private" {
 resource "aws_route" "private_default" {
   route_table_id         = aws_route_table.private.id
   destination_cidr_block = "0.0.0.0/0"
-  network_interface_id   = aws_network_interface.nat.id
+  network_interface_id   = aws_instance.nat.primary_network_interface_id
 }
 
 resource "aws_route_table_association" "private" {
@@ -192,18 +197,12 @@ resource "aws_vpc_security_group_egress_rule" "nat_https" {
 
 # --- The NAT instance ---------------------------------------------------------
 
-resource "aws_network_interface" "nat" {
-  subnet_id         = aws_subnet.public.id
-  security_groups   = [aws_security_group.nat.id]
-  source_dest_check = false # it forwards other hosts' packets
-
-  tags = { Name = "${local.name}-nat" }
-}
-
 # The fixed address CHC sees (output public_ip; tell them it is ours).
+# Associated with whichever instance is current: replacing the instance moves
+# the same allocation onto the new one.
 resource "aws_eip" "nat" {
-  domain            = "vpc"
-  network_interface = aws_network_interface.nat.id
+  domain   = "vpc"
+  instance = aws_instance.nat.id
 
   tags = { Name = "${local.name}-nat" }
 
@@ -221,9 +220,14 @@ resource "aws_instance" "nat" {
   ami           = data.aws_ssm_parameter.al2023_arm64.value
   instance_type = var.instance_type
 
-  primary_network_interface {
-    network_interface_id = aws_network_interface.nat.id
-  }
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.nat.id]
+  # Its own primary ENI forwards other hosts' packets: checking off, on the
+  # instance (the header says why not on a separate ENI).
+  source_dest_check = false
+  # A temporary public IP for first boot (dnf needs the internet before the
+  # Elastic IP is moved onto the instance); the Elastic IP then replaces it.
+  associate_public_ip_address = true
 
   # Standard credits: a NAT this size idles; never pay for unlimited bursting.
   credit_specification {
@@ -245,7 +249,7 @@ resource "aws_instance" "nat" {
   }
 
   # No key pair, no instance profile, no SSM: nothing logs in. A changed
-  # script replaces the instance so it runs again (the ENI and its address stay).
+  # script replaces the instance so it runs again (the address stays).
   user_data                   = file("${path.module}/nat-user-data.sh")
   user_data_replace_on_change = true
 
@@ -255,12 +259,12 @@ resource "aws_instance" "nat" {
     ignore_changes = [ami]
   }
 
-  depends_on = [aws_eip.nat, aws_route.public_default]
+  depends_on = [aws_route.public_default]
 }
 
 # --- Recovery -----------------------------------------------------------------
-# A failed host check: EC2 moves the instance to healthy hardware (same ENI,
-# same address). A failed instance check (a hung kernel): reboot. Both page.
+# A failed host check: EC2 moves the instance to healthy hardware (same
+# instance ID, so the same ENI and address). A failed instance check (a hung kernel): reboot. Both page.
 
 resource "aws_cloudwatch_metric_alarm" "nat_system_check" {
   alarm_name          = "${local.name}-nat-system-check"
