@@ -868,7 +868,7 @@ run "fixed_egress_module" {
     project          = "water-management"
     vpc_cidr         = "10.61.0.0/16"
     zone_ids         = ["afs1-az1", "afs1-az2"]
-    instance_type    = "t4g.nano"
+    instance_type    = "t4g.micro"
     alarm_topic_arns = ["arn:aws:sns:af-south-1:000000000000:water-management-prod-alerts"]
   }
 
@@ -902,10 +902,11 @@ run "fixed_egress_module" {
     }
   }
   override_resource {
-    target          = aws_network_interface.nat
+    target          = aws_instance.nat
     override_during = plan
     values = {
-      id = "eni-000000000nat"
+      id                           = "i-0000000000000nat"
+      primary_network_interface_id = "eni-000000000nat"
     }
   }
   override_resource {
@@ -928,13 +929,13 @@ run "fixed_egress_module" {
     condition = (
       aws_route.private_default.destination_cidr_block == "0.0.0.0/0" &&
       aws_route.private_default.route_table_id == aws_route_table.private.id &&
-      aws_route.private_default.network_interface_id == aws_network_interface.nat.id &&
+      aws_route.private_default.network_interface_id == aws_instance.nat.primary_network_interface_id &&
       aws_route.private_default.gateway_id == null &&
       aws_route.public_default.destination_cidr_block == "0.0.0.0/0" &&
       aws_route.public_default.route_table_id == aws_route_table.public.id &&
       aws_route.public_default.gateway_id == aws_internet_gateway.egress.id
     )
-    error_message = "The private subnets' only way out is the NAT instance's ENI; only the public subnet routes to the internet gateway."
+    error_message = "The private subnets' only way out is the NAT instance's primary ENI; only the public subnet routes to the internet gateway."
   }
   assert {
     condition = (
@@ -947,7 +948,7 @@ run "fixed_egress_module" {
   }
   assert {
     condition     = alltrue([for s in concat(aws_subnet.private, [aws_subnet.public]) : s.map_public_ip_on_launch == false])
-    error_message = "No subnet hands out public IPs: the Elastic IP on the NAT ENI is the only public address."
+    error_message = "No subnet hands out public IPs by default (the NAT instance asks for its own temporary one for first boot)."
   }
   assert {
     condition     = [for s in aws_subnet.private : s.availability_zone_id] == ["afs1-az1", "afs1-az2"] && aws_subnet.public.availability_zone_id == "afs1-az1"
@@ -960,29 +961,31 @@ run "fixed_egress_module" {
 
   # --- The NAT instance -------------------------------------------------------
   assert {
-    condition     = aws_network_interface.nat.source_dest_check == false && aws_network_interface.nat.subnet_id == aws_subnet.public.id && toset(aws_network_interface.nat.security_groups) == toset([aws_security_group.nat.id])
-    error_message = "The NAT ENI sits in the public subnet, in the NAT security group, with source/destination checking off (it forwards)."
+    # Set on the instance: an ENI attached as primary_network_interface can't
+    # carry it, and an update of the instance turned it back on (2026-11-08).
+    condition     = aws_instance.nat.source_dest_check == false && aws_instance.nat.subnet_id == aws_subnet.public.id && toset(aws_instance.nat.vpc_security_group_ids) == toset([aws_security_group.nat.id]) && length(aws_instance.nat.primary_network_interface) == 0
+    error_message = "The NAT instance sits in the public subnet, in the NAT security group, owns its primary ENI (no primary_network_interface), and has source/destination checking off on the instance (it forwards)."
   }
   assert {
-    condition     = aws_eip.nat.domain == "vpc" && aws_eip.nat.network_interface == aws_network_interface.nat.id
-    error_message = "The Elastic IP is on the NAT ENI itself, so it is there before the instance boots and survives the instance's replacement."
+    condition     = aws_eip.nat.domain == "vpc" && aws_eip.nat.instance == aws_instance.nat.id
+    error_message = "The Elastic IP is associated with the NAT instance (a replacement takes the same allocation, so the address never changes)."
   }
   assert {
     condition = (
-      one(aws_instance.nat.primary_network_interface).network_interface_id == aws_network_interface.nat.id &&
-      aws_instance.nat.instance_type == "t4g.nano" &&
+      aws_instance.nat.instance_type == "t4g.micro" &&
+      aws_instance.nat.associate_public_ip_address == true &&
       one(aws_instance.nat.credit_specification).cpu_credits == "standard" &&
       one(aws_instance.nat.metadata_options).http_tokens == "required" &&
       one(aws_instance.nat.metadata_options).http_put_response_hop_limit == 1 &&
       one(aws_instance.nat.root_block_device).encrypted == true &&
       aws_instance.nat.user_data_replace_on_change == true
     )
-    error_message = "The NAT instance: its ENI as primary, standard credits, IMDSv2 only (one hop), an encrypted root volume, replaced when its script changes."
+    error_message = "The NAT instance: a temporary public IP for first boot, standard credits, IMDSv2 only (one hop), an encrypted root volume, replaced when its script changes."
   }
   assert {
     # Unknown at plan when unset, so read the source: nothing logs in.
-    condition     = aws_instance.nat.instance_type != "" && !can(regex("\\n\\s*(key_name|iam_instance_profile|associate_public_ip_address)\\s*=", file("modules/fixed-egress/main.tf")))
-    error_message = "The NAT instance has no key pair, no instance profile and no public IP of its own (only the Elastic IP on its ENI)."
+    condition     = aws_instance.nat.instance_type != "" && !can(regex("\\n\\s*(key_name|iam_instance_profile|primary_network_interface)\\b", file("modules/fixed-egress/main.tf")))
+    error_message = "The NAT instance has no key pair and no instance profile (nothing logs in), and no primary_network_interface (it can't carry source_dest_check)."
   }
   assert {
     condition = (

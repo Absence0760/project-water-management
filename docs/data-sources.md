@@ -156,7 +156,12 @@ in `infra/feeds.tf`):
   718 (2026), doi:10.1038/s41597-026-07096-4. Series are labelled
   `CHIRPS sat` / `CHIRPS rnl` v3.0.
 - **Contact:** chc-help@geog.ucsb.edu. Emailed 2026-10-25 about the 403s and
-  our planned access pattern; no reply yet (#571).
+  our planned access pattern (#571); they replied 2026-10-27 with their
+  per-address limits (below). Emailed again 2026-11-08: from our own fixed
+  address (13.247.28.223, [deployment.md § Fixed egress](./deployment.md#fixed-egress))
+  the GEFS pass still met HTTP 429 at its 13th request, about 31 s in, so we
+  asked their current per-address limit and whether they would allowlist
+  the address; no reply yet (#618).
 - **Access pattern today:** each feed range-reads individual daily GeoTIFFs
   (`daily/final/{rnl,sat}/`, `daily/prelim/sat/`) for its cells, about 5
   requests a file, backfilling from 1981, from the fetcher Lambda's rotating

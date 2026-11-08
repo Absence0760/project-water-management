@@ -1824,15 +1824,25 @@ addresses.
   instance forwards only new outbound HTTPS connections and their replies.
   The module's shape is pinned by `infra/tests/egress.tftest.hcl` (the root
   module's network guardrails read only the root's files).
-- **The NAT instance.** Amazon Linux 2023 on `t4g.nano`
-  (`fixed_egress_instance_type`), standard CPU credits, IMDSv2 only, no key
-  pair, no instance profile: nothing logs in. Its first-boot script
+- **The NAT instance.** Amazon Linux 2023 on `t4g.micro`
+  (`fixed_egress_instance_type`; on a 0.5 GB `t4g.nano` the first-boot dnf
+  install was killed for memory), standard CPU credits, IMDSv2 only, no key
+  pair, no instance profile: nothing logs in. Source/destination checking is
+  off **on the instance**, which owns its primary ENI: with it on, every
+  forwarded packet is dropped. (The first version attached a separate ENI as
+  the instance's primary interface. The provider can't set the check beside
+  that, and on 2026-11-08 an in-place update of the instance turned it back
+  on with `ModifyInstanceAttribute`; the fetcher's connections then timed out
+  at 10 s.) Check it with
+  `aws ec2 describe-instances --profile water-management --filters Name=tag:Name,Values=water-management-egress-nat Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].SourceDestCheck'`
+  (must be `False`). Its first-boot script
   (`nat-user-data.sh`) turns on forwarding and nftables masquerading (the
   ruleset syntax-checked before it loads) and daily security updates
   (`dnf-automatic`, with dnf's release set to `latest`: AL2023 otherwise
-  pins it to the AMI's release, which would never get newer fixes). The Elastic IP is on
-  the ENI, a resource of its own, so the address exists before the instance
-  boots and stays when the instance is replaced. A failed EC2 system check
+  pins it to the AMI's release, which would never get newer fixes). The
+  instance boots with a temporary public IP (dnf needs the internet), and
+  the Elastic IP is then associated with it; a replacement instance takes
+  the same allocation, so the address never changes. A failed EC2 system check
   recovers it onto other hardware and a failed instance check reboots it
   (`water-management-egress-nat-system-check` and `-nat-instance-check`,
   paging at the essential tier).
@@ -1842,7 +1852,7 @@ addresses.
   it has. Nothing user-facing goes through it. A managed NAT gateway would
   remove the instance but costs about $45 a month plus $0.06 a GB processed,
   and the ingest job downloads hundreds of MB a day.
-- **Cost.** About $10 a month in af-south-1: the instance, the Elastic IP's
+- **Cost.** About $13 a month in af-south-1: the instance, the Elastic IP's
   public-IPv4 charge and 8 GB of gp3. No per-GB processing charge.
 - **Turning it on takes two applies.** Set `fixed_egress_enabled = true` in
   the prod tfvars (`infra-secrets/water-management/prod.tfvars`), then:
@@ -1872,7 +1882,7 @@ addresses.
   it on purpose:
   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace='module.fixed_egress[0].aws_instance.nat'`
   (review the plan it shows: only the instance is replaced).
-  The address and the ENI stay; outbound calls stop for the minute or two the
+  The address stays (the Elastic IP moves to the new instance); outbound calls stop for the minute or two the
   new instance takes to boot, so do it outside 02:00–03:30 and 08:30–12:00
   UTC (the daily ingest and GEFS windows).
 - **Turning it off.** `fixed_egress_enabled = false` moves both Lambdas back
@@ -5037,7 +5047,7 @@ interface endpoints (Secrets Manager, SES API, SQS, S3) cost $7.30/month each
 per AZ in us-east-1 ($9.56 in af-south-1), which is still cheaper than a NAT
 (~$33/month plus data); the data feeds' fetcher and the report renderer run
 outside the VPC for the same reason. In production the fetcher and the
-mirror-ingest job leave through the fixed egress instead (about $10/month,
+mirror-ingest job leave through the fixed egress instead (about $13/month,
 § Fixed egress), which is a NAT instance, not a NAT gateway, and only for
 those two. The shared CHIRPS cell cache
 (`chirps_cell_year`, 208) grows with the cells feeds use, about 1.5 KB per
