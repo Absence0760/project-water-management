@@ -51,6 +51,7 @@ proposed there, not forked here.
 - `.github/workflows/audit.yml` — weekly `pnpm audit` + auto-issue
 - `.github/workflows/security.yml` — CodeQL static analysis + container scanning
 - `.github/workflows/scorecard.yml` — OSSF Scorecard
+- `.github/workflows/supply-chain-scan.yml` — zizmor (workflow security) + osv-scanner (every lockfile), advisory (docs/deployment.md)
 - `.github/workflows/claude.yml` — Claude Code automation on PRs/issues
 - `.github/workflows/dependabot-auto-merge.yml` — auto-merges minor/patch Dependabot PRs when the repository allows auto-merge (else it leaves a notice; docs/deployment.md)
 - `.github/workflows/dependabot-lockfile.yml` — re-syncs pnpm lockfile on Dependabot PRs
