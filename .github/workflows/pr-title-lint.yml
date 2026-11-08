@@ -10,8 +10,12 @@ name: pr-title-lint
 # Disable by deleting this file. Failed-check noise on a personal-project
 # PR may not be worth it if you're the only contributor.
 
+# `pull_request`, not `pull_request_target`: the check only reads the PR's
+# title, which the run's read-only token can do on a fork's PR too, so it
+# needs neither this repo's write token nor its secrets (zizmor
+# dangerous-triggers).
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, edited, reopened, synchronize]
 
 permissions: read-all

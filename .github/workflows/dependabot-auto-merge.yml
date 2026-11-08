@@ -32,8 +32,14 @@ name: Dependabot auto-merge
 # (ci.yml) before landing. A red CI run keeps the PR queued until a
 # human intervenes or the PR is closed.
 
+# pull_request_target on purpose (zizmor dangerous-triggers is suppressed
+# here, with the reason): it runs this workflow and fetch-metadata as they are
+# on main, never as the PR has them. Under `pull_request` a Dependabot PR that
+# bumps dependabot/fetch-metadata (or edits this file) would run its own new
+# version with the write token below before anyone read it. Nothing from the
+# PR is checked out or run, and the job is gated on the PR's author.
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     branches: [main]
 
 permissions: read-all

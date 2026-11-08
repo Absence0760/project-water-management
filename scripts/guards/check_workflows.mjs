@@ -32,9 +32,12 @@
 //              job can be red on a commit the gate calls green.
 //   no-cache   a workflow with a production-gated job restores no dependency
 //              cache anywhere (`cache:` on setup-node and friends,
-//              actions/cache). A cache is written by other runs, including
-//              ones that execute untrusted code on main, and a release build
-//              ships what it builds with deploy credentials.
+//              actions/cache), and every actions/setup-node step in it says
+//              `package-manager-cache: false`: setup-node v5+ turns its
+//              cache on by itself when package.json names a packageManager.
+//              A cache is written by other runs, including ones that execute
+//              untrusted code on main, and a release build ships what it
+//              builds with deploy credentials.
 //   image      every `docker build` / `docker buildx build` in a workflow
 //              says --provenance=false --sbom=false and exactly one
 //              --platform, linux/amd64 (the renderer) or linux/arm64 (the
@@ -430,6 +433,35 @@ export function pnpmVersionSteps(lines) {
 }
 
 /**
+ * 1-based lines of `uses: actions/setup-node@…` steps that don't switch off
+ * the package-manager cache setup-node enables on its own (v5+, whenever
+ * package.json has a `packageManager` field). A step ends at the next line
+ * indented no deeper than its own `- `.
+ * @param {string[]} lines
+ * @returns {number[]}
+ */
+export function setupNodeWithImplicitCache(lines) {
+	/** @type {number[]} */
+	const out = [];
+	lines.forEach((l, i) => {
+		if (/^\s*#/.test(l) || !/uses:\s*actions\/setup-node@/.test(l)) return;
+		// The step's own indent: its `- ` (on this line, or the step's first line above).
+		let start = i;
+		while (start > 0 && !/^\s*- /.test(lines[start])) start--;
+		const indent = (lines[start].match(/^(\s*)- /)?.[1] ?? '').length;
+		let off = false;
+		for (let j = start + 1; j < lines.length; j++) {
+			const t = lines[j];
+			if (t.trim() === '' || /^\s*#/.test(t)) continue;
+			if (t.length - t.trimStart().length <= indent) break;
+			if (/^\s+package-manager-cache:\s*false\s*(#.*)?$/.test(t)) off = true;
+		}
+		if (!off) out.push(i + 1);
+	});
+	return out;
+}
+
+/**
  * @param {string} file e.g. `.github/workflows/ci.yml`
  * @param {string} text
  * @param {{ packageManager?: string }} [repo] the root package.json's `packageManager`, when it has one
@@ -510,6 +542,9 @@ export function checkWorkflow(file, text, repo = {}) {
 				out.push({ file, line: i + 1, rule: 'no-cache', message: 'a deploy workflow restores a dependency cache; release builds install cold so a poisoned cache cannot reach production' });
 			}
 		});
+		for (const line of setupNodeWithImplicitCache(lines)) {
+			out.push({ file, line, rule: 'no-cache', message: 'actions/setup-node in a deploy workflow without `package-manager-cache: false`; setup-node restores a pnpm cache by itself when package.json names a packageManager' });
+		}
 	}
 
 	if (file.endsWith('/dependabot-auto-merge.yml')) {

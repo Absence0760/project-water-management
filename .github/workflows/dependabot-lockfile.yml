@@ -61,8 +61,11 @@ permissions:
 
 jobs:
   regenerate:
-    # Only run on Dependabot-authored PRs. github.actor is the bot username.
-    if: github.actor == 'dependabot[bot]'
+    # Only run on Dependabot-authored PRs: the PR's author, not github.actor.
+    # github.actor is whoever triggered this run (the last pusher, or a
+    # re-run), so it can read dependabot[bot] on a PR someone else wrote
+    # (zizmor bot-conditions); the author of the PR cannot be changed.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     # No `permissions:` override — this job inherits the workflow-level
     # `contents: read` AND has no access to any secret. Even if pnpm
@@ -135,7 +138,7 @@ jobs:
     # The `needs.regenerate.result == 'success'` guard makes the chain
     # explicit; the artifact-download step below would also fail if
     # the artifact didn't exist.
-    if: github.actor == 'dependabot[bot]' && needs.regenerate.result == 'success'
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && needs.regenerate.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       # This job touches the PAT and pushes — it needs contents: read

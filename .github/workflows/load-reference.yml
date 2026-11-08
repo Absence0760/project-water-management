@@ -150,6 +150,10 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          # No cache in a workflow that acts with production credentials
+          # (zizmor cache-poisoning); setup-node would otherwise turn its
+          # pnpm cache on from package.json's packageManager.
+          package-manager-cache: false
 
       # Inputs reach the script through the environment, never the shell's text.
       - name: Inputs and licence gates
@@ -180,6 +184,10 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          # No cache in a workflow that acts with production credentials
+          # (zizmor cache-poisoning); setup-node would otherwise turn its
+          # pnpm cache on from package.json's packageManager.
+          package-manager-cache: false
 
       - name: Environment preflight
         env:

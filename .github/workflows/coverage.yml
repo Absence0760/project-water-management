@@ -99,8 +99,10 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
       - name: Install Chromium
+        env:
+          PW_CACHE_HIT: ${{ steps.pw-cache.outputs.cache-hit }}
         run: |
-          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "$PW_CACHE_HIT" = "true" ]; then
             pnpm -C e2e exec playwright install-deps chromium
           else
             pnpm -C e2e exec playwright install --with-deps chromium

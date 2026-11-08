@@ -278,7 +278,6 @@ export async function seedShowcase(d: ShowcaseDeps): Promise<string | null> {
 
 	// The applicant's application: raise their own dam, releasing the EWR through it; run and submitted.
 	const asApplicant = await apiAs(applicant);
-	const middle = nodeId(UNITS.middle);
 	const app = (
 		await asApplicant('POST', `${at}/scenarios`, {
 			...showcaseApplication(stored),
