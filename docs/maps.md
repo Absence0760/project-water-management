@@ -3108,10 +3108,14 @@ grid's kind, and **nothing is converted between them**:
   ([model.md §2.4a](./model.md) *Daily reference ET*). Both are reference
   ET, so neither is converted; the feed changes nothing under pan
   coefficient × A-pan.
-- **A-pan where no pan station is near**: a modelled Class-A pan grid
-  (PenPan from NASA POWER's weather, [§ The evaporation grid](#the-evaporation-grid))
-  proposes the A-pan row as "Modelled Class-A pan (PenPan)", locally only
-  until it is validated against DWS pans.
+- **A-pan where no pan station is near**: the WRC Atlas's A-pan
+  equivalent grid (Schulze and Maharaj, modelled from climate surfaces,
+  [§ The evaporation grid](#the-evaporation-grid)) proposes the A-pan row as
+  "modelled A-pan equivalent reference potential evaporation (WRC Atlas, not
+  a measured pan)", in production too (the operator's decision of
+  2026-11-08); a modelled Class-A pan grid (PenPan from NASA POWER's weather)
+  proposes it as "Modelled Class-A pan (PenPan)", locally only until it is
+  validated against DWS pans.
 
 ### The evaporation grid
 
@@ -3150,6 +3154,36 @@ only reads them.
   station pans; such a grid names its own `--source` and `--attribution`
   (dPET's lines are never put on it). No measured A-pan grid passes D-B
   today (§ Sources).
+- **The WRC Atlas's A-pan grid** (the operator's decision of 2026-11-08,
+  § Sources; the client asked for CCWR's grids). Schulze and Maharaj's A-pan
+  equivalent reference potential evaporation, 12 monthly grids at about 1′,
+  in the Atlas of Agrohydrology 2008 zip (the same download as the Lynch MAP
+  grid). These are modelled from climate surfaces, not measured pans. The
+  Atlas ships ESRI binary grids on the Cape datum (Clarke 1880), so warp
+  each month to WGS84 at the same 1′ cell and write it as ESRI ASCII:
+  `gdalwarp -s_srs EPSG:4222 -t_srs EPSG:4326 -tr 0.0166666666667
+  0.0166666666667 <month> <month>.tif`, then `gdal_translate -of AAIGrid
+  <month>.tif <month>.asc` (square cells: an `.asc` with `dx`/`dy` instead
+  of `cellsize` is refused). `pnpm import:evaporation --apan-asc <jan.asc> …
+  <dec.asc> --dataset Atlas-Apan-2007 --years <first>-<last>` reads the 12
+  grids in calendar order (`apanFromAsciiGrids`, the MAP grid's streaming
+  `.asc` reader, `scanAsciiGrid`), keeps the cells with a value in every
+  month inside `--bbox` (default South Africa's box), and loads them, or
+  writes them with `--out`. `--years` is the period the Atlas says its means
+  cover; it is stored and cited. The grids must share one header; a value
+  past 1 000 mm a month (a grid in tenths of a millimetre) is refused,
+  naming the month and cell. Under the label `Atlas-Apan-2007` the source,
+  version and attribution are always the Atlas's recorded lines (no
+  `--source`), the source starts "Modelled A-pan equivalent (WRC Atlas,
+  Schulze and Maharaj)" and the method says "Modelled, not measured", so no
+  proposal or revision reads it as a measured pan. Twelve monthly grids
+  from another source load under another label with their own `--source`
+  and `--attribution`, locally only. South Africa at 1′ is about 430 000
+  cells, some 40 MB of JSON (8–10 MB gzipped), inside the production load's
+  caps; a catchment spans far fewer than the 40 000 cells one summary reads.
+  The repo's test grids are invented (`backend/fixtures/geo/apan-asc/`).
+  The Atlas's S-pan grids are not loaded: converting S-pan to A-pan needs an
+  equation the hydrologist picks.
 - **A modelled A-pan grid: PenPan** (issue #646 item 7;
   [data-sources.md § penpan-apan](./data-sources.md#penpan-apan), blocked in
   production). Where no pan station is near, `ingest/apan_grid.py` models a
@@ -3188,9 +3222,12 @@ only reads them.
   fixture form instead of loading it, and `load-reference.yml` (kind
   `evaporation`) loads that file through the migrate Lambda
   ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
-  Only a reference-ET grid (`et0`) loads there; an A-pan grid is refused
-  until its source has an allowed row here. The release gate also refuses a
-  PenPan or A-pan key or label before the approval. The attribution, stored on the
+  A reference-ET grid (`et0`) loads there under any label; an A-pan grid
+  only as `Atlas-Apan-2007`, the WRC Atlas's (`REFERENCE_KINDS.evaporation`
+  `apanDatasets`), stored with its recorded lines and no `source` input, and
+  never a PenPan grid, even under that label. The release gate also refuses
+  a PenPan key or label, and any other A-pan key or label, before the
+  approval. The attribution, stored on the
   dataset row, is shown under every proposal (§ Sources).
 - **WR2012's evaporation** is not a grid here: its WRSM2000 configurations'
   monthly A-pan and S-pan per quaternary are proposed by [§ WR2012
@@ -3484,21 +3521,26 @@ the points show without their values), then the grid's source line.
   a production load takes it only as dataset `WAAS-SWCape-2007`, from the
   JSON `--out` writes, and stores its source, version (`v1.1 (March 2007)`)
   and credit line from that table, never the file's or a `source` input.
-  The **Lynch (2004)** national grid stays blocked (its portal lists CC BY-SA
-  4.0 and "No License Provided" at once; followups.md, Decision: the Lynch
-  (2004) MAP grid's licence), and so does any other surface: a load naming
-  `Lynch-2004` is refused with that decision, any other label with the
-  allowed list. Locally any grid loads (`pnpm import:map-grid`), never
-  committed.
+  The **Lynch (2004)** national grid, from the WRC Atlas, is allowed by the
+  operator's decision of 2026-11-08 accepting the licence risk (its portal
+  lists CC BY-SA 4.0 and "No License Provided" at once; [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08)):
+  a production load takes it only as dataset `Lynch-2004`, version `Atlas
+  of Agrohydrology 2008 (Lynch 2004 surface)`, with the Atlas's citation as
+  its credit. Any other surface stays blocked: a load naming another label
+  is refused with the allowed list. Locally any grid loads (`pnpm
+  import:map-grid`), never committed.
 - **Credit.** While the layer draws the Southwestern Cape surface's points
   (a grid whose attribution is its credit line), the map's attribution
   control lists the short "MAP grid: WAAS (2007), Beuster Clarke &
   Associates", linking to the authors' line whole on
-  `/data-sources#waas-map` ([§ Credits on the map](#credits-on-the-map));
+  `/data-sources#waas-map`, and while it draws the Lynch grid's, "MAP grid:
+  Lynch (2004), WRC Atlas", linking to `/data-sources#lynch-map`
+  ([§ Credits on the map](#credits-on-the-map));
   the Layers box's source line gives the whole line too, and
   a grid whose attribution differs from its source adds "Credit: …".
 - **Production file.** `pnpm import:map-grid <grid.asc> --dataset
-  WAAS-SWCape-2007 --source "…" --bbox w,s,e,n --out <file.json.gz>` cuts
+  WAAS-SWCape-2007 --source "…" --bbox w,s,e,n --out <file.json.gz>` (or
+  `--dataset Lynch-2004` for the Atlas's `gmap`, warped to WGS84 first) cuts
   the grid to the box and writes it in the fixture's JSON form (each cell by
   its centre, `rainMapToJson`) instead of loading it; the recipe is
   [deployment.md § Reference datasets](./deployment.md#reference-datasets).
@@ -3666,7 +3708,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 / 2022 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020, 2022 (released May 2024) | Every two years, irregular | **Blocked.** Built for its orchard and vine classes (issue #604 R5-D, § Orchards and vines from SANLC: kind `crop-types`, synthetic fixture only) and refused in production. To unblock: DFFE's written terms for 2018/2022 allowing derivatives in a commercial service (the EGIS terms, issue #618 step 8b), recorded here with the date |
-| Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the MAP grid layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unconfirmed.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", if allowed | the 2008 Atlas zip | none (a 2004 surface) | **Blocked: licence unconfirmed.** Loaded locally only (`pnpm import:map-grid`), never committed; production loads refused. To unblock: the WRC's or the Atlas editor's written terms for showing the grid in a commercial service, recorded here with the date |
+| Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the MAP grid layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unclear.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects. **The operator's decision (2026-11-08): use it in production, accepting that risk**, recorded in [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08) | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", stored as the grid's attribution, shown with the layer and on `/data-sources#lynch-map`; the map's credits show the short "MAP grid: Lynch (2004), WRC Atlas" linking to it ([§ Credits on the map](#credits-on-the-map)) | the 2008 Atlas zip | none (a 2004 surface) | allowed (the operator's decision, 2026-11-08): production loads it as dataset `Lynch-2004` only, stored with the citation above whatever the file says (`geo/referenceLoad.ts`); never committed |
 | Mean annual rainfall surface for the Southwestern Cape (WAAS, about 100 m): the MAP grid layer ([§ MAP grid](#map-grid)) and MAP from the grid ([§ MAP for each unit](#map-for-each-unit)) | Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now DWS), March 2007; a copy received from the client | **Terms not stated** (read 2026-10-23): the copy's ESRI `metadata.xml` still has the ArcGIS template text in its access and use constraints. **The operator's decision (2026-10-23): use it in production**, recorded in [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23) | "Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.", stored as the grid's source and attribution, shown whole with the layer and on `/data-sources#waas-map`; the map's credits show the short "MAP grid: WAAS (2007), Beuster Clarke & Associates" linking to it ([§ Credits on the map](#credits-on-the-map)) | Version 1.1 (March 2007) | none (a 2007 surface) | allowed (the operator's decision, 2026-10-23): production loads it as dataset `WAAS-SWCape-2007` only, clipped with `--bbox` to the client's area, stored with the credit line above whatever the file says (`geo/referenceLoad.ts`); never committed |
 | Other provincial MAP surfaces (about 100 m, another water availability study's) | the study's client or consultant, per surface | **Unconfirmed**: each is a project deliverable whose reuse terms are its owner's | as its owner asks | per surface | none | **Blocked: licence unconfirmed.** Loaded locally only, by the operator who holds the file; never committed; a production load refuses any label but the allowed ones |
 | Synthetic MAP grid (`backend/fixtures/geo/map-grid.synthetic.json`) | this repo (invented rainfall over region Z) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm run setup`) |
@@ -3685,6 +3727,7 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Synthetic GR4J donors (`backend/fixtures/gr4j-donors/gr4j-donors.synthetic.json`) | this repo (14 invented basins) | the repo's own | none | 1 | never | in use (tests, `pnpm run setup`) |
 | WR2012 evaporation (monthly S-pan and A-pan per quaternary from the WRSM2000 network configurations, WMAs 16–19; the MAE and evaporation zone from the quaternary spreadsheets): [§ WR2012 evaporation by quaternary](#wr2012-evaporation-by-quaternary) | WRC (Water Research Commission), with Royal HaskoningDHV, [waterresourceswr2012.co.za](https://waterresourceswr2012.co.za/) | as WR2012 above: no licence published (read 2026-11-02), copyright reserved by its authors | "WR2012 (WRC 2015), WRSM2000 network configurations, WMAs 16–19" on every row and on `/data-sources#wrc-water-resources` | WR2012 (WRC 2015) | none (a 2012 study) | allowed (the operator's decision, 2026-11-03, extending the 2026-11-02 WR2012 decision to its evaporation values on the same published terms, [legal/map-data-licences.md § 3.3d](./legal/map-data-licences.md#33d-the-dws-quaternary-outlines-and-the-wr2012-values-the-operators-decision-added-2026-11-02)): loaded as kind `quaternary-evaporation`; never committed |
 | Modelled Class-A pan (PenPan), our own computation from NASA POWER's daily weather: the A-pan row where no pan station is near ([§ The evaporation grid](#the-evaporation-grid), issue #646 item 7) | NASA POWER (the weather); the model is ours (Rotstayn et al. 2006, after McMahon et al. 2013 Supplement S6) | **CC BY 4.0** (POWER, as [data-sources.md § nasa-power](./data-sources.md#nasa-power)); the grid is ours | "NASA Prediction of Worldwide Energy Resources (POWER) Project, CC BY 4.0; Class-A pan evaporation modelled by us with PenPan (Rotstayn et al. 2006) from its daily meteorology", stored on the dataset row; its source always starts "Modelled Class-A pan (PenPan)", and the proposal and its revision call its values "modelled Class-A pan evaporation (PenPan, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the years run (e.g. 1991–2020) | per refresh of the normal | **Blocked in production** until `apan_grid.py validate`'s report against DWS Class-A pans and the hydrologist's sign-off ([data-sources.md § penpan-apan](./data-sources.md#penpan-apan)); the release gate and the migrate Lambda refuse it. Locally it loads, built and tested against synthetic weather |
+| A-pan equivalent reference potential evaporation (Schulze and Maharaj), 12 monthly grids, about 1 arc minute, South Africa, Lesotho and Eswatini: the A-pan row from the map ([§ The evaporation grid](#the-evaporation-grid)); modelled, not measured pans | R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), the same Water Research Observatory zip as the Lynch grid (ESRI grids on the Cape datum, Clarke 1880) | **Unclear**, as the Lynch row (the same dataset page, read 2026-10-09: CC BY-SA 4.0 and "No License Provided" at once). **The operator's decision (2026-11-08): use it in production, accepting that risk**, [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08) | "Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06", stored on the dataset row and shown under every proposal from it and on `/data-sources#atlas-apan`; its source starts "Modelled A-pan equivalent (WRC Atlas, Schulze and Maharaj)" and the proposal and its revision call its values "modelled A-pan equivalent reference potential evaporation (WRC Atlas, not a measured pan)" (`evaporation.ts` `evaporationLabel`) | the 2008 Atlas zip | none | allowed (the operator's decision, 2026-11-08): production loads it as dataset `Atlas-Apan-2007` only, built with `pnpm import:evaporation --apan-asc`, stored with the lines above whatever the file says (`geo/referenceLoad.ts` `apanDatasets`); never committed. The Atlas's S-pan grids are not loaded (no loader takes S-pan) |
 
 **Which version is in use.** The table's Version column is the version the
 licence was read for. What a deployment actually serves is recorded with
@@ -3752,6 +3795,7 @@ also its section on the **Data sources and credits** page:
 | `hydrorivers` | the River network layer draws HydroRIVERS reaches, or a river added from one is drawn (`creditedFeature`) | "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license" |
 | `jrc-water` | an outline traced from JRC Global Surface Water is drawn (`jrcCreditedFeature`: its description carries the archive's "Source: EC JRC/Google", which tracing writes, [§ Assisted drawing](#assisted-drawing); a trace from the synthetic raster names no source and is credited nothing) | "Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified": JRC's attribution for a published map, and that the data was modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3)) |
 | `waas-map` | the MAP grid layer draws points of a grid whose attribution is the Southwestern Cape surface's credit line (`mapCredits`' `mapGridAttribution`, from the drawn grid's dataset row; [§ MAP grid](#map-grid)) | "MAP grid: WAAS (2007), Beuster Clarke & Associates": the study and its authors, short, linking to their credit line whole on the data sources page ("Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1."; terms not stated, the operator's decision, [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23)). The whole line wrapped along the map's foot under its Show everything and Key buttons, at 1280 px as on a phone (PR #570) |
+| `lynch-map` | the MAP grid layer draws points of a grid whose attribution is the Lynch (2004) grid's citation (`mapGridAttribution`, as above) | "MAP grid: Lynch (2004), WRC Atlas", linking to the Atlas's citation whole on the data sources page ("Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2"; the operator's decision, [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08)) |
 
 On the Map tab each is its own empty source with an invisible layer, so the
 always-expanded attribution control lists it beside the basemap's

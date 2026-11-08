@@ -5262,22 +5262,44 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       (`geo/dwsEvaporation.ts`) against a real reply first: it is built on
       the flow page's layout, since DWS's evaporation page could not be read
       from outside South Africa.
-- [ ] **Decision: the Lynch (2004) MAP grid's licence** (operator; maps.md §
-      MAP grid, § Sources, decision D-B). The Lynch (2004) national grid
-      from the WRC's Atlas of Climatology and Agrohydrology: its portal
-      lists CC BY-SA 4.0 and "No License Provided" at once, and share-alike
-      may reach a map of it. Ask the WRC in writing whether the grid may be
-      shown in a commercial service; until then it is loaded locally only
-      and a production load naming `Lynch-2004` is refused
-      (`geo/referenceLoad.ts` `REFERENCE_KINDS['map-grid'].datasets`). On a
-      yes: record it in the sources table and in
-      legal/map-data-licences.md, set its entry to allowed with its source,
-      version and attribution, add the label to the release gate's
-      `DATASETS` (`scripts/release/map-data-gates.mjs`), and give it a credit
-      like the Southwestern Cape surface's. Any other provincial surface is
-      the same, with its own owner. The Southwestern Cape surface (WAAS,
-      2007) is decided: the operator's decision of 2026-10-23 (terms not
-      stated) allows it, issue #560, legal/map-data-licences.md § 3.3b.
+- [x] **Decision: the Lynch (2004) MAP grid's licence** (operator; maps.md §
+      MAP grid, § Sources, decision D-B). Decided 2026-11-08: the operator
+      accepts the licence risk ("i accept the risk") for the WRC Atlas's
+      grids, the Lynch (2004) MAP grid and the A-pan equivalent grid, as for
+      the WAAS surface. This is an operator's decision, not a finding that
+      the use is licensed (its portal lists CC BY-SA 4.0 and "No License
+      Provided" at once); legal/map-data-licences.md § 3.3e. Built:
+      `Lynch-2004` is allowed in `REFERENCE_KINDS['map-grid'].datasets` and
+      the release gate's `DATASETS`, with the Atlas's citation as its credit
+      (`/data-sources#lynch-map`, "MAP grid: Lynch (2004), WRC Atlas" on the
+      map); `Atlas-Apan-2007` is the one A-pan grid `evaporation` loads
+      (`apanDatasets`, the gate's `APAN_DATASETS`), built from 12 monthly
+      ASCII grids with `pnpm import:evaporation --apan-asc`. Written terms
+      from the WRC would still settle it: record them in § 3.3e if they
+      arrive. Any other provincial surface stays blocked, with its own owner.
+- [ ] **Load the WRC Atlas grids in production** (operator; the client's
+      request for CCWR's MAP and A-pan grids; deployment.md § Reference
+      datasets, The WRC Atlas grids). The code allows `Lynch-2004` (map-grid)
+      and `Atlas-Apan-2007` (evaporation); nothing is loaded yet. Steps:
+      download the Atlas of Agrohydrology 2008 zip from the Water Research
+      Observatory (free account) and keep it as received under
+      `originals/atlas/`; warp `gmap` and the 12 monthly A-pan grids from
+      the Cape datum to WGS84 at 1′ and write each as ESRI ASCII (maps.md §
+      The evaporation grid gives the GDAL lines); `pnpm import:map-grid
+      gmap.asc --dataset Lynch-2004 --source "Lynch (2004)" --bbox <w,s,e,n>
+      --out lynch-2004.json.gz`; `pnpm import:evaporation --apan-asc
+      <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007 --years
+      <first>-<last> --out atlas-apan-2007.json.gz`, with the period the
+      Atlas states for its A-pan means; check the A-pan grids are in mm (a
+      value over 1 000 a month is refused); upload both to the reference
+      bucket and run `load-reference.yml` twice (`kind=map-grid
+      dataset=Lynch-2004`, `kind=evaporation dataset=Atlas-Apan-2007`, no
+      source). Then, in the app: compare the Lynch grid with the WAAS surface
+      and the typed unit MAPs, and the Atlas A-pan with WR2012's
+      per-quaternary A-pan and any nearby pan station. Also confirm the
+      A-pan section number in WRC Report 1489/1/06 and add it to
+      `ATLAS_APAN_ATTRIBUTION` (geo/evaporationGrid.ts) and
+      `ATLAS_APAN_STATEMENT` (dataCredits.ts) together.
 - [ ] **Load the Southwestern Cape MAP surface in production** (operator;
       issue #560; deployment.md § Reference datasets). The code allows it
       as dataset `WAAS-SWCape-2007`; nothing is loaded yet, so production's

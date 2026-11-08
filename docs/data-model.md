@@ -2446,7 +2446,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   mean monthly totals, mm, Oct … Sep, each 0–1000). Only cells with a value
   are stored. Global, loaded by the operator as the schema owner (`pnpm
   import:evaporation`; in production `load-reference.yml` through the
-  migrate Lambda, deployment.md § Reference datasets), readable by anyone signed in, written by no app role.
+  migrate Lambda, deployment.md § Reference datasets: reference ET, and one
+  A-pan grid, the WRC Atlas's modelled `Atlas-Apan-2007`), readable by anyone signed in, written by no app role.
 - **`rain_map_dataset`** and **`rain_map_cell_reference`**
   (`207_rain_map_reference.sql`, [maps.md § MAP grid](./maps.md#map-grid)):
   the mean annual precipitation grids the Map tab's MAP grid layer draws. A
@@ -2460,8 +2461,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   no value. Global reference data: RLS lets any signed-in user read it,
   water_app is granted SELECT only, and `pnpm import:map-grid` writes it as
   the schema owner; in production `load-reference.yml` through the migrate
-  Lambda, for the one allowed dataset (`WAAS-SWCape-2007`, issue #560;
-  deployment.md § Reference datasets), and migration 238 adds `map-grid` to
+  Lambda, for the allowed datasets (`WAAS-SWCape-2007`, issue #560, and the
+  WRC Atlas's `Lynch-2004`, 2026-11-08; deployment.md § Reference datasets), and migration 238 adds `map-grid` to
   `reference_load`'s kinds.
 - **`soil_dataset`** and **`soil_cell_reference`** (`268_soil_grid.sql`,
   issue #622, [maps.md § Soil water capacity](./maps.md#soil-water-capacity)):

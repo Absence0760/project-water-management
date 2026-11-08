@@ -219,6 +219,8 @@ pnpm import:evaporation     # load the synthetic evaporation grid Calibration �
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
                              # <apan.json[.gz]> --dataset <label> loads ingest/apan_grid.py's modelled Class-A pan grid (PenPan; local only,
                              # production blocked until the hydrologist signs off its validation; data-sources.md § penpan-apan)
+                             # --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007 --years <first>-<last> [--bbox …] [--out …] reads the WRC
+                             # Atlas's 12 monthly A-pan equivalent grids (modelled, warped to WGS84 ESRI ASCII first), the one A-pan grid production loads (maps.md § The evaporation grid)
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
 pnpm import:evaporation-stations  # load the synthetic DWS evaporation stations Calibration → Evaporation stations proposes the A-pan from (pnpm run setup runs it);
                              # <stations.csv> --records <dir> --dataset <label> --source "<DWS reply reference, date>" loads your own DWS pan records
@@ -226,7 +228,7 @@ pnpm import:evaporation-stations  # load the synthetic DWS evaporation stations 
 pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm run setup runs it);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees; [--out <grid.json[.gz]>] writes it for a production load instead, which takes only the
-                             # Southwestern Cape surface (WAAS-SWCape-2007; Lynch and the rest refused; maps.md § MAP grid)
+                             # Southwestern Cape surface and the WRC Atlas's Lynch (2004) grid (WAAS-SWCape-2007, Lynch-2004; the rest refused; maps.md § MAP grid)
 pnpm import:gazetteer       # load the synthetic place names the Map's search finds after its own layers (pnpm run setup runs it);
                              # <ZA.txt[.gz]> [<BW.txt[.gz]> …] --dataset <label> [--source "<attribution>"] loads GeoNames' dumps of South Africa and its
                              # neighbours (BW, LS, MZ, NA, SZ, ZW; theirs inside the basemap only), several files as one dataset (CC BY 4.0; maps.md § Gazetteer)
