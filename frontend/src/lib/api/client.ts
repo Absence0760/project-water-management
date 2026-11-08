@@ -174,6 +174,8 @@ import type {
 	MapLinkedNodes,
 	QuaternaryLookup,
 	MapGridLayer,
+	EvaporationGridLayer,
+	EvaporationGridKind,
 	DemGridLayer,
 	UnitMapApplied,
 	UnitMapProposal,
@@ -1291,6 +1293,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One loaded MAP grid's points in `bbox` (at most 2° a side; `dataset` null: the default), for the map's MAP grid layer. */
 			mapGrid: (id: string, bbox: readonly [number, number, number, number], dataset?: string | null) =>
 				request<MapGridLayer>('GET', `${p(id)}/map/map-grid?${new URLSearchParams({ bbox: bbox.join(','), ...(dataset ? { dataset } : {}) })}`),
+			/** One loaded A-pan or S-pan grid's points in `bbox` (at most 2° a side; `dataset` null: the default), the month's (1–12) or, with none, the year's total. */
+			evaporationGrid: (id: string, kind: EvaporationGridKind, bbox: readonly [number, number, number, number], dataset?: string | null, month?: number | null) =>
+				request<EvaporationGridLayer>(
+					'GET',
+					`${p(id)}/map/evaporation-grid?${new URLSearchParams({ kind, bbox: bbox.join(','), ...(dataset ? { dataset } : {}), ...(month ? { month: String(month) } : {}) })}`
+				),
 			/** Each land unit's MAP from one MAP grid, the grid chosen for the whole project unless `dataset` names one (editor; issue #482). */
 			unitMap: (id: string, dataset?: string) => request<UnitMapProposal>('GET', `${p(id)}/map/unit-map${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
 			/** Write the units' MAP from `dataset` into the model, one revision (editor); `nodeIds` absent: every unit it covers. */

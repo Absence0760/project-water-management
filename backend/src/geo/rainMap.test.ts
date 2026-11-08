@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseMapGridArgs, SYNTHETIC_MAP_GRID_FILE } from '../../scripts/import-map-grid.js';
-import { cellRange, rainMapFromAscii, rainMapFromJson, rainMapToJson } from './rainMap.js';
+import { cellRange, LYNCH_MAP, rainMapFromAscii, rainMapFromJson, rainMapToJson, WAAS_MAP } from './rainMap.js';
 
 /** A 3 × 2 grid of 0.5° cells, south-west corner (20, −34), one NODATA cell. */
 const ascii = (head: string[] = ['xllcorner 20', 'yllcorner -34']) => ['ncols 3', 'nrows 2', ...head, 'cellsize 0.5', 'NODATA_value -9999', '100 200 -9999', '400 500 600'];
@@ -129,5 +129,24 @@ describe('rainMapToJson', () => {
 		expect(back.grid.cells).toEqual(grid.cells);
 		expect(back.grid.originLon).toBeCloseTo(grid.originLon, 6);
 		expect(back.grid.originLat).toBeCloseTo(grid.originLat, 6);
+	});
+});
+
+describe('the Lynch (2004) national grid (issue: CCWR grids, the operator’s decision of 2026-11-08)', () => {
+	it('is recorded with the Atlas’s citation as its credit, under its own label', () => {
+		expect(LYNCH_MAP.dataset).toBe('Lynch-2004');
+		expect(LYNCH_MAP.attribution).toBe('Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2');
+		expect(LYNCH_MAP.source).toMatch(/WRC Report 1156\/1\/04/);
+		expect(LYNCH_MAP.attribution).not.toBe(WAAS_MAP.attribution);
+		for (const line of [LYNCH_MAP.source, LYNCH_MAP.attribution]) expect(line.length).toBeLessThanOrEqual(500);
+	});
+
+	it('a 1′ grid on whole tenths of a degree goes through --out cell for cell', async () => {
+		const lines = ['ncols 3', 'nrows 2', 'xllcorner 21.3', 'yllcorner -33.7', 'cellsize 0.016666666667', 'NODATA_value -9999', '400 410 -9999', '420 430 440'];
+		const grid = await rainMapFromAscii(lines, null);
+		expect(grid.cells).toHaveLength(5);
+		const back = rainMapFromJson(JSON.parse(rainMapToJson({ source: 'S', version: 'V', attribution: 'A' }, grid)));
+		if (typeof back === 'string') throw new Error(back);
+		expect(back.grid).toEqual(grid);
 	});
 });

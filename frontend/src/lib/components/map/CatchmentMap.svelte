@@ -35,7 +35,8 @@
 	Licensed data drawn is credited on the attribution control while it is
 	drawn (mapLayers.ts mapCredits: HydroRIVERS reaches or rivers, a dam
 	traced from JRC Global Surface Water, the Southwestern Cape MAP surface's
-	points, `mapGridAttribution`), each linking to its section of the
+	points, `mapGridAttribution`, the WRC Atlas's A-pan and S-pan grids'
+	points, `apanGrid`/`spanGrid`), each linking to its section of the
 	data sources page. With `attribution="outside"` the map draws no
 	attribution control: the parent shows the credits next to the map instead
 	(the farm map's line under it, farm/FarmMapCanvas.svelte), so they never
@@ -104,6 +105,9 @@
 		mapGridLabelMinZoom,
 		MAP_GRID_LABEL_LAYER,
 		type MapGridPointData,
+		evaporationGridData,
+		EVAPORATION_GRID_LABEL_LAYER,
+		type EvaporationGridDraw,
 		chirpsData,
 		demGridData,
 		type DemGridPointData,
@@ -157,6 +161,8 @@
 		units = null,
 		mapGrid = null,
 		mapGridCellDeg = null,
+		apanGrid = null,
+		spanGrid = null,
 		chirps = null,
 		demGrid = null,
 		fillScale = 1
@@ -228,6 +234,10 @@
 		mapGrid?: readonly MapGridPointData[] | null;
 		/** The cell size of the grid `mapGrid` is from, degrees: its values are labelled only once its points are far enough apart for them (mapStyle.ts mapGridLabelMinZoom); null: at every zoom. */
 		mapGridCellDeg?: number | null;
+		/** The A-pan grid layer's points, month, cell size and credit line (evaporationGridLayer.svelte.ts draw); null: none. A grid with a licensed credit is credited while drawn. */
+		apanGrid?: EvaporationGridDraw | null;
+		/** The S-pan grid layer's, the same way. */
+		spanGrid?: EvaporationGridDraw | null;
 		/** The CHIRPS grid layer's cells and points (mapLayers.ts chirpsCells); null or empty: none. */
 		chirps?: readonly ChirpsCellData[] | null;
 		/** The DEM grid layer's sampled cells, each labelled with its elevation; null or empty: none. */
@@ -414,6 +424,8 @@
 	const syncChannels = () => setSource('channels', () => channelData(channels, channelsDim));
 	const syncUnits = () => setSource('units', () => unitsData(units, features));
 	const syncMapGrid = () => setSource('mapgrid', () => mapGridData(mapGrid));
+	const syncApanGrid = () => setSource('apangrid', () => evaporationGridData(apanGrid?.points, apanGrid?.month ?? null));
+	const syncSpanGrid = () => setSource('spangrid', () => evaporationGridData(spanGrid?.points, spanGrid?.month ?? null));
 	const syncChirps = () => setSource('chirps', () => chirpsData(chirps));
 	const syncDemGrid = () => setSource('demgrid', () => demGridData(demGrid));
 
@@ -430,7 +442,7 @@
 	// Each licensed source's credit shows while its data is drawn: HydroRIVERS while the layer draws its reaches
 	// (`riversCredit`) or a river added from one is drawn, JRC Global Surface Water while a traced dam is, the
 	// Southwestern Cape MAP surface while the MAP grid layer draws its points.
-	const credited = $derived(mapCredits(features, riversCredit, mapGrid?.length ? mapGridAttribution : null));
+	const credited = $derived(mapCredits(features, riversCredit, mapGrid?.length ? mapGridAttribution : null, [apanGrid?.attribution ?? null, spanGrid?.attribution ?? null]));
 	const ALL_CREDITS = Object.keys(MAP_CREDIT_TEXT) as MapCredit[];
 	const creditEntries = (ids: readonly MapCredit[]) => ids.map((id) => ({ id, html: creditLink(resolve('data-sources'), id, MAP_CREDIT_TEXT[id]) }));
 
@@ -486,6 +498,10 @@
 						units: unitsData(units, features),
 						mapGrid: mapGridData(mapGrid),
 						mapGridCellDeg,
+						apanGrid: evaporationGridData(apanGrid?.points, apanGrid?.month ?? null),
+						apanGridCellDeg: apanGrid?.cellDeg ?? null,
+						spanGrid: evaporationGridData(spanGrid?.points, spanGrid?.month ?? null),
+						spanGridCellDeg: spanGrid?.cellDeg ?? null,
 						chirps: chirpsData(chirps),
 						demGrid: demGridData(demGrid),
 						fillScale
@@ -664,6 +680,28 @@
 		void status;
 		if (!map || status !== 'ready' || !map.getLayer(MAP_GRID_LABEL_LAYER)) return;
 		map.setLayerZoomRange(MAP_GRID_LABEL_LAYER, z, 24);
+	});
+	$effect(() => {
+		void apanGrid?.points;
+		void apanGrid?.month;
+		void status;
+		syncApanGrid();
+	});
+	$effect(() => {
+		void spanGrid?.points;
+		void spanGrid?.month;
+		void status;
+		syncSpanGrid();
+	});
+	// Each evaporation grid drawn sets the zoom its labels start at, as the MAP grid's does.
+	$effect(() => {
+		const zoom = { apan: mapGridLabelMinZoom(apanGrid?.cellDeg), span: mapGridLabelMinZoom(spanGrid?.cellDeg) };
+		void status;
+		if (!map || status !== 'ready') return;
+		for (const kind of ['apan', 'span'] as const) {
+			const id = EVAPORATION_GRID_LABEL_LAYER[kind];
+			if (map.getLayer(id)) map.setLayerZoomRange(id, zoom[kind], 24);
+		}
 	});
 	$effect(() => {
 		void chirps;

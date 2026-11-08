@@ -13,6 +13,9 @@
 //    the row is typed over; a viewer can't;
 //  - an A-pan dataset's values go into the A-pan row instead, and leave the
 //    PE input alone;
+//  - an S-pan dataset (316, issue #738) is summarised over the boundary with
+//    no target, never the default ahead of one that proposes, and an accept
+//    of it is refused with nothing written (no conversion to A-pan);
 //  - refusals: no boundary, a boundary over cells with no value, an unknown
 //    dataset, an extra field (400); a stranger (404); a farmer (403);
 //  - the loader writes the grid and its dataset row, and a reload replaces them;
@@ -73,7 +76,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-	await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-apan'`);
+	await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])`, [['test-apan', 'test-span']]);
 });
 
 describe('the proposal', () => {
@@ -170,6 +173,32 @@ describe('accepting the proposal', () => {
 		// A real dataset is the default ahead of the synthetic one.
 		expect((await proposals(viewer)).body.dataset.dataset).toBe('test-apan');
 		await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-apan'`);
+	});
+
+	it('an S-pan dataset is shown over the boundary as a cross-check, with no target; accepting it is refused and writes nothing', async () => {
+		await asOwner(
+			`INSERT INTO evaporation_dataset (dataset, kind, source, version, method, attribution, first_year, last_year, cell_deg, origin_lon, origin_lat)
+			 VALUES ('test-span', 'span', 'Test S-pan grid', 'v1', 'Test method.', 'none', 1950, 1999, 0.1, 0.05, 0.05)`
+		);
+		const row = [160, 168, 176, 184, 160, 144, 96, 72, 56, 60, 80, 120];
+		await asOwner(
+			`INSERT INTO evaporation_cell_reference (dataset, row_idx, col_idx, monthly_mm)
+			 SELECT 'test-span', r, c, $1::real[] FROM unnest(ARRAY[-338, -337]) r, unnest(ARRAY[212, 213]) c`,
+			[row]
+		);
+		const p = (await proposals(viewer, '?dataset=test-span')).body;
+		expect(p).toMatchObject({ dataset: { dataset: 'test-span', kind: 'span' }, target: null, proposal: { monthlyMm: row, coverage: 1, cells: 4 } });
+		// Loaded last, real, yet not the default: an S-pan grid proposes nothing.
+		expect((await proposals(viewer)).body.dataset.kind).not.toBe('span');
+		const before = await settings();
+		const revisions = await asOwner('SELECT count(*)::int AS n FROM model_revision WHERE project_id = $1', [projectId]);
+		const res = await accept(editor, { dataset: 'test-span' });
+		expect(res.status).toBe(400);
+		expect(res.body.error).toMatch(/is a Symons-pan \(S-pan\) grid: it is shown as a cross-check against the A-pan only\. S-pan isn’t converted to A-pan from the map/);
+		expect(await settings()).toEqual(before);
+		expect(await asOwner('SELECT count(*)::int AS n FROM model_revision WHERE project_id = $1', [projectId])).toEqual(revisions);
+		expect(await asOwner(`SELECT count(*)::int AS n FROM evaporation_accepted WHERE project_id = $1 AND dataset = 'test-span'`, [projectId])).toEqual([{ n: 0 }]);
+		await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-span'`);
 	});
 
 	it('refuses what it can’t re-derive; nothing changes', async () => {

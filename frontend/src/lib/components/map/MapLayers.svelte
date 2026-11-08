@@ -20,12 +20,17 @@
 	layer) outlines each unit's polygon and writes its name on it, listed here
 	too; the MAP grid (`layers=mapgrid`, § MAP grid) draws one loaded mean
 	annual precipitation grid's points in view, each labelled with its MAP,
-	with a dataset picker when more than one is loaded; the CHIRPS grid
+	with a dataset picker when more than one is loaded; the A-pan and S-pan
+	grids (`layers=apangrid`, `spangrid`, § A-pan and S-pan grids) draw one
+	loaded evaporation grid of each kind the same way, the year's total or a
+	month picked here, the A-pan grid said to be modelled where it is and the
+	S-pan grid a cross-check the model never uses; the CHIRPS grid
 	(`layers=chirps`, § CHIRPS grid) draws CHIRPS v3's 0.05° cells and their
 	centres, where its daily rainfall values sit.
 -->
 <script lang="ts">
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import ChunkFailed from '#lib/components/common/ChunkFailed.svelte';
 	import { followRetry } from '#lib/components/common/loadState.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -53,6 +58,7 @@
 	} from './mapLayers';
 	import { channelColour, chirpsColour, DEM_RAMP, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
 	import type { MapGridLayer } from './mapGridLayer.svelte';
+	import type { EvaporationGrids } from './EvaporationGridToggles.svelte';
 	import type { DemGridLayer } from './demGridLayer.svelte';
 	import { AREA_FILL_STEP, type AreaFill } from './areaFill.svelte';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
@@ -69,6 +75,7 @@
 		relief = null,
 		units = null,
 		mapGrid = null,
+		evaporationGrids = null,
 		chirps = null,
 		labels = true,
 		demGrid = null,
@@ -90,6 +97,8 @@
 		units?: { on: boolean; labels: readonly UnitLabel[] } | null;
 		/** The MAP grid layer's state. Null: no toggle. */
 		mapGrid?: MapGridLayer | null;
+		/** The A-pan and S-pan grid layers' states, each its own toggle, and their toggles' component (loaded apart from the tab, MapTab); null: no toggles (yet); 'failed': their chunk didn't load. */
+		evaporationGrids?: EvaporationGrids | 'failed' | null;
 		/** The CHIRPS grid layer: whether it is on, and the cells in view (null: the view is too wide). Null: no toggle. */
 		chirps?: { on: boolean; cells: readonly ChirpsCell[] | null } | null;
 		/** The map writes labels (glyphs are configured); without, the lists here are the only place to read them. */
@@ -172,6 +181,7 @@
 							: `${mg.cells.length} MAP grid ${mg.cells.length === 1 ? 'point' : 'points'} shown.`
 						: 'Loading the MAP grid…'
 					: null,
+				...(evaporationGrids && evaporationGrids !== 'failed' ? evaporationGrids.grids.map((g) => g.status) : []),
 				demRivers?.on && demRivers.announce !== false && demRivers.layer.paused && !demRivers.layer.zoomIn
 					? DEM_RIVERS_PAUSED
 					: null,
@@ -405,6 +415,11 @@
 				{/if}
 			</div>
 		{/if}
+	{/if}
+	{#if evaporationGrids === 'failed'}
+		<ChunkFailed what="The A-pan and S-pan grid layers" />
+	{:else if evaporationGrids}
+		<evaporationGrids.Toggles grids={evaporationGrids.grids} {labels} ontoggle={toggle} onretry={retryLayer} />
 	{/if}
 	{#if chirps}
 		<label class="check">

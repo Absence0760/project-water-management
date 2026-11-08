@@ -3691,9 +3691,9 @@ placed points. The server never trusts the browser with geometry:
   with `SELECT` granted to `water_app` and no write policy or grant; it is
   written only by the operator's load (`pnpm import:gazetteer`, or
   `load-reference.yml` in production). The MAP grid is loaded the same way
-  in production since issue #560, for its one allowed dataset
-  (`WAAS-SWCape-2007`; any other label refused, and a `source` too, so the
-  stored credit is the recorded one), and migration 238 adds `map-grid` to
+  in production since issue #560, for its allowed datasets
+  (`WAAS-SWCape-2007`, and `Lynch-2004` since 2026-11-08; any other label
+  refused, and a `source` too, so the stored credit is the recorded one), and migration 238 adds `map-grid` to
   `reference_load`'s kinds. 225 also creates the `pg_trgm`
   extension (trusted, as the schema owner) for its trigram index. The
   Map's search, `GET /projects/:id/map/search?q=` (issue #523 C5), is
@@ -4583,7 +4583,7 @@ key there would let any read-only principal forge any user's session.
   bucket (GetObject on `reference/*`, nothing else), refuses it unless it
   hashes to the SHA-256 in the approved run (so the approver approves those
   bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off; the
-  evaporation grid 32 MiB and 64 MiB, a DWS flow table 8 MiB and 16 MiB), and
+  evaporation grid 32 MiB and 128 MiB, a DWS flow table 8 MiB and 16 MiB), and
   parses it with the same code as the local loaders (JSON, a GeoNames dump
   or a DWS daily table; no archive formats, no external references). A DWS
   table is written through `gauge_record_write` with its bounds, in one
@@ -4591,7 +4591,10 @@ key there would let any read-only principal forge any user's session.
   the public log (the workflow prints counts; the station goes to
   CloudWatch). The kinds whose licence isn't
   confirmed are refused in the workflow and again in the Lambda, by name,
-  and so is an A-pan evaporation grid (only dPET's reference ET is allowed).
+  and so is an A-pan or S-pan evaporation grid, except the WRC Atlas's under
+  its one label each (`Atlas-Apan-2007`, `Atlas-Span-2007`, stored with
+  their recorded lines, no `source`; dPET's reference ET loads under any
+  label).
   Its answer and its failure summary carry counts, codes and fixed text
   only, since the Actions log is public; the file's problems go to
   CloudWatch.

@@ -18,6 +18,10 @@
 // accept is one settings revision whose reason names the dataset, version
 // and method (what an evidence pack prints), and an evaporation_accepted
 // row. The server re-derives the values; the client only names the dataset.
+// A Symons-pan (S-pan) grid (316, issue #738) is summarised the same way and
+// shown beside the saved A-pan as a cross-check only: it has no target, and
+// an accept of it is refused, since turning S-pan into A-pan needs a
+// conversion the hydrologist picks (still open in #738).
 //
 // A station (evaporationStations.ts) proposes 12 monthly means of its daily
 // pan record and, for a Class-A pan, the record itself as the daily A-pan
@@ -244,13 +248,19 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			const { dataset } = await pickDataset(db, body.dataset);
 			const d = dataset!;
+			const target = TARGET_OF[d.kind];
+			if (!target) {
+				throw new ApiError(
+					400,
+					`${d.dataset} is a Symons-pan (S-pan) grid: it is shown as a cross-check against the A-pan only. S-pan isn’t converted to A-pan from the map, since which conversion to use is the hydrologist’s choice.`
+				);
+			}
 			const boundary = await boundaryOf(db, id);
 			if (!boundary) throw new ApiError(400, 'There is no catchment boundary on the map: draw or import it on the Map first.');
 			// Re-derived here from the dataset and the boundary as they are now.
 			const summary = await summariseEvaporation(db, d, boundary.geometry);
 			if ('problem' in summary) throw new ApiError(400, `${citeEvaporation(d)} can’t be summarised over the boundary: ${summary.problem}.`);
 			if (!summary.monthlyMm.some((x) => x > 0)) throw new ApiError(400, `${citeEvaporation(d)} has no evaporation over the boundary, so there is nothing to use.`);
-			const target = TARGET_OF[d.kind];
 			const before = await beginSettingsChange(db, id);
 			const { stored } = await settingsOf(db, id);
 			const patch = target === 'pe' ? { pe: { kind: 'monthly', mm: summary.monthlyMm, source: peSourceFor(d, boundary, summary) } } : { apanMm: summary.monthlyMm };

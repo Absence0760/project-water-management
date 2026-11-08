@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { loadFailureSummary } from '../lambda-migrate.js';
-import { limitsFor, LoadError, MAX_OBJECT_BYTES, parseLoadRequest, readReferenceText, REFERENCE_KINDS, type ReadObject, type ReferenceKind } from './referenceLoad.js';
+import { limitsFor, LoadError, MAX_OBJECT_BYTES, parseLoadRequest, readReferenceText, REFERENCE_KINDS, type ReadObject, type ReferenceDataset, type ReferenceKind } from './referenceLoad.js';
 
 const MAPS_MD = fileURLToPath(new URL('../../../docs/maps.md', import.meta.url));
 const GATES = new URL('../../../scripts/release/map-data-gates.mjs', import.meta.url).href;
@@ -70,18 +70,21 @@ describe('which kinds load', () => {
 			});
 		});
 
-		it('the Lynch (2004) grid is refused, naming its decision', () => {
-			const e = thrown(() => parseLoadRequest({ ...mapGrid, dataset: 'Lynch-2004' }));
-			expect(e.code).toBe('refused');
-			expect(e.publicReason).toMatch(/^map-grid dataset Lynch-2004 is blocked in production: .*Decision: the Lynch \(2004\) MAP grid's licence/);
-			expect(e.publicReason).toMatch(/maps\.md § Sources/);
+		it('the Lynch (2004) grid is allowed by the operator’s decision of 2026-11-08, stored with the Atlas’s citation', () => {
+			expect(parseLoadRequest({ ...mapGrid, dataset: 'Lynch-2004' }).dataset).toBe('Lynch-2004');
+			expect(REFERENCE_KINDS['map-grid'].datasets['Lynch-2004']).toMatchObject({
+				status: 'allowed',
+				version: 'Atlas of Agrohydrology 2008 (Lynch 2004 surface)',
+				attribution:
+					'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2'
+			});
 		});
 
 		it('an unknown dataset is refused with the allowed list, not the input', () => {
 			for (const dataset of ['Other-surface', 'toString', 'constructor', 'hasOwnProperty']) {
 				const e = thrown(() => parseLoadRequest({ ...mapGrid, dataset }));
 				expect(e.code, dataset).toBe('refused');
-				expect(e.publicReason, dataset).toBe('map-grid loads only the datasets whose licence is recorded: WAAS-SWCape-2007 (docs/maps.md § Sources)');
+				expect(e.publicReason, dataset).toBe('map-grid loads only the datasets whose licence is recorded: WAAS-SWCape-2007, Lynch-2004 (docs/maps.md § Sources)');
 			}
 		});
 
@@ -112,6 +115,59 @@ describe('which kinds load', () => {
 				)
 			);
 			expect(DATASETS).toEqual(fromTable);
+		});
+	});
+
+	describe('an A-pan evaporation grid loads only under a label whose licence is recorded', () => {
+		const atlas = { kind: 'evaporation', key: 'reference/evaporation/atlas-apan-2007.json.gz', sha256: 'c'.repeat(64), dataset: 'Atlas-Apan-2007' };
+
+		it('the WRC Atlas’s A-pan equivalent is allowed, its lines recorded and saying modelled', () => {
+			expect(parseLoadRequest(atlas)).toEqual({ ...atlas, source: null, minOrder: 1, station: null });
+			const spec: ReferenceKind = REFERENCE_KINDS.evaporation;
+			const named = spec.status === 'allowed' ? spec.kindDatasets?.apan?.['Atlas-Apan-2007'] : undefined;
+			expect(named).toMatchObject({ status: 'allowed', source: expect.stringMatching(/^Modelled A-pan equivalent \(WRC Atlas, Schulze and Maharaj\)/) });
+			expect(named?.status === 'allowed' && named.attribution).toMatch(/^Schulze, R\.E\. and Maharaj, M\. 2007\. A-Pan Equivalent Reference Potential Evaporation\. .*WRC Report 1489\/1\/06$/);
+			// Only the one label: no PenPan label is listed.
+			expect(spec.status === 'allowed' && Object.keys(spec.kindDatasets?.apan ?? {})).toEqual(['Atlas-Apan-2007']);
+		});
+
+		it('takes no source under that label; any other label still takes one (a dPET override)', () => {
+			expect(thrown(() => parseLoadRequest({ ...atlas, source: 'My own credit' })).publicReason).toMatch(/takes no source/);
+			expect(parseLoadRequest({ ...atlas, dataset: 'dPET-1991-2020', source: 'dPET, my note' }).source).toBe('dPET, my note');
+			// Object prototype names are labels like any other, never a listed A-pan grid.
+			expect(parseLoadRequest({ ...atlas, dataset: 'toString', source: 'x' }).source).toBe('x');
+		});
+
+		it('the release gate lists the same A-pan and S-pan labels (map-data-gates.mjs APAN_DATASETS, SPAN_DATASETS)', async () => {
+			const { APAN_DATASETS, SPAN_DATASETS } = (await import(GATES)) as { APAN_DATASETS: string[]; SPAN_DATASETS: string[] };
+			const spec: ReferenceKind = REFERENCE_KINDS.evaporation;
+			const fromTable = (k: 'apan' | 'span') =>
+				spec.status === 'allowed'
+					? Object.entries(spec.kindDatasets?.[k] ?? {})
+							.filter(([, d]) => d.status === 'allowed')
+							.map(([label]) => label)
+					: [];
+			expect(APAN_DATASETS).toEqual(fromTable('apan'));
+			expect(SPAN_DATASETS).toEqual(fromTable('span'));
+		});
+	});
+
+	describe('an S-pan evaporation grid loads only under its recorded label (issue #738), a cross-check, never an A-pan', () => {
+		const span = { kind: 'evaporation', key: 'reference/evaporation/atlas-span-2007.json.gz', sha256: 'c'.repeat(64), dataset: 'Atlas-Span-2007' };
+
+		it('CCWR’s S-pan is allowed under its one label, with recorded lines that say S-pan and that its source is to be confirmed', () => {
+			expect(parseLoadRequest(span)).toEqual({ ...span, source: null, minOrder: 1, station: null });
+			const spec: ReferenceKind = REFERENCE_KINDS.evaporation;
+			const named = spec.status === 'allowed' ? spec.kindDatasets?.span?.['Atlas-Span-2007'] : undefined;
+			expect(named).toMatchObject({ status: 'allowed', source: expect.stringMatching(/^Symons-pan \(S-pan\) evaporation \(WRC Atlas, CCWR\)/) });
+			expect(named?.status === 'allowed' && named.attribution).toMatch(/source to be confirmed/);
+			expect(spec.status === 'allowed' && Object.keys(spec.kindDatasets?.span ?? {})).toEqual(['Atlas-Span-2007']);
+			// One label, one kind: the S-pan label is not an A-pan one, nor the other way round.
+			expect(spec.status === 'allowed' && Object.keys(spec.kindDatasets?.apan ?? {})).not.toContain('Atlas-Span-2007');
+		});
+
+		it('takes no source under that label', () => {
+			expect(thrown(() => parseLoadRequest({ ...span, source: 'My own credit' })).publicReason).toMatch(/takes no source/);
 		});
 	});
 
@@ -220,8 +276,9 @@ describe('which kinds load', () => {
 				expect(status(rowOf(kind, name)), `${kind}: ${name}`).toMatch(spec.status === 'allowed' ? /^allowed/ : /^blocked/);
 			}
 			// A kind allowed dataset by dataset: each listed dataset's own row says the same as it does.
-			if (spec.status === 'allowed' && spec.datasets) {
-				for (const [label, d] of Object.entries(spec.datasets)) {
+			if (spec.status === 'allowed' && (spec.datasets || spec.kindDatasets)) {
+				const all: Record<string, ReferenceDataset> = { ...spec.datasets, ...spec.kindDatasets?.apan, ...spec.kindDatasets?.span };
+				for (const [label, d] of Object.entries(all)) {
 					expect(status(rowOf(`${kind} ${label}`, d.sourcesRow)), `${kind} ${label}`).toMatch(d.status === 'allowed' ? /^allowed/ : /^blocked/);
 				}
 			}
@@ -303,6 +360,11 @@ describe('reading the file', () => {
 		const e = await thrownAsync(readReferenceText(req, async () => ({ contentLength: lim.object + 1, bytes: async () => new Uint8Array(0) })));
 		expect(e.code).toBe('too_large');
 		expect(e.publicReason).toBe('the file is over 32 MiB');
+		// The WRC Atlas's grids load for the whole country: every 1′ cell of the South Africa box is 74 MB of JSON
+		// (measured 2026-11-08), so the unzipped cap holds it with room, and the gzipped file (24 MB) fits the object cap.
+		expect(lim.text).toBe(128 * 1024 * 1024);
+		expect(lim.text).toBeGreaterThan(74_053_030);
+		expect(lim.object).toBeGreaterThan(23_994_713);
 		// Its unzipped cap too (a gzip bomb), here lowered so the test stays small.
 		const bomb = gzipSync(Buffer.alloc(1024 * 1024));
 		const bombReq = { ...req, sha256: sha(bomb) };

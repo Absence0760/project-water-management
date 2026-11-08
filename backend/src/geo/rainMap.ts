@@ -15,7 +15,7 @@
 // dataset's origin, as the evaporation grid's are (evaporationGrid.ts
 // originOf/indexOf), so a box is a range on the primary key.
 import type pg from 'pg';
-import { indexOf, originOf } from './evaporationGrid.js';
+import { indexOf, originOf, sameOrigin } from './evaporationGrid.js';
 import { recordReferenceOrigin, type ReferenceOrigin } from './referenceOrigin.js';
 
 /** The repo's invented grid (backend/fixtures/geo/map-grid.synthetic.json): never real rainfall. */
@@ -37,6 +37,29 @@ export const WAAS_MAP = {
 	source: WAAS_MAP_ATTRIBUTION,
 	version: 'v1.1 (March 2007)',
 	attribution: WAAS_MAP_ATTRIBUTION
+} as const;
+
+/** The Lynch (2004) national grid's credit line, as the WRC Atlas asks it to be cited: shown with the layer and in the map's credits. */
+export const LYNCH_MAP_ATTRIBUTION =
+	'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
+
+/**
+ * The Lynch (2004) mean annual precipitation grid, 1 arc minute, as the WRC's
+ * South African Atlas of Climatology and Agrohydrology (2007) distributes it
+ * (`GISData/grids/gmap`): allowed in production under this label only,
+ * stored with these lines whatever the file says (referenceLoad.ts
+ * REFERENCE_KINDS 'map-grid'). Its portal lists CC BY-SA 4.0 and "No License
+ * Provided" at once; the operator accepted that risk on 2026-11-08
+ * (docs/legal/map-data-licences.md § 3.3e), which is a decision, not a
+ * finding that the use is licensed. The frontend credits the layer while it
+ * draws a grid with this attribution (dataCredits.ts).
+ */
+export const LYNCH_MAP = {
+	dataset: 'Lynch-2004',
+	source:
+		'Lynch, S.D. 2004. Development of a raster database of annual, monthly and daily rainfall for southern Africa. WRC Report 1156/1/04; as distributed in Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06',
+	version: 'Atlas of Agrohydrology 2008 (Lynch 2004 surface)',
+	attribution: LYNCH_MAP_ATTRIBUTION
 } as const;
 
 type Db = pg.ClientBase | pg.Pool;
@@ -148,23 +171,45 @@ export interface RainMapMeta {
 const MAP_MAX_MM = 20_000;
 const inBox = (lon: number, lat: number, box: Box | null) => !box || (lon >= box.w && lon <= box.e && lat >= box.s && lat <= box.n);
 
+/** An ESRI ASCII grid's header, as scanAsciiGrid read it: its cell size and the origin its cells are indexed from. */
+export interface AsciiGridHead {
+	ncols: number;
+	nrows: number;
+	cellDeg: number;
+	/** The south-west corner of the whole grid. */
+	xll: number;
+	yll: number;
+	originLon: number;
+	originLat: number;
+}
+
+/** One value scanAsciiGrid found: its cell's indices from the grid's origin, its centre, and where it sits in the file (1-based). */
+export interface AsciiCell {
+	row: number;
+	col: number;
+	lon: number;
+	lat: number;
+	value: number;
+	fileRow: number;
+	fileCol: number;
+}
+
 /**
- * An ESRI ASCII grid's lines → its cells with a value whose centres lie in
- * `box` (all of them without one). The header's corner or centre form
+ * Stream an ESRI ASCII grid's lines, calling `onCell` for every value that
+ * is a number, not the NODATA value, and whose centre lies in `box` (all of
+ * them without one); returns the header. The header's corner or centre form
  * (`xllcorner`/`xllcenter`), any NODATA value; rows run north to south, as
  * the format has them. Coordinates must be WGS84 degrees: a projected grid
- * (a cell size past 1°, or corners outside ±180/±90) is refused.
+ * (a cell size past 1°, or corners outside ±180/±90) is refused. What a value
+ * may be is the caller's to check (the MAP grid's, the monthly A-pan grids').
  */
-export async function rainMapFromAscii(lines: AsyncIterable<string> | Iterable<string>, box: Box | null): Promise<RainMapGrid> {
+export async function scanAsciiGrid(lines: AsyncIterable<string> | Iterable<string>, box: Box | null, onCell: (cell: AsciiCell) => void): Promise<AsciiGridHead> {
 	const head: Record<string, number> = {};
 	let row = -1;
-	let nrows = 0;
-	let ncols = 0;
 	let x0 = 0;
 	let yTop = 0;
-	let size = 0;
+	let g: AsciiGridHead | null = null;
 	let nodata: number | null = null;
-	let grid: RainMapGrid | null = null;
 	for await (const raw of lines) {
 		const line = raw.trim();
 		if (!line) continue;
@@ -176,9 +221,9 @@ export async function rainMapFromAscii(lines: AsyncIterable<string> | Iterable<s
 				head[m[1]!.toLowerCase()] = v;
 				continue;
 			}
-			ncols = head.ncols ?? 0;
-			nrows = head.nrows ?? 0;
-			size = head.cellsize ?? 0;
+			const ncols = head.ncols ?? 0;
+			const nrows = head.nrows ?? 0;
+			const size = head.cellsize ?? 0;
 			nodata = head.nodata_value ?? null;
 			if (!(Number.isInteger(ncols) && ncols > 0 && Number.isInteger(nrows) && nrows > 0)) throw new Error('the header has no ncols and nrows');
 			if (!(size > 0 && size <= 1)) throw new Error('the cell size is not between 0 and 1 degree: the grid must be in WGS84 degrees (reproject it first)');
@@ -188,30 +233,44 @@ export async function rainMapFromAscii(lines: AsyncIterable<string> | Iterable<s
 			if (xll < -180 || xll + ncols * size > 180 || yll < -90 || yll + nrows * size > 90) throw new Error('the grid is outside ±180°, ±90°: it must be in WGS84 degrees (reproject it first)');
 			x0 = xll;
 			yTop = yll + nrows * size;
-			const originLon = originOf(x0 + size / 2, size);
-			const originLat = originOf(yll + size / 2, size);
-			grid = { cellDeg: size, originLon, originLat, cells: [] };
+			g = { ncols, nrows, cellDeg: size, xll, yll, originLon: originOf(x0 + size / 2, size), originLat: originOf(yll + size / 2, size) };
 			row = 0;
 		}
+		const { ncols, nrows, cellDeg: size } = g!;
 		if (row >= nrows) throw new Error(`the grid has more than its ${nrows} rows`);
 		const lat = yTop - (row + 0.5) * size;
 		if (!box || (lat >= box.s && lat <= box.n)) {
 			const values = line.split(/\s+/);
 			if (values.length !== ncols) throw new Error(`row ${row + 1} has ${values.length} values, not ${ncols}`);
+			const r = indexOf(lat, g!.originLat, size);
 			for (let c = 0; c < ncols; c++) {
 				const v = Number(values[c]);
-				if (!Number.isFinite(v) || v === nodata || v < 0) continue;
-				if (v > MAP_MAX_MM) throw new Error(`row ${row + 1}, column ${c + 1}: ${v} mm is not a mean annual precipitation`);
+				if (!Number.isFinite(v) || v === nodata) continue;
 				const lon = x0 + (c + 0.5) * size;
 				if (!inBox(lon, lat, box)) continue;
-				grid!.cells.push({ row: indexOf(lat, grid!.originLat, size), col: indexOf(lon, grid!.originLon, size), mapMm: v });
+				onCell({ row: r, col: indexOf(lon, g!.originLon, size), lon, lat, value: v, fileRow: row + 1, fileCol: c + 1 });
 			}
 		}
 		row++;
 	}
-	if (!grid) throw new Error('the file has no ESRI ASCII grid header (ncols, nrows, xllcorner, yllcorner, cellsize)');
-	if (row !== nrows) throw new Error(`the grid has ${row} rows, not ${nrows}`);
-	return grid;
+	if (!g) throw new Error('the file has no ESRI ASCII grid header (ncols, nrows, xllcorner, yllcorner, cellsize)');
+	if (row !== g.nrows) throw new Error(`the grid has ${row} rows, not ${g.nrows}`);
+	return g;
+}
+
+/**
+ * An ESRI ASCII grid's lines → its cells with a MAP whose centres lie in
+ * `box` (all of them without one), read by scanAsciiGrid. A negative value
+ * counts as none; a value past 20 000 mm is refused, naming its place.
+ */
+export async function rainMapFromAscii(lines: AsyncIterable<string> | Iterable<string>, box: Box | null): Promise<RainMapGrid> {
+	const cells: RainMapGrid['cells'] = [];
+	const g = await scanAsciiGrid(lines, box, (c) => {
+		if (c.value < 0) return;
+		if (c.value > MAP_MAX_MM) throw new Error(`row ${c.fileRow}, column ${c.fileCol}: ${c.value} mm is not a mean annual precipitation`);
+		cells.push({ row: c.row, col: c.col, mapMm: c.value });
+	});
+	return { cellDeg: g.cellDeg, originLon: g.originLon, originLat: g.originLat, cells };
 }
 
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
@@ -228,7 +287,7 @@ export function rainMapFromJson(doc: unknown): { grid: RainMapGrid; meta: { sour
 		const [lon, lat, v] = Array.isArray(c) ? c.map(Number) : [];
 		if (!(Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon!) <= 180 && Math.abs(lat!) <= 90)) return `cell ${i + 1}: not [lon, lat, mapMm]`;
 		if (!(Number.isFinite(v) && v! >= 0 && v! <= MAP_MAX_MM)) return `cell ${i + 1}: not a MAP of 0–${MAP_MAX_MM} mm`;
-		if (Math.abs(originOf(lon!, cellDeg) - grid.originLon) > 1e-6 || Math.abs(originOf(lat!, cellDeg) - grid.originLat) > 1e-6) return `cell ${i + 1}: its centre isn't on the first cell's ${cellDeg}° grid`;
+		if (!sameOrigin(originOf(lon!, cellDeg), grid.originLon, cellDeg) || !sameOrigin(originOf(lat!, cellDeg), grid.originLat, cellDeg)) return `cell ${i + 1}: its centre isn't on the first cell's ${cellDeg}° grid`;
 		grid.cells.push({ row: indexOf(lat!, grid.originLat, cellDeg), col: indexOf(lon!, grid.originLon, cellDeg), mapMm: v! });
 	}
 	return { grid, meta: { source: text(d.source, 500), version: text(d.version, 100), attribution: text(d.attribution, 500) } };

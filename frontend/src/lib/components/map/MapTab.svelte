@@ -18,6 +18,10 @@
 	const loadDivideSheet = () => import('./DivideSheet.svelte');
 	// The click bar shows only while dividing by clicks: its own chunk keeps the tab under its budget (check:bundle).
 	const loadClickBar = () => import('./ClickBar.svelte');
+	// The A-pan and S-pan grid layers' toggles and state: a chunk of their own, loaded once the tab is up; and the measure
+	// bar, shown only while measuring (2026-11-08: the two layers took the tab past its 60 KB ceiling, 61 KB).
+	const loadEvaporationGrids = () => import('./EvaporationGridToggles.svelte');
+	const loadMeasureBar = () => import('./measure/MeasureBar.svelte');
 	// The sheets a tool opens once its point, shape or cut is on the map (Place, Delineate, Save a drawing, Split,
 	// Trace, Paste coordinates): one chunk for all six (sheets.ts), so they cost one request, warmed when a tool
 	// starts (the sheet opens a click or more later). 2026-10-11, issue #521: the tab was at its 60 KB ceiling;
@@ -91,12 +95,12 @@
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { channelsWanted, chirpsCells, demRiversOffered, layerAsked, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
+	import type { EvaporationGrids } from './EvaporationGridToggles.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
 	import { AreaFill } from './areaFill.svelte';
 	import MapLayers from './MapLayers.svelte';
 	import { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import { RiverLayer } from './riverLayer.svelte';
-	import MeasureBar from './measure/MeasureBar.svelte';
 	import { MeasureDraft } from './measure/measureDraft.svelte';
 	import MapKeyRow from './MapKeyRow.svelte';
 	import { featureResult, featureZone, viewLabel } from './mapResults';
@@ -935,6 +939,35 @@
 		view: () => mapView,
 		load: api.map.mapGrid
 	});
+	// The A-pan and S-pan grids (docs/maps.md § A-pan and S-pan grids): one layer each, toggled on its own. Their state
+	// class and toggles load as one chunk after the tab; each layer is made inside this effect, which owns their effects.
+	let evaporationGrids = $state.raw<EvaporationGrids | null>(null);
+	let evaporationModule = $state.raw<Awaited<ReturnType<typeof loadEvaporationGrids>> | null>(null);
+	// A chunk that failed to load is said in the Layers box, with a reload (ChunkFailed; lazy.ts says why not retry).
+	let evaporationFailed = $state(false);
+	$effect(() => {
+		if (!evaporationModule) {
+			loadEvaporationGrids().then(
+				(m) => (evaporationModule = m),
+				() => (evaporationFailed = true)
+			);
+			return;
+		}
+		const m = evaporationModule;
+		untrack(() => {
+			const grids = (['apan', 'span'] as const).map(
+				(kind) =>
+					new m.EvaporationGridLayer({
+						kind,
+						projectId: () => projectId,
+						on: () => layersOn(params).has(m.EVAPORATION_GRID_LAYER[kind]),
+						view: () => mapView,
+						load: api.map.evaporationGrid
+					})
+			);
+			evaporationGrids = { grids, Toggles: m.default };
+		});
+	});
 	const chirpsOn = $derived(layersOn(params).has('chirps'));
 	const chirpsInView = $derived(chirpsOn ? chirpsCells(mapView) : null);
 	const demGrid = new DemGridLayer({
@@ -1453,6 +1486,7 @@
 		relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
 		units={{ on: unitsOn, labels: unitsLabelled }}
 		{mapGrid}
+		evaporationGrids={evaporationFailed ? 'failed' : evaporationGrids}
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
 		demGrid={demGridOffered ? demGrid : null}
@@ -1499,7 +1533,7 @@
 			<div class="map-layout" class:empty={!features.length} bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
 					{#if measure.active}
-						<MeasureBar {measure} ondone={endMeasure} />
+						<Lazy load={loadMeasureBar}>{#snippet children(MeasureBar)}<MeasureBar {measure} ondone={endMeasure} />{/snippet}</Lazy>
 					{/if}
 					{#if canEdit && dividing && !wide}
 						<Lazy load={loadClickBar}>{#snippet children(ClickBar)}<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapStatus={mapState} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} within={clickWithin} />{/snippet}</Lazy>
@@ -1644,6 +1678,8 @@
 									mapGrid={mapGrid.points}
 									mapGridAttribution={mapGrid.answer?.dataset?.attribution ?? null}
 									mapGridCellDeg={mapGrid.answer?.dataset?.cellDeg ?? null}
+									apanGrid={evaporationGrids?.grids[0]?.draw ?? null}
+									spanGrid={evaporationGrids?.grids[1]?.draw ?? null}
 									chirps={chirpsInView}
 									demGrid={demGrid.points}
 									fillScale={areaFill.scale}
