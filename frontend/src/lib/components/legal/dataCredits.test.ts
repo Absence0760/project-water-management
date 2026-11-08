@@ -4,7 +4,7 @@
 // docs/followups.md), and the map's own notices say the same.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DWS_QUATERNARY_STATEMENT, WR2012_STATEMENT, DEAFRICA_STATEMENT, WATERBODIES_CITATION, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT, LYNCH_MAP_STATEMENT, LYNCH_MAP_MAP_ATTRIBUTION, ATLAS_APAN_STATEMENT } from './dataCredits';
+import { DWS_QUATERNARY_STATEMENT, WR2012_STATEMENT, DEAFRICA_STATEMENT, WATERBODIES_CITATION, SENTINEL_STATEMENT, CARAVAN_STATEMENT, HYDROATLAS_STATEMENT, ISDA_STATEMENT, SOILGRIDS_STATEMENT, LICENCES_READ, licencesReadLine, readDay, COPERNICUS_LIABILITY, COPERNICUS_NOTICE, DATA_CREDITS, DPET_STATEMENT, HYDRORIVERS_MAP_ATTRIBUTION, HYDROSHEDS_STATEMENT, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, WORLDCOVER_STATEMENT, GEONAMES_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT, LYNCH_MAP_STATEMENT, LYNCH_MAP_MAP_ATTRIBUTION, ATLAS_APAN_STATEMENT, ATLAS_SPAN_STATEMENT } from './dataCredits';
 import { AGERA5_CITATION, copernicusAgera5Notice, copernicusEra5lNotice, ECMWF_CREDIT, ERA5L_CITATION, NASA_POWER_ET0_CREDIT } from '@water-management/engine';
 import { TERRAIN_ATTRIBUTION } from '#lib/components/map/mapStyle.js';
 import { COPERNICUS_NOTICE as DELINEATION_NOTICE } from '#lib/components/map/delineation.js';
@@ -24,7 +24,7 @@ describe('the data credits', () => {
 		// The operator's decision behind the Southwestern Cape surface's use is on record with its credit line.
 		expect(doc('legal/map-data-licences.md')).toContain(`"${WAAS_MAP_STATEMENT}"`);
 		// The WRC Atlas's two grids (the operator's decision of 2026-11-08): their citations as maps.md and the decision record them.
-		for (const s of [LYNCH_MAP_STATEMENT, ATLAS_APAN_STATEMENT]) {
+		for (const s of [LYNCH_MAP_STATEMENT, ATLAS_APAN_STATEMENT, ATLAS_SPAN_STATEMENT]) {
 			expect(maps).toContain(`"${s}"`);
 			expect(doc('legal/map-data-licences.md')).toContain(`"${s}"`);
 		}
@@ -78,6 +78,9 @@ describe('the data credits', () => {
 		// The Lynch grid's and the Atlas A-pan's, which a production load stores as each dataset's attribution.
 		expect(backend('geo/rainMap.ts')).toContain(`LYNCH_MAP_ATTRIBUTION = '${LYNCH_MAP_STATEMENT}'`);
 		expect(backend('geo/evaporationGrid.ts')).toContain(`ATLAS_APAN_ATTRIBUTION = '${ATLAS_APAN_STATEMENT}'`);
+		expect(backend('geo/evaporationGrid.ts')).toContain(`ATLAS_SPAN_ATTRIBUTION = '${ATLAS_SPAN_STATEMENT}'`);
+		// The S-pan credit says on the page that it is a cross-check, never converted.
+		expect(DATA_CREDITS.find((c) => c.id === 'atlas-span')!.usedFor).toMatch(/cross-check only\. It is never written to a project or converted to A-pan/);
 		// The A-pan credit says on the page that the values are modelled.
 		expect(DATA_CREDITS.find((c) => c.id === 'atlas-apan')!.usedFor).toMatch(/modelled values, not measured pans/);
 		// The dam observations' credits (issue #604 R5, #624): DE Africa's, and Copernicus's for the Sentinel views.

@@ -245,7 +245,8 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 		// The WRC Atlas's two grids, used on the operator's decision of 2026-11-08 (docs/legal/map-data-licences.md § 3.3e).
 		'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2',
 		'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06',
-		'These are modelled values, not measured pans.'
+		'These are modelled values, not measured pans.',
+		'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)'
 	])
 		expect(html, text).toContain(text);
 	await page.goto('/terms');

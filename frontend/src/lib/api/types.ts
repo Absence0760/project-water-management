@@ -3646,8 +3646,8 @@ export interface CropTypeProposals {
 	unit: CropTypeAreas | null;
 }
 
-/** What an evaporation grid's values are: FAO-56 reference ET (proposed as GR4J's PE) or Class-A pan (the A-pan row). */
-export type EvaporationKind = 'et0' | 'apan';
+/** What an evaporation grid's values are: FAO-56 reference ET (proposed as GR4J's PE), Class-A pan (the A-pan row) or Symons pan (shown as a cross-check only, never proposed; 316, issue #738). */
+export type EvaporationKind = 'et0' | 'apan' | 'span';
 /** The settings an accepted evaporation row goes into: GR4J's monthly PE (settings.pe) or the A-pan row (settings.apanMm). */
 export type EvaporationTarget = 'pe' | 'apan';
 

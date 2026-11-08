@@ -115,7 +115,14 @@ export const LYNCH_MAP_MAP_ATTRIBUTION = 'MAP grid: Lynch (2004), WRC Atlas';
 export const ATLAS_APAN_STATEMENT =
 	'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06';
 
-/** The licence line both Atlas grids share: what the portal says, and on whose decision they are used. */
+/**
+ * The CCWR S-pan grid's credit (issue #738): the backend's
+ * `ATLAS_SPAN_ATTRIBUTION` (geo/evaporationGrid.ts), word for word. It names
+ * the report only, since which product the grids are is still to be confirmed.
+ */
+export const ATLAS_SPAN_STATEMENT = 'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)';
+
+/** The licence line the Atlas grids share: what the portal says, and on whose decision they are used. */
 const ATLAS_LICENCE =
 	'The Water Research Observatory’s dataset page lists Creative Commons Attribution-ShareAlike 4.0 and “No License Provided” at once; used on the operator’s decision of 8 November 2026 accepting that risk';
 
@@ -309,6 +316,16 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		licenceUrl: 'https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip',
 		read: '2026-10-09',
 		statements: [ATLAS_APAN_STATEMENT]
+	},
+	{
+		id: 'atlas-span',
+		name: 'Symons-pan (S-pan) evaporation grids, from the CCWR’s Atlas of Agrohydrology distribution',
+		usedFor: 'Calibration → Evaporation from the map: the monthly S-pan over the catchment, shown beside the saved A-pan as a cross-check only. It is never written to a project or converted to A-pan.',
+		publisher: 'Water Research Commission (WRC): R.E. Schulze (ed.), WRC Report 1489/1/06 (2007), from the Water Research Observatory; which product the grids are is to be confirmed',
+		licence: ATLAS_LICENCE,
+		licenceUrl: 'https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip',
+		read: '2026-10-09',
+		statements: [ATLAS_SPAN_STATEMENT]
 	},
 	{
 		id: 'dws-quaternaries',
