@@ -861,9 +861,22 @@ passed explicitly. Both upload SARIF to code scanning (categories `zizmor`,
 `osv-scanner`) and write a job summary, and neither fails on a finding. The
 code-scanning ruleset names only CodeQL, so their alerts don't block a merge.
 osv-scanner runs `--offline-vulnerabilities`: it downloads the public OSV
-database and sends no package list anywhere. Making them blocking waits on
-the current zizmor findings being fixed and a CISO / Security Analyst
-sign-off; the change then is adding both tools to that ruleset. The shared
+database and sends no package list anywhere. The zizmor baseline (30
+findings when the scan was added, #734) is fixed: checkouts keep no token
+(`persist-credentials: false`), expressions reach `run:` scripts through
+`env:`, version comments name the exact tag of their SHA, the deploys keep
+no cache (above), `dependabot-lockfile.yml` gates on the PR's author rather
+than `github.actor`, and `pr-title-lint.yml` runs on `pull_request`. Six
+findings are suppressed inline (`# zizmor: ignore[…]`), each with its reason
+beside it: `dangerous-triggers` on `claude.yml` (operator-only, the model
+runs no repo code), `pr-mergeable.yml` (`pull_request` fires no run for a
+conflicted PR, the case it reports) and `dependabot-auto-merge.yml` (under
+`pull_request` a Dependabot PR bumping fetch-metadata would run its own new
+version with the write token), and `self-repository` on the three job-level
+`uses: ./.github/workflows/…` calls (actionlint 1.7.12 rejects GitHub's `$/`
+form, rhysd/actionlint#711). Making the scans blocking waits on a CISO /
+Security Analyst sign-off; the change then is adding both tools to that
+ruleset. The shared
 security workflows come from the `templates` repo's `base` branch, so this
 one is to be proposed there too.
 
@@ -909,8 +922,13 @@ the real plan stays an operator step
   credentials; § The data mirror). Then the job calls `/api/health` through
   CloudFront and fails unless it answers `{"ok":true}`.
 - **Release builds install cold**: no dependency cache is restored in either
-  deploy workflow (the workflow guard's `no-cache` rule), since a cache is
-  written by other runs and the build ships with deploy credentials.
+  deploy workflow, nor in `load-reference.yml` (the workflow guard's
+  `no-cache` rule), since a cache is written by other runs and the build ships
+  with deploy credentials. That includes the cache `actions/setup-node`
+  (v5+) turns on by itself when `package.json` names a `packageManager`:
+  every setup-node step in those workflows says `package-manager-cache:
+  false`, and the guard refuses one that doesn't (until 2026-11 the deploys
+  did restore that pnpm cache; zizmor's `cache-poisoning` audit found it).
 
 ### A failed migration
 

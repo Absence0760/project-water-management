@@ -25,7 +25,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: ./.github/workflows/gitleaks.yml
+    # `./`, not GitHub's `$/` self-repository form (zizmor self-repository,
+    # suppressed): actionlint 1.7.12, which CI's workflow-lint runs, rejects
+    # `$/` (rhysd/actionlint#711), and a job-level reusable-workflow call is
+    # resolved from this commit by GitHub, not read from a runner workspace.
+    uses: ./.github/workflows/gitleaks.yml # zizmor: ignore[self-repository]
 
   report:
     name: Surface a failed weekly sweep

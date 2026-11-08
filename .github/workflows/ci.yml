@@ -41,6 +41,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       - id: diff
         name: Anything besides docs changed?
@@ -71,6 +72,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -128,6 +131,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -154,6 +159,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -227,11 +234,13 @@ jobs:
           restore-keys: apt-debs-db-
 
       - name: Install Chromium
+        env:
+          PW_CACHE_HIT: ${{ steps.pw-cache.outputs.cache-hit }}
         run: |
           echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-debs > /dev/null
           mkdir -p ~/apt-debs
           find ~/apt-debs -name '*.deb' -exec sudo cp -t /var/cache/apt/archives/ {} +
-          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "$PW_CACHE_HIT" = "true" ]; then
             pnpm -C e2e exec playwright install-deps chromium
           else
             pnpm -C e2e exec playwright install --with-deps chromium
@@ -252,6 +261,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -320,6 +331,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -363,11 +376,13 @@ jobs:
           restore-keys: apt-debs-e2e-
 
       - name: Install Chromium
+        env:
+          PW_CACHE_HIT: ${{ steps.pw-cache.outputs.cache-hit }}
         run: |
           echo 'APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/99-keep-debs > /dev/null
           mkdir -p ~/apt-debs
           find ~/apt-debs -name '*.deb' -exec sudo cp -t /var/cache/apt/archives/ {} +
-          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "$PW_CACHE_HIT" = "true" ]; then
             pnpm -C e2e exec playwright install-deps chromium
           else
             pnpm -C e2e exec playwright install --with-deps chromium
@@ -412,7 +427,9 @@ jobs:
       - name: Plan this shard
         env:
           E2E_PREBUILT: '1'
-        run: node e2e/support/shard-list.ts ${{ matrix.shard }}/${{ strategy.job-total }} "$RUNNER_TEMP/shard-tests.txt"
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
+        run: node e2e/support/shard-list.ts "$SHARD/$SHARD_TOTAL" "$RUNNER_TEMP/shard-tests.txt"
 
       # Global setup creates + migrates water_e2e; Playwright starts the
       # backend (:3101) and serves the prebuilt site (:7801). The config refuses
@@ -449,6 +466,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -775,7 +794,11 @@ jobs:
     permissions:
       contents: read
       security-events: write # Trivy SARIF upload (public repo only)
-    uses: ./.github/workflows/terraform.yml
+    # `./`, not GitHub's `$/` self-repository form (zizmor self-repository,
+    # suppressed): actionlint 1.7.12, which CI's workflow-lint runs, rejects
+    # `$/` (rhysd/actionlint#711), and a job-level reusable-workflow call is
+    # resolved from this commit by GitHub, not read from a runner workspace.
+    uses: ./.github/workflows/terraform.yml # zizmor: ignore[self-repository]
 
   # Secret scan, called so a detection fails the gate. UNGATED on purpose: a
   # pasted credential arrives in a markdown file as easily as in code, and a
@@ -785,7 +808,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: ./.github/workflows/gitleaks.yml
+    # `./`, not GitHub's `$/` self-repository form (zizmor self-repository,
+    # suppressed): actionlint 1.7.12, which CI's workflow-lint runs, rejects
+    # `$/` (rhysd/actionlint#711), and a job-level reusable-workflow call is
+    # resolved from this commit by GitHub, not read from a runner workspace.
+    uses: ./.github/workflows/gitleaks.yml # zizmor: ignore[self-repository]
 
   # Single required status check for branch protection (docs/USING.md
   # "The CI gate"). It fans in on every job above via `needs` + always(),

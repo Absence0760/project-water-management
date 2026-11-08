@@ -11,8 +11,9 @@ name: supply-chain-scan
 # Advisory first: findings go to code scanning (SARIF, categories `zizmor`
 # and `osv-scanner`) and to the job summary, and neither job fails on a
 # finding. Neither tool is named in a code-scanning merge ruleset, so their
-# alerts do not block a merge either. Once the current findings are fixed,
-# a follow-up makes these checks blocking.
+# alerts do not block a merge either. The zizmor baseline is fixed, with
+# six reasoned inline suppressions (docs/deployment.md); making these checks
+# blocking waits on a CISO / Security Analyst sign-off.
 #
 # Data flow: osv-scanner runs with --offline-vulnerabilities, so it downloads
 # the public OSV database and sends no package list anywhere. zizmor's online

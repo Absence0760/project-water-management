@@ -6,7 +6,7 @@ name: pr-mergeable
 # `ci.yml` triggers on `pull_request`, which runs against the MERGE REF. GitHub
 # cannot compute a merge ref for a PR with conflicts, so no CI run is created
 # at all: not queued, not skipped, not failed. What remains visible are the
-# `pull_request_target` workflows (this one, labeler, pr-title-lint,
+# `pull_request_target` workflows (this one, labeler,
 # dependabot-auto-merge), which build the head ref and go green, so a
 # conflicted PR looks tested when nothing tested it. Dependabot PRs are the
 # usual case here.
@@ -22,7 +22,10 @@ name: pr-mergeable
 # passes `--repo` because there is no working tree to infer it from.
 
 on:
-  pull_request_target:
+  # pull_request_target on purpose: `pull_request` fires no run at all for a
+  # conflicted PR, which is the case this check exists to report. The `pr` job
+  # checks out nothing, runs no PR code and holds only pull-requests: read.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, synchronize]
   push:
     branches: [main]
