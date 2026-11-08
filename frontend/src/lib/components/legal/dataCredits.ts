@@ -316,7 +316,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 	{
 		id: 'atlas-apan',
 		name: 'A-pan equivalent reference potential evaporation (modelled), from the South African Atlas of Climatology and Agrohydrology',
-		usedFor: 'Calibration → Evaporation from the map: the monthly A-pan row it proposes. These are modelled values, not measured pans.',
+		usedFor: 'Evaporation from the map (on Calibration, under Flow calibration): the monthly A-pan row it proposes; and the Map tab’s A-pan grid layer. These are modelled values, not measured pans.',
 		publisher: 'Water Research Commission (WRC): R.E. Schulze and M. Maharaj, in R.E. Schulze (ed.), WRC Report 1489/1/06 (2007), from the Water Research Observatory',
 		licence: ATLAS_LICENCE,
 		licenceUrl: 'https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip',
@@ -326,7 +326,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 	{
 		id: 'atlas-span',
 		name: 'Symons-pan (S-pan) evaporation grids, from the CCWR’s Atlas of Agrohydrology distribution',
-		usedFor: 'Calibration → Evaporation from the map: the monthly S-pan over the catchment, shown beside the saved A-pan as a cross-check only. It is never written to a project or converted to A-pan.',
+		usedFor: 'Evaporation from the map (on Calibration, under Flow calibration): the monthly S-pan over the catchment, shown beside the saved A-pan, and the Map tab’s S-pan grid layer, as a cross-check only. It is never written to a project or converted to A-pan.',
 		publisher: 'Water Research Commission (WRC): R.E. Schulze (ed.), WRC Report 1489/1/06 (2007), from the Water Research Observatory; which product the grids are is to be confirmed',
 		licence: ATLAS_LICENCE,
 		licenceUrl: 'https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip',
