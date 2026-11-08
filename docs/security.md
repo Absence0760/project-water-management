@@ -4336,8 +4336,10 @@ key there would let any read-only principal forge any user's session.
 - **CI's dependency cache is not trusted by release builds.** Every job in
   `ci.yml` (and `dependabot-lockfile.yml`'s credential-free job) restores
   pnpm's store through `actions/setup-node`'s `cache: pnpm`; both deploy
-  workflows restore no cache at all (`check_workflows.mjs` rule
-  `no-cache`, [deployment.md § What each deploy does](./deployment.md#what-each-deploy-does)).
+  workflows and `load-reference.yml` restore no cache at all, setup-node's
+  implicit `packageManager` cache included (`package-manager-cache: false`;
+  `check_workflows.mjs` rule `no-cache`, [deployment.md § What each deploy
+  does](./deployment.md#what-each-deploy-does)).
   That split is the control, because **pnpm's store-integrity check would
   not reject a doctored store** (checked 2026-09-29 against pnpm 10.33.2,
   issue #126):

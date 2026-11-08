@@ -259,13 +259,30 @@ test('draftReadyProblem reads the real ci.yml as passing', () => {
 test('a workflow with a production job may not restore a dependency cache', () => {
 	const build = '  build:\n    runs-on: x\n    steps:\n      - uses: actions/setup-node@' + SHA + ' # v7.0.0\n        with:\n          node-version: 24\n          cache: pnpm\n';
 	const withBuild = good.replace('jobs:\n', 'jobs:\n' + build);
-	assert.deepEqual(rules(withBuild), ['no-cache']);
+	// Twice: the `cache:` line, and the step not switching off setup-node's own cache.
+	assert.deepEqual(rules(withBuild), ['no-cache', 'no-cache']);
 	assert.deepEqual(rules(good.replace('jobs:\n', 'jobs:\n  build2:\n    steps:\n      - uses: actions/cache@' + SHA + ' # v6.1.0\n')), ['no-cache']);
-	// Commented out, or in a workflow that never deploys: fine.
-	assert.deepEqual(rules(withBuild.replace('          cache: pnpm', '          # cache: pnpm')), []);
+	// Commented out (with the implicit cache off), or in a workflow that never deploys: fine.
+	assert.deepEqual(rules(withBuild.replace('          cache: pnpm', '          # cache: pnpm\n          package-manager-cache: false')), []);
 	assert.deepEqual(rules(withBuild.replace('    environment: production\n', '').replace(/  deploy:[\s\S]*/, '')), []);
 	// Cache-Control headers in a run: script are not a cache restore.
 	assert.deepEqual(rules(good + '      - run: aws s3 sync --cache-control "max-age=60" x y\n'), []);
+});
+
+test('a workflow with a production job switches off setup-node\'s implicit cache', () => {
+	const node = (extra) => '      - name: Set up Node\n        uses: actions/setup-node@' + SHA + ' # v7.1.0\n        with:\n          node-version: 24\n' + extra;
+	const inBuild = (step) => good.replace('      - run: node scripts/release/preflight.mjs backend\n', step + '      - run: node scripts/release/preflight.mjs backend\n');
+	// Positive control: the switch, with or without a trailing comment, and
+	// setup-node anywhere in a workflow that never deploys.
+	assert.deepEqual(rules(inBuild(node('          package-manager-cache: false\n'))), []);
+	assert.deepEqual(rules(inBuild(node('          package-manager-cache: false # zizmor cache-poisoning\n'))), []);
+	assert.deepEqual(rules(inBuild(node('')).replace('    environment: production\n', '').replace(/  deploy:[\s\S]*/, '')), []);
+	// No switch, or the switch set true, or it belongs to the next step.
+	assert.deepEqual(rules(inBuild(node(''))), ['no-cache']);
+	assert.deepEqual(rules(inBuild(node('          package-manager-cache: true\n'))), ['no-cache']);
+	assert.deepEqual(rules(inBuild(node('') + '      - uses: x/y@' + SHA + ' # v1.0.0\n        with:\n          package-manager-cache: false\n')), ['no-cache']);
+	// A bare `- uses:` step (no name line) is read the same way.
+	assert.deepEqual(rules(inBuild('      - uses: actions/setup-node@' + SHA + ' # v7.1.0\n')), ['no-cache']);
 });
 
 test('a docker build must produce one single-platform manifest without attestations', () => {
