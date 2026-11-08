@@ -1,6 +1,7 @@
 # ----------------------------------------------------------------------------
-# The Lambdas' baseline execution permissions: logs, and for the three VPC
-# Lambdas the ENI actions (issue #126 § IAM).
+# The Lambdas' baseline execution permissions: logs, and for the VPC
+# Lambdas the ENI actions (issue #126 § IAM); with fixed_egress_enabled the
+# fetcher and mirror-ingest too (egress.tf).
 #
 # No AWS-managed policy is attached. AWSLambdaBasicExecutionRole and
 # AWSLambdaVPCAccessExecutionRole grant logs:CreateLogGroup,
@@ -46,6 +47,10 @@ locals {
     worker  = { role = aws_iam_role.worker_lambda, function_arn = "${local.lambda_arn_prefix}${local.project}-worker" }
     }, local.assistant_enabled ? {
     assistant = { role = aws_iam_role.assistant_lambda[0], function_arn = local.assistant_function_arn }
+    } : {}, local.fixed_egress_on ? {
+    # In the egress VPC, not the private one (egress.tf).
+    fetcher = { role = aws_iam_role.fetcher_lambda, function_arn = "${local.lambda_arn_prefix}${local.project}-fetcher" }
+    ingest  = { role = aws_iam_role.ingest_lambda, function_arn = "${local.lambda_arn_prefix}${local.ingest_function_name}" }
   } : {})
 
   lambda_vpc_eni_actions = [

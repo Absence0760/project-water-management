@@ -203,7 +203,8 @@ resource "aws_iam_role" "fetcher_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# Logs (its own log group only) are in iam.tf; no VPC access, no managed policy.
+# Logs (its own log group only) are in iam.tf, and with fixed_egress_enabled
+# the VPC ENI actions (iam.tf local.lambda_vpc_functions); no managed policy.
 # The queue grants only while per-feed fetching is on.
 
 data "aws_iam_policy_document" "fetcher_lambda" {
@@ -250,7 +251,7 @@ data "archive_file" "fetcher_stub" {
 
 resource "aws_lambda_function" "fetcher" {
   function_name = "${local.project}-fetcher"
-  description   = "Data feeds: downloads CHIRPS / CHIRPS-GEFS / DWS for a fetch request and sends the parsed days back, and runs the mirror's daily and weekly passes. No VPC, no database (backend/src/lambda-fetcher.ts)."
+  description   = "Data feeds: downloads CHIRPS / CHIRPS-GEFS / DWS for a fetch request and sends the parsed days back, and runs the mirror's daily and weekly passes. No database; outside the private VPC (backend/src/lambda-fetcher.ts)."
   role          = aws_iam_role.fetcher_lambda.arn
 
   filename         = data.archive_file.fetcher_stub.output_path
@@ -275,7 +276,16 @@ resource "aws_lambda_function" "fetcher" {
     log_group = aws_cloudwatch_log_group.fetcher.name
   }
 
-  # Deliberately no vpc_config: this is the one Lambda with internet access.
+  # Outside any VPC by default, on AWS's shared addresses; with
+  # fixed_egress_enabled, in the egress VPC behind one Elastic IP (egress.tf),
+  # never the private VPC: it has no path to the database either way.
+  dynamic "vpc_config" {
+    for_each = local.fixed_egress_vpc_config
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
 
   environment {
     variables = merge(
@@ -303,6 +313,7 @@ resource "aws_lambda_function" "fetcher" {
     aws_cloudwatch_log_group.fetcher,
     aws_iam_role_policy.lambda_logs["fetcher"],
     aws_iam_role_policy.fetcher_lambda,
+    aws_iam_role_policy.lambda_vpc_eni,
   ]
 
   lifecycle {
