@@ -23,9 +23,11 @@
 #     through the S3 interface endpoint in packs.tf, only to HEAD an
 #     evidence pack's PDF before recording the hash the renderer answered.
 #
-# The two Lambdas that do need the internet run OUTSIDE the VPC, with no
-# database access: the data feeds' fetcher (feeds.tf) and the report
-# renderer (reports.tf).
+# The Lambdas that do need the internet run OUTSIDE this VPC, with no
+# database access: the data feeds' fetcher (feeds.tf), the mirror-ingest job
+# (ingest.tf) and the report renderer (reports.tf). With
+# fixed_egress_enabled the fetcher and mirror-ingest run in a separate egress
+# VPC behind one Elastic IP (egress.tf, modules/fixed-egress), never this one.
 #
 # Security groups: API, migrate and worker Lambdas; RDS (5432 from those
 # three only); one per interface endpoint (Secrets Manager here, SQS in

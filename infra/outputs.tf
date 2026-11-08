@@ -152,3 +152,8 @@ output "mirror_bucket" {
   description = "The data mirror's private, versioned bucket (Zarr v3 arrays + manifest.json per product). MIRROR_URL is s3://<this>."
   value       = aws_s3_bucket.mirror.bucket
 }
+
+output "fixed_egress_ip" {
+  description = "With fixed_egress_enabled, the one address the fetcher and mirror-ingest Lambdas reach the internet from (egress.tf): the address to give CHC. Null when off."
+  value       = local.fixed_egress_on ? module.fixed_egress[0].public_ip : null
+}
