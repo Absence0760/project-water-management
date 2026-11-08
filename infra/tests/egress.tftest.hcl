@@ -999,6 +999,13 @@ run "fixed_egress_module" {
     error_message = "The first-boot script forwards (ip_forward), masquerades, drops all forwarding but new HTTPS connections and their replies, checks the ruleset before loading it, and follows the latest AL2023 release for its security updates."
   }
 
+  assert {
+    # The first version's ENI is the live instance's primary interface: drop
+    # it from state, never destroy it (2026-11-08).
+    condition     = aws_vpc.egress.cidr_block != "" && can(regex("(?s)removed\\s*\\{\\s*from\\s*=\\s*aws_network_interface\\.nat\\s*lifecycle\\s*\\{\\s*destroy\\s*=\\s*false", file("modules/fixed-egress/main.tf")))
+    error_message = "The old aws_network_interface.nat leaves state with destroy = false: it is the live NAT instance's primary interface and holds the Elastic IP."
+  }
+
   # --- Security groups --------------------------------------------------------
   assert {
     condition = (
