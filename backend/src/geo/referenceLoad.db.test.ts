@@ -9,7 +9,11 @@
 //    attribution; a second load replaces it;
 //  - evaporation: the synthetic grid through `pnpm import:evaporation --out`
 //    (writeEvaporationJson, gzipped) loads cell for cell the same as the
-//    direct load, with its dataset row; an A-pan grid is refused;
+//    direct load, with its dataset row; an A-pan grid is refused under any
+//    label but the WRC Atlas's (Atlas-Apan-2007), whose grid, built from 12
+//    monthly ASCII grids (`--apan-asc`), loads stored with its recorded,
+//    modelled lines; a PenPan grid or a reference-ET file under that label is
+//    refused;
 //  - rivers: the synthetic network loads with the source given, minOrder
 //    leaves the small reaches out;
 //  - gazetteer: the synthetic GeoNames-format places (gzipped) load with
@@ -17,8 +21,9 @@
 //    leaves out dropped;
 //  - MAP grid: the synthetic grid through `pnpm import:map-grid --out`
 //    (writeMapGridJson, gzipped) loads as the one allowed dataset
-//    (WAAS-SWCape-2007), cell for cell the same as the direct load, stored
-//    with the recorded credit line, never the file's own;
+//    (WAAS-SWCape-2007, and Lynch-2004 since 2026-11-08), cell for cell the
+//    same as the direct load, stored with the recorded credit line, never the
+//    file's own;
 //  - quaternaries (the operator's decision, 2026-11-02): the outlines with
 //    their values, through `pnpm import:quaternaries --out`
 //    (writeQuaternariesJson, gzipped), load with the recorded DWS and WR2012
@@ -40,10 +45,10 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadSyntheticEvaporation, parseEvaporationArgs, writeEvaporationJson } from '../../scripts/import-evaporation.js';
+import { loadSyntheticEvaporation, parseEvaporationArgs, SYNTHETIC_APAN_ASC_FILES, SYNTHETIC_PENPAN_FILE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover, parseLandCoverArgs, writeLandCoverJson } from '../../scripts/import-land-cover.js';
 import { SYNTHETIC_RIVERS_FILE } from '../../scripts/import-rivers.js';
 import { SYNTHETIC_GAZETTEER_FILE } from '../../scripts/import-gazetteer.js';
@@ -53,7 +58,8 @@ import { POLYGONS_FILE as SYNTHETIC_WATERBODIES_FILE } from '../../scripts/water
 import { writeQuaternariesJson } from '../../scripts/import-quaternaries.js';
 import { QUATERNARY_SOURCE, replaceDataset as replaceQuaternaries } from './loadQuaternaries.js';
 import { QUATERNARY_EVAPORATION_SOURCE } from './loadQuaternaryEvaporation.js';
-import { replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
+import { LYNCH_MAP, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
+import { ATLAS_APAN } from './evaporationGrid.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { asOwner } from '../__tests__/helpers.js';
 import { replaceCroplandDataset } from './croplandGrid.js';
@@ -66,6 +72,9 @@ const GZ = 'test-reference-load-gz';
 const GZN = 'test-reference-load-gz-neighbours';
 // The one MAP grid label production allows (REFERENCE_KINDS['map-grid'].datasets): only this file writes it in water_test.
 const MG = WAAS_MAP.dataset;
+const LY = LYNCH_MAP.dataset;
+// The one A-pan label production allows (REFERENCE_KINDS.evaporation.apanDatasets): only this file writes it in water_test.
+const AP = ATLAS_APAN.dataset;
 const WB = 'Test-Waterbodies';
 const QT = 'Test-Quaternaries';
 const QE = 'Test-Quaternary-Evaporation';
@@ -96,13 +105,13 @@ beforeAll(async () => {
 afterAll(async () => {
 	await client.query('DELETE FROM cropland_dataset WHERE dataset = $1', [LC]);
 	await client.query('DELETE FROM river_reference WHERE dataset = $1', [RV]);
-	await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', [EV]);
+	await client.query('DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])', [[EV, AP]]);
 	await client.query('DELETE FROM gazetteer_reference WHERE dataset = ANY($1::text[])', [[GZ, GZN]]);
-	await client.query('DELETE FROM rain_map_dataset WHERE dataset = $1', [MG]);
+	await client.query('DELETE FROM rain_map_dataset WHERE dataset = ANY($1::text[])', [[MG, LY]]);
 	await client.query('DELETE FROM waterbody_reference WHERE dataset = $1', [WB]);
 	await client.query('DELETE FROM quaternary_reference WHERE dataset = $1', [QT]);
 	await client.query('DELETE FROM quaternary_evaporation WHERE dataset = $1', [QE]);
-	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG, WB, QT, QE]]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG, LY, AP, WB, QT, QE]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -204,6 +213,45 @@ describe('evaporation, from the file `import:evaporation --out` writes', () => {
 		const notGrid = await load({ kind: 'evaporation', key: 'reference/evaporation/x.json', dataset: EV }, Buffer.from('{"cells":[]}')).catch((e: unknown) => e);
 		expect((notGrid as LoadError).code).toBe('unreadable');
 		expect(await asOwner('SELECT source FROM evaporation_dataset WHERE dataset = $1', [EV])).toEqual([{ source: 'Second' }]);
+	});
+
+	it('the WRC Atlas’s A-pan grid (12 monthly ASCII grids through --apan-asc --out) loads as Atlas-Apan-2007, stored with its recorded, modelled lines', async () => {
+		const args = parseEvaporationArgs(['--apan-asc', ...SYNTHETIC_APAN_ASC_FILES, '--dataset', AP, '--years', '1950-1999']);
+		if (typeof args === 'string' || args.mode !== 'load') throw new Error(String(args));
+		const out = join(dir, 'atlas-apan.json.gz');
+		const { written: wrote } = await writeEvaporationJson({ ...args, out });
+		// The file says something else: the load stores the recorded lines whatever it says.
+		const doc = JSON.parse(gunzipSync(readFileSync(out)).toString('utf8'));
+		const bytes = gzipSync(JSON.stringify({ ...doc, source: 'Not the Atlas', attribution: 'Someone else' }));
+		const result = await load({ kind: 'evaporation', key: 'reference/evaporation/atlas-apan-2007.json.gz', dataset: AP }, bytes);
+		expect(result).toEqual({ kind: 'evaporation', dataset: AP, written: wrote, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('evaporation', AP)).toEqual({ key: 'reference/evaporation/atlas-apan-2007.json.gz', sha256: sha(bytes) });
+		const [d] = await asOwner('SELECT kind, source, version, attribution, method, first_year, last_year FROM evaporation_dataset WHERE dataset = $1', [AP]);
+		expect(d).toMatchObject({ kind: 'apan', source: ATLAS_APAN.source, version: ATLAS_APAN.version, attribution: ATLAS_APAN.attribution, first_year: 1950, last_year: 1999 });
+		expect(d!.method).toMatch(/^Modelled, not measured: the WRC Atlas’s A-pan equivalent/);
+		expect(await asOwner('SELECT count(*)::int AS n FROM evaporation_cell_reference WHERE dataset = $1', [AP])).toEqual([{ n: 10 }]);
+	});
+
+	it('under the Atlas label, a PenPan grid or a reference-ET file is refused, a source too; another A-pan label stays refused; the dataset stays as it was', async () => {
+		const penpan = gzipSync(readFileSync(SYNTHETIC_PENPAN_FILE));
+		for (const [bytes, why] of [
+			[penpan, /PenPan grid is not Atlas-Apan-2007/],
+			[grid('et0', [[21.25, -33.75, twelve(100)]]), /an A-pan grid's label: this file is reference ET/]
+		] as const) {
+			const e = await load({ kind: 'evaporation', key: 'reference/evaporation/x.json.gz', dataset: AP }, bytes).catch((err: unknown) => err);
+			expect(e, String(why)).toBeInstanceOf(LoadError);
+			expect((e as LoadError).code).toBe('refused');
+			expect((e as LoadError).publicReason).toMatch(why);
+		}
+		expect(() => parseLoadRequest({ kind: 'evaporation', key: 'reference/evaporation/x.json.gz', sha256: 'c'.repeat(64), dataset: AP, source: 'Mine' })).toThrow(/takes no source/);
+		// The PenPan grid under a label of its own, and any A-pan grid under another label: refused, naming the allowed one.
+		for (const dataset of ['PenPan-1991-2020', 'Atlas-Apan-2008']) {
+			const e = await load({ kind: 'evaporation', key: 'reference/evaporation/x.json.gz', dataset }, penpan).catch((err: unknown) => err);
+			expect((e as LoadError).publicReason, dataset).toMatch(/only a reference-ET grid .*or an A-pan grid under a label whose licence is recorded: Atlas-Apan-2007/);
+		}
+		expect(await asOwner('SELECT count(*)::int AS n FROM evaporation_dataset WHERE dataset = ANY($1::text[])', [['PenPan-1991-2020', 'Atlas-Apan-2008']])).toEqual([{ n: 0 }]);
+		expect(await asOwner('SELECT source, first_year FROM evaporation_dataset WHERE dataset = $1', [AP])).toEqual([{ source: ATLAS_APAN.source, first_year: 1950 }]);
+		expect(await recorded('evaporation', AP)).toMatchObject({ key: 'reference/evaporation/atlas-apan-2007.json.gz' });
 	});
 });
 
@@ -311,6 +359,19 @@ describe('MAP grid, from the file `import:map-grid --out` writes (issue #560)', 
 		// A local import of the same label names no file: the record goes.
 		await replaceRainMapDataset(client, { dataset: MG, source: 'local', version: 'local', attribution: 'local' }, { cellDeg: 0.01, originLon: 0.005, originLat: 0.005, cells: [{ row: 1, col: 1, mapMm: 500 }] });
 		expect(await recorded('map-grid', MG)).toBeUndefined();
+	});
+
+	it('the Lynch (2004) grid loads as Lynch-2004 (the operator’s decision of 2026-11-08), stored with the Atlas’s citation, not the file’s', async () => {
+		const args = parseMapGridArgs([]);
+		if (typeof args === 'string') throw new Error(args);
+		const out = join(dir, 'lynch.json.gz');
+		const wrote = await writeMapGridJson({ ...args, out });
+		const bytes = readFileSync(out);
+		const result = await load({ kind: 'map-grid', key: 'reference/map-grid/lynch-2004.json.gz', dataset: LY }, bytes);
+		expect(result).toEqual({ kind: 'map-grid', dataset: LY, written: wrote, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('map-grid', LY)).toEqual({ key: 'reference/map-grid/lynch-2004.json.gz', sha256: sha(bytes) });
+		const [d] = await asOwner('SELECT source, version, attribution, cell_count FROM rain_map_dataset WHERE dataset = $1', [LY]);
+		expect(d).toEqual({ source: LYNCH_MAP.source, version: LYNCH_MAP.version, attribution: LYNCH_MAP.attribution, cell_count: wrote });
 	});
 });
 

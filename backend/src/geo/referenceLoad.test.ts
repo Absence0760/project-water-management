@@ -70,18 +70,21 @@ describe('which kinds load', () => {
 			});
 		});
 
-		it('the Lynch (2004) grid is refused, naming its decision', () => {
-			const e = thrown(() => parseLoadRequest({ ...mapGrid, dataset: 'Lynch-2004' }));
-			expect(e.code).toBe('refused');
-			expect(e.publicReason).toMatch(/^map-grid dataset Lynch-2004 is blocked in production: .*Decision: the Lynch \(2004\) MAP grid's licence/);
-			expect(e.publicReason).toMatch(/maps\.md § Sources/);
+		it('the Lynch (2004) grid is allowed by the operator’s decision of 2026-11-08, stored with the Atlas’s citation', () => {
+			expect(parseLoadRequest({ ...mapGrid, dataset: 'Lynch-2004' }).dataset).toBe('Lynch-2004');
+			expect(REFERENCE_KINDS['map-grid'].datasets['Lynch-2004']).toMatchObject({
+				status: 'allowed',
+				version: 'Atlas of Agrohydrology 2008 (Lynch 2004 surface)',
+				attribution:
+					'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2'
+			});
 		});
 
 		it('an unknown dataset is refused with the allowed list, not the input', () => {
 			for (const dataset of ['Other-surface', 'toString', 'constructor', 'hasOwnProperty']) {
 				const e = thrown(() => parseLoadRequest({ ...mapGrid, dataset }));
 				expect(e.code, dataset).toBe('refused');
-				expect(e.publicReason, dataset).toBe('map-grid loads only the datasets whose licence is recorded: WAAS-SWCape-2007 (docs/maps.md § Sources)');
+				expect(e.publicReason, dataset).toBe('map-grid loads only the datasets whose licence is recorded: WAAS-SWCape-2007, Lynch-2004 (docs/maps.md § Sources)');
 			}
 		});
 
@@ -112,6 +115,34 @@ describe('which kinds load', () => {
 				)
 			);
 			expect(DATASETS).toEqual(fromTable);
+		});
+	});
+
+	describe('an A-pan evaporation grid loads only under a label whose licence is recorded', () => {
+		const atlas = { kind: 'evaporation', key: 'reference/evaporation/atlas-apan-2007.json.gz', sha256: 'c'.repeat(64), dataset: 'Atlas-Apan-2007' };
+
+		it('the WRC Atlas’s A-pan equivalent is allowed, its lines recorded and saying modelled', () => {
+			expect(parseLoadRequest(atlas)).toEqual({ ...atlas, source: null, minOrder: 1, station: null });
+			const spec: ReferenceKind = REFERENCE_KINDS.evaporation;
+			const named = spec.status === 'allowed' ? spec.apanDatasets?.['Atlas-Apan-2007'] : undefined;
+			expect(named).toMatchObject({ status: 'allowed', source: expect.stringMatching(/^Modelled A-pan equivalent \(WRC Atlas, Schulze and Maharaj\)/) });
+			expect(named?.status === 'allowed' && named.attribution).toMatch(/^Schulze, R\.E\. and Maharaj, M\. 2007\. A-Pan Equivalent Reference Potential Evaporation\. .*WRC Report 1489\/1\/06$/);
+			// Only the one label: no PenPan label is listed.
+			expect(spec.status === 'allowed' && Object.keys(spec.apanDatasets ?? {})).toEqual(['Atlas-Apan-2007']);
+		});
+
+		it('takes no source under that label; any other label still takes one (a dPET override)', () => {
+			expect(thrown(() => parseLoadRequest({ ...atlas, source: 'My own credit' })).publicReason).toMatch(/takes no source/);
+			expect(parseLoadRequest({ ...atlas, dataset: 'dPET-1991-2020', source: 'dPET, my note' }).source).toBe('dPET, my note');
+			// Object prototype names are labels like any other, never a listed A-pan grid.
+			expect(parseLoadRequest({ ...atlas, dataset: 'toString', source: 'x' }).source).toBe('x');
+		});
+
+		it('the release gate lists the same A-pan labels (map-data-gates.mjs APAN_DATASETS)', async () => {
+			const { APAN_DATASETS } = (await import(GATES)) as { APAN_DATASETS: string[] };
+			const spec: ReferenceKind = REFERENCE_KINDS.evaporation;
+			const fromTable = spec.status === 'allowed' ? Object.entries(spec.apanDatasets ?? {}).filter(([, d]) => d.status === 'allowed').map(([label]) => label) : [];
+			expect(APAN_DATASETS).toEqual(fromTable);
 		});
 	});
 
@@ -220,8 +251,8 @@ describe('which kinds load', () => {
 				expect(status(rowOf(kind, name)), `${kind}: ${name}`).toMatch(spec.status === 'allowed' ? /^allowed/ : /^blocked/);
 			}
 			// A kind allowed dataset by dataset: each listed dataset's own row says the same as it does.
-			if (spec.status === 'allowed' && spec.datasets) {
-				for (const [label, d] of Object.entries(spec.datasets)) {
+			if (spec.status === 'allowed' && (spec.datasets || spec.apanDatasets)) {
+				for (const [label, d] of Object.entries({ ...spec.datasets, ...spec.apanDatasets })) {
 					expect(status(rowOf(`${kind} ${label}`, d.sourcesRow)), `${kind} ${label}`).toMatch(d.status === 'allowed' ? /^allowed/ : /^blocked/);
 				}
 			}

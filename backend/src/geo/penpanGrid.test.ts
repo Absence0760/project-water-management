@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseEvaporationArgs, readEvaporationFiles, SYNTHETIC_PENPAN_FILE as PENPAN_FIXTURE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
-import { DPET, evaporationFromJson, evaporationMethodFor, MODELLED_APAN_LABEL, modelledApanSource, PENPAN } from './evaporationGrid.js';
+import { ATLAS_APAN, atlasApanMethodFor, DPET, evaporationFromJson, evaporationMethodFor, MODELLED_APAN_LABEL, modelledApanSource, PENPAN } from './evaporationGrid.js';
 import { evaporationLabel } from './evaporation.js';
 
 const fixture = () => JSON.parse(readFileSync(PENPAN_FIXTURE, 'utf8')) as Record<string, unknown> & { cells: unknown[]; model: Record<string, unknown> };
@@ -114,5 +114,11 @@ describe('the words for a dataset’s values', () => {
 		expect(evaporationLabel({ kind: 'apan', source: modelledApanSource('my own POWER pull') })).toMatch(/^modelled /);
 		expect(evaporationLabel({ kind: 'apan', source: 'A measured pan grid' })).toBe('Class-A pan evaporation');
 		expect(evaporationLabel({ kind: 'et0', source: DPET.source })).toBe('reference evapotranspiration (FAO-56 Penman-Monteith ET₀)');
+	});
+
+	it('say modelled for the WRC Atlas’s A-pan equivalent, never PenPan', () => {
+		expect(ATLAS_APAN.source.startsWith(MODELLED_APAN_LABEL)).toBe(false);
+		expect(evaporationLabel({ kind: 'apan', source: ATLAS_APAN.source })).toBe('modelled A-pan equivalent reference potential evaporation (WRC Atlas, not a measured pan)');
+		expect(atlasApanMethodFor(1 / 60, 1950, 1999)).toMatch(/^Modelled, not measured: .*1950–1999.*0\.0167° grid/);
 	});
 });

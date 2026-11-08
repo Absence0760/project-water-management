@@ -14,8 +14,11 @@
 // decision that would unblock them. A kind whose datasets have licences of
 // their own (MAP grids: each surface is its owner's) is allowed dataset by
 // dataset: the load must name one of its listed labels, an allowed one, and
-// is stored with the source lines recorded here, never the file's.
-// referenceLoad.test.ts checks this table against the Sources table, so the
+// is stored with the source lines recorded here, never the file's. The
+// evaporation kind is allowed for any reference-ET grid (dPET), and for an
+// A-pan grid only under a label listed in its `apanDatasets` (the WRC
+// Atlas's), stored the same way; every other A-pan grid, PenPan's included,
+// is refused. referenceLoad.test.ts checks this table against the Sources table, so the
 // two can't drift.
 //
 // What a load trusts: the object must hash to the SHA-256 the operator gave
@@ -36,11 +39,11 @@ import type pg from 'pg';
 import { DWS_RIVER_GAUGE } from '../feeds/config.js';
 import { type Plan, planImport, stationOf, writeGaugeRecordPlan } from '../feeds/gaugeRecordImport.js';
 import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './croplandGrid.js';
-import { DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
+import { ATLAS_APAN, atlasApanMethodFor, DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
-import { rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
+import { LYNCH_MAP, rainMapFromJson, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
 import { parseTileProvenance, recordReferenceOrigin, recordTileProvenance, referenceLoadOf, TILE_ARCHIVES, type ReferenceLoadRecord } from './referenceOrigin.js';
 import { replaceWaterbodies, WATERBODIES_SOURCE, waterbodyRecords } from '../dams/observed/loadWaterbodies.js';
 import { donorsFromJson, GR4J_DONORS, replaceDonorDataset } from './gr4jDonors.js';
@@ -67,6 +70,8 @@ export type ReferenceKind = {
 			limits?: { object: number; text: number };
 			/** The labels a load may name, each with its own licence status (every other label is refused); absent: any label. */
 			datasets?: Readonly<Record<string, ReferenceDataset>>;
+			/** Evaporation: the A-pan grids a load may name, by label, each with its own licence status (every other A-pan grid is refused; a reference-ET grid takes any label not listed here). */
+			apanDatasets?: Readonly<Record<string, ReferenceDataset>>;
 	  }
 	| { status: 'blocked'; why: string }
 );
@@ -85,8 +90,22 @@ export const REFERENCE_KINDS = {
 		what: 'the grid of monthly means `pnpm import:evaporation … --out <file>` writes',
 		// South Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON; all
 		// of Africa about 540 000 cells, near 50 MB. Past that it is not one
-		// country's grid.
-		limits: { object: 32 * 1024 * 1024, text: 64 * 1024 * 1024 }
+		// country's grid. The WRC Atlas's A-pan grid at about 1′ over South
+		// Africa, Lesotho and Eswatini is some 430 000 cells, about 40 MB of
+		// JSON (8–10 MB gzipped): inside both caps.
+		limits: { object: 32 * 1024 * 1024, text: 64 * 1024 * 1024 },
+		// A-pan grids by label: the WRC Atlas's A-pan equivalent (modelled, not measured pans), by the operator's
+		// decision of 2026-11-08 accepting its licence risk (docs/legal/map-data-licences.md § 3.3e). PenPan's and
+		// every other A-pan grid stay refused (docs/data-sources.md § penpan-apan).
+		apanDatasets: {
+			[ATLAS_APAN.dataset]: {
+				status: 'allowed',
+				sourcesRow: 'A-pan equivalent reference potential evaporation',
+				source: ATLAS_APAN.source,
+				version: ATLAS_APAN.version,
+				attribution: ATLAS_APAN.attribution
+			}
+		}
 	},
 	rivers: {
 		status: 'allowed',
@@ -177,7 +196,7 @@ export const REFERENCE_KINDS = {
 	},
 	'map-grid': {
 		status: 'allowed',
-		sourcesRows: ['Mean annual rainfall surface for the Southwestern Cape'],
+		sourcesRows: ['Mean annual rainfall surface for the Southwestern Cape', 'Lynch (2004) mean annual precipitation'],
 		file: /\.json(\.gz)?$/,
 		what: 'the cut grid `pnpm import:map-grid <grid.asc> … --bbox w,s,e,n --out <file>` writes',
 		// Dataset by dataset: each MAP surface's terms are its own owner's (docs/maps.md § MAP grid, Licences).
@@ -189,10 +208,13 @@ export const REFERENCE_KINDS = {
 				version: WAAS_MAP.version,
 				attribution: WAAS_MAP.attribution
 			},
-			'Lynch-2004': {
-				status: 'blocked',
+			// The operator's decision of 2026-11-08 accepting the licence risk (docs/legal/map-data-licences.md § 3.3e).
+			[LYNCH_MAP.dataset]: {
+				status: 'allowed',
 				sourcesRow: 'Lynch (2004) mean annual precipitation',
-				why: "the Lynch (2004) grid's licence is unconfirmed (followups.md, Decision: the Lynch (2004) MAP grid's licence)"
+				source: LYNCH_MAP.source,
+				version: LYNCH_MAP.version,
+				attribution: LYNCH_MAP.attribution
 			}
 		}
 	},
@@ -312,6 +334,12 @@ export function parseLoadRequest(raw: unknown): LoadRequest {
 		if (!named) throw refused(`${kind} loads only the datasets whose licence is recorded: ${allowed.join(', ')} (docs/maps.md § Sources)`);
 		if (named.status === 'blocked') throw refused(`${kind} dataset ${dataset} is blocked in production: ${named.why}; docs/maps.md § Sources`);
 		if (source !== null) throw refused(`${kind} takes no source: the dataset's source and credit are the ones recorded with its licence`);
+	}
+	// An A-pan label (evaporation): its recorded lines are stored, so no source of the load's own.
+	if (spec.apanDatasets && Object.hasOwn(spec.apanDatasets, dataset)) {
+		const named = spec.apanDatasets[dataset]!;
+		if (named.status === 'blocked') throw refused(`${kind} dataset ${dataset} is blocked in production: ${named.why}; docs/maps.md § Sources`);
+		if (source !== null) throw refused(`${kind} dataset ${dataset} takes no source: its source and credit are the ones recorded with its licence`);
 	}
 	if (kind === 'rivers' && source === null) throw refused('rivers need a source: the attribution stored on every reach');
 	if (kind === 'dws' && (source === null || !source.trim() || source.length > 200)) {
@@ -434,18 +462,32 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		if (typeof got === 'string') throw new LoadError(`${req.key}: ${got}`, 'unreadable', 'the file is not an evaporation grid (kind, cellDeg, years and cells)');
 		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
 		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
-		// The Sources row that allows this kind is dPET, a reference ET: an A-pan grid's source has no allowed row yet.
-		if (got.kind !== 'et0') throw new LoadError(`${req.key}: kind ${got.kind}`, 'refused', 'only a reference-ET grid (kind "et0", dPET) loads in production: an A-pan source is not allowed yet (docs/maps.md § Sources)');
+		// A reference-ET grid (dPET's row) under any label but an A-pan one; an A-pan grid only under a label
+		// apanDatasets allows (the WRC Atlas's), and never a modelled PenPan grid (docs/data-sources.md § penpan-apan).
+		const evap: ReferenceKind = REFERENCE_KINDS.evaporation;
+		const apan = evap.status === 'allowed' && evap.apanDatasets && Object.hasOwn(evap.apanDatasets, req.dataset) ? evap.apanDatasets[req.dataset]! : null;
+		const allowedApan = evap.status === 'allowed' && evap.apanDatasets ? Object.keys(evap.apanDatasets).join(', ') : '';
+		if (got.kind === 'et0' && apan) throw refused(`dataset ${req.dataset} is an A-pan grid's label: this file is reference ET; load it under another label`);
+		if (got.kind !== 'et0') {
+			if (apan?.status !== 'allowed') {
+				throw new LoadError(`${req.key}: kind ${got.kind}`, 'refused', `only a reference-ET grid (kind "et0", dPET) loads in production, or an A-pan grid under a label whose licence is recorded: ${allowedApan} (docs/maps.md § Sources)`);
+			}
+			if (got.meta.model) throw new LoadError(`${req.key}: a PenPan model`, 'refused', `a modelled PenPan grid is not ${req.dataset} and is blocked in production (docs/data-sources.md § penpan-apan)`);
+		}
 		const c = got.climatology;
 		if (!c.cells.length) throw new LoadError(`${req.key}: no cells`, 'empty', 'the file has no cell with 12 monthly values');
-		const meta = {
-			dataset: req.dataset,
-			kind: got.kind,
-			source: req.source ?? got.meta.source ?? DPET.source,
-			version: got.meta.version ?? DPET.version,
-			attribution: got.meta.attribution ?? DPET.attribution,
-			method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind)
-		};
+		if (apan?.status === 'allowed' && got.meta.attribution && got.meta.attribution !== apan.attribution) log(`the file's own attribution is replaced by the recorded one`);
+		const meta =
+			apan?.status === 'allowed'
+				? { dataset: req.dataset, kind: got.kind, source: apan.source, version: apan.version, attribution: apan.attribution, method: atlasApanMethodFor(c.cellDeg, c.firstYear, c.lastYear) }
+				: {
+						dataset: req.dataset,
+						kind: got.kind,
+						source: req.source ?? got.meta.source ?? DPET.source,
+						version: got.meta.version ?? DPET.version,
+						attribution: got.meta.attribution ?? DPET.attribution,
+						method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind)
+					};
 		try {
 			const written = await replaceEvaporationDataset(client, meta, c, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };

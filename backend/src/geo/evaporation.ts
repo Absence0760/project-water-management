@@ -21,7 +21,7 @@
 // (`dataset: 'synthetic'`); a proposal from it says so.
 import type { Db } from '../db/tx.js';
 import type { Geometry } from './geojson.js';
-import { MODELLED_APAN_LABEL } from './evaporationGrid.js';
+import { ATLAS_APAN_LABEL, MODELLED_APAN_LABEL } from './evaporationGrid.js';
 import { cellAreaM2, cellSpan, gridShares, toGrid } from './gridShares.js';
 
 /** The label the committed fixture loads under; a proposal from it is marked synthetic. */
@@ -183,10 +183,14 @@ export const KIND_LABEL: Record<EvaporationKind, string> = {
 
 /**
  * A dataset's values in words, saying "modelled" for a PenPan grid (its source starts with MODELLED_APAN_LABEL,
- * issue #646 item 7), so no proposal or revision reads a modelled pan as a measured one.
+ * issue #646 item 7) and for the WRC Atlas's A-pan equivalent (ATLAS_APAN_LABEL), so no proposal or revision
+ * reads a modelled pan as a measured one.
  */
-export const evaporationLabel = (d: Pick<EvaporationDataset, 'kind' | 'source'>): string =>
-	d.kind === 'apan' && d.source.startsWith(MODELLED_APAN_LABEL) ? 'modelled Class-A pan evaporation (PenPan, not a measured pan)' : KIND_LABEL[d.kind];
+export const evaporationLabel = (d: Pick<EvaporationDataset, 'kind' | 'source'>): string => {
+	if (d.kind === 'apan' && d.source.startsWith(MODELLED_APAN_LABEL)) return 'modelled Class-A pan evaporation (PenPan, not a measured pan)';
+	if (d.kind === 'apan' && d.source.startsWith(ATLAS_APAN_LABEL)) return 'modelled A-pan equivalent reference potential evaporation (WRC Atlas, not a measured pan)';
+	return KIND_LABEL[d.kind];
+};
 
 /** A dataset's citation in one line, for a revision's reason, the PE row's source and the proposal's source line. */
 export const citeEvaporation = (d: Pick<EvaporationDataset, 'dataset' | 'source' | 'version' | 'firstYear' | 'lastYear'>) =>

@@ -11,8 +11,8 @@ import { gunzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { parseEvaporationArgs, readEvaporationFiles, reduceDpet, SYNTHETIC_EVAPORATION_FILE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
-import { climatology, dpetYear, evaporationFromJson, originOf, readDpetYear, SOUTH_AFRICA_BBOX, toWaterYear, yearTotalsFromJson, type YearTotals } from './loadEvaporation.js';
+import { parseEvaporationArgs, readEvaporationFiles, reduceDpet, SYNTHETIC_APAN_ASC_FILES, SYNTHETIC_EVAPORATION_FILE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
+import { apanFromAsciiGrids, ATLAS_APAN, climatology, dpetYear, evaporationFromJson, originOf, sameOrigin, readDpetYear, SOUTH_AFRICA_BBOX, toWaterYear, yearTotalsFromJson, type YearTotals } from './loadEvaporation.js';
 
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 let dir: string;
@@ -163,6 +163,15 @@ describe('climatology', () => {
 		expect(originOf(-34.5, 0.1)).toBeCloseTo(0.05, 9);
 		expect(originOf(20.55, 0.1)).toBe(0);
 	});
+
+	it('originOf counts an origin within 1e-6° under a whole cell as 0, so a 1′ grid on whole tenths and its rounded centres agree', () => {
+		const cell = 0.016666666667;
+		// 21.3 is 1278 cells of 0.016666666667° less 4e-8: the corner sits just under a whole cell.
+		expect(originOf(21.3 + cell / 2, cell)).toBe(0);
+		expect(originOf(Math.round((21.3 + cell / 2) * 1e6) / 1e6, cell)).toBe(0);
+		expect(sameOrigin(cell - 5e-7, 2e-7, cell)).toBe(true);
+		expect(sameOrigin(0.005, 0.0051, cell)).toBe(false);
+	});
 });
 
 describe('the fixture form and the command', () => {
@@ -274,3 +283,82 @@ describe('the fixture form and the command', () => {
 function cal12(v: number) {
 	return Array.from({ length: 12 }, () => v);
 }
+
+describe('12 monthly A-pan grids as ESRI ASCII (--apan-asc; the WRC Atlas’s A-pan equivalent)', () => {
+	const BASE = [250, 210, 180, 120, 80, 55, 60, 85, 120, 170, 210, 245];
+	const head = (x = '21.3', y = '-33.7') => ['ncols 2', 'nrows 1', `xllcorner ${x}`, `yllcorner ${y}`, 'cellsize 0.016666666667', 'NODATA_value -9999'];
+	const months = (row: (m: number) => string, h = head) => BASE.map((_, m) => ({ name: `m${m + 1}.asc`, lines: [...h(), row(m)] }));
+
+	it('keeps the cells with a value in every month, in water-year order, on the 1′ grid', async () => {
+		const c = await apanFromAsciiGrids(
+			months((m) => `${BASE[m]} ${m === 6 ? -9999 : BASE[m]! + 1}`),
+			SOUTH_AFRICA_BBOX,
+			1950,
+			1999
+		);
+		expect(c).toMatchObject({ cellDeg: 0.016666666667, firstYear: 1950, lastYear: 1999, partial: 1 });
+		expect(c.cells).toEqual([{ row: expect.any(Number), col: expect.any(Number), monthlyMm: toWaterYear(BASE) }]);
+		// The cell's centre is where the header puts it.
+		const lon = c.originLon + (c.cells[0]!.col + 0.5) * c.cellDeg;
+		const lat = c.originLat + (c.cells[0]!.row + 0.5) * c.cellDeg;
+		expect(lon).toBeCloseTo(21.3 + 0.016666666667 / 2, 9);
+		expect(lat).toBeCloseTo(-33.7 + 0.016666666667 / 2, 9);
+	});
+
+	it('cuts to the box, and treats a negative value as none', async () => {
+		const box = { west: 21.31, south: -33.7, east: 21.34, north: -33.68 };
+		const c = await apanFromAsciiGrids(months((m) => `${BASE[m]} ${BASE[m]}`), box, 1950, 1999);
+		expect(c.cells).toHaveLength(1);
+		expect(c.originLon + (c.cells[0]!.col + 0.5) * c.cellDeg).toBeCloseTo(21.325, 6);
+		expect((await apanFromAsciiGrids(months((m) => `${m === 3 ? -1 : BASE[m]} 9`), SOUTH_AFRICA_BBOX, 1950, 1999)).cells).toHaveLength(1);
+	});
+
+	it('refuses a grid in another unit, grids that disagree, the wrong count and a projected grid, naming the file', async () => {
+		await expect(apanFromAsciiGrids(months((m) => `${BASE[m]! * 10} 1`), SOUTH_AFRICA_BBOX, 1950, 1999)).rejects.toThrow(/^m1\.asc: row 1, column 1: 2500 is not a monthly A-pan total of 0–1000 mm/);
+		const shifted = BASE.map((_, m) => ({ name: `m${m + 1}.asc`, lines: [...head(m === 4 ? '21.35' : '21.3'), '1 1'] }));
+		await expect(apanFromAsciiGrids(shifted, SOUTH_AFRICA_BBOX, 1950, 1999)).rejects.toThrow(/^m5\.asc: not on the same grid as m1\.asc/);
+		await expect(apanFromAsciiGrids(months(() => '1 1').slice(0, 11), SOUTH_AFRICA_BBOX, 1950, 1999)).rejects.toThrow(/give 12 monthly grids/);
+		const projected = months(() => '1 1', () => ['ncols 2', 'nrows 1', 'xllcorner -50000', 'yllcorner -3700000', 'cellsize 1000']);
+		await expect(apanFromAsciiGrids(projected, SOUTH_AFRICA_BBOX, 1950, 1999)).rejects.toThrow(/WGS84 degrees/);
+	});
+
+	it('parses --apan-asc: 12 .asc files in order, --years, and the Atlas label’s recorded lines', () => {
+		const env = { INIT_CWD: '/work' } as NodeJS.ProcessEnv;
+		const files = BASE.map((_, i) => `apan${i + 1}.asc`);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1950-1999', '--out', 'a.json.gz'], env)).toMatchObject({
+			mode: 'load',
+			files: files.map((f) => `/work/${f}`),
+			dataset: 'Atlas-Apan-2007',
+			apanAsc: { first: 1950, last: 1999 },
+			out: '/work/a.json.gz'
+		});
+		expect(parseEvaporationArgs(['--apan-asc', ...files.slice(1), '--dataset', 'x', '--years', '1950-1999'], env)).toMatch(/12 ESRI ASCII grids/);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007'], env)).toMatch(/--years <first>-<last>/);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1999-1950'], env)).toMatch(/--years/);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1950-1999', '--source', 'x'], env)).toMatch(/give no --source/);
+		// Another source's monthly grids name their own lines.
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Other', '--years', '1950-1999'], env)).toMatch(/names its source and attribution/);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Other', '--years', '1950-1999', '--source', 's', '--attribution', 'a'], env)).toMatchObject({ dataset: 'Other' });
+		expect(parseEvaporationArgs(['a.nc', '--dataset', 'x', '--years', '1950-1999'], env)).toMatch(/--years goes with --apan-asc/);
+	});
+
+	it('the synthetic grids load as the Atlas’s modelled A-pan, and --out writes what reads back the same', async () => {
+		const args = parseEvaporationArgs(['--apan-asc', ...SYNTHETIC_APAN_ASC_FILES, '--dataset', ATLAS_APAN.dataset, '--years', '1950-1999']);
+		if (typeof args === 'string' || args.mode !== 'load') throw new Error(String(args));
+		const read = await readEvaporationFiles(args);
+		// 12 cells: one has no value in any month (the sea), one none in July only.
+		expect(read.climatology.cells).toHaveLength(10);
+		expect(read.problems).toEqual(['1 cells left out: not every month has them']);
+		expect(read.meta).toMatchObject({ kind: 'apan', source: ATLAS_APAN.source, version: ATLAS_APAN.version, attribution: ATLAS_APAN.attribution });
+		expect(read.meta.method).toMatch(/^Modelled, not measured: the WRC Atlas’s A-pan equivalent/);
+		expect(read.meta.method).toMatch(/1950–1999/);
+		const out = join(dir, 'atlas-apan.json.gz');
+		expect(await writeEvaporationJson({ ...args, out })).toMatchObject({ written: 10 });
+		const back = evaporationFromJson(JSON.parse(gunzipSync(readFileSync(out)).toString('utf8')));
+		if (typeof back === 'string') throw new Error(back);
+		expect(back.kind).toBe('apan');
+		expect(back.problems).toEqual([]);
+		expect(back.climatology.cells).toEqual(read.climatology.cells);
+		expect(back.meta).toMatchObject({ source: ATLAS_APAN.source, attribution: ATLAS_APAN.attribution });
+	});
+});

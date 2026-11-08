@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { BLOCKED_EVAPORATION, DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
+import { APAN_DATASETS, BLOCKED_EVAPORATION, DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
 
 const has = () => true;
 const lacks = () => false;
@@ -98,11 +98,13 @@ describe('load: a reference load’s inputs', () => {
 
 	it('a MAP grid loads only a dataset whose licence is recorded, with no source of its own', () => {
 		const mapGrid = { ...landCover, LOAD_KIND: 'map-grid', LOAD_KEY: 'reference/map-grid/grid.json.gz', LOAD_DATASET: 'WAAS-SWCape-2007' };
-		assert.deepEqual(DATASETS['map-grid'], ['WAAS-SWCape-2007']);
-		for (const dataset of ['Lynch-2004', 'Some-other-surface']) {
+		assert.deepEqual(DATASETS['map-grid'], ['WAAS-SWCape-2007', 'Lynch-2004']);
+		// The Lynch (2004) national grid: allowed by the operator's decision of 2026-11-08 (docs/legal/map-data-licences.md § 3.3e).
+		assert.deepEqual(loadProblems({ ...mapGrid, LOAD_DATASET: 'Lynch-2004', LOAD_KEY: 'reference/map-grid/lynch-2004.json.gz' }, lacks), []);
+		for (const dataset of ['Lynch-2005', 'Some-other-surface']) {
 			const problems = loadProblems({ ...mapGrid, LOAD_DATASET: dataset }, has);
 			assert.equal(problems.length, 1, dataset);
-			assert.match(problems[0], /only the datasets whose licence is recorded: WAAS-SWCape-2007/);
+			assert.match(problems[0], /only the datasets whose licence is recorded: WAAS-SWCape-2007, Lynch-2004/);
 			assert.doesNotMatch(problems[0], new RegExp(dataset));
 		}
 		assert.match(loadProblems({ ...mapGrid, LOAD_SOURCE: 'Lynch 2004' }, has).join('\n'), /takes no source/);
@@ -132,10 +134,24 @@ describe('load: a reference load’s inputs', () => {
 			assert.equal(problems.length, 1, JSON.stringify(extra));
 			assert.match(problems[0], /blocked in production until its validation .*docs\/data-sources\.md § penpan-apan/);
 		}
+		// Another A-pan label than the recorded one, even one that names the Atlas, stays refused.
+		assert.match(loadProblems({ ...evaporation, LOAD_DATASET: 'Atlas-Apan-2008' }, lacks).join('\n'), /penpan-apan/);
 		// Only evaporation: a land-cover file that happens to say "apan" is not this gate's business.
 		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-1991-2020.json.gz dPET-1991-2020'));
 		// A whole word only: a label that merely contains the letters (Japan, capans) is not an A-pan grid.
 		assert.ok(!BLOCKED_EVAPORATION.test('reference/evaporation/dpet-japan.json.gz dPET-capans'));
+	});
+
+	it('lets the WRC Atlas’s A-pan grid through under its recorded label only, with no source, and never a PenPan key under it', () => {
+		assert.deepEqual(APAN_DATASETS, ['Atlas-Apan-2007']);
+		const atlas = { ...evaporation, LOAD_KEY: 'reference/evaporation/atlas-apan-2007.json.gz', LOAD_DATASET: 'Atlas-Apan-2007' };
+		assert.deepEqual(loadProblems(atlas, lacks), []);
+		assert.match(loadProblems({ ...atlas, LOAD_SOURCE: 'My own credit' }, lacks).join('\n'), /takes no source/);
+		const penpan = loadProblems({ ...atlas, LOAD_KEY: 'reference/evaporation/penpan-1991-2020.json.gz' }, lacks);
+		assert.equal(penpan.length, 1);
+		assert.match(penpan[0], /penpan-apan/);
+		// The label belongs to evaporation: as a land-cover label it is any label (that kind isn't gated by A-pan names).
+		assert.deepEqual(loadProblems({ ...landCover, LOAD_DATASET: 'Atlas-Apan-2007' }, lacks), []);
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {

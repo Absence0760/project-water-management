@@ -26,11 +26,18 @@
 //    "model" (evaporationGrid.ts): local only, since production loads
 //    reference ET alone (referenceLoad.ts; docs/data-sources.md §
 //    penpan-apan).
+//  * 12 monthly A-pan grids as ESRI ASCII (`--apan-asc`, January to
+//    December): the WRC Atlas's A-pan equivalent (Schulze and Maharaj
+//    2007), or any other source's monthly means, taken as given
+//    (apanFromAsciiGrids); the Atlas's ESRI binary grids are warped to WGS84
+//    and written as ASCII by the operator first (docs/maps.md § The
+//    evaporation grid).
 // The monthly means are the mean of each calendar month's total over the
 // years, kept only for a cell with every year (so no cell's mean leans on a
 // different set of years than its neighbour's), in water-year order. A load
 // replaces its dataset, in one transaction.
 import { DPET_CELL_DEG, indexOf, originOf, toWaterYear, type CentreCell, type Climatology, type EvaporationCell } from './evaporationGrid.js';
+import { scanAsciiGrid, type AsciiGridHead } from './rainMap.js';
 
 // The grid's JSON form, its defaults and its database load live in
 // evaporationGrid.ts (no NetCDF, so the migrate Lambda can carry them).
@@ -219,4 +226,61 @@ export function climatology(years: readonly YearTotals[]): Climatology | string 
 	}
 	cells.sort((a, b) => a.row - b.row || a.col - b.col);
 	return { cellDeg, originLon, originLat, firstYear: sorted[0]!.year, lastYear: sorted.at(-1)!.year, cells, partial };
+}
+
+/** A monthly A-pan total past this is a wrong file or unit (South Africa's highest month is near 400 mm). */
+const APAN_MONTH_MAX_MM = 1000;
+
+/**
+ * 12 monthly A-pan grids (ESRI ASCII, WGS84 degrees, January to December, all
+ * on one grid) → the climatology of the cells with a value in every month
+ * whose centres lie in `bbox`, in water-year order. Each grid is streamed
+ * (scanAsciiGrid, the MAP grid's reader); only the box's cells are kept. A
+ * negative value counts as none; a value past 1000 mm a month is refused,
+ * naming the month and its place (a grid in tenths of a millimetre, say).
+ * `firstYear`–`lastYear` is the period the source says its means cover.
+ */
+export async function apanFromAsciiGrids(
+	months: readonly { name: string; lines: AsyncIterable<string> | Iterable<string> }[],
+	bbox: Bbox,
+	firstYear: number,
+	lastYear: number
+): Promise<Climatology> {
+	if (months.length !== 12) throw new Error(`give 12 monthly grids, January to December, not ${months.length}`);
+	const box = { w: bbox.west, s: bbox.south, e: bbox.east, n: bbox.north };
+	const cells = new Map<string, { row: number; col: number; v: Float64Array; n: number }>();
+	let first: AsciiGridHead | null = null;
+	for (const [m, { name, lines }] of months.entries()) {
+		let head: AsciiGridHead;
+		try {
+			head = await scanAsciiGrid(lines, box, (c) => {
+				if (c.value < 0) return;
+				if (c.value > APAN_MONTH_MAX_MM) throw new Error(`row ${c.fileRow}, column ${c.fileCol}: ${c.value} is not a monthly A-pan total of 0–${APAN_MONTH_MAX_MM} mm (a grid in tenths of a millimetre?)`);
+				const k = `${c.row}:${c.col}`;
+				if (m === 0) cells.set(k, { row: c.row, col: c.col, v: new Float64Array(12), n: 0 });
+				const cell = cells.get(k);
+				// Only a cell every earlier month had a value for (n months so far) takes this one.
+				if (!cell || cell.n !== m) return;
+				cell.v[m] = c.value;
+				cell.n++;
+			});
+		} catch (e) {
+			throw new Error(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+		}
+		if (!first) first = head;
+		else if (head.ncols !== first.ncols || head.nrows !== first.nrows || Math.abs(head.cellDeg - first.cellDeg) > 1e-9 || Math.abs(head.xll - first.xll) > 1e-7 || Math.abs(head.yll - first.yll) > 1e-7) {
+			throw new Error(`${name}: not on the same grid as ${months[0]!.name} (ncols, nrows, corner and cell size must match)`);
+		}
+	}
+	const out: EvaporationCell[] = [];
+	let partial = 0;
+	for (const c of cells.values()) {
+		if (c.n !== 12) {
+			partial++;
+			continue;
+		}
+		out.push({ row: c.row, col: c.col, monthlyMm: toWaterYear(Array.from(c.v, round2)) });
+	}
+	out.sort((a, b) => a.row - b.row || a.col - b.col);
+	return { cellDeg: first!.cellDeg, originLon: first!.originLon, originLat: first!.originLat, firstYear, lastYear, cells: out, partial };
 }

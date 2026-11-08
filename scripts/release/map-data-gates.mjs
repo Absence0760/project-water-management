@@ -28,12 +28,15 @@
 //     first (the HydroSHEDS licence, § 2.2), and the Terms' clause on map
 //     data licensed to us (§9: no stand-alone redistribution, no reverse
 //     engineering; the licence's § 2.1.2 and § 2.1.3). An evaporation load
-//     whose key or dataset names an A-pan or PenPan grid is refused here,
-//     before the approval: the modelled Class-A pan grid (issue #646 item 7)
-//     is blocked until its validation report and the hydrologist's sign-off
-//     (docs/data-sources.md § penpan-apan). The migrate Lambda refuses any
-//     grid whose kind isn't "et0" whatever its name (referenceLoad.ts), so
-//     this is the early, named refusal, not the only one.
+//     whose key or dataset names a PenPan grid is refused here, before the
+//     approval, and so is one naming any other A-pan grid unless its dataset
+//     is a label APAN_DATASETS lists (the WRC Atlas's A-pan equivalent, the
+//     operator's decision of 2026-11-08), which then takes no source: the
+//     modelled Class-A pan grid (issue #646 item 7) is blocked until its
+//     validation report and the hydrologist's sign-off (docs/data-sources.md
+//     § penpan-apan). The migrate Lambda refuses any A-pan grid outside
+//     those labels whatever its name (referenceLoad.ts), so this is the
+//     early, named refusal, not the only one.
 //
 // "In the app's legal text" means some file under frontend/src (tests left
 // out) carries the sentence, wherever the legal notice puts it.
@@ -64,10 +67,21 @@ export const LOADABLE = ['land-cover', 'evaporation', 'rivers', 'gazetteer', 'ma
  * the two in step). MAP grids: each surface's terms are its owner's. Tiles:
  * the archives the tiles bucket serves, whose provenance a load records (248).
  */
-export const DATASETS = { tiles: ['basemap', 'fonts', 'terrain', 'water'], 'map-grid': ['WAAS-SWCape-2007'] };
+export const DATASETS = { tiles: ['basemap', 'fonts', 'terrain', 'water'], 'map-grid': ['WAAS-SWCape-2007', 'Lynch-2004'] };
 
-/** An evaporation key or dataset that names an A-pan grid (PenPan's, or any other): blocked (docs/data-sources.md § penpan-apan). */
+/**
+ * The A-pan evaporation grids a load may name, by dataset label
+ * (REFERENCE_KINDS.evaporation.apanDatasets, the allowed ones;
+ * referenceLoad.test.ts keeps the two in step): the WRC Atlas's A-pan
+ * equivalent, by the operator's decision of 2026-11-08.
+ */
+export const APAN_DATASETS = ['Atlas-Apan-2007'];
+
+/** An evaporation key or dataset that names an A-pan grid (PenPan's, or any other): blocked unless its label is in APAN_DATASETS (docs/data-sources.md § penpan-apan). */
 export const BLOCKED_EVAPORATION = /(^|[^a-z])(pen-?pan|a-?pan|class-?a)([^a-z]|$)/i;
+
+/** A key or dataset that names a PenPan grid: blocked whatever the label (docs/data-sources.md § penpan-apan). */
+export const PENPAN_EVAPORATION = /(^|[^a-z])pen-?pan([^a-z]|$)/i;
 
 const ARCHIVE = /^\/tiles\/[a-z0-9-]+\.pmtiles$/;
 const GLYPHS = '/tiles/fonts/{fontstack}/{range}.pbf';
@@ -136,9 +150,12 @@ export function loadProblems(env, hasText = legalTextHas) {
 	if (kind === 'dws' && /[A-Z][0-9][A-Z][0-9]{3}/i.test(`${env.LOAD_KEY ?? ''} ${env.LOAD_DATASET ?? ''}`)) {
 		problems.push('name the dws key and dataset without a station code (this log is public): the station comes from the file, or the station input');
 	}
-	if (kind === 'evaporation' && BLOCKED_EVAPORATION.test(`${env.LOAD_KEY ?? ''} ${env.LOAD_DATASET ?? ''}`)) {
+	const named = `${env.LOAD_KEY ?? ''} ${env.LOAD_DATASET ?? ''}`;
+	const listedApan = kind === 'evaporation' && APAN_DATASETS.includes(env.LOAD_DATASET ?? '');
+	if (listedApan && source.trim()) problems.push(`this A-pan dataset takes no source: its source and credit are the ones recorded with its licence`);
+	if (kind === 'evaporation' && (PENPAN_EVAPORATION.test(named) || (!listedApan && BLOCKED_EVAPORATION.test(named)))) {
 		problems.push(
-			'an A-pan evaporation grid (the modelled Class-A pan, PenPan) is blocked in production until its validation against DWS Class-A pans and the hydrologist’s sign-off (docs/data-sources.md § penpan-apan): only a reference-ET grid (dPET) loads'
+			`an A-pan evaporation grid (the modelled Class-A pan, PenPan) is blocked in production until its validation against DWS Class-A pans and the hydrologist’s sign-off (docs/data-sources.md § penpan-apan): only a reference-ET grid (dPET) loads, or an A-pan grid whose licence is recorded, as dataset ${APAN_DATASETS.join(', ')}`
 		);
 	}
 	const station = env.LOAD_STATION ?? '';
