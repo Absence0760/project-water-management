@@ -5785,6 +5785,33 @@ workbook with one request per node instead of one per series:
   `null`. `offset` defaults to 0; `400` when it is negative, not an integer,
   or past the run's end, or when `nodeId` isn't a UUID.
 
+## Client error reports
+
+`POST /client-errors` (signed in; else `401`) — a page that crashed in the
+browser, sent by the SPA's `handleError` hook (`frontend/src/hooks.client.ts`)
+for an exception thrown while a page loaded or rendered, or a 5xx; never for a
+404 or another 4xx. Body, `.strict()` (an unknown key is a `400`):
+
+| Field | Type | Limit |
+| --- | --- | --- |
+| `id` | the error id the error page shows | 8 lower-case hex digits |
+| `status` | integer | 100–599 |
+| `name` | the error's name (`TypeError`) | 200 characters |
+| `message` | the error's message | 500 |
+| `stack` | the error's stack | 4000 |
+| `path` | the page's path and query string | 500 |
+| `version` | the web build's version (Kit's `version`: the build's timestamp) | 100 |
+
+The browser cuts each field to its limit before sending
+(`frontend/src/clientErrors.ts`). The API logs one line,
+`{"event":"client_error","id","userId","status","name","message","stack","path","version"}`
+(`backend/src/logging/clientErrors.ts`), stores nothing and answers `204`
+with no body. A body that fails validation is `400 { error: "invalid error
+report" }` with no `details`, so nothing sent is echoed back. The body goes
+through `readJson` (the general 4 MB cap and its checks). At most 5 reports
+leave a page load, so a crash that repeats can't flood the log. What the line
+holds and where it is kept: [security.md § Client error reports](./security.md#client-error-reports).
+
 ## Health
 
 `GET /health` → `{ ok: true }`.

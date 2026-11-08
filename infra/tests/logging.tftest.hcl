@@ -753,6 +753,7 @@ run "metric_filters_read_json_logs" {
           aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].pattern,
           aws_cloudwatch_log_metric_filter.report_render_failed[0].pattern,
           aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].pattern,
+          aws_cloudwatch_log_metric_filter.client_error[0].pattern,
         ],
         [for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern],
         [for f in aws_cloudwatch_log_metric_filter.run_stamp_drift : f.pattern],
@@ -771,6 +772,7 @@ run "metric_filters_read_json_logs" {
       aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].pattern == "{ $.message.event = \"feed_fetch_failed\" }" &&
       aws_cloudwatch_log_metric_filter.report_render_failed[0].pattern == "{ $.message.event = \"report_render_failed\" }" &&
       aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].pattern == "{ $.message.event = \"origin_secret_rejected\" }" &&
+      aws_cloudwatch_log_metric_filter.client_error[0].pattern == "{ $.message.event = \"client_error\" }" &&
       alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.message.event = \"mail_send_failed\" }"])
     )
     error_message = "Each filter matches the event name its backend line logs (logEvent callers in backend/src)."
@@ -784,7 +786,8 @@ run "metric_filters_read_json_logs" {
       aws_cloudwatch_log_metric_filter.unhandled_error[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
       aws_cloudwatch_log_metric_filter.login_failed[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
       aws_cloudwatch_log_metric_filter.job_dead[0].log_group_name == aws_cloudwatch_log_group.worker.name &&
-      aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].log_group_name == aws_cloudwatch_log_group.lambda.name
+      aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.client_error[0].log_group_name == aws_cloudwatch_log_group.lambda.name
     )
     error_message = "A metric filter reads the wrong log group."
   }

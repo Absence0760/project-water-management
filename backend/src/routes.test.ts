@@ -594,6 +594,12 @@ describe('route auth inventory', () => {
 		expect(await res.json()).toEqual({ error: 'request too large' });
 	});
 
+	// A page crash's report (frontend hooks.client.ts): signed-in users only, and signed out it's a 401 (logging/clientErrors.db.test.ts).
+	it('inventories the client error report as auth-gated', () => {
+		expect(routes).toContain('POST /client-errors');
+		expect(PUBLIC.has('POST /client-errors')).toBe(false);
+	});
+
 	it('logout and health answer anonymous requests', async () => {
 		expect((await app.request('/health')).status).toBe(200);
 		const res = await app.request('/auth/logout', { method: 'POST', headers: { origin: 'http://localhost:7777' } });

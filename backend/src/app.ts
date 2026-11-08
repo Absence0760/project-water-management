@@ -20,6 +20,7 @@ import { historyRoutes } from './history/routes.js';
 import { apiKeyRoutes, ingestRoutes } from './ingest/routes.js';
 import { handleError } from './http/errors.js';
 import { logEvent } from './logging/logEvent.js';
+import { clientErrorRoutes } from './logging/clientErrors.js';
 import { refuseAmbiguousPaths } from './http/rawPath.js';
 import { myInviteRoutes, projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedFromBoundaryRoutes } from './feeds/fromBoundary.js';
@@ -274,6 +275,12 @@ export function createApp() {
 	compare.use('*', requireUser);
 	compare.route('/', compareRoutes);
 	app.route('/compare', compare);
+
+	// A page crash in the browser, reported with the error id its error page shows (frontend hooks.client.ts): one log line, no storage.
+	const clientErrors = new Hono<AuthEnv>();
+	clientErrors.use('*', requireUser);
+	clientErrors.route('/', clientErrorRoutes);
+	app.route('/client-errors', clientErrors);
 
 	app.notFound((c) => c.json({ error: 'not found' }, 404));
 	app.onError(handleError);

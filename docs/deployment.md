@@ -718,7 +718,9 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   signed, so it was signed the slow way; [security.md § Run
   stamps](./security.md#run-stamps)), one on `unhandled_error` in
   the API's log group (a request answered with an unhandled 500, which the
-  Lambda `Errors` metric can't see, § Runbooks), one on `login_failed` in
+  Lambda `Errors` metric can't see, § Runbooks), one on `client_error` in
+  the API's log group (a page that crashed in someone's browser, reported by
+  the error page, § Runbooks 20), one on `login_failed` in
   the API's log group (failed sign-ins across all accounts, password spraying,
   § Runbooks), the job queue's five (a new DLQ message, worker errors and
   throttles, backlog, dead jobs), and the fetcher's and renderer's answered
@@ -739,8 +741,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   rates, the jobs / mail-events / fetch-requests / ingest-results DLQ
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
   Lambda errors and throttles (`lambda-throttles`: the API at its reserved
-  concurrency, issue #541), `unhandled_error`, `mail_send_failed` and
-  `run_stamp_drift`, 14 alarm metrics; 17 once `ingest_image_tag` is set, with the data mirror's
+  concurrency, issue #541), `unhandled_error`, `mail_send_failed`,
+  `run_stamp_drift` and `client_error`, 15 alarm metrics; 18 once `ingest_image_tag` is set, with the data mirror's
   two freshness alarms and `mirror-backfill-failed` (§ The data mirror).
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
@@ -4816,6 +4818,23 @@ Every step is an ordinary app action by an owner unless it says "operator".
     read (the first of `will`; before, the first of `was`); rename a
     series (so the one they mean sorts first) if they want the old pick.
     Record the list in the operator log.
+20. **A page crashed in someone's browser** (the `client-error` alarm, or
+    a user quoting an error id; operator). The error page showed them an
+    8-hex-digit error id, and the browser sent the crash to `POST
+    /client-errors` ([api.md § Client error reports](./api.md#client-error-reports)),
+    which logged `{"event":"client_error","id":"0a1b2c3d","userId":"…","status":500,"name":"TypeError","message":"…","stack":"…","path":"/projects/…","version":"…"}`.
+    In CloudWatch Logs Insights on the API's log group,
+    `filter message.event = "client_error" and message.id = "0a1b2c3d"`
+    finds the one a user quoted, and
+    `filter message.event = "client_error" | stats count() by message.name, message.message, message.path`
+    groups them. `message` and `path` are usually enough to reproduce it;
+    the stack's frames are the minified chunks of that build (`_app/immutable/…`,
+    their hashes name the build, and `version` is its build time), so to map
+    a frame, build the web release that was live with `build.sourcemap` on
+    and look the position up. Fix the cause with a test and a web release.
+    The line names the user (`userId`) and can quote a value the page was
+    handling, so don't copy it outside the log ([security.md § Client error
+    reports](./security.md#client-error-reports)).
 
 ## Rollback
 
