@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { APAN_DATASETS, BLOCKED_EVAPORATION, DATASETS, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
+import { APAN_DATASETS, BLOCKED_EVAPORATION, DATASETS, SPAN_DATASETS, SPAN_EVAPORATION, frontendProblems, frontendSources, LOADABLE, legalTextHas, loadProblems, REQUIRED_TEXT } from './map-data-gates.mjs';
 
 const has = () => true;
 const lacks = () => false;
@@ -152,6 +152,23 @@ describe('load: a reference load’s inputs', () => {
 		assert.match(penpan[0], /penpan-apan/);
 		// The label belongs to evaporation: as a land-cover label it is any label (that kind isn't gated by A-pan names).
 		assert.deepEqual(loadProblems({ ...landCover, LOAD_DATASET: 'Atlas-Apan-2007' }, lacks), []);
+	});
+
+	it('lets CCWR’s S-pan grid through under its recorded label only, with no source; every other S-pan key or label is refused (issue #738)', () => {
+		assert.deepEqual(SPAN_DATASETS, ['Atlas-Span-2007']);
+		const span = { ...evaporation, LOAD_KEY: 'reference/evaporation/atlas-span-2007.json.gz', LOAD_DATASET: 'Atlas-Span-2007' };
+		assert.deepEqual(loadProblems(span, lacks), []);
+		assert.match(loadProblems({ ...span, LOAD_SOURCE: 'x' }, lacks).join('\n'), /S-pan dataset takes no source/);
+		for (const extra of [{ LOAD_DATASET: 'Span-2026' }, { LOAD_DATASET: 'Symons-grid' }, { LOAD_DATASET: 'dPET-1991-2020', LOAD_KEY: 'reference/evaporation/s-pan.json.gz' }]) {
+			const problems = loadProblems({ ...span, ...extra }, lacks);
+			assert.equal(problems.length, 1, JSON.stringify(extra));
+			assert.match(problems[0], /only as dataset Atlas-Span-2007/);
+		}
+		// The S-pan label is not an A-pan one: an A-pan key under it is refused by the A-pan rule.
+		assert.match(loadProblems({ ...span, LOAD_KEY: 'reference/evaporation/atlas-apan.json.gz' }, lacks).join('\n'), /penpan-apan/);
+		// A whole word only: "spans", "Symonsville" are not S-pan grids; dPET still passes.
+		assert.ok(!SPAN_EVAPORATION.test('reference/evaporation/dpet-spans.json.gz Symonsville'));
+		assert.deepEqual(loadProblems(evaporation, lacks), []);
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {

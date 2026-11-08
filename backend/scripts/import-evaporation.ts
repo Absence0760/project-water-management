@@ -13,6 +13,11 @@
 //                          the WRC Atlas's A-pan equivalent (Schulze and Maharaj 2007) as dataset
 //                          Atlas-Apan-2007, stored with its recorded lines (modelled, not measured pans;
 //                          production allows this label only), or another source's with --source and --attribution
+//   pnpm import:evaporation --span-asc <jan.asc> … <dec.asc> --dataset <label> --years <first>-<last> [same options]
+//                          12 monthly Symons-pan (S-pan) grids the same way (issue #738): CCWR's as dataset
+//                          Atlas-Span-2007 (production allows this label only), or another source's with
+//                          --source and --attribution. Shown as a cross-check against the saved A-pan only,
+//                          never proposed or converted to A-pan
 //   pnpm import:evaporation <apan.json[.gz]> --dataset <label>
 //                          a modelled Class-A pan grid (PenPan) that ingest/apan_grid.py grid wrote
 //                          (issue #646 item 7): kind "apan" with its "model", its source always
@@ -43,9 +48,11 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import pg from 'pg';
 import { SYNTHETIC_EVAPORATION_DATASET } from '../src/geo/evaporation.js';
 import {
-	apanFromAsciiGrids,
 	ATLAS_APAN,
+	ATLAS_SPAN,
 	atlasApanMethodFor,
+	atlasSpanMethodFor,
+	monthlyFromAsciiGrids,
 	climatology,
 	DPET,
 	evaporationFromJson,
@@ -70,6 +77,10 @@ export const SYNTHETIC_EVAPORATION_FILE = fileURLToPath(new URL('../fixtures/geo
 export const SYNTHETIC_APAN_ASC_FILES = Array.from({ length: 12 }, (_, i) =>
 	fileURLToPath(new URL(`../fixtures/geo/apan-asc/apan-${String(i + 1).padStart(2, '0')}.synthetic.asc`, import.meta.url))
 );
+/** 12 invented monthly S-pan grids (ESRI ASCII, 1′ cells, January to December) for `--span-asc`'s tests: never real evaporation. */
+export const SYNTHETIC_SPAN_ASC_FILES = Array.from({ length: 12 }, (_, i) =>
+	fileURLToPath(new URL(`../fixtures/geo/span-asc/span-${String(i + 1).padStart(2, '0')}.synthetic.asc`, import.meta.url))
+);
 /** ingest/apan_grid.py's committed synthetic output, a modelled Class-A pan grid (issue #646 item 7; its tests, never loaded by setup). */
 export const SYNTHETIC_PENPAN_FILE = fileURLToPath(new URL('../../ingest/fixtures/apan/penpan.synthetic.json', import.meta.url));
 
@@ -86,8 +97,8 @@ export type EvaporationArgs =
 			version: string | null;
 			attribution: string | null;
 			out?: string | null;
-			/** `--apan-asc`: `files` are 12 monthly A-pan grids (ESRI ASCII), January to December, covering `years`. */
-			apanAsc?: { first: number; last: number } | null;
+			/** `--apan-asc` / `--span-asc`: `files` are 12 monthly A-pan or S-pan grids (ESRI ASCII), January to December, covering first–last. */
+			monthlyAsc?: { kind: 'apan' | 'span'; first: number; last: number } | null;
 	  };
 
 const isJson = (p: string) => /\.json(\.gz)?$/i.test(p);
@@ -95,7 +106,7 @@ const readJsonText = (f: string) => (/\.gz$/i.test(f) ? gunzipSync(readFileSync(
 
 const FLAGS = ['--dataset', '--bbox', '--source', '--version', '--attribution', '--reduce', '--out', '--years'];
 /** Options that take no value. */
-const SWITCHES = ['--apan-asc'];
+const SWITCHES = ['--apan-asc', '--span-asc'];
 
 export function parseEvaporationArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): EvaporationArgs | string {
 	const flag = (name: string) => {
@@ -121,8 +132,10 @@ export function parseEvaporationArgs(argv: string[], env: NodeJS.ProcessEnv = pr
 	const out = flag('--out');
 	if (out !== null && !/\.json(\.gz)?$/i.test(out)) return '--out takes a .json or .json.gz file';
 	const base = { bbox, source: flag('--source'), version: flag('--version'), attribution: flag('--attribution'), out: out === null ? null : cliPath(out, env) };
-	if (argv.includes('--apan-asc')) return parseApanAsc(positional, flag, base, env);
-	if (flag('--years') !== null) return '--years goes with --apan-asc (dPET years come from the files)';
+	if (argv.includes('--apan-asc') && argv.includes('--span-asc')) return 'give --apan-asc or --span-asc, not both: one grid kind a load';
+	if (argv.includes('--apan-asc')) return parseMonthlyAsc('apan', positional, flag, base, env);
+	if (argv.includes('--span-asc')) return parseMonthlyAsc('span', positional, flag, base, env);
+	if (flag('--years') !== null) return '--years goes with --apan-asc or --span-asc (dPET years come from the files)';
 	if (positional.length === 0) return { mode: 'load', ...base, files: [SYNTHETIC_EVAPORATION_FILE], dataset: SYNTHETIC_EVAPORATION_DATASET };
 	const bad = positional.find((p) => extname(p).toLowerCase() !== '.nc' && !isJson(p));
 	if (bad) return `${bad}: give dPET files (.nc), the years --reduce wrote (.json), or one fixture-form .json or .json.gz`;
@@ -132,29 +145,36 @@ export function parseEvaporationArgs(argv: string[], env: NodeJS.ProcessEnv = pr
 	return { mode: 'load', ...base, files: positional.map((p) => cliPath(p, env)), dataset };
 }
 
-/** `--apan-asc`'s arguments: 12 .asc files in calendar order, a label, the years they cover, and the Atlas label's own rules. */
-function parseApanAsc(
+/** `--apan-asc` / `--span-asc`'s arguments: 12 .asc files in calendar order, a label, the years they cover, and the Atlas label's own rules. */
+function parseMonthlyAsc(
+	kind: 'apan' | 'span',
 	positional: string[],
 	flag: (name: string) => string | null,
 	base: Omit<Extract<EvaporationArgs, { mode: 'load' }>, 'mode' | 'files' | 'dataset'>,
 	env: NodeJS.ProcessEnv
 ): EvaporationArgs | string {
+	const opt = `--${kind}-asc`;
+	const atlas = kind === 'apan' ? ATLAS_APAN : ATLAS_SPAN;
+	const what = kind === 'apan' ? 'A-pan' : 'S-pan';
 	if (positional.length !== 12 || positional.some((p) => extname(p).toLowerCase() !== '.asc')) {
-		return '--apan-asc takes 12 ESRI ASCII grids (.asc), January to December in that order';
+		return `${opt} takes 12 ESRI ASCII grids (.asc), January to December in that order`;
 	}
 	const dataset = flag('--dataset');
-	if (!dataset || dataset.length > 50) return `give the dataset a label of at most 50 characters with --dataset (the WRC Atlas's: ${ATLAS_APAN.dataset})`;
+	if (!dataset || dataset.length > 50) return `give the dataset a label of at most 50 characters with --dataset (the WRC Atlas's: ${atlas.dataset})`;
 	if (dataset === SYNTHETIC_EVAPORATION_DATASET) return `"${SYNTHETIC_EVAPORATION_DATASET}" is the committed fixture's label; pick another`;
+	// Each Atlas label names one kind: the other kind's grids under it would be stored as what they aren't.
+	const other = kind === 'apan' ? ATLAS_SPAN : ATLAS_APAN;
+	if (dataset === other.dataset) return `${other.dataset} is the WRC Atlas's ${kind === 'apan' ? 'S-pan' : 'A-pan'} label: load ${what} grids under another label`;
 	const years = /^(\d{4})-(\d{4})$/.exec(flag('--years') ?? '');
 	const first = Number(years?.[1]);
 	const last = Number(years?.[2]);
-	if (!years || first < 1900 || last > 2200 || first > last) return '--apan-asc needs --years <first>-<last>: the period the grids’ monthly means cover, as their source states it';
-	if (dataset === ATLAS_APAN.dataset) {
-		if (base.source !== null || base.version !== null || base.attribution !== null) return `${ATLAS_APAN.dataset} carries the WRC Atlas's recorded source, version and attribution: give no --source, --version or --attribution`;
+	if (!years || first < 1900 || last > 2200 || first > last) return `${opt} needs --years <first>-<last>: the period the grids’ monthly means cover, as their source states it`;
+	if (dataset === atlas.dataset) {
+		if (base.source !== null || base.version !== null || base.attribution !== null) return `${atlas.dataset} carries the WRC Atlas's recorded source, version and attribution: give no --source, --version or --attribution`;
 	} else if (!base.source || !base.attribution) {
-		return 'an A-pan grid other than the WRC Atlas’s names its source and attribution (--source, --attribution)';
+		return `an ${what} grid other than the WRC Atlas’s names its source and attribution (--source, --attribution)`;
 	}
-	return { mode: 'load', ...base, files: positional.map((p) => cliPath(p, env)), dataset, apanAsc: { first, last } };
+	return { mode: 'load', ...base, files: positional.map((p) => cliPath(p, env)), dataset, monthlyAsc: { kind, first, last } };
 }
 
 /** A file's lines, opened only when read: the 12 grids are read one after another, and an open stream would run ahead unread. */
@@ -179,22 +199,26 @@ export async function readEvaporationFiles(
 	args: Extract<EvaporationArgs, { mode: 'load' }>,
 	log: (line: string) => void = () => {}
 ): Promise<{ meta: EvaporationDatasetMeta; climatology: Climatology; problems: string[] }> {
-	if (args.apanAsc) {
-		const c = await apanFromAsciiGrids(
+	if (args.monthlyAsc) {
+		const { kind, first, last } = args.monthlyAsc;
+		const c = await monthlyFromAsciiGrids(
 			args.files.map((f) => ({ name: f, lines: ascLines(f) })),
 			args.bbox,
-			args.apanAsc.first,
-			args.apanAsc.last
+			first,
+			last,
+			kind === 'apan' ? 'A-pan' : 'S-pan'
 		);
-		const atlas = args.dataset === ATLAS_APAN.dataset;
+		const recorded = kind === 'apan' ? ATLAS_APAN : ATLAS_SPAN;
+		const atlas = args.dataset === recorded.dataset;
+		const atlasMethod = kind === 'apan' ? atlasApanMethodFor : atlasSpanMethodFor;
 		return {
 			meta: {
 				dataset: args.dataset,
-				kind: 'apan',
-				source: atlas ? ATLAS_APAN.source : args.source!,
-				version: atlas ? ATLAS_APAN.version : (args.version ?? 'unstated'),
-				attribution: atlas ? ATLAS_APAN.attribution : args.attribution!,
-				method: atlas ? atlasApanMethodFor(c.cellDeg, c.firstYear, c.lastYear) : monthlyGridsMethodFor(c.cellDeg, c.firstYear, c.lastYear)
+				kind,
+				source: atlas ? recorded.source : args.source!,
+				version: atlas ? recorded.version : (args.version ?? 'unstated'),
+				attribution: atlas ? recorded.attribution : args.attribution!,
+				method: atlas ? atlasMethod(c.cellDeg, c.firstYear, c.lastYear) : monthlyGridsMethodFor(c.cellDeg, c.firstYear, c.lastYear, kind)
 			},
 			climatology: c,
 			problems: c.partial ? [`${c.partial} cells left out: not every month has them`] : []
@@ -213,7 +237,7 @@ export async function readEvaporationFiles(
 		const defaults = model ? PENPAN : got.kind === 'et0' ? DPET : null;
 		const source = args.source ?? got.meta.source ?? defaults?.source;
 		if (!source || !defaults && !(args.attribution ?? got.meta.attribution)) {
-			throw new Error(`${f}: an A-pan grid names its source and attribution (--source, --attribution, or "source" and "attribution" in the file)`);
+			throw new Error(`${f}: ${got.kind === 'span' ? 'an S-pan' : 'an A-pan'} grid names its source and attribution (--source, --attribution, or "source" and "attribution" in the file)`);
 		}
 		return {
 			meta: {
@@ -295,7 +319,7 @@ export const loadSyntheticEvaporation = (url: string) => {
 
 const USAGE =
 	'usage: pnpm import:evaporation [--reduce <dir> <year>_daily_pet.nc … [--bbox w,s,e,n]] | [<file> … --dataset <label> [--bbox w,s,e,n] [--source "…"] [--version "…"] [--attribution "…"] [--out <grid.json[.gz]>]]' +
-	' | [--apan-asc <jan.asc> … <dec.asc> --dataset <label> --years <first>-<last> [--bbox w,s,e,n] [--source "…" --attribution "…"] [--out <grid.json[.gz]>]]';
+	' | [--apan-asc|--span-asc <jan.asc> … <dec.asc> --dataset <label> --years <first>-<last> [--bbox w,s,e,n] [--source "…" --attribution "…"] [--out <grid.json[.gz]>]]';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
 	loadDevEnv();

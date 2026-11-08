@@ -47,7 +47,7 @@ export const PENPAN = {
  * Schulze (ed.), South African Atlas of Climatology and Agrohydrology (2007).
  * Modelled, not measured pans. The one A-pan grid a production load takes,
  * under this label only, stored with these lines whatever the file says
- * (referenceLoad.ts REFERENCE_KINDS evaporation `apanDatasets`): the Atlas's
+ * (referenceLoad.ts REFERENCE_KINDS evaporation `kindDatasets.apan`): the Atlas's
  * portal lists CC BY-SA 4.0 and "No License Provided" at once, and the
  * operator accepted that risk on 2026-11-08 (docs/legal/map-data-licences.md
  * § 3.3e). Its source starts with ATLAS_APAN_LABEL, so a proposal and every
@@ -72,10 +72,39 @@ export function atlasApanMethodFor(cellDeg: number, firstYear: number, lastYear:
 	);
 }
 
-/** A grid of 12 monthly A-pan grids other than the Atlas's (`import:evaporation --apan-asc`): its method in words. */
-export function monthlyGridsMethodFor(cellDeg: number, firstYear: number, lastYear: number): string {
+/**
+ * The Atlas's S-pan grid (issue #738): Symons-pan evaporation, monthly, as
+ * CCWR's grids give it. Whether the Atlas ships an S-pan grid, and who made
+ * it, is still to be confirmed (#738 step 1), so the lines name the report and
+ * not a section or authors. The one S-pan grid a production load takes, under
+ * this label only, stored with these lines whatever the file says
+ * (referenceLoad.ts REFERENCE_KINDS evaporation `kindDatasets.span`), on the
+ * operator's decision of 2026-11-08 (docs/legal/map-data-licences.md §
+ * 3.3e). An S-pan grid is shown as a cross-check against the saved A-pan
+ * only, never proposed or converted (evaporation.ts TARGET_OF).
+ */
+export const ATLAS_SPAN_LABEL = 'Symons-pan (S-pan) evaporation (WRC Atlas, CCWR)';
+export const ATLAS_SPAN_ATTRIBUTION = 'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)';
+export const ATLAS_SPAN = {
+	dataset: 'Atlas-Span-2007',
+	source: `${ATLAS_SPAN_LABEL}: monthly Symons-pan evaporation grids from the CCWR (UKZN) Atlas of Agrohydrology 2008 distribution; which product they are is to be confirmed; Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06`,
+	version: 'Atlas of Agrohydrology 2008 (monthly S-pan grids)',
+	attribution: ATLAS_SPAN_ATTRIBUTION
+} as const;
+
+/** The Atlas S-pan grid's method in words: as the grids give it, and shown only, never converted. */
+export function atlasSpanMethodFor(cellDeg: number, firstYear: number, lastYear: number): string {
 	return (
-		`12 monthly A-pan grids (ESRI ASCII, ${cellDeg.toFixed(4)}° cells) taken as given: each cell's monthly means for ${firstYear}–${lastYear}, as the source states them. ` +
+		`Symons-pan (S-pan) evaporation, the CCWR grids’ 12 monthly means as given (the period ${firstYear}–${lastYear} as the operator recorded it), on a ${cellDeg.toFixed(4)}° grid reprojected to WGS84. ` +
+		'Shown as a cross-check against the saved A-pan only: S-pan is never converted to A-pan here (that conversion is the hydrologist’s choice). ' +
+		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
+	);
+}
+
+/** A grid of 12 monthly A-pan or S-pan grids other than the Atlas's (`import:evaporation --apan-asc` / `--span-asc`): its method in words. */
+export function monthlyGridsMethodFor(cellDeg: number, firstYear: number, lastYear: number, kind: 'apan' | 'span' = 'apan'): string {
+	return (
+		`12 monthly ${kind === 'apan' ? 'A-pan' : 'S-pan (Symons pan; shown as a cross-check only, never converted)'} grids (ESRI ASCII, ${cellDeg.toFixed(4)}° cells) taken as given: each cell's monthly means for ${firstYear}–${lastYear}, as the source states them. ` +
 		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
 	);
 }
@@ -103,7 +132,7 @@ export function evaporationMethodFor(cellDeg: number, firstYear: number, lastYea
 			'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
 		);
 	}
-	const what = kind === 'et0' ? 'reference evapotranspiration (ET₀)' : 'A-pan evaporation';
+	const what = kind === 'et0' ? 'reference evapotranspiration (ET₀)' : kind === 'apan' ? 'A-pan evaporation' : 'Symons-pan (S-pan) evaporation';
 	return (
 		`Pre-summarised at import: each ${cellDeg}° cell's daily ${what} summed into calendar-month totals and averaged over ${firstYear}–${lastYear} (cells with every year only). ` +
 		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
@@ -170,8 +199,7 @@ export function evaporationFromJson(doc: unknown):
 	| { kind: EvaporationKind; climatology: Climatology; meta: { source?: string; version?: string; attribution?: string; model?: EvaporationModel }; problems: string[] }
 	| string {
 	const d = doc as { kind?: unknown; cellDeg?: unknown; firstYear?: unknown; lastYear?: unknown; cells?: unknown; source?: unknown; version?: unknown; attribution?: unknown; model?: unknown };
-	if (d?.kind === 'span') return 'an S-pan dataset can’t be loaded: convert it to A-pan with your own monthly factors first, and say so in --source';
-	if (d?.kind !== 'et0' && d?.kind !== 'apan') return 'the JSON file has no "kind" of "et0" (reference ET) or "apan" (Class-A pan)';
+	if (d?.kind !== 'et0' && d?.kind !== 'apan' && d?.kind !== 'span') return 'the JSON file has no "kind" of "et0" (reference ET), "apan" (Class-A pan) or "span" (Symons pan, shown as a cross-check only)';
 	const cellDeg = Number(d.cellDeg);
 	if (!(cellDeg > 0 && cellDeg <= 1)) return 'the JSON file has no "cellDeg" between 0 and 1';
 	const firstYear = Number(d.firstYear);

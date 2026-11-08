@@ -26,10 +26,11 @@
 //    "model" (evaporationGrid.ts): local only, since production loads
 //    reference ET alone (referenceLoad.ts; docs/data-sources.md §
 //    penpan-apan).
-//  * 12 monthly A-pan grids as ESRI ASCII (`--apan-asc`, January to
-//    December): the WRC Atlas's A-pan equivalent (Schulze and Maharaj
-//    2007), or any other source's monthly means, taken as given
-//    (apanFromAsciiGrids); the Atlas's ESRI binary grids are warped to WGS84
+//  * 12 monthly A-pan or S-pan grids as ESRI ASCII (`--apan-asc`,
+//    `--span-asc`, January to December): the WRC Atlas's A-pan equivalent
+//    (Schulze and Maharaj 2007), CCWR's S-pan (issue #738, shown as a
+//    cross-check only), or any other source's monthly means, taken as given
+//    (monthlyFromAsciiGrids); the Atlas's ESRI binary grids are warped to WGS84
 //    and written as ASCII by the operator first (docs/maps.md § The
 //    evaporation grid).
 // The monthly means are the mean of each calendar month's total over the
@@ -228,11 +229,11 @@ export function climatology(years: readonly YearTotals[]): Climatology | string 
 	return { cellDeg, originLon, originLat, firstYear: sorted[0]!.year, lastYear: sorted.at(-1)!.year, cells, partial };
 }
 
-/** A monthly A-pan total past this is a wrong file or unit (South Africa's highest month is near 400 mm). */
-const APAN_MONTH_MAX_MM = 1000;
+/** A monthly pan total past this is a wrong file or unit (South Africa's highest month is near 400 mm). */
+const PAN_MONTH_MAX_MM = 1000;
 
 /**
- * 12 monthly A-pan grids (ESRI ASCII, WGS84 degrees, January to December, all
+ * 12 monthly pan grids, A-pan or S-pan (`what`, for the messages; ESRI ASCII, WGS84 degrees, January to December, all
  * on one grid) → the climatology of the cells with a value in every month
  * whose centres lie in `bbox`, in water-year order. Each grid is streamed
  * (scanAsciiGrid, the MAP grid's reader); only the box's cells are kept. A
@@ -240,11 +241,12 @@ const APAN_MONTH_MAX_MM = 1000;
  * naming the month and its place (a grid in tenths of a millimetre, say).
  * `firstYear`–`lastYear` is the period the source says its means cover.
  */
-export async function apanFromAsciiGrids(
+export async function monthlyFromAsciiGrids(
 	months: readonly { name: string; lines: AsyncIterable<string> | Iterable<string> }[],
 	bbox: Bbox,
 	firstYear: number,
-	lastYear: number
+	lastYear: number,
+	what: 'A-pan' | 'S-pan' = 'A-pan'
 ): Promise<Climatology> {
 	if (months.length !== 12) throw new Error(`give 12 monthly grids, January to December, not ${months.length}`);
 	const box = { w: bbox.west, s: bbox.south, e: bbox.east, n: bbox.north };
@@ -255,7 +257,7 @@ export async function apanFromAsciiGrids(
 		try {
 			head = await scanAsciiGrid(lines, box, (c) => {
 				if (c.value < 0) return;
-				if (c.value > APAN_MONTH_MAX_MM) throw new Error(`row ${c.fileRow}, column ${c.fileCol}: ${c.value} is not a monthly A-pan total of 0–${APAN_MONTH_MAX_MM} mm (a grid in tenths of a millimetre?)`);
+				if (c.value > PAN_MONTH_MAX_MM) throw new Error(`row ${c.fileRow}, column ${c.fileCol}: ${c.value} is not a monthly ${what} total of 0–${PAN_MONTH_MAX_MM} mm (a grid in tenths of a millimetre?)`);
 				const k = `${c.row}:${c.col}`;
 				if (m === 0) cells.set(k, { row: c.row, col: c.col, v: new Float64Array(12), n: 0 });
 				const cell = cells.get(k);

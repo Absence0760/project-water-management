@@ -10,8 +10,9 @@ name: Load a reference dataset
 # Only the kinds docs/maps.md § Sources marks allowed load: land-cover (ESA
 # WorldCover), evaporation (dPET's reference ET, and one A-pan grid, the WRC
 # Atlas's modelled A-pan equivalent as dataset Atlas-Apan-2007 with no source,
-# by the operator's decision of 2026-11-08; PenPan and other A-pan grids
-# refused), gazetteer (GeoNames' South
+# by the operator's decision of 2026-11-08, and one S-pan grid, CCWR's as
+# dataset Atlas-Span-2007, a cross-check only; PenPan and other A-pan or S-pan
+# grids refused), gazetteer (GeoNames' South
 # Africa dump, CC BY 4.0, for the Map's search), rivers (HydroRIVERS, once
 # HydroSHEDS' Exhibit B statement and the Terms' clause on map data licensed to
 # us are in the app's legal text, scripts/release/map-data-gates.mjs) and
@@ -70,7 +71,7 @@ name: Load a reference dataset
 # The gazetteer from GeoNames' ZA.zip, unzipped and gzipped: gzip -k ZA.txt, then key reference/gazetteer/za-<date>.txt.gz.
 # Tiles: `tiles-upload.ts --production …` uploads the archive and its originals and prints this run's inputs (-f kind=tiles -f dataset=terrain …).
 # The MAP grid from `pnpm import:map-grid <grid.asc> --dataset WAAS-SWCape-2007 --source "…" --bbox w,s,e,n --out waas.json.gz`, then -f dataset=WAAS-SWCape-2007 and no source.
-# The Lynch grid the same way with --dataset Lynch-2004; the Atlas A-pan from `pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007 --years <first>-<last> --out atlas-apan.json.gz`, then -f kind=evaporation -f dataset=Atlas-Apan-2007 and no source.
+# The Lynch grid the same way with --dataset Lynch-2004; the Atlas A-pan from `pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007 --years <first>-<last> --out atlas-apan.json.gz`, then -f kind=evaporation -f dataset=Atlas-Apan-2007 and no source; the S-pan the same with --span-asc and -f dataset=Atlas-Span-2007. The Atlas grids load whole (no --bbox).
 # DWS flow: gzip -k the saved page or reply, key reference/dws/<neutral name>.txt.gz, -f kind=dws -f source="<the record's reference>"
 # and a neutral dataset label: this log is public, so name no station in the key or label, and give -f station only when the file names none.
 # Soils from `python3 ingest/soils.py … --out soils.json.gz` (key reference/soils/<file>), GR4J donors from `pnpm fit-donors … --out donors.json.gz` (key reference/gr4j-donors/<file>).
@@ -110,7 +111,7 @@ on:
         required: true
         type: string
       source:
-        description: 'Rivers: the attribution stored on every reach (required). Land cover, evaporation, soils, GR4J donors: overrides the file’s own (the Atlas A-pan, Atlas-Apan-2007: leave empty, its recorded credit is stored). Quaternaries: the source on every row (default the recorded DWS and WR2012 credit). Gazetteer: the credit on every place (default GeoNames’ CC BY 4.0 attribution). MAP grid: leave empty (its recorded credit is stored). DWS: the record’s reference, at most 200 characters (required)'
+        description: 'Rivers: the attribution stored on every reach (required). Land cover, evaporation, soils, GR4J donors: overrides the file’s own (the Atlas A-pan and S-pan, Atlas-Apan-2007 and Atlas-Span-2007: leave empty, their recorded credit is stored). Quaternaries: the source on every row (default the recorded DWS and WR2012 credit). Gazetteer: the credit on every place (default GeoNames’ CC BY 4.0 attribution). MAP grid: leave empty (its recorded credit is stored). DWS: the record’s reference, at most 200 characters (required)'
         required: false
         type: string
         default: ''

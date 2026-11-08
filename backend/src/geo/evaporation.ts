@@ -35,10 +35,11 @@ export const MAX_EVAPORATION_CELLS = 40_000;
 /** Below this share of the boundary with values, the grid doesn't describe the catchment: nothing is proposed. */
 export const MIN_COVERAGE = 0.5;
 
-export type EvaporationKind = 'et0' | 'apan';
+/** 'span' (Symons pan, 316, issue #738) is shown as a cross-check only: it has no target and is never proposed or converted. */
+export type EvaporationKind = 'et0' | 'apan' | 'span';
 /** The settings an accepted value goes into: GR4J's monthly PE, or the A-pan row. */
 export type EvaporationTarget = 'pe' | 'apan';
-export const TARGET_OF: Record<EvaporationKind, EvaporationTarget> = { et0: 'pe', apan: 'apan' };
+export const TARGET_OF: Record<EvaporationKind, EvaporationTarget | null> = { et0: 'pe', apan: 'apan', span: null };
 
 export interface EvaporationDataset {
 	dataset: string;
@@ -88,12 +89,12 @@ const toDataset = (r: DatasetRow): EvaporationDataset => ({
 	synthetic: r.dataset === SYNTHETIC_EVAPORATION_DATASET
 });
 
-/** The loaded evaporation datasets, the default first: a real one before the synthetic grid, then the newest load, then by label. */
+/** The loaded evaporation datasets, the default first: one that proposes something before an S-pan grid (a cross-check only), a real one before the synthetic grid, then the newest load, then by label. */
 export async function evaporationDatasets(db: Db): Promise<EvaporationDataset[]> {
 	const { rows } = await db.query<DatasetRow>(
 		`SELECT dataset, kind, source, version, method, attribution, first_year, last_year, cell_deg, origin_lon, origin_lat, loaded_at
 		 FROM evaporation_dataset
-		 ORDER BY dataset = $1, loaded_at DESC, dataset`,
+		 ORDER BY kind = 'span', dataset = $1, loaded_at DESC, dataset`,
 		[SYNTHETIC_EVAPORATION_DATASET]
 	);
 	return rows.map(toDataset);
@@ -178,7 +179,8 @@ export async function summariseEvaporation(db: Db, dataset: EvaporationDataset, 
 /** What a dataset's values are, in words. */
 export const KIND_LABEL: Record<EvaporationKind, string> = {
 	et0: 'reference evapotranspiration (FAO-56 Penman-Monteith ET₀)',
-	apan: 'Class-A pan evaporation'
+	apan: 'Class-A pan evaporation',
+	span: 'Symons-pan (S-pan) evaporation'
 };
 
 /**
