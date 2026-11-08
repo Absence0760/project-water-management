@@ -3386,6 +3386,44 @@ export interface MapGridLayer {
 	max: number;
 }
 
+/** The pan kinds the map draws as layers: A-pan (the WRC Atlas's is modelled) and S-pan (a cross-check only). */
+export type EvaporationGridKind = 'apan' | 'span';
+
+/** An evaporation grid loaded for the A-pan or S-pan grid layer (GET …/map/evaporation-grid; docs/maps.md § A-pan and S-pan grids). */
+export interface EvaporationGridDataset {
+	dataset: string;
+	kind: EvaporationGridKind;
+	/** Its values in words ("modelled … not a measured pan" for a modelled A-pan grid). */
+	label: string;
+	source: string;
+	version: string;
+	method: string;
+	attribution: string;
+	/** The calendar years its monthly means average. */
+	firstYear: number;
+	lastYear: number;
+	/** The grid's cell size, degrees. */
+	cellDeg: number;
+	/** The repo's invented grid: never real values. */
+	synthetic: boolean;
+}
+
+/** One A-pan or S-pan grid's points in a box (GET …/map/evaporation-grid). */
+export interface EvaporationGridLayer {
+	bbox: [number, number, number, number];
+	kind: EvaporationGridKind;
+	/** The calendar month (1–12) the values are; null: the year's total. */
+	month: number | null;
+	/** The dataset read: the one asked for, else the default (a real one before the synthetic, then the newest load); null when none of the kind is loaded. */
+	dataset: EvaporationGridDataset | null;
+	datasets: EvaporationGridDataset[];
+	/** Each point's centre and its value, whole mm: the month's mean total, or the year's. */
+	cells: [lon: number, lat: number, mm: number][];
+	/** The box holds more of the grid's points than one answer carries (`max`): no cells, zoom in. */
+	tooDense: boolean;
+	max: number;
+}
+
 /** The DEM grid layer's points in a box (GET …/map/dem-grid; docs/maps.md § DEM grid). */
 export interface DemGridLayer {
 	bbox: [number, number, number, number];

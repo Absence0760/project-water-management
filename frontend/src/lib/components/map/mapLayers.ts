@@ -1,13 +1,25 @@
 // The Map tab's optional layers (issue #326 A6, the relief, the river network
-// #345, the hydrological units' labels, the MAP grid and the CHIRPS grid;
-// docs/ui.md § Map): which are on (`layers=` in the URL, a comma list, so a
-// view can be shared and Back undoes a toggle), the bbox the quaternary
-// outlines and the river network are asked for around the project's
-// features, and what the units, MAP grid and CHIRPS layers draw. Pure
+// #345, the hydrological units' labels, the MAP grid, the A-pan and S-pan
+// grids and the CHIRPS grid; docs/ui.md § Map): which are on (`layers=` in
+// the URL, a comma list, so a view can be shared and Back undoes a toggle),
+// the bbox the quaternary outlines and the river network are asked for around
+// the project's features, and what the units, grid and CHIRPS layers draw. Pure
 // (mapLayers.test.ts).
 import type { MapFeature, MapPosition } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
-import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_MAP_ATTRIBUTION, JRC_WATER_STATEMENT, LYNCH_MAP_MAP_ATTRIBUTION, LYNCH_MAP_STATEMENT, WAAS_MAP_MAP_ATTRIBUTION, WAAS_MAP_STATEMENT } from '#lib/components/legal/dataCredits.js';
+import {
+	ATLAS_APAN_MAP_ATTRIBUTION,
+	ATLAS_APAN_STATEMENT,
+	ATLAS_SPAN_MAP_ATTRIBUTION,
+	ATLAS_SPAN_STATEMENT,
+	HYDRORIVERS_MAP_ATTRIBUTION,
+	JRC_WATER_MAP_ATTRIBUTION,
+	JRC_WATER_STATEMENT,
+	LYNCH_MAP_MAP_ATTRIBUTION,
+	LYNCH_MAP_STATEMENT,
+	WAAS_MAP_MAP_ATTRIBUTION,
+	WAAS_MAP_STATEMENT
+} from '#lib/components/legal/dataCredits.js';
 import { boundsOfAll } from './mapData';
 import { interiorPoint } from './pieces';
 import type { ReadonlyURLSearchParams } from '$app/state';
@@ -18,7 +30,7 @@ import type { ReadonlyURLSearchParams } from '$app/state';
  * (`rivers` is labelled "Rivers (HydroRIVERS)" since the DEM rivers,
  * `channels`, came beside it).
  */
-export const MAP_LAYERS = ['quaternaries', 'rivers', 'channels', 'relief', 'units', 'mapgrid', 'chirps', 'demgrid'] as const;
+export const MAP_LAYERS = ['quaternaries', 'rivers', 'channels', 'relief', 'units', 'mapgrid', 'apangrid', 'spangrid', 'chirps', 'demgrid'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** The HydroRIVERS layer's toggle (`rivers`): mapped rivers, for reference. */
@@ -209,14 +221,16 @@ export const jrcCreditedFeature = (f: Pick<MapFeature, 'properties'>) => {
 };
 
 /** A licensed source the map credits while its data is drawn; its id is also its section on the data sources page (`/data-sources#<id>`). */
-export type MapCredit = 'hydrorivers' | 'jrc-water' | 'waas-map' | 'lynch-map';
+export type MapCredit = 'hydrorivers' | 'jrc-water' | 'waas-map' | 'lynch-map' | 'atlas-apan' | 'atlas-span';
 
 /** Each credit's line on the map's attribution control (English: the workspace's map; the farm map words its own, farmMap.ts). */
 export const MAP_CREDIT_TEXT: Readonly<Record<MapCredit, string>> = {
 	hydrorivers: HYDRORIVERS_MAP_ATTRIBUTION,
 	'jrc-water': JRC_WATER_MAP_ATTRIBUTION,
 	'waas-map': WAAS_MAP_MAP_ATTRIBUTION,
-	'lynch-map': LYNCH_MAP_MAP_ATTRIBUTION
+	'lynch-map': LYNCH_MAP_MAP_ATTRIBUTION,
+	'atlas-apan': ATLAS_APAN_MAP_ATTRIBUTION,
+	'atlas-span': ATLAS_SPAN_MAP_ATTRIBUTION
 };
 
 /**
@@ -226,16 +240,25 @@ export const MAP_CREDIT_TEXT: Readonly<Record<MapCredit, string>> = {
  * Global Surface Water while a traced outline is, then the Southwestern Cape
  * MAP surface or the Lynch (2004) grid while the MAP grid layer draws points
  * of a grid stored with that surface's credit line (`mapGridAttribution`: the drawn grid's attribution, null while
- * the layer draws nothing). Empty when nothing drawn is licensed data. The
- * basemap's and the relief's credits are their own sources' and are not
- * listed here.
+ * the layer draws nothing), then the WRC Atlas's A-pan and S-pan grids while
+ * the A-pan or S-pan grid layer draws points of a grid stored with that
+ * credit line (`evaporationAttributions`: each drawn evaporation grid's
+ * attribution). Empty when nothing drawn is licensed data. The basemap's and
+ * the relief's credits are their own sources' and are not listed here.
  */
-export function mapCredits(features: readonly Pick<MapFeature, 'kind' | 'properties'>[], riversDrawn = false, mapGridAttribution: string | null = null): MapCredit[] {
+export function mapCredits(
+	features: readonly Pick<MapFeature, 'kind' | 'properties'>[],
+	riversDrawn = false,
+	mapGridAttribution: string | null = null,
+	evaporationAttributions: readonly (string | null)[] = []
+): MapCredit[] {
 	const out: MapCredit[] = [];
 	if (riversDrawn || features.some(creditedFeature)) out.push('hydrorivers');
 	if (features.some(jrcCreditedFeature)) out.push('jrc-water');
 	if (mapGridAttribution === WAAS_MAP_STATEMENT) out.push('waas-map');
 	if (mapGridAttribution === LYNCH_MAP_STATEMENT) out.push('lynch-map');
+	if (evaporationAttributions.includes(ATLAS_APAN_STATEMENT)) out.push('atlas-apan');
+	if (evaporationAttributions.includes(ATLAS_SPAN_STATEMENT)) out.push('atlas-span');
 	return out;
 }
 

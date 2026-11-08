@@ -312,6 +312,20 @@ describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
 		expect(MAP_CREDIT_TEXT['lynch-map']).toBe('MAP grid: Lynch (2004), WRC Atlas');
 	});
 
+	it('credits the WRC Atlas’s A-pan and S-pan grids while their layers draw a grid stored with each one’s citation, linking to their own sections', () => {
+		const apan = 'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06';
+		const span = 'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)';
+		const lynch = 'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
+		expect(mapCredits([], false, null, [apan, null])).toEqual(['atlas-apan']);
+		expect(mapCredits([], false, null, [null, span])).toEqual(['atlas-span']);
+		expect(mapCredits([dam], false, lynch, [apan, span])).toEqual(['jrc-water', 'lynch-map', 'atlas-apan', 'atlas-span']);
+		// Nothing drawn, or a grid with another credit line (an operator's own, the synthetic one): no Atlas credit.
+		expect(mapCredits([], false, null, [null, null])).toEqual([]);
+		expect(mapCredits([], false, null, ['Invented A-pan grid', `${span}.`])).toEqual([]);
+		expect(MAP_CREDIT_TEXT['atlas-apan']).toBe('A-pan grid: WRC Atlas (modelled)');
+		expect(MAP_CREDIT_TEXT['atlas-span']).toBe('S-pan grid: WRC Atlas');
+	});
+
 	it('words each credit for the attribution control: the JRC line names the source as JRC asks and says the outline was modified', () => {
 		expect(MAP_CREDIT_TEXT['jrc-water']).toBe('Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified');
 		expect(MAP_CREDIT_TEXT.hydrorivers).toMatch(/^Rivers: HydroRIVERS/);

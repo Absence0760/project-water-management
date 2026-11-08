@@ -9,7 +9,9 @@
 // added as the project's river, which the list then marks on the map. The
 // hydrological units (each parcel named by its unit), the MAP grid (the
 // synthetic grid's points in view, with their range and source) and the
-// CHIRPS grid (its points in view), each its own toggle in the URL. The DEM
+// CHIRPS grid (its points in view), each its own toggle in the URL. The A-pan
+// and S-pan grids: two toggles of their own, the year or a month, the A-pan
+// said modelled and the S-pan a cross-check, each credited while drawn. The DEM
 // rivers (the terrain channels drawn outside Delineate): on by default for an
 // editor, `layers=-channels` turns them off and `layers=channels` on again. Axe
 // with the layers on and while measuring, light and dark.
@@ -232,6 +234,106 @@ test('the MAP grid credits the Southwestern Cape surface on the map while its po
 	await openLayers(page);
 	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).uncheck();
 	await expect(credit).toHaveCount(0);
+});
+
+// The A-pan and S-pan grids (docs/maps.md § A-pan and S-pan grids). The e2e database keeps only the synthetic
+// reference ET grid: an A-pan grid loaded there would become every evaporation proposal spec's default. So the
+// A-pan layer first meets the real server's "none loaded" answer, then the answers are stood in for by a route,
+// invented values with the WRC Atlas grids' lines (the server side is evaporationLayer.db.test.ts's): what the
+// Layers box and the map do with them is real.
+test('the A-pan and S-pan grids: two toggles of their own, the year or a month, said modelled or a cross-check, credited while drawn', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Map evaporation grids');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+	await mapReady(page);
+
+	// None loaded: said plainly, nothing drawn.
+	await openLayers(page);
+	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).check();
+	await expect(page.getByTestId('map-apangrid-none')).toContainText('No A-pan grid is loaded, so there is nothing to draw');
+	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).uncheck();
+	await expect(page).not.toHaveURL(/apangrid/);
+
+	const apanLines = {
+		dataset: 'Atlas-Apan-2007',
+		kind: 'apan',
+		label: 'modelled A-pan equivalent reference potential evaporation (WRC Atlas, not a measured pan)',
+		source: 'Modelled A-pan equivalent (WRC Atlas, Schulze and Maharaj): monthly A-pan equivalent reference potential evaporation, modelled from climate surfaces, not measured pans',
+		version: 'Atlas of Agrohydrology 2008',
+		method: 'Modelled, not measured.',
+		attribution:
+			'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06',
+		firstYear: 1950,
+		lastYear: 1999,
+		cellDeg: 0.05,
+		synthetic: false
+	};
+	const spanLines = {
+		...apanLines,
+		dataset: 'Atlas-Span-2007',
+		kind: 'span',
+		label: 'Symons-pan (S-pan) evaporation',
+		source: 'Symons-pan (S-pan) evaporation (WRC Atlas, CCWR): monthly Symons-pan evaporation grids',
+		attribution: 'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)'
+	};
+	const asked: string[] = [];
+	await page.route(/\/map\/evaporation-grid\?/, async (route) => {
+		const q = new URL(route.request().url()).searchParams;
+		asked.push(q.toString());
+		const kind = q.get('kind');
+		const month = q.get('month') ? Number(q.get('month')) : null;
+		const year = kind === 'apan' ? [1812, 1840, 1866] : [1440, 1460, 1490];
+		const dataset = kind === 'apan' ? apanLines : spanLines;
+		// Invented values: a month is the year's twelfth.
+		const cells = [
+			[21.325, -33.675, year[0]],
+			[21.375, -33.675, year[1]],
+			[21.325, -33.625, year[2]]
+		].map(([lon, lat, v]) => [lon, lat, month === null ? v : Math.round(v! / 12)]);
+		await route.fulfill({ json: { bbox: (q.get('bbox') ?? '').split(',').map(Number), kind, month, dataset, datasets: [dataset], cells, tooDense: false, max: 5000 } });
+	});
+	const attrib = page.locator('.maplibregl-ctrl-attrib');
+	const apanCredit = attrib.getByRole('link', { name: 'A-pan grid: WRC Atlas (modelled)', exact: true });
+	const spanCredit = attrib.getByRole('link', { name: 'S-pan grid: WRC Atlas', exact: true });
+	// A fresh page, so the layer's cached "none loaded" answer is gone.
+	await page.reload();
+	await mapReady(page);
+	await expect(apanCredit).toHaveCount(0);
+	await openLayers(page);
+
+	// The A-pan grid: the year's totals by default, said to be modelled, credited on the map.
+	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).check();
+	await expect(page).toHaveURL(/[?&]layers=apangrid(&|$)/);
+	await expect(page.getByTestId('map-apangrid-summary')).toHaveText(
+		/^3 points in view from Atlas-Apan-2007 \(0\.05° cells, 1950–1999 means\), mm a year: 1\s812 mm to 1\s866 mm\. The map has no fonts for labels here, so it shows the points without their values\.$/
+	);
+	await expect(page.getByTestId('map-apangrid-source')).toContainText('Modelled A-pan equivalent reference potential evaporation (WRC Atlas, not a measured pan). Source: ');
+	await expect(apanCredit).toHaveAttribute('href', '/data-sources#atlas-apan');
+	await expect(layers(page).getByRole('status')).toContainText('3 A-pan grid points shown.');
+
+	// A month: asked for and named; the year again comes from the layer's cache.
+	await page.getByTestId('map-apangrid-month').selectOption({ label: 'January' });
+	await expect(page.getByTestId('map-apangrid-summary')).toContainText('mm in January (mean): 151 mm to 156 mm.');
+	expect(asked.at(-1)).toMatch(/(^|&)kind=apan&.*month=1(&|$)/);
+	const before = asked.length;
+	await page.getByTestId('map-apangrid-month').selectOption({ label: 'Year (total)' });
+	await expect(page.getByTestId('map-apangrid-summary')).toContainText('mm a year');
+	expect(asked).toHaveLength(before);
+
+	// The S-pan grid beside it, its own toggle: a cross-check only, credited on its own line.
+	await layers(page).getByRole('checkbox', { name: 'S-pan grid' }).check();
+	await expect(page).toHaveURL(/layers=apangrid(%2C|,)spangrid(&|$)/);
+	await expect(page.getByTestId('map-spangrid-source')).toContainText('Symons-pan (S-pan) evaporation: a cross-check only, never used by the model. Source: ');
+	await expect(spanCredit).toHaveAttribute('href', '/data-sources#atlas-span');
+	await expect(apanCredit).toBeVisible();
+	await expectNoViolations(page, { include: '[data-testid="map-layers"]' });
+
+	// The A-pan grid off: its credit goes, the S-pan grid's stays.
+	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).uncheck();
+	await expect(page).toHaveURL(/[?&]layers=spangrid(&|$)/);
+	await expect(apanCredit).toHaveCount(0);
+	await expect(spanCredit).toBeVisible();
 });
 
 test('the DEM grid: every 10th elevation-model cell each way in view, with its elevation, a toggle in the URL', async ({ page, owner }) => {

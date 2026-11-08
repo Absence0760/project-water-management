@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "The Map tab's A-pan and S-pan grid layers (toggles, month picker and layer state in their own lazy chunk EvaporationGridToggles; the map's two grid sources and layers; the route client): measured 2445 KB locally against 2440 KB for this branch before them (+5 KB). +1 KB for this branch's earlier commits (the S-pan cross-check on Evaporation from the map, the Atlas credits), which already measured 2440 KB against the 2439 KB ceiling. The Map tab chunk stays at 60 KB: the toggles load after the tab, and the measure bar became a lazy chunk."
+}

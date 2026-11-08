@@ -122,6 +122,12 @@ export const ATLAS_APAN_STATEMENT =
  */
 export const ATLAS_SPAN_STATEMENT = 'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)';
 
+/** The map's attribution control while the A-pan grid layer draws the Atlas grid's points: short, saying modelled, linking to /data-sources#atlas-apan. */
+export const ATLAS_APAN_MAP_ATTRIBUTION = 'A-pan grid: WRC Atlas (modelled)';
+
+/** The map's attribution control while the S-pan grid layer draws the CCWR grid's points: short, linking to /data-sources#atlas-span. */
+export const ATLAS_SPAN_MAP_ATTRIBUTION = 'S-pan grid: WRC Atlas';
+
 /** The licence line the Atlas grids share: what the portal says, and on whose decision they are used. */
 const ATLAS_LICENCE =
 	'The Water Research Observatory’s dataset page lists Creative Commons Attribution-ShareAlike 4.0 and “No License Provided” at once; used on the operator’s decision of 8 November 2026 accepting that risk';
