@@ -579,6 +579,36 @@ variable "feeds_contact" {
   }
 }
 
+# --- Fixed egress (egress.tf, modules/fixed-egress) ------------------------------
+
+variable "fixed_egress_enabled" {
+  description = "Run the fetcher and mirror-ingest Lambdas in a small egress VPC behind a NAT instance with one Elastic IP, instead of outside any VPC on AWS's shared addresses (egress.tf; docs/deployment.md § Fixed egress). On in production: CHC limits by address, and other accounts' traffic on a shared Lambda address got us HTTP 429 (2026-11-05 to 11-08). About $10 a month. Off (the default) keeps both Lambdas outside any VPC."
+  type        = bool
+  default     = false
+}
+
+variable "fixed_egress_vpc_cidr" {
+  description = "CIDR of the egress VPC (modules/fixed-egress). Apart from vpc_cidr for clarity; the two VPCs are never connected."
+  type        = string
+  default     = "10.61.0.0/16"
+
+  validation {
+    condition     = can(cidrhost(var.fixed_egress_vpc_cidr, 0)) && tonumber(split("/", var.fixed_egress_vpc_cidr)[1]) <= 22
+    error_message = "fixed_egress_vpc_cidr must be an IPv4 CIDR of /22 or larger (three /24 subnets are carved from it)."
+  }
+}
+
+variable "fixed_egress_instance_type" {
+  description = "The NAT instance's EC2 type. arm64 only (the AMI is Amazon Linux 2023 arm64). t4g.nano carries a few requests a second and the daily ingest's downloads with room to spare."
+  type        = string
+  default     = "t4g.nano"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9]*g[a-z]*\\.[a-z0-9]+$", var.fixed_egress_instance_type))
+    error_message = "fixed_egress_instance_type must be a Graviton (arm64) type such as t4g.nano: the AMI is arm64."
+  }
+}
+
 # --- Server-side reports (reports.tf) --------------------------------------------
 
 variable "renderer_image_tag" {

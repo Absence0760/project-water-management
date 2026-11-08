@@ -1788,9 +1788,88 @@ today minus the newest issue held, as an embedded metric. The alarm
 yesterday's issue held, so the forecast feeds reading the copy wait, keeping
 the forecast they have) on two days running, or when no datapoint arrives
 for two days. Runbook: the run's log line; a `refused` stopped on purpose
-(as above); `partial` on several runs means CHC is publishing late. It is
+(as above); `partial` on several runs means CHC is publishing late; a
+`throttled` (HTTP 429) on run after run, often after only a few requests,
+means CHC is limiting the address we leave from, which is the shared Lambda
+address unless the fixed egress is on (§ Fixed egress, below). It is
 turned on with the daily ingest (`daily_ingest_enabled`): the rule, its
 target and permission, and the alarm exist only then.
+
+### Fixed egress
+
+`fixed_egress_enabled` (default off; **on in production**) runs the fetcher
+and mirror-ingest Lambdas in a small egress VPC of their own, behind a NAT
+instance with one Elastic IP (`infra/egress.tf`, `infra/modules/fixed-egress/`).
+Off, both run outside any VPC and reach the internet from AWS's shared Lambda
+addresses.
+
+- **Why.** CHC limits by public address: its bot protection blocks one for
+  hours above about 2 requests a second, and answers HTTP 429 past 20 open
+  connections (§ Data feeds, its reply of 2026-10-27). A Lambda outside a VPC
+  shares its address with other accounts' functions, so someone else's
+  crawler can get ours throttled however politely we ask. From 2026-11-05 to
+  11-08 the GEFS pass met HTTP 429 on 15 of 16 runs, after 1 to 6 requests,
+  and the 03:00 preliminary pass on its first request, while our whole
+  traffic to CHC was a few dozen requests a day and the same requests
+  succeeded from elsewhere. One address of our own takes other accounts out
+  of it, and gives CHC one address to recognise (and, if they will,
+  allowlist).
+- **Shape.** A separate VPC (`10.61.0.0/16`, `fixed_egress_vpc_cidr`), never
+  peered with the private one, so neither Lambda gains a path to the
+  database and the private VPC keeps its no-internet guarantee and its
+  endpoint policies. Two private subnets (two AZs) hold the Lambdas' ENIs,
+  with one route out: the NAT instance's ENI in the public subnet. The
+  region's S3 (the mirror bucket, DE Africa's buckets) goes through a free
+  gateway endpoint instead. Security groups allow HTTPS only, and the NAT
+  instance forwards only new outbound HTTPS connections and their replies.
+  The module's shape is pinned by `infra/tests/egress.tftest.hcl` (the root
+  module's network guardrails read only the root's files).
+- **The NAT instance.** Amazon Linux 2023 on `t4g.nano`
+  (`fixed_egress_instance_type`), standard CPU credits, IMDSv2 only, no key
+  pair, no instance profile: nothing logs in. Its first-boot script
+  (`nat-user-data.sh`) turns on forwarding and nftables masquerading (the
+  ruleset syntax-checked before it loads) and daily security updates
+  (`dnf-automatic`, with dnf's release set to `latest`: AL2023 otherwise
+  pins it to the AMI's release, which would never get newer fixes). The Elastic IP is on
+  the ENI, a resource of its own, so the address exists before the instance
+  boots and stays when the instance is replaced. A failed EC2 system check
+  recovers it onto other hardware and a failed instance check reboots it
+  (`water-management-egress-nat-system-check` and `-nat-instance-check`,
+  paging at the essential tier).
+- **Trade-off.** One instance in one AZ. If it or its AZ fails, the fetcher
+  and mirror-ingest reach no upstream until EC2 recovers it; the mirror lag
+  and dam/ET heartbeat alarms page meanwhile, and the app keeps serving what
+  it has. Nothing user-facing goes through it. A managed NAT gateway would
+  remove the instance but costs about $45 a month plus $0.06 a GB processed,
+  and the ingest job downloads hundreds of MB a day.
+- **Cost.** About $10 a month in af-south-1: the instance, the Elastic IP's
+  public-IPv4 charge and 8 GB of gp3. No per-GB processing charge.
+- **Turning it on.** Set `fixed_egress_enabled = true` in the prod tfvars
+  (`infra-secrets/water-management/prod.tfvars`), plan and apply as in
+  § Runbooks (`scripts/tf.sh`). Both Lambdas move into the VPC in place; their next
+  invocations start in it (a few seconds of extra cold start the first time
+  Lambda creates the ENIs). Then read the address with
+  `terraform output fixed_egress_ip` and send it to CHC
+  (chc-help@geog.ucsb.edu) as ours, with the user agent's contact.
+  Check the next GEFS run's `mirror_daily_ingest` line (`stopped: copied` or
+  `up_to_date`): that is the proof the NAT forwards. A green EC2 status
+  check only says the instance is up; a first boot that failed (a package
+  install, the ruleset) leaves it up and forwarding nothing, and the first
+  alarm would be the mirror lag's, days later. If the run shows a timeout
+  instead, replace the instance (Patching, below).
+- **Patching.** Security updates apply daily, but a new kernel needs a
+  reboot, and Terraform ignores newer AMIs so an unrelated apply never
+  replaces the instance. Every few months (or for a kernel advisory), replace
+  it on purpose:
+  `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace='module.fixed_egress[0].aws_instance.nat'`
+  (review the plan it shows: only the instance is replaced).
+  The address and the ENI stay; outbound calls stop for the minute or two the
+  new instance takes to boot, so do it outside 02:00–03:30 and 08:30–12:00
+  UTC (the daily ingest and GEFS windows).
+- **Turning it off.** `fixed_egress_enabled = false` moves both Lambdas back
+  outside any VPC and deletes the egress VPC. AWS releases a Lambda's ENIs
+  some minutes after it leaves a subnet, so deleting the subnets can stall
+  that apply for up to 20 minutes; it finishes on its own.
 
 ### ECMWF (the second forecast)
 
@@ -4948,7 +5027,10 @@ at ~$14/month in us-east-1, ~$18 in af-south-1. The VPC Lambdas' four
 interface endpoints (Secrets Manager, SES API, SQS, S3) cost $7.30/month each
 per AZ in us-east-1 ($9.56 in af-south-1), which is still cheaper than a NAT
 (~$33/month plus data); the data feeds' fetcher and the report renderer run
-outside the VPC for the same reason. The shared CHIRPS cell cache
+outside the VPC for the same reason. In production the fetcher and the
+mirror-ingest job leave through the fixed egress instead (about $10/month,
+§ Fixed egress), which is a NAT instance, not a NAT gateway, and only for
+those two. The shared CHIRPS cell cache
 (`chirps_cell_year`, 208) grows with the cells feeds use, about 1.5 KB per
 cell-year: a 100-cell project over 1981–2026 is about 7 MB, and the 20 GiB
 volume holds thousands of such projects; a project over cells another

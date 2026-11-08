@@ -876,7 +876,7 @@ run "ingest_on_with_a_tag" {
   }
   assert {
     condition     = length(aws_lambda_function.ingest[0].vpc_config) == 0
-    error_message = "The ingest Lambda runs outside the VPC (it reaches CHC over the internet; no NAT)."
+    error_message = "By default (fixed_egress_enabled off) the ingest Lambda runs outside any VPC; egress.tftest.hcl pins it in the egress VPC when on."
   }
   assert {
     condition = (

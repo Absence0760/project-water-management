@@ -1764,7 +1764,8 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
   sources.
 - `sqs` (production): the worker has no internet, so `feed_fetch` sends a
   versioned `fetch` message to the `fetch-requests` queue. The **fetcher
-  Lambda** (`lambda-fetcher.ts`, outside the VPC, no database) fetches with
+  Lambda** (`lambda-fetcher.ts`, outside the private VPC, no database; in
+  production behind one fixed address, deployment.md § Fixed egress) fetches with
   `FEED_SOURCE=live` and sends the result as an `ingest` message to
   `ingest-results`. The worker checks that it answers a real `feed_fetch` job
   of that feed (`app_feed_fetch_job`), queues a `feed_ingest` job as that

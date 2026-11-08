@@ -23,7 +23,9 @@
 // outside the project), so it never blocks work, it just cannot check.
 //
 // It never prints a matched term or the line's text, only the file, the line
-// and the term's number in the list: a CI log is as public as the repo.
+// and the term's number in the list: a CI log is as public as the repo. A
+// file's path can contain a term itself, so a printed path has every term
+// replaced by `[term #N]`.
 //
 // One exemption, in the full scan only: a hit in a migration
 // (backend/migrations/) whose file is byte-identical to the same file at the
@@ -159,9 +161,20 @@ export function isReleasedMigration(path, working, tag, showAtTag) {
 
 const showAtTag = (tag, path) => execFileSync('git', ['show', `${tag}:${path}`], { cwd: ROOT, maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'ignore'] });
 
-const loc = (f) => (f.line ? `file=${f.file},line=${f.line}` : `file=${f.file}`);
+/**
+ * `text` with every spelling of every term replaced by `[term #N]`. A finding's path is printed, and a
+ * path can itself contain a term (a folder or file named after a farm), so paths go through this
+ * before they reach a log. @param {string} text @param {RegExp[]} patterns
+ */
+export function redact(text, patterns) {
+	return patterns.reduce((s, re, i) => s.replace(re, `[term #${i + 1}]`), text);
+}
 
-function report(findings, what, released = [], tag = null) {
+function report(findings, what, patterns, released = [], tag = null) {
+	const loc = (f) => {
+		const file = redact(f.file, patterns);
+		return f.line ? `file=${file},line=${f.line}` : `file=${file}`;
+	};
 	for (const f of released) {
 		console.error(`::warning ${loc(f)}::client term #${f.term} from the terms file, in a migration released as ${tag} and unchanged since: it can't change (production checksums it), so this doesn't fail. See docs/security.md § Public repo hygiene.`);
 	}
@@ -190,7 +203,7 @@ function main() {
 	if (args[0] === '--message') {
 		const msg = readFileSync(args[1], 'utf8').replace(/^#.*$/gm, '');
 		scanText(msg, patterns).forEach((f) => findings.push({ ...f, file: '(commit message)' }));
-		return report(findings, 'the commit message');
+		return report(findings, 'the commit message', patterns);
 	}
 	if (args[0] === '--staged') {
 		for (const p of git(['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z']).split('\0').filter(Boolean)) scanPath(p);
@@ -199,13 +212,13 @@ function main() {
 			const text = lines.map((l) => l.text).join('\n');
 			for (const f of scanText(text, patterns)) findings.push({ file, line: lines[f.line - 1].line, term: f.term });
 		}
-		return report(findings, 'staged changes');
+		return report(findings, 'staged changes', patterns);
 	}
 	if (args[0] === '--history') {
 		for (const f of scanText(git(['log', '--all', '--format=%B']), patterns)) findings.push({ file: '(commit messages, all refs)', term: f.term });
 		for (const f of scanText(git(['log', '--all', '-p', '--text', '--format=', '--no-color']), patterns)) findings.push({ file: '(diffs, all refs)', term: f.term });
 		for (const p of new Set(git(['log', '--all', '--format=', '--name-only']).split('\n').filter(Boolean))) scanPath(p);
-		return report(findings, 'the history of every ref');
+		return report(findings, 'the history of every ref', patterns);
 	}
 	const tracked = git(['ls-files', '-z']).split('\0').filter(Boolean);
 	const released = [];
@@ -218,7 +231,7 @@ function main() {
 		if (tag === undefined) tag = newestBackendTag();
 		(isReleasedMigration(p, buf, tag, showAtTag) ? released : findings).push(...hits);
 	}
-	report(findings, `${tracked.length} tracked files`, released, tag);
+	report(findings, `${tracked.length} tracked files`, patterns, released, tag);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();

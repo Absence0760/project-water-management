@@ -277,7 +277,7 @@ resource "aws_sqs_queue" "ingest_dlq" {
   sqs_managed_sse_enabled   = true
 }
 
-# --- The ingest Lambda (no VPC) ------------------------------------------------------
+# --- The ingest Lambda (outside the private VPC; egress.tf) ---------------------------
 
 resource "aws_iam_role" "ingest_lambda" {
   name               = "${local.project}-mirror-ingest-lambda"
@@ -350,7 +350,7 @@ resource "aws_lambda_function" "ingest" {
   count = local.ingest_enabled ? 1 : 0
 
   function_name = local.ingest_function_name
-  description   = "Data mirror: copies CHC's CHIRPS finals into the private mirror bucket (Zarr v3 + manifest), politely, on a schedule. No VPC, no database (ingest/lambda_handler.py)."
+  description   = "Data mirror: copies CHC's CHIRPS finals into the private mirror bucket (Zarr v3 + manifest), politely, on a schedule. No database; outside the private VPC (ingest/lambda_handler.py)."
   role          = aws_iam_role.ingest_lambda.arn
 
   package_type = "Image"
@@ -374,7 +374,15 @@ resource "aws_lambda_function" "ingest" {
     log_group             = aws_cloudwatch_log_group.ingest.name
   }
 
-  # Deliberately no vpc_config: it reaches CHC over the internet.
+  # Outside any VPC by default; with fixed_egress_enabled, in the egress VPC
+  # behind one Elastic IP (egress.tf), like the fetcher: CHC limits by address.
+  dynamic "vpc_config" {
+    for_each = local.fixed_egress_vpc_config
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
 
   environment {
     variables = {
@@ -395,6 +403,7 @@ resource "aws_lambda_function" "ingest" {
     aws_iam_role_policy.ingest_ecr_pull,
     aws_iam_role_policy.ingest_lambda,
     aws_ecr_repository_policy.ingest,
+    aws_iam_role_policy.lambda_vpc_eni,
   ]
 
   lifecycle {
@@ -532,7 +541,7 @@ resource "aws_cloudwatch_metric_alarm" "mirror_lag_prelim" {
   period              = 86400
   statistic           = "Maximum"
   threshold           = var.daily_ingest_lag_alarm_days
-  alarm_description   = "The data mirror's newest CHIRPS sat day (preliminary, else final) is more than ${var.daily_ingest_lag_alarm_days} days old, or the fetcher's daily ingest published no lag for two days (it stopped running, or fails before it measures). Logs Insights on the fetcher log group: filter message.event = \"mirror_daily_ingest\" | fields message.stopped, message.reason, message.detail, message.prelimThrough. reason refused = CHC answered HTTP 403 (the run stopped on purpose; docs/deployment.md § The data mirror). The app keeps serving the cached days meanwhile."
+  alarm_description   = "The data mirror's newest CHIRPS sat day (preliminary, else final) is more than ${var.daily_ingest_lag_alarm_days} days old, or the fetcher's daily ingest published no lag for two days (it stopped running, or fails before it measures). Logs Insights on the fetcher log group: filter message.event = \"mirror_daily_ingest\" | fields message.stopped, message.reason, message.detail, message.prelimThrough. reason refused = CHC answered HTTP 403 (the run stopped on purpose; docs/deployment.md § The data mirror); reason throttled = HTTP 429, most likely the shared outbound address (docs/deployment.md § Fixed egress). The app keeps serving the cached days meanwhile."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "breaching"
 
@@ -560,7 +569,7 @@ resource "aws_cloudwatch_metric_alarm" "mirror_lag_gefs" {
   period              = 86400
   statistic           = "Maximum"
   threshold           = local.gefs_lag_alarm_days
-  alarm_description   = "The data mirror's newest CHIRPS-GEFS issue is ${local.gefs_lag_alarm_days} or more days old (forecast feeds reading the copy wait), or the fetcher's GEFS pass published no lag for two days (it stopped running, or fails before it measures). Logs Insights on the fetcher log group: filter message.event = \"mirror_daily_ingest\" and message.product = \"gefs\" | fields message.stopped, message.partial, message.reason, message.detail, message.newest. reason refused = CHC answered HTTP 403 (the run stopped on purpose; docs/deployment.md § The data mirror). Feeds keep the forecast they have meanwhile."
+  alarm_description   = "The data mirror's newest CHIRPS-GEFS issue is ${local.gefs_lag_alarm_days} or more days old (forecast feeds reading the copy wait), or the fetcher's GEFS pass published no lag for two days (it stopped running, or fails before it measures). Logs Insights on the fetcher log group: filter message.event = \"mirror_daily_ingest\" and message.product = \"gefs\" | fields message.stopped, message.partial, message.reason, message.detail, message.newest. reason refused = CHC answered HTTP 403 (the run stopped on purpose; docs/deployment.md § The data mirror); reason throttled = HTTP 429, most likely the shared outbound address (docs/deployment.md § Fixed egress). Feeds keep the forecast they have meanwhile."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "breaching"
 

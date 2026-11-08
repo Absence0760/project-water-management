@@ -181,7 +181,11 @@ in `infra/feeds.tf`):
   ([architecture.md § Data feeds](./architecture.md#data-feeds), Throttling); about 50–60
   requests a day for prelim and GEFS together, under 10 a month for finals,
   however many feeds or projects there are; a 403 stops the run and alerts.
-  CHC publishes no rate limit.
+  CHC publishes no rate limit. In production every request leaves from one
+  Elastic IP of ours (`fixed_egress_enabled`,
+  [deployment.md § Fixed egress](./deployment.md#fixed-egress)): CHC's
+  limits are per address, and on AWS's shared Lambda addresses other
+  accounts' traffic got us HTTP 429 (2026-11-05 to 11-08).
 - **Rewrites:** CHC rewrites files in place with no version number and no
   checksums. The copy keeps (mtime, size, ETag) per file, re-downloads on a
   change, and bumps the revision only when the hash of the region's values
