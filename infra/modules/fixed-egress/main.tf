@@ -144,8 +144,10 @@ resource "aws_vpc_endpoint" "s3" {
 }
 
 # --- Security groups ----------------------------------------------------------
-# A description can't change in place (replacing a group a Lambda ENI holds
-# can stall an apply for 20+ minutes); tests/egress.tftest.hcl pins them.
+# A group's description can't change in place (replacing a group a Lambda
+# ENI holds can stall an apply for 20+ minutes); tests/egress.tftest.hcl pins
+# them. Groups and rules alike take only a-zA-Z0-9. _-:/()#,@[]+=&;{}!$*: no
+# apostrophes (2026-11-08: one in a rule's description failed the first apply).
 
 resource "aws_security_group" "lambda" {
   name        = "${local.name}-lambda"
@@ -185,7 +187,7 @@ resource "aws_vpc_security_group_egress_rule" "nat_https" {
   ip_protocol       = "tcp"
   from_port         = 443
   to_port           = 443
-  description       = "HTTPS out (forwarded traffic, and the instance's own package updates)"
+  description       = "HTTPS out (forwarded traffic and the instance package updates)"
 }
 
 # --- The NAT instance ---------------------------------------------------------

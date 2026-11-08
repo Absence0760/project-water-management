@@ -1032,6 +1032,27 @@ run "fixed_egress_module" {
     ])
     error_message = "Security-group descriptions are limited to 255 characters of a-zA-Z0-9. _-:/()#,@[]+=&;{}!$*, or AWS rejects the create."
   }
+  assert {
+    # The rules take the same set (AuthorizeSecurityGroup*: "Invalid rule
+    # description"); 2026-11-08 an apostrophe failed the first apply.
+    condition = alltrue([
+      for d in [
+        aws_vpc_security_group_egress_rule.lambda_https.description,
+        aws_vpc_security_group_ingress_rule.nat_from_lambda.description,
+        aws_vpc_security_group_egress_rule.nat_https.description,
+      ] : length(d) <= 255 && can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]+$", d))
+    ])
+    error_message = "Security-group rule descriptions take the same 255 characters of a-zA-Z0-9. _-:/()#,@[]+=&;{}!$* (no apostrophes), or AWS rejects the rule."
+  }
+  assert {
+    # Every description in the module, rules and groups, read from the source,
+    # so a new rule can't skip the check above.
+    condition = aws_vpc.egress.cidr_block != "" && alltrue([
+      for d in regexall("(?m)^\\s*description\\s*=\\s*\"([^\"]*)\"", file("modules/fixed-egress/main.tf")) :
+      can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]+$", d[0]))
+    ])
+    error_message = "A description in modules/fixed-egress/main.tf uses a character AWS refuses in security groups and their rules (an apostrophe, an em dash)."
+  }
 
   # --- Recovery ---------------------------------------------------------------
   assert {

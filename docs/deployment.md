@@ -1842,11 +1842,20 @@ addresses.
   and the ingest job downloads hundreds of MB a day.
 - **Cost.** About $10 a month in af-south-1: the instance, the Elastic IP's
   public-IPv4 charge and 8 GB of gp3. No per-GB processing charge.
-- **Turning it on.** Set `fixed_egress_enabled = true` in the prod tfvars
-  (`infra-secrets/water-management/prod.tfvars`), plan and apply as in
-  § Runbooks (`scripts/tf.sh`). Both Lambdas move into the VPC in place; their next
-  invocations start in it (a few seconds of extra cold start the first time
-  Lambda creates the ENIs). Then read the address with
+- **Turning it on takes two applies.** Set `fixed_egress_enabled = true` in
+  the prod tfvars (`infra-secrets/water-management/prod.tfvars`), then:
+  1. `scripts/tf.sh plan -target=module.fixed_egress …` and apply it: the
+     egress VPC and NAT instance only (24 resources).
+  2. A plain plan and apply (§ Runbooks, `scripts/tf.sh`): both Lambdas
+     gain `vpc_config` in place.
+
+  One apply doesn't work: while the module doesn't exist its subnet IDs are
+  unknown at plan time, and the AWS provider leaves `vpc_config` out of an
+  existing function's plan altogether (2026-11-08: the first plan showed the
+  two Lambdas' description changes only). Check step 2's plan names
+  `vpc_config` on `aws_lambda_function.fetcher` and `.ingest[0]`. Their next
+  invocations start in the VPC (a few seconds of extra cold start the first
+  time Lambda creates the ENIs). Then read the address with
   `terraform output fixed_egress_ip` and send it to CHC
   (chc-help@geog.ucsb.edu) as ours, with the user agent's contact.
   Check the next GEFS run's `mirror_daily_ingest` line (`stopped: copied` or
