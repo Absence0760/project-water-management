@@ -799,7 +799,7 @@ run "renderer_throttles_alarm_once_it_exists" {
 }
 
 # alarm_tier "essential" is what production runs (alarms.tf § Alarm tier): the
-# 13 alarm metrics below and nothing else, so the estate stays inside the
+# 15 alarm metrics below and nothing else, so the estate stays inside the
 # organization's shared CloudWatch free tier. A dropped alarm's log metric
 # filter goes with it.
 run "essential_alarm_tier" {
@@ -826,8 +826,10 @@ run "essential_alarm_tier" {
       length(aws_cloudwatch_metric_alarm.mail_send_failed),
       length(aws_cloudwatch_log_metric_filter.unhandled_error),
       length(aws_cloudwatch_metric_alarm.run_stamp_drift),
+      length(aws_cloudwatch_metric_alarm.client_error),
+      length(aws_cloudwatch_log_metric_filter.client_error),
     ] : n == 1]) && length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 2 && length(aws_cloudwatch_log_metric_filter.run_stamp_drift) == 2
-    error_message = "alarm_tier = \"essential\" must keep the 14 essential alarms and the filters that feed them."
+    error_message = "alarm_tier = \"essential\" must keep the 15 essential alarms and the filters that feed them."
   }
 
   assert {

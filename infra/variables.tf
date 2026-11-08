@@ -582,7 +582,7 @@ variable "feeds_contact" {
 # --- Fixed egress (egress.tf, modules/fixed-egress) ------------------------------
 
 variable "fixed_egress_enabled" {
-  description = "Run the fetcher and mirror-ingest Lambdas in a small egress VPC behind a NAT instance with one Elastic IP, instead of outside any VPC on AWS's shared addresses (egress.tf; docs/deployment.md § Fixed egress). On in production: CHC limits by address, and other accounts' traffic on a shared Lambda address got us HTTP 429 (2026-11-05 to 11-08). About $10 a month. Off (the default) keeps both Lambdas outside any VPC."
+  description = "Run the fetcher and mirror-ingest Lambdas in a small egress VPC behind a NAT instance with one Elastic IP, instead of outside any VPC on AWS's shared addresses (egress.tf; docs/deployment.md § Fixed egress). On in production: CHC limits by address, and other accounts' traffic on a shared Lambda address got us HTTP 429 (2026-11-05 to 11-08). About $13 a month. Off (the default) keeps both Lambdas outside any VPC."
   type        = bool
   default     = false
 }
@@ -599,13 +599,13 @@ variable "fixed_egress_vpc_cidr" {
 }
 
 variable "fixed_egress_instance_type" {
-  description = "The NAT instance's EC2 type. arm64 only (the AMI is Amazon Linux 2023 arm64). t4g.nano carries a few requests a second and the daily ingest's downloads with room to spare."
+  description = "The NAT instance's EC2 type. arm64 only (the AMI is Amazon Linux 2023 arm64). t4g.micro (1 GB): on a t4g.nano (0.5 GB) the first-boot dnf install was killed for memory (2026-11-08), and dnf-automatic runs daily. Forwarding a few requests a second needs almost no CPU."
   type        = string
-  default     = "t4g.nano"
+  default     = "t4g.micro"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9]*g[a-z]*\\.[a-z0-9]+$", var.fixed_egress_instance_type))
-    error_message = "fixed_egress_instance_type must be a Graviton (arm64) type such as t4g.nano: the AMI is arm64."
+    error_message = "fixed_egress_instance_type must be a Graviton (arm64) type such as t4g.micro: the AMI is arm64."
   }
 }
 

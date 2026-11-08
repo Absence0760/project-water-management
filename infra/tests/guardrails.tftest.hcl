@@ -1567,6 +1567,7 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.lambda_throttles[0],
       aws_cloudwatch_metric_alarm.lambda_duration[0],
       aws_cloudwatch_metric_alarm.unhandled_error[0],
+      aws_cloudwatch_metric_alarm.client_error[0],
       aws_cloudwatch_metric_alarm.login_failed[0],
       aws_cloudwatch_metric_alarm.migrate_errors[0],
       aws_cloudwatch_metric_alarm.rds_cpu[0],
@@ -3477,6 +3478,19 @@ run "mail_failures_and_log_privacy" {
       aws_cloudwatch_log_metric_filter.unhandled_error[0].pattern == "{ $.message.event = \"unhandled_error\" }"
     )
     error_message = "unhandled_error must be counted from the API's log group, by the exact event name handleError logs."
+  }
+  # A page crash in the browser (POST /client-errors, backend logging/clientErrors.ts) pages from the API's log group.
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.client_error[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.client_error[0].pattern == "{ $.message.event = \"client_error\" }" &&
+      aws_cloudwatch_metric_alarm.client_error[0].metric_name == aws_cloudwatch_log_metric_filter.client_error[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.client_error[0].namespace == aws_cloudwatch_log_metric_filter.client_error[0].metric_transformation[0].namespace &&
+      aws_cloudwatch_metric_alarm.client_error[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.client_error[0].comparison_operator == "GreaterThanThreshold" &&
+      contains(aws_cloudwatch_metric_alarm.client_error[0].alarm_actions, aws_sns_topic.alerts.arn)
+    )
+    error_message = "client_error must be counted from the API's log group, by the exact event name the route logs, and one must page the alerts topic."
   }
   assert {
     condition = (

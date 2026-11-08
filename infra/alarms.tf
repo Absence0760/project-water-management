@@ -140,13 +140,14 @@ resource "aws_sns_topic_policy" "alerts" {
 # Every CloudWatch alarm in this root (here, feeds.tf, jobs.tf, reports.tf,
 # ses.tf) is created per var.alarm_tier. The CloudWatch free tier is 10 alarm
 # metrics shared across the whole AWS Organization, and "full" is ~50 here.
-# "essential" keeps the 13 that catch a client-visible outage or a risk to the
-# account (18 with the assistant on: its errors, throttles, failed charges,
+# "essential" keeps the 15 that catch a client-visible outage or a risk to the
+# account (20 with the assistant on: its errors, throttles, failed charges,
 # failed model calls and hourly token spend): SES reputation (AWS pauses sending past its bounce/complaint
 # limits), dead-lettered work on the jobs, mail-events and feed queues, the
 # worker going quiet, RDS running out of disk, the site 5xxing, API errors,
 # the API at its reserved concurrency (throttles: saturation, and spend at
-# the cap) and mail that failed after the user was told it was sent. A dropped alarm takes
+# the cap), mail that failed after the user was told it was sent and a page
+# that crashed in someone's browser (client_error). A dropped alarm takes
 # its log metric filter with it: a filter with default_value publishes a
 # custom metric, which has its own 10-metric free tier.
 locals {
@@ -780,6 +781,46 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
   statistic           = "Sum"
   threshold           = 0
   alarm_description   = "The API (or the assistant) answered a request with an unhandled 500 (invisible to the Lambda Errors metric). Search the API's log group, and the assistant's if it is on, for event = unhandled_error: route says which endpoint, error/code the exception's name and code (a Postgres SQLSTATE for a database error), at the stack frames. Runbook: docs/deployment.md § Runbooks."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+# --- Page crashes in the browser -------------------------------------------
+# The SPA's handleError hook (frontend/src/hooks.client.ts) reports a page
+# that crashed (an exception thrown while it rendered or loaded) to POST
+# /client-errors, which logs one line (backend/src/logging/clientErrors.ts):
+#   {"event":"client_error","id":"0a1b2c3d","userId":"…","status":500,"name":"TypeError","message":"…","stack":"…","path":"/projects/…","version":"…"}
+# The id is the one the error page shows the user, so a user quoting it finds
+# the line. Signed-in users only; nothing else records a crash in the browser
+# (it never reaches the API's own error handling), so without this a crash is
+# seen only if someone reports it. Only the API serves the route.
+
+resource "aws_cloudwatch_log_metric_filter" "client_error" {
+  count          = local.alarms_essential ? 1 : 0
+  name           = "${local.project}-client-error"
+  log_group_name = aws_cloudwatch_log_group.lambda.name
+  pattern        = "{ $.message.event = \"client_error\" }"
+
+  metric_transformation {
+    name          = "ClientError"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_error" {
+  count               = local.alarms_essential ? 1 : 0
+  alarm_name          = "${local.project}-client-error"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.client_error[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.client_error[0].metric_transformation[0].namespace
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "A page crashed in someone's browser (the error page showed them an error id). Search the API's log group for event = client_error: id is the one the user sees, path the page, name/message/stack what threw, version the web build. Runbook: docs/deployment.md § Runbooks."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }

@@ -718,7 +718,9 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   signed, so it was signed the slow way; [security.md § Run
   stamps](./security.md#run-stamps)), one on `unhandled_error` in
   the API's log group (a request answered with an unhandled 500, which the
-  Lambda `Errors` metric can't see, § Runbooks), one on `login_failed` in
+  Lambda `Errors` metric can't see, § Runbooks), one on `client_error` in
+  the API's log group (a page that crashed in someone's browser, reported by
+  the error page, § Runbooks 20), one on `login_failed` in
   the API's log group (failed sign-ins across all accounts, password spraying,
   § Runbooks), the job queue's five (a new DLQ message, worker errors and
   throttles, backlog, dead jobs), and the fetcher's and renderer's answered
@@ -739,8 +741,8 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   rates, the jobs / mail-events / fetch-requests / ingest-results DLQ
   arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
   Lambda errors and throttles (`lambda-throttles`: the API at its reserved
-  concurrency, issue #541), `unhandled_error`, `mail_send_failed` and
-  `run_stamp_drift`, 14 alarm metrics; 17 once `ingest_image_tag` is set, with the data mirror's
+  concurrency, issue #541), `unhandled_error`, `mail_send_failed`,
+  `run_stamp_drift` and `client_error`, 15 alarm metrics; 18 once `ingest_image_tag` is set, with the data mirror's
   two freshness alarms and `mirror-backfill-failed` (§ The data mirror).
   Everything else listed above is declared but not created; its metrics and
   log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
@@ -1822,15 +1824,25 @@ addresses.
   instance forwards only new outbound HTTPS connections and their replies.
   The module's shape is pinned by `infra/tests/egress.tftest.hcl` (the root
   module's network guardrails read only the root's files).
-- **The NAT instance.** Amazon Linux 2023 on `t4g.nano`
-  (`fixed_egress_instance_type`), standard CPU credits, IMDSv2 only, no key
-  pair, no instance profile: nothing logs in. Its first-boot script
+- **The NAT instance.** Amazon Linux 2023 on `t4g.micro`
+  (`fixed_egress_instance_type`; on a 0.5 GB `t4g.nano` the first-boot dnf
+  install was killed for memory), standard CPU credits, IMDSv2 only, no key
+  pair, no instance profile: nothing logs in. Source/destination checking is
+  off **on the instance**, which owns its primary ENI: with it on, every
+  forwarded packet is dropped. (The first version attached a separate ENI as
+  the instance's primary interface. The provider can't set the check beside
+  that, and on 2026-11-08 an in-place update of the instance turned it back
+  on with `ModifyInstanceAttribute`; the fetcher's connections then timed out
+  at 10 s.) Check it with
+  `aws ec2 describe-instances --profile water-management --filters Name=tag:Name,Values=water-management-egress-nat Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].SourceDestCheck'`
+  (must be `False`). Its first-boot script
   (`nat-user-data.sh`) turns on forwarding and nftables masquerading (the
   ruleset syntax-checked before it loads) and daily security updates
   (`dnf-automatic`, with dnf's release set to `latest`: AL2023 otherwise
-  pins it to the AMI's release, which would never get newer fixes). The Elastic IP is on
-  the ENI, a resource of its own, so the address exists before the instance
-  boots and stays when the instance is replaced. A failed EC2 system check
+  pins it to the AMI's release, which would never get newer fixes). The
+  instance boots with a temporary public IP (dnf needs the internet), and
+  the Elastic IP is then associated with it; a replacement instance takes
+  the same allocation, so the address never changes. A failed EC2 system check
   recovers it onto other hardware and a failed instance check reboots it
   (`water-management-egress-nat-system-check` and `-nat-instance-check`,
   paging at the essential tier).
@@ -1840,7 +1852,7 @@ addresses.
   it has. Nothing user-facing goes through it. A managed NAT gateway would
   remove the instance but costs about $45 a month plus $0.06 a GB processed,
   and the ingest job downloads hundreds of MB a day.
-- **Cost.** About $10 a month in af-south-1: the instance, the Elastic IP's
+- **Cost.** About $13 a month in af-south-1: the instance, the Elastic IP's
   public-IPv4 charge and 8 GB of gp3. No per-GB processing charge.
 - **Turning it on takes two applies.** Set `fixed_egress_enabled = true` in
   the prod tfvars (`infra-secrets/water-management/prod.tfvars`), then:
@@ -1870,7 +1882,7 @@ addresses.
   it on purpose:
   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace='module.fixed_egress[0].aws_instance.nat'`
   (review the plan it shows: only the instance is replaced).
-  The address and the ENI stay; outbound calls stop for the minute or two the
+  The address stays (the Elastic IP moves to the new instance); outbound calls stop for the minute or two the
   new instance takes to boot, so do it outside 02:00–03:30 and 08:30–12:00
   UTC (the daily ingest and GEFS windows).
 - **Turning it off.** `fixed_egress_enabled = false` moves both Lambdas back
@@ -4863,6 +4875,23 @@ Every step is an ordinary app action by an owner unless it says "operator".
     read (the first of `will`; before, the first of `was`); rename a
     series (so the one they mean sorts first) if they want the old pick.
     Record the list in the operator log.
+20. **A page crashed in someone's browser** (the `client-error` alarm, or
+    a user quoting an error id; operator). The error page showed them an
+    8-hex-digit error id, and the browser sent the crash to `POST
+    /client-errors` ([api.md § Client error reports](./api.md#client-error-reports)),
+    which logged `{"event":"client_error","id":"0a1b2c3d","userId":"…","status":500,"name":"TypeError","message":"…","stack":"…","path":"/projects/…","version":"…"}`.
+    In CloudWatch Logs Insights on the API's log group,
+    `filter message.event = "client_error" and message.id = "0a1b2c3d"`
+    finds the one a user quoted, and
+    `filter message.event = "client_error" | stats count() by message.name, message.message, message.path`
+    groups them. `message` and `path` are usually enough to reproduce it;
+    the stack's frames are the minified chunks of that build (`_app/immutable/…`,
+    their hashes name the build, and `version` is its build time), so to map
+    a frame, build the web release that was live with `build.sourcemap` on
+    and look the position up. Fix the cause with a test and a web release.
+    The line names the user (`userId`) and can quote a value the page was
+    handling, so don't copy it outside the log ([security.md § Client error
+    reports](./security.md#client-error-reports)).
 
 ## Rollback
 
@@ -5065,7 +5094,7 @@ interface endpoints (Secrets Manager, SES API, SQS, S3) cost $7.30/month each
 per AZ in us-east-1 ($9.56 in af-south-1), which is still cheaper than a NAT
 (~$33/month plus data); the data feeds' fetcher and the report renderer run
 outside the VPC for the same reason. In production the fetcher and the
-mirror-ingest job leave through the fixed egress instead (about $10/month,
+mirror-ingest job leave through the fixed egress instead (about $13/month,
 § Fixed egress), which is a NAT instance, not a NAT gateway, and only for
 those two. The shared CHIRPS cell cache
 (`chirps_cell_year`, 208) grows with the cells feeds use, about 1.5 KB per

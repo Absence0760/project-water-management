@@ -188,6 +188,45 @@ departure as "Deleted user deleted their account and left the project
 hand-over, the deletion, axe on the dialog in both themes at desktop and
 phone width).
 
+## Error page
+
+`routes/+error.svelte`, in the root layout's frame (the app shell when
+signed in), in place of a page that crashed (an exception while it loaded
+or rendered: Kit catches a render error in the boundary under the root
+layout, `transformError`) or an address that matches no page. Before it
+there was none, and Kit's bare "500 Internal Error" page told nobody what
+threw.
+
+- **A crash** (status 500, or any 5xx): the heading "Something went wrong on
+  this page", the error's own message (cut to 500 characters), "Error id:
+  `0a1b2c3d`" with "If you report this, quote the error id: it tells us
+  exactly what went wrong.", then **Reload the page** and a link back to the
+  projects list (**Back to your hydrological units**, to `/farm`, on a farm
+  page). The id is 8 hex digits from a random UUID, made by the client
+  `handleError` hook (`hooks.client.ts`, pure parts in `clientErrors.ts`),
+  which sends it, with the error's name, message and stack, the page's path
+  and the web build's version, to `POST /client-errors` ([api.md § Client
+  error reports](./api.md#client-error-reports)). The report is
+  fire-and-forget (`keepalive`, never awaited, never throws out of the hook)
+  and at most 5 leave a page load. The operator finds it by the id in the
+  API's log ([deployment.md § Runbooks](./deployment.md#runbooks)).
+- **Not found** (404): "Page not found" and "Check the address, or go back
+  and follow a link.", the link back, no id, no Reload, and nothing sent: a
+  wrong address isn't a crash.
+- **Another 4xx** (thrown with `error()`): "This page could not be shown"
+  and its message.
+- **Language.** Kit loads the error page with the app's first download, so
+  it stays off the message catalogue: its words are `msg()`s (sheet section
+  `crash`), worded through the i18n module only on the translated routes,
+  where the root layout has already loaded it, and English elsewhere. Their
+  Afrikaans went through the translator and checker agents ("Fout-ID" for
+  the error id; not yet reviewed by a native speaker, like the rest of
+  `af.ts`).
+- Tests: `clientErrors.test.ts` (truncation, the id, what is reported and
+  shown), `e2e/tests/error-page.spec.ts` (a real render crash, the projects
+  list's answer changed so a cell's date code throws, shows the message and
+  id and sends the report with that id; a 404 shows no id and sends nothing).
+
 ## Number style
 
 One thousands separator app-wide (D10, issue #76): a **narrow no-break
