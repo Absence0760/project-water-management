@@ -8816,7 +8816,12 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     runs on pan coefficient × A-pan" when there is no monthly PE), each with
     its year total, and for reference ET a third row, **ET₀ ÷ saved A-pan**,
     the pan coefficient the two imply, as a cross-check: a month outside
-    FAO-56's 0.6–0.85 is bold and named in a note under the table. **Source
+    FAO-56's 0.6–0.85 is bold and named in a note under the table. An S-pan
+    grid (issue #738; "S-pan, cross-check only" in the Grid picker) shows
+    **S-pan from the map**, **Saved A-pan** and **Saved A-pan ÷ S-pan** rows
+    instead, a line saying it is a cross-check only, and a note that it is
+    never written to the project, since turning S-pan into A-pan needs a
+    conversion the hydrologist chooses; it offers no Use. **Source
     and method** (collapsed) cites the dataset, its version and period, its
     attribution and its method. **Use as GR4J’s monthly PE** (or **Use as the
     A-pan evaporation row**; editors) asks first (what reads the values, and
