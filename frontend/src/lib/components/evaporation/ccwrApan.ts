@@ -10,8 +10,6 @@
 export const CCWR_APAN_DATASET = 'Atlas-Apan-2007';
 /** Its name wherever a grid is picked or cited in the app. */
 export const CCWR_APAN_NAME = 'CCWR A-pan';
-/** How the server's operator loads it (docs/STACK.md, docs/maps.md § The evaporation grid): the Atlas's 12 monthly grids, warped to WGS84 ESRI ASCII first; no period, since the Atlas states none. */
-export const CCWR_APAN_IMPORT = 'pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007';
 
 /** An evaporation grid's name as the app shows it: "CCWR A-pan" for the Atlas A-pan grid, else its label. */
 export const evaporationGridName = (dataset: string): string => (dataset === CCWR_APAN_DATASET ? CCWR_APAN_NAME : dataset);

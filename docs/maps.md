@@ -3136,10 +3136,11 @@ grid's kind, and **nothing is converted between them**:
   that dataset by label, and a grid asked for that isn't loaded answers as
   none loaded (`dataset: null`, the loaded ones listed), not an error, so
   until it is loaded (production until issue #755, a fresh clone) the panel
-  says "The CCWR A-pan grid isn’t loaded on this server" with the operator's
-  command, `pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc>
-  --dataset Atlas-Apan-2007` ([§ The evaporation grid](#the-evaporation-grid)),
-  and never proposes another grid in its place. Every grid picker (the
+  says "There’s no CCWR A-pan grid on this server yet", in plain words and
+  without the operator's command, which stays here (issue #586 C5):
+  `pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset
+  Atlas-Apan-2007` ([§ The evaporation grid](#the-evaporation-grid)). It
+  never proposes another grid in its place. Every grid picker (the
   **Grid** select here, the Map's A-pan layer) and the "came from the map"
   line name it **CCWR A-pan**. The generic **An evaporation grid (A-pan from
   the map)** choice stays, linking here: it is where any other grid is
@@ -3739,8 +3740,9 @@ the grid's cell size), with the same view snapping, caps and messages.
 - **One grid at a time.** With more than one of a kind loaded, a **Grid**
   picker chooses; the default is the proposals' (a real one before the
   synthetic, then the newest load).
-- **None loaded.** The toggle is offered either way; turned on, it says "No
-  A-pan grid is loaded, so there is nothing to draw" (and how to load one).
+- **None loaded.** The toggle is offered either way; turned on, it says "There’s
+  no A-pan grid on this server yet, so there is nothing to draw" (no
+  command: that is the operator's, below; issue #586 C5).
   The repo ships no A-pan or S-pan grid that setup loads: locally, load the
   invented monthly grids with `pnpm import:evaporation --apan-asc
   backend/fixtures/geo/apan-asc/apan-{01..12}.synthetic.asc --dataset

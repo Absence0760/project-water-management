@@ -25,7 +25,7 @@
 	import ProposalPanel from '#lib/components/proposals/ProposalPanel.svelte';
 	import ProposalSource from '#lib/components/proposals/ProposalSource.svelte';
 	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
-	import { CCWR_APAN_IMPORT, evaporationGridName } from '#lib/components/evaporation/ccwrApan.js';
+	import { evaporationGridName } from '#lib/components/evaporation/ccwrApan.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { acceptedText, apanOverSpan, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
@@ -162,13 +162,13 @@
 
 	{#if data && view}
 		{#if view.kind === 'no-dataset' && pinned}
-			<div class="alert alert-info slim" data-testid="ccwr-apan-not-loaded">
-				<p class="small">
-					The {evaporationGridName(pinned)} grid isn’t loaded on this server, so there is nothing to propose yet. Type or paste the A-pan row below,
-					or pick another source. Whoever runs the server loads it with:
-				</p>
-				<code class="cmd">{CCWR_APAN_IMPORT}</code>
-			</div>
+			<!-- In plain words: the loader command is the operator's and lives in docs/maps.md only (issue #586 C5). -->
+			<ProposalNoDataset
+				testid="ccwr-apan-not-loaded"
+				what="{evaporationGridName(pinned)} grid"
+				consequence="there is nothing to propose from it"
+				instead="Type or paste the A-pan row below, or pick another source."
+			/>
 		{:else if view.kind === 'no-dataset'}
 			<ProposalNoDataset testid="evaporation-no-dataset" what="evaporation map" consequence="nothing can be proposed" instead="Enter the A-pan and pan coefficient by hand." />
 		{:else}
@@ -329,12 +329,6 @@
 	.err {
 		color: var(--danger);
 		margin: 0;
-	}
-	.cmd {
-		display: block;
-		margin-top: 0.35rem;
-		overflow-wrap: anywhere;
-		font-size: var(--font-xs);
 	}
 	.hint,
 	.small {

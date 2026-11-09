@@ -251,7 +251,7 @@ test('the A-pan and S-pan grids: two toggles of their own, the year or a month, 
 	// None loaded: said plainly, nothing drawn.
 	await openLayers(page);
 	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).check();
-	await expect(page.getByTestId('map-apangrid-none')).toContainText('No A-pan grid is loaded, so there is nothing to draw');
+	await expect(page.getByTestId('map-apangrid-none')).toHaveText('There’s no A-pan grid on this server yet, so there is nothing to draw.');
 	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).uncheck();
 	await expect(page).not.toHaveURL(/apangrid/);
 

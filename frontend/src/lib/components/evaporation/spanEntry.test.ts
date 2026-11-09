@@ -1,6 +1,6 @@
 // The A-pan source choice and the S-pan paste (spanEntry.ts).
 import { describe, expect, it } from 'vitest';
-import { CCWR_APAN_DATASET, CCWR_APAN_IMPORT, evaporationGridName } from './ccwrApan';
+import { CCWR_APAN_DATASET, evaporationGridName } from './ccwrApan';
 import { APAN_SOURCES, parseSpanRow } from './spanEntry';
 
 const ROW = [150, 170, 190, 195, 160, 140, 95, 70, 55, 57, 78, 105];
@@ -38,6 +38,5 @@ describe('the CCWR A-pan grid’s name', () => {
 		expect(evaporationGridName('Atlas-Apan-2007')).toBe('CCWR A-pan');
 		for (const d of ['synthetic', 'Atlas-Span-2007', 'dPET-1991-2020', 'penpan-2001-2020']) expect(evaporationGridName(d)).toBe(d);
 		// The operator's command names the dataset, as docs/STACK.md has it, and no period (the Atlas states none).
-		expect(CCWR_APAN_IMPORT).toBe('pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007');
 	});
 });

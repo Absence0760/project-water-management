@@ -74,7 +74,7 @@
 				<p class="muted" data-loading>Loading the {word}…</p>
 			{:else if !ea.dataset}
 				<p class="muted" data-testid="map-{id}-none">
-					No {word} is loaded, so there is nothing to draw (<code>pnpm import:evaporation --{eg.kind}-asc</code>, docs/maps.md § A-pan and S-pan grids).
+					There’s no {word} on this server yet, so there is nothing to draw.
 				</p>
 			{:else}
 				{#if ea.datasets.length > 1}

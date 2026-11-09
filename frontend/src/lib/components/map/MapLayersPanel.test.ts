@@ -292,8 +292,8 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 	});
 
 	it('says plainly when no grid of its kind is loaded, and each other state', () => {
-		expect(props({ evaporationGrids: [layer('apan', answer(null)), off('span')] })).toContain('No A-pan grid is loaded, so there is nothing to draw');
-		expect(props({ evaporationGrids: [off('apan'), layer('span', answer(null, { kind: 'span' }))] })).toContain('No S-pan grid is loaded, so there is nothing to draw');
+		expect(props({ evaporationGrids: [layer('apan', answer(null)), off('span')] })).toContain('There’s no A-pan grid on this server yet, so there is nothing to draw.');
+		expect(props({ evaporationGrids: [off('apan'), layer('span', answer(null, { kind: 'span' }))] })).toContain('There’s no S-pan grid on this server yet, so there is nothing to draw.');
 		expect(props({ evaporationGrids: [layer('apan', null, { zoomIn: true }), off('span')] })).toContain('Zoom in to see the A-pan grid');
 		expect(props({ evaporationGrids: [layer('apan', null, { error: 'offline' }), off('span')] })).toContain('The A-pan grid couldn’t be loaded: offline');
 		expect(props({ evaporationGrids: [layer('apan', answer(atlasApan, { cells: [], tooDense: true })), off('span')] })).toMatch(/This view holds more than 5.000 of the grid’s points/);

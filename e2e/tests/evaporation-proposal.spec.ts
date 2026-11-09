@@ -179,8 +179,11 @@ test('Demand’s CCWR A-pan grid: not loaded says so with the import command; lo
 	await expect(ccwr.getByTestId('ccwr-apan-body')).toHaveAttribute('data-ready', 'true');
 	await expect(ccwr.getByRole('heading', { name: 'CCWR A-pan grid (catchment average)' })).toBeVisible();
 	// The e2e server loads no Atlas grid (as production until issue #755): none loaded, not an error, and nothing else proposed.
-	await expect(ccwr.getByTestId('ccwr-apan-not-loaded')).toContainText('The CCWR A-pan grid isn’t loaded on this server');
-	await expect(ccwr.getByTestId('ccwr-apan-not-loaded').locator('code')).toHaveText('pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007');
+	await expect(ccwr.getByTestId('ccwr-apan-not-loaded')).toHaveText(
+		'There’s no CCWR A-pan grid on this server yet, so there is nothing to propose from it. Type or paste the A-pan row below, or pick another source.'
+	);
+	// No developer command for a hydrologist (issue #586 C5).
+	await expect(ccwr.getByTestId('ccwr-apan-not-loaded')).not.toContainText('pnpm');
 	await expect(ccwr.locator('tr[data-row="proposed"]')).toHaveCount(0);
 
 	// Loaded: the synthetic grid's answer, presented as the Atlas A-pan grid (what the server sends once it is loaded).
