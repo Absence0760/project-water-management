@@ -290,7 +290,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			// A unit's base-flow loss and gain (engine 1.86.0, migration 222); absent = none.
 			baseflow_loss_m3_day: n.baseflowLossM3Day ?? BASEFLOW_DEFAULTS.baseflowLossM3Day,
 			baseflow_gain_m3_day: n.baseflowGainM3Day ?? BASEFLOW_DEFAULTS.baseflowGainM3Day,
-			// Bed losses and base flow by month (engine 1.116.0, migration 318); absent = the one value all year.
+			// Bed losses and base flow by month (engine 1.116.0, migration 319); absent = the one value all year.
 			reach_loss_frac_monthly: n.reachLossFracMonthly ?? REACH_LOSS_DEFAULTS.reachLossFracMonthly,
 			reach_loss_max_monthly_m3_day: n.reachLossMaxMonthlyM3Day ?? REACH_LOSS_DEFAULTS.reachLossMaxMonthlyM3Day,
 			baseflow_loss_monthly_m3_day: n.baseflowLossMonthlyM3Day ?? BASEFLOW_DEFAULTS.baseflowLossMonthlyM3Day,

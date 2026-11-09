@@ -116,7 +116,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), m³/day; 0 = none. Units only is a model rule (baseflowKind).
 				baseflowLossM3Day: nonNeg.default(0),
 				baseflowGainM3Day: nonNeg.default(0),
-				// Bed losses and base flow by water-year month (engine 1.116.0, migration 318): each row replaces its one value; null = that value all year.
+				// Bed losses and base flow by water-year month (engine 1.116.0, migration 319): each row replaces its one value; null = that value all year.
 				reachLossFracMonthly: z.array(z.number().finite().min(0).max(REACH_LOSS_FRAC_MAX)).length(12).nullable().default(null),
 				reachLossMaxMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				baseflowLossMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),

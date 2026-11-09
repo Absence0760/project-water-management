@@ -2041,7 +2041,7 @@ and `reachLossMaxM3Day` (≥ 0 or `null` = no cap). A body without them gets 0
 and `null` (no loss, no change to any run). `PUT` refuses a share outside
 0–1, a negative cap, and a share on the outlet, which has no reach below it
 (more than half the flow without a cap saves, and its runs warn).
-By water-year month (engine 1.116.0, migration 318): `reachLossFracMonthly`
+By water-year month (engine 1.116.0, migration 319): `reachLossFracMonthly`
 (12 shares in 0–1, Oct–Sep) and `reachLossMaxMonthlyM3Day` (12 values ≥ 0),
 each `null` by default (the one value all year) and, when set, replacing its
 one value; `PUT` refuses a row that isn't 12 values in range, and a monthly
