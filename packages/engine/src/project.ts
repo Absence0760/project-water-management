@@ -2183,6 +2183,24 @@ export const REACH_LOSS_DEFAULTS = {
 	reachLossMaxMonthlyM3Day: null
 } as const;
 
+/**
+ * Each one value of the bed losses and the base flow, and the monthly row
+ * that replaces it when set (engine 1.116.0, docs/model.md §2.6b): with the
+ * row set, the one value is kept but the run never reads it.
+ */
+export const MONTHLY_ROW_OF = {
+	reachLossFrac: 'reachLossFracMonthly',
+	reachLossMaxM3Day: 'reachLossMaxMonthlyM3Day',
+	baseflowLossM3Day: 'baseflowLossMonthlyM3Day',
+	baseflowGainM3Day: 'baseflowGainMonthlyM3Day'
+} as const satisfies Partial<Record<keyof NetworkNode, keyof NetworkNode>>;
+
+/** Is `field` a one value that its monthly row replaces on node `n` (MONTHLY_ROW_OF)? */
+export function replacedByMonth(n: Partial<NetworkNode>, field: string): boolean {
+	const row = Object.hasOwn(MONTHLY_ROW_OF, field) ? MONTHLY_ROW_OF[field as keyof typeof MONTHLY_ROW_OF] : undefined;
+	return row !== undefined && Array.isArray(n[row]);
+}
+
 /** What a unit without the base-flow fields (engine 1.86.0, docs/model.md §2.6b) runs as: no base-flow loss or gain. */
 export const BASEFLOW_DEFAULTS = {
 	baseflowLossM3Day: 0,

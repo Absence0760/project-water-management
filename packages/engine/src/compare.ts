@@ -68,7 +68,8 @@ import {
 	type MapAreaEntry,
 	type RainStationInputs,
 	type RunSummary,
-	type Transfer
+	type Transfer,
+	replacedByMonth
 } from './project';
 import type { Wr2012Reference, Wr2012Settings } from './reference/wr2012Settings';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './calibrate/objectives';
@@ -1813,7 +1814,8 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const parts: string[] = [];
 		if (x.name !== y.name) parts.push(`renamed from "${x.name}"`);
 		for (const [k, label, fmt] of NODE_FIELDS) {
-			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}`);
+			// A one value its monthly row replaces on both sides (engine 1.116.0) is read by neither run: said so.
+			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}${replacedByMonth(x, k) && replacedByMonth(y, k) ? ' (no effect: set by month)' : ''}`);
 		}
 		parts.push(...retiredNodeChanges(rawA.get(x.id), rawB.get(y.id)));
 		// The unit's MAP and its source (engine ≥ 1.78.0, docs/model.md §2.4h); absent = none.
