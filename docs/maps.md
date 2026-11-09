@@ -3104,8 +3104,9 @@ grid's kind, and **nothing is converted between them**:
   it, the form takes the saved settings. Viewers see the proposal, not Use.
 - **Datasets.** The default is one that proposes something before an S-pan
   grid (a cross-check only), then a real dataset before the synthetic one, then
-  the newest load; the API takes `?dataset=`, and the panel offers a choice
-  when more than one is loaded.
+  the newest load; the API takes `?dataset=` (one that isn't loaded answers
+  as none loaded), and the panel offers a choice when more than one is
+  loaded.
 - **The current season, day by day** (issue #604 R5-E). The grid's 12
   values are a climatology. For the season as it runs, add an **AgERA5
   daily reference evapotranspiration** data feed over the catchment
@@ -3124,6 +3125,27 @@ grid's kind, and **nothing is converted between them**:
   2026-11-08); a modelled Class-A pan grid (PenPan from NASA POWER's weather)
   proposes it as "Modelled Class-A pan (PenPan)", locally only until it is
   validated against DWS pans.
+- **The CCWR A-pan grid on Demand.** Model settings → Demand → **A-pan
+  from** → **CCWR A-pan grid (catchment average)** is this panel pinned to
+  `Atlas-Apan-2007` (`EvaporationProposal.svelte` `dataset`,
+  `evaporation/ccwrApan.ts`): no grid picker, the same proposal, Use,
+  confirmation, settings revision and citation, so the catchment's one A-pan
+  row (`settings.apanMm`) becomes the Atlas grid's 12 means over the
+  boundary. The model still runs on one A-pan row for the whole catchment;
+  the grid is only averaged over the boundary. The panel asks the API for
+  that dataset by label, and a grid asked for that isn't loaded answers as
+  none loaded (`dataset: null`, the loaded ones listed), not an error, so
+  until it is loaded (production until issue #755, a fresh clone) the panel
+  says "The CCWR A-pan grid isn’t loaded on this server" with the operator's
+  command, `pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc>
+  --dataset Atlas-Apan-2007` ([§ The evaporation grid](#the-evaporation-grid)),
+  and never proposes another grid in its place. Every grid picker (the
+  **Grid** select here, the Map's A-pan layer) and the "came from the map"
+  line name it **CCWR A-pan**. The generic **An evaporation grid (A-pan from
+  the map)** choice stays, linking here: it is where any other grid is
+  proposed (a PenPan A-pan grid; a reference-ET grid, which goes to GR4J's
+  PE, not the A-pan row; an S-pan grid's cross-check), so the CCWR option
+  doesn't make it redundant.
 
 ### The evaporation grid
 
@@ -3374,10 +3396,12 @@ Model settings → **Demand** → **A-pan from**, beside the A-pan row's
 (`evaporation/spanEntry.ts` `APAN_SOURCES`; a view choice, never saved):
 **Typed or pasted A-pan** (as before), **WR2012 Pitman configuration, per
 quaternary** (`Wr2012EvaporationProposal.svelte`), **Typed or pasted S-pan,
-converted (WR90 / Taljaard)** (`SpanEntry.svelte`), and links to
-[§ Evaporation stations](#evaporation-stations) and [§ Evaporation from the
-map](#evaporation-from-the-map), which stay on Calibration. The two panels are
-lazy: they load only when picked.
+converted (WR90 / Taljaard)** (`SpanEntry.svelte`), **CCWR A-pan grid
+(catchment average)** ([§ Evaporation from the map](#evaporation-from-the-map)
+pinned to `Atlas-Apan-2007`), and links to [§ Evaporation
+stations](#evaporation-stations) and [§ Evaporation from the
+map](#evaporation-from-the-map), which stay on Calibration. The three panels
+are lazy: they load only when picked.
 
 **WR2012 Pitman configuration, per quaternary.** WR2012's WRSM2000 (Pitman)
 network configurations give, per quaternary, the runoff module's 12 monthly
