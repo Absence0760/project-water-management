@@ -124,7 +124,7 @@ sides share.
   the synthetic workbook fixture for the importer parity test and the
   string-decoding fixture that pins the reader to openpyxl
   (`scripts/wbt-import/fixtures/`, invented data).
-- **ingest/**: the bulk ingest job (issue #604), Python 3.14 as an arm64
+- **ingest/**: the bulk ingest job (issue #604), Python 3.15 as an arm64
   container-image Lambda (`ingest/Dockerfile`, AWS's Lambda Python base pinned
   by digest; handler `lambda_handler.handler`). It copies CHC's CHIRPS NetCDF
   (read with xarray + h5netcdf/h5py; no netCDF4, no GDAL) into our own Zarr v3
@@ -168,7 +168,7 @@ pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by de
 pnpm dev:dams:run           # dam observations once: match traced dams, both passes, Waterbodies and WOfS (fixtures by default, no network), load (run-locally.md § Dam observations)
 pnpm dev:et:run             # observed actual ET once: each unit's parcels, the WaPOR pass (fixtures by default, no network), load (run-locally.md § Observed actual ET)
 pnpm dev:ingest:push        # push the synthetic logger CSV to /ingest with the API key in WM_INGEST_KEY (run-locally.md § Ingest)
-pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0|c3s]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.14; makes ingest/.venv on first use; ingest/README.md)
+pnpm dev:ingest:run [rnl|sat|era5l|imerg_late|ecmwf|agera5_et0|power_et0|c3s]  # the bulk ingest Lambda once in fixtures mode: synthetic files and fake upstreams → local Zarr copy in ingest/.mirror (Python 3.15; makes ingest/.venv on first use; ingest/README.md)
 
 pnpm dev:db:up              # Postgres 17 in docker on :5434
 pnpm dev:db:down
@@ -278,7 +278,7 @@ pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNA
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/git-hooks, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~11 min on VERIFY_WORKERS=4, the default cap)
-pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Python 3.14; seconds)
+pnpm test:ingest            # the bulk ingest job's unittest suite (ingest/, Python 3.15; seconds)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:channels-fixture   # rewrite the synthetic DEM's precomputed channels (backend/fixtures/channels/; no DB; maps.md § The elevation model's channels)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
