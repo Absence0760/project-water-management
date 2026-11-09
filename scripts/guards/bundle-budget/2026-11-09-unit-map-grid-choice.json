@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "The unit form's Source of the MAP choice (UnitMapSourceChoice.svelte, network/unitMapChoice.ts, map/mapGridNames.ts) and the engine's shared unit MAP source-line helpers. Measured 2445 locally on main @ ec275ddbb (at its ceiling, no headroom) and 2448 with this change (+3 KB). Headroom 0 KB."
+}
