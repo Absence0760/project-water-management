@@ -29,6 +29,8 @@
 	import DemandObjectFields from './DemandObjectFields.svelte';
 	import SupplyFields from './SupplyFields.svelte';
 	import RiverToDamFields from './RiverToDamFields.svelte';
+	import MonthlyLossFields from './MonthlyLossFields.svelte';
+	import { sectionByMonth } from './monthlyLosses';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import ExplainSwitch from '#lib/components/common/ExplainSwitch.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
@@ -479,6 +481,9 @@
 							{/each}
 						{/if}
 					</div>
+					{#if (g === 'reach' && node.downstreamNodeId !== null) || (g === 'baseflow' && node.kind === 'farm') || sectionByMonth(g === 'reach' ? 'reach' : 'baseflow', node)}
+						{#if g === 'reach' || g === 'baseflow'}<MonthlyLossFields {node} group={g} {readonly} />{/if}
+					{/if}
 					{#if sp.more.length || g === 'irrigation'}
 						{@const key = `more:${g}`}
 						{@const extra = g === 'groundwater' ? `GN 538 rate ${GA_RATE_TEXT(node.gaRateM3HaYear)}` : g === 'irrigation' ? `Abstraction starts ${node.abstractionFrom ?? 'with the run'}` : ''}

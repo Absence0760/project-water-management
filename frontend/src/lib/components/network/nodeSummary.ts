@@ -7,6 +7,7 @@ import { fmtNum } from '#lib/format/number.js';
 import { pctText } from '#lib/model/systems.js';
 import { fieldScale, hasDam, isPct, type NodeField } from './fields';
 import type { NodeSection } from './nodeSections';
+import { baseflowMonthlySummary, reachLoses, reachMonthlySummary, sectionByMonth } from './monthlyLosses';
 import { pumpUnit, riverToDamUnit } from './flowUnit.svelte';
 
 /** A number with at most `digits` decimals, trailing zeros dropped. */
@@ -102,6 +103,7 @@ export function sectionSummary(sec: NodeSection, n: NetworkNode, c: SummaryConte
 		case 'cover':
 			return c.coverPatches ? plural(c.coverPatches, 'patch', 'patches') : 'None';
 		case 'baseflow': {
+			if (sectionByMonth('baseflow', n)) return baseflowMonthlySummary(n);
 			const loss = n.baseflowLossM3Day ?? 0;
 			const gain = n.baseflowGainM3Day ?? 0;
 			if (!(loss > 0) && !(gain > 0)) return 'None';
@@ -109,7 +111,8 @@ export function sectionSummary(sec: NodeSection, n: NetworkNode, c: SummaryConte
 		}
 		case 'reach': {
 			const share = n.reachLossFrac ?? 0;
-			if (!(share > 0)) return n.downstreamNodeId === null ? 'None: the outlet has no reach below it' : 'None lost (0 %)';
+			if (sectionByMonth('reach', n) && reachLoses(n)) return reachMonthlySummary(n);
+			if (!reachLoses(n)) return n.downstreamNodeId === null ? 'None: the outlet has no reach below it' : 'None lost (0 %)';
 			return `${pct(share)} lost${n.reachLossMaxM3Day == null ? '' : `, at most ${fmtNum(n.reachLossMaxM3Day)} m³/day`}`;
 		}
 	}
