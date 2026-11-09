@@ -8,6 +8,7 @@
 	import type { NetworkNode } from '@water-management/engine';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '#lib/format/number.js';
 	import MonthFields from './MonthFields.svelte';
 	import { capByMonth, sectionByMonth, varyByMonth } from './monthlyLosses';
 
@@ -60,7 +61,9 @@
 			/>
 			<FieldHistoryLine field="node:{node.id}:reachLossMaxMonthlyM3Day" {unit} />
 		{:else}
-			<p class="hint">No cap: each month loses its share of the flow, however high.</p>
+			<p class="hint">
+				{node.reachLossMaxM3Day == null ? 'No cap: each month loses its share of the flow, however high.' : `The one cap, ${fmtNum(node.reachLossMaxM3Day)} m³/day, in every month.`}
+			</p>
 		{/if}
 	{:else if on}
 		<p class="hint explain">
