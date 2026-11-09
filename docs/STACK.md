@@ -219,8 +219,9 @@ pnpm import:evaporation     # load the synthetic evaporation grid Calibration �
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
                              # <apan.json[.gz]> --dataset <label> loads ingest/apan_grid.py's modelled Class-A pan grid (PenPan; local only,
                              # production blocked until the hydrologist signs off its validation; data-sources.md § penpan-apan)
-                             # --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007 --years <first>-<last> [--bbox …] [--out …] reads the WRC
-                             # Atlas's 12 monthly A-pan equivalent grids (modelled, warped to WGS84 ESRI ASCII first), the one A-pan grid production loads, whole (maps.md § The evaporation grid);
+                             # --apan-asc <jan.asc> … <dec.asc> --dataset Atlas-Apan-2007 [--years <first>-<last>] [--bbox …] [--out …] reads the WRC
+                             # Atlas's 12 monthly A-pan equivalent grids (modelled, warped to WGS84 ESRI ASCII first), the one A-pan grid production loads, whole;
+                             # no --years for it, since the Atlas states no period for its means (stored as none, issue #755; maps.md § The evaporation grid);
                              # --span-asc … --dataset Atlas-Span-2007 the same for CCWR's 12 monthly S-pan grids (issue #738), shown as a cross-check only, never converted
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
 pnpm import:evaporation-stations  # load the synthetic DWS evaporation stations Calibration → Evaporation stations proposes the A-pan from (pnpm run setup runs it);
