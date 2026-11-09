@@ -12220,6 +12220,29 @@ Dam releases (WP-3.5, engine 0.35.0) move water within the network, so they
 are a memo; only the lost share of dam seepage is a new out term. Runs made
 before 0.35.0 have neither field (all seepage returned then).
 
+### 2.11c Each unit's EWR met (engine ≥ 1.116.0)
+
+`RunSummary.unitEwr` (`network/unitEwr.ts`): one row per hydrological unit
+(farms, then other water users, in network order), summed over every day of
+the run, volumes in m³. With Z the EWR required at the unit, its own share
+plus the shares of the units above it (§2.5, §2.7 column Z, the
+`ewr_cumulative` series), U its outflow (`outflow`) and AA = MIN(U − Z, 0)
+its shortfall (`ewr_shortfall`, with §2.7's float-noise tolerance):
+
+- `requiredM3` = Σ Z (0 for a unit with no EWR share at or above it);
+- `metM3` = Σ (Z + AA) = Σ MIN(U, Z), the part of the requirement the flow
+  passing the unit covered, never above `requiredM3`;
+- `outflowM3` = Σ U;
+- `daysNotMet`: the days with AA < 0.
+
+It is the water account's *EWR required vs met* (§2.11b) for every unit,
+not only the EWR sites, so where a unit is a site the two agree. It reads
+the pragmatic EWR's split (Z); a Reserve rule table's requirement at a site
+(§2.9c) isn't split over the units. The EWR page's map shades each unit by
+`metM3 ÷ requiredM3` (met in full = 100 %) or `outflowM3 ÷ requiredM3`
+([ui.md § EWR](./ui.md#ewr), *On the map*). New output only: no other figure
+changes. Runs before 1.116.0 have no field.
+
 ### 2.12 Allocations: modelled use vs registered volume (roadmap WP-3.10)
 
 Not part of the workbook. `compareAllocations`

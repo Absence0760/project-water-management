@@ -9675,7 +9675,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   count days below the pragmatic EWR; the results are judged by the Reserve
   rule table at … instead." (`ewr/headline.ts` `heatmapHeadlineNote`, which
   RiverTab and the printable report pass as `headlineNote`); a unit's note,
-  which counts its charged shortfall, doesn't), and the **Water account**
+  which counts its charged shortfall, doesn't), **On the map**
+  (`#res-ewr-map`, below), and the **Water account**
   (`#res-water-account`). Then, under an `h2` **How sure, and what if** (a
   region, named as the menu's group), the run-it-yourself tools: the
   **Uncertainty bands** (`#res-uncertainty`), the **Sensitivity runs**
@@ -9696,6 +9697,47 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   the panel's heading ids, so a `#res-…` link focuses it. A tool with a
   result (or one loading, failing or running) shows in full. Each is
   described under [§ Runs & results](#runs--results), where it used to be.
+- **On the map** (`ewr/EwrUnitMap.svelte`, rules in `ewr/ewrMap.ts`,
+  `ewr-map.spec.ts`): the client's hydrologist asked for the Allocations
+  map's graphic here, each hydrological unit against its share of the EWR.
+  Folded until **Show the map** (`ewrMap=1`, a link, so Back folds it); only
+  then are the Map tab's features fetched and the map's code loaded: the
+  Allocations map's own component (`allocations/AllocationMap.svelte`, drawn
+  through a scheme, `ewrScheme`, as its two shadings are) and MapLibre after
+  it. Each unit's area on the Map tab (a farm parcel linked to it, the same
+  lookup as the Allocations map, `useMap.ts` `unitPolygons`) is shaded for
+  the run on the page, from `RunSummary.unitEwr` (engine ≥ 1.116.0,
+  [model.md §2.11c](./model.md#211c-each-units-ewr-met-engine--11160)): Z,
+  the EWR required at the unit, is its own share plus the shares of the
+  units above it, U its outflow. **Shade by** (`ewrMapMeasure=ratio`; the
+  default is left out of the URL, each pick a step Back returns from, a
+  reload keeps it): **Requirement met** (default), Σ MIN(U, Z) ÷ Σ Z, the
+  share of the requirement the flow covered day by day, at most 100 %; or
+  **Flow ÷ requirement**, Σ U ÷ Σ Z, which can pass 100 % and lets a wet
+  year's floods count (the card says so). The card says it is modelled,
+  what Z is in plain words, and that a unit with no EWR share shows "No EWR
+  share". Bands, in the Allocations map's colours (`bandColours`, both
+  themes, the labels' text at 4.5:1): green **Met or exceeded (100 % or
+  more)**, orange **Within 10 % (90–100 %)**, light red **10–50 % short
+  (50–90 %)**, red **Half or more short (under 50 %)**, no fill for **No
+  EWR share** (Σ Z = 0); each band holds its lower edge, a ratio a hair under
+  an edge from float dust counts as on it. Each unit carries its whole % as a
+  button (rounded down, so a label never shows the next band's edge: "99 %"
+  is within 10 %), named with its figures ("Kloof top: 87 % of the EWR
+  required met, … m³ of … m³ over the run. 10–50 % short."); a click, or a
+  unit's name in the table, opens it on Hydrological units for the run
+  (`?tab=supply&run=…&unit=…#res-farm`). The key names every band with how
+  many units on the map are in it, plus **No area on the map** with how
+  many have none, so the counts add up to every unit; under it **Every
+  hydrological unit's figures** (EWR required, EWR met or the flow, the
+  share and the band, worst first; it stacks on a phone) and the units with
+  no area listed with their % and band. A unit with an area that the run
+  doesn't have is a dashed outline, named under the map. A run from before
+  1.116.0 says to run the model again; a viewer withheld the figures
+  (`withheld` names `unitEwr`) is told they aren't shown. In the page's menu
+  after **Days below the EWR, by month**; not in `RIVER_ANCHORS` (it was
+  never on Runs & results, so no old link is forwarded to it), `links.ts`
+  `EWR_MAP_ANCHOR`.
 - **On this page.** A **EWR sections** menu ([§ On this page
   menu](#on-this-page-menu)): from 80rem of page (a 1440 px window,
   `RIVER_RAIL_FROM_REM`) a side index on the left of the panels, every group
@@ -9708,7 +9750,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   tables, when its heading is), **Days below the reserve, each water year**
   (the test the results are judged by, as the chart's heading), **Reserve
   rules met, by month** (always, as its stub says what it needs without a
-  table), **Days below the EWR, by month**, **Water account**, **Uncertainty
+  table), **Days below the EWR, by month**, **On the map**, **Water account**, **Uncertainty
   bands**, **Sensitivity runs**, **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
   balance; How sure, and what if. On the bar the groups are named for screen
   readers only, its links evenly spaced (issue #162: the wider gaps between

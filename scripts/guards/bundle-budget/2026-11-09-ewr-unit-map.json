@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "EWR page On the map card (ewr/EwrUnitMap.svelte + ewrMap.ts, reusing the Allocations map component): measured 2445 KB on main @ 4c53b1f89 and 2450 KB with this change (+5 KB gzipped). Headroom ~1 KB."
+}

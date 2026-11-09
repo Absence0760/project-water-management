@@ -13,7 +13,7 @@ import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '#lib/components/e
 import { headlines } from '#lib/components/overview/latestRun.js';
 import { flowHeading } from '#lib/components/overview/summaryChart.js';
 import { fmtNum } from '#lib/format/number.js';
-import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
+import { EWR_MAP_ANCHOR, EWR_MAP_HEADING, EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
 import { IRRIGATION_SUPPORT_HEADING } from '#lib/components/outcomes/irrigationSupport.js';
 
 const created = (r: RunMeta) => {
@@ -194,7 +194,8 @@ export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, da
 				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine, daily) },
 				{ id: 'res-reserve-years', label: reserveYearsWords(headlineRuleTable, daily).heading },
 				{ id: 'res-reserve', label: RESERVE_MONTHS_HEADING },
-				{ id: 'res-ewr-grid', label: EWR_MONTHS_HEADING }
+				{ id: 'res-ewr-grid', label: EWR_MONTHS_HEADING },
+				{ id: EWR_MAP_ANCHOR, label: EWR_MAP_HEADING }
 			]
 		},
 		{ label: 'Water balance', sections: [{ id: 'res-water-account', label: 'Water account' }] },

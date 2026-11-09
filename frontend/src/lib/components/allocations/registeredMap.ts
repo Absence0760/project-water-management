@@ -9,9 +9,8 @@
 // compared-to-run shading of useMap.ts).
 import type { MapFeature } from '#lib/api/types.js';
 import { fmtNum } from '#lib/format/number.js';
-import { interiorPoint } from '#lib/components/map/pieces.js';
 import type { RegisteredFigures } from './registeredUsers';
-import type { DrawnUnit, MapMeasure, MapScheme } from './useMap';
+import { unitPolygons, type DrawnUnit, type MapMeasure, type MapScheme } from './useMap';
 
 /** A step of the scale, lightest (s1) to darkest (s5); `none`: nothing registered, outline only. */
 export type RegisteredStep = 's1' | 's2' | 's3' | 's4' | 's5' | 'none';
@@ -104,9 +103,6 @@ export interface RegisteredShading {
 	breaks: number[];
 }
 
-type Polygonal = DrawnUnit['polygons'][number]['geometry'];
-const isPolygonal = (g: MapFeature['geometry']): g is Polygonal => g.type === 'Polygon' || g.type === 'MultiPolygon';
-
 /**
  * Every unit of the project (`units`: the farms and water users) with its
  * registered figure for the measure (`subtotals`, the table's) and its step,
@@ -115,28 +111,20 @@ const isPolygonal = (g: MapFeature['geometry']): g is Polygonal => g.type === 'P
  * then by name.
  */
 export function registeredShading(units: readonly { id: string; name: string }[], subtotals: ReadonlyMap<string, RegisteredFigures>, features: readonly MapFeature[], measure: MapMeasure): RegisteredShading {
-	const byNode = new Map<string, { featureId: string; geometry: Polygonal; area: number }[]>();
-	for (const f of features) {
-		if (f.kind !== 'farm_parcel' || !f.nodeId || !isPolygonal(f.geometry)) continue;
-		const list = byNode.get(f.nodeId) ?? [];
-		list.push({ featureId: f.id, geometry: f.geometry, area: f.areaM2 ?? 0 });
-		byNode.set(f.nodeId, list);
-	}
+	const { placed } = unitPolygons(features);
 	const values = units.map((u) => registeredValue(subtotals.get(u.id), measure));
 	const breaks = registeredBreaks(values.filter((v): v is number => v !== null));
 	const drawn: RegisteredUnit[] = [];
 	const unplaced: RegisteredUnit[] = [];
 	units.forEach((u, i) => {
 		const value = values[i]!;
-		const ps = (byNode.get(u.id) ?? []).slice().sort((a, b) => b.area - a.area);
 		const unit: RegisteredUnit = {
 			nodeId: u.id,
 			name: u.name,
 			value,
 			band: registeredStep(value, breaks),
 			label: value !== null && value > 0 ? registeredFigure(measure, value) : 'None registered',
-			polygons: ps.map(({ featureId, geometry }) => ({ featureId, geometry })),
-			at: ps[0] ? interiorPoint(ps[0].geometry) : null
+			...placed(u.id)
 		};
 		(unit.polygons.length ? drawn : unplaced).push(unit);
 	});

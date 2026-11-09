@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '#lib/api/types.js';
-import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
+import { EWR_MAP_ANCHOR, RIVER_ANCHORS, riverAnchor, riverHref } from './links';
 import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
@@ -57,7 +57,7 @@ describe('riverHref and riverAnchor', () => {
 		expect(riverHref(null, 'res-ewr')).toBe('?tab=river#res-ewr');
 	});
 	it('knows the panels that moved from Runs & results, and no others', () => {
-		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-sensitivity', 'res-outcomes', 'res-irrigation', 'res-outlook', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
+		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-ewr-map', 'res-uncertainty', 'res-sensitivity', 'res-outcomes', 'res-irrigation', 'res-outlook', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
 		for (const id of ['res-curtailment', 'res-ewr-agreement', 'res-summary', '']) expect(riverAnchor(id)).toBe(false);
 	});
 });
@@ -65,12 +65,15 @@ describe('riverHref and riverAnchor', () => {
 describe('riverNavGroups', () => {
 	const ids = (ruleTable: boolean) => riverNavGroups(ruleTable, ruleTable).flatMap((g) => g.sections.map((s) => s.id));
 	const flowLabel = (ruleTable: boolean, ruleLine: boolean) => riverNavGroups(ruleLine, ruleTable)[0]!.sections.find((s) => s.id === 'res-ewr')!.label;
+	// The moved panels in page order, with the page's own map after the EWR grid.
+	const PAGE = [...RIVER_ANCHORS.slice(0, 4), EWR_MAP_ANCHOR, ...RIVER_ANCHORS.slice(4)];
 	it('links every panel in page order, and only panels the page anchors', () => {
-		expect(ids(true)).toEqual([...RIVER_ANCHORS]);
+		expect(RIVER_ANCHORS[3]).toBe('res-ewr-grid');
+		expect(ids(true)).toEqual(PAGE);
 		for (const id of ids(true)) expect(riverAnchor(id)).toBe(true);
 	});
 	it('keeps Reserve rules met without a rule table: its panel then says what it needs (issue #465)', () => {
-		expect(ids(false)).toEqual([...RIVER_ANCHORS]);
+		expect(ids(false)).toEqual(PAGE);
 	});
 	it('puts the findings first, the water account straight after them, and the run-it-yourself tools last (issue #465)', () => {
 		expect(riverNavGroups(false, false).map((g) => g.label)).toEqual(['The reserve', 'Water balance', 'How sure, and what if']);
@@ -82,6 +85,8 @@ describe('riverNavGroups', () => {
 			reserveYearsWords(false).heading,
 			RESERVE_MONTHS_HEADING,
 			EWR_MONTHS_HEADING,
+			// Each unit against the EWR required at it (ewr/EwrUnitMap).
+			'On the map',
 			'Water account',
 			'Uncertainty bands',
 			'Sensitivity runs',

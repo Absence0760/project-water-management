@@ -34,9 +34,17 @@ export const EWR_MONTHS_HEADING = 'Days below the EWR, by month';
  */
 export const RIVER_STRIP_ANCHOR = 'res-reserve-strip';
 
-/** True for a `#res-…` fragment that now lives on the EWR page (without the `#`). */
+/**
+ * Each unit on the map (ewr/EwrUnitMap.svelte), after the EWR grid: the page's own panel, never on Runs & results, so
+ * not in RIVER_ANCHORS (the anchors an old Runs & results link is forwarded with, nav/anchorMoves.ts).
+ */
+export const EWR_MAP_ANCHOR = 'res-ewr-map';
+/** Its heading, which the page's menu names it by. */
+export const EWR_MAP_HEADING = 'On the map';
+
+/** True for a `#res-…` fragment that lives on the EWR page (without the `#`). */
 export function riverAnchor(hash: string): boolean {
-	return hash === RIVER_STRIP_ANCHOR || (RIVER_ANCHORS as readonly string[]).includes(hash);
+	return hash === RIVER_STRIP_ANCHOR || hash === EWR_MAP_ANCHOR || (RIVER_ANCHORS as readonly string[]).includes(hash);
 }
 
 /**
