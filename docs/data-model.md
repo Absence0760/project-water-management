@@ -2157,6 +2157,22 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   or less its `non_contributing_m2`; the model save clears it with the
   source. Every area from the map before 195 was gross. Not part of the
   engine's model.
+- **A copied project** (`POST /projects/:id/copy`,
+  `backend/src/projects/copyMap.ts`) takes its map: every `geo_source` and
+  `map_feature` the copier can read, under new ids, each feature's `node_id`
+  moved to the copy's node (NULL where the copy has none) and `source_id` to
+  the copied source. `imported_by` and `created_by` are NULL in the copy
+  (its members may not be the original's; naming the copier would
+  misattribute), the original times stay, and a linked gauge keeps its
+  `link_point`. The copy's nodes keep `area_source`, `area_basis` and
+  `area_feature_id` (moved to the copied feature), and the records of what
+  an accepted value was read over (273: `node.map_polygon`,
+  `crop_area_land_cover`, `evaporation_accepted`) copy with their
+  `featureId` moved to the copied feature; a stamp naming a feature the
+  copy doesn't have gets a random id, so it still reads as another outline.
+  Delineation and Start proposals, dam waterbody matches and observations
+  (261), observed ET (277) and data feeds stay with the original as its
+  history; a copied parcel marks its unit to be read again, as a new one does.
 - **`quaternary_reference`**: the dataset the quaternary lookup proposes
   from. `code` (primary key, `^[A-Z][0-9]{2}[A-Z]$`), `dataset` (the load's
   label; `synthetic` for the committed fixture, region Z), `geometry`
