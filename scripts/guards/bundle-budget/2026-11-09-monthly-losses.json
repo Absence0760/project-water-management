@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "The node form's Vary by month fields for the bed losses and base flow (network/MonthlyLossFields.svelte, network/monthlyLosses.ts, MonthFields' max prop) and the engine's monthly loss plumbing the frontend imports. Measured 2449 KB on feat/monthly-losses merged with main @ a924c7858, against main's 2446 KB ceiling."
+}
