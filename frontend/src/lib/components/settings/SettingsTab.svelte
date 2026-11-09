@@ -20,6 +20,8 @@
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
 	// The typed or pasted S-pan, converted (Demand's A-pan source): loaded only when that source is picked.
 	const loadSpanEntry = () => import('#lib/components/evaporation/SpanEntry.svelte');
+	// The CCWR A-pan grid over the catchment boundary (Demand's A-pan source, Evaporation from the map pinned to it): loaded only when picked.
+	const loadCcwrApan = () => import('./EvaporationProposal.svelte');
 	// WR2012's monthly A-pan per quaternary (Demand's A-pan source): loaded only when that source is picked.
 	const loadWr2012Evaporation = () => import('#lib/components/evaporation/Wr2012EvaporationProposal.svelte');
 	// Rain gaps' three cards, Gap-filling product (issue #604), CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
@@ -84,6 +86,7 @@
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { apanSourceNote, withLakeMonthly } from './peInput';
 	import { APAN_SOURCES, type ApanSourceId } from '#lib/components/evaporation/spanEntry.js';
+	import { CCWR_APAN_DATASET } from '#lib/components/evaporation/ccwrApan.js';
 	import { FLOW_METHOD, stationOptions, unitsOnCatchmentRain } from './flowGeneration';
 	import { calibrationHref } from '#lib/components/calibration/links.js';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
@@ -560,6 +563,10 @@
 			<p class="hint" data-testid="apan-from-link">On Calibration, under Flow calibration: <a href="?tab=calibration#set-evaporation-station">Evaporation stations</a> proposes the row and saves it with its source.</p>
 		{:else if apanFrom === 'grid'}
 			<p class="hint" data-testid="apan-from-link">On Calibration, under Flow calibration: <a href="?tab=calibration#set-evaporation">Evaporation from the map</a> proposes the row and saves it with its source.</p>
+		{:else if apanFrom === 'ccwr'}
+			<Lazy load={loadCcwrApan}>
+				{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={draft.dirty} onApplied={reloadAfterApply} dataset={CCWR_APAN_DATASET} />{/snippet}
+			</Lazy>
 		{:else if apanFrom === 'wr2012'}
 			<Lazy load={loadWr2012Evaporation}>
 				{#snippet children(Wr2012EvaporationProposal)}<Wr2012EvaporationProposal projectId={project.id} {readonly} formDirty={draft.dirty} onApplied={reloadAfterApply} />{/snippet}
@@ -592,8 +599,9 @@
 			</table>
 		</div>
 		<p class="hint muted explain">
-			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment. When an A-pan grid is
-			loaded, <a href="?tab=calibration#set-evaporation">Evaporation from the map</a> (on Calibration, under Flow calibration) proposes it from the catchment boundary.
+			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment. The CCWR A-pan grid
+			(A-pan from, above) proposes it from the catchment boundary when the server has it loaded; any other A-pan grid is on
+			<a href="?tab=calibration#set-evaporation">Evaporation from the map</a> (on Calibration, under Flow calibration).
 		</p>
 		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text} <a href="?tab=series">{apanSource.link}</a>.</p>{/if}
 		<!-- Demand's own paste (issue #477), the A-pan row only: Flow calibration's pan coefficient row, on Calibration, has its own. -->

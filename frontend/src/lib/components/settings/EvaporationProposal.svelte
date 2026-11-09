@@ -10,6 +10,11 @@
 	as a cross-check only (issue #738). Use (editors, in the heading's row, marked "Saves now") asks first, then saves the 12 values as one settings
 	revision citing the dataset; it waits while the form has unsaved changes,
 	since it saves straight to the project. Nothing is applied by itself.
+
+	With `dataset` (Model settings → Demand → A-pan from "CCWR A-pan grid
+	(catchment average)", docs/ui.md § Demand) the panel is pinned to that grid:
+	no grid picker, its own heading, and a grid that isn't loaded on this server
+	says so with the operator's import command instead of proposing another.
 -->
 <script lang="ts">
 	import { PAN_COEFFICIENT_TYPICAL_MAX, PAN_COEFFICIENT_TYPICAL_MIN } from '@water-management/engine';
@@ -20,6 +25,7 @@
 	import ProposalPanel from '#lib/components/proposals/ProposalPanel.svelte';
 	import ProposalSource from '#lib/components/proposals/ProposalSource.svelte';
 	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
+	import { CCWR_APAN_IMPORT, evaporationGridName } from '#lib/components/evaporation/ccwrApan.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { acceptedText, apanOverSpan, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
@@ -28,7 +34,8 @@
 		projectId,
 		readonly,
 		formDirty,
-		onApplied
+		onApplied,
+		dataset: pinned
 	}: {
 		projectId: string;
 		readonly: boolean;
@@ -36,6 +43,8 @@
 		formDirty: boolean;
 		/** The settings changed on the server: the form takes them as they now are. */
 		onApplied: () => Promise<void> | void;
+		/** Pinned to this grid (its label): the CCWR A-pan grid on Demand. Absent: the default grid, with a picker. */
+		dataset?: string;
 	} = $props();
 
 	const uid = $props.id();
@@ -68,7 +77,8 @@
 	}
 	$effect(() => {
 		void projectId;
-		untrack(() => void load());
+		void pinned;
+		untrack(() => void load(pinned));
 	});
 
 	const view = $derived(data ? proposalState(data) : null);
@@ -99,7 +109,7 @@
 		useError = null;
 		try {
 			await api.evaporation.fromMap(projectId, d.dataset);
-			notice = `${what[0]!.toUpperCase()}${what.slice(1)} is now the map’s ${fmtNum(ready.annualMm)} mm a year, saved as a settings revision citing ${d.source} (${d.version}).`;
+			notice = `${what[0]!.toUpperCase()}${what.slice(1)} is now the ${pinned ? `${evaporationGridName(d.dataset)} grid’s catchment average, ` : 'map’s '}${fmtNum(ready.annualMm)} mm a year, saved as a settings revision citing ${d.source} (${d.version}).`;
 			await Promise.all([load(d.dataset), onApplied()]);
 			// The Use button is gone (the settings hold the values now): keep the keyboard here, on what happened.
 			await frame?.focusNotice();
@@ -113,11 +123,11 @@
 
 <ProposalPanel
 	bind:this={frame}
-	testid="evaporation-proposal"
-	prefix="evaporation"
-	id="set-evaporation"
+	testid={pinned ? 'ccwr-apan-proposal' : 'evaporation-proposal'}
+	prefix={pinned ? 'ccwr-apan' : 'evaporation'}
+	id={pinned ? 'set-ccwr-apan' : 'set-evaporation'}
 	variant="inline"
-	title="Evaporation from the map"
+	title={pinned ? `${evaporationGridName(pinned)} grid (catchment average)` : 'Evaporation from the map'}
 	level={4}
 	helpKey="evaporation-from-map"
 	what="evaporation summary"
@@ -142,21 +152,32 @@
 			>
 		{/if}
 	{/snippet}
-	{#snippet intro()}<p class="hint muted explain">
-		The catchment boundary’s monthly evaporation from an evaporation grid. Reference evapotranspiration (FAO-56 ET₀) is proposed as GR4J’s
-		monthly PE as it stands, and A-pan evaporation as the A-pan row: neither is converted into the other. Nothing changes until you use it.
-	</p>{/snippet}
+	{#snippet intro()}{#if pinned}<p class="hint muted explain">
+			The WRC Atlas’s monthly A-pan equivalent (Schulze and Maharaj 2007, from the CCWR’s Atlas of Agrohydrology), averaged over the catchment
+			boundary into the one A-pan row the whole catchment runs on. Modelled from climate surfaces, not a measured pan. Nothing changes until you use it.
+		</p>{:else}<p class="hint muted explain">
+			The catchment boundary’s monthly evaporation from an evaporation grid. Reference evapotranspiration (FAO-56 ET₀) is proposed as GR4J’s
+			monthly PE as it stands, and A-pan evaporation as the A-pan row: neither is converted into the other. Nothing changes until you use it.
+		</p>{/if}{/snippet}
 
 	{#if data && view}
-		{#if view.kind === 'no-dataset'}
+		{#if view.kind === 'no-dataset' && pinned}
+			<div class="alert alert-info slim" data-testid="ccwr-apan-not-loaded">
+				<p class="small">
+					The {evaporationGridName(pinned)} grid isn’t loaded on this server, so there is nothing to propose yet. Type or paste the A-pan row below,
+					or pick another source. Whoever runs the server loads it with:
+				</p>
+				<code class="cmd">{CCWR_APAN_IMPORT}</code>
+			</div>
+		{:else if view.kind === 'no-dataset'}
 			<ProposalNoDataset testid="evaporation-no-dataset" what="evaporation map" consequence="nothing can be proposed" instead="Enter the A-pan and pan coefficient by hand." />
 		{:else}
 			{@const d = data.dataset!}
-			{#if data.datasets.length > 1}
+			{#if data.datasets.length > 1 && !pinned}
 				<div class="field">
 					<label for="{uid}-ds">Grid</label>
 					<select id="{uid}-ds" value={d.dataset} disabled={busy} onchange={(e) => load(e.currentTarget.value)}>
-						{#each data.datasets as o (o.dataset)}<option value={o.dataset}>{o.dataset} ({KIND_SHORT[o.kind]}, {o.version})</option>{/each}
+						{#each data.datasets as o (o.dataset)}<option value={o.dataset}>{evaporationGridName(o.dataset)} ({KIND_SHORT[o.kind]}, {o.version})</option>{/each}
 					</select>
 				</div>
 			{/if}
@@ -308,6 +329,12 @@
 	.err {
 		color: var(--danger);
 		margin: 0;
+	}
+	.cmd {
+		display: block;
+		margin-top: 0.35rem;
+		overflow-wrap: anywhere;
+		font-size: var(--font-xs);
 	}
 	.hint,
 	.small {

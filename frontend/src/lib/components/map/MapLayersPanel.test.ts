@@ -243,9 +243,9 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 		expect(b).not.toContain('map-apangrid-summary');
 	});
 
-	it('draws the A-pan grid’s year totals with their range, says modelled, not measured, and credits the source', () => {
+	it('draws the A-pan grid’s year totals with their range, names it CCWR A-pan, says modelled, not measured, and credits the source', () => {
 		const b = props({ evaporationGrids: [layer('apan', answer(atlasApan)), off('span')] });
-		expect(b).toContain(`2 points in view from Atlas-Apan-2007 (0.017° cells, 1950–1999 means), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
+		expect(b).toContain(`2 points in view from CCWR A-pan (0.017° cells, 1950–1999 means), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
 		const src = b.match(/data-testid="map-apangrid-source">([^<]*)</)![1]!;
 		expect(src).toMatch(/^\s*Modelled A-pan equivalent reference potential evaporation \(WRC Atlas, not a measured pan\)\. Source: /);
 		expect(src).toContain('Credit: Schulze and Maharaj 2007');
@@ -254,7 +254,7 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 
 	it('says "means for no stated period" for a grid whose source states none, never "null–null" (issue #755)', () => {
 		const b = props({ evaporationGrids: [layer('apan', answer({ ...atlasApan, firstYear: null, lastYear: null })), off('span')] });
-		expect(b).toContain(`2 points in view from Atlas-Apan-2007 (0.017° cells, means for no stated period), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
+		expect(b).toContain(`2 points in view from CCWR A-pan (0.017° cells, means for no stated period), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
 		expect(b.match(/data-testid="map-apangrid-summary"[^>]*>([^<]*)</)![1]).not.toMatch(/null|NaN/);
 	});
 
