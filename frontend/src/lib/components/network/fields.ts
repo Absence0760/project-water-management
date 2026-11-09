@@ -355,7 +355,7 @@ const UNUSED_TEXT: Record<UnusedReason, string> = {
 	outlet: 'Not used: the outlet has no reach below it in the model.',
 	noLoss: 'Not used: no bed losses (the share is 0 %). Enter a share to cap it.',
 	noDam: 'Not used: no dam (capacity 0). Enter a capacity to use it.',
-	byMonth: 'Not used: set by month below.'
+	byMonth: 'Not used: set by month above.'
 };
 
 type UnusedNode = Pick<NetworkNode, 'pctUpstreamToDam'> &
@@ -413,7 +413,7 @@ export function unusedLine(r: UnusedReason): { why: string; fix: string } {
 		case 'noDam':
 			return { why: 'Not used without a dam (capacity 0)', fix: 'Enter a capacity to use these.' };
 		case 'byMonth':
-			return { why: 'Set by month below instead', fix: 'Clear Vary by month to use the one value again.' };
+			return { why: 'Set by month above instead', fix: 'Clear Vary by month to use the one value again.' };
 	}
 }
 

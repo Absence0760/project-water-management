@@ -25,6 +25,7 @@
 		testid,
 		scale = 1,
 		decimals,
+		max,
 		onchange
 	}: {
 		/** The row in water-year order (Oct first); a missing month shows `blank`. */
@@ -47,6 +48,8 @@
 		scale?: number;
 		/** Show at most this many decimals (display only; a value keeps its precision until edited). */
 		decimals?: number;
+		/** The most a month may be, in the shown units (× scale): the field says so and is invalid above it. */
+		max?: number;
 		onchange: (next: number[]) => void;
 	} = $props();
 
@@ -74,6 +77,7 @@
 				<NumberInput
 					label={label(m)}
 					min={0}
+					{max}
 					{scale}
 					{decimals}
 					grouped={grouped && readonly}

@@ -2,28 +2,27 @@
 // 1.116.0, docs/model.md §2.6b) in the one-node form: which monthly row stands
 // in for each one-value field, what the "Vary by month" switches write, and the
 // section summary's words. Pure: no Svelte (./MonthlyLossFields.svelte draws it).
-import type { NetworkNode } from '@water-management/engine';
+import { MONTHLY_ROW_OF, replacedByMonth, type NetworkNode } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
 import { monthsOf } from './monthFields';
 
-export type MonthlyLossKey = 'reachLossFracMonthly' | 'reachLossMaxMonthlyM3Day' | 'baseflowLossMonthlyM3Day' | 'baseflowGainMonthlyM3Day';
 
-/** Each one-value field and the monthly row that replaces it when set. */
-export const MONTHLY_ROW_OF = {
-	reachLossFrac: 'reachLossFracMonthly',
-	reachLossMaxM3Day: 'reachLossMaxMonthlyM3Day',
-	baseflowLossM3Day: 'baseflowLossMonthlyM3Day',
-	baseflowGainM3Day: 'baseflowGainMonthlyM3Day'
-} as const satisfies Record<string, MonthlyLossKey>;
-
-type LossNode = Partial<Pick<NetworkNode, keyof typeof MONTHLY_ROW_OF | MonthlyLossKey>>;
+type LossNode = Partial<Pick<NetworkNode, keyof typeof MONTHLY_ROW_OF | (typeof MONTHLY_ROW_OF)[keyof typeof MONTHLY_ROW_OF]>>;
 
 const isRow = (v: unknown): v is number[] => Array.isArray(v);
 
-/** Is this one-value field replaced by its monthly row on node `n`? */
-export function setByMonth(key: string, n: LossNode): boolean {
-	const row = (MONTHLY_ROW_OF as Record<string, MonthlyLossKey>)[key];
-	return row !== undefined && isRow(n[row]);
+/** Is this one-value field replaced by its monthly row on node `n` (the engine's MONTHLY_ROW_OF)? */
+export const setByMonth = (key: string, n: LossNode): boolean => replacedByMonth(n, key);
+
+/** The row the form shows for a one value (MONTHLY_ROW_OF): the stored row, else the one value in every month, which the run reads. */
+export function shownRow(n: LossNode, key: keyof typeof MONTHLY_ROW_OF): number[] {
+	const row = n[MONTHLY_ROW_OF[key]];
+	return isRow(row) ? row : monthsOf((n[key] as number | null | undefined) ?? 0);
+}
+
+/** Does the node carry a base-flow loss or gain, one value or by month? A node that isn't a unit shows the section while it does, so they can be cleared (the save refuses them there). */
+export function hasBaseflowSettings(n: LossNode): boolean {
+	return (n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0 || isRow(n.baseflowLossMonthlyM3Day) || isRow(n.baseflowGainMonthlyM3Day);
 }
 
 /** Does the reach lose anything in any month (by its monthly share when set, else its one share)? */

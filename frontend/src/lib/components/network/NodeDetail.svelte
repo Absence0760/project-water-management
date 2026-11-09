@@ -120,7 +120,7 @@
 	const groupFields = $derived.by(() => {
 		const out = new Map<NodeField['group'], NodeField[]>();
 		for (const f of NODE_FIELDS) {
-			if (!fieldShows(f, node.kind)) continue;
+			if (!fieldShows(f, node.kind, node)) continue;
 			if (!out.has(f.group)) out.set(f.group, []);
 			out.get(f.group)!.push(f);
 		}
@@ -481,8 +481,9 @@
 							{/each}
 						{/if}
 					</div>
-					{#if (g === 'reach' && node.downstreamNodeId !== null) || (g === 'baseflow' && node.kind === 'farm') || sectionByMonth(g === 'reach' ? 'reach' : 'baseflow', node)}
-						{#if g === 'reach' || g === 'baseflow'}<MonthlyLossFields {node} group={g} {readonly} />{/if}
+					<!-- By month (engine 1.116.0): on a unit, or below any node but the outlet; elsewhere only while a row is left to clear. -->
+					{#if (g === 'reach' && (node.downstreamNodeId !== null || sectionByMonth('reach', node))) || (g === 'baseflow' && (node.kind === 'farm' || sectionByMonth('baseflow', node)))}
+						<MonthlyLossFields {node} group={g} {readonly} />
 					{/if}
 					{#if sp.more.length || g === 'irrigation'}
 						{@const key = `more:${g}`}

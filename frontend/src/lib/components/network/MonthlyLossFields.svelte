@@ -3,14 +3,13 @@
 	// (engine 1.116.0, docs/model.md §2.6b), under the section's one-value
 	// fields in the one-node form: a "Vary by month" switch and, when it is on,
 	// a row of twelve months for each value. The one values stay stored (shown
-	// under "Not used: set by month below") and count again when it is cleared
+	// under "Set by month above instead") and count again when it is cleared
 	// (./monthlyLosses.ts).
-	import type { NetworkNode } from '@water-management/engine';
+	import { REACH_LOSS_FRAC_MAX, type NetworkNode } from '@water-management/engine';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '#lib/format/number.js';
 	import MonthFields from './MonthFields.svelte';
-	import { capByMonth, sectionByMonth, varyByMonth } from './monthlyLosses';
+	import { capByMonth, sectionByMonth, shownRow, varyByMonth } from './monthlyLosses';
 
 	let { node, group, readonly }: { node: NetworkNode; group: 'reach' | 'baseflow'; readonly: boolean } = $props();
 
@@ -33,12 +32,13 @@
 			cap can still lose a lot of a big flow; in the dry months a larger share with a small cap fits a low flow. A month at 0 % loses nothing.
 		</p>
 		<MonthFields
-			values={node.reachLossFracMonthly}
+			values={shownRow(node, 'reachLossFrac')}
 			label={(m) => `Share of the flow lost below ${name} in ${m}, %`}
 			caption="Share of the flow lost, %, per month"
 			help="node.reachLossFracMonthly"
 			fillLabel="Use October’s share for every month"
 			scale={100}
+			max={REACH_LOSS_FRAC_MAX * 100}
 			{readonly}
 			testid="reach-frac-months"
 			onchange={(next) => (node.reachLossFracMonthly = next)}
@@ -60,10 +60,8 @@
 				onchange={(next) => (node.reachLossMaxMonthlyM3Day = next)}
 			/>
 			<FieldHistoryLine field="node:{node.id}:reachLossMaxMonthlyM3Day" {unit} />
-		{:else}
-			<p class="hint">
-				{node.reachLossMaxM3Day == null ? 'No cap: each month loses its share of the flow, however high.' : `The one cap, ${fmtNum(node.reachLossMaxM3Day)} m³/day, in every month.`}
-			</p>
+		{:else if node.reachLossMaxM3Day == null}
+			<p class="hint">No cap: each month loses its share of the flow, however high.</p>
 		{/if}
 	{:else if on}
 		<p class="hint explain">
@@ -71,7 +69,7 @@
 			groundwater feeds the river.
 		</p>
 		<MonthFields
-			values={node.baseflowLossMonthlyM3Day}
+			values={shownRow(node, 'baseflowLossM3Day')}
 			label={(m) => `Base flow ${name} loses in ${m}, m³/day`}
 			caption="Base-flow loss, m³/day, per month"
 			help="node.baseflowLossMonthlyM3Day"
@@ -82,7 +80,7 @@
 		/>
 		<FieldHistoryLine field="node:{node.id}:baseflowLossMonthlyM3Day" {unit} />
 		<MonthFields
-			values={node.baseflowGainMonthlyM3Day}
+			values={shownRow(node, 'baseflowGainM3Day')}
 			label={(m) => `Base flow ${name} gains in ${m}, m³/day`}
 			caption="Base-flow gain, m³/day, per month"
 			help="node.baseflowGainMonthlyM3Day"

@@ -3463,7 +3463,7 @@ itself.
   month** switch under it (engine 1.116.0, `MonthlyLossFields.svelte`,
   `monthlyLosses.ts`) turns both into twelve month fields each (October to
   September, starting at the one values, so nothing changes until a month is
-  edited); the one values then fold under "Set by month below instead" and
+  edited); the one values then fold under "Set by month above instead" and
   count again when it is cleared, and the line reads "loses 0–2 000 m³/day,
   gains 0–300 m³/day by month". And last
   **Bed losses in the reach below** (engine ≥

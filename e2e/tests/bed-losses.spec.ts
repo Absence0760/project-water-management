@@ -72,8 +72,8 @@ test('vary the bed losses by month: a small share with a high cap in the wet mon
 	const jan = reach(page).getByLabel('Share of the flow lost below Upper farm in Jan, %');
 	const jul = reach(page).getByLabel('Share of the flow lost below Upper farm in Jul, %');
 	await expect(jan).toHaveValue('10');
-	// The one share stays stored, folded under "Set by month below instead" and read-only.
-	await expect(reach(page).getByText('Set by month below instead: Share of the flow lost.')).toBeVisible();
+	// The one share stays stored, folded under "Set by month above instead" and read-only.
+	await expect(reach(page).getByText('Set by month above instead: Share of the flow lost.')).toBeVisible();
 	await expect(reach(page).getByLabel('Share of the flow lost (%)')).not.toBeEditable();
 	await jul.fill('40');
 	await jul.blur();

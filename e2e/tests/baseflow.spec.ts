@@ -64,8 +64,8 @@ test('vary the base flow by month: a loss in the wet months and a gain in the dr
 	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	await baseflow(page).getByTestId('baseflow-vary').check();
-	// The one values stay stored, folded under "Set by month below instead" and read-only.
-	await expect(baseflow(page).getByText('Set by month below instead: Base-flow loss, Base-flow gain.')).toBeVisible();
+	// The one values stay stored, folded under "Set by month above instead" and read-only.
+	await expect(baseflow(page).getByText('Set by month above instead: Base-flow loss, Base-flow gain.')).toBeVisible();
 	await expect(baseflow(page).getByLabel('Base-flow loss (m³/day)')).not.toBeEditable();
 	const lossJan = baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day');
 	const gainJul = baseflow(page).getByLabel('Base flow Upper farm gains in Jul, m³/day');

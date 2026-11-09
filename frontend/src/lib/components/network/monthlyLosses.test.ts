@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode } from '@water-management/engine';
-import { baseflowMonthlySummary, capByMonth, reachLoses, reachMonthlySummary, sectionByMonth, setByMonth, varyByMonth } from './monthlyLosses';
+import { baseflowMonthlySummary, capByMonth, hasBaseflowSettings, reachLoses, reachMonthlySummary, sectionByMonth, setByMonth, shownRow, varyByMonth } from './monthlyLosses';
+import { nodeSections } from './nodeSections';
 import { NODE_FIELDS, splitFields, unusedReason } from './fields';
 import { sectionSummary } from './nodeSummary';
 
@@ -56,5 +57,28 @@ describe('vary by month (engine 1.116.0)', () => {
 		const b = unitNode({ baseflowLossMonthlyM3Day: wetDry(2000, 0), baseflowGainMonthlyM3Day: wetDry(0, 300) });
 		expect(baseflowMonthlySummary(b).replace(/\s/g, ' ')).toBe('loses 0–2 000 m³/day, gains 0–300 m³/day by month');
 		expect(baseflowMonthlySummary(unitNode({ baseflowLossMonthlyM3Day: new Array(12).fill(0) }))).toBe('None (by month, all 0)');
+	});
+
+	it('a row not set shows the one value the run reads in every month, never 0s, beside a row that is set', () => {
+		// Only the cap by month (the API allows one row alone): the share row shows the one 20 %.
+		const n = unitNode({ reachLossFrac: 0.2, reachLossMaxMonthlyM3Day: wetDry(40_000, 300), baseflowLossMonthlyM3Day: wetDry(2000, 0), baseflowGainM3Day: 50 });
+		expect(shownRow(n, 'reachLossFrac')).toEqual(new Array(12).fill(0.2));
+		expect(shownRow(n, 'reachLossMaxM3Day')).toEqual(wetDry(40_000, 300));
+		expect(shownRow(n, 'baseflowGainM3Day')).toEqual(new Array(12).fill(50));
+		expect(shownRow(n, 'baseflowLossM3Day')).toEqual(wetDry(2000, 0));
+		// The summary agrees with the fields.
+		expect(baseflowMonthlySummary(n).replace(/\s/g, ' ')).toBe('loses 0–2 000 m³/day, gains 50 m³/day by month');
+	});
+
+	it('a node that isn’t a unit shows the base-flow section only while it carries one, so it can be cleared', () => {
+		const gauge = unitNode({ kind: 'gauge' });
+		expect(hasBaseflowSettings(gauge)).toBe(false);
+		expect(nodeSections(gauge, 0)).not.toContain('baseflow');
+		const left = unitNode({ kind: 'gauge', baseflowGainMonthlyM3Day: new Array(12).fill(5) });
+		expect(hasBaseflowSettings(left)).toBe(true);
+		expect(nodeSections(left, 0)).toContain('baseflow');
+		expect(nodeSections(unitNode({ kind: 'user', baseflowLossM3Day: 10 }), 0)).toContain('baseflow');
+		// A unit always has it (positive control).
+		expect(nodeSections(unitNode(), 0)).toContain('baseflow');
 	});
 });
