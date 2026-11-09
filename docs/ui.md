@@ -4761,15 +4761,20 @@ map" card) stays the schematic; this is the geography.
   unit's polygon (a farm parcel linked to it) is outlined heavier and named
   by its unit on the map, and the box lists them ("3 units, each outlined
   and named on the map.") with each polygon's own name when it differs and
-  its area; a name shows its polygon. **MAP grid** (`layers=mapgrid`, the
-  ramp as its swatch): on, one loaded MAP grid's points in view, each
-  coloured and labelled with its MAP ("812 mm"), the box saying how many,
-  from which grid and their range, the source line (with "Credit: …" when
-  the grid's attribution differs from its source; the Southwestern Cape
-  surface's credit also goes on the map's attribution control while its
-  points are drawn), a **Grid** picker when
-  more than one is loaded, and "Zoom in to see the MAP grid" or "This view
-  holds more than 5 000 of the grid’s points" when the view is too wide.
+  its area; a name shows its polygon. **WAAS 2007 MAP** (`layers=mapgrid`, the
+  ramp as its swatch) and, under it, **CCWR MAP** (`layers=ccwrgrid`, the
+  ramp with a bolder border, as its dots have), each its own toggle pinned
+  to one grid (the Southwestern Cape surface, `WAAS-SWCape-2007`; the
+  Lynch (2004) national grid, `Lynch-2004`), with no grid picker: on, that
+  grid's points in view, each coloured on the one ramp and labelled with
+  its MAP ("812 mm"; the WAAS 2007 MAP's under its dot, the CCWR MAP's to
+  its left), the box saying how many, from which grid and their range, the
+  source line (with "Credit: …" when the grid's attribution differs from
+  its source; each grid's credit also goes on the map's attribution control
+  while its points are drawn, both with both on), and, by the layer's own
+  name, "Zoom in to see the CCWR MAP", "This view holds more than 5 000 of
+  the grid’s points", or, when the server hasn't loaded that grid, "No CCWR
+  MAP is loaded, so there is nothing to draw" with its import command.
   **A-pan grid** and **S-pan grid** (`layers=apangrid`, `layers=spangrid`,
   each its own toggle with its ramp as its swatch): on, one loaded A-pan or
   S-pan evaporation grid's points in view the same way, the year's total by
