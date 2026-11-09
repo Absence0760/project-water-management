@@ -1,6 +1,6 @@
-// The A-pan and S-pan grid layers' state on the Map tab (docs/maps.md § A-pan
-// and S-pan grids): one instance per kind. While its layer is in the URL
-// (`layers=apangrid` / `spangrid`), one loaded grid of that kind's points in
+// The A-pan grid layer's state on the Map tab (docs/maps.md § A-pan grid):
+// one instance per kind (A-pan only). While its layer is in the URL
+// (`layers=apangrid`), one loaded grid of that kind's points in
 // the map's view are fetched once per snapped view, dataset and month (GET
 // …/map/evaporation-grid) and handed to the map, which draws each point
 // labelled with its value: the year's total by default, or the month picked.

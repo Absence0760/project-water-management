@@ -4593,10 +4593,11 @@ key there would let any read-only principal forge any user's session.
   the public log (the workflow prints counts; the station goes to
   CloudWatch). The kinds whose licence isn't
   confirmed are refused in the workflow and again in the Lambda, by name,
-  and so is an A-pan or S-pan evaporation grid, except the WRC Atlas's under
-  its one label each (`Atlas-Apan-2007`, `Atlas-Span-2007`, stored with
-  their recorded lines, no `source`; dPET's reference ET loads under any
-  label).
+  and so is an A-pan evaporation grid, except the WRC Atlas's under its one
+  label (`Atlas-Apan-2007`, stored with its recorded lines, no `source`;
+  dPET's reference ET loads under any label). No S-pan (Symons) grid loads:
+  the release gate refuses any evaporation load that names one, and the
+  Lambda reads no `span` kind (removed in 318, issue #738).
   Its answer and its failure summary carry counts, codes and fixed text
   only, since the Actions log is public; the file's problems go to
   CloudWatch.

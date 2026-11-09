@@ -3386,10 +3386,10 @@ export interface MapGridLayer {
 	max: number;
 }
 
-/** The pan kinds the map draws as layers: A-pan (the WRC Atlas's is modelled) and S-pan (a cross-check only). */
-export type EvaporationGridKind = 'apan' | 'span';
+/** The pan kind the map draws as a layer: A-pan (the WRC Atlas's is modelled). */
+export type EvaporationGridKind = 'apan';
 
-/** An evaporation grid loaded for the A-pan or S-pan grid layer (GET …/map/evaporation-grid; docs/maps.md § A-pan and S-pan grids). */
+/** An evaporation grid loaded for the A-pan grid layer (GET …/map/evaporation-grid; docs/maps.md § A-pan grid). */
 export interface EvaporationGridDataset {
 	dataset: string;
 	kind: EvaporationGridKind;
@@ -3408,7 +3408,7 @@ export interface EvaporationGridDataset {
 	synthetic: boolean;
 }
 
-/** One A-pan or S-pan grid's points in a box (GET …/map/evaporation-grid). */
+/** One A-pan grid's points in a box (GET …/map/evaporation-grid). */
 export interface EvaporationGridLayer {
 	bbox: [number, number, number, number];
 	kind: EvaporationGridKind;
@@ -3684,8 +3684,8 @@ export interface CropTypeProposals {
 	unit: CropTypeAreas | null;
 }
 
-/** What an evaporation grid's values are: FAO-56 reference ET (proposed as GR4J's PE), Class-A pan (the A-pan row) or Symons pan (shown as a cross-check only, never proposed; 316, issue #738). */
-export type EvaporationKind = 'et0' | 'apan' | 'span';
+/** What an evaporation grid's values are: FAO-56 reference ET (proposed as GR4J's PE) or Class-A pan (the A-pan row). */
+export type EvaporationKind = 'et0' | 'apan';
 /** The settings an accepted evaporation row goes into: GR4J's monthly PE (settings.pe) or the A-pan row (settings.apanMm). */
 export type EvaporationTarget = 'pe' | 'apan';
 

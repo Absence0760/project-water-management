@@ -4,11 +4,7 @@
 // saved settings hold. What it goes into is the dataset's kind and nothing is
 // converted: reference ET (FAO-56 ET₀) becomes GR4J's monthly PE, A-pan the
 // A-pan row. For reference ET the panel also shows ET₀ ÷ A-pan per month, the
-// pan coefficient the two rows imply, as a cross-check only. A Symons-pan
-// (S-pan) grid (issue #738) proposes nothing: the panel shows its monthly
-// S-pan over the boundary and the saved A-pan ÷ S-pan per month, a cross-check
-// only, since turning S-pan into A-pan needs a conversion the hydrologist
-// picks.
+// pan coefficient the two rows imply, as a cross-check only.
 import type { EvaporationAccepted, EvaporationDataset, EvaporationKind, EvaporationProposals, EvaporationTarget } from '#lib/api/index.js';
 import { fmtDate, fmtDay, fmtNum } from '#lib/format/number.js';
 
@@ -23,19 +19,13 @@ export type ProposalState =
 	| { kind: 'no-dataset' }
 	| { kind: 'no-boundary' }
 	| { kind: 'problem'; problem: string }
-	| { kind: 'ready'; target: EvaporationTarget; proposed: number[]; annualMm: number; coverage: number; cells: number }
-	/** An S-pan grid: shown beside the saved A-pan, nothing to use. */
-	| { kind: 'cross-check'; spanMm: number[]; annualMm: number; coverage: number; cells: number };
+	| { kind: 'ready'; target: EvaporationTarget; proposed: number[]; annualMm: number; coverage: number; cells: number };
 
 export function proposalState(p: EvaporationProposals): ProposalState {
-	if (!p.dataset) return { kind: 'no-dataset' };
-	const span = p.dataset.kind === 'span';
-	const target = p.target;
-	if (!span && !target) return { kind: 'no-dataset' };
+	if (!p.dataset || !p.target) return { kind: 'no-dataset' };
 	if (!p.boundary || !p.proposal) return { kind: 'no-boundary' };
 	if ('problem' in p.proposal) return { kind: 'problem', problem: p.proposal.problem };
-	if (span || !target) return { kind: 'cross-check', spanMm: p.proposal.monthlyMm, annualMm: p.proposal.annualMm, coverage: p.proposal.coverage, cells: p.proposal.cells };
-	return { kind: 'ready', target, proposed: p.proposal.monthlyMm, annualMm: p.proposal.annualMm, coverage: p.proposal.coverage, cells: p.proposal.cells };
+	return { kind: 'ready', target: p.target, proposed: p.proposal.monthlyMm, annualMm: p.proposal.annualMm, coverage: p.proposal.coverage, cells: p.proposal.cells };
 }
 
 /** The saved row the proposal would replace: the A-pan row, or the monthly PE row (null under pan coefficient × A-pan). */
@@ -49,12 +39,8 @@ export const sameAsSaved = (saved: readonly number[] | null, proposed: readonly 
 export const impliedPanCoefficient = (et0: readonly number[], apan: readonly number[]): (number | null)[] =>
 	et0.map((v, i) => (apan[i]! > 0 ? Math.round((v / apan[i]!) * 100) / 100 : null));
 
-/** Saved A-pan ÷ S-pan per month, to 2 decimals; null where the S-pan is 0 or the A-pan row is empty there. A cross-check, never a conversion. */
-export const apanOverSpan = (apan: readonly number[], span: readonly number[]): (number | null)[] =>
-	span.map((s, i) => (s > 0 && apan[i]! > 0 ? Math.round((apan[i]! / s) * 100) / 100 : null));
-
 /** A grid's kind in a few words, for the grid picker. */
-export const KIND_SHORT: Record<EvaporationKind, string> = { et0: 'reference ET', apan: 'A-pan', span: 'S-pan, cross-check only' };
+export const KIND_SHORT: Record<EvaporationKind, string> = { et0: 'reference ET', apan: 'A-pan' };
 
 /** The FAO-56 Table 5 Class A range the Settings warning uses (engine PAN_COEFFICIENT_TYPICAL_MIN/MAX). */
 export const outsidePanRange = (k: readonly (number | null)[], min: number, max: number): number[] =>

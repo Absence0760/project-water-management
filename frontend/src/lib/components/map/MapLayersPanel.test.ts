@@ -197,7 +197,7 @@ describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggle
 	});
 });
 
-describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan and S-pan grids)', () => {
+describe('the Layers box’s A-pan grid toggle (docs/maps.md § A-pan grid)', () => {
 	const props = ({ evaporationGrids, ...extra }: Record<string, unknown>) =>
 		withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, ...(evaporationGrids ? { evaporationGrids: { grids: evaporationGrids as never, Toggles } } : {}), ...extra } }).body);
 	const atlasApan = {
@@ -213,7 +213,6 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 		cellDeg: 0.016666666667,
 		synthetic: false
 	};
-	const span = { ...atlasApan, dataset: 'Atlas-Span-2007', kind: 'span', label: 'Symons-pan (S-pan) evaporation', source: 'CCWR S-pan grids, invented here', attribution: 'Schulze 2007' };
 	const answer = (dataset: unknown, extra: Record<string, unknown> = {}) => ({
 		bbox: [0, 0, 1, 1],
 		kind: (dataset as { kind?: string } | null)?.kind ?? 'apan',
@@ -228,23 +227,22 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 		max: 5000,
 		...extra
 	});
-	const layer = (kind: 'apan' | 'span', a: unknown, extra: Record<string, unknown> = {}) =>
+	const layer = (kind: 'apan', a: unknown, extra: Record<string, unknown> = {}) =>
 		({ kind, on: true, zoomIn: false, error: null, answer: a, month: null, range: [1812, 1840], status: null, pick: () => {}, pickMonth: () => {}, retry: () => {}, ...extra }) as never;
-	const off = (kind: 'apan' | 'span') => layer(kind, null, { on: false });
+	const off = (kind: 'apan') => layer(kind, null, { on: false });
 
-	it('offers two toggles of their own, beside the MAP grid, unchecked while off', () => {
-		expect(props({})).not.toMatch(/map-layer-(apangrid|spangrid)/);
-		const b = props({ evaporationGrids: [off('apan'), off('span')] });
+	it('offers one toggle of its own, beside the MAP grid, unchecked while off, and no S-pan grid toggle', () => {
+		expect(props({})).not.toMatch(/map-layer-apangrid/);
+		const b = props({ evaporationGrids: [off('apan')] });
 		expect(b).toMatch(/<input[^>]*type="checkbox"[^>]*data-testid="map-layer-apangrid"/);
-		expect(b).toMatch(/<input[^>]*type="checkbox"[^>]*data-testid="map-layer-spangrid"/);
-		expect(b).not.toMatch(/<input[^>]*checked[^>]*data-testid="map-layer-(apan|span)grid"/);
+		expect(b).not.toMatch(/<input[^>]*checked[^>]*data-testid="map-layer-apangrid"/);
 		expect(b).toContain('A-pan grid');
-		expect(b).toContain('S-pan grid');
+		expect(b).not.toContain('S-pan');
 		expect(b).not.toContain('map-apangrid-summary');
 	});
 
 	it('draws the A-pan grid’s year totals with their range, says modelled, not measured, and credits the source', () => {
-		const b = props({ evaporationGrids: [layer('apan', answer(atlasApan)), off('span')] });
+		const b = props({ evaporationGrids: [layer('apan', answer(atlasApan))] });
 		expect(b).toContain(`2 points in view from Atlas-Apan-2007 (0.017° cells, 1950–1999 means), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
 		const src = b.match(/data-testid="map-apangrid-source">([^<]*)</)![1]!;
 		expect(src).toMatch(/^\s*Modelled A-pan equivalent reference potential evaporation \(WRC Atlas, not a measured pan\)\. Source: /);
@@ -253,18 +251,13 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 	});
 
 	it('says "means for no stated period" for a grid whose source states none, never "null–null" (issue #755)', () => {
-		const b = props({ evaporationGrids: [layer('apan', answer({ ...atlasApan, firstYear: null, lastYear: null })), off('span')] });
+		const b = props({ evaporationGrids: [layer('apan', answer({ ...atlasApan, firstYear: null, lastYear: null }))] });
 		expect(b).toContain(`2 points in view from Atlas-Apan-2007 (0.017° cells, means for no stated period), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
 		expect(b.match(/data-testid="map-apangrid-summary"[^>]*>([^<]*)</)![1]).not.toMatch(/null|NaN/);
 	});
 
-	it('says the S-pan grid is a cross-check only, never used by the model', () => {
-		const b = props({ evaporationGrids: [off('apan'), layer('span', answer(span))] });
-		expect(b).toMatch(/data-testid="map-spangrid-source">\s*Symons-pan \(S-pan\) evaporation: a cross-check only, never used by the model\. Source: CCWR S-pan grids/);
-	});
-
 	it('offers the year’s total first, then the months October to September, and names the month the values are', () => {
-		const b = props({ evaporationGrids: [layer('apan', answer(atlasApan, { month: 3 }), { month: 3 }), off('span')] });
+		const b = props({ evaporationGrids: [layer('apan', answer(atlasApan, { month: 3 }), { month: 3 })] });
 		const picker = b.match(/<select[^>]*data-testid="map-apangrid-month"[^>]*>([\s\S]*?)<\/select>/)![1]!;
 		expect([...picker.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map((m) => m[1])).toEqual([
 			'Year (total)',
@@ -286,19 +279,18 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 
 	it('says so, with a reload, when the layers’ own chunk failed to load', () => {
 		const b = withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, evaporationGrids: 'failed' } }).body);
-		expect(b).toContain('The A-pan and S-pan grid layers');
+		expect(b).toContain('The A-pan grid layer');
 		expect(b).toContain('Reload page');
 		expect(b).not.toContain('map-layer-apangrid');
 	});
 
 	it('says plainly when no grid of its kind is loaded, and each other state', () => {
-		expect(props({ evaporationGrids: [layer('apan', answer(null)), off('span')] })).toContain('No A-pan grid is loaded, so there is nothing to draw');
-		expect(props({ evaporationGrids: [off('apan'), layer('span', answer(null, { kind: 'span' }))] })).toContain('No S-pan grid is loaded, so there is nothing to draw');
-		expect(props({ evaporationGrids: [layer('apan', null, { zoomIn: true }), off('span')] })).toContain('Zoom in to see the A-pan grid');
-		expect(props({ evaporationGrids: [layer('apan', null, { error: 'offline' }), off('span')] })).toContain('The A-pan grid couldn’t be loaded: offline');
-		expect(props({ evaporationGrids: [layer('apan', answer(atlasApan, { cells: [], tooDense: true })), off('span')] })).toMatch(/This view holds more than 5.000 of the grid’s points/);
-		expect(props({ evaporationGrids: [layer('apan', answer(atlasApan, { cells: [] })), off('span')] })).toContain('The grid has no point in this view.');
-		const twoSets = props({ evaporationGrids: [layer('apan', answer(atlasApan, { datasets: [atlasApan, { ...atlasApan, dataset: 'synthetic-apan', synthetic: true }] })), off('span')] });
+		expect(props({ evaporationGrids: [layer('apan', answer(null))] })).toContain('No A-pan grid is loaded, so there is nothing to draw');
+		expect(props({ evaporationGrids: [layer('apan', null, { zoomIn: true })] })).toContain('Zoom in to see the A-pan grid');
+		expect(props({ evaporationGrids: [layer('apan', null, { error: 'offline' })] })).toContain('The A-pan grid couldn’t be loaded: offline');
+		expect(props({ evaporationGrids: [layer('apan', answer(atlasApan, { cells: [], tooDense: true }))] })).toMatch(/This view holds more than 5.000 of the grid’s points/);
+		expect(props({ evaporationGrids: [layer('apan', answer(atlasApan, { cells: [] }))] })).toContain('The grid has no point in this view.');
+		const twoSets = props({ evaporationGrids: [layer('apan', answer(atlasApan, { datasets: [atlasApan, { ...atlasApan, dataset: 'synthetic-apan', synthetic: true }] }))] });
 		expect(twoSets).toContain('data-testid="map-apangrid-dataset"');
 	});
 });

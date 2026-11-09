@@ -20,11 +20,10 @@
 	layer) outlines each unit's polygon and writes its name on it, listed here
 	too; the MAP grid (`layers=mapgrid`, § MAP grid) draws one loaded mean
 	annual precipitation grid's points in view, each labelled with its MAP,
-	with a dataset picker when more than one is loaded; the A-pan and S-pan
-	grids (`layers=apangrid`, `spangrid`, § A-pan and S-pan grids) draw one
-	loaded evaporation grid of each kind the same way, the year's total or a
-	month picked here, the A-pan grid said to be modelled where it is and the
-	S-pan grid a cross-check the model never uses; the CHIRPS grid
+	with a dataset picker when more than one is loaded; the A-pan grid
+	(`layers=apangrid`, § A-pan grid) draws one loaded A-pan grid the same
+	way, the year's total or a month picked here, said to be modelled where it
+	is; the CHIRPS grid
 	(`layers=chirps`, § CHIRPS grid) draws CHIRPS v3's 0.05° cells and their
 	centres, where its daily rainfall values sit.
 -->
@@ -97,7 +96,7 @@
 		units?: { on: boolean; labels: readonly UnitLabel[] } | null;
 		/** The MAP grid layer's state. Null: no toggle. */
 		mapGrid?: MapGridLayer | null;
-		/** The A-pan and S-pan grid layers' states, each its own toggle, and their toggles' component (loaded apart from the tab, MapTab); null: no toggles (yet); 'failed': their chunk didn't load. */
+		/** The A-pan grid layer's state, its own toggle, and its toggle's component (loaded apart from the tab, MapTab); null: no toggles (yet); 'failed': their chunk didn't load. */
 		evaporationGrids?: EvaporationGrids | 'failed' | null;
 		/** The CHIRPS grid layer: whether it is on, and the cells in view (null: the view is too wide). Null: no toggle. */
 		chirps?: { on: boolean; cells: readonly ChirpsCell[] | null } | null;
@@ -417,7 +416,7 @@
 		{/if}
 	{/if}
 	{#if evaporationGrids === 'failed'}
-		<ChunkFailed what="The A-pan and S-pan grid layers" />
+		<ChunkFailed what="The A-pan grid layer" />
 	{:else if evaporationGrids}
 		<evaporationGrids.Toggles grids={evaporationGrids.grids} {labels} ontoggle={toggle} onretry={retryLayer} />
 	{/if}

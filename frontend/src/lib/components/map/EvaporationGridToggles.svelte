@@ -1,11 +1,9 @@
 <!--
-	The Map tab's A-pan and S-pan grid toggles (docs/maps.md § A-pan and S-pan
-	grids), in the Layers box beside the MAP grid: each its own toggle
-	(`layers=apangrid`, `spangrid`), and while on, what it draws in view: the
-	year's total or a month picked under Show, the grid picked when more than
-	one of the kind is loaded, the A-pan grid said to be modelled where it is
-	and the S-pan grid a cross-check the model never uses, and a plain line
-	when none is loaded. Its own chunk, with the layers' state class, which
+	The Map tab's A-pan grid toggle (docs/maps.md § A-pan grid), in the Layers
+	box beside the MAP grid (`layers=apangrid`), and while on, what it draws in
+	view: the year's total or a month picked under Show, the grid picked when
+	more than one is loaded, the grid said to be modelled where it is, and a
+	plain line when none is loaded. Its own chunk, with the layers' state class, which
 	MapTab loads after the tab (the workspace tab chunk is at its budget,
 	scripts/guards/check_web_bundle_budget.mjs); MapLayers renders it.
 -->
@@ -37,13 +35,13 @@
 	import { fmtNum } from '#lib/format/number.js';
 	import { EVAPORATION_GRID_LABEL, EVAPORATION_GRID_LAYER, EVAPORATION_GRID_MONTHS, evaporationGridWhat, evaporationMonthLabel, evaporationValueWords } from './evaporationGrid';
 	import { MAP_GRID_BBOX_MAX_DEG, mapLabel } from './mapLayers';
-	import { APAN_RAMP, SPAN_RAMP } from './mapStyle';
+	import { APAN_RAMP } from './mapStyle';
 
 	let { grids, labels, ontoggle, onretry }: TogglesProps = $props();
 
 	const degrees = (d: number) => fmtNum(d, d < 0.01 ? 4 : 3, true);
 	/** Each grid's swatch: its ramp, lowest first. */
-	const evapGradient = { apan: `linear-gradient(90deg, ${APAN_RAMP.map(([, c]) => c).join(', ')})`, span: `linear-gradient(90deg, ${SPAN_RAMP.map(([, c]) => c).join(', ')})` };
+	const evapGradient = { apan: `linear-gradient(90deg, ${APAN_RAMP.map(([, c]) => c).join(', ')})` };
 	/** A grid's summary: how many points from which grid, what they are, and their range. */
 	function summary(layer: EvaporationGridLayer): string {
 		const a = layer.answer;
@@ -73,7 +71,7 @@
 				<p class="muted" data-loading>Loading the {word}…</p>
 			{:else if !ea.dataset}
 				<p class="muted" data-testid="map-{id}-none">
-					No {word} is loaded, so there is nothing to draw (<code>pnpm import:evaporation --{eg.kind}-asc</code>, docs/maps.md § A-pan and S-pan grids).
+					No {word} is loaded, so there is nothing to draw (<code>pnpm import:evaporation --apan-asc</code>, docs/maps.md § A-pan grid).
 				</p>
 			{:else}
 				{#if ea.datasets.length > 1}
@@ -111,7 +109,7 @@
 	.check {
 		min-height: 24px;
 	}
-	/* The grid's ramp, lowest to highest (mapStyle.ts APAN_RAMP, SPAN_RAMP), as MapLayers draws the MAP grid's. */
+	/* The grid's ramp, lowest to highest (mapStyle.ts APAN_RAMP), as MapLayers draws the MAP grid's. */
 	.ramp-swatch {
 		width: 1.6rem;
 		height: 0.8rem;

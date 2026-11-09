@@ -693,7 +693,7 @@ export function mapGridLayers(dark: boolean, labels: boolean, labelMinZoom = 0):
 	};
 }
 
-/** An A-pan or S-pan grid point as the map takes it: its value, mm, for the month or the year (`month`). */
+/** An A-pan grid point as the map takes it: its value, mm, for the month or the year (`month`). */
 export interface EvaporationGridPointData {
 	lon: number;
 	lat: number;
@@ -725,10 +725,9 @@ export function evaporationGridData(points: readonly EvaporationGridPointData[] 
 }
 
 /**
- * The evaporation ramps, by mm a year (a month's value × 12): the A-pan grid's
- * yellow to dark orange and the S-pan grid's lilac to purple, apart from the MAP
- * grid's blues and the DEM grid's browns, the same in both themes. Their
- * stops are the key's.
+ * The A-pan grid's ramp, by mm a year (a month's value × 12): yellow to dark
+ * orange, apart from the MAP grid's blues and the DEM grid's browns, the same
+ * in both themes. Its stops are the key's.
  */
 export const APAN_RAMP: readonly (readonly [number, string])[] = [
 	[1000, '#fee391'],
@@ -737,47 +736,31 @@ export const APAN_RAMP: readonly (readonly [number, string])[] = [
 	[2200, '#d95f0e'],
 	[2800, '#993404']
 ];
-export const SPAN_RAMP: readonly (readonly [number, string])[] = [
-	[1000, '#dadaeb'],
-	[1400, '#bcbddc'],
-	[1800, '#9e9ac8'],
-	[2200, '#756bb1'],
-	[2800, '#54278f']
-];
 
 /** Each evaporation grid's source on the map, by kind. */
-export const EVAPORATION_GRID_SOURCE = { apan: 'apangrid', span: 'spangrid' } as const;
+export const EVAPORATION_GRID_SOURCE = { apan: 'apangrid' } as const;
 /** Each evaporation grid's label layer (its zoom range follows the grid drawn, as the MAP grid's does). */
-export const EVAPORATION_GRID_LABEL_LAYER = { apan: 'apangrid-label', span: 'spangrid-label' } as const;
+export const EVAPORATION_GRID_LABEL_LAYER = { apan: 'apangrid-label' } as const;
 
 /**
  * An evaporation grid layer: a dot per point coloured by its value, and the
  * value beside it from `labelMinZoom` in (mapGridLabelMinZoom), each dot
  * ringed in the halo colour as the MAP grid's are. The A-pan grid's dots are a
  * little larger than the MAP grid's and drawn under them, with the value
- * above; the S-pan grid's larger again and under both, with the value to the
- * right: grids on the same cells (the WRC Atlas's) draw as rings of colour
+ * above: grids on the same cells (the WRC Atlas's) draw as rings of colour
  * round one centre, and stay readable together.
  */
-export function evaporationGridLayers(kind: 'apan' | 'span', dark: boolean, labels: boolean, labelMinZoom = 0): { over: Layer[]; labels: Layer[] } {
+export function evaporationGridLayers(kind: 'apan', dark: boolean, labels: boolean, labelMinZoom = 0): { over: Layer[]; labels: Layer[] } {
 	const t = labelColours(dark);
 	const src = { source: EVAPORATION_GRID_SOURCE[kind] };
-	const colour = ['interpolate', ['linear'], ['get', 'v'], ...(kind === 'apan' ? APAN_RAMP : SPAN_RAMP).flat()];
-	const point: Layer =
-		kind === 'apan'
-			? {
-					id: 'apangrid-point',
-					type: 'circle',
-					...src,
-					paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3.5, 14, 7], 'circle-color': colour, 'circle-stroke-color': t.halo, 'circle-stroke-width': 1 }
-				}
-			: {
-					id: 'spangrid-point',
-					type: 'circle',
-					...src,
-					paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 5, 14, 10], 'circle-color': colour, 'circle-stroke-color': t.halo, 'circle-stroke-width': 1 }
-				};
-	const placement = kind === 'apan' ? { 'text-offset': [0, -0.9], 'text-anchor': 'bottom' } : { 'text-offset': [1, 0], 'text-anchor': 'left' };
+	const colour = ['interpolate', ['linear'], ['get', 'v'], ...APAN_RAMP.flat()];
+	const point: Layer = {
+		id: 'apangrid-point',
+		type: 'circle',
+		...src,
+		paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3.5, 14, 7], 'circle-color': colour, 'circle-stroke-color': t.halo, 'circle-stroke-width': 1 }
+	};
+	const placement = { 'text-offset': [0, -0.9], 'text-anchor': 'bottom' };
 	return {
 		over: [point],
 		labels: labels
@@ -932,10 +915,6 @@ export interface StyleOptions {
 	apanGrid?: ReturnType<typeof evaporationGridData>;
 	/** The cell size of the A-pan grid drawn, degrees (its labels show from mapGridLabelMinZoom of it). */
 	apanGridCellDeg?: number | null;
-	/** The S-pan grid's points (evaporationGridData()); none when omitted. */
-	spanGrid?: ReturnType<typeof evaporationGridData>;
-	/** The cell size of the S-pan grid drawn, degrees. */
-	spanGridCellDeg?: number | null;
 	/** The CHIRPS grid's cells and points (chirpsData()); none when omitted. */
 	chirps?: ReturnType<typeof chirpsData>;
 	/** The DEM grid's sampled cells (demGridData()); none when omitted. */
@@ -949,7 +928,7 @@ export interface StyleOptions {
  * (`setStyle`) redraws both and keeps the features and the selection. Order,
  * bottom up: the basemap's land, the relief (when on), the rest of the
  * basemap, the quaternary outlines, the river network, the features, the
- * units' outlines, the CHIRPS grid, the DEM grid, the S-pan and A-pan grids'
+ * units' outlines, the CHIRPS grid, the DEM grid, the A-pan grid's
  * points, the MAP grid's points, then every label (so a results fill never
  * hides a name).
  */
@@ -961,7 +940,6 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 	const mg = mapGridLayers(dark, !!glyphs, mapGridLabelMinZoom(opts.mapGridCellDeg));
 	const dg = demGridLayers(dark, !!glyphs);
 	const ap = evaporationGridLayers('apan', dark, !!glyphs, mapGridLabelMinZoom(opts.apanGridCellDeg));
-	const sp = evaporationGridLayers('span', dark, !!glyphs, mapGridLabelMinZoom(opts.spanGridCellDeg));
 	const style: Style = {
 		...base,
 		sources: {
@@ -974,7 +952,6 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			units: { type: 'geojson', data: opts.units ?? unitsData(null) },
 			mapgrid: { type: 'geojson', data: opts.mapGrid ?? mapGridData(null) },
 			apangrid: { type: 'geojson', data: opts.apanGrid ?? evaporationGridData(null) },
-			spangrid: { type: 'geojson', data: opts.spanGrid ?? evaporationGridData(null) },
 			chirps: { type: 'geojson', data: opts.chirps ?? chirpsData(null) },
 			demgrid: { type: 'geojson', data: opts.demGrid ?? demGridData(null) }
 		},
@@ -987,7 +964,6 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...un.over,
 			...chirpsLayers(dark),
 			...dg.over,
-			...sp.over,
 			...ap.over,
 			...mg.over,
 			...proposalLayers(dark),
@@ -995,7 +971,6 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...qt.labels,
 			...un.labels,
 			...dg.labels,
-			...sp.labels,
 			...ap.labels,
 			...mg.labels
 		]
