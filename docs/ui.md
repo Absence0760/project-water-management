@@ -3459,13 +3459,23 @@ itself.
   the unit's own runoff loses to groundwater (out of the catchment, at most
   the day's runoff) and gains from outside it, both 0 by default, under a
   note saying where the water goes and that neither is the unit's use; its
-  line reads "None" or "loses 1 500 m³/day · gains 20 m³/day". And last
+  line reads "None" or "loses 1 500 m³/day · gains 20 m³/day". A **Vary by
+  month** switch under it (engine 1.116.0, `MonthlyLossFields.svelte`,
+  `monthlyLosses.ts`) turns both into twelve month fields each (October to
+  September, starting at the one values, so nothing changes until a month is
+  edited); the one values then fold under "Set by month below instead" and
+  count again when it is cleared, and the line reads "loses 0–2 000 m³/day,
+  gains 0–300 m³/day by month". And last
   **Bed losses in the reach below** (engine ≥
   1.75.0, [model.md §2.6b](./model.md); on every kind of node, gauges and
   other water users too): the share of the flow lost (up to 100 %: with a daily maximum, WRSM's bed loss; over half without one, the run warns) and the
   most lost in a day, under a note saying where the water goes. On the outlet
   both are read-only (no reach below it) unless a share is left there to
-  clear; the cap is read-only while the share is 0 %. Each is a bordered card
+  clear; the cap is read-only while the share is 0 %. Its **Vary by month**
+  switch (engine 1.116.0) gives the share twelve month fields, with **A daily
+  cap by month** for the cap (unticked: no cap, or the one cap all year);
+  the line reads "5–30 % lost by month, at most 300–40 000 m³/day by
+  month". Each is a bordered card
   (a `<details>`, issue #521) whose tinted header band is its title and a
   line of its values now (`network/nodeSummary.ts` `sectionSummary`: "Dam
   300 000 m³ · starts 60 % · min 15 % · seepage 0 %/day", "Supply Dam only",

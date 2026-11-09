@@ -2041,6 +2041,11 @@ and `reachLossMaxM3Day` (≥ 0 or `null` = no cap). A body without them gets 0
 and `null` (no loss, no change to any run). `PUT` refuses a share outside
 0–1, a negative cap, and a share on the outlet, which has no reach below it
 (more than half the flow without a cap saves, and its runs warn).
+By water-year month (engine 1.116.0, migration 317): `reachLossFracMonthly`
+(12 shares in 0–1, Oct–Sep) and `reachLossMaxMonthlyM3Day` (12 values ≥ 0),
+each `null` by default (the one value all year) and, when set, replacing its
+one value; `PUT` refuses a row that isn't 12 values in range, and a monthly
+share above 0 on the outlet.
 A run with bed losses stores `reach_loss` (m³/day) on each node that has them,
 and `summary.waterBalance` and the water account gain `reachLossM3`; the
 run warns that the EWR is still read from the natural flow before the losses.
@@ -2049,7 +2054,10 @@ A unit's base-flow loss and gain (engine 1.86.0, migration 222, issue #523
 B1, [model.md §2.6b](./model.md)): every node carries `baseflowLossM3Day` and
 `baseflowGainM3Day` (m³/day, ≥ 0). A body without them gets 0 (none, no
 change to any run). `PUT` refuses a negative or infinite value, and either
-one set on a gauge or an other water user (a model rule, `baseflowKind`). A
+one set on a gauge or an other water user (a model rule, `baseflowKind`).
+By month (engine 1.116.0): `baseflowLossMonthlyM3Day` and
+`baseflowGainMonthlyM3Day` (12 values ≥ 0, Oct–Sep, `null` by default),
+each replacing its one value when set, refused on a gauge or user as above. A
 run with them stores `baseflow_loss` and `baseflow_gain` (m³/day) on the unit,
 and `summary.waterBalance` and the water account gain `baseflowLossM3` (out)
 and `baseflowGainM3` (in), each a column of the summary CSV's water balance
