@@ -38,7 +38,7 @@
 # `glob()`, which glob 14 keeps. Drop the overrides once cacache's own range
 # reaches a fixed glob; on a move of aws-lambda-ric, check they still apply.
 
-FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea AS deps
+FROM mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d AS deps
 # aws-lambda-ric compiles a native addon at install (its preinstall and
 # install scripts: the ones renderer-deps/package.json's allowScripts lets
 # run, since npm 11.16+ skips every other package's); its preinstall unpacks
@@ -104,7 +104,7 @@ WORKDIR /deps
 COPY renderer-deps/package.json renderer-deps/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+FROM mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
 WORKDIR /var/task
 COPY --from=deps /deps/node_modules ./node_modules
 COPY dist/renderer/lambda-renderer.mjs ./lambda-renderer.mjs
