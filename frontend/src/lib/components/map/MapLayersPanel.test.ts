@@ -207,13 +207,27 @@ describe('the Layers box’s Hydrological units, MAP grids and CHIRPS grid toggl
 			expect(b).not.toContain('Synthetic test data');
 			expect(props({ mapGrids: [grid(kind, { ...a, cells: [], tooDense: true })] })).toMatch(new RegExp(`data-testid="map-${id}-dense">This view holds more than 5.000 of the grid’s points`));
 			expect(props({ mapGrids: [grid(kind, { ...a, cells: [] })] })).toContain(`data-testid="map-${id}-empty"`);
-			expect(props({ mapGrids: [grid(kind, { ...a, dataset: null })] })).toContain(
-				`No ${name} is loaded, so there is nothing to draw (<code>pnpm import:map-grid &lt;grid.asc> --dataset ${dsLabel[kind]}</code>, docs/maps.md § MAP grid).`
-			);
+			const none = props({ mapGrids: [grid(kind, { ...a, dataset: null })] });
+			expect(none).toContain(`data-testid="map-${id}-none">There’s no ${name} on this server yet, so there is nothing to draw.</p>`);
+			expect(none).not.toContain('pnpm');
 			expect(props({ mapGrids: [grid(kind, null, { zoomIn: true })] })).toContain(`Zoom in to see the ${name} (to about 2° across).`);
 			expect(props({ mapGrids: [grid(kind, null, { error: 'offline' })] })).toContain(`The ${name} couldn’t be loaded: offline`);
 			expect(props({ mapGrids: [grid(kind, null)] })).toContain(`Loading the ${name}…`);
 		}
+	});
+
+	it('draws the synthetic grid in a grid’s place where only that is loaded, saying which grid it stands in for and that it isn’t rainfall', () => {
+		for (const kind of ['waas', 'ccwr'] as const) {
+			const synthetic = { ...ds('synthetic', 0.01, true), source: 'Invented MAP grid' };
+			const b = props({ mapGrids: [grid(kind, gridAnswer(synthetic), { standIn: true })] });
+			expect(b).toContain(`2 points in view from synthetic (0.01° cells): 612 mm to 790 mm. <strong>Synthetic test data, never real rainfall.</strong>`);
+			expect(b).toMatch(
+				new RegExp(`data-testid="map-${layerId[kind]}-source">\\s*No ${label[kind]} on this server; showing the synthetic test grid in its place\\. Mean annual precipitation, mm a year\\. Source: Invented MAP grid\\s*</p>`)
+			);
+			expect(b).not.toContain('Credit:');
+		}
+		// Its own grid: no stand-in line.
+		expect(props({ mapGrids: [grid('waas', gridAnswer(ds('WAAS-SWCape-2007', 0.001)))] })).not.toContain('in its place');
 	});
 
 	it('says where each grid writes its values, so the two read apart when both are on', () => {
@@ -347,8 +361,8 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 	});
 
 	it('says plainly when no grid of its kind is loaded, and each other state', () => {
-		expect(props({ evaporationGrids: [layer('apan', answer(null)), off('span')] })).toContain('No A-pan grid is loaded, so there is nothing to draw');
-		expect(props({ evaporationGrids: [off('apan'), layer('span', answer(null, { kind: 'span' }))] })).toContain('No S-pan grid is loaded, so there is nothing to draw');
+		expect(props({ evaporationGrids: [layer('apan', answer(null)), off('span')] })).toContain('There’s no A-pan grid on this server yet, so there is nothing to draw.');
+		expect(props({ evaporationGrids: [off('apan'), layer('span', answer(null, { kind: 'span' }))] })).toContain('There’s no S-pan grid on this server yet, so there is nothing to draw.');
 		expect(props({ evaporationGrids: [layer('apan', null, { zoomIn: true }), off('span')] })).toContain('Zoom in to see the A-pan grid');
 		expect(props({ evaporationGrids: [layer('apan', null, { error: 'offline' }), off('span')] })).toContain('The A-pan grid couldn’t be loaded: offline');
 		expect(props({ evaporationGrids: [layer('apan', answer(atlasApan, { cells: [], tooDense: true })), off('span')] })).toMatch(/This view holds more than 5.000 of the grid’s points/);

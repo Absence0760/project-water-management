@@ -4773,8 +4773,12 @@ map" card) stays the schematic; this is the geography.
   its source; each grid's credit also goes on the map's attribution control
   while its points are drawn, both with both on), and, by the layer's own
   name, "Zoom in to see the CCWR MAP", "This view holds more than 5 000 of
-  the grid’s points", or, when the server hasn't loaded that grid, "No CCWR
-  MAP is loaded, so there is nothing to draw" with its import command.
+  the grid’s points"; where that grid isn't loaded but the synthetic test
+  grid is (a dev laptop), the synthetic grid in its place, the source line
+  starting "No CCWR MAP on this server; showing the synthetic test grid in
+  its place." beside **Synthetic test data, never real rainfall.**; and
+  with neither, "There’s no CCWR MAP on this server yet, so there is
+  nothing to draw." (no command, issue #586 C5).
   **A-pan grid** and **S-pan grid** (`layers=apangrid`, `layers=spangrid`,
   each its own toggle with its ramp as its swatch): on, one loaded A-pan or
   S-pan evaporation grid's points in view the same way, the year's total by

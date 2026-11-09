@@ -4,7 +4,11 @@
 // map's view are fetched once per snapped view (GET …/map/map-grid with that
 // dataset) and handed to the map, which draws each point labelled with its
 // MAP. A view holding more points than one answer carries comes back
-// `tooDense` (zoom in); a dataset not loaded comes back with none. The request
+// `tooDense` (zoom in); a dataset not loaded comes back with none. Where its
+// dataset isn't loaded but the repo's synthetic grid is (a dev laptop, a fresh
+// clone: production never loads it, referenceLoad.ts), the layer asks for the
+// synthetic grid instead and draws it in its place, `standIn` true, so the
+// layer can be tried locally; it never stands another real grid in. The request
 // comes in with the deps (MapTab passes api.map.mapGrid), so the module never
 // imports the app-wide API client and its SvelteKit $env, and the tests can
 // drive it.
@@ -88,6 +92,12 @@ export class MapGridLayer {
 		return MAP_GRIDS[this.#deps.kind].dataset;
 	}
 
+	/** It draws the synthetic grid in place of its own, which isn't loaded. */
+	get standIn() {
+		const d = this.answer?.dataset;
+		return !!d?.synthetic && d.dataset !== this.dataset;
+	}
+
 	get on() {
 		return this.#deps.on();
 	}
@@ -134,14 +144,17 @@ export class MapGridLayer {
 		if (!a) return `Loading the ${this.label}…`;
 		if (!a.dataset) return `No ${this.label} is loaded.`;
 		if (a.tooDense) return `Too many ${this.label} points in view: zoom in.`;
-		return `${a.cells.length} ${this.label} ${a.cells.length === 1 ? 'point' : 'points'} shown.`;
+		// The synthetic grid standing in is never counted as the layer's own points.
+		return `${a.cells.length} ${this.standIn ? 'synthetic test' : this.label} ${a.cells.length === 1 ? 'point' : 'points'} shown.`;
 	}
 
 	async #load(id: string, bbox: [number, number, number, number], key: string) {
 		this.loading = true;
 		this.error = null;
 		try {
-			const a = await this.#deps.load(id, bbox, this.dataset);
+			let a = await this.#deps.load(id, bbox, this.dataset);
+			const synthetic = a.dataset ? null : a.datasets.find((d) => d.synthetic);
+			if (synthetic) a = await this.#deps.load(id, bbox, synthetic.dataset);
 			this.#cache.set(key, a);
 			if (this.#cache.size > MAP_GRID_CACHE_MAX) this.#cache.delete(this.#cache.keys().next().value!);
 			if (key === this.#asked) this.answer = a;

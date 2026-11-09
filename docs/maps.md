@@ -3551,16 +3551,32 @@ the box's status region name the layer too ("Loading the CCWR MAP…").
   whichever grid is used against the catchment's own gauges.
 - **A grid that isn't loaded is said, not an error.** The server answers a
   label it hasn't loaded as none loaded (`dataset: null`, the loaded ones
-  still listed), and the layer says "No CCWR MAP is loaded, so there is
-  nothing to draw (`pnpm import:map-grid <grid.asc> --dataset Lynch-2004`,
-  docs/maps.md § MAP grid)." That is a fresh clone's state: the committed
-  synthetic grid, and any grid imported locally under another label, are
-  never drawn on the map (no layer asks for them). They still serve the
-  Settings proposals of each unit's MAP ([§ MAP for each unit](#map-for-each-unit)),
-  which pick from every loaded grid. To see a layer drawing locally, import
-  a grid under its label (`pnpm import:map-grid <grid.asc> --dataset
-  Lynch-2004 --source "…"`); the e2e spec stands in for one by answering the
-  layer's request with the synthetic grid's cells under that grid's lines
+  still listed, each with its `synthetic` flag).
+- **Locally, the synthetic grid stands in.** A fresh clone or a dev laptop
+  has only the committed synthetic grid (`pnpm run setup` loads it), so
+  where a layer's own grid isn't loaded but the synthetic one is, the layer
+  asks again for the synthetic grid and draws it in its place
+  (`mapGridLayer.svelte.ts` `standIn`, client side: the route stays one
+  grid per answer, and its `dataset` names the grid the cells are from).
+  The box says so: its summary names `synthetic` and **Synthetic test
+  data, never real rainfall.**, its source line starts "No WAAS 2007 MAP on
+  this server; showing the synthetic test grid in its place.", its status
+  line reads "396 synthetic test points shown.", never counting them as
+  the layer's own, and the map credits nothing. Only the synthetic grid ever stands
+  in, never another real grid (a WAAS 2007 MAP beside a loaded Lynch-2004
+  draws nothing). Production never has it: a production load refuses the
+  label `synthetic` (`geo/referenceLoad.ts`, and the release gate's
+  `scripts/release/map-data-gates.mjs`) and takes only the two allowed
+  labels, so there a layer whose grid isn't loaded says "There’s no CCWR
+  MAP on this server yet, so there is nothing to draw." in plain words, no
+  command (issue #586 C5). Any grid imported locally under another label is
+  never drawn on the map; it still serves the Settings proposals of each
+  unit's MAP ([§ MAP for each unit](#map-for-each-unit)), which pick from
+  every loaded grid. To see a layer draw its own grid locally, import one
+  under its label (`pnpm import:map-grid <grid.asc> --dataset Lynch-2004
+  --source "…"`). The e2e spec draws both layers through the synthetic
+  stand-in, and answers the layer's request with the synthetic grid's cells
+  under a real grid's lines only to check the map's credits
   (`e2e/tests/map-layers.spec.ts`).
 - **The view decides what is asked.** `GET …/map/map-grid?bbox=&dataset=`
   ([api.md § Catchment map](./api.md#catchment-map)) with the view snapped
@@ -3745,8 +3761,9 @@ the grid's cell size), with the same view snapping, caps and messages.
 - **One grid at a time.** With more than one of a kind loaded, a **Grid**
   picker chooses; the default is the proposals' (a real one before the
   synthetic, then the newest load).
-- **None loaded.** The toggle is offered either way; turned on, it says "No
-  A-pan grid is loaded, so there is nothing to draw" (and how to load one).
+- **None loaded.** The toggle is offered either way; turned on, it says "There’s
+  no A-pan grid on this server yet, so there is nothing to draw" (no
+  command: that is the operator's, below; issue #586 C5).
   The repo ships no A-pan or S-pan grid that setup loads: locally, load the
   invented monthly grids with `pnpm import:evaporation --apan-asc
   backend/fixtures/geo/apan-asc/apan-{01..12}.synthetic.asc --dataset

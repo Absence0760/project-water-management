@@ -20,7 +20,8 @@
 	layer) outlines each unit's polygon and writes its name on it, listed here
 	too; the WAAS 2007 MAP (`layers=mapgrid`) and the CCWR MAP
 	(`layers=ccwrgrid`, § MAP grid), each its own toggle, draw that one mean
-	annual precipitation grid's points in view, each labelled with its MAP, or
+	annual precipitation grid's points in view, each labelled with its MAP (the
+	synthetic test grid in its place where only that is loaded, saying so), or
 	say it isn't loaded; the A-pan and S-pan
 	grids (`layers=apangrid`, `spangrid`, § A-pan and S-pan grids) draw one
 	loaded evaporation grid of each kind the same way, the year's total or a
@@ -391,7 +392,7 @@
 					<p class="muted" data-loading>Loading the {g.label}…</p>
 				{:else if !ga.dataset}
 					<p class="muted" data-testid="map-{g.layer}-none">
-						No {g.label} is loaded, so there is nothing to draw (<code>pnpm import:map-grid &lt;grid.asc&gt; --dataset {g.dataset}</code>, docs/maps.md § MAP grid).
+						There’s no {g.label} on this server yet, so there is nothing to draw.
 					</p>
 				{:else}
 					{#if ga.tooDense}
@@ -406,7 +407,7 @@
 						</p>
 					{/if}
 					<p class="muted" data-testid="map-{g.layer}-source">
-						Mean annual precipitation, mm a year. Source: {ga.dataset.source}{gridCredit(ga.dataset) ? `${/[.!?]$/.test(ga.dataset.source) ? '' : '.'} Credit: ${gridCredit(ga.dataset)}` : ''}
+						{#if g.standIn}No {g.label} on this server; showing the synthetic test grid in its place.{' '}{/if}Mean annual precipitation, mm a year. Source: {ga.dataset.source}{gridCredit(ga.dataset) ? `${/[.!?]$/.test(ga.dataset.source) ? '' : '.'} Credit: ${gridCredit(ga.dataset)}` : ''}
 					</p>
 				{/if}
 			</div>

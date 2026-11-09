@@ -3,7 +3,9 @@
 // snapped view while on, always for its own dataset (the WAAS 2007 MAP's
 // WAAS-SWCape-2007, the CCWR MAP's Lynch-2004); points, their range and what
 // the map draws (with the credit line only while points are drawn) from the
-// answer; its status line by its own name, "not loaded" included; an error
+// answer; the synthetic grid drawn in its place where only that is loaded,
+// never another real grid; its status line by its own name, "not loaded"
+// included; an error
 // kept until Retry. The request is the deps' `load`, so the test needs no API
 // client (and no SvelteKit $env).
 import { flushSync } from 'svelte';
@@ -15,8 +17,8 @@ import { mapGridViewBbox, type MapGridKind } from './mapLayers';
 const dataset = (name: string) => ({ dataset: name, source: 'Invented', version: '1', attribution: 'test', cellDeg: 0.01, cells: 9, synthetic: name === 'synthetic' });
 const answer = (cells: [number, number, number][], extra: Partial<Answer> = {}): Answer => ({
 	bbox: [0, 0, 1, 1],
-	dataset: dataset('synthetic'),
-	datasets: [dataset('synthetic')],
+	dataset: dataset('Invented'),
+	datasets: [dataset('Invented')],
 	cells,
 	tooDense: false,
 	max: 5000,
@@ -107,14 +109,51 @@ describe('MapGridLayer', () => {
 		expect([waas.kind, waas.layer, waas.label, waas.dataset]).toEqual(['waas', 'mapgrid', 'WAAS 2007 MAP', 'WAAS-SWCape-2007']);
 	});
 
-	it('says its grid isn’t loaded when the server has none by that label, and draws nothing', async () => {
-		const { deps, layer } = setup(vi.fn<Load>(async () => answer([], { dataset: null })), 'ccwr');
+	it('says its grid isn’t loaded when the server has none by that label, nor the synthetic grid, and draws nothing', async () => {
+		const load = vi.fn<Load>(async () => answer([], { dataset: null, datasets: [] }));
+		const { deps, layer } = setup(load, 'ccwr');
 		deps.view = VIEW;
 		deps.on = true;
 		flushSync();
 		await vi.waitFor(() => expect(layer.status).toBe('No CCWR MAP is loaded.'));
+		expect(load).toHaveBeenCalledOnce();
+		expect(layer.standIn).toBe(false);
 		expect(layer.points).toEqual([]);
 		expect(layer.draw.attribution).toBeNull();
+	});
+
+	it('never stands another real grid in for its own: the WAAS 2007 MAP draws nothing beside a loaded Lynch-2004', async () => {
+		const load = vi.fn<Load>(async () => answer([], { dataset: null, datasets: [dataset('Lynch-2004')] }));
+		const { deps, layer } = setup(load);
+		deps.view = VIEW;
+		deps.on = true;
+		flushSync();
+		await vi.waitFor(() => expect(layer.status).toBe('No WAAS 2007 MAP is loaded.'));
+		expect(load).toHaveBeenCalledExactlyOnceWith('p1', mapGridViewBbox(VIEW), 'WAAS-SWCape-2007');
+		expect(layer.points).toEqual([]);
+	});
+
+	it('draws the synthetic grid in its place where only that is loaded (a dev laptop), and says so', async () => {
+		const load = vi.fn<Load>(async (_id, _bbox, asked) =>
+			asked === 'synthetic' ? answer([[21.305, -33.645, 790]], { dataset: dataset('synthetic') }) : answer([], { dataset: null, datasets: [dataset('synthetic')] })
+		);
+		const { deps, layer } = setup(load, 'ccwr');
+		deps.view = VIEW;
+		deps.on = true;
+		flushSync();
+		await vi.waitFor(() => expect(layer.status).toBe('1 synthetic test point shown.'));
+		expect(load.mock.calls.map((c) => c[2])).toEqual(['Lynch-2004', 'synthetic']);
+		expect(layer.standIn).toBe(true);
+		expect(layer.answer?.dataset?.dataset).toBe('synthetic');
+		expect(layer.points).toEqual([{ lon: 21.305, lat: -33.645, mapMm: 790 }]);
+		// Its own grid's answer, once loaded, is never a stand-in.
+		cleanup?.();
+		const own = setup(vi.fn<Load>(async () => answer([[21.305, -33.645, 790]], { dataset: dataset('Lynch-2004') })), 'ccwr');
+		own.deps.view = VIEW;
+		own.deps.on = true;
+		flushSync();
+		await vi.waitFor(() => expect(own.layer.status).toBe('1 CCWR MAP point shown.'));
+		expect(own.layer.standIn).toBe(false);
 	});
 
 		it('draws nothing for a view the server says is too dense', async () => {
