@@ -115,6 +115,11 @@ describe('model store', () => {
 			// A base-flow loss and gain (engine 1.86.0, 222_unit_baseflow), awkward numbers.
 			baseflowLossM3Day: 0.1 + 0.2,
 			baseflowGainM3Day: 123_456.789,
+			// Bed losses and base flow by month (engine 1.116.0, 317_monthly_losses), awkward numbers and the bounds.
+			reachLossFracMonthly: [0.1 + 0.2, 0, 1, 0.05, 0.05, 0.05, 0.5, 0.5, 0.5, 0.5, 0.5, 1e-7],
+			reachLossMaxMonthlyM3Day: [40_000, 40_000, 0, 1 / 3, 1 / 3, 1 / 3, 300, 300, 300, 300, 300, 123_456.789],
+			baseflowLossMonthlyM3Day: [2000, 2000, 2000, 2000, 2000, 0, 0, 0, 0, 0, 0, 0.1 + 0.2],
+			baseflowGainMonthlyM3Day: [0, 0, 0, 0, 0, 300, 300, 300, 300, 300, 300, 0],
 			// The unit's MAP and its source (issue #482, 209_unit_rain_series), an awkward number.
 			mapMm: 612.3 + 0.1,
 			mapSource: 'Synthetic atlas, 1991–2020'
@@ -274,6 +279,10 @@ describe('model store', () => {
 			reachLossMaxM3Day: null,
 			baseflowLossM3Day: 0,
 			baseflowGainM3Day: 0,
+			reachLossFracMonthly: null,
+			reachLossMaxMonthlyM3Day: null,
+			baseflowLossMonthlyM3Day: null,
+			baseflowGainMonthlyM3Day: null,
 			mapMm: null,
 			mapSource: null,
 			...n
