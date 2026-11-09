@@ -4,7 +4,7 @@
 // already, the implied pan coefficient cross-check, and the provenance line.
 import { describe, expect, it } from 'vitest';
 import type { EvaporationAccepted, EvaporationProposals } from '#lib/api/index.js';
-import { acceptedText, apanOverSpan, coverageText, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, useMessage } from './evaporationProposal';
+import { acceptedText, apanOverSpan, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, useMessage } from './evaporationProposal';
 
 const BASE = [120, 150, 175, 180, 150, 130, 90, 65, 50, 55, 75, 95];
 const dataset = {
@@ -120,5 +120,14 @@ describe('the confirmation before an accept (persona-hydrologist, round 4)', () 
 		expect(useMessage('pe', 1500, daily)).toMatch(/Irrigation demand and dam evaporation keep reading the A-pan row and the daily A-pan record \(1 Jan 2010 to 31 Dec 2020\); GR4J stops reading both\. A GR4J fit/);
 		expect(useMessage('pe', 1500, { ...daily, peKind: 'monthly', peMm: Array(12).fill(100) })).not.toMatch(/daily A-pan record/);
 		expect(useMessage('pe', 1500, settings)).not.toMatch(/daily A-pan record/);
+	});
+});
+
+describe('datasetCitation', () => {
+	it('names the period, or says plainly that the source states none (issue #755)', () => {
+		expect(datasetCitation(dataset)).toBe('SYNTHETIC (synthetic 1, 1991–2020 monthly means; dataset “synthetic”). a');
+		const none = datasetCitation({ ...dataset, dataset: 'Atlas-Apan-2007', firstYear: null, lastYear: null });
+		expect(none).toBe('SYNTHETIC (synthetic 1, monthly means, no period stated by the source; dataset “Atlas-Apan-2007”). a');
+		expect(none).not.toMatch(/null|NaN/);
 	});
 });

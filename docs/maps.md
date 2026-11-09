@@ -3075,7 +3075,8 @@ grid's kind, and **nothing is converted between them**:
   One summary reads at most 40 000 cells of extent (`MAX_EVAPORATION_CELLS`,
   about 480 000 km²).
 - **Cited.** Each dataset row (`evaporation_dataset`) holds its kind, source,
-  version, period (first and last year), method in words, attribution and
+  version, period (first and last year, or none when the source states
+  none), method in words, attribution and
   grid; the panel shows them under **Source and method**. **Use** asks first
   (the confirmation says what reads the values and that a GR4J fit made
   before is marked "Forcing changed since fit", and, when the project has
@@ -3172,15 +3173,28 @@ only reads them. Its A-pan and S-pan grids are also drawn on the Map tab
   `gdalwarp -s_srs EPSG:4222 -t_srs EPSG:4326 -tr 0.0166666666667
   0.0166666666667 <month> <month>.tif`, then `gdal_translate -of AAIGrid
   <month>.tif <month>.asc` (square cells: an `.asc` with `dx`/`dy` instead
-  of `cellsize` is refused). `pnpm import:evaporation --apan-asc <jan.asc> …
-  <dec.asc> --dataset Atlas-Apan-2007 --years <first>-<last>` reads the 12
+  of `cellsize` is refused; `-s_srs EPSG:4222` is needed because GDAL takes
+  the grids' CRS from the `.aux` sidecar, which says WGS84, not from
+  `prj.adf`, which says Cape). `pnpm import:evaporation --apan-asc <jan.asc> …
+  <dec.asc> --dataset Atlas-Apan-2007` reads the 12
   grids in calendar order (`monthlyFromAsciiGrids`, the MAP grid's streaming
   `.asc` reader, `scanAsciiGrid`), keeps the cells with a value in every
   month, and loads them, or writes them with `--out`. Production loads the
   whole grid, for the country (the operator, 2026-11-08); `--bbox` is
   optional and the default box is South Africa's, which holds the whole
-  Atlas grid. `--years` is the period the Atlas says its means
-  cover; it is stored and cited. The grids must share one header; a value
+  Atlas grid. `--years <first>-<last>` is optional: the period a source
+  states its means cover, stored and cited when given. The Atlas states none
+  (Section 13.2: its A-pan maps are unchanged from the 1997 Atlas, Schulze
+  1997, from regression equations fitted at more than 570 stations with at
+  least 3 years of concurrent records; issue #755), so the Atlas's grid is
+  loaded without it: the dataset stores no years (migration 317 lets
+  `first_year` and `last_year` be null, both or neither, for an A-pan or
+  S-pan grid only), its method says "the Atlas states no period for its
+  means: unchanged from the 1997 Atlas, Schulze 1997", the citation says
+  "monthly means, no period stated by the source" and the Map layer's
+  summary "means for no stated period". The grid JSON `--out` writes then
+  has `"firstYear": null, "lastYear": null`; a reference-ET or PenPan file
+  without years is refused. The grids must share one header; a value
   past 1 000 mm a month (a grid in tenths of a millimetre) is refused,
   naming the month and cell. Under the label `Atlas-Apan-2007` the source,
   version and attribution are always the Atlas's recorded lines (no
@@ -3201,8 +3215,8 @@ only reads them. Its A-pan and S-pan grids are also drawn on the Map tab
   Atlas ships one, or the client means another CCWR product, is still to be
   confirmed (#738 step 1), and the code takes whichever 12 monthly S-pan
   grids come. `pnpm import:evaporation --span-asc <jan.asc> … <dec.asc>
-  --dataset Atlas-Span-2007 --years <first>-<last>` reads them the same way
-  as `--apan-asc` (warped to WGS84 1′ ESRI ASCII first), whole by default.
+  --dataset Atlas-Span-2007 [--years <first>-<last>]` reads them the same way
+  as `--apan-asc` (with no period unless `--years` gives one) (warped to WGS84 1′ ESRI ASCII first), whole by default.
   Under `Atlas-Span-2007` the lines are the recorded ones (`ATLAS_SPAN`: the
   report, with "source to be confirmed"; no `--source`); another label takes
   its own `--source` and `--attribution`, locally only. Each Atlas label

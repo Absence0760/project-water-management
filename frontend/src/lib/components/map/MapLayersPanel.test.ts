@@ -307,6 +307,12 @@ describe('the Layers box’s A-pan and S-pan grid toggles (docs/maps.md § A-pan
 		expect(b).not.toContain('Synthetic test data');
 	});
 
+	it('says "means for no stated period" for a grid whose source states none, never "null–null" (issue #755)', () => {
+		const b = props({ evaporationGrids: [layer('apan', answer({ ...atlasApan, firstYear: null, lastYear: null })), off('span')] });
+		expect(b).toContain(`2 points in view from Atlas-Apan-2007 (0.017° cells, means for no stated period), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
+		expect(b.match(/data-testid="map-apangrid-summary"[^>]*>([^<]*)</)![1]).not.toMatch(/null|NaN/);
+	});
+
 	it('says the S-pan grid is a cross-check only, never used by the model', () => {
 		const b = props({ evaporationGrids: [off('apan'), layer('span', answer(span))] });
 		expect(b).toMatch(/data-testid="map-spangrid-source">\s*Symons-pan \(S-pan\) evaporation: a cross-check only, never used by the model\. Source: CCWR S-pan grids/);

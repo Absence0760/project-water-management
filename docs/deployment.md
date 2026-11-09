@@ -3879,7 +3879,9 @@ grid as `evaporation` dataset `Atlas-Apan-2007`, and CCWR's S-pan grid
 (the operator, 2026-11-08), not cut to the client's area; `--bbox` stays
 available if a smaller area is ever wanted. The S-pan load needs the
 backend release that carries migration 316 (it lets `evaporation_dataset`
-hold kind `span`); the other two need no migration. From a folder outside
+hold kind `span`), and a grid with no period (step 3) the release that
+carries migration 317 (it lets `first_year` and `last_year` be null for an
+A-pan or S-pan grid); the MAP grid needs no migration. From a folder outside
 the repo, with the Atlas of Agrohydrology 2008 zip from the Water Research
 Observatory (free account) unpacked; keep the zip as received under
 `originals/atlas/`, never commit it:
@@ -3887,7 +3889,11 @@ Observatory (free account) unpacked; keep the zip as received under
 1. The grids are ESRI binary grids on the Cape datum (Clarke 1880). Warp
    each to WGS84 at the same 1′ square cell and write it as ESRI ASCII:
    `gdalwarp -s_srs EPSG:4222 -t_srs EPSG:4326 -tr 0.0166666666667 0.0166666666667 GISData/grids/gmap gmap.tif`,
-   then `gdal_translate -of AAIGrid gmap.tif gmap.asc`. The same for each
+   then `gdal_translate -of AAIGrid gmap.tif gmap.asc`. Give `-s_srs
+   EPSG:4222` explicitly: each grid's `prj.adf` says Cape datum, but GDAL
+   reads the CRS from the `.aux` sidecar, which says WGS84, so without it
+   the warp would treat Cape coordinates as WGS84 and skip the datum shift
+   (issue #755). The same for each
    of the 12 monthly A-pan grids and the 12 monthly S-pan grids
    (`gdalinfo` names them; keep January to December in order).
 2. The MAP grid, whole:
@@ -3897,16 +3903,22 @@ Observatory (free account) unpacked; keep the zip as received under
    4 MB gzipped (measured 2026-11-08 on an invented grid), inside the
    `map-grid` load's 200 MiB caps.
 3. The A-pan grid, whole:
-   `pnpm import:evaporation --apan-asc ./apan01.asc … ./apan12.asc --dataset Atlas-Apan-2007 --years <first>-<last> --out ./atlas-apan-2007.json.gz`.
-   `--years` is the period the Atlas states its A-pan means cover; it is
-   stored and cited with every proposal. A value over 1 000 mm a month is
+   `pnpm import:evaporation --apan-asc ./apan01.asc … ./apan12.asc --dataset Atlas-Apan-2007 --out ./atlas-apan-2007.json.gz`.
+   Give no `--years`: the Atlas states no period for its A-pan means
+   (Section 13.2: the maps are unchanged from the 1997 Atlas, Schulze 1997,
+   from regression equations, Schulze and Maharaj 1991, fitted at more than
+   570 stations with at least 3 years of concurrent records; issue #755).
+   The dataset then stores no years, and the method cited with every
+   proposal says the Atlas states no period. `--years <first>-<last>` stays
+   for a grid whose source does state one; it is then stored and cited. A value over 1 000 mm a month is
    refused (a grid in tenths of a millimetre): check the Atlas's unit
    first. Every 1′ cell of the South Africa box measured 74 MB of JSON and
    24 MB gzipped (2026-11-08, noisy invented values; the Atlas's land is
    about half the box), inside the `evaporation` load's caps of 32 MiB
    gzipped and 128 MiB unzipped; loading it took 17 s locally.
 4. The S-pan grid, whole, once its source is confirmed:
-   `pnpm import:evaporation --span-asc ./span01.asc … ./span12.asc --dataset Atlas-Span-2007 --years <first>-<last> --out ./atlas-span-2007.json.gz`.
+   `pnpm import:evaporation --span-asc ./span01.asc … ./span12.asc --dataset Atlas-Span-2007 --out ./atlas-span-2007.json.gz`
+   (add `--years <first>-<last>` only if its source states a period).
    The same size as the A-pan grid. It is shown as a cross-check on
    Evaporation from the map only, never fed to the model.
 5. Optionally load them locally first (the same commands without `--out`)
