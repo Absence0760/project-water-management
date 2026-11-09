@@ -5,7 +5,7 @@
 // bed losses as their own loss.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { seedRunnableProject } from '../support/api.ts';
+import { addMember, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
 
@@ -58,7 +58,7 @@ test('set bed losses below a unit, save, reload and run', async ({ page, owner }
 	await expect(balance).toContainText('+ bed losses + outflow + end storage.');
 });
 
-test('vary the bed losses by month: a small share with a high cap in the wet months, a larger share with a small cap in the dry ones', async ({ page, owner }) => {
+test('vary the bed losses by month: a small share with a high cap in the wet months, a larger share with a small cap in the dry ones', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Bed losses by month');
 	await page.goto(`/projects/${project.id}?tab=network`);
@@ -96,6 +96,23 @@ test('vary the bed losses by month: a small share with a high cap in the wet mon
 	await expect(reach(page).getByLabel('Share of the flow lost below Upper farm in Jul, %')).toHaveValue('40');
 	await expect(reach(page).getByLabel('Most lost below Upper farm in a day in Jan, m³/day')).toHaveValue(/^40[\s ]?000$/);
 	await expect(reach(page).getByLabel('Most lost below Upper farm in a day in Jul, m³/day')).toHaveValue('300');
+	// The closed card's line says it is by month, with its range (the months left at the filled 0 cap lose nothing).
+	await expect(page.getByTestId('node-section-reach').getByTestId('node-section-summary')).toHaveText(/^10–40 % lost by month, at most 0–40[\s\u202f]?000 m³\/day by month$/);
+	// On a phone the month rows wrap and stay accessible.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expectNoViolations(page, { include: '[data-testid="reach-by-month"]' });
+	await page.setViewportSize({ width: 1440, height: 900 });
+
+	// A viewer sees the months read-only: the switches off limits, no fill buttons.
+	const viewer = await signIn('Bed losses viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await v.goto(`/projects/${project.id}?tab=network`);
+	await openNodeForm(v);
+	await v.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await expect(reach(v).getByTestId('reach-vary')).toBeDisabled();
+	await expect(reach(v).getByLabel('Share of the flow lost below Upper farm in Jul, %')).not.toBeEditable();
+	await expect(reach(v).getByRole('button', { name: /^Use October’s/ })).toHaveCount(0);
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('Bed losses by month');

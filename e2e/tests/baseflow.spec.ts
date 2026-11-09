@@ -84,6 +84,20 @@ test('vary the base flow by month: a loss in the wet months and a gain in the dr
 	await expect(baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day')).toHaveValue(/^2[\s ]?000$/);
 	await expect(baseflow(page).getByLabel('Base flow Upper farm gains in Jul, m³/day')).toHaveValue('300');
 	await expect(baseflow(page).getByLabel('Base flow Upper farm gains in Jan, m³/day')).toHaveValue('0');
+	await expect(page.getByTestId('node-section-baseflow').getByTestId('node-section-summary')).toHaveText(/^loses 0–2[\s\u202f]?000 m³\/day, gains 0–300 m³\/day by month$/);
+
+	// Cleared: the one values count again, kept all along (0 here), and the months go.
+	await baseflow(page).getByTestId('baseflow-vary').uncheck();
+	await expect(baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day')).toHaveCount(0);
+	await expect(baseflow(page).getByLabel('Base-flow loss (m³/day)')).toBeEditable();
+	await expect(baseflow(page).getByLabel('Base-flow loss (m³/day)')).toHaveValue('0');
+	await expect(page.getByTestId('node-section-baseflow').getByTestId('node-section-summary')).toHaveText('None');
+	// Ticked again for the run below: the months start at the one values.
+	await baseflow(page).getByTestId('baseflow-vary').check();
+	const again = baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day');
+	await again.fill('2000');
+	await again.blur();
+	await saveModelChanges(page);
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('Base flow by month');
