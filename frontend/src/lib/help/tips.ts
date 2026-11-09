@@ -735,7 +735,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'unit-map',
 		term: 'Unit rainfall level',
-		short: 'The unit’s own MAP in mm and its source: it sets the level of the unit’s rain.',
+		short: 'The unit’s own MAP in mm and its source, a MAP grid or typed by hand: it sets the level of the unit’s rain.',
 		units: 'mm/year',
 		category: 'farm',
 		fields: ['node.mapMm', 'node.mapSource']

@@ -3593,6 +3593,19 @@ annual precipitation from one of the loaded MAP grids ([§ MAP
 grid](#map-grid)), proposed beside what its form holds, and written to the
 units' `mapMm` / `mapSource` only when an editor uses it.
 
+The unit's own form chooses it too: **Source of the MAP** is **WAAS 2007
+MAP** (`WAAS-SWCape-2007`), **CCWR MAP** (`Lynch-2004`) or **Typed by
+hand**. Each grid shows this unit's MAP from that grid's proposal, or is
+disabled with the proposal's reason, and picking one applies it to this unit
+(`nodeIds`) through the same POST, so it is recorded exactly as below. The
+one-grid rule holds there as here: with other units on another grid it asks
+to switch them too (Yes applies the picked grid to this unit and them in one
+change; units typed by hand or with no MAP keep theirs), and a grid that
+doesn't cover a unit on another grid can't be picked until that unit's MAP
+is typed by hand or cleared ([ui.md § Network](./ui.md), the unit form's
+MAP). The short names live in one constant, `frontend/src/lib/components/map/mapGridNames.ts`
+`MAP_GRID_NAMES`; the full citation stays where a source is cited.
+
 - **Which units and polygons.** Land units only (farm nodes with an area
   above 0), each over its polygon as for its rain ([§ Rain for each
   unit](#rain-for-each-unit)): the area feature its area came from (a parcel
@@ -3629,7 +3642,8 @@ units' `mapMm` / `mapSource` only when an editor uses it.
   already holding that MAP from that grid is unchanged, and an apply that
   changes nothing records nothing. An apply that would leave a unit with a
   MAP from another grid (one this panel wrote, recognised by its source
-  line) is refused (`grid_mixed`): use the grid that covers every unit, or
+  line: the engine's `unitMapSource` writes it and `unitMapGridOfSource`
+  reads it back, in `project.ts`, shared with the unit form) is refused (`grid_mixed`): use the grid that covers every unit, or
   clear that unit's MAP on its form first. A MAP typed in by hand is no
   grid's and is never touched by an apply that leaves its unit out.
   Each unit's polygon as it stood is recorded with its MAP
