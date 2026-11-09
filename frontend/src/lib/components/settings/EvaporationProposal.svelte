@@ -5,9 +5,7 @@
 	what the saved settings hold, with the dataset, version, period and method
 	cited. A reference-ET grid (FAO-56 ET₀) proposes GR4J's monthly PE as it
 	stands; an A-pan grid proposes the A-pan row. Nothing is converted between
-	the two. A Symons-pan (S-pan) grid proposes nothing: its monthly S-pan over
-	the boundary is shown beside the saved A-pan, with A-pan ÷ S-pan per month,
-	as a cross-check only (issue #738). Use (editors, in the heading's row, marked "Saves now") asks first, then saves the 12 values as one settings
+	the two. Use (editors, in the heading's row, marked "Saves now") asks first, then saves the 12 values as one settings
 	revision citing the dataset; it waits while the form has unsaved changes,
 	since it saves straight to the project. Nothing is applied by itself.
 
@@ -28,7 +26,7 @@
 	import { evaporationGridName } from '#lib/components/evaporation/ccwrApan.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
-	import { acceptedText, apanOverSpan, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
+	import { acceptedText, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
 
 	let {
 		projectId,
@@ -89,10 +87,6 @@
 	const implied = $derived(data && ready?.target === 'pe' && data.settings.apanMm.some((v) => v > 0) ? impliedPanCoefficient(ready.proposed, data.settings.apanMm) : null);
 	const impliedOutside = $derived(implied ? outsidePanRange(implied, PAN_COEFFICIENT_TYPICAL_MIN, PAN_COEFFICIENT_TYPICAL_MAX) : []);
 	const accepted = $derived(data && ready ? (data.accepted.find((a) => a.target === ready.target) ?? null) : null);
-	// An S-pan grid: shown beside the saved A-pan, never used (no S-pan → A-pan conversion here).
-	const cross = $derived(view?.kind === 'cross-check' ? view : null);
-	const savedApan = $derived(data && cross && data.settings.apanMm.some((v) => v > 0) ? data.settings.apanMm : null);
-	const ratio = $derived(cross && savedApan ? apanOverSpan(savedApan, cross.spanMm) : null);
 	const total = (row: readonly number[]) => fmtNum(Math.round(row.reduce((a, b) => a + b, 0) * 10) / 10);
 
 	async function use() {
@@ -190,47 +184,6 @@
 				</p>
 			{:else if view.kind === 'problem'}
 				<p class="alert alert-info slim" data-testid="evaporation-problem">The grid can’t be summarised over the boundary “{data.boundary?.name}”: {view.problem}.</p>
-			{:else if cross}
-				<p class="small">Over the boundary “{data.boundary?.name}” ({coverageText(cross.coverage, cross.cells)}): <strong>a cross-check only</strong>, nothing to use.</p>
-				<div class="table-wrap">
-					<table class="data compact monthly" data-testid="evaporation-span-rows">
-						<caption class="visually-hidden">Monthly S-pan evaporation from the map, beside the saved A-pan, as a cross-check</caption>
-						<thead>
-							<tr>
-								<th scope="col" class="sticky">Month</th>
-								{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
-								<th scope="col" class="num">Year</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr data-row="span">
-								<th scope="row" class="sticky">S-pan from the map <span class="u">mm</span></th>
-								{#each cross.spanMm as v, i (i)}<td class="num">{fmtNum(v)}</td>{/each}
-								<td class="num">{fmtNum(cross.annualMm)}</td>
-							</tr>
-							<tr data-row="saved">
-								<th scope="row" class="sticky">Saved A-pan <span class="u">mm</span></th>
-								{#if savedApan}
-									{#each savedApan as v, i (i)}<td class="num">{fmtNum(v)}</td>{/each}
-									<td class="num">{total(savedApan)}</td>
-								{:else}
-									<td colspan="13" class="muted small">None saved</td>
-								{/if}
-							</tr>
-							{#if ratio}
-								<tr data-row="ratio">
-									<th scope="row" class="sticky">Saved A-pan ÷ S-pan <span class="u">×</span></th>
-									{#each ratio as k, i (i)}<td class="num">{k === null ? '–' : fmtNum(k, 2, true)}</td>{/each}
-									<td></td>
-								</tr>
-							{/if}
-						</tbody>
-					</table>
-				</div>
-				<p class="hint muted" data-testid="evaporation-span-note">
-					This grid is Symons-pan (S-pan) evaporation. It is shown beside the saved A-pan as a cross-check only and is never written to the project: the model reads Class-A pan
-					values, and turning S-pan into A-pan needs a conversion the hydrologist chooses.{ratio ? ' A-pan ÷ S-pan is the ratio the two rows imply month by month.' : ''}
-				</p>
 			{:else if ready}
 				<p class="small">
 					Over the boundary “{data.boundary?.name}” ({coverageText(ready.coverage, ready.cells)}), into <strong>{TARGET_LABEL[ready.target]}</strong>.

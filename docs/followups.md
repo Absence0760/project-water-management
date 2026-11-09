@@ -5315,24 +5315,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       ever wanted): `pnpm import:map-grid gmap.asc --dataset Lynch-2004
       --source "Lynch (2004)" --out lynch-2004.json.gz`; `pnpm
       import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset
-      Atlas-Apan-2007 --years <first>-<last> --out
-      atlas-apan-2007.json.gz`, with the period the Atlas states for its
-      A-pan means; check the A-pan grids are in mm (a value over 1 000 a
-      month is refused). The S-pan (issue #738): first confirm which CCWR
-      product the client means and whether the Atlas zip holds monthly
-      S-pan grids (#738 step 1); then `pnpm import:evaporation --span-asc
-      <jan.asc> … <dec.asc> --dataset Atlas-Span-2007 --years
-      <first>-<last> --out atlas-span-2007.json.gz`, and once the source is
-      known, put it into `ATLAS_SPAN` (geo/evaporationGrid.ts) and
-      `ATLAS_SPAN_STATEMENT` (dataCredits.ts) together. Upload the files to
-      the reference bucket and run `load-reference.yml` for each
+      Atlas-Apan-2007 --out atlas-apan-2007.json.gz` (no `--years`: the
+      Atlas states no period for its A-pan means, issue #755); check the
+      A-pan grids are in mm (a value over 1 000 a month is refused). There
+      is no S-pan load: the Atlas has no S-pan grids (#738 step 1,
+      2026-11-09), so that option was removed (migration 318); the client
+      is still to say which S-pan product they meant (#738). Upload the
+      files to the reference bucket and run `load-reference.yml` for each
       (`kind=map-grid dataset=Lynch-2004`, `kind=evaporation
-      dataset=Atlas-Apan-2007`, `kind=evaporation dataset=Atlas-Span-2007`,
-      no source). The backend release carrying migration 316 must be live
-      before the S-pan load. Then, in the app: compare the Lynch grid with the WAAS surface
-      and the typed unit MAPs, and the Atlas A-pan with WR2012's
-      per-quaternary A-pan and any nearby pan station, and read the
-      S-pan cross-check (saved A-pan ÷ S-pan) on Evaporation from the map. Also confirm the
+      dataset=Atlas-Apan-2007`, no source). Then, in the app: compare the
+      Lynch grid with the WAAS surface and the typed unit MAPs, and the
+      Atlas A-pan with WR2012's per-quaternary A-pan and any nearby pan
+      station. Also confirm the
       A-pan section number in WRC Report 1489/1/06 and add it to
       `ATLAS_APAN_ATTRIBUTION` (geo/evaporationGrid.ts) and
       `ATLAS_APAN_STATEMENT` (dataCredits.ts) together.

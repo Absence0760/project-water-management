@@ -138,36 +138,21 @@ describe('which kinds load', () => {
 			expect(parseLoadRequest({ ...atlas, dataset: 'toString', source: 'x' }).source).toBe('x');
 		});
 
-		it('the release gate lists the same A-pan and S-pan labels (map-data-gates.mjs APAN_DATASETS, SPAN_DATASETS)', async () => {
-			const { APAN_DATASETS, SPAN_DATASETS } = (await import(GATES)) as { APAN_DATASETS: string[]; SPAN_DATASETS: string[] };
+		it('the release gate lists the same A-pan labels (map-data-gates.mjs APAN_DATASETS)', async () => {
+			const { APAN_DATASETS } = (await import(GATES)) as { APAN_DATASETS: string[] };
 			const spec: ReferenceKind = REFERENCE_KINDS.evaporation;
-			const fromTable = (k: 'apan' | 'span') =>
+			const fromTable = (k: 'apan') =>
 				spec.status === 'allowed'
 					? Object.entries(spec.kindDatasets?.[k] ?? {})
 							.filter(([, d]) => d.status === 'allowed')
 							.map(([label]) => label)
 					: [];
 			expect(APAN_DATASETS).toEqual(fromTable('apan'));
-			expect(SPAN_DATASETS).toEqual(fromTable('span'));
 		});
-	});
 
-	describe('an S-pan evaporation grid loads only under its recorded label (issue #738), a cross-check, never an A-pan', () => {
-		const span = { kind: 'evaporation', key: 'reference/evaporation/atlas-span-2007.json.gz', sha256: 'c'.repeat(64), dataset: 'Atlas-Span-2007' };
-
-		it('CCWR’s S-pan is allowed under its one label, with recorded lines that say S-pan and that its source is to be confirmed', () => {
-			expect(parseLoadRequest(span)).toEqual({ ...span, source: null, minOrder: 1, station: null });
+		it('lists no S-pan grid kind (removed 2026-11-09: the WRC Atlas has no S-pan grids, issue #738)', () => {
 			const spec: ReferenceKind = REFERENCE_KINDS.evaporation;
-			const named = spec.status === 'allowed' ? spec.kindDatasets?.span?.['Atlas-Span-2007'] : undefined;
-			expect(named).toMatchObject({ status: 'allowed', source: expect.stringMatching(/^Symons-pan \(S-pan\) evaporation \(WRC Atlas, CCWR\)/) });
-			expect(named?.status === 'allowed' && named.attribution).toMatch(/source to be confirmed/);
-			expect(spec.status === 'allowed' && Object.keys(spec.kindDatasets?.span ?? {})).toEqual(['Atlas-Span-2007']);
-			// One label, one kind: the S-pan label is not an A-pan one, nor the other way round.
-			expect(spec.status === 'allowed' && Object.keys(spec.kindDatasets?.apan ?? {})).not.toContain('Atlas-Span-2007');
-		});
-
-		it('takes no source under that label', () => {
-			expect(thrown(() => parseLoadRequest({ ...span, source: 'My own credit' })).publicReason).toMatch(/takes no source/);
+			expect(spec.status === 'allowed' && Object.keys(spec.kindDatasets ?? {})).toEqual(['apan']);
 		});
 	});
 
@@ -277,7 +262,7 @@ describe('which kinds load', () => {
 			}
 			// A kind allowed dataset by dataset: each listed dataset's own row says the same as it does.
 			if (spec.status === 'allowed' && (spec.datasets || spec.kindDatasets)) {
-				const all: Record<string, ReferenceDataset> = { ...spec.datasets, ...spec.kindDatasets?.apan, ...spec.kindDatasets?.span };
+				const all: Record<string, ReferenceDataset> = { ...spec.datasets, ...spec.kindDatasets?.apan };
 				for (const [label, d] of Object.entries(all)) {
 					expect(status(rowOf(`${kind} ${label}`, d.sourcesRow)), `${kind} ${label}`).toMatch(d.status === 'allowed' ? /^allowed/ : /^blocked/);
 				}

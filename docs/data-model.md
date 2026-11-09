@@ -2455,12 +2455,12 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   the evaporation grid the Settings proposal reads. A dataset row: `dataset`
   (primary key, 1–50; `synthetic` for the committed fixture), `kind` (`et0`,
   FAO-56 reference ET, proposed as GR4J's monthly PE; `apan`, Class-A pan,
-  proposed as the A-pan row; `span`, Symons pan, since 316 (issue #738),
-  shown beside the saved A-pan as a cross-check only, never proposed or
-  converted, so `evaporation_accepted` keeps `et0` and `apan` alone), `source`, `version`, `method` (the
+  proposed as the A-pan row; 316 added `span`, Symons pan, and 318 removed
+  it again, since the WRC Atlas has no S-pan grids, issue #738; 318 stops
+  with an error if any `span` row remains), `source`, `version`, `method` (the
   summarising in words), `attribution`, `first_year` and `last_year` (the
-  years the means average; since 317 (issue #755) both null for an A-pan or
-  S-pan grid whose source states no period, such as the WRC Atlas's, with
+  years the means average; since 317 (issue #755) both null for an A-pan
+  grid whose source states no period, such as the WRC Atlas's, with
   `evaporation_dataset_period_check` keeping them both set or both null and
   a reference-ET grid always dated), `cell_deg`, `origin_lon` and `origin_lat` (0 ≤
   origin < cell: dPET's cells are centred on whole tenths, so their corners
@@ -2471,9 +2471,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   mean monthly totals, mm, Oct … Sep, each 0–1000). Only cells with a value
   are stored. Global, loaded by the operator as the schema owner (`pnpm
   import:evaporation`; in production `load-reference.yml` through the
-  migrate Lambda, deployment.md § Reference datasets: reference ET, one
-  A-pan grid, the WRC Atlas's modelled `Atlas-Apan-2007`, and one S-pan
-  grid, `Atlas-Span-2007`), readable by anyone signed in, written by no app role.
+  migrate Lambda, deployment.md § Reference datasets: reference ET and one
+  A-pan grid, the WRC Atlas's modelled `Atlas-Apan-2007`), readable by anyone signed in, written by no app role.
 - **`rain_map_dataset`** and **`rain_map_cell_reference`**
   (`207_rain_map_reference.sql`, [maps.md § MAP grid](./maps.md#map-grid)):
   the mean annual precipitation grids the Map tab's WAAS 2007 MAP and CCWR

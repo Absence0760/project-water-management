@@ -15,10 +15,9 @@
 //    PE input alone;
 //  - an A-pan dataset whose source states no period (317, issue #755) is
 //    read, proposed and cited without one, and 317's check keeps a period
-//    both years or neither (neither only for A-pan or S-pan);
-//  - an S-pan dataset (316, issue #738) is summarised over the boundary with
-//    no target, never the default ahead of one that proposes, and an accept
-//    of it is refused with nothing written (no conversion to A-pan);
+//    both years or neither (neither only for A-pan);
+//  - the S-pan kind (316) is gone again (318, issue #738: the WRC Atlas has
+//    no S-pan grids): its CHECK refuses one;
 //  - the CCWR A-pan grid (Atlas-Apan-2007) asked for by label is none loaded
 //    (200, dataset null) until it is loaded, then proposed and used as the
 //    A-pan row with a revision citing it as modelled; any grid asked for that
@@ -85,7 +84,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-	await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])`, [['test-apan', 'test-span', 'test-apan-no-period']]);
+	await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])`, [['test-apan', 'test-apan-no-period']]);
 });
 
 describe('the proposal', () => {
@@ -242,32 +241,6 @@ describe('accepting the proposal', () => {
 		}
 	});
 
-	it('an S-pan dataset is shown over the boundary as a cross-check, with no target; accepting it is refused and writes nothing', async () => {
-		await asOwner(
-			`INSERT INTO evaporation_dataset (dataset, kind, source, version, method, attribution, first_year, last_year, cell_deg, origin_lon, origin_lat)
-			 VALUES ('test-span', 'span', 'Test S-pan grid', 'v1', 'Test method.', 'none', 1950, 1999, 0.1, 0.05, 0.05)`
-		);
-		const row = [160, 168, 176, 184, 160, 144, 96, 72, 56, 60, 80, 120];
-		await asOwner(
-			`INSERT INTO evaporation_cell_reference (dataset, row_idx, col_idx, monthly_mm)
-			 SELECT 'test-span', r, c, $1::real[] FROM unnest(ARRAY[-338, -337]) r, unnest(ARRAY[212, 213]) c`,
-			[row]
-		);
-		const p = (await proposals(viewer, '?dataset=test-span')).body;
-		expect(p).toMatchObject({ dataset: { dataset: 'test-span', kind: 'span' }, target: null, proposal: { monthlyMm: row, coverage: 1, cells: 4 } });
-		// Loaded last, real, yet not the default: an S-pan grid proposes nothing.
-		expect((await proposals(viewer)).body.dataset.kind).not.toBe('span');
-		const before = await settings();
-		const revisions = await asOwner('SELECT count(*)::int AS n FROM model_revision WHERE project_id = $1', [projectId]);
-		const res = await accept(editor, { dataset: 'test-span' });
-		expect(res.status).toBe(400);
-		expect(res.body.error).toMatch(/is a Symons-pan \(S-pan\) grid: it is shown as a cross-check against the A-pan only\. S-pan isn’t converted to A-pan from the map/);
-		expect(await settings()).toEqual(before);
-		expect(await asOwner('SELECT count(*)::int AS n FROM model_revision WHERE project_id = $1', [projectId])).toEqual(revisions);
-		expect(await asOwner(`SELECT count(*)::int AS n FROM evaporation_accepted WHERE project_id = $1 AND dataset = 'test-span'`, [projectId])).toEqual([{ n: 0 }]);
-		await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-span'`);
-	});
-
 	it('refuses what it can’t re-derive; nothing changes', async () => {
 		const before = await settings();
 		const err = async (body: Record<string, unknown>, status = 400, pid = projectId, u = editor) => {
@@ -330,7 +303,7 @@ describe('the grid and the provenance', () => {
 		).resolves.toMatchObject({ rowCount: 0 });
 	});
 
-	it('a period is both years or, for an A-pan or S-pan grid only, neither (317; control: both null on an A-pan grid goes in)', async () => {
+	it('a period is both years or, for an A-pan grid only, neither (317, 318; control: both null on an A-pan grid goes in)', async () => {
 		const insert = (dataset: string, kind: string, first: number | null, last: number | null) =>
 			asOwner(
 				`INSERT INTO evaporation_dataset (dataset, kind, source, version, method, attribution, first_year, last_year, cell_deg, origin_lon, origin_lat)
@@ -339,11 +312,13 @@ describe('the grid and the provenance', () => {
 			);
 		try {
 			await insert('test-period-apan', 'apan', null, null);
-			await insert('test-period-span', 'span', null, null);
 			await expect(insert('test-period-et0', 'et0', null, null)).rejects.toThrow(/evaporation_dataset_period_check/);
 			await expect(insert('test-period-half', 'apan', 1950, null)).rejects.toThrow(/evaporation_dataset_period_check/);
 			await expect(insert('test-period-half', 'apan', null, 1999)).rejects.toThrow(/evaporation_dataset_period_check/);
 			await expect(insert('test-period-back', 'apan', 1999, 1950)).rejects.toThrow(/check constraint/);
+			// The S-pan kind is no longer admitted, with or without a period (318, issue #738).
+			await expect(insert('test-period-span', 'span', null, null)).rejects.toThrow(/evaporation_dataset_kind_check/);
+			await expect(insert('test-period-span', 'span', 1950, 1999)).rejects.toThrow(/evaporation_dataset_kind_check/);
 			// The app role reads the no-period row like any other.
 			const read = await withUser(viewer.id, (db) => db.query(`SELECT first_year, last_year FROM evaporation_dataset WHERE dataset = 'test-period-apan'`));
 			expect(read.rows).toEqual([{ first_year: null, last_year: null }]);

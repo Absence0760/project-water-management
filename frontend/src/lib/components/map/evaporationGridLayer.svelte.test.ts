@@ -1,5 +1,5 @@
-// The A-pan and S-pan grid layers' state (evaporationGridLayer.svelte.ts,
-// docs/maps.md § A-pan and S-pan grids): nothing asked while off or zoomed out
+// The A-pan grid layer's state (evaporationGridLayer.svelte.ts,
+// docs/maps.md § A-pan grid): nothing asked while off or zoomed out
 // too far; asked once per project, kind, dataset, month and snapped view while
 // on (the year's total first); a picked month or dataset asks again, and going
 // back is answered from the cache; what the map draws (points, month, cell
@@ -14,7 +14,7 @@ import { mapGridViewBbox } from './mapLayers';
 const dataset = (name: string, kind: EvaporationGridKind = 'apan') => ({
 	dataset: name,
 	kind,
-	label: kind === 'apan' ? 'modelled A-pan (not a measured pan)' : 'Symons-pan (S-pan) evaporation',
+	label: 'modelled A-pan (not a measured pan)',
 	source: 'Invented',
 	version: '1',
 	method: 'm',
@@ -74,12 +74,12 @@ describe('EvaporationGridLayer', () => {
 
 	it('asks for its own kind and the year’s total first, then again for a picked month; going back comes from the cache', async () => {
 		const load = vi.fn<Load>(async (_id, _k, _b, _ds, month) => answer(month === 1 ? [[21.30833, -33.69167, 250]] : [[21.30833, -33.69167, 1812], [21.325, -33.69167, 1840]], { month }));
-		const { deps, layer } = setup(load, 'span');
+		const { deps, layer } = setup(load, 'apan');
 		deps.view = VIEW;
 		deps.on = true;
 		flushSync();
-		expect(layer.kind).toBe('span');
-		expect(load).toHaveBeenCalledExactlyOnceWith('p1', 'span', mapGridViewBbox(VIEW), null, null);
+		expect(layer.kind).toBe('apan');
+		expect(load).toHaveBeenCalledExactlyOnceWith('p1', 'apan', mapGridViewBbox(VIEW), null, null);
 		await vi.waitFor(() => expect(layer.loading).toBe(false));
 		expect(layer.points).toEqual([
 			{ lon: 21.30833, lat: -33.69167, mm: 1812 },
@@ -87,11 +87,11 @@ describe('EvaporationGridLayer', () => {
 		]);
 		expect(layer.range).toEqual([1812, 1840]);
 		// The Layers box's live region says it.
-		expect(layer.status).toBe('2 S-pan grid points shown.');
+		expect(layer.status).toBe('2 A-pan grid points shown.');
 		expect(layer.draw).toMatchObject({ month: null, cellDeg: 1 / 60, attribution: 'credit of Atlas-Apan-2007' });
 		layer.pickMonth(1);
 		flushSync();
-		expect(load).toHaveBeenLastCalledWith('p1', 'span', mapGridViewBbox(VIEW), null, 1);
+		expect(load).toHaveBeenLastCalledWith('p1', 'apan', mapGridViewBbox(VIEW), null, 1);
 		await vi.waitFor(() => expect(layer.points).toEqual([{ lon: 21.30833, lat: -33.69167, mm: 250 }]));
 		expect(layer.draw.month).toBe(1);
 		layer.pickMonth(null);
@@ -100,7 +100,7 @@ describe('EvaporationGridLayer', () => {
 		expect(layer.points).toHaveLength(2);
 		layer.pick('other');
 		flushSync();
-		expect(load).toHaveBeenLastCalledWith('p1', 'span', mapGridViewBbox(VIEW), 'other', null);
+		expect(load).toHaveBeenLastCalledWith('p1', 'apan', mapGridViewBbox(VIEW), 'other', null);
 	});
 
 	it('credits nothing while the server says the view is too dense (no point drawn)', async () => {

@@ -31,11 +31,12 @@
 //     whose key or dataset names a PenPan grid is refused here, before the
 //     approval, and so is one naming any other A-pan grid unless its dataset
 //     is a label APAN_DATASETS lists (the WRC Atlas's A-pan equivalent, the
-//     operator's decision of 2026-11-08), which then takes no source; an
-//     S-pan (Symons) key or label likewise unless its dataset is a label
-//     SPAN_DATASETS lists (CCWR's S-pan, issue #738, a cross-check only): the
-//     modelled Class-A pan grid (issue #646 item 7) is blocked until its
-//     validation report and the hydrologist's sign-off (docs/data-sources.md
+//     operator's decision of 2026-11-08), which then takes no source; and
+//     one naming an S-pan (Symons) grid is refused whatever its label (no
+//     S-pan grid loads: the S-pan kind was removed on 2026-11-09, since the
+//     Atlas has none, issue #738). The modelled Class-A pan grid (issue
+//     #646 item 7) is blocked until its validation report and the
+//     hydrologist's sign-off (docs/data-sources.md
 //     § penpan-apan). The migrate Lambda refuses any A-pan grid outside
 //     those labels whatever its name (referenceLoad.ts), so this is the
 //     early, named refusal, not the only one.
@@ -80,14 +81,10 @@ export const DATASETS = { tiles: ['basemap', 'fonts', 'terrain', 'water'], 'map-
 export const APAN_DATASETS = ['Atlas-Apan-2007'];
 
 /**
- * The S-pan (Symons pan) evaporation grids a load may name, by dataset label
- * (REFERENCE_KINDS.evaporation.kindDatasets.span, the allowed ones;
- * referenceLoad.test.ts keeps the two in step): CCWR's, issue #738, shown as
- * a cross-check against the A-pan only.
+ * An evaporation key or dataset that names an S-pan (Symons pan) grid: always
+ * blocked, since no S-pan grid loads (the kind was removed on 2026-11-09, the
+ * WRC Atlas having none, issue #738), so one is never stored as reference ET.
  */
-export const SPAN_DATASETS = ['Atlas-Span-2007'];
-
-/** An evaporation key or dataset that names an S-pan (Symons pan) grid: blocked unless its label is in SPAN_DATASETS. */
 export const SPAN_EVAPORATION = /(^|[^a-z])(s-?pan|symons)([^a-z]|$)/i;
 
 /** An evaporation key or dataset that names an A-pan grid (PenPan's, or any other): blocked unless its label is in APAN_DATASETS (docs/data-sources.md § penpan-apan). */
@@ -165,10 +162,9 @@ export function loadProblems(env, hasText = legalTextHas) {
 	}
 	const named = `${env.LOAD_KEY ?? ''} ${env.LOAD_DATASET ?? ''}`;
 	const listedApan = kind === 'evaporation' && APAN_DATASETS.includes(env.LOAD_DATASET ?? '');
-	const listedSpan = kind === 'evaporation' && SPAN_DATASETS.includes(env.LOAD_DATASET ?? '');
-	if ((listedApan || listedSpan) && source.trim()) problems.push(`this ${listedApan ? 'A-pan' : 'S-pan'} dataset takes no source: its source and credit are the ones recorded with its licence`);
-	if (kind === 'evaporation' && !listedSpan && SPAN_EVAPORATION.test(named)) {
-		problems.push(`an S-pan (Symons pan) evaporation grid loads in production only as dataset ${SPAN_DATASETS.join(', ')}, the one whose licence is recorded (docs/maps.md § Sources)`);
+	if (listedApan && source.trim()) problems.push('this A-pan dataset takes no source: its source and credit are the ones recorded with its licence');
+	if (kind === 'evaporation' && SPAN_EVAPORATION.test(named)) {
+		problems.push('an S-pan (Symons pan) evaporation grid does not load in production: only a reference-ET grid (dPET) or the A-pan grid whose licence is recorded (docs/maps.md § Sources)');
 	}
 	if (kind === 'evaporation' && (PENPAN_EVAPORATION.test(named) || (!listedApan && BLOCKED_EVAPORATION.test(named)))) {
 		problems.push(

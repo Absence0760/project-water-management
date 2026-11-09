@@ -22,11 +22,9 @@
 	(`layers=ccwrgrid`, § MAP grid), each its own toggle, draw that one mean
 	annual precipitation grid's points in view, each labelled with its MAP (the
 	synthetic test grid in its place where only that is loaded, saying so), or
-	say it isn't loaded; the A-pan and S-pan
-	grids (`layers=apangrid`, `spangrid`, § A-pan and S-pan grids) draw one
-	loaded evaporation grid of each kind the same way, the year's total or a
-	month picked here, the A-pan grid said to be modelled where it is and the
-	S-pan grid a cross-check the model never uses; the CHIRPS grid
+	say it isn't loaded; the A-pan grid (`layers=apangrid`, § A-pan grid) draws
+	one loaded A-pan grid the same way, the year's total or a month picked
+	here, said to be modelled where it is; the CHIRPS grid
 	(`layers=chirps`, § CHIRPS grid) draws CHIRPS v3's 0.05° cells and their
 	centres, where its daily rainfall values sit.
 -->
@@ -101,7 +99,7 @@
 		units?: { on: boolean; labels: readonly UnitLabel[] } | null;
 		/** The MAP grid layers' states (the WAAS 2007 MAP and the CCWR MAP), each its own toggle. Null: no toggles. */
 		mapGrids?: readonly MapGridLayer[] | null;
-		/** The A-pan and S-pan grid layers' states, each its own toggle, and their toggles' component (loaded apart from the tab, MapTab); null: no toggles (yet); 'failed': their chunk didn't load. */
+		/** The A-pan grid layer's state, its own toggle, and its toggle's component (loaded apart from the tab, MapTab); null: no toggles (yet); 'failed': their chunk didn't load. */
 		evaporationGrids?: EvaporationGrids | 'failed' | null;
 		/** The CHIRPS grid layer: whether it is on, and the cells in view (null: the view is too wide). Null: no toggle. */
 		chirps?: { on: boolean; cells: readonly ChirpsCell[] | null } | null;
@@ -414,7 +412,7 @@
 		{/if}
 	{/each}
 	{#if evaporationGrids === 'failed'}
-		<ChunkFailed what="The A-pan and S-pan grid layers" />
+		<ChunkFailed what="The A-pan grid layer" />
 	{:else if evaporationGrids}
 		<evaporationGrids.Toggles grids={evaporationGrids.grids} {labels} ontoggle={toggle} onretry={retryLayer} />
 	{/if}

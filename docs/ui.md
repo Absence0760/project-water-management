@@ -4854,15 +4854,15 @@ map" card) stays the schematic; this is the geography.
   its place." beside **Synthetic test data, never real rainfall.**; and
   with neither, "There’s no CCWR MAP on this server yet, so there is
   nothing to draw." (no command, issue #586 C5).
-  **A-pan grid** and **S-pan grid** (`layers=apangrid`, `layers=spangrid`,
-  each its own toggle with its ramp as its swatch): on, one loaded A-pan or
-  S-pan evaporation grid's points in view the same way, the year's total by
-  default or a month picked under **Show** (Year (total), then October to
-  September); the source line says what the values are ("Modelled A-pan
-  equivalent … (WRC Atlas, not a measured pan)."; the S-pan grid "a
-  cross-check only, never used by the model."), the WRC Atlas grids are
-  credited on the map while drawn, and with none loaded the box says so
-  ([maps.md § A-pan and S-pan grids](./maps.md#a-pan-and-s-pan-grids)).
+  **A-pan grid** (`layers=apangrid`, its ramp as its swatch): on, one
+  loaded A-pan evaporation grid's points in view the same way, the year's
+  total by default or a month picked under **Show** (Year (total), then
+  October to September); the source line says what the values are
+  ("Modelled A-pan equivalent … (WRC Atlas, not a measured pan)."), the WRC
+  Atlas grid is credited on the map while drawn (its name shown as "CCWR
+  A-pan"), and with none loaded the box says "There’s no A-pan grid on this
+  server yet, so there is nothing to draw." ([maps.md § A-pan
+  grid](./maps.md#a-pan-grid)).
   **DEM grid** (`layers=demgrid`, the elevation ramp as its swatch; not
   offered when an editor's delineation check finds no DEM): on, every 10th
   elevation-model cell each way in view, coloured and labelled with its
@@ -8945,12 +8945,7 @@ calibration's line points at *How the shown run fits* for NSE and PBIAS.
     runs on pan coefficient × A-pan" when there is no monthly PE), each with
     its year total, and for reference ET a third row, **ET₀ ÷ saved A-pan**,
     the pan coefficient the two imply, as a cross-check: a month outside
-    FAO-56's 0.6–0.85 is bold and named in a note under the table. An S-pan
-    grid (issue #738; "S-pan, cross-check only" in the Grid picker) shows
-    **S-pan from the map**, **Saved A-pan** and **Saved A-pan ÷ S-pan** rows
-    instead, a line saying it is a cross-check only, and a note that it is
-    never written to the project, since turning S-pan into A-pan needs a
-    conversion the hydrologist chooses; it offers no Use. **Source
+    FAO-56's 0.6–0.85 is bold and named in a note under the table. **Source
     and method** (collapsed) cites the dataset, its version and period, its
     attribution and its method. **Use as GR4J’s monthly PE** (or **Use as the
     A-pan evaporation row**; editors) asks first (what reads the values, and
