@@ -34,6 +34,7 @@ import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/ru
 import type { EwrSplitInfo, PinnedEwrSplit } from './network/ewrSplit';
 import type { EwrDailySource, OutletEwrInfo } from './reserve/dailySource';
 import type { EwrAssuranceSite } from './reserve/assurance';
+import type { EwrDailyMonths } from './reserve/dailyMonths';
 import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
 import type { SupplyAssurance } from './network/reliability';
 import type { UnitEwrMet } from './network/unitEwr';
@@ -4760,6 +4761,15 @@ export interface RunSummary {
 	 * and on older runs.
 	 */
 	ewrAssurance?: EwrAssuranceSite[];
+	/**
+	 * The run's daily EWR at the outlet (`ewr`: the pragmatic EWR, the DRM TAB
+	 * file or the DRM percentile tables, settings.ewrDailySource and
+	 * catchment.outletEwr) judged month by month against the simulated outflow
+	 * (engine ≥ 1.116.0, ./reserve/dailyMonths.ts, docs/model.md §2.9h): per
+	 * complete calendar month, met when Σ outflow ≥ Σ EWR. Absent without an
+	 * outlet, and on older runs.
+	 */
+	ewrDailyMonths?: EwrDailyMonths;
 	/**
 	 * Per EWR site (outlet first, then gauges by node id), the days each farm
 	 * or water user upstream got its whole demand while the site's EWR (the

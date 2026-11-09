@@ -245,7 +245,11 @@ test('two EWR sites each get a Reserve heat map, low flows and high flows (engin
 	});
 	await createRun(page.request, project.id, 'Two sites');
 	await page.goto(`/projects/${project.id}?tab=river`);
+	// The months met open on the daily EWR in use (engine 1.116.0); the rule tables are a switch away.
+	await expect(page.getByRole('region', { name: 'Pragmatic EWR met, by month' })).toBeVisible();
+	await page.getByTestId('months-judge').getByRole('button', { name: 'Reserve rule tables' }).click();
 	const panel = page.getByRole('region', { name: /^Reserve rules met, by month/ });
+	await expect(panel.getByTestId('months-judge').getByRole('button', { name: 'Reserve rule tables' })).toHaveAttribute('aria-pressed', 'true');
 	const site = panel.getByLabel('EWR site');
 	await expect(site.locator('option')).toHaveText(['Outlet (Outflow gauge)', 'Upper gauge']);
 
@@ -382,8 +386,8 @@ test('the EWR results are judged by is chosen near the top of Settings, under th
 	await expect(page.locator('#judge-hint')).toHaveText(
 		/^Which EWR the headline on the EWR page, the run sentence and the printable report are judged by\. It changes no result/
 	);
-	// Automatic judges by the rule table while the charge follows the pragmatic EWR (its default): said under the select.
-	await expect(page.getByTestId('judge-charge-note')).toContainText('follow the pragmatic EWR');
+	// Automatic judges by the rule table while the charge follows the daily EWR, here the pragmatic EWR (its default): said under the select.
+	await expect(page.getByTestId('judge-charge-note')).toContainText('follow the daily EWR (the pragmatic EWR)');
 	await pick.selectOption({ label: 'The pragmatic EWR at the outflow gauge' });
 	// Now both follow the pragmatic EWR: no note.
 	await expect(page.getByTestId('judge-charge-note')).toHaveCount(0);
@@ -405,7 +409,8 @@ test('the EWR results are judged by is chosen near the top of Settings, under th
 	await page.goto(`/projects/${id}/report?run=${runId}`);
 	await expect(printed).toHaveText('Results are judged by the pragmatic EWR at the outflow gauge, the project’s setting when this report was printed.');
 	await page.goto(`/projects/${id}?tab=river`);
-	// Reserve compliance keeps its panel: the table is still assessed, it just doesn't head the results.
+	// Reserve compliance stays a switch away: the table is still assessed, it just doesn't head the results.
+	await page.getByTestId('months-judge').getByRole('button', { name: 'Reserve rule tables' }).click();
 	await expect(page.getByRole('region', { name: /^Reserve rules met, by month/ })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Days below the reserve, each water year' })).toBeVisible();
 

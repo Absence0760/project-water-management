@@ -106,8 +106,10 @@ function fingerprint(out: ModelOutput) {
 	// The EWR split's record (engine ≥ 1.94.0, issue #553 round 4) is new fields beside the old ones, not a change to them:
 	// left out, so the rest of every case, the EWR split by the flow share included, is still pinned as it was. So are
 	// the warnings' codes (engine ≥ 1.102.0, issue #611): each is a warning's text again, which `warnings` pins. And each
-	// unit's EWR met (engine ≥ 1.116.0, model.md §2.11c): sums of the unit series this guard's output already holds.
-	const { unitRain: _unitRain, ewrSplit: _ewrSplit, warningCodes: _warningCodes, unitEwr: _unitEwr, ...rest } = out.summary;
+	// unit's EWR met (engine ≥ 1.116.0, model.md §2.11c): sums of the unit series this guard's output already holds; and
+	// the daily EWR's months (engine ≥ 1.116.0, model.md §2.9h): a monthly reading of the `ewr` and outflow series, which
+	// stay pinned here, so nothing of the forcing.
+	const { unitRain: _unitRain, ewrSplit: _ewrSplit, warningCodes: _warningCodes, unitEwr: _unitEwr, ewrDailyMonths: _ewrDailyMonths, ...rest } = out.summary;
 	const farms = rest.farms.map(({ ewrShare: _ewrShare, ...f }) => f);
 	return { units, golden: goldenFingerprint(out, SUMMED, { ...rest, farms }) };
 }

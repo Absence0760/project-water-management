@@ -210,7 +210,7 @@ describe('the EWR charge from the Reserve rule table', () => {
 			for (let t = 0; t < DAYS; t++) expect(ch[t]! + nat[t]!).toBeCloseTo(own[t]!, 6);
 		}
 		expect(byRule.summary.warnings).toEqual(
-			expect.arrayContaining([expect.stringMatching(/^EWR charge at the outlet \(out\): 37 days outside a complete calendar month follow the pragmatic EWR/)])
+			expect.arrayContaining([expect.stringMatching(/^EWR charge at the outlet \(out\): 37 days outside a complete calendar month follow the daily EWR/)])
 		);
 	});
 
@@ -252,7 +252,7 @@ describe('the EWR charge from the Reserve rule table', () => {
 		expect(col(one, null, 'ewr_charge_shortfall')).toBeUndefined();
 		expect(col(one, 'g', 'ewr_charge_shortfall')).toBeDefined();
 		const none = run(network({ ewrChargeSource: 'ruleTable' }, []));
-		expect(none.summary.warnings).toContain('the EWR charge is set to follow the Reserve rule tables, but no EWR site has one: it follows the pragmatic EWR');
+		expect(none.summary.warnings).toContain('the EWR charge is set to follow the Reserve rule tables, but no EWR site has one: it follows the daily EWR');
 		const plain = run(network({}, []));
 		expect(none.series).toEqual(plain.series);
 	});

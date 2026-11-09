@@ -45,7 +45,8 @@ const SETTINGS_RAIL: [string | null, string[]][] = [
 const EWR_LINKS = [
 	'Flow vs reserve',
 	'Days below the reserve, each water year',
-	'Reserve rules met, by month',
+	// The months met, by the daily EWR in use without a rule table (engine 1.116.0).
+	'Pragmatic EWR met, by month',
 	'Days below the EWR, by month',
 	// Each unit against the EWR required at it (ewr-map.spec.ts), after the EWR grid.
 	'On the map',

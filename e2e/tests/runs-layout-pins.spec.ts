@@ -321,7 +321,8 @@ test('each anchor the moves send on lands on its new home’s panel heading, for
 	const landing: Record<string, string | null> = {
 		'res-ewr': 'Flow vs reserve',
 		'res-reserve-years': 'Days below the reserve, each water year',
-		'res-reserve': 'Reserve rules met, by month',
+		// The months met, on the daily EWR in use without a rule table (engine 1.116.0).
+		'res-reserve': 'Pragmatic EWR met, by month',
 		'res-ewr-grid': 'Days below the EWR, by month',
 		'res-water-account': 'Water account',
 		'res-uncertainty': 'Uncertainty bands',

@@ -63,6 +63,33 @@ export function dailyEwrName(daily: DailyEwrSource): string {
 }
 
 /**
+ * Where the outlet's daily EWR comes from, alone: "the pragmatic EWR", "the
+ * DRM TAB file", "the DRM percentile tables" (or "… without high flows").
+ * For a line that already says "the daily EWR" (the charge, engine ≥ 1.77.0:
+ * a 'pragmatic' charge source is the daily outlet EWR, whichever source it
+ * comes from).
+ */
+export function dailyEwrSource(daily: DailyEwrSource): string {
+	if (!daily || daily.method === 'pragmatic') return 'the pragmatic EWR';
+	if (daily.method === 'tab') return 'the DRM TAB file';
+	return daily.reserveTable === 'withoutHighFlows' ? 'the DRM percentile tables without high flows' : 'the DRM percentile tables';
+}
+
+/** "the daily EWR (the DRM TAB file)": what settings.ewrChargeSource 'pragmatic' follows, named for its source. */
+export const dailyEwrWithSource = (daily: DailyEwrSource): string => `the daily EWR (${dailyEwrSource(daily)})`;
+
+/**
+ * The heading of the EWR page's months-met panel for the daily EWR (engine ≥
+ * 1.116.0, summary.ewrDailyMonths): "Pragmatic EWR met, by month", "Daily
+ * EWR from the DRM TAB file met, by month", dailyEwrName's words without
+ * "the", capitalised.
+ */
+export function dailyMonthsHeading(daily: DailyEwrSource): string {
+	const name = dailyEwrName(daily).replace(/^the /, '');
+	return `${name[0]!.toUpperCase()}${name.slice(1)} met, by month`;
+}
+
+/**
  * What a count of days below the daily EWR is called on a heading: "the
  * reserve", or, when the project has a Reserve rule table (ewrAssurance.ts
  * headlineSite is not null), the daily test's own name (dailyEwrName: "the

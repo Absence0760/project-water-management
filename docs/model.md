@@ -8605,6 +8605,55 @@ bit-identical with and without them stored, they do change the run as
 stored (the positive control), and a scenario switching them on runs
 exactly as the stored rules did.
 
+### 2.9h The daily EWR judged by whole months (engine ≥ 1.116.0)
+
+The EWR page's months-met panel read only the Reserve rule tables (§2.9c), so
+a project whose daily EWR came from the DRM TAB file or the percentile tables
+(§2.9f) saw its monthly verdicts judged by another test than its daily one.
+The client's hydrologist asked for the months met to follow the daily EWR in
+use. `summary.ewrDailyMonths` (`packages/engine/src/reserve/dailyMonths.ts`
+`assessDailyEwrMonths`) judges the run's outlet `ewr` series, whichever
+source it comes from (the pragmatic EWR included), month by month:
+
+```
+per complete calendar month of the run (§2.9c's months: completeMonths; a part
+month at either end, and a month a forecast tail starts inside, are left out;
+one wholly in the tail is assessed):
+  R = Σ the month's daily EWR (m³)        A = Σ the month's simulated outflow at the outlet (m³)
+  met     = A ≥ R                         (relative tolerance 1e-9, as §2.9c)
+  deficit = MAX(R − A, 0)
+```
+
+**A month whose requirement is 0 is met**, as a day with an EWR of 0 is never
+"not met" in the daily test and a rule table's R = 0 month is met in §2.9c;
+`zeroRequirementMonths` counts them, so a screen can say how many of the
+months met asked for nothing rather than let them read as a river that coped.
+A non-finite day counts as 0, as §2.9c sums a month.
+
+The summary: `months`, `met`, `rate` (met ÷ months, null without a month),
+`zeroRequirementMonths`, `longestNotMetRun` (most consecutive months not met),
+`deficitM3` (Σ the months' deficits) and `byMonth`, the twelve calendar months
+in water-year order (Oct … Sep), each with `years`, `met`, `rate`,
+`meanRequiredM3s` and `meanSimulatedM3s` (the mean over its months of the
+month's mean flow, m³/s; null without a month) and `deficitM3`. Unlike a rule
+table (§2.9c) nothing depends on the natural flow's percentile, so there is
+no FDC check, low-flow split or %nMAR here; those stay the rule tables'.
+
+It is a report: no other result reads it. It is absent without an outlet and
+on runs before 1.116.0 (the EWR page asks for a re-run). A run resumed from a
+snapshot (§2.16) covers its own complete months, as its other summaries cover
+its own days. A cap or full-allocation run's viewer kept from the registered
+volumes doesn't get it (its mean flows and deficit are volumes; the
+allowlist, security.md § Allocations). Tests: `reserve/dailyMonths.test.ts`
+(hand-worked months, part months, the zero month, a forecast tail, more flow
+never losing a month on random series, and whole runs on the pragmatic EWR
+and the TAB file; vitest runs under a skewed `TZ`).
+
+Engine 1.116.0 also rewords two charge warnings (§2.9c § The charge from the
+rule table): days outside a complete month, and a rule-table charge with no
+table, "follow the daily EWR" (the outlet's `ewr` from §2.9f's source, or a
+gauge's share of it), not "the pragmatic EWR", which was wrong since 1.77.0.
+
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
 The hydrologist calibrates on a window, not the whole record:

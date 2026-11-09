@@ -7427,14 +7427,20 @@ other sections.
   Save (the note is a warning box, tied to the select by
   `aria-describedby`). With no rule table and no stored choice there is
   nothing to choose, so the panel's one line (at the summary line's size, as
-  the other panels') says results are judged by the pragmatic EWR and links
+  the other panels') says results are judged by the daily EWR at the outflow
+  gauge, named for its source (`notMet.ts` `dailyEwrName`), and links
   to **Reserve rule tables**, named as that heading (issue #586), instead of
   showing a select. It never sets
   **EWR charge follows** (Reserve rules), the model input behind the daily
   charge, curtailment and water account: when the test the choice judges by
   (`headlineTest`: Automatic counts as a rule table whenever there is one)
   differs from the charge's, a line under the select says which test the
-  charge follows.
+  charge follows: the rule tables, or the daily EWR named for its source,
+  "the daily EWR (the DRM TAB file)" (`notMet.ts` `dailyEwrWithSource`;
+  since engine 1.77.0 the `'pragmatic'` charge source is the daily outlet
+  EWR, whichever source it comes from; until 1.116.0 these lines said "the
+  pragmatic EWR" whatever the source). The **EWR charge follows** select
+  names it the same way ("The daily EWR (the DRM TAB file)").
 - **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
   Project page's recent notes, `notes.ts` `noteHref`; an old
   `?tab=calibration#set-…`, from when that opened this page, goes on here
@@ -7564,7 +7570,8 @@ other sections.
   left out, and the fit line; where the daily EWR comes from and its volume; the
   reporting window (or the whole run) and the annual assurance threshold
   (Reporting); WR2012 on with its quaternary and MAR, or off; the rule
-  tables and what the EWR charge follows (nothing when there is none: the
+  tables and what the EWR charge follows ("the rule tables", or "the daily
+  EWR (the DRM TAB file)" named for the daily EWR's source; nothing when there is none: the
   panel's own line says so); how many data-quality limits differ from the
   defaults; the year classes; the outlook's season and planning share;
   whether an evidence rule is declared; automatic runs on or off.
@@ -9640,16 +9647,43 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   Runs & results' and the report's copies keep `h3`): until 2026-10-24 they
   were `h3`, so a screen reader's outline put them under "Days below the
   reserve, each water year":
-  **Reserve rules met, by month** (`#res-reserve`, `EwrAssurancePanel` with
-  a rule table; the panel's own name, *Reserve compliance by month*, stays
-  on the printable report and Compare runs). Without a rule table in the
-  run it is a one-line stub (`data-testid="reserve-stub"`, `river.ts`
-  `reserveStubText`) where the panel was simply absent and nothing said
-  why: "Needs a Reserve rule table: set one in Settings → Reserve rule
-  tables." linked to `?tab=settings#set-reserve` (a viewer reads "an editor
-  sets one …"), or, when the project has a table the run lacks, "This run
-  was made without the project’s Reserve rule table. Run the model again to
-  see it."; then
+  the **months met** (`#res-reserve`, `river/ReserveMonths.svelte`),
+  judged by the **daily EWR in use** or the **Reserve rule tables**. The
+  daily EWR's months (`ewr/EwrDailyMonthsPanel.svelte`, helpers in
+  `ewr/dailyMonths.ts`; engine ≥ 1.116.0, `summary.ewrDailyMonths`,
+  [model.md §2.9h](./model.md)) are headed for the run's daily EWR source
+  (`notMet.ts` `dailyMonthsHeading`: *Pragmatic EWR met, by month*, *Daily
+  EWR from the DRM TAB file met, by month*, *… the DRM percentile tables
+  …*), so they follow Model settings → EWR → Daily EWR from after a re-run
+  (a client hydrologist expected the months met to; until 1.116.0 the panel
+  read only the rule tables): the outlet's verdict line (*Outlet (Name): Met
+  in N of M months …*), tiles for months met, the longest run not met and
+  the deficit (Mm³), a line when months met had a daily EWR of 0 all month
+  (they count as met), the share of months met per month of the year as
+  bars, and a table by month of the year (years, met, met %, mean required
+  and mean simulated m³/s, deficit Mm³). A run with a rule table too has a
+  **Judged by** switch under the heading (a `.seg` of two `aria-pressed`
+  buttons, the daily EWR's name and *Reserve rule tables*); which shows
+  first is `river.ts` `monthsJudge`: the reader's pick, else the daily EWR,
+  unless the project judges its results by a rule table by choice
+  (`settings.ewrHeadline` `ruleTable`, not Automatic) or the run has no
+  daily months (made before 1.116.0); Runs & results' *by month of the year*
+  link under Reserve rules met asks for the tables (`&months=rules`,
+  `links.ts` `riverHref`). The page's menu names the panel as its heading
+  reads (`monthsMetHeading`). Without a rule table in the run there is no
+  switch, and a line under the daily months says what judging them by one
+  too needs (`data-testid="reserve-stub"`, `river.ts` `reserveStubText`):
+  "To judge the months by a Reserve rule table too: set one in Settings →
+  Reserve rule tables." linked to `?tab=settings#set-reserve` (a viewer
+  reads "an editor sets one …"), or, when the project has a table the run
+  lacks, "… Run the model again to judge the months by it too." A run
+  before 1.116.0 without a table says "Run the model again to see this for
+  the daily EWR."; a cap or full-allocation run read by a viewer kept from
+  the registered volumes says the months are for the project's editors and
+  owners. The tables' judgement is
+  **Reserve rules met, by month** (`EwrAssurancePanel`; the panel's own
+  name, *Reserve compliance by month*, stays on the printable report and
+  Compare runs); then
   **Days below the EWR, by month** (`#res-ewr-grid`, `EwrHeatmap`'s
   *EWR compliance by month* renamed here so the two monthly panels read
   apart, `river.ts` `RESERVE_MONTHS_HEADING` / `EWR_MONTHS_HEADING`; with the

@@ -38,6 +38,7 @@ export { resolveWr2012 } from './reference/wr2012Resolve';
 export * from './reserve/rules';
 export * from './reserve/dailySource';
 export * from './reserve/assurance';
+export * from './reserve/dailyMonths';
 export * from './reserve/riverMeasures';
 export * from './reserve/trafficLight';
 export * from './reserve/ewrReleaseRules';

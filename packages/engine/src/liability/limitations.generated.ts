@@ -84,7 +84,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"id": "A4",
 		"source": "finding",
 		"severity": "Medium (sites with a Reserve rule table)",
-		"title": "The daily EWR charge, curtailment and the water account follow the pragmatic EWR by default, while the Reserve compliance report follows the rule table",
+		"title": "The daily EWR charge, curtailment and the water account follow the daily EWR at the outlet by default (the pragmatic EWR, or since engine 1.77.0 the DRM TAB file or percentile tables when Daily EWR from selects one), while the Reserve rule table's assessment follows the rule table",
 		"status": "Built (engine 1.3.0, issue #64), off by default; provisional decision 2026-10-01 keeps it; the hydrologist's or the assessor's confirmation pending"
 	},
 	{
