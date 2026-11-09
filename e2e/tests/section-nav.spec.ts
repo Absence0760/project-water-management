@@ -47,6 +47,8 @@ const EWR_LINKS = [
 	'Days below the reserve, each water year',
 	'Reserve rules met, by month',
 	'Days below the EWR, by month',
+	// Each unit against the EWR required at it (ewr-map.spec.ts), after the EWR grid.
+	'On the map',
 	'Water account',
 	'Uncertainty bands',
 	'Sensitivity runs',
@@ -314,7 +316,7 @@ test('EWR has the menu: every panel by its heading, a jump that lands, and a loa
 	await expectRail(
 		menu,
 		[
-			['The reserve', EWR_LINKS.slice(0, 4)],
+			['The reserve', EWR_LINKS.slice(0, 5)],
 			['Water balance', ['Water account']],
 			['How sure, and what if', ['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'How much irrigation can the catchment support?', 'Seasonal outlook']]
 		],

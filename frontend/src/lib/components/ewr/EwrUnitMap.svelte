@@ -90,9 +90,8 @@
 		const s = q.toString();
 		void goto(`${url.pathname}${s ? `?${s}` : ''}${url.hash}`, { reset: false });
 	}
-	const unitHref = (nodeId: string) => supplyHref(runId, { unit: nodeId, hash: 'res-farm' });
 	function pick(nodeId: string) {
-		void goto(unitHref(nodeId));
+		void goto(supplyHref(runId, { unit: nodeId, hash: 'res-farm' }));
 	}
 
 	const shading = $derived(features && units ? ewrShading(units, features, measure) : null);
@@ -216,7 +215,7 @@
 									{#each figures as u (u.nodeId)}
 										<tr data-node={u.nodeId} data-band={u.band}>
 											<th scope="row"
-												><a href={unitHref(u.nodeId)}>{u.name}</a>{#if !placed.has(u.nodeId)}<span class="sub muted">no area on the map</span>{/if}</th
+												><a href={supplyHref(runId, { unit: u.nodeId, hash: 'res-farm' })}>{u.name}</a>{#if !placed.has(u.nodeId)}<span class="sub muted">no area on the map</span>{/if}</th
 											>
 											<td class="num" data-label="EWR required">{fmtNum(u.figures.requiredM3)} m³</td>
 											<td class="num" data-label={secondHead}>{u.ratio === null ? '–' : `${fmtNum(measure === 'met' ? u.figures.metM3 : u.figures.outflowM3)} m³`}</td>
@@ -237,7 +236,7 @@
 							<ul class="unplaced" aria-labelledby="ewr-map-unplaced-h" data-testid="ewr-map-unplaced">
 								{#each shading.unplaced as u (u.nodeId)}
 									<li data-node={u.nodeId} data-band={u.band}>
-										<a href={unitHref(u.nodeId)}>{u.name}</a>
+										<a href={supplyHref(runId, { unit: u.nodeId, hash: 'res-farm' })}>{u.name}</a>
 										<span class="chip" style:--sw={swatch(u.band)} style:color={u.band === 'none' ? undefined : colours[u.band].text} data-band={u.band}>{u.label}</span>
 										<span class="small muted">{EWR_BAND_SHORT[u.band]}</span>
 									</li>
