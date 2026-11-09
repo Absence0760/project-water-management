@@ -88,7 +88,7 @@ export const GEONAMES_STATEMENT = 'GeoNames (geonames.org), CC BY 4.0';
 export const WAAS_MAP_STATEMENT = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
 
 /**
- * The map's attribution control while the MAP grid layer draws that surface's
+ * The map's attribution control while the WAAS 2007 MAP layer draws that surface's
  * points: short, naming the study and its authors, linking to the full line on
  * /data-sources#waas-map (as HydroRIVERS'). The whole 150-character line wrapped
  * to two or four lines along the map's foot, under its Show everything and Key
@@ -104,7 +104,7 @@ export const WAAS_MAP_MAP_ATTRIBUTION = 'MAP grid: WAAS (2007), Beuster Clarke &
 export const LYNCH_MAP_STATEMENT =
 	'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
 
-/** The map's attribution control while the MAP grid layer draws the Lynch grid's points: short, linking to the full citation on /data-sources#lynch-map. */
+/** The map's attribution control while the CCWR MAP layer draws the Lynch grid's points: short, linking to the full citation on /data-sources#lynch-map. */
 export const LYNCH_MAP_MAP_ATTRIBUTION = 'MAP grid: Lynch (2004), WRC Atlas';
 
 /**
@@ -297,7 +297,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 	{
 		id: 'waas-map',
 		name: 'Mean annual rainfall surface for the Southwestern Cape (WAAS, 2007)',
-		usedFor: 'The map’s MAP grid layer, and the mean annual rainfall a unit’s MAP is proposed from.',
+		usedFor: 'The map’s WAAS 2007 MAP layer, and the mean annual rainfall a unit’s MAP is proposed from.',
 		publisher: 'Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now the Department of Water and Sanitation)',
 		licence: 'No licence terms came with the copy used; it is shown with the credit its authors give',
 		read: '2026-10-23',
@@ -306,7 +306,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 	{
 		id: 'lynch-map',
 		name: 'Lynch (2004) mean annual precipitation, from the South African Atlas of Climatology and Agrohydrology',
-		usedFor: 'The map’s MAP grid layer, and the mean annual rainfall a unit’s MAP is proposed from.',
+		usedFor: 'The map’s CCWR MAP layer, and the mean annual rainfall a unit’s MAP is proposed from.',
 		publisher: 'Water Research Commission (WRC): S.D. Lynch, WRC Report 1156/1/04 (2004), in R.E. Schulze (ed.), WRC Report 1489/1/06 (2007), from the Water Research Observatory',
 		licence: ATLAS_LICENCE,
 		licenceUrl: 'https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip',

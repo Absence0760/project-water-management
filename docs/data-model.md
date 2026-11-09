@@ -2476,7 +2476,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   grid, `Atlas-Span-2007`), readable by anyone signed in, written by no app role.
 - **`rain_map_dataset`** and **`rain_map_cell_reference`**
   (`207_rain_map_reference.sql`, [maps.md § MAP grid](./maps.md#map-grid)):
-  the mean annual precipitation grids the Map tab's MAP grid layer draws. A
+  the mean annual precipitation grids the Map tab's WAAS 2007 MAP and CCWR
+  MAP layers draw (one dataset each) and the units' MAP is proposed from. A
   dataset row: `dataset` (primary key, 1–50; `synthetic` for the committed
   fixture), `source`, `version`, `attribution`, `cell_deg`, `origin_lon` and
   `origin_lat` (0 ≤ origin < cell), `cell_count` (the cells the load wrote,

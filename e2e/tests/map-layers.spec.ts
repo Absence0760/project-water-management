@@ -7,9 +7,10 @@
 // and area in words; the distance is checked against the listed points. The
 // River network (#345): its reaches listed biggest first, one picked and
 // added as the project's river, which the list then marks on the map. The
-// hydrological units (each parcel named by its unit), the MAP grid (the
-// synthetic grid's points in view, with their range and source) and the
-// CHIRPS grid (its points in view), each its own toggle in the URL. The A-pan
+// hydrological units (each parcel named by its unit), the WAAS 2007 MAP and
+// the CCWR MAP (each its own grid's points in view, with their range and
+// source, credited while drawn, or plainly not loaded) and the CHIRPS grid
+// (its points in view), each its own toggle in the URL. The A-pan
 // and S-pan grids: two toggles of their own, the year or a month, the A-pan
 // said modelled and the S-pan a cross-check, each credited while drawn. The DEM
 // rivers (the terrain channels drawn outside Delineate): on by default for an
@@ -143,7 +144,37 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await expect(page.getByTestId('map-rivers')).toHaveCount(0);
 });
 
-test('the hydrological units, the MAP grid and the CHIRPS grid: each a toggle in the URL, what they draw said beside the map', async ({ page, owner }) => {
+// The WAAS 2007 MAP and the CCWR MAP ask for their own grids by label (docs/maps.md § MAP grid). The e2e database
+// keeps only the synthetic grid (a real-looking grid would become the unit MAP proposals' default in every spec), as
+// a dev laptop does, so each layer draws the synthetic grid in its place and says so: the real path, no route.
+// Only the credits need a real grid's lines: there, a layer's request is answered with the synthetic grid's cells
+// read from the real server, under the asked grid's lines. Requests for any other label go through untouched.
+const SYNTHETIC_SOURCE =
+	'Invented MAP grid for tests and demos (backend/fixtures/geo/map-grid.synthetic.json): a smooth hill of rainfall over region Z, never real data';
+const WAAS_LINE = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+const LYNCH_SOURCE =
+	'Lynch, S.D. 2004. Development of a raster database of annual, monthly and daily rainfall for southern Africa. WRC Report 1156/1/04; as distributed in Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06';
+const LYNCH_LINE =
+	'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
+const GRID_LINES: Record<string, { source: string; attribution: string }> = {
+	'WAAS-SWCape-2007': { source: WAAS_LINE, attribution: WAAS_LINE },
+	'Lynch-2004': { source: LYNCH_SOURCE, attribution: LYNCH_LINE }
+};
+async function standInMapGrids(page: Page) {
+	await page.route(/\/map\/map-grid\?/, async (route) => {
+		const url = new URL(route.request().url());
+		const asked = url.searchParams.get('dataset');
+		const lines = asked ? GRID_LINES[asked] : undefined;
+		if (!asked || !lines) return route.continue();
+		url.searchParams.set('dataset', 'synthetic');
+		const res = await route.fetch({ url: url.toString() });
+		const body = (await res.json()) as { dataset: Record<string, unknown> | null };
+		if (body.dataset) body.dataset = { ...body.dataset, dataset: asked, ...lines, synthetic: false };
+		await route.fulfill({ response: res, json: body });
+	});
+}
+
+test('the hydrological units, the WAAS 2007 MAP, the CCWR MAP and the CHIRPS grid: each a toggle in the URL, what they draw said beside the map', async ({ page, owner }) => {
 	void owner;
 	await loadSyntheticMapGrid();
 	const project = await seedRunnableProject(page.request, 'Map layers grids');
@@ -163,77 +194,127 @@ test('the hydrological units, the MAP grid and the CHIRPS grid: each a toggle in
 	await page.getByTestId('map-unit-list').getByRole('button', { name: /^Upper farm/ }).click();
 	await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Upper farm');
 
-	// The MAP grid: the synthetic grid's points in the view (the catchment, 21.3–21.4 E, is inside it), their range and source.
+	// Two MAP tick boxes, the WAAS 2007 MAP first, and no other.
 	await openLayers(page);
-	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).check();
-	await expect(page).toHaveURL(/[?&]layers=units%2Cmapgrid(&|$)|[?&]layers=units,mapgrid(&|$)/);
+	await expect(layers(page).getByRole('checkbox', { name: /MAP/ })).toHaveCount(2);
+	await expect(layers(page).getByTestId('map-layer-mapgrid')).toHaveAccessibleName('WAAS 2007 MAP');
+	await expect(layers(page).getByTestId('map-layer-ccwrgrid')).toHaveAccessibleName('CCWR MAP');
+
+	// The WAAS 2007 MAP: still `mapgrid` in the URL. With no WAAS-SWCape-2007 on this server, the synthetic grid's points
+	// in the view (the catchment, 21.3–21.4 E) in its place, their range, said synthetic and standing in, and credited nowhere.
+	await layers(page).getByRole('checkbox', { name: 'WAAS 2007 MAP' }).check();
+	await expect(page).toHaveURL(/[?&]layers=units(%2C|,)mapgrid(&|$)/);
 	await expect(page.getByTestId('map-mapgrid-summary')).toHaveText(
 		// The e2e site has no glyphs, so the values aren't written on the map and the box says so.
 		/^[\d\s,]+ points in view from synthetic \(0\.01° cells\): \d+ mm to \d+ mm\. Synthetic test data, never real rainfall\. The map has no fonts for labels here, so it shows the points without their values\.$/
 	);
-	await expect(page.getByTestId('map-mapgrid-source')).toContainText('Source: Invented MAP grid for tests and demos');
-	await expect(status).toContainText(/MAP grid points shown\./);
+	await expect(page.getByTestId('map-mapgrid-source')).toHaveText(
+		`No WAAS 2007 MAP on this server; showing the synthetic test grid in its place. Mean annual precipitation, mm a year. Source: ${SYNTHETIC_SOURCE}`
+	);
+	await expect(status).toContainText(/[\d\s,]+ synthetic test points shown\./);
+
+	// The CCWR MAP beside it: its own box, both on at once, the synthetic grid standing in for it too.
+	await layers(page).getByRole('checkbox', { name: 'CCWR MAP' }).check();
+	await expect(page).toHaveURL(/[?&]layers=units(%2C|,)mapgrid(%2C|,)ccwrgrid(&|$)/);
+	await expect(page.getByTestId('map-ccwrgrid-summary')).toHaveText(/^[\d\s,]+ points in view from synthetic \(0\.01° cells\): \d+ mm to \d+ mm\. Synthetic test data, never real rainfall\./);
+	await expect(page.getByTestId('map-ccwrgrid-source')).toHaveText(
+		`No CCWR MAP on this server; showing the synthetic test grid in its place. Mean annual precipitation, mm a year. Source: ${SYNTHETIC_SOURCE}`
+	);
+	await expect(page.getByTestId('map-mapgrid-summary')).toBeVisible();
+	await expect(status).toContainText(/synthetic test points shown\. [\d\s,]+ synthetic test points shown\./);
+	// The synthetic grid credits nothing: its warning says what it is.
+	await expect(page.locator('.maplibregl-ctrl-attrib').getByRole('link', { name: /^MAP grid:/ })).toHaveCount(0);
 
 	// The CHIRPS grid: its 0.05° cells' centres in view, from the grid alone.
 	await layers(page).getByRole('checkbox', { name: 'CHIRPS grid' }).check();
-	await expect(page).toHaveURL(/layers=units(%2C|,)mapgrid(%2C|,)chirps(&|$)/);
+	await expect(page).toHaveURL(/layers=units(%2C|,)mapgrid(%2C|,)ccwrgrid(%2C|,)chirps(&|$)/);
 	await expect(page.getByTestId('map-chirps-summary')).toHaveText(/^[\d\s,]+ CHIRPS v3 grid points? in view, each the centre of a 0\.05° cell/);
-	// The three and the DEM rivers, on by default.
-	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (4 on)');
+	// The four and the DEM rivers, on by default.
+	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (5 on)');
 
 	// Back turns the last one off; the others stay.
 	await page.goBack();
-	await expect(page).toHaveURL(/layers=units(%2C|,)mapgrid(&|$)/);
+	await expect(page).toHaveURL(/layers=units(%2C|,)mapgrid(%2C|,)ccwrgrid(&|$)/);
 	await expect(page.getByTestId('map-chirps')).toHaveCount(0);
 	await expect(page.getByTestId('map-mapgrid-summary')).toBeVisible();
+	await expect(page.getByTestId('map-ccwrgrid-summary')).toBeVisible();
+	// The WAAS 2007 MAP off: the CCWR MAP stays.
+	await layers(page).getByRole('checkbox', { name: 'WAAS 2007 MAP' }).uncheck();
+	await expect(page).toHaveURL(/layers=units(%2C|,)ccwrgrid(&|$)/);
+	await expect(page.getByTestId('map-mapgrid')).toHaveCount(0);
+	await expect(page.getByTestId('map-ccwrgrid-summary')).toBeVisible();
 });
 
-// A grid stored with the Southwestern Cape surface's credit line (issue #560) is credited on the map while its points
-// are drawn. The e2e database keeps only the synthetic grid (a real-looking grid would become every spec's default),
-// so the answer is the synthetic grid's with that grid's lines put in its dataset row: what the map does with it is real.
-test('the MAP grid credits the Southwestern Cape surface on the map while its points are drawn', async ({ page, owner }) => {
+// A server with no MAP grid at all, not even the synthetic one (production before a load): the layer says so by its
+// own name, in plain words. The e2e database keeps the synthetic grid once any spec has loaded it, so this answer
+// (the route's none loaded, rainMap.db.test.ts's on the server side) is stood in by a route.
+test('the CCWR MAP says plainly when no grid is loaded, and credits nothing', async ({ page, owner }) => {
+	void owner;
+	await page.route(/\/map\/map-grid\?/, (route) =>
+		route.fulfill({ json: { bbox: [21, -34, 22, -33], dataset: null, datasets: [], cells: [], tooDense: false, max: 5000 } })
+	);
+	const project = await seedRunnableProject(page.request, 'Map grid not loaded');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+	await mapReady(page);
+	await openLayers(page);
+	await layers(page).getByRole('checkbox', { name: 'CCWR MAP' }).check();
+	await expect(page.getByTestId('map-ccwrgrid-none')).toHaveText('There’s no CCWR MAP on this server yet, so there is nothing to draw.');
+	await expect(layers(page).getByRole('status')).toHaveText('No CCWR MAP is loaded.');
+	await expect(page.locator('.maplibregl-ctrl-attrib').getByRole('link', { name: /^MAP grid:/ })).toHaveCount(0);
+});
+
+test('the MAP grids credit their sources on the map while their points are drawn, both while both are on', async ({ page, owner }) => {
 	void owner;
 	await loadSyntheticMapGrid();
-	const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
-	await page.route(/\/map\/map-grid\?/, async (route) => {
-		const res = await route.fetch();
-		const body = (await res.json()) as { dataset: Record<string, unknown> | null };
-		if (body.dataset) body.dataset = { ...body.dataset, dataset: 'WAAS-SWCape-2007', source: waas, attribution: waas, synthetic: false };
-		await route.fulfill({ response: res, json: body });
-	});
+	await standInMapGrids(page);
 	const project = await seedRunnableProject(page.request, 'Map grid credit');
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 	await mapReady(page);
-	// Short on the map, its link opening the authors' line whole on the data sources page (legal.spec.ts checks that page).
-	const credit = page.locator('.maplibregl-ctrl-attrib').getByRole('link', { name: 'MAP grid: WAAS (2007), Beuster Clarke & Associates', exact: true });
-	await expect(credit).toHaveCount(0);
+	// Short on the map, each link opening its line whole on the data sources page (legal.spec.ts checks that page).
+	const attrib = page.locator('.maplibregl-ctrl-attrib');
+	const waasCredit = attrib.getByRole('link', { name: 'MAP grid: WAAS (2007), Beuster Clarke & Associates', exact: true });
+	const lynchCredit = attrib.getByRole('link', { name: 'MAP grid: Lynch (2004), WRC Atlas', exact: true });
+	await expect(waasCredit).toHaveCount(0);
+	await expect(lynchCredit).toHaveCount(0);
 
 	await openLayers(page);
-	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).check();
+	await layers(page).getByRole('checkbox', { name: 'WAAS 2007 MAP' }).check();
 	await expect(page.getByTestId('map-mapgrid-summary')).toContainText('points in view from WAAS-SWCape-2007');
-	await expect(page.getByTestId('map-mapgrid-source')).toHaveText(`Mean annual precipitation, mm a year. Source: ${waas}`);
-	await expect(credit).toHaveAttribute('href', '/data-sources#waas-map');
+	await expect(page.getByTestId('map-mapgrid-source')).toHaveText(`Mean annual precipitation, mm a year. Source: ${WAAS_LINE}`);
+	await expect(waasCredit).toHaveAttribute('href', '/data-sources#waas-map');
+	await expect(lynchCredit).toHaveCount(0);
+	// The CCWR MAP on too: both credited, each once.
+	await layers(page).getByRole('checkbox', { name: 'CCWR MAP' }).check();
+	await expect(page.getByTestId('map-ccwrgrid-summary')).toContainText('points in view from Lynch-2004');
+	await expect(lynchCredit).toHaveAttribute('href', '/data-sources#lynch-map');
+	await expect(waasCredit).toHaveAttribute('href', '/data-sources#waas-map');
+	await expect(attrib.getByRole('link', { name: /^MAP grid:/ })).toHaveCount(2);
 
 	// The attribution wraps beside the map's bottom-left buttons, never under them (PR #570: the whole line ran under
-	// Show everything and Key at 1280 px as on a phone), wide and at phone width.
+	// Show everything and Key at 1280 px as on a phone), wide and at phone width, with both credits on it.
 	for (const width of [1280, 390]) {
 		await page.setViewportSize({ width, height: 844 });
-		await expect(credit).toBeVisible();
+		await expect(waasCredit).toBeVisible();
+		await expect(lynchCredit).toBeVisible();
 		await expect.poll(() => footOverlap(page), { message: `at ${width} px` }).toEqual([]);
 	}
-	// On the phone the Key opens as a panel over the map's corner: the credit moves clear of that too.
+	// On the phone the Key opens as a panel over the map's corner: the credits move clear of that too.
 	await openKey(page);
 	await expect(page.locator('.key-panel')).toBeVisible();
-	await expect(credit).toBeVisible();
+	await expect(waasCredit).toBeVisible();
 	await expect.poll(() => footOverlap(page), { message: 'with the Key open at 390 px' }).toEqual([]);
 	await page.getByTestId('map-key-toggle').click();
 	await expect(page.getByTestId('map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
 
-	// Off again: the credit goes with the points (Layers reopened: the phone width moved its panel).
+	// Each off again: its credit goes with its points, the other's stays (Layers reopened: the phone width moved its panel).
 	await openLayers(page);
-	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).uncheck();
-	await expect(credit).toHaveCount(0);
+	await layers(page).getByRole('checkbox', { name: 'WAAS 2007 MAP' }).uncheck();
+	await expect(waasCredit).toHaveCount(0);
+	await expect(lynchCredit).toBeVisible();
+	await layers(page).getByRole('checkbox', { name: 'CCWR MAP' }).uncheck();
+	await expect(lynchCredit).toHaveCount(0);
 });
 
 // The A-pan and S-pan grids (docs/maps.md § A-pan and S-pan grids). The e2e database keeps only the synthetic
@@ -251,7 +332,7 @@ test('the A-pan and S-pan grids: two toggles of their own, the year or a month, 
 	// None loaded: said plainly, nothing drawn.
 	await openLayers(page);
 	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).check();
-	await expect(page.getByTestId('map-apangrid-none')).toContainText('No A-pan grid is loaded, so there is nothing to draw');
+	await expect(page.getByTestId('map-apangrid-none')).toHaveText('There’s no A-pan grid on this server yet, so there is nothing to draw.');
 	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).uncheck();
 	await expect(page).not.toHaveURL(/apangrid/);
 

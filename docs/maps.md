@@ -3507,35 +3507,81 @@ unit's area here is what puts it on that map too.
 
 ## MAP grid
 
-The Map tab's **MAP grid** layer (`layers=mapgrid`) draws a mean annual
-precipitation grid's points in the map's view, each a dot coloured on a
-light-to-dark blue ramp by its MAP (`mapStyle.ts` `MAP_RAMP`, ringed in the
-halo colour so both ends read in either theme) and labelled with its value
-in whole mm ("812 mm" under the dot; labels thin themselves where they
-would overlap each other, and need glyphs). MapLibre never thins a label
+The Map tab draws two mean annual precipitation grids, each its own layer
+and tick box in the Layers box (`mapLayers.ts` `MAP_GRIDS`), as the A-pan and
+S-pan grids are: the **WAAS 2007 MAP** (`layers=mapgrid`, dataset
+`WAAS-SWCape-2007`, the Southwestern Cape surface) and, under it, the **CCWR
+MAP** (`layers=ccwrgrid`, dataset `Lynch-2004`, the Lynch (2004) national
+grid the WRC Atlas distributes). The WAAS 2007 MAP kept the id the single
+"MAP grid" layer had before the CCWR MAP came beside it (2026-11-09), so a
+view shared or saved with `layers=mapgrid` opens the same grid. Each layer
+draws its grid's points in the map's view, each a dot coloured on the one
+light-to-dark blue ramp by its MAP (`mapStyle.ts` `MAP_RAMP`, so both grids'
+values read on one key) and labelled with its value in whole mm ("812 mm";
+labels thin themselves where they would overlap each other, and need
+glyphs). The WAAS 2007 MAP's dots are ringed in the halo colour with the
+value under them; the CCWR MAP's, the same size, are ringed in the text
+colour (a bolder ring) with the value to their left (`mapGridLayers`), so
+with both on each dot says which grid it is and no label takes the other
+grid's side, nor the A-pan grid's (above) or the S-pan grid's (right): the
+CCWR MAP lies on the Atlas's 1′ cells as those two do, its dot the
+innermost of their rings. Both on at once is a comparison, not one field:
+the two surfaces can differ by tens of percent in mountain catchments. MapLibre never thins a label
 against the dots, so the label layer starts at the zoom where one of the
 drawn grid's cells is 31 px tall (`mapGridLabelMinZoom`, from the grid's
 cell size, at the equator: z11.1 for 0.01°, z10.4 for 1′, z14.6 for
 100 m) and each label fits in the gap under its own point; further out the
-map shows the dots alone, read by their colour (PR #579). The Layers box
-says how many points are in view, from which grid, at what cell size, and
-their range ("396 points in view from synthetic (0.01° cells): 449 mm to
-799 mm."), then **Synthetic test data, never real rainfall.** for the
-repo's grid, then "Each point’s value shows under it once you zoom in far
-enough for it to clear the next row of points." (or, with no fonts, that
-the points show without their values), then the grid's source line.
+map shows the dots alone, read by their colour (PR #579). Under each tick
+box the Layers box says, by the layer's own name, how many points are in
+view, from which grid, at what cell size, and their range ("396 points in
+view from Lynch-2004 (0.017° cells): 449 mm to 799 mm."), then
+**Synthetic test data, never real rainfall.** for a synthetic grid, then
+where the values show ("Each point’s value shows under it once you zoom in
+far enough for it to clear the next row of points.", "to its left (the dots
+with the bolder ring)" for the CCWR MAP; or, with no fonts, that the points
+show without their values), then the grid's source line. Its loading, zoom
+in, error (with **Try again**), too dense and empty lines and its line in
+the box's status region name the layer too ("Loading the CCWR MAP…").
 
-- **One grid at a time.** With more than one loaded, a **Grid** picker
-  chooses; the default is a real grid before the synthetic one, the finest
-  first (`rainMapDatasets`). A view never mixes two grids: a 100 m
-  provincial surface and the 1.7 km national one can differ by tens of
-  percent in mountain catchments, where the national grid's regression has
-  few stations to lean on, so a map of both would read as one field that
-  isn't. Check whichever grid is used against the catchment's own gauges.
+- **Each layer is one grid, pinned.** Each asks for its own dataset by
+  label and never another, so there is no grid picker; a view never mixes
+  two grids in one layer: a 100 m provincial surface and the 1.7 km
+  national one can differ by tens of percent in mountain catchments, where
+  the national grid's regression has few stations to lean on. Check
+  whichever grid is used against the catchment's own gauges.
+- **A grid that isn't loaded is said, not an error.** The server answers a
+  label it hasn't loaded as none loaded (`dataset: null`, the loaded ones
+  still listed, each with its `synthetic` flag).
+- **Locally, the synthetic grid stands in.** A fresh clone or a dev laptop
+  has only the committed synthetic grid (`pnpm run setup` loads it), so
+  where a layer's own grid isn't loaded but the synthetic one is, the layer
+  asks again for the synthetic grid and draws it in its place
+  (`mapGridLayer.svelte.ts` `standIn`, client side: the route stays one
+  grid per answer, and its `dataset` names the grid the cells are from).
+  The box says so: its summary names `synthetic` and **Synthetic test
+  data, never real rainfall.**, its source line starts "No WAAS 2007 MAP on
+  this server; showing the synthetic test grid in its place.", its status
+  line reads "396 synthetic test points shown.", never counting them as
+  the layer's own, and the map credits nothing. Only the synthetic grid ever stands
+  in, never another real grid (a WAAS 2007 MAP beside a loaded Lynch-2004
+  draws nothing). Production never has it: a production load refuses the
+  label `synthetic` (`geo/referenceLoad.ts`, and the release gate's
+  `scripts/release/map-data-gates.mjs`) and takes only the two allowed
+  labels, so there a layer whose grid isn't loaded says "There’s no CCWR
+  MAP on this server yet, so there is nothing to draw." in plain words, no
+  command (issue #586 C5). Any grid imported locally under another label is
+  never drawn on the map; it still serves the Settings proposals of each
+  unit's MAP ([§ MAP for each unit](#map-for-each-unit)), which pick from
+  every loaded grid. To see a layer draw its own grid locally, import one
+  under its label (`pnpm import:map-grid <grid.asc> --dataset Lynch-2004
+  --source "…"`). The e2e spec draws both layers through the synthetic
+  stand-in, and answers the layer's request with the synthetic grid's cells
+  under a real grid's lines only to check the map's credits
+  (`e2e/tests/map-layers.spec.ts`).
 - **The view decides what is asked.** `GET …/map/map-grid?bbox=&dataset=`
   ([api.md § Catchment map](./api.md#catchment-map)) with the view snapped
   out to 0.02° (`mapGridViewBbox`), at most 2° a side; past that, "Zoom in
-  to see the MAP grid". A view holding more than 5 000 of the grid's points
+  to see the WAAS 2007 MAP (to about 2° across)". A view holding more than 5 000 of the grid's points
   (counted from the grid before any read) comes back `tooDense`: "This view
   holds more than 5 000 of the grid’s points: zoom in to see them." A 100 m
   grid shows from about a 7 km view; the national grid's points across a
@@ -3571,13 +3617,13 @@ the points show without their values), then the grid's source line.
   its credit. Any other surface stays blocked: a load naming another label
   is refused with the allowed list. Locally any grid loads (`pnpm
   import:map-grid`), never committed.
-- **Credit.** While the layer draws the Southwestern Cape surface's points
+- **Credit.** While a layer draws the Southwestern Cape surface's points
   (a grid whose attribution is its credit line), the map's attribution
   control lists the short "MAP grid: WAAS (2007), Beuster Clarke &
   Associates", linking to the authors' line whole on
-  `/data-sources#waas-map`, and while it draws the Lynch grid's, "MAP grid:
-  Lynch (2004), WRC Atlas", linking to `/data-sources#lynch-map`
-  ([§ Credits on the map](#credits-on-the-map));
+  `/data-sources#waas-map`, and while one draws the Lynch grid's, "MAP grid:
+  Lynch (2004), WRC Atlas", linking to `/data-sources#lynch-map`; with both
+  on and drawing, both ([§ Credits on the map](#credits-on-the-map));
   the Layers box's source line gives the whole line too, and
   a grid whose attribution differs from its source adds "Credit: …".
 - **Production file.** `pnpm import:map-grid <grid.asc> --dataset
@@ -3676,10 +3722,10 @@ units' `mapMm` / `mapSource` only when an editor uses it.
 ## A-pan and S-pan grids
 
 The Map tab's **A-pan grid** and **S-pan grid** layers (`layers=apangrid`,
-`layers=spangrid`, beside **MAP grid**, each toggled on its own) draw one
+`layers=spangrid`, beside the **WAAS 2007 MAP** and the **CCWR MAP**, each toggled on its own) draw one
 loaded evaporation grid of their kind ([§ The evaporation
 grid](#the-evaporation-grid): `evaporation_dataset.kind` `apan` or `span`)
-the way the MAP grid layer draws its grid ([§ MAP grid](#map-grid)): a dot
+the way the MAP grid layers draw theirs ([§ MAP grid](#map-grid)): a dot
 per cell centre in view, coloured by its value, labelled with it in whole mm
 from the zoom where a label clears the next row (`mapGridLabelMinZoom`, from
 the grid's cell size), with the same view snapping, caps and messages.
@@ -3715,8 +3761,9 @@ the grid's cell size), with the same view snapping, caps and messages.
 - **One grid at a time.** With more than one of a kind loaded, a **Grid**
   picker chooses; the default is the proposals' (a real one before the
   synthetic, then the newest load).
-- **None loaded.** The toggle is offered either way; turned on, it says "No
-  A-pan grid is loaded, so there is nothing to draw" (and how to load one).
+- **None loaded.** The toggle is offered either way; turned on, it says "There’s
+  no A-pan grid on this server yet, so there is nothing to draw" (no
+  command: that is the operator's, below; issue #586 C5).
   The repo ships no A-pan or S-pan grid that setup loads: locally, load the
   invented monthly grids with `pnpm import:evaporation --apan-asc
   backend/fixtures/geo/apan-asc/apan-{01..12}.synthetic.asc --dataset
@@ -3815,8 +3862,8 @@ to, the fallback and the owner, beside the rain and flow feeds' sources.
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 / 2022 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020, 2022 (released May 2024) | Every two years, irregular | **Blocked.** Built for its orchard and vine classes (issue #604 R5-D, § Orchards and vines from SANLC: kind `crop-types`, synthetic fixture only) and refused in production. To unblock: DFFE's written terms for 2018/2022 allowing derivatives in a commercial service (the EGIS terms, issue #618 step 8b), recorded here with the date |
-| Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the MAP grid layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unclear.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects. **The operator's decision (2026-11-08): use it in production, accepting that risk**, recorded in [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08) | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", stored as the grid's attribution, shown with the layer and on `/data-sources#lynch-map`; the map's credits show the short "MAP grid: Lynch (2004), WRC Atlas" linking to it ([§ Credits on the map](#credits-on-the-map)) | the 2008 Atlas zip | none (a 2004 surface) | allowed (the operator's decision, 2026-11-08): production loads it as dataset `Lynch-2004` only, stored with the citation above whatever the file says (`geo/referenceLoad.ts`); never committed |
-| Mean annual rainfall surface for the Southwestern Cape (WAAS, about 100 m): the MAP grid layer ([§ MAP grid](#map-grid)) and MAP from the grid ([§ MAP for each unit](#map-for-each-unit)) | Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now DWS), March 2007; a copy received from the client | **Terms not stated** (read 2026-10-23): the copy's ESRI `metadata.xml` still has the ArcGIS template text in its access and use constraints. **The operator's decision (2026-10-23): use it in production**, recorded in [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23) | "Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.", stored as the grid's source and attribution, shown whole with the layer and on `/data-sources#waas-map`; the map's credits show the short "MAP grid: WAAS (2007), Beuster Clarke & Associates" linking to it ([§ Credits on the map](#credits-on-the-map)) | Version 1.1 (March 2007) | none (a 2007 surface) | allowed (the operator's decision, 2026-10-23): production loads it as dataset `WAAS-SWCape-2007` only, clipped with `--bbox` to the client's area, stored with the credit line above whatever the file says (`geo/referenceLoad.ts`); never committed |
+| Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the CCWR MAP layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unclear.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects. **The operator's decision (2026-11-08): use it in production, accepting that risk**, recorded in [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08) | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", stored as the grid's attribution, shown with the layer and on `/data-sources#lynch-map`; the map's credits show the short "MAP grid: Lynch (2004), WRC Atlas" linking to it ([§ Credits on the map](#credits-on-the-map)) | the 2008 Atlas zip | none (a 2004 surface) | allowed (the operator's decision, 2026-11-08): production loads it as dataset `Lynch-2004` only, stored with the citation above whatever the file says (`geo/referenceLoad.ts`); never committed |
+| Mean annual rainfall surface for the Southwestern Cape (WAAS, about 100 m): the WAAS 2007 MAP layer ([§ MAP grid](#map-grid)) and MAP from the grid ([§ MAP for each unit](#map-for-each-unit)) | Beuster Clarke & Associates, for the Western Cape Water Availability Assessment Study (WAAS) of the Department of Water Affairs and Forestry (now DWS), March 2007; a copy received from the client | **Terms not stated** (read 2026-10-23): the copy's ESRI `metadata.xml` still has the ArcGIS template text in its access and use constraints. **The operator's decision (2026-10-23): use it in production**, recorded in [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23) | "Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.", stored as the grid's source and attribution, shown whole with the layer and on `/data-sources#waas-map`; the map's credits show the short "MAP grid: WAAS (2007), Beuster Clarke & Associates" linking to it ([§ Credits on the map](#credits-on-the-map)) | Version 1.1 (March 2007) | none (a 2007 surface) | allowed (the operator's decision, 2026-10-23): production loads it as dataset `WAAS-SWCape-2007` only, clipped with `--bbox` to the client's area, stored with the credit line above whatever the file says (`geo/referenceLoad.ts`); never committed |
 | Other provincial MAP surfaces (about 100 m, another water availability study's) | the study's client or consultant, per surface | **Unconfirmed**: each is a project deliverable whose reuse terms are its owner's | as its owner asks | per surface | none | **Blocked: licence unconfirmed.** Loaded locally only, by the operator who holds the file; never committed; a production load refuses any label but the allowed ones |
 | Synthetic MAP grid (`backend/fixtures/geo/map-grid.synthetic.json`) | this repo (invented rainfall over region Z) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm run setup`) |
 | dPET, the daily files of hPET (hourly potential evapotranspiration, FAO-56 Penman-Monteith, 0.1°, 1981 onwards): the evaporation proposals' reference ET ([§ Evaporation from the map](#evaporation-from-the-map)) | University of Bristol (data.bris); Singer, M.B. et al. (2021), *Sci Data* 8, 224 ([doi:10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp](https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp)) | **CC BY 4.0**: "Licence: Creative Commons Attribution 4.0" on the dataset page ([data.bris.ac.uk](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp), read 2026-10-02); commercial use allowed with attribution. Its README: "This dataset contains modified Copernicus Climate Change Service information", from ERA5-Land, itself CC BY 4.0 (next row) | "hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it." Stored on the dataset row, shown under the panel's Source and method, and on the Data sources and credits page (`/data-sources#dpet`) | v3 (yearly files, one added each January) | yearly | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
@@ -3902,8 +3949,8 @@ also its section on the **Data sources and credits** page:
 | --- | --- | --- |
 | `hydrorivers` | the River network layer draws HydroRIVERS reaches, or a river added from one is drawn (`creditedFeature`) | "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund, Inc. (2006-2022), used under license" |
 | `jrc-water` | an outline traced from JRC Global Surface Water is drawn (`jrcCreditedFeature`: its description carries the archive's "Source: EC JRC/Google", which tracing writes, [§ Assisted drawing](#assisted-drawing); a trace from the synthetic raster names no source and is credited nothing) | "Dam outline: traced from JRC Global Surface Water (Source: EC JRC/Google), modified": JRC's attribution for a published map, and that the data was modified (Copernicus Delegated Regulation 1159/2013 Art. 8(1) and (3)) |
-| `waas-map` | the MAP grid layer draws points of a grid whose attribution is the Southwestern Cape surface's credit line (`mapCredits`' `mapGridAttribution`, from the drawn grid's dataset row; [§ MAP grid](#map-grid)) | "MAP grid: WAAS (2007), Beuster Clarke & Associates": the study and its authors, short, linking to their credit line whole on the data sources page ("Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1."; terms not stated, the operator's decision, [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23)). The whole line wrapped along the map's foot under its Show everything and Key buttons, at 1280 px as on a phone (PR #570) |
-| `lynch-map` | the MAP grid layer draws points of a grid whose attribution is the Lynch (2004) grid's citation (`mapGridAttribution`, as above) | "MAP grid: Lynch (2004), WRC Atlas", linking to the Atlas's citation whole on the data sources page ("Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2"; the operator's decision, [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08)) |
+| `waas-map` | a MAP grid layer (the WAAS 2007 MAP) draws points of a grid whose attribution is the Southwestern Cape surface's credit line (`mapCredits`' `mapGridAttributions`, each MAP grid layer's drawn grid's, from its dataset row; [§ MAP grid](#map-grid)) | "MAP grid: WAAS (2007), Beuster Clarke & Associates": the study and its authors, short, linking to their credit line whole on the data sources page ("Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1."; terms not stated, the operator's decision, [legal/map-data-licences.md § 3.3b](./legal/map-data-licences.md#33b-the-southwestern-cape-map-surface-waas-the-operators-decision-added-2026-10-23)). The whole line wrapped along the map's foot under its Show everything and Key buttons, at 1280 px as on a phone (PR #570) |
+| `lynch-map` | a MAP grid layer (the CCWR MAP) draws points of a grid whose attribution is the Lynch (2004) grid's citation (`mapGridAttributions`, as above; with the WAAS 2007 MAP drawing too, both credits show) | "MAP grid: Lynch (2004), WRC Atlas", linking to the Atlas's citation whole on the data sources page ("Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2"; the operator's decision, [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08)) |
 | `atlas-apan` | the A-pan grid layer draws points of a grid whose attribution is the WRC Atlas A-pan grid's citation (`mapCredits`' `evaporationAttributions`; [§ A-pan and S-pan grids](#a-pan-and-s-pan-grids)) | "A-pan grid: WRC Atlas (modelled)", linking to the citation whole on `/data-sources#atlas-apan` ("Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. …"; the operator's decision, [legal/map-data-licences.md § 3.3e](./legal/map-data-licences.md#33e-the-wrc-atlass-map-and-a-pan-grids-the-operators-decision-added-2026-11-08)) |
 | `atlas-span` | the S-pan grid layer draws points of a grid whose attribution is the CCWR S-pan grid's line (as above) | "S-pan grid: WRC Atlas", linking to its line whole on `/data-sources#atlas-span` |
 

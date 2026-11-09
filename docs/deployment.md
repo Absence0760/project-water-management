@@ -3862,7 +3862,7 @@ gh workflow run load-reference.yml -f kind=map-grid -f key=reference/map-grid/wa
 ```
 
 Approve it in the `production` environment. Check on the Map tab of the
-client's project: **MAP grid** on lists "WAAS-SWCape-2007" with its source
+client's project: **WAAS 2007 MAP** on lists "WAAS-SWCape-2007" with its source
 line (the authors' credit line whole), and the map's credits show "MAP
 grid: WAAS (2007), Beuster Clarke & Associates", linking to
 `/data-sources#waas-map`. Then Settings → Flow generation, **MAP from the grid** proposes each unit's MAP from it, beside the typed values,
@@ -3936,7 +3936,7 @@ gh workflow run load-reference.yml -f kind=evaporation -f key=reference/evaporat
 gh workflow run load-reference.yml -f kind=evaporation -f key=reference/evaporation/atlas-span-2007.json.gz -f sha256=<hex> -f dataset=Atlas-Span-2007
 ```
 
-Approve each in the `production` environment. Check: **MAP grid** lists
+Approve each in the `production` environment. Check: **CCWR MAP** lists
 "Lynch-2004" and the map's credits show "MAP grid: Lynch (2004), WRC
 Atlas", linking to `/data-sources#lynch-map`; Calibration → Evaporation
 from the map offers Atlas-Apan-2007, and its proposal says "modelled A-pan

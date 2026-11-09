@@ -678,7 +678,8 @@ pnpm import:evaporation     # the synthetic evaporation grid (pnpm run setup run
 pnpm import:evaporation-stations  # the synthetic DWS evaporation stations (pnpm run setup runs it): what Calibration → Evaporation stations proposes as the A-pan
                             # or your own DWS reply: <stations.csv> --records <dir> --dataset <label> --source "<reply reference, date>", your own
                             # database only (DWS's permission doesn't cover evaporation records yet; maps.md § Evaporation stations)
-pnpm import:map-grid        # the synthetic MAP grid (pnpm run setup runs it): what Map → Layers → MAP grid draws
+pnpm import:map-grid        # the synthetic MAP grid (pnpm run setup runs it): what Settings' MAP from the grid reads; Map → Layers' WAAS 2007 MAP
+                            # and CCWR MAP draw it in their place, said synthetic, until one is imported under its label (--dataset WAAS-SWCape-2007, Lynch-2004)
                             # or a real one: <grid.asc> --dataset <label> --source "…" [--bbox w,s,e,n]; add --out <file.json.gz> to write
                             # the cut grid for a production load instead (deployment.md § Reference datasets; maps.md § MAP grid)
 pnpm import:gazetteer       # the synthetic place and farm names (pnpm run setup runs it): what the Map's search finds after the map's own layers

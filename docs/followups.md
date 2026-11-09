@@ -5314,7 +5314,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
 - [ ] **Load the Southwestern Cape MAP surface in production** (operator;
       issue #560; deployment.md § Reference datasets). The code allows it
       as dataset `WAAS-SWCape-2007`; nothing is loaded yet, so production's
-      MAP grid layer and *MAP from the grid* have no grid. Steps: cut the
+      WAAS 2007 MAP layer and *MAP from the grid* have no grid. Steps: cut the
       grid to the client's area with `pnpm import:map-grid … --bbox … --out`,
       upload it to the reference bucket, run `load-reference.yml` with
       `kind=map-grid`. Then, in the app, check the typed unit MAPs against it

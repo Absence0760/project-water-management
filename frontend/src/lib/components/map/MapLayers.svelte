@@ -18,9 +18,11 @@
 	editor when the server has an elevation model.
 	Hydrological units (`layers=units`, docs/maps.md § Hydrological units
 	layer) outlines each unit's polygon and writes its name on it, listed here
-	too; the MAP grid (`layers=mapgrid`, § MAP grid) draws one loaded mean
-	annual precipitation grid's points in view, each labelled with its MAP,
-	with a dataset picker when more than one is loaded; the A-pan and S-pan
+	too; the WAAS 2007 MAP (`layers=mapgrid`) and the CCWR MAP
+	(`layers=ccwrgrid`, § MAP grid), each its own toggle, draw that one mean
+	annual precipitation grid's points in view, each labelled with its MAP (the
+	synthetic test grid in its place where only that is loaded, saying so), or
+	say it isn't loaded; the A-pan and S-pan
 	grids (`layers=apangrid`, `spangrid`, § A-pan and S-pan grids) draw one
 	loaded evaporation grid of each kind the same way, the year's total or a
 	month picked here, the A-pan grid said to be modelled where it is and the
@@ -42,6 +44,7 @@
 		type ChirpsCell,
 		MAP_GRID_BBOX_MAX_DEG,
 		DEM_GRID_BBOX_MAX_DEG,
+		type MapGridKind,
 		type MapLayer,
 		layersStatus,
 		mapLabel,
@@ -58,6 +61,7 @@
 	} from './mapLayers';
 	import { channelColour, chirpsColour, DEM_RAMP, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
 	import type { MapGridLayer } from './mapGridLayer.svelte';
+	import type { MapGridDataset } from '#lib/api/types.js';
 	import type { EvaporationGrids } from './EvaporationGridToggles.svelte';
 	import type { DemGridLayer } from './demGridLayer.svelte';
 	import { AREA_FILL_STEP, type AreaFill } from './areaFill.svelte';
@@ -74,7 +78,7 @@
 		onshowfeature,
 		relief = null,
 		units = null,
-		mapGrid = null,
+		mapGrids = null,
 		evaporationGrids = null,
 		chirps = null,
 		labels = true,
@@ -95,8 +99,8 @@
 		relief?: { on: boolean; failed: boolean } | null;
 		/** The Hydrological units layer: whether it is on, and the units it labels. Null: no toggle. */
 		units?: { on: boolean; labels: readonly UnitLabel[] } | null;
-		/** The MAP grid layer's state. Null: no toggle. */
-		mapGrid?: MapGridLayer | null;
+		/** The MAP grid layers' states (the WAAS 2007 MAP and the CCWR MAP), each its own toggle. Null: no toggles. */
+		mapGrids?: readonly MapGridLayer[] | null;
 		/** The A-pan and S-pan grid layers' states, each its own toggle, and their toggles' component (loaded apart from the tab, MapTab); null: no toggles (yet); 'failed': their chunk didn't load. */
 		evaporationGrids?: EvaporationGrids | 'failed' | null;
 		/** The CHIRPS grid layer: whether it is on, and the cells in view (null: the view is too wide). Null: no toggle. */
@@ -148,17 +152,19 @@
 	const pickedReach = $derived(rivers.pickedReach);
 	const pickedFeature = $derived(pickedReach ? rivers.featureFor(pickedReach) : null);
 
-	const mg = $derived(mapGrid?.answer ?? null);
-	const mgRange = $derived(mapGrid?.range ?? null);
-	/** The grid's credit, beside its source when it says more (never the synthetic grid's: its warning says it). */
-	const mgCredit = $derived(mg?.dataset && !mg.dataset.synthetic && mg.dataset.attribution && mg.dataset.attribution !== mg.dataset.source ? mg.dataset.attribution : null);
 	const degrees = (d: number) => fmtNum(d, d < 0.01 ? 4 : 3, true);
-	const mgSummary = $derived.by(() => {
-		if (!mg?.dataset) return '';
-		const n = mg.cells.length;
-		const r = mgRange ? `: ${mapLabel(mgRange[0])} to ${mapLabel(mgRange[1])}` : '';
-		return `${fmtNum(n, 0, true)} ${n === 1 ? 'point' : 'points'} in view from ${mg.dataset.dataset} (${degrees(mg.dataset.cellDeg)}° cells)${r}.`;
-	});
+	/** A MAP grid's credit, beside its source when it says more (never the synthetic grid's: its warning says it). */
+	const gridCredit = (d: MapGridDataset) => (!d.synthetic && d.attribution && d.attribution !== d.source ? d.attribution : null);
+	/** A MAP grid's summary: how many points from which grid, its cells, and their range. */
+	function gridSummary(layer: MapGridLayer): string {
+		const a = layer.answer;
+		if (!a?.dataset) return '';
+		const n = a.cells.length;
+		const r = layer.range ? `: ${mapLabel(layer.range[0])} to ${mapLabel(layer.range[1])}` : '';
+		return `${fmtNum(n, 0, true)} ${n === 1 ? 'point' : 'points'} in view from ${a.dataset.dataset} (${degrees(a.dataset.cellDeg)}° cells)${r}.`;
+	}
+	/** Where a MAP grid's values are written beside its points (mapStyle.ts mapGridLayers), so two grids on at once read apart. */
+	const VALUE_PLACE: Record<MapGridKind, string> = { waas: 'under it', ccwr: 'to its left (the dots with the bolder ring)' };
 	/** The ramp's swatch: the MAP colours left to right, lowest first. */
 	const rampGradient = `linear-gradient(90deg, ${MAP_RAMP.map(([, c]) => c).join(', ')})`;
 	/** The DEM grid's swatch: its elevation colours, lowest first. */
@@ -174,13 +180,7 @@
 			pickedReach ? reachLabel(pickedReach) : null,
 			[
 				units?.on ? `${units.labels.length} ${units.labels.length === 1 ? 'hydrological unit' : 'hydrological units'} labelled.` : null,
-				mapGrid?.on && !mapGrid.zoomIn && !mapGrid.error
-					? mg
-						? mg.tooDense
-							? 'Too many MAP grid points in view: zoom in.'
-							: `${mg.cells.length} MAP grid ${mg.cells.length === 1 ? 'point' : 'points'} shown.`
-						: 'Loading the MAP grid…'
-					: null,
+				...(mapGrids ?? []).map((g) => g.status),
 				...(evaporationGrids && evaporationGrids !== 'failed' ? evaporationGrids.grids.map((g) => g.status) : []),
 				demRivers?.on && demRivers.announce !== false && demRivers.layer.paused && !demRivers.layer.zoomIn
 					? DEM_RIVERS_PAUSED
@@ -375,47 +375,44 @@
 			</div>
 		{/if}
 	{/if}
-	{#if mapGrid}
+	{#each mapGrids ?? [] as g (g.kind)}
+		{@const ga = g.answer}
 		<label class="check">
-			<input type="checkbox" checked={mapGrid.on} onchange={(e) => toggle('mapgrid', e.currentTarget.checked)} data-testid="map-layer-mapgrid" />
-			<span class="swatch ramp-swatch" style:--ramp={rampGradient} aria-hidden="true"></span>
-			MAP grid
+			<input type="checkbox" checked={g.on} onchange={(e) => toggle(g.layer, e.currentTarget.checked)} data-testid="map-layer-{g.layer}" />
+			<span class="swatch ramp-swatch" class:ringed={g.kind === 'ccwr'} style:--ramp={rampGradient} aria-hidden="true"></span>
+			{g.label}
 		</label>
-		{#if mapGrid.on}
-			<div class="qt small" data-testid="map-mapgrid">
-				{#if mapGrid.zoomIn}
-					<p class="muted" data-testid="map-mapgrid-zoom">Zoom in to see the MAP grid (to about {MAP_GRID_BBOX_MAX_DEG}° across).</p>
-				{:else if mapGrid.error}
-					<p class="err" role="alert">The MAP grid couldn’t be loaded: {mapGrid.error} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, mapGrid!, 'map-layer-mapgrid')}>Try again</button></p>
-				{:else if !mg}
-					<p class="muted" data-loading>Loading the MAP grid…</p>
-				{:else if !mg.dataset}
-					<p class="muted" data-testid="map-mapgrid-none">No MAP grid is loaded (<code>pnpm import:map-grid</code>, docs/maps.md § MAP grid).</p>
+		{#if g.on}
+			<div class="qt small" data-testid="map-{g.layer}">
+				{#if g.zoomIn}
+					<p class="muted" data-testid="map-{g.layer}-zoom">Zoom in to see the {g.label} (to about {MAP_GRID_BBOX_MAX_DEG}° across).</p>
+				{:else if g.error}
+					<p class="err" role="alert">The {g.label} couldn’t be loaded: {g.error} <button type="button" class="btn btn-sm" data-retry onclick={(e) => retryLayer(e, g, `map-layer-${g.layer}`)}>Try again</button></p>
+				{:else if !ga}
+					<p class="muted" data-loading>Loading the {g.label}…</p>
+				{:else if !ga.dataset}
+					<p class="muted" data-testid="map-{g.layer}-none">
+						There’s no {g.label} on this server yet, so there is nothing to draw.
+					</p>
 				{:else}
-					{#if mg.datasets.length > 1}
-						<label class="pick">
-							Grid
-							<select value={mg.dataset.dataset} onchange={(e) => mapGrid.pick(e.currentTarget.value)} data-testid="map-mapgrid-dataset">
-								{#each mg.datasets as d (d.dataset)}<option value={d.dataset}>{d.dataset} ({degrees(d.cellDeg)}°){d.synthetic ? ', synthetic' : ''}</option>{/each}
-							</select>
-						</label>
-					{/if}
-					{#if mg.tooDense}
-						<p class="muted" data-testid="map-mapgrid-dense">This view holds more than {fmtNum(mg.max, 0, true)} of the grid’s points: zoom in to see them.</p>
-					{:else if !mg.cells.length}
-						<p class="muted" data-testid="map-mapgrid-empty">The grid has no point in this view.</p>
+					{#if ga.tooDense}
+						<p class="muted" data-testid="map-{g.layer}-dense">This view holds more than {fmtNum(ga.max, 0, true)} of the grid’s points: zoom in to see them.</p>
+					{:else if !ga.cells.length}
+						<p class="muted" data-testid="map-{g.layer}-empty">The grid has no point in this view.</p>
 					{:else}
-						<p class="muted" data-testid="map-mapgrid-summary">
-							{mgSummary}{#if mg.dataset.synthetic}{' '}<strong>Synthetic test data, never real rainfall.</strong>{/if}{labels ? ' Each point’s value shows under it once you zoom in far enough for it to clear the next row of points.' : ' The map has no fonts for labels here, so it shows the points without their values.'}
+						<p class="muted" data-testid="map-{g.layer}-summary">
+							{gridSummary(g)}{#if ga.dataset.synthetic}{' '}<strong>Synthetic test data, never real rainfall.</strong>{/if}{labels
+								? ` Each point’s value shows ${VALUE_PLACE[g.kind]} once you zoom in far enough for it to clear the next row of points.`
+								: ' The map has no fonts for labels here, so it shows the points without their values.'}
 						</p>
 					{/if}
-					<p class="muted" data-testid="map-mapgrid-source">
-						Mean annual precipitation, mm a year. Source: {mg.dataset.source}{mgCredit ? `${/[.!?]$/.test(mg.dataset.source) ? '' : '.'} Credit: ${mgCredit}` : ''}
+					<p class="muted" data-testid="map-{g.layer}-source">
+						{#if g.standIn}No {g.label} on this server; showing the synthetic test grid in its place.{' '}{/if}Mean annual precipitation, mm a year. Source: {ga.dataset.source}{gridCredit(ga.dataset) ? `${/[.!?]$/.test(ga.dataset.source) ? '' : '.'} Credit: ${gridCredit(ga.dataset)}` : ''}
 					</p>
 				{/if}
 			</div>
 		{/if}
-	{/if}
+	{/each}
 	{#if evaporationGrids === 'failed'}
 		<ChunkFailed what="The A-pan and S-pan grid layers" />
 	{:else if evaporationGrids}
@@ -561,15 +558,13 @@
 		border-radius: 2px;
 		background: var(--ramp);
 	}
+	/* The CCWR MAP's: ringed in the text colour, as its dots are (mapStyle.ts mapGridLayers). */
+	.ramp-swatch.ringed {
+		border: 2px solid var(--text);
+	}
 	/* A CHIRPS cell: dashed, in its orange. */
 	.chirps-swatch {
 		border-top: 2px dashed var(--ch);
-	}
-	.pick {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		margin: 0.25rem 0;
 	}
 	/* A light-to-dark ramp: the shading the relief draws. */
 	.relief-swatch {

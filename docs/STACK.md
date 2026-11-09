@@ -227,7 +227,7 @@ pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 G
 pnpm import:evaporation-stations  # load the synthetic DWS evaporation stations Calibration → Evaporation stations proposes the A-pan from (pnpm run setup runs it);
                              # <stations.csv> --records <dir> --dataset <label> --source "<DWS reply reference, date>" loads your own DWS pan records
                              # (DWS's permission doesn't cover them yet: local only, production refuses them; maps.md § Evaporation stations)
-pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm run setup runs it);
+pnpm import:map-grid        # load the synthetic MAP grid the unit MAP proposals read (pnpm run setup runs it; the Map tab's WAAS 2007 MAP and CCWR MAP draw it in their grids' place, said synthetic);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees; [--out <grid.json[.gz]>] writes it for a production load instead, which takes only the
                              # Southwestern Cape surface and the WRC Atlas's Lynch (2004) grid, whole (WAAS-SWCape-2007, Lynch-2004; the rest refused; maps.md § MAP grid)
