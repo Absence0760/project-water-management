@@ -1225,7 +1225,12 @@ one at a time: an `alertdialog` with the question as its title, the detail
 under it, **Cancel** first (it takes the focus, so Enter keeps what a
 destructive question would remove) and a confirm button named for the action
 (red when it destroys something). Esc answers Cancel; focus returns to what
-asked. The farm view's note delete passes its words translated.
+asked. The farm view's note delete passes its words translated. A
+question may carry one extra choice, a checkbox unticked each time it is
+asked, with a list and a note under it as its description
+(`confirmWithOption({ …, option: { label, items, note } })` answers
+`{ ok, option }`, `option` true only when ticked and confirmed; the unit
+form's MAP grid pick uses it, § Network).
 `lib/noBrowserConfirm.test.ts` fails if `confirm(` comes back in app code.
 
 When a remove asks: each list asks only when something typed goes with the
@@ -3545,6 +3550,21 @@ itself.
     don't mix. When a unit on another grid isn't covered by the picked one,
     the grid is disabled, naming that unit and its grid: type its MAP by
     hand or clear it on its form first (the backend would refuse the mix).
+  - **Typed or empty units: kept, or replaced on request** (the operator's
+    decision, 2026-11-09). Whenever the picked grid covers other units whose
+    MAP is typed by hand or empty, the question before the pick (the switch
+    above, "Replace the typed MAP?", or, with nothing else to ask, "Use
+    CCWR MAP for Upper farm?") says they keep what they have unless the box
+    below is ticked, and carries that box, unticked every time: "Also
+    replace the typed MAP of 1 unit with the CCWR MAP" ("empty MAP", or
+    "typed or empty MAP", as the units hold), with one line per unit under
+    it as its description ("Lower farm: typed 700 mm → 790 mm", "no MAP →
+    …"). Units the grid doesn't cover are named after the list and kept.
+    Ticked, they go in the same apply (`nodeIds`, `pickNodeIds`), one
+    change in History. The box is the shared confirm's `option`
+    (`confirmWithOption`, `common/confirm.svelte.ts`, drawn by
+    `ConfirmHost.svelte`), so a viewer (no picks) and unsaved model edits
+    (grids disabled) never reach it.
   - **Typed by hand** is a model edit like any other: it keeps the MAP and
     drops a grid's source line, so the required source field (under the
     choice, its helper text as before) asks for one. Typing another number

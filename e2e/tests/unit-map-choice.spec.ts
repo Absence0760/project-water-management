@@ -5,12 +5,15 @@
 // map-layers.spec.ts), so the WAAS 2007 MAP and the CCWR MAP are offered as not
 // loaded and a unit's WAAS MAP is one seeded with the WAAS grid's source line:
 // - Picking the grid writes the unit's MAP and its source line through MAP
-//   for each unit's apply, with no question while the unit has no MAP: the
-//   form shows it, the grid is chosen, and History has the change.
+//   for each unit's apply: the form shows it, the grid is chosen, and History
+//   has the change. Another unit with no MAP keeps none by default.
 // - One grid for the whole project: with another unit on the WAAS 2007 MAP,
 //   picking the grid asks to switch every unit; No writes nothing, Yes
 //   switches both. A unit on another grid this grid can't cover holds the
 //   grid, saying why.
+// - Another unit's typed MAP is kept when a grid is picked, unless the
+//   question's option (unticked) is ticked: then it is replaced in the same
+//   change.
 // - Typed by hand keeps the MAP and asks for its source; another number typed
 //   over a grid's MAP turns the choice to Typed by hand.
 // - Unsaved model edits hold the grids, saying why.
@@ -18,7 +21,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
-import { answerConfirm } from '../support/confirm.ts';
+import { answerConfirm, confirmBox } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { box } from '../support/map.ts';
@@ -82,14 +85,16 @@ test('picking the grid gives the unit its MAP and source line, saved as one chan
 	const mm = (await grid.locator('xpath=..').textContent())!.match(/(\d{3}) mm/)![1]!;
 	await expectNoViolations(page, { include: '[data-testid="unit-map-choice"]' });
 
-	// No MAP yet, so nothing to ask: picked, saved straight away.
+	// Lower farm has no MAP: the question offers to give it the grid's too, unticked, and Use keeps it empty.
 	await grid.check();
+	await expect(confirmBox(page).getByRole('checkbox', { name: 'Also replace the empty MAP of 1 unit with the synthetic MAP' })).not.toBeChecked();
+	await answerConfirm(page, true, /Use synthetic for Upper farm\?[\s\S]*Lower farm: no MAP → \d{3} mm/);
 	await expect(choice.getByTestId('unit-map-choice-notice')).toHaveText(`Upper farm’s MAP is now ${mm} mm from synthetic, saved as one model change (History).`);
 	await expect(grid).toBeChecked();
 	await expect(page.getByTestId('unit-map').getByLabel('MAP (mm)')).toHaveValue(mm);
 	await expect(choice.getByTestId('unit-map-source-line')).toHaveText(GRID_LINE);
 	await expect(page.getByLabel('Source of the MAP')).toHaveCount(0);
-	expect((await unitMaps(page.request, id))['Upper farm']).toEqual({ mapMm: Number(mm), mapSource: expect.stringMatching(GRID_LINE) });
+	expect(await unitMaps(page.request, id)).toEqual({ 'Upper farm': { mapMm: Number(mm), mapSource: expect.stringMatching(GRID_LINE) }, 'Lower farm': { mapMm: null, mapSource: null } });
 	const history = await page.request.get(`${API_URL}/projects/${id}/history`);
 	expect(JSON.stringify(await history.json()).match(/MAP of “Upper farm” from the MAP grid synthetic synthetic 1/g)).toHaveLength(1);
 });
@@ -126,6 +131,43 @@ test('picking a grid while another unit is on the WAAS 2007 MAP asks to switch e
 	expect(after['Lower farm']!.mapSource).toMatch(GRID_LINE);
 });
 
+test('another unit’s typed MAP is kept when the grid is picked, and replaced in the same change when the option is ticked', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticMapGrid();
+	const { id } = await seed(page.request, 'Unit MAP choice keep typed');
+	await setUnitMap(page.request, id, 'Lower farm', 700, 'DWAF map');
+
+	// Default: the option is unticked, so Lower farm keeps its typed MAP.
+	let choice = await unitForm(page, id, 'Upper farm');
+	let grid = choice.getByRole('radio', { name: /^synthetic \d{3} mm$/ });
+	await grid.check();
+	const box = confirmBox(page);
+	const option = box.getByRole('checkbox', { name: 'Also replace the typed MAP of 1 unit with the synthetic MAP' });
+	await expect(option).not.toBeChecked();
+	await expect(option).toHaveAccessibleDescription(/^Lower farm: typed 700 mm → \d{3} mm$/);
+	await expect(box).toContainText('keep what they have unless you tick the box below');
+	await expectNoViolations(page, { include: 'dialog[open]' });
+	await answerConfirm(page, true, 'Use synthetic for Upper farm?');
+	await expect(choice.getByTestId('unit-map-choice-notice')).toHaveText(/^Upper farm’s MAP is now \d{3} mm from synthetic/);
+	let maps = await unitMaps(page.request, id);
+	expect(maps['Upper farm']!.mapSource).toMatch(GRID_LINE);
+	expect(maps['Lower farm']).toEqual({ mapMm: 700, mapSource: 'DWAF map' });
+
+	// Upper farm typed again, then the grid picked with the option ticked: both from the grid, in one change.
+	await setUnitMap(page.request, id, 'Upper farm', 800, 'a study');
+	choice = await unitForm(page, id, 'Upper farm');
+	grid = choice.getByRole('radio', { name: /^synthetic \d{3} mm$/ });
+	await grid.check();
+	await box.getByRole('checkbox', { name: 'Also replace the typed MAP of 1 unit with the synthetic MAP' }).check();
+	await answerConfirm(page, true, 'Replace the typed MAP?');
+	await expect(choice.getByTestId('unit-map-choice-notice')).toHaveText('Upper farm and 1 other unit now have their MAP from synthetic, saved as one model change (History).');
+	maps = await unitMaps(page.request, id);
+	expect(maps['Upper farm']!.mapSource).toMatch(GRID_LINE);
+	expect(maps['Lower farm']!.mapSource).toMatch(GRID_LINE);
+	const history = JSON.stringify(await (await page.request.get(`${API_URL}/projects/${id}/history`)).json());
+	expect(history.match(/MAP of 2 units from the MAP grid synthetic synthetic 1/g)).toHaveLength(1);
+});
+
 test('a unit on the WAAS 2007 MAP that the grid can’t cover holds the grid, saying which to type by hand', async ({ page, owner }) => {
 	void owner;
 	await loadSyntheticMapGrid();
@@ -147,6 +189,7 @@ test('Typed by hand keeps the MAP and asks for its source, and another number ov
 	const choice = await unitForm(page, id, 'Upper farm');
 	const grid = choice.getByRole('radio', { name: /^synthetic \d{3} mm$/ });
 	await grid.check();
+	await answerConfirm(page, true, 'Use synthetic for Upper farm?');
 	await expect(choice.getByTestId('unit-map-source-line')).toHaveText(GRID_LINE);
 	const mm = await page.getByTestId('unit-map').getByLabel('MAP (mm)').inputValue();
 

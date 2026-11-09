@@ -1,14 +1,15 @@
 // A unit's "Source of the MAP" choice (docs/ui.md § Network, docs/maps.md §
 // MAP for each unit): which grid a source line is from, each grid's option for
 // one unit (its MAP, or why not, in the proposal's words), the one-grid rule's
-// switch (who switches, who blocks), the question before a pick, the notice
+// switch (who switches, who blocks), the typed or empty units kept unless the
+// question's option replaces those the grid covers, the question before a pick, the notice
 // after it, and typed by hand. The form itself is pinned by
 // e2e/tests/unit-map-choice.spec.ts.
 import { describe, expect, it } from 'vitest';
 import { unitMapSource } from '@water-management/engine';
 import type { UnitMapCandidate, UnitMapProposal } from '#lib/api/index.js';
 import { MAP_GRID_NAMES, mapGridName } from '#lib/components/map/mapGridNames.js';
-import { choiceOf, gridLabels, gridOptions, pickedNotice, pickNodeIds, pickQuestion, toTyped, type GridLoad } from './unitMapChoice';
+import { choiceOf, gridLabels, gridOptions, pickedNotice, pickNodeIds, pickQuestion, replaceOption, toTyped, type GridLoad } from './unitMapChoice';
 
 const WAAS = { dataset: 'WAAS-SWCape-2007', version: '1.1' };
 const CCWR = { dataset: 'Lynch-2004', version: '2004' };
@@ -123,6 +124,39 @@ describe('gridOptions: each grid for one unit', () => {
 		expect(pickNodeIds('a', ccwr!)).toEqual(['a', 'b']);
 	});
 
+	it('keeps the other typed or empty units by default, and the option replaces only those the grid covers', () => {
+		const p = proposal(CCWR, {
+			units: [
+				unit('a', 790),
+				unit('b', 700, { current: { mapMm: 760, mapSource: waasLine } }),
+				unit('c', 650, { current: { mapMm: 640, mapSource: 'a study, 1990–2010' } }),
+				unit('d', 610, { current: { mapMm: 600, mapSource: ccwrLine } }),
+				unit('e', 600)
+			],
+			uncovered: [{ nodeId: 'f', name: 'F', coveredShare: 0.4, reason: 'r' }],
+			withoutPolygon: [{ nodeId: 'g', name: 'G' }],
+			refused: [{ nodeId: 'a2', name: 'A2', reason: 'r' }]
+		});
+		const [, ccwr] = gridOptions('a', both, new Map([['Lynch-2004', read(p)]]));
+		// Typed (c) and empty (e) are replaceable; d is on this grid already, b switches anyway.
+		expect(ccwr!.replaceable).toEqual([
+			{ nodeId: 'c', name: 'C', currentMm: 640, mapMm: 650 },
+			{ nodeId: 'e', name: 'E', currentMm: null, mapMm: 600 }
+		]);
+		expect(ccwr!.notCovered.map((u) => u.nodeId)).toEqual(['f', 'a2', 'g']);
+		// Default: only this unit and the switched one.
+		expect(pickNodeIds('a', ccwr!)).toEqual(['a', 'b']);
+		expect(pickNodeIds('a', ccwr!, false)).toEqual(['a', 'b']);
+		// Opted in: the covered typed and empty units too, never the uncovered ones.
+		expect(pickNodeIds('a', ccwr!, true)).toEqual(['a', 'b', 'c', 'e']);
+	});
+
+	it('never counts a unit on another grid this grid can’t cover as not covered: it blocks instead', () => {
+		const p = proposal(CCWR, { units: [unit('a', 790), unit('b', 700)], uncovered: [{ nodeId: 'f', name: 'F', coveredShare: 0, reason: 'r' }], otherGrid: [{ nodeId: 'a', name: 'A', mapSource: waasLine }] });
+		const [, ccwr] = gridOptions('a', both, new Map([['Lynch-2004', read(p)]]));
+		expect(ccwr!.notCovered).toEqual([{ nodeId: 'f', name: 'F' }]);
+	});
+
 	it('can’t be picked when a unit this grid doesn’t cover holds another grid’s MAP: that would mix two grids', () => {
 		const p = proposal(CCWR, { units: [unit('a', 790)], otherGrid: [{ nodeId: 'b', name: 'B', mapSource: waasLine }] });
 		const [, ccwr] = gridOptions('a', both, new Map([['Lynch-2004', read(p)]]));
@@ -139,7 +173,9 @@ describe('gridOptions: each grid for one unit', () => {
 });
 
 describe('the question before a pick, and the notice after it', () => {
-	const opt = (patch = {}) => ({ label: 'Lynch-2004', name: 'CCWR MAP', mapMm: 790, covered: null, reason: null, same: false, switches: [], ...patch });
+	const opt = (patch = {}) => ({ label: 'Lynch-2004', name: 'CCWR MAP', mapMm: 790, covered: null, reason: null, same: false, switches: [], replaceable: [], notCovered: [], ...patch });
+	const typedC = { nodeId: 'c', name: 'C', currentMm: 640.5, mapMm: 650 };
+	const emptyE = { nodeId: 'e', name: 'E', currentMm: null, mapMm: 600 };
 
 	it('asks nothing when the unit has no MAP, or a grid’s, and no other unit switches', () => {
 		expect(pickQuestion({ name: 'A', mapMm: null, mapSource: null }, { kind: 'typed' }, opt())).toBeNull();
@@ -166,6 +202,39 @@ describe('the question before a pick, and the notice after it', () => {
 		expect(one!.message).toBe(
 			'1 unit uses WAAS 2007 MAP now: B. It and A get their MAP from CCWR MAP, so the project keeps to one grid, saved straight to the model as one change in History. A’s typed 800 mm (“DWAF map”) is replaced by 790 mm. Units whose MAP is typed by hand, or that have none, keep what they have.'
 		);
+	});
+
+	it('offers to replace the other typed or empty units, unticked, listing each and naming the ones the grid doesn’t cover', () => {
+		expect(replaceOption(opt())).toBeNull();
+		expect(replaceOption(opt({ replaceable: [typedC], notCovered: [{ nodeId: 'f', name: 'F' }] }))).toEqual({
+			label: 'Also replace the typed MAP of 1 unit with the CCWR MAP',
+			items: ['C: typed 640.5 mm → 650 mm'],
+			note: 'CCWR MAP doesn’t cover F, so it keeps its MAP as it is.'
+		});
+		expect(replaceOption(opt({ replaceable: [emptyE] }))!.label).toBe('Also replace the empty MAP of 1 unit with the CCWR MAP');
+		const both2 = replaceOption(opt({ replaceable: [typedC, emptyE], notCovered: [{ nodeId: 'f', name: 'F' }, { nodeId: 'g', name: 'G' }] }))!;
+		expect(both2.label).toBe('Also replace the typed or empty MAP of 2 units with the CCWR MAP');
+		expect(both2.items).toEqual(['C: typed 640.5 mm → 650 mm', 'E: no MAP → 600 mm']);
+		expect(both2.note).toBe('CCWR MAP doesn’t cover F and G, so they keep their MAP as it is.');
+		// Units the grid doesn't cover alone offer nothing to replace.
+		expect(replaceOption(opt({ notCovered: [{ nodeId: 'f', name: 'F' }] }))).toBeNull();
+	});
+
+	it('asks with the option when other units could be replaced, even with nothing else to ask', () => {
+		expect(pickQuestion({ name: 'A', mapMm: null, mapSource: null }, { kind: 'typed' }, opt({ replaceable: [typedC] }))).toEqual({
+			title: 'Use CCWR MAP for A?',
+			message: 'A’s MAP becomes 790 mm from CCWR MAP, saved straight to the model as one change in History. Other units whose MAP is typed by hand, or that have none, keep what they have unless you tick the box below.',
+			confirmLabel: 'Use CCWR MAP',
+			option: replaceOption(opt({ replaceable: [typedC] }))
+		});
+		const typed = pickQuestion({ name: 'A', mapMm: 800, mapSource: 'DWAF map' }, { kind: 'typed' }, opt({ replaceable: [emptyE] }))!;
+		expect(typed.title).toBe('Replace the typed MAP?');
+		expect(typed.message).toMatch(/History\. Other units whose MAP is typed by hand, or that have none, keep what they have unless you tick the box below\.$/);
+		expect(typed.option!.items).toEqual(['E: no MAP → 600 mm']);
+		const sw = pickQuestion({ name: 'A', mapMm: null, mapSource: null }, { kind: 'typed' }, opt({ switches: [{ nodeId: 'b', name: 'B', from: 'WAAS 2007 MAP' }], replaceable: [typedC] }))!;
+		expect(sw.title).toBe('Switch every unit to CCWR MAP?');
+		expect(sw.message).toMatch(/unless you tick the box below\.$/);
+		expect(sw.option!.label).toBe('Also replace the typed MAP of 1 unit with the CCWR MAP');
 	});
 
 	it('says what the pick saved', () => {

@@ -3614,10 +3614,20 @@ disabled with the proposal's reason, and picking one applies it to this unit
 (`nodeIds`) through the same POST, so it is recorded exactly as below. The
 one-grid rule holds there as here: with other units on another grid it asks
 to switch them too (Yes applies the picked grid to this unit and them in one
-change; units typed by hand or with no MAP keep theirs), and a grid that
+change), and a grid that
 doesn't cover a unit on another grid can't be picked until that unit's MAP
 is typed by hand or cleared ([ui.md § Network](./ui.md), the unit form's
-MAP). The short names live in one constant, `frontend/src/lib/components/map/mapGridNames.ts`
+MAP). Units typed by hand, or with no MAP, are no grid's, so they don't
+mix and keep theirs by default (the operator's decision, 2026-11-09: "Keep
+the typed MAP but let the user have the option of replacing with the grid
+MAP"). Whenever the picked grid covers such other units, its question
+(the switch, "Replace the typed MAP?", or "Use <grid> for <unit>?") carries
+an unticked checkbox, "Also replace the typed MAP of N units with the <grid>
+MAP", listing each one's current value → the grid's; ticked, they join the
+same apply's `nodeIds`, so it is still one change in History. Units the grid
+doesn't cover are named under it and kept: there is no grid value to give
+them. The backend needs nothing new: those units are in the proposal's
+`units` with their `current` MAP, and the apply takes any covered unit. The short names live in one constant, `frontend/src/lib/components/map/mapGridNames.ts`
 `MAP_GRID_NAMES`; the full citation stays where a source is cited.
 
 - **Which units and polygons.** Land units only (farm nodes with an area

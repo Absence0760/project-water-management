@@ -5,9 +5,12 @@
 // …/map/unit-map), exactly as Settings → Flow generation → MAP from the grid
 // writes it. One grid for the whole project, never a mix: picking a grid while
 // other units hold another grid's MAP switches them too, after asking, and a
-// grid that can't take every such unit over can't be picked.
+// grid that can't take every such unit over can't be picked. Units typed by
+// hand, or with no MAP, keep theirs, unless the editor ticks the question's
+// option to replace theirs too (the ones this grid covers), in the same apply.
 import { unitMapGridCitation, unitMapGridOfSource, type NetworkNode } from '@water-management/engine';
 import type { UnitMapApplied, UnitMapCandidate, UnitMapProposal, UnitRef } from '#lib/api/index.js';
+import type { ConfirmOption } from '#lib/components/common/confirm.svelte.js';
 import { MAP_GRID_NAMES, mapGridName } from '#lib/components/map/mapGridNames.js';
 import { coveredText, pctText } from '#lib/components/settings/unitMapProposal.js';
 import { fmtNum } from '#lib/format/number.js';
@@ -53,6 +56,10 @@ export interface GridOption {
 	same: boolean;
 	/** The other units holding another grid's MAP, which picking this grid switches too (with the name of the grid each is on). */
 	switches: (UnitRef & { from: string })[];
+	/** The other units this grid covers whose MAP is typed by hand or empty: kept, unless the question's option replaces them too. */
+	replaceable: (UnitRef & { currentMm: number | null; mapMm: number })[];
+	/** The other land units this grid doesn't cover (no values, no polygon, no single parcel) and not on another grid: always kept. */
+	notCovered: UnitRef[];
 }
 
 const sentence = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}${/[.!?]$/.test(s) ? '' : '.'}`;
@@ -70,7 +77,7 @@ const unitsWord = (n: number) => (n === 1 ? '1 unit' : `${fmtNum(n)} units`);
 export function gridOptions(nodeId: string, candidates: readonly UnitMapCandidate[], loads: ReadonlyMap<string, GridLoad>): GridOption[] {
 	const labels = gridLabels(candidates);
 	return labels.map((label): GridOption => {
-		const opt: GridOption = { label, name: mapGridName(label), mapMm: null, covered: null, reason: null, same: false, switches: [] };
+		const opt: GridOption = { label, name: mapGridName(label), mapMm: null, covered: null, reason: null, same: false, switches: [], replaceable: [], notCovered: [] };
 		if (!candidates.some((c) => c.label === label)) return { ...opt, reason: 'Not loaded on this server.' };
 		const load = loads.get(label) ?? { kind: 'reading' };
 		if (load.kind === 'reading') return { ...opt, reason: 'Reading the grid…' };
@@ -109,18 +116,53 @@ export function gridOptions(nodeId: string, candidates: readonly UnitMapCandidat
 			const c = fromOther(u.current.mapSource);
 			return c ? [{ nodeId: u.nodeId, name: u.name, from: mapGridName(c.label) }] : [];
 		});
-		return { ...opt, mapMm: unit.mapMm, covered: coveredText(unit), same: unit.same, switches };
+		// Typed by hand (a source line no grid wrote) or no MAP at all: no grid's, so never switched, only replaced on request.
+		const replaceable = p.units.flatMap((u) =>
+			u.nodeId !== nodeId && (u.current.mapMm === null || choiceOf(u.current.mapSource, labels).kind === 'typed') ? [{ nodeId: u.nodeId, name: u.name, currentMm: u.current.mapMm, mapMm: u.mapMm }] : []
+		);
+		const onOther = new Set(p.otherGrid.map((u) => u.nodeId));
+		const notCovered = [...p.uncovered, ...p.refused, ...p.withoutPolygon].filter((u) => u.nodeId !== nodeId && !onOther.has(u.nodeId)).map(({ nodeId: id, name }) => ({ nodeId: id, name }));
+		return { ...opt, mapMm: unit.mapMm, covered: coveredText(unit), same: unit.same, switches, replaceable, notCovered };
 	});
 }
 
-/** The units an apply of `opt` for this unit sends (POST …/map/unit-map `nodeIds`): this unit and the ones it switches. */
-export const pickNodeIds = (nodeId: string, opt: GridOption): string[] => [nodeId, ...opt.switches.map((s) => s.nodeId)];
+/**
+ * The units an apply of `opt` for this unit sends (POST …/map/unit-map
+ * `nodeIds`): this unit and the ones it switches, and, when the question's
+ * option was ticked, the typed or empty units the grid covers.
+ */
+export const pickNodeIds = (nodeId: string, opt: GridOption, replaceTyped = false): string[] => [
+	nodeId,
+	...opt.switches.map((s) => s.nodeId),
+	...(replaceTyped ? opt.replaceable.map((u) => u.nodeId) : [])
+];
 
-/** The question before picking `opt`, or null when there is nothing to ask (no other unit switches, and no typed MAP is replaced). */
-export function pickQuestion(node: Pick<NetworkNode, 'name' | 'mapMm' | 'mapSource'>, choice: MapChoice, opt: GridOption): { title: string; message: string; confirmLabel: string } | null {
+/** The question's option: replace the typed or empty MAP of the other units this grid covers too (unticked; the units it can't cover are named and kept). */
+export function replaceOption(opt: GridOption): ConfirmOption | null {
+	const r = opt.replaceable;
+	if (!r.length) return null;
+	const typed = r.filter((u) => u.currentMm !== null).length;
+	const what = typed === r.length ? 'typed MAP' : typed === 0 ? 'empty MAP' : 'typed or empty MAP';
+	const nc = opt.notCovered;
+	return {
+		label: `Also replace the ${what} of ${unitsWord(r.length)} with the ${opt.name.replace(/ MAP$/, '')} MAP`,
+		items: r.map((u) => `${u.name || '(unnamed)'}: ${u.currentMm === null ? 'no MAP' : `typed ${fmtNum(u.currentMm, 6, true)} mm`} → ${fmtNum(u.mapMm)} mm`),
+		...(nc.length ? { note: `${opt.name} doesn’t cover ${names(nc)}, so ${nc.length === 1 ? 'it keeps its' : 'they keep their'} MAP as it is.` } : {})
+	};
+}
+
+/** The question before picking `opt`, or null when there is nothing to ask (no other unit switches, no typed MAP is replaced, and no other unit's could be). */
+export function pickQuestion(
+	node: Pick<NetworkNode, 'name' | 'mapMm' | 'mapSource'>,
+	choice: MapChoice,
+	opt: GridOption
+): { title: string; message: string; confirmLabel: string; option?: ConfirmOption } | null {
 	const unit = node.name || 'This unit';
 	const typed = choice.kind === 'typed' && node.mapMm !== null && node.mapMm !== undefined;
 	const replaced = typed ? `${unit}’s typed ${fmtNum(node.mapMm, 6, true)} mm${node.mapSource ? ` (“${node.mapSource}”)` : ''} is replaced by ${fmtNum(opt.mapMm)} mm.` : '';
+	const option = replaceOption(opt);
+	const keep = option ? 'Other units whose MAP is typed by hand, or that have none, keep what they have unless you tick the box below.' : 'Units whose MAP is typed by hand, or that have none, keep what they have.';
+	const withOption = option ? { option } : {};
 	if (opt.switches.length) {
 		const n = opt.switches.length;
 		const from = [...new Set(opt.switches.map((s) => s.from))];
@@ -130,18 +172,28 @@ export function pickQuestion(node: Pick<NetworkNode, 'name' | 'mapMm' | 'mapSour
 				`${unitsWord(n)} ${n === 1 ? 'uses' : 'use'} ${from.join(' and ')} now: ${names(opt.switches)}.`,
 				`${n === 1 ? 'It' : 'They'} and ${node.name || 'this unit'} get their MAP from ${opt.name}, so the project keeps to one grid, saved straight to the model as one change in History.`,
 				replaced,
-				'Units whose MAP is typed by hand, or that have none, keep what they have.'
+				keep
 			]
 				.filter(Boolean)
 				.join(' '),
-			confirmLabel: `Switch to ${opt.name}`
+			confirmLabel: `Switch to ${opt.name}`,
+			...withOption
 		};
 	}
 	if (typed) {
 		return {
 			title: 'Replace the typed MAP?',
-			message: `${replaced.replace(/\.$/, '')} from ${opt.name}, saved straight to the model as one change in History.`,
-			confirmLabel: `Use ${opt.name}`
+			message: `${replaced.replace(/\.$/, '')} from ${opt.name}, saved straight to the model as one change in History.${option ? ` ${keep}` : ''}`,
+			confirmLabel: `Use ${opt.name}`,
+			...withOption
+		};
+	}
+	if (option) {
+		return {
+			title: `Use ${opt.name} for ${unit}?`,
+			message: `${unit}’s MAP becomes ${fmtNum(opt.mapMm)} mm from ${opt.name}, saved straight to the model as one change in History. ${keep}`,
+			confirmLabel: `Use ${opt.name}`,
+			option
 		};
 	}
 	return null;

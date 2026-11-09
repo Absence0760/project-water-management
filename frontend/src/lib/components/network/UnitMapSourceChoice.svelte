@@ -9,7 +9,9 @@
 	generation → MAP from the grid does; so it waits while the model has unsaved
 	changes. One grid for the whole project: picking one while other units hold
 	another grid's MAP asks to switch them too, and a grid that can't take every
-	such unit over can't be picked. Typed by hand is an edit like any other: it
+	such unit over can't be picked. Other units typed by hand or with no MAP
+	keep theirs, unless the question's option (unticked) replaces those the
+	grid covers in the same change. Typed by hand is an edit like any other: it
 	keeps the number and asks for a source (the `typed` snippet, the text
 	field). A viewer sees which it is, read-only.
 -->
@@ -17,7 +19,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import type { NetworkNode } from '@water-management/engine';
 	import { api, type UnitMapCandidate } from '#lib/api/index.js';
-	import { confirmDialog } from '#lib/components/common/confirm.svelte.js';
+	import { confirmDialog, confirmWithOption } from '#lib/components/common/confirm.svelte.js';
 	import { mapGridName } from '#lib/components/map/mapGridNames.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { choiceOf, gridLabels, gridOptions, pickedNotice, pickNodeIds, pickQuestion, toTyped, type GridLoad, type GridOption } from './unitMapChoice';
@@ -106,7 +108,9 @@
 					covered: null,
 					reason: null,
 					same: false,
-					switches: []
+					switches: [],
+					replaceable: [],
+					notCovered: []
 				}))
 	);
 	/** Every grid's proposal read (or failed): `data-ready`, so a test waits on the grids, not on time. */
@@ -120,9 +124,14 @@
 		notice = null;
 		try {
 			const q = pickQuestion(node, choice, opt);
-			if (q && !(await confirmDialog(q))) return;
+			let replaceTyped = false;
+			if (q?.option) {
+				const a = await confirmWithOption({ ...q, option: q.option });
+				if (!a.ok) return;
+				replaceTyped = a.option;
+			} else if (q && !(await confirmDialog(q))) return;
 			busy = true;
-			const r = await api.map.applyUnitMap(projectId, opt.label, pickNodeIds(node.id, opt));
+			const r = await api.map.applyUnitMap(projectId, opt.label, pickNodeIds(node.id, opt, replaceTyped));
 			notice = pickedNotice(r, node.id, node.name || 'This unit', opt.name);
 			await Promise.all([onModelChanged?.(), load()]);
 		} catch (e) {
