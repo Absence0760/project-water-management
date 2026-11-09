@@ -7,7 +7,7 @@
 import { toEpochDay } from '../calendar';
 import { withMonthlyRates } from '../network/transferRates';
 import { isSplitTransfer, transferDestinations, withDestinations } from '../network/transferSplits';
-import { DAM_AREA_EXPONENT, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_PARTS, estimatedDamAreaM2, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type DemandFactorWindow, type IrrigationSystemDef, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_PARTS, estimatedDamAreaM2, MONTHLY_ROW_OF, replacedByMonth, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type DemandFactorWindow, type IrrigationSystemDef, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
 	CROP_SET_FIELDS,
@@ -549,6 +549,10 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const field = allowed(settable, op.field) ?? fail(`"${String(op.field)}" can't be set on a ${n.kind}`);
 			const e = nodeFieldError(field, op.value);
 			if (e) fail(`${field} ${e}`);
+			// A one value its monthly row replaces (engine 1.116.0) would change nothing the run reads: refused, so a
+			// scenario never runs identical to its base while saying it changed the losses.
+			if (replacedByMonth(n, field))
+				fail(`${field} is set by month on ${n.name} (${MONTHLY_ROW_OF[field as keyof typeof MONTHLY_ROW_OF]}): change that row, or set it to null first`);
 			const oldCap = n.damCapacityM3;
 			(n as unknown as Record<string, unknown>)[field] = field === 'name' ? (op.value as string).trim() : cloneData(op.value);
 			if (field === 'damCapacityM3' && n.kind === 'farm') {

@@ -792,8 +792,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		}
 		if (plan.restriction?.inScope[i] || (plan.restriction?.userCut?.[i] ?? 0) > 0) r.restrictedDemand = new Float64Array(days);
 		if (n.reachLoss) r.reachLoss = new Float64Array(days);
-		if (n.baseflow?.lossM3Day) r.baseflowLoss = new Float64Array(days);
-		if (n.baseflow?.gainM3Day) r.baseflowGain = new Float64Array(days);
+		if (n.baseflow?.loses) r.baseflowLoss = new Float64Array(days);
+		if (n.baseflow?.gains) r.baseflowGain = new Float64Array(days);
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (n.river) {
 			const tk = n.river.takes;
@@ -1448,7 +1448,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					// is a site's own share and crosses the reach as it is.
 					const un = nodes[ups[u]!]!;
 					const q = ur.outflow[t]!;
-					const l = reachLossDay(un.reachLoss!, q);
+					const l = reachLossDay(un.reachLoss!, q, month[t]!);
 					rl[t] = l;
 					sumU += q - l;
 					const zs = ur.seniorRequirement[t]!;
@@ -1560,8 +1560,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let bfLoss = 0;
 			let bfGain = 0;
 			if (bf) {
-				bfLoss = baseflowLossDay(bf, I);
-				bfGain = bf.gainM3Day;
+				bfLoss = baseflowLossDay(bf, I, month[t]!);
+				bfGain = bf.gainM3Day[month[t]!]!;
 				Ib = I - bfLoss + bfGain;
 				if (r.baseflowLoss) r.baseflowLoss[t] = bfLoss;
 				if (r.baseflowGain) r.baseflowGain[t] = bfGain;

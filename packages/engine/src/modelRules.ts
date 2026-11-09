@@ -124,7 +124,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			else if (n.kind !== 'gauge') add(`ewrSiteKind:${n.id}`, `"${n.name}": only a gauge can be taken off the EWR sites`);
 		}
 		// Bed losses (engine ≥ 1.75.0, docs/model.md §2.6b) are in the reach below a node: the outlet has none in the model.
-		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0) add(`reachLossOutlet:${n.id}`, `"${n.name}" is the outlet: there is no reach below it in the model to lose water in`);
+		if (n.downstreamNodeId === null && ((n.reachLossFrac ?? 0) > 0 || (n.reachLossFracMonthly ?? []).some((v) => v > 0))) add(`reachLossOutlet:${n.id}`, `"${n.name}" is the outlet: there is no reach below it in the model to lose water in`);
 		// A fixed restriction % (engine 1.86.0, issue #523 B3, docs/model.md §2.7c): a Priority user's only; a
 		// Non-priority user is curtailed for its whole EWR charge already.
 		if ((n.userRestrictionPct ?? 0) > 0) {
@@ -132,7 +132,9 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			else if (n.userPriority === 'junior') add(`userRestrictionJunior:${n.id}`, `"${n.name}": a fixed restriction % is for Priority users; a Non-priority user is curtailed for its whole EWR charge`);
 		}
 		// A base-flow loss or gain (engine 1.86.0, docs/model.md §2.6b) acts on a unit's own runoff: only a unit has one.
-		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0)) add(`baseflowKind:${n.id}`, `"${n.name}": only a hydrological unit has a base-flow loss or gain`);
+		const monthly = (r: number[] | null | undefined) => (r ?? []).some((v) => v !== 0);
+		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0 || monthly(n.baseflowLossMonthlyM3Day) || monthly(n.baseflowGainMonthlyM3Day)))
+			add(`baseflowKind:${n.id}`, `"${n.name}": only a hydrological unit has a base-flow loss or gain`);
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
 		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';

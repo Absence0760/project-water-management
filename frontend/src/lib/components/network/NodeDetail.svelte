@@ -29,6 +29,8 @@
 	import DemandObjectFields from './DemandObjectFields.svelte';
 	import SupplyFields from './SupplyFields.svelte';
 	import RiverToDamFields from './RiverToDamFields.svelte';
+	import MonthlyLossFields from './MonthlyLossFields.svelte';
+	import { sectionByMonth } from './monthlyLosses';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import ExplainSwitch from '#lib/components/common/ExplainSwitch.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
@@ -118,7 +120,7 @@
 	const groupFields = $derived.by(() => {
 		const out = new Map<NodeField['group'], NodeField[]>();
 		for (const f of NODE_FIELDS) {
-			if (!fieldShows(f, node.kind)) continue;
+			if (!fieldShows(f, node.kind, node)) continue;
 			if (!out.has(f.group)) out.set(f.group, []);
 			out.get(f.group)!.push(f);
 		}
@@ -479,6 +481,10 @@
 							{/each}
 						{/if}
 					</div>
+					<!-- By month (engine 1.116.0): on a unit, or below any node but the outlet; elsewhere only while a row is left to clear. -->
+					{#if (g === 'reach' && (node.downstreamNodeId !== null || sectionByMonth('reach', node))) || (g === 'baseflow' && (node.kind === 'farm' || sectionByMonth('baseflow', node)))}
+						<MonthlyLossFields {node} group={g} {readonly} />
+					{/if}
 					{#if sp.more.length || g === 'irrigation'}
 						{@const key = `more:${g}`}
 						{@const extra = g === 'groundwater' ? `GN 538 rate ${GA_RATE_TEXT(node.gaRateM3HaYear)}` : g === 'irrigation' ? `Abstraction starts ${node.abstractionFrom ?? 'with the run'}` : ''}

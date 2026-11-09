@@ -115,6 +115,11 @@ describe('model store', () => {
 			// A base-flow loss and gain (engine 1.86.0, 222_unit_baseflow), awkward numbers.
 			baseflowLossM3Day: 0.1 + 0.2,
 			baseflowGainM3Day: 123_456.789,
+			// Bed losses and base flow by month (engine 1.116.0, 317_monthly_losses), awkward numbers and the bounds.
+			reachLossFracMonthly: [0.1 + 0.2, 0, 1, 0.05, 0.05, 0.05, 0.5, 0.5, 0.5, 0.5, 0.5, 1e-7],
+			reachLossMaxMonthlyM3Day: [40_000, 40_000, 0, 1 / 3, 1 / 3, 1 / 3, 300, 300, 300, 300, 300, 123_456.789],
+			baseflowLossMonthlyM3Day: [2000, 2000, 2000, 2000, 2000, 0, 0, 0, 0, 0, 0, 0.1 + 0.2],
+			baseflowGainMonthlyM3Day: [0, 0, 0, 0, 0, 300, 300, 300, 300, 300, 300, 0],
 			// The unit's MAP and its source (issue #482, 209_unit_rain_series), an awkward number.
 			mapMm: 612.3 + 0.1,
 			mapSource: 'Synthetic atlas, 1991–2020'
@@ -274,6 +279,10 @@ describe('model store', () => {
 			reachLossMaxM3Day: null,
 			baseflowLossM3Day: 0,
 			baseflowGainM3Day: 0,
+			reachLossFracMonthly: null,
+			reachLossMaxMonthlyM3Day: null,
+			baseflowLossMonthlyM3Day: null,
+			baseflowGainMonthlyM3Day: null,
 			mapMm: null,
 			mapSource: null,
 			...n
@@ -306,6 +315,22 @@ describe('model store', () => {
 		// Migration 170's CHECKs keep the water source in the list and the pump and pool sizes, below the API's own checks (engine 1.65.0).
 		await expect(asOwner('UPDATE node SET crop_water_source = $2 WHERE id = $1', [farm.id, 'borehole'])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_water_source_known' });
 		await expect(asOwner('UPDATE node SET crop_river_pool_m3 = -1 WHERE id = $1', [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_river_pool_size' });
+		// Migration 317's CHECKs keep each monthly row 12 values, none NULL, in range, below the API's own checks (engine 1.116.0).
+		const row = (v: string) => `ARRAY[${[...new Array(11).fill('1'), v].join(',')}]::double precision[]`;
+		const monthlyChecks: [string, string][] = [
+			['reach_loss_frac_monthly', 'node_reach_loss_frac_monthly_range'],
+			['reach_loss_max_monthly_m3_day', 'node_reach_loss_max_monthly_size'],
+			['baseflow_loss_monthly_m3_day', 'node_baseflow_loss_monthly_size'],
+			['baseflow_gain_monthly_m3_day', 'node_baseflow_gain_monthly_size']
+		];
+		for (const [col, constraint] of monthlyChecks) {
+			const bad = [`ARRAY[${new Array(11).fill('0').join(',')}]::double precision[]`, row('NULL'), row('-1')];
+			bad.push(col === 'reach_loss_frac_monthly' ? row('1.5') : row("'Infinity'"));
+			for (const v of bad) await expect(asOwner(`UPDATE node SET ${col} = ${v} WHERE id = $1`, [canal.id]), `${col} = ${v}`).rejects.toMatchObject({ code: '23514', constraint });
+			// Positive controls: 12 values in range, and NULL, as the canal had (the read-back below expects it).
+			await asOwner(`UPDATE node SET ${col} = ${row('0')} WHERE id = $1`, [canal.id]);
+			await asOwner(`UPDATE node SET ${col} = NULL WHERE id = $1`, [canal.id]);
+		}
 		await expect(asOwner('UPDATE demand_object SET water_source = $2 WHERE id = $1', [model.demandObjects[0]!.id, 'well'])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_water_source_known' });
 		await expect(asOwner("UPDATE demand_object SET river_pump_m3_day = 'Infinity' WHERE id = $1", [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_river_pump_size' });
 		// Migration 202's CHECKs keep each crop supply share in 0–1 and the pipe a size, below the API's own checks (engine 1.73.0),

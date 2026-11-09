@@ -2032,7 +2032,7 @@ export function buildNetworkPlan(
 	}
 	const claimsOn = (w: string[] | null) => {
 		const share = plan.nodes.map((n) => n.share);
-		applySeniorClaims(plan.nodes, seniorClaims(nodes, topo, share, reaches, days, users, w, cutOf), !!restriction?.userCut);
+		applySeniorClaims(plan.nodes, seniorClaims(nodes, topo, share, reaches, days, month, users, w, cutOf), !!restriction?.userCut);
 	};
 	claimsOn(warnings);
 	// A calibration candidate's shares move with its parameters: the shares, then the claims made from them.
@@ -2598,6 +2598,8 @@ function seniorClaims(
 	share: ArrayLike<number>,
 	reaches: readonly (PlanReachLoss | undefined)[],
 	days: number,
+	/** Calendar month (1–12) of each day: a reach's losses may be set by month (engine 1.116.0). */
+	month: ArrayLike<number>,
 	users: ReadonlyMap<number, OtherUser>,
 	warnings: string[] | null,
 	/**
@@ -2670,7 +2672,7 @@ function seniorClaims(
 					for (let t = 0; t < days; t++) {
 						let v = (pump === undefined ? dem[t]! : Math.min(dem[t]!, pump)) * f;
 						for (let a = 0; a < path.length; a++) {
-							const g = reachGross(reaches[path[a]!]!, v);
+							const g = reachGross(reaches[path[a]!]!, v, month[t]!);
 							add[a]![t]! += g - v;
 							v = g;
 						}
@@ -3000,11 +3002,11 @@ function catchmentRunoffCoefficient(
  * The plan as the natural flow crosses it (./network/reachLoss.ts routeNatural), or null when no reach loses
  * (engine ≥ 1.76.0) and no unit loses or gains base flow (engine 1.86.0, ./network/baseflow.ts).
  */
-export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>): NaturalReaches | null {
+export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream' | 'month'>): NaturalReaches | null {
 	const reach = plan.nodes.map((n) => n.reachLoss);
 	const baseflow = plan.nodes.map((n) => n.baseflow);
 	const hasBase = baseflow.some((p) => p);
-	return reach.some((p) => p) || hasBase ? { order: plan.order, upstream: plan.upstream, reach, ...(hasBase ? { baseflow } : {}) } : null;
+	return reach.some((p) => p) || hasBase ? { order: plan.order, upstream: plan.upstream, reach, month: plan.month, ...(hasBase ? { baseflow } : {}) } : null;
 }
 
 /**
@@ -3015,7 +3017,7 @@ export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upst
  * (net of WRSM's Bedloss) are compared with: the run's WR2012 check and the
  * calibration's MAR penalty. null when no reach loses or there is no outlet.
  */
-export function naturalAtOutlet(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>, outflow: number, natural: ArrayLike<number>): Float64Array | null {
+export function naturalAtOutlet(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream' | 'month'>, outflow: number, natural: ArrayLike<number>): Float64Array | null {
 	const r = naturalReaches(plan);
 	if (!r || outflow < 0) return null;
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h): each unit's own runoff, and natural flow is their sum (no rest).

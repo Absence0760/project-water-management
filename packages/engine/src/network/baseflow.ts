@@ -16,6 +16,7 @@
 // the plan (../run.ts), the simulation (./simulate.ts) and the self-checks
 // (../verify/checks.ts) read a unit through these functions.
 import type { NetworkNode } from '../project';
+import { waterYearIndex } from '../calendar';
 
 /** The run series a unit with a base-flow loss leaves: what it lost each day. */
 export const BASEFLOW_LOSS_SERIES = {
@@ -31,51 +32,78 @@ export const BASEFLOW_GAIN_SERIES = {
 	unit: 'm³/day'
 } as const;
 
-/** A unit's base flow as the simulation runs it, m³/day: the loss at most (0 = none) and the gain (0 = none); one of them > 0. */
+/**
+ * A unit's base flow as the simulation runs it, m³/day by calendar month
+ * (index 1–12; 0 unused): the loss at most (0 = none) and the gain (0 =
+ * none). Set by month (engine 1.116.0) or the one value copied into every
+ * month; `loses` / `gains` say whether any month has one, which decides the
+ * run's series.
+ */
 export interface PlanBaseflow {
-	lossM3Day: number;
-	gainM3Day: number;
+	lossM3Day: Float64Array;
+	gainM3Day: Float64Array;
+	loses: boolean;
+	gains: boolean;
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+/** Water-year month names (Oct–Sep), for the warnings. */
+const MONTH_NAMES = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'] as const;
+
 /**
- * A unit's base-flow loss and gain (absent = neither). Each must be a size
- * ≥ 0; anything else runs as 0, with a warning. Only units carry them: on a
- * gauge or an other water user they are ignored, with a warning (the node
- * form and the API refuse them there).
+ * A unit's base-flow loss and gain (absent = neither): each by month when its
+ * monthly row is set (`baseflowLossMonthlyM3Day`, `baseflowGainMonthlyM3Day`,
+ * water-year order), else the one value all year. Each must be a size ≥ 0;
+ * anything else runs as 0, with a warning. Only units carry them: on a gauge
+ * or an other water user they are ignored, with a warning (the node form and
+ * the API refuse them there).
  */
 export function baseflowOf(n: NetworkNode, warnings: string[]): { baseflow?: PlanBaseflow } {
-	const loss = n.baseflowLossM3Day;
-	const gain = n.baseflowGainM3Day;
-	const set = (v: number | undefined) => v !== undefined && v !== null && v !== 0;
-	if (!set(loss) && !set(gain)) return {};
+	const lossRow = Array.isArray(n.baseflowLossMonthlyM3Day) ? n.baseflowLossMonthlyM3Day : null;
+	const gainRow = Array.isArray(n.baseflowGainMonthlyM3Day) ? n.baseflowGainMonthlyM3Day : null;
+	const set = (v: number | null | undefined) => v !== undefined && v !== null && v !== 0;
+	const anySet = (row: readonly (number | null)[] | null, one: number | undefined) => (row ? row.some(set) : set(one));
+	if (!anySet(lossRow, n.baseflowLossM3Day) && !anySet(gainRow, n.baseflowGainM3Day)) return {};
 	const where = `${n.kind === 'farm' ? 'unit' : n.kind} "${n.name}"`;
 	if (n.kind !== 'farm') {
 		warnings.push(`${where}: a base-flow loss or gain is a unit's; ignored here`);
 		return {};
 	}
-	const size = (v: number | undefined, what: string): number => {
+	const size = (v: number | null | undefined, what: string): number => {
 		if (!set(v)) return 0;
 		if (finite(v) && v >= 0) return v;
 		warnings.push(`${where}: base-flow ${what} ${String(v)} m³/day is not a size ≥ 0; none`);
 		return 0;
 	};
-	const lossM3Day = size(loss, 'loss');
-	const gainM3Day = size(gain, 'gain');
-	if (!(lossM3Day > 0) && !(gainM3Day > 0)) return {};
-	return { baseflow: { lossM3Day, gainM3Day } };
+	const row = (r: readonly (number | null)[] | null, one: number | undefined, what: string): Float64Array => {
+		const out = new Float64Array(13);
+		if (r && r.length !== 12) warnings.push(`${where}: base-flow ${what} by month should have 12 monthly values, has ${r.length}; missing months are 0`);
+		const all = r ? 0 : size(one, what);
+		for (let m = 1; m <= 12; m++) {
+			const wy = waterYearIndex(m);
+			out[m] = r ? size(r[wy], `${what} in ${MONTH_NAMES[wy]}`) : all;
+		}
+		return out;
+	};
+	const lossM3Day = row(lossRow, n.baseflowLossM3Day, 'loss');
+	const gainM3Day = row(gainRow, n.baseflowGainM3Day, 'gain');
+	const loses = lossM3Day.some((v) => v > 0);
+	const gains = gainM3Day.some((v) => v > 0);
+	if (!loses && !gains) return {};
+	return { baseflow: { lossM3Day, gainM3Day, loses, gains } };
 }
 
-/** The day's base-flow loss on a runoff `i`: MIN(L, i), 0 for no runoff. */
-export function baseflowLossDay(p: PlanBaseflow, i: number): number {
-	if (!(i > 0) || !(p.lossM3Day > 0)) return 0;
-	return i < p.lossM3Day ? i : p.lossM3Day;
+/** The day's base-flow loss on a runoff `i` in calendar month `m` (1–12): MIN(L, i), 0 for no runoff. */
+export function baseflowLossDay(p: PlanBaseflow, i: number, m: number): number {
+	const l = p.lossM3Day[m]!;
+	if (!(i > 0) || !(l > 0)) return 0;
+	return i < l ? i : l;
 }
 
-/** The runoff after the base flow: i − MIN(L, i) + gain. */
-export function baseflowRunoff(p: PlanBaseflow, i: number): number {
-	return i - baseflowLossDay(p, i) + p.gainM3Day;
+/** The runoff after the base flow in calendar month `m`: i − MIN(L, i) + gain. */
+export function baseflowRunoff(p: PlanBaseflow, i: number, m: number): number {
+	return i - baseflowLossDay(p, i, m) + p.gainM3Day[m]!;
 }
 
 /** Does any unit of the model lose or gain base flow? baseflowOf's own test, without its warnings. */

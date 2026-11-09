@@ -2018,6 +2018,19 @@ export interface NetworkNode {
 	/** The reach's bed losses at most, m³/day; null / absent = no cap. Read only with `reachLossFrac` > 0. */
 	reachLossMaxM3Day?: number | null;
 	/**
+	 * The bed losses' share by water-year month (engine 1.116.0, Oct–Sep, 12
+	 * values in [0, 1], docs/model.md §2.6b): when set it replaces
+	 * `reachLossFrac`, which is then inert; 0 in a month = no loss that month.
+	 * null / absent = the one share all year.
+	 */
+	reachLossFracMonthly?: number[] | null;
+	/**
+	 * The bed losses' cap by water-year month (engine 1.116.0, Oct–Sep, 12
+	 * values ≥ 0, m³/day): when set it replaces `reachLossMaxM3Day`. null /
+	 * absent = that one cap (or none) all year.
+	 */
+	reachLossMaxMonthlyM3Day?: number[] | null;
+	/**
 	 * A unit's base-flow loss (engine 1.86.0, issue #523 B1, #90 R4 (a),
 	 * docs/model.md §2.6b): m³/day of its own runoff lost to groundwater
 	 * before it reaches the river or its dam, at most the day's runoff
@@ -2032,6 +2045,15 @@ export interface NetworkNode {
 	 * absent = none. Units only.
 	 */
 	baseflowGainM3Day?: number;
+	/**
+	 * The base-flow loss by water-year month (engine 1.116.0, Oct–Sep, 12
+	 * values ≥ 0, m³/day, docs/model.md §2.6b): when set it replaces
+	 * `baseflowLossM3Day`, which is then inert. null / absent = the one value
+	 * all year. Units only.
+	 */
+	baseflowLossMonthlyM3Day?: number[] | null;
+	/** The base-flow gain by water-year month (engine 1.116.0), as `baseflowLossMonthlyM3Day`; replaces `baseflowGainM3Day`. Units only. */
+	baseflowGainMonthlyM3Day?: number[] | null;
 }
 
 /**
@@ -2156,13 +2178,35 @@ export const DAM_STORAGE_DEFAULTS = {
 /** What a node without the bed-loss fields (engine ≥ 1.75.0, docs/model.md §2.6b) runs as: no losses in the reach below it. */
 export const REACH_LOSS_DEFAULTS = {
 	reachLossFrac: 0,
-	reachLossMaxM3Day: null
+	reachLossMaxM3Day: null,
+	reachLossFracMonthly: null,
+	reachLossMaxMonthlyM3Day: null
 } as const;
+
+/**
+ * Each one value of the bed losses and the base flow, and the monthly row
+ * that replaces it when set (engine 1.116.0, docs/model.md §2.6b): with the
+ * row set, the one value is kept but the run never reads it.
+ */
+export const MONTHLY_ROW_OF = {
+	reachLossFrac: 'reachLossFracMonthly',
+	reachLossMaxM3Day: 'reachLossMaxMonthlyM3Day',
+	baseflowLossM3Day: 'baseflowLossMonthlyM3Day',
+	baseflowGainM3Day: 'baseflowGainMonthlyM3Day'
+} as const satisfies Partial<Record<keyof NetworkNode, keyof NetworkNode>>;
+
+/** Is `field` a one value that its monthly row replaces on node `n` (MONTHLY_ROW_OF)? */
+export function replacedByMonth(n: Partial<NetworkNode>, field: string): boolean {
+	const row = Object.hasOwn(MONTHLY_ROW_OF, field) ? MONTHLY_ROW_OF[field as keyof typeof MONTHLY_ROW_OF] : undefined;
+	return row !== undefined && Array.isArray(n[row]);
+}
 
 /** What a unit without the base-flow fields (engine 1.86.0, docs/model.md §2.6b) runs as: no base-flow loss or gain. */
 export const BASEFLOW_DEFAULTS = {
 	baseflowLossM3Day: 0,
-	baseflowGainM3Day: 0
+	baseflowGainM3Day: 0,
+	baseflowLossMonthlyM3Day: null,
+	baseflowGainMonthlyM3Day: null
 } as const;
 
 /** What a node without the development fields (engine ≥ 1.30.0, docs/model.md §2.7g) runs as: its entered dam and demand throughout. */
@@ -2474,9 +2518,14 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				// Bed losses in the reach below (engine ≥ 1.75.0): none unless set.
 				n.reachLossFrac ??= REACH_LOSS_DEFAULTS.reachLossFrac;
 				if (n.reachLossMaxM3Day === undefined) n.reachLossMaxM3Day = REACH_LOSS_DEFAULTS.reachLossMaxM3Day;
+				// By month (engine 1.116.0): the one value all year unless set.
+				if (n.reachLossFracMonthly === undefined) n.reachLossFracMonthly = REACH_LOSS_DEFAULTS.reachLossFracMonthly;
+				if (n.reachLossMaxMonthlyM3Day === undefined) n.reachLossMaxMonthlyM3Day = REACH_LOSS_DEFAULTS.reachLossMaxMonthlyM3Day;
 				// A unit's base-flow loss and gain (engine 1.86.0): none unless set.
 				n.baseflowLossM3Day ??= BASEFLOW_DEFAULTS.baseflowLossM3Day;
 				n.baseflowGainM3Day ??= BASEFLOW_DEFAULTS.baseflowGainM3Day;
+				if (n.baseflowLossMonthlyM3Day === undefined) n.baseflowLossMonthlyM3Day = BASEFLOW_DEFAULTS.baseflowLossMonthlyM3Day;
+				if (n.baseflowGainMonthlyM3Day === undefined) n.baseflowGainMonthlyM3Day = BASEFLOW_DEFAULTS.baseflowGainMonthlyM3Day;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;

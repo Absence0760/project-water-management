@@ -539,6 +539,29 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, baseflowGainM3Day: 10 }, unit] })).join()).toMatch(/only a hydrological unit has a base-flow loss or gain/);
 	});
 
+	it('takes bed losses and base flow by month (engine 1.116.0): none by default, 12 values in range, the outlet and units-only rules', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10) };
+		expect(ModelBody.parse(body(monthly)).nodes[1]).toMatchObject({ reachLossFracMonthly: null, reachLossMaxMonthlyM3Day: null, baseflowLossMonthlyM3Day: null, baseflowGainMonthlyM3Day: null });
+		const wet = [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+		const set = ModelBody.parse({
+			...body(monthly),
+			nodes: [gauge, { ...unit, reachLossFracMonthly: wet, reachLossMaxMonthlyM3Day: new Array(12).fill(40_000), baseflowLossMonthlyM3Day: new Array(12).fill(1500), baseflowGainMonthlyM3Day: new Array(12).fill(0) }]
+		});
+		expect(set.nodes[1]).toMatchObject({ reachLossFracMonthly: wet, baseflowLossMonthlyM3Day: new Array(12).fill(1500) });
+		expect(modelProblems(set)).toEqual([]);
+		for (const bad of [
+			{ reachLossFracMonthly: [...wet.slice(1), 1.01] },
+			{ reachLossFracMonthly: wet.slice(1) },
+			{ reachLossMaxMonthlyM3Day: [...new Array(11).fill(1), -1] },
+			{ baseflowLossMonthlyM3Day: [...new Array(11).fill(1), Number.POSITIVE_INFINITY] },
+			{ baseflowGainMonthlyM3Day: new Array(13).fill(1) }
+		])
+			expect(ModelBody.safeParse({ ...body(monthly), nodes: [gauge, { ...unit, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
+		// The outlet has no reach below it, and only a unit has a base flow (model rules); positive controls above.
+		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, reachLossFracMonthly: wet }, unit] })).join()).toMatch(/is the outlet: there is no reach below it/);
+		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, baseflowGainMonthlyM3Day: new Array(12).fill(5) }, unit] })).join()).toMatch(/only a hydrological unit has a base-flow loss or gain/);
+	});
+
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10) };
 		it('is none by default, and fills a window’s blanks', () => {

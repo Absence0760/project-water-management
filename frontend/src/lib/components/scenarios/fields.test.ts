@@ -41,12 +41,14 @@ describe('field specs cover the engine’s op catalogue', () => {
 	});
 
 	it('lists a node kind’s fields in the engine’s order', () => {
-		// A gauge: its name, whether it is an EWR site (engine 1.5.0) and the bed losses below it (engine 1.75.0).
+		// A gauge: its name, whether it is an EWR site (engine 1.5.0) and the bed losses below it (engine 1.75.0), by month too (1.116.0).
 		expect(nodeFields('gauge')).toEqual([
 			{ field: 'name', label: 'Name' },
 			{ field: 'ewrSite', label: 'EWR site' },
 			{ field: 'reachLossFrac', label: 'Bed losses in the reach below' },
-			{ field: 'reachLossMaxM3Day', label: 'Bed losses at most' }
+			{ field: 'reachLossMaxM3Day', label: 'Bed losses at most' },
+			{ field: 'reachLossFracMonthly', label: 'Bed losses by month' },
+			{ field: 'reachLossMaxMonthlyM3Day', label: 'Bed losses at most by month' }
 		]);
 		expect(nodeFields('farm').map((f) => f.field)).toEqual([...NODE_SET_FIELDS.farm]);
 	});

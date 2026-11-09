@@ -225,13 +225,20 @@ the ranks within one (engine ≥ 1.64.0),
   the reach below any node but the outlet, the node below receiving the
   rest; a priority user's claim grossed up through every reach on the way, and
   the requirement crossing each less what the claims were grossed up by for
-  it (`reach_loss`, `senior_reach_loss`).
+  it (`reach_loss`, `senior_reach_loss`). By month (engine 1.116.0): each
+  day takes its calendar month's share and cap, in the loss and the
+  gross-up alike; a third of the losing nodes in the random networks draw a
+  share row, a cap row or both, some months 0.
 - **A unit's base-flow loss and gain** (§2.6b, engine 1.86.0): MIN(loss, I)
   taken off the unit's runoff and the gain added before the dam/river split,
   the priority pass and the hands-off flow, the runoff column staying I; the
   EWR attribution's net impact reading the runoff after them
   (`baseflow_loss`, `baseflow_gain`; probe `baseflow-loss-and-gain`, and a
-  quarter of the random networks).
+  quarter of the random networks). By month (engine 1.116.0): each day takes
+  its calendar month's loss and gain; a third of those units draw monthly
+  rows, some months 0. The natural flow routed net of the losses (a Reserve
+  rule table's site, the WR2012 check) is not modelled here; the engine's
+  `run.reachLossNatural.test.ts` covers it, by month too.
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent

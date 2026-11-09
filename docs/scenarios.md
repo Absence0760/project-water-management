@@ -198,12 +198,16 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   → 0.2 (with `cropShareRemote` → 0 when the farm had no table).
   Bed losses in the reach below (engine ≥ 1.75.0, [model.md
   §2.6b](./model.md)): `reachLossFrac` (0–1) and `reachLossMaxM3Day` (≥ 0,
-  null = no cap), on any kind of node, never the outlet (a save rule); always
-  a baseline assumption, since the river's losses are no party's proposal.
+  null = no cap), on any kind of node, never the outlet (a save rule), and by
+  water-year month (engine 1.116.0) `reachLossFracMonthly` and
+  `reachLossMaxMonthlyM3Day` (12 values, null = the one value all year);
+  always a baseline assumption, since the river's losses are no party's
+  proposal.
   A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1, [model.md
   §2.6b](./model.md)): `baseflowLossM3Day` and `baseflowGainM3Day` (m³/day,
-  ≥ 0), on a unit only; always a baseline assumption, the land's
-  groundwater, not a proposal.
+  ≥ 0), on a unit only, and by month (engine 1.116.0)
+  `baseflowLossMonthlyM3Day` and `baseflowGainMonthlyM3Day`; always a
+  baseline assumption, the land's groundwater, not a proposal.
 
   **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md);
   provisional decision 2026-10-01, to be confirmed by the client's
@@ -772,7 +776,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale`, `climate.delta`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, climate) |
-| `node.set` | the node is owned and the field is not land (`areaKm2`; it sets the unit's natural MAR share), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
+| `node.set` | the node is owned and the field is not land (`areaKm2`; it sets the unit's natural MAR share), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own; by month `reachLossFracMonthly` / `reachLossMaxMonthlyM3Day`, engine 1.116.0), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's; by month `baseflowLossMonthlyM3Day` / `baseflowGainMonthlyM3Day`); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
 | `node.add` | not a gauge, and no land of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land, and no EWR rule table sited at it (needs `input`) | baseline |
 | `node.insert` | as `node.add`: not a gauge, and no land of its own; and not a priority other water user (the default priority) | baseline. A priority user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |

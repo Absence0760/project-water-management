@@ -30,7 +30,8 @@ Anyone holding a pack can hash the file at the engine's tag and compare.
 | [v10](./v10.md) | 2026-10-23 | 1.90.0 – 1.93.0 | §5: the DRM percentile tables read the total Reserve flow or, by the project's choice, the Reserve flow without high flows (issue #552) |
 | [v11](./v11.md) | 2026-10-24 | 1.94.0 – 1.103.0 | §3, §5: the EWR may be split between the units by each unit's natural MAR under per-unit rain, its period provisional (issue #553) |
 | [v12](./v12.md) | 2026-10-27 | 1.104.0 | §2: the gap-filling product (ERA5-Land, IMERG Late; issue #604 R4-B), and GR4J on a daily FAO-56 reference ET record under a monthly PE row (issue #604 R5-E), both opt-in and provisional |
-| [v13](./v13.md) | 2026-10-28 | ≥ 1.105.0 | §3, §5: the EWR is split by each unit's natural MAR under both flow generation methods; under catchment rain from GR4J runs on each unit's own rain, for the shares only (issue #615); §3: rainfall stations, with each area's CHIRPS corrected against its station's rain at the area's MAP and a patching priority of stations then CHIRPS (issue #612) |
+| [v13](./v13.md) | 2026-10-28 | 1.105.0 – 1.115.0 | §3, §5: the EWR is split by each unit's natural MAR under both flow generation methods; under catchment rain from GR4J runs on each unit's own rain, for the shares only (issue #615); §3: rainfall stations, with each area's CHIRPS corrected against its station's rain at the area's MAP and a patching priority of stations then CHIRPS (issue #612) |
+| [v14](./v14.md) | 2026-11-09 | ≥ 1.116.0 | §3: a unit's base-flow loss and gain by month, and the bed losses in a reach (share and cap, by month or for the year), which no earlier version described |
 
 The highest version is the current one: new sign-offs and packs cite it.
 

@@ -288,13 +288,13 @@ const CROP_SUPPLY = ['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropR
  * docs/model.md §2.6b): the share of the flow lost and its daily cap. Any
  * kind of node; a property of the river, so a baseline assumption.
  */
-const REACH = ['reachLossFrac', 'reachLossMaxM3Day'] as const;
+const REACH = ['reachLossFrac', 'reachLossMaxM3Day', 'reachLossFracMonthly', 'reachLossMaxMonthlyM3Day'] as const;
 /**
  * A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1,
  * docs/model.md §2.6b), m³/day. Units only; the land's groundwater, so a
  * baseline assumption.
  */
-const BASEFLOW = ['baseflowLossM3Day', 'baseflowGainM3Day'] as const;
+const BASEFLOW = ['baseflowLossM3Day', 'baseflowGainM3Day', 'baseflowLossMonthlyM3Day', 'baseflowGainMonthlyM3Day'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -372,8 +372,12 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	cropRemoteCapM3Day: nullable(nonNeg),
 	reachLossFrac: range(0, REACH_LOSS_FRAC_MAX),
 	reachLossMaxM3Day: nullable(nonNeg),
+	reachLossFracMonthly: nullable(monthlyOf(range(0, REACH_LOSS_FRAC_MAX))),
+	reachLossMaxMonthlyM3Day: nullable(monthlyOf(nonNeg)),
 	baseflowLossM3Day: nonNeg,
 	baseflowGainM3Day: nonNeg,
+	baseflowLossMonthlyM3Day: nullable(monthlyOf(nonNeg)),
+	baseflowGainMonthlyM3Day: nullable(monthlyOf(nonNeg)),
 	ewrSite: boolean
 };
 

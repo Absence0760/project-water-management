@@ -55,3 +55,55 @@ test('set a base-flow loss and gain on a unit, save, reload and run', async ({ p
 	await expect(balance).toContainText('+ base-flow gain + rain on dams =');
 	await expect(balance).toContainText('+ base-flow loss + outflow + end storage.');
 });
+
+test('vary the base flow by month: a loss in the wet months and a gain in the dry months', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Base flow by month');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await openNodeForm(page);
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+
+	await baseflow(page).getByTestId('baseflow-vary').check();
+	// The one values stay stored, folded under "Set by month above instead" and read-only.
+	await expect(baseflow(page).getByText('Set by month above instead: Base-flow loss, Base-flow gain.')).toBeVisible();
+	await expect(baseflow(page).getByLabel('Base-flow loss (m³/day)')).not.toBeEditable();
+	const lossJan = baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day');
+	const gainJul = baseflow(page).getByLabel('Base flow Upper farm gains in Jul, m³/day');
+	await expect(lossJan).toHaveValue('0');
+	await lossJan.fill('2000');
+	await lossJan.blur();
+	await gainJul.fill('300');
+	await gainJul.blur();
+	await expectNoViolations(page, { include: '[data-testid="baseflow-by-month"]' });
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toHaveCount(0);
+
+	await page.reload();
+	await openNodeForm(page);
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await expect(baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day')).toHaveValue(/^2[\s ]?000$/);
+	await expect(baseflow(page).getByLabel('Base flow Upper farm gains in Jul, m³/day')).toHaveValue('300');
+	await expect(baseflow(page).getByLabel('Base flow Upper farm gains in Jan, m³/day')).toHaveValue('0');
+	await expect(page.getByTestId('node-section-baseflow').getByTestId('node-section-summary')).toHaveText(/^loses 0–2[\s\u202f]?000 m³\/day, gains 0–300 m³\/day by month$/);
+
+	// Cleared: the one values count again, kept all along (0 here), and the months go.
+	await baseflow(page).getByTestId('baseflow-vary').uncheck();
+	await expect(baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day')).toHaveCount(0);
+	await expect(baseflow(page).getByLabel('Base-flow loss (m³/day)')).toBeEditable();
+	await expect(baseflow(page).getByLabel('Base-flow loss (m³/day)')).toHaveValue('0');
+	await expect(page.getByTestId('node-section-baseflow').getByTestId('node-section-summary')).toHaveText('None');
+	// Ticked again for the run below: the months start at the one values.
+	await baseflow(page).getByTestId('baseflow-vary').check();
+	const again = baseflow(page).getByLabel('Base flow Upper farm loses in Jan, m³/day');
+	await again.fill('2000');
+	await again.blur();
+	await saveModelChanges(page);
+
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.getByLabel(/^Run label/).fill('Base flow by month');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Base flow by month' })).toBeVisible();
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Arithmetic checks' }).click();
+	const checks = page.getByRole('region', { name: /^Arithmetic checks/ });
+	await expect(checks.getByRole('status').filter({ hasText: 'arithmetic checks' })).toHaveText(/^All \d+ arithmetic checks passed\.$/);
+});

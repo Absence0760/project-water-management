@@ -4715,8 +4715,28 @@ a share set there is ignored with a warning. The run clamps a share outside
 warning; the API and the node form refuse both (`backend/src/model/validate.ts`,
 `frontend/src/lib/model/validate.ts`).
 
+**By month (engine 1.116.0).** Either value can vary by water-year month:
+
+| Field | Meaning |
+| --- | --- |
+| `reachLossFracMonthly` | 12 shares (Oct–Sep), each 0 ≤ f ≤ 1; when set it replaces `reachLossFrac` (kept, inert); 0 in a month = no loss that month. null (the default) = the one share all year |
+| `reachLossMaxMonthlyM3Day` | 12 caps (Oct–Sep), m³/day ≥ 0; when set it replaces `reachLossMaxM3Day`. null = the one cap (or none) all year |
+
+Each day takes its own calendar month's f and L in every formula below (the
+loss, the gross-up of a priority claim, the natural flow routed for a
+comparison), so the hydrologist can fit the loss to the season: Q is the
+whole flow leaving the node, what reaches it from the nodes above included,
+so in the wet months a small share with a high cap can still lose a lot of a
+large flow, and in the dry months a larger share with a small cap fits a low
+one. One value in every month runs to the bit as the one value
+(`network/reachLoss.test.ts` › "bed losses by month"). A month outside the
+range runs clamped (a share) or uncapped (a cap) with a warning naming the
+month, as the one values do; a row of all zeros is no loss. With f = 1 and a
+different cap each month it is WRSM's Bedloss month by month (below).
+
 **Each day** (network/reachLoss.ts, at the hand-off in network/simulate.ts),
-with Q the upper node's outflow U:
+with Q the upper node's outflow U (everything it passes downstream, its own
+water and what reached it from upstream, after its dam and its use):
 
 ```
 loss = MIN(L, f × Q)       (0 when Q ≤ 0; L = ∞ without a cap)
@@ -4738,7 +4758,8 @@ not modelled: there is no store or lag for it, so a reach that feeds a spring
 further down is a known simplification. WRSM's Bedloss is a fixed monthly
 volume, MIN(Bedloss, flow): **f = 1 with L = Bedloss × 10⁶ ÷ days in the
 month reproduces it exactly**, day by day, every flow below the day's Bedloss
-lost whole (`network/reachLoss.test.ts`). A share below 1 is a proportional
+lost whole (`network/reachLoss.test.ts`); with the cap set by month (engine
+1.116.0), a different Bedloss in each month. A share below 1 is a proportional
 loss function of the kind eWater Source's practice note on losses describes,
 so the loss shrinks with the flow in a drought rather than taking the whole
 low flow (Mvandaba et al. 2018, PIAHS 378, discuss transmission losses on
@@ -4855,8 +4876,9 @@ eWater Source, Practice Note: Estimation of Losses
 USDA NRCS National Engineering Handbook part 630, chapter 19 (Lane's
 transmission losses).
 
-**Scenarios.** `reachLossFrac` and `reachLossMaxM3Day` are `node.set` fields
-on every kind of node, and baseline assumptions (`BASELINE_NODE_FIELDS`): the
+**Scenarios.** `reachLossFrac` and `reachLossMaxM3Day` (and their monthly
+rows, engine 1.116.0) are `node.set` fields on every kind of node, and
+baseline assumptions (`BASELINE_NODE_FIELDS`): the
 river's losses are not something an applicant proposes (docs/scenarios.md).
 
 #### A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1)
@@ -4883,6 +4905,17 @@ and the run ignores one with a warning):
 
 A value that isn't a size ≥ 0 runs as 0 with a warning; the API and the node
 form refuse it.
+
+**By month (engine 1.116.0).** `baseflowLossMonthlyM3Day` and
+`baseflowGainMonthlyM3Day` (12 values ≥ 0, Oct–Sep) each replace their one
+value when set (null, the default, is that value all year; the one value is
+kept, inert). Each day takes its own calendar month's L and B, so a unit can
+lose base flow in the wet months, when a full river recharges the groundwater
+and more of it soaks away, and gain it in the dry months, when the groundwater
+feeds the river: a net gain in the dry season. The series `baseflow_loss` and
+`baseflow_gain` exist when any month has one; the natural flow routed for a
+comparison takes each day's month too. One value in every month runs to the
+bit as the one value (`network/baseflow.test.ts` › "base flow by month").
 
 **Each day** (network/baseflow.ts, in the unit's step in network/simulate.ts),
 with I the unit's runoff (§2.7 row I: natural × share, less land cover):
@@ -4934,8 +4967,11 @@ fitting both against one record is poorly identified.
 
 **Scenarios.** `baseflowLossM3Day` and `baseflowGainM3Day` are `node.set`
 fields on a unit and baseline assumptions (`BASELINE_NODE_FIELDS`), the
-land's groundwater rather than a proposal; an applicant's view keeps them on
-the units it anonymises (docs/scenarios.md § Applications).
+land's groundwater rather than a proposal, and so are their monthly rows
+(engine 1.116.0). An applicant's view drops them on the units it anonymises
+(`scenario/applicant.ts`): they go with the unit's runoff, which its zeroed
+area takes to 0, so a kept gain would be water from nowhere (docs/scenarios.md
+§ Applications). It keeps the bed losses, the one values and the monthly rows.
 
 **Checks.** `checkBalance` recomputes each day's loss from the setting,
 requires a series exactly when the setting has one and counts both in the

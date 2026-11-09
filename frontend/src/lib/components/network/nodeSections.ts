@@ -10,6 +10,7 @@
 import type { NetworkNode } from '@water-management/engine';
 import type { NavGroup } from '#lib/components/common/sectionNav.js';
 import { GROUPS, hasDam, hasDamDevelopment, NODE_FIELDS, type NodeField } from './fields';
+import { hasBaseflowSettings } from './monthlyLosses';
 import { hasSupplySettings } from './supply';
 
 /** A field group of NODE_FIELDS, or one of the form's own sections. */
@@ -29,7 +30,9 @@ export const SECTION_TITLE: Record<NodeSection, string> = {
 };
 
 /** Whether one of NODE_FIELDS shows on this kind of node (a gauge passes flow through; a user has only groundwater). */
-export function fieldShows(f: NodeField, kind: NetworkNode['kind']): boolean {
+export function fieldShows(f: NodeField, kind: NetworkNode['kind'], node?: NetworkNode): boolean {
+	// A base-flow loss or gain left on a node that isn't a unit (engine 1.86.0) shows so it can be cleared (the save refuses it there).
+	if (f.group === 'baseflow' && kind !== 'farm') return !!node && hasBaseflowSettings(node);
 	if (f.farmOnly && kind !== 'farm') return false;
 	if (f.notGauge && kind === 'gauge') return false;
 	// An other water user has no land, dam or routing of its own (WP-1.33), but may have boreholes (WP-1.34), and a
@@ -39,13 +42,13 @@ export function fieldShows(f: NodeField, kind: NetworkNode['kind']): boolean {
 }
 
 /**
- * The sections the form shows for a node, in order. Demand objects, supply
- * and the dam's development fields also show on a node that isn't a unit (or
+ * The sections the form shows for a node, in order. Demand objects, supply,
+ * a base-flow loss or gain and the dam's development fields also show on a node that isn't a unit (or
  * has no dam) while it still carries them, so they can be cleared (the save
  * refuses them there).
  */
 export function nodeSections(node: NetworkNode, demandObjects: number): NodeSection[] {
-	const groups = new Set(NODE_FIELDS.filter((f) => fieldShows(f, node.kind)).map((f) => f.group));
+	const groups = new Set(NODE_FIELDS.filter((f) => fieldShows(f, node.kind, node)).map((f) => f.group));
 	const farm = node.kind === 'farm';
 	const own: Record<Exclude<NodeSection, NodeField['group']>, boolean> = {
 		// The unit's share in the latest run: shown, not edited (issue #616).

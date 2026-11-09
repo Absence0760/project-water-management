@@ -702,18 +702,18 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'bed-losses',
 		term: 'Bed losses (channel transmission losses)',
-		short: 'Flow lost into the river bed and banks between a hydrological unit and the next one downstream; it leaves the catchment.',
+		short: 'A share of all the flow leaving a hydrological unit, up to a daily cap, lost into the river bed before the next one; by month if needed.',
 		units: 'share of the flow (shown as %); cap m³/day',
 		category: 'network',
-		fields: ['node.reachLossFrac', 'node.reachLossMaxM3Day', 'run.reach_loss']
+		fields: ['node.reachLossFrac', 'node.reachLossMaxM3Day', 'node.reachLossFracMonthly', 'node.reachLossMaxMonthlyM3Day', 'run.reach_loss']
 	},
 	{
 		id: 'base-flow-loss-gain',
 		term: 'Base-flow loss and gain',
-		short: 'Groundwater a hydrological unit’s own runoff loses (out of the catchment) or gains (from outside it) each day, before the river or dam.',
+		short: 'Groundwater a hydrological unit’s own runoff loses (out of the catchment) or gains (from outside it) each day; both can vary by month.',
 		units: 'm³/day',
 		category: 'network',
-		fields: ['node.baseflowLossM3Day', 'node.baseflowGainM3Day', 'run.baseflow_loss', 'run.baseflow_gain']
+		fields: ['node.baseflowLossM3Day', 'node.baseflowGainM3Day', 'node.baseflowLossMonthlyM3Day', 'node.baseflowGainMonthlyM3Day', 'run.baseflow_loss', 'run.baseflow_gain']
 	},
 	{
 		id: 'outflow-gauge',
