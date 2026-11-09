@@ -10,8 +10,12 @@
 // (withUser), so the copy gets the rows and names the copier could read in the
 // original (231's rule: a viewer reads each volume only where the owners
 // allowed it, and a name only as an editor or owner), and RLS on the copy then
-// decides who reads them there. The holder keys (219) are the copy's own: its
-// salt is made with the project, and no run is copied, so no frozen key either.
+// decides who reads them there. The names are read as the copier, so the copy
+// holds exactly what allocation_holder_select returned to them; nothing here
+// ranks a role. The switch's position is read through the Allocations route's
+// one reader (viewerUnitsSwitch) and only carried, never used to decide. The
+// holder keys (219) are the copy's own: its salt is made with the project, and
+// no run is copied, so no frozen key either.
 // What points at a run (run_allocation_holder, the comparisons a run holds)
 // stays behind with the runs.
 //
@@ -19,6 +23,7 @@
 // empty one would say "0 rows"); who imported it isn't carried over
 // (imported_by NULL), as for the map's files (copyMap.ts). The times stay.
 import type { Db } from '../db/tx.js';
+import { viewerUnitsSwitch } from '../allocations/routes.js';
 import { recordAudit } from '../history/record.js';
 
 type IdMap = ReadonlyMap<string, string>;
@@ -56,8 +61,7 @@ export async function copyAllocations(db: Db, srcId: string, newId: string, ids:
 		[srcId, newId, copied.map((r) => r.old), copied.map((r) => r.new)]
 	);
 	// The owners' choice to let viewers read each volume (162): the copier owns the copy, so the owner-only setter takes it.
-	const { rows: flag } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [srcId]);
-	const viewerUnits = !!flag[0]?.on;
+	const viewerUnits = await viewerUnitsSwitch(db, srcId);
 	if (viewerUnits) {
 		await db.query('SELECT app_set_allocations_viewer_units($1, true)', [newId]);
 		await recordAudit(db, newId, 'allocation.viewer_units', { on: true });
