@@ -5,6 +5,7 @@
 // naturalised flows are net of WRSM's Bedloss. The same catchment without the
 // losses is the positive control. Synthetic catchment: invented numbers only.
 import { describe, expect, it } from 'vitest';
+import { reachAllYear } from './testing/lossPlans';
 import { daysPerMonth, toEpochDay } from './calendar';
 import type { ModelInput, ModelOutput, NetworkNode } from './project';
 import { Rng } from './random';
@@ -103,11 +104,12 @@ describe('naturalAtOutlet', () => {
 	// A (share 0.5, losing half its flow) and B (share 0.3) drain to the outlet O; 0.2 of the catchment is in no unit.
 	const plan = {
 		nodes: [
-			{ kind: 'farm' as const, share: 0.5, reachLoss: { frac: 0.5, maxM3Day: Infinity } },
+			{ kind: 'farm' as const, share: 0.5, reachLoss: reachAllYear(0.5, Infinity) },
 			{ kind: 'farm' as const, share: 0.3 },
 			{ kind: 'gauge' as const, share: 0 }
 		],
 		order: Int32Array.from([0, 1, 2]),
+		month: Uint8Array.from([1, 1, 1]),
 		upstream: [Int32Array.from([]), Int32Array.from([]), Int32Array.from([0, 1])]
 	} as unknown as Parameters<typeof naturalAtOutlet>[0];
 
@@ -175,8 +177,9 @@ describe('routeNatural with caps that bind, on two branches, and a site in the m
 	// B's all of it up to 100 m³/day (WRSM's Bedloss form). Day 0: A 1000, B 250; day 1: A 400, B 50.
 	const r = {
 		order: [0, 1, 2, 3],
+		month: [1, 1],
 		upstream: [[], [], [0], [1, 2]],
-		reach: [{ frac: 0.5, maxM3Day: 300 }, { frac: 1, maxM3Day: 100 }, { frac: 0.2, maxM3Day: Infinity }, undefined]
+		reach: [reachAllYear(0.5, 300), reachAllYear(1, 100), reachAllYear(0.2, Infinity), undefined]
 	};
 	const own = [
 		[1000, 400],

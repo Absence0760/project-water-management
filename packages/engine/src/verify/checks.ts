@@ -444,7 +444,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		}
 		if (L && reach) {
 			for (let t = 0; t < out.days; t++) {
-				const want = reachLossDay(reach, U[t]!);
+				const want = reachLossDay(reach, U[t]!, monthOfEpochDay(toEpochDay(out.startDate) + t));
 				if (L[t]! < 0 || Math.abs(L[t]! - want) > tol(want)) return `${n.id} day ${t}: bed losses ${L[t]} ≠ MIN(cap, f × outflow ${U[t]}) = ${want}`;
 				totOut += L[t]!;
 			}
@@ -504,7 +504,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const BFL = get.get(`${n.id}|${BASEFLOW_LOSS_SERIES.key}`);
 		const BFG = get.get(`${n.id}|${BASEFLOW_GAIN_SERIES.key}`);
 		const bf = baseflowOf(n, []).baseflow;
-		if (!!BFL !== !!bf?.lossM3Day || !!BFG !== !!bf?.gainM3Day) return `${n.id}: base-flow series ${BFL ? 'loss' : ''}${BFG ? ' gain' : ''} don't match the setting`;
+		if (!!BFL !== !!bf?.loses || !!BFG !== !!bf?.gains) return `${n.id}: base-flow series ${BFL ? 'loss' : ''}${BFG ? ' gain' : ''} don't match the setting`;
 		for (let t = 0; t < out.days; t++) {
 			let pools = 0;
 			if (riv) {
@@ -540,9 +540,10 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const bfl = BFL?.[t] ?? 0;
 			const bfg = BFG?.[t] ?? 0;
 			if (bf) {
-				const want = baseflowLossDay(bf, I![t]!);
-				if (Math.abs(bfl - want) > tol(want)) return `${where}: base-flow loss ${bfl} ≠ MIN(${bf.lossM3Day}, runoff ${I![t]}) = ${want}`;
-				if (bfg !== bf.gainM3Day) return `${where}: base-flow gain ${bfg} ≠ ${bf.gainM3Day}`;
+				const m = monthOfEpochDay(toEpochDay(out.startDate) + t);
+				const want = baseflowLossDay(bf, I![t]!, m);
+				if (Math.abs(bfl - want) > tol(want)) return `${where}: base-flow loss ${bfl} ≠ MIN(${bf.lossM3Day[m]}, runoff ${I![t]}) = ${want}`;
+				if (bfg !== bf.gainM3Day[m]) return `${where}: base-flow gain ${bfg} ≠ ${bf.gainM3Day[m]}`;
 			}
 			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret + rin + bfg;
 			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout + pools + rout + bfl;

@@ -834,6 +834,13 @@ def add_baseflow(rng: random.Random, doc: dict, dense: bool = False) -> None:
             x["baseflowLossM3Day"] = size()
         if which != 0:
             x["baseflowGainM3Day"] = size()
+        # By water-year month (engine >= 1.116.0), a third of the time: a wet-season loss and a dry-season gain.
+        if rng.random() < 0.35:
+            row = lambda: [rng.choice([0, size()]) for _ in range(12)]
+            if which != 1:
+                x["baseflowLossMonthlyM3Day"] = row()
+            if which != 0:
+                x["baseflowGainMonthlyM3Day"] = row()
 
 
 def add_external_transfers(rng: random.Random, doc: dict, dense: bool = False) -> None:
@@ -1270,6 +1277,16 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                 continue
             x["reachLossFrac"] = rng.choice([round(rng.uniform(0, 0.5), 3), 0.5, round(rng.uniform(0, 0.05), 3), 0.8, 1, 1.3])
             x["reachLossMaxM3Day"] = rng.choice([None, None, 0, round(rng.uniform(10, 500)), round(rng.uniform(500, 50000))])
+        # By water-year month (engine >= 1.116.0): on a third of those nodes a share and/or a cap row, some months
+        # 0, so the reach loses on some days only and a senior claim is grossed up by the day's month.
+        for x in nodes:
+            if not x.get("reachLossFrac") or rng.random() >= 0.35:
+                continue
+            which = rng.randrange(3)
+            if which != 1:
+                x["reachLossFracMonthly"] = [rng.choice([0, round(rng.uniform(0, 0.5), 3), 1, 0.8]) for _ in range(12)]
+            if which != 0:
+                x["reachLossMaxMonthlyM3Day"] = [rng.choice([0, round(rng.uniform(10, 500)), round(rng.uniform(500, 50000))]) for _ in range(12)]
 
 
 def _window(rng, start: dt.date, days: int) -> dict:

@@ -5,6 +5,7 @@
 // unit's impact), the default (none) running exactly as before, and the
 // invariants on random networks with base flow. Invented numbers only.
 import { describe, expect, it } from 'vitest';
+import { baseflowAllYear, reachAllYear } from '../testing/lossPlans';
 import type { ModelInput, NetworkNode } from '../project';
 import { naturalAtOutlet, runModel, runModelWith, withVerification } from '../run';
 import { randomInput } from '../testing/fuzz';
@@ -66,11 +67,11 @@ const has = (o: ReturnType<typeof run>, id: string, key: string) => o.series.som
 const passed = (o: ReturnType<typeof run>) => expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
 
 describe('the base-flow arithmetic', () => {
-	const p = { lossM3Day: 2000, gainM3Day: 300 };
+	const p = baseflowAllYear(2000, 300);
 
 	it('loss = MIN(L, runoff): never negative, never more than the runoff; the gain is added every day', () => {
-		expect([1000, 10_000, 3000, 0, -5].map((i) => baseflowLossDay(p, i))).toEqual([1000, 2000, 2000, 0, 0]);
-		expect([1000, 10_000, 3000, 0].map((i) => baseflowRunoff(p, i))).toEqual([300, 8300, 1300, 300]);
+		expect([1000, 10_000, 3000, 0, -5].map((i) => baseflowLossDay(p, i, 1))).toEqual([1000, 2000, 2000, 0, 0]);
+		expect([1000, 10_000, 3000, 0].map((i) => baseflowRunoff(p, i, 1))).toEqual([300, 8300, 1300, 300]);
 	});
 
 	it('baseflowOf: none by default or at 0; a bad size runs as none, warned; on a gauge or user, ignored and warned', () => {
@@ -78,14 +79,60 @@ describe('the base-flow arithmetic', () => {
 		expect(baseflowOf(node('A', 'farm', 'G'), w)).toEqual({});
 		expect(baseflowOf(node('A', 'farm', 'G', { baseflowLossM3Day: 0, baseflowGainM3Day: 0 }), w)).toEqual({});
 		expect(w).toEqual([]);
-		expect(baseflowOf(node('A', 'farm', 'G', { baseflowLossM3Day: 50 }), w)).toEqual({ baseflow: { lossM3Day: 50, gainM3Day: 0 } });
-		expect(baseflowOf(node('A', 'farm', 'G', { baseflowLossM3Day: -1, baseflowGainM3Day: 7 }), w)).toEqual({ baseflow: { lossM3Day: 0, gainM3Day: 7 } });
+		expect(baseflowOf(node('A', 'farm', 'G', { baseflowLossM3Day: 50 }), w)).toEqual({ baseflow: baseflowAllYear(50, 0) });
+		expect(baseflowOf(node('A', 'farm', 'G', { baseflowLossM3Day: -1, baseflowGainM3Day: 7 }), w)).toEqual({ baseflow: baseflowAllYear(0, 7) });
 		expect(w).toEqual(['unit "A": base-flow loss -1 m³/day is not a size ≥ 0; none']);
 		expect(baseflowOf(node('A', 'farm', 'G', { baseflowGainM3Day: Number.NaN }), w)).toEqual({});
 		expect(baseflowOf(node('G', 'gauge', null, { baseflowGainM3Day: 5 }), w)).toEqual({});
 		expect(w.at(-1)).toBe('gauge "G": a base-flow loss or gain is a unit\'s; ignored here');
 		expect(hasBaseflow([node('A', 'farm', 'G'), node('B', 'farm', 'G', { baseflowGainM3Day: 1 })])).toBe(true);
 		expect(hasBaseflow([node('A', 'farm', 'G', { baseflowLossM3Day: 0 })])).toBe(false);
+	});
+});
+
+/** A water-year row (Oct–Sep) with `jan` in January, `feb` in February and `rest` in every other month. */
+const janFeb = (jan: number, feb: number, rest = 0) => [rest, rest, rest, jan, feb, rest, rest, rest, rest, rest, rest, rest];
+
+describe('base flow by month (engine 1.116.0)', () => {
+	it('baseflowOf reads the water-year rows by calendar month; each row replaces its one value; a row of zeros is none', () => {
+		const w: string[] = [];
+		const p = baseflowOf(node('A', 'farm', 'G', { baseflowLossM3Day: 9, baseflowGainM3Day: 9, baseflowLossMonthlyM3Day: janFeb(2000, 0), baseflowGainMonthlyM3Day: janFeb(0, 300) }), w).baseflow!;
+		expect(w).toEqual([]);
+		expect([p.lossM3Day[1], p.lossM3Day[2], p.lossM3Day[10]]).toEqual([2000, 0, 0]);
+		expect([p.gainM3Day[1], p.gainM3Day[2]]).toEqual([0, 300]);
+		expect(p.loses && p.gains).toBe(true);
+		// A loss by month beside the one gain all year.
+		const q = baseflowOf(node('A', 'farm', 'G', { baseflowLossMonthlyM3Day: janFeb(10, 0), baseflowGainM3Day: 4 }), w).baseflow!;
+		expect([...q.gainM3Day.slice(1)]).toEqual(new Array(12).fill(4));
+		expect(baseflowOf(node('A', 'farm', 'G', { baseflowLossM3Day: 50, baseflowLossMonthlyM3Day: new Array(12).fill(0) }), w)).toEqual({});
+		expect(w).toEqual([]);
+		const r = baseflowOf(node('A', 'farm', 'G', { baseflowLossMonthlyM3Day: janFeb(-5, 10) }), w).baseflow!;
+		expect(r.lossM3Day[1]).toBe(0);
+		expect(w).toEqual(['unit "A": base-flow loss in Jan -5 m³/day is not a size ≥ 0; none']);
+		expect(baseflowOf(node('U', 'user', 'G', { baseflowGainMonthlyM3Day: janFeb(1, 1) }), w)).toEqual({});
+		expect(w.at(-1)).toBe('user "U": a base-flow loss or gain is a unit\'s; ignored here');
+	});
+
+	it('a loss in the wet month and a net gain in the dry month, each day at its own month’s values', () => {
+		// Two January days (wet: loses up to 2 000), then two February days (dry: gains 300).
+		const i = input([node('G', 'gauge', null), node('A', 'farm', 'G', { baseflowLossMonthlyM3Day: janFeb(2000, 0), baseflowGainMonthlyM3Day: janFeb(0, 300) })], null);
+		i.series.rain_catchment_mm!.startDate = '2021-01-30';
+		const o = run(i);
+		passed(o);
+		expect(col(o, 'A', 'baseflow_loss')).toEqual([1000, 2000, 0, 0]);
+		expect(col(o, 'A', 'baseflow_gain')).toEqual([0, 0, 300, 300]);
+		expect(col(o, null, 'simulated_outflow')).toEqual([0, 8000, 3300, 300]);
+		const wb = o.summary.waterBalance!.total;
+		expect(wb.baseflowLossM3).toBe(3000);
+		expect(wb.baseflowGainM3).toBe(600);
+		expect(Math.abs(wb.residualM3)).toBeLessThan(1e-9);
+	});
+
+	it('the one value in every month runs to the bit as the one value', () => {
+		const one = run(input([node('G', 'gauge', null), node('A', 'farm', 'G', { baseflowLossM3Day: 1500, baseflowGainM3Day: 40 })], null));
+		const rows = run(input([node('G', 'gauge', null), node('A', 'farm', 'G', { baseflowLossMonthlyM3Day: new Array(12).fill(1500), baseflowGainMonthlyM3Day: new Array(12).fill(40) })], null));
+		expect(col(rows, null, 'simulated_outflow')).toEqual(col(one, null, 'simulated_outflow'));
+		expect(col(rows, 'A', 'baseflow_loss')).toEqual(col(one, 'A', 'baseflow_loss'));
 	});
 });
 
@@ -175,9 +222,10 @@ describe('the natural flow is net of the base flow, as it is of the bed losses',
 		// A (0) → O (2), B (1) → O. A loses up to 400 and its reach half; B gains 100.
 		const r = {
 			order: [0, 1, 2],
+			month: [1, 1],
 			upstream: [[], [], [0, 1]],
-			reach: [{ frac: 0.5, maxM3Day: Infinity }, undefined, undefined],
-			baseflow: [{ lossM3Day: 400, gainM3Day: 0 }, { lossM3Day: 0, gainM3Day: 100 }, undefined]
+			reach: [reachAllYear(0.5, Infinity), undefined, undefined],
+			baseflow: [baseflowAllYear(400, 0), baseflowAllYear(0, 100), undefined]
 		};
 		const own = [
 			[1000, 300],
@@ -191,8 +239,9 @@ describe('the natural flow is net of the base flow, as it is of the bed losses',
 
 	it('naturalAtOutlet reads it with base flow alone, no reach losing (null with neither)', () => {
 		const plan = {
-			nodes: [{ kind: 'farm' as const, share: 0.5, baseflow: { lossM3Day: 0, gainM3Day: 50 } }, { kind: 'farm' as const, share: 0.3 }, { kind: 'gauge' as const, share: 0 }],
+			nodes: [{ kind: 'farm' as const, share: 0.5, baseflow: baseflowAllYear(0, 50) }, { kind: 'farm' as const, share: 0.3 }, { kind: 'gauge' as const, share: 0 }],
 			order: Int32Array.from([0, 1, 2]),
+			month: Uint8Array.from([1, 1]),
 			upstream: [Int32Array.from([]), Int32Array.from([]), Int32Array.from([0, 1])]
 		} as unknown as Parameters<typeof naturalAtOutlet>[0];
 		// 1000: 500 + 50, 300, the rest 200.

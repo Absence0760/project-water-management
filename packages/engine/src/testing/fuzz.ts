@@ -443,6 +443,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addCalibrationLocations(new Rng(seed ^ 0x6f4a3c21), nodes, settings);
 	// Diversion curves on river off-takes (engine 1.113.0), from their own stream, last of all.
 	addDiversionCurves(new Rng(seed ^ 0x7a3c91e5), transfers);
+	// Bed losses and base flow by month (engine 1.116.0), from their own stream, last of all.
+	addMonthlyLosses(new Rng(seed ^ 0x2b7e1516), nodes);
 	// A maximum or a formula by month, and splits between destinations (engine 1.114.0), from their own streams, last of all.
 	addMonthlyDiversions(new Rng(seed ^ 0x2d4f6a81), transfers);
 	addTransferSplits(new Rng(seed ^ 0x5c1e9b37), nodes, transfers, opts.externalTransfers === true);
@@ -883,6 +885,8 @@ export function withoutReachLosses(input: ModelInput): ModelInput {
 	for (const n of input.model.nodes) {
 		n.reachLossFrac = 0;
 		n.reachLossMaxM3Day = null;
+		n.reachLossFracMonthly = null;
+		n.reachLossMaxMonthlyM3Day = null;
 	}
 	return input;
 }
@@ -920,6 +924,33 @@ function addBaseflow(g: Rng, nodes: NetworkNode[]): void {
 		const which = g.int(0, 2);
 		if (which !== 1) n.baseflowLossM3Day = size();
 		if (which !== 0) n.baseflowGainM3Day = size();
+	}
+}
+
+/**
+ * Bed losses and base flow by month (engine 1.116.0, docs/model.md §2.6b): on
+ * a node with bed losses, 40 % of the time a share by month (some months 0,
+ * now and then out of range) and/or a cap by month (some months 0 or a
+ * trickle, others more than any flow); on a unit with a base-flow loss or
+ * gain, 40 % of the time a row by month for either (a wet-season loss and a
+ * dry-season gain), now and then a month that isn't a size ≥ 0. So a reach
+ * loses on some days and not others, and a priority claim crossing it is
+ * grossed up by the day's month.
+ */
+function addMonthlyLosses(g: Rng, nodes: NetworkNode[]): void {
+	const row = (f: () => number) => Array.from({ length: 12 }, () => (g.bool(0.25) ? 0 : f()));
+	for (const n of nodes) {
+		if ((n.reachLossFrac ?? 0) !== 0 && g.bool(0.4)) {
+			const which = g.int(0, 2);
+			if (which !== 1) n.reachLossFracMonthly = row(() => (g.bool(0.03) ? g.pick([-0.1, 1.2]) : g.pick([g.float(0, 0.05), g.float(0, 0.5), g.float(0.5, 1), 1])));
+			if (which !== 0) n.reachLossMaxMonthlyM3Day = row(() => g.pick([g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]));
+		}
+		if (((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0) && g.bool(0.4)) {
+			const size = () => (g.bool(0.03) ? -1 : g.pick([g.logFloat(0.1, 1e3), g.logFloat(1, 1e5), g.logFloat(1, 1e7)]));
+			const which = g.int(0, 2);
+			if (which !== 1) n.baseflowLossMonthlyM3Day = row(size);
+			if (which !== 0) n.baseflowGainMonthlyM3Day = row(size);
+		}
 	}
 }
 

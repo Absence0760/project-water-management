@@ -37,7 +37,7 @@ const KIND_NAME: Record<NodeKind, string> = { farm: 'Farm', gauge: 'Gauge', user
  * water where the base's do. Not a unit's base-flow loss and gain (engine 1.86.0): they go with its runoff, which
  * the zeroed area takes to 0, so the loss (at most the runoff) would be 0 and a kept gain water from nowhere.
  */
-const KEEP = new Set(['id', 'kind', 'downstreamNodeId', 'sortOrder', 'reachLossFrac', 'reachLossMaxM3Day']);
+const KEEP = new Set(['id', 'kind', 'downstreamNodeId', 'sortOrder', 'reachLossFrac', 'reachLossMaxM3Day', 'reachLossFracMonthly', 'reachLossMaxMonthlyM3Day']);
 
 /** NetworkNode's text fields (a string, or a union of strings). */
 type TextField = { [K in keyof NetworkNode]-?: NonNullable<NetworkNode[K]> extends string ? K : never }[keyof NetworkNode];

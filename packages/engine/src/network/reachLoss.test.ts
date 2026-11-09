@@ -4,6 +4,7 @@
 // grossed up so it still arrives, the default (no losses) running exactly as
 // before, and the invariants on random networks with bed losses.
 import { describe, expect, it } from 'vitest';
+import { reachAllYear } from '../testing/lossPlans';
 import type { ModelInput, NetworkNode } from '../project';
 import { runModel, runModelWith, withVerification } from '../run';
 import { randomInput, withoutReachLosses } from '../testing/fuzz';
@@ -41,6 +42,9 @@ function node(id: string, kind: NetworkNode['kind'], down: string | null, over: 
 
 const flat = (v: number) => new Array(12).fill(v) as number[];
 
+/** A water-year row (Oct–Sep) with `jan` in January, `feb` in February and `rest` in every other month. */
+const janFeb = (jan: number, feb: number, rest = 0) => [rest, rest, rest, jan, feb, rest, rest, rest, rest, rest, rest, rest];
+
 /** A four-day January run with no rain; farm A (when `farmNeedM3Day` is set) needs that many m³/day. */
 function input(nodes: NetworkNode[], farmNeedM3Day: number | null): ModelInput {
 	const apanMm = new Array(12).fill(0);
@@ -63,32 +67,32 @@ const has = (o: ReturnType<typeof run>, id: string, key: string) => o.series.som
 const passed = (o: ReturnType<typeof run>) => expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
 
 describe('the reach arithmetic', () => {
-	const p = { frac: 0.2, maxM3Day: 300 };
+	const p = reachAllYear(0.2, 300);
 
 	it('loss = MIN(cap, f × flow): never negative, never falling as the flow rises, never more than the flow', () => {
-		expect(reachLossDay(p, 0)).toBe(0);
-		expect(reachLossDay(p, -5)).toBe(0);
-		expect(reachLossDay(p, 1000)).toBe(200);
-		expect(reachLossDay(p, 1500)).toBe(300);
-		expect(reachLossDay(p, 1e9)).toBe(300);
+		expect(reachLossDay(p, 0, 1)).toBe(0);
+		expect(reachLossDay(p, -5, 1)).toBe(0);
+		expect(reachLossDay(p, 1000, 1)).toBe(200);
+		expect(reachLossDay(p, 1500, 1)).toBe(300);
+		expect(reachLossDay(p, 1e9, 1)).toBe(300);
 		let prev = 0;
 		for (let q = 0; q <= 5000; q += 37) {
-			const l = reachLossDay(p, q);
+			const l = reachLossDay(p, q, 1);
 			expect(l).toBeGreaterThanOrEqual(prev);
 			expect(l).toBeLessThanOrEqual(q);
 			prev = l;
 		}
-		expect(reachLossDay({ frac: 0.5, maxM3Day: Infinity }, 800)).toBe(400);
+		expect(reachLossDay(reachAllYear(0.5, Infinity), 800, 1)).toBe(400);
 	});
 
 	it('the gross-up is the inverse: passing reachGross(x) delivers x, on both sides of the cap', () => {
 		for (const x of [0, 1, 100, 1199, 1200, 1201, 5000]) {
-			const g = reachGross(p, x);
-			expect(g - reachLossDay(p, g)).toBeCloseTo(x, 9);
+			const g = reachGross(p, x, 1);
+			expect(g - reachLossDay(p, g, 1)).toBeCloseTo(x, 9);
 		}
 		// Below the cap it is x / (1 − f); above it, x + cap.
-		expect(reachGross(p, 800)).toBe(1000);
-		expect(reachGross(p, 2000)).toBe(2300);
+		expect(reachGross(p, 800, 1)).toBe(1000);
+		expect(reachGross(p, 2000, 1)).toBe(2300);
 	});
 
 	it('reachLossOf: none by default, on the outlet (warned) or with a cap of 0; a share out of range clamped, a bad cap ignored, both warned', () => {
@@ -97,31 +101,89 @@ describe('the reach arithmetic', () => {
 		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0, reachLossMaxM3Day: 50 }), w)).toEqual({});
 		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.3, reachLossMaxM3Day: 0 }), w)).toEqual({});
 		expect(w).toEqual([]);
-		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.3 }), w)).toEqual({ reachLoss: { frac: 0.3, maxM3Day: Infinity } });
-		expect(reachLossOf(node('U', 'user', 'G', { reachLossFrac: 0.1, reachLossMaxM3Day: 40 }), w)).toEqual({ reachLoss: { frac: 0.1, maxM3Day: 40 } });
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.3 }), w)).toEqual({ reachLoss: reachAllYear(0.3, Infinity) });
+		expect(reachLossOf(node('U', 'user', 'G', { reachLossFrac: 0.1, reachLossMaxM3Day: 40 }), w)).toEqual({ reachLoss: reachAllYear(0.1, 40) });
 		expect(reachLossOf(node('G', 'gauge', null, { reachLossFrac: 0.3 }), w)).toEqual({});
 		expect(w[0]).toBe('gauge "G": bed losses below the outlet are ignored (the model has no reach below it)');
-		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 1.5, reachLossMaxM3Day: 100 }), w)).toEqual({ reachLoss: { frac: REACH_LOSS_FRAC_MAX, maxM3Day: 100 } });
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 1.5, reachLossMaxM3Day: 100 }), w)).toEqual({ reachLoss: reachAllYear(REACH_LOSS_FRAC_MAX, 100) });
 		expect(w[1]).toBe('unit "A": bed losses 1.5 of the flow are not in [0, 1]; using 1');
-		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.2, reachLossMaxM3Day: -1 }), w)).toEqual({ reachLoss: { frac: 0.2, maxM3Day: Infinity } });
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.2, reachLossMaxM3Day: -1 }), w)).toEqual({ reachLoss: reachAllYear(0.2, Infinity) });
 		expect(w[2]).toBe('unit "A": bed losses cap -1 m³/day is not a size ≥ 0; no cap');
 		expect(w).toHaveLength(3);
 	});
 
 	it('warns, never refuses, more than half the flow lost without a cap; with a cap (WRSM’s Bedloss) or at half, no warning', () => {
 		const w: string[] = [];
-		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.8 }), w)).toEqual({ reachLoss: { frac: 0.8, maxM3Day: Infinity } });
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.8 }), w)).toEqual({ reachLoss: reachAllYear(0.8, Infinity) });
 		expect(w).toEqual(['unit "A": more than half the flow lost in the reach below it; check this is meant (with a cap this is how WRSM\'s Bedloss is expressed)']);
-		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 1, reachLossMaxM3Day: 2000 }), w)).toEqual({ reachLoss: { frac: 1, maxM3Day: 2000 } });
-		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.5 }), w)).toEqual({ reachLoss: { frac: 0.5, maxM3Day: Infinity } });
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 1, reachLossMaxM3Day: 2000 }), w)).toEqual({ reachLoss: reachAllYear(1, 2000) });
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.5 }), w)).toEqual({ reachLoss: reachAllYear(0.5, Infinity) });
 		expect(w).toHaveLength(1);
 	});
 
 	it('all of the flow (f = 1): the loss is MIN(cap, flow); the gross-up is the claim plus the cap, and none without a cap', () => {
-		expect(reachLossDay({ frac: 1, maxM3Day: 300 }, 200)).toBe(200);
-		expect(reachLossDay({ frac: 1, maxM3Day: 300 }, 5000)).toBe(300);
-		expect(reachGross({ frac: 1, maxM3Day: 300 }, 800)).toBe(1100);
-		expect(reachGross({ frac: 1, maxM3Day: Infinity }, 800)).toBe(800);
+		expect(reachLossDay(reachAllYear(1, 300), 200, 1)).toBe(200);
+		expect(reachLossDay(reachAllYear(1, 300), 5000, 1)).toBe(300);
+		expect(reachGross(reachAllYear(1, 300), 800, 1)).toBe(1100);
+		expect(reachGross(reachAllYear(1, Infinity), 800, 1)).toBe(800);
+	});
+});
+
+describe('bed losses by month (engine 1.116.0)', () => {
+	it('reachLossOf reads the water-year rows by calendar month, and each row replaces its one value', () => {
+		const w: string[] = [];
+		const p = reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.9, reachLossMaxM3Day: 7, reachLossFracMonthly: janFeb(0.1, 0.5), reachLossMaxMonthlyM3Day: janFeb(40_000, 300, 1) }), w).reachLoss!;
+		expect(w).toEqual([]);
+		expect(p.frac[1]).toBe(0.1);
+		expect(p.frac[2]).toBe(0.5);
+		expect(p.frac[10]).toBe(0);
+		expect(p.maxM3Day[1]).toBe(40_000);
+		expect(p.maxM3Day[2]).toBe(300);
+		// A share by month with the one cap: the cap holds in every month.
+		const q = reachLossOf(node('A', 'farm', 'G', { reachLossFracMonthly: janFeb(0.1, 0.5), reachLossMaxM3Day: 50 }), w).reachLoss!;
+		expect([...q.maxM3Day.slice(1)]).toEqual(flat(50));
+		// The one share with a cap by month.
+		const r = reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.2, reachLossMaxMonthlyM3Day: janFeb(10, 20, 30) }), w).reachLoss!;
+		expect([...r.frac.slice(1)]).toEqual(flat(0.2));
+		expect(r.maxM3Day[1]).toBe(10);
+		expect(r.maxM3Day[3]).toBe(30);
+		expect(w).toEqual([]);
+	});
+
+	it('a row of zeros is none (even with a one value set), on the outlet it is ignored, and bad months are clamped or uncapped with a warning', () => {
+		const w: string[] = [];
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.4, reachLossFracMonthly: flat(0) }), w)).toEqual({});
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFracMonthly: janFeb(0.2, 0.2), reachLossMaxMonthlyM3Day: flat(0) }), w)).toEqual({});
+		expect(w).toEqual([]);
+		expect(reachLossOf(node('G', 'gauge', null, { reachLossFracMonthly: janFeb(0.2, 0) }), w)).toEqual({});
+		expect(w).toEqual(['gauge "G": bed losses below the outlet are ignored (the model has no reach below it)']);
+		const p = reachLossOf(node('A', 'farm', 'G', { reachLossFracMonthly: janFeb(1.4, 0.1), reachLossMaxMonthlyM3Day: janFeb(-3, 5, 5) }), w).reachLoss!;
+		expect(p.frac[1]).toBe(1);
+		expect(p.maxM3Day[1]).toBe(Infinity);
+		expect(w.slice(1)).toEqual([
+			'unit "A": bed losses 1.4 of the flow in Jan are not in [0, 1]; using 1',
+			'unit "A": bed losses cap -3 m³/day in Jan is not a size ≥ 0; no cap',
+			'unit "A": more than half the flow lost in the reach below it; check this is meant (with a cap this is how WRSM\'s Bedloss is expressed)'
+		]);
+	});
+
+	it('each day loses at its own month’s share and cap: a low share with a high cap in the wet month, a high share with a low cap in the dry one', () => {
+		// Two January days, then two February days.
+		const i = input([node('G', 'gauge', null), node('A', 'farm', 'G', { reachLossFracMonthly: janFeb(0.1, 0.5), reachLossMaxMonthlyM3Day: janFeb(500, 300) })], null);
+		i.series.rain_catchment_mm!.startDate = '2021-01-30';
+		const o = run(i);
+		passed(o);
+		// Jan: MIN(500, 10 % of 1 000 | 10 000); Feb: MIN(300, 50 % of 3 000 | 0).
+		expect(col(o, 'A', 'reach_loss')).toEqual([100, 500, 300, 0]);
+		expect(col(o, null, 'simulated_outflow')).toEqual([900, 9500, 2700, 0]);
+		expect(o.summary.waterBalance!.total.reachLossM3).toBe(900);
+	});
+
+	it('the one value in every month runs to the bit as the one value', () => {
+		const one = run(input([node('G', 'gauge', null), node('A', 'farm', 'G', { reachLossFrac: 0.3, reachLossMaxM3Day: 1500 })], null));
+		const rows = run(input([node('G', 'gauge', null), node('A', 'farm', 'G', { reachLossFracMonthly: flat(0.3), reachLossMaxMonthlyM3Day: flat(1500) })], null));
+		expect(col(rows, 'A', 'reach_loss')).toEqual(col(one, 'A', 'reach_loss'));
+		expect(col(rows, null, 'simulated_outflow')).toEqual(col(one, null, 'simulated_outflow'));
 	});
 });
 

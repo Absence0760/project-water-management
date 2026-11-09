@@ -1847,6 +1847,15 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (ho) parts.push(`hands-off flow ${ho}`);
 		const dv = optionalMonthlyChange(x.divertMonthlyM3Day, y.divertMonthlyM3Day, 'm³/day', 'the one diversion capacity');
 		if (dv) parts.push(`River to dam by month ${dv}`);
+		// Bed losses and base flow by month (engine 1.116.0): each row replaces its one value.
+		const rf = optionalMonthlyChange(x.reachLossFracMonthly, y.reachLossFracMonthly, '', 'the one share');
+		if (rf) parts.push(`bed losses by month ${rf}`);
+		const rc = optionalMonthlyChange(x.reachLossMaxMonthlyM3Day, y.reachLossMaxMonthlyM3Day, 'm³/day', 'the one cap');
+		if (rc) parts.push(`bed losses cap by month ${rc}`);
+		const bl = optionalMonthlyChange(x.baseflowLossMonthlyM3Day, y.baseflowLossMonthlyM3Day, 'm³/day', 'the one value');
+		if (bl) parts.push(`base-flow loss by month ${bl}`);
+		const bg = optionalMonthlyChange(x.baseflowGainMonthlyM3Day, y.baseflowGainMonthlyM3Day, 'm³/day', 'the one value');
+		if (bg) parts.push(`base-flow gain by month ${bg}`);
 		if (!same(x.damCurve ?? null, y.damCurve ?? null)) {
 			const rows = (c: typeof x.damCurve) => (c && c.length ? `${c.length} rows` : 'none (power law)');
 			parts.push(`dam survey curve ${rows(x.damCurve)} → ${rows(y.damCurve)}${x.damCurve?.length && y.damCurve?.length ? ' (values changed)' : ''}`);
@@ -2506,6 +2515,11 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		// Operating rules (engine ≥ 1.32.0): the monthly rows diffModel words itself.
 		['hands-off flow', 'handsOffM3Day'],
 		['River to dam by month', 'divertMonthlyM3Day'],
+		// Bed losses and base flow by month (engine 1.116.0).
+		['bed losses by month', 'reachLossFracMonthly'],
+		['bed losses cap by month', 'reachLossMaxMonthlyM3Day'],
+		['base-flow loss by month', 'baseflowLossMonthlyM3Day'],
+		['base-flow gain by month', 'baseflowGainMonthlyM3Day'],
 		['dam survey curve', 'damCurve'],
 		// The crop supply table's other unit (engine ≥ 1.73.0), worded by name in diffModel.
 		['unit whose dam supplies the crops’ share', 'cropRemoteNodeId'],
