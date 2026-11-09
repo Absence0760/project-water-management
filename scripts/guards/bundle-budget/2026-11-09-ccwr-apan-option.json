@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Demand's CCWR A-pan option: Evaporation from the map pinned to Atlas-Apan-2007 (its not-loaded state with the import command, its own heading and intro) and the CCWR A-pan name in every grid picker; EvaporationProposal is now its own lazy chunk shared by Calibration and Demand (5.5 KB gz). Measured: total 2445 KB on origin/main d52e90728, 2447 KB with this change."
+}

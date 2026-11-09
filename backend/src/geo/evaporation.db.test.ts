@@ -19,8 +19,12 @@
 //  - an S-pan dataset (316, issue #738) is summarised over the boundary with
 //    no target, never the default ahead of one that proposes, and an accept
 //    of it is refused with nothing written (no conversion to A-pan);
-//  - refusals: no boundary, a boundary over cells with no value, an unknown
-//    dataset, an extra field (400); a stranger (404); a farmer (403);
+//  - the CCWR A-pan grid (Atlas-Apan-2007) asked for by label is none loaded
+//    (200, dataset null) until it is loaded, then proposed and used as the
+//    A-pan row with a revision citing it as modelled; any grid asked for that
+//    isn't loaded reads the same;
+//  - refusals: no boundary, a boundary over cells with no value, accepting an
+//    unknown dataset, an extra field (400); a stranger (404); a farmer (403);
 //  - the loader writes the grid and its dataset row, and a reload replaces them;
 //  - the grid is read-only to the app role (control: it reads it); the
 //    provenance's target must match its kind.
@@ -108,10 +112,14 @@ describe('the proposal', () => {
 		expect((await proposals(owner, '', pid)).body.settings.dailyApan).toEqual({ from: '2020-01-30', to: '2020-01-31' });
 	});
 
-	it('says why there is nothing to propose, and is 400 for an unknown dataset, 404 for a stranger, 403 for a farmer', async () => {
+	it('says why there is nothing to propose, answers a grid that isn’t loaded as none loaded, and is 404 for a stranger, 403 for a farmer', async () => {
 		const bare = (await proposals(owner, '', bareProjectId)).body;
 		expect(bare).toMatchObject({ boundary: null, proposal: null, dataset: { dataset: 'synthetic' } });
-		expect((await proposals(viewer, '?dataset=nope')).status).toBe(400);
+		// Model settings → Demand asks for the CCWR A-pan grid by label: not loaded is none loaded, the loaded grids still listed.
+		const none = await proposals(viewer, '?dataset=nope');
+		expect(none.status).toBe(200);
+		expect(none.body).toMatchObject({ dataset: null, target: null, proposal: null, boundary: { name: expect.any(String) } });
+		expect(none.body.datasets.map((d: { dataset: string }) => d.dataset)).toContain('synthetic');
 		expect((await proposals(stranger)).status).toBe(404);
 		expect((await proposals(farmer)).status).toBe(403);
 		expect((await accept(farmer, { dataset: 'synthetic' })).status).toBe(403);
@@ -207,6 +215,31 @@ describe('accepting the proposal', () => {
 		expect(reason).not.toMatch(/null|NaN/);
 		expect((await proposals(viewer, '?dataset=test-apan-no-period')).body.dataset.method).toContain('the Atlas states no period for its means');
 		await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-apan-no-period'`);
+	});
+
+	it('the CCWR A-pan grid (Atlas-Apan-2007) is none loaded until it is loaded, then proposed and used as the A-pan row, cited as modelled', async () => {
+		expect((await proposals(viewer, '?dataset=Atlas-Apan-2007')).body).toMatchObject({ dataset: null, proposal: null });
+		expect((await accept(editor, { dataset: 'Atlas-Apan-2007' })).status).toBe(400);
+		const row = [180, 195, 215, 225, 195, 165, 105, 80, 60, 65, 90, 135];
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			const meta = { ...ATLAS_APAN, kind: 'apan' as const, method: atlasApanMethodFor(0.1, null, null) };
+			const cells = [-338, -337].flatMap((r) => [212, 213].map((c) => ({ row: r, col: c, monthlyMm: row })));
+			expect(await replaceEvaporationDataset(client, meta, { cellDeg: 0.1, originLon: 0.05, originLat: 0.05, firstYear: null, lastYear: null, cells, partial: 0 })).toBe(4);
+		} finally {
+			await client.end();
+		}
+		try {
+			const p = (await proposals(viewer, '?dataset=Atlas-Apan-2007')).body;
+			expect(p).toMatchObject({ target: 'apan', dataset: { dataset: 'Atlas-Apan-2007', firstYear: null, lastYear: null }, proposal: { monthlyMm: row, coverage: 1, cells: 4 } });
+			const res = await accept(editor, { dataset: 'Atlas-Apan-2007' });
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			expect((await settings()).apanMm).toEqual(row);
+			expect(await lastReason()).toMatch(/^A-pan evaporation from the map: [\d.]+ mm a year of modelled A-pan equivalent reference potential evaporation \(WRC Atlas, not a measured pan\)/);
+		} finally {
+			await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'Atlas-Apan-2007'`);
+		}
 	});
 
 	it('an S-pan dataset is shown over the boundary as a cross-check, with no target; accepting it is refused and writes nothing', async () => {

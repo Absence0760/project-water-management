@@ -2787,7 +2787,7 @@
 			],
 			"url": "/help/glossary/crops#apan",
 			"summary": "Monthly evaporation from a Class-A pan, in mm. Times a crop factor it estimates the crop’s water need. (mm per month)",
-			"text": "Enter the 12 monthly values for the catchment, Oct … Sep, from an A-pan station, or from the WR90 or WR2012 quaternary data converted to A-pan: those studies publish Symons-pan (S-pan) evaporation, which reads lower than an A-pan beside it (Bosman 1990 gives the conversion). Entering S-pan unchanged understates crop demand and dam evaporation. When an A-pan grid is loaded, Evaporation from the map (Calibration → Flow calibration) proposes the row from the catchment boundary, citing the grid; a reference-ET (ET₀) grid never fills this row, because ET₀ isn’t pan evaporation."
+			"text": "Enter the 12 monthly values for the catchment, Oct … Sep, from an A-pan station, or from the WR90 or WR2012 quaternary data converted to A-pan: those studies publish Symons-pan (S-pan) evaporation, which reads lower than an A-pan beside it (Bosman 1990 gives the conversion). Entering S-pan unchanged understates crop demand and dam evaporation. A-pan from → CCWR A-pan grid (catchment average) proposes the row from the WRC Atlas’s modelled A-pan equivalent grid averaged over the catchment boundary, citing it, when the server has it loaded; any other A-pan grid is proposed by Evaporation from the map (Calibration → Flow calibration). The whole catchment runs on the one row either way. A reference-ET (ET₀) grid never fills this row, because ET₀ isn’t pan evaporation."
 		},
 		{
 			"kind": "glossary",

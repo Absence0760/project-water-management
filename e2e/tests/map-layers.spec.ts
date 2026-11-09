@@ -387,7 +387,7 @@ test('the A-pan and S-pan grids: two toggles of their own, the year or a month, 
 	await layers(page).getByRole('checkbox', { name: 'A-pan grid' }).check();
 	await expect(page).toHaveURL(/[?&]layers=apangrid(&|$)/);
 	await expect(page.getByTestId('map-apangrid-summary')).toHaveText(
-		/^3 points in view from Atlas-Apan-2007 \(0\.05° cells, 1950–1999 means\), mm a year: 1\s812 mm to 1\s866 mm\. The map has no fonts for labels here, so it shows the points without their values\.$/
+		/^3 points in view from CCWR A-pan \(0\.05° cells, 1950–1999 means\), mm a year: 1\s812 mm to 1\s866 mm\. The map has no fonts for labels here, so it shows the points without their values\.$/
 	);
 	await expect(page.getByTestId('map-apangrid-source')).toContainText('Modelled A-pan equivalent reference potential evaporation (WRC Atlas, not a measured pan). Source: ');
 	await expect(apanCredit).toHaveAttribute('href', '/data-sources#atlas-apan');

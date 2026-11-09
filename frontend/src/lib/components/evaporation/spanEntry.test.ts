@@ -1,5 +1,6 @@
 // The A-pan source choice and the S-pan paste (spanEntry.ts).
 import { describe, expect, it } from 'vitest';
+import { CCWR_APAN_DATASET, evaporationGridName } from './ccwrApan';
 import { APAN_SOURCES, parseSpanRow } from './spanEntry';
 
 const ROW = [150, 170, 190, 195, 160, 140, 95, 70, 55, 57, 78, 105];
@@ -23,9 +24,19 @@ describe('parseSpanRow', () => {
 });
 
 describe('APAN_SOURCES', () => {
-	it('offers the typed rows and WR2012 here and links the stations and the grid to where they live on Calibration', () => {
-		expect(APAN_SOURCES.map((s) => s.id)).toEqual(['typed', 'wr2012', 'span', 'station', 'grid']);
+	it('offers the typed rows, WR2012 and the CCWR grid here and links the stations and any other grid to where they live on Calibration', () => {
+		expect(APAN_SOURCES.map((s) => s.id)).toEqual(['typed', 'wr2012', 'span', 'station', 'ccwr', 'grid']);
+		expect(APAN_SOURCES.find((s) => s.id === 'ccwr')!.label).toBe('CCWR A-pan grid (catchment average)');
 		expect(APAN_SOURCES.filter((s) => 'href' in s).map((s) => s.id)).toEqual(['station', 'grid']);
 		for (const s of APAN_SOURCES.filter((x) => 'href' in x)) expect(s.href).toMatch(/^\?tab=calibration#set-evaporation/);
+	});
+});
+
+describe('the CCWR A-pan grid’s name', () => {
+	it('is "CCWR A-pan" for Atlas-Apan-2007 wherever a grid is named, and every other grid keeps its label', () => {
+		expect(CCWR_APAN_DATASET).toBe('Atlas-Apan-2007');
+		expect(evaporationGridName('Atlas-Apan-2007')).toBe('CCWR A-pan');
+		for (const d of ['synthetic', 'Atlas-Span-2007', 'dPET-1991-2020', 'penpan-2001-2020']) expect(evaporationGridName(d)).toBe(d);
+		// The operator's command names the dataset, as docs/STACK.md has it, and no period (the Atlas states none).
 	});
 });
