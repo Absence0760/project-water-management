@@ -1,4 +1,4 @@
--- 317_monthly_losses — bed losses and a unit's base-flow loss and gain by
+-- 318_monthly_losses — bed losses and a unit's base-flow loss and gain by
 -- water-year month (engine 1.116.0, docs/model.md §2.6b, docs/data-model.md
 -- § Nodes).
 --

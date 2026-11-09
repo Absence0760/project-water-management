@@ -18,6 +18,8 @@
 	const loadDivideSheet = () => import('./DivideSheet.svelte');
 	// The click bar shows only while dividing by clicks: its own chunk keeps the tab under its budget (check:bundle).
 	const loadClickBar = () => import('./ClickBar.svelte');
+	// The map's checks render only when there is something to check (most visits have none): a chunk of their own.
+	const loadMapChecks = () => import('./MapChecks.svelte');
 	// The A-pan and S-pan grid layers' toggles and state: a chunk of their own, loaded once the tab is up; and the measure
 	// bar, shown only while measuring (2026-11-08: the two layers took the tab past its 60 KB ceiling, 61 KB).
 	const loadEvaporationGrids = () => import('./EvaporationGridToggles.svelte');
@@ -86,7 +88,6 @@
 	import { TAB_GRIDS, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import FeatureList from './FeatureList.svelte';
-	import MapChecks from './MapChecks.svelte';
 	import { mapChecks, type MapCheck, type MapCheckInputs } from './mapChecks';
 	import { restOfCatchment, staleValues } from './stale';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
@@ -1761,7 +1762,7 @@
 									{/if}
 								</p>
 								{#if checkError}<p class="err small" role="alert" data-testid="map-check-error">{checkError}</p>{/if}
-								{#if checks.length}<MapChecks {features} {nodes} inputs={checkInputs} onpick={pickFromCheck} onuse={canEdit ? useFromCheck : undefined} {busy} heading={false} />{/if}
+								{#if checks.length}<Lazy load={loadMapChecks}>{#snippet children(MapChecks)}<MapChecks {features} {nodes} inputs={checkInputs} onpick={pickFromCheck} onuse={canEdit ? useFromCheck : undefined} {busy} heading={false} />{/snippet}</Lazy>{/if}
 							</div>
 							{#if panelsInSide}
 								<!-- Layers and Key (until 2026-10-03 boxes over the map); the map's buttons pick these tabs, Escape gives the tab back. -->

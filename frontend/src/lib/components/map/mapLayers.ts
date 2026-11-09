@@ -6,6 +6,7 @@
 // the project's features, and what the units, grid and CHIRPS layers draw. Pure
 // (mapLayers.test.ts).
 import type { MapFeature, MapPosition } from '#lib/api/types.js';
+import { mapGridName } from './mapGridNames';
 import { fmtNum } from '#lib/format/number.js';
 import {
 	ATLAS_APAN_MAP_ATTRIBUTION,
@@ -361,13 +362,14 @@ export type MapGridKind = (typeof MAP_GRID_KINDS)[number];
  * dataset it draws, by the label a production load stores it under (the
  * server's WAAS_MAP and LYNCH_MAP, backend geo/rainMap.ts). `mapgrid` stays
  * the WAAS 2007 MAP's id, so a view shared before the CCWR MAP came beside it
- * opens the same grid. No other loaded grid (the synthetic one, a local
+ * opens the same grid. The names come from mapGridNames.ts, as the unit form's
+ * do. No other loaded grid (the synthetic one, a local
  * import under another label) is drawn on the map: the proposals of a unit's
  * MAP still read it (docs/maps.md § MAP grid).
  */
 export const MAP_GRIDS: Readonly<Record<MapGridKind, { layer: MapLayer; label: string; dataset: string }>> = {
-	waas: { layer: 'mapgrid', label: 'WAAS 2007 MAP', dataset: 'WAAS-SWCape-2007' },
-	ccwr: { layer: 'ccwrgrid', label: 'CCWR MAP', dataset: 'Lynch-2004' }
+	waas: { layer: 'mapgrid', label: mapGridName('WAAS-SWCape-2007'), dataset: 'WAAS-SWCape-2007' },
+	ccwr: { layer: 'ccwrgrid', label: mapGridName('Lynch-2004'), dataset: 'Lynch-2004' }
 };
 
 /** The widest view a MAP grid is asked for (the server's MAP_GRID_BBOX_MAX_DEG). */

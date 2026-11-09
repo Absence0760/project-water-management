@@ -115,7 +115,7 @@ describe('model store', () => {
 			// A base-flow loss and gain (engine 1.86.0, 222_unit_baseflow), awkward numbers.
 			baseflowLossM3Day: 0.1 + 0.2,
 			baseflowGainM3Day: 123_456.789,
-			// Bed losses and base flow by month (engine 1.116.0, 317_monthly_losses), awkward numbers and the bounds.
+			// Bed losses and base flow by month (engine 1.116.0, 318_monthly_losses), awkward numbers and the bounds.
 			reachLossFracMonthly: [0.1 + 0.2, 0, 1, 0.05, 0.05, 0.05, 0.5, 0.5, 0.5, 0.5, 0.5, 1e-7],
 			reachLossMaxMonthlyM3Day: [40_000, 40_000, 0, 1 / 3, 1 / 3, 1 / 3, 300, 300, 300, 300, 300, 123_456.789],
 			baseflowLossMonthlyM3Day: [2000, 2000, 2000, 2000, 2000, 0, 0, 0, 0, 0, 0, 0.1 + 0.2],
@@ -315,7 +315,7 @@ describe('model store', () => {
 		// Migration 170's CHECKs keep the water source in the list and the pump and pool sizes, below the API's own checks (engine 1.65.0).
 		await expect(asOwner('UPDATE node SET crop_water_source = $2 WHERE id = $1', [farm.id, 'borehole'])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_water_source_known' });
 		await expect(asOwner('UPDATE node SET crop_river_pool_m3 = -1 WHERE id = $1', [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_river_pool_size' });
-		// Migration 317's CHECKs keep each monthly row 12 values, none NULL, in range, below the API's own checks (engine 1.116.0).
+		// Migration 318's CHECKs keep each monthly row 12 values, none NULL, in range, below the API's own checks (engine 1.116.0).
 		const row = (v: string) => `ARRAY[${[...new Array(11).fill('1'), v].join(',')}]::double precision[]`;
 		const monthlyChecks: [string, string][] = [
 			['reach_loss_frac_monthly', 'node_reach_loss_frac_monthly_range'],
