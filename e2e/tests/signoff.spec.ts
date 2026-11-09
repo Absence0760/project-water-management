@@ -27,7 +27,7 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	await expect(validation.getByRole('rowheader', { name: 'B3', exact: true })).toBeVisible();
 	// The Reserve method's choices still open are on it too (engine-audit A4, A6, A7, issue #71): the charge, high-flow events.
 	await expect(validation.getByRole('rowheader', { name: 'A4', exact: true })).toBeVisible();
-	await expect(validation.getByText(/^The daily EWR charge, curtailment and the water account follow the pragmatic EWR by default/)).toBeVisible();
+	await expect(validation.getByText(/^The daily EWR charge, curtailment and the water account follow the daily EWR at the outlet by default \(the pragmatic EWR, or since engine 1.77.0 the DRM TAB file or percentile tables/)).toBeVisible();
 	await expect(validation.getByRole('rowheader', { name: 'A6', exact: true })).toBeVisible();
 	// One the client's hydrologist confirmed is not (A1, scaling below a table's driest point, #90 EWR assurance rules, 2026-10-10).
 	await expect(validation.getByRole('rowheader', { name: 'A1', exact: true })).toHaveCount(0);
