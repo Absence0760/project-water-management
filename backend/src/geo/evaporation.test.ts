@@ -79,3 +79,9 @@ it('citeEvaporation names the source, version, period and label', () => {
 		'dPET (Singer et al. 2021) (hPET v3, 1991–2020 monthly means; dataset “dPET-1991-2020”)'
 	);
 });
+
+it('citeEvaporation says plainly when the source states no period (issue #755)', () => {
+	expect(citeEvaporation({ dataset: 'Atlas-Apan-2007', source: 'Atlas A-pan', version: 'Atlas 2008', firstYear: null, lastYear: null })).toBe(
+		'Atlas A-pan (Atlas 2008, monthly means, no period stated by the source; dataset “Atlas-Apan-2007”)'
+	);
+});
