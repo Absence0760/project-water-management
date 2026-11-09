@@ -3359,7 +3359,7 @@ export interface QuaternaryLayer {
 	datasets: { dataset: string; count: number }[];
 }
 
-/** A mean annual precipitation grid loaded for the MAP grid layer (GET …/map/map-grid; docs/maps.md § MAP grid). */
+/** A loaded mean annual precipitation grid (GET …/map/map-grid; docs/maps.md § MAP grid). */
 export interface MapGridDataset {
 	dataset: string;
 	source: string;
@@ -3376,7 +3376,7 @@ export interface MapGridDataset {
 /** One dataset's MAP grid points in a box (GET …/map/map-grid). */
 export interface MapGridLayer {
 	bbox: [number, number, number, number];
-	/** The dataset read: the one asked for, else the default (a real one before the synthetic, the finest first); null when none is loaded. */
+	/** The dataset read: the one asked for, else the default (a real one before the synthetic, the finest first); null when none is loaded, or the one asked for isn't. */
 	dataset: MapGridDataset | null;
 	datasets: MapGridDataset[];
 	/** Each point's centre and its MAP, whole mm/yr. */

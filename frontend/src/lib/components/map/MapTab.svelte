@@ -93,7 +93,7 @@
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, channelMinKm2AtZoom, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
-	import { channelsWanted, chirpsCells, demRiversOffered, layerAsked, layersOn, unitLabels } from './mapLayers';
+	import { channelsWanted, chirpsCells, demRiversOffered, layerAsked, layersOn, MAP_GRID_KINDS, MAP_GRIDS, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
 	import type { EvaporationGrids } from './EvaporationGridToggles.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
@@ -930,15 +930,20 @@
 		await load();
 	}
 
-	// --- the hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md): on while `layers=` names them ---
+	// --- the hydrological units, the MAP grids and the CHIRPS grid (docs/maps.md): on while `layers=` names them ---
 	const unitsOn = $derived(layersOn(params).has('units'));
 	const unitsLabelled = $derived(unitsOn ? unitLabels(features) : []);
-	const mapGrid = new MapGridLayer({
-		projectId: () => projectId,
-		on: () => layersOn(params).has('mapgrid'),
-		view: () => mapView,
-		load: api.map.mapGrid
-	});
+	// The WAAS 2007 MAP and the CCWR MAP (docs/maps.md § MAP grid): one layer each, toggled on its own.
+	const mapGrids = MAP_GRID_KINDS.map(
+		(kind) =>
+			new MapGridLayer({
+				kind,
+				projectId: () => projectId,
+				on: () => layersOn(params).has(MAP_GRIDS[kind].layer),
+				view: () => mapView,
+				load: api.map.mapGrid
+			})
+	);
 	// The A-pan and S-pan grids (docs/maps.md § A-pan and S-pan grids): one layer each, toggled on its own. Their state
 	// class and toggles load as one chunk after the tab; each layer is made inside this effect, which owns their effects.
 	let evaporationGrids = $state.raw<EvaporationGrids | null>(null);
@@ -1485,7 +1490,7 @@
 		onshowfeature={(id) => void selectFromList(id)}
 		relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
 		units={{ on: unitsOn, labels: unitsLabelled }}
-		{mapGrid}
+		{mapGrids}
 		evaporationGrids={evaporationFailed ? 'failed' : evaporationGrids}
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
@@ -1675,9 +1680,8 @@
 									onpiecehover={(k) => (dividing ? (clickLit = k) : (pieceLit = k))}
 									onpiecepick={canEdit && !dividing ? pickPiece : undefined}
 									units={unitsLabelled}
-									mapGrid={mapGrid.points}
-									mapGridAttribution={mapGrid.answer?.dataset?.attribution ?? null}
-									mapGridCellDeg={mapGrid.answer?.dataset?.cellDeg ?? null}
+									waasGrid={mapGrids[0]!.draw}
+									ccwrGrid={mapGrids[1]!.draw}
 									apanGrid={evaporationGrids?.grids[0]?.draw ?? null}
 									spanGrid={evaporationGrids?.grids[1]?.draw ?? null}
 									chirps={chirpsInView}

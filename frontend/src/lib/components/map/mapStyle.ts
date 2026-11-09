@@ -18,6 +18,7 @@
 // Relief layer is on.
 import type { MapFeature, MapGeometry, MapPosition } from '#lib/api/types.js';
 import type { ProposalPiece } from './pieces';
+import type { MapGridKind } from './mapLayers';
 
 /** Shown on the map whenever the basemap is (the Protomaps / OSM licence). */
 export const BASEMAP_ATTRIBUTION = '© Protomaps © OpenStreetMap contributors';
@@ -602,7 +603,14 @@ export interface MapGridPointData {
 	mapMm: number;
 }
 
-/** The `mapgrid` source's data: each point with its MAP and its label ("812 mm"). */
+/** What the map draws of one MAP grid layer: its points, its cell size, and its credit line (null while nothing is drawn). */
+export interface MapGridDraw {
+	points: readonly MapGridPointData[];
+	cellDeg: number | null;
+	attribution: string | null;
+}
+
+/** A MAP grid source's data: each point with its MAP and its label ("812 mm"). */
 export function mapGridData(points: readonly MapGridPointData[] | null | undefined) {
 	return {
 		type: 'FeatureCollection' as const,
@@ -615,9 +623,10 @@ export function mapGridData(points: readonly MapGridPointData[] | null | undefin
 }
 
 /**
- * The MAP ramp: a light-to-dark blue by mm/yr, the same in both themes (each
- * point has a casing of the opposite lightness, so the pale end reads on a
- * light basemap and the dark end on a dark one). Its stops are the key's.
+ * The MAP ramp: a light-to-dark blue by mm/yr, the same in both themes and for
+ * both MAP grids, so their values read on one key (each point has a casing of
+ * the opposite lightness, so the pale end reads on a light basemap and the
+ * dark end on a dark one). Its stops are the key's.
  */
 export const MAP_RAMP: readonly (readonly [number, string])[] = [
 	[200, '#c6dbef'],
@@ -627,8 +636,10 @@ export const MAP_RAMP: readonly (readonly [number, string])[] = [
 	[2000, '#08306b']
 ];
 
-/** The MAP grid's label layer (its zoom range follows the grid drawn, CatchmentMap's setLayerZoomRange). */
-export const MAP_GRID_LABEL_LAYER = 'mapgrid-label';
+/** Each MAP grid's source on the map, by kind (mapLayers.ts MAP_GRIDS). */
+export const MAP_GRID_SOURCE = { waas: 'mapgrid', ccwr: 'ccwrgrid' } as const;
+/** Each MAP grid's label layer (its zoom range follows the grid drawn, CatchmentMap's setLayerZoomRange). */
+export const MAP_GRID_LABEL_LAYER = { waas: 'mapgrid-label', ccwr: 'ccwrgrid-label' } as const;
 
 /**
  * How far a label reaches below its point's centre, px, to the far side of
@@ -656,36 +667,43 @@ export function mapGridLabelMinZoom(cellDeg: number | null | undefined): number 
 }
 
 /**
- * The MAP grid layer: a dot per point, coloured by MAP, and its value under
- * it from `labelMinZoom` (mapGridLabelMinZoom) in, where the points are far
+ * A MAP grid layer: a dot per point, coloured by MAP on the one ramp, and its
+ * value from `labelMinZoom` (mapGridLabelMinZoom) in, where the points are far
  * enough apart for a label to clear the next row's dots; labels thin
- * themselves where they would overlap each other.
+ * themselves where they would overlap each other. The WAAS 2007 MAP's dots
+ * are ringed in the halo colour, with the value under them; the CCWR MAP's,
+ * the same size, are ringed in the text colour, with the value to their left:
+ * with both on (two grids on different cells) each point says which grid it
+ * is, and no label sits where the other grid's, the A-pan grid's (above) or
+ * the S-pan grid's (right) does. The CCWR MAP is on the WRC Atlas's cells, as
+ * the A-pan and S-pan grids are: its dot is the smallest of their rings.
  */
-export function mapGridLayers(dark: boolean, labels: boolean, labelMinZoom = 0): { over: Layer[]; labels: Layer[] } {
+export function mapGridLayers(kind: MapGridKind, dark: boolean, labels: boolean, labelMinZoom = 0): { over: Layer[]; labels: Layer[] } {
 	const t = labelColours(dark);
-	const src = { source: 'mapgrid' };
+	const src = { source: MAP_GRID_SOURCE[kind] };
+	const placement = kind === 'waas' ? { 'text-offset': [0, 0.9], 'text-anchor': 'top' } : { 'text-offset': [-1, 0], 'text-anchor': 'right' };
 	return {
 		over: [
 			{
-				id: 'mapgrid-point',
+				id: `${MAP_GRID_SOURCE[kind]}-point`,
 				type: 'circle',
 				...src,
 				paint: {
 					'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2.5, 14, 5],
 					'circle-color': ['interpolate', ['linear'], ['get', 'mm'], ...MAP_RAMP.flat()],
-					'circle-stroke-color': t.halo,
-					'circle-stroke-width': 1
+					'circle-stroke-color': kind === 'waas' ? t.halo : t.text,
+					'circle-stroke-width': kind === 'waas' ? 1 : 1.5
 				}
 			}
 		],
 		labels: labels
 			? [
 					{
-						id: MAP_GRID_LABEL_LAYER,
+						id: MAP_GRID_LABEL_LAYER[kind],
 						type: 'symbol',
 						...src,
 						...(labelMinZoom > 0 ? { minzoom: labelMinZoom } : {}),
-						layout: { 'text-field': ['get', 'label'], 'text-font': [LABEL_FONTS.regular], 'text-size': 11, 'text-offset': [0, 0.9], 'text-anchor': 'top', 'text-padding': 2 },
+						layout: { 'text-field': ['get', 'label'], 'text-font': [LABEL_FONTS.regular], 'text-size': 11, ...placement, 'text-padding': 2 },
 						paint: { 'text-color': t.text, 'text-halo-color': t.halo, 'text-halo-width': 1.5 }
 					}
 				]
@@ -924,10 +942,14 @@ export interface StyleOptions {
 	dataSourcesHref?: string;
 	/** The hydrological units' outlines and labels (unitsData()); none when omitted. */
 	units?: ReturnType<typeof unitsData>;
-	/** The MAP grid's points (mapGridData()); none when omitted. */
-	mapGrid?: ReturnType<typeof mapGridData>;
-	/** The cell size of the MAP grid drawn, degrees: its labels show from mapGridLabelMinZoom of it; null or omitted, at every zoom. */
-	mapGridCellDeg?: number | null;
+	/** The WAAS 2007 MAP's points (mapGridData()); none when omitted. */
+	waasGrid?: ReturnType<typeof mapGridData>;
+	/** The cell size of the WAAS 2007 MAP drawn, degrees: its labels show from mapGridLabelMinZoom of it; null or omitted, at every zoom. */
+	waasGridCellDeg?: number | null;
+	/** The CCWR MAP's points (mapGridData()); none when omitted. */
+	ccwrGrid?: ReturnType<typeof mapGridData>;
+	/** The cell size of the CCWR MAP drawn, degrees. */
+	ccwrGridCellDeg?: number | null;
 	/** The A-pan grid's points (evaporationGridData()); none when omitted. */
 	apanGrid?: ReturnType<typeof evaporationGridData>;
 	/** The cell size of the A-pan grid drawn, degrees (its labels show from mapGridLabelMinZoom of it). */
@@ -950,7 +972,7 @@ export interface StyleOptions {
  * bottom up: the basemap's land, the relief (when on), the rest of the
  * basemap, the quaternary outlines, the river network, the features, the
  * units' outlines, the CHIRPS grid, the DEM grid, the S-pan and A-pan grids'
- * points, the MAP grid's points, then every label (so a results fill never
+ * points, the CCWR MAP's and the WAAS 2007 MAP's points, then every label (so a results fill never
  * hides a name).
  */
 export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnType<typeof overlayData>, opts: StyleOptions = {}): Style {
@@ -958,7 +980,8 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 	const glyphs = opts.glyphs || null;
 	const qt = quaternaryLayers(dark, !!glyphs);
 	const un = unitsLayers(dark, !!glyphs);
-	const mg = mapGridLayers(dark, !!glyphs, mapGridLabelMinZoom(opts.mapGridCellDeg));
+	const mg = mapGridLayers('waas', dark, !!glyphs, mapGridLabelMinZoom(opts.waasGridCellDeg));
+	const cg = mapGridLayers('ccwr', dark, !!glyphs, mapGridLabelMinZoom(opts.ccwrGridCellDeg));
 	const dg = demGridLayers(dark, !!glyphs);
 	const ap = evaporationGridLayers('apan', dark, !!glyphs, mapGridLabelMinZoom(opts.apanGridCellDeg));
 	const sp = evaporationGridLayers('span', dark, !!glyphs, mapGridLabelMinZoom(opts.spanGridCellDeg));
@@ -972,7 +995,8 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			features: { type: 'geojson', data },
 			proposal: { type: 'geojson', data: opts.proposal ?? proposalData(null) },
 			units: { type: 'geojson', data: opts.units ?? unitsData(null) },
-			mapgrid: { type: 'geojson', data: opts.mapGrid ?? mapGridData(null) },
+			mapgrid: { type: 'geojson', data: opts.waasGrid ?? mapGridData(null) },
+			ccwrgrid: { type: 'geojson', data: opts.ccwrGrid ?? mapGridData(null) },
 			apangrid: { type: 'geojson', data: opts.apanGrid ?? evaporationGridData(null) },
 			spangrid: { type: 'geojson', data: opts.spanGrid ?? evaporationGridData(null) },
 			chirps: { type: 'geojson', data: opts.chirps ?? chirpsData(null) },
@@ -989,6 +1013,7 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...dg.over,
 			...sp.over,
 			...ap.over,
+			...cg.over,
 			...mg.over,
 			...proposalLayers(dark),
 			...(glyphs && tilesUrl ? labelLayers(dark) : []),
@@ -997,6 +1022,7 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...dg.labels,
 			...sp.labels,
 			...ap.labels,
+			...cg.labels,
 			...mg.labels
 		]
 	};

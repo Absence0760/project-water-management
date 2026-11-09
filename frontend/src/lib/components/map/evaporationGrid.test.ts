@@ -6,10 +6,10 @@ import { EVAPORATION_GRID_LABEL, EVAPORATION_GRID_LAYER, EVAPORATION_GRID_MONTHS
 import { layersOn, MAP_LAYERS, withLayer } from './mapLayers';
 
 describe('the A-pan and S-pan grid layers (docs/maps.md § A-pan and S-pan grids)', () => {
-	it('are two layers of their own beside the MAP grid, each toggled alone in the URL', () => {
+	it('are two layers of their own beside the MAP grids, each toggled alone in the URL', () => {
 		expect(EVAPORATION_GRID_LAYER).toEqual({ apan: 'apangrid', span: 'spangrid' });
 		expect(EVAPORATION_GRID_LABEL).toEqual({ apan: 'A-pan grid', span: 'S-pan grid' });
-		expect(MAP_LAYERS.slice(MAP_LAYERS.indexOf('mapgrid'), MAP_LAYERS.indexOf('mapgrid') + 3)).toEqual(['mapgrid', 'apangrid', 'spangrid']);
+		expect(MAP_LAYERS.slice(MAP_LAYERS.indexOf('mapgrid'), MAP_LAYERS.indexOf('mapgrid') + 4)).toEqual(['mapgrid', 'ccwrgrid', 'apangrid', 'spangrid']);
 		const both = withLayer(withLayer('?tab=map', 'spangrid', true), 'apangrid', true);
 		expect(new URLSearchParams(both).get('layers')).toBe('apangrid,spangrid');
 		const one = withLayer(both, 'apangrid', false);

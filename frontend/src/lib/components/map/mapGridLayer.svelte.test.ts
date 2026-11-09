@@ -1,13 +1,16 @@
-// The MAP grid layer's state (mapGridLayer.svelte.ts, docs/maps.md § MAP grid):
-// nothing asked while off or zoomed out too far; asked once per project,
-// dataset and snapped view while on; a picked dataset asks again; points and
-// their range drawn from the answer; an error kept until Retry. The request
-// is the deps' `load`, so the test needs no API client (and no SvelteKit $env).
+// A MAP grid layer's state (mapGridLayer.svelte.ts, docs/maps.md § MAP grid):
+// nothing asked while off or zoomed out too far; asked once per project and
+// snapped view while on, always for its own dataset (the WAAS 2007 MAP's
+// WAAS-SWCape-2007, the CCWR MAP's Lynch-2004); points, their range and what
+// the map draws (with the credit line only while points are drawn) from the
+// answer; its status line by its own name, "not loaded" included; an error
+// kept until Retry. The request is the deps' `load`, so the test needs no API
+// client (and no SvelteKit $env).
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MapGridLayer as Answer } from '#lib/api/types.js';
 import { MapGridLayer } from './mapGridLayer.svelte';
-import { mapGridViewBbox } from './mapLayers';
+import { mapGridViewBbox, type MapGridKind } from './mapLayers';
 
 const dataset = (name: string) => ({ dataset: name, source: 'Invented', version: '1', attribution: 'test', cellDeg: 0.01, cells: 9, synthetic: name === 'synthetic' });
 const answer = (cells: [number, number, number][], extra: Partial<Answer> = {}): Answer => ({
@@ -26,13 +29,13 @@ afterEach(() => {
 	cleanup = null;
 });
 
-type Load = (id: string, bbox: readonly [number, number, number, number], dataset: string | null) => Promise<Answer>;
+type Load = (id: string, bbox: readonly [number, number, number, number], dataset: string) => Promise<Answer>;
 
-function setup(load: Load) {
+function setup(load: Load, kind: MapGridKind = 'waas') {
 	const deps = $state({ on: false, view: null as [number, number, number, number] | null, projectId: 'p1' });
 	let layer!: MapGridLayer;
 	cleanup = $effect.root(() => {
-		layer = new MapGridLayer({ projectId: () => deps.projectId, on: () => deps.on, view: () => deps.view, load });
+		layer = new MapGridLayer({ kind, projectId: () => deps.projectId, on: () => deps.on, view: () => deps.view, load });
 	});
 	flushSync();
 	return { deps, layer };
@@ -63,40 +66,64 @@ describe('MapGridLayer', () => {
 		expect(load).not.toHaveBeenCalled();
 	});
 
-	it('asks once per snapped view and dataset, draws the points with their range, and asks again for a picked dataset', async () => {
-		const load = vi.fn<Load>(async (_id, _b, ds) => answer(ds === 'coarse' ? [[21.3, -33.6, 400]] : [[21.305, -33.645, 790], [21.315, -33.645, 612]]));
+	it('asks once per snapped view for its own dataset, and draws the points with their range', async () => {
+		const load = vi.fn<Load>(async () => answer([[21.305, -33.645, 790], [21.315, -33.645, 612]]));
 		const { deps, layer } = setup(load);
 		deps.view = VIEW;
 		deps.on = true;
 		flushSync();
-		expect(load).toHaveBeenCalledExactlyOnceWith('p1', mapGridViewBbox(VIEW), null);
+		expect(load).toHaveBeenCalledExactlyOnceWith('p1', mapGridViewBbox(VIEW), 'WAAS-SWCape-2007');
 		await vi.waitFor(() => expect(layer.loading).toBe(false));
 		expect(layer.points).toEqual([
 			{ lon: 21.305, lat: -33.645, mapMm: 790 },
 			{ lon: 21.315, lat: -33.645, mapMm: 612 }
 		]);
 		expect(layer.range).toEqual([612, 790]);
+		expect(layer.draw).toEqual({ points: layer.points, cellDeg: 0.01, attribution: 'test' });
+		expect(layer.status).toBe('2 WAAS 2007 MAP points shown.');
 		// A pan inside the same snapped box asks nothing.
 		deps.view = [21.302, -33.648, 21.328, -33.622];
 		flushSync();
 		expect(load).toHaveBeenCalledTimes(1);
-		layer.pick('coarse');
+		// Off: nothing drawn, so nothing credited.
+		deps.on = false;
 		flushSync();
-		expect(load).toHaveBeenLastCalledWith('p1', mapGridViewBbox(VIEW), 'coarse');
-		await vi.waitFor(() => expect(layer.points).toEqual([{ lon: 21.3, lat: -33.6, mapMm: 400 }]));
-		// Back to the default: answered from the cache.
-		layer.pick(null);
-		flushSync();
-		expect(load).toHaveBeenCalledTimes(2);
-		expect(layer.points).toHaveLength(2);
+		expect(layer.draw).toEqual({ points: [], cellDeg: 0.01, attribution: null });
+		expect(layer.status).toBeNull();
 	});
 
-	it('draws nothing for a view the server says is too dense', async () => {
+	it('is the WAAS 2007 MAP (`mapgrid`) or the CCWR MAP (`ccwrgrid`), each asking for its own grid', async () => {
+		const load = vi.fn<Load>(async () => answer([[21.3, -33.6, 400]]));
+		const { deps, layer } = setup(load, 'ccwr');
+		expect([layer.kind, layer.layer, layer.label, layer.dataset]).toEqual(['ccwr', 'ccwrgrid', 'CCWR MAP', 'Lynch-2004']);
+		deps.view = VIEW;
+		deps.on = true;
+		flushSync();
+		expect(layer.status).toBe('Loading the CCWR MAP…');
+		expect(load).toHaveBeenCalledExactlyOnceWith('p1', mapGridViewBbox(VIEW), 'Lynch-2004');
+		await vi.waitFor(() => expect(layer.status).toBe('1 CCWR MAP point shown.'));
+		cleanup?.();
+		const waas = setup(vi.fn<Load>(async () => answer([]))).layer;
+		expect([waas.kind, waas.layer, waas.label, waas.dataset]).toEqual(['waas', 'mapgrid', 'WAAS 2007 MAP', 'WAAS-SWCape-2007']);
+	});
+
+	it('says its grid isn’t loaded when the server has none by that label, and draws nothing', async () => {
+		const { deps, layer } = setup(vi.fn<Load>(async () => answer([], { dataset: null })), 'ccwr');
+		deps.view = VIEW;
+		deps.on = true;
+		flushSync();
+		await vi.waitFor(() => expect(layer.status).toBe('No CCWR MAP is loaded.'));
+		expect(layer.points).toEqual([]);
+		expect(layer.draw.attribution).toBeNull();
+	});
+
+		it('draws nothing for a view the server says is too dense', async () => {
 		const { deps, layer } = setup(vi.fn<Load>(async () => answer([], { tooDense: true })));
 		deps.view = VIEW;
 		deps.on = true;
 		flushSync();
 		await vi.waitFor(() => expect(layer.answer?.tooDense).toBe(true));
+		expect(layer.status).toBe('Too many WAAS 2007 MAP points in view: zoom in.');
 		expect(layer.points).toEqual([]);
 		expect(layer.range).toBeNull();
 	});
