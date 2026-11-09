@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '#lib/api/types.js';
 import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
-import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
+import { EWR_MONTHS_HEADING, ewrRuleText, monthsJudge, monthsMetHeading, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type MonthsJudge, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
 	id,
@@ -55,6 +55,8 @@ describe('riverHref and riverAnchor', () => {
 		expect(riverHref('r 1')).toBe('?tab=river&run=r%201');
 		expect(riverHref('r1', 'res-reserve')).toBe('?tab=river&run=r1#res-reserve');
 		expect(riverHref(null, 'res-ewr')).toBe('?tab=river#res-ewr');
+		// The months-met panel on the rule tables, for a link that names their months (engine 1.116.0).
+		expect(riverHref('r1', 'res-reserve', 'rules')).toBe('?tab=river&run=r1&months=rules#res-reserve');
 	});
 	it('knows the panels that moved from Runs & results, and no others', () => {
 		for (const id of ['res-reserve', 'res-ewr', 'res-ewr-grid', 'res-uncertainty', 'res-sensitivity', 'res-outcomes', 'res-irrigation', 'res-outlook', 'res-water-account']) expect(riverAnchor(id)).toBe(true);
@@ -93,6 +95,14 @@ describe('riverNavGroups', () => {
 		// The years chart's heading follows the test the results are judged by.
 		expect(labels(true)[1]).toBe('Days below the pragmatic EWR, each water year');
 	});
+	it('names the months-met link as the panel’s heading reads: the daily EWR’s, named for its source, or the rule tables’ (engine 1.116.0)', () => {
+		const label = (judge: MonthsJudge, daily?: Parameters<typeof riverNavGroups>[2]) =>
+			riverNavGroups(false, true, daily, monthsMetHeading(judge, daily))[0]!.sections.find((s) => s.id === 'res-reserve')!.label;
+		expect(label('daily', null)).toBe('Pragmatic EWR met, by month');
+		expect(label('daily', { method: 'tab' })).toBe('Daily EWR from the DRM TAB file met, by month');
+		expect(label('daily', { method: 'percentile', reserveTable: 'withoutHighFlows' })).toBe('Daily EWR from the DRM percentile tables without high flows met, by month');
+		expect(label('rules', { method: 'tab' })).toBe(RESERVE_MONTHS_HEADING);
+	});
 	it('names the flow chart as its heading does: "Flow vs reserve" unless a rule table elsewhere leaves it only the pragmatic EWR (issue #177)', () => {
 		expect(flowLabel(false, false)).toBe('Flow vs reserve');
 		expect(flowLabel(true, true)).toBe('Flow vs reserve');
@@ -111,11 +121,31 @@ describe('the monthly panels and the Reserve stub (issue #465)', () => {
 		expect(EWR_MONTHS_HEADING).toBe('Days below the EWR, by month');
 	});
 	it('without a rule table in the project, says one is needed and links to where it is set', () => {
-		expect(reserveStubText(false, true)).toEqual({ lead: 'Needs a Reserve rule table:', link: 'set one in Settings → Reserve rule tables' });
+		expect(reserveStubText(false, true)).toEqual({ lead: 'To judge the months by a Reserve rule table too:', link: 'set one in Settings → Reserve rule tables' });
 		expect(reserveStubText(false, false).link).toBe('an editor sets one in Settings → Reserve rule tables');
 	});
 	it('with one the run lacks, says a new run shows it (nothing to set)', () => {
-		expect(reserveStubText(true, true)).toEqual({ lead: 'This run was made without the project’s Reserve rule table. Run the model again to see it.', link: null });
+		expect(reserveStubText(true, true)).toEqual({ lead: 'This run was made without the project’s Reserve rule table. Run the model again to judge the months by it too.', link: null });
+	});
+});
+
+describe('monthsJudge: what the months-met panel judges by (engine 1.116.0)', () => {
+	const daily = { months: 12 } as never;
+	const site = [{}] as never;
+	it('the daily EWR without a rule table, whatever was picked or chosen', () => {
+		expect(monthsJudge({ ewrDailyMonths: daily }, { source: 'ruleTable', siteNodeId: null }, 'rules')).toBe('daily');
+		expect(monthsJudge({}, null, null)).toBe('daily');
+	});
+	it('with both: the daily EWR by default (Automatic and the pragmatic headline alike), the tables when the project judges by one by choice', () => {
+		expect(monthsJudge({ ewrAssurance: site, ewrDailyMonths: daily }, null, null)).toBe('daily');
+		expect(monthsJudge({ ewrAssurance: site, ewrDailyMonths: daily }, { source: 'auto' }, null)).toBe('daily');
+		expect(monthsJudge({ ewrAssurance: site, ewrDailyMonths: daily }, { source: 'pragmatic' }, null)).toBe('daily');
+		expect(monthsJudge({ ewrAssurance: site, ewrDailyMonths: daily }, { source: 'ruleTable', siteNodeId: null }, null)).toBe('rules');
+	});
+	it('the reader’s pick wins when the run has both; a run without the daily months (before 1.116.0) opens on the tables', () => {
+		expect(monthsJudge({ ewrAssurance: site, ewrDailyMonths: daily }, { source: 'ruleTable', siteNodeId: null }, 'daily')).toBe('daily');
+		expect(monthsJudge({ ewrAssurance: site, ewrDailyMonths: daily }, null, 'rules')).toBe('rules');
+		expect(monthsJudge({ ewrAssurance: site }, null, null)).toBe('rules');
 	});
 });
 

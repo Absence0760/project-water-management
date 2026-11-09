@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
 import { headlines } from '#lib/components/overview/latestRun.js';
 import { riverKpis } from '#lib/components/river/river.js';
-import { EACH_RUNS_DAILY_EWR, EWR_NOT_MET, dailyEwrName, dailyEwrNameOf, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
+import { EACH_RUNS_DAILY_EWR, EWR_NOT_MET, dailyEwrName, dailyEwrNameOf, dailyEwrSource, dailyEwrWithSource, dailyMonthsHeading, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
 
 describe('ewrNotMet', () => {
 	it('words the pragmatic EWR test one way: the share not met and the days not met of the record', () => {
@@ -66,6 +66,24 @@ describe('daysBelowTestOf', () => {
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] } }, { summary: { ewrAssurance: [site], catchment: { outletEwr: { method: 'percentile' } } } }])).toBe('each run’s daily EWR');
 		// Without a rule table the count stays "the reserve", whatever the sources.
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [] } }, { summary: { ewrAssurance: [], ...tab } }])).toBe('the reserve');
+	});
+});
+
+describe('the daily EWR’s source alone, the charge’s words and the months-met heading (engine 1.116.0)', () => {
+	it('names each source', () => {
+		expect([null, undefined, { method: 'pragmatic' as const }].map(dailyEwrSource)).toEqual(['the pragmatic EWR', 'the pragmatic EWR', 'the pragmatic EWR']);
+		expect(dailyEwrSource({ method: 'tab' })).toBe('the DRM TAB file');
+		expect(dailyEwrSource({ method: 'percentile' })).toBe('the DRM percentile tables');
+		expect(dailyEwrSource({ method: 'percentile', reserveTable: 'withoutHighFlows' })).toBe('the DRM percentile tables without high flows');
+	});
+	it('the charge follows the daily EWR, named for its source', () => {
+		expect(dailyEwrWithSource({ method: 'tab' })).toBe('the daily EWR (the DRM TAB file)');
+		expect(dailyEwrWithSource(null)).toBe('the daily EWR (the pragmatic EWR)');
+	});
+	it('the months-met heading takes dailyEwrName’s words, capitalised', () => {
+		expect(dailyMonthsHeading(null)).toBe('Pragmatic EWR met, by month');
+		expect(dailyMonthsHeading({ method: 'tab' })).toBe('Daily EWR from the DRM TAB file met, by month');
+		expect(dailyMonthsHeading({ method: 'percentile' })).toBe('Daily EWR from the DRM percentile tables met, by month');
 	});
 });
 

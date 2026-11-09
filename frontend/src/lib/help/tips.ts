@@ -1516,7 +1516,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-charge-source',
 		term: 'What the EWR charge follows',
-		short: 'The daily pragmatic EWR (default; provisional, not hydrologist-confirmed), or at a site with a rule table the month’s requirement.',
+		short: 'The daily EWR from whichever source EWR → Daily EWR from picks (default; provisional), or at a rule-table site the month’s requirement.',
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['settings.ewrChargeSource', 'run.ewr_charge_shortfall']

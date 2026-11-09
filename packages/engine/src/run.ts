@@ -62,6 +62,7 @@ import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology'
 import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
+import { assessDailyEwrMonths } from './reserve/dailyMonths';
 import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, withReserveTable, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
 import { naturalFlowFor, perUnitAreaKm2, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
@@ -609,7 +610,7 @@ function runNetworkIn(
 			...(capturing ? { captureAt: captureAt! } : {})
 		}
 	);
-	// What each EWR site's charge follows (engine ≥ 1.3.0, issue #64): the pragmatic EWR, or
+	// What each EWR site's charge follows (engine ≥ 1.3.0, issue #64): the daily EWR (whichever source, 1.77.0), or
 	// with settings.ewrChargeSource 'ruleTable' the site's rule-table requirement where it has one.
 	const chargeSites = ewrChargeSites(settings, siteNodes, topo.outflow, ewrAssurance, sim, simOutflow, ewr, ewrShort, days, nodes, warnings);
 	// Units served in full while an EWR site below them fails (engine ≥ 1.33.0, issue #71, ./reserve/riverMeasures.ts):
@@ -1343,6 +1344,8 @@ function runNetworkIn(
 			ewrCompliance: compliance,
 			ewrSplit: built.ewrSplit.info,
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
+			// The daily EWR in use judged by whole months (engine ≥ 1.116.0, §2.9h), whatever its source.
+			...(topo.outflow >= 0 ? { ewrDailyMonths: assessDailyEwrMonths(startDate, days, ewr, simOutflow, historyDays) } : {}),
 			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, doubleMass },
@@ -3184,7 +3187,7 @@ function ewrChargeSites(
 ): { node: number; required: ArrayLike<number>; shortfall: ArrayLike<number>; ruleTable: boolean }[] {
 	const byRule = settings.ewrChargeSource === 'ruleTable';
 	const rules = new Map(byRule ? assessed.map((a) => [a.node, a.requiredM3Day]) : []);
-	if (byRule && rules.size === 0) warnings.push('the EWR charge is set to follow the Reserve rule tables, but no EWR site has one: it follows the pragmatic EWR');
+	if (byRule && rules.size === 0) warnings.push('the EWR charge is set to follow the Reserve rule tables, but no EWR site has one: it follows the daily EWR');
 	return siteNodes.map((node) => {
 		const isOutlet = node === outflow;
 		const required = isOutlet ? ewr : sim.nodes[node]!.ewrCumulative;
@@ -3210,7 +3213,7 @@ function ewrChargeSites(
 		if (pragmaticDays) {
 			const name = nodes[node]!.name;
 			warnings.push(
-				`EWR charge at ${isOutlet ? `the outlet (${name})` : name}: ${pragmaticDays} day${pragmaticDays === 1 ? '' : 's'} outside a complete calendar month follow${pragmaticDays === 1 ? 's' : ''} the pragmatic EWR, since the rule table's requirement is monthly`
+				`EWR charge at ${isOutlet ? `the outlet (${name})` : name}: ${pragmaticDays} day${pragmaticDays === 1 ? '' : 's'} outside a complete calendar month follow${pragmaticDays === 1 ? 's' : ''} the daily EWR, since the rule table's requirement is monthly`
 			);
 		}
 		return { node, required: req, shortfall: sh, ruleTable: true };

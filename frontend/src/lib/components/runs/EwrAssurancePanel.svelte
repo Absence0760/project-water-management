@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
 	import { EWR_ASSURANCE_MIN_YEARS, type EwrAssuranceSite } from '@water-management/engine';
+	import type { Snippet } from 'svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { describeMonths, monthName, WATER_YEAR_MONTHS } from '#lib/format/months.js';
@@ -37,7 +38,8 @@
 		sites,
 		print = false,
 		title = 'Reserve compliance by month',
-		headingLevel = 3
+		headingLevel = 3,
+		controls
 	}: {
 		sites: EwrAssuranceSite[];
 		/** The printable report: Month by month opens (the report shows each site in its own panel). */
@@ -46,6 +48,8 @@
 		title?: string;
 		/** Its heading's level: 3 under a page's h2 (Runs & results, the report); EWR's panels are h2, peers of its charts. */
 		headingLevel?: 2 | 3;
+		/** Under the heading: EWR's "Judged by" switch between this and the daily EWR's months (river/ReserveMonths.svelte). */
+		controls?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -75,6 +79,7 @@
 
 <section aria-labelledby="{uid}-h">
 	<svelte:element this={`h${headingLevel}`} id="{uid}-h">{title} <HelpTip key="reserve-compliance" /></svelte:element>
+	{#if controls}{@render controls()}{/if}
 	{#if sites.length > 1}
 		<div class="field site">
 			<label for="{uid}-site">EWR site</label>

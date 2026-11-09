@@ -2709,6 +2709,16 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   (`setting` | `simulated`), `lowFlowRatio`, `patternCorrelation` and `flag {
   level: ok | note | query | unusable, basis, deviationPct, thresholds, text }`.
   A flag's `text` is also in `warnings`. Rules: [model.md §2.10c](./model.md#210c-wr2012-check-engine--060-issue-4-phase-8).
+- `summary.ewrDailyMonths` (engine ≥ 1.116.0; absent without an outlet and
+  on older runs) is the run's daily EWR at the outlet (the `ewr` series,
+  whichever source `settings.ewrDailySource` picks) judged month by month
+  (`EwrDailyMonths` in `packages/engine/src/reserve/dailyMonths.ts`, rules:
+  [model.md §2.9h](./model.md)): `months`, `met`, `rate` (null without a
+  complete month), `zeroRequirementMonths` (months met whose daily EWR was 0
+  all month), `longestNotMetRun`, `deficitM3`, and `byMonth` (12, water-year
+  order: `{ month, years, met, rate, meanRequiredM3s, meanSimulatedM3s,
+  deficitM3 }`). Withheld from a viewer kept from the registered volumes on a
+  cap or full-allocation run (it is not on that allowlist).
 - `summary.ewrAssurance` (engine ≥ 0.21.0; only when the project has a rule
   table) is monthly compliance with the Reserve's assurance rules, one entry
   per EWR site with a table, outlet first then gauges by node id

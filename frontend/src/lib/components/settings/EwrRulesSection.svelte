@@ -15,6 +15,7 @@
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import NotesDrawer from '#lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '#lib/components/notes/notes.js';
+	import { dailyEwrName, dailyEwrSource, dailyEwrWithSource } from '#lib/components/ewr/notMet.js';
 	import { newTable, rulesError, siteOptions } from './ewrRules';
 
 	let {
@@ -79,14 +80,14 @@
 		A Reserve determination gives the EWR as a table: for each month, the flow required at each assurance level (“% point”, the share of
 		time it should be equalled or exceeded; 10 % is the wet-condition flow, 99 % the drought flow). Each month’s <strong>natural flow</strong>
 		picks the point it sits at, and the run checks whether the simulated flow at the site met the EWR at that point. The result is a
-		monthly compliance rate on Runs & results; the pragmatic EWR above sets the daily charge and curtailment unless you choose the rule
-		tables below. A total-flow table can
+		monthly compliance rate on the EWR page; {dailyEwrWithSource(daily)}, set under EWR above, sets the daily charge and curtailment unless
+		you choose the rule tables below. A total-flow table can
 		also carry the Desktop Reserve Model’s low-flow table (maintenance and drought low flows), to show whether a month failed its low flows or
 		only its high flows, and any site can list freshets and floods to check each water year. Each table’s head has <strong>Load file…</strong> (a DRM file or a CSV) and <strong>Paste…</strong> (from a spreadsheet).
 	</p>
 
 	{#if value.length === 0}
-		<p class="muted small">No rule table: runs report the days below the pragmatic EWR only.</p>
+		<p class="muted small">No rule table: runs report the days below {dailyEwrName(daily)} only.</p>
 	{:else}
 		<Lazy load={loadEditor}>
 			{#snippet children(Editor)}
@@ -101,7 +102,7 @@
 			<div class="field">
 				<span class="lbl"><label for="{uid}-charge">EWR charge follows</label><HelpTip key="settings.ewrChargeSource" /></span>
 				<select id="{uid}-charge" disabled={readonly} value={chargeSource ?? 'pragmatic'} onchange={(e) => (chargeSource = e.currentTarget.value as EwrChargeSource)} aria-describedby="{uid}-charge-h">
-					<option value="pragmatic">The pragmatic EWR</option>
+					<option value="pragmatic">The daily EWR ({dailyEwrSource(daily)})</option>
 					<option value="ruleTable">The rule tables</option>
 				</select>
 				<span class="hint explain" id="{uid}-charge-h">Which daily requirement sets the EWR charge, curtailment and the water account at a site with a table. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>

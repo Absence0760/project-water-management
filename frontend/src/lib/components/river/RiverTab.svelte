@@ -12,8 +12,8 @@
 	// the days below the reserve per water year. The page flows in the window's
 	// one scroll (nothing is sized to the window, and no card or table scrolls
 	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
-	// with their `#res-…` ids, findings first (issue #465): Reserve rules met by month (a one-line stub
-	// saying what it needs without a rule table), days below the EWR by month (with the EWR required vs
+	// with their `#res-…` ids, findings first (issue #465): the months met (ReserveMonths: by the daily EWR in
+	// use, engine 1.116.0, or the Reserve rule tables, a switch apart), days below the EWR by month (with the EWR required vs
 	// met per site and water year under its grid) and the water account; then, under "How sure, and
 	// what if", the run-it-yourself tools, each one row until it has run (common/ToolRow): the
 	// uncertainty bands, the sensitivity runs, the outcome matrix and the seasonal outlook.
@@ -48,8 +48,9 @@
 	import OutlookPanel from '#lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '#lib/components/reliability/WaterAccountPanel.svelte';
 	import { RIVER_STRIP_ANCHOR, riverAnchor } from './links';
+	import ReserveMonths from './ReserveMonths.svelte';
 	import ReserveStrip from './ReserveStrip.svelte';
-	import { EWR_MONTHS_HEADING, ewrRuleText, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups } from './river';
+	import { EWR_MONTHS_HEADING, ewrRuleText, monthsJudge, monthsMetHeading, pickRiverRun, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type MonthsJudge } from './river';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
@@ -58,7 +59,6 @@
 	// water-year bars (shared with Compare runs) and Reserve compliance (only with a rule table) stay lazy.
 	const loadFlowVsReserve = () => import('#lib/components/overview/FlowVsReserve.svelte');
 	const loadReserveYears = () => import('#lib/components/compare/ReserveYearsChart.svelte');
-	const loadAssurancePanel = () => import('#lib/components/runs/EwrAssurancePanel.svelte');
 
 	let {
 		projectId,
@@ -187,6 +187,11 @@
 	const ruleLine = $derived(!!shown && hasRuleLine(shown.series));
 	const yearsWords = $derived(reserveYearsWords(ruleTable, summary?.catchment.outletEwr));
 	const reserveStub = $derived(reserveStubText(!!project.settings.ewrRules?.length, canEdit));
+	// The months met by the daily EWR in use or the rule tables (river.ts monthsJudge): the reader's pick, else the daily EWR
+	// unless the project judges by a rule table by choice.
+	// A link that names the rule tables' months asks for them (`&months=rules`, links.ts riverHref).
+	let monthsPick = $state<MonthsJudge | null>(page.url.searchParams.get('months') === 'rules' ? 'rules' : null);
+	const monthsShown = $derived(summary ? monthsJudge(summary, headline, monthsPick) : 'rules');
 	const kpis = $derived(
 		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === shownPrevious?.id ? { summary: previous.summary, days: historyDays(previous) } : null, headline) : []
 	);
@@ -271,7 +276,7 @@
 	     under its first screen. From 80rem of page a side index on the left, every group named over
 	     its links; narrower a bar under the header, its links evenly spaced (issue #162, #462). The
 	     page's own widths are read from river-body, the column beside the index. -->
-	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="EWR sections" railFrom={RIVER_RAIL_FROM_REM}>
+	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr, monthsMetHeading(monthsShown, summary.catchment.outletEwr)) : []} label="EWR sections" railFrom={RIVER_RAIL_FROM_REM}>
 	<!-- data-run: the run whose record is on screen; aria-busy while another run picked is loading (both for the tests). -->
 	<div class="river-body" data-testid="river-body" data-run={shown?.run.id} aria-busy={busy}>
 	{#if pick.gone}
@@ -361,21 +366,10 @@
 		     starts afresh with the next run's record. -->
 		{#key shownRun.id}
 		<div class="panels findings">
-			{#if summary.ewrAssurance?.length}
-				<div class="panel" id="res-reserve">
-					<Lazy load={loadAssurancePanel}>
-						{#snippet children(EwrAssurancePanel)}
-							<EwrAssurancePanel sites={summary.ewrAssurance ?? []} title={RESERVE_MONTHS_HEADING} headingLevel={2} />
-						{/snippet}
-					</Lazy>
-				</div>
-			{:else}
-				<!-- Without a rule table this panel was simply absent and nothing said why (issue #465): one line saying what it needs. -->
-				<section class="panel stub" id="res-reserve" aria-labelledby="reserve-stub-h" data-testid="reserve-stub">
-					<h2 id="reserve-stub-h">{RESERVE_MONTHS_HEADING}</h2>
-					<p>{reserveStub.lead}{#if reserveStub.link}{' '}<a href="?tab=settings#set-reserve">{reserveStub.link}</a>.{/if}</p>
-				</section>
-			{/if}
+			<!-- The months met, by the daily EWR in use (engine 1.116.0) or the Reserve rule tables, a switch apart. -->
+			<div class="panel" id="res-reserve">
+				<ReserveMonths {summary} judge={monthsShown} onjudge={(j) => (monthsPick = j)} stub={reserveStub} />
+			</div>
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}
 					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} title={EWR_MONTHS_HEADING} headingLevel={2} />
@@ -590,21 +584,6 @@
 	   (Reserve compliance's month by month shows its first rows, then Show all). */
 	.panels :global(div.table-wrap) {
 		max-height: none;
-	}
-	/* Reserve rules met without a rule table: one line, the heading and what it needs. */
-	.stub {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0.25rem 1rem;
-	}
-	.stub h2,
-	.stub p {
-		margin: 0;
-	}
-	.stub p {
-		font-size: 0.85rem;
-		color: var(--text-muted);
 	}
 	.tools h2 {
 		margin: 1.5rem 0 0.75rem;

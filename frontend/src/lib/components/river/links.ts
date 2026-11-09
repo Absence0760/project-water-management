@@ -45,7 +45,11 @@ export function riverAnchor(hash: string): boolean {
  */
 export const SUMMARY_STRIP_ANCHORS: readonly string[] = ['strip-h', 'reserve-strip'];
 
-/** `?tab=river` (the EWR page), with the run (`&run=`) and a panel (`#res-…`) when given. */
-export function riverHref(runId?: string | null, anchor?: string | null): string {
-	return `?tab=river${runId ? `&run=${encodeURIComponent(runId)}` : ''}${anchor ? `#${anchor}` : ''}`;
+/**
+ * `?tab=river` (the EWR page), with the run (`&run=`) and a panel (`#res-…`) when given. `months: 'rules'` opens
+ * the months-met panel (`#res-reserve`) on the Reserve rule tables rather than the daily EWR (river.ts monthsJudge),
+ * for a link that names the rule tables' months.
+ */
+export function riverHref(runId?: string | null, anchor?: string | null, months?: 'rules'): string {
+	return `?tab=river${runId ? `&run=${encodeURIComponent(runId)}` : ''}${months ? `&months=${months}` : ''}${anchor ? `#${anchor}` : ''}`;
 }

@@ -6,6 +6,7 @@
 // pass the derived figures in.
 import { defaultDataQualitySettings, resolveGapRain, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
 import { gapRainChoiceText } from '#lib/components/series/gapRain.js';
+import { dailyEwrWithSource } from '#lib/components/ewr/notMet.js';
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '#lib/api/types.js';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '#lib/format/number.js';
 import type { SettingsSectionId } from './sections';
@@ -168,7 +169,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 		// Moved out of EWR (issue #521): the window results average over, and when a water year counts as met.
 		'set-reporting': `${dateSpan(s.reportStart, s.reportEnd) ? `Reporting ${dateSpan(s.reportStart, s.reportEnd)}` : 'Reporting over the whole run'} · a water year is met at ${Math.round((s.assuranceAnnualThreshold ?? 0.9) * 1000) / 10} % of demand`,
 		'set-reserve': s.ewrRules?.length
-			? `${plural(s.ewrRules.length, 'rule table')} · the EWR charge follows ${s.ewrChargeSource === 'ruleTable' ? 'the rule tables' : 'the pragmatic EWR'}`
+			? // A 'pragmatic' charge source is the daily outlet EWR, whichever source it comes from (engine ≥ 1.77.0, run.ts ewrChargeSites).
+				`${plural(s.ewrRules.length, 'rule table')} · the EWR charge follows ${s.ewrChargeSource === 'ruleTable' ? 'the rule tables' : dailyEwrWithSource(s.ewrDailySource)}`
 			: // The panel's own line says what having none means.
 				'',
 		'set-quality': (() => {

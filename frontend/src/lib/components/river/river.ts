@@ -9,7 +9,7 @@ import { metricDelta, type MetricDelta, type RunSummary } from '@water-managemen
 import type { EwrHeadline, RunMeta } from '#lib/api/types.js';
 import type { NavGroup } from '#lib/components/common/sectionNav.js';
 import type { MetricSpec } from '#lib/components/compare/delta.js';
-import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
+import { dailyMonthsHeading, daysBelowTest, ewrNotMet, type DailyEwrSource } from '#lib/components/ewr/notMet.js';
 import { headlines } from '#lib/components/overview/latestRun.js';
 import { flowHeading } from '#lib/components/overview/summaryChart.js';
 import { fmtNum } from '#lib/format/number.js';
@@ -162,16 +162,38 @@ export function reserveYearsWords(ruleTable: boolean, daily?: DailyEwrSource): {
 export { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING };
 
 /**
- * What `#res-reserve` says without a Reserve rule table in the run (issue
- * #465): before, the panel was simply absent and nothing said why. With
- * none in the project, it needs one (set in Settings → Reserve rule tables,
- * by an editor); with one the run lacks (made before the table, or by an engine before
- * 0.21.0), a new run shows it.
+ * What `#res-reserve` says under the daily EWR's months when the run has no
+ * Reserve rule table (issue #465: before, the panel was simply absent and
+ * nothing said why). With none in the project, a table is needed to judge
+ * the months by it too (set in Settings → Reserve rule tables, by an
+ * editor); with one the run lacks (made before the table, or by an engine
+ * before 0.21.0), a new run shows it.
  */
 export function reserveStubText(projectHasTable: boolean, canEdit: boolean): { lead: string; link: string | null } {
-	if (projectHasTable) return { lead: 'This run was made without the project’s Reserve rule table. Run the model again to see it.', link: null };
-	return { lead: 'Needs a Reserve rule table:', link: canEdit ? 'set one in Settings → Reserve rule tables' : 'an editor sets one in Settings → Reserve rule tables' };
+	if (projectHasTable) return { lead: 'This run was made without the project’s Reserve rule table. Run the model again to judge the months by it too.', link: null };
+	return { lead: 'To judge the months by a Reserve rule table too:', link: canEdit ? 'set one in Settings → Reserve rule tables' : 'an editor sets one in Settings → Reserve rule tables' };
 }
+
+/** What `#res-reserve` judges the months by: the daily EWR in use (engine ≥ 1.116.0), or the Reserve rule tables. */
+export type MonthsJudge = 'daily' | 'rules';
+
+/**
+ * Which judgement `#res-reserve` shows. The daily EWR in use by default: a
+ * client hydrologist expected the months met to follow Model settings → EWR
+ * → Daily EWR from, where the panel read only the rule tables. With a rule
+ * table in the run too: the reader's pick; else the tables when the project
+ * judges its results by one by choice (settings.ewrHeadline `ruleTable`,
+ * not Automatic) or the run lacks the daily months (made before engine
+ * 1.116.0, or kept from this reader). Without a table, the daily EWR.
+ */
+export function monthsJudge(summary: Pick<RunSummary, 'ewrAssurance' | 'ewrDailyMonths'>, headline: EwrHeadline | null | undefined, picked: MonthsJudge | null): MonthsJudge {
+	if (!summary.ewrAssurance?.length) return 'daily';
+	if (picked) return picked;
+	return headline?.source === 'ruleTable' || !summary.ewrDailyMonths ? 'rules' : 'daily';
+}
+
+/** The months-met panel's heading for what it shows: "Reserve rules met, by month", or the daily EWR's (notMet.ts dailyMonthsHeading). */
+export const monthsMetHeading = (judge: MonthsJudge, daily?: DailyEwrSource): string => (judge === 'rules' ? RESERVE_MONTHS_HEADING : dailyMonthsHeading(daily));
 
 /**
  * The page's "On this page" menu (common/SectionNav): every panel in page
@@ -184,16 +206,17 @@ export function reserveStubText(projectHasTable: boolean, canEdit: boolean): { l
  * draws it and keeps its "Flow vs reserve" name (summaryChart.ts flowHeading).
  * `headlineRuleTable`: the headline judges by a rule table (the project's
  * settings.ewrHeadline, issue #444), which names the flow chart as it does
- * the chart's own heading.
+ * the chart's own heading. `monthsHeading`: the months-met panel's heading as
+ * shown (monthsMetHeading; Reserve rules met when not given).
  */
-export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, daily?: DailyEwrSource): NavGroup[] {
+export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, daily?: DailyEwrSource, monthsHeading?: string): NavGroup[] {
 	return [
 		{
 			label: 'The reserve',
 			sections: [
 				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine, daily) },
 				{ id: 'res-reserve-years', label: reserveYearsWords(headlineRuleTable, daily).heading },
-				{ id: 'res-reserve', label: RESERVE_MONTHS_HEADING },
+				{ id: 'res-reserve', label: monthsHeading ?? RESERVE_MONTHS_HEADING },
 				{ id: 'res-ewr-grid', label: EWR_MONTHS_HEADING }
 			]
 		},
