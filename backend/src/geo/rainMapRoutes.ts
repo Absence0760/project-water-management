@@ -11,7 +11,11 @@
 // percent in places, and a view of both would read as one field. A box holding
 // more of the grid's cells than one answer carries comes back with
 // `tooDense: true` and no cells, counted from the grid before any read: the
-// layer says zoom in.
+// layer says zoom in. A dataset asked for that isn't loaded answers as none
+// loaded (`dataset: null`, no cells, the loaded ones listed), not an error: the
+// Map tab asks for its two MAP grids by label (the WAAS 2007 MAP and the CCWR
+// MAP, frontend mapLayers.ts MAP_GRIDS), and a server that hasn't loaded one
+// is the normal state, which the layer says plainly.
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -37,7 +41,6 @@ export const rainMapRoutes = new Hono<AuthEnv>().get('/:id/map/map-grid', async 
 		await requireRole(db, id, 'viewer');
 		const datasets = await rainMapDatasets(db);
 		const chosen = asked === undefined ? (datasets[0] ?? null) : (datasets.find((d) => d.dataset === asked) ?? null);
-		if (asked !== undefined && !chosen) throw new ApiError(404, `No MAP grid “${asked}” is loaded.`);
 		const read = chosen ? await rainMapCellsIn(db, chosen.dataset, bbox, MAP_GRID_LAYER_MAX) : { cells: [], inBox: 0 };
 		return c.json({
 			bbox: [bbox.w, bbox.s, bbox.e, bbox.n],
