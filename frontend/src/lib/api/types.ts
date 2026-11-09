@@ -3399,9 +3399,9 @@ export interface EvaporationGridDataset {
 	version: string;
 	method: string;
 	attribution: string;
-	/** The calendar years its monthly means average. */
-	firstYear: number;
-	lastYear: number;
+	/** The calendar years its monthly means average; both null when the source states no period (the WRC Atlas's A-pan, issue #755). */
+	firstYear: number | null;
+	lastYear: number | null;
 	/** The grid's cell size, degrees. */
 	cellDeg: number;
 	/** The repo's invented grid: never real values. */
@@ -3698,8 +3698,9 @@ export interface EvaporationDataset {
 	/** How the cells were summarised and the boundary averaged, in words (cited in History and evidence packs). */
 	method: string;
 	attribution: string;
-	firstYear: number;
-	lastYear: number;
+	/** The calendar years its monthly means average; both null when the source states no period (the WRC Atlas's A-pan, issue #755). */
+	firstYear: number | null;
+	lastYear: number | null;
 	cellDeg: number;
 	originLon: number;
 	originLat: number;

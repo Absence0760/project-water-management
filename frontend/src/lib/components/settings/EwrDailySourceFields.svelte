@@ -19,6 +19,10 @@
 	(`tabFile`, issue #617) and shown under the TAB flows (DrmTabFileView; folded
 	under the percentile tables when it gave only the table MAR), and the .rul's
 	name, date, unit and REC (`rulFile`) above its tables; both are display only.
+	TAB flows with no file kept (typed, pasted, imported from a workbook, saved before #617) offer
+	**Browse for the .tab file…** beside them: its preview then sits under the TAB row and compares the
+	stored flows with the file month by month (TabFlowsCompare), and the file can be kept without
+	changing them; a kept file the TAB row no longer matches shows the same comparison.
 	Its own chunk: the Settings tab chunk sits at its size
 	ceiling. Helpers in ./ewrDailySource.ts and ./drmFiles.ts.
 -->
@@ -33,8 +37,9 @@
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import DrmFormatHelp from './DrmFormatHelp.svelte';
-	import { parseDrmFile, percentileTablesFromRul, rulFileRecord, tabFileM3s, tabFileRecord, tabFlowsEdited, type TabFile } from './drmFiles';
+	import { compareTabFlows, parseDrmFile, percentileTablesFromRul, rulFileRecord, tabFileM3s, tabFileRecord, tabFlowsEdited, type TabFile } from './drmFiles';
 	import DrmTabFileView from './DrmTabFileView.svelte';
+	import TabFlowsCompare from './TabFlowsCompare.svelte';
 	import { api } from '#lib/api/index.js';
 	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 	import ScaledEwrTablesView from './ScaledEwrTablesView.svelte';
@@ -107,7 +112,10 @@
 	let pasteNote = $state<{ ok: boolean; text: string } | null>(null);
 	// A .rul loaded under another method filled the percentile tables without switching to them: offer the switch.
 	let offerPercentile = $state(false);
-	let tabPreview = $state<{ file: string; tab: TabFile } | null>(null);
+	// A .tab read and not yet used; `at` 'row' when it came from Browse for the .tab file… under the TAB row, shown there.
+	let tabPreview = $state<{ file: string; tab: TabFile; at: 'load' | 'row' } | null>(null);
+	/** Some TAB flow is stored: a .tab read under the TAB method is compared with them before anything is used. */
+	const hasTabFlows = $derived(!!src.tabM3s && src.tabM3s.some((v) => v !== null && v !== undefined));
 	// The paste dialog: its text, and which table it fills (the TAB flows, or one of the three percentile tables).
 	let pasteOpen = $state(false);
 	let pasteText = $state('');
@@ -115,7 +123,8 @@
 	const pasteTarget = $derived<DailyTable>(method === 'tab' ? 'tabM3s' : pasteGridTarget);
 	const read = latestFileText();
 
-	async function loadFile(e: Event & { currentTarget: HTMLInputElement }) {
+	/** `only` 'tab': Browse for the .tab file… under TAB flows kept without one, which reads a .tab and nothing else. */
+	async function loadFile(e: Event & { currentTarget: HTMLInputElement }, only: 'tab' | null = null) {
 		const f = e.currentTarget.files?.[0];
 		e.currentTarget.value = '';
 		if (!f) return;
@@ -131,15 +140,22 @@
 			note = { ok: false, text: `${f.name}: ${drm.error}` };
 			return;
 		}
+		if (only === 'tab' && drm.kind !== 'tab') {
+			note = { ok: false, text: `${f.name} is a .rul file. Choose the .tab to compare with the TAB flows; Load a DRM file takes a .rul.` };
+			return;
+		}
 		if (drm.kind === 'tab') {
 			// Shown first: the converted m³/s next to the file's Mm³, used only on the person's say.
-			tabPreview = { file: f.name, tab: drm };
+			const at = only === 'tab' && method === 'tab' ? 'row' : 'load';
+			tabPreview = { file: f.name, tab: drm, at };
 			note = {
 				ok: true,
 				text:
-					method === 'tab'
-						? `Read ${f.name} (DRM summary). Check the converted flows below, then use them.`
-						: `Read ${f.name} (DRM summary). Its MAR scales the percentile tables; its flows are for the TAB file method.`
+					method !== 'tab'
+						? `Read ${f.name} (DRM summary). Its MAR scales the percentile tables; its flows are for the TAB file method.`
+						: hasTabFlows
+							? `Read ${f.name} (DRM summary). Compare it with the stored TAB flows ${at === 'row' ? 'under the TAB flows' : 'below'}, then use its values or keep the file only.`
+							: `Read ${f.name} (DRM summary). Check the converted flows below, then use them.`
 			};
 			return;
 		}
@@ -177,6 +193,15 @@
 			if (tab.marMm3 !== null) edit({ ...mar, tabFile });
 			note = { ok: true, text: tab.marMm3 !== null ? `Used ${file}'s MAR, ${tab.marMm3} Mm³/a, as the table MAR.` : `${file} has no MAR line: nothing used.` };
 		}
+		tabPreview = null;
+	}
+
+	/** Keep the read .tab with the TAB flows as they are (typed, pasted or imported): shown under them, compared month by month. */
+	function keepTabFileOnly() {
+		if (!tabPreview) return;
+		const { tab, file } = tabPreview;
+		edit({ tabFile: tabFileRecord(tab, file) });
+		note = { ok: true, text: `Kept ${file} with the stored TAB flows, which stay as they were; the months that differ are shown under them.` };
 		tabPreview = null;
 	}
 
@@ -218,8 +243,25 @@
 		edit({ tabM3s: row });
 	}
 
-	// The CSV layout the Expected format offers beside the DRM files (synthetic numbers).
+	// The read .tab before it is used: the whole file, and under the TAB method the stored flows against it.
 </script>
+
+{#snippet tabPreviewBox(p: { file: string; tab: TabFile })}
+	{@const cmp = method === 'tab' && hasTabFlows ? compareTabFlows(src.tabM3s, p.tab) : null}
+	<div class="preview" data-testid="ewr-tab-preview">
+		<p class="preview-h">{p.file}, as read</p>
+		{#if cmp}<TabFlowsCompare comparison={cmp} fileName={p.file} testid="ewr-tab-preview-compare" />{/if}
+		<DrmTabFileView file={tabFileRecord(p.tab, p.file)} used={method === 'tab' ? 'tab' : 'mar'} testid="ewr-tab-preview-file" />
+		<p class="small">
+			{p.tab.marMm3 !== null ? '' : 'No MAR line. '}A .tab and a .rul from the same determination go together: the .tab’s MAR scales the .rul’s percentile tables too.
+		</p>
+		<div class="actions">
+			<button type="button" class="btn btn-sm btn-primary" onclick={useTab}>{method === 'tab' ? 'Use these values' : 'Use its MAR only'}</button>
+			{#if cmp && cmp.differ > 0}<button type="button" class="btn btn-sm" onclick={keepTabFileOnly}>Keep the file, not its flows</button>{/if}
+			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (tabPreview = null)}>Cancel</button>
+		</div>
+	</div>
+{/snippet}
 
 <fieldset class="plain daily" data-testid="ewr-daily-source">
 	<legend>The daily EWR at the outlet <HelpTip key="settings.ewrDailySource" /></legend>
@@ -259,19 +301,7 @@
 				{#if offerPercentile && method !== 'percentile'}
 					<div class="actions"><button type="button" class="btn btn-sm" onclick={usePercentile}>Use the percentile tables</button></div>
 				{/if}
-				{#if tabPreview}
-					<div class="preview" data-testid="ewr-tab-preview">
-						<p class="preview-h">{tabPreview.file}, as read</p>
-						<DrmTabFileView file={tabFileRecord(tabPreview.tab, tabPreview.file)} used={method === 'tab' ? 'tab' : 'mar'} testid="ewr-tab-preview-file" />
-						<p class="small">
-							{tabPreview.tab.marMm3 !== null ? '' : 'No MAR line. '}A .tab and a .rul from the same determination go together: the .tab’s MAR scales the .rul’s percentile tables too.
-						</p>
-						<div class="actions">
-							<button type="button" class="btn btn-sm btn-primary" onclick={useTab}>{method === 'tab' ? 'Use these values' : 'Use its MAR only'}</button>
-							<button type="button" class="btn btn-sm btn-ghost" onclick={() => (tabPreview = null)}>Cancel</button>
-						</div>
-					</div>
-				{/if}
+				{#if tabPreview?.at === 'load'}{@render tabPreviewBox(tabPreview)}{/if}
 				<DrmFormatHelp target="dailyEwr" context="of a file for the daily EWR at the outlet" />
 			</div>
 			<GridPasteDialog
@@ -361,13 +391,26 @@
 				{#if marOnly}
 					<p class="small state" data-testid="ewr-tab-mar-only">{src.tabFile.name} gave only the table MAR.</p>
 					{#if !readonly}<div class="actions"><button type="button" class="btn btn-sm" onclick={useKeptTabFlows}>Use its TAB flows</button></div>{/if}
-				{:else if edited}<p class="small state" data-testid="ewr-tab-edited">The TAB flows were changed after loading {src.tabFile.name}; the file is shown as loaded.</p>{/if}
+				{:else if edited}
+					<p class="small state" data-testid="ewr-tab-edited">The TAB flows were changed after loading {src.tabFile.name}; the file is shown as loaded.</p>
+					<TabFlowsCompare comparison={compareTabFlows(src.tabM3s, src.tabFile)} fileName={src.tabFile.name} />
+				{/if}
 				<Fold name="The .tab file:" line="{src.tabFile.name}{src.tabFile.category ? ` · REC ${src.tabFile.category}` : ''}{marOnly ? ' · gave the table MAR only' : edited ? ' · TAB flows changed since' : ' · Total flows, maint. are the TAB flows'}" change="Show" open={true} problem={false} body="none" spaced testid="ewr-tab-file">
 					<DrmTabFileView file={src.tabFile} used={marOnly ? 'mar' : 'tab'} testid="ewr-tab-file-view" />
 				</Fold>
 			{:else if src.tabM3s}
 				<p class="small state" data-testid="ewr-tab-legacy">These TAB flows were saved without their .tab file.{readonly ? '' : ' Load the .tab again to see the whole file.'}</p>
+				{#if !readonly}
+					<!-- The .tab beside the stored flows (the hydrologist's check that they are the file's): read, compared, used or kept only on their say. -->
+					<div class="actions">
+						<label class="btn btn-sm file">
+							Browse for the .tab file…
+							<input type="file" accept=".tab,.txt,text/plain" onchange={(e) => loadFile(e, 'tab')} data-testid="ewr-tab-browse" />
+						</label>
+					</div>
+				{/if}
 			{/if}
+			{#if tabPreview?.at === 'row'}{@render tabPreviewBox(tabPreview)}{/if}
 		{:else}
 			{#snippet grid(which: GridKey)}
 				{@const label = DAILY_TABLE_LABELS[which]}
