@@ -1430,6 +1430,26 @@ export function mapMmError(mapMm: unknown, source: unknown): string | null {
 	return null;
 }
 
+/**
+ * A unit's MAP taken from a MAP grid (docs/maps.md § MAP for each unit): the
+ * backend writes its source line, and both sides read back which grid it came
+ * from, here, so the one-grid rule (`grid_mixed`) and the unit form's grid
+ * choice recognise a grid's MAP the same way.
+ */
+export const UNIT_MAP_METHOD = 'area-weighted mean over the unit’s parcel';
+
+/** A grid's citation as a unit's MAP source begins: its label and version. */
+export const unitMapGridCitation = (g: { dataset: string; version: string }) => `${g.dataset} ${g.version}`;
+
+/** A unit's MAP source line: "<label> <version>, area-weighted mean over the unit’s parcel, <n> cells". */
+export const unitMapSource = (g: { dataset: string; version: string }, cells: number) =>
+	`${unitMapGridCitation(g)}, ${UNIT_MAP_METHOD}, ${cells} cell${cells === 1 ? '' : 's'}`;
+
+const UNIT_MAP_SOURCE_RE = new RegExp(`^(.*), ${UNIT_MAP_METHOD}, \\d+ cells?$`);
+
+/** The grid citation a MAP source line names, when the MAP came from a grid (unitMapSource wrote it); null for a MAP typed in. */
+export const unitMapGridOfSource = (source: string | null | undefined): string | null => (source ? (UNIT_MAP_SOURCE_RE.exec(source)?.[1] ?? null) : null);
+
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Why a stored settings.unitRain can't be used, or null (absent and null are fine: Per unit's defaults). The API applies the same rules. `catchment` still passes, so an older stored setting reads; it runs Per unit. */

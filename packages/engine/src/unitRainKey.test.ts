@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapMmError, parseGaugeSeriesKey, rainStationError, parseUnitRainSeriesKey, UNIT_RAIN_KINDS, unitRainError, unitRainSeriesKey } from './project';
+import { mapMmError, parseGaugeSeriesKey, rainStationError, parseUnitRainSeriesKey, UNIT_RAIN_KINDS, unitMapGridCitation, unitMapGridOfSource, unitMapSource, unitRainError, unitRainSeriesKey } from './project';
 
 describe('unit rain series keys (issue #482)', () => {
 	it('round-trips every unit rain kind', () => {
@@ -76,5 +76,22 @@ describe('rainStationError (issue #553)', () => {
 	it('refuses something that is not a station', () => {
 		expect(rainStationError(null as never)).toMatch(/not a rainfall station/);
 		expect(rainStationError([] as never)).toMatch(/not a rainfall station/);
+	});
+});
+
+describe('a unit MAP’s grid source line (docs/maps.md § MAP for each unit)', () => {
+	it('writes the grid’s label, version, method and cells, and reads the citation back', () => {
+		const line = unitMapSource({ dataset: 'Lynch-2004', version: '2004' }, 12);
+		expect(line).toBe('Lynch-2004 2004, area-weighted mean over the unit’s parcel, 12 cells');
+		expect(unitMapGridOfSource(line)).toBe(unitMapGridCitation({ dataset: 'Lynch-2004', version: '2004' }));
+		expect(unitMapSource({ dataset: 'g', version: '1' }, 1)).toBe('g 1, area-weighted mean over the unit’s parcel, 1 cell');
+	});
+
+	it('reads a typed source, an empty one or none as no grid’s', () => {
+		expect(unitMapGridOfSource('DWAF map')).toBeNull();
+		expect(unitMapGridOfSource('Lynch-2004 2004, area-weighted mean over the unit’s parcel')).toBeNull();
+		expect(unitMapGridOfSource('')).toBeNull();
+		expect(unitMapGridOfSource(null)).toBeNull();
+		expect(unitMapGridOfSource(undefined)).toBeNull();
 	});
 });

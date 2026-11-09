@@ -59,6 +59,7 @@
 		runs = null,
 		only,
 		onsave,
+		onModelChanged,
 		reason = $bindable('')
 	}: {
 		editor: ModelEditor;
@@ -71,6 +72,8 @@
 		only?: 'table';
 		/** The page's model save, for the node sheet's save row (the sheet hides the save bar). */
 		onsave?: () => void;
+		/** The model changed on the server (a unit's MAP from a grid, picked on its form): the workspace takes it as it now is. */
+		onModelChanged?: () => Promise<void> | void;
 		/** The save bar's reason, shared with the sheet's save row. */
 		reason?: string;
 	} = $props();
@@ -1020,6 +1023,9 @@
 					plantedHref={editing.kind === 'farm' ? plantedHref(editing.id) : null}
 					transfersLine={editingTransfers}
 					transfersHref={editing.kind === 'farm' ? '?tab=transfers' : null}
+					{projectId}
+					modelDirty={editor.dirty}
+					{onModelChanged}
 				/>
 				{#if editing.kind === 'farm' && projectId}
 					<Lazy load={loadYield}>

@@ -100,7 +100,9 @@ test('an editor uses each unit’s MAP from the grid, written to the units with 
 	await expect(page).toHaveURL(/[?&]tab=network&edit=[^&]+&section=area/);
 	const form = await openNodeForm(page, 'Upper farm');
 	await expect(form.getByLabel(/^MAP/)).toHaveValue(upperMm);
-	await expect(form.getByLabel('Source of the MAP')).toHaveValue(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel, \d+ cells$/);
+	// Its source is the grid, chosen, with the grid's line (docs/ui.md § Network).
+	await expect(form.getByTestId('unit-map-choice').getByRole('radio', { name: /^synthetic / })).toBeChecked();
+	await expect(form.getByTestId('unit-map-source-line')).toHaveText(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel, \d+ cells$/);
 
 	// One History entry for both units.
 	const history = await page.request.get(`${API_URL}/projects/${id}/history`);
@@ -215,7 +217,7 @@ test('unsaved model edits hold Use, saying why, and once saved it works again', 
 	await expect(page).toHaveURL(/[?&]tab=network&edit=[^&]+&section=area/);
 	const after = await openNodeForm(page, 'Upper farm');
 	await expect(after.getByLabel('Return flow (% of supply)')).toHaveValue('5');
-	await expect(after.getByLabel('Source of the MAP')).toHaveValue(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel/);
+	await expect(after.getByTestId('unit-map-source-line')).toHaveText(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel/);
 });
 
 test('a viewer has no MAP from the grid panel', async ({ page, owner, signIn }) => {

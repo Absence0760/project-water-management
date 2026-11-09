@@ -1225,7 +1225,12 @@ one at a time: an `alertdialog` with the question as its title, the detail
 under it, **Cancel** first (it takes the focus, so Enter keeps what a
 destructive question would remove) and a confirm button named for the action
 (red when it destroys something). Esc answers Cancel; focus returns to what
-asked. The farm view's note delete passes its words translated.
+asked. The farm view's note delete passes its words translated. A
+question may carry one extra choice, a checkbox unticked each time it is
+asked, with a list and a note under it as its description
+(`confirmWithOption({ …, option: { label, items, note } })` answers
+`{ ok, option }`, `option` true only when ticked and confirmed; the unit
+form's MAP grid pick uses it, § Network).
 `lib/noBrowserConfirm.test.ts` fails if `confirm(` comes back in app code.
 
 When a remove asks: each list asks only when something typed goes with the
@@ -3522,11 +3527,71 @@ itself.
   (`node-share`; issue #616).
 - **MAP** (a unit's own mean annual precipitation, mm, issue #482): in a
   unit's Catchment area section, after the areas, an optional **MAP**
-  (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
-  a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only under Model settings' Flow generation, where **MAP from the
-  grid** can fill it and its source from a loaded MAP grid for every unit
-  at once. Clearing the MAP clears
+  (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, under it,
+  **Source of the MAP** (`node.mapMm`, `node.mapSource`): a choice of
+  **WAAS 2007 MAP**, **CCWR MAP** (the `WAAS-SWCape-2007` and `Lynch-2004`
+  grids, their short names in `map/mapGridNames.ts` `MAP_GRID_NAMES`; any
+  other loaded grid, such as the synthetic one, after them by its label) or
+  **Typed by hand** (`UnitMapSourceChoice.svelte`, logic in
+  `network/unitMapChoice.ts`; [maps.md § MAP for each
+  unit](./maps.md#map-for-each-unit)).
+  - **A grid** shows the MAP it gives this unit, read from MAP for each
+    unit's proposal for that grid (`GET …/map/unit-map?dataset=`, so an
+    editor's: the area-weighted mean over its parcel, with "93.3 % covered"
+    when the grid has values over 90–100 % of it). One it can't give is
+    disabled with the proposal's own reason under it: not loaded on this
+    server, no polygon, several parcels and none its area, under 90 %
+    covered, too many cells, or the proposal couldn't be read. Picking it
+    writes the MAP and its source line through that proposal's apply
+    (`POST …/map/unit-map` with `nodeIds`), so the line, the recorded
+    polygon and the History entry are exactly what Settings' **MAP from the
+    grid** writes; it is saved straight away, says so in the choice's live
+    notice, and the workspace reloads the model. Replacing a typed MAP asks
+    first ("Replace the typed MAP?"). The chosen grid shows its source
+    line under it, and **Take it again** when the grid now gives another
+    MAP (a redrawn parcel). Which grid a unit is on is read from its source
+    line, by the engine's `unitMapGridOfSource`, the recognition the
+    backend's one-grid rule (`grid_mixed`) uses.
+  - **One grid for the whole project.** Picking a grid while other units
+    hold another grid's MAP asks "Switch every unit to CCWR MAP?" ("1 unit
+    uses WAAS 2007 MAP now: Lower farm. …"); Yes applies the picked grid to
+    this unit and those units in one change, No changes nothing. Units
+    typed by hand, or with no MAP, keep theirs: they are no grid's, so they
+    don't mix. When a unit on another grid isn't covered by the picked one,
+    the grid is disabled, naming that unit and its grid: type its MAP by
+    hand or clear it on its form first (the backend would refuse the mix).
+  - **Typed or empty units: kept, or replaced on request** (the operator's
+    decision, 2026-11-09). Whenever the picked grid covers other units whose
+    MAP is typed by hand or empty, the question before the pick (the switch
+    above, "Replace the typed MAP?", or, with nothing else to ask, "Use
+    CCWR MAP for Upper farm?") says they keep what they have unless the box
+    below is ticked, and carries that box, unticked every time: "Also
+    replace the typed MAP of 1 unit with the CCWR MAP" ("empty MAP", or
+    "typed or empty MAP", as the units hold), with one line per unit under
+    it as its description ("Lower farm: typed 700 mm → 790 mm", "no MAP →
+    …"). Units the grid doesn't cover are named after the list and kept.
+    Ticked, they go in the same apply (`nodeIds`, `pickNodeIds`), one
+    change in History. The box is the shared confirm's `option`
+    (`confirmWithOption`, `common/confirm.svelte.ts`, drawn by
+    `ConfirmHost.svelte`), so a viewer (no picks) and unsaved model edits
+    (grids disabled) never reach it.
+  - **Typed by hand** is a model edit like any other: it keeps the MAP and
+    drops a grid's source line, so the required source field (under the
+    choice, its helper text as before) asks for one. Typing another number
+    over a grid's MAP does the same (`withUnitMap`): a grid's line never
+    stands beside a number the grid didn't give. The MAP field stays
+    editable while a grid is chosen.
+  - **Unsaved changes.** A grid saves straight to the project, so while the
+    model has unsaved changes the grids are disabled, each saying "Save or
+    discard your model changes first: a grid’s MAP is saved straight away."
+    (as Settings' panel and the Start sheet's Apply wait).
+  - **A viewer** sees the choice read-only (the proposal is an editor's, so
+    without each grid's MAP), with the unit's grid or Typed by hand chosen;
+    with no MAP there is nothing to show.
+
+  It is read only under Model settings' Flow generation, where **MAP from
+  the grid** can also fill every unit's MAP and source from one loaded MAP
+  grid at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
   `aria-invalid` with the message under its field, and blocks Save
   (`unitMapIssue` in `model/validate.ts`, the engine's `mapMmError`, as the

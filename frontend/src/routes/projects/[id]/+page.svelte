@@ -1210,7 +1210,7 @@
 				{:else if tab === 'network'}
 					<IssueList issues={editor.issues} area="network" links />
 					<Lazy load={LOAD.network}>
-						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} {projectId} {runs} onsave={saveModel} bind:reason={saveReason} />{/snippet}
+						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} {projectId} {runs} onsave={saveModel} onModelChanged={reloadInputs} bind:reason={saveReason} />{/snippet}
 					</Lazy>
 				{:else if tab === 'map'}
 					<Lazy load={LOAD.map}>

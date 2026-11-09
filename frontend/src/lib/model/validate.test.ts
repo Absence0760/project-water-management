@@ -569,6 +569,16 @@ describe('a unit’s MAP (issue #482)', () => {
 		expect(n).toMatchObject({ mapMm: null, mapSource: null });
 	});
 
+	it('turns a grid’s MAP typed by hand when another number goes in: its source line goes, and the source is asked for', () => {
+		const line = 'Lynch-2004 2004, area-weighted mean over the unit’s parcel, 9 cells';
+		const n = farm({ mapMm: 812, mapSource: line });
+		withUnitMap(n, 812);
+		expect(n).toMatchObject({ mapMm: 812, mapSource: line });
+		withUnitMap(n, 800);
+		expect(n).toMatchObject({ mapMm: 800, mapSource: '' });
+		expect(unitMapProblem(n)?.field).toBe('source');
+	});
+
 	it('leaves a gauge that kept a MAP from being a unit alone, so a kind change never blocks Save with no field to fix', () => {
 		expect(unitMapIssue({ ...node('g', 'Gauge', null), mapMm: 800, mapSource: 'study' })).toBeNull();
 	});

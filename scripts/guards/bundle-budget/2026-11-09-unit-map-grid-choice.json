@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "The unit form's Source of the MAP choice (UnitMapSourceChoice.svelte, network/unitMapChoice.ts, map/mapGridNames.ts), the engine's shared unit MAP source-line helpers, and the option to replace other units' typed or empty MAP with the grid's (the confirm dialog's checkbox, confirmWithOption in common/confirm.svelte.ts and ConfirmHost.svelte). Measured 2445 locally on main @ ec275ddbb (at its ceiling, no headroom), 2448 with the choice (+3 KB) and 2449 with the replace option (+1 KB more, merged with main @ d52e90728). Headroom 0 KB."
+}

@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, destinationsProblem, diversionMonthsProblem, GA538_GROUNDWATER_RATES, hasMonthlyDiversion, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, transferDestinations, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, destinationsProblem, diversionMonthsProblem, GA538_GROUNDWATER_RATES, hasMonthlyDiversion, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, transferDestinations, unitMapGridOfSource, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -148,8 +148,15 @@ export function unitMapProblem(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>): { f
 
 export const unitMapIssue = (n: Pick<NetworkNode, 'mapMm' | 'mapSource'>): string | null => unitMapProblem(n)?.message ?? null;
 
-/** The unit's MAP set from its field: clearing it clears its source too (a source without a MAP says nothing). */
+/**
+ * The unit's MAP set from its field: clearing it clears its source too (a
+ * source without a MAP says nothing), and a number other than a grid's drops
+ * that grid's source line (the engine's unitMapGridOfSource), so the MAP is
+ * typed by hand and asks for its source: a grid's line never stands beside a
+ * number the grid didn't give (docs/maps.md § MAP for each unit).
+ */
 export function withUnitMap(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>, mm: number | null): void {
+	if (mm !== n.mapMm && unitMapGridOfSource(n.mapSource) !== null) n.mapSource = '';
 	n.mapMm = mm;
 	if (mm === null) n.mapSource = null;
 }
