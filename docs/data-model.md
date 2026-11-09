@@ -155,6 +155,10 @@ data](./api.md#model-data)).
 | `reach_loss_max_m3_day` | (none) | The reach's loss at most, m³/day (≥ 0, finite, CHECK `node_reach_loss_max_size`); NULL (default) = no cap. Read only with `reach_loss_frac` > 0 |
 | `baseflow_loss_m3_day` | (none) | A unit's base-flow loss (migration 222, engine 1.86.0, issue #523 B1, [model.md §2.6b](./model.md)): m³/day of its own runoff lost to groundwater, MIN(this, runoff), out of the catchment (≥ 0, finite, CHECK `node_baseflow_loss_size`). 0 (default, every existing row) = none. Units only (`modelRuleIssues`, `baseflowKind`) |
 | `baseflow_gain_m3_day` | (none) | A unit's base-flow gain: m³/day joining its runoff every day from outside the catchment (≥ 0, finite, CHECK `node_baseflow_gain_size`). 0 (default) = none. Units only |
+| `reach_loss_frac_monthly` | (none) | Bed losses by water-year month (migration 319, engine 1.116.0, [model.md §2.6b](./model.md)): 12 shares in [0, 1], Oct–Sep (CHECK `node_reach_loss_frac_monthly_range`: 12 values, no NULL). When set it replaces `reach_loss_frac`, which is kept but inert; 0 in a month = no loss that month. NULL (default, every existing row) = that one share all year |
+| `reach_loss_max_monthly_m3_day` | (none) | The bed losses' cap by month, m³/day (12 values ≥ 0, finite, CHECK `node_reach_loss_max_monthly_size`); replaces `reach_loss_max_m3_day` when set. NULL = that one cap (or none) all year |
+| `baseflow_loss_monthly_m3_day` | (none) | A unit's base-flow loss by month, m³/day (12 values ≥ 0, finite, CHECK `node_baseflow_loss_monthly_size`); replaces `baseflow_loss_m3_day` when set. NULL = that one value all year. Units only |
+| `baseflow_gain_monthly_m3_day` | (none) | A unit's base-flow gain by month, as the loss (CHECK `node_baseflow_gain_monthly_size`); replaces `baseflow_gain_m3_day` when set. Units only |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).
@@ -2157,6 +2161,22 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   or less its `non_contributing_m2`; the model save clears it with the
   source. Every area from the map before 195 was gross. Not part of the
   engine's model.
+- **A copied project** (`POST /projects/:id/copy`,
+  `backend/src/projects/copyMap.ts`) takes its map: every `geo_source` and
+  `map_feature` the copier can read, under new ids, each feature's `node_id`
+  moved to the copy's node (NULL where the copy has none) and `source_id` to
+  the copied source. `imported_by` and `created_by` are NULL in the copy
+  (its members may not be the original's; naming the copier would
+  misattribute), the original times stay, and a linked gauge keeps its
+  `link_point`. The copy's nodes keep `area_source`, `area_basis` and
+  `area_feature_id` (moved to the copied feature), and the records of what
+  an accepted value was read over (273: `node.map_polygon`,
+  `crop_area_land_cover`, `evaporation_accepted`) copy with their
+  `featureId` moved to the copied feature; a stamp naming a feature the
+  copy doesn't have gets a random id, so it still reads as another outline.
+  Delineation and Start proposals, dam waterbody matches and observations
+  (261), observed ET (277) and data feeds stay with the original as its
+  history; a copied parcel marks its unit to be read again, as a new one does.
 - **`quaternary_reference`**: the dataset the quaternary lookup proposes
   from. `code` (primary key, `^[A-Z][0-9]{2}[A-Z]$`), `dataset` (the load's
   label; `synthetic` for the committed fixture, region Z), `geometry`
@@ -2455,7 +2475,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   A-pan grid, the WRC Atlas's modelled `Atlas-Apan-2007`), readable by anyone signed in, written by no app role.
 - **`rain_map_dataset`** and **`rain_map_cell_reference`**
   (`207_rain_map_reference.sql`, [maps.md § MAP grid](./maps.md#map-grid)):
-  the mean annual precipitation grids the Map tab's MAP grid layer draws. A
+  the mean annual precipitation grids the Map tab's WAAS 2007 MAP and CCWR
+  MAP layers draw (one dataset each) and the units' MAP is proposed from. A
   dataset row: `dataset` (primary key, 1–50; `synthetic` for the committed
   fixture), `source`, `version`, `attribution`, `cell_deg`, `origin_lon` and
   `origin_lat` (0 ≤ origin < cell), `cell_count` (the cells the load wrote,

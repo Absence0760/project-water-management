@@ -13,6 +13,7 @@
 	import type { EwrChargeSource, EwrDailySource, EwrRuleTable, NetworkNode } from '@water-management/engine';
 	import type { EwrHeadline } from '#lib/api/types.js';
 	import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, ruleTableSites } from '#lib/components/ewr/headline.js';
+	import { dailyEwrName, dailyEwrWithSource } from '#lib/components/ewr/notMet.js';
 	import { JUDGE_HEADING } from './sections';
 
 	let {
@@ -56,7 +57,7 @@
 		</div>
 		<!-- The panel's one line, at the summary line's size like the other panels' (issue #586, C16); the link named as the heading it goes to. -->
 		<p class="summary" data-testid="judge-nothing">
-			Results are judged by the pragmatic EWR at the outflow gauge. Add a Reserve rule table under <a href="#set-reserve">Reserve rule tables</a> to
+			Results are judged by {dailyEwrName(ewrDaily)} at the outflow gauge. Add a Reserve rule table under <a href="#set-reserve">Reserve rule tables</a> to
 			choose another test here.
 		</p>
 	{:else}
@@ -68,13 +69,13 @@
 		</div>
 		<p class="hint muted explain" id="judge-hint">
 			Which EWR the headline on the EWR page, the run sentence and the printable report are judged by. It changes no result: save it and no
-			re-run is needed. The pragmatic EWR and the Reserve rule tables are set under <a href="#set-ewr">EWR</a> and
+			re-run is needed. The daily EWR and the Reserve rule tables are set under <a href="#set-ewr">EWR</a> and
 			<a href="#set-reserve">Reserve rule tables</a>.
 		</p>
 		{#if problem}<p class="alert alert-warning small" role="status" id="judge-problem" data-testid="judge-problem">{problem}</p>{/if}
 		{#if differs}
 			<p class="hint muted" id="judge-charge" data-testid="judge-charge-note">
-				The daily EWR charge and curtailment follow {chargeSource === 'ruleTable' ? 'the rule tables' : 'the pragmatic EWR'} (Reserve rule tables → EWR charge follows), a different test.
+				The daily EWR charge and curtailment follow {chargeSource === 'ruleTable' ? 'the rule tables' : dailyEwrWithSource(ewrDaily)} (Reserve rule tables → EWR charge follows), a different test.
 			</p>
 		{/if}
 	{/if}

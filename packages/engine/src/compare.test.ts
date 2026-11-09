@@ -609,6 +609,33 @@ describe('diffInputs', () => {
 		expect(texts(a, c)).toEqual([]);
 	});
 
+	it('lists bed losses and base flow by month set, changed and cleared, and a one value its row replaces as no effect (engine 1.116.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const wet = [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+		Object.assign(b.model.nodes.find((n) => n.name === 'Rooikloof')!, { reachLossFracMonthly: wet, baseflowGainMonthlyM3Day: new Array(12).fill(300) });
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: bed losses by month the one share → 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3 (Oct–Sep)',
+			'Rooikloof: base-flow gain by month the one value → 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 m³/day (Oct–Sep)'
+		]);
+		// Changed and cleared.
+		const c = copyWithFreshIds(b);
+		const rk = c.model.nodes.find((n) => n.name === 'Rooikloof')!;
+		Object.assign(rk, { reachLossFracMonthly: [...wet.slice(0, 11), 0.5], baseflowGainMonthlyM3Day: null });
+		const t = texts(b, c);
+		expect(t).toHaveLength(2);
+		expect(t[0]).toMatch(/^Rooikloof: bed losses by month .*0\.3 → 0\.5/);
+		expect(t[1]).toBe('Rooikloof: base-flow gain by month 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300 m³/day (Oct–Sep) → the one value');
+		// The one share under the row on both sides: listed, as no effect.
+		const d = copyWithFreshIds(b);
+		d.model.nodes.find((n) => n.name === 'Rooikloof')!.reachLossFrac = 0.4;
+		expect(texts(b, d)).toEqual(['Rooikloof: bed losses in the reach below none → 40% of the flow (no effect: set by month)']);
+		// Without the row it counts (positive control).
+		const e = copyWithFreshIds(a);
+		e.model.nodes.find((n) => n.name === 'Rooikloof')!.reachLossFrac = 0.4;
+		expect(texts(a, e)).toEqual(['Rooikloof: bed losses in the reach below none → 40% of the flow']);
+	});
+
 	it('lists individual boreholes added, changed and removed, matched across a copy by node and borehole name (WP-3.9)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

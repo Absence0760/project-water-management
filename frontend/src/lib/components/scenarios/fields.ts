@@ -251,9 +251,14 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): the river's, a baseline assumption.
 	reachLossFrac: { label: 'Bed losses in the reach below', spec: pct() },
 	reachLossMaxM3Day: { label: 'Bed losses at most', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	reachLossFracMonthly: { label: 'Bed losses by month', spec: { t: 'monthly', unit: '%', scale: 100, nullable: true } },
+	reachLossMaxMonthlyM3Day: { label: 'Bed losses at most by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	// A unit's base-flow loss and gain (engine 1.86.0, docs/model.md §2.6b): its groundwater's, a baseline assumption.
 	baseflowLossM3Day: { label: 'Base-flow loss', spec: num('m³/day') },
 	baseflowGainM3Day: { label: 'Base-flow gain', spec: num('m³/day') },
+	// By month (engine 1.116.0): each row replaces its one value; none = that value all year.
+	baseflowLossMonthlyM3Day: { label: 'Base-flow loss by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
+	baseflowGainMonthlyM3Day: { label: 'Base-flow gain by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
 	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };
@@ -432,7 +437,7 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 		spec: { t: 'enum', options: CALIBRATION_FLOW_KINDS.map((k) => ({ value: k, label: kindLabel(k) })), nullable: true, nullLabel: 'default (observed, else logger)' }
 	},
 	// Reserve method choices (engine ≥ 1.3.0, issue #64), pending the hydrologist.
-	ewrChargeSource: { label: 'EWR charge follows', spec: { t: 'enum', options: plain(EWR_CHARGE_SOURCES, { pragmatic: 'The pragmatic EWR', ruleTable: 'The rule tables' }) } },
+	ewrChargeSource: { label: 'EWR charge follows', spec: { t: 'enum', options: plain(EWR_CHARGE_SOURCES, { pragmatic: 'The daily EWR', ruleTable: 'The rule tables' }) } },
 	lowFlowMeasure: { label: 'Low flows judged on', spec: { t: 'enum', options: plain(LOW_FLOW_MEASURES, { total: 'The month’s total flow', baseflow: 'The month’s base flow' }) } },
 	// Registered volumes (engine ≥ 1.18.0, issue #72): a full-allocation scenario is the cumulative-impact background.
 	allocationMode: { label: 'Allocation mode', spec: { t: 'enum', options: plain(ALLOCATION_MODES, ALLOCATION_MODE_LABEL) } },

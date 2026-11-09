@@ -4,7 +4,9 @@
 	§ Hydrological units layer) shaded by the scheme it is given: its band of
 	modelled use ÷ registered volume (useMap.ts useScheme), or, with no run
 	needed, what its registered users register on a sequential scale
-	(registeredMap.ts registeredScheme). This component is a dynamic import of AllocationsTab, and
+	(registeredMap.ts registeredScheme). The EWR page's map draws through it too,
+	each unit against the EWR required at it (ewr/ewrMap.ts ewrScheme, docs/ui.md §
+	EWR). This component is a dynamic import of AllocationsTab (and EwrUnitMap), and
 	MapLibre a dynamic import of it (map/maplibre.ts, as CatchmentMap loads it),
 	so neither weighs on the tab until the map is opened. The basemap is the Map
 	tab's own (mapStyle.ts basemapStyle); it follows the app's theme.

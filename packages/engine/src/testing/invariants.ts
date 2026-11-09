@@ -75,6 +75,7 @@ function canonical(out: ModelOutput) {
 			...s,
 			farms: byNode(s.farms),
 			users: s.users && byNode(s.users),
+			unitEwr: s.unitEwr && byNode(s.unitEwr),
 			curtailment: s.curtailment && { ...s.curtailment, farms: byNode(s.curtailment.farms), otherUsers: s.curtailment.otherUsers && byNode(s.curtailment.otherUsers) },
 			ewrCompliance: s.ewrCompliance && { ...s.ewrCompliance, farms: byNode(s.ewrCompliance.farms) },
 			supplyAssurance: s.supplyAssurance && {

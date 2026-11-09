@@ -1290,7 +1290,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Every 10th cell of the elevation model each way in `bbox` (at most 0.5° a side), for the map's DEM grid layer. */
 			demGrid: (id: string, bbox: readonly [number, number, number, number]) =>
 				request<DemGridLayer>('GET', `${p(id)}/map/dem-grid?${new URLSearchParams({ bbox: bbox.join(',') })}`),
-			/** One loaded MAP grid's points in `bbox` (at most 2° a side; `dataset` null: the default), for the map's MAP grid layer. */
+			/** One loaded MAP grid's points in `bbox` (at most 2° a side; `dataset` null: the default; one not loaded: none), for the map's WAAS 2007 MAP and CCWR MAP layers. */
 			mapGrid: (id: string, bbox: readonly [number, number, number, number], dataset?: string | null) =>
 				request<MapGridLayer>('GET', `${p(id)}/map/map-grid?${new URLSearchParams({ bbox: bbox.join(','), ...(dataset ? { dataset } : {}) })}`),
 			/** One loaded A-pan grid's points in `bbox` (at most 2° a side; `dataset` null: the default), the month's (1–12) or, with none, the year's total. */

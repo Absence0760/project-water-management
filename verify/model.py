@@ -2394,38 +2394,57 @@ def run(doc: dict) -> dict:
     ewr = [float(settings["ewrPragmaticM3PerDay"][m]) for m in wm]
     k_lake = settings.get("lakeEvapFactorMonthly") or [settings["lakeEvapFactor"]] * 12
 
-    # Bed losses in the reach below each node (§2.6b): the share f clamped to [0, 1], the cap (None = none);
-    # none below the outlet, for f = 0 or a cap of 0.
-    reach: dict[str, tuple[float, float]] = {}
-    for x in nodes:
-        f_ = x.get("reachLossFrac") or 0
-        if f_ == 0 or x.get("downstreamNodeId") is None:
-            continue
-        f_ = min(max(f_, 0.0), 1.0) if isinstance(f_, (int, float)) and math.isfinite(f_) else 0.0
-        c_ = x.get("reachLossMaxM3Day")
-        c_ = c_ if isinstance(c_, (int, float)) and math.isfinite(c_) and c_ >= 0 else math.inf
-        if f_ > 0 and c_ > 0:
-            reach[x["id"]] = (f_, c_)
+    # Bed losses in the reach below each node (§2.6b): the share f clamped to [0, 1], the cap (None = none),
+    # by water-year month (engine >= 1.116.0: a monthly row replaces its one value); none below the outlet, or
+    # when no month has f > 0 and a cap > 0.
+    def _month(row, k):
+        return row[k] if k < len(row) else None
 
-    # A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0): m³/day sizes >= 0 (anything else none), units only.
+    def _frac(v):
+        if v is None or v == 0:
+            return 0.0
+        return min(max(float(v), 0.0), 1.0) if isinstance(v, (int, float)) and math.isfinite(v) else 0.0
+
+    def _cap(v):
+        return float(v) if isinstance(v, (int, float)) and math.isfinite(v) and v >= 0 else math.inf
+
+    reach: dict[str, list[tuple[float, float]]] = {}
+    for x in nodes:
+        if x.get("downstreamNodeId") is None:
+            continue
+        fr, cr = x.get("reachLossFracMonthly"), x.get("reachLossMaxMonthlyM3Day")
+        fr = fr if isinstance(fr, list) else None
+        cr = cr if isinstance(cr, list) else None
+        months_ = [
+            (_frac(_month(fr, k)) if fr is not None else _frac(x.get("reachLossFrac")),
+             _cap(_month(cr, k)) if cr is not None else _cap(x.get("reachLossMaxM3Day")))
+            for k in range(12)
+        ]
+        if any(f_ > 0 and c_ > 0 for f_, c_ in months_):
+            reach[x["id"]] = months_
+
+    # A unit's base-flow loss and gain (§2.6b, engine >= 1.86.0): m³/day sizes >= 0 (anything else none), units
+    # only; by water-year month (engine >= 1.116.0: a monthly row replaces its one value).
     def _size(v):
         return float(v) if isinstance(v, (int, float)) and math.isfinite(v) and v >= 0 else 0.0
 
-    baseflow: dict[str, tuple[float, float]] = {}
+    baseflow: dict[str, tuple[list[float], list[float]]] = {}
     for x in nodes:
         if x["kind"] != "farm":
             continue
-        bl_, bg_ = _size(x.get("baseflowLossM3Day")), _size(x.get("baseflowGainM3Day"))
-        if bl_ > 0 or bg_ > 0:
+        lr, gr = x.get("baseflowLossMonthlyM3Day"), x.get("baseflowGainMonthlyM3Day")
+        bl_ = [_size(_month(lr, k)) for k in range(12)] if isinstance(lr, list) else [_size(x.get("baseflowLossM3Day"))] * 12
+        bg_ = [_size(_month(gr, k)) for k in range(12)] if isinstance(gr, list) else [_size(x.get("baseflowGainM3Day"))] * 12
+        if any(v > 0 for v in bl_) or any(v > 0 for v in bg_):
             baseflow[x["id"]] = (bl_, bg_)
 
-    def reach_loss(xid, q):
-        f_, c_ = reach[xid]
+    def reach_loss(xid, q, m):
+        f_, c_ = reach[xid][m]
         return min(c_, f_ * q) if q > 0 else 0.0
 
-    def reach_gross(xid, v):
+    def reach_gross(xid, v, m):
         # A reach losing the whole flow (f = 1) asks the claim plus its cap; with no cap nothing can arrive, so no gross-up.
-        f_, c_ = reach[xid]
+        f_, c_ = reach[xid][m]
         if not v > 0:
             return v
         if f_ >= 1:
@@ -2460,7 +2479,7 @@ def run(doc: dict) -> dict:
             for i in range(n):
                 v = Dn[u["id"]][i] * shares.get(fid, 0.0) / tot
                 for r_ in path:
-                    g_ = reach_gross(r_, v)
+                    g_ = reach_gross(r_, v, wm[i])
                     sen_led[r_][i] += g_ - v
                     v = g_
                 sen_y[fid][i] += v
@@ -2921,7 +2940,7 @@ def run(doc: dict) -> dict:
             H = 0.0
             for u in ups[xid]:
                 if u in reach:
-                    lost = reach_loss(u, U[u])
+                    lost = reach_loss(u, U[u], wm[i])
                     col[u]["reach_loss"][i] = lost
                     if lost > 0:
                         diag["reach_loss_days"] += 1
@@ -3046,7 +3065,7 @@ def run(doc: dict) -> dict:
             # the dam and the river; the runoff column stays I.
             Ib = I
             if xid in baseflow:
-                bl_, bg_ = baseflow[xid]
+                bl_, bg_ = baseflow[xid][0][wm[i]], baseflow[xid][1][wm[i]]
                 lost_bf = min(bl_, I) if I > 0 else 0.0
                 Ib = I - lost_bf + bg_
                 cc["baseflow_loss"][i] = lost_bf
@@ -3653,9 +3672,9 @@ def run(doc: dict) -> dict:
         if xid in sen_led:
             put(xid, "senior_reach_loss", sen_led[xid])
         if xid in baseflow:
-            if baseflow[xid][0] > 0:
+            if any(v > 0 for v in baseflow[xid][0]):
                 put(xid, "baseflow_loss", cc["baseflow_loss"])
-            if baseflow[xid][1] > 0:
+            if any(v > 0 for v in baseflow[xid][1]):
                 put(xid, "baseflow_gain", cc["baseflow_gain"])
         if x["kind"] == "farm":
             d = fd[xid]

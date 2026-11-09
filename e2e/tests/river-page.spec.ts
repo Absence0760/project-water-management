@@ -98,16 +98,16 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	await expect(page.getByTestId('uncertainty-panel')).toBeVisible();
 	await expect(page.getByTestId('outcome-matrix')).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Water account' })).toBeVisible();
-	// No rule table: Reserve rules met is a one-line stub saying what it needs and where, not absent (issue #465).
-	const stub = page.getByTestId('reserve-stub');
-	await expect(stub).toHaveAttribute('id', 'res-reserve');
-	await expect(stub.getByRole('heading', { name: 'Reserve rules met, by month' })).toBeVisible();
-	await expect(stub).toContainText('Needs a Reserve rule table: set one in Settings → Reserve rule tables.');
+	// No rule table: the months met by the daily EWR in use (engine 1.116.0), and a line saying what judging them by a
+	// rule table too needs and where, not nothing (issue #465); no switch.
+	const months = page.locator('#res-reserve');
+	await expect(months.getByRole('heading', { level: 2, name: 'Pragmatic EWR met, by month' })).toBeVisible();
+	await expect(months.getByTestId('months-judge')).toHaveCount(0);
+	const stub = months.getByTestId('reserve-stub');
+	await expect(stub).toHaveText('To judge the months by a Reserve rule table too: set one in Settings → Reserve rule tables.');
 	await expect(stub.getByRole('link', { name: 'set one in Settings → Reserve rule tables' })).toHaveAttribute('href', '?tab=settings#set-reserve');
-	expect((await stub.boundingBox())!.height).toBeLessThan(80);
 	// The panels are the page's own sections, peers of the flow chart and the water-year bars (h2): as h3s they sat
 	// under "Days below the reserve, each water year" in a screen reader's outline. No level is skipped.
-	await expect(stub.getByRole('heading', { level: 2, name: 'Reserve rules met, by month' })).toBeVisible();
 	await expect(heat.getByRole('heading', { level: 2, name: /^Days below the EWR, by month/ })).toBeVisible();
 	await expect(page.locator('#res-ewr-grid').getByRole('heading', { level: 3, name: /^EWR required vs met, each water year/ })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Water account' }).getByRole('heading', { level: 2, name: /^Water account/ })).toBeVisible();
@@ -123,6 +123,8 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 		'res-reserve-years',
 		'res-reserve',
 		'res-ewr-grid',
+		// Each unit on the map, folded until asked for (ewr-map.spec.ts).
+		'res-ewr-map',
 		'res-water-account',
 		'res-uncertainty',
 		'res-sensitivity',
@@ -154,7 +156,7 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	expect(strip.x).toBeGreaterThan(tilesBox.x + tilesBox.width - 1);
 	expect(Math.abs(strip.y - tilesBox.y)).toBeLessThan(2);
 	expect(chart.y).toBeGreaterThan(Math.max(strip.y + strip.height, tilesBox.y + tilesBox.height) - 1);
-	// The next panel is Reserve rules met (or its stub; findings first, issue #465).
+	// The next panel is the months met (findings first, issue #465).
 	expect((await page.locator('#res-reserve').boundingBox())!.y).toBeLessThan(vh);
 	expect(await innerScrollers(page)).toEqual([]);
 });
@@ -539,6 +541,10 @@ test('twenty water years with a rule table: every table grows with the page, and
 	// A rule table: the bars count the pragmatic EWR, so they say so (issue #177).
 	const years = page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' });
 	await expect(years.getByRole('img', { name: /in 20 water years\.$/ })).toBeVisible();
+	// The months met open on the daily EWR (engine 1.116.0); its table grows with the page too.
+	await expect(page.getByRole('region', { name: 'Pragmatic EWR met, by month' }).getByRole('table', { name: /^By month of the year/ }).locator('tbody tr')).toHaveCount(12);
+	expect(await innerScrollers(page)).toEqual([]);
+	await page.getByTestId('months-judge').getByRole('button', { name: 'Reserve rule tables' }).click();
 	const reserve = page.getByRole('region', { name: /^Reserve rules met, by month/ });
 	await expect(reserve.getByRole('table', { name: /^Each month at the outlet/ }).locator('tbody tr')).toHaveCount(20);
 	await expect(page.getByRole('region', { name: /^Days below the EWR, by month/ })).toBeVisible();
@@ -778,4 +784,62 @@ test('the flow chart keeps its height while its flows load', async ({ page, owne
 	await expect(flow.locator('section.flow')).toHaveAttribute('aria-busy', 'false');
 	const after = (await flow.boundingBox())!.height;
 	expect(Math.abs(after - before)).toBeLessThanOrEqual(2);
+});
+
+// The months met follow Model settings → EWR → Daily EWR from (engine 1.116.0, docs/model.md §2.9h): the client's
+// hydrologist expected them to, where the panel read only the Reserve rule tables. Named for the source, a change of
+// source shows after a re-run, and with a rule table too the tables' judgement is a switch away. The units are
+// 12 + 8 = 20 km²; a TAB table for 20 km² scales by 1.
+test('the months met follow the daily EWR in use, named for it, change with it after a re-run, and switch to the rule tables', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River daily months');
+	await createRun(page.request, id, 'Pragmatic');
+	await openRiver(page, id);
+	const months = page.locator('#res-reserve');
+	const pragmatic = page.getByRole('region', { name: 'Pragmatic EWR met, by month' });
+	await expect(pragmatic).toHaveAttribute('data-testid', 'ewr-daily-months');
+	await expect(pragmatic.getByRole('status')).toHaveText(/^Outlet \(.+\): (Met in|Not met in) /);
+	const menu = page.getByRole('navigation', { name: 'EWR sections' });
+	await expect(menu.getByRole('link', { name: 'Pragmatic EWR met, by month' })).toHaveAttribute('href', /#res-reserve$/);
+
+	// Synthetic TAB flows, far above the river: named for the TAB file, and no month met.
+	await updateSettings(page.request, id, {
+		ewrDailySource: { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 20, tabM3s: new Array(12).fill(50), naturalPctM3s: null, reservePctM3s: null }
+	});
+	await createRun(page.request, id, 'TAB file');
+	await openRiver(page, id);
+	const tab = page.getByRole('region', { name: 'Daily EWR from the DRM TAB file met, by month' });
+	await expect(tab).toBeVisible();
+	await expect(pragmatic).toHaveCount(0);
+	await expect(tab.getByRole('status')).toHaveText(/^Outlet \(.+\): Not met in any of the 36 complete months\.$/);
+	await expect(tab.locator('.stat').filter({ hasText: 'Months met' }).locator('dd').first()).toHaveText(/^0(\.0)?\s?%$/);
+	await expect(tab.locator('.stat').filter({ hasText: 'Longest run not met' }).locator('dd').first()).toHaveText(/^36\s*months$/);
+	const table = tab.getByRole('table', { name: /^By month of the year/ });
+	await expect(table.locator('tbody tr')).toHaveCount(12);
+	// Three Octobers, each asking 50 m³/s (× 1).
+	await expect(table.getByRole('row', { name: /^Oct/ }).getByRole('cell').nth(0)).toHaveText('3');
+	await expect(table.getByRole('row', { name: /^Oct/ }).getByRole('cell').nth(3)).toHaveText('50.0');
+	await expect(tab.getByRole('img', { name: /^Share of months met per month of the year at the outlet/ })).toBeVisible();
+	await expect(menu.getByRole('link', { name: 'Daily EWR from the DRM TAB file met, by month' })).toHaveAttribute('href', /#res-reserve$/);
+	await expect(months.getByTestId('reserve-stub')).toBeVisible();
+	await expectNoViolations(page, { include: '#res-reserve' });
+
+	// With a rule table too: the daily EWR first, the tables a switch away, and the menu names what is shown.
+	await updateSettings(page.request, id, {
+		ewrRules: [{ siteNodeId: null, source: 'Synthetic rule table', component: 'total', unit: 'mcm', points: POINTS, ewr: MONTHS.map(() => POINTS.map(() => 0)), naturalSource: 'run', natural: null, scale: 1 }]
+	});
+	await createRun(page.request, id, 'TAB file and rules');
+	await openRiver(page, id);
+	const judge = months.getByTestId('months-judge');
+	await expect(judge.getByRole('button')).toHaveText(['Daily EWR from the DRM TAB file', 'Reserve rule tables']);
+	await expect(judge.getByRole('button', { name: 'Daily EWR from the DRM TAB file' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(tab).toBeVisible();
+	await expect(months.getByTestId('reserve-stub')).toHaveCount(0);
+	await judge.getByRole('button', { name: 'Reserve rule tables' }).click();
+	const rules = page.getByRole('region', { name: /^Reserve rules met, by month/ });
+	await expect(rules.getByRole('status').filter({ hasText: 'Met in' })).toHaveText(/^Outlet \(.+\): Met in every one of the 36 complete months\.$/);
+	await expect(menu.getByRole('link', { name: 'Reserve rules met, by month' })).toHaveAttribute('href', /#res-reserve$/);
+	await expect(rules.getByTestId('months-judge').getByRole('button', { name: 'Reserve rule tables' })).toHaveAttribute('aria-pressed', 'true');
+	await expectNoViolations(page, { include: '#res-reserve' });
 });

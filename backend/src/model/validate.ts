@@ -116,6 +116,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), m³/day; 0 = none. Units only is a model rule (baseflowKind).
 				baseflowLossM3Day: nonNeg.default(0),
 				baseflowGainM3Day: nonNeg.default(0),
+				// Bed losses and base flow by water-year month (engine 1.116.0, migration 319): each row replaces its one value; null = that value all year.
+				reachLossFracMonthly: z.array(z.number().finite().min(0).max(REACH_LOSS_FRAC_MAX)).length(12).nullable().default(null),
+				reachLossMaxMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				baseflowLossMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				baseflowGainMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				// The land unit's MAP, mm, and where it came from (issue #482, docs/model.md §2.4h): null = none. A MAP needs
 				// its source (the engine's mapMmError, checked below); a source without a MAP is not stored.
 				mapMm: z.number().finite().min(MAP_MM_MIN).max(MAP_MM_MAX).nullable().default(null),

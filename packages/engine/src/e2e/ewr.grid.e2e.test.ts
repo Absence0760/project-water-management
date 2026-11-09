@@ -242,10 +242,10 @@ describe('no-flow days and users served in full while a site fails (§2.9e)', ()
 		const { out, days } = go({ start: '2004-01-10', end, nodes: [farm('A', 'U1'), user('U1', 'O', 10), gauge('O', null)], natural: () => 1000, ewr: 0, settings: { ewrRules: [rule], ewrChargeSource: 'ruleTable' } });
 		const s = out.summary.servedWhileEwrFails![0]!;
 		expect(s.basis).toBe('ruleTable');
-		// Feb + Mar are complete months (29 + 31); 10–31 January follows the pragmatic EWR (0: met).
+		// Feb + Mar are complete months (29 + 31); 10–31 January follows the daily EWR (0: met).
 		expect(s.daysNotMet).toBe(60);
 		expect(s.units).toEqual([{ nodeId: 'U1', name: 'U1', kind: 'user', days: 60 }]);
-		expect(out.summary.warnings.some((w) => /22 days outside a complete calendar month follow the pragmatic EWR/.test(w))).toBe(true);
+		expect(out.summary.warnings.some((w) => /22 days outside a complete calendar month follow the daily EWR/.test(w))).toBe(true);
 		// The charge: U1's whole take on each failing day (its impact is far below the shortfall).
 		const c = ser(out, 'U1', 'ewr_charge');
 		expect(c.slice(0, 22).every((v) => v === 0)).toBe(true);

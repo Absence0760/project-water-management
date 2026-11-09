@@ -407,6 +407,16 @@ async function prepareImport(db: Db, projectId: string, body: Omit<z.infer<typeo
 	};
 }
 
+/**
+ * Where the owners' What viewers see switch stands (162): its position only, for the owner's toggle and for a copy of
+ * the project to carry (projects/copyAllocations.ts). It decides nothing: who reads each volume and each name is the
+ * database's rule (231), which RLS applies (authority-reads.db.test.ts keeps every reader of the switch here).
+ */
+export async function viewerUnitsSwitch(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [projectId]);
+	return !!rows[0]?.on;
+}
+
 export const allocationRoutes = new Hono<AuthEnv>()
 	.get('/:id/allocations', async (c) => {
 		const id = c.req.param('id');
@@ -416,8 +426,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const allocations = await loadAllocations(db, id);
 			// The farms and water users an allocation can be matched to.
 			const nodes = await matchNodes(db, id);
-			const { rows: flag } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [id]);
-			const viewerUnits = !!flag[0]?.on;
+			const viewerUnits = await viewerUnitsSwitch(db, id);
 			// A viewer the owners haven't let read each volume: RLS gave them no row; totals per water source instead (D3).
 			// Who reads each row and each name is the database's one rule (231), which allocation_select and
 			// allocation_holder_select read too: a member acting for the authority always (#523 G6).

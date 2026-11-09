@@ -32,6 +32,8 @@ import { resolveResponsibleAuthority } from './authoritySettings.js';
 import { readJson } from '../http/body.js';
 import { projectName } from '../http/visibleName.js';
 import { bodyLimit } from 'hono/body-limit';
+import { copyAllocations } from './copyAllocations.js';
+import { copyCatchmentMap } from './copyMap.js';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
 import { insertImportReport, latestImportReport, parseImportReport } from './importReport.js';
 import { loadMyOutcomes } from '../portfolio/portfolio.js';
@@ -518,6 +520,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 				Object.assign(copiedSettings, remapSettingSeriesIds(copiedSettings, new Map(pairs.map((r) => [r.old, r.new]))));
 				await db.query('UPDATE project SET settings = $2 WHERE id = $1', [newId, JSON.stringify(copiedSettings)]);
 			}
+			// The catchment map follows (sources, features, each node's area-from-map link and the records of what an accepted
+			// value was read over); proposals, dam observations, waterbody matches and feeds stay with the original (copyMap.ts).
+			await copyCatchmentMap(db, srcId, newId, ids);
+			// The registered volumes, their files and the names the copier may read, with the viewer-units choice
+			// (copyAllocations.ts); what points at a run stays behind with the runs, which don't copy.
+			await copyAllocations(db, srcId, newId, ids);
 			// Notes don't copy (docs/data-model.md § Notes): a copy diverges, and a
 			// note is its author's words about the original; RLS inserts a note only
 			// as yourself, so keeping the author would mean bypassing it, and

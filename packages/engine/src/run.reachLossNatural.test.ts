@@ -5,6 +5,7 @@
 // naturalised flows are net of WRSM's Bedloss. The same catchment without the
 // losses is the positive control. Synthetic catchment: invented numbers only.
 import { describe, expect, it } from 'vitest';
+import { reachAllYear } from './testing/lossPlans';
 import { daysPerMonth, toEpochDay } from './calendar';
 import type { ModelInput, ModelOutput, NetworkNode } from './project';
 import { Rng } from './random';
@@ -103,11 +104,12 @@ describe('naturalAtOutlet', () => {
 	// A (share 0.5, losing half its flow) and B (share 0.3) drain to the outlet O; 0.2 of the catchment is in no unit.
 	const plan = {
 		nodes: [
-			{ kind: 'farm' as const, share: 0.5, reachLoss: { frac: 0.5, maxM3Day: Infinity } },
+			{ kind: 'farm' as const, share: 0.5, reachLoss: reachAllYear(0.5, Infinity) },
 			{ kind: 'farm' as const, share: 0.3 },
 			{ kind: 'gauge' as const, share: 0 }
 		],
 		order: Int32Array.from([0, 1, 2]),
+		month: Uint8Array.from([1, 1, 1]),
 		upstream: [Int32Array.from([]), Int32Array.from([]), Int32Array.from([0, 1])]
 	} as unknown as Parameters<typeof naturalAtOutlet>[0];
 
@@ -170,13 +172,37 @@ describe('the natural flow net of the natural bed losses (engine 1.76.0)', () =>
 	});
 });
 
+describe('routeNatural by month (engine 1.116.0)', () => {
+	it('each day loses at its own month’s share and cap: half in January, none in February', () => {
+		// A (0) → O (1). A's reach loses half in January (calendar 1), nothing in February, uncapped.
+		const f = new Float64Array(13);
+		f[1] = 0.5;
+		const r = { order: [0, 1], upstream: [[], [0]], reach: [{ frac: f, maxM3Day: new Float64Array(13).fill(Infinity) }, undefined], month: [1, 1, 2, 2] };
+		const [o] = routeNatural(r, (i) => (i === 0 ? 1000 : 0), 4, [1]);
+		expect([...o!]).toEqual([500, 500, 1000, 1000]);
+	});
+
+	it('naturalAtOutlet takes each day’s month too', () => {
+		const f = new Float64Array(13);
+		f[1] = 0.5;
+		const plan = {
+			nodes: [{ kind: 'farm' as const, share: 1, reachLoss: { frac: f, maxM3Day: new Float64Array(13).fill(Infinity) } }, { kind: 'gauge' as const, share: 0 }],
+			order: Int32Array.from([0, 1]),
+			month: Uint8Array.from([1, 2]),
+			upstream: [Int32Array.from([]), Int32Array.from([0])]
+		} as unknown as Parameters<typeof naturalAtOutlet>[0];
+		expect([...naturalAtOutlet(plan, 1, [1000, 1000])!]).toEqual([500, 1000]);
+	});
+});
+
 describe('routeNatural with caps that bind, on two branches, and a site in the middle', () => {
 	// A (0) → G (2) → O (3), B (1) → O. A's reach loses half up to 300 m³/day, G's (below the site) 20 %,
 	// B's all of it up to 100 m³/day (WRSM's Bedloss form). Day 0: A 1000, B 250; day 1: A 400, B 50.
 	const r = {
 		order: [0, 1, 2, 3],
+		month: [1, 1],
 		upstream: [[], [], [0], [1, 2]],
-		reach: [{ frac: 0.5, maxM3Day: 300 }, { frac: 1, maxM3Day: 100 }, { frac: 0.2, maxM3Day: Infinity }, undefined]
+		reach: [reachAllYear(0.5, 300), reachAllYear(1, 100), reachAllYear(0.2, Infinity), undefined]
 	};
 	const own = [
 		[1000, 400],

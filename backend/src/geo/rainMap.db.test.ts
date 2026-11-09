@@ -3,8 +3,8 @@
 // synthetic grid (0.01° cells over region Z, an empty south-west corner) and a
 // second, coarser grid loaded here. A viewer reads one dataset's points in the
 // box, the default first, marked synthetic; a box holding more of the grid's
-// cells than one answer carries comes back tooDense with no cells; an unknown
-// dataset is 404; a bad or oversized bbox 400; a non-member gets 404 and a
+// cells than one answer carries comes back tooDense with no cells; a dataset
+// that isn't loaded answers as none loaded; a bad or oversized bbox 400; a non-member gets 404 and a
 // farmer 403, with a member's read as the positive control; water_app can't
 // write the grid.
 import pg from 'pg';
@@ -105,8 +105,14 @@ describe('GET /projects/:id/map/map-grid', () => {
 		expect((await viewer.call('GET', url('21.0,-34.0,21.8,-33.2', 'coarse-test'))).body.tooDense).toBe(false);
 	});
 
-	it('refuses an unknown dataset (404), and a malformed, inverted or oversized bbox (400), with no SQL in the answer', async () => {
-		expect((await viewer.call('GET', url('21.3,-33.7,21.4,-33.6', 'nope'))).status).toBe(404);
+	it('answers a dataset that isn’t loaded as none loaded, every loaded grid still listed (the Map tab asks for its grids by label)', async () => {
+		const res = await viewer.call('GET', url('21.3,-33.7,21.4,-33.6', 'Lynch-2004'));
+		expect(res.status).toBe(200);
+		expect(res.body).toMatchObject({ dataset: null, cells: [], tooDense: false });
+		expect(res.body.datasets.map((d: { dataset: string }) => d.dataset)).toEqual(['coarse-test', 'synthetic']);
+	});
+
+	it('refuses a malformed, inverted or oversized bbox (400), with no SQL in the answer', async () => {
 		for (const bbox of ['21,-33', '21,-33,a,-32', '21.5,-33.7,21.4,-33.6', `21,-34,${21 + MAP_GRID_BBOX_MAX_DEG + 0.1},-33`]) {
 			const res = await viewer.call('GET', url(bbox));
 			expect(res.status, bbox).toBe(400);

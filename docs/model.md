@@ -4715,8 +4715,28 @@ a share set there is ignored with a warning. The run clamps a share outside
 warning; the API and the node form refuse both (`backend/src/model/validate.ts`,
 `frontend/src/lib/model/validate.ts`).
 
+**By month (engine 1.116.0).** Either value can vary by water-year month:
+
+| Field | Meaning |
+| --- | --- |
+| `reachLossFracMonthly` | 12 shares (Oct–Sep), each 0 ≤ f ≤ 1; when set it replaces `reachLossFrac` (kept, inert); 0 in a month = no loss that month. null (the default) = the one share all year |
+| `reachLossMaxMonthlyM3Day` | 12 caps (Oct–Sep), m³/day ≥ 0; when set it replaces `reachLossMaxM3Day`. null = the one cap (or none) all year |
+
+Each day takes its own calendar month's f and L in every formula below (the
+loss, the gross-up of a priority claim, the natural flow routed for a
+comparison), so the hydrologist can fit the loss to the season: Q is the
+whole flow leaving the node, what reaches it from the nodes above included,
+so in the wet months a small share with a high cap can still lose a lot of a
+large flow, and in the dry months a larger share with a small cap fits a low
+one. One value in every month runs to the bit as the one value
+(`network/reachLoss.test.ts` › "bed losses by month"). A month outside the
+range runs clamped (a share) or uncapped (a cap) with a warning naming the
+month, as the one values do; a row of all zeros is no loss. With f = 1 and a
+different cap each month it is WRSM's Bedloss month by month (below).
+
 **Each day** (network/reachLoss.ts, at the hand-off in network/simulate.ts),
-with Q the upper node's outflow U:
+with Q the upper node's outflow U (everything it passes downstream, its own
+water and what reached it from upstream, after its dam and its use):
 
 ```
 loss = MIN(L, f × Q)       (0 when Q ≤ 0; L = ∞ without a cap)
@@ -4738,7 +4758,8 @@ not modelled: there is no store or lag for it, so a reach that feeds a spring
 further down is a known simplification. WRSM's Bedloss is a fixed monthly
 volume, MIN(Bedloss, flow): **f = 1 with L = Bedloss × 10⁶ ÷ days in the
 month reproduces it exactly**, day by day, every flow below the day's Bedloss
-lost whole (`network/reachLoss.test.ts`). A share below 1 is a proportional
+lost whole (`network/reachLoss.test.ts`); with the cap set by month (engine
+1.116.0), a different Bedloss in each month. A share below 1 is a proportional
 loss function of the kind eWater Source's practice note on losses describes,
 so the loss shrinks with the flow in a drought rather than taking the whole
 low flow (Mvandaba et al. 2018, PIAHS 378, discuss transmission losses on
@@ -4855,8 +4876,9 @@ eWater Source, Practice Note: Estimation of Losses
 USDA NRCS National Engineering Handbook part 630, chapter 19 (Lane's
 transmission losses).
 
-**Scenarios.** `reachLossFrac` and `reachLossMaxM3Day` are `node.set` fields
-on every kind of node, and baseline assumptions (`BASELINE_NODE_FIELDS`): the
+**Scenarios.** `reachLossFrac` and `reachLossMaxM3Day` (and their monthly
+rows, engine 1.116.0) are `node.set` fields on every kind of node, and
+baseline assumptions (`BASELINE_NODE_FIELDS`): the
 river's losses are not something an applicant proposes (docs/scenarios.md).
 
 #### A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1)
@@ -4883,6 +4905,17 @@ and the run ignores one with a warning):
 
 A value that isn't a size ≥ 0 runs as 0 with a warning; the API and the node
 form refuse it.
+
+**By month (engine 1.116.0).** `baseflowLossMonthlyM3Day` and
+`baseflowGainMonthlyM3Day` (12 values ≥ 0, Oct–Sep) each replace their one
+value when set (null, the default, is that value all year; the one value is
+kept, inert). Each day takes its own calendar month's L and B, so a unit can
+lose base flow in the wet months, when a full river recharges the groundwater
+and more of it soaks away, and gain it in the dry months, when the groundwater
+feeds the river: a net gain in the dry season. The series `baseflow_loss` and
+`baseflow_gain` exist when any month has one; the natural flow routed for a
+comparison takes each day's month too. One value in every month runs to the
+bit as the one value (`network/baseflow.test.ts` › "base flow by month").
 
 **Each day** (network/baseflow.ts, in the unit's step in network/simulate.ts),
 with I the unit's runoff (§2.7 row I: natural × share, less land cover):
@@ -4934,8 +4967,11 @@ fitting both against one record is poorly identified.
 
 **Scenarios.** `baseflowLossM3Day` and `baseflowGainM3Day` are `node.set`
 fields on a unit and baseline assumptions (`BASELINE_NODE_FIELDS`), the
-land's groundwater rather than a proposal; an applicant's view keeps them on
-the units it anonymises (docs/scenarios.md § Applications).
+land's groundwater rather than a proposal, and so are their monthly rows
+(engine 1.116.0). An applicant's view drops them on the units it anonymises
+(`scenario/applicant.ts`): they go with the unit's runoff, which its zeroed
+area takes to 0, so a kept gain would be water from nowhere (docs/scenarios.md
+§ Applications). It keeps the bed losses, the one values and the monthly rows.
 
 **Checks.** `checkBalance` recomputes each day's loss from the setting,
 requires a series exactly when the setting has one and counts both in the
@@ -8569,6 +8605,55 @@ bit-identical with and without them stored, they do change the run as
 stored (the positive control), and a scenario switching them on runs
 exactly as the stored rules did.
 
+### 2.9h The daily EWR judged by whole months (engine ≥ 1.116.0)
+
+The EWR page's months-met panel read only the Reserve rule tables (§2.9c), so
+a project whose daily EWR came from the DRM TAB file or the percentile tables
+(§2.9f) saw its monthly verdicts judged by another test than its daily one.
+The client's hydrologist asked for the months met to follow the daily EWR in
+use. `summary.ewrDailyMonths` (`packages/engine/src/reserve/dailyMonths.ts`
+`assessDailyEwrMonths`) judges the run's outlet `ewr` series, whichever
+source it comes from (the pragmatic EWR included), month by month:
+
+```
+per complete calendar month of the run (§2.9c's months: completeMonths; a part
+month at either end, and a month a forecast tail starts inside, are left out;
+one wholly in the tail is assessed):
+  R = Σ the month's daily EWR (m³)        A = Σ the month's simulated outflow at the outlet (m³)
+  met     = A ≥ R                         (relative tolerance 1e-9, as §2.9c)
+  deficit = MAX(R − A, 0)
+```
+
+**A month whose requirement is 0 is met**, as a day with an EWR of 0 is never
+"not met" in the daily test and a rule table's R = 0 month is met in §2.9c;
+`zeroRequirementMonths` counts them, so a screen can say how many of the
+months met asked for nothing rather than let them read as a river that coped.
+A non-finite day counts as 0, as §2.9c sums a month.
+
+The summary: `months`, `met`, `rate` (met ÷ months, null without a month),
+`zeroRequirementMonths`, `longestNotMetRun` (most consecutive months not met),
+`deficitM3` (Σ the months' deficits) and `byMonth`, the twelve calendar months
+in water-year order (Oct … Sep), each with `years`, `met`, `rate`,
+`meanRequiredM3s` and `meanSimulatedM3s` (the mean over its months of the
+month's mean flow, m³/s; null without a month) and `deficitM3`. Unlike a rule
+table (§2.9c) nothing depends on the natural flow's percentile, so there is
+no FDC check, low-flow split or %nMAR here; those stay the rule tables'.
+
+It is a report: no other result reads it. It is absent without an outlet and
+on runs before 1.116.0 (the EWR page asks for a re-run). A run resumed from a
+snapshot (§2.16) covers its own complete months, as its other summaries cover
+its own days. A cap or full-allocation run's viewer kept from the registered
+volumes doesn't get it (its mean flows and deficit are volumes; the
+allowlist, security.md § Allocations). Tests: `reserve/dailyMonths.test.ts`
+(hand-worked months, part months, the zero month, a forecast tail, more flow
+never losing a month on random series, and whole runs on the pragmatic EWR
+and the TAB file; vitest runs under a skewed `TZ`).
+
+Engine 1.116.0 also rewords two charge warnings (§2.9c § The charge from the
+rule table): days outside a complete month, and a rule-table charge with no
+table, "follow the daily EWR" (the outlet's `ewr` from §2.9f's source, or a
+gauge's share of it), not "the pragmatic EWR", which was wrong since 1.77.0.
+
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 
 The hydrologist calibrates on a window, not the whole record:
@@ -12183,6 +12268,29 @@ the run, volumes in m³, summed over every node per day in node-id order.
 Dam releases (WP-3.5, engine 0.35.0) move water within the network, so they
 are a memo; only the lost share of dam seepage is a new out term. Runs made
 before 0.35.0 have neither field (all seepage returned then).
+
+### 2.11c Each unit's EWR met (engine ≥ 1.116.0)
+
+`RunSummary.unitEwr` (`network/unitEwr.ts`): one row per hydrological unit
+(farms, then other water users, in network order), summed over every day of
+the run, volumes in m³. With Z the EWR required at the unit, its own share
+plus the shares of the units above it (§2.5, §2.7 column Z, the
+`ewr_cumulative` series), U its outflow (`outflow`) and AA = MIN(U − Z, 0)
+its shortfall (`ewr_shortfall`, with §2.7's float-noise tolerance):
+
+- `requiredM3` = Σ Z (0 for a unit with no EWR share at or above it);
+- `metM3` = Σ (Z + AA) = Σ MIN(U, Z), the part of the requirement the flow
+  passing the unit covered, never above `requiredM3`;
+- `outflowM3` = Σ U;
+- `daysNotMet`: the days with AA < 0.
+
+It is the water account's *EWR required vs met* (§2.11b) for every unit,
+not only the EWR sites, so where a unit is a site the two agree. It reads
+the pragmatic EWR's split (Z); a Reserve rule table's requirement at a site
+(§2.9c) isn't split over the units. The EWR page's map shades each unit by
+`metM3 ÷ requiredM3` (met in full = 100 %) or `outflowM3 ÷ requiredM3`
+([ui.md § EWR](./ui.md#ewr), *On the map*). New output only: no other figure
+changes. Runs before 1.116.0 have no field.
 
 ### 2.12 Allocations: modelled use vs registered volume (roadmap WP-3.10)
 

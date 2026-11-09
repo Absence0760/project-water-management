@@ -5,14 +5,17 @@
 // on Use and records the months, the note and the equation in the revision.
 
 /**
- * Where the A-pan row can come from. The WR2012 configurations and the typed S-pan are proposed here (each a lazy
- * panel); the stations and the grid stay on Calibration, and the choice links to them.
+ * Where the A-pan row can come from. The WR2012 configurations, the typed S-pan and the CCWR A-pan grid (pinned to
+ * `Atlas-Apan-2007`, averaged over the catchment boundary, ./ccwrApan.ts) are proposed here (each a lazy panel); the
+ * stations and any other evaporation grid (a PenPan A-pan, a reference-ET grid for GR4J's PE) stay on Calibration, and
+ * the choice links to them.
  */
 export const APAN_SOURCES = [
 	{ id: 'typed', label: 'Typed or pasted A-pan (the row below)' },
 	{ id: 'wr2012', label: 'WR2012 Pitman configuration, per quaternary' },
 	{ id: 'span', label: 'Typed or pasted S-pan, converted (WR90 / Taljaard)' },
 	{ id: 'station', label: 'A DWS evaporation station', href: '?tab=calibration#set-evaporation-station', where: 'Evaporation stations' },
+	{ id: 'ccwr', label: 'CCWR A-pan grid (catchment average)' },
 	{ id: 'grid', label: 'An evaporation grid (A-pan from the map)', href: '?tab=calibration#set-evaporation', where: 'Evaporation from the map' }
 ] as const;
 export type ApanSourceId = (typeof APAN_SOURCES)[number]['id'];

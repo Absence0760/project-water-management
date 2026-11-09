@@ -6,8 +6,13 @@
 // ET₀ ÷ A-pan as a cross-check; Use asks first, saves the 12 values as one
 // settings revision and the form reloads them; History cites the dataset.
 // Use waits while the form has unsaved changes. A viewer reads it but can't
-// use it, and a project with no boundary is told to draw one. The tables are
-// read, never the map. Invented data only.
+// use it, and a project with no boundary is told to draw one. Model settings
+// → Demand → A-pan from "CCWR A-pan grid (catchment average)" is the same
+// panel pinned to Atlas-Apan-2007: not loaded on the e2e server, it says so
+// in plain words; loaded (its answer stood in for by a route, the synthetic
+// grid's months as A-pan), it proposes the A-pan row under the name "CCWR
+// A-pan" and Use asks first. The tables are read, never the map. Invented
+// data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, putSeries, seedRunnableProject } from '../support/api.ts';
@@ -136,4 +141,43 @@ test('Use waits for unsaved settings, and a project with no boundary is told to 
 	await anySaveBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
 	await answerConfirm(page, true);
 	await expect(use).toBeEnabled();
+});
+
+test('Demand’s CCWR A-pan grid: not loaded says so in plain words; loaded, it proposes the catchment’s A-pan row', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'CCWR A-pan grid');
+	await drawBoundary(page, project.id);
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.getByTestId('apan-from').selectOption({ label: 'CCWR A-pan grid (catchment average)' });
+	const ccwr = page.getByTestId('ccwr-apan-proposal');
+	await expect(ccwr.getByTestId('ccwr-apan-body')).toHaveAttribute('data-ready', 'true');
+	await expect(ccwr.getByRole('heading', { name: 'CCWR A-pan grid (catchment average)' })).toBeVisible();
+	// The e2e server loads no Atlas grid (as production until issue #755): none loaded, not an error, and nothing else proposed.
+	await expect(ccwr.getByTestId('ccwr-apan-not-loaded')).toHaveText(
+		'There’s no CCWR A-pan grid on this server yet, so there is nothing to propose from it. Type or paste the A-pan row below, or pick another source.'
+	);
+	// No developer command for a hydrologist (issue #586 C5).
+	await expect(ccwr.getByTestId('ccwr-apan-not-loaded')).not.toContainText('pnpm');
+	await expect(ccwr.locator('tr[data-row="proposed"]')).toHaveCount(0);
+
+	// Loaded: the synthetic grid's answer, presented as the Atlas A-pan grid (what the server sends once it is loaded).
+	await page.route(/\/evaporation-proposals\?dataset=Atlas-Apan-2007$/, async (route) => {
+		const res = await route.fetch({ url: route.request().url().replace('?dataset=Atlas-Apan-2007', '') });
+		const body = await res.json();
+		body.dataset = { ...body.dataset, dataset: 'Atlas-Apan-2007', kind: 'apan', synthetic: false, firstYear: null, lastYear: null };
+		body.datasets = [...body.datasets, { dataset: 'Atlas-Apan-2007', kind: 'apan', version: body.dataset.version, synthetic: false }];
+		body.target = 'apan';
+		await route.fulfill({ response: res, json: body });
+	});
+	await page.getByTestId('apan-from').selectOption('typed');
+	await page.getByTestId('apan-from').selectOption('ccwr');
+	await expect(ccwr.getByTestId('ccwr-apan-body')).toHaveAttribute('data-ready', 'true');
+	await expect(ccwr.locator('tr[data-row="proposed"]').getByRole('cell')).toHaveText(['120', '150', '175', '180', '150', '130', '90', '65', '50', '55', '75', '95', '1\u202f335']);
+	await expect(ccwr).toContainText('into the A-pan evaporation row');
+	await expect(ccwr.getByTestId('evaporation-source')).toContainText('monthly means, no period stated by the source; dataset “Atlas-Apan-2007”');
+	// Pinned: no grid picker.
+	await expect(ccwr.getByLabel('Grid')).toHaveCount(0);
+	await ccwr.getByRole('button', { name: 'Use as the A-pan evaporation row' }).click();
+	await answerConfirm(page, false, /Irrigation demand, dam evaporation and, under pan coefficient × A-pan, GR4J will read these 12 monthly values \(1\u202f335 mm a year\) instead of the A-pan row it holds now\./);
+	await expectNoViolations(page, { include: '[data-testid="ccwr-apan-proposal"]' });
 });

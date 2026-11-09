@@ -32,6 +32,7 @@
 </script>
 
 <script lang="ts">
+	import { evaporationGridName } from '#lib/components/evaporation/ccwrApan.js';
 	import { fmtNum } from '#lib/format/number.js';
 	import { EVAPORATION_GRID_LABEL, EVAPORATION_GRID_LAYER, EVAPORATION_GRID_MONTHS, evaporationGridWhat, evaporationMonthLabel, evaporationValueWords } from './evaporationGrid';
 	import { MAP_GRID_BBOX_MAX_DEG, mapLabel } from './mapLayers';
@@ -48,7 +49,7 @@
 		if (!a?.dataset) return '';
 		const n = a.cells.length;
 		const r = layer.range ? `: ${mapLabel(layer.range[0])} to ${mapLabel(layer.range[1])}` : '';
-		return `${fmtNum(n, 0, true)} ${n === 1 ? 'point' : 'points'} in view from ${a.dataset.dataset} (${degrees(a.dataset.cellDeg)}° cells, ${a.dataset.firstYear !== null && a.dataset.lastYear !== null ? `${a.dataset.firstYear}–${a.dataset.lastYear} means` : 'means for no stated period'}), ${evaporationValueWords(a.month)}${r}.`;
+		return `${fmtNum(n, 0, true)} ${n === 1 ? 'point' : 'points'} in view from ${evaporationGridName(a.dataset.dataset)} (${degrees(a.dataset.cellDeg)}° cells, ${a.dataset.firstYear !== null && a.dataset.lastYear !== null ? `${a.dataset.firstYear}–${a.dataset.lastYear} means` : 'means for no stated period'}), ${evaporationValueWords(a.month)}${r}.`;
 	}
 </script>
 
@@ -71,14 +72,14 @@
 				<p class="muted" data-loading>Loading the {word}…</p>
 			{:else if !ea.dataset}
 				<p class="muted" data-testid="map-{id}-none">
-					No {word} is loaded, so there is nothing to draw (<code>pnpm import:evaporation --apan-asc</code>, docs/maps.md § A-pan grid).
+					There’s no {word} on this server yet, so there is nothing to draw.
 				</p>
 			{:else}
 				{#if ea.datasets.length > 1}
 					<label class="pick">
 						Grid
 						<select value={ea.dataset.dataset} onchange={(e) => eg.pick(e.currentTarget.value)} data-testid="map-{id}-dataset">
-							{#each ea.datasets as d (d.dataset)}<option value={d.dataset}>{d.dataset} ({degrees(d.cellDeg)}°){d.synthetic ? ', synthetic' : ''}</option>{/each}
+							{#each ea.datasets as d (d.dataset)}<option value={d.dataset}>{evaporationGridName(d.dataset)} ({degrees(d.cellDeg)}°){d.synthetic ? ', synthetic' : ''}</option>{/each}
 						</select>
 					</label>
 				{/if}

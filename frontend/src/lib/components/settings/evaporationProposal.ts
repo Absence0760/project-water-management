@@ -6,6 +6,7 @@
 // A-pan row. For reference ET the panel also shows ET₀ ÷ A-pan per month, the
 // pan coefficient the two rows imply, as a cross-check only.
 import type { EvaporationAccepted, EvaporationDataset, EvaporationKind, EvaporationProposals, EvaporationTarget } from '#lib/api/index.js';
+import { evaporationGridName } from '#lib/components/evaporation/ccwrApan.js';
 import { fmtDate, fmtDay, fmtNum } from '#lib/format/number.js';
 
 /** Where an accepted row goes, in words. */
@@ -62,8 +63,8 @@ export function acceptedText(a: EvaporationAccepted): string {
 	const what = TARGET_LABEL[a.target];
 	const when = fmtDate(a.acceptedAt);
 	return a.current
-		? `${what[0]!.toUpperCase()}${what.slice(1)} came from the map (${a.dataset}, ${a.version}) on ${when}.`
-		: `Typed over since: ${what} came from the map (${a.dataset}, ${a.version}) on ${when}.`;
+		? `${what[0]!.toUpperCase()}${what.slice(1)} came from the map (${evaporationGridName(a.dataset)}, ${a.version}) on ${when}.`
+		: `Typed over since: ${what} came from the map (${evaporationGridName(a.dataset)}, ${a.version}) on ${when}.`;
 }
 
 /**

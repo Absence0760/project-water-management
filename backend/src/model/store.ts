@@ -36,6 +36,8 @@ const MODEL_JSON = `json_build_object(
 			hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr", divert_monthly_m3_day AS "divertMonthlyM3Day",
 			ewr_site AS "ewrSite", reach_loss_frac AS "reachLossFrac", reach_loss_max_m3_day AS "reachLossMaxM3Day",
 			baseflow_loss_m3_day AS "baseflowLossM3Day", baseflow_gain_m3_day AS "baseflowGainM3Day",
+			reach_loss_frac_monthly AS "reachLossFracMonthly", reach_loss_max_monthly_m3_day AS "reachLossMaxMonthlyM3Day",
+			baseflow_loss_monthly_m3_day AS "baseflowLossMonthlyM3Day", baseflow_gain_monthly_m3_day AS "baseflowGainMonthlyM3Day",
 			map_mm AS "mapMm", map_source AS "mapSource",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
 		FROM node WHERE project_id = $1) r), '[]'),
@@ -170,7 +172,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year,
-			reach_loss_frac, reach_loss_max_m3_day, baseflow_loss_m3_day, baseflow_gain_m3_day, map_mm, map_source)
+			reach_loss_frac, reach_loss_max_m3_day, baseflow_loss_m3_day, baseflow_gain_m3_day,
+			reach_loss_frac_monthly, reach_loss_max_monthly_m3_day, baseflow_loss_monthly_m3_day, baseflow_gain_monthly_m3_day, map_mm, map_source)
 		 SELECT id, $1, name, kind, sort_order, area_km2, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
@@ -182,7 +185,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year,
-			reach_loss_frac, reach_loss_max_m3_day, baseflow_loss_m3_day, baseflow_gain_m3_day, map_mm, map_source
+			reach_loss_frac, reach_loss_max_m3_day, baseflow_loss_m3_day, baseflow_gain_m3_day,
+			reach_loss_frac_monthly, reach_loss_max_monthly_m3_day, baseflow_loss_monthly_m3_day, baseflow_gain_monthly_m3_day, map_mm, map_source
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 			-- An area accepted from the map (152, geo/routes.ts area-from-map) stays 'map' until the area is typed over (or the node changes kind).
@@ -219,6 +223,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year,
 			reach_loss_frac = EXCLUDED.reach_loss_frac, reach_loss_max_m3_day = EXCLUDED.reach_loss_max_m3_day,
 			baseflow_loss_m3_day = EXCLUDED.baseflow_loss_m3_day, baseflow_gain_m3_day = EXCLUDED.baseflow_gain_m3_day,
+			reach_loss_frac_monthly = EXCLUDED.reach_loss_frac_monthly, reach_loss_max_monthly_m3_day = EXCLUDED.reach_loss_max_monthly_m3_day,
+			baseflow_loss_monthly_m3_day = EXCLUDED.baseflow_loss_monthly_m3_day, baseflow_gain_monthly_m3_day = EXCLUDED.baseflow_gain_monthly_m3_day,
 			map_mm = EXCLUDED.map_mm, map_source = EXCLUDED.map_source,
 			-- The polygon a MAP from the grid was taken over (273, geo/unitMapRoutes.ts) goes once the MAP is changed here: a typed MAP is over no polygon.
 			map_polygon = CASE WHEN node.map_mm IS DISTINCT FROM EXCLUDED.map_mm OR node.map_source IS DISTINCT FROM EXCLUDED.map_source THEN NULL ELSE node.map_polygon END
@@ -284,6 +290,11 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			// A unit's base-flow loss and gain (engine 1.86.0, migration 222); absent = none.
 			baseflow_loss_m3_day: n.baseflowLossM3Day ?? BASEFLOW_DEFAULTS.baseflowLossM3Day,
 			baseflow_gain_m3_day: n.baseflowGainM3Day ?? BASEFLOW_DEFAULTS.baseflowGainM3Day,
+			// Bed losses and base flow by month (engine 1.116.0, migration 319); absent = the one value all year.
+			reach_loss_frac_monthly: n.reachLossFracMonthly ?? REACH_LOSS_DEFAULTS.reachLossFracMonthly,
+			reach_loss_max_monthly_m3_day: n.reachLossMaxMonthlyM3Day ?? REACH_LOSS_DEFAULTS.reachLossMaxMonthlyM3Day,
+			baseflow_loss_monthly_m3_day: n.baseflowLossMonthlyM3Day ?? BASEFLOW_DEFAULTS.baseflowLossMonthlyM3Day,
+			baseflow_gain_monthly_m3_day: n.baseflowGainMonthlyM3Day ?? BASEFLOW_DEFAULTS.baseflowGainMonthlyM3Day,
 			// The unit's MAP and its source (issue #482, migration 209); absent = none. A source without a MAP isn't kept.
 			map_mm: n.mapMm ?? null,
 			map_source: n.mapMm === null || n.mapMm === undefined ? null : (n.mapSource?.trim() || null)

@@ -42,6 +42,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true,
 	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true, reachLossFrac: true, reachLossMaxM3Day: true,
 	baseflowLossM3Day: true, baseflowGainM3Day: true,
+	reachLossFracMonthly: true, reachLossMaxMonthlyM3Day: true, baseflowLossMonthlyM3Day: true, baseflowGainMonthlyM3Day: true,
 	cropWaterSource: true, cropRiverPumpM3Day: true, cropRiverPoolM3: true,
 	cropShareDam: true, cropShareRiver: true, cropShareRemote: true, cropRemoteNodeId: true, cropRemoteCapM3Day: true, mapMm: true, mapSource: true
 };

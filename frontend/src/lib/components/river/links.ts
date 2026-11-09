@@ -34,9 +34,17 @@ export const EWR_MONTHS_HEADING = 'Days below the EWR, by month';
  */
 export const RIVER_STRIP_ANCHOR = 'res-reserve-strip';
 
-/** True for a `#res-…` fragment that now lives on the EWR page (without the `#`). */
+/**
+ * Each unit on the map (ewr/EwrUnitMap.svelte), after the EWR grid: the page's own panel, never on Runs & results, so
+ * not in RIVER_ANCHORS (the anchors an old Runs & results link is forwarded with, nav/anchorMoves.ts).
+ */
+export const EWR_MAP_ANCHOR = 'res-ewr-map';
+/** Its heading, which the page's menu names it by. */
+export const EWR_MAP_HEADING = 'On the map';
+
+/** True for a `#res-…` fragment that lives on the EWR page (without the `#`). */
 export function riverAnchor(hash: string): boolean {
-	return hash === RIVER_STRIP_ANCHOR || (RIVER_ANCHORS as readonly string[]).includes(hash);
+	return hash === RIVER_STRIP_ANCHOR || hash === EWR_MAP_ANCHOR || (RIVER_ANCHORS as readonly string[]).includes(hash);
 }
 
 /**
@@ -45,7 +53,11 @@ export function riverAnchor(hash: string): boolean {
  */
 export const SUMMARY_STRIP_ANCHORS: readonly string[] = ['strip-h', 'reserve-strip'];
 
-/** `?tab=river` (the EWR page), with the run (`&run=`) and a panel (`#res-…`) when given. */
-export function riverHref(runId?: string | null, anchor?: string | null): string {
-	return `?tab=river${runId ? `&run=${encodeURIComponent(runId)}` : ''}${anchor ? `#${anchor}` : ''}`;
+/**
+ * `?tab=river` (the EWR page), with the run (`&run=`) and a panel (`#res-…`) when given. `months: 'rules'` opens
+ * the months-met panel (`#res-reserve`) on the Reserve rule tables rather than the daily EWR (river.ts monthsJudge),
+ * for a link that names the rule tables' months.
+ */
+export function riverHref(runId?: string | null, anchor?: string | null, months?: 'rules'): string {
+	return `?tab=river${runId ? `&run=${encodeURIComponent(runId)}` : ''}${months ? `&months=${months}` : ''}${anchor ? `#${anchor}` : ''}`;
 }

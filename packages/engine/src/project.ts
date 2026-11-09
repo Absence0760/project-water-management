@@ -34,8 +34,10 @@ import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/ru
 import type { EwrSplitInfo, PinnedEwrSplit } from './network/ewrSplit';
 import type { EwrDailySource, OutletEwrInfo } from './reserve/dailySource';
 import type { EwrAssuranceSite } from './reserve/assurance';
+import type { EwrDailyMonths } from './reserve/dailyMonths';
 import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
 import type { SupplyAssurance } from './network/reliability';
+import type { UnitEwrMet } from './network/unitEwr';
 import type { AllocationEntry, AllocationWaterSource } from './allocations/compare';
 import type { AllocationMode } from './allocations/mode';
 import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
@@ -1428,6 +1430,26 @@ export function mapMmError(mapMm: unknown, source: unknown): string | null {
 	return null;
 }
 
+/**
+ * A unit's MAP taken from a MAP grid (docs/maps.md § MAP for each unit): the
+ * backend writes its source line, and both sides read back which grid it came
+ * from, here, so the one-grid rule (`grid_mixed`) and the unit form's grid
+ * choice recognise a grid's MAP the same way.
+ */
+export const UNIT_MAP_METHOD = 'area-weighted mean over the unit’s parcel';
+
+/** A grid's citation as a unit's MAP source begins: its label and version. */
+export const unitMapGridCitation = (g: { dataset: string; version: string }) => `${g.dataset} ${g.version}`;
+
+/** A unit's MAP source line: "<label> <version>, area-weighted mean over the unit’s parcel, <n> cells". */
+export const unitMapSource = (g: { dataset: string; version: string }, cells: number) =>
+	`${unitMapGridCitation(g)}, ${UNIT_MAP_METHOD}, ${cells} cell${cells === 1 ? '' : 's'}`;
+
+const UNIT_MAP_SOURCE_RE = new RegExp(`^(.*), ${UNIT_MAP_METHOD}, \\d+ cells?$`);
+
+/** The grid citation a MAP source line names, when the MAP came from a grid (unitMapSource wrote it); null for a MAP typed in. */
+export const unitMapGridOfSource = (source: string | null | undefined): string | null => (source ? (UNIT_MAP_SOURCE_RE.exec(source)?.[1] ?? null) : null);
+
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Why a stored settings.unitRain can't be used, or null (absent and null are fine: Per unit's defaults). The API applies the same rules. `catchment` still passes, so an older stored setting reads; it runs Per unit. */
@@ -2018,6 +2040,19 @@ export interface NetworkNode {
 	/** The reach's bed losses at most, m³/day; null / absent = no cap. Read only with `reachLossFrac` > 0. */
 	reachLossMaxM3Day?: number | null;
 	/**
+	 * The bed losses' share by water-year month (engine 1.116.0, Oct–Sep, 12
+	 * values in [0, 1], docs/model.md §2.6b): when set it replaces
+	 * `reachLossFrac`, which is then inert; 0 in a month = no loss that month.
+	 * null / absent = the one share all year.
+	 */
+	reachLossFracMonthly?: number[] | null;
+	/**
+	 * The bed losses' cap by water-year month (engine 1.116.0, Oct–Sep, 12
+	 * values ≥ 0, m³/day): when set it replaces `reachLossMaxM3Day`. null /
+	 * absent = that one cap (or none) all year.
+	 */
+	reachLossMaxMonthlyM3Day?: number[] | null;
+	/**
 	 * A unit's base-flow loss (engine 1.86.0, issue #523 B1, #90 R4 (a),
 	 * docs/model.md §2.6b): m³/day of its own runoff lost to groundwater
 	 * before it reaches the river or its dam, at most the day's runoff
@@ -2032,6 +2067,15 @@ export interface NetworkNode {
 	 * absent = none. Units only.
 	 */
 	baseflowGainM3Day?: number;
+	/**
+	 * The base-flow loss by water-year month (engine 1.116.0, Oct–Sep, 12
+	 * values ≥ 0, m³/day, docs/model.md §2.6b): when set it replaces
+	 * `baseflowLossM3Day`, which is then inert. null / absent = the one value
+	 * all year. Units only.
+	 */
+	baseflowLossMonthlyM3Day?: number[] | null;
+	/** The base-flow gain by water-year month (engine 1.116.0), as `baseflowLossMonthlyM3Day`; replaces `baseflowGainM3Day`. Units only. */
+	baseflowGainMonthlyM3Day?: number[] | null;
 }
 
 /**
@@ -2156,13 +2200,35 @@ export const DAM_STORAGE_DEFAULTS = {
 /** What a node without the bed-loss fields (engine ≥ 1.75.0, docs/model.md §2.6b) runs as: no losses in the reach below it. */
 export const REACH_LOSS_DEFAULTS = {
 	reachLossFrac: 0,
-	reachLossMaxM3Day: null
+	reachLossMaxM3Day: null,
+	reachLossFracMonthly: null,
+	reachLossMaxMonthlyM3Day: null
 } as const;
+
+/**
+ * Each one value of the bed losses and the base flow, and the monthly row
+ * that replaces it when set (engine 1.116.0, docs/model.md §2.6b): with the
+ * row set, the one value is kept but the run never reads it.
+ */
+export const MONTHLY_ROW_OF = {
+	reachLossFrac: 'reachLossFracMonthly',
+	reachLossMaxM3Day: 'reachLossMaxMonthlyM3Day',
+	baseflowLossM3Day: 'baseflowLossMonthlyM3Day',
+	baseflowGainM3Day: 'baseflowGainMonthlyM3Day'
+} as const satisfies Partial<Record<keyof NetworkNode, keyof NetworkNode>>;
+
+/** Is `field` a one value that its monthly row replaces on node `n` (MONTHLY_ROW_OF)? */
+export function replacedByMonth(n: Partial<NetworkNode>, field: string): boolean {
+	const row = Object.hasOwn(MONTHLY_ROW_OF, field) ? MONTHLY_ROW_OF[field as keyof typeof MONTHLY_ROW_OF] : undefined;
+	return row !== undefined && Array.isArray(n[row]);
+}
 
 /** What a unit without the base-flow fields (engine 1.86.0, docs/model.md §2.6b) runs as: no base-flow loss or gain. */
 export const BASEFLOW_DEFAULTS = {
 	baseflowLossM3Day: 0,
-	baseflowGainM3Day: 0
+	baseflowGainM3Day: 0,
+	baseflowLossMonthlyM3Day: null,
+	baseflowGainMonthlyM3Day: null
 } as const;
 
 /** What a node without the development fields (engine ≥ 1.30.0, docs/model.md §2.7g) runs as: its entered dam and demand throughout. */
@@ -2474,9 +2540,14 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				// Bed losses in the reach below (engine ≥ 1.75.0): none unless set.
 				n.reachLossFrac ??= REACH_LOSS_DEFAULTS.reachLossFrac;
 				if (n.reachLossMaxM3Day === undefined) n.reachLossMaxM3Day = REACH_LOSS_DEFAULTS.reachLossMaxM3Day;
+				// By month (engine 1.116.0): the one value all year unless set.
+				if (n.reachLossFracMonthly === undefined) n.reachLossFracMonthly = REACH_LOSS_DEFAULTS.reachLossFracMonthly;
+				if (n.reachLossMaxMonthlyM3Day === undefined) n.reachLossMaxMonthlyM3Day = REACH_LOSS_DEFAULTS.reachLossMaxMonthlyM3Day;
 				// A unit's base-flow loss and gain (engine 1.86.0): none unless set.
 				n.baseflowLossM3Day ??= BASEFLOW_DEFAULTS.baseflowLossM3Day;
 				n.baseflowGainM3Day ??= BASEFLOW_DEFAULTS.baseflowGainM3Day;
+				if (n.baseflowLossMonthlyM3Day === undefined) n.baseflowLossMonthlyM3Day = BASEFLOW_DEFAULTS.baseflowLossMonthlyM3Day;
+				if (n.baseflowGainMonthlyM3Day === undefined) n.baseflowGainMonthlyM3Day = BASEFLOW_DEFAULTS.baseflowGainMonthlyM3Day;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
@@ -4711,6 +4782,15 @@ export interface RunSummary {
 	 */
 	ewrAssurance?: EwrAssuranceSite[];
 	/**
+	 * The run's daily EWR at the outlet (`ewr`: the pragmatic EWR, the DRM TAB
+	 * file or the DRM percentile tables, settings.ewrDailySource and
+	 * catchment.outletEwr) judged month by month against the simulated outflow
+	 * (engine ≥ 1.116.0, ./reserve/dailyMonths.ts, docs/model.md §2.9h): per
+	 * complete calendar month, met when Σ outflow ≥ Σ EWR. Absent without an
+	 * outlet, and on older runs.
+	 */
+	ewrDailyMonths?: EwrDailyMonths;
+	/**
 	 * Per EWR site (outlet first, then gauges by node id), the days each farm
 	 * or water user upstream got its whole demand while the site's EWR (the
 	 * daily requirement its charge follows) was not met (engine ≥ 1.33.0,
@@ -4841,6 +4921,14 @@ export interface RunSummary {
 	 * §2.11a–b). Absent on older runs.
 	 */
 	supplyAssurance?: SupplyAssurance;
+	/**
+	 * Each hydrological unit's EWR over the run (engine ≥ 1.116.0,
+	 * ./network/unitEwr.ts, model.md §2.11c): the EWR required at the unit
+	 * (its share plus the shares above it), the part of it the flow passing the
+	 * unit covered, and its outflow. Farms, then other water users, in network
+	 * order. Absent on older runs; the EWR page's map asks for a new run then.
+	 */
+	unitEwr?: UnitEwrMet[];
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 	/**

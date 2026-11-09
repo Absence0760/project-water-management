@@ -59,6 +59,7 @@ import {
 	mapGridLabelMinZoom,
 	MAP_GRID_LABEL_CLEARANCE_PX,
 	MAP_GRID_LABEL_LAYER,
+	MAP_GRID_SOURCE,
 	MAP_RAMP,
 	chirpsData,
 	chirpsColour,
@@ -200,7 +201,7 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), 'units-casing', 'units-line', 'chirps-cell', 'chirps-point', 'demgrid-point', 'apangrid-point', 'mapgrid-point', ...proposalLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), 'units-casing', 'units-line', 'chirps-cell', 'chirps-point', 'demgrid-point', 'apangrid-point', 'ccwrgrid-point', 'mapgrid-point', ...proposalLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
 		expect(mapStyle(null, false, data).sources).toEqual({
@@ -211,6 +212,7 @@ describe('overlay', () => {
 			proposal: { type: 'geojson', data: proposalData(null) },
 			units: { type: 'geojson', data: unitsData(null) },
 			mapgrid: { type: 'geojson', data: mapGridData(null) },
+			ccwrgrid: { type: 'geojson', data: mapGridData(null) },
 			apangrid: { type: 'geojson', data: evaporationGridData(null) },
 			chirps: { type: 'geojson', data: chirpsData(null) },
 			demgrid: { type: 'geojson', data: demGridData(null) }
@@ -284,11 +286,11 @@ describe('labels (#326 A6): self-hosted glyphs, none without a glyphs URL', () =
 
 	it('with glyphs but no tiles, labels only the quaternaries, the units and the grids (there are no place names to draw)', () => {
 		const s = mapStyle(null, false, data, { glyphs });
-		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label', 'units-label', 'demgrid-label', 'apangrid-label', 'mapgrid-label']);
+		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label', 'units-label', 'demgrid-label', 'apangrid-label', 'ccwrgrid-label', 'mapgrid-label']);
 		// Without glyphs: no text anywhere, the points and outlines still drawn.
 		const bare = mapStyle(null, false, data);
 		expect(bare.layers.filter((l) => l.type === 'symbol')).toEqual([]);
-		expect(bare.layers.map((l) => l.id)).toEqual(expect.arrayContaining(['units-line', 'mapgrid-point', 'chirps-point']));
+		expect(bare.layers.map((l) => l.id)).toEqual(expect.arrayContaining(['units-line', 'mapgrid-point', 'ccwrgrid-point', 'chirps-point']));
 	});
 
 	it('keeps every label at least 4.5:1 against its halo and against every basemap colour, light and dark', () => {
@@ -654,7 +656,7 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 		]);
 	});
 
-	it('feeds the MAP grid source each point with its MAP and its label in whole mm', () => {
+	it('feeds a MAP grid source each point with its MAP and its label in whole mm', () => {
 		expect(mapGridData([{ lon: 21.305, lat: -33.645, mapMm: 812.4 }]).features).toEqual([
 			{ type: 'Feature', properties: { mm: 812.4, label: '812 mm' }, geometry: { type: 'Point', coordinates: [21.305, -33.645] } }
 		]);
@@ -662,7 +664,7 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 	});
 
 	it('colours the MAP points on a rising ramp, each ringed in the halo colour so both ends read on either basemap', () => {
-		const [point] = mapGridLayers(false, false).over;
+		const [point] = mapGridLayers('waas', false, false).over;
 		expect(point!.paint).toMatchObject({ 'circle-stroke-color': labelColours(false).halo, 'circle-stroke-width': 1 });
 		expect(MAP_RAMP.map(([mm]) => mm)).toEqual([...MAP_RAMP.map(([mm]) => mm)].sort((a, b) => a - b));
 		for (const dark of [false, true]) {
@@ -686,13 +688,39 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 		expect(mapGridLabelMinZoom(0.0009)).toBeGreaterThan(mapGridLabelMinZoom(0.01));
 		for (const none of [null, undefined, 0, -1, Number.NaN]) expect(mapGridLabelMinZoom(none)).toBe(0);
 		// The label layer carries it; the dots draw at every zoom.
-		const { over, labels } = mapGridLayers(false, true, 11.1);
-		expect(labels[0]).toMatchObject({ id: MAP_GRID_LABEL_LAYER, minzoom: 11.1 });
+		const { over, labels } = mapGridLayers('waas', false, true, 11.1);
+		expect(labels[0]).toMatchObject({ id: MAP_GRID_LABEL_LAYER.waas, minzoom: 11.1 });
 		expect(over[0]).not.toHaveProperty('minzoom');
-		expect(mapGridLayers(false, true).labels[0]).not.toHaveProperty('minzoom');
-		// And the style built for a grid passes it on (a theme switch rebuilds the style).
-		const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', false, overlayData([], null), { glyphs: 'https://x/{fontstack}/{range}.pbf', mapGridCellDeg: 0.01 });
-		expect(s.layers.find((l) => l.id === MAP_GRID_LABEL_LAYER)).toMatchObject({ minzoom: 11.1 });
+		expect(mapGridLayers('waas', false, true).labels[0]).not.toHaveProperty('minzoom');
+		// And the style built for each grid passes its own on (a theme switch rebuilds the style).
+		const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', false, overlayData([], null), { glyphs: 'https://x/{fontstack}/{range}.pbf', waasGridCellDeg: 0.01, ccwrGridCellDeg: 1 / 60 });
+		expect(s.layers.find((l) => l.id === MAP_GRID_LABEL_LAYER.waas)).toMatchObject({ minzoom: 11.1 });
+		expect(s.layers.find((l) => l.id === MAP_GRID_LABEL_LAYER.ccwr)).toMatchObject({ minzoom: 10.4 });
+	});
+
+	it('draws the WAAS 2007 MAP and the CCWR MAP as two sources on one ramp, told apart by their rings and where their values sit', () => {
+		const style = mapStyle(null, false, overlayData([], null), {
+			glyphs: 'https://x/{fontstack}/{range}.pbf',
+			waasGrid: mapGridData([{ lon: 21.305, lat: -33.645, mapMm: 790 }]),
+			ccwrGrid: mapGridData([{ lon: 21.308, lat: -33.642, mapMm: 640 }])
+		});
+		expect(style.sources[MAP_GRID_SOURCE.waas]).toEqual({ type: 'geojson', data: mapGridData([{ lon: 21.305, lat: -33.645, mapMm: 790 }]) });
+		expect(style.sources[MAP_GRID_SOURCE.ccwr]).toEqual({ type: 'geojson', data: mapGridData([{ lon: 21.308, lat: -33.642, mapMm: 640 }]) });
+		for (const dark of [false, true]) {
+			const t = labelColours(dark);
+			const [waas] = mapGridLayers('waas', dark, false).over;
+			const [ccwr] = mapGridLayers('ccwr', dark, false).over;
+			expect(ccwr).toMatchObject({ id: 'ccwrgrid-point', source: 'ccwrgrid' });
+			expect((ccwr!.paint as Record<string, unknown>)['circle-color']).toEqual((waas!.paint as Record<string, unknown>)['circle-color']);
+			expect((ccwr!.paint as Record<string, unknown>)['circle-radius']).toEqual((waas!.paint as Record<string, unknown>)['circle-radius']);
+			expect(waas!.paint).toMatchObject({ 'circle-stroke-color': t.halo, 'circle-stroke-width': 1 });
+			expect(ccwr!.paint).toMatchObject({ 'circle-stroke-color': t.text, 'circle-stroke-width': 1.5 });
+			// The CCWR ring reads on either basemap (WCAG 1.4.11, 3:1).
+			for (const g of [basemapColours(dark).earth, basemapColours(dark).bg]) expect(contrast(t.text, g), `ring on ${g}`).toBeGreaterThanOrEqual(3);
+		}
+		// Each grid's value on its own side of its dot: WAAS under, A-pan above, CCWR left.
+		const anchors = ['mapgrid-label', 'ccwrgrid-label', 'apangrid-label'].map((id) => (style.layers.find((l) => l.id === id)!.layout as Record<string, unknown>)['text-anchor']);
+		expect(anchors).toEqual(['top', 'right', 'bottom']);
 	});
 
 	it('feeds an evaporation grid source each point with its value, its label in whole mm, and its value a year for the ramp', () => {
@@ -703,9 +731,9 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 		expect(evaporationGridData(null).features).toEqual([]);
 	});
 
-	it('draws the A-pan grid as a ring round the MAP grid’s dots, under them, its ramp rising and readable on either basemap', () => {
+	it('draws the A-pan grid as a ring round the MAP grids’ dots, under them, its ramp rising and readable on either basemap', () => {
 		const radius = (kind: 'apan') => ((evaporationGridLayers(kind, false, false).over[0]!.paint as Record<string, unknown>)['circle-radius'] as number[]).slice(-1)[0]!;
-		const mapRadius = ((mapGridLayers(false, false).over[0]!.paint as Record<string, unknown>)['circle-radius'] as number[]).slice(-1)[0]!;
+		const mapRadius = ((mapGridLayers('waas', false, false).over[0]!.paint as Record<string, unknown>)['circle-radius'] as number[]).slice(-1)[0]!;
 		expect(radius('apan')).toBeGreaterThan(mapRadius);
 		for (const ramp of [APAN_RAMP]) {
 			expect(ramp.map(([mm]) => mm)).toEqual([...ramp.map(([mm]) => mm)].sort((a, b) => a - b));

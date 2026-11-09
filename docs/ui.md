@@ -1225,7 +1225,12 @@ one at a time: an `alertdialog` with the question as its title, the detail
 under it, **Cancel** first (it takes the focus, so Enter keeps what a
 destructive question would remove) and a confirm button named for the action
 (red when it destroys something). Esc answers Cancel; focus returns to what
-asked. The farm view's note delete passes its words translated.
+asked. The farm view's note delete passes its words translated. A
+question may carry one extra choice, a checkbox unticked each time it is
+asked, with a list and a note under it as its description
+(`confirmWithOption({ …, option: { label, items, note } })` answers
+`{ ok, option }`, `option` true only when ticked and confirmed; the unit
+form's MAP grid pick uses it, § Network).
 `lib/noBrowserConfirm.test.ts` fails if `confirm(` comes back in app code.
 
 When a remove asks: each list asks only when something typed goes with the
@@ -3459,13 +3464,23 @@ itself.
   the unit's own runoff loses to groundwater (out of the catchment, at most
   the day's runoff) and gains from outside it, both 0 by default, under a
   note saying where the water goes and that neither is the unit's use; its
-  line reads "None" or "loses 1 500 m³/day · gains 20 m³/day". And last
+  line reads "None" or "loses 1 500 m³/day · gains 20 m³/day". A **Vary by
+  month** switch under it (engine 1.116.0, `MonthlyLossFields.svelte`,
+  `monthlyLosses.ts`) turns both into twelve month fields each (October to
+  September, starting at the one values, so nothing changes until a month is
+  edited); the one values then fold under "Set by month above instead" and
+  count again when it is cleared, and the line reads "loses 0–2 000 m³/day,
+  gains 0–300 m³/day by month". And last
   **Bed losses in the reach below** (engine ≥
   1.75.0, [model.md §2.6b](./model.md); on every kind of node, gauges and
   other water users too): the share of the flow lost (up to 100 %: with a daily maximum, WRSM's bed loss; over half without one, the run warns) and the
   most lost in a day, under a note saying where the water goes. On the outlet
   both are read-only (no reach below it) unless a share is left there to
-  clear; the cap is read-only while the share is 0 %. Each is a bordered card
+  clear; the cap is read-only while the share is 0 %. Its **Vary by month**
+  switch (engine 1.116.0) gives the share twelve month fields, with **A daily
+  cap by month** for the cap (unticked: no cap, or the one cap all year);
+  the line reads "5–30 % lost by month, at most 300–40 000 m³/day by
+  month". Each is a bordered card
   (a `<details>`, issue #521) whose tinted header band is its title and a
   line of its values now (`network/nodeSummary.ts` `sectionSummary`: "Dam
   300 000 m³ · starts 60 % · min 15 % · seepage 0 %/day", "Supply Dam only",
@@ -3512,11 +3527,71 @@ itself.
   (`node-share`; issue #616).
 - **MAP** (a unit's own mean annual precipitation, mm, issue #482): in a
   unit's Catchment area section, after the areas, an optional **MAP**
-  (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
-  a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only under Model settings' Flow generation, where **MAP from the
-  grid** can fill it and its source from a loaded MAP grid for every unit
-  at once. Clearing the MAP clears
+  (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, under it,
+  **Source of the MAP** (`node.mapMm`, `node.mapSource`): a choice of
+  **WAAS 2007 MAP**, **CCWR MAP** (the `WAAS-SWCape-2007` and `Lynch-2004`
+  grids, their short names in `map/mapGridNames.ts` `MAP_GRID_NAMES`; any
+  other loaded grid, such as the synthetic one, after them by its label) or
+  **Typed by hand** (`UnitMapSourceChoice.svelte`, logic in
+  `network/unitMapChoice.ts`; [maps.md § MAP for each
+  unit](./maps.md#map-for-each-unit)).
+  - **A grid** shows the MAP it gives this unit, read from MAP for each
+    unit's proposal for that grid (`GET …/map/unit-map?dataset=`, so an
+    editor's: the area-weighted mean over its parcel, with "93.3 % covered"
+    when the grid has values over 90–100 % of it). One it can't give is
+    disabled with the proposal's own reason under it: not loaded on this
+    server, no polygon, several parcels and none its area, under 90 %
+    covered, too many cells, or the proposal couldn't be read. Picking it
+    writes the MAP and its source line through that proposal's apply
+    (`POST …/map/unit-map` with `nodeIds`), so the line, the recorded
+    polygon and the History entry are exactly what Settings' **MAP from the
+    grid** writes; it is saved straight away, says so in the choice's live
+    notice, and the workspace reloads the model. Replacing a typed MAP asks
+    first ("Replace the typed MAP?"). The chosen grid shows its source
+    line under it, and **Take it again** when the grid now gives another
+    MAP (a redrawn parcel). Which grid a unit is on is read from its source
+    line, by the engine's `unitMapGridOfSource`, the recognition the
+    backend's one-grid rule (`grid_mixed`) uses.
+  - **One grid for the whole project.** Picking a grid while other units
+    hold another grid's MAP asks "Switch every unit to CCWR MAP?" ("1 unit
+    uses WAAS 2007 MAP now: Lower farm. …"); Yes applies the picked grid to
+    this unit and those units in one change, No changes nothing. Units
+    typed by hand, or with no MAP, keep theirs: they are no grid's, so they
+    don't mix. When a unit on another grid isn't covered by the picked one,
+    the grid is disabled, naming that unit and its grid: type its MAP by
+    hand or clear it on its form first (the backend would refuse the mix).
+  - **Typed or empty units: kept, or replaced on request** (the operator's
+    decision, 2026-11-09). Whenever the picked grid covers other units whose
+    MAP is typed by hand or empty, the question before the pick (the switch
+    above, "Replace the typed MAP?", or, with nothing else to ask, "Use
+    CCWR MAP for Upper farm?") says they keep what they have unless the box
+    below is ticked, and carries that box, unticked every time: "Also
+    replace the typed MAP of 1 unit with the CCWR MAP" ("empty MAP", or
+    "typed or empty MAP", as the units hold), with one line per unit under
+    it as its description ("Lower farm: typed 700 mm → 790 mm", "no MAP →
+    …"). Units the grid doesn't cover are named after the list and kept.
+    Ticked, they go in the same apply (`nodeIds`, `pickNodeIds`), one
+    change in History. The box is the shared confirm's `option`
+    (`confirmWithOption`, `common/confirm.svelte.ts`, drawn by
+    `ConfirmHost.svelte`), so a viewer (no picks) and unsaved model edits
+    (grids disabled) never reach it.
+  - **Typed by hand** is a model edit like any other: it keeps the MAP and
+    drops a grid's source line, so the required source field (under the
+    choice, its helper text as before) asks for one. Typing another number
+    over a grid's MAP does the same (`withUnitMap`): a grid's line never
+    stands beside a number the grid didn't give. The MAP field stays
+    editable while a grid is chosen.
+  - **Unsaved changes.** A grid saves straight to the project, so while the
+    model has unsaved changes the grids are disabled, each saying "Save or
+    discard your model changes first: a grid’s MAP is saved straight away."
+    (as Settings' panel and the Start sheet's Apply wait).
+  - **A viewer** sees the choice read-only (the proposal is an editor's, so
+    without each grid's MAP), with the unit's grid or Typed by hand chosen;
+    with no MAP there is nothing to show.
+
+  It is read only under Model settings' Flow generation, where **MAP from
+  the grid** can also fill every unit's MAP and source from one loaded MAP
+  grid at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
   `aria-invalid` with the message under its field, and blocks Save
   (`unitMapIssue` in `model/validate.ts`, the engine's `mapMmError`, as the
@@ -4761,22 +4836,33 @@ map" card) stays the schematic; this is the geography.
   unit's polygon (a farm parcel linked to it) is outlined heavier and named
   by its unit on the map, and the box lists them ("3 units, each outlined
   and named on the map.") with each polygon's own name when it differs and
-  its area; a name shows its polygon. **MAP grid** (`layers=mapgrid`, the
-  ramp as its swatch): on, one loaded MAP grid's points in view, each
-  coloured and labelled with its MAP ("812 mm"), the box saying how many,
-  from which grid and their range, the source line (with "Credit: …" when
-  the grid's attribution differs from its source; the Southwestern Cape
-  surface's credit also goes on the map's attribution control while its
-  points are drawn), a **Grid** picker when
-  more than one is loaded, and "Zoom in to see the MAP grid" or "This view
-  holds more than 5 000 of the grid’s points" when the view is too wide.
+  its area; a name shows its polygon. **WAAS 2007 MAP** (`layers=mapgrid`, the
+  ramp as its swatch) and, under it, **CCWR MAP** (`layers=ccwrgrid`, the
+  ramp with a bolder border, as its dots have), each its own toggle pinned
+  to one grid (the Southwestern Cape surface, `WAAS-SWCape-2007`; the
+  Lynch (2004) national grid, `Lynch-2004`), with no grid picker: on, that
+  grid's points in view, each coloured on the one ramp and labelled with
+  its MAP ("812 mm"; the WAAS 2007 MAP's under its dot, the CCWR MAP's to
+  its left), the box saying how many, from which grid and their range, the
+  source line (with "Credit: …" when the grid's attribution differs from
+  its source; each grid's credit also goes on the map's attribution control
+  while its points are drawn, both with both on), and, by the layer's own
+  name, "Zoom in to see the CCWR MAP", "This view holds more than 5 000 of
+  the grid’s points"; where that grid isn't loaded but the synthetic test
+  grid is (a dev laptop), the synthetic grid in its place, the source line
+  starting "No CCWR MAP on this server; showing the synthetic test grid in
+  its place." beside **Synthetic test data, never real rainfall.**; and
+  with neither, "There’s no CCWR MAP on this server yet, so there is
+  nothing to draw." (no command, issue #586 C5).
   **A-pan grid** (`layers=apangrid`, its ramp as its swatch): on, one
   loaded A-pan evaporation grid's points in view the same way, the year's
   total by default or a month picked under **Show** (Year (total), then
   October to September); the source line says what the values are
   ("Modelled A-pan equivalent … (WRC Atlas, not a measured pan)."), the WRC
-  Atlas grid is credited on the map while drawn, and with none loaded the
-  box says so ([maps.md § A-pan grid](./maps.md#a-pan-grid)).
+  Atlas grid is credited on the map while drawn (its name shown as "CCWR
+  A-pan"), and with none loaded the box says "There’s no A-pan grid on this
+  server yet, so there is nothing to draw." ([maps.md § A-pan
+  grid](./maps.md#a-pan-grid)).
   **DEM grid** (`layers=demgrid`, the elevation ramp as its swatch; not
   offered when an editor's delineation check finds no DEM): on, every 10th
   elevation-model cell each way in view, coloured and labelled with its
@@ -7415,14 +7501,20 @@ other sections.
   Save (the note is a warning box, tied to the select by
   `aria-describedby`). With no rule table and no stored choice there is
   nothing to choose, so the panel's one line (at the summary line's size, as
-  the other panels') says results are judged by the pragmatic EWR and links
+  the other panels') says results are judged by the daily EWR at the outflow
+  gauge, named for its source (`notMet.ts` `dailyEwrName`), and links
   to **Reserve rule tables**, named as that heading (issue #586), instead of
   showing a select. It never sets
   **EWR charge follows** (Reserve rules), the model input behind the daily
   charge, curtailment and water account: when the test the choice judges by
   (`headlineTest`: Automatic counts as a rule table whenever there is one)
   differs from the charge's, a line under the select says which test the
-  charge follows.
+  charge follows: the rule tables, or the daily EWR named for its source,
+  "the daily EWR (the DRM TAB file)" (`notMet.ts` `dailyEwrWithSource`;
+  since engine 1.77.0 the `'pragmatic'` charge source is the daily outlet
+  EWR, whichever source it comes from; until 1.116.0 these lines said "the
+  pragmatic EWR" whatever the source). The **EWR charge follows** select
+  names it the same way ("The daily EWR (the DRM TAB file)").
 - **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
   Project page's recent notes, `notes.ts` `noteHref`; an old
   `?tab=calibration#set-…`, from when that opened this page, goes on here
@@ -7552,7 +7644,8 @@ other sections.
   left out, and the fit line; where the daily EWR comes from and its volume; the
   reporting window (or the whole run) and the annual assurance threshold
   (Reporting); WR2012 on with its quaternary and MAR, or off; the rule
-  tables and what the EWR charge follows (nothing when there is none: the
+  tables and what the EWR charge follows ("the rule tables", or "the daily
+  EWR (the DRM TAB file)" named for the daily EWR's source; nothing when there is none: the
   panel's own line says so); how many data-quality limits differ from the
   defaults; the year classes; the outlook's season and planning share;
   whether an evidence rule is declared; automatic runs on or off.
@@ -7647,10 +7740,23 @@ two.
   **Typed or pasted S-pan, converted (WR90 / Taljaard)** (`SpanEntry.svelte`,
   lazy): 12 S-pan months typed, or pasted with **Fill the months**, the
   equation picked (Taljaard's warning; one under its floor disabled with the
-  month named), an optional note, and **Use as the A-pan**; and **A DWS
-  evaporation station** and **An evaporation grid**, each a link to its card
-  on Calibration ([maps.md § WR2012 evaporation by
-  quaternary](./maps.md#wr2012-evaporation-by-quaternary)). The month inputs
+  month named), an optional note, and **Use as the A-pan**; **CCWR A-pan
+  grid (catchment average)** (`EvaporationProposal.svelte` pinned to
+  `Atlas-Apan-2007`, `evaporation/ccwrApan.ts`, lazy): Evaporation from the
+  map's panel with its own heading and no grid picker, the WRC Atlas's
+  modelled A-pan equivalent averaged over the catchment boundary into the
+  one A-pan row (proposed, saved, cited and **Use as the A-pan evaporation
+  row** as on Calibration: "Saves now", asks first, waits while the form has
+  unsaved changes); when the server hasn't loaded that grid (production
+  until issue #755, a fresh clone) it says "The CCWR A-pan grid isn’t loaded
+  on this server" with the operator's import command, never another grid's
+  values; and **A DWS evaporation station** and **An evaporation grid**
+  (any other loaded grid: a PenPan A-pan, a reference-ET grid for GR4J's
+  PE), each a link to its card on Calibration ([maps.md § WR2012
+  evaporation by quaternary](./maps.md#wr2012-evaporation-by-quaternary),
+  [§ Evaporation from the map](./maps.md#evaporation-from-the-map)). Every
+  grid picker (Evaporation from the map's **Grid**, the Map's A-pan layer)
+  names `Atlas-Apan-2007` **CCWR A-pan**. The month inputs
   show 0.1 mm (`NumberInput` `decimals`); the stored value keeps its
   precision until edited. Then the A-pan (Oct–Sep), with **Paste from a
   spreadsheet…** while the typed A-pan is picked
@@ -9623,16 +9729,43 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   Runs & results' and the report's copies keep `h3`): until 2026-10-24 they
   were `h3`, so a screen reader's outline put them under "Days below the
   reserve, each water year":
-  **Reserve rules met, by month** (`#res-reserve`, `EwrAssurancePanel` with
-  a rule table; the panel's own name, *Reserve compliance by month*, stays
-  on the printable report and Compare runs). Without a rule table in the
-  run it is a one-line stub (`data-testid="reserve-stub"`, `river.ts`
-  `reserveStubText`) where the panel was simply absent and nothing said
-  why: "Needs a Reserve rule table: set one in Settings → Reserve rule
-  tables." linked to `?tab=settings#set-reserve` (a viewer reads "an editor
-  sets one …"), or, when the project has a table the run lacks, "This run
-  was made without the project’s Reserve rule table. Run the model again to
-  see it."; then
+  the **months met** (`#res-reserve`, `river/ReserveMonths.svelte`),
+  judged by the **daily EWR in use** or the **Reserve rule tables**. The
+  daily EWR's months (`ewr/EwrDailyMonthsPanel.svelte`, helpers in
+  `ewr/dailyMonths.ts`; engine ≥ 1.116.0, `summary.ewrDailyMonths`,
+  [model.md §2.9h](./model.md)) are headed for the run's daily EWR source
+  (`notMet.ts` `dailyMonthsHeading`: *Pragmatic EWR met, by month*, *Daily
+  EWR from the DRM TAB file met, by month*, *… the DRM percentile tables
+  …*), so they follow Model settings → EWR → Daily EWR from after a re-run
+  (a client hydrologist expected the months met to; until 1.116.0 the panel
+  read only the rule tables): the outlet's verdict line (*Outlet (Name): Met
+  in N of M months …*), tiles for months met, the longest run not met and
+  the deficit (Mm³), a line when months met had a daily EWR of 0 all month
+  (they count as met), the share of months met per month of the year as
+  bars, and a table by month of the year (years, met, met %, mean required
+  and mean simulated m³/s, deficit Mm³). A run with a rule table too has a
+  **Judged by** switch under the heading (a `.seg` of two `aria-pressed`
+  buttons, the daily EWR's name and *Reserve rule tables*); which shows
+  first is `river.ts` `monthsJudge`: the reader's pick, else the daily EWR,
+  unless the project judges its results by a rule table by choice
+  (`settings.ewrHeadline` `ruleTable`, not Automatic) or the run has no
+  daily months (made before 1.116.0); Runs & results' *by month of the year*
+  link under Reserve rules met asks for the tables (`&months=rules`,
+  `links.ts` `riverHref`). The page's menu names the panel as its heading
+  reads (`monthsMetHeading`). Without a rule table in the run there is no
+  switch, and a line under the daily months says what judging them by one
+  too needs (`data-testid="reserve-stub"`, `river.ts` `reserveStubText`):
+  "To judge the months by a Reserve rule table too: set one in Settings →
+  Reserve rule tables." linked to `?tab=settings#set-reserve` (a viewer
+  reads "an editor sets one …"), or, when the project has a table the run
+  lacks, "… Run the model again to judge the months by it too." A run
+  before 1.116.0 without a table says "Run the model again to see this for
+  the daily EWR."; a cap or full-allocation run read by a viewer kept from
+  the registered volumes says the months are for the project's editors and
+  owners. The tables' judgement is
+  **Reserve rules met, by month** (`EwrAssurancePanel`; the panel's own
+  name, *Reserve compliance by month*, stays on the printable report and
+  Compare runs); then
   **Days below the EWR, by month** (`#res-ewr-grid`, `EwrHeatmap`'s
   *EWR compliance by month* renamed here so the two monthly panels read
   apart, `river.ts` `RESERVE_MONTHS_HEADING` / `EWR_MONTHS_HEADING`; with the
@@ -9658,7 +9791,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   count days below the pragmatic EWR; the results are judged by the Reserve
   rule table at … instead." (`ewr/headline.ts` `heatmapHeadlineNote`, which
   RiverTab and the printable report pass as `headlineNote`); a unit's note,
-  which counts its charged shortfall, doesn't), and the **Water account**
+  which counts its charged shortfall, doesn't), **On the map**
+  (`#res-ewr-map`, below), and the **Water account**
   (`#res-water-account`). Then, under an `h2` **How sure, and what if** (a
   region, named as the menu's group), the run-it-yourself tools: the
   **Uncertainty bands** (`#res-uncertainty`), the **Sensitivity runs**
@@ -9679,6 +9813,47 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   the panel's heading ids, so a `#res-…` link focuses it. A tool with a
   result (or one loading, failing or running) shows in full. Each is
   described under [§ Runs & results](#runs--results), where it used to be.
+- **On the map** (`ewr/EwrUnitMap.svelte`, rules in `ewr/ewrMap.ts`,
+  `ewr-map.spec.ts`): the client's hydrologist asked for the Allocations
+  map's graphic here, each hydrological unit against its share of the EWR.
+  Folded until **Show the map** (`ewrMap=1`, a link, so Back folds it); only
+  then are the Map tab's features fetched and the map's code loaded: the
+  Allocations map's own component (`allocations/AllocationMap.svelte`, drawn
+  through a scheme, `ewrScheme`, as its two shadings are) and MapLibre after
+  it. Each unit's area on the Map tab (a farm parcel linked to it, the same
+  lookup as the Allocations map, `useMap.ts` `unitPolygons`) is shaded for
+  the run on the page, from `RunSummary.unitEwr` (engine ≥ 1.116.0,
+  [model.md §2.11c](./model.md#211c-each-units-ewr-met-engine--11160)): Z,
+  the EWR required at the unit, is its own share plus the shares of the
+  units above it, U its outflow. **Shade by** (`ewrMapMeasure=ratio`; the
+  default is left out of the URL, each pick a step Back returns from, a
+  reload keeps it): **Requirement met** (default), Σ MIN(U, Z) ÷ Σ Z, the
+  share of the requirement the flow covered day by day, at most 100 %; or
+  **Flow ÷ requirement**, Σ U ÷ Σ Z, which can pass 100 % and lets a wet
+  year's floods count (the card says so). The card says it is modelled,
+  what Z is in plain words, and that a unit with no EWR share shows "No EWR
+  share". Bands, in the Allocations map's colours (`bandColours`, both
+  themes, the labels' text at 4.5:1): green **Met or exceeded (100 % or
+  more)**, orange **Within 10 % (90–100 %)**, light red **10–50 % short
+  (50–90 %)**, red **Half or more short (under 50 %)**, no fill for **No
+  EWR share** (Σ Z = 0); each band holds its lower edge, a ratio a hair under
+  an edge from float dust counts as on it. Each unit carries its whole % as a
+  button (rounded down, so a label never shows the next band's edge: "99 %"
+  is within 10 %), named with its figures ("Kloof top: 87 % of the EWR
+  required met, … m³ of … m³ over the run. 10–50 % short."); a click, or a
+  unit's name in the table, opens it on Hydrological units for the run
+  (`?tab=supply&run=…&unit=…#res-farm`). The key names every band with how
+  many units on the map are in it, plus **No area on the map** with how
+  many have none, so the counts add up to every unit; under it **Every
+  hydrological unit's figures** (EWR required, EWR met or the flow, the
+  share and the band, worst first; it stacks on a phone) and the units with
+  no area listed with their % and band. A unit with an area that the run
+  doesn't have is a dashed outline, named under the map. A run from before
+  1.116.0 says to run the model again; a viewer withheld the figures
+  (`withheld` names `unitEwr`) is told they aren't shown. In the page's menu
+  after **Days below the EWR, by month**; not in `RIVER_ANCHORS` (it was
+  never on Runs & results, so no old link is forwarded to it), `links.ts`
+  `EWR_MAP_ANCHOR`.
 - **On this page.** A **EWR sections** menu ([§ On this page
   menu](#on-this-page-menu)): from 80rem of page (a 1440 px window,
   `RIVER_RAIL_FROM_REM`) a side index on the left of the panels, every group
@@ -9691,7 +9866,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   tables, when its heading is), **Days below the reserve, each water year**
   (the test the results are judged by, as the chart's heading), **Reserve
   rules met, by month** (always, as its stub says what it needs without a
-  table), **Days below the EWR, by month**, **Water account**, **Uncertainty
+  table), **Days below the EWR, by month**, **On the map**, **Water account**, **Uncertainty
   bands**, **Sensitivity runs**, **Outcome matrix** and **Seasonal outlook**, in three groups: The reserve; Water
   balance; How sure, and what if. On the bar the groups are named for screen
   readers only, its links evenly spaced (issue #162: the wider gaps between

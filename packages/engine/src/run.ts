@@ -29,6 +29,7 @@ import { apanDailyMm } from './evaporation/apanDaily';
 import { runDrought } from './drought/summary';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
+import { unitEwrMet } from './network/unitEwr';
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
 import { noFlowDays, servedWhileEwrFails } from './reserve/riverMeasures';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
@@ -62,6 +63,7 @@ import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology'
 import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
+import { assessDailyEwrMonths } from './reserve/dailyMonths';
 import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, withReserveTable, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
 import { naturalFlowFor, perUnitAreaKm2, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
@@ -609,7 +611,7 @@ function runNetworkIn(
 			...(capturing ? { captureAt: captureAt! } : {})
 		}
 	);
-	// What each EWR site's charge follows (engine ≥ 1.3.0, issue #64): the pragmatic EWR, or
+	// What each EWR site's charge follows (engine ≥ 1.3.0, issue #64): the daily EWR (whichever source, 1.77.0), or
 	// with settings.ewrChargeSource 'ruleTable' the site's rule-table requirement where it has one.
 	const chargeSites = ewrChargeSites(settings, siteNodes, topo.outflow, ewrAssurance, sim, simOutflow, ewr, ewrShort, days, nodes, warnings);
 	// Units served in full while an EWR site below them fails (engine ≥ 1.33.0, issue #71, ./reserve/riverMeasures.ts):
@@ -1343,6 +1345,8 @@ function runNetworkIn(
 			ewrCompliance: compliance,
 			ewrSplit: built.ewrSplit.info,
 			...(ewrAssurance.length ? { ewrAssurance: ewrAssurance.map((a) => a.report) } : {}),
+			// The daily EWR in use judged by whole months (engine ≥ 1.116.0, §2.9h), whatever its source.
+			...(topo.outflow >= 0 ? { ewrDailyMonths: assessDailyEwrMonths(startDate, days, ewr, simOutflow, historyDays) } : {}),
 			...(servedWhileFails.length ? { servedWhileEwrFails: servedWhileFails } : {}),
 			...(wr2012 ? { wr2012 } : {}),
 			dataQuality: { observedAgreement: agreement, seriesChecks: checks, doubleMass },
@@ -1358,6 +1362,18 @@ function runNetworkIn(
 			...(apanDaily ? { apanDaily } : {}),
 			...(et0Daily ? { et0Daily } : {}),
 			...(assurance ? { supplyAssurance: assurance } : {}),
+			// Each unit's EWR required at it and met by the flow passing it (engine ≥ 1.116.0, ./network/unitEwr.ts, §2.11c).
+			unitEwr: unitEwrMet(
+				[...nodes.flatMap((n, i) => (n.kind === 'farm' ? [i] : [])), ...nodes.flatMap((n, i) => (n.kind === 'user' ? [i] : []))].map((i) => ({
+					nodeId: nodes[i]!.id,
+					name: nodes[i]!.name,
+					kind: nodes[i]!.kind as 'farm' | 'user',
+					outflow: sim.nodes[i]!.outflow,
+					required: sim.nodes[i]!.ewrCumulative,
+					shortfall: sim.nodes[i]!.ewrShortfall
+				})),
+				days
+			),
 			warnings,
 			// Stable codes for the warnings that have one (engine ≥ 1.102.0, ./warningCodes.ts, issue #611).
 			warningCodes: scope.codesOf(warnings)
@@ -2032,7 +2048,7 @@ export function buildNetworkPlan(
 	}
 	const claimsOn = (w: string[] | null) => {
 		const share = plan.nodes.map((n) => n.share);
-		applySeniorClaims(plan.nodes, seniorClaims(nodes, topo, share, reaches, days, users, w, cutOf), !!restriction?.userCut);
+		applySeniorClaims(plan.nodes, seniorClaims(nodes, topo, share, reaches, days, month, users, w, cutOf), !!restriction?.userCut);
 	};
 	claimsOn(warnings);
 	// A calibration candidate's shares move with its parameters: the shares, then the claims made from them.
@@ -2598,6 +2614,8 @@ function seniorClaims(
 	share: ArrayLike<number>,
 	reaches: readonly (PlanReachLoss | undefined)[],
 	days: number,
+	/** Calendar month (1–12) of each day: a reach's losses may be set by month (engine 1.116.0). */
+	month: ArrayLike<number>,
 	users: ReadonlyMap<number, OtherUser>,
 	warnings: string[] | null,
 	/**
@@ -2670,7 +2688,7 @@ function seniorClaims(
 					for (let t = 0; t < days; t++) {
 						let v = (pump === undefined ? dem[t]! : Math.min(dem[t]!, pump)) * f;
 						for (let a = 0; a < path.length; a++) {
-							const g = reachGross(reaches[path[a]!]!, v);
+							const g = reachGross(reaches[path[a]!]!, v, month[t]!);
 							add[a]![t]! += g - v;
 							v = g;
 						}
@@ -3000,11 +3018,11 @@ function catchmentRunoffCoefficient(
  * The plan as the natural flow crosses it (./network/reachLoss.ts routeNatural), or null when no reach loses
  * (engine ≥ 1.76.0) and no unit loses or gains base flow (engine 1.86.0, ./network/baseflow.ts).
  */
-export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>): NaturalReaches | null {
+export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream' | 'month'>): NaturalReaches | null {
 	const reach = plan.nodes.map((n) => n.reachLoss);
 	const baseflow = plan.nodes.map((n) => n.baseflow);
 	const hasBase = baseflow.some((p) => p);
-	return reach.some((p) => p) || hasBase ? { order: plan.order, upstream: plan.upstream, reach, ...(hasBase ? { baseflow } : {}) } : null;
+	return reach.some((p) => p) || hasBase ? { order: plan.order, upstream: plan.upstream, reach, month: plan.month, ...(hasBase ? { baseflow } : {}) } : null;
 }
 
 /**
@@ -3015,7 +3033,7 @@ export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upst
  * (net of WRSM's Bedloss) are compared with: the run's WR2012 check and the
  * calibration's MAR penalty. null when no reach loses or there is no outlet.
  */
-export function naturalAtOutlet(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>, outflow: number, natural: ArrayLike<number>): Float64Array | null {
+export function naturalAtOutlet(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream' | 'month'>, outflow: number, natural: ArrayLike<number>): Float64Array | null {
 	const r = naturalReaches(plan);
 	if (!r || outflow < 0) return null;
 	// Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h): each unit's own runoff, and natural flow is their sum (no rest).
@@ -3184,7 +3202,7 @@ function ewrChargeSites(
 ): { node: number; required: ArrayLike<number>; shortfall: ArrayLike<number>; ruleTable: boolean }[] {
 	const byRule = settings.ewrChargeSource === 'ruleTable';
 	const rules = new Map(byRule ? assessed.map((a) => [a.node, a.requiredM3Day]) : []);
-	if (byRule && rules.size === 0) warnings.push('the EWR charge is set to follow the Reserve rule tables, but no EWR site has one: it follows the pragmatic EWR');
+	if (byRule && rules.size === 0) warnings.push('the EWR charge is set to follow the Reserve rule tables, but no EWR site has one: it follows the daily EWR');
 	return siteNodes.map((node) => {
 		const isOutlet = node === outflow;
 		const required = isOutlet ? ewr : sim.nodes[node]!.ewrCumulative;
@@ -3210,7 +3228,7 @@ function ewrChargeSites(
 		if (pragmaticDays) {
 			const name = nodes[node]!.name;
 			warnings.push(
-				`EWR charge at ${isOutlet ? `the outlet (${name})` : name}: ${pragmaticDays} day${pragmaticDays === 1 ? '' : 's'} outside a complete calendar month follow${pragmaticDays === 1 ? 's' : ''} the pragmatic EWR, since the rule table's requirement is monthly`
+				`EWR charge at ${isOutlet ? `the outlet (${name})` : name}: ${pragmaticDays} day${pragmaticDays === 1 ? '' : 's'} outside a complete calendar month follow${pragmaticDays === 1 ? 's' : ''} the daily EWR, since the rule table's requirement is monthly`
 			);
 		}
 		return { node, required: req, shortfall: sh, ruleTable: true };

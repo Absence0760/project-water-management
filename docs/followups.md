@@ -669,6 +669,31 @@ open:
       worked values, and the method text naming the version. Trigger: a copy
       of the paper, or the validation showing PenPan's bias is too large.
 
+## A-pan for each unit from the CCWR grid (on hold, 2026-11-09)
+
+The operator first asked that, with the CCWR A-pan grid chosen, each
+hydrological unit run on its own monthly A-pan (its average over the unit's
+outline), in the crop demand and in the runoff model. They then narrowed the
+scope to the catchment average only ("Leave the model running on catchment
+A-pan evaporation for now"), which Demand's **CCWR A-pan grid (catchment
+average)** option is. On hold, not cancelled:
+
+- [ ] **Per-unit A-pan from the CCWR grid.** The operator's answers for when
+      it comes back (2026-11-09): (1) a dam evaporates at its own unit's
+      A-pan, and a dam outside every unit at the area-weighted catchment
+      mean; (2) a daily A-pan record is ignored while the per-unit grid is
+      the source; (3) a unit under 90 % covered by the grid runs on the
+      covered units' area-weighted mean, with a run warning and a line in Run
+      readiness. An engine draft with passing tests (18 of 18) was never
+      committed: it is kept outside the repo, in the gitignored
+      `reviews/per-unit-apan-2026-11-09/` of the main checkout on the laptop
+      it was written on (`per-unit-engine.patch`, `apanUnits.ts`,
+      `run.apanUnits.test.ts`), so treat it as a starting point only. Durable
+      fix: an engine change (A-pan per unit in demand, GR4J's PE and dam
+      evaporation, an ENGINE_VERSION bump, docs/model.md), the Demand option
+      switching to per unit, tests and the cross-check. Trigger: the operator
+      asks for it again, after the Atlas grids are loaded (issue #755).
+
 ## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
 
 Rounds 1 to 4 of 2026-10-29 (PR #655) built #621's register row, the `climate.delta`
@@ -5308,7 +5333,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
 - [ ] **Load the Southwestern Cape MAP surface in production** (operator;
       issue #560; deployment.md § Reference datasets). The code allows it
       as dataset `WAAS-SWCape-2007`; nothing is loaded yet, so production's
-      MAP grid layer and *MAP from the grid* have no grid. Steps: cut the
+      WAAS 2007 MAP layer and *MAP from the grid* have no grid. Steps: cut the
       grid to the client's area with `pnpm import:map-grid … --bbox … --out`,
       upload it to the reference bucket, run `load-reference.yml` with
       `kind=map-grid`. Then, in the app, check the typed unit MAPs against it

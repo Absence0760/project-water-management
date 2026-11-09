@@ -3,6 +3,7 @@
 import { pumpUnit, riverToDamUnit, type FlowUnit } from './flowUnit.svelte';
 import { estimatedDamAreaM2, onRiverDam, RETURN_FLOW_SLACK, type NetworkNode, type NodeKind } from '@water-management/engine';
 import { fmtNum } from '#lib/format/number.js';
+import { reachLoses, setByMonth } from './monthlyLosses';
 
 export type NodeNumberKey =
 	| 'areaKm2'
@@ -347,23 +348,41 @@ export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day' || f
 export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
 
 /** Why a field isn't used on this node (fieldUnused): one id per reason, so the form can name each reason once. */
-export type UnusedReason = 'onRiver' | 'outlet' | 'noLoss' | 'noDam';
+export type UnusedReason = 'onRiver' | 'outlet' | 'noLoss' | 'noDam' | 'byMonth';
 
 const UNUSED_TEXT: Record<UnusedReason, string> = {
 	onRiver: 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.',
 	outlet: 'Not used: the outlet has no reach below it in the model.',
 	noLoss: 'Not used: no bed losses (the share is 0 %). Enter a share to cap it.',
-	noDam: 'Not used: no dam (capacity 0). Enter a capacity to use it.'
+	noDam: 'Not used: no dam (capacity 0). Enter a capacity to use it.',
+	byMonth: 'Not used: set by month above.'
 };
 
-type UnusedNode = Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3' | 'downstreamNodeId' | 'reachLossFrac'>>;
+type UnusedNode = Pick<NetworkNode, 'pctUpstreamToDam'> &
+	Partial<
+		Pick<
+			NetworkNode,
+			| 'damCapacityM3'
+			| 'downstreamNodeId'
+			| 'reachLossFrac'
+			| 'reachLossMaxM3Day'
+			| 'baseflowLossM3Day'
+			| 'baseflowGainM3Day'
+			| 'reachLossFracMonthly'
+			| 'reachLossMaxMonthlyM3Day'
+			| 'baseflowLossMonthlyM3Day'
+			| 'baseflowGainMonthlyM3Day'
+		>
+	>;
 
 /** fieldUnused's reason, as an id. */
 export function unusedReason(f: NodeField, n: UnusedNode, form = false): UnusedReason | null {
 	if (f.key === 'divertCapacityM3Day' && onRiverDam(n)) return 'onRiver'; // gitleaks:allow (a field name, not a secret)
 	// Bed losses (engine ≥ 1.75.0) are in the reach below: none below the outlet. One left there stays editable so it can be cleared.
-	if (f.group === 'reach' && n.downstreamNodeId === null && !((n.reachLossFrac ?? 0) > 0)) return 'outlet';
-	if (f.key === 'reachLossMaxM3Day' && !((n.reachLossFrac ?? 0) > 0)) return 'noLoss';
+	if (f.group === 'reach' && n.downstreamNodeId === null && !reachLoses(n)) return 'outlet';
+	// A field whose monthly row is set (engine 1.116.0) is replaced by it: the row is edited in its place.
+	if (setByMonth(f.key, n)) return 'byMonth';
+	if (f.key === 'reachLossMaxM3Day' && !reachLoses(n)) return 'noLoss';
 	if (!form) return null;
 	if (f.group === 'dam' && f.key !== 'damCapacityM3' && !((n.damCapacityM3 ?? 0) > 0)) return 'noDam';
 	return null;
@@ -393,6 +412,8 @@ export function unusedLine(r: UnusedReason): { why: string; fix: string } {
 			return { why: 'Not used with no bed losses (the share is 0 %)', fix: 'Enter a share to cap it.' };
 		case 'noDam':
 			return { why: 'Not used without a dam (capacity 0)', fix: 'Enter a capacity to use these.' };
+		case 'byMonth':
+			return { why: 'Set by month above instead', fix: 'Clear Vary by month to use the one value again.' };
 	}
 }
 

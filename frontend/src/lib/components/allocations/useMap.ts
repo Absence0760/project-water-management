@@ -248,7 +248,7 @@ export interface MapShading {
  */
 export interface MapScheme {
 	/** Which shading: another id has other layers, so the map restyles. */
-	id: 'use' | 'registered';
+	id: 'use' | 'registered' | 'ewr';
 	layers: (dark: boolean) => Layer[];
 	colours: (dark: boolean) => Record<string, { fill: string; text: string }>;
 	/** A unit's label's accessible name. */
@@ -290,17 +290,7 @@ const BAND_RANK: Record<UseBand, number> = { far: 0, over: 1, unregistered: 2, n
  * order to look into them (furthest above first), then by name.
  */
 export function useShading(c: AllocationComparison, features: readonly MapFeature[], source: UseSource, waterYear: number | null, measure: MapMeasure = 'use'): UseShading {
-	const byNode = new Map<string, { featureId: string; geometry: Polygonal; area: number }[]>();
-	for (const f of features) {
-		if (f.kind !== 'farm_parcel' || !f.nodeId || !isPolygonal(f.geometry)) continue;
-		const list = byNode.get(f.nodeId) ?? [];
-		list.push({ featureId: f.id, geometry: f.geometry, area: f.areaM2 ?? 0 });
-		byNode.set(f.nodeId, list);
-	}
-	const placed = (nodeId: string) => {
-		const ps = (byNode.get(nodeId) ?? []).slice().sort((a, b) => b.area - a.area);
-		return { polygons: ps.map(({ featureId, geometry }) => ({ featureId, geometry })), at: ps[0] ? interiorPoint(ps[0].geometry) : null };
-	};
+	const { placed, nodeIds, names } = unitPolygons(features);
 	const drawn: ShadedUnit[] = [];
 	const unplaced: ShadedUnit[] = [];
 	const inRun = new Set<string>();
@@ -313,12 +303,38 @@ export function useShading(c: AllocationComparison, features: readonly MapFeatur
 	}
 	const rank = (u: ShadedUnit) => (u.band ? BAND_RANK[u.band] : 6);
 	unplaced.sort((a, b) => rank(a) - rank(b) || (b.use?.ratio ?? 0) - (a.use?.ratio ?? 0) || a.name.localeCompare(b.name));
+	return { drawn, unplaced, notInRun: notInRunOf(nodeIds, inRun, names, placed) };
+}
+
+/**
+ * The Map tab's unit polygons (a farm_parcel linked to a unit, docs/maps.md §
+ * Hydrological units layer), for each map that shades the units (this one,
+ * registeredMap.ts, ewr/ewrMap.ts): a unit's polygons, largest first, and where
+ * its label sits (inside the largest; null without one), every unit id with a
+ * polygon, and the units' names as the features carry them.
+ */
+export function unitPolygons(features: readonly MapFeature[]) {
+	const byNode = new Map<string, { featureId: string; geometry: Polygonal; area: number }[]>();
+	for (const f of features) {
+		if (f.kind !== 'farm_parcel' || !f.nodeId || !isPolygonal(f.geometry)) continue;
+		const list = byNode.get(f.nodeId) ?? [];
+		list.push({ featureId: f.id, geometry: f.geometry, area: f.areaM2 ?? 0 });
+		byNode.set(f.nodeId, list);
+	}
+	const placed = (nodeId: string): Pick<DrawnUnit, 'polygons' | 'at'> => {
+		const ps = (byNode.get(nodeId) ?? []).slice().sort((a, b) => b.area - a.area);
+		return { polygons: ps.map(({ featureId, geometry }) => ({ featureId, geometry })), at: ps[0] ? interiorPoint(ps[0].geometry) : null };
+	};
 	const names = new Map(features.filter((f) => f.nodeId && f.nodeName).map((f) => [f.nodeId!, f.nodeName!]));
-	const notInRun: UnitNotInRun[] = [...byNode.keys()]
+	return { placed, nodeIds: [...byNode.keys()], names };
+}
+
+/** The polygons of units a run doesn't have (added since it ran), by name: drawn as a dashed outline. */
+export function notInRunOf(nodeIds: readonly string[], inRun: ReadonlySet<string>, names: ReadonlyMap<string, string>, placed: (nodeId: string) => Pick<DrawnUnit, 'polygons' | 'at'>): UnitNotInRun[] {
+	return nodeIds
 		.filter((id) => !inRun.has(id))
 		.map((id) => ({ nodeId: id, name: names.get(id) ?? 'A hydrological unit', ...placed(id) }))
 		.sort((a, b) => a.name.localeCompare(b.name));
-	return { drawn, unplaced, notInRun };
 }
 
 /** The map's GeoJSON: each drawn unit's polygons with its band, and the polygons of units not in the run. */

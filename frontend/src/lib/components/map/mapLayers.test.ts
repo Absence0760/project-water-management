@@ -25,6 +25,8 @@ import {
 	layersStatus,
 	MAP_GRID_BBOX_MAX_DEG,
 	mapGridViewBbox,
+	MAP_GRID_KINDS,
+	MAP_GRIDS,
 	mapLabel,
 	QUATERNARY_BBOX_MAX_DEG,
 	quaternaryBbox,
@@ -66,10 +68,11 @@ describe('layers in the URL', () => {
 		expect(new URLSearchParams(three).get('layers')).toBe('quaternaries,rivers,relief');
 	});
 
-	it('takes the units, the MAP grid and the CHIRPS grid as layers, each on and off on its own', () => {
-		const all = ['chirps', 'mapgrid', 'units'].reduce((q, l) => withLayer(q, l as 'units', true), '?tab=map');
-		expect(new URLSearchParams(all).get('layers')).toBe('units,mapgrid,chirps');
-		expect(new URLSearchParams(withLayer(all, 'mapgrid', false)).get('layers')).toBe('units,chirps');
+	it('takes the units, the two MAP grids and the CHIRPS grid as layers, each on and off on its own', () => {
+		const all = ['chirps', 'ccwrgrid', 'mapgrid', 'units'].reduce((q, l) => withLayer(q, l as 'units', true), '?tab=map');
+		expect(new URLSearchParams(all).get('layers')).toBe('units,mapgrid,ccwrgrid,chirps');
+		expect(new URLSearchParams(withLayer(all, 'mapgrid', false)).get('layers')).toBe('units,ccwrgrid,chirps');
+		expect(new URLSearchParams(withLayer(all, 'ccwrgrid', false)).get('layers')).toBe('units,mapgrid,chirps');
 		expect([...layersOn(new URLSearchParams('layers=chirps,units,-channels'))]).toEqual(['units', 'chirps']);
 	});
 });
@@ -153,6 +156,18 @@ describe('unitLabels', () => {
 		expect(x).toBeLessThan(21.4);
 		expect(y).toBeGreaterThan(-33.7);
 		expect(y).toBeLessThan(-33.6);
+	});
+});
+
+describe('the MAP grids (docs/maps.md § MAP grid)', () => {
+	it('are the WAAS 2007 MAP, still `mapgrid` so a view shared before keeps working, and the CCWR MAP, each pinned to one dataset', () => {
+		expect(MAP_GRID_KINDS).toEqual(['waas', 'ccwr']);
+		expect(MAP_GRIDS).toEqual({
+			waas: { layer: 'mapgrid', label: 'WAAS 2007 MAP', dataset: 'WAAS-SWCape-2007' },
+			ccwr: { layer: 'ccwrgrid', label: 'CCWR MAP', dataset: 'Lynch-2004' }
+		});
+		expect(MAP_LAYERS.indexOf('ccwrgrid')).toBe(MAP_LAYERS.indexOf('mapgrid') + 1);
+		expect([...layersOn(new URLSearchParams('layers=mapgrid'))]).toEqual(['channels', 'mapgrid']);
 	});
 });
 
@@ -293,33 +308,41 @@ describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
 		expect(mapCredits([{ kind: 'dam', properties: { credit: 'jrc-water' } }, { kind: 'river', properties: { credit: 'hydrorivers' } }])).toEqual(['hydrorivers', 'jrc-water']);
 	});
 
-	it('credits the Southwestern Cape MAP surface while the MAP grid layer draws a grid stored with its credit line (issue #560)', () => {
+	it('credits the Southwestern Cape MAP surface while a MAP grid layer draws a grid stored with its credit line (issue #560)', () => {
 		const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
-		expect(mapCredits([], false, waas)).toEqual(['waas-map']);
-		expect(mapCredits([dam, reach], false, waas)).toEqual(['hydrorivers', 'jrc-water', 'waas-map']);
+		expect(mapCredits([], false, [waas, null])).toEqual(['waas-map']);
+		expect(mapCredits([dam, reach], false, [waas, null])).toEqual(['hydrorivers', 'jrc-water', 'waas-map']);
 		// No grid drawn, the synthetic grid, or another grid's line: no credit.
-		expect(mapCredits([], false, null)).toEqual([]);
-		expect(mapCredits([], false, 'Synthetic MAP grid (invented rainfall over region Z), water-management test fixture')).toEqual([]);
-		expect(mapCredits([], false, `${waas} (edited)`)).toEqual([]);
+		expect(mapCredits([], false, [null, null])).toEqual([]);
+		expect(mapCredits([], false, ['Synthetic MAP grid (invented rainfall over region Z), water-management test fixture', null])).toEqual([]);
+		expect(mapCredits([], false, [`${waas} (edited)`, null])).toEqual([]);
 		expect(MAP_CREDIT_TEXT['waas-map']).toBe('MAP grid: WAAS (2007), Beuster Clarke & Associates');
 	});
 
-	it('credits the Lynch (2004) grid while the MAP grid layer draws a grid stored with the Atlas’s citation', () => {
+	it('credits the Lynch (2004) grid while a MAP grid layer draws a grid stored with the Atlas’s citation', () => {
 		const lynch = 'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
-		expect(mapCredits([], false, lynch)).toEqual(['lynch-map']);
-		expect(mapCredits([dam, reach], false, lynch)).toEqual(['hydrorivers', 'jrc-water', 'lynch-map']);
-		expect(mapCredits([], false, `${lynch}.`)).toEqual([]);
+		expect(mapCredits([], false, [null, lynch])).toEqual(['lynch-map']);
+		expect(mapCredits([dam, reach], false, [null, lynch])).toEqual(['hydrorivers', 'jrc-water', 'lynch-map']);
+		expect(mapCredits([], false, [null, `${lynch}.`])).toEqual([]);
 		expect(MAP_CREDIT_TEXT['lynch-map']).toBe('MAP grid: Lynch (2004), WRC Atlas');
+	});
+
+	it('credits both MAP grids while the WAAS 2007 MAP and the CCWR MAP are both drawn, WAAS first, each once', () => {
+		const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
+		const lynch = 'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
+		expect(mapCredits([], false, [waas, lynch])).toEqual(['waas-map', 'lynch-map']);
+		expect(mapCredits([], false, [lynch, waas])).toEqual(['waas-map', 'lynch-map']);
+		expect(mapCredits([dam], true, [waas, lynch])).toEqual(['hydrorivers', 'jrc-water', 'waas-map', 'lynch-map']);
 	});
 
 	it('credits the WRC Atlas’s A-pan grid while its layer draws a grid stored with its citation, linking to its own section', () => {
 		const apan = 'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06';
 		const lynch = 'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
-		expect(mapCredits([], false, null, [apan])).toEqual(['atlas-apan']);
-		expect(mapCredits([dam], false, lynch, [apan])).toEqual(['jrc-water', 'lynch-map', 'atlas-apan']);
+		expect(mapCredits([], false, [], [apan])).toEqual(['atlas-apan']);
+		expect(mapCredits([dam], false, [null, lynch], [apan])).toEqual(['jrc-water', 'lynch-map', 'atlas-apan']);
 		// Nothing drawn, or a grid with another credit line (an operator's own, the synthetic one): no Atlas credit.
-		expect(mapCredits([], false, null, [null])).toEqual([]);
-		expect(mapCredits([], false, null, ['Invented A-pan grid', `${apan}.`])).toEqual([]);
+		expect(mapCredits([], false, [], [null])).toEqual([]);
+		expect(mapCredits([], false, [], ['Invented A-pan grid', `${apan}.`])).toEqual([]);
 		expect(MAP_CREDIT_TEXT['atlas-apan']).toBe('A-pan grid: WRC Atlas (modelled)');
 		// One credit per licensed source the map draws: no S-pan grid credit since the option was removed (issue #738).
 		expect(Object.keys(MAP_CREDIT_TEXT)).toEqual(['hydrorivers', 'jrc-water', 'waas-map', 'lynch-map', 'atlas-apan']);

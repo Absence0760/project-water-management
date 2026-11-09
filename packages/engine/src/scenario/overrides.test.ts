@@ -233,6 +233,37 @@ describe('applyScenario: each op', () => {
 		expect(nodeOf(r.input, 'A')!.downstreamNodeId).toBe('G');
 	});
 
+	it('node.set takes bed losses and base flow by month (engine 1.116.0): 12 values in range, units only for base flow, and refuses a one value its row replaces', () => {
+		const wet = [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+		const ok = one({ op: 'node.set', nodeId: 'A', field: 'reachLossFracMonthly', value: wet });
+		expect(ok.problems).toEqual([]);
+		expect(nodeOf(ok.input, 'A')!.reachLossFracMonthly).toEqual(wet);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'baseflowGainMonthlyM3Day', value: new Array(12).fill(300) }).problems).toEqual([]);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'reachLossMaxMonthlyM3Day', value: null }).problems).toEqual([]);
+		// Refused: a wrong length, a negative month, a share above 1, base flow on a gauge.
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'reachLossFracMonthly', value: wet.slice(1) }).problems[0]).toMatch(/12 monthly values/);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'baseflowLossMonthlyM3Day', value: [...new Array(11).fill(1), -1] }).problems[0]).toMatch(/month 12/);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'reachLossFracMonthly', value: [...wet.slice(1), 1.2] }).problems[0]).toMatch(/month 12/);
+		expect(one({ op: 'node.set', nodeId: 'G', field: 'baseflowLossMonthlyM3Day', value: new Array(12).fill(1) }).problems[0]).toMatch(/can't be set on a gauge/);
+		// A gauge carries bed losses by month (positive control for the kind rule).
+		const b = base();
+		b.model.nodes.push(node('W', { name: 'Weir', kind: 'gauge', downstreamNodeId: 'G', areaKm2: 0, divertCapacityM3Day: 0 }));
+		expect(one({ op: 'node.set', nodeId: 'W', field: 'reachLossFracMonthly', value: wet }, b).problems).toEqual([]);
+		// With the row set, the one share it replaces is refused (the run would be the base's); cleared first, it is taken.
+		const rowed = base();
+		Object.assign(nodeOf(rowed, 'A')!, { reachLossFracMonthly: wet });
+		const r = one({ op: 'node.set', nodeId: 'A', field: 'reachLossFrac', value: 0.4 }, rowed);
+		expect(r.problems[0]).toMatch(/reachLossFrac is set by month on Farm A \(reachLossFracMonthly\): change that row, or set it to null first/);
+		const cleared = applyScenario(rowed, [
+			{ op: 'node.set', nodeId: 'A', field: 'reachLossFracMonthly', value: null },
+			{ op: 'node.set', nodeId: 'A', field: 'reachLossFrac', value: 0.4 }
+		]);
+		expect(cleared.problems).toEqual([]);
+		expect(nodeOf(cleared.input, 'A')!.reachLossFrac).toBe(0.4);
+		// The cap it doesn't replace is still taken beside the share row.
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'reachLossMaxM3Day', value: 500 }, rowed).problems).toEqual([]);
+	});
+
 	it('node.set refuses a duplicate name (compare matches by name across copies)', () => {
 		const r = one({ op: 'node.set', nodeId: 'A', field: 'name', value: 'farm b' });
 		expect(r.problems[0]).toMatch(/duplicate hydrological unit name/);

@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, destinationsProblem, diversionMonthsProblem, GA538_GROUNDWATER_RATES, hasMonthlyDiversion, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, transferDestinations, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { baselineEwrRules, cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, destinationsProblem, diversionMonthsProblem, GA538_GROUNDWATER_RATES, hasMonthlyDiversion, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, transferDestinations, unitMapGridOfSource, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -148,8 +148,15 @@ export function unitMapProblem(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>): { f
 
 export const unitMapIssue = (n: Pick<NetworkNode, 'mapMm' | 'mapSource'>): string | null => unitMapProblem(n)?.message ?? null;
 
-/** The unit's MAP set from its field: clearing it clears its source too (a source without a MAP says nothing). */
+/**
+ * The unit's MAP set from its field: clearing it clears its source too (a
+ * source without a MAP says nothing), and a number other than a grid's drops
+ * that grid's source line (the engine's unitMapGridOfSource), so the MAP is
+ * typed by hand and asks for its source: a grid's line never stands beside a
+ * number the grid didn't give (docs/maps.md § MAP for each unit).
+ */
 export function withUnitMap(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>, mm: number | null): void {
+	if (mm !== n.mapMm && unitMapGridOfSource(n.mapSource) !== null) n.mapSource = '';
 	n.mapMm = mm;
 	if (mm === null) n.mapSource = null;
 }
@@ -238,12 +245,20 @@ export function validateModel(model: ProjectModel, opts: { baseline?: boolean } 
 		if (!inRange(n.reachLossFrac ?? 0, 0, REACH_LOSS_FRAC_MAX))
 			issues.push({ area: 'network', itemId: n.id, message: `${label}: the share of the flow lost in the reach below must be between 0% and ${REACH_LOSS_FRAC_MAX * 100}%.` });
 		if (!inRange(n.reachLossMaxM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the most lost in the reach below in a day can't be negative.` });
-		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0)
+		// By month (engine 1.116.0): 12 values each, in the same ranges.
+		const badRow = (r: number[] | null | undefined, max: number) => !!r && (r.length !== 12 || r.some((v) => !inRange(v, 0, max)));
+		if (badRow(n.reachLossFracMonthly, REACH_LOSS_FRAC_MAX))
+			issues.push({ area: 'network', itemId: n.id, message: `${label}: the bed losses by month need 12 shares between 0% and ${REACH_LOSS_FRAC_MAX * 100}%.` });
+		if (badRow(n.reachLossMaxMonthlyM3Day, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the bed losses' cap by month needs 12 values, none negative.` });
+		if (badRow(n.baseflowLossMonthlyM3Day, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow loss by month needs 12 values, none negative.` });
+		if (badRow(n.baseflowGainMonthlyM3Day, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow gain by month needs 12 values, none negative.` });
+		if (n.downstreamNodeId === null && ((n.reachLossFrac ?? 0) > 0 || (n.reachLossFracMonthly ?? []).some((v) => v > 0)))
 			issues.push({ area: 'network', itemId: n.id, message: `${label}: the outlet has no reach below it in the model; set its bed losses to 0%.` });
 		// A unit's base-flow loss and gain (engine 1.86.0, issue #523 B1), as the API checks them: sizes ≥ 0, units only.
 		if (!inRange(n.baseflowLossM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow loss can't be negative.` });
 		if (!inRange(n.baseflowGainM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the base-flow gain can't be negative.` });
-		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0))
+		const anyMonth = (r: number[] | null | undefined) => (r ?? []).some((v) => v !== 0);
+		if (n.kind !== 'farm' && ((n.baseflowLossM3Day ?? 0) !== 0 || (n.baseflowGainM3Day ?? 0) !== 0 || anyMonth(n.baseflowLossMonthlyM3Day) || anyMonth(n.baseflowGainMonthlyM3Day)))
 			issues.push({ area: 'network', itemId: n.id, message: `${label}: only a hydrological unit has a base-flow loss or gain; set both to 0.` });
 		// A unit's MAP (issue #482), as the API checks it.
 		const map = unitMapIssue(n);

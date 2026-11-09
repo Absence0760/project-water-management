@@ -29,6 +29,9 @@
 	import DemandObjectFields from './DemandObjectFields.svelte';
 	import SupplyFields from './SupplyFields.svelte';
 	import RiverToDamFields from './RiverToDamFields.svelte';
+	import MonthlyLossFields from './MonthlyLossFields.svelte';
+	import { sectionByMonth } from './monthlyLosses';
+	import UnitMapSourceChoice from './UnitMapSourceChoice.svelte';
 	import FieldHistoryLine from '#lib/components/history/FieldHistoryLine.svelte';
 	import ExplainSwitch from '#lib/components/common/ExplainSwitch.svelte';
 	import Fold from '#lib/components/common/Fold.svelte';
@@ -64,8 +67,17 @@
 		transfersLine = null,
 		transfersHref = null,
 		section = null,
-		baseline = false
+		baseline = false,
+		projectId = '',
+		modelDirty = false,
+		onModelChanged
 	}: {
+		/** The project, for a unit's MAP from a grid (GET/POST …/map/unit-map); '' shows the grids without picking one. */
+		projectId?: string;
+		/** Unsaved model edits: a unit's MAP grid can't be picked until they are saved or discarded (it saves straight to the project). */
+		modelDirty?: boolean;
+		/** The model changed on the server (a grid's MAP was saved): the workspace takes it as it now is. */
+		onModelChanged?: () => Promise<void> | void;
 		/** The project's own model (issue #523 B4): its EWR-keeping switches are a scenario's. False in Override mode. */
 		baseline?: boolean;
 		node: NetworkNode;
@@ -118,7 +130,7 @@
 	const groupFields = $derived.by(() => {
 		const out = new Map<NodeField['group'], NodeField[]>();
 		for (const f of NODE_FIELDS) {
-			if (!fieldShows(f, node.kind)) continue;
+			if (!fieldShows(f, node.kind, node)) continue;
 			if (!out.has(f.group)) out.set(f.group, []);
 			out.get(f.group)!.push(f);
 		}
@@ -444,24 +456,29 @@
 								{#if mapProblem && !mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
 								<FieldHistoryLine field="node:{node.id}:mapMm" {unit} />
 							</div>
-							{#if node.mapMm !== null && node.mapMm !== undefined}
-								<div class="field">
-									<span class="lbl"><label for={id('mapSource')}>Source of the MAP</label></span>
-									<input
-										id={id('mapSource')}
-										readonly={readonly}
-										required
-										maxlength={PE_SOURCE_MAX}
-										value={node.mapSource ?? ''}
-										placeholder="e.g. a 1′ MAP grid averaged over the unit’s parcel"
-										aria-invalid={mapOnSource || undefined}
-										aria-describedby="{id('mapSource')}-h{mapOnSource ? ` ${id('map')}-err` : ''}"
-										oninput={(e) => (node.mapSource = e.currentTarget.value)}
-									/>
-									<span class="hint" id="{id('mapSource')}-h">Required: the dataset or study, and its years. The run shows it beside the unit’s rain factor.</span>
-									{#if mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
-									<FieldHistoryLine field="node:{node.id}:mapSource" {unit} />
-								</div>
+							<!-- Where the MAP comes from: a MAP grid (saved straight to the model through MAP for each unit's apply) or typed by hand. -->
+							{#if !readonly || (node.mapMm !== null && node.mapMm !== undefined)}
+								<UnitMapSourceChoice {node} {projectId} {readonly} {modelDirty} {onModelChanged}>
+									{#snippet typed()}
+										<div class="field">
+											<label class="visually-hidden" for={id('mapSource')}>Source of the MAP, typed by hand</label>
+											<input
+												id={id('mapSource')}
+												readonly={readonly}
+												required
+												maxlength={PE_SOURCE_MAX}
+												value={node.mapSource ?? ''}
+												placeholder="e.g. a catchment study and its years"
+												aria-invalid={mapOnSource || undefined}
+												aria-describedby="{id('mapSource')}-h{mapOnSource ? ` ${id('map')}-err` : ''}"
+												oninput={(e) => (node.mapSource = e.currentTarget.value)}
+											/>
+											<span class="hint" id="{id('mapSource')}-h">Required: the dataset or study, and its years. The run shows it beside the unit’s rain factor.</span>
+											{#if mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
+										</div>
+									{/snippet}
+								</UnitMapSourceChoice>
+								<FieldHistoryLine field="node:{node.id}:mapSource" {unit} />
 							{/if}
 						{/if}
 						{#if g === 'routing'}
@@ -479,6 +496,10 @@
 							{/each}
 						{/if}
 					</div>
+					<!-- By month (engine 1.116.0): on a unit, or below any node but the outlet; elsewhere only while a row is left to clear. -->
+					{#if (g === 'reach' && (node.downstreamNodeId !== null || sectionByMonth('reach', node))) || (g === 'baseflow' && (node.kind === 'farm' || sectionByMonth('baseflow', node)))}
+						<MonthlyLossFields {node} group={g} {readonly} />
+					{/if}
 					{#if sp.more.length || g === 'irrigation'}
 						{@const key = `more:${g}`}
 						{@const extra = g === 'groundwater' ? `GN 538 rate ${GA_RATE_TEXT(node.gaRateM3HaYear)}` : g === 'irrigation' ? `Abstraction starts ${node.abstractionFrom ?? 'with the run'}` : ''}

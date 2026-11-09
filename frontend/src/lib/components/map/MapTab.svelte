@@ -18,6 +18,8 @@
 	const loadDivideSheet = () => import('./DivideSheet.svelte');
 	// The click bar shows only while dividing by clicks: its own chunk keeps the tab under its budget (check:bundle).
 	const loadClickBar = () => import('./ClickBar.svelte');
+	// The map's checks render only when there is something to check (most visits have none): a chunk of their own.
+	const loadMapChecks = () => import('./MapChecks.svelte');
 	// The A-pan grid layer's toggle and state: a chunk of its own, loaded once the tab is up; and the measure
 	// bar, shown only while measuring (2026-11-08: the evaporation grid layers took the tab past its 60 KB ceiling, 61 KB).
 	const loadEvaporationGrids = () => import('./EvaporationGridToggles.svelte');
@@ -86,14 +88,13 @@
 	import { TAB_GRIDS, withParam, withoutParam } from '#lib/workspace/overlays.js';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import FeatureList from './FeatureList.svelte';
-	import MapChecks from './MapChecks.svelte';
 	import { mapChecks, type MapCheck, type MapCheckInputs } from './mapChecks';
 	import { restOfCatchment, staleValues } from './stale';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, channelMinKm2AtZoom, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
-	import { channelsWanted, chirpsCells, demRiversOffered, layerAsked, layersOn, unitLabels } from './mapLayers';
+	import { channelsWanted, chirpsCells, demRiversOffered, layerAsked, layersOn, MAP_GRID_KINDS, MAP_GRIDS, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
 	import type { EvaporationGrids } from './EvaporationGridToggles.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
@@ -930,15 +931,20 @@
 		await load();
 	}
 
-	// --- the hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md): on while `layers=` names them ---
+	// --- the hydrological units, the MAP grids and the CHIRPS grid (docs/maps.md): on while `layers=` names them ---
 	const unitsOn = $derived(layersOn(params).has('units'));
 	const unitsLabelled = $derived(unitsOn ? unitLabels(features) : []);
-	const mapGrid = new MapGridLayer({
-		projectId: () => projectId,
-		on: () => layersOn(params).has('mapgrid'),
-		view: () => mapView,
-		load: api.map.mapGrid
-	});
+	// The WAAS 2007 MAP and the CCWR MAP (docs/maps.md § MAP grid): one layer each, toggled on its own.
+	const mapGrids = MAP_GRID_KINDS.map(
+		(kind) =>
+			new MapGridLayer({
+				kind,
+				projectId: () => projectId,
+				on: () => layersOn(params).has(MAP_GRIDS[kind].layer),
+				view: () => mapView,
+				load: api.map.mapGrid
+			})
+	);
 	// The A-pan grid (docs/maps.md § A-pan grid): a layer toggled on its own. Its state class and toggle load as one
 	// chunk after the tab; the layer is made inside this effect, which owns its effects.
 	let evaporationGrids = $state.raw<EvaporationGrids | null>(null);
@@ -1485,7 +1491,7 @@
 		onshowfeature={(id) => void selectFromList(id)}
 		relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
 		units={{ on: unitsOn, labels: unitsLabelled }}
-		{mapGrid}
+		{mapGrids}
 		evaporationGrids={evaporationFailed ? 'failed' : evaporationGrids}
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
@@ -1675,9 +1681,8 @@
 									onpiecehover={(k) => (dividing ? (clickLit = k) : (pieceLit = k))}
 									onpiecepick={canEdit && !dividing ? pickPiece : undefined}
 									units={unitsLabelled}
-									mapGrid={mapGrid.points}
-									mapGridAttribution={mapGrid.answer?.dataset?.attribution ?? null}
-									mapGridCellDeg={mapGrid.answer?.dataset?.cellDeg ?? null}
+									waasGrid={mapGrids[0]!.draw}
+									ccwrGrid={mapGrids[1]!.draw}
 									apanGrid={evaporationGrids?.grids[0]?.draw ?? null}
 									chirps={chirpsInView}
 									demGrid={demGrid.points}
@@ -1756,7 +1761,7 @@
 									{/if}
 								</p>
 								{#if checkError}<p class="err small" role="alert" data-testid="map-check-error">{checkError}</p>{/if}
-								{#if checks.length}<MapChecks {features} {nodes} inputs={checkInputs} onpick={pickFromCheck} onuse={canEdit ? useFromCheck : undefined} {busy} heading={false} />{/if}
+								{#if checks.length}<Lazy load={loadMapChecks}>{#snippet children(MapChecks)}<MapChecks {features} {nodes} inputs={checkInputs} onpick={pickFromCheck} onuse={canEdit ? useFromCheck : undefined} {busy} heading={false} />{/snippet}</Lazy>{/if}
 							</div>
 							{#if panelsInSide}
 								<!-- Layers and Key (until 2026-10-03 boxes over the map); the map's buttons pick these tabs, Escape gives the tab back. -->

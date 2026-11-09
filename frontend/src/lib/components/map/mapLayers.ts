@@ -1,11 +1,12 @@
 // The Map tab's optional layers (issue #326 A6, the relief, the river network
-// #345, the hydrological units' labels, the MAP grid, the A-pan grid and
-// the CHIRPS grid; docs/ui.md § Map): which are on (`layers=` in
+// #345, the hydrological units' labels, the WAAS 2007 MAP and the CCWR MAP,
+// the A-pan grid and the CHIRPS grid; docs/ui.md § Map): which are on (`layers=` in
 // the URL, a comma list, so a view can be shared and Back undoes a toggle),
 // the bbox the quaternary outlines and the river network are asked for around
 // the project's features, and what the units, grid and CHIRPS layers draw. Pure
 // (mapLayers.test.ts).
 import type { MapFeature, MapPosition } from '#lib/api/types.js';
+import { mapGridName } from './mapGridNames';
 import { fmtNum } from '#lib/format/number.js';
 import {
 	ATLAS_APAN_MAP_ATTRIBUTION,
@@ -26,9 +27,10 @@ import type { ReadonlyURLSearchParams } from '$app/state';
  * The layers the tab can add, in the order the URL lists them. An id is what
  * a shared or saved `layers=` holds, so it never changes when a label does
  * (`rivers` is labelled "Rivers (HydroRIVERS)" since the DEM rivers,
- * `channels`, came beside it).
+ * `channels`, came beside it; `mapgrid` "WAAS 2007 MAP" since the CCWR MAP,
+ * `ccwrgrid`, came beside it).
  */
-export const MAP_LAYERS = ['quaternaries', 'rivers', 'channels', 'relief', 'units', 'mapgrid', 'apangrid', 'chirps', 'demgrid'] as const;
+export const MAP_LAYERS = ['quaternaries', 'rivers', 'channels', 'relief', 'units', 'mapgrid', 'ccwrgrid', 'apangrid', 'chirps', 'demgrid'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** The HydroRIVERS layer's toggle (`rivers`): mapped rivers, for reference. */
@@ -157,7 +159,7 @@ export const RIVER_VIEW_SNAP_DEG = 0.05;
  * A map view (west, south, east, north) snapped outward to whole multiples of
  * `snap` degrees, so a small pan asks the same box again: null when no view
  * is known or the snapped view is wider than `maxDeg` a side (the server
- * refuses it: zoom in). The river network, the MAP grid and the DEM grid ask
+ * refuses it: zoom in). The river network, the MAP grids and the DEM grid ask
  * for their view this way.
  */
 export function snappedViewBbox(view: readonly [number, number, number, number] | null, snap: number, maxDeg: number): [number, number, number, number] | null {
@@ -235,24 +237,26 @@ export const MAP_CREDIT_TEXT: Readonly<Record<MapCredit, string>> = {
  * (docs/maps.md § Sources): HydroRIVERS while the River network layer draws
  * its reaches (`riversDrawn`) or a river added from one is drawn, then JRC
  * Global Surface Water while a traced outline is, then the Southwestern Cape
- * MAP surface or the Lynch (2004) grid while the MAP grid layer draws points
- * of a grid stored with that surface's credit line (`mapGridAttribution`: the drawn grid's attribution, null while
- * the layer draws nothing), then the WRC Atlas's A-pan grid while the A-pan
- * grid layer draws points of a grid stored with that credit line (`evaporationAttributions`: each drawn evaporation grid's
+ * MAP surface and the Lynch (2004) grid while a MAP grid layer draws points of
+ * a grid stored with that surface's credit line (`mapGridAttributions`: each
+ * MAP grid layer's drawn attribution, null while it draws nothing; both while
+ * the WAAS 2007 MAP and the CCWR MAP are on), then the WRC Atlas's A-pan grid while
+ * the A-pan grid layer draws points of a grid stored with that
+ * credit line (`evaporationAttributions`: each drawn evaporation grid's
  * attribution). Empty when nothing drawn is licensed data. The basemap's and
  * the relief's credits are their own sources' and are not listed here.
  */
 export function mapCredits(
 	features: readonly Pick<MapFeature, 'kind' | 'properties'>[],
 	riversDrawn = false,
-	mapGridAttribution: string | null = null,
+	mapGridAttributions: readonly (string | null)[] = [],
 	evaporationAttributions: readonly (string | null)[] = []
 ): MapCredit[] {
 	const out: MapCredit[] = [];
 	if (riversDrawn || features.some(creditedFeature)) out.push('hydrorivers');
 	if (features.some(jrcCreditedFeature)) out.push('jrc-water');
-	if (mapGridAttribution === WAAS_MAP_STATEMENT) out.push('waas-map');
-	if (mapGridAttribution === LYNCH_MAP_STATEMENT) out.push('lynch-map');
+	if (mapGridAttributions.includes(WAAS_MAP_STATEMENT)) out.push('waas-map');
+	if (mapGridAttributions.includes(LYNCH_MAP_STATEMENT)) out.push('lynch-map');
 	if (evaporationAttributions.includes(ATLAS_APAN_STATEMENT)) out.push('atlas-apan');
 	return out;
 }
@@ -342,16 +346,35 @@ export function unitLabels(features: readonly MapFeature[]): UnitLabel[] {
 }
 
 // ---------------------------------------------------------------------------
-// The MAP grid (docs/maps.md § MAP grid)
+// The MAP grids (docs/maps.md § MAP grid)
 // ---------------------------------------------------------------------------
 
-/** The widest view the MAP grid is asked for (the server's MAP_GRID_BBOX_MAX_DEG). */
+/** The MAP grids the tab draws, each its own layer. */
+export const MAP_GRID_KINDS = ['waas', 'ccwr'] as const;
+export type MapGridKind = (typeof MAP_GRID_KINDS)[number];
+
+/**
+ * Each MAP grid layer: its `layers=` id, its toggle's name, and the one loaded
+ * dataset it draws, by the label a production load stores it under (the
+ * server's WAAS_MAP and LYNCH_MAP, backend geo/rainMap.ts). `mapgrid` stays
+ * the WAAS 2007 MAP's id, so a view shared before the CCWR MAP came beside it
+ * opens the same grid. The names come from mapGridNames.ts, as the unit form's
+ * do. No other loaded grid (the synthetic one, a local
+ * import under another label) is drawn on the map: the proposals of a unit's
+ * MAP still read it (docs/maps.md § MAP grid).
+ */
+export const MAP_GRIDS: Readonly<Record<MapGridKind, { layer: MapLayer; label: string; dataset: string }>> = {
+	waas: { layer: 'mapgrid', label: mapGridName('WAAS-SWCape-2007'), dataset: 'WAAS-SWCape-2007' },
+	ccwr: { layer: 'ccwrgrid', label: mapGridName('Lynch-2004'), dataset: 'Lynch-2004' }
+};
+
+/** The widest view a MAP grid is asked for (the server's MAP_GRID_BBOX_MAX_DEG). */
 export const MAP_GRID_BBOX_MAX_DEG = 2;
-/** The grid a view is snapped out to before the MAP grid is asked for it, so small pans share one answer. */
+/** The grid a view is snapped out to before a MAP grid is asked for it, so small pans share one answer. */
 export const MAP_GRID_VIEW_SNAP_DEG = 0.02;
 
 /**
- * The bbox the MAP grid is asked for: the map's view, snapped outward to
+ * The bbox a MAP grid is asked for: the map's view, snapped outward to
  * MAP_GRID_VIEW_SNAP_DEG. Null when no view is known or it is wider than
  * MAP_GRID_BBOX_MAX_DEG a side (zoom in). The server says when a view holds
  * more of the grid's points than one answer carries.

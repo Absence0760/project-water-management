@@ -90,6 +90,7 @@ const SMALL_TEXT_EXCEPTIONS: Record<string, string[]> = {
 	'lib/components/report/LicenceWaterfall.svelte': ['.val, .lbl, .unit'],
 	'lib/components/report/evidence/IntervalPlot.svelte': ['.lbl, .axis'],
 	'lib/components/runs/EwrAssurancePanel.svelte': ['.v, .m', '.axis'],
+	'lib/components/ewr/EwrDailyMonthsPanel.svelte': ['.v, .m', '.axis'],
 	'lib/components/runs/EwrFdcOverlay.svelte': ['.tick', '.axis-title'],
 	'lib/components/settings/MonthlyBars.svelte': ['.m', '.max'],
 	'lib/components/uncertainty/BandFdcChart.svelte': ['.tick', '.ewr-l'],

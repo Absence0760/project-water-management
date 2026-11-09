@@ -131,12 +131,12 @@ describe('the Layers box’s River network', () => {
 	});
 });
 
-describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggles', () => {
+describe('the Layers box’s Hydrological units, MAP grids and CHIRPS grid toggles', () => {
 	const props = (extra: Record<string, unknown>) => withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, onshowfeature: () => {}, ...extra } }).body);
 	const at: [number, number] = [21.3, -33.6];
 
 	it('offers none of them unless the tab passes them, and each unchecked while off', () => {
-		expect(props({})).not.toMatch(/map-layer-(units|mapgrid|chirps)/);
+		expect(props({})).not.toMatch(/map-layer-(units|mapgrid|ccwrgrid|chirps)/);
 		const off = props({ units: { on: false, labels: [] }, chirps: { on: false, cells: null } });
 		expect(off).toMatch(/<input[^>]*type="checkbox"[^>]*data-testid="map-layer-units"/);
 		expect(off).not.toMatch(/<input[^>]*checked[^>]*data-testid="map-layer-units"/);
@@ -160,21 +160,87 @@ describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggle
 		expect(props({ chirps: { on: true, cells: null } })).toContain('Zoom in to see the CHIRPS grid');
 	});
 
-	it('shows the MAP grid’s points from one dataset with their range and source, a picker when there are two, and each other state', () => {
-		const ds = (dataset: string, cellDeg: number, synthetic = false) => ({ dataset, source: `Source of ${dataset}`, version: '1', attribution: 'a', cellDeg, cells: 9, synthetic });
-		const grid = (answer: unknown, extra: Record<string, unknown> = {}) =>
-			({ on: true, zoomIn: false, error: null, answer, range: [612, 790], pick: () => {}, retry: () => {}, ...extra }) as never;
-		const two = { bbox: [0, 0, 1, 1], dataset: ds('synthetic', 0.01, true), datasets: [ds('coarse-test', 0.25), ds('synthetic', 0.01, true)], cells: [[21.305, -33.645, 790], [21.315, -33.645, 612]], tooDense: false, max: 5000 };
-		const b = props({ mapGrid: grid(two) });
-		expect(b).toContain('2 points in view from synthetic (0.01° cells): 612 mm to 790 mm.');
-		expect(b).toContain('Synthetic test data, never real rainfall.');
-		expect(b).toContain('Source: Source of synthetic');
-		expect(b).toContain('data-testid="map-mapgrid-dataset"');
-		expect(props({ mapGrid: grid({ ...two, datasets: [two.dataset] }) })).not.toContain('map-mapgrid-dataset');
-		expect(props({ mapGrid: grid({ ...two, cells: [], tooDense: true }) })).toMatch(/This view holds more than 5.000 of the grid’s points/);
-		expect(props({ mapGrid: grid({ ...two, dataset: null, datasets: [] }) })).toContain('No MAP grid is loaded');
-		expect(props({ mapGrid: grid(null, { zoomIn: true }) })).toContain('Zoom in to see the MAP grid');
-		expect(props({ mapGrid: grid(null, { error: 'offline' }) })).toContain('The MAP grid couldn’t be loaded: offline');
+	const ds = (dataset: string, cellDeg: number, synthetic = false) => ({ dataset, source: `Source of ${dataset}`, version: '1', attribution: 'a', cellDeg, cells: 9, synthetic });
+	const label = { waas: 'WAAS 2007 MAP', ccwr: 'CCWR MAP' } as const;
+	const layerId = { waas: 'mapgrid', ccwr: 'ccwrgrid' } as const;
+	const dsLabel = { waas: 'WAAS-SWCape-2007', ccwr: 'Lynch-2004' } as const;
+	/** A MAP grid layer's state as the box reads it (mapGridLayer.svelte.ts MapGridLayer). */
+	const grid = (kind: 'waas' | 'ccwr', answer: unknown, extra: Record<string, unknown> = {}) =>
+		({ kind, layer: layerId[kind], label: label[kind], dataset: dsLabel[kind], on: true, zoomIn: false, error: null, answer, range: [612, 790], status: null, retry: () => {}, ...extra }) as never;
+	const gridAnswer = (dataset: unknown, extra: Record<string, unknown> = {}) => ({
+		bbox: [0, 0, 1, 1],
+		dataset,
+		datasets: [ds('Lynch-2004', 1 / 60), ds('WAAS-SWCape-2007', 0.001), ds('synthetic', 0.01, true)],
+		cells: [
+			[21.305, -33.645, 790],
+			[21.315, -33.645, 612]
+		],
+		tooDense: false,
+		max: 5000,
+		...extra
+	});
+
+	it('offers the WAAS 2007 MAP (still `mapgrid`) then the CCWR MAP, each its own toggle, unchecked while off, with no grid picker', () => {
+		const b = props({ mapGrids: [grid('waas', null, { on: false }), grid('ccwr', null, { on: false })] });
+		const waas = b.search(/<input[^>]*data-testid="map-layer-mapgrid"/);
+		const ccwr = b.search(/<input[^>]*data-testid="map-layer-ccwrgrid"/);
+		expect(waas).toBeGreaterThan(-1);
+		expect(ccwr).toBeGreaterThan(waas);
+		expect(b).toMatch(/data-testid="map-layer-mapgrid"[^>]*\/>[\s\S]*?WAAS 2007 MAP\s*<\/label>/);
+		expect(b).toMatch(/data-testid="map-layer-ccwrgrid"[^>]*\/>[\s\S]*?CCWR MAP\s*<\/label>/);
+		expect(b).not.toMatch(/<input[^>]*checked[^>]*data-testid="map-layer-(mapgrid|ccwrgrid)"/);
+		expect(b).not.toContain('MAP grid');
+		const both = props({ mapGrids: [grid('waas', gridAnswer(ds('WAAS-SWCape-2007', 0.001))), grid('ccwr', gridAnswer(ds('Lynch-2004', 1 / 60)))] });
+		expect(both).not.toMatch(/<select/);
+		expect(both).toContain('data-testid="map-mapgrid-summary"');
+		expect(both).toContain('data-testid="map-ccwrgrid-summary"');
+	});
+
+	it('shows each grid’s points with their range and source, and each other state by the grid’s own name', () => {
+		for (const kind of ['waas', 'ccwr'] as const) {
+			const id = layerId[kind];
+			const name = label[kind];
+			const a = gridAnswer(ds(dsLabel[kind], 0.01));
+			const b = props({ mapGrids: [grid(kind, a)] });
+			expect(b).toContain(`2 points in view from ${dsLabel[kind]} (0.01° cells): 612 mm to 790 mm.`);
+			expect(b).toContain(`Source: Source of ${dsLabel[kind]}`);
+			expect(b).not.toContain('Synthetic test data');
+			expect(props({ mapGrids: [grid(kind, { ...a, cells: [], tooDense: true })] })).toMatch(new RegExp(`data-testid="map-${id}-dense">This view holds more than 5.000 of the grid’s points`));
+			expect(props({ mapGrids: [grid(kind, { ...a, cells: [] })] })).toContain(`data-testid="map-${id}-empty"`);
+			const none = props({ mapGrids: [grid(kind, { ...a, dataset: null })] });
+			expect(none).toContain(`data-testid="map-${id}-none">There’s no ${name} on this server yet, so there is nothing to draw.</p>`);
+			expect(none).not.toContain('pnpm');
+			expect(props({ mapGrids: [grid(kind, null, { zoomIn: true })] })).toContain(`Zoom in to see the ${name} (to about 2° across).`);
+			expect(props({ mapGrids: [grid(kind, null, { error: 'offline' })] })).toContain(`The ${name} couldn’t be loaded: offline`);
+			expect(props({ mapGrids: [grid(kind, null)] })).toContain(`Loading the ${name}…`);
+		}
+	});
+
+	it('draws the synthetic grid in a grid’s place where only that is loaded, saying which grid it stands in for and that it isn’t rainfall', () => {
+		for (const kind of ['waas', 'ccwr'] as const) {
+			const synthetic = { ...ds('synthetic', 0.01, true), source: 'Invented MAP grid' };
+			const b = props({ mapGrids: [grid(kind, gridAnswer(synthetic), { standIn: true })] });
+			expect(b).toContain(`2 points in view from synthetic (0.01° cells): 612 mm to 790 mm. <strong>Synthetic test data, never real rainfall.</strong>`);
+			expect(b).toMatch(
+				new RegExp(`data-testid="map-${layerId[kind]}-source">\\s*No ${label[kind]} on this server; showing the synthetic test grid in its place\\. Mean annual precipitation, mm a year\\. Source: Invented MAP grid\\s*</p>`)
+			);
+			expect(b).not.toContain('Credit:');
+		}
+		// Its own grid: no stand-in line.
+		expect(props({ mapGrids: [grid('waas', gridAnswer(ds('WAAS-SWCape-2007', 0.001)))] })).not.toContain('in its place');
+	});
+
+	it('says where each grid writes its values, so the two read apart when both are on', () => {
+		const b = props({ mapGrids: [grid('waas', gridAnswer(ds('WAAS-SWCape-2007', 0.001))), grid('ccwr', gridAnswer(ds('Lynch-2004', 1 / 60)))] });
+		expect(b).toMatch(/data-testid="map-mapgrid-summary">[^<]*Each point’s value shows under it once you zoom in/);
+		expect(b).toMatch(/data-testid="map-ccwrgrid-summary">[^<]*Each point’s value shows to its left \(the dots with the bolder ring\) once you zoom in/);
+		// Without the map's fonts, neither writes values.
+		expect(props({ mapGrids: [grid('ccwr', gridAnswer(ds('Lynch-2004', 1 / 60)))], labels: false })).toContain('The map has no fonts for labels here');
+	});
+
+	it('adds each grid’s status line to the box’s one live region', () => {
+		const b = props({ mapGrids: [grid('waas', null, { status: 'Loading the WAAS 2007 MAP…' }), grid('ccwr', null, { status: '12 CCWR MAP points shown.' })] });
+		expect(b).toMatch(/data-testid="map-layers-status">Loading the WAAS 2007 MAP… 12 CCWR MAP points shown\.</);
 	});
 
 	it('names the grid’s credit beside its source when they differ, once when they are the same (issue #560)', () => {
@@ -186,14 +252,17 @@ describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggle
 			tooDense: false,
 			max: 5000
 		});
-		const grid = (a: unknown) => ({ on: true, zoomIn: false, error: null, answer: a, range: [790, 790], pick: () => {}, retry: () => {} }) as never;
+		const waasGrid = (a: unknown) => grid('waas', a, { range: [790, 790] });
 		const waas = 'Mean annual rainfall surface for the Southwestern Cape. Prepared for the WAAS project by Beuster Clarke & Associates. March 2007, Version 1.1.';
-		const same = props({ mapGrid: grid(answer(waas, waas)) });
+		const same = props({ mapGrids: [waasGrid(answer(waas, waas))] });
 		expect(same).toContain(`Source: ${waas.replaceAll('&', '&amp;')}`);
 		expect(same).not.toContain('Credit:');
-		expect(props({ mapGrid: grid(answer('A provincial surface', 'Its authors, 2007')) })).toContain('Source: A provincial surface. Credit: Its authors, 2007');
-		// The synthetic grid's warning already says what its attribution would.
-		expect(props({ mapGrid: grid({ ...answer('Invented grid', 'Synthetic test data'), dataset: { ...answer('Invented grid', 'Synthetic test data').dataset, synthetic: true } }) })).not.toContain('Credit:');
+		expect(props({ mapGrids: [waasGrid(answer('A provincial surface', 'Its authors, 2007'))] })).toContain('Source: A provincial surface. Credit: Its authors, 2007');
+		// A synthetic grid's warning already says what its attribution would.
+		const synthetic = { ...answer('Invented grid', 'Synthetic test data'), dataset: { ...answer('Invented grid', 'Synthetic test data').dataset, synthetic: true } };
+		const s = props({ mapGrids: [waasGrid(synthetic)] });
+		expect(s).not.toContain('Credit:');
+		expect(s).toContain('Synthetic test data, never real rainfall.');
 	});
 });
 
@@ -231,7 +300,7 @@ describe('the Layers box’s A-pan grid toggle (docs/maps.md § A-pan grid)', ()
 		({ kind, on: true, zoomIn: false, error: null, answer: a, month: null, range: [1812, 1840], status: null, pick: () => {}, pickMonth: () => {}, retry: () => {}, ...extra }) as never;
 	const off = (kind: 'apan') => layer(kind, null, { on: false });
 
-	it('offers one toggle of its own, beside the MAP grid, unchecked while off, and no S-pan grid toggle', () => {
+	it('offers one toggle of its own, beside the MAP grids, unchecked while off, and no S-pan grid toggle', () => {
 		expect(props({})).not.toMatch(/map-layer-apangrid/);
 		const b = props({ evaporationGrids: [off('apan')] });
 		expect(b).toMatch(/<input[^>]*type="checkbox"[^>]*data-testid="map-layer-apangrid"/);
@@ -241,9 +310,9 @@ describe('the Layers box’s A-pan grid toggle (docs/maps.md § A-pan grid)', ()
 		expect(b).not.toContain('map-apangrid-summary');
 	});
 
-	it('draws the A-pan grid’s year totals with their range, says modelled, not measured, and credits the source', () => {
+	it('draws the A-pan grid’s year totals with their range, names it CCWR A-pan, says modelled, not measured, and credits the source', () => {
 		const b = props({ evaporationGrids: [layer('apan', answer(atlasApan))] });
-		expect(b).toContain(`2 points in view from Atlas-Apan-2007 (0.017° cells, 1950–1999 means), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
+		expect(b).toContain(`2 points in view from CCWR A-pan (0.017° cells, 1950–1999 means), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
 		const src = b.match(/data-testid="map-apangrid-source">([^<]*)</)![1]!;
 		expect(src).toMatch(/^\s*Modelled A-pan equivalent reference potential evaporation \(WRC Atlas, not a measured pan\)\. Source: /);
 		expect(src).toContain('Credit: Schulze and Maharaj 2007');
@@ -252,7 +321,7 @@ describe('the Layers box’s A-pan grid toggle (docs/maps.md § A-pan grid)', ()
 
 	it('says "means for no stated period" for a grid whose source states none, never "null–null" (issue #755)', () => {
 		const b = props({ evaporationGrids: [layer('apan', answer({ ...atlasApan, firstYear: null, lastYear: null }))] });
-		expect(b).toContain(`2 points in view from Atlas-Apan-2007 (0.017° cells, means for no stated period), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
+		expect(b).toContain(`2 points in view from CCWR A-pan (0.017° cells, means for no stated period), mm a year: ${mapLabel(1812)} to ${mapLabel(1840)}.`);
 		expect(b.match(/data-testid="map-apangrid-summary"[^>]*>([^<]*)</)![1]).not.toMatch(/null|NaN/);
 	});
 
@@ -285,7 +354,7 @@ describe('the Layers box’s A-pan grid toggle (docs/maps.md § A-pan grid)', ()
 	});
 
 	it('says plainly when no grid of its kind is loaded, and each other state', () => {
-		expect(props({ evaporationGrids: [layer('apan', answer(null))] })).toContain('No A-pan grid is loaded, so there is nothing to draw');
+		expect(props({ evaporationGrids: [layer('apan', answer(null))] })).toContain('There’s no A-pan grid on this server yet, so there is nothing to draw.');
 		expect(props({ evaporationGrids: [layer('apan', null, { zoomIn: true })] })).toContain('Zoom in to see the A-pan grid');
 		expect(props({ evaporationGrids: [layer('apan', null, { error: 'offline' })] })).toContain('The A-pan grid couldn’t be loaded: offline');
 		expect(props({ evaporationGrids: [layer('apan', answer(atlasApan, { cells: [], tooDense: true }))] })).toMatch(/This view holds more than 5.000 of the grid’s points/);

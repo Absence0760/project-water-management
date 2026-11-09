@@ -91,6 +91,8 @@ it('coverageText and acceptedText say where the values came from', () => {
 	};
 	expect(acceptedText(a)).toMatch(/^GR4J’s monthly PE came from the map \(synthetic, synthetic 1\) on /);
 	expect(acceptedText({ ...a, target: 'apan', current: false })).toMatch(/^Typed over since: the A-pan evaporation row came from the map/);
+	// The Atlas A-pan grid is named as Demand's source names it.
+	expect(acceptedText({ ...a, target: 'apan', dataset: 'Atlas-Apan-2007', version: 'Atlas 2008' })).toMatch(/^The A-pan evaporation row came from the map \(CCWR A-pan, Atlas 2008\) on /);
 });
 
 describe('the confirmation before an accept (persona-hydrologist, round 4)', () => {

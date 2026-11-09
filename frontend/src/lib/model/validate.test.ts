@@ -324,6 +324,37 @@ describe('validateModel', () => {
 		expect(messages(model([{ ...g, reachLossFrac: 0.1 }, a]))).toEqual(['"Gauge": the outlet has no reach below it in the model; set its bed losses to 0%.']);
 	});
 
+	it('checks bed losses and base flow by month as the API does: 12 values in range, none on the outlet, base flow on units only (engine 1.116.0)', () => {
+		const g = node('g', 'Gauge', null);
+		const a = node('a', 'A', 'g');
+		const wet = [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+		const rows = { reachLossFracMonthly: wet, reachLossMaxMonthlyM3Day: new Array(12).fill(300), baseflowLossMonthlyM3Day: new Array(12).fill(2000), baseflowGainMonthlyM3Day: new Array(12).fill(0) };
+		expect(messages(model([g, { ...a, ...rows }]))).toEqual([]);
+		expect(
+			messages(
+				model([
+					g,
+					{
+						...a,
+						reachLossFracMonthly: [...wet.slice(1), 1.2],
+						reachLossMaxMonthlyM3Day: new Array(11).fill(1),
+						baseflowLossMonthlyM3Day: [...new Array(11).fill(1), -1],
+						baseflowGainMonthlyM3Day: new Array(13).fill(1)
+					}
+				])
+			)
+		).toEqual([
+			'"A": the bed losses by month need 12 shares between 0% and 100%.',
+			"\"A\": the bed losses' cap by month needs 12 values, none negative.",
+			'"A": the base-flow loss by month needs 12 values, none negative.',
+			'"A": the base-flow gain by month needs 12 values, none negative.'
+		]);
+		// Only the monthly share on the outlet, only a monthly row on a gauge: refused as the one values are.
+		expect(messages(model([{ ...g, reachLossFracMonthly: wet }, a]))).toEqual(['"Gauge": the outlet has no reach below it in the model; set its bed losses to 0%.']);
+		const w = { ...node('w', 'Weir', 'g'), kind: 'gauge' as const };
+		expect(messages(model([g, a, { ...w, baseflowGainMonthlyM3Day: new Array(12).fill(5) }]))).toEqual(['"Weir": only a hydrological unit has a base-flow loss or gain; set both to 0.']);
+	});
+
 	it('checks a dam’s survey curve, release and seepage share as the API does (WP-3.5)', () => {
 		const g = node('g', 'Gauge', null);
 		const curve = [
@@ -536,6 +567,16 @@ describe('a unit’s MAP (issue #482)', () => {
 		expect(n).toMatchObject({ mapMm: 900, mapSource: 'a grid' });
 		withUnitMap(n, null);
 		expect(n).toMatchObject({ mapMm: null, mapSource: null });
+	});
+
+	it('turns a grid’s MAP typed by hand when another number goes in: its source line goes, and the source is asked for', () => {
+		const line = 'Lynch-2004 2004, area-weighted mean over the unit’s parcel, 9 cells';
+		const n = farm({ mapMm: 812, mapSource: line });
+		withUnitMap(n, 812);
+		expect(n).toMatchObject({ mapMm: 812, mapSource: line });
+		withUnitMap(n, 800);
+		expect(n).toMatchObject({ mapMm: 800, mapSource: '' });
+		expect(unitMapProblem(n)?.field).toBe('source');
 	});
 
 	it('leaves a gauge that kept a MAP from being a unit alone, so a kind change never blocks Save with no field to fix', () => {

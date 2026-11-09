@@ -2,7 +2,8 @@
 // 180_evaporation_reference.sql, 181_evaporation_accepted.sql; docs/api.md
 // § Catchment map, docs/maps.md § Evaporation from the map).
 //
-//   GET  /projects/:id/evaporation-proposals        the boundary's monthly evaporation from a grid, beside the settings (viewer)
+//   GET  /projects/:id/evaporation-proposals        the boundary's monthly evaporation from a grid, beside the settings (viewer);
+//                                                   a grid asked for by label that isn't loaded answers as none loaded
 //   POST /projects/:id/evaporation-from-map         accept it into the settings it belongs to (editor)
 //   GET  /projects/:id/evaporation-stations         the nearest DWS evaporation stations to the boundary, with each one's monthly means (viewer)
 //   POST /projects/:id/evaporation-from-station     accept a station's pan record as the A-pan (editor; issue #646 item 6)
@@ -108,13 +109,18 @@ async function boundaryOf(db: Db, projectId: string): Promise<Boundary | null> {
 	return rows[0] ?? null;
 }
 
-/** The dataset asked for, or the default (a real one before the synthetic grid); null with none loaded. */
-async function pickDataset(db: Db, wanted: string | undefined): Promise<{ dataset: EvaporationDataset | null; datasets: EvaporationDataset[] }> {
+/**
+ * The dataset asked for, or the default (a real one before the synthetic grid); null with none loaded. One asked for
+ * that isn't loaded is refused (400), or, with `missing: 'none'` (the proposals' GET), answered as none loaded: Model
+ * settings → Demand asks for the CCWR A-pan grid by its label (Atlas-Apan-2007), and a server that hasn't loaded it
+ * (production until issue #755, a fresh clone) is the normal state, which the panel says plainly.
+ */
+async function pickDataset(db: Db, wanted: string | undefined, missing: 'refuse' | 'none' = 'refuse'): Promise<{ dataset: EvaporationDataset | null; datasets: EvaporationDataset[] }> {
 	const datasets = await evaporationDatasets(db);
 	if (wanted === undefined) return { dataset: datasets[0] ?? null, datasets };
 	const hit = datasets.find((d) => d.dataset === wanted);
-	if (!hit) throw new ApiError(400, `No evaporation dataset “${wanted}” is loaded.`);
-	return { dataset: hit, datasets };
+	if (!hit && missing === 'refuse') throw new ApiError(400, `No evaporation dataset “${wanted}” is loaded.`);
+	return { dataset: hit ?? null, datasets };
 }
 
 /** The project's settings as stored, merged over the defaults. */
@@ -186,7 +192,7 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 		const { dataset: wanted } = EvaporationQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
-			const { dataset, datasets } = await pickDataset(db, wanted);
+			const { dataset, datasets } = await pickDataset(db, wanted, 'none');
 			const boundary = await boundaryOf(db, id);
 			const summary = dataset && boundary ? await summariseEvaporation(db, dataset, boundary.geometry) : null;
 			const { merged } = await settingsOf(db, id);

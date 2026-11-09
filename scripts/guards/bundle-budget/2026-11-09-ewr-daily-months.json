@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "The EWR page's months met by the daily EWR in use (engine 1.116.0): the lazy EwrDailyMonthsPanel chunk (verdict, tiles, bars, table), the Judged by switch (river/ReserveMonths) and the engine's assessDailyEwrMonths. Measured 2451 KB locally against 2446 KB on main @ a924c7858 (+5 KB)."
+}
