@@ -772,6 +772,19 @@ so does a **published DWS gauge record**: an outlet flow record a DWS feed
 wrote whole is DWS's own publication, shown at any holder count; a private
 logger isn't ([security.md § Share links](./security.md#share-links)).
 
+**A copy of the project** (`POST /projects/:id/copy`,
+`backend/src/projects/copyAllocations.ts`) takes the registered volumes
+the copier can read in the original, so who sees what never widens through
+a copy. The rows and the import files behind them are copied under new ids,
+each row matched to the copy's node. The names come across only if the
+copier could read them (an owner or editor, or the authority's delegate),
+so a viewer's copy has the volumes without the names. The owners' **What
+viewers see** choice comes across too, recorded in the copy's history. An
+import file is copied only with a row of it, and its importer isn't carried
+over. The holder keys are the copy's own (its salt, 219). What points at a
+run (each run's frozen holder keys, its comparison) stays behind with the
+runs, which don't copy.
+
 ## Still to build (WP-3.10)
 
 Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
