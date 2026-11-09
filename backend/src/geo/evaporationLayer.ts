@@ -28,8 +28,9 @@ export interface EvaporationLayerDataset {
 	version: string;
 	method: string;
 	attribution: string;
-	firstYear: number;
-	lastYear: number;
+	/** Both null when the source states no period (issue #755). */
+	firstYear: number | null;
+	lastYear: number | null;
 	cellDeg: number;
 	synthetic: boolean;
 }
