@@ -14,7 +14,8 @@
 	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
 	// with their `#res-…` ids, findings first (issue #465): Reserve rules met by month (a one-line stub
 	// saying what it needs without a rule table), days below the EWR by month (with the EWR required vs
-	// met per site and water year under its grid) and the water account; then, under "How sure, and
+	// met per site and water year under its grid), each unit against the EWR required at it on the map
+	// (ewr/EwrUnitMap, folded until asked for) and the water account; then, under "How sure, and
 	// what if", the run-it-yourself tools, each one row until it has run (common/ToolRow): the
 	// uncertainty bands, the sensitivity runs, the outcome matrix and the seasonal outlook.
 	// Another run picked keeps the page on screen, aria-busy, until its record is in (docs/ui.md § EWR).
@@ -29,6 +30,7 @@
 	import { runOptionLabel } from '#lib/components/compare/picker.js';
 	import EwrHeatmap from '#lib/components/ewr/EwrHeatmap.svelte';
 	import EwrRequiredMet from '#lib/components/ewr/EwrRequiredMet.svelte';
+	import EwrUnitMap from '#lib/components/ewr/EwrUnitMap.svelte';
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { runHref } from '#lib/components/overview/attention.js';
 	import { historyDays } from '#lib/components/overview/latestRun.js';
@@ -386,6 +388,8 @@
 				<!-- The volume side of compliance, per site and water year (the water account's tail until issue #175). -->
 				<EwrRequiredMet assurance={summary.supplyAssurance} headingLevel={3} />
 			</div>
+			<!-- Each unit against the EWR required at it, on the map (folded until asked for, `ewrMap=1`). -->
+			<EwrUnitMap {projectId} runId={shownRun.id} {summary} />
 			<!-- The last finding, straight after the EWR by month: it sat below the three tools until issue #465. -->
 			<div class="panel" id="res-water-account">
 				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" headingLevel={2} />

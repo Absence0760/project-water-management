@@ -157,6 +157,7 @@ export {
 	type WaterAccountEwr,
 	type WaterAccountRow
 } from './network/reliability';
+export { unitEwrMet, type UnitEwrInput, type UnitEwrMet } from './network/unitEwr';
 export * from './views/farmView';
 export * from './views/notice';
 export * from './views/farmProjection';

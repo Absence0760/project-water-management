@@ -123,6 +123,8 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 		'res-reserve-years',
 		'res-reserve',
 		'res-ewr-grid',
+		// Each unit on the map, folded until asked for (ewr-map.spec.ts).
+		'res-ewr-map',
 		'res-water-account',
 		'res-uncertainty',
 		'res-sensitivity',

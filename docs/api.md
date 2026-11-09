@@ -2803,6 +2803,14 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
     damEvaporationM3, streamDepletionM3, outflowM3, outM3, damSeepageM3,
     irrigationSuppliedM3, openingStorageM3, closingStorageM3, storageChangeM3,
     residualM3, scaleM3, ewr: { nodeId, name, requiredM3, metM3, daysNotMet }[] }`.
+- `summary.unitEwr` (engine ≥ 1.116.0, [model.md §2.11c](./model.md#211c-each-units-ewr-met-engine--11160);
+  absent on older runs, and withheld with `supplyAssurance` from a viewer
+  who gets only a run's verdicts) is each unit's EWR over the run, farms then
+  other water users in network order: `{ nodeId, name, kind: 'farm'|'user',
+  requiredM3, metM3, outflowM3, daysNotMet }[]` (m³; `requiredM3` the EWR
+  required at the unit, its share plus the shares above it, 0 with none;
+  `metM3` the part of it the flow passing the unit covered, Σ MIN(flow,
+  requirement)). The EWR page's map shades by it.
 - `summary.chirpsCorrection` (engine ≥ 0.7.0) is the CHIRPS fallback bias
   correction, `null` when the project has no CHIRPS series: `{ mode, minDays,
   minMm, clampMin, clampMax, pooled: { days, catchmentMm, chirpsMm, ownFactor,

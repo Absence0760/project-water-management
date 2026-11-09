@@ -36,6 +36,7 @@ import type { EwrDailySource, OutletEwrInfo } from './reserve/dailySource';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
 import type { SupplyAssurance } from './network/reliability';
+import type { UnitEwrMet } from './network/unitEwr';
 import type { AllocationEntry, AllocationWaterSource } from './allocations/compare';
 import type { AllocationMode } from './allocations/mode';
 import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
@@ -4841,6 +4842,14 @@ export interface RunSummary {
 	 * §2.11a–b). Absent on older runs.
 	 */
 	supplyAssurance?: SupplyAssurance;
+	/**
+	 * Each hydrological unit's EWR over the run (engine ≥ 1.116.0,
+	 * ./network/unitEwr.ts, model.md §2.11c): the EWR required at the unit
+	 * (its share plus the shares above it), the part of it the flow passing the
+	 * unit covered, and its outflow. Farms, then other water users, in network
+	 * order. Absent on older runs; the EWR page's map asks for a new run then.
+	 */
+	unitEwr?: UnitEwrMet[];
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
 	/**

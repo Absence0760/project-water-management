@@ -29,6 +29,7 @@ import { apanDailyMm } from './evaporation/apanDaily';
 import { runDrought } from './drought/summary';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
+import { unitEwrMet } from './network/unitEwr';
 import { attributeEwrShortfall, bindingSite, siteUnits } from './network/attribution';
 import { noFlowDays, servedWhileEwrFails } from './reserve/riverMeasures';
 import { bindingSeries, EWR_BINDING_SERIES } from './network/bindingSeries';
@@ -1358,6 +1359,18 @@ function runNetworkIn(
 			...(apanDaily ? { apanDaily } : {}),
 			...(et0Daily ? { et0Daily } : {}),
 			...(assurance ? { supplyAssurance: assurance } : {}),
+			// Each unit's EWR required at it and met by the flow passing it (engine ≥ 1.116.0, ./network/unitEwr.ts, §2.11c).
+			unitEwr: unitEwrMet(
+				[...nodes.flatMap((n, i) => (n.kind === 'farm' ? [i] : [])), ...nodes.flatMap((n, i) => (n.kind === 'user' ? [i] : []))].map((i) => ({
+					nodeId: nodes[i]!.id,
+					name: nodes[i]!.name,
+					kind: nodes[i]!.kind as 'farm' | 'user',
+					outflow: sim.nodes[i]!.outflow,
+					required: sim.nodes[i]!.ewrCumulative,
+					shortfall: sim.nodes[i]!.ewrShortfall
+				})),
+				days
+			),
 			warnings,
 			// Stable codes for the warnings that have one (engine ≥ 1.102.0, ./warningCodes.ts, issue #611).
 			warningCodes: scope.codesOf(warnings)
