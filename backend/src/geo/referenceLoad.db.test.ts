@@ -259,6 +259,25 @@ describe('evaporation, from the file `import:evaporation --out` writes', () => {
 		expect(await recorded('evaporation', AP)).toMatchObject({ key: 'reference/evaporation/atlas-apan-2007.json.gz' });
 	});
 
+	it('the Atlas’s A-pan grid with no period (--apan-asc without --years, issue #755) loads with null years and a method that says so; a reference-ET file without years is refused', async () => {
+		const args = parseEvaporationArgs(['--apan-asc', ...SYNTHETIC_APAN_ASC_FILES, '--dataset', AP]);
+		if (typeof args === 'string' || args.mode !== 'load') throw new Error(String(args));
+		const out = join(dir, 'atlas-apan-no-period.json.gz');
+		const { written: wrote } = await writeEvaporationJson({ ...args, out });
+		expect(JSON.parse(gunzipSync(readFileSync(out)).toString('utf8'))).toMatchObject({ firstYear: null, lastYear: null });
+		const result = await load({ kind: 'evaporation', key: 'reference/evaporation/atlas-apan-2007.json.gz', dataset: AP }, readFileSync(out));
+		expect(result).toMatchObject({ dataset: AP, written: wrote });
+		const [d] = await asOwner('SELECT kind, source, method, first_year, last_year FROM evaporation_dataset WHERE dataset = $1', [AP]);
+		expect(d).toMatchObject({ kind: 'apan', source: ATLAS_APAN.source, first_year: null, last_year: null });
+		expect(d!.method).toContain('(the Atlas states no period for its means: unchanged from the 1997 Atlas, Schulze 1997)');
+		expect(await asOwner('SELECT count(*)::int AS n FROM evaporation_cell_reference WHERE dataset = $1', [AP])).toEqual([{ n: 10 }]);
+		// dPET's years come from its files: a reference-ET grid with none is unreadable, and the dataset stays as it was.
+		const et0 = gzipSync(JSON.stringify({ kind: 'et0', cellDeg: 0.1, cells: [[21.25, -33.75, twelve(100)]] }));
+		const e = await load({ kind: 'evaporation', key: 'reference/evaporation/no-years.json.gz', dataset: EV }, et0).catch((err: unknown) => err);
+		expect((e as LoadError).code).toBe('unreadable');
+		expect(await asOwner('SELECT source FROM evaporation_dataset WHERE dataset = $1', [EV])).toEqual([{ source: 'Second' }]);
+	});
+
 	it('CCWR’s S-pan grid (--span-asc --out) loads as Atlas-Span-2007, kind span, never A-pan; other S-pan labels and crossed labels are refused', async () => {
 		const args = parseEvaporationArgs(['--span-asc', ...SYNTHETIC_SPAN_ASC_FILES, '--dataset', SP, '--years', '1950-1999']);
 		if (typeof args === 'string' || args.mode !== 'load') throw new Error(String(args));

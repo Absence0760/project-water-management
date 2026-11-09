@@ -8,12 +8,14 @@
 //                          dPET years (.nc, or the .json --reduce wrote) averaged into monthly means, or one fixture-form .json
 //   pnpm import:evaporation <file> … --dataset <label> --out <grid.json[.gz]> [same options]
 //                          the same monthly means written to a file instead of loaded (no database)
-//   pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset <label> --years <first>-<last> [--bbox w,s,e,n] [--out <grid.json[.gz]>]
-//                          12 monthly A-pan grids (ESRI ASCII, WGS84 degrees, calendar order) taken as given:
+//   pnpm import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset <label> [--years <first>-<last>] [--bbox w,s,e,n] [--out <grid.json[.gz]>]
+//                          12 monthly A-pan grids (ESRI ASCII, WGS84 degrees, calendar order) taken as given,
+//                          with the period their means cover when the source states one (the WRC Atlas
+//                          states none, so leave --years out for it; issue #755):
 //                          the WRC Atlas's A-pan equivalent (Schulze and Maharaj 2007) as dataset
 //                          Atlas-Apan-2007, stored with its recorded lines (modelled, not measured pans;
 //                          production allows this label only), or another source's with --source and --attribution
-//   pnpm import:evaporation --span-asc <jan.asc> … <dec.asc> --dataset <label> --years <first>-<last> [same options]
+//   pnpm import:evaporation --span-asc <jan.asc> … <dec.asc> --dataset <label> [--years <first>-<last>] [same options]
 //                          12 monthly Symons-pan (S-pan) grids the same way (issue #738): CCWR's as dataset
 //                          Atlas-Span-2007 (production allows this label only), or another source's with
 //                          --source and --attribution. Shown as a cross-check against the saved A-pan only,
@@ -58,6 +60,7 @@ import {
 	evaporationFromJson,
 	evaporationMethodFor,
 	evaporationToJson,
+	hasPeriod,
 	modelledApanSource,
 	monthlyGridsMethodFor,
 	PENPAN,
@@ -97,8 +100,8 @@ export type EvaporationArgs =
 			version: string | null;
 			attribution: string | null;
 			out?: string | null;
-			/** `--apan-asc` / `--span-asc`: `files` are 12 monthly A-pan or S-pan grids (ESRI ASCII), January to December, covering first–last. */
-			monthlyAsc?: { kind: 'apan' | 'span'; first: number; last: number } | null;
+			/** `--apan-asc` / `--span-asc`: `files` are 12 monthly A-pan or S-pan grids (ESRI ASCII), January to December, covering first–last (both null: the source states no period). */
+			monthlyAsc?: { kind: 'apan' | 'span'; first: number | null; last: number | null } | null;
 	  };
 
 const isJson = (p: string) => /\.json(\.gz)?$/i.test(p);
@@ -145,7 +148,7 @@ export function parseEvaporationArgs(argv: string[], env: NodeJS.ProcessEnv = pr
 	return { mode: 'load', ...base, files: positional.map((p) => cliPath(p, env)), dataset };
 }
 
-/** `--apan-asc` / `--span-asc`'s arguments: 12 .asc files in calendar order, a label, the years they cover, and the Atlas label's own rules. */
+/** `--apan-asc` / `--span-asc`'s arguments: 12 .asc files in calendar order, a label, the years they cover if the source states them, and the Atlas label's own rules. */
 function parseMonthlyAsc(
 	kind: 'apan' | 'span',
 	positional: string[],
@@ -165,10 +168,18 @@ function parseMonthlyAsc(
 	// Each Atlas label names one kind: the other kind's grids under it would be stored as what they aren't.
 	const other = kind === 'apan' ? ATLAS_SPAN : ATLAS_APAN;
 	if (dataset === other.dataset) return `${other.dataset} is the WRC Atlas's ${kind === 'apan' ? 'S-pan' : 'A-pan'} label: load ${what} grids under another label`;
-	const years = /^(\d{4})-(\d{4})$/.exec(flag('--years') ?? '');
-	const first = Number(years?.[1]);
-	const last = Number(years?.[2]);
-	if (!years || first < 1900 || last > 2200 || first > last) return `${opt} needs --years <first>-<last>: the period the grids’ monthly means cover, as their source states it`;
+	// --years is the period the source states for its means; without it none is stored (the WRC Atlas states none, issue #755).
+	const yearsText = flag('--years');
+	let first: number | null = null;
+	let last: number | null = null;
+	if (yearsText !== null) {
+		const years = /^(\d{4})-(\d{4})$/.exec(yearsText);
+		first = Number(years?.[1]);
+		last = Number(years?.[2]);
+		if (!years || first < 1900 || last > 2200 || first > last) {
+			return `${opt}'s --years takes <first>-<last> (1900–2200): the period the grids’ monthly means cover, as their source states it; leave it out when the source states none`;
+		}
+	}
 	if (dataset === atlas.dataset) {
 		if (base.source !== null || base.version !== null || base.attribution !== null) return `${atlas.dataset} carries the WRC Atlas's recorded source, version and attribution: give no --source, --version or --attribution`;
 	} else if (!base.source || !base.attribution) {
@@ -233,6 +244,13 @@ export async function readEvaporationFiles(
 		if (typeof got === 'string') throw new Error(`${f}: ${got}`);
 		const c = got.climatology;
 		const model = got.meta.model;
+		// A grid with no period is one --apan-asc / --span-asc wrote (evaporationFromJson lets no other through): its means as given, not summed here.
+		const recorded = got.kind === 'apan' ? ATLAS_APAN : got.kind === 'span' ? ATLAS_SPAN : null;
+		const method = hasPeriod(c)
+			? evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind, model)
+			: recorded && args.dataset === recorded.dataset
+				? (got.kind === 'span' ? atlasSpanMethodFor : atlasApanMethodFor)(c.cellDeg, null, null)
+				: monthlyGridsMethodFor(c.cellDeg, null, null, got.kind === 'span' ? 'span' : 'apan');
 		// dPET's lines describe a reference-ET grid only: a PenPan grid has its own, and any other A-pan grid must name its source.
 		const defaults = model ? PENPAN : got.kind === 'et0' ? DPET : null;
 		const source = args.source ?? got.meta.source ?? defaults?.source;
@@ -246,7 +264,7 @@ export async function readEvaporationFiles(
 				source: model ? modelledApanSource(source) : source,
 				version: args.version ?? got.meta.version ?? defaults?.version ?? 'unstated',
 				attribution: (args.attribution ?? got.meta.attribution ?? defaults?.attribution)!,
-				method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind, model),
+				method,
 				...(model ? { model } : {})
 			},
 			climatology: c,
@@ -319,7 +337,7 @@ export const loadSyntheticEvaporation = (url: string) => {
 
 const USAGE =
 	'usage: pnpm import:evaporation [--reduce <dir> <year>_daily_pet.nc … [--bbox w,s,e,n]] | [<file> … --dataset <label> [--bbox w,s,e,n] [--source "…"] [--version "…"] [--attribution "…"] [--out <grid.json[.gz]>]]' +
-	' | [--apan-asc|--span-asc <jan.asc> … <dec.asc> --dataset <label> --years <first>-<last> [--bbox w,s,e,n] [--source "…" --attribution "…"] [--out <grid.json[.gz]>]]';
+	' | [--apan-asc|--span-asc <jan.asc> … <dec.asc> --dataset <label> [--years <first>-<last>] [--bbox w,s,e,n] [--source "…" --attribution "…"] [--out <grid.json[.gz]>]]';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
 	loadDevEnv();

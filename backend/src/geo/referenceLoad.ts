@@ -39,7 +39,7 @@ import type pg from 'pg';
 import { DWS_RIVER_GAUGE } from '../feeds/config.js';
 import { type Plan, planImport, stationOf, writeGaugeRecordPlan } from '../feeds/gaugeRecordImport.js';
 import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './croplandGrid.js';
-import { ATLAS_APAN, ATLAS_SPAN, atlasApanMethodFor, atlasSpanMethodFor, DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
+import { ATLAS_APAN, ATLAS_SPAN, atlasApanMethodFor, atlasSpanMethodFor, DPET, evaporationFromJson, evaporationMethodFor, hasPeriod, replaceEvaporationDataset, type EvaporationDatasetMeta } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
@@ -515,23 +515,29 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		if (!c.cells.length) throw new LoadError(`${req.key}: no cells`, 'empty', 'the file has no cell with 12 monthly values');
 		const named = listed?.named.status === 'allowed' ? listed.named : null;
 		if (named && got.meta.attribution && got.meta.attribution !== named.attribution) log(`the file's own attribution is replaced by the recorded one`);
-		const meta = named
-			? {
-					dataset: req.dataset,
-					kind: got.kind,
-					source: named.source,
-					version: named.version,
-					attribution: named.attribution,
-					method: (got.kind === 'span' ? atlasSpanMethodFor : atlasApanMethodFor)(c.cellDeg, c.firstYear, c.lastYear)
-				}
-			: {
-					dataset: req.dataset,
-					kind: got.kind,
-					source: req.source ?? got.meta.source ?? DPET.source,
-					version: got.meta.version ?? DPET.version,
-					attribution: got.meta.attribution ?? DPET.attribution,
-					method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind)
-				};
+		let meta: EvaporationDatasetMeta;
+		if (named) {
+			// An Atlas grid states no period (issue #755): its method says so when the file has none.
+			meta = {
+				dataset: req.dataset,
+				kind: got.kind,
+				source: named.source,
+				version: named.version,
+				attribution: named.attribution,
+				method: (got.kind === 'span' ? atlasSpanMethodFor : atlasApanMethodFor)(c.cellDeg, c.firstYear, c.lastYear)
+			};
+		} else {
+			// evaporationFromJson lets a file leave its period out only for an A-pan or S-pan grid, and those load only under a listed label (above).
+			if (!hasPeriod(c)) throw new LoadError(`${req.key}: no period`, 'unreadable', 'the file has no "firstYear" ≤ "lastYear"');
+			meta = {
+				dataset: req.dataset,
+				kind: got.kind,
+				source: req.source ?? got.meta.source ?? DPET.source,
+				version: got.meta.version ?? DPET.version,
+				attribution: got.meta.attribution ?? DPET.attribution,
+				method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind)
+			};
+		}
 		try {
 			const written = await replaceEvaporationDataset(client, meta, c, origin);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };

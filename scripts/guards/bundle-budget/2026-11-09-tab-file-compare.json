@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The .tab browse and the stored-TAB-flows comparison on Settings → the daily EWR at the outlet (TabFlowsCompare in the EwrDailySourceFields chunk, compareTabFlows, the help text): measured 2446 KB locally against 2445 KB on main @ 4c53b1f8 (+1 KB)."
+}

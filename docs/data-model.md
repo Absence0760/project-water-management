@@ -2455,7 +2455,10 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   shown beside the saved A-pan as a cross-check only, never proposed or
   converted, so `evaporation_accepted` keeps `et0` and `apan` alone), `source`, `version`, `method` (the
   summarising in words), `attribution`, `first_year` and `last_year` (the
-  years the means average), `cell_deg`, `origin_lon` and `origin_lat` (0 ≤
+  years the means average; since 317 (issue #755) both null for an A-pan or
+  S-pan grid whose source states no period, such as the WRC Atlas's, with
+  `evaporation_dataset_period_check` keeping them both set or both null and
+  a reference-ET grid always dated), `cell_deg`, `origin_lon` and `origin_lat` (0 ≤
   origin < cell: dPET's cells are centred on whole tenths, so their corners
   sit 0.05° off), `loaded_at`. A cell row: `dataset` (cascades with it),
   `row_idx`, `col_idx` (the cell with south-west corner `origin_lon + col_idx
