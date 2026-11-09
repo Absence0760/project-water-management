@@ -4,7 +4,7 @@
 // (`{ "kind": "et0", "cellDeg": 0.1, "firstYear": …, "lastYear": …,
 // "source"?, "version"?, "attribution"?, "model"?, "cells": [[lon, lat, [Oct … Sep]], …] }`,
 // each cell by its centre; `"firstYear": null, "lastYear": null` (or both left out)
-// for an A-pan or S-pan grid whose source states no period, issue #755; `model`: how a modelled A-pan grid was made, PenPan's
+// for an A-pan grid whose source states no period, issue #755; `model`: how a modelled A-pan grid was made, PenPan's
 // settings, written by ingest/apan_grid.py; issue #646 item 7): the committed synthetic fixture's form, and what
 // `pnpm import:evaporation … --out` writes for a production load), and the
 // load into the database, which replaces a dataset in one transaction.
@@ -66,7 +66,7 @@ export const ATLAS_APAN = {
 
 /**
  * The period a grid's monthly means cover, both years or neither: null for an
- * A-pan or S-pan grid whose source states none (the WRC Atlas's, issue #755;
+ * A-pan grid whose source states none (the WRC Atlas's, issue #755;
  * 317_evaporation_period_optional.sql).
  */
 export type Period = { firstYear: number; lastYear: number } | { firstYear: null; lastYear: null };
@@ -88,41 +88,11 @@ export function atlasApanMethodFor(cellDeg: number, firstYear: number | null, la
 	);
 }
 
-/**
- * The Atlas's S-pan grid (issue #738): Symons-pan evaporation, monthly, as
- * CCWR's grids give it. Whether the Atlas ships an S-pan grid, and who made
- * it, is still to be confirmed (#738 step 1), so the lines name the report and
- * not a section or authors. The one S-pan grid a production load takes, under
- * this label only, stored with these lines whatever the file says
- * (referenceLoad.ts REFERENCE_KINDS evaporation `kindDatasets.span`), on the
- * operator's decision of 2026-11-08 (docs/legal/map-data-licences.md §
- * 3.3e). An S-pan grid is shown as a cross-check against the saved A-pan
- * only, never proposed or converted (evaporation.ts TARGET_OF).
- */
-export const ATLAS_SPAN_LABEL = 'Symons-pan (S-pan) evaporation (WRC Atlas, CCWR)';
-export const ATLAS_SPAN_ATTRIBUTION = 'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)';
-export const ATLAS_SPAN = {
-	dataset: 'Atlas-Span-2007',
-	source: `${ATLAS_SPAN_LABEL}: monthly Symons-pan evaporation grids from the CCWR (UKZN) Atlas of Agrohydrology 2008 distribution; which product they are is to be confirmed; Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06`,
-	version: 'Atlas of Agrohydrology 2008 (monthly S-pan grids)',
-	attribution: ATLAS_SPAN_ATTRIBUTION
-} as const;
-
-/** The Atlas S-pan grid's method in words: as the grids give it, and shown only, never converted. */
-export function atlasSpanMethodFor(cellDeg: number, firstYear: number | null, lastYear: number | null): string {
-	const period = firstYear !== null && lastYear !== null ? `the period ${firstYear}–${lastYear} as the operator recorded it` : 'the grids state no period for their means';
-	return (
-		`Symons-pan (S-pan) evaporation, the CCWR grids’ 12 monthly means as given (${period}), on a ${cellDeg.toFixed(4)}° grid reprojected to WGS84. ` +
-		'Shown as a cross-check against the saved A-pan only: S-pan is never converted to A-pan here (that conversion is the hydrologist’s choice). ' +
-		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
-	);
-}
-
-/** A grid of 12 monthly A-pan or S-pan grids other than the Atlas's (`import:evaporation --apan-asc` / `--span-asc`): its method in words. */
-export function monthlyGridsMethodFor(cellDeg: number, firstYear: number | null, lastYear: number | null, kind: 'apan' | 'span' = 'apan'): string {
+/** A grid of 12 monthly A-pan grids other than the Atlas's (`import:evaporation --apan-asc`): its method in words. */
+export function monthlyGridsMethodFor(cellDeg: number, firstYear: number | null, lastYear: number | null): string {
 	const period = firstYear !== null && lastYear !== null ? `for ${firstYear}–${lastYear}, as the source states them` : 'as given (the source states no period for them)';
 	return (
-		`12 monthly ${kind === 'apan' ? 'A-pan' : 'S-pan (Symons pan; shown as a cross-check only, never converted)'} grids (ESRI ASCII, ${cellDeg.toFixed(4)}° cells) taken as given: each cell's monthly means ${period}. ` +
+		`12 monthly A-pan grids (ESRI ASCII, ${cellDeg.toFixed(4)}° cells) taken as given: each cell's monthly means ${period}. ` +
 		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
 	);
 }
@@ -150,7 +120,7 @@ export function evaporationMethodFor(cellDeg: number, firstYear: number, lastYea
 			'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
 		);
 	}
-	const what = kind === 'et0' ? 'reference evapotranspiration (ET₀)' : kind === 'apan' ? 'A-pan evaporation' : 'Symons-pan (S-pan) evaporation';
+	const what = kind === 'et0' ? 'reference evapotranspiration (ET₀)' : 'A-pan evaporation';
 	return (
 		`Pre-summarised at import: each ${cellDeg}° cell's daily ${what} summed into calendar-month totals and averaged over ${firstYear}–${lastYear} (cells with every year only). ` +
 		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
@@ -203,7 +173,7 @@ export interface Climatology {
 	cellDeg: number;
 	originLon: number;
 	originLat: number;
-	/** The calendar years the means average; both null for an A-pan or S-pan grid whose source states none (Period). */
+	/** The calendar years the means average; both null for an A-pan grid whose source states none (Period). */
 	firstYear: number | null;
 	lastYear: number | null;
 	cells: EvaporationCell[];
@@ -218,7 +188,7 @@ export function evaporationFromJson(doc: unknown):
 	| { kind: EvaporationKind; climatology: Climatology; meta: { source?: string; version?: string; attribution?: string; model?: EvaporationModel }; problems: string[] }
 	| string {
 	const d = doc as { kind?: unknown; cellDeg?: unknown; firstYear?: unknown; lastYear?: unknown; cells?: unknown; source?: unknown; version?: unknown; attribution?: unknown; model?: unknown };
-	if (d?.kind !== 'et0' && d?.kind !== 'apan' && d?.kind !== 'span') return 'the JSON file has no "kind" of "et0" (reference ET), "apan" (Class-A pan) or "span" (Symons pan, shown as a cross-check only)';
+	if (d?.kind !== 'et0' && d?.kind !== 'apan') return 'the JSON file has no "kind" of "et0" (reference ET) or "apan" (Class-A pan)';
 	const cellDeg = Number(d.cellDeg);
 	if (!(cellDeg > 0 && cellDeg <= 1)) return 'the JSON file has no "cellDeg" between 0 and 1';
 	const model = modelFromJson(d.model, d.kind);
@@ -255,19 +225,19 @@ export function evaporationFromJson(doc: unknown):
 
 /**
  * A file's years, or why they can't be read: both whole years, first ≤ last,
- * or (an A-pan or S-pan grid of means as given, no PenPan model) both null or
+ * or (an A-pan grid of means as given, no PenPan model) both null or
  * left out, when its source states no period (issue #755).
  */
 function periodFromJson(first: unknown, last: unknown, kind: EvaporationKind, modelled: boolean): Period | string {
 	const none = (v: unknown) => v === undefined || v === null;
 	if (none(first) && none(last)) {
-		if (kind === 'et0' || modelled) return 'the JSON file has no "firstYear" ≤ "lastYear" (only an A-pan or S-pan grid of means as given may leave its period out)';
+		if (kind === 'et0' || modelled) return 'the JSON file has no "firstYear" ≤ "lastYear" (only an A-pan grid of means as given may leave its period out)';
 		return { firstYear: null, lastYear: null };
 	}
 	const firstYear = Number(first);
 	const lastYear = Number(last);
 	if (none(first) || none(last) || !(Number.isInteger(firstYear) && Number.isInteger(lastYear) && firstYear <= lastYear)) {
-		return 'the JSON file has no "firstYear" ≤ "lastYear" (give both, or for an A-pan or S-pan grid whose source states no period, neither)';
+		return 'the JSON file has no "firstYear" ≤ "lastYear" (give both, or for an A-pan grid whose source states no period, neither)';
 	}
 	return { firstYear, lastYear };
 }

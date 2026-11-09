@@ -1293,7 +1293,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One loaded MAP grid's points in `bbox` (at most 2° a side; `dataset` null: the default), for the map's MAP grid layer. */
 			mapGrid: (id: string, bbox: readonly [number, number, number, number], dataset?: string | null) =>
 				request<MapGridLayer>('GET', `${p(id)}/map/map-grid?${new URLSearchParams({ bbox: bbox.join(','), ...(dataset ? { dataset } : {}) })}`),
-			/** One loaded A-pan or S-pan grid's points in `bbox` (at most 2° a side; `dataset` null: the default), the month's (1–12) or, with none, the year's total. */
+			/** One loaded A-pan grid's points in `bbox` (at most 2° a side; `dataset` null: the default), the month's (1–12) or, with none, the year's total. */
 			evaporationGrid: (id: string, kind: EvaporationGridKind, bbox: readonly [number, number, number, number], dataset?: string | null, month?: number | null) =>
 				request<EvaporationGridLayer>(
 					'GET',

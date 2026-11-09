@@ -245,10 +245,11 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 		// The WRC Atlas's two grids, used on the operator's decision of 2026-11-08 (docs/legal/map-data-licences.md § 3.3e).
 		'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2',
 		'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06',
-		'These are modelled values, not measured pans.',
-		'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)'
+		'These are modelled values, not measured pans.'
 	])
 		expect(html, text).toContain(text);
+	// No S-pan grid credit: the WRC Atlas has no S-pan grids, so the option was removed (issue #738).
+	expect(html).not.toContain('Symons-pan (S-pan) evaporation grids');
 	await page.goto('/terms');
 	// §9 binds users to the end-user terms licensed map data needs (HydroRIVERS: no stand-alone copy, no reverse engineering).
 	await expect(page.locator('#third-party ~ p').filter({ hasText: 'Map data licensed to us.' })).toContainText(

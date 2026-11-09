@@ -4,7 +4,7 @@
 // already, the implied pan coefficient cross-check, and the provenance line.
 import { describe, expect, it } from 'vitest';
 import type { EvaporationAccepted, EvaporationProposals } from '#lib/api/index.js';
-import { acceptedText, apanOverSpan, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, useMessage } from './evaporationProposal';
+import { acceptedText, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, useMessage } from './evaporationProposal';
 
 const BASE = [120, 150, 175, 180, 150, 130, 90, 65, 50, 55, 75, 95];
 const dataset = {
@@ -45,23 +45,9 @@ describe('proposalState', () => {
 	});
 });
 
-describe('an S-pan grid (issue #738): a cross-check only', () => {
-	const span = props({ dataset: { ...dataset, dataset: 'Atlas-Span-2007', kind: 'span', synthetic: false }, target: null, proposal: { monthlyMm: BASE, annualMm: 1335, coverage: 0.9, cells: 6 } });
-
-	it('is a cross-check, never ready: there is no target and nothing to use', () => {
-		expect(proposalState(span)).toEqual({ kind: 'cross-check', spanMm: BASE, annualMm: 1335, coverage: 0.9, cells: 6 });
-		expect(proposalState({ ...span, boundary: null, proposal: null })).toEqual({ kind: 'no-boundary' });
-	});
-
-	it('gives saved A-pan ÷ S-pan month by month, a dash where either is 0, never a converted row', () => {
-		const apan = BASE.map((v) => v * 1.25);
-		expect(apanOverSpan(apan, BASE)).toEqual(BASE.map(() => 1.25));
-		expect(apanOverSpan([0, ...apan.slice(1)], [100, 0, ...BASE.slice(2)]).slice(0, 3)).toEqual([null, null, 1.25]);
-	});
-
-	it('names the kind in the grid picker as a cross-check', () => {
-		expect(KIND_SHORT.span).toBe('S-pan, cross-check only');
-		expect(KIND_SHORT.apan).toBe('A-pan');
+describe('the grid picker', () => {
+	it('names each kind in a few words', () => {
+		expect(KIND_SHORT).toEqual({ et0: 'reference ET', apan: 'A-pan' });
 	});
 });
 

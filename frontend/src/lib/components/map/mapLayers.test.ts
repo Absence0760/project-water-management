@@ -312,18 +312,17 @@ describe('jrcCreditedFeature and mapCredits (issue #523 C6)', () => {
 		expect(MAP_CREDIT_TEXT['lynch-map']).toBe('MAP grid: Lynch (2004), WRC Atlas');
 	});
 
-	it('credits the WRC Atlas’s A-pan and S-pan grids while their layers draw a grid stored with each one’s citation, linking to their own sections', () => {
+	it('credits the WRC Atlas’s A-pan grid while its layer draws a grid stored with its citation, linking to its own section', () => {
 		const apan = 'Schulze, R.E. and Maharaj, M. 2007. A-Pan Equivalent Reference Potential Evaporation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06';
-		const span = 'Schulze, R.E. (Ed). 2007. South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06 (S-pan grids; source to be confirmed)';
 		const lynch = 'Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2';
-		expect(mapCredits([], false, null, [apan, null])).toEqual(['atlas-apan']);
-		expect(mapCredits([], false, null, [null, span])).toEqual(['atlas-span']);
-		expect(mapCredits([dam], false, lynch, [apan, span])).toEqual(['jrc-water', 'lynch-map', 'atlas-apan', 'atlas-span']);
+		expect(mapCredits([], false, null, [apan])).toEqual(['atlas-apan']);
+		expect(mapCredits([dam], false, lynch, [apan])).toEqual(['jrc-water', 'lynch-map', 'atlas-apan']);
 		// Nothing drawn, or a grid with another credit line (an operator's own, the synthetic one): no Atlas credit.
-		expect(mapCredits([], false, null, [null, null])).toEqual([]);
-		expect(mapCredits([], false, null, ['Invented A-pan grid', `${span}.`])).toEqual([]);
+		expect(mapCredits([], false, null, [null])).toEqual([]);
+		expect(mapCredits([], false, null, ['Invented A-pan grid', `${apan}.`])).toEqual([]);
 		expect(MAP_CREDIT_TEXT['atlas-apan']).toBe('A-pan grid: WRC Atlas (modelled)');
-		expect(MAP_CREDIT_TEXT['atlas-span']).toBe('S-pan grid: WRC Atlas');
+		// One credit per licensed source the map draws: no S-pan grid credit since the option was removed (issue #738).
+		expect(Object.keys(MAP_CREDIT_TEXT)).toEqual(['hydrorivers', 'jrc-water', 'waas-map', 'lynch-map', 'atlas-apan']);
 	});
 
 	it('words each credit for the attribution control: the JRC line names the source as JRC asks and says the outline was modified', () => {

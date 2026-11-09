@@ -6,10 +6,8 @@
 // ET₀ ÷ A-pan as a cross-check; Use asks first, saves the 12 values as one
 // settings revision and the form reloads them; History cites the dataset.
 // Use waits while the form has unsaved changes. A viewer reads it but can't
-// use it, and a project with no boundary is told to draw one. An S-pan grid
-// (issue #738; its answer stood in for by a route, so the shared e2e
-// database keeps one grid) is shown as a cross-check beside the saved A-pan,
-// with no Use. The tables are read, never the map. Invented data only.
+// use it, and a project with no boundary is told to draw one. The tables are
+// read, never the map. Invented data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, putSeries, seedRunnableProject } from '../support/api.ts';
@@ -138,28 +136,4 @@ test('Use waits for unsaved settings, and a project with no boundary is told to 
 	await anySaveBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
 	await answerConfirm(page, true);
 	await expect(use).toBeEnabled();
-});
-
-test('an S-pan grid is a cross-check only: its months, the saved A-pan and A-pan ÷ S-pan, and no Use (issue #738)', async ({ page, owner }) => {
-	void owner;
-	const project = await seedRunnableProject(page.request, 'Evaporation S-pan cross-check');
-	await drawBoundary(page, project.id);
-	// The synthetic grid's answer, presented as an S-pan grid: what the server sends for one (no target).
-	await page.route(/\/evaporation-proposals(\?|$)/, async (route) => {
-		const res = await route.fetch();
-		const body = await res.json();
-		body.dataset = { ...body.dataset, dataset: 'Atlas-Span-2007', kind: 'span', synthetic: false };
-		body.datasets = [{ dataset: 'Atlas-Span-2007', kind: 'span', version: body.dataset.version, synthetic: false }];
-		body.target = null;
-		await route.fulfill({ response: res, json: body });
-	});
-	await openPanel(page, project.id);
-	await expect(panel(page)).toContainText('a cross-check only, nothing to use');
-	await expect(row(page, 'span').getByRole('cell')).toHaveText(['120', '150', '175', '180', '150', '130', '90', '65', '50', '55', '75', '95', '1\u202f335']);
-	// The seeded A-pan row starts at 150 mm: 150 ÷ 120.
-	await expect(row(page, 'ratio').getByRole('cell').first()).toHaveText('1.25');
-	await expect(panel(page).getByTestId('evaporation-span-note')).toContainText('never written to the project');
-	await expect(panel(page).getByRole('button', { name: /^Use / })).toHaveCount(0);
-	await expect(row(page, 'proposed')).toHaveCount(0);
-	await expectNoViolations(page, { include: '[data-testid="evaporation-proposal"]' });
 });

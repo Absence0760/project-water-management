@@ -16,9 +16,9 @@
 // dataset: the load must name one of its listed labels, an allowed one, and
 // is stored with the source lines recorded here, never the file's. The
 // evaporation kind is allowed for any reference-ET grid (dPET), and for an
-// A-pan or S-pan grid only under a label listed for that grid kind in its
-// `kindDatasets` (the WRC Atlas's), stored the same way; every other A-pan or
-// S-pan grid, PenPan's included, is refused. referenceLoad.test.ts checks this table against the Sources table, so the
+// A-pan grid only under a label listed for that grid kind in its
+// `kindDatasets` (the WRC Atlas's), stored the same way; every other A-pan
+// grid, PenPan's included, is refused. referenceLoad.test.ts checks this table against the Sources table, so the
 // two can't drift.
 //
 // What a load trusts: the object must hash to the SHA-256 the operator gave
@@ -39,7 +39,7 @@ import type pg from 'pg';
 import { DWS_RIVER_GAUGE } from '../feeds/config.js';
 import { type Plan, planImport, stationOf, writeGaugeRecordPlan } from '../feeds/gaugeRecordImport.js';
 import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './croplandGrid.js';
-import { ATLAS_APAN, ATLAS_SPAN, atlasApanMethodFor, atlasSpanMethodFor, DPET, evaporationFromJson, evaporationMethodFor, hasPeriod, replaceEvaporationDataset, type EvaporationDatasetMeta } from './evaporationGrid.js';
+import { ATLAS_APAN, atlasApanMethodFor, DPET, evaporationFromJson, evaporationMethodFor, hasPeriod, replaceEvaporationDataset, type EvaporationDatasetMeta } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { placeRecords, placesSummary, replacePlaces } from './loadGazetteer.js';
@@ -70,8 +70,8 @@ export type ReferenceKind = {
 			limits?: { object: number; text: number };
 			/** The labels a load may name, each with its own licence status (every other label is refused); absent: any label. */
 			datasets?: Readonly<Record<string, ReferenceDataset>>;
-			/** Evaporation: per grid kind (A-pan, S-pan), the labels a load of that kind may name, each with its own licence status (every other A-pan or S-pan grid is refused; a reference-ET grid takes any label not listed here). */
-			kindDatasets?: Readonly<Partial<Record<'apan' | 'span', Readonly<Record<string, ReferenceDataset>>>>>;
+			/** Evaporation: per grid kind (A-pan), the labels a load of that kind may name, each with its own licence status (every other A-pan grid is refused; a reference-ET grid takes any label not listed here). */
+			kindDatasets?: Readonly<Partial<Record<'apan', Readonly<Record<string, ReferenceDataset>>>>>;
 	  }
 	| { status: 'blocked'; why: string }
 );
@@ -89,8 +89,8 @@ export const REFERENCE_KINDS = {
 		file: /\.json(\.gz)?$/,
 		what: 'the grid of monthly means `pnpm import:evaporation … --out <file>` writes',
 		// South Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON; all
-		// of Africa about 540 000 cells, near 50 MB. The WRC Atlas's A-pan and
-		// S-pan grids load whole, for the country (the operator, 2026-11-08):
+		// of Africa about 540 000 cells, near 50 MB. The WRC Atlas's A-pan grid
+		// loads whole, for the country (the operator, 2026-11-08):
 		// at 1′ every cell of the South Africa box (16–33.2° E, 35.2–22° S) is
 		// 817 344 cells, measured 2026-11-08 through `import:evaporation
 		// --apan-asc --out` at 74 MB of JSON, 24 MB gzipped with noisy values;
@@ -100,8 +100,8 @@ export const REFERENCE_KINDS = {
 		limits: { object: 32 * 1024 * 1024, text: 128 * 1024 * 1024 },
 		// A-pan grids by label: the WRC Atlas's A-pan equivalent (modelled, not measured pans), by the operator's
 		// decision of 2026-11-08 accepting its licence risk (docs/legal/map-data-licences.md § 3.3e). PenPan's and
-		// every other A-pan grid stay refused (docs/data-sources.md § penpan-apan). S-pan grids by label too: CCWR's,
-		// on the same decision (issue #738), shown as a cross-check only, never proposed or converted.
+		// every other A-pan grid stay refused (docs/data-sources.md § penpan-apan). (An S-pan label was removed on
+		// 2026-11-09: the Atlas has no S-pan grids, issue #738.)
 		kindDatasets: {
 			apan: {
 				[ATLAS_APAN.dataset]: {
@@ -110,15 +110,6 @@ export const REFERENCE_KINDS = {
 					source: ATLAS_APAN.source,
 					version: ATLAS_APAN.version,
 					attribution: ATLAS_APAN.attribution
-				}
-			},
-			span: {
-				[ATLAS_SPAN.dataset]: {
-					status: 'allowed',
-					sourcesRow: 'Symons-pan (S-pan) evaporation',
-					source: ATLAS_SPAN.source,
-					version: ATLAS_SPAN.version,
-					attribution: ATLAS_SPAN.attribution
 				}
 			}
 		}
@@ -351,7 +342,7 @@ export function parseLoadRequest(raw: unknown): LoadRequest {
 		if (named.status === 'blocked') throw refused(`${kind} dataset ${dataset} is blocked in production: ${named.why}; docs/maps.md § Sources`);
 		if (source !== null) throw refused(`${kind} takes no source: the dataset's source and credit are the ones recorded with its licence`);
 	}
-	// An A-pan or S-pan label (evaporation): its recorded lines are stored, so no source of the load's own.
+	// An A-pan label (evaporation): its recorded lines are stored, so no source of the load's own.
 	const kindNamed = gridKindDataset(spec, dataset);
 	if (kindNamed) {
 		const named = kindNamed.named;
@@ -370,10 +361,10 @@ export function parseLoadRequest(raw: unknown): LoadRequest {
 	return { kind: kind as AllowedKind, key, sha256, dataset, source, minOrder: minOrder as number, station };
 }
 
-/** The A-pan or S-pan grid kind a label is listed under (evaporation's kindDatasets), with its entry; null for any other label. */
-function gridKindDataset(spec: ReferenceKind, dataset: string): { gridKind: 'apan' | 'span'; named: ReferenceDataset } | null {
+/** The A-pan grid kind a label is listed under (evaporation's kindDatasets), with its entry; null for any other label. */
+function gridKindDataset(spec: ReferenceKind, dataset: string): { gridKind: 'apan'; named: ReferenceDataset } | null {
 	if (spec.status !== 'allowed' || !spec.kindDatasets) return null;
-	for (const gridKind of ['apan', 'span'] as const) {
+	for (const gridKind of ['apan'] as const) {
 		const table = spec.kindDatasets[gridKind];
 		if (table && Object.hasOwn(table, dataset)) return { gridKind, named: table[dataset]! };
 	}
@@ -489,13 +480,13 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		if (typeof got === 'string') throw new LoadError(`${req.key}: ${got}`, 'unreadable', 'the file is not an evaporation grid (kind, cellDeg, years and cells)');
 		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
 		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
-		// A reference-ET grid (dPET's row) under any label but a listed A-pan or S-pan one; an A-pan or S-pan grid only
-		// under a label kindDatasets lists for its own kind (the WRC Atlas's), and never a modelled PenPan grid
-		// (docs/data-sources.md § penpan-apan). An S-pan grid is stored as S-pan, never as A-pan.
+		// A reference-ET grid (dPET's row) under any label but a listed A-pan one; an A-pan grid only under a label
+		// kindDatasets lists for its own kind (the WRC Atlas's), and never a modelled PenPan grid
+		// (docs/data-sources.md § penpan-apan).
 		const evap: ReferenceKind = REFERENCE_KINDS.evaporation;
 		const listed = gridKindDataset(evap, req.dataset);
-		const allowedFor = (k: 'apan' | 'span') => (evap.status === 'allowed' ? Object.keys(evap.kindDatasets?.[k] ?? {}).join(', ') : '');
-		const KIND_WORD = { et0: 'reference ET', apan: 'an A-pan grid', span: 'an S-pan grid' } as const;
+		const allowedFor = (k: 'apan') => (evap.status === 'allowed' ? Object.keys(evap.kindDatasets?.[k] ?? {}).join(', ') : '');
+		const KIND_WORD = { et0: 'reference ET', apan: 'an A-pan grid' } as const;
 		if (listed && listed.gridKind !== got.kind) {
 			throw refused(`dataset ${req.dataset} is ${KIND_WORD[listed.gridKind]}'s label: this file is ${KIND_WORD[got.kind]}; load it under another label`);
 		}
@@ -504,9 +495,7 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 				throw new LoadError(
 					`${req.key}: kind ${got.kind}`,
 					'refused',
-					got.kind === 'apan'
-						? `only a reference-ET grid (kind "et0", dPET) loads in production, or an A-pan grid under a label whose licence is recorded: ${allowedFor('apan')} (docs/maps.md § Sources)`
-						: `an S-pan grid loads in production only under a label whose licence is recorded: ${allowedFor('span')} (docs/maps.md § Sources)`
+					`only a reference-ET grid (kind "et0", dPET) loads in production, or an A-pan grid under a label whose licence is recorded: ${allowedFor('apan')} (docs/maps.md § Sources)`
 				);
 			}
 			if (got.meta.model) throw new LoadError(`${req.key}: a PenPan model`, 'refused', `a modelled PenPan grid is not ${req.dataset} and is blocked in production (docs/data-sources.md § penpan-apan)`);
@@ -524,10 +513,10 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 				source: named.source,
 				version: named.version,
 				attribution: named.attribution,
-				method: (got.kind === 'span' ? atlasSpanMethodFor : atlasApanMethodFor)(c.cellDeg, c.firstYear, c.lastYear)
+				method: atlasApanMethodFor(c.cellDeg, c.firstYear, c.lastYear)
 			};
 		} else {
-			// evaporationFromJson lets a file leave its period out only for an A-pan or S-pan grid, and those load only under a listed label (above).
+			// evaporationFromJson lets a file leave its period out only for an A-pan grid, and those load only under a listed label (above).
 			if (!hasPeriod(c)) throw new LoadError(`${req.key}: no period`, 'unreadable', 'the file has no "firstYear" ≤ "lastYear"');
 			meta = {
 				dataset: req.dataset,

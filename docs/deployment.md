@@ -3734,7 +3734,7 @@ Lambda's list against the Sources table):
 | Kind | Licence (maps.md § Sources) | The file | How to make it |
 | --- | --- | --- | --- |
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
-| `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) under any label; an A-pan grid only as dataset `Atlas-Apan-2007`, the WRC Atlas's A-pan equivalent (modelled, not measured pans), and an S-pan grid only as `Atlas-Span-2007` (kind `span`, a cross-check only, never converted; migration 316), by the operator's decision of 2026-11-08 (legal/map-data-licences.md § 3.3e), each stored with its recorded source, version and credit whatever the file says and with no `source` input; PenPan's and every other A-pan or S-pan grid refused (the gate and the Lambda); at most 32 MiB gzipped, 128 MiB unzipped (a national 1′ grid) | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
+| `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) under any label; an A-pan grid only as dataset `Atlas-Apan-2007`, the WRC Atlas's A-pan equivalent (modelled, not measured pans), by the operator's decision of 2026-11-08 (legal/map-data-licences.md § 3.3e), stored with its recorded source, version and credit whatever the file says and with no `source` input; PenPan's and every other A-pan grid refused (the gate and the Lambda), and any S-pan grid (no `span` kind since migration 318: the Atlas has none, issue #738); at most 32 MiB gzipped, 128 MiB unzipped (a national 1′ grid) | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
 | `gazetteer` | GeoNames, CC BY 4.0: allowed (its attribution, "GeoNames (geonames.org), CC BY 4.0", is stored on every place and shown under every Map search that lists one) | GeoNames' South Africa dump, `ZA.txt`, and its six neighbours' (`BW`, `LS`, `MZ`, `NA`, `SZ`, `ZW`) concatenated into a second file (gzip each); the kinds the search doesn't keep (roads, schools, …), a neighbour's places outside the basemap, and any other country's are left out at load | download the seven zips from download.geonames.org/export/dump/, unzip each in its own folder, `gzip -k ZA.txt`, and `cat` the six neighbours into one file, gzipped (steps below; maps.md § Gazetteer) |
 | `map-grid` | allowed dataset by dataset: the Southwestern Cape surface (WAAS, 2007) only, by the operator's decision of 2026-10-23 (terms not stated; legal/map-data-licences.md § 3.3b), as dataset `WAAS-SWCape-2007`, stored with its recorded source, version and credit line whatever the file says; and the Lynch (2004) grid from the WRC Atlas, by the operator's decision of 2026-11-08 accepting its licence risk (legal/map-data-licences.md § 3.3e), as dataset `Lynch-2004`; any other label refused (the gate and the Lambda), and so is a `source` | the grid cut to the client's area, in the JSON form `--out` writes (gzipped), never the ASCII grid itself | `pnpm import:map-grid waas.asc --dataset WAAS-SWCape-2007 --source "…" --bbox <w,s,e,n> --out waas-swcape.json.gz` (steps below) |
@@ -3872,16 +3872,14 @@ replaces its dataset).
 **The WRC Atlas grids** (the operator's decision of 2026-11-08,
 legal/map-data-licences.md § 3.3e; [maps.md § MAP grid](./maps.md#map-grid),
 [§ The evaporation grid](./maps.md#the-evaporation-grid)). The Lynch (2004)
-MAP grid loads as `map-grid` dataset `Lynch-2004`, the A-pan equivalent
-grid as `evaporation` dataset `Atlas-Apan-2007`, and CCWR's S-pan grid
-(issue #738; which product it is is to be confirmed first, #738 step 1) as
-`evaporation` dataset `Atlas-Span-2007`. Each loads whole, for the country
-(the operator, 2026-11-08), not cut to the client's area; `--bbox` stays
-available if a smaller area is ever wanted. The S-pan load needs the
-backend release that carries migration 316 (it lets `evaporation_dataset`
-hold kind `span`), and a grid with no period (step 3) the release that
-carries migration 317 (it lets `first_year` and `last_year` be null for an
-A-pan or S-pan grid); the MAP grid needs no migration. From a folder outside
+MAP grid loads as `map-grid` dataset `Lynch-2004` and the A-pan equivalent
+grid as `evaporation` dataset `Atlas-Apan-2007`. The Atlas has no S-pan
+grids (#738 step 1, 2026-11-09), so there is no S-pan load. Each loads
+whole, for the country (the operator, 2026-11-08), not cut to the client's
+area; `--bbox` stays available if a smaller area is ever wanted. A grid
+with no period (step 3) needs the backend release that carries migration
+317 (it lets `first_year` and `last_year` be null for an A-pan grid); the
+MAP grid needs no migration. From a folder outside
 the repo, with the Atlas of Agrohydrology 2008 zip from the Water Research
 Observatory (free account) unpacked; keep the zip as received under
 `originals/atlas/`, never commit it:
@@ -3894,8 +3892,8 @@ Observatory (free account) unpacked; keep the zip as received under
    reads the CRS from the `.aux` sidecar, which says WGS84, so without it
    the warp would treat Cape coordinates as WGS84 and skip the datum shift
    (issue #755). The same for each
-   of the 12 monthly A-pan grids and the 12 monthly S-pan grids
-   (`gdalinfo` names them; keep January to December in order).
+   of the 12 monthly A-pan grids (`gdalinfo` names them; keep January to
+   December in order).
 2. The MAP grid, whole:
    `pnpm import:map-grid ./gmap.asc --dataset Lynch-2004 --source "Lynch (2004)" --out ./lynch-2004.json.gz`
    (the load stores the Atlas's citation instead of the `--source`). Every
@@ -3916,24 +3914,17 @@ Observatory (free account) unpacked; keep the zip as received under
    24 MB gzipped (2026-11-08, noisy invented values; the Atlas's land is
    about half the box), inside the `evaporation` load's caps of 32 MiB
    gzipped and 128 MiB unzipped; loading it took 17 s locally.
-4. The S-pan grid, whole, once its source is confirmed:
-   `pnpm import:evaporation --span-asc ./span01.asc … ./span12.asc --dataset Atlas-Span-2007 --out ./atlas-span-2007.json.gz`
-   (add `--years <first>-<last>` only if its source states a period).
-   The same size as the A-pan grid. It is shown as a cross-check on
-   Evaporation from the map only, never fed to the model.
-5. Optionally load them locally first (the same commands without `--out`)
+4. Optionally load them locally first (the same commands without `--out`)
    and look at them on the Map tab and in Calibration → Evaporation from
    the map.
-6. Upload and load them, giving no source:
+5. Upload and load them, giving no source:
 
 ```bash
-sha256sum lynch-2004.json.gz atlas-apan-2007.json.gz atlas-span-2007.json.gz
+sha256sum lynch-2004.json.gz atlas-apan-2007.json.gz
 aws s3 cp lynch-2004.json.gz s3://<reference_bucket>/reference/map-grid/lynch-2004.json.gz --profile water-management
 aws s3 cp atlas-apan-2007.json.gz s3://<reference_bucket>/reference/evaporation/atlas-apan-2007.json.gz --profile water-management
-aws s3 cp atlas-span-2007.json.gz s3://<reference_bucket>/reference/evaporation/atlas-span-2007.json.gz --profile water-management
 gh workflow run load-reference.yml -f kind=map-grid -f key=reference/map-grid/lynch-2004.json.gz -f sha256=<hex> -f dataset=Lynch-2004
 gh workflow run load-reference.yml -f kind=evaporation -f key=reference/evaporation/atlas-apan-2007.json.gz -f sha256=<hex> -f dataset=Atlas-Apan-2007
-gh workflow run load-reference.yml -f kind=evaporation -f key=reference/evaporation/atlas-span-2007.json.gz -f sha256=<hex> -f dataset=Atlas-Span-2007
 ```
 
 Approve each in the `production` environment. Check: **MAP grid** lists
@@ -3941,8 +3932,7 @@ Approve each in the `production` environment. Check: **MAP grid** lists
 Atlas", linking to `/data-sources#lynch-map`; Calibration → Evaporation
 from the map offers Atlas-Apan-2007, and its proposal says "modelled A-pan
 equivalent reference potential evaporation (WRC Atlas, not a measured
-pan)"; picking Atlas-Span-2007 shows its S-pan and saved A-pan ÷ S-pan as
-a cross-check, with no Use. The read paths stay bounded with national
+pan)". The read paths stay bounded with national
 grids: the Map layer reads at most 5 000 points a request over at most 2°
 a side, a unit's MAP at most 100 000 cells, and an evaporation summary at
 most 40 000 cells of extent (129 ms for a 3.2° box on the full 1′ grid).
@@ -4145,7 +4135,7 @@ production checks](#read-only-production-checks)), or the archive's
 | `evaporation` | dPET on data.bris (DOI-versioned; new years appended) | the dataset page lists its years; refresh when the years you average over change | `pnpm import:evaporation:fetch <first> <last>` (the yearly files are 2.4 GB each and deleted once reduced: keep the reduced totals, not the NetCDF, under `originals/evaporation/`), then `--out` and load | Settings → Evaporation from the map shows the new dataset |
 | `gazetteer` | GeoNames country dumps, `download.geonames.org/export/dump/<CC>.zip` | `curl -sI -z <last load's date> https://download.geonames.org/export/dump/ZA.zip`: 304 is unchanged; refresh a few times a year at most | the gazetteer steps above; keep the seven zips under `originals/gazetteer/` | the Map's search finds the places listed above |
 | `map-grid` | a file from the client (WAAS, 2007): no upstream | never, unless the client sends a new surface | the MAP grid steps above; keep the surface as received under `originals/map-grid/` | the MAP grid layer and its credit line |
-| `map-grid` `Lynch-2004`, `evaporation` `Atlas-Apan-2007` and `Atlas-Span-2007` | the WRC Atlas of Agrohydrology 2008 zip, Water Research Observatory (a 2007 publication, static) | never, unless the WRC publishes a new edition | the WRC Atlas grids steps above; keep the zip under `originals/atlas/` | the MAP grid layer and its credit; the A-pan proposal's source line |
+| `map-grid` `Lynch-2004` and `evaporation` `Atlas-Apan-2007` | the WRC Atlas of Agrohydrology 2008 zip, Water Research Observatory (a 2007 publication, static) | never, unless the WRC publishes a new edition | the WRC Atlas grids steps above; keep the zip under `originals/atlas/` | the MAP grid layer and its credit; the A-pan proposal's source line |
 | `soils` | SoilGrids 2.0 water retention (`storage.googleapis.com/isric-share-soilgrids/pre-release/`) and iSDAsoil's bedrock depth (`s3://isdasoil`) | `curl -sI` one SoilGrids file and compare its ETag and Last-Modified (2021-10-27 today); iSDAsoil v1 is final | the soil grid steps above; keep the GeoTIFF clips under `originals/soils/` | the load's counts |
 | `gr4j-donors` | GRDC-Caravan on Zenodo (versioned records) | the record's version list (0.6 today); and whenever the engine's fit or the copy's years change | the donor steps above, under a new label; keep the zip under `originals/gr4j-donors/` | the load's counts; the donor set's SHA-256 on its row |
 

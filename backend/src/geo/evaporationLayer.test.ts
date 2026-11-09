@@ -1,4 +1,4 @@
-// The A-pan and S-pan grid layers' pure parts (geo/evaporationLayer.ts): a
+// The A-pan grid layer's pure parts (geo/evaporationLayer.ts): a
 // calendar month's place in a cell's Oct … Sep values, and a cell's value for a
 // month or the year.
 import { describe, expect, it } from 'vitest';

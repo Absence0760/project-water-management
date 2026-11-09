@@ -18,8 +18,8 @@
 	const loadDivideSheet = () => import('./DivideSheet.svelte');
 	// The click bar shows only while dividing by clicks: its own chunk keeps the tab under its budget (check:bundle).
 	const loadClickBar = () => import('./ClickBar.svelte');
-	// The A-pan and S-pan grid layers' toggles and state: a chunk of their own, loaded once the tab is up; and the measure
-	// bar, shown only while measuring (2026-11-08: the two layers took the tab past its 60 KB ceiling, 61 KB).
+	// The A-pan grid layer's toggle and state: a chunk of its own, loaded once the tab is up; and the measure
+	// bar, shown only while measuring (2026-11-08: the evaporation grid layers took the tab past its 60 KB ceiling, 61 KB).
 	const loadEvaporationGrids = () => import('./EvaporationGridToggles.svelte');
 	const loadMeasureBar = () => import('./measure/MeasureBar.svelte');
 	// The sheets a tool opens once its point, shape or cut is on the map (Place, Delineate, Save a drawing, Split,
@@ -939,8 +939,8 @@
 		view: () => mapView,
 		load: api.map.mapGrid
 	});
-	// The A-pan and S-pan grids (docs/maps.md § A-pan and S-pan grids): one layer each, toggled on its own. Their state
-	// class and toggles load as one chunk after the tab; each layer is made inside this effect, which owns their effects.
+	// The A-pan grid (docs/maps.md § A-pan grid): a layer toggled on its own. Its state class and toggle load as one
+	// chunk after the tab; the layer is made inside this effect, which owns its effects.
 	let evaporationGrids = $state.raw<EvaporationGrids | null>(null);
 	let evaporationModule = $state.raw<Awaited<ReturnType<typeof loadEvaporationGrids>> | null>(null);
 	// A chunk that failed to load is said in the Layers box, with a reload (ChunkFailed; lazy.ts says why not retry).
@@ -955,7 +955,7 @@
 		}
 		const m = evaporationModule;
 		untrack(() => {
-			const grids = (['apan', 'span'] as const).map(
+			const grids = (['apan'] as const).map(
 				(kind) =>
 					new m.EvaporationGridLayer({
 						kind,
@@ -1679,7 +1679,6 @@
 									mapGridAttribution={mapGrid.answer?.dataset?.attribution ?? null}
 									mapGridCellDeg={mapGrid.answer?.dataset?.cellDeg ?? null}
 									apanGrid={evaporationGrids?.grids[0]?.draw ?? null}
-									spanGrid={evaporationGrids?.grids[1]?.draw ?? null}
 									chirps={chirpsInView}
 									demGrid={demGrid.points}
 									fillScale={areaFill.scale}

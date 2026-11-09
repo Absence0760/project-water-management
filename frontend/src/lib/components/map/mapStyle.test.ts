@@ -56,7 +56,6 @@ import {
 	evaporationGridLayers,
 	EVAPORATION_GRID_LABEL_LAYER,
 	APAN_RAMP,
-	SPAN_RAMP,
 	mapGridLabelMinZoom,
 	MAP_GRID_LABEL_CLEARANCE_PX,
 	MAP_GRID_LABEL_LAYER,
@@ -201,7 +200,7 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), 'units-casing', 'units-line', 'chirps-cell', 'chirps-point', 'demgrid-point', 'spangrid-point', 'apangrid-point', 'mapgrid-point', ...proposalLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), 'units-casing', 'units-line', 'chirps-cell', 'chirps-point', 'demgrid-point', 'apangrid-point', 'mapgrid-point', ...proposalLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
 		expect(mapStyle(null, false, data).sources).toEqual({
@@ -213,7 +212,6 @@ describe('overlay', () => {
 			units: { type: 'geojson', data: unitsData(null) },
 			mapgrid: { type: 'geojson', data: mapGridData(null) },
 			apangrid: { type: 'geojson', data: evaporationGridData(null) },
-			spangrid: { type: 'geojson', data: evaporationGridData(null) },
 			chirps: { type: 'geojson', data: chirpsData(null) },
 			demgrid: { type: 'geojson', data: demGridData(null) }
 		});
@@ -286,7 +284,7 @@ describe('labels (#326 A6): self-hosted glyphs, none without a glyphs URL', () =
 
 	it('with glyphs but no tiles, labels only the quaternaries, the units and the grids (there are no place names to draw)', () => {
 		const s = mapStyle(null, false, data, { glyphs });
-		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label', 'units-label', 'demgrid-label', 'spangrid-label', 'apangrid-label', 'mapgrid-label']);
+		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label', 'units-label', 'demgrid-label', 'apangrid-label', 'mapgrid-label']);
 		// Without glyphs: no text anywhere, the points and outlines still drawn.
 		const bare = mapStyle(null, false, data);
 		expect(bare.layers.filter((l) => l.type === 'symbol')).toEqual([]);
@@ -705,12 +703,11 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 		expect(evaporationGridData(null).features).toEqual([]);
 	});
 
-	it('draws the A-pan and S-pan grids as rings round one centre under the MAP grid’s dots, each ramp rising and readable on either basemap', () => {
-		const radius = (kind: 'apan' | 'span') => ((evaporationGridLayers(kind, false, false).over[0]!.paint as Record<string, unknown>)['circle-radius'] as number[]).slice(-1)[0]!;
+	it('draws the A-pan grid as a ring round the MAP grid’s dots, under them, its ramp rising and readable on either basemap', () => {
+		const radius = (kind: 'apan') => ((evaporationGridLayers(kind, false, false).over[0]!.paint as Record<string, unknown>)['circle-radius'] as number[]).slice(-1)[0]!;
 		const mapRadius = ((mapGridLayers(false, false).over[0]!.paint as Record<string, unknown>)['circle-radius'] as number[]).slice(-1)[0]!;
-		expect(radius('span')).toBeGreaterThan(radius('apan'));
 		expect(radius('apan')).toBeGreaterThan(mapRadius);
-		for (const ramp of [APAN_RAMP, SPAN_RAMP]) {
+		for (const ramp of [APAN_RAMP]) {
 			expect(ramp.map(([mm]) => mm)).toEqual([...ramp.map(([mm]) => mm)].sort((a, b) => a - b));
 			for (const dark of [false, true]) {
 				const halo = labelColours(dark).halo;
@@ -720,10 +717,9 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 				}
 			}
 		}
-		// Labels from the grid's own zoom, placed apart: the A-pan value above its dot, the S-pan value to its right.
-		const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', false, overlayData([], null), { glyphs: 'https://x/{fontstack}/{range}.pbf', apanGridCellDeg: 1 / 60, spanGridCellDeg: 0.01 });
+		// Labels from the grid's own zoom, the A-pan value above its dot.
+		const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', false, overlayData([], null), { glyphs: 'https://x/{fontstack}/{range}.pbf', apanGridCellDeg: 1 / 60 });
 		expect(s.layers.find((l) => l.id === EVAPORATION_GRID_LABEL_LAYER.apan)).toMatchObject({ minzoom: 10.4, layout: { 'text-anchor': 'bottom' } });
-		expect(s.layers.find((l) => l.id === EVAPORATION_GRID_LABEL_LAYER.span)).toMatchObject({ minzoom: 11.1, layout: { 'text-anchor': 'left' } });
 	});
 
 	it('feeds the CHIRPS source each cell’s square and its centre, in an orange that stands out from the land (3:1)', () => {

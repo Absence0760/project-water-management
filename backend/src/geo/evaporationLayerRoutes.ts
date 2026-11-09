@@ -1,7 +1,7 @@
-// The A-pan and S-pan grid layers of the catchment map (docs/maps.md § A-pan
-// and S-pan grids, docs/api.md § Catchment map):
+// The A-pan grid layer of the catchment map (docs/maps.md § A-pan grid,
+// docs/api.md § Catchment map):
 //
-//   GET /projects/:id/map/evaporation-grid?kind=apan|span&bbox=minLon,minLat,maxLon,maxLat[&dataset=…][&month=1–12]   (viewer)
+//   GET /projects/:id/map/evaporation-grid?kind=apan&bbox=minLon,minLat,maxLon,maxLat[&dataset=…][&month=1–12]   (viewer)
 //
 // One loaded evaporation grid of that kind (evaporationLayer.ts), its cells in
 // the box, each with the month's mean total or, without `month`, the year's
@@ -32,7 +32,7 @@ const Query = BboxQuery.extend({
 	month: z.coerce.number().int().min(1).max(12).optional()
 });
 
-const KIND_WORD = { apan: 'A-pan', span: 'S-pan' } as const;
+const KIND_WORD = { apan: 'A-pan' } as const;
 
 export const evaporationLayerRoutes = new Hono<AuthEnv>().get('/:id/map/evaporation-grid', async (c) => {
 	const { bbox, kind, dataset: asked, month } = Query.parse(c.req.query());

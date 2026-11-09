@@ -1,22 +1,22 @@
-// The A-pan and S-pan grid layers of the catchment map (docs/maps.md § A-pan
-// and S-pan grids): one evaporation grid's cells in a box, each its centre and
-// its value for one month or the year, for GET …/map/evaporation-grid
+// The A-pan grid layer of the catchment map (docs/maps.md § A-pan grid): one
+// evaporation grid's cells in a box, each its centre and its value for one
+// month or the year, for GET …/map/evaporation-grid
 // (evaporationLayerRoutes.ts). The grids are the evaporation proposals' own
-// (180_evaporation_reference.sql, 316 for S-pan): cells keyed by their
-// south-west corner's indices, so a box is a range on the primary key, as the
-// MAP grid's is (rainMap.ts cellRange).
+// (180_evaporation_reference.sql): cells keyed by their south-west corner's
+// indices, so a box is a range on the primary key, as the MAP grid's is
+// (rainMap.ts cellRange).
 //
-// Only the pan kinds are drawn: an A-pan grid (the WRC Atlas's is modelled,
-// not measured pans) and an S-pan grid (a cross-check, never fed to the
-// model). A reference ET (et0) grid isn't pan evaporation, and a layer of it
-// beside the pans would read as one more pan: it stays on Evaporation from the
-// map, where its proposal says what it is.
+// Only the A-pan kind is drawn (the WRC Atlas's is modelled, not measured
+// pans). A reference ET (et0) grid isn't pan evaporation, and a layer of it
+// beside the pan would read as one more pan: it stays on Evaporation from the
+// map, where its proposal says what it is. (An S-pan grid layer was removed on
+// 2026-11-09: the Atlas has no S-pan grids, issue #738.)
 import type { Db } from '../db/tx.js';
 import { evaporationDatasets, evaporationLabel, type EvaporationDataset } from './evaporation.js';
 import { cellRange, type Box } from './rainMap.js';
 
 /** The evaporation kinds the map draws as layers. */
-export const EVAPORATION_LAYER_KINDS = ['apan', 'span'] as const;
+export const EVAPORATION_LAYER_KINDS = ['apan'] as const;
 export type EvaporationLayerKind = (typeof EVAPORATION_LAYER_KINDS)[number];
 
 /** A dataset as the layer lists it: the proposals' fields, and its values in words (evaporationLabel: "modelled" for a modelled A-pan). */

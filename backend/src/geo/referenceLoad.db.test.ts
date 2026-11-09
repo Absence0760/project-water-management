@@ -13,10 +13,7 @@
 //    label but the WRC Atlas's (Atlas-Apan-2007), whose grid, built from 12
 //    monthly ASCII grids (`--apan-asc`), loads stored with its recorded,
 //    modelled lines; a PenPan grid or a reference-ET file under that label is
-//    refused; CCWR's S-pan grid (`--span-asc`, issue #738) loads only as
-//    Atlas-Span-2007, stored as kind span (never as A-pan), any other S-pan
-//    label refused, and an S-pan file under the A-pan label (or the reverse)
-//    refused;
+//    refused; a file of the removed S-pan kind (issue #738) is unreadable;
 //  - rivers: the synthetic network loads with the source given, minOrder
 //    leaves the small reaches out;
 //  - gazetteer: the synthetic GeoNames-format places (gzipped) load with
@@ -51,7 +48,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadSyntheticEvaporation, parseEvaporationArgs, SYNTHETIC_APAN_ASC_FILES, SYNTHETIC_SPAN_ASC_FILES, SYNTHETIC_PENPAN_FILE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
+import { loadSyntheticEvaporation, parseEvaporationArgs, SYNTHETIC_APAN_ASC_FILES, SYNTHETIC_PENPAN_FILE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover, parseLandCoverArgs, writeLandCoverJson } from '../../scripts/import-land-cover.js';
 import { SYNTHETIC_RIVERS_FILE } from '../../scripts/import-rivers.js';
 import { SYNTHETIC_GAZETTEER_FILE } from '../../scripts/import-gazetteer.js';
@@ -62,7 +59,7 @@ import { writeQuaternariesJson } from '../../scripts/import-quaternaries.js';
 import { QUATERNARY_SOURCE, replaceDataset as replaceQuaternaries } from './loadQuaternaries.js';
 import { QUATERNARY_EVAPORATION_SOURCE } from './loadQuaternaryEvaporation.js';
 import { LYNCH_MAP, replaceRainMapDataset, WAAS_MAP } from './rainMap.js';
-import { ATLAS_APAN, ATLAS_SPAN } from './evaporationGrid.js';
+import { ATLAS_APAN } from './evaporationGrid.js';
 import { GEONAMES_SOURCE } from './gazetteer.js';
 import { asOwner } from '../__tests__/helpers.js';
 import { replaceCroplandDataset } from './croplandGrid.js';
@@ -78,8 +75,6 @@ const MG = WAAS_MAP.dataset;
 const LY = LYNCH_MAP.dataset;
 // The one A-pan label production allows (REFERENCE_KINDS.evaporation.kindDatasets.apan): only this file writes it in water_test.
 const AP = ATLAS_APAN.dataset;
-// The one S-pan label production allows (kindDatasets.span): only this file writes it in water_test.
-const SP = ATLAS_SPAN.dataset;
 const WB = 'Test-Waterbodies';
 const QT = 'Test-Quaternaries';
 const QE = 'Test-Quaternary-Evaporation';
@@ -110,13 +105,13 @@ beforeAll(async () => {
 afterAll(async () => {
 	await client.query('DELETE FROM cropland_dataset WHERE dataset = $1', [LC]);
 	await client.query('DELETE FROM river_reference WHERE dataset = $1', [RV]);
-	await client.query('DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])', [[EV, AP, SP]]);
+	await client.query('DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])', [[EV, AP]]);
 	await client.query('DELETE FROM gazetteer_reference WHERE dataset = ANY($1::text[])', [[GZ, GZN]]);
 	await client.query('DELETE FROM rain_map_dataset WHERE dataset = ANY($1::text[])', [[MG, LY]]);
 	await client.query('DELETE FROM waterbody_reference WHERE dataset = $1', [WB]);
 	await client.query('DELETE FROM quaternary_reference WHERE dataset = $1', [QT]);
 	await client.query('DELETE FROM quaternary_evaporation WHERE dataset = $1', [QE]);
-	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG, LY, AP, SP, WB, QT, QE]]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV, GZ, GZN, MG, LY, AP, WB, QT, QE]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -278,32 +273,14 @@ describe('evaporation, from the file `import:evaporation --out` writes', () => {
 		expect(await asOwner('SELECT source FROM evaporation_dataset WHERE dataset = $1', [EV])).toEqual([{ source: 'Second' }]);
 	});
 
-	it('CCWR’s S-pan grid (--span-asc --out) loads as Atlas-Span-2007, kind span, never A-pan; other S-pan labels and crossed labels are refused', async () => {
-		const args = parseEvaporationArgs(['--span-asc', ...SYNTHETIC_SPAN_ASC_FILES, '--dataset', SP, '--years', '1950-1999']);
-		if (typeof args === 'string' || args.mode !== 'load') throw new Error(String(args));
-		const out = join(dir, 'atlas-span.json.gz');
-		const { written: wrote } = await writeEvaporationJson({ ...args, out });
-		const bytes = readFileSync(out);
-		const result = await load({ kind: 'evaporation', key: 'reference/evaporation/atlas-span-2007.json.gz', dataset: SP }, bytes);
-		expect(result).toMatchObject({ kind: 'evaporation', dataset: SP, written: wrote });
-		const [d] = await asOwner('SELECT kind, source, version, attribution, method FROM evaporation_dataset WHERE dataset = $1', [SP]);
-		expect(d).toMatchObject({ kind: 'span', source: ATLAS_SPAN.source, version: ATLAS_SPAN.version, attribution: ATLAS_SPAN.attribution });
-		expect(d!.method).toMatch(/S-pan is never converted to A-pan here/);
-		const refusal = async (dataset: string, file: Uint8Array) => {
-			const e = await load({ kind: 'evaporation', key: 'reference/evaporation/x.json.gz', dataset }, file).catch((err: unknown) => err);
+	it('an S-pan file (kind "span", removed 2026-11-09 since the WRC Atlas has no S-pan grids, issue #738) is unreadable under any label, and nothing is stored', async () => {
+		const span = grid('span', [[21.25, -33.75, twelve(120)]]);
+		for (const dataset of ['S-pan-grid', AP, EV]) {
+			const e = await load({ kind: 'evaporation', key: 'reference/evaporation/s.json.gz', dataset }, span).catch((err: unknown) => err);
 			expect(e, dataset).toBeInstanceOf(LoadError);
-			expect((e as LoadError).code, dataset).toBe('refused');
-			return (e as LoadError).publicReason ?? '';
-		};
-		// Another S-pan label: refused, naming the allowed one.
-		expect(await refusal('Other-Span-2007', bytes)).toMatch(/an S-pan grid loads in production only under a label whose licence is recorded: Atlas-Span-2007/);
-		// The S-pan file under the A-pan label: never stored as A-pan.
-		expect(await refusal(AP, bytes)).toMatch(/is an A-pan grid's label: this file is an S-pan grid/);
-		// An A-pan file under the S-pan label.
-		const apan = gzipSync(JSON.stringify({ ...JSON.parse(gunzipSync(bytes).toString('utf8')), kind: 'apan' }));
-		expect(await refusal(SP, apan)).toMatch(/is an S-pan grid's label: this file is an A-pan grid/);
-		expect(await asOwner('SELECT kind FROM evaporation_dataset WHERE dataset = ANY($1::text[])', [[SP, AP]])).toEqual(expect.arrayContaining([{ kind: 'span' }, { kind: 'apan' }]));
-		expect(await asOwner(`SELECT count(*)::int AS n FROM evaporation_dataset WHERE dataset = 'Other-Span-2007'`)).toEqual([{ n: 0 }]);
+			expect((e as LoadError).code, dataset).toBe('unreadable');
+		}
+		expect(await asOwner(`SELECT count(*)::int AS n FROM evaporation_dataset WHERE dataset = 'S-pan-grid'`)).toEqual([{ n: 0 }]);
 	});
 });
 
