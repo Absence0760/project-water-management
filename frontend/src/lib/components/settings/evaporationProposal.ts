@@ -9,7 +9,7 @@
 // S-pan over the boundary and the saved A-pan ÷ S-pan per month, a cross-check
 // only, since turning S-pan into A-pan needs a conversion the hydrologist
 // picks.
-import type { EvaporationAccepted, EvaporationKind, EvaporationProposals, EvaporationTarget } from '#lib/api/index.js';
+import type { EvaporationAccepted, EvaporationDataset, EvaporationKind, EvaporationProposals, EvaporationTarget } from '#lib/api/index.js';
 import { fmtDate, fmtDay, fmtNum } from '#lib/format/number.js';
 
 /** Where an accepted row goes, in words. */
@@ -61,6 +61,14 @@ export const outsidePanRange = (k: readonly (number | null)[], min: number, max:
 	k.flatMap((v, i) => (v !== null && (v < min || v > max) ? [i] : []));
 
 /** The coverage and cell count, in a phrase. */
+/**
+ * The dataset's citation under the proposal, as the server's citeEvaporation
+ * words it: "1991–2020 monthly means", or "monthly means, no period stated by
+ * the source" for a grid whose source states none (the WRC Atlas's, issue #755).
+ */
+export const datasetCitation = (d: Pick<EvaporationDataset, 'dataset' | 'source' | 'version' | 'attribution' | 'firstYear' | 'lastYear'>): string =>
+	`${d.source} (${d.version}, ${d.firstYear !== null && d.lastYear !== null ? `${d.firstYear}–${d.lastYear} monthly means` : 'monthly means, no period stated by the source'}; dataset “${d.dataset}”). ${d.attribution}`;
+
 export const coverageText = (coverage: number, cells: number) => `${cells} grid cell${cells === 1 ? '' : 's'}; ${fmtNum(Math.round(coverage * 100))} % of the boundary has values`;
 
 /** Where an accepted row came from, in a line. */

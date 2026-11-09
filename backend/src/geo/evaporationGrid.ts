@@ -3,7 +3,8 @@
 // defaults and the method text, the grid of monthly means in its JSON form
 // (`{ "kind": "et0", "cellDeg": 0.1, "firstYear": …, "lastYear": …,
 // "source"?, "version"?, "attribution"?, "model"?, "cells": [[lon, lat, [Oct … Sep]], …] }`,
-// each cell by its centre (`model`: how a modelled A-pan grid was made, PenPan's
+// each cell by its centre; `"firstYear": null, "lastYear": null` (or both left out)
+// for an A-pan or S-pan grid whose source states no period, issue #755; `model`: how a modelled A-pan grid was made, PenPan's
 // settings, written by ingest/apan_grid.py; issue #646 item 7): the committed synthetic fixture's form, and what
 // `pnpm import:evaporation … --out` writes for a production load), and the
 // load into the database, which replaces a dataset in one transaction.
@@ -63,11 +64,26 @@ export const ATLAS_APAN = {
 	attribution: ATLAS_APAN_ATTRIBUTION
 } as const;
 
+/**
+ * The period a grid's monthly means cover, both years or neither: null for an
+ * A-pan or S-pan grid whose source states none (the WRC Atlas's, issue #755;
+ * 317_evaporation_period_optional.sql).
+ */
+export type Period = { firstYear: number; lastYear: number } | { firstYear: null; lastYear: null };
+
+/** Whether `p` states its years (a reference-ET or PenPan grid always does). */
+export const hasPeriod = <T extends { firstYear: number | null; lastYear: number | null }>(p: T): p is T & { firstYear: number; lastYear: number } =>
+	p.firstYear !== null && p.lastYear !== null;
+
 /** The Atlas A-pan grid's method in words (the monthly means as the Atlas gives them, not summed here from daily values). */
-export function atlasApanMethodFor(cellDeg: number, firstYear: number, lastYear: number): string {
+export function atlasApanMethodFor(cellDeg: number, firstYear: number | null, lastYear: number | null): string {
+	const period =
+		firstYear !== null && lastYear !== null
+			? `the period ${firstYear}–${lastYear} as the operator recorded it`
+			: 'the Atlas states no period for its means: unchanged from the 1997 Atlas, Schulze 1997';
 	return (
 		'Modelled, not measured: the WRC Atlas’s A-pan equivalent reference potential evaporation (Schulze and Maharaj 2007), its 12 monthly means as the Atlas gives them ' +
-		`(the period ${firstYear}–${lastYear} as the operator recorded it), on its ${cellDeg.toFixed(4)}° grid reprojected to WGS84; no pan coefficient or conversion applied here. ` +
+		`(${period}), on its ${cellDeg.toFixed(4)}° grid reprojected to WGS84; no pan coefficient or conversion applied here. ` +
 		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
 	);
 }
@@ -93,18 +109,20 @@ export const ATLAS_SPAN = {
 } as const;
 
 /** The Atlas S-pan grid's method in words: as the grids give it, and shown only, never converted. */
-export function atlasSpanMethodFor(cellDeg: number, firstYear: number, lastYear: number): string {
+export function atlasSpanMethodFor(cellDeg: number, firstYear: number | null, lastYear: number | null): string {
+	const period = firstYear !== null && lastYear !== null ? `the period ${firstYear}–${lastYear} as the operator recorded it` : 'the grids state no period for their means';
 	return (
-		`Symons-pan (S-pan) evaporation, the CCWR grids’ 12 monthly means as given (the period ${firstYear}–${lastYear} as the operator recorded it), on a ${cellDeg.toFixed(4)}° grid reprojected to WGS84. ` +
+		`Symons-pan (S-pan) evaporation, the CCWR grids’ 12 monthly means as given (${period}), on a ${cellDeg.toFixed(4)}° grid reprojected to WGS84. ` +
 		'Shown as a cross-check against the saved A-pan only: S-pan is never converted to A-pan here (that conversion is the hydrologist’s choice). ' +
 		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
 	);
 }
 
 /** A grid of 12 monthly A-pan or S-pan grids other than the Atlas's (`import:evaporation --apan-asc` / `--span-asc`): its method in words. */
-export function monthlyGridsMethodFor(cellDeg: number, firstYear: number, lastYear: number, kind: 'apan' | 'span' = 'apan'): string {
+export function monthlyGridsMethodFor(cellDeg: number, firstYear: number | null, lastYear: number | null, kind: 'apan' | 'span' = 'apan'): string {
+	const period = firstYear !== null && lastYear !== null ? `for ${firstYear}–${lastYear}, as the source states them` : 'as given (the source states no period for them)';
 	return (
-		`12 monthly ${kind === 'apan' ? 'A-pan' : 'S-pan (Symons pan; shown as a cross-check only, never converted)'} grids (ESRI ASCII, ${cellDeg.toFixed(4)}° cells) taken as given: each cell's monthly means for ${firstYear}–${lastYear}, as the source states them. ` +
+		`12 monthly ${kind === 'apan' ? 'A-pan' : 'S-pan (Symons pan; shown as a cross-check only, never converted)'} grids (ESRI ASCII, ${cellDeg.toFixed(4)}° cells) taken as given: each cell's monthly means ${period}. ` +
 		'The catchment’s month is the mean of the cells it covers, each weighted by its area on the WGS84 ellipsoid × the share of it inside the boundary; cells without a value are left out.'
 	);
 }
@@ -185,8 +203,9 @@ export interface Climatology {
 	cellDeg: number;
 	originLon: number;
 	originLat: number;
-	firstYear: number;
-	lastYear: number;
+	/** The calendar years the means average; both null for an A-pan or S-pan grid whose source states none (Period). */
+	firstYear: number | null;
+	lastYear: number | null;
 	cells: EvaporationCell[];
 	/** Cells left out for missing a year. */
 	partial: number;
@@ -202,11 +221,11 @@ export function evaporationFromJson(doc: unknown):
 	if (d?.kind !== 'et0' && d?.kind !== 'apan' && d?.kind !== 'span') return 'the JSON file has no "kind" of "et0" (reference ET), "apan" (Class-A pan) or "span" (Symons pan, shown as a cross-check only)';
 	const cellDeg = Number(d.cellDeg);
 	if (!(cellDeg > 0 && cellDeg <= 1)) return 'the JSON file has no "cellDeg" between 0 and 1';
-	const firstYear = Number(d.firstYear);
-	const lastYear = Number(d.lastYear);
-	if (!(Number.isInteger(firstYear) && Number.isInteger(lastYear) && firstYear <= lastYear)) return 'the JSON file has no "firstYear" ≤ "lastYear"';
 	const model = modelFromJson(d.model, d.kind);
 	if (typeof model === 'string') return model;
+	const period = periodFromJson(d.firstYear, d.lastYear, d.kind, model !== null);
+	if (typeof period === 'string') return period;
+	const { firstYear, lastYear } = period;
 	if (!Array.isArray(d.cells) || !d.cells.length) return 'the JSON file has no "cells"';
 	if (!Array.isArray(d.cells[0])) return 'the JSON file’s first cell is not [lon, lat, [12 values]]';
 	const problems: string[] = [];
@@ -232,6 +251,25 @@ export function evaporationFromJson(doc: unknown):
 		meta: { source: text(d.source, 500), version: text(d.version, 100), attribution: text(d.attribution, 500), ...(model ? { model } : {}) },
 		problems
 	};
+}
+
+/**
+ * A file's years, or why they can't be read: both whole years, first ≤ last,
+ * or (an A-pan or S-pan grid of means as given, no PenPan model) both null or
+ * left out, when its source states no period (issue #755).
+ */
+function periodFromJson(first: unknown, last: unknown, kind: EvaporationKind, modelled: boolean): Period | string {
+	const none = (v: unknown) => v === undefined || v === null;
+	if (none(first) && none(last)) {
+		if (kind === 'et0' || modelled) return 'the JSON file has no "firstYear" ≤ "lastYear" (only an A-pan or S-pan grid of means as given may leave its period out)';
+		return { firstYear: null, lastYear: null };
+	}
+	const firstYear = Number(first);
+	const lastYear = Number(last);
+	if (none(first) || none(last) || !(Number.isInteger(firstYear) && Number.isInteger(lastYear) && firstYear <= lastYear)) {
+		return 'the JSON file has no "firstYear" ≤ "lastYear" (give both, or for an A-pan or S-pan grid whose source states no period, neither)';
+	}
+	return { firstYear, lastYear };
 }
 
 /** A file's `model` (absent: a grid of measured or reference values), or why it can't be read. Only an A-pan grid can be modelled. */

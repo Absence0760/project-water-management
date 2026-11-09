@@ -5,6 +5,7 @@ import { blankEwrRuleTable, ewrDailySourceIssues, ewrRuleTableIssues, blankEwrDa
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+	compareTabFlows,
 	drmKind,
 	DRM_MONTH_DAYS,
 	exampleRulFile,
@@ -14,12 +15,14 @@ import {
 	parseDrmFile,
 	parseRulFile,
 	parseTabFile,
+	pctText,
 	percentileTablesFromRul,
 	ruleTableFromRul,
 	ruleTableFromTab,
 	rulFileRecord,
 	tabFileM3s,
 	tabFileRecord,
+	tabComparisonLine,
 	tabFlowsEdited,
 	TAB_COLUMNS,
 	type RulFile,
@@ -240,6 +243,49 @@ describe('parseTabFile', () => {
 		expect(tabFlowsEdited(flows.map((v, i) => (i === 3 ? v + 0.001 : v)), rec)).toBe(true);
 		expect(tabFlowsEdited(flows.map((v, i) => (i === 3 ? null : v)), rec)).toBe(true);
 		expect(tabFlowsEdited(null, rec)).toBe(true);
+	});
+});
+
+// TAB flows stored without their file (typed, pasted, imported from a workbook, saved before #617) checked against
+// the .tab the hydrologist browses for: month by month, with tabFlowsEdited's tolerance.
+describe('compareTabFlows: the stored TAB flows against a .tab', () => {
+	const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+	const tab = ok(parseTabFile(exampleTabFile()));
+	const flows = tab.totalMaintM3s;
+
+	it('the file’s own flows match all 12 months, within the 1e-9 tolerance', () => {
+		const c = compareTabFlows(flows.map((v) => v * (1 + 1e-12)), tab);
+		expect(c.differ).toBe(0);
+		expect(c.largest).toBeNull();
+		expect(c.months.every((m) => m.same && m.diffPct === 0)).toBe(true);
+		expect(tabComparisonLine(c, MONTHS)).toBe('All 12 TAB flows match the file.');
+	});
+
+	it('names how many months differ and the largest, signed, in % of the file’s value; rounding shows as a small %', () => {
+		// Rounded to 4 decimals (as a workbook might hold them), then one month 10 % low.
+		const stored = flows.map((v, i) => (i === 3 ? v * 0.9 : Math.round(v * 1e4) / 1e4));
+		const c = compareTabFlows(stored, tab);
+		const rounded = flows.filter((v, i) => i !== 3 && Math.round(v * 1e4) / 1e4 !== v).length;
+		expect(c.differ).toBe(rounded + 1);
+		expect(c.largest?.month).toBe(3);
+		expect(c.largest?.pct).toBeCloseTo(-10, 9);
+		expect(c.months[3]!.file).toBe(flows[3]);
+		expect(tabComparisonLine(c, MONTHS)).toBe(`${rounded + 1} of 12 months differ from the file; the largest, Jan, by −10.00 %.`);
+		expect(c.months.filter((m, i) => i !== 3 && !m.same).every((m) => Math.abs(m.diffPct!) < 0.1)).toBe(true);
+	});
+
+	it('an empty month differs and is counted, with no %; nothing stored differs everywhere', () => {
+		const c = compareTabFlows(flows.map((v, i) => (i === 0 ? null : v)), tab);
+		expect(c.months[0]).toEqual({ stored: null, file: flows[0], diffPct: null, same: false });
+		expect(tabComparisonLine(c, MONTHS)).toBe('1 of 12 month differs from the file (1 empty).');
+		expect(compareTabFlows(null, tab).differ).toBe(12);
+	});
+
+	it('pctText keeps enough figures to tell rounding from a change', () => {
+		expect(pctText(0)).toBe('0');
+		expect(pctText(6.25)).toBe('6.25');
+		expect(pctText(0.0061234)).toBe('0.0061');
+		expect(pctText(0.00001)).toBe('< 0.0001');
 	});
 });
 

@@ -48,8 +48,9 @@ export interface EvaporationDataset {
 	version: string;
 	method: string;
 	attribution: string;
-	firstYear: number;
-	lastYear: number;
+	/** The calendar years the monthly means average; both null when the source states none (the WRC Atlas's A-pan, issue #755). */
+	firstYear: number | null;
+	lastYear: number | null;
 	cellDeg: number;
 	originLon: number;
 	originLat: number;
@@ -65,8 +66,8 @@ interface DatasetRow {
 	version: string;
 	method: string;
 	attribution: string;
-	first_year: number;
-	last_year: number;
+	first_year: number | null;
+	last_year: number | null;
 	cell_deg: number;
 	origin_lon: number;
 	origin_lat: number;
@@ -196,4 +197,8 @@ export const evaporationLabel = (d: Pick<EvaporationDataset, 'kind' | 'source'>)
 
 /** A dataset's citation in one line, for a revision's reason, the PE row's source and the proposal's source line. */
 export const citeEvaporation = (d: Pick<EvaporationDataset, 'dataset' | 'source' | 'version' | 'firstYear' | 'lastYear'>) =>
-	`${d.source} (${d.version}, ${d.firstYear}–${d.lastYear} monthly means; dataset “${d.dataset}”)`;
+	`${d.source} (${d.version}, ${evaporationPeriodWords(d)}; dataset “${d.dataset}”)`;
+
+/** "1991–2020 monthly means", or, for a grid whose source states no period (issue #755), "monthly means, no period stated by the source". */
+export const evaporationPeriodWords = (d: Pick<EvaporationDataset, 'firstYear' | 'lastYear'>): string =>
+	d.firstYear !== null && d.lastYear !== null ? `${d.firstYear}–${d.lastYear} monthly means` : 'monthly means, no period stated by the source';
