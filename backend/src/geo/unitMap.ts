@@ -17,7 +17,7 @@
 // A unit the chosen grid doesn't cover is listed, never filled from another
 // grid. A unit's MAP takes the engine's range (mapMmError, as PUT /model
 // checks): a grid value outside it leaves the unit uncovered, saying why.
-import { MAP_MM_MAX, MAP_MM_MIN } from '@water-management/engine';
+import { MAP_MM_MAX, MAP_MM_MIN, UNIT_MAP_METHOD, unitMapGridCitation, unitMapGridOfSource, unitMapSource } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { loadUnits, unitParcel } from '../feeds/fromUnits.js';
 import { outlineChanged, type PolygonStamp } from './acceptances.js';
@@ -33,8 +33,8 @@ export const MIN_UNIT_COVERAGE = 0.9;
  * past it is uncovered by that grid, saying so.
  */
 export const MAX_UNIT_MAP_CELLS = 100_000;
-/** How a grid MAP was taken, in its source line. */
-export const UNIT_MAP_METHOD = 'area-weighted mean over the unit’s parcel';
+// The source line and its recognition are the engine's (project.ts), so the unit form reads them as this does.
+export { UNIT_MAP_METHOD, unitMapSource };
 /**
  * The most grid cells one request reads from one grid, summed over the
  * units' bounding boxes: 60 units of about 4 km on a 100 m grid is under a
@@ -64,16 +64,10 @@ export async function unitMapGrids(db: Db): Promise<UnitMapGrid[]> {
 }
 
 /** A grid's citation as a unit's MAP source begins: its label and version. */
-export const gridCitation = (g: Pick<RainMapDataset, 'dataset' | 'version'>) => `${g.dataset} ${g.version}`;
-
-/** A unit's MAP source line: "<label> <version>, area-weighted mean over the unit’s parcel, <n> cells". */
-export const unitMapSource = (g: Pick<RainMapDataset, 'dataset' | 'version'>, cells: number) =>
-	`${gridCitation(g)}, ${UNIT_MAP_METHOD}, ${cells} cell${cells === 1 ? '' : 's'}`;
-
-const SOURCE_RE = new RegExp(`^(.*), ${UNIT_MAP_METHOD}, \\d+ cells?$`);
+export const gridCitation = (g: Pick<RainMapDataset, 'dataset' | 'version'>) => unitMapGridCitation(g);
 
 /** The grid citation a MAP source line names, when the MAP came from a grid (this module wrote it); null for a MAP typed in. */
-export const gridOfSource = (source: string | null | undefined): string | null => (source ? (SOURCE_RE.exec(source)?.[1] ?? null) : null);
+export const gridOfSource = unitMapGridOfSource;
 
 /** One unit over one grid: its MAP, or why the grid doesn't cover it. */
 export type UnitOverGrid = { mapMm: number; cells: number; coveredShare: number } | { coveredShare: number; reason: string };
