@@ -22,7 +22,7 @@
 	import ProposalSynthetic from '#lib/components/proposals/ProposalSynthetic.svelte';
 	import { fmtNum } from '#lib/format/number.js';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
-	import { acceptedText, apanOverSpan, coverageText, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
+	import { acceptedText, apanOverSpan, coverageText, datasetCitation, impliedPanCoefficient, KIND_SHORT, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
 
 	let {
 		projectId,
@@ -270,7 +270,7 @@
 			{/if}
 			<ProposalSource
 				testid="evaporation-source"
-				citation="{d.source} ({d.version}, {d.firstYear}–{d.lastYear} monthly means; dataset “{d.dataset}”). {d.attribution}"
+				citation={datasetCitation(d)}
 				method={d.method}
 			/>
 		{/if}

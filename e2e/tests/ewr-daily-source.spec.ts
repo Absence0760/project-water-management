@@ -128,6 +128,63 @@ test('a .tab shows the whole file, its total maintenance column marked as the TA
 	await expectNoViolations(page, { include: '[data-testid="ewr-daily-source"]' });
 });
 
+// TAB flows kept without their .tab (typed, pasted, imported from a workbook, saved before #617): the hydrologist browses
+// for the .tab beside them, sees the whole file and the stored flows against it month by month, and keeps the file
+// without changing the flows; after a reload the file and the comparison stay.
+test('TAB flows saved without their file: browse for the .tab, see it whole beside the stored flows, and keep it without changing them', async ({ page, owner }) => {
+	void owner;
+	const id = await seed(page.request, 'Daily EWR, browse for the .tab');
+	await updateSettings(page.request, id, {
+		ewrDailySource: { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 40, tabM3s: TAB_M3S, naturalPctM3s: null, reservePctM3s: null }
+	});
+	await page.goto(`/projects/${id}?tab=settings`);
+	const daily = page.getByRole('group', { name: /^The daily EWR at the outlet/ });
+	await expect(daily.getByTestId('ewr-tab-legacy')).toHaveText('These TAB flows were saved without their .tab file. Load the .tab again to see the whole file.');
+	const browse = daily.getByLabel('Browse for the .tab file…');
+
+	// It reads a .tab and nothing else.
+	await browse.setInputFiles(RUL);
+	await expect(daily.getByRole('status', { name: 'File result' })).toHaveText('drm-synthetic.rul is a .rul file. Choose the .tab to compare with the TAB flows; Load a DRM file takes a .rul.');
+	await expect(daily.getByTestId('ewr-tab-preview')).toHaveCount(0);
+
+	await browse.setInputFiles(TAB);
+	const preview = daily.getByTestId('ewr-tab-preview');
+	// Under the TAB row it compares, not above the fields.
+	const row = daily.getByRole('table', { name: /^TAB flows: total flows, maintenance/ });
+	expect((await preview.boundingBox())!.y).toBeGreaterThan((await row.boundingBox())!.y);
+	// The whole file, as the kept file shows it.
+	await expect(preview.getByText('Estimate for')).toBeVisible();
+	await expect(preview.getByRole('table', { name: /^Monthly distributions/ }).getByRole('row', { name: /^Jul/ }).getByRole('cell')).toHaveText(['11.200', '8.960', '0.800', '3.920', '0.560', '1.680', '5.600', '2.0908']);
+	// The stored flows against it: Oct 0.4704 is the file's 1.26 Mm³ over 31 days rounded (−0.0064 %); the rest differ more.
+	const compare = preview.getByTestId('ewr-tab-preview-compare');
+	await expect(compare.getByTestId('ewr-tab-preview-compare-line')).toHaveText(/^\d+ of 12 months differ from the file; the largest, [A-Z][a-z]{2}, by [+−][\d.]+ %\.$/);
+	const cmpTable = compare.getByRole('table', { name: /^The TAB flows against drm-synthetic\.tab/ });
+	await expect(cmpTable.getByRole('row', { name: /^Stored/ }).getByRole('cell').first()).toHaveText('0.4704');
+	await expect(cmpTable.getByRole('row', { name: /^In the file/ }).getByRole('cell').first()).toHaveText('0.4704');
+	await expect(cmpTable.getByRole('row', { name: /^Difference/ }).getByRole('cell').first()).toHaveText('−0.0064');
+	await expectNoViolations(page, { include: '[data-testid="ewr-daily-source"]' });
+
+	// Keep the file only: the stored flows stay as they were.
+	await preview.getByRole('button', { name: 'Keep the file, not its flows' }).click();
+	await expect(preview).toHaveCount(0);
+	await expect(daily.getByLabel('TAB flow, Nov, m³/s')).toHaveValue('0.4');
+	await saveSettings(page);
+	await page.reload();
+
+	await expect(daily.getByTestId('ewr-tab-legacy')).toHaveCount(0);
+	await expect(daily.getByLabel('TAB flow, Oct, m³/s')).toHaveValue('0.4704');
+	await expect(daily.getByLabel('TAB flow, Nov, m³/s')).toHaveValue('0.4');
+	const file = daily.getByTestId('ewr-tab-file');
+	await expect(file.locator(':scope > summary')).toContainText('The .tab file: drm-synthetic.tab · REC C · TAB flows changed since');
+	await expect(file.getByRole('table', { name: /^Monthly distributions/ }).getByRole('row', { name: /^Oct/ }).getByRole('cell').last()).toHaveText('0.4704');
+	await expect(daily.getByTestId('ewr-tab-edited')).toHaveText('The TAB flows were changed after loading drm-synthetic.tab; the file is shown as loaded.');
+	await expect(daily.getByTestId('ewr-tab-compare').getByTestId('ewr-tab-compare-line')).toHaveText(/^\d+ of 12 months differ from the file/);
+
+	// A phone: the comparison scrolls inside its own box, not the page.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expectNoSidewaysScroll(page);
+});
+
 // The scaled tables (issue #90 B1 gap a): each value × s, in Settings as soon as s is known (the area ratio needs no
 // run) and with the run, from its own settings snapshot and s. The units are 12 + 8 = 20 km²; the table's 40 km², so s = 0.5.
 test('the TAB flows scaled to the model show in Settings and with the run that read them', async ({ page, owner }) => {

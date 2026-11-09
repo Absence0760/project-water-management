@@ -8101,9 +8101,25 @@ two.
   loaded" (`drmFiles.ts tabFlowsEdited`, derived, not stored). A file kept
   for its MAR only and then seen under the TAB method gave no TAB flow, so it
   says "<file> gave only the table MAR", marks its MAR line, and offers **Use
-  its TAB flows**. A source saved
-  before the file was kept keeps its 12 values and says "These TAB flows were
-  saved without their .tab file. Load the .tab again to see the whole file."
+  its TAB flows**. TAB flows with no file kept (saved before the file was
+  kept, typed, pasted, or imported from a workbook) keep their 12 values and
+  say "These TAB flows were saved without their .tab file. Load the .tab again
+  to see the whole file.", with **Browse for the .tab file…** under the line
+  (not for a viewer). It reads a `.tab` only (a `.rul` there is refused in the
+  File result line) and opens the preview under the TAB row instead of above
+  the fields: the whole file as above, and first the stored flows against it
+  (`settings/TabFlowsCompare.svelte`, `drmFiles.ts compareTabFlows`): a line,
+  "N of 12 months differ from the file; the largest, Oct, by −6.25 %" (or
+  "All 12 TAB flows match the file."), and a table of each month's **Stored**,
+  **In the file** (m³/s, 4 decimals) and **Difference** (% of the file's
+  value, "same" within the 1e-9 tolerance, enough figures to tell a
+  rounding of 0.0064 % from a real change; a tint on differing months only
+  as a second cue). Besides **Use these values** and Cancel, when any month
+  differs it offers **Keep the file, not its flows**, which keeps the file
+  (`tabFile`) and changes no flow and no MAR; the panel then shows the kept
+  file with the changed-since line, and under it the same comparison, which
+  every kept file the TAB row no longer matches shows. A `.tab` read through
+  **Load a DRM file** while TAB flows are stored shows the comparison too.
   A `.rul` fills the three percentile
   tables (the natural duration curves, the total Reserve and the Reserve flows
   without high flows, converted from Mm³ a month when its unit line says so;

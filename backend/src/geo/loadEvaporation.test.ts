@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseEvaporationArgs, readEvaporationFiles, reduceDpet, SYNTHETIC_APAN_ASC_FILES, SYNTHETIC_SPAN_ASC_FILES, SYNTHETIC_EVAPORATION_FILE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
-import { monthlyFromAsciiGrids, ATLAS_APAN, ATLAS_SPAN, climatology, dpetYear, evaporationFromJson, originOf, sameOrigin, readDpetYear, SOUTH_AFRICA_BBOX, toWaterYear, yearTotalsFromJson, type YearTotals } from './loadEvaporation.js';
+import { monthlyFromAsciiGrids, ATLAS_APAN, ATLAS_SPAN, atlasApanMethodFor, atlasSpanMethodFor, monthlyGridsMethodFor, climatology, dpetYear, evaporationFromJson, originOf, sameOrigin, readDpetYear, SOUTH_AFRICA_BBOX, toWaterYear, yearTotalsFromJson, type YearTotals } from './loadEvaporation.js';
 
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 let dir: string;
@@ -338,8 +338,16 @@ describe('12 monthly A-pan grids as ESRI ASCII (--apan-asc; the WRC Atlas’s A-
 			out: '/work/a.json.gz'
 		});
 		expect(parseEvaporationArgs(['--apan-asc', ...files.slice(1), '--dataset', 'x', '--years', '1950-1999'], env)).toMatch(/12 ESRI ASCII grids/);
-		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007'], env)).toMatch(/--years <first>-<last>/);
-		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1999-1950'], env)).toMatch(/--years/);
+		// --years is optional (issue #755): the WRC Atlas states no period, so none is stored.
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007'], env)).toMatchObject({
+			dataset: 'Atlas-Apan-2007',
+			monthlyAsc: { kind: 'apan', first: null, last: null }
+		});
+		// Given, it is still checked.
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1999-1950'], env)).toMatch(/--years takes <first>-<last>.*leave it out when the source states none/);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1850-1999'], env)).toMatch(/--years takes <first>-<last> \(1900–2200\)/);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1950'], env)).toMatch(/--years takes/);
+		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years'], env)).toMatch(/--years takes/);
 		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Atlas-Apan-2007', '--years', '1950-1999', '--source', 'x'], env)).toMatch(/give no --source/);
 		// Another source's monthly grids name their own lines.
 		expect(parseEvaporationArgs(['--apan-asc', ...files, '--dataset', 'Other', '--years', '1950-1999'], env)).toMatch(/names its source and attribution/);
@@ -366,6 +374,69 @@ describe('12 monthly A-pan grids as ESRI ASCII (--apan-asc; the WRC Atlas’s A-
 		expect(back.climatology.cells).toEqual(read.climatology.cells);
 		expect(back.meta).toMatchObject({ source: ATLAS_APAN.source, attribution: ATLAS_APAN.attribution });
 	});
+
+	it('without --years the Atlas grid stores no period, says so in its method, and --out writes null years that read back (issue #755)', async () => {
+		const args = parseEvaporationArgs(['--apan-asc', ...SYNTHETIC_APAN_ASC_FILES, '--dataset', ATLAS_APAN.dataset]);
+		if (typeof args === 'string' || args.mode !== 'load') throw new Error(String(args));
+		const read = await readEvaporationFiles(args);
+		expect(read.climatology).toMatchObject({ firstYear: null, lastYear: null });
+		expect(read.climatology.cells).toHaveLength(10);
+		expect(read.meta.method).toMatch(/^Modelled, not measured: the WRC Atlas’s A-pan equivalent/);
+		expect(read.meta.method).toContain('(the Atlas states no period for its means: unchanged from the 1997 Atlas, Schulze 1997)');
+		expect(read.meta.method).not.toMatch(/null|NaN|operator recorded/);
+		expect(read.meta.method.length).toBeLessThanOrEqual(1000);
+		const out = join(dir, 'atlas-apan-no-period.json.gz');
+		await writeEvaporationJson({ ...args, out });
+		const doc = JSON.parse(gunzipSync(readFileSync(out)).toString('utf8'));
+		expect(doc).toMatchObject({ kind: 'apan', firstYear: null, lastYear: null });
+		const back = evaporationFromJson(doc);
+		if (typeof back === 'string') throw new Error(back);
+		expect(back.climatology).toMatchObject({ firstYear: null, lastYear: null });
+		expect(back.climatology.cells).toEqual(read.climatology.cells);
+		// Loaded locally from that file under the Atlas label, it keeps the Atlas's method, not the daily-summing one.
+		const again = await readEvaporationFiles({ mode: 'load', files: [out], dataset: ATLAS_APAN.dataset, bbox: SOUTH_AFRICA_BBOX, source: null, version: null, attribution: null });
+		expect(again.meta.method).toBe(read.meta.method);
+		// Another source's grids without a period: the generic method says none was stated.
+		const other = await readEvaporationFiles({ mode: 'load', files: [out], dataset: 'Other', bbox: SOUTH_AFRICA_BBOX, source: null, version: null, attribution: null });
+		expect(other.meta.method).toMatch(/^12 monthly A-pan grids .* each cell's monthly means as given \(the source states no period for them\)\./);
+	});
+
+	it('the method texts with and without a period', () => {
+		expect(atlasApanMethodFor(0.0167, 1950, 1999)).toContain('(the period 1950–1999 as the operator recorded it)');
+		expect(atlasApanMethodFor(0.0167, null, null)).toContain('(the Atlas states no period for its means: unchanged from the 1997 Atlas, Schulze 1997)');
+		expect(atlasSpanMethodFor(0.0167, 1950, 1999)).toContain('(the period 1950–1999 as the operator recorded it)');
+		expect(atlasSpanMethodFor(0.0167, null, null)).toContain('(the grids state no period for their means)');
+		expect(monthlyGridsMethodFor(0.0167, 1950, 1999)).toContain("each cell's monthly means for 1950–1999, as the source states them.");
+		expect(monthlyGridsMethodFor(0.0167, null, null, 'span')).toContain("each cell's monthly means as given (the source states no period for them).");
+		for (const m of [atlasApanMethodFor(0.0167, null, null), atlasSpanMethodFor(0.0167, null, null), monthlyGridsMethodFor(0.0167, null, null)]) {
+			expect(m).not.toMatch(/null|NaN/);
+			expect(m.length).toBeLessThanOrEqual(1000);
+		}
+	});
+
+	it('a grid JSON may leave its period out only for an A-pan or S-pan grid of means as given', () => {
+		const cells = [[21.25, -33.75, Array.from({ length: 12 }, () => 100)]];
+		for (const kind of ['apan', 'span']) {
+			for (const doc of [{ kind, cellDeg: 0.1, cells }, { kind, cellDeg: 0.1, firstYear: null, lastYear: null, cells }]) {
+				const got = evaporationFromJson(doc);
+				if (typeof got === 'string') throw new Error(got);
+				expect(got.climatology).toMatchObject({ firstYear: null, lastYear: null });
+			}
+		}
+		// Reference ET's years come from its files, and a PenPan grid states its own.
+		expect(evaporationFromJson({ kind: 'et0', cellDeg: 0.1, cells })).toMatch(/no "firstYear" ≤ "lastYear"/);
+		expect(evaporationFromJson({ kind: 'et0', cellDeg: 0.1, firstYear: null, lastYear: null, cells })).toMatch(/no "firstYear" ≤ "lastYear"/);
+		const model = { name: 'penpan', groundAlbedo: 0.23, screen: 1, inputs: 'NASA POWER' };
+		expect(evaporationFromJson({ kind: 'apan', cellDeg: 0.1, model, cells })).toMatch(/no "firstYear" ≤ "lastYear"/);
+		// Both or neither.
+		expect(evaporationFromJson({ kind: 'apan', cellDeg: 0.1, firstYear: 1950, cells })).toMatch(/give both, or .* neither/);
+		expect(evaporationFromJson({ kind: 'apan', cellDeg: 0.1, firstYear: null, lastYear: 1999, cells })).toMatch(/give both, or .* neither/);
+		expect(evaporationFromJson({ kind: 'apan', cellDeg: 0.1, firstYear: 1999, lastYear: 1950, cells })).toMatch(/no "firstYear" ≤ "lastYear"/);
+	});
+
+	it('refuses one year of a period without the other', async () => {
+		await expect(monthlyFromAsciiGrids(months(() => '1 1'), SOUTH_AFRICA_BBOX, 1950, null)).rejects.toThrow(/both years of the period, or neither/);
+	});
 });
 
 describe('12 monthly S-pan grids as ESRI ASCII (--span-asc; issue #738, a cross-check only)', () => {
@@ -382,6 +453,7 @@ describe('12 monthly S-pan grids as ESRI ASCII (--span-asc; issue #738, a cross-
 		expect(parseEvaporationArgs(['--span-asc', '--apan-asc', ...files, '--dataset', 'x', '--years', '1950-1999'], env)).toMatch(/not both/);
 		expect(parseEvaporationArgs(['--span-asc', ...files, '--dataset', 'Other', '--years', '1950-1999'], env)).toMatch(/an S-pan grid other than the WRC Atlas’s names its source and attribution/);
 		expect(parseEvaporationArgs(['--span-asc', ...files, '--dataset', 'Atlas-Span-2007', '--years', '1950-1999', '--attribution', 'a'], env)).toMatch(/give no --source/);
+		expect(parseEvaporationArgs(['--span-asc', ...files, '--dataset', 'Atlas-Span-2007'], env)).toMatchObject({ monthlyAsc: { kind: 'span', first: null, last: null } });
 	});
 
 	it('the synthetic grids load as kind span with the Atlas’s S-pan lines, never as A-pan, and --out reads back the same', async () => {

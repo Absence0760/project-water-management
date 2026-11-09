@@ -340,6 +340,48 @@ export function tabFlowsEdited(tabM3s: readonly (number | null)[] | null, f: Pic
 	});
 }
 
+/** One month of the stored TAB flows beside the .tab's converted column: the difference in % of the file's value (null when nothing is stored for that month). */
+export type TabFlowMonth = { stored: number | null; file: number; diffPct: number | null; same: boolean };
+/** The stored TAB flows against a .tab (the file the hydrologist browses for to check them): each month, how many differ, and the largest difference. */
+export type TabFlowComparison = { months: TabFlowMonth[]; differ: number; largest: { month: number; pct: number } | null };
+
+/**
+ * The stored TAB flows compared with a .tab's Total flows, maint. column in m³/s, month by month, with the
+ * tolerance tabFlowsEdited uses (relative 1e-9): so TAB flows typed, pasted or imported from a workbook can be
+ * checked against the DRM file they should have come from, before or after keeping that file.
+ */
+export function compareTabFlows(tabM3s: readonly (number | null)[] | null, f: Pick<EwrTabFile, 'monthlyMcm'>): TabFlowComparison {
+	const fromFile = tabFileM3s(f);
+	let largest: TabFlowComparison['largest'] = null;
+	const months = fromFile.map((file, m): TabFlowMonth => {
+		const x = tabM3s?.[m];
+		const stored = x === null || x === undefined || !Number.isFinite(x) ? null : x;
+		if (stored === null) return { stored, file, diffPct: null, same: false };
+		const same = Math.abs(stored - file) <= 1e-9 * Math.max(Math.abs(file), 1e-12);
+		const diffPct = same ? 0 : file === 0 ? null : ((stored - file) / file) * 100;
+		if (!same && diffPct !== null && (!largest || Math.abs(diffPct) > Math.abs(largest.pct))) largest = { month: m, pct: diffPct };
+		return { stored, file, diffPct, same };
+	});
+	return { months, differ: months.filter((m) => !m.same).length, largest };
+}
+
+/** The comparison in one line: "All 12 TAB flows match the file." or "3 of 12 months differ from the file; the largest, Oct, by +6.25 %." */
+export function tabComparisonLine(c: TabFlowComparison, monthNames: readonly string[]): string {
+	if (c.differ === 0) return 'All 12 TAB flows match the file.';
+	const missing = c.months.filter((m) => m.stored === null).length;
+	const lead = `${c.differ} of 12 month${c.differ === 1 ? '' : 's'} differ${c.differ === 1 ? 's' : ''} from the file`;
+	const big = c.largest ? `; the largest, ${monthNames[c.largest.month]}, by ${c.largest.pct > 0 ? '+' : '−'}${pctText(Math.abs(c.largest.pct))} %` : '';
+	return `${lead}${big}${missing ? ` (${missing} empty)` : ''}.`;
+}
+
+/** A difference in %, enough figures to tell rounding (0.0061) from a real change (6.25). */
+export function pctText(p: number): string {
+	if (p === 0) return '0';
+	if (p < 0.0001) return '< 0.0001';
+	if (p >= 1) return p.toFixed(2);
+	return Number(p.toPrecision(2)).toString();
+}
+
 /** A DRM file of either kind, by its content; null when the text is neither (a CSV or a paste). */
 export function parseDrmFile(text: string): DrmParse<RulFile | TabFile> | null {
 	const kind = drmKind(text);

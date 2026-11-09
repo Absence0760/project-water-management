@@ -73,13 +73,25 @@ describe('EwrDailySourceFields: the kept .tab and .rul', () => {
 		expect(t).not.toContain('Load the .tab again');
 	});
 
+	const html = (value: EwrDailySource) => render(EwrDailySourceFields, { props: { value, modelAreaKm2: 10 } }).body;
+
 	it('a TAB row changed since says so; a source saved before the file was kept says to load it again', () => {
 		const edited = render(EwrDailySourceFields, { props: { value: { ...tabSource, tabM3s: tab.totalMaintM3s.map((v, i) => (i === 0 ? 0.5 : v)) }, modelAreaKm2: 10 } }).body;
 		expect(text(edited)).toContain('The TAB flows were changed after loading drm.tab; the file is shown as loaded.');
 		const { tabFile: _, ...legacy } = tabSource;
 		const old = text(render(EwrDailySourceFields, { props: { value: legacy, modelAreaKm2: 10 } }).body);
 		expect(old).toContain('These TAB flows were saved without their .tab file. Load the .tab again to see the whole file.');
+		// Beside them, a way to browse for the .tab and compare it (read, compared and used or kept only on the person's say).
+		const oldHtml = render(EwrDailySourceFields, { props: { value: legacy, modelAreaKm2: 10 } }).body;
+		expect(oldHtml).toMatch(/Browse for the \.tab file…\s*<input type="file" accept="\.tab,\.txt,text\/plain"[^>]*data-testid="ewr-tab-browse"/);
 		expect(text(render(EwrDailySourceFields, { props: { value: legacy, modelAreaKm2: 10, readonly: true } }).body)).not.toContain('Load the .tab again');
+		expect(render(EwrDailySourceFields, { props: { value: legacy, modelAreaKm2: 10, readonly: true } }).body).not.toContain('ewr-tab-browse');
+		// A kept file the TAB row no longer matches: the stored flows against the file, month by month.
+		expect(edited).toContain('data-testid="ewr-tab-compare"');
+		expect(text(edited)).toContain('1 of 12 month differs from the file; the largest, Oct, by');
+		expect(text(edited)).toMatch(/Stored 0\.5000 /);
+		expect(html(tabSource)).not.toContain('ewr-tab-compare');
+		expect(oldHtml).not.toContain('ewr-tab-compare');
 		// Kept for its MAR only, then switched to the TAB method: no TAB flow came from it, so it says so and offers them.
 		const marOnly = text(render(EwrDailySourceFields, { props: { value: { ...tabSource, tabM3s: null }, modelAreaKm2: 10 } }).body);
 		expect(marOnly).toContain('drm.tab gave only the table MAR. Use its TAB flows');
