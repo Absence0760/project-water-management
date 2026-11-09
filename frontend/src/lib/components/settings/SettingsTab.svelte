@@ -564,9 +564,12 @@
 		{:else if apanFrom === 'grid'}
 			<p class="hint" data-testid="apan-from-link">On Calibration, under Flow calibration: <a href="?tab=calibration#set-evaporation">Evaporation from the map</a> proposes the row and saves it with its source.</p>
 		{:else if apanFrom === 'ccwr'}
-			<Lazy load={loadCcwrApan}>
-				{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={draft.dirty} onApplied={reloadAfterApply} dataset={CCWR_APAN_DATASET} />{/snippet}
-			</Lazy>
+			<!-- Its own anchor here on Model settings: the panel's id stays set-evaporation, Calibration's anchor (calibration/page.test.ts reads it from the panel's source). -->
+			<div id="set-ccwr-apan">
+				<Lazy load={loadCcwrApan}>
+					{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={draft.dirty} onApplied={reloadAfterApply} dataset={CCWR_APAN_DATASET} />{/snippet}
+				</Lazy>
+			</div>
 		{:else if apanFrom === 'wr2012'}
 			<Lazy load={loadWr2012Evaporation}>
 				{#snippet children(Wr2012EvaporationProposal)}<Wr2012EvaporationProposal projectId={project.id} {readonly} formDirty={draft.dirty} onApplied={reloadAfterApply} />{/snippet}

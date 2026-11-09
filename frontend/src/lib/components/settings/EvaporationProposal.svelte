@@ -119,7 +119,7 @@
 	bind:this={frame}
 	testid={pinned ? 'ccwr-apan-proposal' : 'evaporation-proposal'}
 	prefix={pinned ? 'ccwr-apan' : 'evaporation'}
-	id={pinned ? 'set-ccwr-apan' : 'set-evaporation'}
+	id="set-evaporation"
 	variant="inline"
 	title={pinned ? `${evaporationGridName(pinned)} grid (catchment average)` : 'Evaporation from the map'}
 	level={4}
