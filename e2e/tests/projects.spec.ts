@@ -297,7 +297,9 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 		await page.setViewportSize({ width, height: 800 });
 		const badge = staleRow.getByTitle('Recorded rain (catchment or CHIRPS) runs to 30 Oct 2020').filter({ visible: true });
 		await expect(badge).toHaveCount(1);
-		const fit = await badge.evaluate((b) => {
+		// Polled: right after setViewportSize the table may not have laid out at the new width yet (it failed once at
+		// 320 px in CI on PR #757 and passed 3 of 3 locally); a badge that really overflows still fails once the layout settles.
+		const measure = () => badge.evaluate((b) => {
 			const cell = b.closest('td, th') as HTMLElement;
 			const bb = b.getBoundingClientRect();
 			const cb = cell.getBoundingClientRect();
@@ -308,7 +310,7 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 				clearOfRun: !rb || bb.right <= rb.left + 0.5
 			};
 		});
-		expect(fit, `the rain badge at ${width} px`).toEqual({ inside: true, clearOfRun: true });
+		await expect.poll(measure, { message: `the rain badge at ${width} px` }).toEqual({ inside: true, clearOfRun: true });
 	}
 	await page.setViewportSize({ width: 1280, height: 720 });
 

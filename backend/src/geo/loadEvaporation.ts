@@ -191,7 +191,7 @@ export function yearTotalsFromJson(doc: unknown): YearTotals | string {
  * cells every year has, in water-year order. Refuses years that repeat,
  * leave a gap, or are on different grids.
  */
-export function climatology(years: readonly YearTotals[]): Climatology | string {
+export function climatology(years: readonly YearTotals[]): (Climatology & { firstYear: number; lastYear: number }) | string {
 	if (!years.length) return 'no years to average';
 	const sorted = [...years].sort((a, b) => a.year - b.year);
 	for (let i = 1; i < sorted.length; i++) {
@@ -239,16 +239,18 @@ const PAN_MONTH_MAX_MM = 1000;
  * (scanAsciiGrid, the MAP grid's reader); only the box's cells are kept. A
  * negative value counts as none; a value past 1000 mm a month is refused,
  * naming the month and its place (a grid in tenths of a millimetre, say).
- * `firstYear`–`lastYear` is the period the source says its means cover.
+ * `firstYear`–`lastYear` is the period the source says its means cover, both
+ * null when it states none (the WRC Atlas's, issue #755).
  */
 export async function monthlyFromAsciiGrids(
 	months: readonly { name: string; lines: AsyncIterable<string> | Iterable<string> }[],
 	bbox: Bbox,
-	firstYear: number,
-	lastYear: number,
+	firstYear: number | null,
+	lastYear: number | null,
 	what: 'A-pan' | 'S-pan' = 'A-pan'
 ): Promise<Climatology> {
 	if (months.length !== 12) throw new Error(`give 12 monthly grids, January to December, not ${months.length}`);
+	if ((firstYear === null) !== (lastYear === null)) throw new Error('give both years of the period, or neither when the source states none');
 	const box = { w: bbox.west, s: bbox.south, e: bbox.east, n: bbox.north };
 	const cells = new Map<string, { row: number; col: number; v: Float64Array; n: number }>();
 	let first: AsciiGridHead | null = null;

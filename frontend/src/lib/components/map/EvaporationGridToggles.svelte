@@ -50,7 +50,7 @@
 		if (!a?.dataset) return '';
 		const n = a.cells.length;
 		const r = layer.range ? `: ${mapLabel(layer.range[0])} to ${mapLabel(layer.range[1])}` : '';
-		return `${fmtNum(n, 0, true)} ${n === 1 ? 'point' : 'points'} in view from ${a.dataset.dataset} (${degrees(a.dataset.cellDeg)}° cells, ${a.dataset.firstYear}–${a.dataset.lastYear} means), ${evaporationValueWords(a.month)}${r}.`;
+		return `${fmtNum(n, 0, true)} ${n === 1 ? 'point' : 'points'} in view from ${a.dataset.dataset} (${degrees(a.dataset.cellDeg)}° cells, ${a.dataset.firstYear !== null && a.dataset.lastYear !== null ? `${a.dataset.firstYear}–${a.dataset.lastYear} means` : 'means for no stated period'}), ${evaporationValueWords(a.month)}${r}.`;
 	}
 </script>
 

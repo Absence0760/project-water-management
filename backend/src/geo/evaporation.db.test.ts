@@ -13,6 +13,9 @@
 //    the row is typed over; a viewer can't;
 //  - an A-pan dataset's values go into the A-pan row instead, and leave the
 //    PE input alone;
+//  - an A-pan dataset whose source states no period (317, issue #755) is
+//    read, proposed and cited without one, and 317's check keeps a period
+//    both years or neither (neither only for A-pan or S-pan);
 //  - an S-pan dataset (316, issue #738) is summarised over the boundary with
 //    no target, never the default ahead of one that proposes, and an accept
 //    of it is refused with nothing written (no conversion to A-pan);
@@ -21,10 +24,12 @@
 //  - the loader writes the grid and its dataset row, and a reload replaces them;
 //  - the grid is read-only to the app role (control: it reads it); the
 //    provenance's target must match its kind.
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { ATLAS_APAN, atlasApanMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import type { Position } from './geojson.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -76,7 +81,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-	await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])`, [['test-apan', 'test-span']]);
+	await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = ANY($1::text[])`, [['test-apan', 'test-span', 'test-apan-no-period']]);
 });
 
 describe('the proposal', () => {
@@ -175,6 +180,35 @@ describe('accepting the proposal', () => {
 		await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-apan'`);
 	});
 
+	it('an A-pan grid whose source states no period (issue #755) is read, proposed and cited without one; a dated grid is the control', async () => {
+		const row = [190, 200, 210, 220, 190, 170, 110, 85, 65, 70, 95, 140];
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		try {
+			// A short source, so the revision reason (500 characters) keeps the whole citation.
+			const meta = { dataset: 'test-apan-no-period', kind: 'apan' as const, source: 'Test Atlas grid', version: 'v1', attribution: ATLAS_APAN.attribution, method: atlasApanMethodFor(0.1, null, null) };
+			const cells = [-338, -337].flatMap((r) => [212, 213].map((c) => ({ row: r, col: c, monthlyMm: row })));
+			expect(await replaceEvaporationDataset(client, meta, { cellDeg: 0.1, originLon: 0.05, originLat: 0.05, firstYear: null, lastYear: null, cells, partial: 0 })).toBe(4);
+		} finally {
+			await client.end();
+		}
+		expect(await asOwner(`SELECT first_year, last_year FROM evaporation_dataset WHERE dataset = 'test-apan-no-period'`)).toEqual([{ first_year: null, last_year: null }]);
+		// A viewer reads it, its years null (the panel says no period, never "null–null").
+		const p = (await proposals(viewer, '?dataset=test-apan-no-period')).body;
+		expect(p).toMatchObject({ target: 'apan', dataset: { dataset: 'test-apan-no-period', firstYear: null, lastYear: null }, proposal: { monthlyMm: row, coverage: 1, cells: 4 } });
+		// Control: a dated grid still carries its years.
+		const dated = (await proposals(viewer, '?dataset=synthetic')).body;
+		expect(dated.dataset).toMatchObject({ firstYear: 1991, lastYear: 2020 });
+		const res = await accept(editor, { dataset: 'test-apan-no-period' });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect((await settings()).apanMm).toEqual(row);
+		const reason = await lastReason();
+		expect(reason).toContain('Test Atlas grid (v1, monthly means, no period stated by the source; dataset “test-apan-no-period”)');
+		expect(reason).not.toMatch(/null|NaN/);
+		expect((await proposals(viewer, '?dataset=test-apan-no-period')).body.dataset.method).toContain('the Atlas states no period for its means');
+		await asOwner(`DELETE FROM evaporation_dataset WHERE dataset = 'test-apan-no-period'`);
+	});
+
 	it('an S-pan dataset is shown over the boundary as a cross-check, with no target; accepting it is refused and writes nothing', async () => {
 		await asOwner(
 			`INSERT INTO evaporation_dataset (dataset, kind, source, version, method, attribution, first_year, last_year, cell_deg, origin_lon, origin_lat)
@@ -261,6 +295,28 @@ describe('the grid and the provenance', () => {
 		await expect(
 			withUser(viewer.id, (db) => db.query(`UPDATE evaporation_accepted SET coverage = 0.5 WHERE project_id = $1 RETURNING 1`, [projectId]))
 		).resolves.toMatchObject({ rowCount: 0 });
+	});
+
+	it('a period is both years or, for an A-pan or S-pan grid only, neither (317; control: both null on an A-pan grid goes in)', async () => {
+		const insert = (dataset: string, kind: string, first: number | null, last: number | null) =>
+			asOwner(
+				`INSERT INTO evaporation_dataset (dataset, kind, source, version, method, attribution, first_year, last_year, cell_deg, origin_lon, origin_lat)
+				 VALUES ($1, $2, 's', 'v', 'm', 'a', $3, $4, 0.1, 0.05, 0.05)`,
+				[dataset, kind, first, last]
+			);
+		try {
+			await insert('test-period-apan', 'apan', null, null);
+			await insert('test-period-span', 'span', null, null);
+			await expect(insert('test-period-et0', 'et0', null, null)).rejects.toThrow(/evaporation_dataset_period_check/);
+			await expect(insert('test-period-half', 'apan', 1950, null)).rejects.toThrow(/evaporation_dataset_period_check/);
+			await expect(insert('test-period-half', 'apan', null, 1999)).rejects.toThrow(/evaporation_dataset_period_check/);
+			await expect(insert('test-period-back', 'apan', 1999, 1950)).rejects.toThrow(/check constraint/);
+			// The app role reads the no-period row like any other.
+			const read = await withUser(viewer.id, (db) => db.query(`SELECT first_year, last_year FROM evaporation_dataset WHERE dataset = 'test-period-apan'`));
+			expect(read.rows).toEqual([{ first_year: null, last_year: null }]);
+		} finally {
+			await asOwner(`DELETE FROM evaporation_dataset WHERE dataset LIKE 'test-period-%'`);
+		}
 	});
 
 	it('the grid is read-only to the app role (control: it reads it)', async () => {
