@@ -2455,6 +2455,14 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   their nodes, and each unit's dams and pump to it. A boundary redrawn
   since the proposal is refused (409) when its area is ticked. The proposal
   keeps the plan and the ticks.
+- **What History says.** A start's or a division's revision reason counts
+  what it did ("Started from the map: 4 hydrological units; 2 areas (gross)
+  and 1 drains-into from …", "Divided from the map: …") and ends with the
+  elevation model and the method version. That citation is always kept
+  whole (`backend/src/delineation/reasons.ts`, `fitReason`, issue #763):
+  past the reason's 500 characters, only the names of the areas taken
+  effective are shortened, as many as fit and the rest counted ("A, B and
+  12 more", or "14 areas"), never cut mid-word.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
   above drain into it), owning no land; applied, a `gauge` node linked to
@@ -2641,7 +2649,9 @@ clicking the rivers, with no points to place and no roles to pick first.
   "Sub-catchment *n*" by its click's number, after those already on the map
   ("Sub-catchment at the outlet" for the outlet's piece), its description the outlet, where it drains, the
   area upstream (or "more upstream than was routed"), the inflow points
-  entering it, the dataset and the method version, and its outlet in
+  entering it, the dataset and the method version (at most 500 characters,
+  the dataset and method always whole: past it, the inflows are named as
+  far as they fit and the rest counted, "… and 12 more"; issue #763), and its outlet in
   `properties.subcatchment`; the saved pieces whose land changed it redraws
   (above).
 - **Then straight on to the network.** After a Save the Map opens the

@@ -36,5 +36,8 @@ describe('the words', () => {
 		expect(areaBasisNote(2, [])).toBe(' (gross)');
 		expect(areaBasisNote(1, ['Dam'])).toBe(' (effective, without what drains into pans)');
 		expect(areaBasisNote(3, ['Dam', 'Rest'])).toBe(' (gross; effective, without what drains into pans: Dam, Rest)');
+		// Past its room, the names are counted rather than cut (issue #763).
+		expect(areaBasisNote(9, ['Dam', 'Rest', 'Weir'], 66)).toBe(' (gross; effective, without what drains into pans: Dam and 2 more)');
+		expect(areaBasisNote(9, ['Dam', 'Rest', 'Weir'], 10)).toBe(' (gross; effective, without what drains into pans: 3 areas)');
 	});
 });
