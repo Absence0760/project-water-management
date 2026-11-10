@@ -161,6 +161,9 @@ describe('accepting a station', () => {
 		expect(reason).toMatch(/Z1E002 “Symons Testpan \(invented\)” \(Symons pan, /);
 		expect(reason).toMatch(/A = \(S \+ 11\.1745\) ÷ 0\.8706, the inverse of the Taljaard \(2023\)/);
 		expect(reason).toMatch(/the daily S-pan record not written/);
+		// The long conversion note is shortened, never the station's citation (issue #763).
+		expect(reason).toMatch(/\(dataset “synthetic”\)\.$/);
+		expect(reason.length).toBeLessThanOrEqual(500);
 		// The Class-A station's series stays as it was.
 		expect((await apanSeries(projectId)).map((s) => s.name)).toEqual(['DWS Z1E001']);
 	});

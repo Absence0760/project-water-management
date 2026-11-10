@@ -35,6 +35,17 @@ export function fitReason(head: string, tail: string, max = REASON_MAX): string 
 	return `${head.slice(0, Math.max(0, max - tail.length - 1)).trimEnd()}…${tail}`;
 }
 
+/**
+ * fitReason with a citation that may be long (a source text an operator
+ * loaded, up to 500 characters): the full citation when everything fits, or
+ * when it takes at most half the reason (the head is shortened); else the
+ * dataset's short reference (`reference`), whose full text stays on its row.
+ */
+export function fitCitedReason(head: string, citation: string, reference: string, max = REASON_MAX): string {
+	if (head.length + citation.length <= max || citation.length <= max / 2) return fitReason(head, citation, max);
+	return fitReason(head, reference, max);
+}
+
 /** The optional "why" of a change: trimmed, no NUL; empty means none. */
 export const Reason = z
 	.string()

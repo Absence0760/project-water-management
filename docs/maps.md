@@ -3339,7 +3339,10 @@ map proposes, the modeller picks and accepts.
   station and re-derives the means, writes the A-pan row as one settings
   revision whose reason cites the station, its pan, its distance, the
   months the means came from, any conversion (its equation by name) and the
-  dataset's source, which History, run comparison and an evidence pack's
+  dataset's source (last and always whole: the conversion note before it is
+  what gets shortened to fit the reason's 500 characters, and a source past
+  half of them is cited as the dataset's label and a `/data-sources` link,
+  its text staying on the station's row; issue #763), which History, run comparison and an evidence pack's
   revisions carry, and writes the daily series when asked (queueing a
   re-run and automatic calibration as any new series does). While Settings
   has unsaved changes, Use waits. A Class-A or Symons pan only: the
@@ -3442,8 +3445,11 @@ Symons-pan (S-pan) depths and the irrigation module's 12 monthly Class-A pan
   `settings.apanMm` as one settings revision whose reason names the dataset,
   each quaternary with its share (and where its irrigation modules
   disagree), how many module files the rows came from, any part left out,
-  the S-pan total and the source. While Settings has unsaved changes, Use
-  waits.
+  the S-pan total and the source. The source comes last and is kept whole
+  (a long quaternary list before it is what gets shortened to fit the
+  reason's 500 characters; a source past half of them is cited as the
+  dataset's label and `/data-sources#wrc-water-resources`; issue #763).
+  While Settings has unsaved changes, Use waits.
 - **Dam evaporation.** The WR90 lake-factor presets (Settings → Demand)
   start from the A-pan row and turn it back into S-pan with the WR90 or
   Taljaard (2023) equation (`lakeFactorPresets.ts`, S = a × A + b), not with
@@ -3461,7 +3467,9 @@ Taljaard (2023), with the same floors and warning as a Symons station
 ([§ Evaporation stations](#evaporation-stations)); an optional note says
 where they come from. **Use** saves through
 `POST /projects/:id/evaporation-from-span` as one revision giving the months,
-the note and the equation.
+the note and the equation; the months and the equation are kept whole, and
+only a long note is shortened to fit the reason's 500 characters (issue
+#763).
 
 - **Who sees them.** A viewer's read; a farmer gets 403 and a non-member 404.
 
