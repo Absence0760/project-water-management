@@ -6,7 +6,9 @@ import {
 	DEFAULT_IRRIGATION_SYSTEMS,
 	IRRIGATION_SYSTEMS,
 	modelFarmEfficiency,
+	runApanRows,
 	type IrrigationSystemDef,
+	type NetworkNode,
 	type ProjectModel
 } from '@water-management/engine';
 
@@ -47,11 +49,31 @@ export function systemUse(m: Pick<ProjectModel, 'crops' | 'cropAreas'>, id: stri
  * blended with its plantings' systems, each weighted by its yearly requirement
  * at the project's A-pan; a unit that isn't a farm runs at 1.
  */
-export function unitEfficiency(m: ProjectModel, nodeId: string, apanMm: readonly number[]): number {
+export function unitEfficiency(m: ProjectModel, nodeId: string, apanMm: ApanInput): number {
 	const n = m.nodes.find((x) => x.id === nodeId);
 	if (n?.kind !== 'farm') return 1;
 	const own = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
-	return modelFarmEfficiency(own, nodeId, m.crops, m.cropAreas, apanMm, m.irrigationSystems);
+	return modelFarmEfficiency(own, nodeId, m.crops, m.cropAreas, apanOf(apanMm, nodeId), m.irrigationSystems);
+}
+
+/**
+ * The A-pan a preview reads for a unit: one row for every unit, or (engine ≥ 1.117.0, CCWR A-pan (Hydrological Unit))
+ * each unit's own, as the run reads it (apanInputOf).
+ */
+export type ApanInput = readonly number[] | ((nodeId: string) => readonly number[]);
+export const apanOf = (a: ApanInput, nodeId: string): readonly number[] => (typeof a === 'function' ? a(nodeId) : a);
+
+/**
+ * What a run will read from these settings for each unit (the engine's runApanRows): under the 'units' basis each
+ * covered land unit's own row and the covered units' area-weighted row for the rest; else the one row, as an array,
+ * so a preview without the option is what it was.
+ */
+export function apanInputOf(settings: { apanMm?: readonly number[]; apanBasis?: unknown; apanUnits?: unknown } | null | undefined, nodes: readonly NetworkNode[]): ApanInput {
+	const r = runApanRows(settings, nodes);
+	if (!r.apanUnits) return settings?.apanMm ?? [];
+	const units = r.apanUnits.units;
+	const catchment = r.apanMm;
+	return (nodeId: string) => units[nodeId] ?? catchment;
 }
 
 /** A unit's planted crops (area > 0), each with the system it is on: its own on the unit, else the crop's default; null when none. */

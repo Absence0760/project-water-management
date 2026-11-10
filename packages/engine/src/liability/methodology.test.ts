@@ -36,7 +36,8 @@ const PUBLISHED: Record<string, string> = {
 	// Revised before its first release (issue #616, the flow split by the same natural MAR share, in the same draft as #615;
 	// issue #622, the regional GR4J prior in § 6 and § 8).
 	'methodology-13': '01080a221739ce69ccb529a9582730fa1249af2584aae4ec688896c9ce8329a2',
-	'methodology-14': '795433341e870dff3869378804597f41f2f9aa8e98e8dbde780d9a1de4c0448a'
+	'methodology-14': '795433341e870dff3869378804597f41f2f9aa8e98e8dbde780d9a1de4c0448a',
+	'methodology-15': 'd7d93e821391e221c91974b6d95395e6f0c29ac07dda7be7662741c1066c49e2'
 };
 
 describe('methodology statement (generated from docs/methodology)', () => {

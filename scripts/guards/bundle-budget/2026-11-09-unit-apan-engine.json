@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Engine 1.117.0, each unit's own A-pan (CCWR A-pan (Hydrological Unit)): the engine's evaporation/apanUnits.ts and the per-unit rows in the run, compare, farm projection and scenario fields (the engine ships in several chunks), the Demand choice saved as apanBasis, the table's Use and the Run readiness line. Measured 2475 KB locally against the 2470 KB ceiling with the unit A-pan table's entry (+5 KB). Headroom ~1 KB."
+}

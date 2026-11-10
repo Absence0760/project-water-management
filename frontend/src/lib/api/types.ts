@@ -3079,13 +3079,35 @@ export interface OutlookRequest {
 
 /** A yield request's parameters (backend yield/store.ts YieldParams). */
 export interface YieldParams {
-	/** 'constant', 'demand' (the farm's own demand shape) or 12 factors, Oct–Sep. */
+	/** 'constant', 'demand' (a unit's irrigation demand shape) or 12 factors, Oct–Sep. */
 	pattern: 'constant' | 'demand' | number[];
+	/** With 'demand': the unit whose irrigation demand shapes the draft (engine ≥ 1.117.0); absent = the dam's own unit. */
+	patternNodeId?: string;
 	/** 0.5–1; 1 = the firm yield. */
 	assurance: number;
 	tolerance: number;
 	/** Curve points, 8–12. */
 	points: number;
+	/** A curve's largest capacity, m³ (engine ≥ 1.117.0, sizing a proposed dam); absent = twice the dam's own. */
+	maxCapacityM3?: number;
+}
+
+/** A hydrological unit the Draft pattern can take its shape from (GET …/yield/options). */
+export interface YieldPatternUnit {
+	nodeId: string;
+	name: string;
+	/** It has irrigation demand to shape a draft. */
+	demand: boolean;
+}
+
+/** What the Yield panel offers for one dam, in the run's or scenario's model (GET /projects/:id/yield/options). */
+export interface YieldOptions {
+	/** 0 = the unit has no dam in this model: no firm yield, a curve only to an entered largest capacity. */
+	damCapacityM3: number;
+	/** What can bring water into the dam (engine damInflowRoutes): `receives` false = its yield is 0 at any size, refused (400 yield_no_inflow). */
+	inflow: { runoffToDam: number; upstreamToDam: number; upstreamUnits: number; riverToDam: boolean; transfersIn: number; receives: boolean };
+	/** The model's hydrological units the caller may see, in its order. */
+	units: YieldPatternUnit[];
 }
 
 /** POST /projects/:id/yield: exactly one of runId and scenarioId. */
@@ -3110,11 +3132,14 @@ export interface YieldResult {
 	nodeId: string;
 	jobId: string | null;
 	kind: 'firm' | 'curve';
-	params: YieldParams;
+	/** `patternNodeName`: the name the unit shaping the draft had when the job ran (with patternNodeId). */
+	params: YieldParams & { patternNodeName?: string };
 	/** Null for a viewer kept from each registered volume, on a yield computed on a cap or full-allocation run (`withheld`, #523 I). */
 	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean } | null;
 	withheld?: string[];
 	engineVersion: string;
+	/** A scenario's yield: the scenario's opsSha256 when it was worked out (320); null on a run, or from before 320. */
+	opsSha256?: string | null;
 	createdBy: string | null;
 	createdAt: string;
 }
@@ -3791,6 +3816,40 @@ export interface EvaporationProposals {
 	 */
 	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null; dailyApan?: { from: string; to: string } | null };
 	accepted: EvaporationAccepted[];
+}
+
+/** One land unit's monthly A-pan over the A-pan grid (GET /projects/:id/map/unit-apan). */
+export interface UnitApanUnit {
+	nodeId: string;
+	name: string;
+	/** The unit's area in the model, km². */
+	areaKm2: number;
+	/** Oct … Sep, mm, to 0.1. */
+	monthlyMm: number[];
+	annualMm: number;
+	cells: number;
+	coveredShare: number;
+	/** (unit's year − catchment's year) ÷ catchment's year × 100; null without a catchment average. */
+	diffPct: number | null;
+}
+
+/** GET /projects/:id/map/unit-apan: each unit's monthly A-pan from an A-pan grid beside the catchment's, for comparison only. */
+export interface UnitApanProposal {
+	/** Null when the grid asked for isn't loaded on this server (or isn't an A-pan grid). */
+	dataset: { label: string; version: string; source: string; attribution: string; method: string; cellDeg: number; synthetic: boolean; firstYear: number | null; lastYear: number | null } | null;
+	boundary: { featureId: string; name: string } | null;
+	/** The boundary's average over the same grid, or why there is none; null without a boundary or a grid. */
+	catchment: { monthlyMm: number[]; annualMm: number; coverage: number; cells: number } | { problem: string } | null;
+	units: UnitApanUnit[];
+	uncovered: { nodeId: string; name: string; coveredShare: number; reason: string }[];
+	withoutPolygon: { nodeId: string; name: string }[];
+	refused: { nodeId: string; name: string; reason: string }[];
+	/** The one catchment A-pan row (`settings.apanMm`). */
+	settingsApanMm: number[];
+	/** What the settings hold: the basis (engine ≥ 1.117.0) and each unit's saved row. Absent from an older server. */
+	saved?: { basis: 'catchment' | 'units'; dataset: string | null; source: string | null; units: Record<string, number[]> };
+	/** Every covered unit's row is saved as shown, from this grid. */
+	same?: boolean;
 }
 
 /** How a DWS evaporation station's pan record becomes A-pan (issue #646 item 6): as it stands, or by an S→A equation's 12 values. */

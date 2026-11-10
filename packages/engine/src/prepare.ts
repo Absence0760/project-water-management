@@ -43,6 +43,7 @@ import {
 	type ZeroRainMask
 } from './rain';
 import { apanDailyInfo, type ApanDailyInfo } from './evaporation/apanDaily';
+import { resolveApanUnits, type ApanUnitsRun } from './evaporation/apanUnits';
 import { et0DailyInfo, type Et0DailyInfo } from './evaporation/et0Daily';
 import { applyGapRain, fitGapProducts, gapRainKeys, type GapRainFits, type GapRainRun } from './gapRain';
 import { doubleMass as doubleMassOf, doubleMassRunWarning, type DoubleMass } from './doublemass';
@@ -193,8 +194,10 @@ export interface PreparedRun {
 	doubleMass: DoubleMass | null;
 	/** settings.rainSource as applied, and the per-day `rain_source` column (engine ≥ 0.30.0; null without periods). */
 	rainSource: { info: RainSourceInfo; column: Float64Array } | null;
-	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
+	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one, and under the A-pan per hydro unit). */
 	apanDaily: ApanDailyInfo | null;
+	/** The A-pan per hydro unit the run applies (engine ≥ 1.117.0, settings.apanUnits); null when it reads the one catchment row. */
+	apanUnits: ApanUnitsRun | null;
 	/** The daily reference ET series' use (engine ≥ 1.104.0, ./evaporation/et0Daily.ts); null without one. */
 	et0Daily: Et0DailyInfo | null;
 	/**
@@ -231,7 +234,14 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 	let settings = withPinnedStationFactors(mergeSettings(input.settings, warnings, input.model.nodes), options.pinned?.stationFactors);
 	// A record's own periods (engine ≥ 1.102.0, issue #611, ./recordPeriods.ts): settings.flowMissing on a flow record and
 	// settings.rainStations.unreliable on the alternative gauge are gaps from here on, for every reader of the run.
-	const series = withRecordPeriods(settings, input.series ?? {}, warnings);
+	const recorded = withRecordPeriods(settings, input.series ?? {}, warnings);
+	// A-pan per hydro unit (engine ≥ 1.117.0, ./evaporation/apanUnits.ts, docs/model.md §2.3b): the settings every
+	// reader gets carry the rows kept to the model's land units and, as `apanMm`, the catchment row (the covered units'
+	// rows area-weighted). The daily A-pan series is not read under it, so it leaves the run's series here.
+	const apanUnits = resolveApanUnits(settings, input.model.nodes, (recorded.evap_apan_mm?.values.length ?? 0) > 0, warnings);
+	if (apanUnits) settings = { ...settings, apanMm: apanUnits.catchmentMm, apanUnits: apanUnits.setting };
+	else if (settings.apanUnits != null) settings = { ...settings, apanUnits: null };
+	const series: ModelInput['series'] = apanUnits && recorded.evap_apan_mm ? (({ evap_apan_mm: _apan, ...rest }) => rest)(recorded) : recorded;
 	// Rainfall stations (engine ≥ 1.91.0, issue #553, docs/model.md §2.4i): with a station for the catchment, its rule
 	// is the catchment rain. The catchment gauge's own handling (§2.4b's fit, §2.4c–§2.4e) then reads no gauge: the
 	// station's record went through its checks in ./runoff/stationRecord.ts. Without settings.rainStations: as before.
@@ -307,7 +317,7 @@ export function prepareRun(input: ModelInput, options: PrepareOptions = {}): Pre
 	const stations = stationCtx ? { context: stationCtx, catchment: prep.stationForcing, catchmentDays: prep.stationDays, plan } : null;
 	const { stationForcing: _f, stationDays: _d, ...rest } = prep;
 	if (rest.fits && stationCtx) rest.fits = { ...rest.fits, stationFactors: pairingFactors(stationCtx) };
-	return { ...rest, warnings, settings, series, stations };
+	return { ...rest, warnings, settings, series, stations, apanUnits: apanUnits?.run ?? null };
 }
 
 /**
@@ -400,7 +410,7 @@ function alignToWindow(
 	end: number,
 	options: PrepareOptions = {},
 	plan: CatchmentStationPlan | null = null
-): Omit<PreparedRun, 'settings' | 'series' | 'stations'> & { stationForcing: StationAreaForcing | null; stationDays: StationAreaDays | null } {
+): Omit<PreparedRun, 'settings' | 'series' | 'stations' | 'apanUnits'> & { stationForcing: StationAreaForcing | null; stationDays: StationAreaDays | null } {
 	const warnings: string[] = [];
 	const days = end - start + 1;
 	const startDate = fromEpochDay(start);

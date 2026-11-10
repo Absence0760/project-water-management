@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+	import { apanInputOf } from '#lib/model/systems.js';
 	// The Crops & demand grids: crop factors, planted areas and the demand
 	// preview, as full tables. The grid modal shows one section each
 	// (model/GridModal.svelte, `sections`), scenario override mode all three
@@ -73,7 +74,7 @@
 	const demand = $derived(
 		farmDemands(
 			editor.model,
-			settings.apanMm,
+			apanInputOf(settings, editor.model.nodes),
 			settings.februaryDays,
 			farms.map((f) => f.id)
 		)

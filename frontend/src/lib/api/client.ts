@@ -162,6 +162,7 @@ import type {
 	OutlookPublication,
 	OutlookRequest,
 	YieldJob,
+	YieldOptions,
 	YieldRequest,
 	YieldResult,
 	AutoCalibration,
@@ -207,6 +208,7 @@ import type {
 	CroplandProposals,
 	CropTypeLayer,
 	EvaporationProposals,
+	UnitApanProposal,
 	Gr4jPrior,
 	EvaporationStationProposals,
 	Wr2012EvaporationProposal,
@@ -1421,6 +1423,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			fromMap: (id: string, dataset: string) =>
 				request<{ target: EvaporationTarget; monthlyMm: number[]; dataset: string; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-map`, { dataset })
 		},
+		/** Each land unit's monthly A-pan from an A-pan grid beside the catchment's (docs/maps.md § A-pan for each unit): for comparison only. */
+		unitApan: {
+			get: (id: string, dataset: string) => request<UnitApanProposal>('GET', `${p(id)}/map/unit-apan?${new URLSearchParams({ dataset })}`),
+			/** Use: save each covered unit's row and run the model on them (settings.apanBasis 'units'), one settings revision. */
+			use: (id: string, dataset: string) =>
+				request<{ dataset: string; units: { nodeId: string; monthlyMm: number[] }[]; source: string; revisionId: string | null }>('POST', `${p(id)}/map/unit-apan`, { dataset })
+		},
 		/**
 		 * The nearest DWS evaporation stations to the boundary (issue #646 item 6, docs/api.md § Catchment map): a station's
 		 * monthly means proposed as the A-pan row (a Symons pan's only through the S→A equation picked), and a Class-A pan's
@@ -1481,6 +1490,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			jobs: (id: string, q: { nodeId: string; runId?: string; scenarioId?: string }) => {
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v ? [[k, v]] : [])));
 				return request<{ jobs: YieldJob[] }>('GET', `${p(id)}/yield/jobs?${qs}`).then((r) => r.jobs);
+			},
+			/** The dam's capacity in the run's or scenario's model, and the units whose irrigation demand can shape its draft. */
+			options: (id: string, q: { nodeId: string; runId?: string; scenarioId?: string }) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v ? [[k, v]] : [])));
+				return request<YieldOptions>('GET', `${p(id)}/yield/options?${qs}`);
 			},
 			/** Stop a yield job: a waiting one at once, a running one at its next progress report. */
 			cancel: (id: string, jobId: string) => request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/yield/${enc(jobId)}/cancel`)

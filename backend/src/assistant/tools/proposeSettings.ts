@@ -80,7 +80,10 @@ export const NOT_PROPOSED: Readonly<Record<string, string>> = {
 	outcomes: 'the outcome settings choose what the results pages show, not how the model runs',
 	outlook: 'the seasonal outlook settings choose what the outlook shows, not how the model runs',
 	ewrHeadline: 'the EWR headline chooses what the results pages lead with, not how the model runs',
-	referenceGauge: 'the reference gauge’s areas scale a neighbouring record for Calibration’s comparison, not how the model runs'
+	referenceGauge: 'the reference gauge’s areas scale a neighbouring record for Calibration’s comparison, not how the model runs',
+	// Engine ≥ 1.117.0: Model settings → Demand → CCWR A-pan (Hydrological Unit), each unit's rows taken from the grid by the server.
+	apanBasis: 'which A-pan each unit runs on is chosen on Model settings → Demand (A-pan from), with the units’ grid A-pan, not proposed',
+	apanUnits: 'each unit’s own A-pan is taken from the CCWR A-pan grid by the server (Use on Model settings → Demand), not typed or proposed'
 };
 
 /**

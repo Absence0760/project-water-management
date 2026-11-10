@@ -388,6 +388,13 @@ the frontend catalogue (same contract: add, never rename):
   The run pages don't ask: the run lists them in `withheldSeries`
   (issue #523 finding I).
   An editor or owner can give it to them.
+- `yield_no_dam`, `yield_no_inflow`, `yield_pattern_unit` (`400` from
+  `POST /projects/:id/yield`, [§ Yield](#yield)): the unit has no dam in
+  that model (a firm yield, or a curve without `maxCapacityM3`); its dam
+  receives no water there (its yield would be 0 at any size); the unit
+  named to shape the draft isn't a hydrological unit of that model with
+  irrigation demand. The Yield panel says each before asking, from
+  `GET …/yield/options`.
 - `job_collision` (`409` from a request that queues a job): the job met a
   pending one with the same dedupe key that the caller can't see under RLS,
   so there is none to return (`backend/src/jobs/queue.ts`
@@ -2259,6 +2266,9 @@ series' data feed, which then keeps them rather than replacing them
 (given in mm, cm or in): on the days it has a value it replaces the monthly
 A-pan means, and a run reports the days that fell back to them in
 `summary.apanDaily` ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
+Under `settings.apanBasis` `'units'` (engine ≥ 1.117.0, [model.md §2.3b](./model.md)) the record isn't read, and a
+run reports each land unit's A-pan row in `summary.apanUnits` (`{ dataset, source, catchmentMm, units: { nodeId, name,
+areaKm2, apanMm, covered }[], dailyIgnored }`).
 `rain_catchment_alt_mm` (an alternative catchment gauge) and
 `rain_reanalysis_mm` (a gauge-free reanalysis such as ERA5), engine ≥ 0.30.0,
 are read only by a `settings.rainSource` period
@@ -3842,6 +3852,8 @@ is its composite dam, its volume the user's), and is `404` now.
 | GET | `/projects/:id/map/dem-grid` | `?bbox=minLon,minLat,maxLon,maxLat` (WGS84, west < east, south < north, at most 0.5° a side) | `{ bbox, dataset: { label, attribution, zoom }, stride, cellM, points: [lon, lat, elevationM][], tooDense, max }`: every `stride` (10) cells of the elevation model along each row and column in the bbox, on the global pixel grid at its deepest zoom, each its cell centre and whole-metre elevation, north to south; `cellM` a cell's side there; cells below −500 m left out. `tooDense` (no points) past `max` (5 000), counted before a tile is read. The Map tab's **DEM grid** layer (`delineation/demGridRoutes.ts`, [maps.md § DEM grid](./maps.md#dem-grid)). `dataset.label` ends with the archive's recorded version and dates when its provenance is recorded ("… (version 0.0.13, upstream file of 2026-09-30, recorded 2026-10-27)", migration 248, `geo/referenceOrigin.ts` `withProvenance`). `400` for a missing, malformed, inverted or oversized bbox; `409` without a DEM (`DEM_URL` empty); `503` when the DEM can't be read; a farmer `403` | viewer |
 | GET | `/projects/:id/map/unit-map` | `?dataset=` (optional, a grid's label) | `{ dataset, coversAll, units, uncovered, withoutPolygon, refused, otherGrid, candidates }`: each land unit's MAP from one MAP grid ([maps.md § MAP for each unit](./maps.md#map-for-each-unit)). `dataset: { label, version, source, attribution, cellDeg, synthetic } \| null`: the grid asked for, else the finest real grid covering every unit with a parcel, else the real grid covering the most (the finest of those), the synthetic grid only when no real grid covers any unit; null when none covers any. `units: { nodeId, name, featureId, mapMm, cells, coveredShare, current: { mapMm, mapSource }, same }[]`: each unit it covers, its area-weighted MAP over its parcel in whole mm, the cells with a value it touches, the share of the parcel with values, what its form holds, and whether that is this MAP from this grid already. `uncovered: { nodeId, name, coveredShare, reason }[]`: units with a parcel the grid doesn't cover (values over less than 90 % of the parcel, or more than 100 000 cells in its box), never filled from another grid. `withoutPolygon: { nodeId, name }[]`; `refused: { nodeId, name, reason }[]` (several parcels and none its area). `otherGrid: { nodeId, name, mapSource }[]`: units outside the proposal whose MAP came from another grid (a POST is then `grid_mixed`). `candidates: { label, version, cellDeg, synthetic, covered, missing: { nodeId, name }[] }[]`: every loaded grid in the order the choice reads them. `400 { details: { code: "dataset_unknown" } }` for a grid that isn't loaded; a viewer `403`; a project you can't see `404` (`geo/unitMapRoutes.ts`) | editor |
 | POST | `/projects/:id/map/unit-map` | `{ dataset, nodeIds?: uuid[] }`, strict | `200 { dataset, units: { nodeId, mapMm, mapSource }[], changed, revisionId }`: re-derived on the server from the grid and the parcels as they are, each chosen unit's (every unit `dataset` covers, or the `nodeIds`) `mapMm` and `mapSource` (`<label> <version>, area-weighted mean over the unit’s parcel, <n> cells`) written as one model revision (`model_put`, its reason citing the grid; `revisionId` null when nothing changed). `400` codes in `details.code`: `dataset_unknown`, `unit_unknown` (a node that isn't a land unit), `nothing_covered`; `409`: `unit_uncovered` (a named unit the grid doesn't cover, has no parcel or is refused; `details.units` says why), `grid_mixed` (a unit would keep a MAP from another grid; `details.units`) | editor |
+| GET | `/projects/:id/map/unit-apan` | `?dataset=` (optional, an A-pan grid's label; default the first A-pan grid loaded) | `200 { dataset, boundary, catchment, units, uncovered, withoutPolygon, refused, settingsApanMm }`: each land unit's monthly A-pan from one A-pan grid, for comparison only ([maps.md § A-pan for each unit](./maps.md#a-pan-for-each-unit), `geo/unitApanRoutes.ts`). `dataset: { label, version, source, attribution, method, cellDeg, synthetic } \| null`: null when the grid asked for isn't loaded or isn't an A-pan grid (then nothing else is read: Model settings → Demand asks for `Atlas-Apan-2007`, which a server may not have). `boundary: { featureId, name } \| null`. `catchment: { monthlyMm, annualMm, coverage, cells } \| { problem } \| null`: the boundary's average over the same grid, as `GET …/evaporation-proposals` gives it. `units: { nodeId, name, areaKm2, monthlyMm, annualMm, cells, coveredShare, diffPct }[]`: each unit the grid covers, its 12 area-weighted months over its outline (Oct … Sep, mm, to 0.1), and `diffPct` = (unit's year − catchment's year) ÷ catchment's year × 100 (null without a catchment average). `uncovered: { nodeId, name, coveredShare, reason }[]` (values over less than 90 % of the outline, or past the unit MAP's cell caps), `withoutPolygon: { nodeId, name }[]`, `refused: { nodeId, name, reason }[]` (several parcels and none its area): never filled from elsewhere. `settingsApanMm`: the one catchment row. `saved: { basis: 'catchment' \| 'units', dataset, source, units: { <node id>: 12 months } }`: what the settings hold (engine ≥ 1.117.0); `same`: every covered unit's row is saved as shown, from this grid. Writes nothing; a project you can't see `404` | viewer |
+| POST | `/projects/:id/map/unit-apan` | `{ dataset }`, strict | `200 { dataset, units: { nodeId, monthlyMm }[], source, revisionId }`: **Use** under Model settings → Demand → **CCWR A-pan (Hydrological Unit)**. Re-derived on the server from the grid and the outlines as they are, each covered unit's 12 months written to `settings.apanUnits` (`{ dataset, source, units }`, the source citing the grid and the method) with `settings.apanBasis: 'units'`, as one settings revision (`settings_patch`, its reason naming the units left out). Units the grid doesn't cover get no row: the engine runs them on the covered units' area-weighted mean ([model.md §2.3b](./model.md)). `400` codes in `details.code`: `dataset_unknown`, `nothing_covered` (`geo/unitApanRoutes.ts`) | editor |
 | GET | `/projects/:id/nodes/:nodeId/dam-proposals` | – | `200 { nodeId, nodeName, current: { damCapacityM3, damAreaFullM2 }, dam: { id, name, geometryType, point: [lon, lat], areaM2 } \| null, radiusM: 1000, register: RegisterDamProposal[], area: { featureId, featureName, areaM2, method } \| null, datasets: { dataset, count }[] }` (issue #326 B-dams, `geo/damRoutes.ts`, [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)): the hydrological unit's dam on the map (a linked `dam` feature, a polygon first, then the earliest), the registered dams within 1 km of its centroid or point, nearest first, at most 5, and the polygon's area as the full-supply area (`null` for a point). `dam: null` when no dam feature is linked. `current` is the saved model's. Writes nothing. `400` for a node that isn't a farm; `404` for another project's node | viewer |
 | POST | `/projects/:id/nodes/:nodeId/dam-area-from-map` | `{ featureId }` | `200 { nodeId, damAreaFullM2, areaFeatureId, revisionId }`: the unit's `damAreaFullM2` set to the dam polygon's geodesic area, recorded as a model revision whose reason names the feature. `400` for a node that isn't a farm, a feature that isn't a `dam`, a dam point (no area), a dam linked to another unit, or a unit with no dam capacity; `404` for another project's feature or node | editor |
 | GET | `/projects/:id/nodes/:nodeId/cropland-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { nodeId, nodeName, dataset: CroplandDataset \| null, datasets: { dataset, version, synthetic }[], parcels: { featureId, name, areaM2, cultivatedM2 }[], unit: { areaM2, cultivatedM2 } \| null, catchment: { featureId, name, areaM2, cultivatedM2 } \| null, crops: { cropId, name, areaM2, accepted: CropAreaFromLandCover \| null }[], cropTypes: { dataset: CropTypeDataset, parcels: { featureId, name, areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 }[], unit: { areaM2, orchardM2, vineM2, newOrchardM2, newVineM2 } \| null } \| null }` (issue #326 B-landcover, `geo/croplandRoutes.ts`, [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)): each `farm_parcel` linked to the unit (oldest first; with none, the polygon its area came from, `area_feature_id`, a parcel or an *other* area, issue #646 F1, `geo/unitPolygon.ts`) with its area and the area the land cover maps as cropland in it (m², rounded), their sum (`unit`, null without parcels), the catchment boundary's for reference, and the project's crops with the unit's planted area now (0 = none) and where an accepted area came from. A polygon that can't be summarised (too big) has `problem` in place of the figures. No dataset loaded: `dataset: null` and no figures. `cropTypes` (issue #604 R5-D, [maps.md § Orchards and vines from SANLC](./maps.md#orchards-and-vines-from-sanlc)): the same parcels' permanent orchards and vines from the default crop-type dataset, and the part of each new since its `baselineVersion` (0 without one), m² rounded, the unit's sums adding the rounded parcels; `null` with no crop-type dataset loaded, as in production until SANLC's terms are recorded. Writes nothing. `400` for a node that isn't a farm or an unknown dataset; `404` for another project's node | viewer |
@@ -4651,24 +4663,40 @@ scenario (its ops on its base run's inputs), never the live model.
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/yield` | `{ nodeId, runId \| scenarioId, kind, params? }` | `202 { jobId, job: JobMeta, created: true }`. The same request while one is pending (queued, or failed and waiting to retry) is `200 { jobId, job, created: false }` with that job: an editor's matches any editor's, a contributor's only their own (they can't see anyone else's job, so an assessor's pending one never stands for theirs). A contributor (an applicant) only with `scenarioId` of an application they own and `nodeId` their own farm or a dam its `node.add` or `node.insert` ops add (`403` for a run or an application that isn't theirs; a dam hidden from them is the `400` an unknown node gets). `409` for a forecast run (issue #51: a yield is judged on history; the Network tab offers only ordinary runs), and for a scenario whose base is one | editor, or a contributor on their own application |
 | GET | `/projects/:id/yield?runId=\|scenarioId=&nodeId=&jobId=` | – | `{ results: YieldResult[] }`, newest first, at most 50: one of `runId` / `scenarioId` (or `jobId` alone), optionally one node. A contributor reads only the results they computed | contributor (RLS: their own) |
+| GET | `/projects/:id/yield/options?nodeId=&runId=\|scenarioId=` | – | `YieldOptions = { damCapacityM3, inflow: { runoffToDam, upstreamToDam, upstreamUnits, riverToDam, transfersIn, receives }, units: { nodeId, name, demand }[] }`: what the Yield panel offers for this dam, read from the model the job would run on (the run's, or the scenario's ops on its base). `damCapacityM3` 0: the unit has no dam there (no firm yield; a curve only with `maxCapacityM3`). `inflow` is engine `damInflowRoutes`: `receives` false, nothing routes water into the dam (its yield is 0 at any size; a yield is refused). `units`: the model's hydrological units in its order, each with whether it has irrigation demand to shape a draft (engine `irrigationDemandUnits`, which builds the model once). Exactly one of `runId` / `scenarioId` (`400`); `422 the model can't run this input: …` in the engine's words. A contributor gets their own farm and the units their ops add, on their own application only (as `POST /yield`) | viewer (a contributor: their own application) |
 | GET | `/projects/:id/yield/jobs?nodeId=&runId=\|scenarioId=` | – | `{ jobs: YieldJob[] }`: this dam's pending yield jobs (queued, running, or failed and waiting to retry), whoever queued them, newest first, at most 20; `nodeId` required, at most one of `runId` / `scenarioId` (`400` for both). A done or dead job drops off: read its result with `GET /yield?jobId=`. A contributor sees only their own jobs | contributor (RLS: their own) |
 | POST | `/projects/:id/yield/:jobId/cancel` | – | `200 { status, cancelled }` (`app_cancel_job_outcome`, 285): `cancelled` is whether this call changed the job, so cancelling one already dead, or running and already flagged, answers `false`. A queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report, then goes `dead` with nothing stored. `404` for a job that isn't a yield job of this project, or isn't yours to cancel | the user who queued it, or an editor |
 
 - `kind`: `firm` (one yield at the dam's own capacity) or `curve` (the yield
-  at `points` capacities evenly from 0 to 2 × the dam's).
+  at `points` capacities evenly from 0 to 2 × the dam's, or to
+  `maxCapacityM3`).
 - `params` (strict; every field optional): `pattern` `constant` (default),
-  `demand` (the farm's own irrigation demand by month) or 12 non-negative
-  factors Oct–Sep; `assurance` 0.5–1 (default 1, the firm yield: no failure
+  `demand` (a unit's irrigation demand by month) or 12 non-negative
+  factors Oct–Sep; `patternNodeId` (engine ≥ 1.117.0, with `demand` only,
+  else `400`): the hydrological unit whose irrigation demand shapes the
+  draft, absent = the dam's own unit (every request before it reads as
+  before; the dam's own id is dropped, so it is the same request);
+  `assurance` 0.5–1 (default 1, the firm yield: no failure
   day in the record; below 1, the share of water years allowed a failure is
   1 − assurance); `tolerance` 0.00001–0.05 (default 0.001, relative);
-  `points` 8–12 (default 11).
+  `points` 8–12 (default 11); `maxCapacityM3` (engine ≥ 1.117.0, `curve`
+  only, else `400`; above 0, at most 10¹²): the curve's largest capacity,
+  for sizing a proposed dam; absent = twice the dam's capacity, as every
+  stored curve without it reads.
 - Checked before anything is queued: exactly one of `runId` and
   `scenarioId` (`400`), a run or scenario of this project (`404`), a run
   rebuilt from stored inputs (`409`, as for a scenario's base), a scenario
   whose ops all apply (`422 { details: { problems } }`), a node of that run
   or scenario (`400 that node is not in this run or scenario`), a farm or dam,
-  not a gauge or other user (`400`), and a dam with a capacity above 0 for a
-  curve (`400`).
+  not a gauge or other user (`400`); `400 yield_no_dam` for a unit whose dam
+  capacity is 0 in that model (a firm yield always; a curve unless it
+  gives `maxCapacityM3`); `400 yield_no_inflow` for a dam nothing routes
+  water into there (Runoff to dam and Upstream inflow to dam 0 % or nothing
+  upstream, no River to dam, no transfer or off-take to it: its yield would
+  be 0 at any size); `400 yield_pattern_unit` when `patternNodeId` names no
+  hydrological unit of that model the caller may see (an applicant: their
+  own farm and their added units), or one with no irrigation demand (the
+  model is built once to check it, as the job will).
 - **At most 2 yield jobs queued or running per user** (`429`); a repeat of a
   pending request is never refused. A job gets 2 attempts.
 - `YieldJob = JobMeta & { target: { nodeId, runId, scenarioId, kind, params } }`:
@@ -4678,11 +4706,18 @@ scenario (its ops on its base run's inputs), never the live model.
   (another tab, a reload, a colleague). Follow the job's status on
   `GET /jobs`.
 - `YieldResult = { id, runId, scenarioId, nodeId, jobId, kind, params,
-  points, engineVersion, createdBy, createdAt }`. `params` is the request's,
-  with its defaults. `points` is `{ point: YieldPoint }` for `firm`, or
+  points, engineVersion, opsSha256, createdBy, createdAt }`. `params` is the
+  request's, with its defaults, plus `patternNodeName` with a
+  `patternNodeId`: the unit's name when the job ran, so the result still
+  names it after a rename or removal. `opsSha256` (320): on a scenario, its
+  ops hash when the job ran (the panel flags a result whose hash differs
+  from the scenario's now); `null` on a run, or before 320. `points` is `{ point: YieldPoint }` for `firm`, or
   `{ baseCapacityM3, assurance, points: YieldPoint[], monotone }` for
   `curve`. `YieldPoint = { capacityM3, yieldM3Day, yieldM3Year, failsAtM3Day,
-  failureDays, failedYears, boundM3Day, probes }` (model.md §2.13).
+  failureDays, failedYears, boundM3Day, probes }` (model.md §2.13). From
+  engine 1.117.0 every yield starts the dam half full on the record's first
+  day, whatever its `damInitialPct` (`boundM3Day` counts that half); a
+  result's `engineVersion` says which rule it was worked out under.
   `monotone: false` says the yield falls somewhere as the dam grows, which
   can be real (evaporation, a dam starting below its minimum level).
   To a viewer the project keeps from each registered volume, a result that
@@ -4692,8 +4727,8 @@ scenario (its ops on its base run's inputs), never the live model.
   scenario's current ops; a scenario's result from before 221 (mode
   unknown) is withheld too ([security.md](./security.md)).
 - The job's `error` when it fails: `the model can't run this input: …`,
-  `the yield search failed: …` (the engine's words, e.g. `this node has no
-  irrigation demand to shape the draft; use a constant pattern`),
+  `the yield search failed: …` (the engine's words, e.g. `this hydrological
+  unit has no irrigation demand to shape the draft; use a constant pattern`),
   `cancelled`, or the queue's own messages ([§ Jobs](#jobs)). It keeps the
   newest 5 results per run or scenario and dam.
 - Every number is **historical** (it replays the one record); the UI says so.

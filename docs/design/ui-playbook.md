@@ -1418,6 +1418,15 @@ Interaction details that bit:
 - **A sticky element inside a scroll container covers controls** as they
   scroll, and axe fails the covered ones (target size). Put a picker in the
   Dialog `subhead` instead.
+- **A box that scrolls must fit above a bar pinned at the window's foot.**
+  Scenario override mode's sticky "Edits to record" (up to 50vh) sat over the
+  node table's 70vh `.table-wrap`, so no scroll position showed the box's foot,
+  and a mouse had no sideways scrollbar to reach (2026-11-09). Measure the bar
+  (`bind:offsetHeight`) and lower the box's cap through `--table-wrap-max`
+  (app.css), less `--dock-h` for the save bar; pin the bar itself at
+  `bottom: var(--dock-h, 0px)`, not under the save bar. And a sticky header
+  sits above the rows' sticky name cells (`table.data thead` z-index 3 over
+  their 1–2), or the rows paint over it as the box scrolls down.
 - **Closing an overlay drops its param with goto's `replace`**, so Back
   closes the overlay rather than leaving the page. A create dialog
   (Scenarios' `new=1`) that navigates on success lets the URL close it: drop

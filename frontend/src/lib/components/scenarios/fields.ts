@@ -5,6 +5,7 @@
 // stored value for people. Fractions are stored 0–1 and shown as %. Pure:
 // no Svelte, no API.
 import {
+	APAN_BASES,
 	ACCUMULATION_MODES,
 	BOREHOLE_RULES,
 	CALIBRATION_FLOW_KINDS,
@@ -417,6 +418,10 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	'gr4j.x3': { label: 'GR4J routing store X3', spec: num('mm') },
 	'gr4j.x4': { label: 'GR4J unit hydrograph time base X4', spec: num('days') },
 	'gr4j.warmupDays': { label: 'GR4J warm-up', spec: num('days', { int: true }) },
+	apanBasis: {
+		label: 'A-pan the units run on',
+		spec: { t: 'enum', options: plain(APAN_BASES, { catchment: 'CCWR A-pan (Catchment): the one A-pan row', units: 'CCWR A-pan (Hydrological Unit): each unit’s own' }), nullable: true, nullLabel: 'the one A-pan row' }
+	},
 	chirpsBiasCorrection: { label: 'CHIRPS bias correction', spec: { t: 'enum', options: plain(CHIRPS_BIAS_MODES, { monthly: 'Monthly factors', none: 'None' }) } },
 	'zeroRainRuns.mode': { label: 'Zero-rain runs', spec: { t: 'enum', options: plain(ZERO_RAIN_MODES, { missing: 'Treat as missing', asRecorded: 'As recorded' }) } },
 	'zeroRainRuns.accumulationMode': {

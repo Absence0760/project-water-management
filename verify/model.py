@@ -725,6 +725,38 @@ def topo_order(nodes: list[dict]) -> list[dict]:
 DEFAULT_SYSTEMS = {"drip": 0.9, "micro": 0.82, "pivot": 0.85, "sprinkler": 0.8, "movable": 0.75, "surface": 0.7}
 
 
+def apan_units_of(settings: dict, nodes: list[dict]) -> tuple[dict[str, list[float]], list[float]] | None:
+    """§2.3b (engine >= 1.117.0): under settings.apanBasis "units", each land unit's own 12-month A-pan row from
+    settings.apanUnits, kept to the model's land units (a farm with an area above 0), and the catchment row, the
+    covered units' rows area-weighted in node-id order (a month every row agrees on is that value exactly). None
+    under the catchment row, with no rows stored, unusable rows, or none covering a land unit."""
+    if settings.get("apanBasis") != "units":
+        return None
+    au = settings.get("apanUnits")
+    if not isinstance(au, dict) or not isinstance(au.get("units"), dict) or not au["units"]:
+        return None
+    for row in au["units"].values():
+        if not isinstance(row, list) or len(row) != 12 or any(not isinstance(v, (int, float)) or v < 0 for v in row):
+            return None
+    land = sorted((x for x in nodes if x["kind"] == "farm" and (x.get("areaKm2") or 0) > 0 and x["id"] in au["units"]), key=lambda x: x["id"])
+    if not land:
+        return None
+    rows = {x["id"]: [float(v) for v in au["units"][x["id"]]] for x in land}
+    areas = [float(x["areaKm2"]) for x in land]
+    total = sum(areas)
+    catchment = []
+    for m in range(12):
+        first = rows[land[0]["id"]][m]
+        if all(rows[x["id"]][m] == first for x in land):
+            catchment.append(first)
+            continue
+        acc = 0.0
+        for x, a in zip(land, areas):
+            acc += rows[x["id"]][m] * a
+        catchment.append(acc / total)
+    return rows, catchment
+
+
 def farm_efficiency(node: dict, rows: list[tuple[dict, float, dict]], apan: list[float], systems: dict[str, float]) -> float:
     """§2.3 item 6: the harmonic mean of the plantings' efficiencies weighted by
     their annual gross requirement at the monthly A-pan. A planting's efficiency
@@ -878,6 +910,10 @@ def apply_climate_delta(doc: dict, op: dict) -> dict:
     s = doc.setdefault("settings", {})
     if isinstance(s.get("apanMm"), list) and len(s["apanMm"]) == 12:
         s["apanMm"] = [v * ef[(w + 9) % 12] for w, v in enumerate(s["apanMm"])]
+    # Each unit's own A-pan (engine >= 1.117.0, §2.3b): every row by the same factors.
+    au = s.get("apanUnits")
+    if isinstance(au, dict) and isinstance(au.get("units"), dict):
+        au["units"] = {nid: [v * ef[(w + 9) % 12] for w, v in enumerate(row)] for nid, row in au["units"].items()}
     pe = s.get("pe")
     if isinstance(pe, dict) and pe.get("kind") == "monthly":
         pe["mm"] = [v * ef[(w + 9) % 12] for w, v in enumerate(pe["mm"])]
@@ -1789,6 +1825,14 @@ def run(doc: dict) -> dict:
     # ---- GR4J -----------------------------------------------------------
     g = settings["gr4j"]
     apan = [float(x) for x in settings["apanMm"]]
+    # §2.3b (engine >= 1.117.0): CCWR A-pan (Hydrological Unit), each land unit on its own row; the catchment row
+    # (every other reader) is the covered units' rows area-weighted, and the daily A-pan record isn't read.
+    apan_units = apan_units_of(settings, model["nodes"])
+    unit_apan: dict[str, list[float]] = {}
+    if apan_units is not None:
+        unit_apan, apan = apan_units
+        series = {k: v for k, v in series.items() if k != "evap_apan_mm"}
+        diag["apan_units"] = len(unit_apan)
     # §2.3a (engine >= 0.38.0, issue #45): a daily A-pan record (evap_apan_mm) is the day's A-pan wherever it has a
     # value >= 0; any other day (none, negative, outside the record) reads the month's mean spread over the month.
     # Crop demand, dam evaporation and GR4J's PE under pan coefficient x A-pan all read it.
@@ -1876,17 +1920,40 @@ def run(doc: dict) -> dict:
         # §2.10n (engine 1.110.0, issue #659): each land unit on its calibration location's X1–X4.
         zone_p = location_params(settings, model["nodes"], units)
         diag["zone_units"] = diag.get("zone_units", 0) + len(zone_p)
+        # §2.3b: a unit with its own A-pan row runs GR4J on pan coefficient × that row (not under a monthly PE row).
+        def unit_pet(uid: str) -> list[float]:
+            row = unit_apan.get(uid)
+            if row is None or pe.get("kind") == "monthly" or row == apan:
+                return pet
+            return [settings["panCoefficient"][m] * row[m] / calendar_days_in_month(o) for o, m in zip(days, wm)]
+
+        unit_pets = {u["id"]: unit_pet(u["id"]) for u in units}
+        if any(unit_pets[u["id"]] is not pet for u in units):
+            # The catchment's PE series: the units' own, area-weighted (node-id order).
+            area_u = 0.0
+            for u in units:
+                area_u += float(u["areaKm2"])
+            mixed = [0.0] * n
+            for u in units:
+                w = float(u["areaKm2"]) / area_u
+                x = unit_pets[u["id"]]
+                for i in range(n):
+                    mixed[i] = mixed[i] + x[i] * w
+            catchment_pet = mixed
+        else:
+            catchment_pet = pet
         for u in units:
             a = float(u["areaKm2"])
             pu = forcing[u["id"]]
+            upet = unit_pets[u["id"]]
             zp = zone_p.get(u["id"], g)
             gu = Gr4j(zp["x1"], zp["x2"], zp["x3"], zp["x4"])
             for k in range(int(g.get("warmupDays", 365))):
                 i = k % hist if hist > 0 else 0
-                gu.step(pu[i], pet[i])
+                gu.step(pu[i], upet[i])
             q = []
             for i in range(n):
-                r = gu.step(pu[i], pet[i])
+                r = gu.step(pu[i], upet[i])
                 q.append(r["q"] * a * 1000)
                 acc["rain"][i] += a * pu[i]
                 acc["aet"][i] += a * r["aet"]
@@ -1900,6 +1967,7 @@ def run(doc: dict) -> dict:
             put(u["id"], "runoff_natural", q)
         # The catchment's GR4J series are the units' area-weighted means (§2.4h).
         rain_gr4j, aet, prod, rout, uhs, exch = ([v / area_km2 for v in acc[k]] for k in ("rain", "aet", "prod", "rout", "uh", "exch"))
+        pet = catchment_pet
     put(None, "rain_used", rain_gr4j)
     put(None, "pet", pet)
     put(None, "aet", aet)
@@ -2057,7 +2125,8 @@ def run(doc: dict) -> dict:
         cropped = 0.0
         for _, a, _p in rows:
             cropped += a
-        e = farm_efficiency(f, rows, apan, systems)
+        f_apan = unit_apan.get(f["id"], apan)
+        e = farm_efficiency(f, rows, f_apan, systems)
         smax = cropped * store_mm / 1000
         w = 0.0
         gross_s, eff_s, soil_s, F_s, D_s, F0_s = [], [], [], [], [], []
@@ -2067,7 +2136,7 @@ def run(doc: dict) -> dict:
                 if apan_day[i] is not None:
                     gross += a * crop["cropFactor"][m] * apan_day[i] / 1000
                 else:
-                    gross += a * (apan[m] * crop["cropFactor"][m]) / 1000 / mdays[m]
+                    gross += a * (f_apan[m] * crop["cropFactor"][m]) / 1000 / mdays[m]
             frac = eff_monthly[m] if eff_monthly else settings["effectiveRainFraction"]
             pe_m3 = cropped * frac / 1000 * rain_demand[i]
             available = w + pe_m3
@@ -2723,7 +2792,7 @@ def run(doc: dict) -> dict:
                 area, slope = area_of(f, s0)
                 pd = rf * area / 1000
                 seep = f.get("damSeepagePerDay") or 0.0
-                e_raw = (k_lake[m] * apan_day[i] if apan_day[i] is not None else k_lake[m] * apan[m] / mdays[m]) / 1000 * area
+                e_raw = (k_lake[m] * apan_day[i] if apan_day[i] is not None else k_lake[m] * unit_apan.get(f["id"], apan)[m] / mdays[m]) / 1000 * area
                 if slope is None:
                     b = f.get("damAreaExponent", 0.7)
                     if b > 1:

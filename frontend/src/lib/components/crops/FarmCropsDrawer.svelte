@@ -22,7 +22,7 @@
 	import EtObservedBox from './EtObservedBox.svelte';
 	import { farmDemands } from './demand';
 	import { farmPlanting, inOrder, plantedFirst } from './farmDrawer';
-	import { findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
+	import { apanInputOf, findSystem, systemLabel, systemsOf } from '#lib/model/systems.js';
 
 	let {
 		open = $bindable(false),
@@ -63,7 +63,7 @@
 	});
 	const rows = $derived(inOrder(planting.rows, order));
 	// Saved A-pan × the areas as edited, as the Crops tab's demand preview.
-	const demand = $derived(farmDemands(editor.model, settings.apanMm, settings.februaryDays, [nodeId])[0] ?? null);
+	const demand = $derived(farmDemands(editor.model, apanInputOf(settings, editor.model.nodes), settings.februaryDays, [nodeId])[0] ?? null);
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
 	const peak = $derived(demand ? demand.monthlyM3Day.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0) : 0);
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 2);

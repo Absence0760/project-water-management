@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apanInputOf } from '#lib/model/systems.js';
 	// Load crop factors (issue #54 item 1; docs/ui.md § Load crop factors): from the
 	// reference library (./library.ts), a b023 workbook's [Crop demand] or a
 	// node-based workbook's [Crop_Factors] (the browser importer, in its worker,
@@ -150,7 +151,7 @@
 	const changeOf = $derived(new Map(changes.map((c) => [c.cropId, c])));
 	const accepted = $derived(changes.filter((c) => c.differs && !reject[c.cropId]));
 	const demand = $derived(
-		accepted.length ? demandDifference(editor.model, applyChanges(crops, accepted), settings.apanMm, settings.februaryDays, farmIds) : null
+		accepted.length ? demandDifference(editor.model, applyChanges(crops, accepted), apanInputOf(settings, editor.model.nodes), settings.februaryDays, farmIds) : null
 	);
 
 	async function readWorkbook(e: Event & { currentTarget: HTMLInputElement }) {

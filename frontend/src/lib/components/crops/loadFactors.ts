@@ -4,6 +4,7 @@
 // crop, and the demand difference before anything is applied. Pure: the
 // dialog applies the accepted changes to the ModelEditor, and the normal save
 // (with its reason) saves them.
+import type { ApanInput } from '#lib/model/systems.js';
 import { type CropDef, type ProjectModel } from '@water-management/engine';
 import type { FileFormat } from '#lib/components/common/formatHelp.js';
 import { WORKBOOK_MAX_MB } from '#lib/components/import/workbookFile.js';
@@ -226,7 +227,7 @@ export interface DemandDifference {
 export function demandDifference(
 	model: ProjectModel,
 	nextCrops: CropDef[],
-	apanMm: readonly number[],
+	apanMm: ApanInput,
 	februaryDays: number,
 	farmIds: string[]
 ): DemandDifference {

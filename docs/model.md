@@ -662,6 +662,66 @@ wins wherever there is one (the daily series above, or a nearby station's
 monthly means). Production refuses the grid until it is validated against
 DWS Class-A pans and the hydrologist signs off.
 
+### 2.3b Each unit's own A-pan (engine ≥ 1.117.0, CCWR A-pan (Hydrological Unit))
+
+By default the whole catchment runs on one A-pan row (`settings.apanMm`, and
+a daily record, §2.3a, where there is one), whatever source filled it. Model
+settings → Demand → **A-pan from** → **CCWR A-pan (Hydrological Unit)** (the
+operator's choice of 2026-11-09) stores `settings.apanBasis: 'units'`, and
+each land unit's own 12 monthly A-pan, the WRC Atlas's A-pan equivalent grid
+(`Atlas-Apan-2007`) area-weighted over the unit's outline
+([maps.md § A-pan for each unit](./maps.md#a-pan-for-each-unit)), saved with
+**Use** into `settings.apanUnits` (`{ dataset, source, units: { <node id>:
+12 months } }`, one settings revision citing the grid). Every other source
+(typed row, WR2012, S-pan converted, a DWS station, any other grid, and
+**CCWR A-pan (Catchment)**) stores `apanBasis` null: the one row, the rows
+kept but unread. Absent or null runs exactly as before 1.117.0, to the bit
+(`run.apanUnits.test.ts`). `packages/engine/src/evaporation/apanUnits.ts`
+resolves it once per run (`prepare.ts`):
+
+- **The unit's own row.** A land unit (a farm with an area above 0) with a
+  stored row runs on it in its crop demand (§2.3: gross demand and the
+  plantings' irrigation-system weighting), its dam's open-water evaporation
+  (§2.7a: lake factor × the unit's month ÷ days in the month) and its GR4J
+  potential evaporation under pan coefficient × A-pan (§2.4a: pan coefficient
+  × the unit's month ÷ days in the month). Under a monthly PE row GR4J reads
+  that row as before; only demand and the dam read the unit's A-pan.
+- **The catchment row** is the covered units' rows weighted by their model
+  areas (`areaKm2`), month by month in node-id order (a month every row
+  agrees on is that value exactly). Everything else reads it: (1) a dam
+  outside every unit (a farm with no land of its own) evaporates at it; (3)
+  a land unit with no stored row (the grid covered under 90 % of its
+  outline, or it had no outline) runs on it, with a run warning naming it
+  and a line in Run readiness; any other reader of the catchment A-pan
+  (other users, the catchment's PE series, which is the units' PE
+  area-weighted when any has its own) too. The typed `apanMm` is not read.
+- **(2) The daily A-pan record is ignored** while this source is chosen: no
+  unit reads `evap_apan_mm`, and the run says so in a warning
+  (`summary.apanUnits.dailyIgnored`).
+- With the basis chosen but no row stored, or rows for no land unit of the
+  model, the run reads `apanMm` as before, with a warning saying why.
+- **What the run records.** `summary.apanUnits`: the dataset, its source,
+  the catchment row, and each land unit's row with `covered`. A GR4J fit
+  records the units' rows (`fitRecord.forcing.apanUnits`); setting,
+  changing or clearing them since is a forcing change with its own caveat.
+- **Readers outside the run** read the same rows (`apanUnits.ts`
+  `runApanRows`): the farm projections' irrigation efficiencies
+  (`views/farmProjection.ts` `apanUnits`, the season and report-window
+  curtailment), and in the app the Crops tab's demand previews and a unit's
+  blended efficiency on the Network tab (frontend `model/systems.ts`
+  `apanInputOf`).
+- **Scenarios.** `settings.set` `apanBasis` switches the basis;
+  `settings.set` `apanMm` under the units basis scales every unit's row by
+  the factor it puts on the catchment row, month by month; `climate.delta`
+  scales every row by its evaporation factors; `series.scale` of the daily
+  A-pan record is refused (unread). Rows are kept with their node ids when
+  a project is copied or imported (remapped).
+
+b023 runs one A-pan row for every unit; this is a departure, finding **AP1**
+in [engine-audit.md](./engine-audit.md). The independent Python model
+(`verify/model.py` `apan_units_of`) models it, and its generator and the
+engine's fuzz generator draw it.
+
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
 **Retired in engine 1.0.0 (issue #16, 2026-09-26).** The engine's runoff
@@ -12904,14 +12964,53 @@ the API refuses one (409) and the Network tab doesn't offer it.
 - **Pattern.** The draft on day *t* is *x* × *p(t)*, with *p* a monthly shape
   normalised so its mean over the record is 1: *x* is then the mean daily
   draft whatever the shape. Three shapes: `constant` (1 every day),
-  `demand` (the node's own abstraction demand D = F / e, its mean per
-  water-year month) and 12 custom factors (Oct–Sep).
+  `demand` (a unit's abstraction demand D = F / e plus its demand objects',
+  its mean per water-year month) and 12 custom factors (Oct–Sep). `demand`
+  takes the dam's own unit's demand unless `patternNodeId` names another
+  hydrological unit (engine ≥ 1.117.0, the hydrologist's request 2026-11-09):
+  a proposed dam in a unit with no crops can then be drafted to the shape of
+  a neighbouring unit's irrigation demand, whose dam it would serve. Only the
+  shape is borrowed; the other unit's own demand still runs as modelled.
+  `irrigationDemandUnits(problem)` lists the units that can lend one: the
+  units with land whose demand by month is above 0 in some month, in the
+  model's node order; another unit with none is refused, as is a source unit
+  with any pattern but `demand`. Without `patternNodeId` (or with the dam's
+  own id) the shape is the dam's own, bit for bit as before
+  (`yield.test.ts`).
+- **The dam starts the record half full** (`YIELD_START_FULL_SHARE` = 0.5,
+  engine ≥ 1.117.0, the operator's decision 2026-11-09): in every yield
+  search, at every point of a storage–yield curve and in a sizing curve of a
+  unit with no dam, the dam holds 50 % of its capacity on the record's first
+  day, whatever its own initial storage (`damInitialPct`), which the
+  model's own runs keep using. The record's first day shouldn't decide the
+  firm yield: an empty start in a dry first month gave a firm yield of 0
+  (and a full one credits the yield with water the record never brought).
+  The mean-supply bound *B* counts that half. A dam with a capacity share
+  (it comes into service during the record, §2.7i) starts at half its first
+  day's capacity. A dam whose minimum operating level is above half its
+  capacity starts below it, and supplies nothing until it fills to it.
+  Results from before 1.117.0 started at the dam's own initial storage; the
+  panel says so beside them.
 - **Yield at assurance *p*** (0.5–1): the largest draft whose annual failure
   rate, water years (October start) with at least one failure day ÷ water
   years in the record, is at most 1 − *p*. *p* = 1 is the firm yield. A
   part year at either end of the record counts as a year.
 - **Storage–yield curve**: the yield at 11 capacities evenly from 0 to 2 ×
-  the dam's own (8–12 in the WP; 11 gives the dam's own capacity as a point).
+  the dam's own (8–12 in the WP; 11 gives the dam's own capacity as a point),
+  or to `maxCapacityM3` (engine ≥ 1.117.0): **sizing a proposed dam**, which
+  a unit with no dam (capacity 0) can do. Its dams start half full, as
+  every yield's does (above), with no dead storage and, with no area–volume
+  relation to scale from a dam of 0 m³, no surface: no evaporation and no
+  rain on the dam, so the curve is an upper bound until the scenario gives
+  the dam a capacity and a surface (an approximation the panel and this
+  section state; pending the hydrologist).
+- **A dam that receives nothing** (`damInflowRoutes`, engine ≥ 1.117.0):
+  with no share of its runoff or of the flow from upstream routed into it
+  (or an upstream share with no unit above), no River to dam and no transfer
+  or off-take delivering to it, the dam catches only rain on its own surface,
+  so its yield is 0 at any size. The API refuses such a yield and the panel
+  says which routing to set; a dam fed only by a transfer or River to dam is
+  not refused.
 
 **How a probe runs.** `prepareYield(input)` does everything a run does
 before the network once: settings, the aligned inputs, natural flow from the
@@ -12951,8 +13050,9 @@ yield takes under a second and an 11-point curve about 7 s
 (`yield.perf.test.ts` budgets 5 s and 30 s), inside the 60 s the WP asks
 of a job.
 
-**A resized dam** (the curve, and any `capacityM3`) keeps its initial and
-dead storage as the same fractions of capacity. A transfer rule drawing from
+**A resized dam** (the curve, and any `capacityM3`) keeps its dead storage
+as the same fraction of capacity, and starts half full like every dam in the
+search (engine ≥ 1.117.0; before it, its own initial storage fraction). A transfer rule drawing from
 it keeps its reserve as the same fraction. Its surface follows **the dam's
 own area–volume relation** (engine ≥ 1.10.0, `network/damResize.ts`; drafted
 from the hydrologist persona's review of issue #46, item 11; **provisional

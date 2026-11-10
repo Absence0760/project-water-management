@@ -275,9 +275,42 @@ def random_input(seed: int, dense: bool = False) -> dict:
     add_transfer_splits(random.Random(seed * 32452939 + 53), doc, dense)
     # Its own stream (both branches had taken 15485927 + 47), so the CHIRPS choice draws apart from the monthly diversions.
     add_unit_chirps_choice(random.Random(seed * 49979687 + 59), doc, dense)
+    # Each unit's own A-pan (§2.3b, engine >= 1.117.0): its own stream, last, so no other draw moves.
+    add_apan_units(random.Random(seed * 67867999 + 61), doc, dense)
     # The EWR split by each unit's natural MAR (§2.5b) is every network's from engine 1.105.0 (issue #615): no
     # setting to draw any more (add_ewr_split's stream was the last, so no other draw moves).
     return doc
+
+
+def add_apan_units(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """CCWR A-pan (Hydrological Unit) (§2.3b, engine >= 1.117.0): in 25 % of networks (50 % dense) the settings
+    store each of most land units' own 12-month A-pan row (the catchment row × a unit factor, now and then a month
+    of its own), some land units left without one (they run on the covered units' area-weighted row), now and then
+    a row for a node that isn't a land unit (ignored). Most of those choose the 'units' basis; the rest keep the
+    catchment row with the rows stored, which must change nothing."""
+    if rng.random() >= (0.5 if dense else 0.25):
+        return
+    s = doc["settings"]
+    land = [x for x in doc["model"]["nodes"] if x["kind"] == "farm" and (x.get("areaKm2") or 0) > 0]
+    if not land:
+        return
+    base = [max(1.0, float(v)) if v else rng.uniform(40, 250) for v in s["apanMm"]]
+    units = {}
+    for x in land:
+        if rng.random() < 0.2:
+            continue
+        k = rng.uniform(0.7, 1.4)
+        row = [round(v * k, 1) for v in base]
+        if rng.random() < 0.2:
+            row[rng.randrange(12)] = round(rng.uniform(0, 300), 1)
+        units[x["id"]] = row
+    others = [x for x in doc["model"]["nodes"] if x not in land]
+    if others and rng.random() < 0.2:
+        units[rng.choice(others)["id"]] = [round(v, 1) for v in base]
+    if not units:
+        return
+    s["apanUnits"] = {"dataset": "synthetic", "source": "synthetic A-pan grid, area-weighted over each unit's outline", "units": units}
+    s["apanBasis"] = "units" if rng.random() < 0.8 else rng.choice(["catchment", None])
 
 
 def add_apan_daily(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
