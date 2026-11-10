@@ -5992,6 +5992,23 @@ The card's body holds three top-aligned groups:
   the catchment can't (the option says it needs a unit to deliver to). A
   rule saved with one curve (engine 1.113.0) shows that formula in every
   month; its first edit writes the rule's own monthly list.
+  *Percentage of available flow* (the operator's ask for a client canal, 2026-11-10;
+  `transfers/TakesPercentByMonth.svelte`, rules in `transfers/percentOfFlow.ts`):
+  one diversion of a share of the river leaving the source, the rest left in
+  the river for the units below. A row per month, Oct to Sep, with **Share of
+  the flow, %** and **Canal capacity** (blank, or a 0 % share, = off), the
+  summary ("49 % of the flow, all year; the rest stays in the river") and
+  **Apply [month] to every month**. No new field: it is stored as the formula
+  by month with b = 0 and no largest share (a · x⁰ ÷ 100 = a %, whatever x's
+  unit), so the share is of U₀, the flow leaving the source after its own
+  use ([model.md §2.6a](./model.md)), never above the canal, and the
+  hands-off flow, the EWR when kept and its priority's sharing still apply
+  after it. A rule whose every running month is such a formula shows in this
+  mode; switching to it keeps those shares, starts the other months at 100 %
+  (up to their rate, as before) and sets the curve's unit to m³/s when it
+  has none (the model asks for one; it changes nothing at b = 0). The curve's
+  unit, basis and preview are hidden in this mode. From the dam it switches
+  **Takes from** to the river as a formula does.
 - **Max rate by month** (engine ≥ 1.14.0, `transfers/MonthRates.svelte`):
   twelve m³/s fields in water-year order, six to a row (four in a phone's
   card, all twelve in one row where the group is 58rem wide), each wide

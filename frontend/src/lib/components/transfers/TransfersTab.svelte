@@ -36,6 +36,8 @@
 	import MonthRates from './MonthRates.svelte';
 	import DiversionCurveFields from './DiversionCurveFields.svelte';
 	import TakesByMonth from './TakesByMonth.svelte';
+	import TakesPercentByMonth from './TakesPercentByMonth.svelte';
+	import { isPercentOfFlow, toPercentOfFlow } from './percentOfFlow';
 	import TransferDestinations from './TransferDestinations.svelte';
 	import { WATER_YEAR_MONTHS } from '#lib/format/months.js';
 	import GridPasteDialog from '#lib/components/model/GridPasteDialog.svelte';
@@ -136,13 +138,21 @@
 	}
 
 	// --- How much it takes (engine ≥ 1.114.0, docs/model.md §2.6a): one pull-down at the top of the rates ---
-	type Takes = 'demand' | 'capacity' | 'byMonth';
+	// "Percentage of available flow" (percentOfFlow.ts) is a formula by month with b = 0, shown as one share a month.
+	type Takes = 'demand' | 'capacity' | 'byMonth' | 'percent';
 	/** What the pull-down shows: a river rule's sizing; a dam rule up to a maximum (one with a formula, refused on save, shows it). */
-	const takesOf = (t: Transfer): Takes => (t.sizing === 'diversionCurve' || hasMonthlyDiversion(t) ? 'byMonth' : (t.source ?? 'dam') === 'river' && t.sizing === 'capacity' ? 'capacity' : (t.source ?? 'dam') === 'river' ? 'demand' : 'capacity');
+	const takesOf = (t: Transfer): Takes => (isPercentOfFlow(t) ? 'percent' : t.sizing === 'diversionCurve' || hasMonthlyDiversion(t) ? 'byMonth' : (t.source ?? 'dam') === 'river' && t.sizing === 'capacity' ? 'capacity' : (t.source ?? 'dam') === 'river' ? 'demand' : 'capacity');
 	/** The rules a formula switched to the river, so the card says why its source changed. */
 	let movedToRiver = $state<string[]>([]);
 	function setTakes(t: Transfer, v: Takes) {
-		if (v === 'byMonth') {
+		if (v === 'percent') {
+			// A share of the river's flow, as a formula is: a rule from the dam becomes a river off-take, and says so.
+			if ((t.source ?? 'dam') !== 'river') {
+				t.source = 'river';
+				movedToRiver = [...movedToRiver, t.id];
+			}
+			Object.assign(t, toPercentOfFlow(t));
+		} else if (v === 'byMonth') {
 			// A formula is a share of the river's flow: a rule from the dam becomes a river off-take, and says so.
 			if ((t.source ?? 'dam') !== 'river') {
 				t.source = 'river';
@@ -353,6 +363,7 @@
 											{#if river}<option value="demand">What the destination needs</option>{/if}
 											<option value="capacity">Up to a maximum</option>
 											<option value="byMonth" disabled={!river && outsideTo}>A formula by month{!river && outsideTo ? ' (needs a unit to deliver to)' : ''}</option>
+											<option value="percent" disabled={!river && outsideTo}>Percentage of available flow{!river && outsideTo ? ' (needs a unit to deliver to)' : ''}</option>
 										</select>
 										<!-- Each rule's title names the unit its rates show in (the picker is the list's, in its heading). -->
 										<span class="u">{transferUnit.label}</span>
@@ -360,9 +371,11 @@
 									</div>
 								{/snippet}
 								{#if movedToRiver.includes(t.id) && river}
-									<p class="moved small" data-testid="takes-moved-to-river">A formula takes a share of the river’s flow, so this transfer now takes from the river (an off-take), set under Takes from.</p>
+									<p class="moved small" data-testid="takes-moved-to-river">{takes === 'percent' ? 'A percentage of the flow' : 'A formula'} takes a share of the river’s flow, so this transfer now takes from the river (an off-take), set under Takes from.</p>
 								{/if}
-								{#if takes === 'byMonth'}
+								{#if takes === 'percent'}
+									<TakesPercentByMonth rule={t} {label} disabled={readonly} title={takesTitle} />
+								{:else if takes === 'byMonth'}
 									<TakesByMonth rule={t} {label} disabled={readonly} title={takesTitle} />
 								{:else}
 									<MonthRates rule={t} {label} disabled={readonly} title={takesTitle} />
@@ -420,7 +433,7 @@
 											</div>
 										{/if}
 										<!-- Sized by a diversion curve (engine ≥ 1.113.0, §2.6a): its curve and what it diverts at a few flows. -->
-										{#if t.sizing === 'diversionCurve'}<DiversionCurveFields rule={t} {label} {name} disabled={readonly} />{/if}
+										{#if t.sizing === 'diversionCurve' && takes !== 'percent'}<DiversionCurveFields rule={t} {label} {name} disabled={readonly} />{/if}
 										<div class="checks">
 											<span class="check-row">
 												<label class="check">
