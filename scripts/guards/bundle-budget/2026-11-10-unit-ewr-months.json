@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "PR #777: the EWR months met judged at a hydrological unit (unitMonths.ts, EwrDailyMonthsAt, EwrUnitPick on the EWR page and the scenario pair); CI's bundle check on main measured 2482 KB before it and 2484 KB after"
+}
