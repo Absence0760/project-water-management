@@ -7,7 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { isScenarioRun } from './scenarioRun';
+import { isScenarioRun, runScenario } from './scenarioRun';
 
 describe('isScenarioRun', () => {
 	it('is the API’s fromScenario: true for a live or orphaned scenario run, false for a run of the model', () => {
@@ -38,6 +38,14 @@ function sourceFiles(dir: string): string[] {
 		return /\.(svelte|ts)$/.test(e.name) ? [join(dir, e.name)] : [];
 	});
 }
+
+describe('runScenario', () => {
+	it('names and links the scenario of a scenario run, also once it is deleted, and nothing for a run of the model', () => {
+		expect(runScenario({ fromScenario: true, scenarioId: 's', scenarioName: ' Hexberg Dam ' })).toEqual({ id: 's', name: 'Hexberg Dam' });
+		expect(runScenario({ fromScenario: true, scenarioId: null, scenarioName: 'Hexberg Dam' })).toEqual({ id: null, name: 'Hexberg Dam' });
+		expect(runScenario({ fromScenario: false, scenarioId: null, scenarioName: null })).toBeNull();
+	});
+});
 
 describe('no run is classified by its scenarioId', () => {
 	it('the pattern finds a run’s scenarioId and passes a note’s or a pack’s', () => {

@@ -49,10 +49,10 @@
 	import type { MatrixShare } from '#lib/components/outcomes/matrix.js';
 	import OutlookPanel from '#lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '#lib/components/reliability/WaterAccountPanel.svelte';
-	import { RIVER_STRIP_ANCHOR, riverAnchor } from './links';
+	import { RIVER_STRIP_ANCHOR, riverAnchor, riverHref } from './links';
 	import ReserveMonths from './ReserveMonths.svelte';
 	import ReserveStrip from './ReserveStrip.svelte';
-	import { EWR_MONTHS_HEADING, ewrRuleText, monthsJudge, monthsMetHeading, pickRiverRun, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type MonthsJudge } from './river';
+	import { EWR_MONTHS_HEADING, ewrRuleText, monthsJudge, monthsMetHeading, pickRiverRun, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, scenarioRunNote, type MonthsJudge } from './river';
 	import SectionNav from '#lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
@@ -88,6 +88,8 @@
 	// Newest first, for the picker.
 	const ordered = $derived([...(runs ?? [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)));
 	const name = (r: RunMeta) => r.label || 'Untitled run';
+	// A scenario's run says so under the header, with its base run a link away (docs/ui.md § EWR).
+	const scenarioNote = $derived(pick ? scenarioRunNote(pick.run, runs) : null);
 
 	// A run picked is a new history entry, so Back returns to the run before.
 	function choose(id: string) {
@@ -285,6 +287,16 @@
 		<!-- `run=` names a run that's gone (deleted since the link was made): the newest is shown, and said (as Hydrological units). -->
 		<p class="alert alert-info" role="note">That run no longer exists, so this shows the newest run.</p>
 	{/if}
+	{#if scenarioNote}
+		<!-- A scenario's run (also once its scenario is deleted): which scenario, and its base run one link away, so the
+		     scenario's EWR can be read against the base without hunting the Run menu. -->
+		<p class="scenario-note muted small" data-testid="river-scenario-note">
+			Scenario run: <strong>{scenarioNote.name}</strong>{#if scenarioNote.base}, against the base run
+				<strong>{name(scenarioNote.base)}</strong> ({fmtWhen(scenarioNote.base.createdAt)}){/if}.
+			{#if scenarioNote.base}<a href={riverHref(scenarioNote.base.id)} data-testid="river-show-base">Show the base run</a>{/if}
+			{#if scenarioNote.scenarioId}<a href="?tab=scenarios&scenario={encodeURIComponent(scenarioNote.scenarioId)}">Open the scenario</a>{/if}
+		</p>
+	{/if}
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
 	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
@@ -467,6 +479,12 @@
 	}
 	.judged {
 		margin: 0 0 0.75rem;
+	}
+	.scenario-note {
+		margin: 0 0 0.75rem;
+	}
+	.scenario-note a + a {
+		margin-left: 0.75rem;
 	}
 	.judged .fell-back {
 		display: block;

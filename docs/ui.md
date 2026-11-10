@@ -8641,7 +8641,13 @@ The page has:
   pick follows the reader between the two pages (the sidebar carries `run=`,
   `workspace/tabLinks.ts` `RUN_TABS`). A select labelled **Run** with each
   run named as the other pages' pickers name it (`compare/picker.ts`
-  `runOptionLabel`, newest first, the newest marked *latest*), when it ran
+  `runOptionLabel`, newest first, the newest marked *latest*; a scenario's
+  run names its scenario, `runPickName`: "Hexberg Dam (scenario)" for a run
+  with the scenario's own label, "Hexberg Dam (scenario, as licensed)" for
+  a run of its licensed terms, "Wet years (scenario: Hexberg Dam)" for a
+  label of the user's own, the scenario's name cut at 32 characters; the
+  EWR page, Runs & results, Compare runs, Hydrological units and
+  Allocations name runs the same way), when it ran
   day first as the run line says it ("today 13:40", "3 Oct 2026 09:12",
   `fmtWhen`); with one run,
   its name and no select. Choosing one writes `run=`, one step in history
@@ -9605,6 +9611,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   "today 13:40", `fmtWhen`, issue #586 R4-F); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
+  A scenario's run (also once its scenario is deleted, `isScenarioRun`) says
+  so in a line at the top of the page (`river.ts` `scenarioRunNote`):
+  "Scenario run: Hexberg Dam, against the base run Baseline (today 13:40).",
+  with **Show the base run** (`?tab=river&run=<base>`, the base its snapshot
+  recorded, `RunMeta.scenarioBaseRunId`, while it is still in the list) and
+  **Open the scenario** (while the scenario exists).
   While the picked run's record loads, the page keeps the run before it on
   screen, its body `aria-busy="true"`, then swaps (a cached record at once):
   until 2026-10-24 every panel unmounted for at least a render on each pick,
@@ -12567,10 +12579,33 @@ closing, and **Discard edits** puts it back. **Edits to record**
   #8). A feature the scenario adds or removes shows against 0 in the run
   without it: a river-first farm's *Pumped from the river* series (the base
   drawn as zeros, "run B only") and farm column ("A: none (0)"), under
-  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab). Only the
+  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab), and **EWR for
+  this run** and **EWR for the base run** (`riverHref`, the EWR page on the
+  scenario's run or on the base run the comparison used: the operator, on
+  2026-11-09, couldn't find a scenario's run on the EWR page). Only the
   assessors see this section; an applicant gets a note instead
   ([§ Applications](#applications-wp-33)). A note says when the changes were
-  edited since that run. Under the comparison, the scenario run's
+  edited since that run. Under the headline results, **EWR months met: base
+  against a run** (`ScenarioEwrMonths.svelte`, the operator's ask of
+  2026-11-09, for presenting a scenario): the EWR page's months-met panel for
+  the daily EWR in use (`ewr/EwrDailyMonthsPanel.svelte` in its `compact`
+  mode: an h4 with the run's name and date, the tiles Months met, Longest
+  run not met and Deficit in one row without their long explanations, then
+  the chart on a narrower 360-unit width, then the verdict, the table folded
+  under **Values by month**) twice: the base run the comparison used on the
+  left ("Base: …"), and on the right the run a **Run on the right** select
+  picks from the project's runs but the base (named as the other run
+  pickers name them, newest first), the scenario's latest run by default
+  (`scenarios/ewrMonths.ts` `rightChoices`, `rightRun`). One component on
+  both sides, so the 0–100 % axis, the bars' colours and the month order
+  match, and the tiles come first so they line up whatever the verdicts
+  say. Side by side from 44rem of the section (a container query; 1280 and
+  1440 windows), stacked under that. A line above them names the daily EWR
+  both are judged by, as the EWR page names it; when the two runs judged
+  different ones, a warning says so instead (`judgedBy`). A run made before
+  engine 1.116.0 says "Run the model again to see this for the daily EWR."
+  on its side, the base side with a **Run the model** link (`?tab=runs`).
+  Under the comparison, the scenario run's
   **Validation statement**, folded shut (the same `ValidationPanel` as a
   run's Record group, § Runs & results).
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is

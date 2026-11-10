@@ -705,7 +705,7 @@
 {#if applicant}
 	<ApplicantResults {projectId} scenarioId={s.id} lastRunId={s.lastRun?.id ?? null} opsSha256={s.opsSha256} />
 {:else}
-	<ScenarioCompare {projectId} scenario={s} />
+	<ScenarioCompare {projectId} scenario={s} {runs} />
 {/if}
 
 {#if yieldFarms.length}

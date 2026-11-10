@@ -2389,7 +2389,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, fromScenario, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, fitEngineVersions, errata }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, fromScenario, scenarioBaseRunId, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, fitEngineVersions, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
@@ -2427,7 +2427,11 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   its name (the name the run recorded, once the scenario is gone; `null` for
   a run of the model). `fromScenario` is whether a scenario made the run,
   `true` also once that scenario is deleted (`model_run.from_scenario`, 188):
-  tell a run of the model by it, never by `scenarioId`. `citedBy` is what keeps the run for good
+  tell a run of the model by it, never by `scenarioId`. `scenarioBaseRunId`
+  is the base run a scenario run was made on, as its snapshot recorded it
+  (`inputs.scenario.baseRunId`: also after the scenario is rebased or
+  deleted), `null` for a run of the model; the EWR page's scenario note
+  links to it. `citedBy` is what keeps the run for good
   (`{ kind: 'publication' | 'scenario' | 'signoff', id, name }[]`, oldest
   first, the citations you can see; a publication's `name` is the day it was
   published, `YYYY-MM-DD` in the project's time zone, a sign-off's the signer's name; `[]` when
