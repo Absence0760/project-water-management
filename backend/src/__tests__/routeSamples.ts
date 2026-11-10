@@ -195,6 +195,9 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/evaporation-from-span': () => ({ body: { spanMm: [150, 170, 190, 195, 160, 140, 95, 70, 55, 57, 78, 105], conversion: 'taljaard2023', note: 'Station notes' } }),
 	// Needs the synthetic MAP grid loaded (scripts/import-map-grid.ts); the ladder's parcel lies in its region Z.
 	'POST /projects/:id/map/unit-map': () => ({ body: { dataset: 'synthetic' } }),
+	// Each unit's own A-pan (engine 1.117.0): refused (400, dataset_unknown) past the role check unless an A-pan grid by this label is loaded
+	// (the mass-assignment sweep loads an invented one over the ladder's parcel).
+	'POST /projects/:id/map/unit-apan': () => ({ body: { dataset: 'ladder-apan' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/allocations/import/commit': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/notes': (c) => ({ body: { body: 'Ladder note', nodeId: c.farmId } }),

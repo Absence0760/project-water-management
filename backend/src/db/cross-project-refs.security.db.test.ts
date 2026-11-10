@@ -1199,8 +1199,11 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/yield runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: r.runId, kind: 'firm' }),
 	'POST /projects/:id/yield nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: r.farmId, runId: h.run2Id, kind: 'firm' }),
 	// The draft's shape from another unit's irrigation demand (engine 1.117.0): the unit must be one of the run's own (yield_pattern_unit).
-	'POST /projects/:id/yield params.patternNodeId': (h, r) =>
-		dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: h.run2Id, kind: 'firm', params: { pattern: 'demand', patternNodeId: r.farmId, assurance: 1 } }),
+	'POST /projects/:id/yield params.patternNodeId': async (h, r) => {
+		// The per-user cap on yields in flight counts the yield cases above: settle them so it doesn't answer (429) first.
+		await asOwner(`UPDATE job SET status = 'done', finished_at = now() WHERE kind = 'yield' AND project_id = ANY($1) AND status <> 'done'`, [[A.projectId, B.projectId]]);
+		return dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: h.run2Id, kind: 'firm', params: { pattern: 'demand', patternNodeId: r.farmId, assurance: 1 } });
+	},
 	'POST /projects/:id/notes runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a run', runId: r.runId }),
 	'POST /projects/:id/notes nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a farm', nodeId: r.farmId }),
 	'POST /projects/:id/notes scenarioId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a scenario', scenarioId: r.scenarioId }),
