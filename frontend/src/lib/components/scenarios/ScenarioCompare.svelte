@@ -12,8 +12,10 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { resolve } from '$app/paths';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
+	import { riverHref } from '#lib/components/river/links.js';
 	import { untrack } from 'svelte';
-	import { api, ApiError, type RunCompareResponse, type Scenario } from '#lib/api/index.js';
+	import { api, ApiError, type RunCompareResponse, type RunMeta, type Scenario } from '#lib/api/index.js';
+	import ScenarioEwrMonths from './ScenarioEwrMonths.svelte';
 	import Lazy from '#lib/components/common/Lazy.svelte';
 	import LoadState from '#lib/components/common/LoadState.svelte';
 	import AssuranceDeltaTable from '#lib/components/compare/AssuranceDeltaTable.svelte';
@@ -26,7 +28,7 @@
 	const loadOverlay = () => import('#lib/components/compare/CompareOverlay.svelte');
 
 	// Only assessors see it: ScenarioEditor shows an applicant a note instead.
-	let { projectId, scenario }: { projectId: string; scenario: Scenario } = $props();
+	let { projectId, scenario, runs = [] }: { projectId: string; scenario: Scenario; /** The project's runs, for the EWR months' Run menu. */ runs?: readonly RunMeta[] } = $props();
 
 	let data = $state<RunCompareResponse | null>(null);
 	let loading = $state(false);
@@ -76,6 +78,9 @@
 		{#if data}
 			<span class="acts">
 				<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>
+				<!-- The EWR page on either side (docs/ui.md § Scenarios): its Run menu then names the scenario's run. -->
+				<a class="btn btn-sm" href={riverHref(data.b.run.id)} data-testid="scenario-ewr-link">EWR for this run</a>
+				<a class="btn btn-sm" href={riverHref(data.a.run.id)} data-testid="scenario-base-ewr-link">EWR for the base run</a>
 				<!-- The licensing evidence report of this run on its base (issue #71, docs/ui.md § Evidence report). -->
 				<a class="btn btn-sm" href={resolve(`projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(data.b.run.id)}&evidence`)} data-testid="scenario-evidence-link">Evidence report</a>
 			</span>
@@ -104,6 +109,8 @@
 					<h3 id="sc-headline-h">Headline results</h3>
 					<HeadlineDeltas comparison={data.comparison} fit={false} />
 				</section>
+				<!-- The EWR page's months met, base on the left and a picked run on the right (docs/ui.md § Scenarios). -->
+				<ScenarioEwrMonths {projectId} {runs} base={data.a.run} latest={data.b.run} />
 				<section aria-labelledby="sc-farms-h">
 					<h3 id="sc-farms-h">Hydrological units</h3>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
