@@ -2,6 +2,7 @@
 // of overrides a scenario applies to a base run's input, the per-field value
 // checks, and a zod-free runtime validator the backend can call on a request
 // body (or mirror in zod). Pure: no I/O.
+import { APAN_BASES, type ApanBasis } from '../evaporation/apanUnits';
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { REACH_LOSS_FRAC_MAX } from '../network/reachLoss';
 import { EWR_SPLIT_RETIRED_IN } from '../network/ewrSplit';
@@ -501,6 +502,8 @@ export interface SettingsPathValues {
 	/** Monthly lake factors (WP-3.5); null = the one factor in every month. */
 	lakeEvapFactorMonthly: number[] | null;
 	apanMm: number[];
+	/** What each unit's A-pan runs on (engine ≥ 1.117.0, ../evaporation/apanUnits.ts): the catchment row or each unit's own; null = the catchment row. */
+	apanBasis: ApanBasis | null;
 	panCoefficient: number[];
 	ewrPragmaticM3PerDay: number[];
 	'gr4j.x1': number;
@@ -583,6 +586,7 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	lakeEvapFactor: range(0, 2),
 	lakeEvapFactorMonthly: nullable(monthlyOf(range(0, 2))),
 	apanMm: monthlyOf(range(0, 10_000)),
+	apanBasis: nullable(oneOf(APAN_BASES)),
 	panCoefficient: monthlyOf(range(0, 2)),
 	ewrPragmaticM3PerDay: monthlyOf(nonNeg),
 	'gr4j.x1': gr4j('x1'),

@@ -3772,9 +3772,21 @@ catchment average, with each unit's year and its difference from the
 catchment's year (%), and a line saying how far the units spread ("The 3
 units the grid covers range from −4.2 % to +6.0 % of the catchment's
 year."). It is there so the hydrologist can judge whether units differ enough
-to matter. **For comparison only**: nothing in it saves, and the model still
-runs every unit on the one A-pan row (`settings.apanMm`). A viewer reads it
-too.
+to matter. A viewer reads it too.
+
+- **Use for each unit** (editors, "Saves now", asks first; `POST
+  …/map/unit-apan`) saves each covered unit's 12 months into
+  `settings.apanUnits` with the option itself (`settings.apanBasis:
+  'units'`), as one settings revision citing the grid (History). The model
+  then runs each unit on its own A-pan (engine ≥ 1.117.0, [model.md
+  §2.3b](./model.md)): crop demand, its dam's evaporation and its GR4J PE; a
+  unit left out of the table, and a dam outside every unit, on the covered
+  units' area-weighted mean. Picking the option is a settings change too
+  (the save bar), so a project can choose it before any unit has a row; the
+  run then reads the A-pan row and says why. Use doesn't wait for that one
+  change, only for other unsaved settings. Picking any other **A-pan from**
+  source puts the basis back to the catchment row; the units' rows stay
+  saved. A line under the table says what the settings hold.
 
 - **Taken as each unit's MAP is** ([§ MAP for each unit](#map-for-each-unit)):
   the unit's outline is the area feature its area came from, else its only

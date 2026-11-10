@@ -7799,11 +7799,16 @@ two.
   on this server" with the operator's import command, never another grid's
   values; **CCWR A-pan (Hydrological Unit)**
   (`evaporation/UnitApanTable.svelte`, its own lazy chunk, a panel of that
-  name): each unit's 12 monthly means over its outline beside the catchment
+  name; the one **A-pan from** choice that is saved, as `settings.apanBasis`
+  `'units'`, so the save bar shows when it is picked and the select opens on
+  it; every other choice puts the basis back): **Use for each unit**
+  ("Saves now", asks first, waits only for other unsaved settings) saves the
+  units' rows and runs the model on them ([model.md §2.3b](./model.md)); each unit's 12 monthly means over its outline beside the catchment
   average, its year and its difference from the catchment's year, the spread
   in a sentence, and the units left out with why (under 90 % covered, no
-  outline, several parcels); no Use, and the model still runs the one row
-  ([maps.md § A-pan for each unit](./maps.md#a-pan-for-each-unit)); and **A DWS evaporation station** and **An evaporation grid**
+  outline, several parcels), which run on the covered units' area-weighted
+  mean ([maps.md § A-pan for each unit](./maps.md#a-pan-for-each-unit));
+  the Runs tab's Run readiness lists them (`run-unit-apan`); and **A DWS evaporation station** and **An evaporation grid**
   (any other loaded grid: a PenPan A-pan, a reference-ET grid for GR4J's
   PE), each a link to its card on Calibration ([maps.md § WR2012
   evaporation by quaternary](./maps.md#wr2012-evaporation-by-quaternary),

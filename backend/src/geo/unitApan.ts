@@ -25,6 +25,9 @@ import { MAX_GRID_CELLS_PER_REQUEST, MAX_UNIT_MAP_CELLS, MIN_UNIT_COVERAGE } fro
 
 type Grid = Pick<EvaporationDataset, 'cellDeg' | 'originLon' | 'originLat'>;
 
+/** How a unit's row is taken, in words (its source line and the History reason say it). */
+export const UNIT_APAN_METHOD = 'each unit’s 12 monthly means area-weighted over its outline (cells × the share inside, on the WGS84 ellipsoid), units under 90 % covered left out';
+
 const round1 = (x: number) => Math.round(x * 10) / 10;
 const sum = (row: readonly number[]) => row.reduce((a, b) => a + b, 0);
 
@@ -104,7 +107,7 @@ export interface UnitApanUnit extends Named {
 
 export interface UnitApanProposal {
 	/** The A-pan grid read; null when it (or any A-pan grid, with none asked for) isn't loaded on this server. */
-	dataset: { label: string; version: string; source: string; attribution: string; method: string; cellDeg: number; synthetic: boolean } | null;
+	dataset: { label: string; version: string; source: string; attribution: string; method: string; cellDeg: number; synthetic: boolean; firstYear: number | null; lastYear: number | null } | null;
 	boundary: { featureId: string; name: string } | null;
 	/** The boundary's average over the same grid (what the CCWR option proposes as the A-pan row), or why there is none. */
 	catchment: { monthlyMm: number[]; annualMm: number; coverage: number; cells: number } | { problem: string } | null;
@@ -114,8 +117,12 @@ export interface UnitApanProposal {
 	withoutPolygon: Named[];
 	/** Units with several parcels and none its area. */
 	refused: (Named & { reason: string })[];
-	/** The A-pan row the model runs every unit on now. */
+	/** The A-pan row the model runs every unit on now (the catchment row). */
 	settingsApanMm: number[];
+	/** What the settings hold now: the basis (engine ≥ 1.117.0) and the units' saved rows, if any. */
+	saved: { basis: 'catchment' | 'units'; dataset: string | null; source: string | null; units: Record<string, number[]> };
+	/** Every covered unit's row is saved as shown, from this grid (nothing to use). */
+	same: boolean;
 }
 
 /** The A-pan grid asked for (null when it isn't loaded or isn't an A-pan grid), else the first A-pan grid loaded. */
@@ -128,8 +135,15 @@ async function apanGrid(db: Db, asked: string | undefined): Promise<EvaporationD
  * Each land unit's monthly A-pan over `asked` (else the first A-pan grid), beside the catchment boundary's. Read-only.
  * `settingsApanMm` is the caller's (the stored settings merged over the defaults).
  */
-export async function unitApanProposal(db: Db, projectId: string, asked: string | undefined, settingsApanMm: number[]): Promise<UnitApanProposal> {
-	const out: UnitApanProposal = { dataset: null, boundary: null, catchment: null, units: [], uncovered: [], withoutPolygon: [], refused: [], settingsApanMm };
+export async function unitApanProposal(
+	db: Db,
+	projectId: string,
+	asked: string | undefined,
+	settings: { apanMm: readonly number[]; apanBasis?: unknown; apanUnits?: { dataset: string; source: string; units: Record<string, number[]> } | null }
+): Promise<UnitApanProposal> {
+	const stored = settings.apanUnits ?? null;
+	const saved = { basis: settings.apanBasis === 'units' ? ('units' as const) : ('catchment' as const), dataset: stored?.dataset ?? null, source: stored?.source ?? null, units: stored?.units ?? {} };
+	const out: UnitApanProposal = { dataset: null, boundary: null, catchment: null, units: [], uncovered: [], withoutPolygon: [], refused: [], settingsApanMm: [...settings.apanMm], saved, same: false };
 	const grid = await apanGrid(db, asked);
 	const { rows: b } = await db.query<{ id: string; name: string; geometry: Geometry }>(
 		`SELECT id, name, geometry FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' ORDER BY created_at, id LIMIT 1`,
@@ -138,7 +152,17 @@ export async function unitApanProposal(db: Db, projectId: string, asked: string 
 	const boundary = b[0] ?? null;
 	out.boundary = boundary ? { featureId: boundary.id, name: boundary.name } : null;
 	if (!grid) return out;
-	out.dataset = { label: grid.dataset, version: grid.version, source: grid.source, attribution: grid.attribution, method: grid.method, cellDeg: grid.cellDeg, synthetic: grid.synthetic };
+	out.dataset = {
+		label: grid.dataset,
+		version: grid.version,
+		source: grid.source,
+		attribution: grid.attribution,
+		method: grid.method,
+		cellDeg: grid.cellDeg,
+		synthetic: grid.synthetic,
+		firstYear: grid.firstYear,
+		lastYear: grid.lastYear
+	};
 	if (boundary) {
 		const s = await summariseEvaporation(db, grid, boundary.geometry);
 		out.catchment = 'problem' in s ? { problem: s.problem } : { monthlyMm: s.monthlyMm, annualMm: s.annualMm, coverage: s.coverage, cells: s.cells };
@@ -161,5 +185,12 @@ export async function unitApanProposal(db: Db, projectId: string, asked: string 
 			} else out.uncovered.push({ ...named, coveredShare: r.coveredShare, reason: r.reason });
 		}
 	}
+	// Saved as shown: the same grid, exactly these units, each to 0.05 mm (the settings round-trip floats).
+	const close = (a: readonly number[] | undefined, b: readonly number[]) => !!a && a.length === 12 && a.every((x, m) => Math.abs(x - b[m]!) < 0.05);
+	out.same =
+		out.units.length > 0 &&
+		saved.dataset === grid.dataset &&
+		Object.keys(saved.units).length === out.units.length &&
+		out.units.every((u) => close(saved.units[u.nodeId], u.monthlyMm));
 	return out;
 }

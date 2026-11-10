@@ -54,6 +54,13 @@ export interface PlanNode {
 	 * `share`. Absent under catchment rain.
 	 */
 	localRunoff?: Float64Array;
+	/**
+	 * This dam's own open-water evaporation depth per day (mm), in place of
+	 * the plan's (engine ≥ 1.117.0, A-pan per hydro unit, docs/model.md
+	 * §2.3b): lake factor × its unit's A-pan for the month ÷ days in the month.
+	 * Absent = the plan's lakeEvapMmDay.
+	 */
+	lakeEvapMmDay?: Float64Array;
 	/** Share of the upstream inflow (H) that enters the dam (K); the rest passes below it (L). Engine ≥ 0.9.0 (model.md §3 Q1). */
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
@@ -656,7 +663,8 @@ const capacityK = (n: PlanNode, t: number): number => (n.capacityScale ? n.capac
  * physics, and never binds for b ≤ 1, where the clamped step already keeps
  * it (docs/model.md §2.7a).
  */
-function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64Array | undefined, damRainMm: Float64Array | undefined): { A: number; Pd: number; E: number; Sp: number } {
+function damDay(node: PlanNode, qPrev: number, t: number, planLakeEvapMmDay: Float64Array | undefined, damRainMm: Float64Array | undefined): { A: number; Pd: number; E: number; Sp: number } {
+	const lakeEvapMmDay = node.lakeEvapMmDay ?? planLakeEvapMmDay;
 	const k = capacityK(node, t);
 	const cap = node.damCapacityM3 * k;
 	if (!(cap > 0 && qPrev > 0)) return { A: 0, Pd: 0, E: 0, Sp: 0 };

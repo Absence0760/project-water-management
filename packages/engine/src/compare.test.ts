@@ -1349,6 +1349,13 @@ describe('diffInputs', () => {
 		expect(texts(a, { ...a, settings: { ...a.settings, lakeEvapFactorSource: 'Flat 0.75 × A-pan (the default) preset: …' } })).toEqual([
 			'Dam evaporation factor source: none → "Flat 0.75 × A-pan (the default) preset: …"'
 		]);
+		// Each unit's own A-pan (engine ≥ 1.117.0): the basis and the units' rows in words; a run before it had neither.
+		const twelve = (v: number) => new Array<number>(12).fill(v);
+		const perUnit = { ...a, settings: { ...a.settings, apanBasis: 'units', apanUnits: { dataset: 'Atlas-Apan-2007', source: 's', units: { f1: twelve(200) } } } as never };
+		expect(texts(a, perUnit)).toEqual(['A-pan the units run on: the one A-pan row → each unit’s own (CCWR A-pan (Hydrological Unit))', 'Each unit’s own A-pan: given to Rooikloof (2400 mm a year)']);
+		const moved = { ...a, settings: { ...a.settings, apanBasis: 'units', apanUnits: { dataset: 'Atlas-Apan-2007', source: 's', units: { f1: twelve(210) } } } as never };
+		expect(texts(perUnit, moved)).toEqual(['Each unit’s own A-pan: changed for Rooikloof (2400 → 2520 mm a year)']);
+		expect(diffInputs(a, { ...a, settings: { ...a.settings, apanBasis: null } as never })).toEqual([]);
 		const beforeNote = structuredClone(a);
 		delete (beforeNote.settings as Record<string, unknown>).lakeEvapFactorSource;
 		expect(diffInputs(beforeNote, { ...a, settings: { ...a.settings, lakeEvapFactorSource: '' } })).toEqual([]);

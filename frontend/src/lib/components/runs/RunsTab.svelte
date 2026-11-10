@@ -8,7 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { runFitEngineVersions, toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { runFitEngineVersions, toEpochDay, unitsWithoutGridApan, type SeriesMeta } from '@water-management/engine';
 	import { rebuildingNote } from '#lib/series/provenance.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '#lib/api/index.js';
@@ -543,6 +543,9 @@
 	);
 	// CHIRPS as a unit's driver (engine ≥ 1.114.0): the units whose choice won't run as chosen. Notes, not blockers.
 	const chirpsNotes = $derived(series ? unitChirpsChoiceNotes(editor.model.nodes, project.settings, series) : { noChirps: [], rawInstead: [] });
+	// Run readiness (engine ≥ 1.117.0, CCWR A-pan (Hydrological Unit)): the land units with no A-pan of their own run on
+	// the covered units' area-weighted mean. A note, not a blocker: the run warns too.
+	const withoutOwnApan = $derived(unitsWithoutGridApan(editor.model.nodes, project.settings));
 	const unitNames = (units: readonly { name: string }[]) => `${units.slice(0, 6).map((n) => n.name || 'unnamed').join(', ')}${units.length > 6 ? ` and ${units.length - 6} more` : ''}`;
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	// The in-page menu (SectionNav): above the results, or beside them from 62rem of results (a 1440 px
@@ -668,6 +671,17 @@
 					{/if}
 				</p>
 			{/each}
+		{/if}
+		{#if !runBusy && withoutOwnApan.length}
+			<p class="note" data-testid="run-unit-apan">
+				{#if project.settings.apanUnits}
+					{withoutOwnApan.length === 1 ? '1 unit has' : `${withoutOwnApan.length} units have`} no A-pan of {withoutOwnApan.length === 1 ? 'its' : 'their'} own from the CCWR A-pan grid
+					(under 90 % covered, or no outline), so {withoutOwnApan.length === 1 ? 'it runs' : 'they run'} on the covered units’ area-weighted mean: {unitNames(withoutOwnApan)}.
+				{:else}
+					CCWR A-pan (Hydrological Unit) is chosen but no unit has its own A-pan saved yet, so every unit runs on the A-pan row. Use the units’ A-pan in
+				{/if}
+				<a href="?tab=settings#set-ccwr-apan-units">Model settings</a>.
+			</p>
 		{/if}
 		{#if !runBusy && (chirpsNotes.noChirps.length || chirpsNotes.rawInstead.length)}
 			<p class="note" data-testid="run-chirps-driver">

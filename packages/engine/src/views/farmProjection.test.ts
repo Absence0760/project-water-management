@@ -1,3 +1,4 @@
+import { runApanRows } from '../evaporation/apanUnits';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
 import { DEMAND_PCT_FLOOR_M3_DAY } from '../network/curtailment';
@@ -22,7 +23,8 @@ function asRun(input: ModelInput, out: ModelOutput): ProjectionRun {
 		// Crops under their own irrigation efficiency (engine 0.43.0) set a farm's consumptive share.
 		crops: input.model.crops,
 		cropAreas: input.model.cropAreas,
-		apanMm: input.settings?.apanMm,
+		// The rows the run read (engine ≥ 1.117.0): the catchment row and, under the 'units' basis, each unit's own.
+		...runApanRows(input.settings, input.model.nodes),
 		// The project's irrigation systems (engine 1.72.0), which the crops and plantings name.
 		...(input.model.irrigationSystems ? { irrigationSystems: input.model.irrigationSystems } : {}),
 		// A unit with demand objects (engine 1.7.0) takes its consumptive share from its stored return flow.
