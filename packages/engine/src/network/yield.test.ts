@@ -5,7 +5,7 @@ import { runModel } from '../run';
 import { randomInput } from '../testing/fuzz';
 import { withForecastTail } from '../testing/forecastInvariants';
 import type { ModelInput, NetworkNode } from '../project';
-import { firmYield, prepareYield, storageYieldCapacities, storageYieldCurve, yieldPatternDaily } from './yield';
+import { firmYield, irrigationDemandUnits, prepareYield, storageYieldCapacities, storageYieldCurve, yieldPatternDaily } from './yield';
 
 const zeros = new Array(12).fill(0) as unknown as Monthly;
 
@@ -121,6 +121,106 @@ describe('firmYield', () => {
 		firmYield(prepareYield(input, () => ({ naturalFlowM3Day: natural })), 'dam', { onProbe: (d) => seen.push(d) });
 		expect(seen.length).toBeGreaterThan(3);
 		expect(seen).toEqual(seen.map((_, k) => k + 1));
+	});
+});
+
+/**
+ * Another unit's irrigation demand shapes the draft (engine 1.117.0): 'dam'
+ * (the proposed dam, no crops) drains to 'farm' (crops, demand only in
+ * Oct–Mar, all year with a little in Apr–Sep when `allYear`), then the gauge.
+ */
+function twoUnits(days: number, opts: { damCrops?: boolean } = {}): { input: ModelInput; natural: number[] } {
+	// The A-pan per water-year month: 6 mm/day Oct–Mar, 2 mm/day Apr–Sep.
+	const apanMm = [6, 6, 6, 6, 6, 6, 2, 2, 2, 2, 2, 2];
+	const input: ModelInput = {
+		settings: { apanMm: apanMm as never, effectiveRainFraction: 0, ewrPragmaticM3PerDay: zeros },
+		model: {
+			nodes: [
+				node('dam', { downstreamNodeId: 'farm', pctRunoffToDam: 1, damCapacityM3: 50_000, damInitialPct: 1 }),
+				node('farm', { downstreamNodeId: 'g', irrigationEfficiency: 0.8 }),
+				node('g', { kind: 'gauge', areaKm2: 0 })
+			],
+			crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(1) }],
+			cropAreas: [{ nodeId: 'farm', cropId: 'c', areaM2: 10_000 }, ...(opts.damCrops ? [{ nodeId: 'dam', cropId: 'c', areaM2: 5_000 }] : [])],
+			transfers: []
+		},
+		series: { rain_catchment_mm: { startDate: '2001-10-01', values: new Array(days).fill(0) } }
+	};
+	return { input, natural: new Array(days).fill(200) };
+}
+
+describe("a draft shaped by another unit's irrigation demand (engine 1.117.0)", () => {
+	const days = 2 * 365;
+
+	it('lists the units with irrigation demand, in the model order, and no gauge', () => {
+		const a = twoUnits(days);
+		expect(irrigationDemandUnits(prepareYield(a.input, () => ({ naturalFlowM3Day: a.natural })))).toEqual(['farm']);
+		const b = twoUnits(days, { damCrops: true });
+		expect(irrigationDemandUnits(prepareYield(b.input, () => ({ naturalFlowM3Day: b.natural })))).toEqual(['dam', 'farm']);
+	});
+
+	it("takes the other unit's monthly shape: three times the A-pan in Oct–Mar as in Apr–Sep", () => {
+		const { input, natural } = twoUnits(days);
+		const p = prepareYield(input, () => ({ naturalFlowM3Day: natural }));
+		const daily = yieldPatternDaily(p, 'dam', 'demand', 'farm');
+		expect(daily.reduce((a, b) => a + b, 0) / days).toBeCloseTo(1, 12);
+		const oct = daily[0]!;
+		const apr = daily[182]!;
+		// The A-pan is mm a month: 3 × as much in October's 31 days as in April's 30.
+		expect(oct / apr).toBeCloseTo((3 * 30) / 31, 12);
+		// The same shape as the farm's own demand pattern, and as the 12 factors it stands for.
+		expect(Array.from(daily)).toEqual(Array.from(yieldPatternDaily(p, 'farm', 'demand')));
+		// A firm yield on it is the one on the 12 factors it stands for, and not the constant draft's.
+		const factors = Array.from({ length: 12 }, (_, m) => daily[p.wyMonth.indexOf(m)]!);
+		const y = firmYield(p, 'dam', { pattern: 'demand', patternNodeId: 'farm', tolerance: 1e-6 });
+		expect(y.yieldM3Day).toBeCloseTo(firmYield(p, 'dam', { pattern: factors, tolerance: 1e-6 }).yieldM3Day, 3);
+		expect(y.yieldM3Day).not.toBeCloseTo(firmYield(p, 'dam', { tolerance: 1e-6 }).yieldM3Day, 0);
+	});
+
+	it("without patternNodeId, or with the dam's own id, is the dam's own demand shape, bit for bit", () => {
+		const { input, natural } = twoUnits(days, { damCrops: true });
+		const p = prepareYield(input, () => ({ naturalFlowM3Day: natural }));
+		const own = yieldPatternDaily(p, 'dam', 'demand');
+		expect(yieldPatternDaily(p, 'dam', 'demand', 'dam')).toEqual(own);
+		const a = firmYield(p, 'dam', { pattern: 'demand' });
+		expect(firmYield(p, 'dam', { pattern: 'demand', patternNodeId: undefined })).toEqual(a);
+		expect(firmYield(p, 'dam', { pattern: 'demand', patternNodeId: 'dam' })).toEqual(a);
+		expect(storageYieldCurve(p, 'dam', { pattern: 'demand', points: 3 })).toEqual(storageYieldCurve(p, 'dam', { pattern: 'demand', patternNodeId: 'dam', points: 3 }));
+	});
+
+	it('refuses a unit with no demand, a gauge, an unknown id, and a source unit with another pattern', () => {
+		const { input, natural } = twoUnits(days, { damCrops: true });
+		input.model.cropAreas = input.model.cropAreas.filter((c) => c.nodeId === 'dam');
+		const p = prepareYield(input, () => ({ naturalFlowM3Day: natural }));
+		expect(() => firmYield(p, 'dam', { pattern: 'demand', patternNodeId: 'farm' })).toThrow(/chosen to shape the draft has no irrigation demand/);
+		expect(() => firmYield(p, 'dam', { pattern: 'demand', patternNodeId: 'g' })).toThrow(/not a unit with land/);
+		expect(() => firmYield(p, 'dam', { pattern: 'demand', patternNodeId: 'nope' })).toThrow(/not a unit with land/);
+		expect(() => firmYield(p, 'dam', { pattern: 'constant', patternNodeId: 'dam' })).toThrow(/'demand' pattern only/);
+	});
+});
+
+describe('sizing a proposed dam: the curve to an entered largest capacity (engine 1.117.0)', () => {
+	it('a unit with no dam: 0 to the entered maximum, each yield the analytic one of a dam starting empty', () => {
+		const days = 2 * 365;
+		// No dam (capacity 0), all its runoff routed to where a dam would be.
+		const { input, natural } = singleDam(40, 0, days);
+		const p = prepareYield(input, () => ({ naturalFlowM3Day: natural }));
+		expect(() => storageYieldCurve(p, 'dam')).toThrow(/largest capacity to size it to/);
+		const curve = storageYieldCurve(p, 'dam', { maxCapacityM3: 30_000, points: 4 });
+		expect(curve.baseCapacityM3).toBe(0);
+		expect(curve.points.map((q) => q.capacityM3)).toEqual([0, 10_000, 20_000, 30_000]);
+		// Starting empty, no losses: a constant inflow of 40 is the firm yield at every size.
+		for (const q of curve.points) expect(q.yieldM3Day).toBeCloseTo(40, 1);
+		expect(curve.monotone).toBe(true);
+	});
+
+	it('a dam with a capacity: the entered maximum replaces twice the capacity; without it, as before', () => {
+		expect(storageYieldCapacities(20_000, 3, 100_000)).toEqual([0, 50_000, 100_000]);
+		expect(storageYieldCapacities(20_000, 3)).toEqual([0, 20_000, 40_000]);
+		expect(storageYieldCapacities(0, 3, 9)).toEqual([0, 4.5, 9]);
+		expect(() => storageYieldCapacities(0, 3)).toThrow(/capacity above 0/);
+		expect(() => storageYieldCapacities(20_000, 3, 0)).toThrow(/finite number above 0/);
+		expect(() => storageYieldCapacities(20_000, 3, Number.NaN)).toThrow(/finite number above 0/);
 	});
 });
 

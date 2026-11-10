@@ -19,12 +19,22 @@ import { resizeCurveRows, resizedFullArea } from './damResize';
 import { forecastTail } from '../forecastTail';
 import { prepareRun } from '../prepare';
 
-/** A draft shape: flat, the node's own irrigation demand by month, or 12 factors (water year, Oct–Sep). */
+/**
+ * A draft shape: flat, a unit's irrigation demand by month (the dam's own
+ * unit's, or `patternNodeId`'s, engine ≥ 1.117.0), or 12 factors (water
+ * year, Oct–Sep).
+ */
 export type YieldPattern = 'constant' | 'demand' | readonly number[];
 
 export interface YieldOptions {
 	/** Draft shape (default 'constant'). Normalised so the draft is the mean daily draft over the record. */
 	pattern?: YieldPattern;
+	/**
+	 * With pattern 'demand': the hydrological unit whose irrigation demand
+	 * shapes the draft (engine ≥ 1.117.0). Absent: the dam's own unit, as
+	 * before. A unit with no irrigation demand is refused.
+	 */
+	patternNodeId?: string;
 	/**
 	 * Assurance p, 0.5–1 (default 1, the firm yield): the largest draft whose
 	 * annual failure rate (water years with at least one failure day ÷ water
@@ -125,6 +135,13 @@ export function prepareYield(input: ModelInput, naturalFlow?: (ctx: RunContext) 
 	};
 }
 
+/** The unit whose demand shapes a draft: a unit with land, as the dam is. */
+function patternIndex(p: YieldProblem, nodeId: string): number {
+	const i = p.nodeIds.indexOf(nodeId);
+	if (i < 0 || p.plan.nodes[i]!.kind !== 'farm') throw new Error('the hydrological unit chosen to shape the draft is not a unit with land in this model');
+	return i;
+}
+
 const isProblem = (x: ModelInput | YieldProblem): x is YieldProblem => 'plan' in x && 'yearOfDay' in x;
 
 function nodeIndex(p: YieldProblem, nodeId: string): number {
@@ -135,23 +152,49 @@ function nodeIndex(p: YieldProblem, nodeId: string): number {
 }
 
 /**
- * The draft shape per day, normalised to a mean of 1 over the record, so a
- * draft of x m³/day draws x × days in total whatever the shape.
+ * A unit's irrigation demand by water-year month (0 = Oct): its abstraction
+ * demand D = F / e, plus its demand objects' (engine ≥ 1.7.0), the mean of
+ * each month over the record.
  */
-export function yieldPatternDaily(p: YieldProblem, nodeId: string, pattern: YieldPattern = 'constant'): Float64Array {
-	const i = nodeIndex(p, nodeId);
+function demandByMonth(p: YieldProblem, i: number): Float64Array<ArrayBuffer> {
+	const node = p.plan.nodes[i]!;
+	const sum = new Float64Array(12);
+	const n = new Float64Array(12);
+	for (let t = 0; t < p.days; t++) {
+		sum[p.wyMonth[t]!]! += node.objects ? node.demand[t]! / node.irrigationEfficiency + node.objects.total[t]! : node.demand[t]! / node.irrigationEfficiency;
+		n[p.wyMonth[t]!]!++;
+	}
 	const factors = new Float64Array(12);
+	for (let m = 0; m < 12; m++) factors[m] = n[m] ? sum[m]! / n[m]! : 0;
+	return factors;
+}
+
+const hasDemand = (factors: Float64Array) => factors.some((f) => f > 0);
+
+/**
+ * The hydrological units whose irrigation demand can shape a draft (pattern
+ * 'demand', `patternNodeId`): the units with land whose demand by month is
+ * above 0 in some month, in the model's node order (engine ≥ 1.117.0).
+ */
+export function irrigationDemandUnits(p: YieldProblem): string[] {
+	return p.nodeIds.filter((_, i) => p.plan.nodes[i]!.kind === 'farm' && hasDemand(demandByMonth(p, i)));
+}
+
+/**
+ * The draft shape per day, normalised to a mean of 1 over the record, so a
+ * draft of x m³/day draws x × days in total whatever the shape. Pattern
+ * 'demand' takes `patternNodeId`'s irrigation demand (engine ≥ 1.117.0),
+ * absent the dam's own.
+ */
+export function yieldPatternDaily(p: YieldProblem, nodeId: string, pattern: YieldPattern = 'constant', patternNodeId?: string): Float64Array {
+	const i = nodeIndex(p, nodeId);
+	if (patternNodeId !== undefined && pattern !== 'demand') throw new Error("a unit to shape the draft goes with the 'demand' pattern only");
+	let factors = new Float64Array(12);
 	if (pattern === 'constant') factors.fill(1);
 	else if (pattern === 'demand') {
-		// The node's own abstraction demand D = F / e, plus its demand objects' (engine ≥ 1.7.0), its mean by water-year month.
-		const node = p.plan.nodes[i]!;
-		const sum = new Float64Array(12);
-		const n = new Float64Array(12);
-		for (let t = 0; t < p.days; t++) {
-			sum[p.wyMonth[t]!]! += node.objects ? node.demand[t]! / node.irrigationEfficiency + node.objects.total[t]! : node.demand[t]! / node.irrigationEfficiency;
-			n[p.wyMonth[t]!]!++;
-		}
-		for (let m = 0; m < 12; m++) factors[m] = n[m] ? sum[m]! / n[m]! : 0;
+		const from = patternNodeId === undefined ? i : patternIndex(p, patternNodeId);
+		factors = demandByMonth(p, from);
+		if (from !== i && !hasDemand(factors)) throw new Error('the hydrological unit chosen to shape the draft has no irrigation demand; choose another unit or a constant pattern');
 	} else {
 		if (pattern.length !== 12) throw new Error('a yield pattern has 12 monthly factors (Oct–Sep)');
 		for (let m = 0; m < 12; m++) {
@@ -282,7 +325,7 @@ export function firmYield(source: ModelInput | YieldProblem, nodeId: string, opt
 	const base = p.plan.nodes[i]!;
 	const cap = opts.capacityM3 ?? base.damCapacityM3;
 	if (!(Number.isFinite(cap) && cap >= 0)) throw new Error('capacity is a finite number ≥ 0');
-	const pattern = yieldPatternDaily(p, nodeId, opts.pattern);
+	const pattern = yieldPatternDaily(p, nodeId, opts.pattern, opts.patternNodeId);
 	const { plan, at, setDraft } = probePlan(p, i, cap);
 	const days = p.days;
 	const allowedYears = Math.floor((1 - assurance) * p.years + 1e-9);
@@ -381,23 +424,35 @@ export interface StorageYieldCurve {
 	monotone: boolean;
 }
 
-/** Capacities for a storage–yield curve: `n` points evenly from 0 to 2 × the dam's capacity. */
-export function storageYieldCapacities(capacityM3: number, n = STORAGE_YIELD_DEFAULT_POINTS): number[] {
-	if (!(capacityM3 > 0)) throw new Error('a storage–yield curve needs a dam with a capacity above 0');
+/**
+ * Capacities for a storage–yield curve: `n` points evenly from 0 to 2 × the
+ * dam's capacity, or to `maxCapacityM3` when given (engine ≥ 1.117.0: sizing
+ * a proposed dam, which a unit with no dam yet can do).
+ */
+export function storageYieldCapacities(capacityM3: number, n = STORAGE_YIELD_DEFAULT_POINTS, maxCapacityM3?: number): number[] {
+	if (maxCapacityM3 !== undefined) {
+		if (!(Number.isFinite(maxCapacityM3) && maxCapacityM3 > 0)) throw new Error('the largest capacity of a storage–yield curve is a finite number above 0');
+	} else if (!(capacityM3 > 0)) throw new Error('a storage–yield curve needs a dam with a capacity above 0, or the largest capacity to size it to');
 	if (!(Number.isInteger(n) && n >= 2 && n <= 20)) throw new Error('a storage–yield curve has 2–20 points');
-	return Array.from({ length: n }, (_, k) => (STORAGE_YIELD_MAX_MULTIPLE * capacityM3 * k) / (n - 1));
+	const top = maxCapacityM3 ?? STORAGE_YIELD_MAX_MULTIPLE * capacityM3;
+	return Array.from({ length: n }, (_, k) => (top * k) / (n - 1));
 }
 
-/** Yield at each capacity from 0 to 2 × the dam's own (`points` of them). */
+/**
+ * Yield at each capacity from 0 to 2 × the dam's own, or to `maxCapacityM3`
+ * (`points` of them). A unit with no dam sizes a proposed one: its dams start
+ * empty, with no dead storage and, having no area–volume relation to scale,
+ * no surface to evaporate from or catch rain on (docs/model.md §2.13).
+ */
 export function storageYieldCurve(
 	source: ModelInput | YieldProblem,
 	nodeId: string,
-	opts: YieldOptions & { points?: number; onPoint?: (done: number, total: number) => void } = {}
+	opts: YieldOptions & { points?: number; maxCapacityM3?: number; onPoint?: (done: number, total: number) => void } = {}
 ): StorageYieldCurve {
 	const p = isProblem(source) ? source : prepareYield(source);
 	const i = nodeIndex(p, nodeId);
 	const baseCap = p.plan.nodes[i]!.damCapacityM3;
-	const caps = storageYieldCapacities(baseCap, opts.points);
+	const caps = storageYieldCapacities(baseCap, opts.points, opts.maxCapacityM3);
 	const points: YieldPoint[] = [];
 	for (const c of caps) {
 		points.push(firmYield(p, nodeId, { ...opts, capacityM3: c }));
