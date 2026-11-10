@@ -87,6 +87,15 @@ export const YIELD_MAX_PROBES = 60;
 /** Storage–yield curve: capacities from 0 to this multiple of the dam's capacity. */
 export const STORAGE_YIELD_MAX_MULTIPLE = 2;
 export const STORAGE_YIELD_DEFAULT_POINTS = 11;
+/**
+ * The share of its capacity the dam holds on the record's first day in a
+ * yield search and at every point of a storage–yield curve (engine ≥
+ * 1.117.0, the operator's decision 2026-11-09), whatever its own initial
+ * storage (damInitialPct), which the normal run keeps using. The record's
+ * first day shouldn't decide the firm yield: an empty start in a dry first
+ * month gave 0 (docs/model.md §2.13).
+ */
+export const YIELD_START_FULL_SHARE = 0.5;
 /** A deficit smaller than this share of the day's draft is float noise, not a failure. */
 const FAILURE_NOISE = 1e-9;
 
@@ -274,7 +283,9 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	const node: PlanNode = {
 		...rest,
 		damCapacityM3: cap,
-		initialStorageM3: base.initialStorageM3 * ratio,
+		// Half full on the first day (YIELD_START_FULL_SHARE), not the dam's own initial storage; a dam that comes into
+		// service later (§2.7i) keeps its first day's capacity share, as the run's initial storage does.
+		initialStorageM3: YIELD_START_FULL_SHARE * cap * (base.capacityScale && p.days ? base.capacityScale[0]! : 1),
 		deadStorageM3: base.deadStorageM3 * ratio,
 		damAreaFullM2: resizedFullArea(base.damAreaFullM2, baseCap, cap, base.damAreaExponent),
 		...(curve ? { damCurve: curve } : {}),
