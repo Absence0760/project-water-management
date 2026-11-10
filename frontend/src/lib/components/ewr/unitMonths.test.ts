@@ -8,12 +8,12 @@ const series = (startDate: string, values: (number | null)[]) => ({ startDate, v
 
 describe('unitChoices', () => {
 	it('lists the units with an EWR share in either run, the first run’s order first, a unit only the second has after', () => {
-		const base = { unitEwr: [unit('a', 'Top', 10), unit('b', 'Dry', 0), unit('c', 'Kunje', 30)] };
-		const scen = { unitEwr: [unit('c', 'Kunje', 25), unit('d', 'Hexberg', 5)] };
+		const base = { unitEwr: [unit('a', 'Top', 10), unit('b', 'Dry', 0), unit('c', 'Kloofpunt', 30)] };
+		const scen = { unitEwr: [unit('c', 'Kloofpunt', 25), unit('d', 'Bergsig', 5)] };
 		expect(unitChoices(base, scen)).toEqual([
 			{ nodeId: 'a', name: 'Top' },
-			{ nodeId: 'c', name: 'Kunje' },
-			{ nodeId: 'd', name: 'Hexberg' }
+			{ nodeId: 'c', name: 'Kloofpunt' },
+			{ nodeId: 'd', name: 'Bergsig' }
 		]);
 	});
 	it('offers none for runs made before engine 1.116.0, or none at all', () => {
@@ -74,8 +74,8 @@ describe('placeWords', () => {
 	it('names the outlet or the unit, and the unit’s requirement as its share', () => {
 		expect(placeWords(null).where).toBe('the outlet');
 		expect(placeWords(null).requirement('the daily EWR from the DRM TAB file')).toBe('the daily EWR from the DRM TAB file');
-		const k = placeWords({ nodeId: 'k', name: 'Kunje' });
-		expect(k.flow).toBe('the flow leaving Kunje (after its abstractions)');
+		const k = placeWords({ nodeId: 'k', name: 'Kloofpunt' });
+		expect(k.flow).toBe('the flow leaving Kloofpunt (after its abstractions)');
 		expect(k.requirement('the pragmatic EWR')).toBe('its share of the pragmatic EWR (with the shares of the units above it)');
 	});
 });
