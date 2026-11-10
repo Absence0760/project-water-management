@@ -708,7 +708,7 @@ function runNetworkIn(
 		['deficit', 'deficit', 'Irrigation deficit'],
 		['inflowUpstream', 'inflow_upstream', 'Inflow from upstream'],
 		['runoff', 'runoff', 'Farm runoff'],
-		['transfer', 'transfer', 'Transfer (in + / out −)'],
+		['transfer', 'transfer', 'Dam transfers (in + / out −; river off-takes are listed separately)'],
 		['storage', 'dam_storage', 'Dam storage'],
 		['spill', 'spill', 'Dam spill'],
 		['outflow', 'outflow', 'Outflow'],

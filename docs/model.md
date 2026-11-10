@@ -4717,6 +4717,12 @@ rule to the same keep.
 (what it took, before losses); on the destination `offtake_in` (what arrived),
 `offtake_used` and `offtake_to_dam` (the workings); on each unit seepage
 rejoins below, `offtake_loss_return` (engine ≥ 1.42.0, part of its outflow).
+None of it is in either unit's `transfer` series, which nets only the rules
+that run from a unit's dam; that series is labelled "Dam transfers (in + /
+out −; river off-takes are listed separately)" so a user charting an
+off-take's destination looks for `offtake_in` instead (runs before the
+relabel keep their stored label, "Transfer (in + / out −)"; a label only, so
+no `ENGINE_VERSION` bump).
 `WaterBalanceRow` and the water account gain `conveyanceLossM3`, net of the
 seepage returned.
 
