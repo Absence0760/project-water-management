@@ -2287,7 +2287,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'firm-yield',
 		term: 'Historical firm yield',
-		short: 'The largest steady draft a dam meets on every day of the record, with the rest of the network running as modelled.',
+		short: 'The largest steady draft a dam meets on every day of the record, the rest of the network as modelled. A dam fed no water yields none.',
 		units: 'm³/day',
 		category: 'results'
 	},
@@ -2300,13 +2300,13 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'draft-pattern',
 		term: 'Draft pattern',
-		short: 'How a yield’s draft is spread over the year: the same every day, or shaped like the unit’s own irrigation demand by month.',
+		short: 'How a draft is spread over the year: the same every day, or shaped like the irrigation demand by month of the dam’s unit or any other.',
 		category: 'results'
 	},
 	{
 		id: 'storage-yield-curve',
 		term: 'Storage–yield curve',
-		short: 'The yield at 11 dam capacities from 0 to twice the dam’s own, at the chosen pattern and assurance: what a raise would add.',
+		short: 'The yield at 11 dam capacities from 0 to twice the dam’s own, or to a capacity you enter to size a proposed dam.',
 		units: 'm³ → m³/day',
 		category: 'results'
 	},

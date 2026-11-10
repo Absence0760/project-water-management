@@ -22,7 +22,7 @@
 	// comparison, their own view of the results (ApplicantResults: the
 	// server's projection of the run against its base), and a Yield panel for
 	// their own units and the ones their changes add.
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import type { ScenarioOp } from '@water-management/engine';
 	import { api, scenarioProblems, SCENARIO_STATUS_MOVES, type Run, type RunMeta, type ScenarioStatus, type ScenarioWithCheck } from '#lib/api/index.js';
 	import { session } from '#lib/auth/session.svelte.js';
@@ -150,6 +150,20 @@
 	/** Who queues a yield: an editor; on an application its applicant (not the people it's shared with, 096). */
 	const canYield = $derived(applicant ? isOwner : canEdit);
 	let yieldNodeId = $state('');
+	let opForm = $state<ReturnType<typeof OpForm> | null>(null);
+	/**
+	 * The Yield panel's "Set its dam capacity / runoff to dam in this scenario": Add a change on that unit's field. Out of
+	 * override mode first, unless it holds unsaved edits (the mode's own Close asks about those).
+	 */
+	async function setYieldField(field: 'damCapacityM3' | 'pctRunoffToDam') {
+		if (!yieldNode) return;
+		if (overriding) {
+			if (overrideDirty) return;
+			overriding = false;
+			await tick();
+		}
+		await opForm?.startChange(yieldNode.id, field);
+	}
 	const yieldNode = $derived(yieldFarms.find((n) => n.id === yieldNodeId) ?? null);
 	/** Changes that don't apply: an edit group's one problem line counts each of its ops. */
 	const problems = $derived(data.check ? s.ops.length - data.check.applied.length : 0);
@@ -546,7 +560,7 @@
 					<HelpTip key="override-mode" label="About override mode" />
 				</div>
 				<!-- An applicant reads no climate factor table (viewer and above, 282): the climate is the authority's baseline, not theirs. -->
-				<OpForm input={effective} onadd={add} disabled={saving} {projectId} futureClimate={!applicant} />
+				<OpForm bind:this={opForm} input={effective} onadd={add} disabled={saving} {projectId} futureClimate={!applicant} />
 			{/if}
 		{/if}
 		<p class="visually-hidden" role="status">{note}</p>
@@ -721,6 +735,8 @@
 						scenario={isApplication || applicant ? null : { baseRunId: s.baseRunId, ops: s.ops, opsSha256: s.opsSha256 }}
 						canEdit={canYield}
 						hasDam={yieldNode.damCapacityM3 > 0}
+						scenarioState={{ opsSha256: s.opsSha256, updatedAt: s.updatedAt }}
+						onsetfield={editable ? setYieldField : null}
 					/>
 				{/snippet}
 			</Lazy>

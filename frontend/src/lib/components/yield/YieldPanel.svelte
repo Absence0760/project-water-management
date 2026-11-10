@@ -14,10 +14,20 @@
 	// The preview runs this web build's engine (ENGINE_VERSION, the worker is
 	// part of the same build) and names it, with a note when the stored
 	// result came from another engine (the backend is released separately).
+	//
+	// The Draft pattern lists the dam's own unit's irrigation demand and every
+	// other unit's that has some (engine ≥ 1.117.0), read with the dam's capacity
+	// from the model the job runs on (GET …/yield/options). A unit with no dam
+	// there (capacity 0) has no yield of its own: the panel says so, offers no
+	// firm yield or preview, and sizes a proposed dam with a storage–yield curve
+	// up to a largest capacity the user enters. A dam nothing routes water into
+	// (no runoff or upstream share to the dam, no River to dam, no transfer in)
+	// yields 0 at any size: the panel says why and offers no yield. A scenario's
+	// stored yield worked out on earlier changes says so.
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { followRetry } from '#lib/components/common/loadState.js';
 	import { onDestroy, untrack } from 'svelte';
-	import { api, type JobMeta, type RunMeta, type YieldResult } from '#lib/api/index.js';
+	import { api, type JobMeta, type RunMeta, type YieldOptions, type YieldResult } from '#lib/api/index.js';
 	import LineChart from '#lib/components/charts/LineChart.svelte';
 	import { fmtDate, fmtNum, fmtPct } from '#lib/format/number.js';
 	import type { PreviewEngine } from '#lib/preview/runner.js';
@@ -28,6 +38,7 @@
 		ASSURANCE_OPTIONS,
 		assuranceLabel,
 		curveChart,
+		curveRangeText,
 		engineDiffersNote,
 		HISTORICAL_NOTE,
 		jobStatus,
@@ -35,7 +46,13 @@
 		latestResults,
 		yieldWithheld,
 		modelRuns,
+		noDamText,
+		parseMaxCapacity,
+		patternChoices,
 		patternLabel,
+		patternParams,
+		noInflowText,
+		staleNote,
 		PREVIEW_TOLERANCE,
 		previewSource,
 		type PreviewScenario
@@ -49,7 +66,9 @@
 		scenarioId = null,
 		scenario = null,
 		canEdit,
-		hasDam
+		hasDam,
+		scenarioState = null,
+		onsetfield = null
 	}: {
 		projectId: string;
 		nodeId: string;
@@ -61,22 +80,67 @@
 		/** With scenarioId: its base run and ops, so the browser can preview it (not given for an application). */
 		scenario?: PreviewScenario | null;
 		canEdit: boolean;
-		/** The node has a dam (capacity > 0): a curve needs one. */
+		/** The node has a dam (capacity > 0) as the page knows it; the model the job runs on (GET …/yield/options) decides once read. */
 		hasDam: boolean;
+		/** With scenarioId: its ops hash and last change, so a stored yield worked out on earlier changes says so. */
+		scenarioState?: { opsSha256: string; updatedAt: string } | null;
+		/** In a scenario the user may change: open its Add a change on this unit's field (no dam: its capacity; no inflow: its runoff to dam). */
+		onsetfield?: ((field: 'damCapacityM3' | 'pctRunoffToDam') => void) | null;
 	} = $props();
 
-	const choices = $derived(modelRuns(runs));
+	const runChoices = $derived(modelRuns(runs));
 	let runId = $state<string>('');
 	$effect(() => {
 		// Default to the newest run of the model; keep a choice that still exists.
-		const ids = choices.map((r) => r.id);
+		const ids = runChoices.map((r) => r.id);
 		if (!ids.includes(untrack(() => runId))) runId = ids[0] ?? '';
 	});
 	const target = $derived(scenarioId ? { scenarioId } : runId ? { runId } : null);
 	const targetKey = $derived(scenarioId ? `s:${scenarioId}` : `r:${runId}`);
 
-	let pattern = $state<'constant' | 'demand'>('constant');
+	/** The Draft pattern choice: 'constant', 'demand' (this unit's) or `unit:<id>` (patternChoices). */
+	let pattern = $state('constant');
 	let assurance = $state(1);
+	/** The storage–yield curve's "Up to" capacity, as typed (parseMaxCapacity). */
+	let maxText = $state('');
+
+	// --- what the model the job runs on offers: the dam's capacity and the units that can shape its draft ---
+	let options = $state<YieldOptions | null>(null);
+	let optionsError = $state<string | null>(null);
+	let optionsFor = '';
+	async function loadOptions() {
+		const t = target;
+		const key = `${targetKey}|${nodeId}`;
+		optionsFor = key;
+		options = null;
+		optionsError = null;
+		if (!t) return;
+		try {
+			const o = await api.yield.options(projectId, { ...t, nodeId });
+			if (optionsFor === key) options = o;
+		} catch (e) {
+			if (optionsFor === key) optionsError = msg(e);
+		}
+	}
+	$effect(() => {
+		void targetKey;
+		void nodeId;
+		untrack(loadOptions);
+	});
+	const choices = $derived(patternChoices(options?.units ?? null, nodeId));
+	$effect(() => {
+		// A choice the model no longer offers (another run, a unit removed, its own demand gone) falls back to Constant.
+		const ok = choices.some((c) => c.value === untrack(() => pattern) && !c.disabled);
+		if (!ok) pattern = 'constant';
+	});
+	/** No dam in the model the job runs on (capacity 0): no yield of its own, a curve only up to an entered capacity. */
+	const noDam = $derived(options ? !(options.damCapacityM3 > 0) : !hasDam);
+	/** Nothing routes water into the dam (options.inflow): its yield is 0 at any size, so none is offered (the API refuses one). */
+	const noInflow = $derived(noInflowText(nodeName, options?.inflow));
+	const maxParsed = $derived(parseMaxCapacity(maxText));
+	const maxError = $derived('error' in maxParsed ? maxParsed.error : null);
+	const maxValue = $derived('value' in maxParsed ? maxParsed.value : undefined);
+	const curveBlocked = $derived(maxError !== null || (noDam && maxValue === undefined));
 
 	let results = $state<YieldResult[]>([]);
 	let loading = $state(false);
@@ -145,7 +209,8 @@
 		submitting = true;
 		submitError = null;
 		try {
-			const res = await api.yield.start(projectId, { ...target, nodeId, kind, params: { pattern, assurance } });
+			const params = { ...patternParams(pattern), assurance, ...(kind === 'curve' && maxValue !== undefined ? { maxCapacityM3: maxValue } : {}) };
+			const res = await api.yield.start(projectId, { ...target, nodeId, kind, params });
 			job = res.job;
 			await poll(res.jobId);
 		} catch (e) {
@@ -170,7 +235,9 @@
 	const source = $derived(previewSource(scenarioId, runId, scenario));
 	// A string, so a parent passing an equal scenario object again doesn't start a new preview.
 	const sourceKey = $derived(source?.key ?? '');
-	let preview = $state<{ state: 'computing' } | { state: 'done'; point: YieldPoint; pattern: typeof pattern; assurance: number } | { state: 'error'; message: string } | null>(null);
+	let preview = $state<
+		{ state: 'computing' } | { state: 'done'; point: YieldPoint; params: ReturnType<typeof patternParams>; assurance: number } | { state: 'error'; message: string } | null
+	>(null);
 	let engine: PreviewEngine | null = null;
 	let previewSeq = 0;
 
@@ -178,7 +245,8 @@
 		const src = source;
 		const seq = ++previewSeq;
 		engine?.cancel();
-		if (!src) {
+		// A unit with no dam, or a dam that receives no water, has no firm yield to preview.
+		if (!src || noDam || noInflow) {
 			preview = null;
 			return;
 		}
@@ -190,9 +258,9 @@
 			if (seq !== previewSeq) return;
 			// A plain copy: the scenario's ops come from reactive state, and a proxy can't be posted to a worker.
 			const ops = src.ops ? $state.snapshot(src.ops) : undefined;
-			const asked = { pattern, assurance };
-			const point = await engine.firmYield({ input, ops, nodeId, ...asked, tolerance: PREVIEW_TOLERANCE });
-			if (seq === previewSeq) preview = { state: 'done', point, ...asked };
+			const params = patternParams(pattern);
+			const point = await engine.firmYield({ input, ops, nodeId, ...params, assurance, tolerance: PREVIEW_TOLERANCE });
+			if (seq === previewSeq) preview = { state: 'done', point, params, assurance };
 		} catch (e) {
 			// A newer preview replaced this one: not an error.
 			if (seq !== previewSeq || (e instanceof Error && e.name === 'PreviewSuperseded')) return;
@@ -205,6 +273,8 @@
 		void nodeId;
 		void pattern;
 		void assurance;
+		void noDam;
+		void noInflow;
 		untrack(runPreview);
 	});
 
@@ -229,13 +299,13 @@
 	<p class="note small">{HISTORICAL_NOTE}</p>
 
 	{#if !scenarioId}
-		{#if choices.length === 0}
+		{#if runChoices.length === 0}
 			<p class="muted">Run the model first: a yield is worked out on a saved run's inputs.</p>
 		{:else}
 			<div class="field">
 				<label for="yield-run-{nodeId}">Run</label>
 				<select id="yield-run-{nodeId}" bind:value={runId} disabled={busy}>
-					{#each choices as r (r.id)}
+					{#each runChoices as r (r.id)}
 						<option value={r.id}>{r.label || 'Unlabelled run'} · {fmtDate(r.createdAt, true)}</option>
 					{/each}
 				</select>
@@ -243,13 +313,29 @@
 		{/if}
 	{/if}
 
+	{#if target && noDam}
+		<div class="alert alert-info no-dam" role="note" data-testid="yield-no-dam">
+			<p>{noDamText(nodeName)}</p>
+			{#if canEdit && !noInflow}<p>To size a proposed dam, draw a storage–yield curve up to the largest capacity you would consider.</p>{/if}
+			{#if onsetfield && canEdit}<button type="button" class="btn btn-sm" onclick={() => onsetfield('damCapacityM3')}>Set its dam capacity in this scenario</button>{/if}
+		</div>
+	{/if}
+	{#if target && noInflow}
+		<div class="alert alert-warning no-dam" role="note" data-testid="yield-no-inflow">
+			<p>{noInflow}</p>
+			{#if onsetfield && canEdit}<button type="button" class="btn btn-sm" onclick={() => onsetfield('pctRunoffToDam')}>Set its runoff to dam in this scenario</button>{/if}
+		</div>
+	{/if}
+	{#if optionsError}<p class="muted small" data-testid="yield-options-error">The units that could shape the draft couldn't be read ({optionsError.replace(/\.$/, '')}), so the pattern list is the dam's own.</p>{/if}
+
 	{#if target && (canEdit || source)}
 		<div class="controls">
 			<div class="field">
 				<label for="yield-pattern-{nodeId}">Draft pattern <HelpTip key="draft-pattern" label="About how the draft is spread over the year" /></label>
 				<select id="yield-pattern-{nodeId}" bind:value={pattern} disabled={busy}>
-					<option value="constant">Constant: the same every day</option>
-					<option value="demand">This hydrological unit's irrigation demand, by month</option>
+					{#each choices as c (c.value)}
+						<option value={c.value} disabled={c.disabled}>{c.label}</option>
+					{/each}
 				</select>
 			</div>
 			<div class="field">
@@ -260,27 +346,41 @@
 					{/each}
 				</select>
 			</div>
-			{#if canEdit}<div class="buttons">
-				<button type="button" class="btn btn-primary" disabled={busy} onclick={() => start('firm')}>Work out the yield</button>
-				<button
-					type="button"
-					class="btn"
-					disabled={busy || !hasDam}
-					title={hasDam ? undefined : 'A storage–yield curve needs a dam with a capacity above 0'}
-					onclick={() => start('curve')}>Storage–yield curve</button
-				>
-			</div>{/if}
+			{#if canEdit}
+				<div class="field">
+					<label for="yield-max-{nodeId}">Curve up to (m³)</label>
+					<input
+						id="yield-max-{nodeId}"
+						type="text"
+						inputmode="decimal"
+						autocomplete="off"
+						bind:value={maxText}
+						disabled={busy}
+						placeholder={noDam ? 'Required' : options ? `${fmtNum(2 * options.damCapacityM3)} (twice the dam)` : 'Twice the dam'}
+						aria-required={noDam}
+						aria-invalid={maxError !== null}
+						aria-describedby="yield-max-hint-{nodeId}"
+					/>
+					<span class="hint small" class:failed={maxError !== null} id="yield-max-hint-{nodeId}" data-testid="yield-max-hint"
+						>{maxError ?? (noDam ? 'Required to size a proposed dam: the largest capacity to try.' : "Empty: twice the dam's capacity.")}</span
+					>
+				</div>
+				<div class="buttons">
+					{#if !noDam}<button type="button" class="btn btn-primary" disabled={busy || !!noInflow} onclick={() => start('firm')}>Work out the yield</button>{/if}
+					<button type="button" class="btn" class:btn-primary={noDam} disabled={busy || curveBlocked || !!noInflow} onclick={() => start('curve')}>Storage–yield curve</button>
+				</div>
+			{/if}
 		</div>
 	{/if}
 
-	{#if source}
+	{#if source && !noDam && !noInflow}
 		<div class="preview" data-testid="yield-preview" data-state={preview?.state ?? 'computing'}>
 			<h3>Preview <span class="badge">Not stored</span></h3>
 			<div aria-live="polite">
 				{#if preview?.state === 'done'}
 					{@const p = preview.point}
 					<p data-testid="yield-preview-value">
-						<strong>{fmtNum(p.yieldM3Day)} m³/day</strong> ({fmtNum(p.yieldM3Year)} m³ a year): historical {assuranceLabel(preview.assurance)} yield, {patternLabel(preview.pattern)},
+						<strong>{fmtNum(p.yieldM3Day)} m³/day</strong> ({fmtNum(p.yieldM3Year)} m³ a year): historical {assuranceLabel(preview.assurance)} yield, {patternLabel(preview.params, options?.units ?? null)},
 						with {p.failureDays} failure days in {p.failedYears} water years at that draft.
 					</p>
 				{:else if preview?.state === 'error'}
@@ -341,24 +441,28 @@
 		{/if}
 		{#if latest.firm}
 			{@const p = latest.firm.points.point}
+			{@const stale = staleNote(latest.firm, scenarioState)}
+			{#if stale}<p class="alert alert-warning small" data-testid="yield-firm-stale">{stale}</p>{/if}
 			<dl class="firm" data-testid="yield-firm">
 				<div>
 					<dt>Historical {assuranceLabel(latest.firm.params.assurance)} yield</dt>
 					<dd><strong>{fmtNum(p.yieldM3Day)} m³/day</strong> ({fmtNum(p.yieldM3Year)} m³ a year)</dd>
 				</div>
 				<div><dt>Dam capacity</dt><dd>{fmtNum(p.capacityM3)} m³</dd></div>
-				<div><dt>Pattern</dt><dd>{patternLabel(latest.firm.params.pattern)}</dd></div>
+				<div><dt>Pattern</dt><dd data-testid="yield-firm-pattern">{patternLabel(latest.firm.params, options?.units ?? null)}</dd></div>
 				<div><dt>Failures at that draft</dt><dd>{p.failureDays} days, in {p.failedYears} water years</dd></div>
 				<div><dt>Worked out</dt><dd>{fmtDate(latest.firm.createdAt, true)} by {latest.firm.createdBy ?? 'a former member'} (engine {latest.firm.engineVersion})</dd></div>
 			</dl>
 		{/if}
 		{#if latest.curve && chart}
 			{@const c = latest.curve}
+			{@const stale = staleNote(c, scenarioState)}
 			<h3>Storage–yield curve <HelpTip key="storage-yield-curve" label="About the curve of yield against capacity" /></h3>
 			<p class="muted small">
-				{assuranceLabel(c.params.assurance)} yield, {patternLabel(c.params.pattern)}, at {c.points.points.length} capacities from 0 to twice the dam's {fmtNum(c.points.baseCapacityM3)} m³.
+				<span data-testid="yield-curve-range">{assuranceLabel(c.params.assurance)} yield, {patternLabel(c.params, options?.units ?? null)}, {curveRangeText(c)}.</span>
 				Worked out {fmtDate(c.createdAt, true)}.
 			</p>
+			{#if stale}<p class="alert alert-warning small" data-testid="yield-curve-stale">{stale}</p>{/if}
 			{#if !c.points.monotone}
 				<p class="alert alert-warning small" data-testid="yield-not-monotone">
 					The yield falls somewhere as the dam gets bigger. That can be real (a bigger, shallower dam loses more to evaporation, or starts further below its minimum operating level), not a fault in the search.
@@ -378,8 +482,9 @@
 					</thead>
 					<tbody>
 						{#each c.points.points as p (p.capacityM3)}
-							<tr class:own={p.capacityM3 === c.points.baseCapacityM3}>
-								<th scope="row" class="num">{fmtNum(p.capacityM3)}{p.capacityM3 === c.points.baseCapacityM3 ? ' (this dam)' : ''}</th>
+							{@const own = c.points.baseCapacityM3 > 0 && p.capacityM3 === c.points.baseCapacityM3}
+							<tr class:own>
+								<th scope="row" class="num">{fmtNum(p.capacityM3)}{own ? ' (this dam)' : ''}</th>
 								<td class="num">{fmtNum(p.yieldM3Day)}</td>
 								<td class="num">{fmtNum(p.yieldM3Year)}</td>
 								<td class="num">{p.failedYears}</td>
@@ -420,6 +525,12 @@
 	}
 	.status .failed,
 	.preview .failed {
+		color: var(--danger);
+	}
+	.no-dam p {
+		margin: 0 0 0.35rem;
+	}
+	.hint.failed {
 		color: var(--danger);
 	}
 	.preview {
