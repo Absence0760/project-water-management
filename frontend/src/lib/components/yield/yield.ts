@@ -176,10 +176,11 @@ export function noInflowText(name: string, inflow: YieldOptions['inflow'] | null
  * recorded it, the scenario has been changed since. Null otherwise, and for a
  * yield on a run (a run's input never changes).
  */
-export function staleNote(r: Pick<YieldResult, 'scenarioId' | 'opsSha256' | 'createdAt'>, scenario: { opsSha256: string; updatedAt: string } | null): string | null {
-	if (!r.scenarioId || !scenario) return null;
-	if (r.opsSha256) return r.opsSha256 === scenario.opsSha256 ? null : "Worked out before the scenario's latest changes: work it out again.";
-	return Date.parse(r.createdAt) < Date.parse(scenario.updatedAt) ? 'Worked out before the scenario was last changed, possibly on other changes: work it out again to be sure.' : null;
+export function staleNote(result: Pick<YieldResult, 'scenarioId' | 'opsSha256' | 'createdAt'>, scenario: { opsSha256: string; updatedAt: string } | null): string | null {
+	// A stored yield result's scenario, not a run's (a run's goes through runs/scenarioRun.ts isScenarioRun).
+	if (!result.scenarioId || !scenario) return null;
+	if (result.opsSha256) return result.opsSha256 === scenario.opsSha256 ? null : "Worked out before the scenario's latest changes: work it out again.";
+	return Date.parse(result.createdAt) < Date.parse(scenario.updatedAt) ? 'Worked out before the scenario was last changed, possibly on other changes: work it out again to be sure.' : null;
 }
 
 /** Most a typed largest capacity may be (backend YieldParams.maxCapacityM3). */

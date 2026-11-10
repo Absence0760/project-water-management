@@ -1198,6 +1198,9 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	},
 	'POST /projects/:id/yield runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: r.runId, kind: 'firm' }),
 	'POST /projects/:id/yield nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: r.farmId, runId: h.run2Id, kind: 'firm' }),
+	// The draft's shape from another unit's irrigation demand (engine 1.117.0): the unit must be one of the run's own (yield_pattern_unit).
+	'POST /projects/:id/yield params.patternNodeId': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: h.run2Id, kind: 'firm', params: { pattern: 'demand', patternNodeId: r.farmId, assurance: 1 } }),
 	'POST /projects/:id/notes runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a run', runId: r.runId }),
 	'POST /projects/:id/notes nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a farm', nodeId: r.farmId }),
 	'POST /projects/:id/notes scenarioId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a scenario', scenarioId: r.scenarioId }),
@@ -1332,6 +1335,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'alerts/routes.ts:feedId': ['PUT /projects/:id/alert-rules feedId'],
 	'alerts/routes.ts:seriesId': ['PUT /projects/:id/alert-rules seriesId'],
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
+	'yield/store.ts:patternNodeId': ['POST /projects/:id/yield params.patternNodeId'],
 	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId', 'POST /projects/:id/map/import features.nodeId'],
 	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
 	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],

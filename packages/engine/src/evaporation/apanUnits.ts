@@ -158,8 +158,8 @@ export function resolveApanUnits(
 		byId.map((n) => r.units[n.id]!),
 		byId.map((n) => n.areaKm2)
 	) as unknown as Monthly;
-	const units: Record<string, number[]> = {};
-	for (const n of covered) units[n.id] = [...r.units[n.id]!];
+	// Built with Object.fromEntries, so a unit id that is a prototype key ("__proto__") stays a plain entry (CodeQL js/remote-property-injection).
+	const units: Record<string, number[]> = Object.fromEntries(covered.map((n) => [n.id, [...r.units[n.id]!]]));
 	// Node-id order, so a run's warnings are the same however the nodes are listed.
 	const sorted = [...land].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 	const uncovered = sorted.filter((n) => !Object.hasOwn(r.units, n.id));
@@ -245,7 +245,7 @@ export function scaleApanUnits(setting: ApanUnitsSettings, base: readonly number
 		else if (n === 0) f.push(1);
 		else return { problem: `the units’ A-pan is 0 in month ${m + 1} of the water year, so it can’t be scaled to ${n} mm` };
 	}
-	const units: Record<string, number[]> = {};
-	for (const [id, row] of Object.entries(setting.units)) units[id] = row.map((v, m) => (f[m] === 1 ? v : v * f[m]!));
+	// Object.fromEntries, so a unit id that is a prototype key stays a plain entry (CodeQL js/remote-property-injection).
+	const units: Record<string, number[]> = Object.fromEntries(Object.entries(setting.units).map(([id, row]) => [id, row.map((v, m) => (f[m] === 1 ? v : v * f[m]!))]));
 	return { setting: { ...setting, units } };
 }
