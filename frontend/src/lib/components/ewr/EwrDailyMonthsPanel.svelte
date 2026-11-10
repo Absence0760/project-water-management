@@ -8,7 +8,7 @@
 	field (older, or kept from this reader) says why.
 -->
 <script lang="ts">
-	import type { RunSummary } from '@water-management/engine';
+	import type { EwrDailyMonths, RunSummary } from '@water-management/engine';
 	import type { Snippet } from 'svelte';
 	import { fmtNum, fmtPct } from '#lib/format/number.js';
 	import { monthName } from '#lib/format/months.js';
@@ -18,11 +18,26 @@
 
 	let {
 		summary,
-		controls
+		controls,
+		compact = false,
+		title,
+		level = 3,
+		missing
 	}: {
 		summary: Pick<RunSummary, 'ewrDailyMonths' | 'catchment' | 'ewrCompliance' | 'allocations'>;
 		/** Under the heading: EWR's "Judged by" switch when the run has a Reserve rule table too (river/ReserveMonths.svelte). */
 		controls?: Snippet;
+		/**
+		 * One side of two read side by side (scenarios/ScenarioEwrMonths.svelte): an h3 named `title`, no
+		 * explanation (the pair says it once), the tiles first and the chart under them so both sides' line up
+		 * whatever their verdicts' lengths, then the verdict, and the table folded.
+		 */
+		compact?: boolean;
+		/** The heading in compact mode (the run's name and date), and its level. */
+		title?: string;
+		level?: 3 | 4;
+		/** After the missing-run line: what to do about it (the base run's "Run the model"). */
+		missing?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -33,29 +48,32 @@
 	const zero = $derived(r ? zeroRequirementText(r) : null);
 
 	// The chart: share of months met per month of the year, on a fixed 0–100 % axis (as the rule tables' panel).
-	const W = 480;
+	// Narrower in compact mode, so a side's half-width column draws the months' names near their full size.
+	const W = $derived(compact ? 360 : 480);
 	const H = 150;
-	const TOP = 16;
+	// Compact: room for the axis title over a full bar's value.
+	const TOP = $derived(compact ? 26 : 16);
 	const BOTTOM = 18;
-	const bw = W / 12;
+	const bw = $derived(W / 12);
 </script>
 
 <section aria-labelledby="{uid}-h" data-testid="ewr-daily-months">
-	<h2 id="{uid}-h">{heading}</h2>
+	{#if compact}
+		<svelte:element this={`h${level}`} id="{uid}-h" class="side-h" {title}>{title ?? heading}</svelte:element>
+	{:else}
+		<h2 id="{uid}-h">{heading}</h2>
+	{/if}
 	{#if controls}{@render controls()}{/if}
-	<p class="muted small">
+	{#if !compact}<p class="muted small">
 		Each whole calendar month at the outlet: met when the simulated outflow over the month is at least {dailyEwrName(daily)} summed over its days. It
 		follows Model settings → EWR → Daily EWR from; a change there shows here after the model runs again.
-	</p>
+	</p>{/if}
 	{#if !r}
-		<p class="muted" data-testid="ewr-daily-months-missing">{dailyMonthsMissing(summary)}</p>
+		<p class="muted" data-testid="ewr-daily-months-missing">{dailyMonthsMissing(summary)}{#if missing}{' '}{@render missing()}{/if}</p>
 	{:else}
-		<p class="flag {rateClass(r.rate)}" role="status">
-			<strong>{outlet ? `Outlet (${outlet})` : 'Outlet'}:</strong>
-			{dailyMonthsVerdict(r)}
-		</p>
+		{#if !compact}{@render verdict(r)}{/if}
 
-		<dl class="stats">
+		<dl class="stats" class:compact>
 			<div class="stat">
 				<dt>Months met</dt>
 				<dd>{r.rate === null ? '–' : fmtPct(r.rate)}</dd>
@@ -64,15 +82,15 @@
 			<div class="stat">
 				<dt>Longest run not met</dt>
 				<dd>{fmtNum(r.longestNotMetRun)}<small>months</small></dd>
-				<dd class="sub">consecutive months below the requirement</dd>
+				<dd class="sub long">consecutive months below the requirement</dd>
 			</div>
 			<div class="stat">
 				<dt>Deficit</dt>
 				<dd>{fmtMm3(r.deficitM3)}<small>Mm³</small></dd>
-				<dd class="sub">the months’ shortfalls below the requirement, summed</dd>
+				<dd class="sub long">the months’ shortfalls below the requirement, summed</dd>
 			</div>
 		</dl>
-		{#if zero}<p class="muted small">{zero}</p>{/if}
+		{#if zero && !compact}<p class="muted small">{zero}</p>{/if}
 
 		<svg viewBox="0 0 {W} {H}" class="bars" role="img" aria-label="Share of months met per month of the year at the outlet (the table below holds the values)">
 			{#each [0, 0.5, 1] as g (g)}
@@ -93,7 +111,30 @@
 			{/each}
 			<text x="2" y="10" class="axis">% of months met</text>
 		</svg>
+		{#if compact}
+			{@render verdict(r)}
+			{#if zero}<p class="muted small">{zero}</p>{/if}
+		{/if}
 
+		{#if compact}
+			<details class="values">
+				<summary>Values by month</summary>
+				{@render values(r)}
+			</details>
+		{:else}
+			{@render values(r)}
+		{/if}
+	{/if}
+</section>
+
+{#snippet verdict(r: EwrDailyMonths)}
+	<p class="flag {rateClass(r.rate)}" role="status">
+		<strong>{outlet ? `Outlet (${outlet})` : 'Outlet'}:</strong>
+		{dailyMonthsVerdict(r)}
+	</p>
+{/snippet}
+
+{#snippet values(r: EwrDailyMonths)}
 		<div class="table-wrap">
 			<table class="data compact" aria-labelledby="{uid}-moy">
 				<caption id="{uid}-moy">By month of the year: months met and mean flows (m³/s)</caption>
@@ -123,8 +164,7 @@
 				</tbody>
 			</table>
 		</div>
-	{/if}
-</section>
+{/snippet}
 
 <style>
 	.flag {
@@ -183,6 +223,26 @@
 	.axis {
 		font-size: 10px;
 		fill: var(--text-muted);
+	}
+	/* Compact: the three tiles in one row of a half-width column, without their long explanations. */
+	.stats.compact {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	.stats.compact dd {
+		overflow-wrap: anywhere;
+	}
+	.stats.compact .sub.long {
+		display: none;
+	}
+	.side-h {
+		margin: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.values summary {
+		cursor: pointer;
+		font-size: var(--font-sm);
 	}
 	td.short {
 		color: var(--warning);

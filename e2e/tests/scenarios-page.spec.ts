@@ -309,3 +309,47 @@ test('a run scenario links to the EWR page on its run, which names the scenario 
 	await expect(page.getByTestId('river-scenario-note')).toHaveCount(0);
 });
 
+test('EWR months met: the base on the left and a picked run on the right, side by side at 1280, with no violations', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await seedRunnableProject(page.request, 'Scenario EWR months');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	const scenarioId = await createScenario(page.request, project.id, {
+		name: 'Hexberg Dam',
+		baseRunId: runId,
+		ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 180_000 }]
+	});
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
+	expect(ran.ok()).toBe(true);
+	const scenarioRun = ((await ran.json()) as { run: { id: string } }).run.id;
+	// A later run of the model, to pick on the right.
+	const later = await createRun(page.request, project.id, 'Later run');
+	await openScenarios(page, project.id, `&scenario=${scenarioId}`);
+
+	const months = page.getByRole('region', { name: 'EWR months met: base against a run' });
+	const base = months.getByTestId('scenario-ewr-base');
+	const right = months.getByTestId('scenario-ewr-right');
+	await expect(base.getByRole('heading', { level: 4 })).toHaveText(/^Base: Baseline · today \d{2}:\d{2}$/);
+	await expect(right.getByRole('heading', { level: 4 })).toHaveText(/^Hexberg Dam \(scenario\) · today \d{2}:\d{2}$/);
+	await expect(months.getByTestId('scenario-ewr-judged')).toContainText('on both sides');
+	for (const side of [base, right]) {
+		await expect(side.getByRole('img', { name: /Share of months met per month of the year/ })).toBeVisible();
+		await expect(side.getByText('Months met', { exact: true })).toBeVisible();
+	}
+	// Side by side: the tiles start at the same height, the right column to the right of the left.
+	const [b, r] = [await base.locator('dl.stats').boundingBox(), await right.locator('dl.stats').boundingBox()];
+	expect(r!.x).toBeGreaterThan(b!.x + b!.width - 1);
+	expect(Math.abs(r!.y - b!.y)).toBeLessThan(2);
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+
+	const select = months.getByRole('combobox', { name: 'Run on the right' });
+	await expect(select).toHaveValue(scenarioRun);
+	await expect(select.locator('option')).toHaveCount(2);
+	await select.selectOption(later);
+	await expect(right.getByRole('heading', { level: 4 })).toHaveText(/^Later run · today /);
+	await expect(right).toHaveAttribute('aria-busy', 'false');
+	await expect(base.getByRole('heading', { level: 4 })).toHaveText(/^Base: Baseline/);
+});
+

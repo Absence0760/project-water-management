@@ -12520,7 +12520,27 @@ closing, and **Discard edits** puts it back. **Edits to record**
   2026-11-09, couldn't find a scenario's run on the EWR page). Only the
   assessors see this section; an applicant gets a note instead
   ([§ Applications](#applications-wp-33)). A note says when the changes were
-  edited since that run. Under the comparison, the scenario run's
+  edited since that run. Under the headline results, **EWR months met: base
+  against a run** (`ScenarioEwrMonths.svelte`, the operator's ask of
+  2026-11-09, for presenting a scenario): the EWR page's months-met panel for
+  the daily EWR in use (`ewr/EwrDailyMonthsPanel.svelte` in its `compact`
+  mode: an h4 with the run's name and date, the tiles Months met, Longest
+  run not met and Deficit in one row without their long explanations, then
+  the chart on a narrower 360-unit width, then the verdict, the table folded
+  under **Values by month**) twice: the base run the comparison used on the
+  left ("Base: …"), and on the right the run a **Run on the right** select
+  picks from the project's runs but the base (named as the other run
+  pickers name them, newest first), the scenario's latest run by default
+  (`scenarios/ewrMonths.ts` `rightChoices`, `rightRun`). One component on
+  both sides, so the 0–100 % axis, the bars' colours and the month order
+  match, and the tiles come first so they line up whatever the verdicts
+  say. Side by side from 44rem of the section (a container query; 1280 and
+  1440 windows), stacked under that. A line above them names the daily EWR
+  both are judged by, as the EWR page names it; when the two runs judged
+  different ones, a warning says so instead (`judgedBy`). A run made before
+  engine 1.116.0 says "Run the model again to see this for the daily EWR."
+  on its side, the base side with a **Run the model** link (`?tab=runs`).
+  Under the comparison, the scenario run's
   **Validation statement**, folded shut (the same `ValidationPanel` as a
   run's Record group, § Runs & results).
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is
