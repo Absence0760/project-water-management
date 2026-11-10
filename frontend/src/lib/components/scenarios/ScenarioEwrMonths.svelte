@@ -5,13 +5,18 @@
 	outcome reads against its base at a glance. Both are the same component, so the axis (0–100 %), the bars'
 	colours and the month order match; the tiles come first in each, so they line up. Side by side from 44rem of
 	the section (a laptop's scenario page), stacked under that. Which daily EWR both are judged by is said once
-	above them, or that they differ (ewrMonths.ts judgedBy).
+	above them, or that they differ (ewrMonths.ts judgedBy). One "At" pick (ewr/EwrUnitPick.svelte) judges both
+	sides at the outlet or at one hydrological unit, from the units with an EWR share in either run, so a scenario's
+	effect on the river just below a unit reads against its base (ewr/EwrDailyMonthsAt.svelte; a unit the scenario
+	added says so on the base's side).
 -->
 <script lang="ts">
 	import type { RunSummary } from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import { api, type RunMeta } from '#lib/api/index.js';
 	import Lazy from '#lib/components/common/Lazy.svelte';
+	import EwrUnitPick from '#lib/components/ewr/EwrUnitPick.svelte';
+	import { pickedUnit, placeWords, unitChoices } from '#lib/components/ewr/unitMonths.js';
 	import { runOptionLabel, runPickName } from '#lib/components/compare/picker.js';
 	import { detailCache } from '#lib/components/runs/cache.js';
 	import { fmtWhen } from '#lib/format/number.js';
@@ -35,11 +40,11 @@
 	} = $props();
 
 	const uid = $props.id();
-	const loadPanel = () => import('#lib/components/ewr/EwrDailyMonthsPanel.svelte');
+	const loadPanel = () => import('#lib/components/ewr/EwrDailyMonthsAt.svelte');
 
 	let picked = $state<string | null>(null);
-	const choices = $derived(rightChoices(runs, base.id));
-	const rightId = $derived(rightRun(choices, picked, latest.id));
+	const rightChoicesList = $derived(rightChoices(runs, base.id));
+	const rightId = $derived(rightRun(rightChoicesList, picked, latest.id));
 
 	// The right side's record: the latest run's is in hand; another is fetched through the Runs tab's cache.
 	let fetched = $state.raw<Known | null>(null);
@@ -66,6 +71,11 @@
 	});
 	const right = $derived(rightId === latest.id ? latest : fetched?.id === rightId ? fetched : null);
 	const judged = $derived(judgedBy(base.summary, right?.summary ?? null));
+	// Where both sides are judged (null: the outlet); kept while it is offered by either run.
+	let at = $state<string | null>(null);
+	const choices = $derived(unitChoices(base.summary, right?.summary ?? null));
+	const unit = $derived(pickedUnit(choices, at));
+	const place = $derived(placeWords(unit));
 	const title = (r: Known) => `${runPickName(r)} · ${fmtWhen(r.createdAt)}`;
 </script>
 
@@ -74,13 +84,14 @@
 	<div class="pick">
 		<label for="{uid}-run">Run on the right</label>
 		<select id="{uid}-run" value={rightId} onchange={(e) => (picked = e.currentTarget.value)} data-testid="scenario-ewr-run">
-			{#each choices as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtWhen(iso), i === 0)}</option>{/each}
+			{#each rightChoicesList as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtWhen(iso), i === 0)}</option>{/each}
 		</select>
 	</div>
+	<EwrUnitPick {choices} value={unit?.nodeId ?? null} onpick={(id) => (at = id)} />
 	{#if judged?.same}
 		<p class="muted small" data-testid="scenario-ewr-judged">
-			Each whole calendar month at the outlet, judged by <strong>{judged.name}</strong> on both sides: met when the simulated outflow over the month is at
-			least the requirement summed over its days.
+			Each whole calendar month at {place.where}, judged by <strong>{judged.name}</strong> on both sides: met when {place.flow} over the month is at
+			least {unit ? 'its share of the requirement (with the shares of the units above it)' : 'the requirement'} summed over its days.
 		</p>
 	{:else if judged}
 		<p class="alert alert-warning" role="note" data-testid="scenario-ewr-mismatch">{judged.text}</p>
@@ -89,7 +100,7 @@
 		<div class="col" data-testid="scenario-ewr-base">
 			<Lazy load={loadPanel}>
 				{#snippet children(Panel)}
-					<Panel summary={base.summary} compact level={4} title="Base: {title(base)}">
+					<Panel {projectId} runId={base.id} summary={base.summary} {unit} compact level={4} title="Base: {title(base)}">
 						{#snippet missing()}<a href="?tab=runs">Run the model</a>{/snippet}
 					</Panel>
 				{/snippet}
@@ -98,7 +109,7 @@
 		<div class="col" data-testid="scenario-ewr-right" aria-busy={!right && !error}>
 			{#if right}
 				<Lazy load={loadPanel}>
-					{#snippet children(Panel)}<Panel summary={right.summary} compact level={4} title={title(right)} />{/snippet}
+					{#snippet children(Panel)}<Panel {projectId} runId={right.id} summary={right.summary} {unit} compact level={4} title={title(right)} />{/snippet}
 				</Lazy>
 			{:else if error}
 				<p class="alert alert-error" role="alert">That run couldn’t be loaded: {error}</p>
