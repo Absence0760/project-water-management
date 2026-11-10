@@ -448,6 +448,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// A maximum or a formula by month, and splits between destinations (engine 1.114.0), from their own streams, last of all.
 	addMonthlyDiversions(new Rng(seed ^ 0x2d4f6a81), transfers);
 	addTransferSplits(new Rng(seed ^ 0x5c1e9b37), nodes, transfers, opts.externalTransfers === true);
+	// Each unit's own A-pan, CCWR A-pan (Hydrological Unit) (engine 1.117.0), from its own stream, last of all.
+	addApanUnits(new Rng(seed ^ 0x3e9d1f27), nodes, settings);
 	return {
 		settings,
 		model: {
@@ -1528,6 +1530,32 @@ export function withUnitChirpsChoice(input: ModelInput, seed: number): ModelInpu
 	}
 	input.settings.unitRain = { ...input.settings.unitRain, chirpsUnits };
 	return input;
+}
+
+/**
+ * Each unit's own A-pan (engine 1.117.0, docs/model.md §2.3b) in a fifth of the networks with a land unit: most land
+ * units given the catchment row × a factor of their own (now and then a month of its own), some left without one (they
+ * run on the covered units' area-weighted row), now and then a row for a node that isn't a land unit (ignored); the
+ * 'units' basis on most, the catchment row (rows stored, unread) on the rest.
+ */
+function addApanUnits(rng: Rng, nodes: readonly NetworkNode[], settings: ModelInput['settings']): void {
+	const land = nodes.filter((n) => n.kind === 'farm' && n.areaKm2 > 0);
+	if (!land.length || !rng.bool(0.2)) return;
+	const base = (settings.apanMm ?? []).map((v) => (v > 0 ? v : rng.float(40, 250)));
+	if (base.length !== 12) return;
+	const units: Record<string, number[]> = {};
+	for (const n of land) {
+		if (rng.bool(0.2)) continue;
+		const k = rng.float(0.7, 1.4);
+		const row = base.map((v) => Math.round(v * k * 10) / 10);
+		if (rng.bool(0.2)) row[rng.int(0, 11)] = Math.round(rng.float(0, 300) * 10) / 10;
+		units[n.id] = row;
+	}
+	const others = nodes.filter((n) => !land.includes(n));
+	if (others.length && rng.bool(0.2)) units[rng.pick(others).id] = base.map((v) => Math.round(v * 10) / 10);
+	if (!Object.keys(units).length) return;
+	settings.apanUnits = { dataset: 'synthetic', source: 'synthetic A-pan grid, area-weighted over each unit’s outline', units };
+	settings.apanBasis = rng.bool(0.8) ? 'units' : rng.pick(['catchment', null] as const);
 }
 
 /**

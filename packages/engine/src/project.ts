@@ -19,6 +19,7 @@ import type { GapRainInfo } from './gapRain';
 import type { RainSourceInfo } from './rainSourcePeriods';
 import type { CodedWarning } from './warningCodes';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
+import type { ApanBasis, ApanUnitsRun, ApanUnitsSettings } from './evaporation/apanUnits';
 import type { Et0DailyInfo } from './evaporation/et0Daily';
 import type { FlowFillSummary, FlowGapFillSettings } from './flowGapFill';
 import type { SeriesOrigin } from './seriesProvenance';
@@ -453,6 +454,24 @@ export interface ProjectSettings {
 	allocationTolerance?: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
+	/**
+	 * What the model runs each unit's A-pan on (engine ≥ 1.117.0,
+	 * ./evaporation/apanUnits.ts, docs/model.md §2.3b): 'catchment', the one
+	 * A-pan row (`apanMm`, and a daily A-pan record), the default; or 'units',
+	 * each land unit's own row from `apanUnits`. Absent or null = 'catchment'.
+	 */
+	apanBasis?: ApanBasis | null;
+	/**
+	 * A-pan per hydrological unit from a gridded A-pan (engine ≥ 1.117.0,
+	 * ./evaporation/apanUnits.ts, docs/model.md §2.3b): each covered land
+	 * unit's 12 monthly means, saved from Model settings → Demand's table.
+	 * Read only under `apanBasis` 'units': then it is the run's A-pan source,
+	 * each covered unit's crop demand, GR4J PE and dam evaporation read its
+	 * own row, everything else the covered units' rows area-weighted, the
+	 * daily A-pan series is not read, and `apanMm` (kept, so switching back
+	 * restores it) is not read either. Absent or null = no rows stored.
+	 */
+	apanUnits?: ApanUnitsSettings | null;
 	/**
 	 * Rain → natural-flow model (./runoff): 'gr4j', the only one since engine
 	 * 1.0.0 removed the legacy b023 recession model (issue #16). Not a choice
@@ -4880,6 +4899,13 @@ export interface RunSummary {
 	 * A-pan series, and on older runs.
 	 */
 	apanDaily?: ApanDailyInfo;
+	/**
+	 * The A-pan per hydrological unit the run applied (engine ≥ 1.117.0,
+	 * settings.apanUnits, docs/model.md §2.3b): the row each land unit ran on
+	 * and whether it was its own, and the catchment row. Absent when the run
+	 * read the one catchment row, and on older runs.
+	 */
+	apanUnits?: ApanUnitsRun;
 	/**
 	 * How the daily reference ET series was used (engine ≥ 1.104.0, issue
 	 * #604 R5-E, ./evaporation/et0Daily.ts): whether GR4J read it (only under

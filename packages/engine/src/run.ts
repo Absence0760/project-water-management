@@ -23,9 +23,10 @@ import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind }
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags, withoutPeriodHighs } from './calibrate/dayFlags';
-import { dayText, daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
+import { dayText, daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate, type Monthly } from './calendar';
 import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
+import { apanRowOf } from './evaporation/apanUnits';
 import { runDrought } from './drought/summary';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -319,7 +320,7 @@ function runNetworkIn(
 		...(resume ? { pinned: resume.pinned.fits, resumedFill: { kinds: resume.flowFillHistory ?? [] } } : {}),
 		...(capturing ? { captureFits: true } : {})
 	});
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, et0Daily, flowFill, gapRain } = prepared;
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, apanUnits, et0Daily, flowFill, gapRain } = prepared;
 	// Every later reader of the input sees a record's own missing periods as gaps (engine ≥ 1.102.0, ./recordPeriods.ts).
 	if (series !== input.series) input = { ...input, series };
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
@@ -1360,6 +1361,7 @@ function runNetworkIn(
 			rainSource: rainSource?.info ?? null,
 			rainAccumulation: accumulation?.info ?? null,
 			...(apanDaily ? { apanDaily } : {}),
+			...(apanUnits ? { apanUnits } : {}),
 			...(et0Daily ? { et0Daily } : {}),
 			...(assurance ? { supplyAssurance: assurance } : {}),
 			// Each unit's EWR required at it and met by the flow passing it (engine ≥ 1.116.0, ./network/unitEwr.ts, §2.11c).
@@ -1836,6 +1838,18 @@ export function buildNetworkPlan(
 		lakeEvapMmDay[t] = a === a ? (lakeK ? lakeK[m]! : settings.lakeEvapFactor) * a : ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * settings.apanMm[m]!) / monthDays[m]!;
 		if ((a === a ? a : settings.apanMm[m]!) > 0) anyApan = true;
 	}
+	// A-pan per hydro unit (engine ≥ 1.117.0, §2.3b): a dam on a unit the grid covers loses its unit's row; every other
+	// dam the catchment row above (settings.apanMm, the covered units' rows area-weighted). No daily series under it.
+	const lakeEvapOf = (n: NetworkNode): Float64Array | undefined => {
+		const own = settings.apanUnits?.units[n.id];
+		if (!own || !(n.kind === 'farm' && n.damCapacityM3 > 0)) return undefined;
+		const out = new Float64Array(days);
+		for (let t = 0; t < days; t++) {
+			const m = waterYearIndex(month[t]!);
+			out[t] = ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * own[m]!) / monthDays[m]!;
+		}
+		return out;
+	};
 	// No A-pan on any day (a new project's default row; an ET0 grid fills GR4J's PE only, docs/maps.md): open water
 	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4). Only
 	// the dams: a river abstraction's pool is storage only from engine 1.86.0 (issue #523 B2), with no evaporation.
@@ -1960,6 +1974,7 @@ export function buildNetworkPlan(
 	);
 	const remoteLinks = remotes.flatMap((x, i) => (x ? [{ from: x.from, to: i }] : []));
 	const unitRunoffOf = new Map((warm.unitRunoff ?? []).map((u) => [u.nodeId, u.runoffM3Day]));
+	const lakeOwn = nodes.map(lakeEvapOf);
 
 	const plan: NetworkPlan = {
 		days,
@@ -1988,6 +2003,7 @@ export function buildNetworkPlan(
 				// Its natural MAR share (engine ≥ 1.105.0, §2.5), set below by planUnitShares once the plan is built.
 				share: 0,
 				...(local ? { localRunoff: local } : {}),
+				...(lakeOwn[i] ? { lakeEvapMmDay: lakeOwn[i] } : {}),
 				pctUpstreamToDam: n.pctUpstreamToDam,
 				pctRunoffToDam: n.pctRunoffToDam,
 				divertCapacityM3Day: n.divertCapacityM3Day,
@@ -3578,7 +3594,9 @@ function buildDemand(
 		}
 		if (cropped === 0) return d;
 		anyArea = true;
-		const gross = grossFarmDemandM3PerDay(settings.apanMm, crops, areas, settings.februaryDays);
+		// A-pan per hydro unit (engine ≥ 1.117.0, §2.3b): the unit's own row, else the catchment's (no daily series under it).
+		const apan = apanRowOf(settings, node.id) as Monthly;
+		const gross = grossFarmDemandM3PerDay(apan, crops, areas, settings.februaryDays);
 		if (apanDay) {
 			const k = cropFactorAreaM2(crops, areas);
 			for (let t = 0; t < days; t++) {
@@ -3603,7 +3621,7 @@ function buildDemand(
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		if (dated) for (let t = factorFrom; t < days; t++) f.net[t]! *= dated[t]!;
 		// Plantings under their own irrigation system (engine ≥ 0.43.0 per crop, 1.72.0 per unit): weighted by their annual requirement at the monthly A-pan.
-		const efficiency = (e: number) => unitIrrigationEfficiency(e, crops, plantings, settings.apanMm);
+		const efficiency = (e: number) => unitIrrigationEfficiency(e, crops, plantings, apan);
 		return { net: f.net, ...(netBase ? { netBase } : {}), gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.

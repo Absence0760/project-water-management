@@ -1,7 +1,8 @@
 // Model settings → Demand → A-pan from "CCWR A-pan (Hydrological Unit)":
 // each hydrological unit's monthly A-pan from the CCWR A-pan grid, beside the
-// catchment's (UnitApanTable.svelte; docs/ui.md § Demand,
-// docs/maps.md § A-pan for each unit). The words and numbers the table shows.
+// catchment's, and Use, which runs each unit on its own (UnitApanTable.svelte;
+// docs/ui.md § Demand, docs/maps.md § A-pan for each unit, docs/model.md
+// §2.3b). The words and numbers the table shows.
 import type { UnitApanProposal } from '#lib/api/index.js';
 import { fmtNum } from '#lib/format/number.js';
 
@@ -38,4 +39,27 @@ export function leftOut(p: UnitApanProposal): { nodeId: string; name: string; re
 		...p.withoutPolygon.map((u) => ({ ...u, reason: 'the unit has no outline (parcel) on the map' })),
 		...p.refused
 	];
+}
+
+/** What the settings hold for the units now, in a sentence; null with nothing saved and the catchment row chosen. */
+export function savedText(p: UnitApanProposal): string | null {
+	const saved = p.saved;
+	if (!saved) return null;
+	const n = Object.keys(saved.units).length;
+	if (p.same && saved.basis === 'units') return `Saved: the model runs ${n === 1 ? 'this unit' : `these ${n} units`} on ${n === 1 ? 'its' : 'their'} own A-pan.`;
+	if (p.same) return `Saved for ${n === 1 ? 'this unit' : `these ${n} units`}; save the settings with this option to run on them.`;
+	if (n && saved.basis === 'units') return `The model runs ${n} unit${n === 1 ? '' : 's'} on A-pan saved earlier${saved.dataset ? ` from ${saved.dataset}` : ''}, not what is shown here: use these to replace ${n === 1 ? 'it' : 'them'}.`;
+	if (saved.basis === 'units') return 'No unit has its own A-pan saved yet, so every unit runs on the A-pan row below until you use these.';
+	return null;
+}
+
+/** The Use confirmation: what changes, and what the units left out run on. */
+export function useMessage(p: UnitApanProposal): string {
+	const n = p.units.length;
+	const out = leftOut(p);
+	return (
+		`Crop demand, dam evaporation and, under pan coefficient × A-pan, GR4J will read each unit’s own 12 months for ${n} unit${n === 1 ? '' : 's'} instead of the one A-pan row. ` +
+		(out.length ? `${out.map((u) => u.name).join(', ')} ${out.length === 1 ? 'has' : 'have'} none and ${out.length === 1 ? 'runs' : 'run'} on the covered units’ area-weighted mean, as does a dam outside every unit. ` : 'A dam outside every unit runs on the covered units’ area-weighted mean. ') +
+		'A daily A-pan record isn’t read while this option is chosen.'
+	);
 }

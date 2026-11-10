@@ -662,6 +662,66 @@ wins wherever there is one (the daily series above, or a nearby station's
 monthly means). Production refuses the grid until it is validated against
 DWS Class-A pans and the hydrologist signs off.
 
+### 2.3b Each unit's own A-pan (engine ≥ 1.117.0, CCWR A-pan (Hydrological Unit))
+
+By default the whole catchment runs on one A-pan row (`settings.apanMm`, and
+a daily record, §2.3a, where there is one), whatever source filled it. Model
+settings → Demand → **A-pan from** → **CCWR A-pan (Hydrological Unit)** (the
+operator's choice of 2026-11-09) stores `settings.apanBasis: 'units'`, and
+each land unit's own 12 monthly A-pan, the WRC Atlas's A-pan equivalent grid
+(`Atlas-Apan-2007`) area-weighted over the unit's outline
+([maps.md § A-pan for each unit](./maps.md#a-pan-for-each-unit)), saved with
+**Use** into `settings.apanUnits` (`{ dataset, source, units: { <node id>:
+12 months } }`, one settings revision citing the grid). Every other source
+(typed row, WR2012, S-pan converted, a DWS station, any other grid, and
+**CCWR A-pan (Catchment)**) stores `apanBasis` null: the one row, the rows
+kept but unread. Absent or null runs exactly as before 1.117.0, to the bit
+(`run.apanUnits.test.ts`). `packages/engine/src/evaporation/apanUnits.ts`
+resolves it once per run (`prepare.ts`):
+
+- **The unit's own row.** A land unit (a farm with an area above 0) with a
+  stored row runs on it in its crop demand (§2.3: gross demand and the
+  plantings' irrigation-system weighting), its dam's open-water evaporation
+  (§2.7a: lake factor × the unit's month ÷ days in the month) and its GR4J
+  potential evaporation under pan coefficient × A-pan (§2.4a: pan coefficient
+  × the unit's month ÷ days in the month). Under a monthly PE row GR4J reads
+  that row as before; only demand and the dam read the unit's A-pan.
+- **The catchment row** is the covered units' rows weighted by their model
+  areas (`areaKm2`), month by month in node-id order (a month every row
+  agrees on is that value exactly). Everything else reads it: (1) a dam
+  outside every unit (a farm with no land of its own) evaporates at it; (3)
+  a land unit with no stored row (the grid covered under 90 % of its
+  outline, or it had no outline) runs on it, with a run warning naming it
+  and a line in Run readiness; any other reader of the catchment A-pan
+  (other users, the catchment's PE series, which is the units' PE
+  area-weighted when any has its own) too. The typed `apanMm` is not read.
+- **(2) The daily A-pan record is ignored** while this source is chosen: no
+  unit reads `evap_apan_mm`, and the run says so in a warning
+  (`summary.apanUnits.dailyIgnored`).
+- With the basis chosen but no row stored, or rows for no land unit of the
+  model, the run reads `apanMm` as before, with a warning saying why.
+- **What the run records.** `summary.apanUnits`: the dataset, its source,
+  the catchment row, and each land unit's row with `covered`. A GR4J fit
+  records the units' rows (`fitRecord.forcing.apanUnits`); setting,
+  changing or clearing them since is a forcing change with its own caveat.
+- **Readers outside the run** read the same rows (`apanUnits.ts`
+  `runApanRows`): the farm projections' irrigation efficiencies
+  (`views/farmProjection.ts` `apanUnits`, the season and report-window
+  curtailment), and in the app the Crops tab's demand previews and a unit's
+  blended efficiency on the Network tab (frontend `model/systems.ts`
+  `apanInputOf`).
+- **Scenarios.** `settings.set` `apanBasis` switches the basis;
+  `settings.set` `apanMm` under the units basis scales every unit's row by
+  the factor it puts on the catchment row, month by month; `climate.delta`
+  scales every row by its evaporation factors; `series.scale` of the daily
+  A-pan record is refused (unread). Rows are kept with their node ids when
+  a project is copied or imported (remapped).
+
+b023 runs one A-pan row for every unit; this is a departure, finding **AP1**
+in [engine-audit.md](./engine-audit.md). The independent Python model
+(`verify/model.py` `apan_units_of`) models it, and its generator and the
+engine's fuzz generator draw it.
+
 ### 2.4 Natural flow from rain (`[Flow data]`)
 
 **Retired in engine 1.0.0 (issue #16, 2026-09-26).** The engine's runoff

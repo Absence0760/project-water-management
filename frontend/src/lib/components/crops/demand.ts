@@ -3,6 +3,7 @@
 // reduction, which needs the rainfall series): the crops' gross requirement
 // divided by the unit's irrigation efficiency, the water it abstracts for them
 // (audit N1, docs/model.md §2.3).
+import { apanOf, type ApanInput } from '#lib/model/systems.js';
 import {
 	daysPerMonth,
 	modelFarmEfficiency,
@@ -37,7 +38,7 @@ export function annualMm3(monthlyM3Day: readonly number[], februaryDays = 28.25)
 
 export function farmDemands(
 	model: ProjectModel,
-	apanMm: readonly number[],
+	apanMm: ApanInput,
 	februaryDays = 28.25,
 	nodeIds: string[] = model.nodes.map((n) => n.id)
 ): FarmDemand[] {
@@ -56,7 +57,8 @@ export function farmDemands(
 			areas.set(a.cropId, (areas.get(a.cropId) ?? 0) + a.areaM2);
 			areaM2 += a.areaM2;
 		}
-		const apan = apanMm as unknown as Monthly;
+		// Each unit's own A-pan under CCWR A-pan (Hydrological Unit) (engine ≥ 1.117.0), as the run reads it.
+		const apan = apanOf(apanMm, nodeId) as unknown as Monthly;
 		// One efficiency per unit, as a run uses: its plantings' irrigation systems (engine ≥ 1.72.0) blended,
 		// its own where one has none (a value outside (0, 1] runs as 1); a non-farm with crop areas abstracts its requirement (e = 1).
 		const node = byId.get(nodeId);

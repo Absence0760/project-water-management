@@ -6,6 +6,7 @@
 // ones the checks hold the run to.
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { datedDemandFactorOf, demandFactorOf, demandFactorStart, modelFarmEfficiency, unitPartFactor } from '../demand';
+import { apanRowOf, resolveApanUnits, type ResolvedApanUnits } from '../evaporation/apanUnits';
 import { seepageReturnOf } from '../network/dam';
 import { abstractionStartDay } from '../network/development';
 import { ON_RIVER_DAM_SINCE, onRiverDam } from '../network/supply';
@@ -13,12 +14,29 @@ import { compareEngineVersions } from '../liability/errata';
 import { DAM_AREA_EXPONENT, DEFAULT_FEBRUARY_DAYS, DEFAULT_LAKE_EVAP_FACTOR, estimatedDamAreaForEngine, type DemandPart, type ModelInput, type NetworkNode } from '../project';
 
 /**
+ * The A-pan per hydro unit as runModel applies it (engine ≥ 1.117.0,
+ * ../evaporation/apanUnits.ts): null when the input reads the one row (no
+ * setting, an unusable one, or none of its units a land unit of `model`).
+ */
+export function inputApanUnits(input: { settings: ModelInput['settings']; model?: Pick<ModelInput['model'], 'nodes'> }): ResolvedApanUnits | null {
+	return input.model ? resolveApanUnits(input.settings, input.model.nodes, false, []) : null;
+}
+
+/**
  * Open-water evaporation depth (mm) on each run day (audit N2): the lake
  * factor (the month's, when all twelve monthly factors are numbers ≥ 0) ×
  * the day's A-pan from `evap_apan_mm` where it has a number ≥ 0 (engine ≥
- * 0.38.0), else × the month's A-pan ÷ days in the month.
+ * 0.38.0), else × the month's A-pan ÷ days in the month. Under the A-pan per
+ * hydro unit (engine ≥ 1.117.0, with `model`) the month's A-pan is `nodeId`'s
+ * own row, else the catchment row, and the daily series is not read.
  */
-export function lakeEvaporationMmDay(input: { settings: ModelInput['settings']; series?: ModelInput['series'] }, startDate: string, days: number): Float64Array {
+export function lakeEvaporationMmDay(
+	input: { settings: ModelInput['settings']; series?: ModelInput['series']; model?: Pick<ModelInput['model'], 'nodes'> },
+	startDate: string,
+	days: number,
+	nodeId?: string
+): Float64Array {
+	const per = inputApanUnits(input);
 	const st = input.settings ?? {};
 	const lakeK = typeof st.lakeEvapFactor === 'number' && Number.isFinite(st.lakeEvapFactor) && st.lakeEvapFactor >= 0 ? st.lakeEvapFactor : DEFAULT_LAKE_EVAP_FACTOR;
 	const lakeM = st.lakeEvapFactorMonthly;
@@ -26,10 +44,14 @@ export function lakeEvaporationMmDay(input: { settings: ModelInput['settings']; 
 	// As mergeSettings holds them (engine ≥ 1.69.0): February 28–29 days, a negative A-pan month is 0.
 	const feb = typeof st.februaryDays === 'number' && st.februaryDays >= 28 && st.februaryDays <= 29 ? st.februaryDays : DEFAULT_FEBRUARY_DAYS;
 	// The default A-pan is 0 in every month.
-	const apan = Array.isArray(st.apanMm) ? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0)) : new Array<number>(12).fill(0);
+	const apan = per
+		? [...((nodeId !== undefined ? per.setting.units[nodeId] : undefined) ?? per.catchmentMm)]
+		: Array.isArray(st.apanMm)
+			? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0))
+			: new Array<number>(12).fill(0);
 	const monthLen = [31, 30, 31, 31, feb, 31, 30, 31, 30, 31, 31, 30];
 	const day0 = toEpochDay(startDate);
-	const apanSeries = input.series?.evap_apan_mm;
+	const apanSeries = per ? undefined : input.series?.evap_apan_mm;
 	const apanOffset = apanSeries ? day0 - toEpochDay(apanSeries.startDate) : 0;
 	return Float64Array.from({ length: days }, (_, t) => {
 		const wy = (monthOfEpochDay(day0 + t) + 2) % 12;
@@ -101,7 +123,9 @@ export function damWorkings(n: NetworkNode, engineVersion?: string): DamWorkings
  */
 export function runEfficiency(input: Pick<ModelInput, 'settings' | 'model'>, n: NetworkNode): number {
 	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
-	const apan = input.settings?.apanMm;
+	// Under the A-pan per hydro unit (engine ≥ 1.117.0) the unit's own row, as the run weighs its plantings by.
+	const per = inputApanUnits(input);
+	const apan = per ? apanRowOf({ apanMm: per.catchmentMm, apanUnits: per.setting }, n.id) : input.settings?.apanMm;
 	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0)) : [], input.model.irrigationSystems);
 }
 

@@ -3805,7 +3805,7 @@ export interface UnitApanUnit {
 /** GET /projects/:id/map/unit-apan: each unit's monthly A-pan from an A-pan grid beside the catchment's, for comparison only. */
 export interface UnitApanProposal {
 	/** Null when the grid asked for isn't loaded on this server (or isn't an A-pan grid). */
-	dataset: { label: string; version: string; source: string; attribution: string; method: string; cellDeg: number; synthetic: boolean } | null;
+	dataset: { label: string; version: string; source: string; attribution: string; method: string; cellDeg: number; synthetic: boolean; firstYear: number | null; lastYear: number | null } | null;
 	boundary: { featureId: string; name: string } | null;
 	/** The boundary's average over the same grid, or why there is none; null without a boundary or a grid. */
 	catchment: { monthlyMm: number[]; annualMm: number; coverage: number; cells: number } | { problem: string } | null;
@@ -3813,8 +3813,12 @@ export interface UnitApanProposal {
 	uncovered: { nodeId: string; name: string; coveredShare: number; reason: string }[];
 	withoutPolygon: { nodeId: string; name: string }[];
 	refused: { nodeId: string; name: string; reason: string }[];
-	/** The A-pan row the model runs every unit on now. */
+	/** The one catchment A-pan row (`settings.apanMm`). */
 	settingsApanMm: number[];
+	/** What the settings hold: the basis (engine ≥ 1.117.0) and each unit's saved row. Absent from an older server. */
+	saved?: { basis: 'catchment' | 'units'; dataset: string | null; source: string | null; units: Record<string, number[]> };
+	/** Every covered unit's row is saved as shown, from this grid. */
+	same?: boolean;
 }
 
 /** How a DWS evaporation station's pan record becomes A-pan (issue #646 item 6): as it stands, or by an S→A equation's 12 values. */

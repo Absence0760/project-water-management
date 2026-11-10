@@ -6,8 +6,10 @@
 // difference from the catchment boundary's year; a unit under 90 % covered,
 // one without a parcel and one with several parcels are listed with the
 // reason, never filled from elsewhere; a grid that isn't loaded, or isn't an
-// A-pan grid, answers dataset null. Nothing is written. Synthetic geometry and
-// values only.
+// A-pan grid, answers dataset null. The GET writes nothing; POST (Use, editor)
+// saves each covered unit's row as settings.apanUnits with the 'units' basis,
+// as one settings revision citing the grid, a viewer refused and a stranger
+// 404. Synthetic geometry and values only.
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
@@ -148,5 +150,62 @@ describe('GET /projects/:id/map/unit-apan', () => {
 			expect(r.body).toMatchObject({ dataset: null, units: [], catchment: null });
 		}
 		expect((await viewer.call('GET', at(pid, 'x'.repeat(51)))).status).toBe(400);
+	});
+
+	it('Use (editor) saves each covered unit’s row and the units basis as one settings revision; a viewer is refused', async () => {
+		const editor = await signUp('UAeditor');
+		const { pid, id } = await project('Unit A-pan use', { West: [PARCEL_WEST], East: [PARCEL_EAST], Edge: [PARCEL_EDGE] });
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
+		expect((await viewer.call('POST', at(pid), { dataset: GRID })).status).toBe(403);
+		expect((await stranger.call('POST', at(pid), { dataset: GRID })).status).toBe(404);
+		expect((await editor.call('POST', at(pid), { dataset: 'not-loaded' })).status).toBe(400);
+		expect((await editor.call('POST', at(pid), { dataset: GRID, extra: 1 })).status).toBe(400);
+		const shown = (await viewer.call('GET', at(pid, GRID))).body;
+		expect(shown.same).toBe(false);
+		expect(shown.saved).toEqual({ basis: 'catchment', dataset: null, source: null, units: {} });
+		const res = await editor.call('POST', at(pid), { dataset: GRID });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.revisionId).toEqual(expect.any(String));
+		const [{ settings }] = await asOwner('SELECT settings FROM project WHERE id = $1', [pid]);
+		expect(settings.apanBasis).toBe('units');
+		expect(Object.keys(settings.apanUnits.units).sort()).toEqual([id.East, id.West].sort());
+		expect(settings.apanUnits.dataset).toBe(GRID);
+		expect(settings.apanUnits.source).toMatch(/^Invented A-pan grid \(1, monthly means, no period stated by the source; dataset “ua-apan-test”\); each unit’s 12 monthly means area-weighted/);
+		settings.apanUnits.units[id.West!].forEach((v: number, m: number) => expect(v).toBeCloseTo(shown.units.find((u: { nodeId: string }) => u.nodeId === id.West!).monthlyMm[m], 6));
+		const [rev] = await asOwner(`SELECT source, reason FROM model_revision WHERE project_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`, [pid]);
+		expect(rev.source).toBe('settings_patch');
+		expect(rev.reason).toMatch(/^A-pan for each hydrological unit \(CCWR A-pan \(Hydrological Unit\)\): 2 units from .*; on the covered units’ area-weighted mean: “Edge”; Invented A-pan grid/);
+		const after = (await viewer.call('GET', at(pid, GRID))).body;
+		expect(after.same).toBe(true);
+		expect(after.saved).toMatchObject({ basis: 'units', dataset: GRID });
+		// A copy of the project keeps each row on its own copy of the unit.
+		const copy = await owner.call('POST', `/projects/${pid}/copy`, { name: 'Unit A-pan copy' });
+		expect(copy.status, JSON.stringify(copy.body)).toBe(201);
+		const cid = copy.body.project.id as string;
+		const [{ settings: cs }] = await asOwner('SELECT settings FROM project WHERE id = $1', [cid]);
+		const nodes = (await asOwner(`SELECT id FROM node WHERE project_id = $1 AND kind = 'farm' AND area_km2 > 0`, [cid])).map((r: { id: string }) => r.id);
+		expect(Object.keys(cs.apanUnits.units)).toHaveLength(2);
+		expect(Object.keys(cs.apanUnits.units).every((k) => nodes.includes(k))).toBe(true);
+	});
+
+	it('a project whose units the grid doesn’t cover can’t use it', async () => {
+		const { pid } = await project('Unit A-pan none covered', { Edge: [PARCEL_EDGE] });
+		const r = await owner.call('POST', at(pid), { dataset: GRID });
+		expect(r.status).toBe(400);
+		expect(r.body.details?.code ?? r.body.code).toBe('nothing_covered');
+	});
+
+	it('the settings save takes the basis and the units’ rows, and refuses what the engine can’t use', async () => {
+		const { pid, id } = await project('Unit A-pan settings', { West: [PARCEL_WEST] });
+		const patch = (settings: object) => owner.call('PATCH', `/projects/${pid}`, { settings });
+		expect((await patch({ apanBasis: 'units' })).status).toBe(200);
+		expect((await patch({ apanBasis: 'other' })).status).toBe(400);
+		expect((await patch({ apanUnits: { dataset: GRID, source: 'typed', units: { [id.West!]: [1, 2] } } })).status).toBe(400);
+		expect((await patch({ apanUnits: { dataset: GRID, source: 'typed', units: { [id.West!]: BASE } } })).status).toBe(200);
+		expect((await patch({ apanBasis: null })).status).toBe(200);
+		const [{ settings }] = await asOwner('SELECT settings FROM project WHERE id = $1', [pid]);
+		// Back to the catchment row: the units' rows are kept.
+		expect(settings.apanBasis).toBeNull();
+		expect(settings.apanUnits.units[id.West!]).toEqual(BASE);
 	});
 });

@@ -3,6 +3,7 @@
 // series re-windowed, and compared with runModel run again with that window
 // as the project's report window: farms (binding EWR site included), other
 // water users and EWR sites. Over the run's own window it is the stored table.
+import { runApanRows } from '../evaporation/apanUnits';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ReportWindow } from '../network/curtailment';
@@ -28,7 +29,8 @@ function asRun(input: ModelInput, out: ModelOutput, read?: Set<string>): Curtail
 		// Crops under their own irrigation efficiency (engine 0.43.0) set a farm's consumptive share.
 		crops: input.model.crops,
 		cropAreas: input.model.cropAreas,
-		apanMm: input.settings?.apanMm,
+		// The rows the run read (engine ≥ 1.117.0): the catchment row and, under the 'units' basis, each unit's own.
+		...runApanRows(input.settings, input.model.nodes),
 		// A unit with demand objects (engine 1.7.0) takes its consumptive share from its stored return flow.
 		...(input.model.demandObjects ? { demandObjects: input.model.demandObjects } : {}),
 		series: (nodeId, key) => {

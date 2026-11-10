@@ -669,30 +669,23 @@ open:
       worked values, and the method text naming the version. Trigger: a copy
       of the paper, or the validation showing PenPan's bias is too large.
 
-## A-pan for each unit from the CCWR grid (on hold, 2026-11-09)
+## A-pan for each unit from the CCWR grid (done, 2026-11-09)
 
 The operator first asked that, with the CCWR A-pan grid chosen, each
-hydrological unit run on its own monthly A-pan (its average over the unit's
-outline), in the crop demand and in the runoff model. They then narrowed the
-scope to the catchment average only ("Leave the model running on catchment
-A-pan evaporation for now"), which Demand's **CCWR A-pan grid (catchment
-average)** option is. On hold, not cancelled:
+hydrological unit run on its own monthly A-pan, then put it on hold, then
+asked for it again on 2026-11-09 as a choice in Model settings → Demand →
+**A-pan from**: **CCWR A-pan (Catchment)** (the one averaged row, as
+before) or **CCWR A-pan (Hydrological Unit)**.
 
-- [ ] **Per-unit A-pan from the CCWR grid.** The operator's answers for when
-      it comes back (2026-11-09): (1) a dam evaporates at its own unit's
-      A-pan, and a dam outside every unit at the area-weighted catchment
-      mean; (2) a daily A-pan record is ignored while the per-unit grid is
-      the source; (3) a unit under 90 % covered by the grid runs on the
-      covered units' area-weighted mean, with a run warning and a line in Run
-      readiness. An engine draft with passing tests (18 of 18) was never
-      committed: it is kept outside the repo, in the gitignored
-      `reviews/per-unit-apan-2026-11-09/` of the main checkout on the laptop
-      it was written on (`per-unit-engine.patch`, `apanUnits.ts`,
-      `run.apanUnits.test.ts`), so treat it as a starting point only. Durable
-      fix: an engine change (A-pan per unit in demand, GR4J's PE and dam
-      evaporation, an ENGINE_VERSION bump, docs/model.md), the Demand option
-      switching to per unit, tests and the cross-check. Trigger: the operator
-      asks for it again, after the Atlas grids are loaded (issue #755).
+- [x] **Each unit's A-pan from the grid, shown.** The Hydrological Unit
+      option's table: each unit's 12 monthly means over its outline beside
+      the catchment average, its year and difference
+      (`GET …/map/unit-apan`, docs/maps.md § A-pan for each unit).
+- [x] **Per-unit A-pan in the engine (1.117.0).** Crop demand, a dam's
+      evaporation and GR4J's PE per unit, with the operator's three answers
+      (docs/model.md §2.3b; engine-audit.md AP1, AU1–AU3), saved per unit
+      with Use (`POST …/map/unit-apan`), the cross-check and both generators
+      drawing it, methodology version 15.
 
 ## Future climate, observed ET and Sentinel dam views (issues #621, #623, #624)
 

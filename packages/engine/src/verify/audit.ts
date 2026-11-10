@@ -276,7 +276,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	// unit's abstraction date (engine ≥ 1.30.0).
 	// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
 	const df = Array.from(dailyDemandFactor(run.settings, n, day0, days, run.farm.get(ALLOCATION_SERIES.demandFactor.key), 'crops').perDay);
-	const evap = lakeEvaporationMmDay({ settings: run.settings }, run.startDate, days);
+	const evap = lakeEvaporationMmDay({ settings: run.settings, model }, run.startDate, days, n.id);
 	const cell = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 	const values = (xs: ArrayLike<number | null>) => Array.from({ length: days }, (_, t) => cell(xs[t]));
 

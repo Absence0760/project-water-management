@@ -1,6 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
+import type { ApanInput } from './systems';
 import { NEW_FARM_IRRIGATION_SYSTEM, newNetworkNode, OFFTAKE_DEFAULTS, type IrrigationSystemDef, transferDestinations, transferRatesM3s, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { renumberSupplyOrder } from '#lib/components/network/demandObjectOrder.js';
@@ -93,7 +94,7 @@ export class ModelEditor {
 	 * The project's monthly A-pan (settings.apanMm), set by the page: a unit's efficiency is its plantings'
 	 * systems blended by their requirement at it (engine ≥ 1.72.0), which the unit form shows.
 	 */
-	apanMm = $state<readonly number[]>([]);
+	apanMm = $state<ApanInput>([]);
 	issues = $derived<ModelIssue[]>(validateModel(this.model, { baseline: this.#baseline }));
 
 	load(m: ProjectModel) {

@@ -33,7 +33,7 @@
 
 <script lang="ts">
 	import DayInput from '#lib/components/common/DayInput.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { withParam } from '#lib/workspace/overlays.js';
@@ -218,8 +218,25 @@
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
 	// Where Demand's A-pan comes from: a daily A-pan series (issue #45) is A-pan too, on the days it covers.
 	const apanSource = $derived(apanSourceNote(seriesKinds));
-	/** Where the A-pan row comes from (spanEntry.ts APAN_SOURCES): a view choice only, never saved. */
+	/**
+	 * Where the A-pan comes from (spanEntry.ts APAN_SOURCES). A view choice for every source that fills the one row;
+	 * CCWR A-pan (Hydrological Unit) is saved, as settings.apanBasis 'units' (engine ≥ 1.117.0): the model then runs
+	 * each unit on its own A-pan. Picking any other source puts the basis back to the catchment row.
+	 */
 	let apanFrom = $state<ApanSourceId>('typed');
+	function pickApanFrom(id: ApanSourceId) {
+		apanFrom = id;
+		if (id === 'ccwrUnits') s.apanBasis = 'units';
+		else if (s.apanBasis === 'units') s.apanBasis = null;
+	}
+	// The saved basis shows as its option (on load, after a save, Discard or a Use elsewhere).
+	$effect(() => {
+		const units = s.apanBasis === 'units';
+		untrack(() => {
+			if (units && apanFrom !== 'ccwrUnits') apanFrom = 'ccwrUnits';
+			else if (!units && apanFrom === 'ccwrUnits') apanFrom = 'typed';
+		});
+	});
 	/** A value saved straight to the project (the converted S-pan): the form takes the saved settings. */
 	async function reloadAfterApply() {
 		const p = await api.projects.get(project.id);
@@ -553,14 +570,22 @@
 		     model reads the row below whatever filled it, and each fill is recorded in History with its source. -->
 		<div class="toolbar grid-actions apan-from" data-testid="grid-actions">
 			<label for="st-apan-from">A-pan from</label>
-			<select id="st-apan-from" bind:value={apanFrom} data-testid="apan-from" aria-describedby="st-apan-from-h">
+			<select id="st-apan-from" value={apanFrom} onchange={(e) => pickApanFrom(e.currentTarget.value as ApanSourceId)} data-testid="apan-from" aria-describedby="st-apan-from-h">
 				{#each APAN_SOURCES as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
 			</select>
 			{#if !readonly && apanFrom === 'typed'}
 				<button type="button" class="btn btn-sm" onclick={openMonthlyPaste}>Paste from a spreadsheet…</button>
 			{/if}
 		</div>
-		<p class="hint explain" id="st-apan-from-h">Only how you fill the row: the model reads the A-pan row below whatever filled it, and each fill is recorded in History with its source.</p>
+		{#if apanFrom === 'ccwrUnits'}
+			<p class="hint explain" id="st-apan-from-h" data-testid="apan-from-units">
+				Saved with the settings: the model runs each hydrological unit on its own A-pan from the CCWR A-pan grid (crop demand, its dam’s evaporation and
+				GR4J), saved for the units with Use below. A unit without one, and a dam outside every unit, run on the covered units’ area-weighted mean; the
+				A-pan row below and a daily A-pan record aren’t read.
+			</p>
+		{:else}
+			<p class="hint explain" id="st-apan-from-h">Only how you fill the row: the model reads the A-pan row below whatever filled it, and each fill is recorded in History with its source.</p>
+		{/if}
 		{#if apanFrom === 'station'}
 			<p class="hint" data-testid="apan-from-link">On Calibration, under Flow calibration: <a href="?tab=calibration#set-evaporation-station">Evaporation stations</a> proposes the row and saves it with its source.</p>
 		{:else if apanFrom === 'grid'}
@@ -576,7 +601,7 @@
 			<!-- Each unit's own A-pan from the same grid, beside the catchment average (its own lazy chunk). -->
 			<div id="set-ccwr-apan-units">
 				<Lazy load={loadUnitApan}>
-					{#snippet children(UnitApanTable)}<UnitApanTable projectId={project.id} dataset={CCWR_APAN_DATASET} />{/snippet}
+					{#snippet children(UnitApanTable)}<UnitApanTable projectId={project.id} dataset={CCWR_APAN_DATASET} {readonly} formDirty={draft.dirtyBesides('apanBasis')} onApplied={reloadAfterApply} />{/snippet}
 				</Lazy>
 			</div>
 		{:else if apanFrom === 'wr2012'}

@@ -43,6 +43,7 @@
 </script>
 
 <script lang="ts">
+	import { apanInputOf } from '#lib/model/systems.js';
 	import { untrack } from 'svelte';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { trackClose } from '#lib/nav/closeNav.js';
@@ -310,7 +311,8 @@
 	// Automatic runs (WP-2.11): with a re-run queued, the banners say when instead of offering the button.
 	// A unit's efficiency is its plantings' systems blended at the saved A-pan (engine ≥ 1.72.0): the editor's return-flow check needs it.
 	$effect(() => {
-		editor.apanMm = project?.settings?.apanMm ?? [];
+		// What a run reads for each unit (engine ≥ 1.117.0: each unit's own A-pan under CCWR A-pan (Hydrological Unit)).
+		editor.apanMm = apanInputOf(project?.settings, editor.model.nodes);
 	});
 	const rerunQueued = $derived(resolveAutoRun(project?.settings).enabled && !!project?.rerunQueuedFor);
 	const queuedSentence = $derived.by(() => {
