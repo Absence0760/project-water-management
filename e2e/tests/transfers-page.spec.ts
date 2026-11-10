@@ -226,7 +226,7 @@ test('a river off-take can take a percentage of the available flow, month by mon
 	await openTransfers(page, project.id);
 	const card = ruleCard(page, 1);
 	await card.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('river');
-	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption({ label: 'Percentage of available flow' });
+	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption({ label: '% of available flow' });
 	const months = card.getByTestId('takes-percent-by-month');
 	await expect(months.getByRole('columnheader')).toHaveText(['Month', 'Share of the flow, %', 'Canal capacity, m³/s']);
 	// The sample rule runs Nov to Feb at 0.01 m³/s: those months start at 100 % (up to the canal, as before), the rest off.

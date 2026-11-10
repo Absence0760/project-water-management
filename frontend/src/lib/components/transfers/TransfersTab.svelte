@@ -363,7 +363,7 @@
 											{#if river}<option value="demand">What the destination needs</option>{/if}
 											<option value="capacity">Up to a maximum</option>
 											<option value="byMonth" disabled={!river && outsideTo}>A formula by month{!river && outsideTo ? ' (needs a unit to deliver to)' : ''}</option>
-											<option value="percent" disabled={!river && outsideTo}>Percentage of available flow{!river && outsideTo ? ' (needs a unit to deliver to)' : ''}</option>
+											<option value="percent" disabled={!river && outsideTo}>% of available flow{!river && outsideTo ? ' (needs a unit to deliver to)' : ''}</option>
 										</select>
 										<!-- Each rule's title names the unit its rates show in (the picker is the list's, in its heading). -->
 										<span class="u">{transferUnit.label}</span>

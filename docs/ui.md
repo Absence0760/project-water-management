@@ -5992,7 +5992,7 @@ The card's body holds three top-aligned groups:
   the catchment can't (the option says it needs a unit to deliver to). A
   rule saved with one curve (engine 1.113.0) shows that formula in every
   month; its first edit writes the rule's own monthly list.
-  *Percentage of available flow* (the operator's ask for a client canal, 2026-11-10;
+  *% of available flow* (the operator's ask for a client canal, 2026-11-10;
   `transfers/TakesPercentByMonth.svelte`, rules in `transfers/percentOfFlow.ts`):
   one diversion of a share of the river leaving the source, the rest left in
   the river for the units below. A row per month, Oct to Sep, with **Share of
