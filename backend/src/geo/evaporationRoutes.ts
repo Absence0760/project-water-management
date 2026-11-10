@@ -45,7 +45,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
-import { beginSettingsChange, recordModelRevision } from '../history/record.js';
+import { beginSettingsChange, fitReason, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
@@ -58,6 +58,7 @@ import {
 	citeEvaporation,
 	evaporationDatasets,
 	evaporationLabel,
+	referenceEvaporation,
 	summariseEvaporation,
 	TARGET_OF,
 	type EvaporationDataset,
@@ -140,12 +141,28 @@ function currentRows(s: ReturnType<typeof mergeSettings>): Record<EvaporationTar
 const pct = (x: number) => `${Math.round(x * 100)} %`;
 
 /** How the values were taken over this boundary, in a sentence. */
-const howTaken = (b: Boundary, s: EvaporationSummary) =>
+const howTaken = (b: Pick<Boundary, 'name'>, s: EvaporationSummary) =>
 	`area-weighted over the ${s.cells} grid cell${s.cells === 1 ? '' : 's'} the catchment boundary “${b.name || 'unnamed'}” covers (${pct(s.coverage)} of it has values)`;
 
-/** The PE row's `source` (at most PE_SOURCE_MAX): the dataset's citation and how it was taken. */
-export const peSourceFor = (d: EvaporationDataset, b: Boundary, s: EvaporationSummary) =>
-	`Proposed from the map: ${evaporationLabel(d)}, ${citeEvaporation(d)}, ${howTaken(b, s)}; taken as GR4J's PE unchanged.`.slice(0, PE_SOURCE_MAX);
+/**
+ * The PE row's `source` (at most PE_SOURCE_MAX): the dataset's citation and how it was taken; with the dataset's
+ * reference in place of its citation when the citation would not fit (issue #763), never a cut-off citation.
+ */
+export const peSourceFor = (d: EvaporationDataset, b: Pick<Boundary, 'name'>, s: EvaporationSummary) => {
+	const line = (cite: string) => `Proposed from the map: ${evaporationLabel(d)}, ${cite}, ${howTaken(b, s)}; taken as GR4J's PE unchanged.`;
+	const full = line(citeEvaporation(d));
+	return full.length <= PE_SOURCE_MAX ? full : line(referenceEvaporation(d)).slice(0, PE_SOURCE_MAX);
+};
+
+/**
+ * The settings revision's reason for an accepted proposal (issue #763): what changed and how it was taken, then the
+ * dataset's stable reference (label, version, period, where its source, method and credit live), which fitReason
+ * always keeps whole. The long source and method stay on the dataset row (and evaporation_accepted's copy).
+ */
+export const evaporationReason = (d: EvaporationDataset, b: Pick<Boundary, 'name'>, s: EvaporationSummary): string => {
+	const what = TARGET_OF[d.kind] === 'pe' ? 'GR4J’s monthly PE' : 'A-pan evaporation';
+	return fitReason(`${what} from the map: ${s.annualMm} mm a year of ${evaporationLabel(d)}, ${howTaken(b, s)}`, `; ${referenceEvaporation(d)}.`);
+};
 
 /** GET …/evaporation-stations' query: the search radius from the boundary, km. */
 export const EvaporationStationsQuery = z.object({ within: z.coerce.number().finite().positive().max(EVAP_STATIONS_WITHIN_MAX_KM).optional() }).strict();
@@ -270,12 +287,7 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 				// The boundary as it was summarised (273, issue #646 F8): the Map's Checks flag a redraw since.
 				[id, target, summary.monthlyMm, d.dataset, d.kind, d.source, d.version, d.method, summary.coverage, JSON.stringify({ featureId: boundary.id, updatedAt: boundary.updatedAt, areaM2: boundary.areaM2 ?? 0 })]
 			);
-			const what = target === 'pe' ? 'GR4J’s monthly PE' : 'A-pan evaporation';
-			const revision = await recordModelRevision(db, id, {
-				source: 'settings_patch',
-				before,
-				reason: `${what} from the map: ${summary.annualMm} mm a year of ${evaporationLabel(d)}, ${howTaken(boundary, summary)}; ${citeEvaporation(d)}. ${d.method}`.slice(0, 500)
-			});
+			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: evaporationReason(d, boundary, summary) });
 			return c.json({ target, monthlyMm: summary.monthlyMm, dataset: d.dataset, revisionId: revision?.id ?? null });
 		});
 	})

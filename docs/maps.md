@@ -3082,14 +3082,25 @@ grid's kind, and **nothing is converted between them**:
   /projects/:id/evaporation-from-map` with the dataset
   ([api.md § Catchment map](./api.md#catchment-map)): the server re-derives
   the 12 values from the boundary as it is, writes them into the settings,
-  records one settings revision whose reason cites the dataset, version and
-  method ("GR4J’s monthly PE from the map: 1335 mm a year of reference
-  evapotranspiration (FAO-56 Penman-Monteith ET₀), area-weighted over the 4
-  grid cells the catchment boundary “Catchment” covers (100 % of it has
-  values); dPET, … (hPET v3 …, 1991–2020 monthly means; dataset
-  “dPET-1991-2020”). Pre-summarised at import: …"), which History, the run
-  comparison and an evidence pack's revisions list carry, and keeps an
-  `evaporation_accepted` row (181) with the same citation. The row records the boundary it was summarised over
+  records one settings revision whose reason cites the dataset by its
+  stable reference: its label, version and period, and where its source,
+  method and credit are ("GR4J’s monthly PE from the map: 1335 mm a year of
+  reference evapotranspiration (FAO-56 Penman-Monteith ET₀), area-weighted
+  over the 4 grid cells the catchment boundary “Catchment” covers (100 % of
+  it has values); dataset “dPET-1991-2020” (hPET v3 …, 1991–2020 monthly
+  means; its source and method as the dataset records them, credit at
+  /data-sources#dpet)."), which History, the run comparison and an evidence
+  pack's revisions list carry. The reason is capped at 500 characters
+  (`REASON_MAX`), and the full source and method don't fit it (the WRC
+  Atlas's source alone is about 330, its method about 460), so they stay on
+  the `evaporation_dataset` row and the `evaporation_accepted` row (181),
+  which keeps the full citation; the reference always survives whole, and
+  only the description before it (a long boundary name) is shortened
+  (`fitReason`, issue #763). The Atlas's reference ends at
+  `/data-sources#atlas-apan`, a reference-ET grid's at `#dpet`, any other
+  grid's at the page. A monthly PE's `source` keeps the full citation when
+  it fits its 600 characters, else the reference, never a cut-off citation.
+  The accepted row records the boundary it was summarised over
   (`boundary`, 273): after the boundary is redrawn, the Map's
   [Checks](#checks) and the Start data list say to propose it again (issue
   #646 F8). A monthly PE's own
@@ -3777,7 +3788,10 @@ to matter. A viewer reads it too.
 - **Use for each unit** (editors, "Saves now", asks first; `POST
   …/map/unit-apan`) saves each covered unit's 12 months into
   `settings.apanUnits` with the option itself (`settings.apanBasis:
-  'units'`), as one settings revision citing the grid (History). The model
+  'units'`), as one settings revision citing the grid by its reference, as
+  Evaporation from the map's does (the left-out unit names are what gets
+  shortened to fit; `settings.apanUnits.source` keeps the full citation when
+  it fits, issue #763) (History). The model
   then runs each unit on its own A-pan (engine ≥ 1.117.0, [model.md
   §2.3b](./model.md)): crop demand, its dam's evaporation and its GR4J PE; a
   unit left out of the table, and a dam outside every unit, on the covered
