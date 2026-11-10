@@ -24,6 +24,8 @@
 	const loadCcwrApan = () => import('./EvaporationProposal.svelte');
 	// WR2012's monthly A-pan per quaternary (Demand's A-pan source): loaded only when that source is picked.
 	const loadWr2012Evaporation = () => import('#lib/components/evaporation/Wr2012EvaporationProposal.svelte');
+	// Each unit's A-pan from the CCWR grid (its own chunk: only the Hydrological Unit option draws it).
+	const loadUnitApan = () => import('#lib/components/evaporation/UnitApanTable.svelte');
 	// Rain gaps' three cards, Gap-filling product (issue #604), CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
 	// line at the defaults (most projects): out of the tab's chunk for the same reason, with its three sections.
 	const loadRainGaps = () => loadSections().then((m) => ({ default: m }));
@@ -568,6 +570,13 @@
 			<div id="set-ccwr-apan">
 				<Lazy load={loadCcwrApan}>
 					{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={draft.dirty} onApplied={reloadAfterApply} dataset={CCWR_APAN_DATASET} />{/snippet}
+				</Lazy>
+			</div>
+		{:else if apanFrom === 'ccwrUnits'}
+			<!-- Each unit's own A-pan from the same grid, beside the catchment average (its own lazy chunk). -->
+			<div id="set-ccwr-apan-units">
+				<Lazy load={loadUnitApan}>
+					{#snippet children(UnitApanTable)}<UnitApanTable projectId={project.id} dataset={CCWR_APAN_DATASET} />{/snippet}
 				</Lazy>
 			</div>
 		{:else if apanFrom === 'wr2012'}

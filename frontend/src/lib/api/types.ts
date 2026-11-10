@@ -3787,6 +3787,36 @@ export interface EvaporationProposals {
 	accepted: EvaporationAccepted[];
 }
 
+/** One land unit's monthly A-pan over the A-pan grid (GET /projects/:id/map/unit-apan). */
+export interface UnitApanUnit {
+	nodeId: string;
+	name: string;
+	/** The unit's area in the model, km². */
+	areaKm2: number;
+	/** Oct … Sep, mm, to 0.1. */
+	monthlyMm: number[];
+	annualMm: number;
+	cells: number;
+	coveredShare: number;
+	/** (unit's year − catchment's year) ÷ catchment's year × 100; null without a catchment average. */
+	diffPct: number | null;
+}
+
+/** GET /projects/:id/map/unit-apan: each unit's monthly A-pan from an A-pan grid beside the catchment's, for comparison only. */
+export interface UnitApanProposal {
+	/** Null when the grid asked for isn't loaded on this server (or isn't an A-pan grid). */
+	dataset: { label: string; version: string; source: string; attribution: string; method: string; cellDeg: number; synthetic: boolean } | null;
+	boundary: { featureId: string; name: string } | null;
+	/** The boundary's average over the same grid, or why there is none; null without a boundary or a grid. */
+	catchment: { monthlyMm: number[]; annualMm: number; coverage: number; cells: number } | { problem: string } | null;
+	units: UnitApanUnit[];
+	uncovered: { nodeId: string; name: string; coveredShare: number; reason: string }[];
+	withoutPolygon: { nodeId: string; name: string }[];
+	refused: { nodeId: string; name: string; reason: string }[];
+	/** The A-pan row the model runs every unit on now. */
+	settingsApanMm: number[];
+}
+
 /** How a DWS evaporation station's pan record becomes A-pan (issue #646 item 6): as it stands, or by an S→A equation's 12 values. */
 export type StationApan = { ok: true; apanMm: number[]; spanMm: number[] | null; conversion: SpanConversionId | null; note: string | null } | { ok: false; reason: string };
 /** The inverted S-pan ← A-pan equations a Symons station's means may be converted by (engine spanToApan.ts). */

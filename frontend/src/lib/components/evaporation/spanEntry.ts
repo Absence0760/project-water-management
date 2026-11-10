@@ -15,7 +15,8 @@ export const APAN_SOURCES = [
 	{ id: 'wr2012', label: 'WR2012 Pitman configuration, per quaternary' },
 	{ id: 'span', label: 'Typed or pasted S-pan, converted (WR90 / Taljaard)' },
 	{ id: 'station', label: 'A DWS evaporation station', href: '?tab=calibration#set-evaporation-station', where: 'Evaporation stations' },
-	{ id: 'ccwr', label: 'CCWR A-pan grid (catchment average)' },
+	{ id: 'ccwr', label: 'CCWR A-pan (Catchment)' },
+	{ id: 'ccwrUnits', label: 'CCWR A-pan (Hydrological Unit)' },
 	{ id: 'grid', label: 'An evaporation grid (A-pan from the map)', href: '?tab=calibration#set-evaporation', where: 'Evaporation from the map' }
 ] as const;
 export type ApanSourceId = (typeof APAN_SOURCES)[number]['id'];

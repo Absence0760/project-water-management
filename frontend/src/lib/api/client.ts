@@ -207,6 +207,7 @@ import type {
 	CroplandProposals,
 	CropTypeLayer,
 	EvaporationProposals,
+	UnitApanProposal,
 	Gr4jPrior,
 	EvaporationStationProposals,
 	Wr2012EvaporationProposal,
@@ -1420,6 +1421,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			get: (id: string, dataset?: string) => request<EvaporationProposals>('GET', `${p(id)}/evaporation-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
 			fromMap: (id: string, dataset: string) =>
 				request<{ target: EvaporationTarget; monthlyMm: number[]; dataset: string; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-map`, { dataset })
+		},
+		/** Each land unit's monthly A-pan from an A-pan grid beside the catchment's (docs/maps.md § A-pan for each unit): for comparison only. */
+		unitApan: {
+			get: (id: string, dataset: string) => request<UnitApanProposal>('GET', `${p(id)}/map/unit-apan?${new URLSearchParams({ dataset })}`)
 		},
 		/**
 		 * The nearest DWS evaporation stations to the boundary (issue #646 item 6, docs/api.md § Catchment map): a station's

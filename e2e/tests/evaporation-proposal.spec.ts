@@ -7,12 +7,18 @@
 // settings revision and the form reloads them; History cites the dataset.
 // Use waits while the form has unsaved changes. A viewer reads it but can't
 // use it, and a project with no boundary is told to draw one. Model settings
-// → Demand → A-pan from "CCWR A-pan grid (catchment average)" is the same
+// → Demand → A-pan from "CCWR A-pan (Catchment)" is the same
 // panel pinned to Atlas-Apan-2007: not loaded on the e2e server, it says so
 // in plain words; loaded (its answer stood in for by a route, the synthetic
 // grid's months as A-pan), it proposes the A-pan row under the name "CCWR
-// A-pan" and Use asks first. The tables are read, never the map. Invented
-// data only.
+// A-pan" and Use asks first. "CCWR A-pan (Hydrological Unit)" shows each
+// unit's monthly A-pan from the same grid beside the catchment average: the e2e
+// database keeps no A-pan grid (one loaded there would become every
+// evaporation spec's default, and the Map's A-pan layer's), so the server's
+// "not loaded" answer is read first, then an invented answer stands in for
+// it (the server side is geo/unitApan.db.test.ts's), with units the grid
+// doesn't describe listed with the reason. The tables are read, never the
+// map. Invented data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, putSeries, seedRunnableProject } from '../support/api.ts';
@@ -148,10 +154,10 @@ test('Demand’s CCWR A-pan grid: not loaded says so in plain words; loaded, it 
 	const project = await seedRunnableProject(page.request, 'CCWR A-pan grid');
 	await drawBoundary(page, project.id);
 	await page.goto(`/projects/${project.id}?tab=settings`);
-	await page.getByTestId('apan-from').selectOption({ label: 'CCWR A-pan grid (catchment average)' });
+	await page.getByTestId('apan-from').selectOption({ label: 'CCWR A-pan (Catchment)' });
 	const ccwr = page.getByTestId('ccwr-apan-proposal');
 	await expect(ccwr.getByTestId('ccwr-apan-body')).toHaveAttribute('data-ready', 'true');
-	await expect(ccwr.getByRole('heading', { name: 'CCWR A-pan grid (catchment average)' })).toBeVisible();
+	await expect(ccwr.getByRole('heading', { name: 'CCWR A-pan (Catchment)' })).toBeVisible();
 	// The e2e server loads no Atlas grid (as production until issue #755): none loaded, not an error, and nothing else proposed.
 	await expect(ccwr.getByTestId('ccwr-apan-not-loaded')).toHaveText(
 		'There’s no CCWR A-pan grid on this server yet, so there is nothing to propose from it. Type or paste the A-pan row below, or pick another source.'
@@ -180,4 +186,71 @@ test('Demand’s CCWR A-pan grid: not loaded says so in plain words; loaded, it 
 	await ccwr.getByRole('button', { name: 'Use as the A-pan evaporation row' }).click();
 	await answerConfirm(page, false, /Irrigation demand, dam evaporation and, under pan coefficient × A-pan, GR4J will read these 12 monthly values \(1\u202f335 mm a year\) instead of the A-pan row it holds now\./);
 	await expectNoViolations(page, { include: '[data-testid="ccwr-apan-proposal"]' });
+});
+
+test('Demand’s CCWR A-pan (Hydrological Unit) compares each unit’s A-pan with the catchment’s; a viewer reads it too', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'CCWR A-pan per unit');
+	const [, upper, lower] = project.model.nodes;
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await page.getByTestId('apan-from').selectOption({ label: 'CCWR A-pan (Hydrological Unit)' });
+	const table = page.getByTestId('unit-apan');
+	// The catchment option's panel isn't drawn under this one.
+	await expect(page.getByTestId('ccwr-apan-proposal')).toHaveCount(0);
+	await expect(table.getByTestId('unit-apan-body')).toHaveAttribute('data-ready', 'true');
+	await expect(table.getByRole('heading', { name: 'CCWR A-pan (Hydrological Unit)' })).toBeVisible();
+	// The e2e server has no CCWR grid: said plainly, nothing compared.
+	await expect(table.getByTestId('unit-apan-not-loaded')).toHaveText('There’s no CCWR A-pan grid on this server yet, so there is nothing to compare.');
+	await expect(table.locator('tr[data-row]')).toHaveCount(0);
+
+	// Loaded: an invented answer in the server's shape. Upper farm below the catchment's year, Lower farm above,
+	// a third unit under 90 % covered and one without an outline listed with the reason.
+	const months = (base: number) => Array.from({ length: 12 }, (_, m) => base + m);
+	const total = (base: number) => 12 * base + 66;
+	const answer = {
+		dataset: { label: 'Atlas-Apan-2007', version: 'v1', source: 'Invented', attribution: 'Invented', method: 'Invented', cellDeg: 0.0167, synthetic: false },
+		boundary: { featureId: crypto.randomUUID(), name: 'Catchment' },
+		catchment: { monthlyMm: months(200), annualMm: total(200), coverage: 1, cells: 12 },
+		units: [
+			{ nodeId: upper!.id, name: upper!.name, areaKm2: 10, monthlyMm: months(190), annualMm: total(190), cells: 4, coveredShare: 1, diffPct: -4.8 },
+			{ nodeId: lower!.id, name: lower!.name, areaKm2: 8, monthlyMm: months(212), annualMm: total(212), cells: 4, coveredShare: 1, diffPct: 5.8 }
+		],
+		uncovered: [{ nodeId: crypto.randomUUID(), name: 'Edge farm', coveredShare: 0.22, reason: 'the grid has values for only 22 % of the unit’s parcel (at least 90 % is needed)' }],
+		withoutPolygon: [{ nodeId: crypto.randomUUID(), name: 'Bare farm' }],
+		refused: [],
+		settingsApanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110]
+	};
+	const standIn = (p: Page) => p.route(/\/map\/unit-apan\?dataset=Atlas-Apan-2007$/, (route) => route.fulfill({ json: answer }));
+	await standIn(page);
+	await page.reload();
+	await page.getByTestId('apan-from').selectOption('ccwrUnits');
+	await expect(table.getByTestId('unit-apan-body')).toHaveAttribute('data-ready', 'true');
+	await expect(table).toContainText('For comparison only');
+	await expect(table).toContainText(/the model still runs\s+every unit on the one A-pan row below/);
+	await expect(table.locator('tr[data-row]').getByRole('rowheader')).toHaveText(['Catchment average mm', 'Upper farm', 'Lower farm']);
+	await expect(table.locator('tr[data-row="catchment"]').getByRole('cell')).toHaveText([...months(200).map(String), '2\u202f466', '–']);
+	await expect(table.locator(`tr[data-node="${upper!.id}"] td`).last()).toHaveText('−4.8 %');
+	await expect(table.locator(`tr[data-node="${lower!.id}"] td`).last()).toHaveText('+5.8 %');
+	await expect(table.getByTestId('unit-apan-spread')).toHaveText('The 2 units the grid covers range from −4.8 % to +5.8 % of the catchment’s year.');
+	// Never filled from elsewhere: listed with the reason.
+	await expect(table.getByTestId('unit-apan-left-out').getByRole('listitem')).toHaveText([
+		'Edge farm: the grid has values for only 22 % of the unit’s parcel (at least 90 % is needed)',
+		'Bare farm: the unit has no outline (parcel) on the map'
+	]);
+	// Nothing to use here: comparison only.
+	await expect(table.getByRole('button')).toHaveCount(0);
+	await expectNoViolations(page, { include: '[data-testid="unit-apan"]' });
+
+	// A viewer reads the same table; on a phone nothing scrolls sideways.
+	const viewer = await signIn('Unit A-pan viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await standIn(v);
+	await v.setViewportSize({ width: 390, height: 844 });
+	await v.goto(`/projects/${project.id}?tab=settings`);
+	await v.getByTestId('apan-from').selectOption('ccwrUnits');
+	await expect(v.getByTestId('unit-apan').getByTestId('unit-apan-body')).toHaveAttribute('data-ready', 'true');
+	await expect(v.getByTestId('unit-apan').locator('tr[data-row="unit"]')).toHaveCount(2);
+	await expectNoSidewaysScroll(v);
+	await expectNoViolations(v, { include: '[data-testid="unit-apan"]' });
 });
