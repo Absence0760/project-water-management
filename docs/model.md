@@ -12904,14 +12904,53 @@ the API refuses one (409) and the Network tab doesn't offer it.
 - **Pattern.** The draft on day *t* is *x* × *p(t)*, with *p* a monthly shape
   normalised so its mean over the record is 1: *x* is then the mean daily
   draft whatever the shape. Three shapes: `constant` (1 every day),
-  `demand` (the node's own abstraction demand D = F / e, its mean per
-  water-year month) and 12 custom factors (Oct–Sep).
+  `demand` (a unit's abstraction demand D = F / e plus its demand objects',
+  its mean per water-year month) and 12 custom factors (Oct–Sep). `demand`
+  takes the dam's own unit's demand unless `patternNodeId` names another
+  hydrological unit (engine ≥ 1.117.0, the hydrologist's request 2026-11-09):
+  a proposed dam in a unit with no crops can then be drafted to the shape of
+  a neighbouring unit's irrigation demand, whose dam it would serve. Only the
+  shape is borrowed; the other unit's own demand still runs as modelled.
+  `irrigationDemandUnits(problem)` lists the units that can lend one: the
+  units with land whose demand by month is above 0 in some month, in the
+  model's node order; another unit with none is refused, as is a source unit
+  with any pattern but `demand`. Without `patternNodeId` (or with the dam's
+  own id) the shape is the dam's own, bit for bit as before
+  (`yield.test.ts`).
+- **The dam starts the record half full** (`YIELD_START_FULL_SHARE` = 0.5,
+  engine ≥ 1.117.0, the operator's decision 2026-11-09): in every yield
+  search, at every point of a storage–yield curve and in a sizing curve of a
+  unit with no dam, the dam holds 50 % of its capacity on the record's first
+  day, whatever its own initial storage (`damInitialPct`), which the
+  model's own runs keep using. The record's first day shouldn't decide the
+  firm yield: an empty start in a dry first month gave a firm yield of 0
+  (and a full one credits the yield with water the record never brought).
+  The mean-supply bound *B* counts that half. A dam with a capacity share
+  (it comes into service during the record, §2.7i) starts at half its first
+  day's capacity. A dam whose minimum operating level is above half its
+  capacity starts below it, and supplies nothing until it fills to it.
+  Results from before 1.117.0 started at the dam's own initial storage; the
+  panel says so beside them.
 - **Yield at assurance *p*** (0.5–1): the largest draft whose annual failure
   rate, water years (October start) with at least one failure day ÷ water
   years in the record, is at most 1 − *p*. *p* = 1 is the firm yield. A
   part year at either end of the record counts as a year.
 - **Storage–yield curve**: the yield at 11 capacities evenly from 0 to 2 ×
-  the dam's own (8–12 in the WP; 11 gives the dam's own capacity as a point).
+  the dam's own (8–12 in the WP; 11 gives the dam's own capacity as a point),
+  or to `maxCapacityM3` (engine ≥ 1.117.0): **sizing a proposed dam**, which
+  a unit with no dam (capacity 0) can do. Its dams start half full, as
+  every yield's does (above), with no dead storage and, with no area–volume
+  relation to scale from a dam of 0 m³, no surface: no evaporation and no
+  rain on the dam, so the curve is an upper bound until the scenario gives
+  the dam a capacity and a surface (an approximation the panel and this
+  section state; pending the hydrologist).
+- **A dam that receives nothing** (`damInflowRoutes`, engine ≥ 1.117.0):
+  with no share of its runoff or of the flow from upstream routed into it
+  (or an upstream share with no unit above), no River to dam and no transfer
+  or off-take delivering to it, the dam catches only rain on its own surface,
+  so its yield is 0 at any size. The API refuses such a yield and the panel
+  says which routing to set; a dam fed only by a transfer or River to dam is
+  not refused.
 
 **How a probe runs.** `prepareYield(input)` does everything a run does
 before the network once: settings, the aligned inputs, natural flow from the
@@ -12951,8 +12990,9 @@ yield takes under a second and an 11-point curve about 7 s
 (`yield.perf.test.ts` budgets 5 s and 30 s), inside the 60 s the WP asks
 of a job.
 
-**A resized dam** (the curve, and any `capacityM3`) keeps its initial and
-dead storage as the same fractions of capacity. A transfer rule drawing from
+**A resized dam** (the curve, and any `capacityM3`) keeps its dead storage
+as the same fraction of capacity, and starts half full like every dam in the
+search (engine ≥ 1.117.0; before it, its own initial storage fraction). A transfer rule drawing from
 it keeps its reserve as the same fraction. Its surface follows **the dam's
 own area–volume relation** (engine ≥ 1.10.0, `network/damResize.ts`; drafted
 from the hydrologist persona's review of issue #46, item 11; **provisional

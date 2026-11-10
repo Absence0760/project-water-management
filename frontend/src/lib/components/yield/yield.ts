@@ -3,7 +3,7 @@
 // latest curve, and the storage–yield chart's data.
 import type { ScenarioOp, YieldPoint } from '@water-management/engine';
 import type { ChartSeries } from '#lib/components/charts/series.js';
-import type { JobMeta, RunMeta, YieldJob, YieldResult } from '#lib/api/index.js';
+import type { JobMeta, RunMeta, YieldJob, YieldOptions, YieldParams, YieldPatternUnit, YieldResult } from '#lib/api/index.js';
 import { fmtNum } from '#lib/format/number.js';
 import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 
@@ -96,9 +96,138 @@ export function latestResults(results: readonly YieldResult[]): { firm: FirmResu
 /** Whether a result's figures were withheld from this reader: a yield on a cap or full-allocation run, for a viewer kept from the volumes (#523 I). */
 export const yieldWithheld = (results: readonly YieldResult[]): boolean => results.some((r) => r.points === null);
 
-/** "Constant", "This farm's demand shape" or "Custom monthly shape". */
-export function patternLabel(p: YieldResult['params']['pattern']): string {
-	return p === 'constant' ? 'constant draft' : p === 'demand' ? "this hydrological unit's demand shape" : 'custom monthly shape';
+/** One Draft pattern choice: `value` is 'constant', 'demand' (the dam's own unit) or `unit:<id>` (another unit's). */
+export interface PatternChoice {
+	value: string;
+	label: string;
+	/** Shown but not choosable, the reason in its label (the dam's own unit with no irrigation demand). */
+	disabled?: boolean;
+}
+
+const UNIT_PREFIX = 'unit:';
+const unitName = (name: string) => name.trim() || 'Unnamed unit';
+
+/**
+ * The Draft pattern list (docs/ui.md § Yield): Constant; this unit's own
+ * irrigation demand (disabled, saying why, when it has none); then each other
+ * unit with irrigation demand, in the model's order. `units` null: not known
+ * yet (still loading, or the options couldn't be read), so the list is the
+ * two it always had.
+ */
+export function patternChoices(units: readonly YieldPatternUnit[] | null, nodeId: string): PatternChoice[] {
+	const out: PatternChoice[] = [{ value: 'constant', label: 'Constant: the same every day' }];
+	const own = units?.find((u) => u.nodeId === nodeId);
+	if (!units || own?.demand) out.push({ value: 'demand', label: "This hydrological unit's irrigation demand, by month" });
+	else out.push({ value: 'demand', label: "This hydrological unit's irrigation demand, by month (it has none: no crops or demand objects)", disabled: true });
+	for (const u of units ?? []) {
+		if (u.nodeId !== nodeId && u.demand) out.push({ value: UNIT_PREFIX + u.nodeId, label: `${unitName(u.name)}'s irrigation demand, by month` });
+	}
+	return out;
+}
+
+/** A choice's request params: `pattern`, and `patternNodeId` for another unit's demand. */
+export function patternParams(value: string): Pick<YieldParams, 'pattern' | 'patternNodeId'> {
+	if (value.startsWith(UNIT_PREFIX)) return { pattern: 'demand', patternNodeId: value.slice(UNIT_PREFIX.length) };
+	return { pattern: value === 'demand' ? 'demand' : 'constant' };
+}
+
+/**
+ * "constant draft", "this hydrological unit's demand shape", "custom monthly
+ * shape", or "Riverside's irrigation demand shape" for another unit's
+ * (patternNodeId), by the name it had when the job ran (patternNodeName).
+ * `units`, the model's units now: a unit renamed since, or no longer in the
+ * model, is said so rather than hidden.
+ */
+export function patternLabel(p: Pick<YieldParams, 'pattern' | 'patternNodeId'> & { patternNodeName?: string }, units: readonly YieldPatternUnit[] | null = null): string {
+	if (p.pattern === 'constant') return 'constant draft';
+	if (p.pattern !== 'demand') return 'custom monthly shape';
+	if (p.patternNodeId === undefined) return "this hydrological unit's demand shape";
+	const now = units?.find((u) => u.nodeId === p.patternNodeId)?.name;
+	const was = p.patternNodeName;
+	const base = `${unitName(was ?? now ?? 'another unit')}'s irrigation demand shape`;
+	if (units && now === undefined) return `${base} (that unit is no longer in this model)`;
+	if (was !== undefined && now !== undefined && now !== was) return `${base} (the unit now called ${unitName(now)})`;
+	return base;
+}
+
+/** What the panel says for a unit with no dam in the model it reads (capacity 0): no yield of its own until one is set. */
+export function noDamText(name: string): string {
+	return `${name.trim() || 'This unit'} has no dam in this model (capacity 0 m³). In a scenario, add a change that sets its dam capacity, then work out the yield.`;
+}
+
+/**
+ * A dam nothing routes water into in the model the panel reads (the API's
+ * `inflow`): its yield is 0 at any size, so the panel says why and offers no
+ * yield (the API refuses one, 400 yield_no_inflow). Null when it receives water.
+ */
+export function noInflowText(name: string, inflow: YieldOptions['inflow'] | null | undefined): string | null {
+	if (!inflow || inflow.receives) return null;
+	const who = name.trim() || 'This unit';
+	const upstream =
+		inflow.upstreamToDam > 0 && inflow.upstreamUnits === 0
+			? `Upstream inflow to dam is ${fmtNum(inflow.upstreamToDam * 100, 0)} % but no unit drains into it`
+			: 'Upstream inflow to dam is 0 %';
+	return `${who}'s dam receives no water in this model: Runoff to dam is 0 % and ${upstream}. In the scenario, set the share of its runoff (and of the river above it) that the dam catches.`;
+}
+
+/**
+ * A scenario's stored yield worked out on other changes than the scenario has
+ * now: its recorded ops hash differs (320), or, for one from before the app
+ * recorded it, the scenario has been changed since. Null otherwise, and for a
+ * yield on a run (a run's input never changes).
+ */
+export function staleNote(r: Pick<YieldResult, 'scenarioId' | 'opsSha256' | 'createdAt'>, scenario: { opsSha256: string; updatedAt: string } | null): string | null {
+	if (!r.scenarioId || !scenario) return null;
+	if (r.opsSha256) return r.opsSha256 === scenario.opsSha256 ? null : "Worked out before the scenario's latest changes: work it out again.";
+	return Date.parse(r.createdAt) < Date.parse(scenario.updatedAt) ? 'Worked out before the scenario was last changed, possibly on other changes: work it out again to be sure.' : null;
+}
+
+/** Most a typed largest capacity may be (backend YieldParams.maxCapacityM3). */
+export const MAX_CAPACITY_LIMIT_M3 = 1e12;
+
+/**
+ * The storage–yield curve's "Up to" field: '' = not given (twice the dam's
+ * capacity); a number above 0 (thousands may be spaced or comma-separated);
+ * else an error to show.
+ */
+export function parseMaxCapacity(text: string): { value: number | undefined } | { error: string } {
+	const t = text.replace(/[\s\u00a0\u2009\u202f_,]/g, '');
+	if (t === '') return { value: undefined };
+	const v = Number(t);
+	if (!/^\d*\.?\d+$/.test(t) || !(v > 0)) return { error: 'Enter the largest capacity in m³, a number above 0.' };
+	if (v > MAX_CAPACITY_LIMIT_M3) return { error: 'Enter at most 1 000 000 000 000 m³.' };
+	return { value: v };
+}
+
+/** The curve's range in words: to twice the dam's own capacity (every curve before the entered maximum), or to the maximum entered. */
+export function curveRangeText(c: CurveResult): string {
+	const n = c.points.points.length;
+	const max = c.params.maxCapacityM3;
+	if (max === undefined) return `at ${n} capacities from 0 to twice the dam's ${fmtNum(c.points.baseCapacityM3)} m³`;
+	const own = c.points.baseCapacityM3 > 0 ? `the dam holds ${fmtNum(c.points.baseCapacityM3)} m³` : 'sizing a proposed dam: the unit has no dam in this model';
+	return `at ${n} capacities from 0 to ${fmtNum(max)} m³ (${own})`;
+}
+
+/** The engine that starts every yield's dam half full (engine YIELD_START_FULL_SHARE, docs/model.md §2.13). */
+export const HALF_FULL_SINCE = '1.117.0';
+
+const versionAtLeast = (v: string, min: string): boolean => {
+	const a = v.split('.').map(Number);
+	const b = min.split('.').map(Number);
+	for (let k = 0; k < 3; k++) {
+		const x = a[k] ?? 0;
+		const y = b[k] ?? 0;
+		if (!(Number.isFinite(x) && Number.isFinite(y))) return false;
+		if (x !== y) return x > y;
+	}
+	return true;
+};
+
+/** How a stored yield's dam started the record: half full from engine 1.117.0, its own initial storage before. */
+export function startLabel(engineVersion: string): string {
+	return versionAtLeast(engineVersion, HALF_FULL_SINCE)
+		? 'half full'
+		: `at the dam's own initial storage (worked out before engine ${HALF_FULL_SINCE}, which starts every yield half full)`;
 }
 
 export function assuranceLabel(a: number): string {

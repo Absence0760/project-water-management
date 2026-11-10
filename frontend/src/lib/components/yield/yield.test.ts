@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { YIELD_DEFAULT_TOLERANCE, type ScenarioOp, type YieldPoint } from '@water-management/engine';
 import type { JobMeta, RunMeta, YieldJob, YieldResult } from '#lib/api/index.js';
-import { assuranceLabel, cancellableJobStatus, curveChart, engineDiffersNote, jobStatus, jobToFollow, latestResults, modelRuns, yieldWithheld, patternLabel, PREVIEW_TOLERANCE, previewSource, type CurveResult } from './yield';
+import { fmtNum } from '#lib/format/number.js';
+import {
+	assuranceLabel,
+	cancellableJobStatus,
+	curveChart,
+	curveRangeText,
+	engineDiffersNote,
+	jobStatus,
+	jobToFollow,
+	latestResults,
+	modelRuns,
+	noDamText,
+	parseMaxCapacity,
+	patternChoices,
+	patternLabel,
+	patternParams,
+	PREVIEW_TOLERANCE,
+	previewSource,
+	noInflowText,
+	staleNote,
+	startLabel,
+	yieldWithheld,
+	type CurveResult
+} from './yield';
 
 const job = (over: Partial<JobMeta>): JobMeta => ({
 	id: 'j',
@@ -105,15 +128,114 @@ describe('curveChart', () => {
 
 describe('labels', () => {
 	it('names patterns, assurance levels and the runs a yield can use', () => {
-		expect(patternLabel('constant')).toBe('constant draft');
-		expect(patternLabel('demand')).toBe("this hydrological unit's demand shape");
-		expect(patternLabel(new Array(12).fill(1))).toBe('custom monthly shape');
+		expect(patternLabel({ pattern: 'constant' })).toBe('constant draft');
+		expect(patternLabel({ pattern: 'demand' })).toBe("this hydrological unit's demand shape");
+		expect(patternLabel({ pattern: new Array(12).fill(1) })).toBe('custom monthly shape');
 		expect(assuranceLabel(1)).toBe('firm');
 		expect(assuranceLabel(0.95)).toBe('95 % assurance');
 		const runs = [{ id: 'f', scenarioId: null, trigger: 'forecast' }, { id: 'a', scenarioId: 's' }, { id: 'b', scenarioId: null, trigger: 'manual' }, { id: 'c' }] as RunMeta[];
 		// A forecast run is never offered (issue #51: a yield is judged on history).
 		expect(modelRuns(runs).map((r) => r.id)).toEqual(['b', 'c']);
 		expect(modelRuns(null)).toEqual([]);
+	});
+});
+
+describe("the Draft pattern: any unit's irrigation demand (engine 1.117.0)", () => {
+	const units = [
+		{ nodeId: 'z', name: 'Riverside', demand: true },
+		{ nodeId: 'h', name: 'Hilltop', demand: false },
+		{ nodeId: 'b', name: 'Bare', demand: false },
+		{ nodeId: 'k', name: 'Meadow', demand: true }
+	];
+
+	it("a dam whose unit has no demand: Constant, its own disabled with the reason, then each other unit with demand in the model's order", () => {
+		expect(patternChoices(units, 'h')).toEqual([
+			{ value: 'constant', label: 'Constant: the same every day' },
+			{ value: 'demand', label: "This hydrological unit's irrigation demand, by month (it has none: no crops or demand objects)", disabled: true },
+			{ value: 'unit:z', label: "Riverside's irrigation demand, by month" },
+			{ value: 'unit:k', label: "Meadow's irrigation demand, by month" }
+		]);
+	});
+
+	it('a unit with demand: its own enabled, itself not listed again; before the units load, the two it always had', () => {
+		expect(patternChoices(units, 'z').map((c) => [c.value, !!c.disabled])).toEqual([
+			['constant', false],
+			['demand', false],
+			['unit:k', false]
+		]);
+		expect(patternChoices(null, 'h')).toEqual([
+			{ value: 'constant', label: 'Constant: the same every day' },
+			{ value: 'demand', label: "This hydrological unit's irrigation demand, by month" }
+		]);
+	});
+
+	it('maps each choice to the request: no patternNodeId for the dam’s own, as every request before', () => {
+		expect(patternParams('constant')).toEqual({ pattern: 'constant' });
+		expect(patternParams('demand')).toEqual({ pattern: 'demand' });
+		expect(patternParams('unit:z')).toEqual({ pattern: 'demand', patternNodeId: 'z' });
+	});
+
+	it("labels another unit's shape by the name it had, and says when it was renamed or removed", () => {
+		const p = { pattern: 'demand' as const, patternNodeId: 'z', patternNodeName: 'Riverside' };
+		expect(patternLabel(p)).toBe("Riverside's irrigation demand shape");
+		expect(patternLabel(p, units)).toBe("Riverside's irrigation demand shape");
+		expect(patternLabel(p, [{ nodeId: 'z', name: 'Riverside Noord', demand: true }])).toBe("Riverside's irrigation demand shape (the unit now called Riverside Noord)");
+		expect(patternLabel(p, [])).toBe("Riverside's irrigation demand shape (that unit is no longer in this model)");
+		// A preview (no stored name) names it from the model.
+		expect(patternLabel({ pattern: 'demand', patternNodeId: 'k' }, units)).toBe("Meadow's irrigation demand shape");
+	});
+});
+
+describe('a unit with no dam, and sizing a proposed one', () => {
+	it('says plainly that it has no dam, and when its dam receives no water', () => {
+		expect(noDamText('Hilltop')).toBe('Hilltop has no dam in this model (capacity 0 m³). In a scenario, add a change that sets its dam capacity, then work out the yield.');
+		expect(noDamText(' ')).toMatch(/^This unit has no dam/);
+		const none = { runoffToDam: 0, upstreamToDam: 0, upstreamUnits: 2, riverToDam: false, transfersIn: 0, receives: false };
+		expect(noInflowText('Hilltop', none)).toBe(
+			"Hilltop's dam receives no water in this model: Runoff to dam is 0 % and Upstream inflow to dam is 0 %. In the scenario, set the share of its runoff (and of the river above it) that the dam catches."
+		);
+		expect(noInflowText('Hilltop', { ...none, upstreamToDam: 1, upstreamUnits: 0 })).toMatch(/Upstream inflow to dam is 100 % but no unit drains into it\./);
+		expect(noInflowText('Hilltop', { ...none, runoffToDam: 0.5, receives: true })).toBeNull();
+		expect(noInflowText('Hilltop', null)).toBeNull();
+	});
+
+	it("flags a scenario's stored yield worked out on other changes than the scenario has now", () => {
+		const sc = { opsSha256: 'b'.repeat(64), updatedAt: '2026-11-09T10:00:00Z' };
+		const r = { scenarioId: 's', createdAt: '2026-11-09T09:00:00Z' };
+		expect(staleNote({ ...r, opsSha256: 'b'.repeat(64) }, sc)).toBeNull();
+		expect(staleNote({ ...r, opsSha256: 'a'.repeat(64) }, sc)).toBe("Worked out before the scenario's latest changes: work it out again.");
+		// From before the app recorded the changes: judged by when the scenario last changed.
+		expect(staleNote({ ...r, opsSha256: null }, sc)).toMatch(/^Worked out before the scenario was last changed/);
+		expect(staleNote({ ...r, opsSha256: null, createdAt: '2026-11-09T11:00:00Z' }, sc)).toBeNull();
+		// A run's yield, or no scenario to compare with.
+		expect(staleNote({ scenarioId: null, opsSha256: null, createdAt: r.createdAt }, sc)).toBeNull();
+		expect(staleNote({ ...r, opsSha256: 'a'.repeat(64) }, null)).toBeNull();
+	});
+
+	it('reads the "Up to" capacity: empty is twice the dam, a number above 0, spaced or comma thousands', () => {
+		expect(parseMaxCapacity('')).toEqual({ value: undefined });
+		expect(parseMaxCapacity('  ')).toEqual({ value: undefined });
+		expect(parseMaxCapacity('300 000')).toEqual({ value: 300_000 });
+		expect(parseMaxCapacity('1,500,000')).toEqual({ value: 1_500_000 });
+		expect(parseMaxCapacity('2500.5')).toEqual({ value: 2500.5 });
+		for (const bad of ['0', '-5', 'abc', '1e6', '5 m³']) expect(parseMaxCapacity(bad)).toHaveProperty('error');
+		expect(parseMaxCapacity('2000000000000')).toEqual({ error: 'Enter at most 1 000 000 000 000 m³.' });
+	});
+
+	it("describes a curve's range: twice the dam for a stored curve without a maximum, else the maximum entered", () => {
+		const c = (cap: number, max?: number) =>
+			({ ...base, id: 'c', kind: 'curve', params: { ...base.params, ...(max ? { maxCapacityM3: max } : {}) }, points: { baseCapacityM3: cap, assurance: 1, points: [point(0, 0), point(1, 1), point(2, 2)], monotone: true } }) as CurveResult;
+		expect(curveRangeText(c(20_000))).toBe(`at 3 capacities from 0 to twice the dam's ${fmtNum(20_000)} m³`);
+		expect(curveRangeText(c(20_000, 90_000))).toBe(`at 3 capacities from 0 to ${fmtNum(90_000)} m³ (the dam holds ${fmtNum(20_000)} m³)`);
+		expect(curveRangeText(c(0, 300_000))).toBe(`at 3 capacities from 0 to ${fmtNum(300_000)} m³ (sizing a proposed dam: the unit has no dam in this model)`);
+	});
+});
+
+describe('how a stored yield started the record', () => {
+	it('half full from engine 1.117.0; before it, the dam’s own initial storage, said so', () => {
+		for (const v of ['1.117.0', '1.117.1', '1.118.0', '2.0.0']) expect(startLabel(v)).toBe('half full');
+		for (const v of ['1.116.0', '1.34.0', '0.34.0']) expect(startLabel(v)).toBe("at the dam's own initial storage (worked out before engine 1.117.0, which starts every yield half full)");
+		expect(startLabel('garbage')).toMatch(/^at the dam's own/);
 	});
 });
 

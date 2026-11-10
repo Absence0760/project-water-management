@@ -162,6 +162,7 @@ import type {
 	OutlookPublication,
 	OutlookRequest,
 	YieldJob,
+	YieldOptions,
 	YieldRequest,
 	YieldResult,
 	AutoCalibration,
@@ -1486,6 +1487,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			jobs: (id: string, q: { nodeId: string; runId?: string; scenarioId?: string }) => {
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v ? [[k, v]] : [])));
 				return request<{ jobs: YieldJob[] }>('GET', `${p(id)}/yield/jobs?${qs}`).then((r) => r.jobs);
+			},
+			/** The dam's capacity in the run's or scenario's model, and the units whose irrigation demand can shape its draft. */
+			options: (id: string, q: { nodeId: string; runId?: string; scenarioId?: string }) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v ? [[k, v]] : [])));
+				return request<YieldOptions>('GET', `${p(id)}/yield/options?${qs}`);
 			},
 			/** Stop a yield job: a waiting one at once, a running one at its next progress report. */
 			cancel: (id: string, jobId: string) => request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/yield/${enc(jobId)}/cancel`)

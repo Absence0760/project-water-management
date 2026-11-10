@@ -4015,11 +4015,57 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 - On the Network tab a **Run** select picks the saved run of the model it
   works on (the newest by default; scenario runs aren't offered). With no
   run, it says to run the model first.
-- Editors pick a **Draft pattern** (constant, or this farm's irrigation
-  demand by month) and an **Assurance** (firm, 98, 95, 90 or 80 %), then
-  **Work out the yield** or **Storage–yield curve** (disabled, with a title
-  saying why, for a farm with no dam). Viewers see the results, and the
-  pattern and assurance for the preview below, with no run buttons.
+- Editors pick a **Draft pattern** and an **Assurance** (firm, 98, 95, 90
+  or 80 %), then **Work out the yield** or **Storage–yield curve**. The
+  Draft pattern lists Constant, then *This hydrological unit's irrigation
+  demand, by month* (shown disabled, "it has none: no crops or demand
+  objects", when the dam's own unit has none), then *<Unit>'s irrigation
+  demand, by month* for every other hydrological unit with irrigation
+  demand, in the model's order (engine ≥ 1.117.0, the hydrologist's request
+  2026-11-09: a proposed dam in a unit with no crops drafted to the shape of
+  the unit it would serve; `patternChoices` in `yield.ts`). The list, the
+  dam's capacity and what routes water into it come from the model the job
+  runs on, the run's or the scenario's (`GET …/yield/options`); until they
+  load, or if they can't be read (a muted line says so), it is Constant and
+  the dam's own. A choice the model no longer offers falls back to Constant.
+  Stored results name the shape by the unit's name when the job ran,
+  "(the unit now called …)" after a rename and "(that unit is no longer in
+  this model)" after a removal (`patternLabel`). **Curve up to (m³)**: the
+  curve's largest capacity, empty for twice the dam's (as every stored
+  curve without it reads), required for a unit with no dam. Viewers see the
+  results, and the pattern and assurance for the preview below, with no run
+  buttons.
+- **Half full at the start** (engine ≥ 1.117.0, model.md §2.13): the
+  panel's line under its title says the dam starts the record half full,
+  and each stored firm yield and curve says how it started: "half full" on
+  engine 1.117.0 or later, "at the dam's own initial storage (worked out
+  before engine 1.117.0 …)" before it (`startLabel` in `yield.ts`).
+- **A unit with no dam** in that model (capacity 0): an info note says
+  "<Unit> has no dam in this model (capacity 0 m³). In a scenario, add a
+  change that sets its dam capacity, then work out the yield.", with, on a
+  scenario the user may change, **Set its dam capacity in this scenario**
+  (Add a change on that unit's *Dam capacity*, prefilled and focused;
+  `OpForm.startChange`). No Work out the yield and no preview; the curve
+  sizes a proposed dam from 0 to the entered capacity (the dams start half full, as every yield's does,
+  and, with no area–volume relation to scale, have no surface: model.md
+  §2.13), and its line says "(sizing a proposed dam: the unit has no dam in
+  this model)". The API refuses the rest (`400 yield_no_dam`).
+- **A dam that receives no water** (Runoff to dam and Upstream inflow to dam
+  0 % or nothing upstream, no River to dam, no transfer in: engine
+  `damInflowRoutes`): a warning says "<Unit>'s dam receives no water in this
+  model: Runoff to dam is 0 % and Upstream inflow to dam is 0 %. In the
+  scenario, set the share of its runoff (and of the river above it) that the
+  dam catches.", with **Set its runoff to dam in this scenario**. Its yield
+  would be 0 at any size, so the panel offers no yield, curve or preview,
+  and the API refuses one (`400 yield_no_inflow`): a dam fed only by a
+  transfer or River to dam counts as receiving water, so nothing that could
+  yield is refused.
+- **A scenario's stored yield from earlier changes**: the job records the
+  scenario's ops hash (320); a firm yield or curve whose hash differs from
+  the scenario's now says "Worked out before the scenario's latest changes:
+  work it out again." (one from before 320: "Worked out before the scenario
+  was last changed, possibly on other changes …" when it predates the
+  scenario's last change; `staleNote`).
 - **Preview** (a dashed box, "Not stored"; issue #73, WP-3.6 through
   WP-1.17's preview worker): the firm yield for the pattern and assurance
   picked, worked out at once in the browser, off the main thread

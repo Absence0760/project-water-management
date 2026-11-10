@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Yield panel: any unit's demand shape (pattern list, labels), sizing a proposed dam (Curve up to field), the no-dam/no-inflow notes and stale-result labels, OpForm.startChange, the preview worker's patternNodeId, and the help text for them. Measured: main 2466 KB, this branch 2469 KB total gzipped; the panel is already its own lazy chunk."
+}

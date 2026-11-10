@@ -3073,13 +3073,35 @@ export interface OutlookRequest {
 
 /** A yield request's parameters (backend yield/store.ts YieldParams). */
 export interface YieldParams {
-	/** 'constant', 'demand' (the farm's own demand shape) or 12 factors, Oct–Sep. */
+	/** 'constant', 'demand' (a unit's irrigation demand shape) or 12 factors, Oct–Sep. */
 	pattern: 'constant' | 'demand' | number[];
+	/** With 'demand': the unit whose irrigation demand shapes the draft (engine ≥ 1.117.0); absent = the dam's own unit. */
+	patternNodeId?: string;
 	/** 0.5–1; 1 = the firm yield. */
 	assurance: number;
 	tolerance: number;
 	/** Curve points, 8–12. */
 	points: number;
+	/** A curve's largest capacity, m³ (engine ≥ 1.117.0, sizing a proposed dam); absent = twice the dam's own. */
+	maxCapacityM3?: number;
+}
+
+/** A hydrological unit the Draft pattern can take its shape from (GET …/yield/options). */
+export interface YieldPatternUnit {
+	nodeId: string;
+	name: string;
+	/** It has irrigation demand to shape a draft. */
+	demand: boolean;
+}
+
+/** What the Yield panel offers for one dam, in the run's or scenario's model (GET /projects/:id/yield/options). */
+export interface YieldOptions {
+	/** 0 = the unit has no dam in this model: no firm yield, a curve only to an entered largest capacity. */
+	damCapacityM3: number;
+	/** What can bring water into the dam (engine damInflowRoutes): `receives` false = its yield is 0 at any size, refused (400 yield_no_inflow). */
+	inflow: { runoffToDam: number; upstreamToDam: number; upstreamUnits: number; riverToDam: boolean; transfersIn: number; receives: boolean };
+	/** The model's hydrological units the caller may see, in its order. */
+	units: YieldPatternUnit[];
 }
 
 /** POST /projects/:id/yield: exactly one of runId and scenarioId. */
@@ -3104,11 +3126,14 @@ export interface YieldResult {
 	nodeId: string;
 	jobId: string | null;
 	kind: 'firm' | 'curve';
-	params: YieldParams;
+	/** `patternNodeName`: the name the unit shaping the draft had when the job ran (with patternNodeId). */
+	params: YieldParams & { patternNodeName?: string };
 	/** Null for a viewer kept from each registered volume, on a yield computed on a cap or full-allocation run (`withheld`, #523 I). */
 	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean } | null;
 	withheld?: string[];
 	engineVersion: string;
+	/** A scenario's yield: the scenario's opsSha256 when it was worked out (320); null on a run, or from before 320. */
+	opsSha256?: string | null;
 	createdBy: string | null;
 	createdAt: string;
 }
