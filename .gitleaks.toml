@@ -30,6 +30,12 @@ regexes = [
   # in frontend/src/lib/components/supply/UnitResultsTable.svelte's column list when its lines gained a help key.
   '''^avgSuppliedM3Day$''',
   '''^avgDeficitM3Day$''',
+  # Three more model field names after "key:", reviewed 2026-11-10 (issue #756): the weekly full-history sweep matched
+  # them in September commits of frontend/src/lib/components/runs/RunSummaryView.svelte (a column list) and
+  # frontend/src/lib/components/settings/calibration.ts (the calibration fields). Field names, not credentials.
+  '''^avgEwrShortfallM3Day$''',
+  '''^amplitudeM3Day$''',
+  '''^recessionCurveM3Day$''',
   # The full-history sweep's findings once the repo's history was recreated (2026-09-28): .gitleaksignore pinned
   # these by commit, and every commit changed. Reviewed 2026-10-09 (issue #435): fake values in tests and
   # infra/scripts, and field or element names after "key:".
