@@ -100,6 +100,8 @@
 	const pending = $derived(diff && loaded ? opItems(diff.ops, null, null, anonymisedCount ? null : loaded, namesOf([editor.model, loaded.model], diff.ops)) : null);
 	const canRecord = $derived(!!diff && diff.ops.length > 0 && !diff.unsupported.length && !diff.problems.length && !blocking && !saving);
 	let note = $state('');
+	// The record bar's height, so the tables' boxes fit the window above it (the style block's .tables).
+	let recordH = $state(0);
 
 	async function record() {
 		if (!diff || !canRecord) return;
@@ -160,7 +162,7 @@
 	</div>
 </section>
 
-<div class="tables">
+<div class="tables" style:--record-h="{recordH}px">
 	<IssueList issues={editor.issues} {area} />
 	{#if area === 'network'}
 		<Lazy load={LOAD.network}>
@@ -177,7 +179,7 @@
 	{/if}
 </div>
 
-<section class="panel record" aria-labelledby="record-h" data-testid="override-record">
+<section class="panel record" aria-labelledby="record-h" data-testid="override-record" bind:offsetHeight={recordH}>
 	<h2 id="record-h">Edits to record</h2>
 	{#if !editor.dirty && !invalid.length}
 		<p class="muted">No edits yet. Change a value in the tables above; each edit becomes a change to “{scenarioName}”.</p>
@@ -254,14 +256,23 @@
 		border-color: var(--accent);
 		color: var(--accent);
 	}
-	/* Kept in view while the tables scroll, but never taller than half the screen. */
+	/* Kept in view while the tables scroll, but never taller than half the screen; above the workspace save bar
+	   while that shows (--dock-h), not under it. */
 	.record {
 		position: sticky;
-		bottom: 0;
+		bottom: var(--dock-h, 0px);
 		z-index: 5;
 		max-height: 50vh;
 		overflow-y: auto;
 		border-top: 3px solid var(--warning);
+	}
+	/* A table box (app.css .table-wrap, 70vh) as tall as the window less the record bar put its sideways scrollbar and
+	   last rows under the bar at every scroll position, so a mouse couldn't scroll a wide node table right (2026-11-09).
+	   Each box is capped to fit the window above the bar and the save bar, so scrolling the page shows all of it. */
+	@media (min-width: 641px) {
+		.tables {
+			--table-wrap-max: max(12rem, min(70vh, calc(100vh - var(--header-h, 0px) - var(--record-h, 0px) - var(--dock-h, 0px) - 1.5rem)));
+		}
 	}
 	.record h2 {
 		margin: 0 0 0.5rem;

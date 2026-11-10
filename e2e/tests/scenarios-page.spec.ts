@@ -5,10 +5,13 @@
 // the window, its rows scrolling inside it and staying in view while the
 // scenario scrolls; with none picked the newest opens in place; Run, the
 // status moves and Delete sit in the scenario's head row; override mode
-// brings its banner into view clear of the record bar. Thirty scenarios at
+// brings its banner into view clear of the record bar, and its tables' boxes fit
+// the window above that bar (and the save bar), so a wide node table's sideways
+// scrollbar can be reached. Thirty scenarios at
 // 1440 × 960, 1280 × 800 and on a phone; a viewer; axe in both themes and on
 // a phone. The Applicant view with thirty applications: New application is
 // its section header's action, on the first screen. Synthetic data only.
+import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -16,6 +19,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { createScenario, header, newDialog, openScenarios, rail, scenarioList, seedManyScenarios } from '../support/scenarios.ts';
 import { headerControl } from '../support/sectionHeader.ts';
+import { anySaveBar, openSettings } from '../support/settings.ts';
 
 test('the header counts the scenarios; + New scenario opens a dialog that Back and Esc close, and creating picks the new one', async ({ page, owner }) => {
 	void owner;
@@ -166,6 +170,86 @@ test('override mode opens with its banner in view, clear of the record bar, at 1
 	expect(closeBox.y + closeBox.height).toBeLessThanOrEqual(recordBox.y);
 	await close.click();
 	await expect(page.getByTestId('override-mode')).toHaveCount(0);
+});
+
+/**
+ * Override mode's node table, grown past its box with added units (each an edit, so Edits to record lists them):
+ * the box fits the window above the sticky record bar and the save bar, so scrolling the page brings the whole box,
+ * its sideways scrollbar and last row included, clear of both; its header stays over the pinned name cells as it
+ * scrolls down; and the table scrolls sideways under the mouse. (2026-11-09: the box was 70vh whatever the bar
+ * covered, so its scrollbar sat under Edits to record, and the rows' name cells painted over the header.)
+ */
+async function expectNodeTableClearOfBars(page: Page) {
+	const mode = page.getByTestId('override-mode');
+	const add = page.getByRole('button', { name: '+ Add hydrological unit' });
+	for (let i = 0; i < 14; i++) await add.click();
+	await expect(page.getByTestId('override-record').getByRole('button', { name: /^Record \d+ changes$/ })).toBeEnabled();
+	await expect(mode).toBeVisible();
+	const wrap = page.locator('.tables .table-wrap.net-wrap');
+	// Taller and wider than its box: the case where the cap and the sideways scrollbar matter.
+	const size = await wrap.evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, sw: el.scrollWidth, cw: el.clientWidth }));
+	expect(size.sh).toBeGreaterThan(size.ch);
+	expect(size.sw).toBeGreaterThan(size.cw);
+	// Scroll the page until the box's foot meets the record bar's top.
+	await wrap.evaluate((el) => {
+		const record = document.querySelector('[data-testid="override-record"]')!.getBoundingClientRect();
+		window.scrollBy(0, el.getBoundingClientRect().bottom - record.top + 2);
+	});
+	const box = (await wrap.boundingBox())!;
+	const record = (await page.getByTestId('override-record').boundingBox())!;
+	expect(box.y).toBeGreaterThanOrEqual(0);
+	expect(box.y + box.height).toBeLessThanOrEqual(record.y);
+	const bar = anySaveBar(page);
+	if (await bar.count()) {
+		const saveBox = (await bar.boundingBox())!;
+		expect(record.y + record.height).toBeLessThanOrEqual(saveBox.y + 1);
+	}
+	// The box's foot (its sideways scrollbar) is the box itself to a pointer, not the bar over it.
+	const hit = await wrap.evaluate((el) => {
+		const r = el.getBoundingClientRect();
+		const at = document.elementFromPoint(r.left + r.width / 2, r.bottom - 3);
+		return !!at && el.contains(at);
+	});
+	expect(hit).toBe(true);
+	// Scrolled down inside its box, the header stays over the rows: the pinned name cells pass under it.
+	const headerOnTop = await wrap.evaluate((el) => {
+		el.scrollTop = el.scrollHeight;
+		const name = el.querySelector('thead th.sticky')!.getBoundingClientRect();
+		const at = document.elementFromPoint(name.left + 8, name.bottom - 4);
+		return !!at && !!at.closest('thead');
+	});
+	expect(headerOnTop).toBe(true);
+	// And it scrolls sideways under the mouse.
+	expect(await wrap.evaluate((el) => el.scrollLeft)).toBe(0);
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.wheel(400, 0);
+	await expect.poll(() => wrap.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+}
+
+test('override mode at 1280 × 800: a node table past its box fits above Edits to record, its sideways scrollbar in reach; axe passes', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await seedManyScenarios(page.request, 'Scenarios page override scroll', 1);
+	await openScenarios(page, project.id);
+	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
+	await expectNodeTableClearOfBars(page);
+	await expectNoViolations(page);
+});
+
+test('override mode with the catchment’s save bar showing: Edits to record sits above the save bar, and the node table above both', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await seedManyScenarios(page.request, 'Scenarios page override save bar', 1);
+	await openSettings(page, project.id);
+	const apan = page.locator('#set-demand').getByLabel('A-pan evaporation, Oct, mm');
+	await apan.fill('152');
+	await apan.blur();
+	await expect(anySaveBar(page)).toBeVisible();
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Scenarios', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
+	await expect(anySaveBar(page)).toBeVisible();
+	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
+	await expectNodeTableClearOfBars(page);
 });
 
 test('a viewer reads the list and a scenario, with no New scenario and no create dialog', async ({ page, owner, signIn }) => {

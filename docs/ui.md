@@ -12380,7 +12380,8 @@ workspace save bar never shows it, Record is disabled with "1 problem in
 the tables to fix before recording." and the field listed under it as a
 link (**Fix before recording:**), it counts as unrecorded for leaving and
 closing, and **Discard edits** puts it back. **Edits to record**
-  (sticky at the foot on wide screens) lists each edit as the change it will
+  (sticky at the foot on wide screens, above the workspace save bar while
+  that shows) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
   change can express (a node's kind, the outlet moved…) is
@@ -12388,7 +12389,13 @@ closing, and **Discard edits** puts it back. **Edits to record**
   crop removed and what a node drains into record from engine 1.35.0, and a
   demand object added, changed or removed, its schedule and people served
   included, from engine 1.45.0); the
-  tables' own problems ("Fix before saving") block it too. While there are
+  tables' own problems ("Fix before saving") block it too. On wide
+  screens each table's box (`.table-wrap`, 70vh elsewhere) is capped to the
+  window less the record bar's measured height and the save bar
+  (`--table-wrap-max`), so scrolling the page brings a whole box, its
+  sideways scrollbar and last row included, clear of both: a wide node table
+  at 1280 had its scrollbar under the bar at every scroll position
+  (2026-11-09, `scenarios-page.spec.ts`). While there are
   unrecorded edits the Changes list's ✕, Undo, Run, the status moves and
   Delete wait, and leaving the page asks first. The status moves (an
   application's Submit, Withdraw, Reopen and decision included) also wait
