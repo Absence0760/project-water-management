@@ -5302,34 +5302,29 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       ASCII grids with `pnpm import:evaporation --apan-asc`. Written terms
       from the WRC would still settle it: record them in § 3.3e if they
       arrive. Any other provincial surface stays blocked, with its own owner.
-- [ ] **Load the WRC Atlas grids in production** (operator; the client's
+- [x] **Load the WRC Atlas grids in production** (operator; the client's
       request for CCWR's MAP and A-pan grids; deployment.md § Reference
-      datasets, The WRC Atlas grids). The code allows `Lynch-2004` (map-grid)
-      and `Atlas-Apan-2007` (evaporation); nothing is loaded yet. Steps:
-      download the Atlas of Agrohydrology 2008 zip from the Water Research
-      Observatory (free account) and keep it as received under
-      `originals/atlas/`; warp `gmap` and the 12 monthly A-pan grids from
-      the Cape datum to WGS84 at 1′ and write each as ESRI ASCII (maps.md §
-      The evaporation grid gives the GDAL lines). Each loads whole, for the
-      country (the operator, 2026-11-08; `--bbox` only if a smaller area is
-      ever wanted): `pnpm import:map-grid gmap.asc --dataset Lynch-2004
-      --source "Lynch (2004)" --out lynch-2004.json.gz`; `pnpm
-      import:evaporation --apan-asc <jan.asc> … <dec.asc> --dataset
-      Atlas-Apan-2007 --out atlas-apan-2007.json.gz` (no `--years`: the
-      Atlas states no period for its A-pan means, issue #755); check the
-      A-pan grids are in mm (a value over 1 000 a month is refused). There
-      is no S-pan load: the Atlas has no S-pan grids (#738 step 1,
-      2026-11-09), so that option was removed (migration 318); the client
-      is still to say which S-pan product they meant (#738). Upload the
-      files to the reference bucket and run `load-reference.yml` for each
-      (`kind=map-grid dataset=Lynch-2004`, `kind=evaporation
-      dataset=Atlas-Apan-2007`, no source). Then, in the app: compare the
-      Lynch grid with the WAAS surface and the typed unit MAPs, and the
-      Atlas A-pan with WR2012's per-quaternary A-pan and any nearby pan
-      station. Also confirm the
-      A-pan section number in WRC Report 1489/1/06 and add it to
-      `ATLAS_APAN_ATTRIBUTION` (geo/evaporationGrid.ts) and
-      `ATLAS_APAN_STATEMENT` (dataCredits.ts) together.
+      datasets, The WRC Atlas grids; issue #755). Done 2026-11-09: the
+      Atlas of Agrohydrology 2008 zip is kept as received under
+      `originals/atlas/` in the reference bucket; `Lynch-2004` (map-grid,
+      `load-reference.yml` run 42652406631) and `Atlas-Apan-2007`
+      (evaporation, run 42724528292, no period: the Atlas states none) are
+      loaded whole, for the country, and the operator checked both in the
+      app (the Map's layers, Demand's CCWR A-pan proposal). There is no
+      S-pan load: the Atlas has no S-pan grids (#738 step 1), so that option
+      was removed (migration 318); the client is still to say which S-pan
+      product they meant (#738).
+- [ ] **Compare the Atlas grids with what the project uses** (the client's
+      hydrologist). Missing: the Lynch (2004) MAP grid against the WAAS
+      surface and the typed unit MAPs, and the Atlas A-pan against WR2012's
+      per-quaternary A-pan and any nearby pan station, so the choice of
+      source is a recorded one. Trigger: before the units' MAP or the A-pan
+      row is switched to an Atlas grid for a reported run.
+- [ ] **Cite the Atlas A-pan's section.** Missing: the section number of WRC
+      Report 1489/1/06 the A-pan grid comes from, in `ATLAS_APAN_ATTRIBUTION`
+      (backend geo/evaporationGrid.ts) and `ATLAS_APAN_STATEMENT`
+      (frontend dataCredits.ts), changed together. Trigger: whoever next has
+      the report open.
 - [ ] **Load the Southwestern Cape MAP surface in production** (operator;
       issue #560; deployment.md § Reference datasets). The code allows it
       as dataset `WAAS-SWCape-2007`; nothing is loaded yet, so production's
