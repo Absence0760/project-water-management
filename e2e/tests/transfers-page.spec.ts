@@ -215,6 +215,50 @@ test('a river off-take can take a share of the river by a formula (engine 1.113.
 	await expectNoSidewaysScroll(page);
 });
 
+// A percentage of the available flow by month (docs/ui.md § Transfers; the operator's ask for a client canal, 2026-11-10): one
+// diversion of a share of the river leaving the source, up to the canal, the rest left in the river. Stored as a
+// formula by month with b = 0, so it saves as one and comes back in this mode.
+test('a river off-take can take a percentage of the available flow, month by month, and it saves', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers percentage of flow');
+	await putModel(page.request, project.id, sampleModel());
+	await openTransfers(page, project.id);
+	const card = ruleCard(page, 1);
+	await card.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('river');
+	await card.getByLabel('Takes, transfer 1', { exact: true }).selectOption({ label: '% of available flow' });
+	const months = card.getByTestId('takes-percent-by-month');
+	await expect(months.getByRole('columnheader')).toHaveText(['Month', 'Share of the flow, %', 'Canal capacity, m³/s']);
+	// The sample rule runs Nov to Feb at 0.01 m³/s: those months start at 100 % (up to the canal, as before), the rest off.
+	await expect(months.getByLabel('Share of the flow transfer 1 takes in Nov, %', { exact: true })).toHaveValue('100');
+	await expect(months.getByLabel('Share of the flow transfer 1 takes in Oct, %', { exact: true })).toHaveValue('');
+	await expect(months).toContainText('100 % of the flow, 4 months; the rest stays in the river');
+	// 49 % in November, then November's share and canal in every month.
+	await months.getByLabel('Share of the flow transfer 1 takes in Nov, %', { exact: true }).fill('49');
+	await months.getByLabel('Share of the flow transfer 1 takes in Nov, %', { exact: true }).press('Tab');
+	await months.getByLabel('Month to apply to every month, transfer 1', { exact: true }).selectOption('Nov');
+	await months.getByRole('button', { name: 'Apply to every month', exact: true }).click();
+	await expect(months).toContainText('49 % of the flow, all year; the rest stays in the river');
+	// July 0 %: the month is off.
+	await months.getByLabel('Share of the flow transfer 1 takes in Jul, %', { exact: true }).fill('0');
+	await months.getByLabel('Share of the flow transfer 1 takes in Jul, %', { exact: true }).press('Tab');
+	await expect(months.getByLabel('Canal capacity of transfer 1 in Jul, m³/s', { exact: true })).toHaveValue('');
+	await expect(months).toContainText('49 % of the flow, 11 months; the rest stays in the river');
+	// No curve to set: the flow's unit and basis make no difference to a flat share.
+	await expect(card.getByTestId('diversion-curve')).toHaveCount(0);
+	await expect(card.locator('.rule-problems')).toHaveCount(0);
+	await expectNoViolations(page, { include: '[data-testid="takes-percent-by-month"]' });
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toBeHidden();
+	await page.reload();
+	const saved = ruleCard(page, 1);
+	await expect(saved.getByLabel('Takes, transfer 1', { exact: true })).toHaveValue('percent');
+	await expect(saved.getByLabel('Share of the flow transfer 1 takes in Oct, %', { exact: true })).toHaveValue('49');
+	await expect(saved.getByLabel('Share of the flow transfer 1 takes in Jul, %', { exact: true })).toHaveValue('');
+	await expect(saved.getByLabel('Canal capacity of transfer 1 in Sep, m³/s', { exact: true })).toHaveValue('0.01');
+	await expectNoSidewaysScroll(page);
+});
+
 test('a month with a formula beside a month with a maximum, and a 40/60 split between two units (engine 1.114.0), save and come back', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
