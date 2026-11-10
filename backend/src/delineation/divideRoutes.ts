@@ -36,7 +36,8 @@ import {
 	START_PROPOSALS_PER_HOUR,
 	toProposal
 } from './start.js';
-import { AreaBasis, areaBasisNote, takenAreaM2 } from './areaBasis.js';
+import { AreaBasis, takenAreaM2 } from './areaBasis.js';
+import { divideReason } from './reasons.js';
 import { delineateUnits } from './subcatchments.js';
 import {
 	DivideApplyBody,
@@ -293,11 +294,10 @@ export const divideRoutes = new Hono<AuthEnv>()
 				...decisionUnits.filter((u) => u.parcelId && u.areaBasis === 'effective').map((u) => nodes.get(u.nodeId!)!.name),
 				...(restNode && restBasis === 'effective' ? [restNode.name] : [])
 			];
-			const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Divided from the map: ${s(areas, 'area')}${areaBasisNote(areas, effective)}, ${s(orders, 'drains-into', 'drains-into')}${gauges ? `, ${s(gauges, 'gauge')} added` : ''}${newUnits ? `, ${s(newUnits, 'unit')} added` : ''}${body.rest.to === 'new' ? ', the rest of the catchment added' : ''} from ${p.dataset}, ${p.method_version}`.slice(0, 500)
+				reason: divideReason({ areas, effective, orders, gauges, newUnits, restAdded: body.rest.to === 'new', dataset: p.dataset, methodVersion: p.method_version })
 			});
 			const decision: DivideDecision = {
 				units: decisionUnits,

@@ -46,6 +46,21 @@ export function fitCitedReason(head: string, citation: string, reference: string
 	return fitReason(head, reference, max);
 }
 
+/**
+ * `items` joined with `join`, at most `room` characters: as many whole items as fit, the rest counted ("A, B and 12
+ * more"), or `none(n)` when not even the first fits beside its count. Never cuts an item mid-word. For the lists in a
+ * generated reason that grow with the model (names), so fitReason has nothing left to shorten. Pure.
+ */
+export function fitList(items: readonly string[], room: number, join = ', ', none = (n: number) => `${n} of them`): string {
+	const all = items.join(join);
+	if (all.length <= room) return all;
+	for (let k = items.length - 1; k > 0; k--) {
+		const text = `${items.slice(0, k).join(join)} and ${items.length - k} more`;
+		if (text.length <= room) return text;
+	}
+	return none(items.length);
+}
+
 /** The optional "why" of a change: trimmed, no NUL; empty means none. */
 export const Reason = z
 	.string()
