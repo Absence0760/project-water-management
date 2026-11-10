@@ -12904,14 +12904,38 @@ the API refuses one (409) and the Network tab doesn't offer it.
 - **Pattern.** The draft on day *t* is *x* × *p(t)*, with *p* a monthly shape
   normalised so its mean over the record is 1: *x* is then the mean daily
   draft whatever the shape. Three shapes: `constant` (1 every day),
-  `demand` (the node's own abstraction demand D = F / e, its mean per
-  water-year month) and 12 custom factors (Oct–Sep).
+  `demand` (a unit's abstraction demand D = F / e plus its demand objects',
+  its mean per water-year month) and 12 custom factors (Oct–Sep). `demand`
+  takes the dam's own unit's demand unless `patternNodeId` names another
+  hydrological unit (engine ≥ 1.117.0, the hydrologist's request 2026-11-09):
+  a proposed dam in a unit with no crops can then be drafted to the shape of
+  a neighbouring unit's irrigation demand, whose dam it would serve. Only the
+  shape is borrowed; the other unit's own demand still runs as modelled.
+  `irrigationDemandUnits(problem)` lists the units that can lend one: the
+  units with land whose demand by month is above 0 in some month, in the
+  model's node order; another unit with none is refused, as is a source unit
+  with any pattern but `demand`. Without `patternNodeId` (or with the dam's
+  own id) the shape is the dam's own, bit for bit as before
+  (`yield.test.ts`).
 - **Yield at assurance *p*** (0.5–1): the largest draft whose annual failure
   rate, water years (October start) with at least one failure day ÷ water
   years in the record, is at most 1 − *p*. *p* = 1 is the firm yield. A
   part year at either end of the record counts as a year.
 - **Storage–yield curve**: the yield at 11 capacities evenly from 0 to 2 ×
-  the dam's own (8–12 in the WP; 11 gives the dam's own capacity as a point).
+  the dam's own (8–12 in the WP; 11 gives the dam's own capacity as a point),
+  or to `maxCapacityM3` (engine ≥ 1.117.0): **sizing a proposed dam**, which
+  a unit with no dam (capacity 0) can do. Its dams start empty with no dead
+  storage, and, with no area–volume relation to scale from a dam of 0 m³,
+  no surface: no evaporation and no rain on the dam, so the curve is an
+  upper bound until the scenario gives the dam a capacity and a surface (an
+  approximation the panel and this section state; pending the hydrologist).
+- **A dam that receives nothing** (`damInflowRoutes`, engine ≥ 1.117.0):
+  with no share of its runoff or of the flow from upstream routed into it
+  (or an upstream share with no unit above), no River to dam and no transfer
+  or off-take delivering to it, the dam catches only rain on its own surface,
+  so its yield is 0 at any size. The API refuses such a yield and the panel
+  says which routing to set; a dam fed only by a transfer or River to dam is
+  not refused.
 
 **How a probe runs.** `prepareYield(input)` does everything a run does
 before the network once: settings, the aligned inputs, natural flow from the

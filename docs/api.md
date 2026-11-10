@@ -388,6 +388,13 @@ the frontend catalogue (same contract: add, never rename):
   The run pages don't ask: the run lists them in `withheldSeries`
   (issue #523 finding I).
   An editor or owner can give it to them.
+- `yield_no_dam`, `yield_no_inflow`, `yield_pattern_unit` (`400` from
+  `POST /projects/:id/yield`, [§ Yield](#yield)): the unit has no dam in
+  that model (a firm yield, or a curve without `maxCapacityM3`); its dam
+  receives no water there (its yield would be 0 at any size); the unit
+  named to shape the draft isn't a hydrological unit of that model with
+  irrigation demand. The Yield panel says each before asking, from
+  `GET …/yield/options`.
 - `job_collision` (`409` from a request that queues a job): the job met a
   pending one with the same dedupe key that the caller can't see under RLS,
   so there is none to return (`backend/src/jobs/queue.ts`
@@ -4647,24 +4654,40 @@ scenario (its ops on its base run's inputs), never the live model.
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/yield` | `{ nodeId, runId \| scenarioId, kind, params? }` | `202 { jobId, job: JobMeta, created: true }`. The same request while one is pending (queued, or failed and waiting to retry) is `200 { jobId, job, created: false }` with that job: an editor's matches any editor's, a contributor's only their own (they can't see anyone else's job, so an assessor's pending one never stands for theirs). A contributor (an applicant) only with `scenarioId` of an application they own and `nodeId` their own farm or a dam its `node.add` or `node.insert` ops add (`403` for a run or an application that isn't theirs; a dam hidden from them is the `400` an unknown node gets). `409` for a forecast run (issue #51: a yield is judged on history; the Network tab offers only ordinary runs), and for a scenario whose base is one | editor, or a contributor on their own application |
 | GET | `/projects/:id/yield?runId=\|scenarioId=&nodeId=&jobId=` | – | `{ results: YieldResult[] }`, newest first, at most 50: one of `runId` / `scenarioId` (or `jobId` alone), optionally one node. A contributor reads only the results they computed | contributor (RLS: their own) |
+| GET | `/projects/:id/yield/options?nodeId=&runId=\|scenarioId=` | – | `YieldOptions = { damCapacityM3, inflow: { runoffToDam, upstreamToDam, upstreamUnits, riverToDam, transfersIn, receives }, units: { nodeId, name, demand }[] }`: what the Yield panel offers for this dam, read from the model the job would run on (the run's, or the scenario's ops on its base). `damCapacityM3` 0: the unit has no dam there (no firm yield; a curve only with `maxCapacityM3`). `inflow` is engine `damInflowRoutes`: `receives` false, nothing routes water into the dam (its yield is 0 at any size; a yield is refused). `units`: the model's hydrological units in its order, each with whether it has irrigation demand to shape a draft (engine `irrigationDemandUnits`, which builds the model once). Exactly one of `runId` / `scenarioId` (`400`); `422 the model can't run this input: …` in the engine's words. A contributor gets their own farm and the units their ops add, on their own application only (as `POST /yield`) | viewer (a contributor: their own application) |
 | GET | `/projects/:id/yield/jobs?nodeId=&runId=\|scenarioId=` | – | `{ jobs: YieldJob[] }`: this dam's pending yield jobs (queued, running, or failed and waiting to retry), whoever queued them, newest first, at most 20; `nodeId` required, at most one of `runId` / `scenarioId` (`400` for both). A done or dead job drops off: read its result with `GET /yield?jobId=`. A contributor sees only their own jobs | contributor (RLS: their own) |
 | POST | `/projects/:id/yield/:jobId/cancel` | – | `200 { status, cancelled }` (`app_cancel_job_outcome`, 285): `cancelled` is whether this call changed the job, so cancelling one already dead, or running and already flagged, answers `false`. A queued or retrying job is `dead` at once (its `error` is `cancelled`); a running one stays `running` until its next progress report, then goes `dead` with nothing stored. `404` for a job that isn't a yield job of this project, or isn't yours to cancel | the user who queued it, or an editor |
 
 - `kind`: `firm` (one yield at the dam's own capacity) or `curve` (the yield
-  at `points` capacities evenly from 0 to 2 × the dam's).
+  at `points` capacities evenly from 0 to 2 × the dam's, or to
+  `maxCapacityM3`).
 - `params` (strict; every field optional): `pattern` `constant` (default),
-  `demand` (the farm's own irrigation demand by month) or 12 non-negative
-  factors Oct–Sep; `assurance` 0.5–1 (default 1, the firm yield: no failure
+  `demand` (a unit's irrigation demand by month) or 12 non-negative
+  factors Oct–Sep; `patternNodeId` (engine ≥ 1.117.0, with `demand` only,
+  else `400`): the hydrological unit whose irrigation demand shapes the
+  draft, absent = the dam's own unit (every request before it reads as
+  before; the dam's own id is dropped, so it is the same request);
+  `assurance` 0.5–1 (default 1, the firm yield: no failure
   day in the record; below 1, the share of water years allowed a failure is
   1 − assurance); `tolerance` 0.00001–0.05 (default 0.001, relative);
-  `points` 8–12 (default 11).
+  `points` 8–12 (default 11); `maxCapacityM3` (engine ≥ 1.117.0, `curve`
+  only, else `400`; above 0, at most 10¹²): the curve's largest capacity,
+  for sizing a proposed dam; absent = twice the dam's capacity, as every
+  stored curve without it reads.
 - Checked before anything is queued: exactly one of `runId` and
   `scenarioId` (`400`), a run or scenario of this project (`404`), a run
   rebuilt from stored inputs (`409`, as for a scenario's base), a scenario
   whose ops all apply (`422 { details: { problems } }`), a node of that run
   or scenario (`400 that node is not in this run or scenario`), a farm or dam,
-  not a gauge or other user (`400`), and a dam with a capacity above 0 for a
-  curve (`400`).
+  not a gauge or other user (`400`); `400 yield_no_dam` for a unit whose dam
+  capacity is 0 in that model (a firm yield always; a curve unless it
+  gives `maxCapacityM3`); `400 yield_no_inflow` for a dam nothing routes
+  water into there (Runoff to dam and Upstream inflow to dam 0 % or nothing
+  upstream, no River to dam, no transfer or off-take to it: its yield would
+  be 0 at any size); `400 yield_pattern_unit` when `patternNodeId` names no
+  hydrological unit of that model the caller may see (an applicant: their
+  own farm and their added units), or one with no irrigation demand (the
+  model is built once to check it, as the job will).
 - **At most 2 yield jobs queued or running per user** (`429`); a repeat of a
   pending request is never refused. A job gets 2 attempts.
 - `YieldJob = JobMeta & { target: { nodeId, runId, scenarioId, kind, params } }`:
@@ -4674,8 +4697,12 @@ scenario (its ops on its base run's inputs), never the live model.
   (another tab, a reload, a colleague). Follow the job's status on
   `GET /jobs`.
 - `YieldResult = { id, runId, scenarioId, nodeId, jobId, kind, params,
-  points, engineVersion, createdBy, createdAt }`. `params` is the request's,
-  with its defaults. `points` is `{ point: YieldPoint }` for `firm`, or
+  points, engineVersion, opsSha256, createdBy, createdAt }`. `params` is the
+  request's, with its defaults, plus `patternNodeName` with a
+  `patternNodeId`: the unit's name when the job ran, so the result still
+  names it after a rename or removal. `opsSha256` (320): on a scenario, its
+  ops hash when the job ran (the panel flags a result whose hash differs
+  from the scenario's now); `null` on a run, or before 320. `points` is `{ point: YieldPoint }` for `firm`, or
   `{ baseCapacityM3, assurance, points: YieldPoint[], monotone }` for
   `curve`. `YieldPoint = { capacityM3, yieldM3Day, yieldM3Year, failsAtM3Day,
   failureDays, failedYears, boundM3Day, probes }` (model.md §2.13).
@@ -4688,8 +4715,8 @@ scenario (its ops on its base run's inputs), never the live model.
   scenario's current ops; a scenario's result from before 221 (mode
   unknown) is withheld too ([security.md](./security.md)).
 - The job's `error` when it fails: `the model can't run this input: …`,
-  `the yield search failed: …` (the engine's words, e.g. `this node has no
-  irrigation demand to shape the draft; use a constant pattern`),
+  `the yield search failed: …` (the engine's words, e.g. `this hydrological
+  unit has no irrigation demand to shape the draft; use a constant pattern`),
   `cancelled`, or the queue's own messages ([§ Jobs](#jobs)). It keeps the
   newest 5 results per run or scenario and dam.
 - Every number is **historical** (it replays the one record); the UI says so.

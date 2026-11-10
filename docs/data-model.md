@@ -4017,10 +4017,11 @@ No job table of its own: `job` holds status, progress and errors.
 | `node_id` | The dam node as the run's or scenario's input names it. No foreign key: a scenario can add nodes, and a run can name nodes deleted since |
 | `job_id` | The job that computed it (`ON DELETE SET NULL` when the 30-day purge deletes the job) |
 | `kind` | `firm` or `curve` |
-| `params` | The request's parameters with their defaults: `pattern`, `assurance`, `tolerance`, `points` (≤ 4 KB) |
+| `params` | The request's parameters with their defaults: `pattern`, `assurance`, `tolerance`, `points`, and when given `patternNodeId` (another unit's demand shape) and `maxCapacityM3` (a curve's largest capacity; engine ≥ 1.117.0), with `patternNodeName`, that unit's name when the job ran, which the job adds (≤ 4 KB) |
 | `points` | `{ point }` for `firm`, `{ baseCapacityM3, assurance, points, monotone }` for `curve`, engine `YieldPoint`s (≤ 64 KB) |
 | `engine_version`, `created_by`, `created_at` | `created_by` and `created_at` are stamped by the insert trigger |
 | `allocation_mode` | The `settings.allocationMode` of the input the yield ran on (`none`, `cap`, `fullAllocation`; 221, #523 G1c), written by the job. A viewer kept from the volumes gets a `cap` or `fullAllocation` result without its points; NULL = a result from before 221, judged on a run by the run's own mode and withheld on a scenario (`yield/store.ts` `yieldsOnCapOrFull`) |
+| `ops_sha256` | On a scenario, its `ops_sha256` when the job ran (320; CHECK 64 hex), so the Yield panel flags a result worked out before the scenario's latest changes. NULL on a run (its input never changes) and for a scenario's result from before 320 |
 
 - **RLS**: SELECT for viewers (farmers read nothing: listed in the catalogue
   guard's `FARMERS_NEVER_READ`), INSERT and DELETE for editors. No UPDATE
