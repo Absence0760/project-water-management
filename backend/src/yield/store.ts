@@ -3,7 +3,7 @@
 // stored results.
 import { createHash } from 'node:crypto';
 import type { ModelInput, StorageYieldCurve, YieldPoint } from '@water-management/engine';
-import { canonicalJson } from '@water-management/engine';
+import { canonicalJson, damInflowRoutes, irrigationDemandUnits, prepareYield, type DamInflowRoutes } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -23,12 +23,22 @@ export const YieldParams = z
 	.object({
 		/** 'constant', 'demand' (the node's own demand shape) or 12 factors, Oct–Sep. */
 		pattern: z.union([z.enum(['constant', 'demand']), z.array(z.number().finite().min(0).max(1e6)).length(12)]).default('constant'),
+		/**
+		 * With pattern 'demand': the hydrological unit whose irrigation demand shapes the draft (engine ≥ 1.117.0).
+		 * Absent: the dam's own unit, as every request before it. Checked against the model (checkPatternNode).
+		 */
+		patternNodeId: Uuid.optional(),
 		/** 0.5–1; 1 = the firm yield. */
 		assurance: z.number().min(0.5).max(1).default(1),
 		/** Relative tolerance of the bisection. */
 		tolerance: z.number().min(1e-5).max(0.05).default(0.001),
 		/** Curve points, 8–12 (WP-3.6). */
-		points: z.number().int().min(8).max(12).default(11)
+		points: z.number().int().min(8).max(12).default(11),
+		/**
+		 * A curve's largest capacity, m³ (engine ≥ 1.117.0: sizing a proposed dam). Absent: twice the dam's own,
+		 * as every curve before it; required for a unit with no dam (checkYieldNode).
+		 */
+		maxCapacityM3: z.number().finite().positive().max(1e12).optional()
 	})
 	.strict();
 export type YieldParams = z.infer<typeof YieldParams>;
@@ -45,7 +55,21 @@ export const YieldRequest = z
 	.superRefine((b, ctx) => {
 		// What it runs on: a saved run, or a scenario (its ops on its base run).
 		if (!b.runId === !b.scenarioId) ctx.addIssue({ code: 'custom', message: 'give exactly one of runId and scenarioId' });
+		if (b.params.patternNodeId !== undefined && b.params.pattern !== 'demand')
+			ctx.addIssue({ code: 'custom', path: ['params', 'patternNodeId'], message: "patternNodeId goes with the 'demand' pattern only" });
+		if (b.params.maxCapacityM3 !== undefined && b.kind !== 'curve')
+			ctx.addIssue({ code: 'custom', path: ['params', 'maxCapacityM3'], message: 'maxCapacityM3 goes with a storage–yield curve only' });
 	});
+
+/**
+ * The request as stored and keyed: a patternNodeId naming the dam's own unit
+ * is dropped, so it is the same request (and the same label) as one without.
+ */
+export function canonicalYieldRequest(r: YieldRequest): YieldRequest {
+	if (r.params.patternNodeId !== r.nodeId) return r;
+	const { patternNodeId: _own, ...params } = r.params;
+	return { ...r, params };
+}
 export type YieldRequest = z.infer<typeof YieldRequest>;
 
 /** The job's payload: the request as validated. */
@@ -73,18 +97,18 @@ export function yieldDedupeKey(r: YieldRequest, contributorId?: string): string 
  * is a historical figure, so it is judged on history, as sweeps and
  * scenarios are (a scenario's base is refused the same way, loadBaseInput).
  */
-export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest, 'runId' | 'scenarioId'>): Promise<ModelInput> {
+export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest, 'runId' | 'scenarioId'>): Promise<{ input: ModelInput; opsSha256: string | null }> {
 	if (r.scenarioId) {
 		const scenario = await loadScenario(db, projectId, r.scenarioId);
 		const check = checkScenario(await loadBaseInput(db, projectId, scenario.baseRunId), scenario);
 		if (check.problems.length) throw new ApiError(422, "an op of this scenario doesn't apply to its base run", { problems: check.problems });
-		return check.input;
+		return { input: check.input, opsSha256: scenario.opsSha256 };
 	}
 	const { rows } = await db.query<{ trigger: string }>('SELECT "trigger" FROM model_run WHERE project_id = $1 AND id = $2', [projectId, r.runId]);
 	if (!rows[0]) throw new ApiError(404, 'run not found');
 	if (rows[0].trigger === 'forecast') throw new ApiError(409, 'that run is a forecast run; a yield is judged on history, so use an ordinary run of the model');
 	try {
-		return await loadRunInput(db, r.runId!);
+		return { input: await loadRunInput(db, r.runId!), opsSha256: null };
 	} catch (err) {
 		if (err instanceof RunInputError) throw new ApiError(err.problem === 'not_found' ? 404 : 409, err.problem === 'not_found' ? 'run not found' : err.message);
 		throw err;
@@ -102,11 +126,31 @@ export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest
  * Checks the node too (checkYieldNode). Used by the route and, as the acting
  * user, by the job handler, so a job dies once its applicant loses the role.
  */
-export async function yieldInputFor(db: Db, projectId: string, role: Role, userId: string, r: YieldRequest): Promise<ModelInput> {
-	if (rank[role] >= rank.editor) {
-		const input = await yieldInput(db, projectId, r);
-		checkYieldNode(input, r.nodeId, r.kind);
-		return input;
+export async function yieldInputFor(db: Db, projectId: string, role: Role, userId: string, r: YieldRequest): Promise<{ input: ModelInput; opsSha256: string | null }> {
+	const { input, opsSha256 } = await yieldTargetFor(db, projectId, role, userId, r);
+	return { input, opsSha256 };
+}
+
+/**
+ * yieldInputFor's input, and the units this user may see in it: null for
+ * an editor, or a viewer with `read` (the whole model), else a contributor's own
+ * farm and the nodes their ops add. Checks the dam (checkYieldNode) and the
+ * unit shaping the draft (checkPatternNode) against them.
+ */
+export async function yieldTargetFor(
+	db: Db,
+	projectId: string,
+	role: Role,
+	userId: string,
+	r: Pick<YieldRequest, 'nodeId' | 'runId' | 'scenarioId'> & { kind: YieldRequest['kind'] | null; params?: Pick<YieldParams, 'patternNodeId' | 'maxCapacityM3'> },
+	opts: { read?: boolean } = {}
+): Promise<{ input: ModelInput; visible: Set<string> | null; opsSha256: string | null }> {
+	// `read`: only reading the model's units (GET …/yield/patterns), which a viewer may, as they may preview a yield.
+	if (rank[role] >= rank.editor || (opts.read && rank[role] >= rank.viewer)) {
+		const { input, opsSha256 } = await yieldInput(db, projectId, r);
+		checkYieldNode(input, r.nodeId, r.kind, r.params?.maxCapacityM3);
+		checkPatternNode(input, r.params?.patternNodeId, null);
+		return { input, visible: null, opsSha256 };
 	}
 	if (role !== 'contributor') throw new ApiError(403, 'requires editor role');
 	if (!r.scenarioId) throw new ApiError(403, "an applicant calculates yields on their own application, not on a saved run");
@@ -117,17 +161,103 @@ export async function yieldInputFor(db: Db, projectId: string, role: Role, userI
 	if (check.problems.length) throw new ApiError(422, "an op of this scenario doesn't apply to its base run", { problems: check.problems });
 	const baseIds = new Set(base.model.nodes.map((n) => n.id));
 	const added = scenario.ops.flatMap((o) => ((o.op === 'node.add' || o.op === 'node.insert') && !baseIds.has(o.node.id) ? [o.node.id] : []));
-	if (!scenario.ownedNodeIds.includes(r.nodeId) && !added.includes(r.nodeId)) throw new ApiError(400, 'that hydrological unit is not in this run or scenario');
-	checkYieldNode(check.input, r.nodeId, r.kind);
-	return check.input;
+	const visible = new Set([...scenario.ownedNodeIds, ...added]);
+	if (!visible.has(r.nodeId)) throw new ApiError(400, 'that hydrological unit is not in this run or scenario');
+	checkYieldNode(check.input, r.nodeId, r.kind, r.params?.maxCapacityM3);
+	checkPatternNode(check.input, r.params?.patternNodeId, visible);
+	return { input: check.input, visible, opsSha256: scenario.opsSha256 };
 }
 
-/** A dam node of the input, or 400 with why not. */
-export function checkYieldNode(input: ModelInput, nodeId: string, kind: 'firm' | 'curve'): void {
+/**
+ * A dam node of the input, or 400 with why not. A unit with no dam in this
+ * model (capacity 0) has no yield of its own to work out: a firm yield is
+ * 400 yield_no_dam, and so is a storage–yield curve unless it is sizing a
+ * proposed dam to an entered largest capacity (`maxCapacityM3`). A dam
+ * that receives no water in this model (no runoff or upstream share routed
+ * into it, no River to dam, no transfer in: damInflowRoutes) yields 0 at any
+ * size, so both are 400 yield_no_inflow. `kind` null: only the node (the
+ * Yield panel's options).
+ */
+export function checkYieldNode(input: ModelInput, nodeId: string, kind: 'firm' | 'curve' | null, maxCapacityM3?: number): void {
 	const n = input.model.nodes.find((x) => x.id === nodeId);
 	if (!n) throw new ApiError(400, 'that hydrological unit is not in this run or scenario');
 	if (n.kind !== 'farm') throw new ApiError(400, 'a yield is for a hydrological unit with land (a unit or its dam), not a gauge or other water user');
-	if (kind === 'curve' && !(n.damCapacityM3 > 0)) throw new ApiError(400, 'a storage–yield curve needs a dam with a capacity above 0');
+	if (kind === null) return;
+	if (n.damCapacityM3 > 0) return checkInflow(input, n.id);
+	if (kind === 'firm')
+		throw ApiError.coded(400, 'yield_no_dam', 'this hydrological unit has no dam in this run or scenario (capacity 0 m³): set its dam capacity in a scenario first, or size one with a storage–yield curve to a largest capacity');
+	if (maxCapacityM3 === undefined)
+		throw ApiError.coded(400, 'yield_no_dam', 'a storage–yield curve of a unit with no dam (capacity 0 m³) needs the largest capacity to size it to (params.maxCapacityM3)');
+	checkInflow(input, n.id);
+}
+
+/** 400 yield_no_inflow for a dam nothing routes water into (damInflowRoutes). */
+function checkInflow(input: ModelInput, nodeId: string): void {
+	if (damInflowRoutes(input, nodeId).receives) return;
+	throw ApiError.coded(
+		400,
+		'yield_no_inflow',
+		"this hydrological unit's dam receives no water in this run or scenario (Runoff to dam and Upstream inflow to dam are 0 %, with no River to dam or transfer into it), so its yield is 0 at any size: set the share of its runoff, or of the river above it, that the dam catches"
+	);
+}
+
+/**
+ * The unit a 'demand' draft takes its shape from, when it isn't the dam's
+ * own: a hydrological unit (land) of this run's or scenario's model that the
+ * caller may see (`visible`; null = all), else 400 yield_pattern_unit. A unit
+ * hidden from an applicant gets the words an unknown id gets. Whether it has
+ * irrigation demand needs the model built (checkPatternDemand).
+ */
+export function checkPatternNode(input: ModelInput, patternNodeId: string | undefined, visible: Set<string> | null): void {
+	if (patternNodeId === undefined) return;
+	const n = input.model.nodes.find((x) => x.id === patternNodeId);
+	if (!n || n.kind !== 'farm' || (visible && !visible.has(n.id)))
+		throw ApiError.coded(400, 'yield_pattern_unit', 'the unit chosen to shape the draft is not a hydrological unit of this run or scenario');
+}
+
+export interface PatternUnit {
+	nodeId: string;
+	name: string;
+	/** It has irrigation demand to shape a draft. */
+	demand: boolean;
+}
+
+/** What the Yield panel offers for one dam (GET …/yield/options): its dam in this model, and the units that can shape its draft. */
+export interface YieldOptionsRow {
+	/** The dam's capacity in this run's or scenario's model, m³; 0 = no dam (a firm yield is refused, a curve needs a largest capacity). */
+	damCapacityM3: number;
+	/** What can bring water into the dam (damInflowRoutes): none, and its yield is 0 at any size (a yield is refused, 400 yield_no_inflow). */
+	inflow: DamInflowRoutes;
+	units: PatternUnit[];
+}
+
+export function yieldOptions(input: ModelInput, nodeId: string, visible: Set<string> | null): YieldOptionsRow {
+	const n = input.model.nodes.find((x) => x.id === nodeId)!;
+	return { damCapacityM3: n.damCapacityM3, inflow: damInflowRoutes(input, nodeId), units: patternUnits(input, visible) };
+}
+
+/**
+ * The hydrological units of the input, in the model's node order, with
+ * whether each has irrigation demand to shape a draft (the engine's
+ * irrigationDemandUnits, on the same model the job runs). `visible`: only
+ * these (a contributor's). 422 when the model can't run the input, in the
+ * engine's words.
+ */
+export function patternUnits(input: ModelInput, visible: Set<string> | null): PatternUnit[] {
+	let withDemand: Set<string>;
+	try {
+		withDemand = new Set(irrigationDemandUnits(prepareYield(input)));
+	} catch (err) {
+		throw new ApiError(422, `the model can't run this input: ${(err as Error).message}`);
+	}
+	return input.model.nodes.filter((n) => n.kind === 'farm' && (!visible || visible.has(n.id))).map((n) => ({ nodeId: n.id, name: n.name, demand: withDemand.has(n.id) }));
+}
+
+/** 400 yield_pattern_unit when the unit chosen to shape the draft has no irrigation demand in this model. */
+export function checkPatternDemand(input: ModelInput, patternNodeId: string | undefined, visible: Set<string> | null): void {
+	if (patternNodeId === undefined) return;
+	if (!patternUnits(input, visible).some((u) => u.nodeId === patternNodeId && u.demand))
+		throw ApiError.coded(400, 'yield_pattern_unit', 'the unit chosen to shape the draft has no irrigation demand in this run or scenario; choose another unit or a constant pattern');
 }
 
 /** What yield_result.points holds. */
@@ -140,15 +270,18 @@ export interface YieldResultRow {
 	nodeId: string;
 	jobId: string | null;
 	kind: 'firm' | 'curve';
-	params: YieldParams;
+	/** `patternNodeName`: the name the unit shaping the draft had when the job ran (with patternNodeId; the job adds it). */
+	params: YieldParams & { patternNodeName?: string };
 	points: YieldPoints;
 	engineVersion: string;
+	/** A scenario's yield: the scenario's ops_sha256 when the job ran (320); null on a run, or before 320. */
+	opsSha256: string | null;
 	createdBy: string | null;
 	createdAt: string;
 }
 
 const SELECT = `SELECT y.id, y.run_id AS "runId", y.scenario_id AS "scenarioId", y.node_id AS "nodeId", y.job_id AS "jobId",
-	y.kind, y.params, y.points, y.engine_version AS "engineVersion", u.display_name AS "createdBy", y.created_at AS "createdAt"
+	y.kind, y.params, y.points, y.engine_version AS "engineVersion", y.ops_sha256 AS "opsSha256", u.display_name AS "createdBy", y.created_at AS "createdAt"
 	FROM yield_result y LEFT JOIN app_user u ON u.id = y.created_by`;
 
 /** A run's or scenario's results, newest first, optionally for one node or one job (RLS: viewer). */

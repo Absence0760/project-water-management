@@ -114,6 +114,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/yield': (c) => ({ body: { nodeId: c.farmId, runId: c.runId, kind: 'firm' } }),
 	'GET /projects/:id/yield': (c) => ({ query: { runId: c.runId } }),
 	'GET /projects/:id/yield/jobs': (c) => ({ query: { nodeId: c.farmId } }),
+	'GET /projects/:id/yield/options': (c) => ({ query: { nodeId: c.farmId, runId: c.runId } }),
 	'POST /projects/:id/sweeps': (c) => ({ body: { name: 'Ladder sweep', baseRunId: c.runId, members: levels('name') } }),
 	'POST /projects/:id/assessments': (c) => ({ body: { name: `Ladder assessment ${crypto.randomUUID()}`, scenarioIds: [c.ids.sid!, c.ids.sid2!] } }),
 	'GET /projects/:id/assessments/backgrounds': (c) => ({ query: { baseRunId: c.runId } }),

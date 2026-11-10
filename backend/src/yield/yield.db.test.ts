@@ -100,7 +100,7 @@ describe('POST /projects/:id/yield', () => {
 		).body.scenario.id;
 		const res = await post({ nodeId: c.dam.id, scenarioId: sid, kind: 'curve' });
 		expect(res.status).toBe(400);
-		expect(res.body.error).toBe('a storage–yield curve needs a dam with a capacity above 0');
+		expect(res.body).toMatchObject({ code: 'yield_no_dam', error: 'a storage–yield curve of a unit with no dam (capacity 0 m³) needs the largest capacity to size it to (params.maxCapacityM3)' });
 		await tick();
 	});
 
@@ -192,6 +192,163 @@ describe('POST /projects/:id/yield', () => {
 		await tick();
 		expect(await job(res.body.jobId)).toMatchObject({ status: 'dead', last_error: 'the user who queued this job no longer has the editor role on the project' });
 		expect((await owner.call('GET', `/projects/${c.projectId}/yield?runId=${c.runId}`)).body.results).toEqual([]);
+	});
+});
+
+/**
+ * A proposed dam with no crops of its own (Hilltop, no dam in the base: capacity `cap`) draining to a farm with
+ * crops (Riverside, no dam), then the outlet, and a user with no land: the operator's case, 2026-11-09.
+ */
+async function proposedDam(owner: User, cap = 0) {
+	const projectId = (await owner.call('POST', '/projects', { name: 'Proposed dam' })).body.project.id as string;
+	const outlet = node('Outlet', null);
+	// The model's order is the units' sortOrder (then name): Riverside, Hilltop, Bare.
+	const farm = node('Riverside', outlet.id, { sortOrder: 1, damCapacityM3: 0 });
+	const dam = node('Hilltop', farm.id, { sortOrder: 2, pctRunoffToDam: 1, damCapacityM3: cap, damInitialPct: 0, damMinPct: 0 });
+	const bare = node('Bare', outlet.id, { sortOrder: 3 });
+	const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+	const model = { nodes: [outlet, farm, dam, bare], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+	expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+	const rain = Array.from({ length: 90 }, (_, i) => (i % 7 === 0 ? 20 : 0));
+	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'base' });
+	expect(run.status, JSON.stringify(run.body)).toBe(201);
+	return { projectId, outlet, farm, dam, bare, runId: run.body.run.id as string };
+}
+
+describe("another unit's irrigation demand shapes the draft (patternNodeId, engine 1.117.0)", () => {
+	it('GET …/yield/options lists the units with whether each has demand; the job stores the shape and its unit’s name', async () => {
+		const owner = await signUp('YieldShape');
+		const c = await proposedDam(owner, 20_000);
+		const opts = await owner.call('GET', `/projects/${c.projectId}/yield/options?nodeId=${c.dam.id}&runId=${c.runId}`);
+		expect(opts.status, JSON.stringify(opts.body)).toBe(200);
+		expect(opts.body).toEqual({
+			damCapacityM3: 20_000,
+			inflow: { runoffToDam: 1, upstreamToDam: 0, upstreamUnits: 0, riverToDam: false, transfersIn: 0, receives: true },
+			units: [
+				{ nodeId: c.farm.id, name: 'Riverside', demand: true },
+				{ nodeId: c.dam.id, name: 'Hilltop', demand: false },
+				{ nodeId: c.bare.id, name: 'Bare', demand: false }
+			]
+		});
+		// A viewer reads them too (they preview a yield); an outsider gets 404.
+		const viewer = await signUp('YieldShapeViewer');
+		await member(owner, c.projectId, viewer, 'viewer');
+		expect((await viewer.call('GET', `/projects/${c.projectId}/yield/options?nodeId=${c.dam.id}&runId=${c.runId}`)).status).toBe(200);
+		expect((await (await signUp('YieldShapeOut')).call('GET', `/projects/${c.projectId}/yield/options?nodeId=${c.dam.id}&runId=${c.runId}`)).status).toBe(404);
+
+		const res = await owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind: 'firm', params: { pattern: 'demand', patternNodeId: c.farm.id } });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		await tick();
+		expect(await job(res.body.jobId)).toMatchObject({ status: 'done', last_error: null });
+		const [r] = (await owner.call('GET', `/projects/${c.projectId}/yield?jobId=${res.body.jobId}`)).body.results;
+		expect(r.params).toEqual({ pattern: 'demand', patternNodeId: c.farm.id, patternNodeName: 'Riverside', assurance: 1, tolerance: 0.001, points: 11 });
+		expect(r.points.point.yieldM3Day).toBeGreaterThan(0);
+		// The dam's own id is the same request as none: its own (here empty) demand, which the job refuses.
+		const own = await owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind: 'firm', params: { pattern: 'demand', patternNodeId: c.dam.id } });
+		expect(own.status).toBe(202);
+		expect((await asOwner('SELECT payload FROM job WHERE id = $1', [own.body.jobId]))[0].payload.params).not.toHaveProperty('patternNodeId');
+		await tick();
+		expect((await job(own.body.jobId)).last_error).toMatch(/no irrigation demand/);
+	});
+
+	it('refuses a gauge, an unknown id, a unit with no demand and a non-demand pattern with 400, never DB text', async () => {
+		const owner = await signUp('YieldShapeBad');
+		const c = await proposedDam(owner, 20_000);
+		const post = (params: Record<string, unknown>) => owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind: 'firm', params });
+		for (const id of [c.outlet.id, crypto.randomUUID()]) {
+			expect((await post({ pattern: 'demand', patternNodeId: id })).body).toEqual({
+				error: 'the unit chosen to shape the draft is not a hydrological unit of this run or scenario',
+				code: 'yield_pattern_unit'
+			});
+		}
+		const none = await post({ pattern: 'demand', patternNodeId: c.bare.id });
+		expect(none.status).toBe(400);
+		expect(none.body.code).toBe('yield_pattern_unit');
+		expect(none.body.error).toMatch(/has no irrigation demand/);
+		expect((await post({ pattern: 'constant', patternNodeId: c.farm.id })).status).toBe(400);
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE project_id = $1 AND kind = 'yield'`, [c.projectId]))[0].n).toBe(0);
+		// Positive control: the farm with crops.
+		expect((await post({ pattern: 'demand', patternNodeId: c.farm.id })).status).toBe(202);
+	});
+});
+
+describe('a unit with no dam (capacity 0): no firm yield, a sizing curve to an entered largest capacity', () => {
+	it('refuses the firm yield and an unbounded curve with 400 yield_no_dam; a curve to 300 000 m³ runs from 0', async () => {
+		const owner = await signUp('YieldNoDam');
+		const c = await proposedDam(owner, 0);
+		const post = (kind: string, params: Record<string, unknown> = {}) => owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind, params });
+		const firm = await post('firm');
+		expect(firm.status).toBe(400);
+		expect(firm.body.code).toBe('yield_no_dam');
+		expect(firm.body.error).toMatch(/^this hydrological unit has no dam in this run or scenario \(capacity 0 m³\)/);
+		expect((await post('curve')).body.code).toBe('yield_no_dam');
+		expect((await post('firm', { maxCapacityM3: 300_000 })).status).toBe(400);
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE project_id = $1 AND kind = 'yield'`, [c.projectId]))[0].n).toBe(0);
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield/options?nodeId=${c.dam.id}&runId=${c.runId}`)).body.damCapacityM3).toBe(0);
+
+		const curve = await post('curve', { maxCapacityM3: 300_000, pattern: 'demand', patternNodeId: c.farm.id });
+		expect(curve.status, JSON.stringify(curve.body)).toBe(202);
+		await tick();
+		expect(await job(curve.body.jobId)).toMatchObject({ status: 'done', last_error: null });
+		const [r] = (await owner.call('GET', `/projects/${c.projectId}/yield?jobId=${curve.body.jobId}`)).body.results;
+		expect(r.params.maxCapacityM3).toBe(300_000);
+		expect(r.points.baseCapacityM3).toBe(0);
+		expect(r.points.points.map((p: { capacityM3: number }) => p.capacityM3)).toEqual(Array.from({ length: 11 }, (_, k) => k * 30_000));
+		expect(r.points.points.at(-1).yieldM3Day).toBeGreaterThan(r.points.points[0].yieldM3Day);
+	});
+});
+
+describe('a dam that receives no water (the hydrologist, 2026-11-09): refused, then worked out once the scenario routes water in', () => {
+	it('400 yield_no_inflow on a scenario that adds capacity only; positive once its runoff goes to the dam; results record the ops', async () => {
+		const owner = await signUp('YieldNoInflow');
+		const c = await proposedDam(owner, 0);
+		// The unit as it was in the base: no dam and nothing routed into one.
+		const routedNothing = await owner.call('POST', `/projects/${c.projectId}/scenarios`, {
+			name: 'Hilltop Dam',
+			baseRunId: c.runId,
+			ops: [
+				{ op: 'node.set', nodeId: c.dam.id, field: 'pctRunoffToDam', value: 0 },
+				{ op: 'node.set', nodeId: c.dam.id, field: 'damCapacityM3', value: 80_000 }
+			]
+		});
+		expect(routedNothing.status, JSON.stringify(routedNothing.body)).toBe(201);
+		const sid = routedNothing.body.scenario.id as string;
+		const post = (kind: string, params: Record<string, unknown> = {}) => owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, scenarioId: sid, kind, params });
+		const opts = await owner.call('GET', `/projects/${c.projectId}/yield/options?nodeId=${c.dam.id}&scenarioId=${sid}`);
+		expect(opts.body).toMatchObject({ damCapacityM3: 80_000, inflow: { runoffToDam: 0, upstreamToDam: 0, riverToDam: false, transfersIn: 0, receives: false } });
+		for (const r of [await post('firm'), await post('curve'), await post('curve', { maxCapacityM3: 200_000 })]) {
+			expect(r.status).toBe(400);
+			expect(r.body.code).toBe('yield_no_inflow');
+			expect(r.body.error).toMatch(/^this hydrological unit's dam receives no water in this run or scenario/);
+		}
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE project_id = $1 AND kind = 'yield'`, [c.projectId]))[0].n).toBe(0);
+
+		// Route its runoff into the dam: the yield is worked out, and above 0.
+		const before = (await owner.call('GET', `/projects/${c.projectId}/scenarios/${sid}`)).body.scenario;
+		const routed = await owner.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, {
+			ops: [
+				{ op: 'node.set', nodeId: c.dam.id, field: 'pctRunoffToDam', value: 1 },
+				{ op: 'node.set', nodeId: c.dam.id, field: 'damCapacityM3', value: 80_000 }
+			]
+		});
+		expect(routed.status, JSON.stringify(routed.body)).toBe(200);
+		const after = routed.body.scenario;
+		expect(after.opsSha256).not.toBe(before.opsSha256);
+		const ok = await post('firm');
+		expect(ok.status, JSON.stringify(ok.body)).toBe(202);
+		await tick();
+		expect(await job(ok.body.jobId)).toMatchObject({ status: 'done', last_error: null });
+		const [r] = (await owner.call('GET', `/projects/${c.projectId}/yield?jobId=${ok.body.jobId}`)).body.results;
+		expect(r.points.point.yieldM3Day).toBeGreaterThan(0);
+		// The changes it ran on, for the panel's "worked out before the scenario's latest changes".
+		expect(r.opsSha256).toBe(after.opsSha256);
+		// A yield on a run records none (a run's input never changes).
+		const c2 = await proposedDam(owner, 20_000);
+		const runYield = await owner.call('POST', `/projects/${c2.projectId}/yield`, { nodeId: c2.dam.id, runId: c2.runId, kind: 'firm' });
+		await tick();
+		expect((await owner.call('GET', `/projects/${c2.projectId}/yield?jobId=${runYield.body.jobId}`)).body.results[0].opsSha256).toBeNull();
 	});
 });
 

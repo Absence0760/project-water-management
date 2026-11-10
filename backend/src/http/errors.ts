@@ -143,6 +143,18 @@ export const ERROR_CODES = [
  *     day or file of a unit a cap or full-allocation run bound to its volume
  *     (issue #523 finding I; runs/withheldSeries.ts). The run pages are
  *     English workspace pages; they don't ask for these (`withheldSeries`).
+ *   yield_pattern_unit (400): POST …/yield with `params.patternNodeId`
+ *     naming no hydrological unit of the run's or scenario's model (or one
+ *     hidden from an applicant), or one with no irrigation demand to shape
+ *     the draft (yield/store.ts checkPatternNode, checkPatternDemand). The
+ *     Yield panel is an English workspace page.
+ *   yield_no_dam (400): POST …/yield for a unit whose dam capacity is 0 in
+ *     the run's or scenario's model: a firm yield always, a storage–yield
+ *     curve without `params.maxCapacityM3` (yield/store.ts checkYieldNode).
+ *   yield_no_inflow (400): POST …/yield for a dam nothing routes water into
+ *     in that model (Runoff to dam and Upstream inflow to dam 0 %, no River
+ *     to dam, no transfer in; engine damInflowRoutes): its yield is 0 at any
+ *     size (yield/store.ts checkYieldNode).
  *   assistant_* (issue #610, assistant/routes.ts; docs/api.md § Assistant):
  *     the assistant panel is an English workspace page. Before a stream:
  *     assistant_off (404, ASSISTANT_PROVIDER is off), assistant_rate_limited
@@ -166,6 +178,9 @@ export const MACHINE_ERROR_CODES = [
 	'pack_volumes_withheld',
 	'ewr_rule_scenario_only',
 	'allocation_series_withheld',
+	'yield_pattern_unit',
+	'yield_no_dam',
+	'yield_no_inflow',
 	'assistant_off',
 	'assistant_rate_limited',
 	'assistant_budget_spent',
