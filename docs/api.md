@@ -4705,7 +4705,10 @@ scenario (its ops on its base run's inputs), never the live model.
   from the scenario's now); `null` on a run, or before 320. `points` is `{ point: YieldPoint }` for `firm`, or
   `{ baseCapacityM3, assurance, points: YieldPoint[], monotone }` for
   `curve`. `YieldPoint = { capacityM3, yieldM3Day, yieldM3Year, failsAtM3Day,
-  failureDays, failedYears, boundM3Day, probes }` (model.md §2.13).
+  failureDays, failedYears, boundM3Day, probes }` (model.md §2.13). From
+  engine 1.117.0 every yield starts the dam half full on the record's first
+  day, whatever its `damInitialPct` (`boundM3Day` counts that half); a
+  result's `engineVersion` says which rule it was worked out under.
   `monotone: false` says the yield falls somewhere as the dam grows, which
   can be real (evaporation, a dam starting below its minimum level).
   To a viewer the project keeps from each registered volume, a result that

@@ -4035,13 +4035,18 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   curve without it reads), required for a unit with no dam. Viewers see the
   results, and the pattern and assurance for the preview below, with no run
   buttons.
+- **Half full at the start** (engine ≥ 1.117.0, model.md §2.13): the
+  panel's line under its title says the dam starts the record half full,
+  and each stored firm yield and curve says how it started: "half full" on
+  engine 1.117.0 or later, "at the dam's own initial storage (worked out
+  before engine 1.117.0 …)" before it (`startLabel` in `yield.ts`).
 - **A unit with no dam** in that model (capacity 0): an info note says
   "<Unit> has no dam in this model (capacity 0 m³). In a scenario, add a
   change that sets its dam capacity, then work out the yield.", with, on a
   scenario the user may change, **Set its dam capacity in this scenario**
   (Add a change on that unit's *Dam capacity*, prefilled and focused;
   `OpForm.startChange`). No Work out the yield and no preview; the curve
-  sizes a proposed dam from 0 to the entered capacity (the dams start empty
+  sizes a proposed dam from 0 to the entered capacity (the dams start half full, as every yield's does,
   and, with no area–volume relation to scale, have no surface: model.md
   §2.13), and its line says "(sizing a proposed dam: the unit has no dam in
   this model)". The API refuses the rest (`400 yield_no_dam`).
