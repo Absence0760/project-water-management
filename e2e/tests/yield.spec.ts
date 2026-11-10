@@ -253,5 +253,7 @@ test("a proposed dam: no dam and no inflow said plainly, then a sizing curve and
 	await expect(panel.getByTestId('yield-firm-pattern')).toHaveText("Lower farm's irrigation demand shape");
 	await expect(panel.getByTestId('yield-firm')).toContainText('120\u202f000 m³');
 	await expect(panel.getByTestId('yield-firm-stale')).toHaveCount(0);
+	// The search starts the dam half full (engine 1.117.0), whatever its own initial storage.
+	await expect(panel.getByTestId('yield-firm-start')).toHaveText('half full');
 	expect(Number((await panel.getByTestId('yield-firm').locator('dd strong').textContent())!.replace(/[^\d.]/g, ''))).toBeGreaterThan(0);
 });

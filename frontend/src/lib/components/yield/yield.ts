@@ -208,6 +208,28 @@ export function curveRangeText(c: CurveResult): string {
 	return `at ${n} capacities from 0 to ${fmtNum(max)} m³ (${own})`;
 }
 
+/** The engine that starts every yield's dam half full (engine YIELD_START_FULL_SHARE, docs/model.md §2.13). */
+export const HALF_FULL_SINCE = '1.117.0';
+
+const versionAtLeast = (v: string, min: string): boolean => {
+	const a = v.split('.').map(Number);
+	const b = min.split('.').map(Number);
+	for (let k = 0; k < 3; k++) {
+		const x = a[k] ?? 0;
+		const y = b[k] ?? 0;
+		if (!(Number.isFinite(x) && Number.isFinite(y))) return false;
+		if (x !== y) return x > y;
+	}
+	return true;
+};
+
+/** How a stored yield's dam started the record: half full from engine 1.117.0, its own initial storage before. */
+export function startLabel(engineVersion: string): string {
+	return versionAtLeast(engineVersion, HALF_FULL_SINCE)
+		? 'half full'
+		: `at the dam's own initial storage (worked out before engine ${HALF_FULL_SINCE}, which starts every yield half full)`;
+}
+
 export function assuranceLabel(a: number): string {
 	return a >= 1 ? 'firm' : `${fmtNum(a * 100, 0)} % assurance`;
 }

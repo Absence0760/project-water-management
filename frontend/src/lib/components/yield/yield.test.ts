@@ -21,6 +21,7 @@ import {
 	previewSource,
 	noInflowText,
 	staleNote,
+	startLabel,
 	yieldWithheld,
 	type CurveResult
 } from './yield';
@@ -227,6 +228,14 @@ describe('a unit with no dam, and sizing a proposed one', () => {
 		expect(curveRangeText(c(20_000))).toBe(`at 3 capacities from 0 to twice the dam's ${fmtNum(20_000)} m³`);
 		expect(curveRangeText(c(20_000, 90_000))).toBe(`at 3 capacities from 0 to ${fmtNum(90_000)} m³ (the dam holds ${fmtNum(20_000)} m³)`);
 		expect(curveRangeText(c(0, 300_000))).toBe(`at 3 capacities from 0 to ${fmtNum(300_000)} m³ (sizing a proposed dam: the unit has no dam in this model)`);
+	});
+});
+
+describe('how a stored yield started the record', () => {
+	it('half full from engine 1.117.0; before it, the dam’s own initial storage, said so', () => {
+		for (const v of ['1.117.0', '1.117.1', '1.118.0', '2.0.0']) expect(startLabel(v)).toBe('half full');
+		for (const v of ['1.116.0', '1.34.0', '0.34.0']) expect(startLabel(v)).toBe("at the dam's own initial storage (worked out before engine 1.117.0, which starts every yield half full)");
+		expect(startLabel('garbage')).toMatch(/^at the dam's own/);
 	});
 });
 

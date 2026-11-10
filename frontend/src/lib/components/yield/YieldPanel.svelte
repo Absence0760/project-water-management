@@ -53,6 +53,7 @@
 		patternParams,
 		noInflowText,
 		staleNote,
+		startLabel,
 		PREVIEW_TOLERANCE,
 		previewSource,
 		type PreviewScenario
@@ -294,7 +295,7 @@
 <section class="panel yield" aria-labelledby="yield-h-{nodeId}-t" data-testid="yield-panel">
 	<div class="panel-head">
 		<h2 id="yield-h-{nodeId}"><span id="yield-h-{nodeId}-t">Yield of {nodeName || 'this dam'}</span> <HelpTip key="firm-yield" /></h2>
-		<span class="muted small">How much this dam can supply, drawing steadily through the whole record.</span>
+		<span class="muted small">How much this dam can supply, drawing steadily through the whole record, starting it half full.</span>
 	</div>
 	<p class="note small">{HISTORICAL_NOTE}</p>
 
@@ -450,6 +451,7 @@
 				</div>
 				<div><dt>Dam capacity</dt><dd>{fmtNum(p.capacityM3)} m³</dd></div>
 				<div><dt>Pattern</dt><dd data-testid="yield-firm-pattern">{patternLabel(latest.firm.params, options?.units ?? null)}</dd></div>
+				<div><dt>Dam at the start</dt><dd data-testid="yield-firm-start">{startLabel(latest.firm.engineVersion)}</dd></div>
 				<div><dt>Failures at that draft</dt><dd>{p.failureDays} days, in {p.failedYears} water years</dd></div>
 				<div><dt>Worked out</dt><dd>{fmtDate(latest.firm.createdAt, true)} by {latest.firm.createdBy ?? 'a former member'} (engine {latest.firm.engineVersion})</dd></div>
 			</dl>
@@ -460,7 +462,7 @@
 			<h3>Storage–yield curve <HelpTip key="storage-yield-curve" label="About the curve of yield against capacity" /></h3>
 			<p class="muted small">
 				<span data-testid="yield-curve-range">{assuranceLabel(c.params.assurance)} yield, {patternLabel(c.params, options?.units ?? null)}, {curveRangeText(c)}.</span>
-				Worked out {fmtDate(c.createdAt, true)}.
+				Each dam starts the record <span data-testid="yield-curve-start">{startLabel(c.engineVersion)}</span>. Worked out {fmtDate(c.createdAt, true)}.
 			</p>
 			{#if stale}<p class="alert alert-warning small" data-testid="yield-curve-stale">{stale}</p>{/if}
 			{#if !c.points.monotone}
