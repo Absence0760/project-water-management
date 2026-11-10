@@ -382,7 +382,7 @@
 		<div class="panels findings">
 			<!-- The months met, by the daily EWR in use (engine 1.116.0) or the Reserve rule tables, a switch apart. -->
 			<div class="panel" id="res-reserve">
-				<ReserveMonths {summary} judge={monthsShown} onjudge={(j) => (monthsPick = j)} stub={reserveStub} />
+				<ReserveMonths {projectId} runId={shownRun.id} {summary} judge={monthsShown} onjudge={(j) => (monthsPick = j)} stub={reserveStub} />
 			</div>
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}

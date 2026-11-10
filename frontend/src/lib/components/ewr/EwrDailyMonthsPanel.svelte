@@ -6,6 +6,9 @@
 	after a re-run. The Reserve rule tables keep their own judgement (runs/EwrAssurancePanel.svelte), a switch away on
 	EWR (river/ReserveMonths.svelte). A run without the
 	field (older, or kept from this reader) says why.
+	At a hydrological unit instead (`unit`, ewr/EwrDailyMonthsAt.svelte works its months out from the unit's stored
+	series, ewr/unitMonths.ts): the same tiles, chart and table, named for the unit, its flow and its share of the
+	daily EWR.
 -->
 <script lang="ts">
 	import type { EwrDailyMonths, RunSummary } from '@water-management/engine';
@@ -15,6 +18,7 @@
 	import { fmtFlow, fmtMm3 } from '#lib/components/runs/ewrAssurance.js';
 	import { dailyEwrName, dailyMonthsHeading } from './notMet';
 	import { dailyMonthsMissing, dailyMonthsVerdict, rateClass, zeroRequirementText } from './dailyMonths';
+	import { placeWords, type UnitChoice } from './unitMonths';
 
 	let {
 		summary,
@@ -22,7 +26,10 @@
 		compact = false,
 		title,
 		level = 3,
-		missing
+		missing,
+		unit = null,
+		result,
+		unavailable
 	}: {
 		summary: Pick<RunSummary, 'ewrDailyMonths' | 'catchment' | 'ewrCompliance' | 'allocations'>;
 		/** Under the heading: EWR's "Judged by" switch when the run has a Reserve rule table too (river/ReserveMonths.svelte). */
@@ -38,10 +45,17 @@
 		level?: 3 | 4;
 		/** After the missing-run line: what to do about it (the base run's "Run the model"). */
 		missing?: Snippet;
+		/** Judged at this unit rather than the outlet (null: the outlet). */
+		unit?: UnitChoice | null;
+		/** The unit's months (ewr/unitMonths.ts); left out, the run's own outlet months. */
+		result?: EwrDailyMonths | null;
+		/** Why there are no months to show here (loading, a unit this run hasn't): said instead of the re-run line. */
+		unavailable?: string;
 	} = $props();
 
 	const uid = $props.id();
-	const r = $derived(summary.ewrDailyMonths ?? null);
+	const r = $derived(result !== undefined ? result : (summary.ewrDailyMonths ?? null));
+	const place = $derived(placeWords(unit));
 	const daily = $derived(summary.catchment.outletEwr);
 	const heading = $derived(dailyMonthsHeading(daily));
 	const outlet = $derived(summary.ewrCompliance?.outlet?.name ?? null);
@@ -65,11 +79,11 @@
 	{/if}
 	{#if controls}{@render controls()}{/if}
 	{#if !compact}<p class="muted small">
-		Each whole calendar month at the outlet: met when the simulated outflow over the month is at least {dailyEwrName(daily)} summed over its days. It
+		Each whole calendar month at {place.where}: met when {place.flow} over the month is at least {place.requirement(dailyEwrName(daily))} summed over its days. It
 		follows Model settings → EWR → Daily EWR from; a change there shows here after the model runs again.
 	</p>{/if}
 	{#if !r}
-		<p class="muted" data-testid="ewr-daily-months-missing">{dailyMonthsMissing(summary)}{#if missing}{' '}{@render missing()}{/if}</p>
+		<p class="muted" data-testid="ewr-daily-months-missing">{unavailable ?? dailyMonthsMissing(summary)}{#if missing && unavailable === undefined}{' '}{@render missing()}{/if}</p>
 	{:else}
 		{#if !compact}{@render verdict(r)}{/if}
 
@@ -92,7 +106,7 @@
 		</dl>
 		{#if zero && !compact}<p class="muted small">{zero}</p>{/if}
 
-		<svg viewBox="0 0 {W} {H}" class="bars" role="img" aria-label="Share of months met per month of the year at the outlet (the table below holds the values)">
+		<svg viewBox="0 0 {W} {H}" class="bars" role="img" aria-label="Share of months met per month of the year at {place.where} (the table below holds the values)">
 			{#each [0, 0.5, 1] as g (g)}
 				<line x1="0" x2={W} y1={H - BOTTOM - g * (H - BOTTOM - TOP)} y2={H - BOTTOM - g * (H - BOTTOM - TOP)} class="grid" />
 			{/each}
@@ -129,7 +143,7 @@
 
 {#snippet verdict(r: EwrDailyMonths)}
 	<p class="flag {rateClass(r.rate)}" role="status">
-		<strong>{outlet ? `Outlet (${outlet})` : 'Outlet'}:</strong>
+		<strong>{unit ? unit.name : outlet ? `Outlet (${outlet})` : 'Outlet'}:</strong>
 		{dailyMonthsVerdict(r)}
 	</p>
 {/snippet}

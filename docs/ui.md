@@ -9813,7 +9813,20 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   the deficit (Mm³), a line when months met had a daily EWR of 0 all month
   (they count as met), the share of months met per month of the year as
   bars, and a table by month of the year (years, met, met %, mean required
-  and mean simulated m³/s, deficit Mm³). A run with a rule table too has a
+  and mean simulated m³/s, deficit Mm³). **At** (`ewr/EwrUnitPick.svelte`,
+  shown when the run has a unit with an EWR share; the operator's ask of
+  2026-11-10) judges the same panel at a hydrological unit instead of the
+  outlet: each whole month is met when the flow leaving the unit (its
+  `outflow`, after its abstractions) is at least the EWR required at it
+  (`ewr_cumulative`, Z: the daily EWR in use times its share plus the shares
+  of the units above it, [model.md §2.11c](./model.md)) summed over the
+  month, by the engine's own test (`assessDailyEwrMonths`). The figures are
+  worked out on the page from those two stored series
+  (`ewr/unitMonths.ts`, `ewr/EwrDailyMonthsAt.svelte`, through the Runs
+  series cache), so every run from engine 1.116.0 has them without a
+  re-run; the verdict, the explanation and the chart's name say the unit's
+  name, and *The outlet* goes back. A run made before 1.116.0 offers no
+  units. A run with a rule table too has a
   **Judged by** switch under the heading (a `.seg` of two `aria-pressed`
   buttons, the daily EWR's name and *Reserve rule tables*); which shows
   first is `river.ts` `monthsJudge`: the reader's pick, else the daily EWR,
@@ -12602,7 +12615,12 @@ closing, and **Discard edits** puts it back. **Edits to record**
   say. Side by side from 44rem of the section (a container query; 1280 and
   1440 windows), stacked under that. A line above them names the daily EWR
   both are judged by, as the EWR page names it; when the two runs judged
-  different ones, a warning says so instead (`judgedBy`). A run made before
+  different ones, a warning says so instead (`judgedBy`). One **At** select
+  under **Run on the right** (the EWR page's, above) judges both sides at the
+  outlet or at one hydrological unit, offering the units with an EWR share in
+  either run, so a scenario's effect on the river below a unit reads against
+  its base; the line above names the place. A unit the scenario added says
+  "<Name> isn’t in this run." on the base's side. A run made before
   engine 1.116.0 says "Run the model again to see this for the daily EWR."
   on its side, the base side with a **Run the model** link (`?tab=runs`).
   Under the comparison, the scenario run's

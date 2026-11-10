@@ -440,5 +440,18 @@ test('EWR months met: the base on the left and a picked run on the right, side b
 	await expect(right.getByRole('heading', { level: 4 })).toHaveText(/^Later run · today /);
 	await expect(right).toHaveAttribute('aria-busy', 'false');
 	await expect(base.getByRole('heading', { level: 4 })).toHaveText(/^Base: Baseline/);
+
+	// One "At" pick judges both sides at a hydrological unit: the flow leaving it against its share of the EWR.
+	const at = months.getByRole('combobox', { name: 'At' });
+	await expect(at.locator('option')).toHaveText(['The outlet', 'Upper farm', 'Lower farm']);
+	await at.selectOption({ label: 'Lower farm' });
+	await expect(months.getByTestId('scenario-ewr-judged')).toContainText('Each whole calendar month at Lower farm');
+	for (const side of [base, right]) {
+		await expect(side.getByRole('status')).toHaveText(/^Lower farm: /);
+		await expect(side.getByRole('img', { name: /^Share of months met per month of the year at Lower farm/ })).toBeVisible();
+	}
+	await expectNoViolations(page);
+	await at.selectOption({ label: 'The outlet' });
+	for (const side of [base, right]) await expect(side.getByRole('status')).toHaveText(/^Outlet/);
 });
 
