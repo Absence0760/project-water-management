@@ -4581,7 +4581,12 @@ map" card) stays the schematic; this is the geography.
   outline follows these, and, with the River network layer on, **River
   network**: mapped rivers, for reference only; they can sit off the terrain
   channels (2026-10-03: the operator saw red and blue lines with neither in
-  the Key, and asked which one a catchment follows); **Delineate…** (or the bar's **Enter coordinates**) opens
+  the Key, and asked which one a catchment follows). The key, and **Snap to
+  features** with features on the map, show from the moment the bar opens,
+  while the map is still loading (only a map that can't be drawn leaves them
+  out): nothing is added above the bar's buttons as the map draws, since a
+  row added there moved **Enter coordinates** out from under a press already
+  on it and the release opened nothing (issue #719). **Delineate…** (or the bar's **Enter coordinates**) opens
   the **Delineate a catchment** sheet (`delineate=1`): "The point is" The
   catchment’s outlet / Just below a dam wall, the clicked position (or
   Latitude and Longitude behind **Enter coordinates**), the dataset line
@@ -4682,7 +4687,8 @@ map" card) stays the schematic; this is the geography.
   width, so the panel is in the DOM once). It has how ("Click a terrain
   channel for each outlet, or press Enter at the crosshair. Each gets the
   land that drains to it before any other click, following the terrain.")
-  with the lines on the map in words under it (as Delineate's bar); with a
+  with the lines on the map in words under it (as Delineate's bar, while the
+  map loads too); with a
   catchment boundary on the map, a line naming it ("Within “Valley”: its
   delineated outlet is the lowest point, so the land between your lowest
   click and the outlet is the outlet’s piece (O). A click outside the

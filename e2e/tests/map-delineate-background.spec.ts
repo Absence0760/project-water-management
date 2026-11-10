@@ -7,6 +7,13 @@
 // after a reload), the worker's tick runs the job (support/jobs.ts, no
 // sleeps: the sheet asks every 2 s), and the proposal is reviewed and
 // accepted as any other. Axe-scanned while it waits.
+//
+// Enter coordinates opens the sheet from a press made while the map is still
+// loading (issue #719): the delineation lines' key used to be added above the
+// draw bar's buttons once the map drew, which moved the button out from under
+// a press already on it, so the release landed elsewhere and no click came
+// (CI shard 9 of run 41929914753). The map library is held back until the
+// button is pressed, so the map draws between the press and the release.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
@@ -50,4 +57,35 @@ test('a catchment sent to the background: the sheet waits for the worker, then t
 	await r.getByTestId('delineate-accept-area').click();
 	await expect(page.getByTestId('map-notice')).toContainText('Saved Catchment above the outlet (delineated), 5');
 	await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('Enter coordinates pressed while the map loads: the map drawing doesn’t move it, and the release opens the sheet', async ({ page, owner }) => {
+	void owner;
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route('**/_app/immutable/chunks/*.js', async (route) => {
+		const res = await route.fetch();
+		const body = await res.text();
+		if (body.includes('maplibre')) await held;
+		await route.fulfill({ response: res, body });
+	});
+	const project = await seedRunnableProject(page.request, 'Delineate while the map loads');
+	await openMap(page, project.id);
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
+	const mapWrap = page.locator('.map-wrap');
+	await expect(mapWrap).toHaveAttribute('data-status', 'loading');
+	// The lines' key is there before the map draws, so nothing is added above the buttons as it does.
+	await expect(page.getByTestId('map-draw-bar').getByTestId('map-delineation-lines')).toBeVisible();
+
+	const button = page.getByTestId('map-enter-coordinates');
+	const pressed = await button.boundingBox();
+	expect(pressed).not.toBeNull();
+	await page.mouse.move(pressed!.x + pressed!.width / 2, pressed!.y + pressed!.height / 2);
+	await page.mouse.down();
+	release();
+	await expect(mapWrap).toHaveAttribute('data-status', 'ready');
+	expect(await button.boundingBox()).toEqual(pressed);
+	await page.mouse.up();
+	await expect(page).toHaveURL(/[?&]delineate=1/);
+	await expect(sheet(page)).toBeVisible();
 });
