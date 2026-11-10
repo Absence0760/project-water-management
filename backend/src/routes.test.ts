@@ -238,6 +238,12 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Each unit's monthly A-pan from the CCWR A-pan grid (comparison only): auth-gated like every project route.
+	it('inventories the unit A-pan route as auth-gated', () => {
+		expect(routes).toContain('GET /projects/:id/map/unit-apan');
+		expect(PUBLIC.has('GET /projects/:id/map/unit-apan')).toBe(false);
+	});
+
 	// The Map's search (issue #523 C5): our own reference tables only, behind a session like every project route.
 	it('inventories the map search route as auth-gated', () => {
 		expect(routes).toContain('GET /projects/:id/map/search');

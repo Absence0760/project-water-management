@@ -3120,7 +3120,8 @@ grid's kind, and **nothing is converted between them**:
   proposes it as "Modelled Class-A pan (PenPan)", locally only until it is
   validated against DWS pans.
 - **The CCWR A-pan grid on Demand.** Model settings → Demand → **A-pan
-  from** → **CCWR A-pan grid (catchment average)** is this panel pinned to
+  from** → **CCWR A-pan (Catchment)** (until 2026-11-09 "CCWR A-pan grid
+  (catchment average)") is this panel pinned to
   `Atlas-Apan-2007` (`EvaporationProposal.svelte` `dataset`,
   `evaporation/ccwrApan.ts`): no grid picker, the same proposal, Use,
   confirmation, settings revision and citation, so the catchment's one A-pan
@@ -3141,6 +3142,9 @@ grid's kind, and **nothing is converted between them**:
   proposed (a PenPan A-pan grid; a reference-ET grid, which goes to GR4J's
   PE, not the A-pan row), so the CCWR option
   doesn't make it redundant.
+- **Each unit's A-pan.** The next option, **CCWR A-pan (Hydrological
+  Unit)**, shows each unit's monthly A-pan from the same grid beside the
+  catchment average ([§ A-pan for each unit](#a-pan-for-each-unit)).
 
 ### The evaporation grid
 
@@ -3384,9 +3388,10 @@ Model settings → **Demand** → **A-pan from**, beside the A-pan row's
 (`evaporation/spanEntry.ts` `APAN_SOURCES`; a view choice, never saved):
 **Typed or pasted A-pan** (as before), **WR2012 Pitman configuration, per
 quaternary** (`Wr2012EvaporationProposal.svelte`), **Typed or pasted S-pan,
-converted (WR90 / Taljaard)** (`SpanEntry.svelte`), **CCWR A-pan grid
-(catchment average)** ([§ Evaporation from the map](#evaporation-from-the-map)
-pinned to `Atlas-Apan-2007`), and links to [§ Evaporation
+converted (WR90 / Taljaard)** (`SpanEntry.svelte`), **CCWR A-pan
+(Catchment)** ([§ Evaporation from the map](#evaporation-from-the-map)
+pinned to `Atlas-Apan-2007`), **CCWR A-pan (Hydrological Unit)** ([§ A-pan
+for each unit](#a-pan-for-each-unit)), and links to [§ Evaporation
 stations](#evaporation-stations) and [§ Evaporation from the
 map](#evaporation-from-the-map), which stay on Calibration. The three panels
 are lazy: they load only when picked.
@@ -3753,6 +3758,47 @@ them. The backend needs nothing new: those units are in the proposal's
   grid](#map-grid)).
 - **The synthetic grid** proposes invented values, marked as such; the
   units' MAP from it is for development and tests only.
+
+## A-pan for each unit
+
+Model settings → Demand → **A-pan from** → **CCWR A-pan (Hydrological
+Unit)** (the operator's choice of 2026-11-09, beside **CCWR A-pan
+(Catchment)**) shows the panel **CCWR A-pan (Hydrological Unit)**
+(`UnitApanTable.svelte`, its own lazy chunk;
+`geo/unitApan.ts`, `geo/unitApanRoutes.ts`, `GET …/map/unit-apan?dataset=`,
+[api.md § Catchment map](./api.md#catchment-map)): each hydrological unit's
+12 monthly A-pan means, area-weighted over the unit's outline, beside the
+catchment average, with each unit's year and its difference from the
+catchment's year (%), and a line saying how far the units spread ("The 3
+units the grid covers range from −4.2 % to +6.0 % of the catchment's
+year."). It is there so the hydrologist can judge whether units differ enough
+to matter. **For comparison only**: nothing in it saves, and the model still
+runs every unit on the one A-pan row (`settings.apanMm`). A viewer reads it
+too.
+
+- **Taken as each unit's MAP is** ([§ MAP for each unit](#map-for-each-unit)):
+  the unit's outline is the area feature its area came from, else its only
+  parcel (`feeds/fromUnits.ts` `unitParcel`); each cell weighs its area on
+  the ellipsoid × the share of it inside the outline, cells without a value
+  are left out of both sums, and the 12 months are each rounded to 0.1 mm. The
+  catchment row is the boundary's average over the same grid, as the panel
+  above proposes it ([§ Evaporation from the map](#evaporation-from-the-map)).
+- **Never filled from elsewhere.** A unit the grid covers under 90 % of its
+  outline (the unit MAP's `MIN_UNIT_COVERAGE`), one without an outline and
+  one with several parcels none of which is its area are listed under the
+  table with the reason.
+- **Bounded reads**, the unit MAP's caps: at most 100 000 cells in one
+  unit's box (`MAX_UNIT_MAP_CELLS`) and 1 000 000 in one request
+  (`MAX_GRID_CELLS_PER_REQUEST`); a unit past either is listed with why.
+- **Not loaded.** A grid that isn't loaded on the server (or isn't an A-pan
+  grid) answers `dataset: null`, and the table says "There’s no CCWR A-pan
+  grid on this server yet, so there is nothing to compare." Locally the
+  invented 1′ grids load under a label of their own, never the CCWR's:
+  `pnpm import:evaporation --apan-asc backend/fixtures/geo/apan-asc/apan-*.synthetic.asc
+  --dataset <label> --source "…" --attribution "…"`, and `GET
+  …/map/unit-apan?dataset=<label>` reads them. The e2e database keeps no
+  A-pan grid (it would become every evaporation spec's default), so the e2e
+  spec stands in for the answer; `geo/unitApan.db.test.ts` covers the server.
 
 ## A-pan grid
 

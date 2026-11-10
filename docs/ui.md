@@ -7741,7 +7741,8 @@ two.
   lazy): 12 S-pan months typed, or pasted with **Fill the months**, the
   equation picked (Taljaard's warning; one under its floor disabled with the
   month named), an optional note, and **Use as the A-pan**; **CCWR A-pan
-  grid (catchment average)** (`EvaporationProposal.svelte` pinned to
+  (Catchment)** (until 2026-11-09 "CCWR A-pan grid (catchment average)";
+  `EvaporationProposal.svelte` pinned to
   `Atlas-Apan-2007`, `evaporation/ccwrApan.ts`, lazy): Evaporation from the
   map's panel with its own heading and no grid picker, the WRC Atlas's
   modelled A-pan equivalent averaged over the catchment boundary into the
@@ -7750,7 +7751,13 @@ two.
   unsaved changes); when the server hasn't loaded that grid (production
   until issue #755, a fresh clone) it says "The CCWR A-pan grid isn’t loaded
   on this server" with the operator's import command, never another grid's
-  values; and **A DWS evaporation station** and **An evaporation grid**
+  values; **CCWR A-pan (Hydrological Unit)**
+  (`evaporation/UnitApanTable.svelte`, its own lazy chunk, a panel of that
+  name): each unit's 12 monthly means over its outline beside the catchment
+  average, its year and its difference from the catchment's year, the spread
+  in a sentence, and the units left out with why (under 90 % covered, no
+  outline, several parcels); no Use, and the model still runs the one row
+  ([maps.md § A-pan for each unit](./maps.md#a-pan-for-each-unit)); and **A DWS evaporation station** and **An evaporation grid**
   (any other loaded grid: a PenPan A-pan, a reference-ET grid for GR4J's
   PE), each a link to its card on Calibration ([maps.md § WR2012
   evaporation by quaternary](./maps.md#wr2012-evaporation-by-quaternary),
