@@ -10,6 +10,7 @@
 // a phone. The Applicant view with thirty applications: New application is
 // its section header's action, on the first screen. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
+import { pinClockToProject } from '../support/clock.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -281,6 +282,8 @@ test('a run scenario links to the EWR page on its run, which names the scenario 
 	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
 	expect(ran.ok()).toBe(true);
 	const scenarioRun = ((await ran.json()) as { run: { id: string } }).run.id;
+	// The run labels say "today": the clock at the project's newest run (support/clock.ts).
+	await pinClockToProject(page, project.id, 'lastRunAt');
 	await openScenarios(page, project.id, `&scenario=${scenarioId}`);
 
 	const compare = page.getByRole('region', { name: 'Scenario against its base' });
@@ -325,6 +328,8 @@ test('EWR months met: the base on the left and a picked run on the right, side b
 	const scenarioRun = ((await ran.json()) as { run: { id: string } }).run.id;
 	// A later run of the model, to pick on the right.
 	const later = await createRun(page.request, project.id, 'Later run');
+	// The run labels say "today": the clock at the project's newest run (support/clock.ts).
+	await pinClockToProject(page, project.id, 'lastRunAt');
 	await openScenarios(page, project.id, `&scenario=${scenarioId}`);
 
 	const months = page.getByRole('region', { name: 'EWR months met: base against a run' });
