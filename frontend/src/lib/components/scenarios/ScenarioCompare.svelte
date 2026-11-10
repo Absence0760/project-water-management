@@ -12,6 +12,7 @@
 	import HelpTip from '#lib/components/help/HelpTip.svelte';
 	import { resolve } from '$app/paths';
 	import { compareTabHref } from '#lib/components/compare/picker.js';
+	import { riverHref } from '#lib/components/river/links.js';
 	import { untrack } from 'svelte';
 	import { api, ApiError, type RunCompareResponse, type Scenario } from '#lib/api/index.js';
 	import Lazy from '#lib/components/common/Lazy.svelte';
@@ -76,6 +77,9 @@
 		{#if data}
 			<span class="acts">
 				<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>
+				<!-- The EWR page on either side (docs/ui.md § Scenarios): its Run menu then names the scenario's run. -->
+				<a class="btn btn-sm" href={riverHref(data.b.run.id)} data-testid="scenario-ewr-link">EWR for this run</a>
+				<a class="btn btn-sm" href={riverHref(data.a.run.id)} data-testid="scenario-base-ewr-link">EWR for the base run</a>
 				<!-- The licensing evidence report of this run on its base (issue #71, docs/ui.md § Evidence report). -->
 				<a class="btn btn-sm" href={resolve(`projects/${encodeURIComponent(projectId)}/report?run=${encodeURIComponent(data.b.run.id)}&evidence`)} data-testid="scenario-evidence-link">Evidence report</a>
 			</span>

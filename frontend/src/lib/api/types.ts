@@ -835,6 +835,12 @@ export interface RunMeta {
 	 */
 	fromScenario?: boolean;
 	/**
+	 * The base run a scenario run was made on, as its snapshot recorded it
+	 * (inputs.scenario.baseRunId, also once the scenario is rebased or
+	 * deleted); null for a run of the model. Absent from an older API.
+	 */
+	scenarioBaseRunId?: string | null;
+	/**
 	 * What cites the run, so it is kept for good (no delete, no trim, no
 	 * unpin): the publications that hold it and the scenarios based on it
 	 * that you can see, oldest first. Absent from an older API.

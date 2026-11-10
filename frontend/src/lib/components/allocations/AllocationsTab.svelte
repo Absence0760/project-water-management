@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
+	import { runPickName } from '#lib/components/compare/picker.js';
 	// Allocations (?tab=allocations, WP-3.10, issue #17 option A, docs/ui.md
 	// § Allocations): a run's modelled use against the registered volumes.
 	// The section header counts the volumes and the units above registered and
@@ -191,7 +192,8 @@
 	/** `run=` names a run that isn't in the list (deleted since): the default is shown, and said. */
 	const gone = $derived(!!runParam && !!runs && !named);
 	const run = $derived(named ?? defaultRun);
-	const runLabel = (r: RunMeta) => `${r.label || 'Untitled run'} · ${fmtDate(r.createdAt, true)}${r.published ? ' · published' : ''}${isScenarioRun(r) ? ' · scenario' : ''}`;
+	// A scenario's run names its scenario (runPickName), as the other pages' run pickers do.
+	const runLabel = (r: RunMeta) => `${runPickName(r)} · ${fmtDate(r.createdAt, true)}${r.published ? ' · published' : ''}`;
 	function pickRun(id: string) {
 		void goto(withParam(url, 'run', id), { reset: false });
 	}

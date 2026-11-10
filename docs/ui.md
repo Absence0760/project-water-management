@@ -8583,7 +8583,13 @@ The page has:
   pick follows the reader between the two pages (the sidebar carries `run=`,
   `workspace/tabLinks.ts` `RUN_TABS`). A select labelled **Run** with each
   run named as the other pages' pickers name it (`compare/picker.ts`
-  `runOptionLabel`, newest first, the newest marked *latest*), when it ran
+  `runOptionLabel`, newest first, the newest marked *latest*; a scenario's
+  run names its scenario, `runPickName`: "Hexberg Dam (scenario)" for a run
+  with the scenario's own label, "Hexberg Dam (scenario, as licensed)" for
+  a run of its licensed terms, "Wet years (scenario: Hexberg Dam)" for a
+  label of the user's own, the scenario's name cut at 32 characters; the
+  EWR page, Runs & results, Compare runs, Hydrological units and
+  Allocations name runs the same way), when it ran
   day first as the run line says it ("today 13:40", "3 Oct 2026 09:12",
   `fmtWhen`); with one run,
   its name and no select. Choosing one writes `run=`, one step in history
@@ -9547,6 +9553,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   "today 13:40", `fmtWhen`, issue #586 R4-F); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
   a reload keeps it. **Open in Runs & results** goes to `?tab=runs&run=<id>`.
+  A scenario's run (also once its scenario is deleted, `isScenarioRun`) says
+  so in a line at the top of the page (`river.ts` `scenarioRunNote`):
+  "Scenario run: Hexberg Dam, against the base run Baseline (today 13:40).",
+  with **Show the base run** (`?tab=river&run=<base>`, the base its snapshot
+  recorded, `RunMeta.scenarioBaseRunId`, while it is still in the list) and
+  **Open the scenario** (while the scenario exists).
   While the picked run's record loads, the page keeps the run before it on
   screen, its body `aria-busy="true"`, then swaps (a cached record at once):
   until 2026-10-24 every panel unmounted for at least a render on each pick,
@@ -12502,7 +12514,10 @@ closing, and **Discard edits** puts it back. **Edits to record**
   #8). A feature the scenario adds or removes shows against 0 in the run
   without it: a river-first farm's *Pumped from the river* series (the base
   drawn as zeros, "run B only") and farm column ("A: none (0)"), under
-  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab). Only the
+  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab), and **EWR for
+  this run** and **EWR for the base run** (`riverHref`, the EWR page on the
+  scenario's run or on the base run the comparison used: the operator, on
+  2026-11-09, couldn't find a scenario's run on the EWR page). Only the
   assessors see this section; an applicant gets a note instead
   ([§ Applications](#applications-wp-33)). A note says when the changes were
   edited since that run. Under the comparison, the scenario run's

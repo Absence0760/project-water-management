@@ -15,6 +15,7 @@ import { flowHeading } from '#lib/components/overview/summaryChart.js';
 import { fmtNum } from '#lib/format/number.js';
 import { EWR_MAP_ANCHOR, EWR_MAP_HEADING, EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
 import { IRRIGATION_SUPPORT_HEADING } from '#lib/components/outcomes/irrigationSupport.js';
+import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
 
 const created = (r: RunMeta) => {
 	const t = Date.parse(r.createdAt);
@@ -36,6 +37,33 @@ export function pickRiverRun(runs: readonly RunMeta[] | null, wanted: string | n
 	const found = wanted ? sorted.findIndex((r) => r.id === wanted) : 0;
 	const at = Math.max(0, found);
 	return { run: sorted[at]!, previous: sorted[at + 1] ?? null, gone: found < 0 };
+}
+
+/** The note under the page's header when the run shown is a scenario's (scenarioRunNote). */
+export interface ScenarioRunNote {
+	/** The scenario's name, as the run recorded it once the scenario is gone. */
+	name: string;
+	/** The scenario, to open it; null once it is deleted. */
+	scenarioId: string | null;
+	/** The base run the scenario run was made on, when it is still in the list (the note's "Show the base run"). */
+	base: RunMeta | null;
+}
+
+/**
+ * What the page says of a scenario's run (isScenarioRun, also once the
+ * scenario is deleted): which scenario, and the base run it was made on
+ * (`scenarioBaseRunId`, the base its snapshot recorded) when that run is still
+ * in the list, so one link switches the page to it. null for a run of the
+ * model.
+ */
+export function scenarioRunNote(run: RunMeta, runs: readonly RunMeta[] | null): ScenarioRunNote | null {
+	if (!isScenarioRun(run)) return null;
+	const baseId = run.scenarioBaseRunId;
+	return {
+		name: (run.scenarioName ?? '').trim() || run.label || 'Untitled scenario',
+		scenarioId: run.scenarioId ?? null,
+		base: (baseId && runs?.find((r) => r.id === baseId)) || null
+	};
 }
 
 export type RiverKpiId = 'reserve' | 'ewr' | 'outflow';

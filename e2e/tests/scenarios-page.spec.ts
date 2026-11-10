@@ -266,3 +266,46 @@ test('a run scenario shows its run’s validation statement under the comparison
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
 });
+
+test('a run scenario links to the EWR page on its run, which names the scenario and switches to the base run', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Scenario EWR links');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	const scenarioId = await createScenario(page.request, project.id, {
+		name: 'Hexberg Dam',
+		baseRunId: runId,
+		ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 180_000 }]
+	});
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
+	expect(ran.ok()).toBe(true);
+	const scenarioRun = ((await ran.json()) as { run: { id: string } }).run.id;
+	await openScenarios(page, project.id, `&scenario=${scenarioId}`);
+
+	const compare = page.getByRole('region', { name: 'Scenario against its base' });
+	await expect(compare.getByRole('link', { name: 'EWR for the base run' })).toHaveAttribute('href', `?tab=river&run=${runId}`);
+	await compare.getByRole('link', { name: 'EWR for this run' }).click();
+
+	// The EWR page on the scenario's run: the Run menu names the scenario, and the note says whose run it is.
+	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${scenarioRun}`));
+	const body = page.getByTestId('river-body');
+	await expect(body).toHaveAttribute('data-run', scenarioRun);
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+	const select = page.getByRole('combobox', { name: 'Run' });
+	await expect(select).toHaveValue(scenarioRun);
+	await expect(select.locator(`option[value="${scenarioRun}"]`)).toHaveText(/^Hexberg Dam \(scenario\) · today \d{2}:\d{2} · /);
+	await expect(select.locator(`option[value="${runId}"]`)).toHaveText(/^Baseline · today /);
+	const note = page.getByTestId('river-scenario-note');
+	await expect(note).toHaveText(/^Scenario run: Hexberg Dam, against the base run Baseline \(today \d{2}:\d{2}\)\./);
+	await expect(note.getByRole('link', { name: 'Open the scenario' })).toHaveAttribute('href', `?tab=scenarios&scenario=${scenarioId}`);
+	await expectNoViolations(page);
+
+	// One link to the base: the select follows, and a run of the model has no note.
+	await note.getByRole('link', { name: 'Show the base run' }).click();
+	await expect(body).toHaveAttribute('data-run', runId);
+	await expect(body).toHaveAttribute('aria-busy', 'false');
+	await expect(select).toHaveValue(runId);
+	await expect(page.getByTestId('river-scenario-note')).toHaveCount(0);
+});
+

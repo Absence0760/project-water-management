@@ -35,6 +35,7 @@
 	import AssurancePanel from '#lib/components/reliability/AssurancePanel.svelte';
 	import { runDamCapacity } from '#lib/components/runs/results.js';
 	import { runYears } from '#lib/components/runs/runList.js';
+	import { runPickName } from '#lib/components/compare/picker.js';
 	import { dataEndOf } from '#lib/format/age.js';
 	import { fmtDay, fmtNum, fmtPct, fmtQty, fmtWhen, localIsoDate } from '#lib/format/number.js';
 	import type { ModelEditor } from '#lib/model/editor.svelte.js';
@@ -300,7 +301,7 @@
 		<label class="run-pick">
 			<span class="visually-hidden">Run shown</span>
 			<select value={meta.id} onchange={(e) => pickRun(e.currentTarget.value)}>
-				{#each runs as r (r.id)}<option value={r.id}>{runName(r)} · {fmtWhen(r.createdAt)} · {runYears(r.startDate, r.endDate)}</option>{/each}
+				{#each runs as r (r.id)}<option value={r.id}>{runPickName(r)} · {fmtWhen(r.createdAt)} · {runYears(r.startDate, r.endDate)}</option>{/each}
 			</select>
 		</label>
 	{/if}
