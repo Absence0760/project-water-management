@@ -336,6 +336,20 @@
 	// --- rebase ------------------------------------------------------------------------
 	let proposerOpen = $state(false);
 	let rebaseOpen = $state(false);
+	let rebaseFold = $state<HTMLDetailsElement | undefined>(undefined);
+	/** Where the rebase fold is offered (an editor's draft, not an application, out of override mode): the EWR months' older base says to use it. */
+	const canRebase = $derived(editable && !isApplication && !overriding);
+	/**
+	 * The comparison's "Rebase…" (an older base run's EWR months, ScenarioEwrMonths.svelte): open the fold and move
+	 * focus into it, on its run menu when there is one, else on its summary, so the page scrolls to it.
+	 */
+	async function openRebase() {
+		rebaseOpen = true;
+		await tick();
+		const target = rebaseFold?.querySelector<HTMLElement>('#rebase-run') ?? rebaseFold?.querySelector<HTMLElement>('summary');
+		target?.focus();
+		rebaseFold?.scrollIntoView({ block: 'nearest' });
+	}
 	/** Another run of the model to base the scenario on (a scenario run can't be a base). */
 	const rebaseChoices = $derived(runs.filter((r) => !isScenarioRun(r) && r.id !== s.baseRunId));
 	let rebaseTo = $state('');
@@ -614,8 +628,18 @@
 			<ScenarioStatement scenarioName={s.name} answers={s} {canChange} {saving} onsave={(p) => patch(p)} />
 		{/key}
 
-		{#if editable && !isApplication && !overriding}
-			<Fold name="Based on" line={s.baseRun.label || 'Untitled run'} change="Rebase…" problem={false} body="stack" class="rebase" bind:open={rebaseOpen} testid="rebase-fold">
+		{#if canRebase}
+			<Fold
+				name="Based on"
+				line={s.baseRun.label || 'Untitled run'}
+				change="Rebase…"
+				problem={false}
+				body="stack"
+				class="rebase"
+				bind:open={rebaseOpen}
+				bind:element={rebaseFold}
+				testid="rebase-fold"
+			>
 				{#snippet after()}<span class="visually-hidden">: rebase onto another run</span>{/snippet}
 				<p class="hint">
 					<span class="explain">Rebase onto another run: apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say).</span>
@@ -705,7 +729,7 @@
 {#if applicant}
 	<ApplicantResults {projectId} scenarioId={s.id} lastRunId={s.lastRun?.id ?? null} opsSha256={s.opsSha256} />
 {:else}
-	<ScenarioCompare {projectId} scenario={s} {runs} />
+	<ScenarioCompare {projectId} scenario={s} {runs} onrebase={canRebase ? openRebase : undefined} />
 {/if}
 
 {#if yieldFarms.length}

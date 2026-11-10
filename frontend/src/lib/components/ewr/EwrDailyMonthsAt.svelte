@@ -25,7 +25,8 @@
 		compact = false,
 		title,
 		level = 3,
-		missing
+		missing,
+		rerun
 	}: {
 		projectId: string;
 		runId: string;
@@ -37,21 +38,26 @@
 		title?: string;
 		level?: 3 | 4;
 		missing?: Snippet;
+		/** The re-run line's words for a run made before engine 1.116.0 (EwrDailyMonthsPanel.svelte). */
+		rerun?: string;
 	} = $props();
 
 	let result = $state.raw<EwrDailyMonths | null>(null);
 	let error = $state<string | null>(null);
 	let loadedKey = $state<string | null>(null);
 
+	// A run made before engine 1.116.0 has no unit figures: the panel's own missing line says what to do (a re-run,
+	// or the caller's `rerun` words and `missing` steps), as at the outlet.
+	const stale = $derived(!!unit && !verdictsOnly(summary) && !summary.unitEwr);
 	// Why a unit's months can't be worked out for this run, before any request: kept from this reader (its series
-	// are withheld), made before engine 1.116.0 (no unit figures: a re-run), or a unit this run hasn't.
+	// are withheld), made before engine 1.116.0 (above), or a unit this run hasn't.
 	const blocked = $derived.by(() => {
-		if (!unit) return null;
-		if (verdictsOnly(summary) || !summary.unitEwr) return dailyMonthsMissing(summary);
+		if (!unit || stale) return null;
+		if (verdictsOnly(summary)) return dailyMonthsMissing(summary);
 		if (!unitInRun(summary, unit.nodeId)) return `${unit.name} isn’t in this run.`;
 		return null;
 	});
-	const key = $derived(unit && !blocked ? `${runId}|${unit.nodeId}` : null);
+	const key = $derived(unit && !blocked && !stale ? `${runId}|${unit.nodeId}` : null);
 
 	$effect(() => {
 		const k = key;
@@ -74,14 +80,14 @@
 	});
 
 	const unavailable = $derived(
-		!unit ? undefined : (blocked ?? (error ? `Couldn’t load ${unit.name}’s flows: ${error}` : loadedKey !== key ? `Working out the months at ${unit.name}…` : undefined))
+		!unit || stale ? undefined : (blocked ?? (error ? `Couldn’t load ${unit.name}’s flows: ${error}` : loadedKey !== key ? `Working out the months at ${unit.name}…` : undefined))
 	);
 </script>
 
-<div aria-busy={!!unit && !blocked && !error && loadedKey !== key}>
+<div aria-busy={!!unit && !blocked && !stale && !error && loadedKey !== key}>
 	{#if unit}
-		<EwrDailyMonthsPanel {summary} {controls} {compact} {title} {level} {missing} {unit} result={loadedKey === key ? result : null} {unavailable} />
+		<EwrDailyMonthsPanel {summary} {controls} {compact} {title} {level} {missing} {rerun} {unit} result={!stale && loadedKey === key ? result : null} {unavailable} />
 	{:else}
-		<EwrDailyMonthsPanel {summary} {controls} {compact} {title} {level} {missing} />
+		<EwrDailyMonthsPanel {summary} {controls} {compact} {title} {level} {missing} {rerun} />
 	{/if}
 </div>

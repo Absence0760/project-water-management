@@ -24,6 +24,10 @@ describe('dailyMonthsMissing', () => {
 		expect(dailyMonthsMissing({})).toBe('Run the model again to see this for the daily EWR.');
 		expect(dailyMonthsMissing({ allocations: { mode: 'cap', verdictsOnly: true } as never })).toMatch(/editors and owners only/);
 	});
+	it("a caller's words replace the re-run line, never the kept-from-this-reader one", () => {
+		expect(dailyMonthsMissing({}, 'Rebase it.')).toBe('Rebase it.');
+		expect(dailyMonthsMissing({ allocations: { mode: 'cap', verdictsOnly: true } as never }, 'Rebase it.')).toMatch(/editors and owners only/);
+	});
 });
 
 describe('rateClass', () => {

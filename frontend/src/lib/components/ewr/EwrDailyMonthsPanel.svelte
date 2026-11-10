@@ -19,6 +19,7 @@
 	import { dailyEwrName, dailyMonthsHeading } from './notMet';
 	import { dailyMonthsMissing, dailyMonthsVerdict, rateClass, zeroRequirementText } from './dailyMonths';
 	import { placeWords, type UnitChoice } from './unitMonths';
+	import { verdictsOnly } from '#lib/components/runs/withheld.js';
 
 	let {
 		summary,
@@ -27,6 +28,7 @@
 		title,
 		level = 3,
 		missing,
+		rerun,
 		unit = null,
 		result,
 		unavailable
@@ -43,8 +45,10 @@
 		/** The heading in compact mode (the run's name and date), and its level. */
 		title?: string;
 		level?: 3 | 4;
-		/** After the missing-run line: what to do about it (the base run's "Run the model"). */
+		/** After the missing-run line of a run made before engine 1.116.0: what to do about it (the scenario base's "Run the model, then Rebase…"). */
 		missing?: Snippet;
+		/** That line's words in place of "Run the model again…" (the scenario's base, where a re-run alone changes nothing). */
+		rerun?: string;
 		/** Judged at this unit rather than the outlet (null: the outlet). */
 		unit?: UnitChoice | null;
 		/** The unit's months (ewr/unitMonths.ts); left out, the run's own outlet months. */
@@ -83,7 +87,7 @@
 		follows Model settings → EWR → Daily EWR from; a change there shows here after the model runs again.
 	</p>{/if}
 	{#if !r}
-		<p class="muted" data-testid="ewr-daily-months-missing">{unavailable ?? dailyMonthsMissing(summary)}{#if missing && unavailable === undefined}{' '}{@render missing()}{/if}</p>
+		<p class="muted" data-testid="ewr-daily-months-missing">{unavailable ?? dailyMonthsMissing(summary, rerun)}{#if missing && unavailable === undefined && !verdictsOnly(summary)}{' '}{@render missing()}{/if}</p>
 	{:else}
 		{#if !compact}{@render verdict(r)}{/if}
 

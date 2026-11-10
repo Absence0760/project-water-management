@@ -12639,7 +12639,16 @@ closing, and **Discard edits** puts it back. **Edits to record**
   its base; the line above names the place. A unit the scenario added says
   "<Name> isn’t in this run." on the base's side. A run made before
   engine 1.116.0 says "Run the model again to see this for the daily EWR."
-  on its side, the base side with a **Run the model** link (`?tab=runs`).
+  on the right. On the base side a re-run alone changes nothing (a scenario
+  stays on the run it was made on or rebased onto), so an older base says
+  it was made before the months were kept and to run the model again, then
+  rebase this scenario onto the new run, with **Run the model**
+  (`?tab=runs`), then **Rebase…**, which opens the editor's **Based on**
+  fold and moves focus to its **New base run** select (`onrebase`, from
+  `ScenarioEditor.svelte` through `ScenarioCompare.svelte`; `baseRerunText`).
+  Only where that fold is offered (an editor's draft, not an application,
+  outside override mode); anyone else reads that the months show once an
+  editor rebases the scenario, with no links. The same at a unit.
   Under the comparison, the scenario run's
   **Validation statement**, folded shut (the same `ValidationPanel` as a
   run's Record group, § Runs & results).

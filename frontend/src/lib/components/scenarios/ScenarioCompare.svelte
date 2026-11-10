@@ -28,7 +28,19 @@
 	const loadOverlay = () => import('#lib/components/compare/CompareOverlay.svelte');
 
 	// Only assessors see it: ScenarioEditor shows an applicant a note instead.
-	let { projectId, scenario, runs = [] }: { projectId: string; scenario: Scenario; /** The project's runs, for the EWR months' Run menu. */ runs?: readonly RunMeta[] } = $props();
+	let {
+		projectId,
+		scenario,
+		runs = [],
+		onrebase
+	}: {
+		projectId: string;
+		scenario: Scenario;
+		/** The project's runs, for the EWR months' Run menu. */
+		runs?: readonly RunMeta[];
+		/** Opens the editor's rebase fold; left out where the reader can't rebase (ScenarioEwrMonths.svelte's older base). */
+		onrebase?: () => void;
+	} = $props();
 
 	let data = $state<RunCompareResponse | null>(null);
 	let loading = $state(false);
@@ -110,7 +122,7 @@
 					<HeadlineDeltas comparison={data.comparison} fit={false} />
 				</section>
 				<!-- The EWR page's months met, base on the left and a picked run on the right (docs/ui.md § Scenarios). -->
-				<ScenarioEwrMonths {projectId} {runs} base={data.a.run} latest={data.b.run} />
+				<ScenarioEwrMonths {projectId} {runs} base={data.a.run} latest={data.b.run} {onrebase} />
 				<section aria-labelledby="sc-farms-h">
 					<h3 id="sc-farms-h">Hydrological units</h3>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />

@@ -455,3 +455,63 @@ test('EWR months met: the base on the left and a picked run on the right, side b
 	for (const side of [base, right]) await expect(side.getByRole('status')).toHaveText(/^Outlet/);
 });
 
+test('EWR months met: a base run from before the months were kept says run the model, then rebase, and Rebase… opens the fold', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Scenario EWR months older base');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	const scenarioId = await createScenario(page.request, project.id, {
+		name: 'Hexberg Dam',
+		baseRunId: runId,
+		ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 180_000 }]
+	});
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
+	expect(ran.ok()).toBe(true);
+	// A later run of the model: what the scenario would be rebased onto.
+	await createRun(page.request, project.id, 'Later run');
+	// The base run as one made before engine 1.116.0 reads: no months for the daily EWR, no unit figures. The
+	// comparison (GET /compare/runs, side a the base) is the base side's record.
+	const older = async (p: Page) =>
+		p.route(/\/compare\/runs\?/, async (route) => {
+			const res = await route.fetch();
+			const body = (await res.json()) as { a: { run: { summary: Record<string, unknown> } } };
+			delete body.a.run.summary.ewrDailyMonths;
+			delete body.a.run.summary.unitEwr;
+			await route.fulfill({ response: res, json: body });
+		});
+	await older(page);
+	await openScenarios(page, project.id, `&scenario=${scenarioId}`);
+
+	const months = page.getByRole('region', { name: 'EWR months met: base against a run' });
+	const base = months.getByTestId('scenario-ewr-base');
+	await expect(base.getByTestId('ewr-daily-months-missing')).toHaveText(
+		'This base run was made before the months for the daily EWR were kept, and a scenario stays on its base run: run the model again, then rebase this scenario onto the new run. Run the model, then Rebase…'
+	);
+	await expect(base.getByRole('link', { name: 'Run the model' })).toHaveAttribute('href', '?tab=runs');
+	// The right side still shows its months.
+	await expect(months.getByTestId('scenario-ewr-right').getByText('Months met', { exact: true })).toBeVisible();
+	// At a unit the base side says the same, with the same steps.
+	await months.getByRole('combobox', { name: 'At' }).selectOption({ label: 'Lower farm' });
+	await expect(base.getByTestId('ewr-daily-months-missing')).toContainText('then rebase this scenario onto the new run.');
+	await expectNoViolations(page);
+
+	const fold = page.getByTestId('rebase-fold');
+	await expect(fold).not.toHaveAttribute('open');
+	await base.getByRole('button', { name: 'Rebase…' }).click();
+	await expect(fold).toHaveAttribute('open', '');
+	await expect(fold.getByRole('combobox', { name: 'New base run' })).toBeFocused();
+	await expect(fold.getByRole('combobox', { name: 'New base run' })).toBeInViewport();
+
+	// A viewer can't rebase: plain words, no steps.
+	const viewer = await signIn('Scenario EWR months viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await older(viewer.page);
+	await openScenarios(viewer.page, project.id, `&scenario=${scenarioId}`);
+	const vbase = viewer.page.getByTestId('scenario-ewr-base');
+	await expect(vbase.getByTestId('ewr-daily-months-missing')).toHaveText(
+		'This base run was made before the months for the daily EWR were kept, and a scenario stays on its base run: they show here once an editor rebases this scenario onto a newer run of the model.'
+	);
+	await expect(vbase.getByRole('link')).toHaveCount(0);
+	await expect(vbase.getByRole('button')).toHaveCount(0);
+});
+
