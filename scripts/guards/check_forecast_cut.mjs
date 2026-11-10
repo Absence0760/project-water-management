@@ -70,6 +70,14 @@ export const INVENTORY = [
 	{ path: 'frontend/src/lib/components/compare/ReserveYearsChart.svelte', reads: 1, how: 'cut', evidence: ['reserveDaysByWaterYear(x.value.startDate, x.value.values, list[i]!.forecastFrom'] },
 	{ path: 'frontend/src/lib/components/dams/DamObservedBox.svelte', reads: 1, how: 'cut', evidence: ['observedChartSeries(dam, modelled, data?.run?.forecastFrom)'], note: 'observed.ts observedChartSeries ends the modelled surface area before the forecast (issue #604 R5-B)' },
 	{ path: 'frontend/src/lib/components/dams/DamsTab.svelte', reads: 1, how: 'cut+band', evidence: ['beforeForecast(s.values', 'band={forecastBand('] },
+	{
+		path: 'frontend/src/lib/components/ewr/EwrDailyMonthsAt.svelte',
+		reads: 1,
+		how: 'cut',
+		evidence: ['u.nodeId, summary.historyDays)', 'Math.min(historyDays ?? days, days)'],
+		in: ['frontend/src/lib/components/ewr/EwrDailyMonthsAt.svelte', 'frontend/src/lib/components/ewr/unitMonths.ts'],
+		note: 'a unit’s months met: assessDailyEwrMonths leaves out a month the forecast tail starts inside, as the outlet’s RunSummary.ewrDailyMonths does'
+	},
 	{ path: 'frontend/src/lib/components/map/mapResults.svelte.ts', reads: 1, how: 'cut', evidence: ['meta.forecastFrom ?? null'], note: 'loadDamLevels cuts (overview/damLevels.ts)' },
 	{ path: 'frontend/src/lib/components/network/NetworkTab.svelte', reads: 2, how: 'cut', evidence: ['latestRun?.forecastFrom ?? null', 'damLevel(dam, s, latestRun?.forecastFrom'] },
 	{ path: 'frontend/src/lib/components/outcomes/OutcomeMatrixPanel.svelte', reads: 1, how: 'never', evidence: ['!run.forecastFrom'], note: 'a demand sweep is based on an ordinary run only' },
