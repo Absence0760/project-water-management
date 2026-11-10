@@ -23,6 +23,29 @@ export const SERIES_REVISION_MAX_DAYS = 180;
 /** Longest reason for a change (the model_revision CHECK). */
 export const REASON_MAX = 500;
 
+/**
+ * A generated reason that keeps its citation whole (issue #763): `tail` (a
+ * dataset's reference) always survives, and only `head` (the description,
+ * which can hold user-named things) is shortened, with an ellipsis, to fit
+ * REASON_MAX. A tail past REASON_MAX on its own is a bug in the caller.
+ */
+export function fitReason(head: string, tail: string, max = REASON_MAX): string {
+	if (tail.length > max) throw new Error(`a reason's citation is ${tail.length} characters, more than ${max}`);
+	if (head.length + tail.length <= max) return head + tail;
+	return `${head.slice(0, Math.max(0, max - tail.length - 1)).trimEnd()}…${tail}`;
+}
+
+/**
+ * fitReason with a citation that may be long (a source text an operator
+ * loaded, up to 500 characters): the full citation when everything fits, or
+ * when it takes at most half the reason (the head is shortened); else the
+ * dataset's short reference (`reference`), whose full text stays on its row.
+ */
+export function fitCitedReason(head: string, citation: string, reference: string, max = REASON_MAX): string {
+	if (head.length + citation.length <= max || citation.length <= max / 2) return fitReason(head, citation, max);
+	return fitReason(head, reference, max);
+}
+
 /** The optional "why" of a change: trimmed, no NUL; empty means none. */
 export const Reason = z
 	.string()

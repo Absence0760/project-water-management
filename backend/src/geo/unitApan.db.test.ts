@@ -174,7 +174,7 @@ describe('GET /projects/:id/map/unit-apan', () => {
 		settings.apanUnits.units[id.West!].forEach((v: number, m: number) => expect(v).toBeCloseTo(shown.units.find((u: { nodeId: string }) => u.nodeId === id.West!).monthlyMm[m], 6));
 		const [rev] = await asOwner(`SELECT source, reason FROM model_revision WHERE project_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`, [pid]);
 		expect(rev.source).toBe('settings_patch');
-		expect(rev.reason).toMatch(/^A-pan for each hydrological unit \(CCWR A-pan \(Hydrological Unit\)\): 2 units from .*; on the covered units’ area-weighted mean: “Edge”; Invented A-pan grid/);
+		expect(rev.reason).toMatch(/^A-pan for each hydrological unit \(CCWR A-pan \(Hydrological Unit\)\): 2 units from .*; on the covered units’ area-weighted mean: “Edge”; dataset “ua-apan-test” \(1, monthly means, no period stated by the source; its source and method as the dataset records them, credit at \/data-sources\)$/);
 		const after = (await viewer.call('GET', at(pid, GRID))).body;
 		expect(after.same).toBe(true);
 		expect(after.saved).toMatchObject({ basis: 'units', dataset: GRID });
