@@ -15,7 +15,7 @@ import { flowHeading } from '#lib/components/overview/summaryChart.js';
 import { fmtNum } from '#lib/format/number.js';
 import { EWR_MAP_ANCHOR, EWR_MAP_HEADING, EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
 import { IRRIGATION_SUPPORT_HEADING } from '#lib/components/outcomes/irrigationSupport.js';
-import { isScenarioRun } from '#lib/components/runs/scenarioRun.js';
+import { runScenario } from '#lib/components/runs/scenarioRun.js';
 
 const created = (r: RunMeta) => {
 	const t = Date.parse(r.createdAt);
@@ -57,11 +57,12 @@ export interface ScenarioRunNote {
  * model.
  */
 export function scenarioRunNote(run: RunMeta, runs: readonly RunMeta[] | null): ScenarioRunNote | null {
-	if (!isScenarioRun(run)) return null;
+	const scenario = runScenario(run);
+	if (!scenario) return null;
 	const baseId = run.scenarioBaseRunId;
 	return {
-		name: (run.scenarioName ?? '').trim() || run.label || 'Untitled scenario',
-		scenarioId: run.scenarioId ?? null,
+		name: scenario.name || run.label || 'Untitled scenario',
+		scenarioId: scenario.id,
 		base: (baseId && runs?.find((r) => r.id === baseId)) || null
 	};
 }
