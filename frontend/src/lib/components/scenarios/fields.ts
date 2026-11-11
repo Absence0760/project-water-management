@@ -26,6 +26,7 @@ import {
 	LAND_COVER_CLASSES,
 	LAND_COVER_SET_FIELDS,
 	SUPPLY_RULES,
+	applyScenario,
 	SUPPLY_RULE_LABEL,
 	WATER_SOURCE_LABEL,
 	WATER_SOURCES,
@@ -39,11 +40,15 @@ import {
 	type CropSetField,
 	type DemandObjectSetField,
 	type LandCoverSetField,
+	type NetworkNode,
 	type NodeKind,
 	type NodeSetField,
 	type PeInput,
 	type PeKind,
 	type SettingsPath,
+	type ModelInput,
+	type ScenarioOp,
+	type Transfer,
 	type TransferSetField
 } from '@water-management/engine';
 import { describeDroughtRestriction, describeEwrDailySource, ewrDailySourceIssues, type DroughtRestrictionRule, type EwrDailySource } from '@water-management/engine';
@@ -76,8 +81,11 @@ export type ValueSpec =
 	| { t: 'bool' }
 	/** An ISO date; empty is null. */
 	| { t: 'date'; nullLabel: string }
-	/** A node of the model, by id; with `nullLabel`, empty is null (shown as that). */
-	| { t: 'node'; nullLabel?: string }
+	/**
+	 * A node of the model, by id; with `nullLabel`, empty is null (shown as
+	 * that). `withDam`: only another unit with a dam (nodeChoices).
+	 */
+	| { t: 'node'; nullLabel?: string; withDam?: boolean }
 	/** A row of the model's irrigation-systems table, by id (engine ≥ 1.72.0); with `nullLabel`, empty is null. */
 	| { t: 'system'; nullLabel?: string }
 	/**
@@ -244,7 +252,9 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	cropWaterSource: { label: 'Crops’ water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL) } },
 	cropRiverPumpM3Day: { label: 'Crops’ river pump capacity', spec: flow(pumpUnit, { nullable: true, nullLabel: 'no limit' }) },
 	cropRiverPoolM3: { label: 'Crops’ pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
-	// The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k); which unit's dam gives the remote share is the model's.
+	// The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k), and which unit's dam gives the remote share (engine
+	// 1.118.0; a team scenario's only, OpForm's remoteDam).
+	cropRemoteNodeId: { label: 'Unit whose dam supplies the crops’ share', spec: { t: 'node', nullLabel: 'none', withDam: true } },
 	cropShareDam: { label: 'Crops’ share from the dam', spec: pct(true, 'no table') },
 	cropShareRiver: { label: 'Crops’ share from the river', spec: pct(true, 'no table') },
 	cropShareRemote: { label: 'Crops’ share from another unit’s dam', spec: pct(true, 'no table') },
@@ -265,8 +275,20 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 };
 
 /** The fields node.set may change on a node of this kind, in the engine's order. */
-export function nodeFields(kind: NodeKind): { field: NodeSetField; label: string }[] {
-	return (NODE_SET_FIELDS[kind] as readonly NodeSetField[]).map((field) => ({ field, label: NODE_FIELD_SPECS[field].label }));
+export function nodeFields(kind: NodeKind, opts: { remoteDam?: boolean } = {}): { field: NodeSetField; label: string }[] {
+	return (NODE_SET_FIELDS[kind] as readonly NodeSetField[])
+		.filter((field) => opts.remoteDam !== false || field !== 'cropRemoteNodeId')
+		.map((field) => ({ field, label: NODE_FIELD_SPECS[field].label }));
+}
+
+/**
+ * The units a `node` value may pick, in the model the op meets (the base with
+ * the listed ops applied): every unit, or with `withDam` every other unit
+ * with a dam there (engine 1.118.0: a dam the scenario added counts, one it
+ * took away doesn't; the engine checks the same when the op applies).
+ */
+export function nodeChoices<N extends Pick<NetworkNode, 'id' | 'kind' | 'damCapacityM3'>>(spec: Extract<ValueSpec, { t: 'node' }>, nodes: readonly N[], selfId?: string | null): N[] {
+	return nodes.filter((n) => n.kind === 'farm' && (!spec.withDam || (n.id !== selfId && n.damCapacityM3 > 0)));
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +343,58 @@ export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.filter((field) => TRANSFER_FI
 	field,
 	label: TRANSFER_FIELD_SPECS[field].label
 }));
+
+/**
+ * The months and the one maximum rate a rule with monthly rates (engine ≥
+ * 1.14.0) keeps in step with its list: the engine's save rules
+ * (`monthlyRatesMismatch`) refuse them disagreeing, so `transfer.set` of either
+ * on such a rule is skipped. Its rates change through `monthlyRateM3s`, which
+ * sets both to match (null puts the rule back on one rate in its months).
+ */
+const SET_BY_MONTHLY_RATES: readonly TransferSetField[] = ['months', 'maxRateM3s'];
+
+/**
+ * The fields the Add a change form offers for this transfer: TRANSFER_FIELDS
+ * less the ones the engine would refuse for its shape. A rule with monthly
+ * rates (any `monthlyRateM3s` but null, the test `monthlyRatesMismatch` starts
+ * from) loses the months and the one maximum rate. No rule picked yet: all.
+ */
+export function transferFieldsFor(transfer: Pick<Transfer, 'monthlyRateM3s'> | undefined): typeof TRANSFER_FIELDS {
+	if (!transfer || transfer.monthlyRateM3s === null || transfer.monthlyRateM3s === undefined) return TRANSFER_FIELDS;
+	return TRANSFER_FIELDS.filter((f) => !SET_BY_MONTHLY_RATES.includes(f.field));
+}
+
+/**
+ * The choices a transfer.set of a choice field (a list, yes/no or a
+ * hydrological unit) may take on this rule, as the form's option values
+ * ('' for none): each one the engine applies to `input` without a problem
+ * (applyScenario, so every save rule that depends on the rule's shape is the
+ * engine's own: a share of the river's flow on a rule from the dam or without
+ * a complete curve, the river as source for a rule out of the catchment, from
+ * or to a non-unit, sized by a formula or one whose destination drains into
+ * its source, an end that is the source itself, an other water user or loops
+ * an off-take, a seepage unit not below the source). `units`: the units the
+ * form lists for a unit field. Null for any other field, or no rule picked.
+ */
+export function transferChoices(input: ModelInput, transferId: string, field: TransferSetField, units: readonly string[]): string[] | null {
+	const spec = TRANSFER_FIELD_SPECS[field].spec;
+	if (!input.model.transfers.some((t) => t.id === transferId)) return null;
+	const all =
+		spec.t === 'enum'
+			? [...(spec.nullable ? [''] : []), ...spec.options.map((o) => o.value)]
+			: spec.t === 'bool'
+				? ['true', 'false']
+				: spec.t === 'node'
+					? [...(spec.nullLabel !== undefined ? [''] : []), ...units]
+					: null;
+	if (!all) return null;
+	return all.filter((text) => {
+		const parsed = parseValue(spec, text);
+		if (!parsed.ok) return false;
+		const op = { op: 'transfer.set', transferId, field, value: parsed.value } as ScenarioOp;
+		return applyScenario(input, [op]).problems.length === 0;
+	});
+}
 
 // ---------------------------------------------------------------------------
 // crop.set, landCover.set (engine ≥ 1.35.0)

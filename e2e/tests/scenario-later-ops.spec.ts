@@ -104,3 +104,45 @@ test('an editor moves and inserts nodes, changes a crop and sets a registered vo
 	const live = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { name: string }[] };
 	expect(live.nodes.map((n) => n.name).sort()).toEqual(['Lower farm', 'Outflow gauge', 'Upper farm']);
 });
+
+test('a unit’s crops draw on a dam the scenario adds: the picker offers the other units with a dam as the listed changes leave them (engine 1.118.0)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Scenario remote dam');
+	await createRun(page.request, project.id, 'Baseline');
+	const name = 'Pipe from Hexberg';
+	await page.goto(`/projects/${project.id}?tab=scenarios&new=1`);
+	const create = page.getByRole('dialog', { name: 'New scenario' });
+	await create.getByLabel('Name', { exact: true }).fill(name);
+	await create.getByRole('button', { name: 'Create scenario' }).click();
+	await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
+
+	const form = page.getByRole('form', { name: 'Add a change' });
+	const changes = page.getByRole('list', { name: `Changes in ${name}` }).getByRole('listitem');
+	const pickRemote = async () => {
+		await form.getByLabel('Kind of change').selectOption({ label: 'Change a hydrological unit' });
+		await form.getByLabel('Hydrological unit').selectOption({ label: 'Lower farm' });
+		await form.getByLabel('Field').selectOption({ label: 'Unit whose dam supplies the crops’ share' });
+	};
+
+	// Before the new dam: only the other unit with a dam (never Lower farm itself).
+	await pickRemote();
+	await expect(form.locator('#op-value option')).toHaveText(['None', 'Upper farm']);
+
+	// A new dam, Hexberg, draining into the outflow gauge.
+	await form.getByLabel('Kind of change').selectOption({ label: 'Add a hydrological unit' });
+	await form.getByLabel('Name', { exact: true }).fill('Hexberg');
+	await form.getByLabel('Drains into').selectOption({ label: 'Outflow gauge' });
+	await form.getByLabel('Dam capacity (m³)').fill('400000');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(changes).toHaveCount(1);
+
+	// After it, the picker offers Hexberg too, and the change applies against the scenario's model.
+	await pickRemote();
+	await expect(form.locator('#op-value option')).toHaveText(['None', 'Upper farm', 'Hexberg']);
+	await form.locator('#op-value').selectOption({ label: 'Hexberg' });
+	await expectNoViolations(page);
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(changes).toHaveCount(2);
+	await expect(changes.nth(1)).toContainText(/Lower farm: Unit whose dam supplies the crops’ share .*→ Hexberg/);
+	await expect(page.getByTestId('scenario-problems')).toHaveCount(0);
+});

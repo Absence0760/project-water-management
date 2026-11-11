@@ -1884,15 +1884,34 @@ for every workspace tab. Its own chunk.
 
 - **Header**: the section header titled "Dams", with the context line
   "8 dams · 2.73 million m³ capacity · latest run “Baseline”, ran today"
-  (`damsSummary`, `fmtVolume`), **Hydrological unit table** (the grid modal over this
-  page, `grid=nodes`) once there is a dam, and **Open in Runs & results** once there
-  is a run, all filled through `fillHeader` like Crops & demand. The cards'
+  (`damsSummary`, `fmtVolume`; "run “Hexberg Dam (scenario)”, ran today" for a
+  run picked that isn't the newest, `damsRunText`), the **Run** menu once there
+  is a run and a dam, **Hydrological unit table** (the grid modal over this
+  page, `grid=nodes`) once there is a dam, and **Open in Runs & results** (the
+  run shown) once there
+  is a run, all filled through `fillHeader` like Crops & demand.
+- **Run menu**: every run, newest first, each named as the other pages' run
+  pickers name it (`compare/picker.ts` `runOptionLabel`: a scenario's run
+  "Hexberg Dam (scenario) · 9 Nov 2026 20:31 · 1981–2026"; the newest tagged
+  "latest"). The newest is the default; a pick goes in the URL as `run=<id>`
+  beside `dam=` (a step in history, so Back returns and a reload keeps it;
+  `river.ts` `pickRiverRun`, as EWR and Outputs). A `run=` naming a deleted
+  run shows the newest and says so. A scenario's run (also once its scenario
+  is deleted) has a note under the header, as on EWR (`scenarioRunNote`):
+  "Scenario run: Hexberg Dam, against the base run Baseline (…)", with **Show
+  the base run** and **Open the scenario**. Its cards are the scenario's dams:
+  a dam the scenario added (in no model) has a card with the run's figures and
+  capacity and no Edit dam or On the Network link, and nothing is marked
+  changed since the run (the run's model is the scenario's, not an earlier
+  one). A `dam=` the run picked doesn't have a card for (a scenario's dam, with
+  another run picked) falls back to the first card; a dam in the model the run
+  has no storage for keeps its card and the chart says it isn't in this run. The cards'
   and the chart's headings are h2 under its h1.
 - **Which dams**: a farm with a capacity of at least 1 m³ (`modelDams`). Only
   a farm has a dam in the engine; a capacity on a gauge or another water user
   is inert (no storage, no `dam_storage` series), so it is not listed, and
   the Summary's *Dam capacity* fact counts farms' dams only too. The levels are
-  those of the latest run (`pickRuns`, the Summary's newest-by-date rule):
+  those of the run shown (the Run menu's; by default the newest, the Summary's newest-by-date rule):
   the dams the run stored storage for (`damsInRun`, capacity and minimum
   level from the run's own model), each dam's daily series fetched through
   the Runs cache four at a time (`loadDamLevels`) and kept for the sparklines
@@ -4581,7 +4600,12 @@ map" card) stays the schematic; this is the geography.
   outline follows these, and, with the River network layer on, **River
   network**: mapped rivers, for reference only; they can sit off the terrain
   channels (2026-10-03: the operator saw red and blue lines with neither in
-  the Key, and asked which one a catchment follows); **Delineate…** (or the bar's **Enter coordinates**) opens
+  the Key, and asked which one a catchment follows). The key, and **Snap to
+  features** with features on the map, show from the moment the bar opens,
+  while the map is still loading (only a map that can't be drawn leaves them
+  out): nothing is added above the bar's buttons as the map draws, since a
+  row added there moved **Enter coordinates** out from under a press already
+  on it and the release opened nothing (issue #719). **Delineate…** (or the bar's **Enter coordinates**) opens
   the **Delineate a catchment** sheet (`delineate=1`): "The point is" The
   catchment’s outlet / Just below a dam wall, the clicked position (or
   Latitude and Longitude behind **Enter coordinates**), the dataset line
@@ -4682,7 +4706,8 @@ map" card) stays the schematic; this is the geography.
   width, so the panel is in the DOM once). It has how ("Click a terrain
   channel for each outlet, or press Enter at the crosshair. Each gets the
   land that drains to it before any other click, following the terrain.")
-  with the lines on the map in words under it (as Delineate's bar); with a
+  with the lines on the map in words under it (as Delineate's bar, while the
+  map loads too); with a
   catchment boundary on the map, a line naming it ("Within “Valley”: its
   delineated outlet is the lowest point, so the land between your lowest
   click and the outlet is the outlet’s piece (O). A click outside the
@@ -12381,7 +12406,11 @@ them scenarios).
   op of the engine's `ScenarioOp` union: change a node's value, add a node
   (a leaf farm or other water user), remove a node, set a farm's crop area,
   add a crop (optionally starting from another crop's factors), add, change
-  or remove a transfer, add or remove land cover, change a setting, scale
+  (only the fields and choices the picked rule's shape takes: no months or
+  one maximum rate on a rule with monthly rates, whose **Maximum rate by
+  month** sets both, and a list, yes/no or unit shows only the choices the
+  engine applies to that rule, so no share of the river's flow on a rule
+  from the dam; scenarios.md § Op catalogue) or remove a transfer, add or remove land cover, change a setting, scale
   rainfall by a % change over a date range, scale demand (farms' irrigation
   or other water users', as a % of what they'd take, for ticked nodes and
   months; none ticked is all; `demand.scale`, issue #53 R1; for units, from
@@ -12639,7 +12668,16 @@ closing, and **Discard edits** puts it back. **Edits to record**
   its base; the line above names the place. A unit the scenario added says
   "<Name> isn’t in this run." on the base's side. A run made before
   engine 1.116.0 says "Run the model again to see this for the daily EWR."
-  on its side, the base side with a **Run the model** link (`?tab=runs`).
+  on the right. On the base side a re-run alone changes nothing (a scenario
+  stays on the run it was made on or rebased onto), so an older base says
+  it was made before the months were kept and to run the model again, then
+  rebase this scenario onto the new run, with **Run the model**
+  (`?tab=runs`), then **Rebase…**, which opens the editor's **Based on**
+  fold and moves focus to its **New base run** select (`onrebase`, from
+  `ScenarioEditor.svelte` through `ScenarioCompare.svelte`; `baseRerunText`).
+  Only where that fold is offered (an editor's draft, not an application,
+  outside override mode); anyone else reads that the months show once an
+  editor rebases the scenario, with no links. The same at a unit.
   Under the comparison, the scenario run's
   **Validation statement**, folded shut (the same `ValidationPanel` as a
   run's Record group, § Runs & results).

@@ -41,7 +41,8 @@
 		lineClass,
 		ontoggle,
 		after,
-		children
+		children,
+		element = $bindable()
 	}: {
 		/** The group's name, ending in a colon: "Search:", "Default limits:". None when the line says it all. */
 		name?: string;
@@ -73,6 +74,8 @@
 		/** More of the summary after the line (visually hidden words for the accessible name). */
 		after?: Snippet;
 		children: Snippet;
+		/** The <details> element, bound by a caller that opens the fold from elsewhere and moves focus into it (the scenario page's Rebase…). */
+		element?: HTMLDetailsElement;
 	} = $props();
 
 	// Read once: a fold that shut itself the moment the last value went back to its default would pull the
@@ -81,7 +84,7 @@
 	if (atDefaults !== undefined) open = !atDefaults;
 </script>
 
-<details class="fold {klass}" class:spaced data-testid={testid} bind:open {ontoggle}>
+<details class="fold {klass}" class:spaced data-testid={testid} bind:open {ontoggle} bind:this={element}>
 	<summary
 		>{#if name}<span class="fold-name">{name}</span>{' '}{/if}<span id={lineId} class="fold-line {lineClass ?? ''}" data-testid={lineTestid}>{line}</span>{@render after?.()}{#if problem}<span
 				class="fold-problem">needs fixing</span

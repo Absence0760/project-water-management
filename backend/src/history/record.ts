@@ -23,6 +23,77 @@ export const SERIES_REVISION_MAX_DAYS = 180;
 /** Longest reason for a change (the model_revision CHECK). */
 export const REASON_MAX = 500;
 
+/**
+ * A generated reason that keeps its citation whole (issue #763): `tail` (a
+ * dataset's reference) always survives, and only `head` (the description,
+ * which can hold user-named things) is shortened, with an ellipsis, to fit
+ * REASON_MAX. A tail past REASON_MAX on its own is a bug in the caller.
+ */
+export function fitReason(head: string, tail: string, max = REASON_MAX): string {
+	if (tail.length > max) throw new Error(`a reason's citation is ${tail.length} characters, more than ${max}`);
+	return clipWords(head, max - tail.length) + tail;
+}
+
+/** The longest word clipWords backs up over to cut on a word boundary. */
+const CLIP_WORD_MAX = 30;
+
+/**
+ * `text` at most `max` characters: whole when it fits, else cut at the last
+ * word boundary that leaves room for an ellipsis ("…"), dropping the
+ * whitespace and the `,;:` the cut would leave hanging. A word longer than
+ * CLIP_WORD_MAX (or than the room) is cut where it must, so the result never
+ * passes `max` and never throws away a long run for want of a space. Pure.
+ */
+export function clipWords(text: string, max: number): string {
+	if (text.length <= max) return text;
+	if (max <= 0) return '';
+	const room = max - 1;
+	const cut = text.slice(0, room);
+	// The cut already ends a word when the next character is whitespace; else back to the last whitespace in it, unless
+	// that drops more than a long word's worth (a pasted run of characters with no space is cut where it must).
+	const back = /\s/.test(text[room]!) ? room : cut.search(/\s\S*$/);
+	const end = back > 0 && room - back <= CLIP_WORD_MAX ? back : room;
+	return `${cut.slice(0, end).replace(/[\s,;:]+$/, '')}…`;
+}
+
+/**
+ * fitReason with a citation that may be long (a source text an operator
+ * loaded, up to 500 characters): the full citation when everything fits, or
+ * when it takes at most half the reason (the head is shortened); else the
+ * dataset's short reference (`reference`), whose full text stays on its row.
+ */
+export function fitCitedReason(head: string, citation: string, reference: string, max = REASON_MAX): string {
+	if (head.length + citation.length <= max || citation.length <= max / 2) return fitReason(head, citation, max);
+	return fitReason(head, reference, max);
+}
+
+/**
+ * fitCitedReason followed by a note (a dataset's method, which can run to
+ * 1000 characters): the head and citation as fitCitedReason gives them, then
+ * as much of the note as the rest of REASON_MAX holds, cut on a word with an
+ * ellipsis, or none when not even that fits.
+ */
+export function fitNotedReason(head: string, citation: string, reference: string, note: string, max = REASON_MAX): string {
+	const lead = fitCitedReason(head, citation, reference, max);
+	const rest = note ? clipWords(note, max - lead.length - 1) : '';
+	return rest && rest !== '…' ? `${lead} ${rest}` : lead;
+}
+
+/**
+ * `items` joined with `join`, at most `room` characters: as many whole items as fit, the rest counted ("A, B and 12
+ * more"), or `none(n)` when not even the first fits beside its count. Never cuts an item mid-word. For the lists in a
+ * generated reason that grow with the model (names), so fitReason has nothing left to shorten. Pure.
+ */
+export function fitList(items: readonly string[], room: number, join = ', ', none = (n: number) => `${n} of them`): string {
+	const all = items.join(join);
+	if (all.length <= room) return all;
+	for (let k = items.length - 1; k > 0; k--) {
+		const text = `${items.slice(0, k).join(join)} and ${items.length - k} more`;
+		if (text.length <= room) return text;
+	}
+	return none(items.length);
+}
+
 /** The optional "why" of a change: trimmed, no NUL; empty means none. */
 export const Reason = z
 	.string()

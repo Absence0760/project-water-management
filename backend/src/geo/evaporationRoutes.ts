@@ -45,7 +45,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
-import { beginSettingsChange, recordModelRevision } from '../history/record.js';
+import { beginSettingsChange, fitCitedReason, fitReason, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
@@ -58,6 +58,7 @@ import {
 	citeEvaporation,
 	evaporationDatasets,
 	evaporationLabel,
+	referenceEvaporation,
 	summariseEvaporation,
 	TARGET_OF,
 	type EvaporationDataset,
@@ -140,12 +141,56 @@ function currentRows(s: ReturnType<typeof mergeSettings>): Record<EvaporationTar
 const pct = (x: number) => `${Math.round(x * 100)} %`;
 
 /** How the values were taken over this boundary, in a sentence. */
-const howTaken = (b: Boundary, s: EvaporationSummary) =>
+const howTaken = (b: Pick<Boundary, 'name'>, s: EvaporationSummary) =>
 	`area-weighted over the ${s.cells} grid cell${s.cells === 1 ? '' : 's'} the catchment boundary “${b.name || 'unnamed'}” covers (${pct(s.coverage)} of it has values)`;
 
-/** The PE row's `source` (at most PE_SOURCE_MAX): the dataset's citation and how it was taken. */
-export const peSourceFor = (d: EvaporationDataset, b: Boundary, s: EvaporationSummary) =>
-	`Proposed from the map: ${evaporationLabel(d)}, ${citeEvaporation(d)}, ${howTaken(b, s)}; taken as GR4J's PE unchanged.`.slice(0, PE_SOURCE_MAX);
+/**
+ * The PE row's `source` (at most PE_SOURCE_MAX): the dataset's citation and how it was taken; with the dataset's
+ * reference in place of its citation when the citation would not fit (issue #763), never a cut-off citation.
+ */
+export const peSourceFor = (d: EvaporationDataset, b: Pick<Boundary, 'name'>, s: EvaporationSummary) => {
+	const line = (cite: string) => `Proposed from the map: ${evaporationLabel(d)}, ${cite}, ${howTaken(b, s)}; taken as GR4J's PE unchanged.`;
+	const full = line(citeEvaporation(d));
+	return full.length <= PE_SOURCE_MAX ? full : line(referenceEvaporation(d)).slice(0, PE_SOURCE_MAX);
+};
+
+/**
+ * The settings revision's reason for an accepted proposal (issue #763): what changed and how it was taken, then the
+ * dataset's stable reference (label, version, period, where its source, method and credit live), which fitReason
+ * always keeps whole. The long source and method stay on the dataset row (and evaporation_accepted's copy).
+ */
+export const evaporationReason = (d: EvaporationDataset, b: Pick<Boundary, 'name'>, s: EvaporationSummary): string => {
+	const what = TARGET_OF[d.kind] === 'pe' ? 'GR4J’s monthly PE' : 'A-pan evaporation';
+	return fitReason(`${what} from the map: ${s.annualMm} mm a year of ${evaporationLabel(d)}, ${howTaken(b, s)}`, `; ${referenceEvaporation(d)}.`);
+};
+
+/**
+ * A DWS evaporation station's revision reason (issue #763): the station's source and dataset last, kept whole, or
+ * the dataset's reference when the source is long; only the description before it is shortened.
+ */
+export const stationReason = (head: string, st: { source: string; dataset: string }): string =>
+	fitCitedReason(head, `. ${st.source} (dataset “${st.dataset}”).`, `. Dataset “${st.dataset}”: its source as the dataset records it, credit at /data-sources.`);
+
+/**
+ * WR2012's A-pan revision reason (issue #763): the source last, kept whole, or the datasets' reference when it is
+ * long; the quaternary list before it (the head, which starts with the dataset labels) is what gets shortened.
+ */
+export const wr2012Reason = (head: string, datasets: string, source: string | null): string =>
+	source
+		? fitCitedReason(head, `. ${source}`, `. Source as dataset ${datasets} records it, credit at /data-sources#wrc-water-resources.`)
+		: fitReason(head, '.');
+
+/**
+ * A typed S-pan's revision reason (issue #763): the S-pan months, the conversion and its note last, kept whole;
+ * only the user's note (up to 200 characters) is shortened.
+ */
+export const spanReason = (note: string | undefined, apanMm: readonly number[], spanMm: readonly number[], label: string, conversionNote: string): string => {
+	const annual = (row: readonly number[]) => Math.round(row.reduce((a, b) => a + b, 0));
+	return fitReason(
+		`A-pan evaporation from S-pan typed or pasted${note ? ` (${note})` : ''}: ${annual(apanMm)} mm a year from ${annual(spanMm)} mm of S-pan`,
+		` (Oct–Sep, mm: ${spanMm.join(' ')}), converted by the ${label}; ${conversionNote}.`
+	);
+};
 
 /** GET …/evaporation-stations' query: the search radius from the boundary, km. */
 export const EvaporationStationsQuery = z.object({ within: z.coerce.number().finite().positive().max(EVAP_STATIONS_WITHIN_MAX_KM).optional() }).strict();
@@ -270,12 +315,7 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 				// The boundary as it was summarised (273, issue #646 F8): the Map's Checks flag a redraw since.
 				[id, target, summary.monthlyMm, d.dataset, d.kind, d.source, d.version, d.method, summary.coverage, JSON.stringify({ featureId: boundary.id, updatedAt: boundary.updatedAt, areaM2: boundary.areaM2 ?? 0 })]
 			);
-			const what = target === 'pe' ? 'GR4J’s monthly PE' : 'A-pan evaporation';
-			const revision = await recordModelRevision(db, id, {
-				source: 'settings_patch',
-				before,
-				reason: `${what} from the map: ${summary.annualMm} mm a year of ${evaporationLabel(d)}, ${howTaken(boundary, summary)}; ${citeEvaporation(d)}. ${d.method}`.slice(0, 500)
-			});
+			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: evaporationReason(d, boundary, summary) });
 			return c.json({ target, monthlyMm: summary.monthlyMm, dataset: d.dataset, revisionId: revision?.id ?? null });
 		});
 	})
@@ -334,13 +374,13 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 			const where = km === 0 ? `inside the catchment boundary “${boundary.name || 'unnamed'}”` : `${Math.round(km * 10) / 10} km from the catchment boundary “${boundary.name || 'unnamed'}”`;
 			const annual = Math.round(apan.apanMm.reduce((a, b) => a + b, 0));
 			const record = trimmedRecord(st.startDate, st.values);
-			const parts = [
+			const head = [
 				`A-pan evaporation from DWS evaporation station ${st.code}${st.name ? ` “${st.name}”` : ''} (${PAN_LABEL[st.pan]}, ${where}): ${annual} mm a year, the monthly means of ${monthsText(means)}`,
-				apan.note ? `; ${apan.note}` : '',
 				daily ? `; daily series “${seriesName}” written (${record.startDate} to ${fromEpochDay(toEpochDay(record.startDate) + record.values.length - 1)})` : st.pan === 'symons' ? '; the daily S-pan record not written' : '; daily series not written',
-				`. ${st.source} (dataset “${st.dataset}”).`
-			];
-			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: parts.join('').slice(0, 500) });
+				// The conversion note last in the head: its equation comes first, so a shortened reason keeps it, and only its reference is cut.
+				apan.note ? `; ${apan.note}` : ''
+			].join('');
+			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: stationReason(head, st) });
 			let queued = null;
 			if (daily) {
 				const source = `DWS evaporation station ${st.code} (${PAN_LABEL[st.pan]}), dataset ${st.dataset}`.slice(0, 200);
@@ -391,10 +431,9 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 				used.length === 1 ? 'the A-pan of the quaternary' : 'the area-weighted A-pan of the quaternaries',
 				` under the catchment boundary “${boundary.name || 'unnamed'}”: ${quaternariesText(used)}; from ${files} module file${files === 1 ? '' : 's'}`,
 				left >= 0.005 ? `; ${Math.round(left * 100)} % of the catchment has no WR2012 A-pan and is left out of the mean` : '',
-				ev.spanMm ? `; their runoff modules’ S-pan is ${annual(ev.spanMm)} mm a year` : '',
-				`. ${used[0]!.source ?? ''}`
+				ev.spanMm ? `; their runoff modules’ S-pan is ${annual(ev.spanMm)} mm a year` : ''
 			].join('');
-			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: reason.trim().slice(0, 500) });
+			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: wr2012Reason(reason, datasets, used[0]!.source?.trim() || null) });
 			return c.json({ apanMm, spanMm: ev.spanMm, quaternaries: used.map((q) => q.code), revisionId: revision?.id ?? null });
 		});
 	})
@@ -410,13 +449,8 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 			const before = await beginSettingsChange(db, id);
 			const { stored } = await settingsOf(db, id);
 			await db.query('UPDATE project SET settings = $2::jsonb, updated_at = now() WHERE id = $1', [id, JSON.stringify(patchSettings(stored, { apanMm: fill.values }))]);
-			const annual = (row: readonly number[]) => Math.round(row.reduce((a, b) => a + b, 0));
 			const label = SPAN_CONVERSIONS.find((x) => x.id === body.conversion)!.label;
-			const reason = [
-				`A-pan evaporation from S-pan typed or pasted${body.note ? ` (${body.note})` : ''}: ${annual(fill.values)} mm a year from ${annual(spanMm)} mm of S-pan`,
-				` (Oct–Sep, mm: ${spanMm.join(' ')}), converted by the ${label}; ${fill.note}.`
-			].join('');
-			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: reason.slice(0, 500) });
+			const revision = await recordModelRevision(db, id, { source: 'settings_patch', before, reason: spanReason(body.note, fill.values, spanMm, label, fill.note) });
 			return c.json({ apanMm: fill.values, spanMm, conversion: body.conversion, revisionId: revision?.id ?? null });
 		});
 	});

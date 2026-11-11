@@ -380,8 +380,10 @@ function unmaskText(line: string, masked: Masked | null): string {
 interface Visibility {
 	node: (id: string) => boolean;
 	item: (id: string) => boolean;
+	/** Masked mode: the ops are an application's, judged under its applicant's mask (WP-3.3). */
+	application: boolean;
 }
-const SEE_ALL: Visibility = { node: () => true, item: () => true };
+const SEE_ALL: Visibility = { node: () => true, item: () => true, application: false };
 
 class OpError extends Error {}
 const fail = (msg: string): never => {
@@ -513,6 +515,33 @@ function resizeDamGeometry(n: NetworkNode, oldCap: number): string | null {
 	return `dam area when full ${Math.round(from)} → ${Math.round(n.damAreaFullM2)} m² along the dam's own area–volume relation (× ${ratio.toFixed(3)}^${b})${estimated ? ', from the 7.2 × capacity^0.77 estimate' : ''}`;
 }
 
+/**
+ * node.set `cropRemoteNodeId` (engine 1.118.0): the unit whose dam gives a
+ * unit's crops their remote share. Checked against the scenario's model as
+ * the ops before it leave it, so a dam the scenario itself adds (a node.add,
+ * or a damCapacityM3 above 0 on the unit) counts and the base's doesn't
+ * decide: the named node must be another unit with a dam now. A later op that
+ * takes the dam away (damCapacityM3 → 0, node.remove) breaks the save rule
+ * cropSupplyIssues checks after it while the remote share is above 0, so that
+ * op is refused. Never an application's: it would point the applicant's crops
+ * at a neighbour's dam, water the licence assessment would then count as
+ * theirs without the neighbour's consent or a licence for it, and it names a
+ * node their view anonymises (docs/scenarios.md § Op catalogue).
+ */
+function remoteDamCheck(d: Draft, n: NetworkNode, id: string | null, see: Visibility): void {
+	if (see.application)
+		fail(
+			"an application can't draw its crops from another unit's dam: that water is the other unit's, so the assessment would count a neighbour's dam as the applicant's; propose a transfer from a dam of your own, or set the shares from your own dam and the river"
+		);
+	if (id === null) return;
+	const src = d.model.nodes.find((x) => x.id === id);
+	if (!src) fail(`cropRemoteNodeId: no hydrological unit ${id} in the scenario's model at this op`);
+	if (src!.kind !== 'farm') fail(`cropRemoteNodeId: "${src!.name}" is a ${src!.kind}, not a hydrological unit with a dam`);
+	if (src!.id === n.id) fail(`cropRemoteNodeId: "${n.name}" can't supply its own crops' share from another unit's dam; that is cropShareDam`);
+	if (!(src!.damCapacityM3 > 0))
+		fail(`cropRemoteNodeId: "${src!.name}" has no dam at this point in the scenario; add its dam (damCapacityM3 above 0, or a node.add with one) in an earlier op`);
+}
+
 function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[] {
 	const notes: string[] = [];
 	const m = d.model;
@@ -554,6 +583,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			// scenario never runs identical to its base while saying it changed the losses.
 			if (replacedByMonth(n, field))
 				fail(`${field} is set by month on ${n.name} (${MONTHLY_ROW_OF[field as keyof typeof MONTHLY_ROW_OF]}): change that row, or set it to null first`);
+			if (field === 'cropRemoteNodeId') remoteDamCheck(d, n, op.value as string | null, see);
 			const oldCap = n.damCapacityM3;
 			(n as unknown as Record<string, unknown>)[field] = field === 'name' ? (op.value as string).trim() : cloneData(op.value);
 			if (field === 'damCapacityM3' && n.kind === 'farm') {
@@ -1037,7 +1067,7 @@ interface Stepped extends Omit<ScenarioResult, 'renamed' | 'reIds'> {
  * refused on its own, and the rest of its group still counts.
  */
 function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | null): Stepped {
-	const see: Visibility = masked ? { node: (id) => !masked.nodes.has(id), item: (id) => !masked.tokens.has(id) } : SEE_ALL;
+	const see: Visibility = masked ? { node: (id) => !masked.nodes.has(id), item: (id) => !masked.tokens.has(id), application: true } : SEE_ALL;
 	// The stations travel with the draft (engine 1.107.0): climate.delta scales their MAPs.
 	let cur: ModelInput = { settings: cloneData(base.settings), model: masked?.model ?? cloneData(base.model), series: { ...base.series }, ...(base.stations !== undefined ? { stations: base.stations } : {}) };
 	let issues = structureIssues(cur);
@@ -1212,7 +1242,8 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 			// boreholes, and how it takes water (the supply rule and river pump, WP-3.8), which is
 			// what a licence to abstract from the river asks for, like a new pump. Land sets the unit's natural MAR share,
 			// which splits the catchment's natural runoff, so it stays baseline.
-			return ok(mine(op.nodeId) && !BASELINE_NODE_FIELDS.includes(op.field));
+			// Another unit's dam (engine 1.118.0) names a node beyond the applicant's own: never theirs (an application refuses it).
+			return ok(mine(op.nodeId) && !BASELINE_NODE_FIELDS.includes(op.field) && op.field !== 'cropRemoteNodeId');
 		case 'node.add':
 			// A new gauge moves an EWR site; a new node with land re-partitions the catchment's runoff (its natural MAR share).
 			return ok(!sharesRunoff(op.node));

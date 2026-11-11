@@ -72,7 +72,6 @@
 	const onMap = $derived(savedPieces(r));
 	const first = $derived(r?.firstNumber ?? 1);
 
-	const mapReady = $derived(mapStatus === 'ready');
 	const mapFailed = $derived(mapStatus === 'failed');
 
 	// Typed coordinates are folded while the map draws or is still loading, and open once it
@@ -121,7 +120,8 @@
 			: 'The map can’t be drawn here: enter each outlet’s coordinates.'}
 	</p>
 	{#if withinText}<p class="within small" data-testid="map-click-within">{withinText}</p>{/if}
-	{#if lines?.length && mapReady}<DelineationLines {lines} />{/if}
+	<!-- While the map loads too: added as it drew, it moved Enter coordinates and the buttons under a press (issue #719). -->
+	{#if lines?.length && !mapFailed}<DelineationLines {lines} />{/if}
 	<p class="said small muted" role="status" data-testid="map-click-said">{divider.said}</p>
 	{#if divider.error}<p class="problem small" role="alert" data-testid="map-click-error">{divider.error}</p>{/if}
 

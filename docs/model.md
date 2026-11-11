@@ -7437,7 +7437,7 @@ asserts both on random networks.
 | `cropShareDam` | share of the crop demand asked of the unit's own dam side, 0–1 |
 | `cropShareRiver` | share asked of the river at the unit, through the crops' river abstraction (its pump `cropRiverPumpM3Day` and pool `cropRiverPoolM3`, §2.7j) |
 | `cropShareRemote` | share asked of another unit's dam |
-| `cropRemoteNodeId` | that unit: a farm with a dam, not this one, and not one this unit drains into |
+| `cropRemoteNodeId` | that unit: a farm with a dam, not this one, and not one this unit drains into (a team scenario may set it since engine 1.118.0, checked against the scenario's model as its earlier ops leave it; an application may not, [scenarios.md § Op catalogue](./scenarios.md#op-catalogue)) |
 | `cropRemoteCapM3Day` | the pipe or canal's capacity from it, m³/day; null = no limit (the run warns); 0 = nothing |
 
 The shares add up to 100 %. All three null = no table: the crops take
