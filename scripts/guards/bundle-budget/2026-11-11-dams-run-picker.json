@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "the Dams page's Run menu, scenario-run note and deleted-run notice (DamsTab.svelte): total 2486 KB against 2485 KB measured after build:frontend"
+}

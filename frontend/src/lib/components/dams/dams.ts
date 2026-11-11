@@ -12,6 +12,9 @@ import { CROP_SUPPLY_DEFAULTS, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, SUPPL
 import type { ChartSeries } from '#lib/components/charts/series.js';
 import { pctOfCapacity, type DamLevel } from '#lib/components/overview/damLevels.js';
 import { fmtDay, fmtNum } from '#lib/format/number.js';
+import type { RunMeta } from '#lib/api/types.js';
+import { runPickName } from '#lib/components/compare/picker.js';
+import type { ScenarioRunFields } from '#lib/components/runs/scenarioRun.js';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 
@@ -134,8 +137,10 @@ export interface DamCard {
 	minPct: number;
 	/** A farm's own dam: the card links to the farm drawer. */
 	farm: boolean;
-	/** Its levels in the latest run; null before a run, or when the run has no storage for it. */
+	/** Its levels in the run shown; null before a run, or when the run has no storage for it. */
 	level: DamLevel | null;
+	/** The unit is in the model now, so its card links to its node sheet and the Network (not for a dam a scenario added, or one removed since). */
+	inModel: boolean;
 }
 
 
@@ -162,25 +167,30 @@ export function modelDams(nodes: readonly NodeLike[]): { nodeId: string; name: s
  * order (emptiest first, `sortDamLevels`), then the rest in node order. A dam
  * the run has but the model no longer has (removed since) keeps its card, so
  * the cards always match the run's levels. `runNodes` (the run's own model)
- * marks a card whose dam has been edited since (damChange).
+ * marks a card whose dam has been edited since (damChange). For a scenario's
+ * run (`scenario`) the run's model is the scenario's, not an earlier model, so
+ * no card is marked changed and the heads show the run's capacity: a dam the
+ * scenario added (in no model) shows as it ran, not as "removed".
  */
-export function damCards(nodes: readonly NodeLike[], levels: readonly DamLevel[], runNodes?: readonly NodeLike[]): DamCard[] {
+export function damCards(nodes: readonly NodeLike[], levels: readonly DamLevel[], runNodes?: readonly NodeLike[], opts: { scenario?: boolean } = {}): DamCard[] {
 	const dams = modelDams(nodes);
 	const byId = new Map(dams.map((d) => [d.nodeId, d]));
 	const live = new Map(nodes.map((n) => [n.id, n]));
 	const then = new Map((runNodes ?? []).map((n) => [n.id, n]));
 	const withLevel: DamCard[] = levels.map((l) => ({
 		nodeId: l.nodeId,
-		name: byId.get(l.nodeId)?.name ?? l.name,
+		// A scenario's run names its dams as the scenario did (a dam it added is in no model).
+		name: (opts.scenario ? undefined : byId.get(l.nodeId)?.name) ?? l.name,
 		capacityM3: l.capacityM3,
-		nowCapacityM3: byId.get(l.nodeId)?.capacityM3 ?? 0,
+		nowCapacityM3: opts.scenario ? l.capacityM3 : (byId.get(l.nodeId)?.capacityM3 ?? 0),
 		minPct: l.minPct,
 		farm: live.get(l.nodeId)?.kind === 'farm',
 		level: l,
-		change: damChange(then.get(l.nodeId), live.get(l.nodeId) ?? { id: l.nodeId, damCapacityM3: 0 })
+		change: opts.scenario ? null : damChange(then.get(l.nodeId), live.get(l.nodeId) ?? { id: l.nodeId, damCapacityM3: 0 }),
+		inModel: live.has(l.nodeId)
 	}));
 	const seen = new Set(levels.map((l) => l.nodeId));
-	return [...withLevel, ...dams.filter((d) => !seen.has(d.nodeId)).map((d) => ({ ...d, nowCapacityM3: d.capacityM3, level: null, change: null }))];
+	return [...withLevel, ...dams.filter((d) => !seen.has(d.nodeId)).map((d) => ({ ...d, nowCapacityM3: d.capacityM3, level: null, change: null, inModel: true }))];
 }
 
 /** The dam shown in the chart: the one the URL names when it has a card, else the first (the emptiest). */
@@ -200,6 +210,16 @@ export function damsSummary(count: number, capacityM3: number, run: string | nul
 	const parts = [`${fmtNum(count)} dam${count === 1 ? '' : 's'}`, `${fmtVolume(capacityM3)} capacity`];
 	parts.push(run ?? 'no run yet');
 	return parts.join(' · ');
+}
+
+/**
+ * The header's run part (damsSummary): "latest run “Baseline”, ran today" for
+ * the newest run, "run “Hexberg Dam (scenario)”, ran 3 days ago" for one
+ * picked from the Run menu, a scenario's run named as the pickers name it
+ * (runPickName).
+ */
+export function damsRunText(run: Pick<RunMeta, 'label'> & ScenarioRunFields, latest: boolean, ago: string): string {
+	return `${latest ? 'latest run' : 'run'} “${runPickName(run)}”, ran ${ago}`;
 }
 
 /** The change over the last 30 days in words, never colour alone: "down 11 pp in 30 days". null without a value 30 days back. */
