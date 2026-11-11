@@ -40,6 +40,7 @@ import {
 	type CropSetField,
 	type DemandObjectSetField,
 	type LandCoverSetField,
+	type NetworkNode,
 	type NodeKind,
 	type NodeSetField,
 	type PeInput,
@@ -80,8 +81,11 @@ export type ValueSpec =
 	| { t: 'bool' }
 	/** An ISO date; empty is null. */
 	| { t: 'date'; nullLabel: string }
-	/** A node of the model, by id; with `nullLabel`, empty is null (shown as that). */
-	| { t: 'node'; nullLabel?: string }
+	/**
+	 * A node of the model, by id; with `nullLabel`, empty is null (shown as
+	 * that). `withDam`: only another unit with a dam (nodeChoices).
+	 */
+	| { t: 'node'; nullLabel?: string; withDam?: boolean }
 	/** A row of the model's irrigation-systems table, by id (engine ≥ 1.72.0); with `nullLabel`, empty is null. */
 	| { t: 'system'; nullLabel?: string }
 	/**
@@ -248,7 +252,9 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	cropWaterSource: { label: 'Crops’ water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL) } },
 	cropRiverPumpM3Day: { label: 'Crops’ river pump capacity', spec: flow(pumpUnit, { nullable: true, nullLabel: 'no limit' }) },
 	cropRiverPoolM3: { label: 'Crops’ pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
-	// The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k); which unit's dam gives the remote share is the model's.
+	// The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k), and which unit's dam gives the remote share (engine
+	// 1.118.0; a team scenario's only, OpForm's remoteDam).
+	cropRemoteNodeId: { label: 'Unit whose dam supplies the crops’ share', spec: { t: 'node', nullLabel: 'none', withDam: true } },
 	cropShareDam: { label: 'Crops’ share from the dam', spec: pct(true, 'no table') },
 	cropShareRiver: { label: 'Crops’ share from the river', spec: pct(true, 'no table') },
 	cropShareRemote: { label: 'Crops’ share from another unit’s dam', spec: pct(true, 'no table') },
@@ -269,8 +275,20 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 };
 
 /** The fields node.set may change on a node of this kind, in the engine's order. */
-export function nodeFields(kind: NodeKind): { field: NodeSetField; label: string }[] {
-	return (NODE_SET_FIELDS[kind] as readonly NodeSetField[]).map((field) => ({ field, label: NODE_FIELD_SPECS[field].label }));
+export function nodeFields(kind: NodeKind, opts: { remoteDam?: boolean } = {}): { field: NodeSetField; label: string }[] {
+	return (NODE_SET_FIELDS[kind] as readonly NodeSetField[])
+		.filter((field) => opts.remoteDam !== false || field !== 'cropRemoteNodeId')
+		.map((field) => ({ field, label: NODE_FIELD_SPECS[field].label }));
+}
+
+/**
+ * The units a `node` value may pick, in the model the op meets (the base with
+ * the listed ops applied): every unit, or with `withDam` every other unit
+ * with a dam there (engine 1.118.0: a dam the scenario added counts, one it
+ * took away doesn't; the engine checks the same when the op applies).
+ */
+export function nodeChoices<N extends Pick<NetworkNode, 'id' | 'kind' | 'damCapacityM3'>>(spec: Extract<ValueSpec, { t: 'node' }>, nodes: readonly N[], selfId?: string | null): N[] {
+	return nodes.filter((n) => n.kind === 'farm' && (!spec.withDam || (n.id !== selfId && n.damCapacityM3 > 0)));
 }
 
 // ---------------------------------------------------------------------------

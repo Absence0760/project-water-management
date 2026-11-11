@@ -191,9 +191,36 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   table) and `cropRemoteCapM3Day` (≥ 0, null = no limit); farms only, and
   the shares add up to 100 % (save rules, checked once after a run of
   `node.set` ops on the farm, so set the shares next to each other). Which
-  unit's dam gives the remote share, `cropRemoteNodeId`, is the model's and
-  can't be set by a scenario (it names another node, which an applicant's
-  view may hide; a `node.add` carries none). "What if a fifth of the crops
+  unit's dam gives the remote share, `cropRemoteNodeId` (an id, or null for
+  none), is settable since engine 1.118.0, in a team scenario only. When the
+  op applies, the unit it names must be another unit (a farm, not the unit
+  itself) with a dam (`damCapacityM3` above 0) in the scenario's model as the
+  ops before it leave it, not in the base: a dam the scenario adds earlier
+  (a `node.add` with one, or `damCapacityM3` raised from 0) counts, and a
+  base dam an earlier op took away doesn't. A unit missing at that point, or
+  with no dam then, is refused with a problem naming it (`cropRemoteNodeId:
+  "Doringkloof" has no dam at this point in the scenario …`), and the shares
+  set beside it go with it (the edit group). A later op that takes the dam
+  away (`damCapacityM3` → 0, `node.remove`) while the remote share is above
+  0 breaks the save rule that checks it (`cropSupplyIssues`, [model.md
+  §2.7k](./model.md)), so that later op is the one refused. The other save
+  rules still hold: the unit can't drain into the dam's unit. "Vlakvlei's
+  crops draw half from the scenario's new Hexberg dam through a 2,000 m³/day
+  pipe" is a `node.add` of Hexberg with its dam, then `cropShareDam` → 0,
+  `cropShareRiver` → 0.5, `cropShareRemote` → 0.5, `cropRemoteCapM3Day` →
+  2000 and `cropRemoteNodeId` → Hexberg; before 1.118.0 that took a
+  transfer from Hexberg's dam, which still works. **An application refuses
+  it** (applied under its applicant's mask, § Applications), even for a dam
+  the applicant adds: it would point the applicant's crops at another
+  unit's dam, so the assessment would count water from a neighbour's dam as
+  the proposal's without the neighbour's consent or a licence for it, and
+  it names a node the applicant's view anonymises. An applicant proposes a
+  transfer from a dam of their own instead, which the assessor sees as a
+  rule between named units (§ Classification), and `classifyOp` calls the
+  op `baseline` should one ever be classified. A `node.add` still carries
+  none (set it with a `node.set` after it). `combineScenarios` counts the
+  unit named as one the op depends on, so another scenario removing it is a
+  conflict. "What if a fifth of the crops
   came from the river" is two ops: `cropShareDam` → 0.8 and `cropShareRiver`
   → 0.2 (with `cropShareRemote` → 0 when the farm had no table).
   Bed losses in the reach below (engine ≥ 1.75.0, [model.md
@@ -783,7 +810,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale`, `climate.delta`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, climate) |
-| `node.set` | the node is owned and the field is not land (`areaKm2`; it sets the unit's natural MAR share), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own; by month `reachLossFracMonthly` / `reachLossMaxMonthlyM3Day`, engine 1.116.0), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's; by month `baseflowLossMonthlyM3Day` / `baseflowGainMonthlyM3Day`); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
+| `node.set` | the node is owned and the field is not land (`areaKm2`; it sets the unit's natural MAR share), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own; by month `reachLossFracMonthly` / `reachLossMaxMonthlyM3Day`, engine 1.116.0), or a unit's base-flow loss and gain, `baseflowLossM3Day` / `baseflowGainM3Day` (engine 1.86.0, the groundwater's; by month `baseflowLossMonthlyM3Day` / `baseflowGainMonthlyM3Day`), or another unit's dam for its crops, `cropRemoteNodeId` (engine 1.118.0; an application refuses it, § Op catalogue); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), the river's bed losses and a unit's base-flow loss and gain |
 | `node.add` | not a gauge, and no land of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land, and no EWR rule table sited at it (needs `input`) | baseline |
 | `node.insert` | as `node.add`: not a gauge, and no land of its own; and not a priority other water user (the default priority) | baseline. A priority user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
@@ -1387,7 +1414,12 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   form shows in a picked unit (River to dam, every pump capacity, the
   borehole and pipe capacities) is typed in that pick there too, m³/s, l/s or
   m³/day, and the op stores m³/day whatever was picked (issue #523 C2,
-  [ui.md § Flow units](./ui.md#flow-units)).
+  [ui.md § Flow units](./ui.md#flow-units)). "Unit whose dam supplies the
+  crops' share" (`cropRemoteNodeId`, engine 1.118.0) picks from the other
+  units with a dam in the input the op meets (`fields.ts` `nodeChoices`), so
+  a dam an earlier op adds is offered and one it took away isn't, or none;
+  an application's form, and the licence terms' form, don't offer the
+  field (`OpForm`'s `remoteDam`), since the engine refuses it there.
 - **What the editor computes itself**, from the base run's model and settings
   snapshot (`GET …/runs/:runId`) with no series: the input each op meets
   (`stepInputs`, the engine's `scenarioSteps`), for the targets the form
