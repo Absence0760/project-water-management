@@ -12387,7 +12387,11 @@ them scenarios).
   op of the engine's `ScenarioOp` union: change a node's value, add a node
   (a leaf farm or other water user), remove a node, set a farm's crop area,
   add a crop (optionally starting from another crop's factors), add, change
-  or remove a transfer, add or remove land cover, change a setting, scale
+  (only the fields and choices the picked rule's shape takes: no months or
+  one maximum rate on a rule with monthly rates, whose **Maximum rate by
+  month** sets both, and a list, yes/no or unit shows only the choices the
+  engine applies to that rule, so no share of the river's flow on a rule
+  from the dam; scenarios.md § Op catalogue) or remove a transfer, add or remove land cover, change a setting, scale
   rainfall by a % change over a date range, scale demand (farms' irrigation
   or other water users', as a % of what they'd take, for ticked nodes and
   months; none ticked is all; `demand.scale`, issue #53 R1; for units, from
