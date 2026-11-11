@@ -36,8 +36,12 @@
 //      any array of an unlisted issue in the fortnight before the newest
 //      (a run cut short) swept the same way.
 //
-// A refusal (HTTP 403) or throttling ends the run at once, with no retry, as
-// in the preliminary pass; the run reports the error rather than throwing, so
+// Throttling (HTTP 429/503) is waited out and retried as in the preliminary
+// pass (daily.ts pacedHttp's `retry`: Retry-After, else 60 s doubling, at most
+// 3 retries, only while the deadline leaves room; each logged as
+// `mirror_ingest_throttled`, product gefs). A throttling that outlasts them
+// ends the run, and the hourly rule tries again. A refusal (HTTP 403) ends it
+// at once, never retried; the run reports the error rather than throwing, so
 // the caller still publishes the lag metric (days since the newest issue
 // held) and logs the outcome. A refusal also leaves a marker in the copy
 // (`gefs/refused.json`, the time CHC refused): the rule runs hourly to 11:38
@@ -57,7 +61,7 @@ import { DAILY_CHUNK, type DailyProduct, ensureDaily, writeDailyDays } from '../
 import { gridOf, MIRROR_REGION, type Region, regionSize } from '../mirror/grid.js';
 import { type Manifest, manifestHash, MirrorManifestError, writeManifest } from '../mirror/manifest.js';
 import type { MirrorStore } from '../mirror/store.js';
-import { MIRROR_LAG_METRIC, MIRROR_METRIC_NAMESPACE, pacedHttp, readRegionDay, REQUEST_INTERVAL_MS } from './daily.js';
+import { logThrottled, MIRROR_LAG_METRIC, MIRROR_METRIC_NAMESPACE, pacedHttp, readRegionDay, REQUEST_INTERVAL_MS, type ThrottledAttempt } from './daily.js';
 
 /** The newest issues the copy keeps; older ones are deleted. */
 export const GEFS_KEEP_ISSUES = 7;
@@ -114,6 +118,8 @@ export interface GefsIngestOptions {
 	sleep?: (ms: number) => Promise<void>;
 	region?: Region;
 	keep?: number;
+	/** Each 429/503 met (tests capture it); by default logged as `mirror_ingest_throttled`. */
+	onThrottled?: (t: ThrottledAttempt) => void;
 }
 
 export interface GefsIngestResult {
@@ -192,7 +198,10 @@ export async function runGefsIngest(opts: GefsIngestOptions): Promise<GefsIngest
 	const now = opts.now ?? Date.now;
 	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 	const keep = opts.keep ?? GEFS_KEEP_ISSUES;
-	const { http, counter } = pacedHttp(opts.http, opts.intervalMs ?? REQUEST_INTERVAL_MS, now, sleep);
+	const { http, counter } = pacedHttp(opts.http, opts.intervalMs ?? REQUEST_INTERVAL_MS, now, sleep, {
+		deadline: opts.deadline,
+		onThrottled: opts.onThrottled ?? logThrottled('gefs')
+	});
 	const { store, today } = opts;
 	const { rows, cols } = regionSize(region);
 	const block = { y0: 0, x0: 0, h: rows, w: cols };

@@ -162,7 +162,15 @@ in `infra/feeds.tf`):
   address (13.247.28.223, [deployment.md § Fixed egress](./deployment.md#fixed-egress))
   the GEFS pass still met HTTP 429 at its 13th request, about 31 s in, so we
   asked their current per-address limit and whether they would allowlist
-  the address; no reply yet (#618).
+  the address (#618). They replied 2026-11-10: 13.247.28.223 is not
+  blocked, and our pattern (one request at a time, about 1 s apart) is well
+  within their limits. The 429s came from a cap on concurrent heavy
+  GeoTIFF/NetCDF downloads shared by all addresses, which a single user
+  could fill; their October statement that the limits are per address was
+  incorrect. They added per-address limits on 2026-11-10, recommend a
+  sleep and retry after a 429 (which the passes now do: Limits, below), are
+  still considering an allowlist, and asked us to tell them if 429s
+  continue over the next few days.
 - **Access pattern today:** each feed range-reads individual daily GeoTIFFs
   (`daily/final/{rnl,sat}/`, `daily/prelim/sat/`) for its cells, about 5
   requests a file, backfilling from 1981, from the fetcher Lambda's rotating
@@ -189,9 +197,16 @@ in `infra/feeds.tf`):
   however many feeds or projects there are; a 403 stops the run and alerts.
   CHC publishes no rate limit. In production every request leaves from one
   Elastic IP of ours (`fixed_egress_enabled`,
-  [deployment.md § Fixed egress](./deployment.md#fixed-egress)): CHC's
-  limits are per address, and on AWS's shared Lambda addresses other
-  accounts' traffic got us HTTP 429 (2026-11-05 to 11-08).
+  [deployment.md § Fixed egress](./deployment.md#fixed-egress)), one
+  address for CHC to recognise. We took the HTTP 429s of 2026-11-05 to
+  11-08 for other accounts' traffic on AWS's shared Lambda addresses; CHC's
+  reply of 2026-11-10 (Contact, above) says they came from a cap on their
+  side shared by every address, now replaced by per-address limits. A 429 or
+  503 is waited out and the request asked again, as CHC recommends: the
+  `Retry-After`, else 60 s doubling, at most 3 retries, and only while the
+  run's time left allows (the fetcher's preliminary and GEFS passes,
+  `ingest/daily.ts` `pacedHttp`; the Python ingest, `ingest/polite.py`),
+  each one logged with its attempt and `Retry-After`.
 - **Rewrites:** CHC rewrites files in place with no version number and no
   checksums. The copy keeps (mtime, size, ETag) per file, re-downloads on a
   change, and bumps the revision only when the hash of the region's values

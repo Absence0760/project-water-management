@@ -33,20 +33,31 @@
 // array's first day if later). It never jumps a day that is missing, so a
 // reader never takes a missing day as "no data".
 //
-// A refusal (HTTP 403) or throttling (429/503) from CHC ends the run at once,
-// with no retry (the live client, feeds/http.ts, pauses the host as well);
-// so does any other failure. What was copied before it is kept. The run
-// reports the error rather than throwing it, so the caller can still publish
-// the lag metric and log the outcome before it fails the invocation.
+// Throttling (HTTP 429/503) is waited out and the same request asked again
+// (pacedHttp's `retry`, CHC's advice of 2026-11-10, as ingest/polite.py does):
+// the Retry-After CHC gave, else THROTTLE_DEFAULT_SECONDS doubling (60, 120,
+// 240 s), at most THROTTLE_MAX_RETRIES times, and only while the deadline
+// leaves room for the wait and the request (THROTTLE_RETRY_REQUEST_MS). The
+// default wait is never shorter than the pause the live client (feeds/http.ts
+// THROTTLED) puts on the host, so a retry is a real request, not the pause's
+// instant refusal. Each 429/503 is logged (`mirror_ingest_throttled`: the
+// attempt, the Retry-After, the wait, whether it retries). Every retry goes
+// through the pacing and counts as a request. A throttling that outlasts the
+// retries or the deadline ends the run; a refusal (HTTP 403) ends it at once,
+// never retried (the live client pauses the host for an hour as well); so does
+// any other failure. What was copied before it is kept. The run reports the
+// error rather than throwing it, so the caller can still publish the lag
+// metric and log the outcome before it fails the invocation.
 //
 // The revision (D8) moves only on a real change of values: a preliminary
 // file is published once, so a new day is an addition, not a revision.
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { AbsolutePath } from '@zarrita/storage';
-import { FeedFormatError, FeedUnavailableError } from '../feeds/errors.js';
-import type { FeedHttp } from '../feeds/http.js';
+import { FeedFormatError, FeedThrottledError, FeedUnavailableError } from '../feeds/errors.js';
+import { type FeedHttp, THROTTLE_DEFAULT_SECONDS, THROTTLE_MAX_SECONDS } from '../feeds/http.js';
 import { chirpsPrelimUrl } from '../feeds/sources/chirps.js';
 import { type GridInfo, openGrid, readRows } from '../feeds/sources/tiff.js';
+import { logEvent } from '../logging/logEvent.js';
 import { DAILY_CHUNK, ensureDaily, MirrorFormatError, openDaily, writeDailyDays } from '../mirror/arrays.js';
 import { dayIndex, gridOf, MIRROR_REGION, MIRROR_STEP, type Region, regionSize } from '../mirror/grid.js';
 import { type Manifest, manifestHash, readManifest, writeManifest } from '../mirror/manifest.js';
@@ -85,6 +96,8 @@ export interface DailyIngestOptions {
 	now?: () => number;
 	sleep?: (ms: number) => Promise<void>;
 	region?: Region;
+	/** Each 429/503 met (tests capture it); by default logged as `mirror_ingest_throttled`. */
+	onThrottled?: (t: ThrottledAttempt) => void;
 }
 
 export interface DailyIngestResult {
@@ -105,8 +118,66 @@ export interface DailyIngestResult {
 	error: unknown;
 }
 
-/** `http`, each request waiting until `intervalMs` after the previous one started; counts them. */
-export function pacedHttp(http: FeedHttp, intervalMs: number, now: () => number, sleep: (ms: number) => Promise<void>) {
+/** Retries of one request after a 429/503 (CHC's advice of 2026-11-10; ingest/polite.py keeps the same 3). */
+export const THROTTLE_MAX_RETRIES = 3;
+/** Room the deadline must leave after a retry's wait, for the request itself: the live client's per-request timeout (feeds/http.ts). */
+export const THROTTLE_RETRY_REQUEST_MS = 20_000;
+
+/** One 429/503 a paced request met, and what pacedHttp does about it. */
+export interface ThrottledAttempt {
+	url: string;
+	status: 429 | 503;
+	/** This request's attempt that met it (1 = the first ask), of `of` at most. */
+	attempt: number;
+	of: number;
+	/** The source's Retry-After in seconds, or null when it gave none. */
+	retryAfterSeconds: number | null;
+	/** The wait before the retry, in seconds. */
+	waitSeconds: number;
+	/** False when the run stops on it: retries used up, a wait past THROTTLE_MAX_SECONDS, or no room before the deadline. */
+	retrying: boolean;
+}
+
+/** How a paced client waits out a 429/503 (see daily.ts's header). Without one, a 429/503 is thrown at once. */
+export interface ThrottleRetry {
+	/** Epoch ms: a retry only when its wait plus THROTTLE_RETRY_REQUEST_MS ends by then. */
+	deadline?: number;
+	maxRetries?: number;
+	onThrottled?: (t: ThrottledAttempt) => void;
+}
+
+/**
+ * The wait before retry `n` (1-based) after a 429/503: the source's
+ * Retry-After, else THROTTLE_DEFAULT_SECONDS doubling. The default first wait
+ * is exactly the pause feeds/http.ts puts on the host without a Retry-After
+ * (with one, the pause is min(Retry-After, THROTTLE_MAX_SECONDS) and the wait
+ * the Retry-After), so the retry never meets that pause's instant refusal.
+ */
+export function throttleWaitSeconds(err: FeedThrottledError, n: number): number {
+	return err.retryAfterSeconds ?? THROTTLE_DEFAULT_SECONDS * 2 ** (n - 1);
+}
+
+/** The default `onThrottled`: one warn line a 429/503, so CloudWatch shows what the source asked. */
+export const logThrottled = (product: string) => (t: ThrottledAttempt) =>
+	logEvent('warn', {
+		event: 'mirror_ingest_throttled',
+		product,
+		url: t.url,
+		status: t.status,
+		attempt: t.attempt,
+		of: t.of,
+		retryAfter: t.retryAfterSeconds ?? 'absent',
+		waitSeconds: t.waitSeconds,
+		retrying: t.retrying
+	});
+
+/**
+ * `http`, each request waiting until `intervalMs` after the previous one
+ * started; counts them. With `retry`, a request that meets a 429/503 is asked
+ * again after the wait (throttleWaitSeconds), each retry paced and counted
+ * like any request; a 403 or any other failure is thrown at once.
+ */
+export function pacedHttp(http: FeedHttp, intervalMs: number, now: () => number, sleep: (ms: number) => Promise<void>, retry?: ThrottleRetry) {
 	let last = -Infinity;
 	const counter = { requests: 0 };
 	const wait = async () => {
@@ -115,10 +186,29 @@ export function pacedHttp(http: FeedHttp, intervalMs: number, now: () => number,
 		last = now();
 		counter.requests++;
 	};
+	const ask = async <T>(url: string, call: () => Promise<T>): Promise<T> => {
+		const max = retry?.maxRetries ?? THROTTLE_MAX_RETRIES;
+		for (let attempt = 1; ; attempt++) {
+			await wait();
+			try {
+				return await call();
+			} catch (err) {
+				if (!retry || !(err instanceof FeedThrottledError)) throw err;
+				const waitSeconds = throttleWaitSeconds(err, attempt);
+				const retrying =
+					attempt <= max &&
+					waitSeconds <= THROTTLE_MAX_SECONDS &&
+					(retry.deadline === undefined || now() + waitSeconds * 1000 + THROTTLE_RETRY_REQUEST_MS <= retry.deadline);
+				retry.onThrottled?.({ url, status: err.status, attempt, of: max + 1, retryAfterSeconds: err.retryAfterSeconds, waitSeconds, retrying });
+				if (!retrying) throw err;
+				await sleep(waitSeconds * 1000);
+			}
+		}
+	};
 	const paced: FeedHttp = {
-		range: async (url, start, end) => (await wait(), http.range(url, start, end)),
-		text: async (url) => (await wait(), http.text(url)),
-		...(http.rangeTagged ? { rangeTagged: async (url: string, start: number, end: number) => (await wait(), http.rangeTagged!(url, start, end)) } : {})
+		range: (url, start, end) => ask(url, () => http.range(url, start, end)),
+		text: (url) => ask(url, () => http.text(url)),
+		...(http.rangeTagged ? { rangeTagged: (url: string, start: number, end: number) => ask(url, () => http.rangeTagged!(url, start, end)) } : {})
 	};
 	return { http: paced, counter };
 }
@@ -220,7 +310,10 @@ export async function runDailyIngest(opts: DailyIngestOptions): Promise<DailyIng
 	const now = opts.now ?? Date.now;
 	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 	const maxFiles = opts.maxFiles ?? DAILY_MAX_FILES;
-	const { http, counter } = pacedHttp(opts.http, opts.intervalMs ?? REQUEST_INTERVAL_MS, now, sleep);
+	const { http, counter } = pacedHttp(opts.http, opts.intervalMs ?? REQUEST_INTERVAL_MS, now, sleep, {
+		deadline: opts.deadline,
+		onThrottled: opts.onThrottled ?? logThrottled('prelim')
+	});
 	const { store, today } = opts;
 
 	const sat = await readManifest(store, 'sat');

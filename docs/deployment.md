@@ -1526,8 +1526,10 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 
 The CHIRPS feeds were switched off on 2026-10-25 (#571) after CHC's bot
 protection blocked the fetcher's addresses. CHC wrote back on 2026-10-27:
-their limits are per public address (a block for hours above about 2
-requests a second, HTTP 429 past 20 open connections), and they asked for
+a block for hours above about 2 requests a second from one address, and
+HTTP 429 past 20 open connections (on 2026-11-10 they said that cap was in
+fact shared by all addresses, and replaced it with per-address limits;
+[data-sources.md § chirps](./data-sources.md#chirps)), and they asked for
 one file at a time, about one request a second in total across our Lambdas,
 and a contact email in the user agent. The fetcher now does all three
 ([architecture.md § Data feeds → Throttling](./architecture.md#data-feeds)).
@@ -1823,9 +1825,13 @@ yesterday's issue held, so the forecast feeds reading the copy wait, keeping
 the forecast they have) on two days running, or when no datapoint arrives
 for two days. Runbook: the run's log line; a `refused` stopped on purpose
 (as above); `partial` on several runs means CHC is publishing late; a
-`throttled` (HTTP 429) on run after run, often after only a few requests,
-means CHC is limiting the address we leave from, which is the shared Lambda
-address unless the fixed egress is on (§ Fixed egress, below). It is
+`throttled` (HTTP 429) is logged only once the pass's retries (up to 3,
+`Retry-After` else 60 s doubling, while its time allows) are spent; each
+429 shows as a `mirror_ingest_throttled` line with its attempt and
+`Retry-After`. If 429s go on run after run, tell CHC
+(chc-help@geog.ucsb.edu) with the times: they asked to hear if they
+continue after their per-address limits of 2026-11-10
+([data-sources.md § chirps](./data-sources.md#chirps)). It is
 turned on with the daily ingest (`daily_ingest_enabled`): the rule, its
 target and permission, and the alarm exist only then.
 
@@ -1837,17 +1843,23 @@ instance with one Elastic IP (`infra/egress.tf`, `infra/modules/fixed-egress/`).
 Off, both run outside any VPC and reach the internet from AWS's shared Lambda
 addresses.
 
-- **Why.** CHC limits by public address: its bot protection blocks one for
-  hours above about 2 requests a second, and answers HTTP 429 past 20 open
-  connections (§ Data feeds, its reply of 2026-10-27). A Lambda outside a VPC
-  shares its address with other accounts' functions, so someone else's
-  crawler can get ours throttled however politely we ask. From 2026-11-05 to
-  11-08 the GEFS pass met HTTP 429 on 15 of 16 runs, after 1 to 6 requests,
-  and the 03:00 preliminary pass on its first request, while our whole
-  traffic to CHC was a few dozen requests a day and the same requests
-  succeeded from elsewhere. One address of our own takes other accounts out
-  of it, and gives CHC one address to recognise (and, if they will,
-  allowlist).
+- **Why.** CHC's bot protection blocks a public address for hours above
+  about 2 requests a second (§ Data feeds, its reply of 2026-10-27). A
+  Lambda outside a VPC shares its address with other accounts' functions, so
+  someone else's crawler could get ours blocked however politely we ask.
+  From 2026-11-05 to 11-08 the GEFS pass met HTTP 429 on 15 of 16 runs,
+  after 1 to 6 requests, and the 03:00 preliminary pass on its first
+  request, while our whole traffic to CHC was a few dozen requests a day.
+  We took that for other accounts on the shared address; CHC's reply of
+  2026-11-10 says it wasn't: the 429s came from a cap on concurrent heavy
+  downloads shared by all addresses on their side (their October word that
+  the limits were per address was wrong), which they replaced that day with
+  per-address limits, and our address is not blocked
+  ([data-sources.md § chirps](./data-sources.md#chirps)). One address of
+  our own still takes other accounts' traffic out of any per-address limit,
+  and gives CHC one address to recognise (and, if they decide to,
+  allowlist); the passes now also retry a 429 (§ Data feeds → Throttling in
+  architecture.md).
 - **Shape.** A separate VPC (`10.61.0.0/16`, `fixed_egress_vpc_cidr`), never
   peered with the private one, so neither Lambda gains a path to the
   database and the private VPC keeps its no-internet guarantee and its
