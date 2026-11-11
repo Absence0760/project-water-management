@@ -560,7 +560,7 @@
 					<HelpTip key="override-mode" label="About override mode" />
 				</div>
 				<!-- An applicant reads no climate factor table (viewer and above, 282): the climate is the authority's baseline, not theirs. -->
-				<OpForm bind:this={opForm} input={effective} onadd={add} disabled={saving} {projectId} futureClimate={!applicant} />
+				<OpForm bind:this={opForm} input={effective} onadd={add} disabled={saving} {projectId} futureClimate={!applicant} remoteDam={!isApplication} />
 			{/if}
 		{/if}
 		<p class="visually-hidden" role="status">{note}</p>

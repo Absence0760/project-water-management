@@ -22,6 +22,7 @@ import {
 	TRANSFER_FIELD_SPECS,
 	formatValue,
 	monthsText,
+	nodeChoices,
 	nodeFields,
 	parseValue,
 	peDraftOf,
@@ -403,6 +404,40 @@ describe('a crop and a land-cover patch (crop.set, landCover.set, engine 1.35.0)
 		expect(parseValue(s, '20')).toMatchObject({ ok: false });
 		expect(parseValue(s, 'a; b')).toMatchObject({ ok: false });
 		expect(formatValue(CROP_FIELD_SPECS.irrigationEfficiency.spec, null)).toBe("the hydrological unit's");
+	});
+});
+
+describe('another unit’s dam for a unit’s crops (node.set cropRemoteNodeId, engine 1.118.0)', () => {
+	const spec = NODE_FIELD_SPECS.cropRemoteNodeId.spec as Extract<ValueSpec, { t: 'node' }>;
+	const nodes = [
+		{ id: 'G', kind: 'gauge' as const, damCapacityM3: 0 },
+		{ id: 'A', kind: 'farm' as const, damCapacityM3: 150_000 },
+		{ id: 'B', kind: 'farm' as const, damCapacityM3: 0 },
+		// A dam the scenario added (node.add), in the model the op meets.
+		{ id: 'H', kind: 'farm' as const, damCapacityM3: 400_000 },
+		{ id: 'U', kind: 'user' as const, damCapacityM3: 0 }
+	];
+
+	it('picks only another unit with a dam in the model the op meets, or none', () => {
+		expect(spec).toEqual({ t: 'node', nullLabel: 'none', withDam: true });
+		expect(nodeChoices(spec, nodes, 'B').map((n) => n.id)).toEqual(['A', 'H']);
+		// The unit itself is never its own other unit, dam or not.
+		expect(nodeChoices(spec, nodes, 'A').map((n) => n.id)).toEqual(['H']);
+		// A dam an earlier op took away is not offered.
+		expect(nodeChoices(spec, nodes.map((n) => (n.id === 'H' ? { ...n, damCapacityM3: 0 } : n)), 'B').map((n) => n.id)).toEqual(['A']);
+		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
+		expect(parseValue(spec, 'H')).toEqual({ ok: true, value: 'H' });
+	});
+
+	it('leaves the other node pickers every unit', () => {
+		expect(nodeChoices(TRANSFER_FIELD_SPECS.fromNodeId.spec as Extract<ValueSpec, { t: 'node' }>, nodes, 'A').map((n) => n.id)).toEqual(['A', 'B', 'H']);
+	});
+
+	it('is a unit field, left out for an application (the engine refuses it there)', () => {
+		expect(nodeFields('farm').some((f) => f.field === 'cropRemoteNodeId')).toBe(true);
+		expect(nodeFields('farm', { remoteDam: false }).some((f) => f.field === 'cropRemoteNodeId')).toBe(false);
+		expect(nodeFields('farm', { remoteDam: false })).toHaveLength(NODE_SET_FIELDS.farm.length - 1);
+		expect(nodeFields('user').some((f) => f.field === 'cropRemoteNodeId')).toBe(false);
 	});
 });
 

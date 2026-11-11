@@ -16,7 +16,7 @@
 	import { PE_KIND_OPTIONS } from '#lib/components/settings/peInput.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import DemandScheduleFields from '#lib/components/network/DemandScheduleFields.svelte';
-	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, rescaleText, settingsValue, valueText, type ValueSpec } from './fields';
+	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeChoices, nodeFields, peDraftOf, rescaleText, settingsValue, valueText, type ValueSpec } from './fields';
 	import FlowUnitSelect from '#lib/components/network/FlowUnitSelect.svelte';
 	import { fmtDay, fmtNum, tidyDay } from '#lib/format/number.js';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
@@ -26,7 +26,8 @@
 		onadd,
 		disabled = false,
 		projectId = null,
-		futureClimate = true
+		futureClimate = true,
+		remoteDam = true
 	}: {
 		/** The input a new op meets: the base run with the listed ops applied. */
 		input: ModelInput;
@@ -36,6 +37,8 @@
 		disabled?: boolean;
 		/** Offer Future climate (climate.delta): false for an applicant, who reads no climate factor table. */
 		futureClimate?: boolean;
+		/** Offer another unit's dam for a unit's crops (node.set cropRemoteNodeId, engine 1.118.0): false for an application, which the engine refuses it in. */
+		remoteDam?: boolean;
 	} = $props();
 
 	// climate.delta (engine 1.107.0, issue #621 slice 5) is a pick of model, pathway and window from the project's change
@@ -110,7 +113,7 @@
 			: null
 	);
 	const fieldOptions = $derived.by(() => {
-		if (d.kind === 'node.set') return node ? nodeFields(node.kind).map((f) => ({ value: f.field, label: f.label })) : [];
+		if (d.kind === 'node.set') return node ? nodeFields(node.kind, { remoteDam }).map((f) => ({ value: f.field, label: f.label })) : [];
 		if (d.kind === 'transfer.set') return TRANSFER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'settings.set') return SETTINGS_FIELDS.map((f) => ({ value: f.path, label: f.label }));
 		if (d.kind === 'crop.set') return CROP_FIELDS.map((f) => ({ value: f.field, label: f.label }));
@@ -293,7 +296,7 @@
 			{:else if s.t === 'node'}
 				<select id="op-value" bind:value={d.value}>
 					{#if s.nullLabel !== undefined}<option value="">{s.nullLabel.charAt(0).toUpperCase() + s.nullLabel.slice(1)}</option>{:else}<option value="" disabled>Pick a hydrological unit</option>{/if}
-					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+					{#each nodeChoices(s, nodes, d.kind === 'node.set' ? d.nodeId : null) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			{:else if s.t === 'curve'}
 				<textarea id="op-value" rows="6" spellcheck="false" aria-describedby="op-curve-h" placeholder={'100, 0, 0\n101, 8000, 4000\n102, 14000, 15000'} bind:value={d.value}></textarea>
