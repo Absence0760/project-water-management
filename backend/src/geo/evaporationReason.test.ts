@@ -114,7 +114,7 @@ describe('the station, WR2012 and typed S-pan reasons (issue #763)', () => {
 describe('fitReason', () => {
 	it('joins head and tail when they fit, and refuses a tail past the limit', () => {
 		expect(fitReason('head', '; tail', 20)).toBe('head; tail');
-		expect(fitReason('a long head here', '; tail', 12)).toBe('a lon…; tail');
+		expect(fitReason('a long head here', '; tail', 16)).toBe('a long…; tail');
 		expect(() => fitReason('h', 'x'.repeat(21), 20)).toThrow(/more than 20/);
 	});
 

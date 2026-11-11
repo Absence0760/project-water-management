@@ -31,8 +31,29 @@ export const REASON_MAX = 500;
  */
 export function fitReason(head: string, tail: string, max = REASON_MAX): string {
 	if (tail.length > max) throw new Error(`a reason's citation is ${tail.length} characters, more than ${max}`);
-	if (head.length + tail.length <= max) return head + tail;
-	return `${head.slice(0, Math.max(0, max - tail.length - 1)).trimEnd()}…${tail}`;
+	return clipWords(head, max - tail.length) + tail;
+}
+
+/** The longest word clipWords backs up over to cut on a word boundary. */
+const CLIP_WORD_MAX = 30;
+
+/**
+ * `text` at most `max` characters: whole when it fits, else cut at the last
+ * word boundary that leaves room for an ellipsis ("…"), dropping the
+ * whitespace and the `,;:` the cut would leave hanging. A word longer than
+ * CLIP_WORD_MAX (or than the room) is cut where it must, so the result never
+ * passes `max` and never throws away a long run for want of a space. Pure.
+ */
+export function clipWords(text: string, max: number): string {
+	if (text.length <= max) return text;
+	if (max <= 0) return '';
+	const room = max - 1;
+	const cut = text.slice(0, room);
+	// The cut already ends a word when the next character is whitespace; else back to the last whitespace in it, unless
+	// that drops more than a long word's worth (a pasted run of characters with no space is cut where it must).
+	const back = /\s/.test(text[room]!) ? room : cut.search(/\s\S*$/);
+	const end = back > 0 && room - back <= CLIP_WORD_MAX ? back : room;
+	return `${cut.slice(0, end).replace(/[\s,;:]+$/, '')}…`;
 }
 
 /**
@@ -44,6 +65,18 @@ export function fitReason(head: string, tail: string, max = REASON_MAX): string 
 export function fitCitedReason(head: string, citation: string, reference: string, max = REASON_MAX): string {
 	if (head.length + citation.length <= max || citation.length <= max / 2) return fitReason(head, citation, max);
 	return fitReason(head, reference, max);
+}
+
+/**
+ * fitCitedReason followed by a note (a dataset's method, which can run to
+ * 1000 characters): the head and citation as fitCitedReason gives them, then
+ * as much of the note as the rest of REASON_MAX holds, cut on a word with an
+ * ellipsis, or none when not even that fits.
+ */
+export function fitNotedReason(head: string, citation: string, reference: string, note: string, max = REASON_MAX): string {
+	const lead = fitCitedReason(head, citation, reference, max);
+	const rest = note ? clipWords(note, max - lead.length - 1) : '';
+	return rest && rest !== '…' ? `${lead} ${rest}` : lead;
 }
 
 /**

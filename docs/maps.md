@@ -2877,7 +2877,12 @@ it.
   (…) (2021 v200; dataset “WorldCover-2021-v200”). Pre-summarised at
   import: …"), which History, the run comparison and an evidence pack's
   revisions list carry, and keeps a `crop_area_land_cover` row (174) with the
-  same citation. The box shows that provenance beside each crop, and says
+  same citation. The citation is always whole (its short reference,
+  `dataset “…” (version)`, when a long source would crowd out the rest); the
+  method fills what is left of the reason's 500 characters and is cut on a
+  whole word with "…" (`plantedReason` in `croplandRoutes.ts`,
+  `fitNotedReason` and `clipWords` in `history/record.ts`); the row keeps the
+  whole method. The box shows that provenance beside each crop, and says
   "Typed over since" once the area no longer matches it. While the model has
   unsaved changes, Use waits. Viewers see the summary but not Use. The row records the polygons the area was summed over
   (`polygons`, 273), so the Map's [Checks](#checks) and the Start data list
@@ -3105,8 +3110,9 @@ grid's kind, and **nothing is converted between them**:
   Atlas's source alone is about 330, its method about 460), so they stay on
   the `evaporation_dataset` row and the `evaporation_accepted` row (181),
   which keeps the full citation; the reference always survives whole, and
-  only the description before it (a long boundary name) is shortened
-  (`fitReason`, issue #763). The Atlas's reference ends at
+  only the description before it (a long boundary name) is shortened, on a
+  whole word with "…" (`fitReason`, issue #763; a run of more than 30
+  characters with no space is cut where it must). The Atlas's reference ends at
   `/data-sources#atlas-apan`, a reference-ET grid's at `#dpet`, any other
   grid's at the page. A monthly PE's `source` keeps the full citation when
   it fits its 600 characters, else the reference, never a cut-off citation.
