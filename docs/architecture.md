@@ -1793,10 +1793,15 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
   keyed by its issue) refuses the answer whole as a failed fetch.
 - **Throttling.** CHC asked us (2026-10-27, issue #604) to read **one file
   at a time, about one request a second in total across all our Lambdas,
-  with a contact email in the user agent**. Their limits are per public
-  address: their bot protection (CrowdSec) blocks one for hours above about
-  2 requests a second sustained, each repeat block longer, and they answer
-  429 past 20 open connections; a block can also look like 403 or timeouts.
+  with a contact email in the user agent**. Their bot protection
+  (CrowdSec) blocks a public address for hours above about 2 requests a
+  second sustained, each repeat block longer; a block can also look like
+  403 or timeouts. They also said then that they answer 429 past 20 open
+  connections per address, but corrected that on 2026-11-10: the 429s we met
+  from 2026-11-05 came from a cap on concurrent heavy downloads shared by
+  all addresses, which one user could fill. They added per-address limits
+  that day and recommend a sleep and retry after a 429
+  ([data-sources.md § chirps](./data-sources.md#chirps), Contact).
   The old fetcher read six files at a time with two fetcher Lambdas
   (about 3.6 requests a second) and was blocked. Their download guide asks
   for 0.5 s plus up to 0.5 s of jitter between requests
@@ -1904,8 +1909,21 @@ For a source still fetched per feed (`FEED_FETCHER`, `jobs/transport.ts`):
     fetcher (`config/production.ts`: an address, not a reserved domain or a
     template's), set from Terraform's `feeds_contact`, optional elsewhere.
 
-  An HTTP 429 or 503 is a `FeedThrottledError` (a `FeedUnavailableError`,
-  `throttled` in the fetcher's log): the fetch fails at once and starts no
+  The fetcher's scheduled passes (preliminary days, GEFS; `ingest/daily.ts`
+  `pacedHttp` with its `retry`) wait out a 429 or 503 and ask the same
+  request again: the `Retry-After`, else `THROTTLE_DEFAULT_SECONDS` doubling
+  (60, 120, 240 s; never shorter than the live client's pause on the host,
+  below, so the retry really asks), at most 3 retries, each paced and
+  counted like any request, and only while the pass's deadline leaves room
+  for the wait plus a request's 20 s. Each 429/503 logs a
+  `mirror_ingest_throttled` line (product, URL, status, attempt, the
+  `Retry-After` or `absent`, the wait, whether it retries). One that
+  outlasts them ends the run as below. The Python ingest does the same
+  (`ingest/polite.py`).
+
+  In the per-feed fetch, an HTTP 429 or 503 is a `FeedThrottledError` (a
+  `FeedUnavailableError`, `throttled` in the fetcher's log): the fetch fails
+  at once and starts no
   further reads (`mapLimit` stops on the first failure), and the live client
   asks that host nothing more for its `Retry-After` (60 s without one, at most
   15 minutes, `THROTTLE_*` in `feeds/http.ts`), remembered across a warm
