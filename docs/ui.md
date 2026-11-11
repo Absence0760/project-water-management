@@ -1884,15 +1884,34 @@ for every workspace tab. Its own chunk.
 
 - **Header**: the section header titled "Dams", with the context line
   "8 dams · 2.73 million m³ capacity · latest run “Baseline”, ran today"
-  (`damsSummary`, `fmtVolume`), **Hydrological unit table** (the grid modal over this
-  page, `grid=nodes`) once there is a dam, and **Open in Runs & results** once there
-  is a run, all filled through `fillHeader` like Crops & demand. The cards'
+  (`damsSummary`, `fmtVolume`; "run “Hexberg Dam (scenario)”, ran today" for a
+  run picked that isn't the newest, `damsRunText`), the **Run** menu once there
+  is a run and a dam, **Hydrological unit table** (the grid modal over this
+  page, `grid=nodes`) once there is a dam, and **Open in Runs & results** (the
+  run shown) once there
+  is a run, all filled through `fillHeader` like Crops & demand.
+- **Run menu**: every run, newest first, each named as the other pages' run
+  pickers name it (`compare/picker.ts` `runOptionLabel`: a scenario's run
+  "Hexberg Dam (scenario) · 9 Nov 2026 20:31 · 1981–2026"; the newest tagged
+  "latest"). The newest is the default; a pick goes in the URL as `run=<id>`
+  beside `dam=` (a step in history, so Back returns and a reload keeps it;
+  `river.ts` `pickRiverRun`, as EWR and Outputs). A `run=` naming a deleted
+  run shows the newest and says so. A scenario's run (also once its scenario
+  is deleted) has a note under the header, as on EWR (`scenarioRunNote`):
+  "Scenario run: Hexberg Dam, against the base run Baseline (…)", with **Show
+  the base run** and **Open the scenario**. Its cards are the scenario's dams:
+  a dam the scenario added (in no model) has a card with the run's figures and
+  capacity and no Edit dam or On the Network link, and nothing is marked
+  changed since the run (the run's model is the scenario's, not an earlier
+  one). A `dam=` the run picked doesn't have a card for (a scenario's dam, with
+  another run picked) falls back to the first card; a dam in the model the run
+  has no storage for keeps its card and the chart says it isn't in this run. The cards'
   and the chart's headings are h2 under its h1.
 - **Which dams**: a farm with a capacity of at least 1 m³ (`modelDams`). Only
   a farm has a dam in the engine; a capacity on a gauge or another water user
   is inert (no storage, no `dam_storage` series), so it is not listed, and
   the Summary's *Dam capacity* fact counts farms' dams only too. The levels are
-  those of the latest run (`pickRuns`, the Summary's newest-by-date rule):
+  those of the run shown (the Run menu's; by default the newest, the Summary's newest-by-date rule):
   the dams the run stored storage for (`damsInRun`, capacity and minimum
   level from the run's own model), each dam's daily series fetched through
   the Runs cache four at a time (`loadDamLevels`) and kept for the sparklines
