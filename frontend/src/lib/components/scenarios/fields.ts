@@ -26,6 +26,7 @@ import {
 	LAND_COVER_CLASSES,
 	LAND_COVER_SET_FIELDS,
 	SUPPLY_RULES,
+	applyScenario,
 	SUPPLY_RULE_LABEL,
 	WATER_SOURCE_LABEL,
 	WATER_SOURCES,
@@ -44,6 +45,8 @@ import {
 	type PeInput,
 	type PeKind,
 	type SettingsPath,
+	type ModelInput,
+	type ScenarioOp,
 	type Transfer,
 	type TransferSetField
 } from '@water-management/engine';
@@ -341,6 +344,38 @@ const SET_BY_MONTHLY_RATES: readonly TransferSetField[] = ['months', 'maxRateM3s
 export function transferFieldsFor(transfer: Pick<Transfer, 'monthlyRateM3s'> | undefined): typeof TRANSFER_FIELDS {
 	if (!transfer || transfer.monthlyRateM3s === null || transfer.monthlyRateM3s === undefined) return TRANSFER_FIELDS;
 	return TRANSFER_FIELDS.filter((f) => !SET_BY_MONTHLY_RATES.includes(f.field));
+}
+
+/**
+ * The choices a transfer.set of a choice field (a list, yes/no or a
+ * hydrological unit) may take on this rule, as the form's option values
+ * ('' for none): each one the engine applies to `input` without a problem
+ * (applyScenario, so every save rule that depends on the rule's shape is the
+ * engine's own: a share of the river's flow on a rule from the dam or without
+ * a complete curve, the river as source for a rule out of the catchment, from
+ * or to a non-unit, sized by a formula or one whose destination drains into
+ * its source, an end that is the source itself, an other water user or loops
+ * an off-take, a seepage unit not below the source). `units`: the units the
+ * form lists for a unit field. Null for any other field, or no rule picked.
+ */
+export function transferChoices(input: ModelInput, transferId: string, field: TransferSetField, units: readonly string[]): string[] | null {
+	const spec = TRANSFER_FIELD_SPECS[field].spec;
+	if (!input.model.transfers.some((t) => t.id === transferId)) return null;
+	const all =
+		spec.t === 'enum'
+			? [...(spec.nullable ? [''] : []), ...spec.options.map((o) => o.value)]
+			: spec.t === 'bool'
+				? ['true', 'false']
+				: spec.t === 'node'
+					? [...(spec.nullLabel !== undefined ? [''] : []), ...units]
+					: null;
+	if (!all) return null;
+	return all.filter((text) => {
+		const parsed = parseValue(spec, text);
+		if (!parsed.ok) return false;
+		const op = { op: 'transfer.set', transferId, field, value: parsed.value } as ScenarioOp;
+		return applyScenario(input, [op]).problems.length === 0;
+	});
 }
 
 // ---------------------------------------------------------------------------
