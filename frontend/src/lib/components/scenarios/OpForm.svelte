@@ -16,7 +16,7 @@
 	import { PE_KIND_OPTIONS } from '#lib/components/settings/peInput.js';
 	import { kindLabel } from '#lib/series/kinds.js';
 	import DemandScheduleFields from '#lib/components/network/DemandScheduleFields.svelte';
-	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, rescaleText, settingsValue, valueText, type ValueSpec } from './fields';
+	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, formatValue, nodeFields, peDraftOf, rescaleText, settingsValue, transferFieldsFor, valueText, type ValueSpec } from './fields';
 	import FlowUnitSelect from '#lib/components/network/FlowUnitSelect.svelte';
 	import { fmtDay, fmtNum, tidyDay } from '#lib/format/number.js';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
@@ -111,7 +111,7 @@
 	);
 	const fieldOptions = $derived.by(() => {
 		if (d.kind === 'node.set') return node ? nodeFields(node.kind).map((f) => ({ value: f.field, label: f.label })) : [];
-		if (d.kind === 'transfer.set') return TRANSFER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
+		if (d.kind === 'transfer.set') return transferFieldsFor(transfer).map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'settings.set') return SETTINGS_FIELDS.map((f) => ({ value: f.path, label: f.label }));
 		if (d.kind === 'crop.set') return CROP_FIELDS.map((f) => ({ value: f.field, label: f.label }));
 		if (d.kind === 'landCover.set') return LAND_COVER_FIELDS.map((f) => ({ value: f.field, label: f.label }));
@@ -410,6 +410,8 @@
 					value={d.transferId}
 					onchange={(e) => {
 						d.transferId = e.currentTarget.value;
+						// A field the new rule's shape doesn't take is dropped (months or the one maximum rate on a rule with monthly rates).
+						if (d.kind === 'transfer.set' && d.field && !fieldOptions.some((f) => f.value === d.field)) d.field = '';
 						prefill();
 					}}
 				>

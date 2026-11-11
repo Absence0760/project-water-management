@@ -44,6 +44,7 @@ import {
 	type PeInput,
 	type PeKind,
 	type SettingsPath,
+	type Transfer,
 	type TransferSetField
 } from '@water-management/engine';
 import { describeDroughtRestriction, describeEwrDailySource, ewrDailySourceIssues, type DroughtRestrictionRule, type EwrDailySource } from '@water-management/engine';
@@ -321,6 +322,26 @@ export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.filter((field) => TRANSFER_FI
 	field,
 	label: TRANSFER_FIELD_SPECS[field].label
 }));
+
+/**
+ * The months and the one maximum rate a rule with monthly rates (engine ≥
+ * 1.14.0) keeps in step with its list: the engine's save rules
+ * (`monthlyRatesMismatch`) refuse them disagreeing, so `transfer.set` of either
+ * on such a rule is skipped. Its rates change through `monthlyRateM3s`, which
+ * sets both to match (null puts the rule back on one rate in its months).
+ */
+const SET_BY_MONTHLY_RATES: readonly TransferSetField[] = ['months', 'maxRateM3s'];
+
+/**
+ * The fields the Add a change form offers for this transfer: TRANSFER_FIELDS
+ * less the ones the engine would refuse for its shape. A rule with monthly
+ * rates (any `monthlyRateM3s` but null, the test `monthlyRatesMismatch` starts
+ * from) loses the months and the one maximum rate. No rule picked yet: all.
+ */
+export function transferFieldsFor(transfer: Pick<Transfer, 'monthlyRateM3s'> | undefined): typeof TRANSFER_FIELDS {
+	if (!transfer || transfer.monthlyRateM3s === null || transfer.monthlyRateM3s === undefined) return TRANSFER_FIELDS;
+	return TRANSFER_FIELDS.filter((f) => !SET_BY_MONTHLY_RATES.includes(f.field));
+}
 
 // ---------------------------------------------------------------------------
 // crop.set, landCover.set (engine ≥ 1.35.0)
