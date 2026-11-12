@@ -4107,6 +4107,23 @@ outlines are separate and stay. To withdraw it: take `quaternary-evaporation`
 out of `REFERENCE_KINDS` and the gate's `LOADABLE`, and delete the rows with a
 forward migration (`DELETE FROM quaternary_evaporation WHERE dataset = 'WR2012-WRSM2000'`).
 
+#### Shared with other projects
+
+The reference bucket is also where the estate's other projects get the source files they share with this one. That way each file is kept once, not downloaded again by every project. EWR Compliance is the first. Nothing loads these files and the app never reads them. Another project reads them at build time, on the operator's workstation, with the `water-management` profile, and checks each file against its hashes. The bucket policy stays as it is: it grants nothing to any other account.
+
+`bin/share-reference.sh [--dry-run] <kind> <version> <file>...` puts them up:
+- Each file goes to `originals/<kind>/<version>-<file>`, with a space in its name replaced by `-` and its SHA-256 stored as the object's `sha256` metadata.
+- Beside the files it writes `originals/<kind>/<version>-SHA256SUMS`, which a reader checks against.
+- A file already up with the same hash is skipped. One with a different hash, or with no hash recorded, is refused: a new delivery takes a new version.
+
+| Kind | What | Read by |
+| --- | --- | --- |
+| `rivers` | HydroRIVERS v1.0, Africa: the zip as downloaded (`v10-HydroRIVERS_v10_af_shp.zip`; its SHA-256 is pinned in `bin/source-checksums.sha256`). This project's own River network originals too | EWR Compliance `tools/build-rivers.ts`: the lines it draws |
+| `dws-rivers-500k` | The DWS 1:500 000 rivers (`wriall500`) as KML: `PrimaryRivers.kml` and `SecondaryRivers.kml`, with each reach's name, class (perennial or not) and Strahler order | EWR Compliance `tools/build-rivers.ts`: the river names and classes |
+| `dws-quaternaries` | The DWS quaternary catchment boundaries as KML (`Quaternary-Catchment-Boundaries.kml`, 1 843 quaternaries) | Kept for the estate. Neither project reads it yet |
+
+To read one from another project: `aws s3 cp s3://<reference_bucket>/originals/<kind>/<version>-<file> . --profile water-management`. Then check it with that version's `SHA256SUMS`.
+
 #### Refreshing a dataset
 
 Reference data changes yearly at most, and most of it never. Check
