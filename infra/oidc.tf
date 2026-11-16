@@ -40,27 +40,49 @@ data "aws_iam_role" "github_deploy" {
         for s in flatten([try(jsondecode(self.assume_role_policy).Statement, [])]) :
         try(s.Effect, "") != "Allow" || (
           toset(flatten([try(s.Action, [])])) == toset(["sts:AssumeRoleWithWebIdentity"]) &&
-          length(flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:sub"], [])])) == 1 &&
+          length(flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:sub"], [])])) >= 1 &&
           alltrue([
             for sub in flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:sub"], [])]) :
-            can(regex(local.deploy_sub_pattern, sub))
+            anytrue([for pattern in local.deploy_sub_patterns : can(regex(pattern, sub))])
+          ]) &&
+          alltrue([
+            for pattern in local.deploy_sub_patterns :
+            length([
+              for sub in flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:sub"], [])]) :
+              sub if can(regex(pattern, sub))
+            ]) <= 1
           ]) &&
           toset(flatten([try(s.Condition.StringEquals["token.actions.githubusercontent.com:aud"], [])])) == toset(["sts.amazonaws.com"]) &&
           length(keys(try(s.Condition.StringLike, {}))) == 0
         )
       ])
-      error_message = "The bootstrap deploy role's trust policy must allow only sts:AssumeRoleWithWebIdentity, with exactly one StringEquals sub for ${var.github_repo}'s `production` environment and aud = sts.amazonaws.com (no StringLike / wildcards). Fix the bootstrap (new-project-account.sh) before planning."
+      error_message = "The bootstrap deploy role's trust policy must allow only sts:AssumeRoleWithWebIdentity, with exactly one StringEquals sub for ${var.github_repo}'s `production` environment (one per owner in github_migration_owners during an org move) and aud = sts.amazonaws.com (no StringLike / wildcards). Fix the bootstrap (new-project-account.sh) before planning."
     }
   }
 }
 
 locals {
-  # ^repo:<owner>(@<id>)?/<repo>(@<id>)?:environment:production$
-  deploy_sub_pattern = format(
-    "^repo:%s(@[0-9]+)?/%s(@[0-9]+)?:environment:production$",
-    replace(split("/", var.github_repo)[0], ".", "\\."),
-    replace(split("/", var.github_repo)[1], ".", "\\."),
-  )
+  # ^repo:<owner>(@<id>)?/<repo>(@<id>)?:environment:production$, one per
+  # accepted owner: github_repo's owner, then github_migration_owners.
+  #
+  # Org move (Absence0760/project-mgmt#14): transferring the repo into a GitHub
+  # org changes the subject (a repo transferred after 2026-07-15 issues
+  # repo:<org>@<org_id>/<repo>@<repo_id>), so for the switchover the bootstrap
+  # trusts both the old and the new subject. Listing the other owner in
+  # github_migration_owners lets this check accept that, and nothing more: the
+  # repo name, the environment, StringEquals and the audience are still pinned,
+  # every sub must belong to an accepted owner, and each owner may have at most
+  # one. With the list empty this is exactly the old one-subject check. Read
+  # the prefix the role must trust, never guess it:
+  #   gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
+  deploy_sub_patterns = [
+    for owner in distinct(concat([split("/", var.github_repo)[0]], var.github_migration_owners)) :
+    format(
+      "^repo:%s(@[0-9]+)?/%s(@[0-9]+)?:environment:production$",
+      replace(owner, ".", "\\."),
+      replace(split("/", var.github_repo)[1], ".", "\\."),
+    )
+  ]
 }
 
 # ----------------------------------------------------------------------------
