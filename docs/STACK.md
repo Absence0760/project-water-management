@@ -400,7 +400,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
 ## Conventions and gotchas
 
 - **This repo is public.** Never commit secrets (they live in the private
-  `Absence0760/infra-secrets` repo under `water-management/`), client
+  `jaredhoward-dev/infra-secrets` repo under `water-management/`), client
   workbooks, or anything derived from them. Committed fixtures are synthetic,
   with no real farm names or values ([security.md § Public repo hygiene](./security.md#public-repo-hygiene)).
 - **The engine stays pure.** No `fetch`, no DB, no Node or DOM APIs in

@@ -98,5 +98,5 @@ The full list is in [docs/STACK.md](./docs/STACK.md#commands-run-from-repo-root)
 This repo is public. Client workbooks and anything extracted from them
 (kept outside the repo in `../project-water-management-source/`; `data/`, `*.xlsm`, `*.xlsx` are gitignored) are **never committed**, and
 committed test fixtures are synthetic. Production secrets are SOPS-encrypted in
-the private `Absence0760/infra-secrets` repo under `water-management/`, never
+the private `jaredhoward-dev/infra-secrets` repo under `water-management/`, never
 here. See [docs/security.md § Public repo hygiene](./docs/security.md#public-repo-hygiene).

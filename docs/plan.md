@@ -50,7 +50,7 @@ and [data-model.md](./data-model.md)):
   ever committed. The workbooks live outside the repo (`../project-water-management-source/`); `data/` and `*.xlsm`/`*.xlsx` are
   gitignored, and committed fixtures are synthetic, with no real farm names or
   values. All production secrets are SOPS-encrypted in the private
-  `Absence0760/infra-secrets` repo under `water-management/`
+  `jaredhoward-dev/infra-secrets` repo under `water-management/`
   ([security.md § Public repo hygiene](./security.md#public-repo-hygiene)).
 - **Production URL: `icwbt.jaredhoward.com`** since issue #551 (the app is
   Integrated Catchment - Water Balance Tool, IC-WBT); it was
@@ -312,7 +312,7 @@ writing, or gives a ranked change list.
   and "farm X's dam +50%"), with difference charts and a difference table.
   Run comparison is built ([run-comparison.md](./run-comparison.md)), and so
   are scenarios within a project (roadmap step 3,
-  [#18](https://github.com/Absence0760/project-water-management/issues/18)):
+  [#18](https://github.com/jaredhoward-dev/project-water-management/issues/18)):
   the engine, backend and API, and the Scenarios tab with its override
   editor and scenario-vs-base comparison ([scenarios.md](./scenarios.md),
   [ui.md § Scenarios](./ui.md#scenarios-tabscenarios)).
@@ -330,7 +330,7 @@ writing, or gives a ranked change list.
   the EWR compliance grid (`EwrHeatmap`, outlet and per farm, engine
   `EwrCompliance`) and the annual water balance table in the calibration
   panel. The printable catchment report
-  ([#19](https://github.com/Absence0760/project-water-management/issues/19),
+  ([#19](https://github.com/jaredhoward-dev/project-water-management/issues/19),
   WP-2.15 Phase A) puts them, with the rest of a run's results, on A4
   ([ui.md § Report](./ui.md#report)).
 - 🚧 **Calibration workbench:** plot observed vs simulated, adjust the rain→flow
@@ -562,7 +562,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 
 ### Model and hydrology (for the hydrologist)
 
-> **Calibration record ([#1](https://github.com/Absence0760/project-water-management/issues/1), closed).**
+> **Calibration record ([#1](https://github.com/jaredhoward-dev/project-water-management/issues/1), closed).**
 >
 > **Decided 2026-09-25: calibrate and validate on the logger. The workbook's
 > gauge column is used only as a regional wet/dry index.** Question 1 below
@@ -602,7 +602,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 > The yes to 1 closed #1. Questions 2–4 are still open and don't reopen it;
 > each is its own follow-up.
 
-> **Rain forcing ([#12](https://github.com/Absence0760/project-water-management/issues/12), closed).**
+> **Rain forcing ([#12](https://github.com/jaredhoward-dev/project-water-management/issues/12), closed).**
 >
 > **Decided 2026-09-26: force the model with the #12 era treatment.** The
 > operator accepted the research's recommendation on the hydrologist's
@@ -626,7 +626,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 >    logger are question 2; the A-pan row and a station ET₀ record are
 >    questions 6 and 7.)
 
-> **Evaporation ([#13](https://github.com/Absence0760/project-water-management/issues/13), closed).**
+> **Evaporation ([#13](https://github.com/jaredhoward-dev/project-water-management/issues/13), closed).**
 >
 > **Decided 2026-09-26: keep the workbook's A-pan row, and set GR4J's PE at
 > the station-scaled ET₀ level.** The operator accepted the research's
@@ -836,7 +836,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     - **Afrikaans:** the client's native-speaker translator reviews the
       farmer text before farmers are invited in Afrikaans (followups.md
       § Afrikaans).
-21. **Which priority should a new other water user start with ([#507](https://github.com/Absence0760/project-water-management/issues/507))?**
+21. **Which priority should a new other water user start with ([#507](https://github.com/jaredhoward-dev/project-water-management/issues/507))?**
     #90 settled that senior/junior is enough, not which is the default. A new
     other water user starts **senior** (engine `USER_DEFAULTS`, model.md
     §2.7c): every hydrological unit upstream passes its demand before filling
@@ -893,7 +893,7 @@ Questions 10–14 are answered by what shipped, so they are struck.
 
 From the client's four sketched outputs; research and recommendations in
 [design/planning-outputs.md](./design/planning-outputs.md), build in
-[#53](https://github.com/Absence0760/project-water-management/issues/53).
+[#53](https://github.com/jaredhoward-dev/project-water-management/issues/53).
 
 - **O1. Risk cut-offs.** In the outcome matrix, what share of Reserve months
   met (or % of days below the EWR) counts as high risk, increasing risk,

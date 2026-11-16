@@ -1,6 +1,6 @@
 # Design: the phone-first farmer view (`/farm/:projectId`)
 
-Design spec for [issue #14](https://github.com/Absence0760/project-water-management/issues/14).
+Design spec for [issue #14](https://github.com/jaredhoward-dev/project-water-management/issues/14).
 It feeds the build of [WP-2.1](../roadmap/step-2-shared-catchment.md#wp-21-farmer-role-and-farm-scoped-rls)
 (farm-scoped RLS) and [WP-2.6](../roadmap/step-2-shared-catchment.md#wp-26-phone-first-farmer-view)
 (the view). WP-2.1 and WP-2.3 (with the WP-2.6 API routes) are built; the

@@ -174,7 +174,7 @@ private estate repo, one file per project; copy it from the templates repo's
 commit and push it there: the script refuses an unsaved one, and it is the
 only record of the account's root email, which AWS never lets you change or
 reuse. Set `github_subject_prefix` to what
-`gh api repos/Absence0760/project-water-management/actions/oidc/customization/sub --jq .sub_claim_prefix`
+`gh api repos/jaredhoward-dev/project-water-management/actions/oidc/customization/sub --jq .sub_claim_prefix`
 prints, never to `repo:<owner>/<repo>`: this repo is on GitHub's immutable
 subject claims, so its OIDC subject carries numeric IDs, and a slug-form
 prefix leaves every deploy failing to assume the role
@@ -245,7 +245,7 @@ Estate runbook: `~/github/project-mgmt/docs/runbooks.md`.
 ## 2. Secrets (one-time, then as needed)
 
 **This repo is public.** Production secrets live **only** in the private
-`Absence0760/infra-secrets` repo, at `water-management/prod.sops.yaml`,
+`jaredhoward-dev/infra-secrets` repo, at `water-management/prod.sops.yaml`,
 encrypted under `alias/water-management-sops`. They are never in this repo,
 encrypted or not, and never in Terraform state or a saved plan either.
 Terraform gets them through `infra/scripts/tf.sh`, which runs it under
@@ -1219,23 +1219,23 @@ line:
    (self-review allowed: there is one operator):
 
    ```bash
-   gh api -X PUT repos/Absence0760/project-water-management/environments/production -F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user --jq .id)" -F prevent_self_review=false -F "deployment_branch_policy[protected_branches]=false" -F "deployment_branch_policy[custom_branch_policies]=true"
+   gh api -X PUT repos/jaredhoward-dev/project-water-management/environments/production -F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user --jq .id)" -F prevent_self_review=false -F "deployment_branch_policy[protected_branches]=false" -F "deployment_branch_policy[custom_branch_policies]=true"
    ```
 
 2. Allow exactly `main` and the two release tag patterns (a manual rollback
    run is dispatched from `main`; a release event runs on its tag):
 
    ```bash
-   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name=main -f type=branch
-   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='backend@*' -f type=tag
-   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='web@*' -f type=tag
+   gh api -X POST repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies -f name=main -f type=branch
+   gh api -X POST repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies -f name='backend@*' -f type=tag
+   gh api -X POST repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies -f name='web@*' -f type=tag
    ```
 
 3. Protect the release tags: only a repository admin (you, bypassing through
    `gh release create`) can create them, and nobody can move or delete one:
 
    ```bash
-   gh api -X POST repos/Absence0760/project-water-management/rulesets --input - <<< '{"name":"Release tags","target":"tag","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"conditions":{"ref_name":{"include":["refs/tags/backend@*","refs/tags/web@*"],"exclude":[]}},"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}'
+   gh api -X POST repos/jaredhoward-dev/project-water-management/rulesets --input - <<< '{"name":"Release tags","target":"tag","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"conditions":{"ref_name":{"include":["refs/tags/backend@*","refs/tags/web@*"],"exclude":[]}},"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}'
    ```
 
 4. Check. The first should print `{"custom_branch_policies":true,"protected_branches":false}`
@@ -1243,9 +1243,9 @@ line:
    ruleset as `active`:
 
    ```bash
-   gh api repos/Absence0760/project-water-management/environments/production --jq '{p: .deployment_branch_policy, r: [.protection_rules[] | select(.type == "required_reviewers") | .reviewers[].reviewer.login]}'
-   gh api repos/Absence0760/project-water-management/environments/production/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
-   gh api repos/Absence0760/project-water-management/rulesets --jq '.[] | select(.target == "tag") | "\(.name) \(.enforcement)"'
+   gh api repos/jaredhoward-dev/project-water-management/environments/production --jq '{p: .deployment_branch_policy, r: [.protection_rules[] | select(.type == "required_reviewers") | .reviewers[].reviewer.login]}'
+   gh api repos/jaredhoward-dev/project-water-management/environments/production/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
+   gh api repos/jaredhoward-dev/project-water-management/rulesets --jq '.[] | select(.target == "tag") | "\(.name) \(.enforcement)"'
    ```
 
 The preflight reads these with the workflow's own token (`actions: read` for
@@ -2660,7 +2660,7 @@ The operator, once:
    CloudShell icon) and get the checkout and Python 3.14 (CloudShell's own
    Python is older). uv's installer is a shell script from astral.sh that
    puts `uv` in `~/.local/bin`; read it first if you prefer:
-   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/Absence0760/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.14 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
+   `curl -LsSf https://astral.sh/uv/install.sh | sh && git clone --depth 1 https://github.com/jaredhoward-dev/project-water-management.git /tmp/wm && cd /tmp/wm/ingest && ~/.local/bin/uv venv --python 3.14 .venv && ~/.local/bin/uv pip install --python .venv/bin/python --require-hashes -r requirements.txt && cp requirements.txt .venv/.requirements.txt`
    (in `/tmp`, since the home directory holds 1 GB).
 3. **Copy one model at a time:**
    `cd /tmp/wm && AWS_REGION=af-south-1 AWS_DEFAULT_REGION=af-south-1 MIRROR_URL=s3://<mirror bucket> ingest/dev.sh cmip6 copy --source s3 --models ACCESS-CM2`
@@ -4510,7 +4510,7 @@ IDs as you go (`Z…`, without the `/hostedzone/` prefix):
 14. Release the backend (the new name in emails and the authenticator label), and approve it in the `production` environment ([§ Releasing](#releasing)): `gh release create backend@<next version> --target main --generate-notes`
 15. Once that deploy has finished, release the web app, which ships the new name and carries the new CAPTCHA key (the old build's key no longer exists, so until this release a sign-in that hits the CAPTCHA can't solve it): `gh release create web@<next version> --target main --generate-notes`
 16. Run the post-apply check, with the redirect: `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops --redirect-from water-management.jaredhoward.com`
-17. Point the repository's website at the new address: `gh repo edit Absence0760/project-water-management --homepage https://icwbt.jaredhoward.com`
+17. Point the repository's website at the new address: `gh repo edit jaredhoward-dev/project-water-management --homepage https://icwbt.jaredhoward.com`
 
 What people notice: the session cookie belongs to the host, so anyone signed
 in on the old address signs in again on the new one; an authenticator app

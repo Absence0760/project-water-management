@@ -4150,7 +4150,7 @@ readable by anyone. The rules:
 
 - **No secrets, not even encrypted ones.** Production values (DB credentials,
   `AUTH_JWT_SECRET`, anything that grants access) live only in the private
-  `Absence0760/infra-secrets` repo under `water-management/`, SOPS-encrypted
+  `jaredhoward-dev/infra-secrets` repo under `water-management/`, SOPS-encrypted
   under `alias/water-management-sops`. Bootstrap:
   `infra-secrets/bin/sops-init.sh --project water-management --region <region>`.
   Terraform gets them as ephemeral variables through `infra/scripts/tf.sh`
