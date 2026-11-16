@@ -18,6 +18,8 @@ const script = join(here, 'tf.sh');
 const which = (tool) => spawnSync('bash', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim();
 const BASH = which('bash');
 const KEYS = ['auth_jwt_secret', 'db_app_password', 'alerts_token_secret', 'cloudfront_private_key', 'app_encryption_key'];
+/** Keys passed only when present (a feature's, off until the operator adds it: station API feeds, issue #784). */
+const OPTIONAL_KEYS = ['feed_credential_private_key'];
 const VALUES = {
 	auth_jwt_secret: 'synthetic-jwt-0123456789abcdef0123456789abcdef',
 	db_app_password: 'synthetic0db0password0123456789',
@@ -56,7 +58,7 @@ function setup({ withSops = true, secretsFile = SOPS_FILE() } = {}) {
 		join(bin, 'terraform'),
 		`#!/usr/bin/env node
 const { appendFileSync } = require('node:fs');
-const keys = ${JSON.stringify(KEYS)};
+const keys = ${JSON.stringify([...KEYS, ...OPTIONAL_KEYS])};
 appendFileSync(process.env.FAKE_TF_LOG, JSON.stringify({
 	args: process.argv.slice(2),
 	tfvars: Object.fromEntries(keys.filter((k) => ('TF_VAR_' + k) in process.env).map((k) => [k, process.env['TF_VAR_' + k]])),
@@ -106,6 +108,22 @@ test('each sops key reaches Terraform as TF_VAR_<key>, and only so', () => {
 	assert.deepEqual(r.tf[0].bare, [], 'the bare sops names are unset before Terraform runs');
 	assert.deepEqual(r.sops, [{ args: ['exec-env', '--same-process', ctx.secrets, r.sops[0].args[3]] }]);
 	assert.equal(r.stdout, '', 'prints nothing of its own');
+});
+
+test('an optional key reaches Terraform when the sops file has it, and its absence (or an empty one) is no error', () => {
+	const ctx = setup();
+	const key = 'synthetic-feed-private-key-000000000000000A';
+	const withKey = run(ctx, ['plan'], { FAKE_SOPS_ENV: JSON.stringify({ ...VALUES, feed_credential_private_key: key }) });
+	assert.equal(withKey.status, 0, withKey.stderr);
+	assert.deepEqual(withKey.tf[0].tfvars, { ...VALUES, feed_credential_private_key: key });
+	assert.deepEqual(withKey.tf[0].bare, [], 'the bare optional name is unset too');
+	for (const extra of [{}, { feed_credential_private_key: '' }]) {
+		const ctx2 = setup();
+		const r = run(ctx2, ['plan'], { FAKE_SOPS_ENV: JSON.stringify({ ...VALUES, ...extra }) });
+		assert.equal(r.status, 0, r.stderr);
+		assert.deepEqual(r.tf[0].tfvars, VALUES, JSON.stringify(extra));
+		assert.deepEqual(r.tf[0].bare, []);
+	}
 });
 
 test('arguments with spaces, quotes and $ pass through unchanged', () => {

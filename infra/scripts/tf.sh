@@ -45,6 +45,10 @@ secrets="${WM_SECRETS_FILE:-$here/../../../infra-secrets/water-management/prod.s
 # The sops keys that become TF_VAR_<key> (variables.tf § Runtime secrets;
 # infra/prod.sops.yaml.example).
 keys=(auth_jwt_secret db_app_password alerts_token_secret cloudfront_private_key app_encryption_key)
+# Keys a feature needs only once it is on, passed when present and non-empty:
+# feed_credential_private_key, the fetcher's key for station API feeds (issue
+# #784; variables.tf refuses station_api_feeds without it).
+optional_keys=(feed_credential_private_key)
 
 die() {
 	echo "tf.sh: $*" >&2
@@ -128,6 +132,11 @@ for k in '"${keys[*]}"'; do
 	v=$(printenv "$k") || { echo "tf.sh: $k is missing from the sops file" >&2; exit 1; }
 	[ -n "$v" ] || { echo "tf.sh: $k is empty in the sops file" >&2; exit 1; }
 	export "TF_VAR_$k=$v"
+	unset "$k"
+done
+for k in '"${optional_keys[*]}"'; do
+	v=$(printenv "$k") || continue
+	[ -z "$v" ] || export "TF_VAR_$k=$v"
 	unset "$k"
 done
 unset k v
