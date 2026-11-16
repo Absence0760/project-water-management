@@ -220,7 +220,7 @@
 					aria-invalid={inv('st-secret')}
 					aria-describedby={desc('st-secret', `${uid}-st-secret-h`)}
 				/>
-				<span class="hint" id="{uid}-st-secret-h">Kept sealed: only the server’s fetcher can read it, and it is never shown again, here or anywhere else.</span>
+				<span class="hint" id="{uid}-st-secret-h">At least 8 characters. Kept sealed: only the server’s fetcher can read it, and it is never shown again, here or anywhere else.</span>
 			</div>
 		</div>
 	{/if}

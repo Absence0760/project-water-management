@@ -189,6 +189,9 @@ describe('fetchStation', () => {
 		const e2 = await fetchStation(csv, { start: '2026-03-01', end: '2026-03-01' }, { secret: key }, header.client, NOW).catch((e) => e);
 		expect(e2.message).toMatch(/no “rain” column/);
 		expect(leaks(feedErrorMessage(e2))).toBe(false);
+		// A key shorter than 8 (one saved before keys had to be 8 characters): a cut piece as long as the key itself is blanked.
+		expect(scrubKey('the value “ab12cd3” is not a number', { secret: 'ab12cd3' })).not.toContain('ab12cd3');
+		expect(scrubKey('the value “xyz” is not a number', { secret: 'xyz' })).not.toContain('xyz');
 		// A message with nothing of the key is left as it was.
 		expect(scrubKey('the answer is not valid JSON', { secret: key })).toBe('the answer is not valid JSON');
 	});

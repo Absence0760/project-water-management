@@ -47,29 +47,30 @@ describe('stationDraftToBody', () => {
 		const bearer = stationDraftToBody(ready({ authKind: 'bearer', secret: '  tok-1234  ', user: 'ignored' }), 'G');
 		expect('body' in bearer && bearer.body.credential).toEqual({ secret: 'tok-1234' });
 		expect('body' in bearer && bearer.body.config.auth).toEqual({ kind: 'bearer' });
-		const basic = stationDraftToBody(ready({ authKind: 'basic', secret: 'pw', user: ' ann ' }), 'G');
-		expect('body' in basic && basic.body.credential).toEqual({ secret: 'pw', user: 'ann' });
+		const basic = stationDraftToBody(ready({ authKind: 'basic', secret: 'password1', user: ' ann ' }), 'G');
+		expect('body' in basic && basic.body.credential).toEqual({ secret: 'password1', user: 'ann' });
 		// No user name typed: none sent, never an empty one (the API refuses that).
-		const noUser = stationDraftToBody(ready({ authKind: 'basic', secret: 'pw', user: '  ' }), 'G');
-		expect('body' in noUser && noUser.body.credential).toEqual({ secret: 'pw' });
+		const noUser = stationDraftToBody(ready({ authKind: 'basic', secret: 'password1', user: '  ' }), 'G');
+		expect('body' in noUser && noUser.body.credential).toEqual({ secret: 'password1' });
 	});
 
 	it('never sends an empty credential: a key method with no key is refused, and no method drops a typed key', () => {
 		expect(stationDraftToBody(ready({ authKind: 'bearer', secret: '   ' }), 'G')).toEqual({ error: 'Enter the key.', field: 'st-secret' });
+		expect(stationDraftToBody(ready({ authKind: 'bearer', secret: 'short12' }), 'G')).toEqual({ error: 'The key is at least 8 characters.', field: 'st-secret' });
 		expect(stationDraftToBody(ready({ authKind: 'basic', secret: '' }), 'G')).toEqual({ error: 'Enter the password.', field: 'st-secret' });
 		const none = stationDraftToBody(ready({ authKind: 'none', secret: 'left-over' }), 'G');
 		expect('body' in none && 'credential' in none.body).toBe(false);
 	});
 
 	it('takes a header or query parameter by name, never the key in the URL or an extra header', () => {
-		const header = stationDraftToBody(ready({ authKind: 'header', headerName: 'X-Api-Key', headerPrefix: 'Token ', secret: 'k' }), 'G');
+		const header = stationDraftToBody(ready({ authKind: 'header', headerName: 'X-Api-Key', headerPrefix: 'Token ', secret: 'key-12345' }), 'G');
 		expect('body' in header && header.body.config.auth).toEqual({ kind: 'header', name: 'X-Api-Key', prefix: 'Token ' });
-		expect(stationDraftToBody(ready({ authKind: 'header', secret: 'k' }), 'G')).toMatchObject({ field: 'st-header-name' });
-		expect(stationDraftToBody(ready({ authKind: 'header', headerName: 'Cookie', secret: 'k' }), 'G')).toMatchObject({ field: 'st-header-name' });
-		const query = stationDraftToBody(ready({ authKind: 'query', queryName: 'apiKey', secret: 'k' }), 'G');
+		expect(stationDraftToBody(ready({ authKind: 'header', secret: 'key-12345' }), 'G')).toMatchObject({ field: 'st-header-name' });
+		expect(stationDraftToBody(ready({ authKind: 'header', headerName: 'Cookie', secret: 'key-12345' }), 'G')).toMatchObject({ field: 'st-header-name' });
+		const query = stationDraftToBody(ready({ authKind: 'query', queryName: 'apiKey', secret: 'key-12345' }), 'G');
 		expect('body' in query && query.body.config.auth).toEqual({ kind: 'query', name: 'apiKey' });
 		expect(stationDraftToBody(ready({ url: `${URL}&apiKey=abc` }), 'G')).toMatchObject({ field: 'st-url' });
-		expect(stationDraftToBody(ready({ url: `${URL}&code=1`, authKind: 'query', queryName: 'code', secret: 'k' }), 'G')).toMatchObject({ field: 'st-query-name' });
+		expect(stationDraftToBody(ready({ url: `${URL}&code=1`, authKind: 'query', queryName: 'code', secret: 'key-12345' }), 'G')).toMatchObject({ field: 'st-query-name' });
 		expect(stationDraftToBody(ready({ headers: [{ name: 'Authorization', value: 'Bearer x' }] }), 'G')).toMatchObject({ field: 'st-headers' });
 	});
 
@@ -167,9 +168,9 @@ describe('stationFormatOf', () => {
 
 describe('presets', () => {
 	it('prefill the format (and for Weather Underground the URL and key method) but keep the name, station and key', () => {
-		const typed = { ...emptyStationDraft(), station: 'IKAAPS12', secret: 'abc', time: 'old', scale: '2' };
+		const typed = { ...emptyStationDraft(), station: 'IKAAPS12', secret: 'abc-12345', time: 'old', scale: '2' };
 		const wu = STATION_PRESETS.find((p) => p.id === 'wu-pws-daily')!.apply(typed);
-		expect(wu).toMatchObject({ station: 'IKAAPS12', secret: 'abc', authKind: 'query', queryName: 'apiKey', urlTime: 'YYYYMMDD', records: 'observations', value: 'metric.precipTotal', scale: '' });
+		expect(wu).toMatchObject({ station: 'IKAAPS12', secret: 'abc-12345', authKind: 'query', queryName: 'apiKey', urlTime: 'YYYYMMDD', records: 'observations', value: 'metric.precipTotal', scale: '' });
 		const body = stationDraftToBody(wu, 'Home');
 		expect('body' in body && body.body.config).toMatchObject({ urlTimeFormat: 'YYYYMMDD', maxDaysPerRequest: 31, auth: { kind: 'query', name: 'apiKey' } });
 		const generic = STATION_PRESETS.find((p) => p.id === 'json-daily')!.apply({ ...typed, url: URL, authKind: 'bearer' });

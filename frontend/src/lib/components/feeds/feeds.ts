@@ -612,6 +612,7 @@ export function credentialLine(f: Pick<FeedMeta, 'source' | 'config' | 'credenti
 export function credentialPatch(secret: string, user: string, basic: boolean): { credential: StationCredentialBody } | { error: string } {
 	const s = secret.trim();
 	if (!s) return { error: basic ? 'Enter the new password.' : 'Enter the new key.' };
+	if (s.length < 8) return { error: basic ? 'The password is at least 8 characters.' : 'The key is at least 8 characters.' };
 	if (s.length > 4096) return { error: 'The key is too long (at most 4096 characters).' };
 	const u = user.trim();
 	if (u.length > 256) return { error: 'The user name is at most 256 characters.' };

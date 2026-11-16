@@ -686,9 +686,11 @@ describe('station API feeds (issue #784)', () => {
 	it('replaces a key only with a non-empty one, with a user name for basic', () => {
 		expect(credentialPatch('  ', '', false)).toEqual({ error: 'Enter the new key.' });
 		expect(credentialPatch('', 'ann', true)).toEqual({ error: 'Enter the new password.' });
-		expect(credentialPatch(' new-key ', 'ignored', false)).toEqual({ credential: { secret: 'new-key' } });
-		expect(credentialPatch('pw', ' ann ', true)).toEqual({ credential: { secret: 'pw', user: 'ann' } });
-		expect(credentialPatch('pw', '', true)).toEqual({ credential: { secret: 'pw' } });
+		expect(credentialPatch(' new-key-1 ', 'ignored', false)).toEqual({ credential: { secret: 'new-key-1' } });
+		expect(credentialPatch('short12', '', false)).toEqual({ error: 'The key is at least 8 characters.' });
+		expect(credentialPatch('pw', 'ann', true)).toEqual({ error: 'The password is at least 8 characters.' });
+		expect(credentialPatch('password1', ' ann ', true)).toEqual({ credential: { secret: 'password1', user: 'ann' } });
+		expect(credentialPatch('password1', '', true)).toEqual({ credential: { secret: 'password1' } });
 	});
 
 	it('suggests a separate series named after the station', () => {

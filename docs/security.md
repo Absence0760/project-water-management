@@ -3307,8 +3307,10 @@ doubling; hours for a refused key). On at most 60 feeds per project
 VPC's Elastic IP with `fixed_egress_enabled`), so a target could block it
 for every station feed; our own upstreams can't be targeted, so their blocks
 can't come from this. The answers are parsed as rainfall and bounded, never
-shown raw; an error quotes at most a short piece of one value, with any
-piece of the key blanked (`sources/station.ts` `scrubKey`). Every change is
+shown raw; an error quotes at most a short piece of one value, with the key
+and any run of 8 or more of its characters blanked (`sources/station.ts`
+`scrubKey`; keys are at least 8 characters), though a piece shorter than 8
+of a longer key can remain. Every change is
 in the feed's history. A provider's
 terms and licence are the project owner's responsibility
 ([data-sources.md § station-api](./data-sources.md#station-api)).

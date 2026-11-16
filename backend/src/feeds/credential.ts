@@ -33,7 +33,7 @@ const PKCS8_PREFIX = Buffer.from('302e020100300506032b656e04220420', 'hex');
 /** What a credential holds: one secret (a token, a key, a password) and, for Basic auth, a user name. */
 export const FeedCredential = z
 	.object({
-		secret: z.string().min(1).max(4096),
+		secret: z.string().min(8, 'a key is at least 8 characters').max(4096),
 		user: z.string().min(1).max(256).optional()
 	})
 	.strict();

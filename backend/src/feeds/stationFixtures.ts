@@ -21,6 +21,8 @@
 //   GET /v1/loop                HTTP 302 to itself (too many redirects)
 //   GET /v1/page                HTTP 200, an HTML page (not the data)
 //   GET /v1/throttled           HTTP 429, Retry-After: 60
+//   GET /v1/hang                never answers, not even at the client's own deadline (stands in for a host slow
+//                               enough to use up a fetch's whole budget: the fetcher's cap is what ends it)
 //   anything else on the host   HTTP 404
 //
 // Any other host fails: in fixtures mode nothing leaves the process, and a
@@ -164,6 +166,7 @@ export function fixtureRequester(now: () => number = Date.now): Requester {
 				`with FEED_SOURCE=fixtures a station feed can only ask the synthetic API on ${STATION_FIXTURE_HOST}: set FEED_SOURCE=live (in backend/.env.development.local) to ask ${url.hostname}`
 			);
 		}
+		if (url.pathname === '/v1/hang') return new Promise<IncomingMessage>(() => {});
 		return message(stationFixtureAnswer(url, (opts.headers ?? {}) as Record<string, unknown>, now()));
 	};
 }

@@ -1165,6 +1165,29 @@ describe('the fetcher and station API feeds (issue #784)', () => {
 		expect(fetchBudgetFor('dws', 14 * 60_000)).toBe(14 * 60_000);
 	});
 
+	it('answers a station fetch that never ends as too slow after two minutes, with 14 left on the Lambda, and not before', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+		try {
+			let settled = false;
+			const done = handler({ Records: [record('m1', { v: 1, type: 'fetch', ...ids, request: station({ url: 'https://station.example/v1/hang?station={station}' }) })] } as never, {
+				getRemainingTimeInMillis: () => 14 * 60_000
+			}).then((r) => ((settled = true), r));
+			await vi.advanceTimersByTimeAsync(STATION_FETCH_BUDGET_MS - 1_000);
+			expect(settled).toBe(false);
+			expect(sent).toHaveLength(0);
+			await vi.advanceTimersByTimeAsync(2_000);
+			expect(await done).toEqual({ batchItemFailures: [] });
+			expect(sent).toEqual([
+				{ url: 'https://sqs.example/ingest-results', message: { v: 1, type: 'ingest', ...ids, result: { ok: false, error: 'the source is unreachable: it did not answer in time' } } }
+			]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('refuses further station requests once the deadline has passed', async () => {
 		const inner = { http: { get: async () => ({ text: '', contentType: null }) }, pacer: null };
 		await expect(stationWithDeadline(inner, Date.now() - 1).http.get({ url: 'https://x.example/', headers: {} })).rejects.toThrow('it did not answer in time');

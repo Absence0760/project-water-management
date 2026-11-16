@@ -315,6 +315,7 @@ export function stationDraftToBody(d: StationDraft, name: string): { body: Stati
 
 	const secret = d.secret.trim();
 	if (d.authKind !== 'none' && !secret) return { error: d.authKind === 'basic' ? 'Enter the password.' : 'Enter the key.', field: 'st-secret' };
+	if (secret && secret.length < 8) return { error: d.authKind === 'basic' ? 'The password is at least 8 characters.' : 'The key is at least 8 characters.', field: 'st-secret' };
 	if (secret.length > 4096) return { error: 'The key is too long (at most 4096 characters).', field: 'st-secret' };
 
 	const rows = d.headers.map((h) => ({ name: h.name.trim(), value: h.value })).filter((h) => h.name || h.value.trim());

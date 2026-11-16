@@ -192,24 +192,26 @@ export const SCRUB_MIN_RUN = 8;
 
 /**
  * `message` with every trace of the key blanked (…): each whole form of it (the raw secret, URL-encoded, Basic's
- * base64), and any run of at least SCRUB_MIN_RUN characters that is a piece of one. The parser quotes at most 40
+ * base64), and any run of at least SCRUB_MIN_RUN characters (or the whole secret's length, when shorter: a key saved
+ * before secrets had to be 8 characters) that is a piece of one. The parser quotes at most 40
  * characters of a value and 120 of a CSV header, so an answer that echoed the key leaves a cut-off piece of it, which
  * an exact match would miss.
  */
 export function scrubKey(message: string, credential: FeedCredential | null): string {
 	if (!credential) return message;
 	const forms = [credential.secret, encodeURIComponent(credential.secret), credential.user ? Buffer.from(`${credential.user}:${credential.secret}`).toString('base64') : '']
-		.filter((f) => f.length >= 4)
+		.filter((f) => f.length > 0)
 		.sort((a, b) => b.length - a.length);
+	const run = Math.max(1, Math.min(SCRUB_MIN_RUN, credential.secret.length));
 	let s = forms.reduce((acc, f) => acc.split(f).join('…'), message);
-	// Mark every character inside a run of ≥ SCRUB_MIN_RUN that some form holds, then blank each marked stretch once.
+	// Mark every character inside a run of ≥ `run` that some form holds, then blank each marked stretch once.
 	const hit = new Array<boolean>(s.length).fill(false);
 	for (const f of forms) {
-		if (f.length < SCRUB_MIN_RUN) continue;
-		for (let i = 0; i + SCRUB_MIN_RUN <= s.length; i++) {
-			const seed = s.slice(i, i + SCRUB_MIN_RUN);
+		if (f.length < run) continue;
+		for (let i = 0; i + run <= s.length; i++) {
+			const seed = s.slice(i, i + run);
 			for (let at = f.indexOf(seed); at >= 0; at = f.indexOf(seed, at + 1)) {
-				let n = SCRUB_MIN_RUN;
+				let n = run;
 				while (i + n < s.length && at + n < f.length && s[i + n] === f[at + n]) n++;
 				for (let k = i; k < i + n; k++) hit[k] = true;
 			}
