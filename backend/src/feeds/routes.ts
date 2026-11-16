@@ -20,6 +20,7 @@ import {
 	CHIRPS_DAILY_PRODUCTS,
 	CHIRPS_PRODUCT_FIRST_DAY,
 	chirpsProduct,
+	credentialProblem,
 	FEED_SCHEDULES,
 	FEED_SOURCES,
 	FeedInput,
@@ -29,12 +30,14 @@ import {
 	type GridConfig,
 	isAreaReplace,
 	sameArea,
-	SOURCES
+	SOURCES,
+	type StationApiConfig
 } from './config.js';
 import { feedSourceMode } from './http.js';
 import { rainCopy } from './rainCopy.js';
 import { gapRainProducts, viewWindowQuery } from './gapRainView.js';
 import {
+	clearFeedCredential,
 	createFeed,
 	deleteFeed,
 	type FeedMeta,
@@ -45,6 +48,7 @@ import {
 	replaceKey,
 	type RunSeriesPick,
 	runSeries,
+	saveFeedCredential,
 	seriesAccepts,
 	targetSeries,
 	updateFeed
@@ -245,12 +249,39 @@ export async function refuseTakeOver(db: Db, projectId: string, input: Pick<Feed
 	);
 }
 
-/** A feed's configuration as the history records it (never its credentials: feeds carry none). */
+/**
+ * A feed's configuration as the history records it. Never a credential: a station API feed's key change is recorded
+ * as `credential: 'saved' | 'replaced' | 'cleared'` only (issue #784), never its value, hint or sealed bytes.
+ */
 export const feedSubject = (
 	feedId: string,
 	action: 'created' | 'changed' | 'removed',
-	f: { source: string; targetKind: string; targetName: string; schedule: string; enabled: boolean }
-) => ({ feedId, action, source: f.source, targetKind: f.targetKind, targetName: f.targetName, schedule: f.schedule, enabled: f.enabled });
+	f: { source: string; targetKind: string; targetName: string; schedule: string; enabled: boolean },
+	credential?: CredentialChange
+) => ({
+	feedId,
+	action,
+	source: f.source,
+	targetKind: f.targetKind,
+	targetName: f.targetName,
+	schedule: f.schedule,
+	enabled: f.enabled,
+	...(credential ? { credential } : {})
+});
+export type CredentialChange = 'saved' | 'replaced' | 'cleared';
+
+/**
+ * Whether this server lets an owner attach a station API feed (issue #784): STATION_API_FEEDS=on, read on each
+ * request; absent or anything else is off. Off refuses only attaching one (or moving a feed onto the source): a feed
+ * already attached keeps fetching, and its owner can still change or remove it.
+ */
+export const stationApiFeedsOn = (env: Record<string, string | undefined> = process.env): boolean => env.STATION_API_FEEDS === 'on';
+export const STATION_API_OFF_MESSAGE = 'station API feeds are off on this server';
+
+/** A station API feed whose auth sends a key, with none saved: saved anyway, and the answer says so. */
+export const CREDENTIAL_MISSING_WARNING = 'the feed sends a key but none is saved: its fetches will be refused until you enter the key (Replace key)';
+const credentialWarning = (feed: FeedMeta | null): string | undefined =>
+	feed?.source === 'station_api' && (feed.config as StationApiConfig).auth.kind !== 'none' && feed.credential?.saved === false ? CREDENTIAL_MISSING_WARNING : undefined;
 
 /**
  * Count and insert one attach at a time per project, so concurrent attaches
@@ -309,6 +340,8 @@ export const feedRoutes = new Hono<AuthEnv>()
 				chirpsProducts: CHIRPS_DAILY_PRODUCTS,
 				schedules: FEED_SCHEDULES,
 				mode: feedSourceMode(),
+				// Whether a station API feed may be attached here (STATION_API_FEEDS); one already attached shows either way.
+				stationApiFeeds: stationApiFeedsOn(),
 				rainCopy: copy,
 				canEdit: role === 'owner',
 				canRun: role !== 'viewer'
@@ -322,15 +355,22 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const feed = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
+			if (input.source === 'station_api' && !stationApiFeedsOn()) throw new ApiError(400, STATION_API_OFF_MESSAGE);
 			await attachSlot(db, id);
 			await refuseTakeOver(db, id, input);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
+			// Sealed to the fetcher with the new feed's id, in the same transaction (FeedInput refused it on any other source).
+			const credential = input.credential ? await saveFeedCredential(db, id, fid, input.credential) : undefined;
 			const feed = await getFeed(db, id, fid, new Date(), await rainCopy(db));
-			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'created', input), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
+			await recordAudit(db, id, 'feed.configured', {
+				...feedSubject(fid, 'created', input, credential),
+				...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {})
+			});
 			return feed;
 		});
-		return c.json({ feed }, 201);
+		const warning = credentialWarning(feed);
+		return c.json({ feed, ...(warning ? { warning } : {}) }, 201);
 	})
 	// Change some of a feed's settings; the rest keep their values. Saving
 	// makes the saver the feed's acting user.
@@ -353,8 +393,14 @@ export const feedRoutes = new Hono<AuthEnv>()
 				targetName: patch.targetName ?? cur.targetName,
 				schedule: patch.schedule ?? cur.schedule,
 				enabled: patch.enabled ?? cur.enabled,
-				replaceSeries: patch.replaceSeries ?? false
+				replaceSeries: patch.replaceSeries ?? false,
+				// A new key is checked against the feed as saved (FeedInput: station API feeds that send one only).
+				...(patch.credential ? { credential: patch.credential } : {})
 			});
+			// Moving a feed onto the source is attaching one: refused while the server has them off.
+			if (input.source === 'station_api' && cur.source !== 'station_api' && !stationApiFeedsOn()) throw new ApiError(400, STATION_API_OFF_MESSAGE);
+			// Clearing a key is a station API feed's alone, as saving one is.
+			if (patch.credential === null && input.source !== 'station_api') throw new ApiError(400, credentialProblem(input.source, input.config)!);
 			// Asked when the save changes where the feed writes or what it writes (source, product, target).
 			const changed =
 				input.source !== cur.source ||
@@ -380,12 +426,23 @@ export const feedRoutes = new Hono<AuthEnv>()
 				}
 			}
 			if (!(await updateFeed(db, id, fid, checked, replace, configFrom).catch(conflict))) throw new ApiError(404, 'not found');
+			// The key (issue #784), in its own table so that changing it keeps the feed's progress. A feed moved off the
+			// source, or onto sending no key, drops the one it had: nothing would send it.
+			let credential: CredentialChange | undefined;
+			if (checked.credential) credential = await saveFeedCredential(db, id, fid, checked.credential);
+			else if (patch.credential === null || (cur.source === 'station_api' && credentialProblem(checked.source, checked.config) !== null)) {
+				if (await clearFeedCredential(db, id, fid)) credential = 'cleared';
+			}
 			// Logged even when the settings come back unchanged: every save makes the saver the
 			// feed's acting user (the identity its scheduled fetches run as), which is itself a change.
-			await recordAudit(db, id, 'feed.configured', { ...feedSubject(fid, 'changed', checked), ...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {}) });
+			await recordAudit(db, id, 'feed.configured', {
+				...feedSubject(fid, 'changed', checked, credential),
+				...(replaceFrom !== undefined ? { replaceSeries: replaceFrom } : {})
+			});
 			return getFeed(db, id, fid, new Date(), await rainCopy(db));
 		});
-		return c.json({ feed });
+		const warning = credentialWarning(feed);
+		return c.json({ feed, ...(warning ? { warning } : {}) });
 	})
 	.delete('/:id/feeds/:feedId', async (c) => {
 		const id = c.req.param('id');

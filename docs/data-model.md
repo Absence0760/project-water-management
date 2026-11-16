@@ -4803,14 +4803,14 @@ columns (`BEFORE UPDATE OF …`), so a cleared `job_id` never reaches it;
 table with an UPDATE trigger names the DB test that ages its job past 30
 days and runs the purge.
 
-### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql)
+### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql, 321_feed_source_station_api.sql)
 
 One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#data-feeds)).
 
 | Column | Holds |
 | --- | --- |
-| `project_id`, `source` | The project, and `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` (253) or `agera5_et0` (260, issue #604 R5-E: daily reference ET from our copy into `evap_et0_mm`) |
-| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ bbox: { south, west, north, east }, skipNoData? }` (at most 100 cells in 25 rows) or `{ station }`, plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981). Listed cells may carry the mark of where they came from, written only by its route: `boundary` (the catchment boundary, `fromBoundary.ts`) or `unit` (`{ nodeId, featureId, updatedAt, areaKm2 }`: a land unit's parcel, `fromUnits.ts`, issue #482; such a feed writes the unit's own rain, [§ Unit rain series](#unit-rain-series-209_unit_rain_seriessql)) |
+| `project_id`, `source` | The project, and `chirps`, `chirps_gefs`, `dws`, `ecmwf_ens` (253), `agera5_et0` (260, issue #604 R5-E: daily reference ET from our copy into `evap_et0_mm`) or `station_api` (321, issue #784: a rainfall station's own web API into `rain_catchment_mm`; its key is in `data_feed_credential`, below) |
+| `config` | JSON ≤ 8 KB, validated per source by `feeds/config.ts`: `{ cells: [{ lat, lon, weight }] }` or `{ bbox: { south, west, north, east }, skipNoData? }` (at most 100 cells in 25 rows) or `{ station }`, or for `station_api` `{ url, station?, auth, headers?, urlTimeFormat?, maxDaysPerRequest?, revisionDays?, format }` (a URL template, how the key is sent, and how to read the answer; never the key: [api.md § Data feeds](./api.md#data-feeds)), plus optional `startDate`, `staleAfterDays`, and for CHIRPS `product` (`sat`, the default, from 1998; `rnl` from 1981). Listed cells may carry the mark of where they came from, written only by its route: `boundary` (the catchment boundary, `fromBoundary.ts`) or `unit` (`{ nodeId, featureId, updatedAt, areaKm2 }`: a land unit's parcel, `fromUnits.ts`, issue #482; such a feed writes the unit's own rain, [§ Unit rain series](#unit-rain-series-209_unit_rain_seriessql)) |
 | `target_kind`, `target_name` | The series the values merge into (`time_series (project_id, kind, name)`). `UNIQUE (project_id, target_kind, target_name)`: one feed per series. A fetched value replaces only a day the feed wrote itself, or fills an empty one; an uploaded or imported value is kept, and a gap never erases ([§ Feed days](#feed-days-031_feed_dayssql)). A CHIRPS feed writes nothing into a series holding another product or version (032, [§ Series provenance](#series-provenance-032_series_provenancesql)) |
 | `enabled`, `schedule` | `schedule` is always `daily` (CHECK, 111: no source publishes more often; the migration turned `hourly` feeds daily) |
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
@@ -4883,6 +4883,30 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     series under the owner's confirmation; clears `replace_series_from`, as
     the job's user, who must be an editor (an editor can't write `data_feed`
     directly).
+  - **`data_feed_credential`** (321, issue #784): a `station_api` feed's key,
+    one row per feed. `feed_id` (primary key, cascades with the feed),
+    `project_id` (cascades), `sealed` (≤ 6000: the key sealed by the API to
+    the fetcher's public key, X25519 + HKDF-SHA256 + AES-256-GCM with the
+    feed's id as additional data, `feeds/credential.ts`; nothing in the
+    database, the API or the production worker can open it, and a sealed
+    value copied onto another feed's row doesn't open), `hint` (exactly 4
+    characters: the secret's last four, kept only for a secret of 16 or
+    more, else NULL), `updated_at`, `updated_by` (`ON DELETE SET NULL`).
+    Apart from `data_feed` so that viewers, who read `data_feed`, never read
+    it, and so that replacing a key keeps the feed's progress
+    (`data_feed_stamp` fires only on `data_feed`). RLS: SELECT editors (the
+    fetch job reads it as the feed's acting user and passes the sealed bytes
+    to the fetcher unopened, `feeds/store.ts feedForJob`); INSERT / UPDATE /
+    DELETE owners. Trigger `data_feed_credential_stamp` (pinned
+    `search_path`): the feed must be the row's project's (else
+    `foreign_key_violation`) and a `station_api` feed (else
+    `check_violation`); it stamps `updated_at` and `updated_by` (the caller)
+    when the key changes, and leaves them, bar clearing `updated_by`, when it
+    doesn't. The routes delete the row when a feed moves off `station_api` or
+    onto auth `none`. `app_feed_credential_state(feed)` (`SECURITY DEFINER`,
+    `water_app` only): what the feed list shows, to viewers too,
+    `{ saved, hint, updatedAt }` (the hint only to an editor or owner), NULL
+    for another source or a caller who can't read the feed; never `sealed`.
   - **`feed_stage`** (032): one row per feed with a confirmed replacement
     being backfilled: `start_date` + `values` (≤ 60 000, the new record so
     far), the `product` / `product_version` it will be labelled (both NULL,

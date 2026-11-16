@@ -9,6 +9,7 @@ import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, type SeriesProvenance } from '@water-mana
 import { z } from 'zod';
 import { type StationFormat, stationFormatProblem, timeFormatProblem } from '@water-management/engine/station-format';
 import { SeriesStartDate } from '../series/limits.js';
+import { FeedCredential } from './credential.js';
 import { headerProblem, MAX_HEADERS, urlProblem } from './stationUrl.js';
 
 export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0', 'station_api'] as const;
@@ -541,7 +542,12 @@ export const FeedInput = z
 		 * another product or version (or an unrecorded one): the routes record
 		 * what it holds now, and the next fetch replaces it whole (issue #40c).
 		 */
-		replaceSeries: z.boolean().default(false)
+		replaceSeries: z.boolean().default(false),
+		/**
+		 * A station API feed's key, write-only (issue #784): sealed to the fetcher (feeds/credential.ts) and kept in
+		 * data_feed_credential, never in the config and never returned. PATCH also takes null, which clears it (FeedPatch).
+		 */
+		credential: FeedCredential.optional()
 	})
 	.strict()
 	.transform((v, ctx) => {
@@ -549,6 +555,13 @@ export const FeedInput = z
 		if (!config.success) {
 			for (const issue of config.error.issues) ctx.addIssue({ ...issue, path: ['config', ...issue.path] } as never);
 			return z.NEVER;
+		}
+		if (v.credential !== undefined) {
+			const problem = credentialProblem(v.source, config.data);
+			if (problem) {
+				ctx.addIssue({ code: 'custom', path: ['credential'], message: problem });
+				return z.NEVER;
+			}
 		}
 		if (v.source !== 'dws' && v.source !== 'station_api') {
 			const grid = config.data as GridConfig;
@@ -576,6 +589,16 @@ export const FeedInput = z
 	});
 export type FeedInput = z.output<typeof FeedInput>;
 
+/**
+ * Why a feed of `source` with `config` can't keep a credential, or null: only a station API feed sends a key, and only
+ * when its auth sends one (not 'none'). The schema and the PATCH route (which may save a key alone) both ask.
+ */
+export function credentialProblem(source: FeedSource, config: FeedConfig): string | null {
+	if (source !== 'station_api') return 'only a weather station API feed keeps a key';
+	if ((config as StationApiConfig).auth.kind === 'none') return 'the feed sends no key (how the key is sent: none): choose how it is sent, or leave the key out';
+	return null;
+}
+
 /** PATCH: any of the fields; the route merges them over the saved feed and parses the whole with FeedInput. */
 export const FeedPatch = z
 	.object({
@@ -585,6 +608,8 @@ export const FeedPatch = z
 		targetName: z.string().trim().max(100).optional(),
 		schedule: z.enum(FEED_SCHEDULES).optional(),
 		enabled: z.boolean().optional(),
-		replaceSeries: z.boolean().optional()
+		replaceSeries: z.boolean().optional(),
+		/** A new key (replaces the saved one), null to clear it, absent to keep it (station API feeds only). */
+		credential: FeedCredential.nullable().optional()
 	})
 	.strict();

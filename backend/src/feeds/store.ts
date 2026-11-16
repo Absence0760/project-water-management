@@ -5,6 +5,7 @@ import { provenanceKey, sameProvenance, type SeriesKind, type SeriesProvenance }
 import type { Db } from '../db/tx.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { feedProvenance, type FeedConfig, type FeedInput, type FeedSchedule, type FeedSource } from './config.js';
+import { credentialHint, type FeedCredential, sealFeedCredential } from './credential.js';
 import type { FetchWindow } from './fetch.js';
 import { type FeedHealth, feedHealth, type RainCopy } from './health.js';
 
@@ -70,6 +71,19 @@ export interface FeedMeta {
 	 * Read as the caller, so job's RLS (viewer) applies.
 	 */
 	pendingFetch: 'queued' | 'running' | null;
+	/**
+	 * A station API feed only (absent for other sources): what the card shows of its key (issue #784,
+	 * 321 app_feed_credential_state). `hint`: the secret's last four characters, for an editor or owner and a
+	 * secret of 16 or more; else null. Never the key, never the sealed bytes.
+	 */
+	credential?: FeedCredentialState;
+}
+
+/** A station API feed's key as the API shows it (FeedMeta.credential). */
+export interface FeedCredentialState {
+	saved: boolean;
+	hint: string | null;
+	updatedAt: string | null;
 }
 
 /** The row the handlers work from. */
@@ -106,6 +120,12 @@ export interface FeedRow {
 	 * `area:…` = its whole record re-read over new cells (296); null = nothing.
 	 */
 	replaceFrom: string | null;
+	/**
+	 * A station API feed's key, sealed to the fetcher (data_feed_credential.sealed, feeds/credential.ts): handed to the
+	 * fetcher unopened, which opens it with openFeedCredential(credential, id). Null when none is saved; absent (or null)
+	 * for other sources.
+	 */
+	credential?: string | null;
 }
 
 const COLS = `f.id, f.source, f.config, f.target_kind AS "targetKind", f.target_name AS "targetName", f.enabled, f.schedule,
@@ -125,12 +145,14 @@ const COLS = `f.id, f.source, f.config, f.target_kind AS "targetKind", f.target_
 			WHERE j.project_id = f.project_id AND j.dedupe_key = 'feed_fetch:' || f.id::text AND j.status = 'running') THEN 'running'
 		WHEN EXISTS (SELECT 1 FROM job j
 			WHERE j.project_id = f.project_id AND j.dedupe_key = 'feed_fetch:' || f.id::text AND j.status IN ('queued', 'failed')) THEN 'queued'
-		END AS "pendingFetch"`;
+		END AS "pendingFetch",
+	CASE WHEN f.source = 'station_api' THEN app_feed_credential_state(f.id) END AS credential`;
 const FROM = `data_feed f LEFT JOIN app_user u ON u.id = f.acting_user_id
 	LEFT JOIN time_series t ON t.project_id = f.project_id AND t.kind = f.target_kind AND t.name = f.target_name
 	LEFT JOIN feed_stage st ON st.feed_id = f.id`;
 
-type FeedSelect = Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConflict'> & {
+type FeedSelect = Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConflict' | 'credential'> & {
+	credential: FeedCredentialState | null;
 	/** The project's (058): the zone the feed's health counts its days in. */
 	timeZone: string | null;
 	seriesExists: boolean;
@@ -144,7 +166,9 @@ export const seriesAccepts = (writes: SeriesProvenance | null, series: { filled:
 	!writes || !series || !series.filled || sameProvenance(series.provenance, writes);
 
 function toMeta(r: FeedSelect, now: Date, copy: RainCopy | null = null): FeedMeta {
-	const { seriesExists, seriesProduct, seriesProductVersion, seriesFilled, timeZone: tz, ...row } = r;
+	const { seriesExists, seriesProduct, seriesProductVersion, seriesFilled, timeZone: tz, credential, ...rest } = r;
+	// Only a station API feed carries the field (the function answers null for any other).
+	const row: Omit<FeedMeta, 'health' | 'writes' | 'series' | 'versionConflict'> = rest.source === 'station_api' && credential ? { ...rest, credential } : rest;
 	const timeZone = tz ?? DEFAULT_TIME_ZONE;
 	const writes = feedProvenance(row.source, row.config);
 	const provenance = seriesProduct !== null && seriesProductVersion !== null ? { product: seriesProduct, version: seriesProductVersion } : null;
@@ -311,6 +335,28 @@ export async function replaceConfigFrom(db: Db, projectId: string, feedId: strin
 	return rows[0]?.config ?? null;
 }
 
+/**
+ * Save a station API feed's key as the signed-in owner (RLS: 321's owner policies): sealed to the fetcher, bound to
+ * the feed's id, with its hint. 'saved' when the feed had none, 'replaced' when it had one. The feed's own row isn't
+ * touched, so its progress stays (data_feed_stamp fires only on data_feed).
+ */
+export async function saveFeedCredential(db: Db, projectId: string, feedId: string, credential: FeedCredential): Promise<'saved' | 'replaced'> {
+	const sealed = sealFeedCredential(credential, feedId);
+	const { rows } = await db.query<{ inserted: boolean }>(
+		`INSERT INTO data_feed_credential (feed_id, project_id, sealed, hint) VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (feed_id) DO UPDATE SET sealed = EXCLUDED.sealed, hint = EXCLUDED.hint
+		 RETURNING (xmax = 0) AS inserted`,
+		[feedId, projectId, sealed, credentialHint(credential)]
+	);
+	return rows[0]!.inserted ? 'saved' : 'replaced';
+}
+
+/** Remove a feed's key as the signed-in owner; false when it had none. */
+export async function clearFeedCredential(db: Db, projectId: string, feedId: string): Promise<boolean> {
+	const { rowCount } = await db.query('DELETE FROM data_feed_credential WHERE project_id = $1 AND feed_id = $2', [projectId, feedId]);
+	return (rowCount ?? 0) > 0;
+}
+
 export async function deleteFeed(db: Db, projectId: string, feedId: string): Promise<boolean> {
 	const { rowCount } = await db.query('DELETE FROM data_feed WHERE project_id = $1 AND id = $2', [projectId, feedId]);
 	return (rowCount ?? 0) > 0;
@@ -325,7 +371,8 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 			CASE WHEN last_meta->>'cellsUsed' ~ '^[0-9]{1,4}$' THEN (last_meta->>'cellsUsed')::int END AS "cellsUsed",
 			CASE WHEN last_meta->>'finalThrough' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'finalThrough' END AS "finalThrough",
 			CASE WHEN last_meta->>'revisionXmin' ~ '^[0-9]{1,20}$' THEN last_meta->>'revisionXmin' END AS "revisionXmin",
-			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version, replace_series_from AS "replaceFrom"
+			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version, replace_series_from AS "replaceFrom",
+			CASE WHEN source = 'station_api' THEN (SELECT c.sealed FROM data_feed_credential c WHERE c.feed_id = data_feed.id) END AS credential
 		 FROM data_feed WHERE project_id = $1 AND id = $2`,
 		[projectId, feedId]
 	);

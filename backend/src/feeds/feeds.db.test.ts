@@ -130,7 +130,9 @@ describe('data_feed RLS and the routes', () => {
 		expect(list.status).toBe(200);
 		expect(list.body.feeds.map((f: { id: string }) => f.id)).toEqual([id]);
 		expect(list.body).toMatchObject({ mode: 'fixtures', canEdit: false, canRun: false, schedules: ['daily'] });
-		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0']);
+		expect(list.body.sources.map((s: { source: string }) => s.source)).toEqual(['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0', 'station_api']);
+		// Whether this server lets an owner attach a station API feed (STATION_API_FEEDS, on in the tests; issue #784).
+		expect(list.body.stationApiFeeds).toBe(true);
 		// Our CHIRPS copy (issue #604), as the worker's tick records it (mirror_copy): not checked before a tick, then,
 		// off a live process, the committed sample copy, on time as of the day it was made.
 		expect(list.body.rainCopy).toEqual({ readable: false });
