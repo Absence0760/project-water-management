@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig, gridCells, type StationApiConfig } from './config.js';
 import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError, FeedKeyError, FeedNoDataError } from './errors.js';
 import { type FeedHttp, feedSourceMode } from './http.js';
-import { FeedCredentialError, openFeedCredential, SEALED_MAX } from './credential.js';
+import { credentialBinding, FeedCredentialError, openFeedCredential, SEALED_MAX } from './credential.js';
 import { fetchStation, type StationClient, stationClient, stationFirstDay, stationLastDay, stationWindowDays, STATION_DEFAULT_REVISION_DAYS, STATION_KEY_PROBLEMS } from './sources/station.js';
 import { STATION_MAX_REQUESTS } from './config.js';
 import { logEvent } from '../logging/logEvent.js';
@@ -637,7 +637,7 @@ export async function runFetch(req: FetchRequest, http: FeedHttp, budget: FetchB
 				let credential = null;
 				if (req.credential) {
 					try {
-						credential = openFeedCredential(req.credential, req.feedId ?? '');
+						credential = openFeedCredential(req.credential, credentialBinding(req.feedId ?? '', req.config as StationApiConfig));
 					} catch (err) {
 						if (err instanceof FeedCredentialError) throw new FeedKeyError(STATION_KEY_PROBLEMS.unopened[0]);
 						throw err;
