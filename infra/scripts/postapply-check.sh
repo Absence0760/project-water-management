@@ -7,8 +7,11 @@
 # never prints a secret, an email address or the Function URL.
 #
 #   infra/scripts/postapply-check.sh --profile water-management --region af-south-1 \
-#     [--var-file ../../infra-secrets/water-management/prod.tfvars] [--domain <site domain>] \
+#     [--var-file ../../infra-secrets/water-management/prod.tfvars.sops] [--domain <site domain>] \
 #     [--redirect-from <former hostname>]... [--rds-event-test]
+#
+# A --var-file ending in .sops (prod.tfvars.sops) is decrypted with sops, as
+# --profile, to a private temporary copy that is removed on exit.
 #
 # Checks:
 #   sns-<region>     Both alert topics (<region> and us-east-1, the budgets')
@@ -85,6 +88,9 @@
 # `pnpm test:guards`).
 set -euo pipefail
 
+# shellcheck source=sops-var-file.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sops-var-file.sh"
+
 project="water-management"
 topic="$project-prod-alerts"
 repo="$project-renderer"
@@ -119,6 +125,14 @@ if [ -n "$var_file" ] && [ ! -f "$var_file" ]; then
 	echo "postapply-check: no such var file: $var_file" >&2
 	exit 2
 fi
+# A *.sops var file (prod.tfvars.sops) is read from a private decrypted copy,
+# removed on exit (sops-var-file.sh), decrypted as --profile.
+var_tmp=""
+if [[ "$var_file" = *.sops ]]; then
+	var_tmp="$(umask 077 && mktemp -d)"
+	trap 'rm -rf "$var_tmp"' EXIT
+	var_file="$( [ -z "$profile" ] || export AWS_PROFILE="$profile"; sops_var_file "$var_file" "$var_tmp")" || exit 2
+fi
 var_set() {
 	[ -n "$var_file" ] || return 0
 	awk -v name="$1" '
@@ -143,7 +157,7 @@ warn() { printf 'WARN  %-18s %s\n' "$1" "$2"; warnings=$((warnings + 1)); }
 fail() { printf 'FAIL  %-18s %s\n' "$1" "$2"; failures=$((failures + 1)); }
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+trap 'rm -rf "$tmp"; [ -z "$var_tmp" ] || rm -rf "$var_tmp"' EXIT
 errfile="$tmp/err"
 # The first non-blank line of the last AWS or curl error (a code and message, no secret).
 last_error() { { grep -m 1 -v "^[[:space:]]*$" "$errfile" || true; } | cut -c1-200; }

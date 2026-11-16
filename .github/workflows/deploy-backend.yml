@@ -480,7 +480,7 @@ jobs:
               --query 'CodeSha256' --output text
             aws lambda wait function-updated --function-name "$RENDERER_FUNCTION_NAME"
           elif grep -q 'ResourceNotFoundException' <<<"$get_err"; then
-            echo "::notice::The renderer Lambda doesn't exist yet. Its image ${tag} is in ECR: set renderer_image_tag = \"${tag}\" in prod.tfvars and apply (docs/deployment.md § Reports)."
+            echo "::notice::The renderer Lambda doesn't exist yet. Its image ${tag} is in ECR: set renderer_image_tag = \"${tag}\" in prod.tfvars.sops (AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops) and apply (docs/deployment.md § Reports)."
           else
             # Its error code only: the text names the deploy role and account.
             code=$(grep -oE 'An error occurred \([A-Za-z]+\)' <<<"$get_err" | head -n 1 || true)
@@ -531,7 +531,7 @@ jobs:
               --query 'CodeSha256' --output text
             aws lambda wait function-updated --function-name "$INGEST_FUNCTION_NAME"
           elif grep -q 'ResourceNotFoundException' <<<"$get_err"; then
-            echo "::notice::The mirror ingest Lambda doesn't exist yet. Its image ${tag} is in ECR: set ingest_image_tag = \"${tag}\" in prod.tfvars and apply (docs/deployment.md § The data mirror)."
+            echo "::notice::The mirror ingest Lambda doesn't exist yet. Its image ${tag} is in ECR: set ingest_image_tag = \"${tag}\" in prod.tfvars.sops (AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops) and apply (docs/deployment.md § The data mirror)."
           else
             # Its error code only: the text names the deploy role and account.
             code=$(grep -oE 'An error occurred \([A-Za-z]+\)' <<<"$get_err" | head -n 1 || true)

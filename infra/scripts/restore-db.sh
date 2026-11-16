@@ -5,7 +5,7 @@
 # the database. Dry-run by default: it prints every AWS and Terraform command
 # it would run and changes nothing.
 #
-#   infra/scripts/restore-db.sh --region <r> --profile <p> --var-file <prod.tfvars> \
+#   infra/scripts/restore-db.sh --region <r> --profile <p> --var-file <prod.tfvars.sops> \
 #     (--restore-time 2026-09-28T08:15:00Z | --latest | --snapshot <id>) [--execute [--yes]]
 #
 # Why a script: RestoreDBInstanceToPointInTime and
@@ -131,6 +131,13 @@ for tool in aws terraform jq; do
 done
 # Checked now, not at step 6: by then production has been swapped.
 "$SCRIPTS_DIR/tf.sh" --preflight || die "step 6 (terraform import + plan) needs the runtime secrets from sops (tf.sh)."
+# A *.sops var file (prod.tfvars.sops) goes to tf.sh as is, which decrypts it
+# for each Terraform run; this proves now that it decrypts (output discarded).
+if [[ "$VAR_FILE" = *.sops ]]; then
+	command -v sops > /dev/null || die "sops not found on PATH; it decrypts $VAR_FILE."
+	AWS_PROFILE="$PROFILE" sops --decrypt --input-type binary --output-type binary "$VAR_FILE" > /dev/null \
+		|| die "could not decrypt $VAR_FILE as profile $PROFILE (step 6 needs it)."
+fi
 
 AWS=(aws --region "$REGION" --profile "$PROFILE" --output json)
 # output and state rm read state only; import and plan evaluate the
