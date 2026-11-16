@@ -7,9 +7,11 @@ import type { SeriesKind } from '@water-management/engine';
 import { dayText } from '@water-management/engine/calendar';
 import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, type SeriesProvenance } from '@water-management/engine/provenance';
 import { z } from 'zod';
+import { type StationFormat, stationFormatProblem, timeFormatProblem } from '@water-management/engine/station-format';
 import { SeriesStartDate } from '../series/limits.js';
+import { headerProblem, MAX_HEADERS, urlProblem } from './stationUrl.js';
 
-export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0'] as const;
+export const FEED_SOURCES = ['chirps', 'chirps_gefs', 'dws', 'ecmwf_ens', 'agera5_et0', 'station_api'] as const;
 export type FeedSource = (typeof FEED_SOURCES)[number];
 
 /**
@@ -65,7 +67,10 @@ export const SOURCES: Record<FeedSource, SourceSpec> = {
 	// POWER's lag plus a margin, so a feed goes stale when both copies have stopped.
 	agera5_et0: { label: 'AgERA5 daily reference evapotranspiration', kinds: ['evap_et0_mm'], unit: 'mm', staleAfterDays: 15, staleAlertDays: 7 },
 	// Verified DWS flow lags by months (docs/architecture.md § Data feeds).
-	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm³/s', staleAfterDays: 240, staleAlertDays: 30 }
+	dws: { label: 'DWS gauge flow', kinds: ['flow_observed_m3s', 'flow_reference_m3s', 'flow_logger_m3s'], unit: 'm³/s', staleAfterDays: 240, staleAlertDays: 30 },
+	// A rainfall station's own web API (issue #784): a logger reports within the day, so its newest whole rain day is
+	// yesterday's; 3 days allows a day's outage at the provider before the card turns stale.
+	station_api: { label: 'Weather station API', kinds: ['rain_catchment_mm'], unit: 'mm', staleAfterDays: 3, staleAlertDays: 2 }
 };
 
 const Lat = z.number().finite().min(-60).max(60);
@@ -349,7 +354,148 @@ export function feedStaleAfterDays(source: FeedSource, config: FeedConfig): numb
 	return SOURCES[source].staleAfterDays;
 }
 export type DwsConfig = z.output<typeof DwsConfig>;
-export type FeedConfig = GridConfig | DwsConfig;
+
+/**
+ * A station API feed (issue #784): a rainfall station read from whatever web API its provider offers. The URL is a
+ * template; the key is never in it (it is sealed apart, feeds/credential.ts, in data_feed_credential, so viewers who
+ * read a feed's config never see it, and changing it doesn't reset the feed). How to read the answer is the engine's
+ * StationFormat (@water-management/engine/station-format), shared with the attach card's sample preview.
+ */
+export const STATION_URL_MAX = 2000;
+/** The most requests one fetch makes (one per maxDaysPerRequest days); a longer backfill continues on the next fetch. */
+export const STATION_MAX_REQUESTS = 24;
+/** Query parameter names that carry a key: one in the typed URL is refused, so a key never sits where viewers read it. */
+export const STATION_KEY_PARAMS = /^(api[-_]?key|apikey|key|token|access[-_]?token|auth|authorization|secret|api[-_]?secret|password|pass|pwd|sig|signature|application[-_]?key|client[-_]?secret)$/i;
+export const STATION_PLACEHOLDERS = ['{station}', '{start}', '{end}'] as const;
+
+const StationId = z
+	.string()
+	.trim()
+	.min(1)
+	.max(100)
+	.regex(/^[A-Za-z0-9 _.:@-]+$/, 'a station ID is letters, digits, spaces and . _ : @ -');
+
+/** How the key is sent. The secret part is the credential; a header or parameter name is not secret. */
+export const StationAuth = z.discriminatedUnion('kind', [
+	z.object({ kind: z.literal('none') }).strict(),
+	/** Authorization: Bearer <key> */
+	z.object({ kind: z.literal('bearer') }).strict(),
+	/** <name>: <prefix><key> (X-Api-Key, X-Api-Secret, …) */
+	z.object({ kind: z.literal('header'), name: z.string().trim().min(1).max(64), prefix: z.string().max(32).default('') }).strict(),
+	/** ?<name>=<key>, added to the URL when the request is made (never stored in it) */
+	z.object({ kind: z.literal('query'), name: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_.-]+$/, 'a parameter name is letters, digits and _ . -') }).strict(),
+	/** Authorization: Basic (the credential's user and secret) */
+	z.object({ kind: z.literal('basic') }).strict()
+]);
+export type StationAuth = z.output<typeof StationAuth>;
+
+const Field = z.string().trim().max(200);
+/** The engine's StationFormat, as the API accepts it (feeds/sources/station.ts checks what the fields mean together). */
+export const StationFormatSchema = z
+	.object({
+		format: z.enum(['json', 'csv']),
+		records: Field.optional(),
+		recordsKeyedByTime: z.boolean().optional(),
+		delimiter: z.enum([',', ';', '\t', '|']).optional(),
+		skipLines: z.number().int().min(0).max(50).optional(),
+		headerRow: z.boolean().optional(),
+		decimalComma: z.boolean().optional(),
+		time: Field,
+		value: Field.min(1),
+		timeFormat: z.string().trim().min(1).max(40),
+		timeZone: z.string().trim().min(1).max(64).optional(),
+		resolution: z.enum(['daily', 'subdaily']),
+		stampMarks: z.enum(['end', 'start']).optional(),
+		valueKind: z.enum(['amount', 'cumulative']).optional(),
+		scale: z.number().finite().positive().max(1000).optional(),
+		missing: z.array(z.string().max(32)).max(20).optional(),
+		dayStartHour: z.number().int().min(0).max(23).optional(),
+		creditDayTo: z.enum(['start', 'end']).optional(),
+		noReadingsMeans: z.enum(['gap', 'zero']).optional()
+	})
+	.strict()
+	.superRefine((f, ctx) => {
+		const problem = stationFormatProblem(f as StationFormat);
+		if (problem) ctx.addIssue({ code: 'custom', message: problem });
+		if (!f.recordsKeyedByTime && f.time === '') ctx.addIssue({ code: 'custom', path: ['time'], message: 'name the time field or column' });
+	});
+
+export const StationApiConfig = z
+	.object({
+		/** https://…, with {station}, {start} and {end} filled in per request (each URL-encoded). */
+		url: z
+			.string()
+			.trim()
+			.min(1)
+			.max(STATION_URL_MAX)
+			.superRefine((raw, ctx) => {
+				const problem = stationUrlProblem(raw);
+				if (problem) ctx.addIssue({ code: 'custom', message: problem });
+			}),
+		station: StationId.optional(),
+		auth: StationAuth,
+		/** Extra headers the API wants (not secret: viewers can read them). */
+		headers: z.record(z.string().trim().min(1).max(64), z.string().max(1024)).optional(),
+		/** How {start} and {end} are written: 'iso', 'epoch_s', 'epoch_ms' or a pattern (YYYY-MM-DD). Default YYYY-MM-DD. */
+		urlTimeFormat: z.string().trim().min(1).max(40).optional(),
+		/** The most days one request asks for (the provider's own limit per call). Default 31. */
+		maxDaysPerRequest: z.number().int().min(1).max(366).optional(),
+		/** Days before the newest one that every fetch reads again (late or corrected readings). Default 7. */
+		revisionDays: z.number().int().min(0).max(60).optional(),
+		format: StationFormatSchema,
+		/** First day to fetch when the feed has no data yet (default: 90 days back). */
+		startDate: SeriesStartDate.optional(),
+		staleAfterDays: z.number().int().min(1).max(3650).optional()
+	})
+	.strict()
+	.superRefine((c, ctx) => {
+		if (c.url.includes('{station}') && !c.station) ctx.addIssue({ code: 'custom', path: ['station'], message: 'the URL has {station}: give the station’s ID' });
+		if (c.urlTimeFormat !== undefined) {
+			const p = timeFormatProblem(c.urlTimeFormat);
+			if (p) ctx.addIssue({ code: 'custom', path: ['urlTimeFormat'], message: p });
+		}
+		const names = Object.keys(c.headers ?? {});
+		if (names.length > MAX_HEADERS) ctx.addIssue({ code: 'custom', path: ['headers'], message: `at most ${MAX_HEADERS} extra headers` });
+		for (const n of names) {
+			const p = headerProblem(n, c.headers![n]!);
+			if (p) ctx.addIssue({ code: 'custom', path: ['headers', n], message: p });
+			if (/^(authorization|x-api-key|x-api-secret|api-key|apikey)$/i.test(n)) {
+				ctx.addIssue({ code: 'custom', path: ['headers', n], message: `the ${n} header carries a key: choose “Header” as how the key is sent, and enter the key in the key field` });
+			}
+		}
+		if (c.auth.kind === 'header') {
+			const p = headerProblem(c.auth.name, 'x');
+			if (p) ctx.addIssue({ code: 'custom', path: ['auth', 'name'], message: p });
+			else if (names.some((n) => n.toLowerCase() === (c.auth as { name: string }).name.toLowerCase())) {
+				ctx.addIssue({ code: 'custom', path: ['auth', 'name'], message: 'that header is also an extra header' });
+			}
+		}
+		if (c.auth.kind === 'query' && new URL(c.url.replace(/\{(station|start|end)\}/g, 'x')).searchParams.has(c.auth.name)) {
+			ctx.addIssue({ code: 'custom', path: ['auth', 'name'], message: `the URL already has a ${c.auth.name} parameter: take it out, the key is added when the request is made` });
+		}
+	});
+export type StationApiConfig = z.output<typeof StationApiConfig>;
+
+/**
+ * Why a URL template can't be saved, or null: a valid https URL once its placeholders are filled, a public host
+ * (feeds/stationHttp.ts urlProblem), no key in its query (STATION_KEY_PARAMS), and only the known placeholders.
+ * The fetcher checks again, address included, before every request.
+ */
+export function stationUrlProblem(raw: string): string | null {
+	const unknown = raw.match(/\{[^}]*\}/g)?.find((p) => !(STATION_PLACEHOLDERS as readonly string[]).includes(p));
+	if (unknown) return `${unknown} is not a placeholder: use {station}, {start} and {end}`;
+	const url = URL.parse(raw.replace(/\{(station|start|end)\}/g, 'x'));
+	if (!url) return 'not a valid URL (it starts https://)';
+	const problem = urlProblem(url);
+	if (problem) return problem;
+	for (const k of url.searchParams.keys()) {
+		if (STATION_KEY_PARAMS.test(k)) return `the URL carries a key (${k}=…): take it out and enter the key in the key field, where it is kept sealed; choose “Query parameter ${k}” as how it is sent`;
+	}
+	if (url.hash) return 'the URL has a #fragment, which is never sent: take it out';
+	return null;
+}
+
+export type FeedConfig = GridConfig | DwsConfig | StationApiConfig;
 
 /**
  * What a feed writes, as the series records it (032_series_provenance.sql),
@@ -368,12 +514,18 @@ export function feedProvenance(source: FeedSource, config: FeedConfig): SeriesPr
  * the product's own label for CHIRPS. At most SOURCE_MAX characters.
  */
 export function feedSourceText(source: FeedSource, config: FeedConfig): string {
+	// A station API feed names its host and station, never the URL's path or query (feeds/stationHttp.ts safeUrl).
+	if (source === 'station_api') {
+		const c = config as StationApiConfig;
+		const host = URL.parse(c.url.replace(/\{(station|start|end)\}/g, 'x'))?.hostname ?? 'its API';
+		return `${SOURCES[source].label} data feed, ${host}${c.station ? `, station ${c.station}` : ''}`.slice(0, 100);
+	}
 	const station = 'station' in config ? `, station ${config.station}` : '';
 	return `${SOURCES[source].label} data feed${station}`;
 }
 
 /** The config schema for a source. */
-export const configSchema = (source: FeedSource) => (source === 'dws' ? DwsConfig : GridConfig);
+export const configSchema = (source: FeedSource) => (source === 'dws' ? DwsConfig : source === 'station_api' ? StationApiConfig : GridConfig);
 
 /** Parse a feed's source + config + target together; zod issues point at the field. */
 export const FeedInput = z
@@ -398,7 +550,7 @@ export const FeedInput = z
 			for (const issue of config.error.issues) ctx.addIssue({ ...issue, path: ['config', ...issue.path] } as never);
 			return z.NEVER;
 		}
-		if (v.source !== 'dws') {
+		if (v.source !== 'dws' && v.source !== 'station_api') {
 			const grid = config.data as GridConfig;
 			if (grid.product !== undefined && v.source !== 'chirps') {
 				ctx.addIssue({ code: 'custom', path: ['config', 'product'], message: 'only a CHIRPS feed has a daily product' });
