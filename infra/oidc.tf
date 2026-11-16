@@ -72,8 +72,14 @@ locals {
   # github_migration_owners lets this check accept that, and nothing more: the
   # repo name, the environment, StringEquals and the audience are still pinned,
   # every sub must belong to an accepted owner, and each owner may have at most
-  # one. With the list empty this is exactly the old one-subject check. Read
-  # the prefix the role must trust, never guess it:
+  # one. With the list empty this is exactly the old one-subject check.
+  #
+  # Finishing a move (project-mgmt#14 step 18), in this order or the plan
+  # fails: (1) trim the bootstrap trust to the new subject alone; this check
+  # still passes, because the new owner is listed here. (2) Then, in one edit,
+  # set github_repo to the new owner and empty github_migration_owners.
+  # tests/iam.tftest.hcl covers both steps and the wrong order. Read the prefix
+  # the role must trust, never guess it:
   #   gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
   deploy_sub_patterns = [
     for owner in distinct(concat([split("/", var.github_repo)[0]], var.github_migration_owners)) :
