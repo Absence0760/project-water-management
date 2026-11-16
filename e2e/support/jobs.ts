@@ -34,9 +34,11 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
  *
  * `schedule: false` runs only jobs already queued: no feed, report or alert
  * schedule queues anything. Leave it on only where the test needs the
- * schedule (data-feeds.spec.ts, whose feeds are queued by it): the schedules
- * look at every project, so such a tick can queue another spec's due feed
- * (never run it: the claim is scoped).
+ * schedule (data-feeds.spec.ts, whose feeds are queued by it). The feed
+ * schedule is scoped like the claim: it queues only `projects`' due feeds
+ * (runner.ts projectIds), so it never queues another spec's new feed, which
+ * is due at once (it had queued station-api-feed.spec.ts's, issue #784). The
+ * report and alert schedules still look at every project.
  *
  * `maxJobs` caps the jobs the tick runs (JOB_MAX_PER_TICK). A CHIRPS
  * backfill read from our copy queues its next window due at once

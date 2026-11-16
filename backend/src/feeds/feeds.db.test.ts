@@ -38,7 +38,8 @@ import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { HOST_BUSY_RETRY_SECONDS } from './hostSlot.js';
 import { ingestResult } from './ingest.js';
-import { claimFeed, feedForJob, listDueFeeds, takeFeedFetch } from './store.js';
+import { claimFeed, feedFetchDedupeKey, feedForJob, listDueFeeds, takeFeedFetch } from './store.js';
+import { enqueueJob } from '../jobs/queue.js';
 import { recordMirrorCopy } from './mirrorRevision.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -709,6 +710,54 @@ describe('the scheduler', () => {
 		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id;
 		expect((await owner.call('POST', `/projects/${pid}/feeds/${id}/run-now`)).status).toBe(202);
 		expect(await scheduleDueFeeds()).toEqual({ queued: 1, refused: 0 });
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_fetch' AND project_id = $1`, [pid]))[0].n).toBe(1);
+	});
+
+	it('a tick scoped to some projects schedules only their feeds, leaving another project’s due feed alone (positive control: unscoped takes it)', async () => {
+		const owner = await signUp('ScopedSchedule');
+		const mine = await project(owner, 'Mine');
+		const theirs = await project(owner, 'Theirs');
+		const a = (await owner.call('POST', `/projects/${mine}/feeds`, gefs())).body.feed.id as string;
+		const b = (await owner.call('POST', `/projects/${theirs}/feeds`, gefs())).body.feed.id as string;
+		const queuedFor = async () =>
+			((await asOwner(`SELECT payload->>'feedId' AS id FROM job WHERE kind = 'feed_fetch' ORDER BY id`)) as { id: string }[]).map((r) => r.id);
+		expect(await scheduleDueFeeds({ projectIds: [mine] })).toEqual({ queued: 1, refused: 0 });
+		expect(await queuedFor()).toEqual([a]);
+		expect((await feedRow(b)).last_scheduled_at).toBeNull();
+		expect(await scheduleDueFeeds()).toEqual({ queued: 1, refused: 0 });
+		expect((await queuedFor()).sort()).toEqual([a, b].sort());
+	});
+
+	it('a tick claiming a feed while a "Run now" on it is mid-way doesn’t deadlock: both finish, with one fetch (322)', async () => {
+		const owner = await signUp('RunNowRace');
+		const pid = await project(owner);
+		// New, so due, and never pressed, so its bucket row is still to be made (a foreign key check on the feed).
+		const id = (await owner.call('POST', `/projects/${pid}/feeds`, gefs())).body.feed.id as string;
+		const job = { projectId: pid, kind: 'feed_fetch' as const, payload: { feedId: id }, dedupeKey: feedFetchDedupeKey(id) };
+		let queued!: () => void;
+		let go!: () => void;
+		const pressQueued = new Promise<void>((r) => (queued = r));
+		const tickWaits = new Promise<void>((r) => (go = r));
+		// The run-now route's order (routes.ts): queue the fetch, then take a token from the feed's bucket.
+		const press = withUser(owner.id, async (db) => {
+			const r = await enqueueJob(db, job);
+			queued();
+			await tickWaits;
+			await db.query('SELECT app_feed_take_run_now($1, $2, $3)', [id, RUN_NOW_RATE.capacity, RUN_NOW_RATE.refillSeconds]);
+			return r.created;
+		});
+		await pressQueued;
+		// The scheduler's order (schedule.ts): claim the feed, then queue its fetch, which waits on the press's job.
+		const tick = withUser(owner.id, async (db) => {
+			const claimed = await claimFeed(db, id);
+			return { claimed, created: (await enqueueJob(db, job)).created };
+		});
+		const waiting = async () => (await asOwner('SELECT 1 FROM pg_locks WHERE NOT granted')).length > 0;
+		await expect.poll(waiting, { timeout: 10_000 }).toBe(true);
+		go();
+		// Before 322 the claim's FOR UPDATE blocked the bucket's FOR KEY SHARE: Postgres failed one with 40P01.
+		expect(await press).toBe(true);
+		expect(await tick).toEqual({ claimed: true, created: false });
 		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE kind = 'feed_fetch' AND project_id = $1`, [pid]))[0].n).toBe(1);
 	});
 

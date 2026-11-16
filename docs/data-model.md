@@ -4835,7 +4835,10 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     Returns id, project and acting user only.
   - `app_claim_feed(feed, all)` (027): claims one feed for the transaction's
     user, who must be its acting user: still enabled and due, `FOR UPDATE
-    SKIP LOCKED`, stamping `last_scheduled_at`. The scheduler queues the
+    SKIP LOCKED` (`FOR NO KEY UPDATE SKIP LOCKED` since 322, which a foreign
+    key's `FOR KEY SHARE` passes: "Run now" queues its job and then makes the
+    feed's bucket row, and against `FOR UPDATE` that deadlocked with a tick
+    claiming the feed meanwhile, issue #784), stamping `last_scheduled_at`. The scheduler queues the
     fetch in the same transaction, so a rollback releases the claim (#32).
     Replaces 018's batch `app_claim_due_feeds`, whose claim committed apart
     from the enqueues.
@@ -4943,8 +4946,9 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
     the caller).
   - `app_take_feed_fetch(feed, job)` (029): the `feed_ingest` job claims the
     window of the fetch it answers and clears the columns in one statement
-    (`FOR UPDATE`, so a second ingest of the same answer waits, then gets
-    nothing). No row: not the feed's newest fetch, or already applied, so the
+    (`FOR UPDATE`, `FOR NO KEY UPDATE` since 322, so a second ingest of the
+    same answer waits, then gets nothing, while a "Run now" checking the
+    feed's foreign key meanwhile doesn't deadlock with it). No row: not the feed's newest fetch, or already applied, so the
     answer is dropped.
 - Grants: `SELECT, INSERT, UPDATE, DELETE` to `water_app`. Indexes: the
   unique constraint covers `project_id`; `acting_user_id`, `created_by`; and

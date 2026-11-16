@@ -829,8 +829,11 @@ alerts plug in as a further kind.
   queued seconds on; a chain due at once (the copy's backfill windows) it
   runs up to its job cap (`JOB_MAX_PER_TICK`; the e2e tick's `maxJobs`). `runTick({ projectIds })` claims
   only those projects' jobs: the e2e suite's tick (`worker.ts --once
-  --project <id>`), so parallel tests never run each other's jobs; the
-  worker Lambda and the local loop never pass it.
+  --project <id>`), so parallel tests never run each other's jobs; its feed
+  schedule queues only those projects' due feeds too, so a test's tick never
+  queues another test's new feed, which is due at once (it had left
+  station-api-feed.spec.ts's card showing a fetch nothing would run, issue
+  #784). The worker Lambda and the local loop never pass it.
 - **Each job runs as its acting user**, the member who queued it (an editor,
   or for `report_render` any viewer: `023_reports.sql` widens the job insert
   policy for that one kind): the worker
@@ -1763,7 +1766,10 @@ row names a source, where to read it and the series it merges into:
   passed since it was last scheduled, since CHC publishes each issue around
   08:26–08:30 UTC and an earlier fetch reads yesterday's. For each feed the
   tick opens one transaction **as the feed's acting user** (the owner who
-  last saved it), claims it (`app_claim_feed`, stamping `last_scheduled_at`)
+  last saved it), claims it (`app_claim_feed`, stamping `last_scheduled_at`,
+  under a `FOR NO KEY UPDATE` row lock since 322: the `FOR UPDATE` it took
+  before deadlocked with a "Run now" that had queued its job first and then
+  checked the bucket's foreign key with `FOR KEY SHARE`, issue #784)
   and queues its `feed_fetch` under RLS, so the claim and the job commit
   together: a failure between them rolls the claim back and the next tick
   tries again, and one feed's failure doesn't hold up the rest (#32). A

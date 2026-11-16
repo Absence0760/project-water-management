@@ -22,11 +22,11 @@ import { runJobsTick } from '../support/jobs.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { projectDay } from '../support/dates.ts';
 
-// One at a time: these ticks run the feed schedule, which looks at every
-// project (a new feed is due at once), so a tick in one test would queue
-// another test's feed mid-test (a feed no longer Waiting). The tick claims
-// only this test's project's jobs (runJobsTick's `projects`), so it never
-// runs that fetch; every other spec's tick is `schedule: false`.
+// One at a time: these ticks run the feed schedule (a new feed is due at
+// once). It schedules and claims only this test's project (runJobsTick's
+// `projects`), so it never queues or runs another test's or spec's feed (it
+// had queued station-api-feed.spec.ts's, issue #784); every other spec's tick
+// is `schedule: false`.
 test.describe.configure({ mode: 'default' });
 
 const MONTHS =['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
