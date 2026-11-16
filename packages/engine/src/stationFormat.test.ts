@@ -31,6 +31,52 @@ describe('paths', () => {
 		expect(atPath({}, 'constructor')).toBeUndefined();
 		expect(atPath({}, '__proto__')).toBeUndefined();
 	});
+	it('reads a long run of [ in one pass (CodeQL js/polynomial-redos)', () => {
+		// A regex scan of each [ to the end was quadratic: 100 000 of them took ~10 s, past vitest's 5 s timeout.
+		const run = '['.repeat(100_000);
+		expect(atPath([[1]], `${run}x`)).toBeUndefined();
+		expect(atPath([[1]], `rows${run}`)).toBeUndefined();
+		// One part, from the first [ to the ], holding the rest of the run: not an index or a filter.
+		expect(atPath([[1]], `${run}]`)).toBeUndefined();
+		expect(() => readStationAnswer('{"data":[]}', { ...daily, records: `${run}x` })).toThrow(/no list of records at/);
+	});
+	it('reads a path as the regex it replaced did', () => {
+		// The pattern atPath used before the scan, kept here as the reference.
+		const reference = (root: unknown, path: string): unknown => {
+			if (path.trim() === '') return root;
+			let cur: unknown = root;
+			for (const raw of path.split('.')) {
+				const m = /^([^[\]]*)((?:\[[^\]]*\])*)$/.exec(raw.trim());
+				if (!m) return undefined;
+				if (m[1] !== '') {
+					if (cur === null || typeof cur !== 'object' || Array.isArray(cur)) return undefined;
+					cur = Object.hasOwn(cur, m[1]!) ? (cur as Record<string, unknown>)[m[1]!] : undefined;
+				}
+				for (const b of m[2]!.match(/\[[^\]]*\]/g) ?? []) {
+					if (!Array.isArray(cur)) return undefined;
+					const inner = b.slice(1, -1).trim();
+					if (/^\d+$/.test(inner)) cur = cur[Number(inner)];
+					else {
+						const eq = inner.indexOf('=');
+						if (eq < 1) return undefined;
+						const k = inner.slice(0, eq).trim();
+						const want = inner.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+						cur = cur.find((el) => el !== null && typeof el === 'object' && Object.hasOwn(el, k) && String((el as Record<string, unknown>)[k]) === want);
+					}
+				}
+			}
+			return cur;
+		};
+		const root = { a: [[{ b: 1, a: [0, { a: 2 }] }], { b: '0' }], '': [{ a: 3 }], ' a': 4 };
+		const alphabet = ['a', 'b', '[', ']', '0', '1', '=', '.', ' ', '"', '[0]', '[b=1]', '[a]'];
+		let seed = 784;
+		const next = () => (seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648);
+		for (let n = 0; n < 5000; n++) {
+			let path = '';
+			for (let len = next() % 9; len > 0; len--) path += alphabet[next() % alphabet.length];
+			expect(atPath(root, path), path).toBe(reference(root, path));
+		}
+	});
 });
 
 describe('time zones', () => {

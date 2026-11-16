@@ -487,12 +487,28 @@ export const StationApiConfig = z
 export type StationApiConfig = z.output<typeof StationApiConfig>;
 
 /**
+ * The first `{…}` in a URL template that isn't one of `known`, as the regex /\{[^}]*\}/g would find it (each `{` to
+ * the next `}`), or undefined. A scan, not that regex: on a long run of `{` the regex was quadratic
+ * (CodeQL js/polynomial-redos).
+ */
+function unknownPlaceholder(template: string, known: readonly string[]): string | undefined {
+	for (let open = template.indexOf('{'); open >= 0; ) {
+		const close = template.indexOf('}', open + 1);
+		if (close < 0) return undefined;
+		const p = template.slice(open, close + 1);
+		if (!known.includes(p)) return p;
+		open = template.indexOf('{', close + 1);
+	}
+	return undefined;
+}
+
+/**
  * Why a URL template can't be saved, or null: a valid https URL once its placeholders are filled, a public host
  * (feeds/stationHttp.ts urlProblem), no key in its query (STATION_KEY_PARAMS), and only the known placeholders.
  * The fetcher checks again, address included, before every request.
  */
 export function stationUrlProblem(raw: string): string | null {
-	const unknown = raw.match(/\{[^}]*\}/g)?.find((p) => !(STATION_PLACEHOLDERS as readonly string[]).includes(p));
+	const unknown = unknownPlaceholder(raw, STATION_PLACEHOLDERS as readonly string[]);
 	if (unknown) return `${unknown} is not a placeholder: use {station}, {start} and {end}`;
 	// The site itself is fixed: a placeholder in the host would let an edit of the station ID (or the dates) send the
 	// key to another site while its binding (credential.ts credentialBinding) still read the same origin.

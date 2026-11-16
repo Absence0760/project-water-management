@@ -124,6 +124,10 @@ describe('stationUrlProblem and urlPlaceholderNote', () => {
 		expect(stationUrlProblem('')).toBe('Enter the API’s URL, starting https://.');
 		expect(stationUrlProblem('http://station.example/x')).toMatch(/must start with https/);
 		expect(stationUrlProblem('https://station.example/{day}')).toBe('{day} is not a placeholder: use {station}, {start} and {end}.');
+		// Each { runs to the next } (as /\{[^}]*\}/g did), scanned in one pass: the regex took ~10 s on 100 000 of them.
+		expect(stationUrlProblem('https://station.example/{a{station}')).toBe('{a{station} is not a placeholder: use {station}, {start} and {end}.');
+		expect(stationUrlProblem(`https://station.example/${'{'.repeat(100_000)}`)).toBeNull();
+		expect(stationUrlProblem(`https://station.example/${'{'.repeat(100_000)}}`)).toMatch(/^\{+\} is not a placeholder/);
 		expect(stationUrlProblem('https://ann:pw@station.example/')).toMatch(/user name and password/);
 		expect(stationUrlProblem('https://station.example/?token=abc')).toMatch(/carries a key \(token=…\)/);
 		expect(stationUrlProblem('https://station.example/#x')).toMatch(/#fragment/);

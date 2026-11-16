@@ -130,22 +130,41 @@ const localEpochDay = (tz: string, t: number, shiftMs = 0) => Math.floor((t + zo
 
 // --- Paths -----------------------------------------------------------------------------------
 
-const SEGMENT = /^([^[\]]*)((?:\[[^\]]*\])*)$/;
+/**
+ * One path segment split into its key and its bracket parts: `rows[0][id=7]` is `rows` and `['0', 'id=7']` (each
+ * part as written, untrimmed); null when it isn't a key followed only by `[…]` parts. A key holds no `[` or `]`; a part
+ * runs from `[` to the next `]` (it may hold a `[`). A hand-written scan, one pass, so an owner's path (or a long run
+ * of `[`) can't make it backtrack: a regex here was quadratic (CodeQL js/polynomial-redos).
+ */
+function splitSegment(seg: string): { key: string; parts: string[] } | null {
+	let i = 0;
+	while (i < seg.length && seg[i] !== '[' && seg[i] !== ']') i++;
+	const key = seg.slice(0, i);
+	const parts: string[] = [];
+	while (i < seg.length) {
+		if (seg[i] !== '[') return null;
+		const close = seg.indexOf(']', i + 1);
+		if (close < 0) return null;
+		parts.push(seg.slice(i + 1, close));
+		i = close + 1;
+	}
+	return { key, parts };
+}
 
 /** The value at a path (dot keys, [n] indexes, [key=value] filters); undefined when it isn't there. */
 export function atPath(root: unknown, path: string): unknown {
 	if (path.trim() === '') return root;
 	let cur: unknown = root;
 	for (const raw of path.split('.')) {
-		const m = SEGMENT.exec(raw.trim());
-		if (!m) return undefined;
-		if (m[1] !== '') {
+		const seg = splitSegment(raw.trim());
+		if (!seg) return undefined;
+		if (seg.key !== '') {
 			if (cur === null || typeof cur !== 'object' || Array.isArray(cur)) return undefined;
-			cur = Object.hasOwn(cur, m[1]!) ? (cur as Record<string, unknown>)[m[1]!] : undefined;
+			cur = Object.hasOwn(cur, seg.key) ? (cur as Record<string, unknown>)[seg.key] : undefined;
 		}
-		for (const b of m[2]!.match(/\[[^\]]*\]/g) ?? []) {
+		for (const part of seg.parts) {
 			if (!Array.isArray(cur)) return undefined;
-			const inner = b.slice(1, -1).trim();
+			const inner = part.trim();
 			if (/^\d+$/.test(inner)) cur = cur[Number(inner)];
 			else {
 				const eq = inner.indexOf('=');

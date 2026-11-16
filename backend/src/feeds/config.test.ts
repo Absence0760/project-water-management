@@ -214,6 +214,16 @@ describe('a station API feed (issue #784)', () => {
 			expect(stationUrlProblem(`https://api.example.com/rain?${k}=x`), k).toBeNull();
 		}
 	});
+	it('finds an unknown placeholder as /\{[^}]*\}/g did, in one pass on a long run of { (CodeQL js/polynomial-redos)', () => {
+		// Each { runs to the next }: the first one here holds the second's {.
+		expect(stationUrlProblem('https://api.example.com/{a{station}/rain')).toBe('{a{station} is not a placeholder: use {station}, {start} and {end}');
+		expect(stationUrlProblem('https://api.example.com/{station}/{x}?from={start}')).toMatch(/^\{x\} is not a placeholder/);
+		expect(stationUrlProblem('https://api.example.com/{station}}/{end')).toBeNull();
+		// The regex scanned each { to the end: 100 000 of them took ~10 s, past vitest's 5 s timeout.
+		const run = '{'.repeat(100_000);
+		expect(stationUrlProblem(`https://api.example.com/${run}`)).toBeNull();
+		expect(stationUrlProblem(`https://api.example.com/${run}}`)).toMatch(/^\{+\} is not a placeholder/);
+	});
 
 	it('refuses a placeholder in the site, so an edit of the station can’t move the key to another host', () => {
 		for (const url of ['https://rain.{station}/v1?from={start}', 'https://{station}.example.com/rain', 'https://api.example.com{station}/x', 'https://x-{start}.example.com/']) {

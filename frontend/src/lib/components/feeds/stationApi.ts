@@ -192,11 +192,27 @@ export const STATION_FIRST_DAY = '2000-01-01';
 /** The URL with its placeholders filled by a stand-in, parsed; null when it isn't a URL. */
 const parsedUrl = (raw: string) => URL.parse(raw.trim().replace(PLACEHOLDER, 'x'));
 
+/**
+ * The first `{…}` in a URL template that isn't one of `known`, as the regex /\{[^}]*\}/g would find it (each `{` to
+ * the next `}`), or undefined. A scan, not that regex: on a long run of `{` the regex was quadratic
+ * (CodeQL js/polynomial-redos).
+ */
+function unknownPlaceholder(template: string, known: readonly string[]): string | undefined {
+	for (let open = template.indexOf('{'); open >= 0; ) {
+		const close = template.indexOf('}', open + 1);
+		if (close < 0) return undefined;
+		const p = template.slice(open, close + 1);
+		if (!known.includes(p)) return p;
+		open = template.indexOf('{', close + 1);
+	}
+	return undefined;
+}
+
 /** What is wrong with a URL template, or null (the server's checks, bar the address ones it makes itself). */
 export function stationUrlProblem(raw: string): string | null {
 	const url = raw.trim();
 	if (!url) return 'Enter the API’s URL, starting https://.';
-	const unknown = url.match(/\{[^}]*\}/g)?.find((p) => !['{station}', '{start}', '{end}'].includes(p));
+	const unknown = unknownPlaceholder(url, ['{station}', '{start}', '{end}']);
 	if (unknown) return `${unknown} is not a placeholder: use {station}, {start} and {end}.`;
 	// The site is fixed (backend config.ts stationUrlProblem): a placeholder in the host could send the key elsewhere.
 	const authority = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(url)?.[1] ?? '';
