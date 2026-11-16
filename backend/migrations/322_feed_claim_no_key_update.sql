@@ -1,6 +1,7 @@
 -- 322_feed_claim_no_key_update — the scheduler's claim on a feed, and an
 -- ingest taking its fetch, no longer deadlock with a "Run now" on that feed
--- (docs/architecture.md § Data feeds → Schedule).
+-- (docs/architecture.md § Data feeds → Schedule); and the due-feed listing
+-- can be scoped to some projects (end of file).
 --
 -- app_claim_feed locked the feed's row FOR UPDATE, then the tick queued the
 -- feed's fetch (job, unique on its dedupe key while queued). "Run now" goes
@@ -26,6 +27,42 @@
 -- continueBackfill), so a press during an ingest could meet it the same way.
 -- It takes FOR NO KEY UPDATE too: a second ingest of one answer still waits
 -- for the first (the lock conflicts with itself). The rest is 029's.
+--
+-- app_due_feeds (276's definition) takes an optional p_projects, as
+-- app_claim_jobs did in 123: NULL (the default, and production's tick, which
+-- still calls it with two arguments) lists every project's due feeds exactly
+-- as before; an array lists only those projects' due feeds, filtered before
+-- the LIMIT. The e2e suite's scoped tick (`worker.ts --once --project <id>`)
+-- uses it so a test's tick never queues another test's new feed (a new feed
+-- is due at once), whose card then showed a fetch waiting that nothing would
+-- run (issue #784); filtering a capped all-project listing afterwards would
+-- schedule nothing once more feeds of other projects were due ahead. A new
+-- argument changes the signature, so the old function is dropped (nothing
+-- depends on it) and its grants given again, as 027 gave them.
+DROP FUNCTION app_due_feeds(integer, boolean);
+
+CREATE FUNCTION app_due_feeds(p_limit integer, p_all boolean DEFAULT false, p_projects uuid[] DEFAULT NULL)
+	RETURNS TABLE (id uuid, project_id uuid, acting_user_id uuid)
+	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+	AS $$
+	BEGIN
+		IF p_limit IS NULL OR p_limit < 1 OR p_limit > 500 THEN
+			RAISE EXCEPTION 'list 1–500 feeds' USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+		RETURN QUERY
+		SELECT f.id, f.project_id, f.acting_user_id FROM data_feed f
+		WHERE f.enabled AND f.acting_user_id IS NOT NULL
+		  AND (p_projects IS NULL OR f.project_id = ANY (p_projects))
+		  AND (p_all OR (app_feed_is_due(f.source, f.schedule, f.consecutive_failures, f.last_scheduled_at, now(), f.last_error)
+		                 AND NOT app_feed_fetch_out(f.fetch_job_id, now())))
+		ORDER BY f.last_scheduled_at NULLS FIRST, f.id
+		LIMIT p_limit;
+	END
+	$$;
+
+REVOKE ALL ON FUNCTION app_due_feeds(integer, boolean, uuid[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_due_feeds(integer, boolean, uuid[]) TO water_app;
+
 CREATE OR REPLACE FUNCTION app_claim_feed(p_feed uuid, p_all boolean DEFAULT false)
 	RETURNS boolean
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public

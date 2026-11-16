@@ -728,6 +728,26 @@ describe('the scheduler', () => {
 		expect((await queuedFor()).sort()).toEqual([a, b].sort());
 	});
 
+	it('a scoped tick filters by project before its limit: more of another project’s feeds due ahead don’t crowd its own out (322)', async () => {
+		const owner = await signUp('ScopedCap');
+		const mine = await project(owner, 'Mine');
+		const theirs = await project(owner, 'Theirs');
+		const a = (await owner.call('POST', `/projects/${mine}/feeds`, gefs())).body.feed.id as string;
+		// Scheduled two days ago, so still due but behind every never-scheduled feed (last_scheduled_at NULLS FIRST).
+		await asOwner(`UPDATE data_feed SET last_scheduled_at = now() - interval '2 days' WHERE id = $1`, [a]);
+		const ahead: string[] = [];
+		for (let i = 0; i < 3; i++) ahead.push((await owner.call('POST', `/projects/${theirs}/feeds`, { ...gefs(), targetName: `f${i}` })).body.feed.id as string);
+		// The listing alone, capped at 2: unscoped, the other project's feeds fill it; scoped, mine is there.
+		const listed = (projectIds?: string[]) => withoutUser((db) => listDueFeeds(db, 2, false, projectIds)).then((r) => r.map((f) => f.id));
+		expect((await listed()).every((id) => ahead.includes(id))).toBe(true);
+		expect(await listed([mine])).toEqual([a]);
+		expect(await listed([theirs])).toHaveLength(2);
+		// The scoped tick, capped at 1, schedules mine and none of theirs.
+		expect(await scheduleDueFeeds({ projectIds: [mine], limit: 1 })).toEqual({ queued: 1, refused: 0 });
+		expect(((await asOwner(`SELECT payload->>'feedId' AS id FROM job WHERE kind = 'feed_fetch'`)) as { id: string }[]).map((r) => r.id)).toEqual([a]);
+		for (const id of ahead) expect((await feedRow(id)).last_scheduled_at).toBeNull();
+	});
+
 	it('a tick claiming a feed while a "Run now" on it is mid-way doesn’t deadlock: both finish, with one fetch (322)', async () => {
 		const owner = await signUp('RunNowRace');
 		const pid = await project(owner);

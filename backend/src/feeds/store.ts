@@ -447,11 +447,14 @@ export interface DueFeed {
 	actingUserId: string;
 }
 
-/** Due feeds for the scheduler, longest-waiting first (app_due_feeds; no user context, stamps nothing). `all`: every enabled feed, due or not. */
-export async function listDueFeeds(db: Db, limit: number, all = false): Promise<DueFeed[]> {
+/**
+ * Due feeds for the scheduler, longest-waiting first (app_due_feeds; no user context, stamps nothing). `all`: every enabled feed, due or not.
+ * `projectIds`: only those projects' feeds, filtered before the limit (322); unset, every project's.
+ */
+export async function listDueFeeds(db: Db, limit: number, all = false, projectIds?: readonly string[]): Promise<DueFeed[]> {
 	const { rows } = await db.query<DueFeed>(
-		'SELECT id, project_id AS "projectId", acting_user_id AS "actingUserId" FROM app_due_feeds($1, $2)',
-		[limit, all]
+		'SELECT id, project_id AS "projectId", acting_user_id AS "actingUserId" FROM app_due_feeds($1, $2, $3::uuid[])',
+		[limit, all, projectIds ? [...projectIds] : null]
 	);
 	return rows;
 }

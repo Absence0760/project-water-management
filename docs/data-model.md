@@ -4829,10 +4829,14 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   config or target clears the health and the fetch columns; switching a feed
   back on makes it due at once.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
-  - `app_due_feeds(limit, all)` (027): the scheduler, no user context. Lists
-    enabled feeds with an acting user that are due, longest-waiting first,
-    stamping nothing; `all` lists every enabled feed (`pnpm dev:feeds:run`).
-    Returns id, project and acting user only.
+  - `app_due_feeds(limit, all, projects)` (027; `projects` since 322): the
+    scheduler, no user context. Lists enabled feeds with an acting user that
+    are due, longest-waiting first, stamping nothing; `all` lists every
+    enabled feed (`pnpm dev:feeds:run`). `projects` (default NULL, every
+    project's, as production calls it) keeps only those projects' feeds,
+    before the limit: the e2e suite's scoped tick, so other projects' due
+    feeds can't crowd its own out of the listing (issue #784). Returns id,
+    project and acting user only.
   - `app_claim_feed(feed, all)` (027): claims one feed for the transaction's
     user, who must be its acting user: still enabled and due, `FOR UPDATE
     SKIP LOCKED` (`FOR NO KEY UPDATE SKIP LOCKED` since 322, which a foreign

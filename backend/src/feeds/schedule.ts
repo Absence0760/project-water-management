@@ -25,16 +25,15 @@ export interface ScheduleResult {
 	refused: number;
 }
 
-/** Most due feeds listed when a tick schedules only some projects' (`projectIds`), before keeping theirs (app_due_feeds' own cap). */
-export const SCOPED_LISTING = 500;
-
 /**
  * Queue a fetch for each due feed (`all`: every enabled feed, for `pnpm dev:feeds:run`).
  * `projectIds`: only those projects' feeds (the e2e suite's scoped tick,
  * `worker.ts --once --project <id>`): a test's tick no longer queues another
  * test's new feed (a new feed is due at once), whose card then showed a fetch
  * waiting that nothing would run (station-api-feed.spec.ts beside
- * data-feeds.spec.ts, issue #784). Unset in production: every project's.
+ * data-feeds.spec.ts, issue #784). The listing filters by project before its
+ * limit (app_due_feeds' p_projects, 322), so other projects' due feeds never
+ * crowd these out. Unset in production: every project's.
  *
  * Each feed's claim (stamping its schedule) and its enqueue share one
  * transaction, so a failure between them can't leave a feed claimed with no
@@ -47,9 +46,7 @@ export async function scheduleDueFeeds({
 	all = false,
 	projectIds
 }: { limit?: number; all?: boolean; projectIds?: readonly string[] } = {}): Promise<ScheduleResult> {
-	const due = projectIds
-		? (await withoutUser((db) => listDueFeeds(db, SCOPED_LISTING, all))).filter((f) => projectIds.includes(f.projectId)).slice(0, limit)
-		: await withoutUser((db) => listDueFeeds(db, limit, all));
+	const due = await withoutUser((db) => listDueFeeds(db, limit, all, projectIds));
 	const out: ScheduleResult = { queued: 0, refused: 0 };
 	let failure: unknown = null;
 	for (const f of due) {

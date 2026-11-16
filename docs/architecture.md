@@ -1761,7 +1761,11 @@ row names a source, where to read it and the series it merges into:
   publishes more often (CHIRPS daily at most, CHIRPS-GEFS one issue a day,
   verified DWS flow months behind), so the old hourly schedule only re-read
   the same days 24 times. Every tick lists the due feeds (`app_due_feeds`,
-  `SECURITY DEFINER`): enabled ones not scheduled within a day.
+  `SECURITY DEFINER`): enabled ones not scheduled within a day. The e2e
+  suite's tick scoped to its test's project (`worker.ts --once --project`)
+  lists only that project's due feeds, filtered in SQL before the limit
+  (its `p_projects`, 322), so no other spec's new feed gets a fetch queued
+  that nothing runs; production's tick lists every project's.
   A CHIRPS-GEFS feed is instead due once the latest 08:45 UTC has
   passed since it was last scheduled, since CHC publishes each issue around
   08:26–08:30 UTC and an earlier fetch reads yesterday's. For each feed the
