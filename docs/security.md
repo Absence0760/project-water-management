@@ -3238,9 +3238,20 @@ public HTTPS server:
 **Credential sealing** (`backend/src/feeds/credential.ts`). The secret part
 (a token, a key, a password, Basic's user name) is sealed by the API to the
 fetcher's X25519 public key (`FEED_CREDENTIAL_PUBLIC_KEY`): ECIES with a
-fresh ephemeral key per seal, HKDF-SHA256, AES-256-GCM, the feed's id as the
-additional authenticated data, so a sealed credential copied onto another
-feed's row (or another project's) doesn't open.
+fresh ephemeral key per seal, HKDF-SHA256, AES-256-GCM, with the feed's
+binding as the additional authenticated data (`credentialBinding`: the
+feed's id, its URL's origin and how the key is sent). So a sealed credential
+copied onto another feed's row (or another project's) doesn't open, and
+neither does one whose feed was re-pointed at another site or told to send
+the key another way.
+
+- **The key goes only where it was typed for.** A PATCH that moves the URL
+  to another origin, or changes how the key is sent (auth kind, header or
+  parameter name), drops the saved key unless the same save enters a new
+  one (recorded as `cleared`); without this, a second owner could point the
+  feed at their own server and receive a key they never saw. The binding
+  makes sure of it if a code path ever forgot (`stationApiFeed.db.test.ts`,
+  `credential.test.ts`).
 
 - **Who can open it: only the fetcher.** The private key
   (`FEED_CREDENTIAL_PRIVATE_KEY`) is the fetcher Lambda's runtime secret
@@ -3274,20 +3285,37 @@ scheduler backs it off 2 h × 2ⁿ (242_feed_refused_backoff) rather than
 retrying, so a wrong or revoked key never hammers the owner's provider
 account into a lockout. A 429 or 503 waits for its `Retry-After`.
 
-**What remains (accepted).** A hostile URL owner, an owner of a project, can
-make our fetcher send `GET` requests to any public HTTPS host on port 443 of
-their choosing, with headers they choose (within the rules above): at most
-24 requests per feed per fetch, a fetch a day plus a rate-limited
-**Run now** (6, then one every 10 minutes), on at most 60 feeds per project
+**What remains (accepted).** Sign-up is open (§ Sign-up by invitation), so
+anyone with an account and a second factor can create a project, own it and
+attach a station feed: a hostile owner can make our fetcher send `GET`
+requests to any public HTTPS host on port 443 of their choosing (not our
+own upstreams, `stationUrl.ts` `OWN_UPSTREAM_HOSTS`), with headers they
+choose within the rules above. The bound, per feed: at most 24 requests a
+fetch (`STATION_MAX_REQUESTS`), each fetch at most 2 minutes
+(`lambda-fetcher.ts` `STATION_FETCH_BUDGET_MS`, so a host that trickles its
+answers can't hold one of the fetcher's few concurrent runs for longer),
+backfill windows chained at least 10 minutes apart
+(`STATION_BACKFILL_NEXT_SECONDS`) and stopped after 3 windows in a row that
+wrote no rain (`STATION_EMPTY_WINDOWS_MAX`), from 2000-01-01 at the earliest
+(`STATION_FIRST_DAY`). Worst case: 3 456 requests a feed a day, and only
+while every window holds rain (a real backfill, about two days at one day a
+request); against an API that answers nothing, 72 on the first day and 24 a
+day after, plus a rate-limited **Run now** (6, then one every 10 minutes); a
+failing fetch stops at its first failed request and backs off (15 minutes,
+doubling; hours for a refused key). On at most 60 feeds per project
 (`MAX_FEEDS`). The requests come from our fetcher's address (the egress
 VPC's Elastic IP with `fixed_egress_enabled`), so a target could block it
-for every feed, CHC's included; the answers are parsed as rainfall and
-bounded, never shown raw. Owners are trusted to that degree (they are
-named, invited, and every change is in the feed's history). A provider's
+for every station feed; our own upstreams can't be targeted, so their blocks
+can't come from this. The answers are parsed as rainfall and bounded, never
+shown raw; an error quotes at most a short piece of one value, with any
+piece of the key blanked (`sources/station.ts` `scrubKey`). Every change is
+in the feed's history. A provider's
 terms and licence are the project owner's responsibility
 ([data-sources.md § station-api](./data-sources.md#station-api)).
-Guards: `feeds/stationHttp.test.ts`, `feeds/config.test.ts`,
-`feeds/credential.test.ts`, `feeds/stationApiFeed.db.test.ts`,
+Guards: `feeds/stationHttp.test.ts`, `feeds/stationUrl.test.ts`,
+`feeds/config.test.ts`, `feeds/credential.test.ts`,
+`feeds/sources/station.test.ts`, `feeds/stationApiFeed.db.test.ts`,
+`feeds/stationFetch.db.test.ts`, `lambda-fetcher.test.ts`,
 `config/production.security.test.ts`, `config/runtimeSecrets.test.ts`.
 
 ### Import reports

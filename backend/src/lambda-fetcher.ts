@@ -236,6 +236,16 @@ export function stationWithDeadline(client: StationClient, deadline: number): St
  * deadline itself no new request starts (withDeadline), and a fetch still
  * running is answered as a failure.
  */
+/**
+ * The most time one station API fetch may take: 24 requests (STATION_MAX_REQUESTS) a second apart, each normally a
+ * second or two, fit with room to spare; a host that trickles its answers is cut off here and the fetch fails, so
+ * the scheduler's backoff (15 minutes, doubling) spaces its next attempt.
+ */
+export const STATION_FETCH_BUDGET_MS = 120_000;
+
+/** The time a fetch of `source` gets out of `remainingMs`: a station API fetch at most STATION_FETCH_BUDGET_MS. */
+export const fetchBudgetFor = (source: string, remainingMs: number) => (source === 'station_api' ? Math.min(remainingMs, STATION_FETCH_BUDGET_MS) : remainingMs);
+
 async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number, station?: StationClient): Promise<FetchAnswer> {
 	let timer: NodeJS.Timeout | undefined;
 	const late = new Promise<FetchAnswer>((resolve) => {
@@ -268,6 +278,10 @@ async function fetchHoldingSlot(
 	const budget = () => (context ? context.getRemainingTimeInMillis() - FETCH_SEND_MARGIN_MS : DEFAULT_BUDGET_MS);
 	const host = slotHostFor(req.source);
 	// A station API feed takes no slot: its host is the station provider's, never CHC (feeds/hostSlot.ts slotHostFor).
+	// Its budget is capped (STATION_FETCH_BUDGET_MS): the host is one a project owner chose, and one that answers
+	// slowly must not hold one of the fetcher's few concurrent runs, every other project's fetches queued behind it,
+	// for the Lambda's whole timeout (issue #784 security review).
+	if (req.source === 'station_api') return fetchWithin(req, http, fetchBudgetFor(req.source, budget()), station);
 	if (!host || !slots) return fetchWithin(req, http, budget(), station);
 	let take: SlotTake;
 	try {

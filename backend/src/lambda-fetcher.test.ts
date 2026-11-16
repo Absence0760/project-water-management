@@ -52,6 +52,8 @@ const {
 	isEtDekadalEvent,
 	S2_BUDGET_SHARE_WITH_S1,
 	scenePassShares,
+	fetchBudgetFor,
+	STATION_FETCH_BUDGET_MS,
 	stationWithDeadline,
 	WATERBODIES_BUDGET_SHARE,
 	withDeadline,
@@ -1154,6 +1156,13 @@ describe('the fetcher and station API feeds (issue #784)', () => {
 		expect(fetchFailureReason('the source’s data could not be read: the URL redirects to another site (https://evil.example): save that site’s URL instead, if you trust it with the key')).toBe('format');
 		expect(failureDetail('the source’s data could not be read: the URL redirects to another site (https://evil.example): save that site’s URL instead, if you trust it with the key')).toBeNull();
 		expect(failureDetail('the source’s data could not be read: the station API’s answer: record 1: the value “x” is not a number')).toBeNull();
+	});
+
+	it('gives a station fetch at most two minutes, whatever the Lambda has left (a slow host can’t hold a run)', () => {
+		expect(STATION_FETCH_BUDGET_MS).toBe(120_000);
+		expect(fetchBudgetFor('station_api', 14 * 60_000)).toBe(120_000);
+		expect(fetchBudgetFor('station_api', 30_000)).toBe(30_000);
+		expect(fetchBudgetFor('dws', 14 * 60_000)).toBe(14 * 60_000);
 	});
 
 	it('refuses further station requests once the deadline has passed', async () => {
