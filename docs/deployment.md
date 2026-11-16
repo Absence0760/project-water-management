@@ -3194,16 +3194,20 @@ What `station_api_feeds = true` changes (`infra/feeds.tf`, `secrets.tf`,
   scheduled modes (daily ingest, GEFS, DWS weekly, dams, ET) keep the
   `fetcher_reserved_concurrency` they had. The account's concurrency quota
   needs that 2 more of headroom (the sum of every reservation + 10:
-  `infra/terraform.tfvars.example`).
+  `infra/terraform.tfvars.example`); `infra/scripts/preapply-check.sh`
+  counts them when its `--var-file` sets `station_api_feeds = true`.
 
 ### Turning it on
 
 The operator does every step; nothing here is for an agent to run.
 
-1. **Release the backend** with issue #784 (migration 321 and the feed):
-   `gh release create backend@X.Y.Z --target main --generate-notes`, approved
-   in the `production` environment. Its production check takes an unset
-   `STATION_API_FEEDS` as off, so it starts on today's Terraform.
+1. **Release the backend and the web app** with issue #784:
+   `gh release create backend@X.Y.Z --target main --generate-notes`
+   (migration 321 and the feed) and
+   `gh release create web@X.Y.Z --target main --generate-notes` (the Attach a
+   feed form), each approved in the `production` environment. The backend's
+   production check takes an unset `STATION_API_FEEDS` as off, so it starts
+   on today's Terraform.
 2. **Generate the key pair on your own machine:** `pnpm gen:feed-credential-key`.
    It prints both halves and writes nothing. Never paste the private half
    into a chat, an issue or a CI log, and clear the terminal afterwards.
@@ -3216,8 +3220,12 @@ The operator does every step; nothing here is for an agent to run.
    `station_api_feeds = true` and `feed_credential_public_key = "<the public half>"`.
    Plan refuses the switch without both keys, a malformed key, or the
    committed dev key.
-5. **Plan, read it, then apply** (`infra/scripts/tf.sh plan -var-file=…`,
-   then `apply` with your own go-ahead). Expect: a new
+5. **Check the headroom, plan, read it, then apply** with your own go-ahead.
+   With `station_api_feeds = true` in `prod.tfvars`,
+   `cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
+   counts the fetcher's 2 more in its `lambda-quota` check. Then
+   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out=<plan>`
+   and `AWS_PROFILE=water-management ./scripts/tf.sh apply <plan>`. Expect: a new
    `aws_secretsmanager_secret.runtime["fetcher"]` and its version, the
    `read-runtime-secret` policy on the fetcher's role, the
    `station-fetch-requests.fifo` queue and its DLQ (and redrive policy), the
