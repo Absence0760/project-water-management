@@ -7,7 +7,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
-import { openFeedCredential } from './credential.js';
+import { credentialBinding, openFeedCredential } from './credential.js';
+
+/** What a key saved on feed `id` with config() is sealed to. */
+const bound = (id: string, cfg: Record<string, unknown> = config()) => credentialBinding(id, cfg as { url: string; auth: { kind: string; name?: string } });
 import { CREDENTIAL_MISSING_WARNING, STATION_API_OFF_MESSAGE } from './routes.js';
 import { feedForJob } from './store.js';
 
@@ -60,7 +63,7 @@ describe('station API feed: attach, replace and clear its key', () => {
 		const sealed1 = await sealedOf(fid);
 		expect(sealed1).toBeTruthy();
 		// Sealed to the fetcher, bound to this feed: it opens to the key with the private key and the feed's id.
-		expect(openFeedCredential(sealed1!, fid)).toEqual({ secret: SECRET });
+		expect(openFeedCredential(sealed1!, bound(fid))).toEqual({ secret: SECRET });
 		expectNoKey(created.body, SECRET, sealed1);
 
 		// The list: the owner sees the hint; a viewer sees that a key is saved, not its hint.
@@ -77,7 +80,7 @@ describe('station API feed: attach, replace and clear its key', () => {
 		expect(replaced.body.feed.credential).toMatchObject({ saved: true, hint: 'abcd' });
 		const sealed2 = await sealedOf(fid);
 		expect(sealed2).not.toBe(sealed1);
-		expect(openFeedCredential(sealed2!, fid)).toEqual({ secret: OTHER_SECRET });
+		expect(openFeedCredential(sealed2!, bound(fid))).toEqual({ secret: OTHER_SECRET });
 		expectNoKey(replaced.body, SECRET, OTHER_SECRET, sealed1, sealed2);
 
 		// Clear: none saved, and the answer says the feed's auth needs one.
@@ -251,12 +254,59 @@ describe('station API feed: progress, the server switch, the URL and the job row
 		const fid = (await owner.call('POST', `/projects/${pid}/feeds`, station({ credential: { secret: SECRET } }))).body.feed.id as string;
 		const row = await withUser(owner.id, (db) => feedForJob(db, pid, fid));
 		expect(row!.credential).toBe(await sealedOf(fid));
-		expect(openFeedCredential(row!.credential!, fid)).toEqual({ secret: SECRET });
+		expect(openFeedCredential(row!.credential!, bound(fid))).toEqual({ secret: SECRET });
 		// Another feed's id doesn't open it (the seal is bound to the feed).
-		await expect(async () => openFeedCredential(row!.credential!, '00000000-0000-4000-8000-000000000000')).rejects.toThrow(/could not be opened/);
+		await expect(async () => openFeedCredential(row!.credential!, bound('00000000-0000-4000-8000-000000000000'))).rejects.toThrow(/could not be opened/);
 		await owner.call('PATCH', `/projects/${pid}/feeds/${fid}`, { credential: null });
 		expect((await withUser(owner.id, (db) => feedForJob(db, pid, fid)))!.credential).toBeNull();
 		const chirps = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] }, enabled: false })).body.feed.id as string;
 		expect((await withUser(owner.id, (db) => feedForJob(db, pid, chirps)))!.credential).toBeNull();
+	});
+});
+
+describe('station API feed: a key goes only where it was saved for (issue #784 review)', () => {
+	it('re-pointing the URL at another site, or sending the key another way, drops it; a same-site edit keeps it', async () => {
+		const owner = await signUp('RepointOwner');
+		const second = await signUp('RepointSecond');
+		const pid = await project(owner);
+		await member(owner, pid, second, 'owner');
+		const fid = (await owner.call('POST', `/projects/${pid}/feeds`, station({ credential: { secret: SECRET } }))).body.feed.id as string;
+
+		// Positive control: another path and query on the same site keeps the key, and it still opens.
+		const samePlace = config({ url: 'https://api.example.com/v2/rain?station={station}&from={start}&to={end}' });
+		const kept = await second.call('PATCH', `/projects/${pid}/feeds/${fid}`, { config: samePlace });
+		expect(kept.status).toBe(200);
+		expect(kept.body.feed.credential.saved).toBe(true);
+		expect(openFeedCredential((await sealedOf(fid))!, bound(fid, samePlace))).toEqual({ secret: SECRET });
+
+		// Another owner points the feed at their own server: the key is dropped, and the history says so.
+		const moved = await second.call('PATCH', `/projects/${pid}/feeds/${fid}`, { config: config({ url: 'https://collector.example.net/x?from={start}&to={end}' }) });
+		expect(moved.status).toBe(200);
+		expect(moved.body.feed.credential).toEqual({ saved: false, hint: null, updatedAt: null });
+		expect(moved.body.warning).toBe(CREDENTIAL_MISSING_WARNING);
+		expect(await sealedOf(fid)).toBeNull();
+		const last = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'feed.configured' ORDER BY id DESC LIMIT 1`, [pid]);
+		expect((last[0]!.subject as { credential?: string }).credential).toBe('cleared');
+
+		// A new key in the same save as the move is kept (the owner typed it for that site).
+		const elsewhere = config({ url: 'https://other.example.org/rain?from={start}&to={end}' });
+		const withKey = await owner.call('PATCH', `/projects/${pid}/feeds/${fid}`, { config: elsewhere, credential: { secret: OTHER_SECRET } });
+		expect(withKey.body.feed.credential.saved).toBe(true);
+		expect(openFeedCredential((await sealedOf(fid))!, bound(fid, elsewhere))).toEqual({ secret: OTHER_SECRET });
+
+		// Changing how the key is sent drops it too.
+		const asQuery = await second.call('PATCH', `/projects/${pid}/feeds/${fid}`, { config: { ...elsewhere, auth: { kind: 'query', name: 'k' } } });
+		expect(asQuery.body.feed.credential.saved).toBe(false);
+	});
+
+	it('Replace key on a server without the fetcher’s public key is a plain 400, not a 500', async () => {
+		const owner = await signUp('NoPubKey');
+		const pid = await project(owner);
+		const fid = (await owner.call('POST', `/projects/${pid}/feeds`, station())).body.feed.id as string;
+		vi.stubEnv('FEED_CREDENTIAL_PUBLIC_KEY', '');
+		const res = await owner.call('PATCH', `/projects/${pid}/feeds/${fid}`, { credential: { secret: SECRET } });
+		expect(res.status).toBe(400);
+		expect(res.body.error).toBe(STATION_API_OFF_MESSAGE);
+		expect(await sealedOf(fid)).toBeNull();
 	});
 });

@@ -5,7 +5,7 @@ import { provenanceKey, sameProvenance, type SeriesKind, type SeriesProvenance }
 import type { Db } from '../db/tx.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { feedProvenance, type FeedConfig, type FeedInput, type FeedSchedule, type FeedSource } from './config.js';
-import { credentialHint, type FeedCredential, sealFeedCredential } from './credential.js';
+import { credentialBinding, type CredentialTarget, credentialHint, type FeedCredential, sealFeedCredential } from './credential.js';
 import type { FetchWindow } from './fetch.js';
 import { type FeedHealth, feedHealth, type RainCopy } from './health.js';
 
@@ -340,8 +340,15 @@ export async function replaceConfigFrom(db: Db, projectId: string, feedId: strin
  * the feed's id, with its hint. 'saved' when the feed had none, 'replaced' when it had one. The feed's own row isn't
  * touched, so its progress stays (data_feed_stamp fires only on data_feed).
  */
-export async function saveFeedCredential(db: Db, projectId: string, feedId: string, credential: FeedCredential): Promise<'saved' | 'replaced'> {
-	const sealed = sealFeedCredential(credential, feedId);
+export async function saveFeedCredential(
+	db: Db,
+	projectId: string,
+	feedId: string,
+	credential: FeedCredential,
+	target: CredentialTarget
+): Promise<'saved' | 'replaced'> {
+	// Sealed to the feed, its URL's origin and how the key is sent (credentialBinding): re-pointed, it won't open.
+	const sealed = sealFeedCredential(credential, credentialBinding(feedId, target));
 	const { rows } = await db.query<{ inserted: boolean }>(
 		`INSERT INTO data_feed_credential (feed_id, project_id, sealed, hint) VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (feed_id) DO UPDATE SET sealed = EXCLUDED.sealed, hint = EXCLUDED.hint

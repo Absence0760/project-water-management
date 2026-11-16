@@ -154,7 +154,7 @@ test('an owner attaches a station API feed with a key, tries a sample, runs it, 
 	await answerConfirm(page, true, 'Remove the key?');
 	// The API warns that the feed now sends a key it hasn't got; the panel says so after its own words.
 	await expect(status).toHaveText(
-		'Key removed. Note: the feed sends a key but none is saved: its fetches will be refused until you enter the key (Replace key).'
+		'Key removed. Note: the feed sends a key but none is saved: its fetches will be refused until you enter the key (Add a key).'
 	);
 	await expect(feed.getByTestId('feed-key')).toHaveText('No key saved: the feed can’t sign in to its API until an owner adds one.');
 	await expect(feed.getByRole('button', { name: `Add a key: ${TARGET}` })).toBeVisible();

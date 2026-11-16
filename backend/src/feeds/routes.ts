@@ -33,6 +33,7 @@ import {
 	SOURCES,
 	type StationApiConfig
 } from './config.js';
+import { credentialBinding, type CredentialTarget, type FeedCredential } from './credential.js';
 import { feedSourceMode } from './http.js';
 import { rainCopy } from './rainCopy.js';
 import { gapRainProducts, viewWindowQuery } from './gapRainView.js';
@@ -279,7 +280,21 @@ export const stationApiFeedsOn = (env: Record<string, string | undefined> = proc
 export const STATION_API_OFF_MESSAGE = 'station API feeds are off on this server';
 
 /** A station API feed whose auth sends a key, with none saved: saved anyway, and the answer says so. */
-export const CREDENTIAL_MISSING_WARNING = 'the feed sends a key but none is saved: its fetches will be refused until you enter the key (Replace key)';
+export const CREDENTIAL_MISSING_WARNING = 'the feed sends a key but none is saved: its fetches will be refused until you enter the key (Add a key)';
+/**
+ * Save a key, or say plainly that this server can't: sealing needs the fetcher's public key
+ * (FEED_CREDENTIAL_PUBLIC_KEY), which a server with station API feeds switched off may not have, while a feed
+ * attached before keeps running and its owner may still try Replace key.
+ */
+async function saveKey(db: Db, projectId: string, feedId: string, credential: FeedCredential, target: CredentialTarget) {
+	try {
+		return await saveFeedCredential(db, projectId, feedId, credential, target);
+	} catch (err) {
+		if (err instanceof Error && /FEED_CREDENTIAL_PUBLIC_KEY/.test(err.message)) throw new ApiError(400, STATION_API_OFF_MESSAGE);
+		throw err;
+	}
+}
+
 const credentialWarning = (feed: FeedMeta | null): string | undefined =>
 	feed?.source === 'station_api' && (feed.config as StationApiConfig).auth.kind !== 'none' && feed.credential?.saved === false ? CREDENTIAL_MISSING_WARNING : undefined;
 
@@ -361,7 +376,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
 			// Sealed to the fetcher with the new feed's id, in the same transaction (FeedInput refused it on any other source).
-			const credential = input.credential ? await saveFeedCredential(db, id, fid, input.credential) : undefined;
+			const credential = input.credential ? await saveKey(db, id, fid, input.credential, input.config as StationApiConfig) : undefined;
 			const feed = await getFeed(db, id, fid, new Date(), await rainCopy(db));
 			await recordAudit(db, id, 'feed.configured', {
 				...feedSubject(fid, 'created', input, credential),
@@ -428,9 +443,16 @@ export const feedRoutes = new Hono<AuthEnv>()
 			if (!(await updateFeed(db, id, fid, checked, replace, configFrom).catch(conflict))) throw new ApiError(404, 'not found');
 			// The key (issue #784), in its own table so that changing it keeps the feed's progress. A feed moved off the
 			// source, or onto sending no key, drops the one it had: nothing would send it.
+			// A feed re-pointed at another site, or told to send the key another way, drops it too unless the same save
+			// enters one: the key goes only where the owner who typed it said (it no longer opens there either,
+			// credentialBinding). Without this a second owner could point the feed at their own server and read the key.
 			let credential: CredentialChange | undefined;
-			if (checked.credential) credential = await saveFeedCredential(db, id, fid, checked.credential);
-			else if (patch.credential === null || (cur.source === 'station_api' && credentialProblem(checked.source, checked.config) !== null)) {
+			const repointed =
+				cur.source === 'station_api' &&
+				checked.source === 'station_api' &&
+				credentialBinding(fid, cur.config as StationApiConfig) !== credentialBinding(fid, checked.config as StationApiConfig);
+			if (checked.credential) credential = await saveKey(db, id, fid, checked.credential, checked.config as StationApiConfig);
+			else if (patch.credential === null || repointed || (cur.source === 'station_api' && credentialProblem(checked.source, checked.config) !== null)) {
 				if (await clearFeedCredential(db, id, fid)) credential = 'cleared';
 			}
 			// Logged even when the settings come back unchanged: every save makes the saver the

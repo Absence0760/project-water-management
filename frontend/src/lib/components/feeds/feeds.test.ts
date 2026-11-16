@@ -699,8 +699,8 @@ describe('station API feeds (issue #784)', () => {
 
 	it('words the API’s warning as a note after the message', () => {
 		expect(warningText(undefined)).toBe('');
-		expect(warningText('the feed sends a key but none is saved: its fetches will be refused until you enter the key (Replace key)')).toBe(
-			' Note: the feed sends a key but none is saved: its fetches will be refused until you enter the key (Replace key).'
+		expect(warningText('the feed sends a key but none is saved: its fetches will be refused until you enter the key (Add a key)')).toBe(
+			' Note: the feed sends a key but none is saved: its fetches will be refused until you enter the key (Add a key).'
 		);
 		expect(warningText('already a sentence. ')).toBe(' Note: already a sentence.');
 	});

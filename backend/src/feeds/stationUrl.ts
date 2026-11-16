@@ -97,6 +97,33 @@ export function headerProblem(name: string, value: string): string | null {
 	return null;
 }
 
+/**
+ * The hosts our own feeds and the bulk ingest ask (FEED_HOSTS, ingest/*.py), and their parents' suffixes. A station
+ * URL may not point at them: our fetcher shares an outbound address with those jobs, and a source that blocks by
+ * address for volume (CHC did, 2026-10-25) would cut off our own data. stationUrl.test.ts checks FEED_HOSTS is covered.
+ */
+export const OWN_UPSTREAM_HOSTS: readonly string[] = [
+	'data.chc.ucsb.edu',
+	'www.dws.gov.za',
+	'dws.gov.za',
+	'www.cpc.ncep.noaa.gov',
+	'deafrica-services.s3.af-south-1.amazonaws.com',
+	'deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com',
+	'deafrica-sentinel-1.s3.af-south-1.amazonaws.com',
+	'api.digitalearth.africa',
+	'geoserver.digitalearth.africa',
+	'explorer.digitalearth.africa',
+	'storage.googleapis.com',
+	'edcintl.cr.usgs.gov',
+	'cds.climate.copernicus.eu',
+	'power.larc.nasa.gov',
+	'ecmwf-forecasts.s3.eu-central-1.amazonaws.com',
+	'.earthdata.nasa.gov',
+	'.eosdis.nasa.gov'
+];
+
+const ownUpstream = (host: string) => OWN_UPSTREAM_HOSTS.some((h) => (h.startsWith('.') ? host.endsWith(h) : host === h));
+
 /** Why a URL can't be asked, or null: https, the default port, no user:password, a public host. Checked at save and before each request. */
 export function urlProblem(url: URL): string | null {
 	if (url.protocol !== 'https:') return 'the URL must start with https://';
@@ -107,6 +134,7 @@ export function urlProblem(url: URL): string | null {
 	if (!host.includes('.') || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal') || host.endsWith('.local')) {
 		return 'the URL’s host must be a public internet name';
 	}
+	if (ownUpstream(host.toLowerCase())) return 'the URL points at a data source the app itself reads, which a station feed may not ask';
 	return null;
 }
 

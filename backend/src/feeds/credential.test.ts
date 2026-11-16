@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { credentialHint, FeedCredentialError, generateFeedCredentialKeys, openFeedCredential, sealFeedCredential } from './credential.js';
+import { credentialBinding, credentialHint, FeedCredentialError, generateFeedCredentialKeys, openFeedCredential, sealFeedCredential } from './credential.js';
 
 const keys = generateFeedCredentialKeys();
 const env = { FEED_CREDENTIAL_PUBLIC_KEY: keys.publicKey, FEED_CREDENTIAL_PRIVATE_KEY: keys.privateKey };
@@ -47,5 +47,31 @@ describe('feed credential sealing', () => {
 	it('hints only the last four of a long secret', () => {
 		expect(credentialHint({ secret: 'abcdefghijklmnop' })).toBe('mnop');
 		expect(credentialHint({ secret: 'short-secret' })).toBeNull();
+	});
+});
+
+describe('the key’s binding', () => {
+	const target = { url: 'https://api.example.com/v1/{station}/rain?from={start}', auth: { kind: 'header', name: 'X-Api-Key' } };
+	const bound = credentialBinding(FEED, target);
+
+	it('opens where it was sealed, whatever the path, query or placeholders', () => {
+		const sealed = sealFeedCredential({ secret: 'tok' }, bound, env);
+		const samePlace = credentialBinding(FEED, { ...target, url: 'https://api.example.com/v2/other?station={station}' });
+		expect(openFeedCredential(sealed, samePlace, env)).toEqual({ secret: 'tok' });
+		// Header names are case-insensitive.
+		expect(credentialBinding(FEED, { ...target, auth: { kind: 'header', name: 'x-api-key' } })).toBe(bound);
+	});
+
+	it('won’t open once the feed is re-pointed at another site or sends the key another way', () => {
+		const sealed = sealFeedCredential({ secret: 'tok' }, bound, env);
+		for (const moved of [
+			{ ...target, url: 'https://attacker.example.net/collect' },
+			{ ...target, url: 'https://evil.api.example.com/v1' },
+			{ ...target, auth: { kind: 'query', name: 'X-Api-Key' } },
+			{ ...target, auth: { kind: 'header', name: 'X-Other' } },
+			{ ...target, auth: { kind: 'bearer' } }
+		]) {
+			expect(() => openFeedCredential(sealed, credentialBinding(FEED, moved), env)).toThrow(FeedCredentialError);
+		}
 	});
 });

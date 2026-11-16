@@ -366,7 +366,16 @@ export const STATION_URL_MAX = 2000;
 /** The most requests one fetch makes (one per maxDaysPerRequest days); a longer backfill continues on the next fetch. */
 export const STATION_MAX_REQUESTS = 24;
 /** Query parameter names that carry a key: one in the typed URL is refused, so a key never sits where viewers read it. */
-export const STATION_KEY_PARAMS = /^(api[-_]?key|apikey|key|token|access[-_]?token|auth|authorization|secret|api[-_]?secret|password|pass|pwd|sig|signature|application[-_]?key|client[-_]?secret)$/i;
+export const STATION_KEY_PARAMS = /key|token|secret|passw|^pass$|^pwd$|sig|auth|appid|credential|session/i;
+/** Header names that carry a key the same way: refused as extra headers (choose “Header” as how the key is sent). */
+export const STATION_KEY_HEADERS = /key|token|secret|passw|auth|sig|credential|session|cookie/i;
+/**
+ * The earliest day a station feed may start from. A backfill is walked a capped window at a time, so a far start date
+ * against an API that answers nothing would keep the fetcher asking for weeks (issue #784 security review); logger
+ * APIs hold nothing older, and an older record is a one-off upload. A fixed day, not one counted back from today, so a
+ * saved feed never stops parsing as the years pass (the fetcher re-parses every config it is sent).
+ */
+export const STATION_FIRST_DAY = '2000-01-01';
 export const STATION_PLACEHOLDERS = ['{station}', '{start}', '{end}'] as const;
 
 const StationId = z
@@ -444,8 +453,8 @@ export const StationApiConfig = z
 		/** Days before the newest one that every fetch reads again (late or corrected readings). Default 7. */
 		revisionDays: z.number().int().min(0).max(60).optional(),
 		format: StationFormatSchema,
-		/** First day to fetch when the feed has no data yet (default: 90 days back). */
-		startDate: SeriesStartDate.optional(),
+		/** First day to fetch when the feed has no data yet (default: 90 days back); not before STATION_FIRST_DAY. */
+		startDate: SeriesStartDate.refine((d) => d >= STATION_FIRST_DAY, `a station feed starts on ${dayText(STATION_FIRST_DAY)} at the earliest: upload an older record instead`).optional(),
 		staleAfterDays: z.number().int().min(1).max(3650).optional()
 	})
 	.strict()
@@ -460,7 +469,7 @@ export const StationApiConfig = z
 		for (const n of names) {
 			const p = headerProblem(n, c.headers![n]!);
 			if (p) ctx.addIssue({ code: 'custom', path: ['headers', n], message: p });
-			if (/^(authorization|x-api-key|x-api-secret|api-key|apikey)$/i.test(n)) {
+			if (STATION_KEY_HEADERS.test(n)) {
 				ctx.addIssue({ code: 'custom', path: ['headers', n], message: `the ${n} header carries a key: choose “Header” as how the key is sent, and enter the key in the key field` });
 			}
 		}

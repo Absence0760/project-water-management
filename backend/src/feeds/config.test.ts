@@ -201,6 +201,22 @@ describe('a station API feed (issue #784)', () => {
 			expect(issue({ ...base, url: `https://api.example.com/rain?${k}=abc&from={start}` }), k).toMatch(new RegExp(`the URL carries a key \\(${k}=…\\).*key field`));
 		}
 		expect(stationUrlProblem('https://api.example.com/rain?station_name=x')).toBeNull();
+		// Names that only contain a key word are refused too (security review): appid, x-api-key, api_token.
+		for (const k of ['appid', 'x-api-key', 'api_token', 'client_secret', 'sessionid', 'pwd']) {
+			expect(issue({ ...base, url: `https://api.example.com/rain?${k}=abc` }), k).toMatch(/the URL carries a key/);
+		}
+		for (const k of ['units', 'format', 'stationId', 'start_date', 'cycle_type']) expect(stationUrlProblem(`https://api.example.com/rain?${k}=x`), k).toBeNull();
+	});
+
+	it('refuses a host the app’s own feeds and ingest read', () => {
+		for (const host of ['data.chc.ucsb.edu', 'www.dws.gov.za', 'power.larc.nasa.gov', 'urs.earthdata.nasa.gov', 'storage.googleapis.com']) {
+			expect(issue({ ...base, url: `https://${host}/rain` }), host).toMatch(/a data source the app itself reads/);
+		}
+	});
+
+	it('starts no earlier than 2000-01-01', () => {
+		expect(issue({ ...base, startDate: '1999-12-31' })).toMatch(/at the earliest/);
+		expect(StationApiConfig.safeParse({ ...base, startDate: '2000-01-01' }).success).toBe(true);
 	});
 
 	it('takes only the known placeholders, and needs the station for {station}', () => {
@@ -224,10 +240,11 @@ describe('a station API feed (issue #784)', () => {
 		expect(StationApiConfig.safeParse({ ...base, headers: { Accept: 'application/json' } }).success).toBe(true);
 		expect(issue({ ...base, headers: { Authorization: 'Bearer x' } })).toMatch(/carries a key/);
 		expect(issue({ ...base, headers: { 'X-Api-Key': 'x' } })).toMatch(/carries a key/);
+		for (const h of ['X-Auth-Token', 'Ocp-Apim-Subscription-Key', 'X-RapidAPI-Key', 'X-Session']) expect(issue({ ...base, headers: { [h]: 'x' } }), h).toMatch(/carries a key/);
 		expect(issue({ ...base, headers: { Host: 'evil.example' } })).toMatch(/set by the app/);
 		expect(issue({ ...base, headers: { Cookie: 'a=b' } })).toMatch(/set by the app/);
 		expect(issue({ ...base, headers: { 'X-Ok': 'a\r\nX-Evil: 1' } })).toMatch(/can’t carry/);
-		expect(issue({ ...base, auth: { kind: 'header', name: 'X-Station-Key' }, headers: { 'x-station-key': 'v' } })).toBe('that header is also an extra header');
+		expect(issue({ ...base, auth: { kind: 'header', name: 'X-Station' }, headers: { 'x-station': 'v' } })).toBe('that header is also an extra header');
 		expect(issue({ ...base, auth: { kind: 'query', name: 'from' } })).toMatch(/already has a from parameter/);
 	});
 
