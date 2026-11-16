@@ -15,6 +15,8 @@
 // - redirects followed by hand, at most MAX_HOPS, and only within the URL's
 //   own origin: one to another site fails with a message naming that site, so
 //   the key is never sent anywhere the owner didn't type;
+// - an answer not read (a redirect, a refusal, an error status) destroyed,
+//   never drained, so an endless body costs nothing;
 // - a total deadline, a size cap counted while reading, no compression, and
 //   the person's own header names and values validated before they are sent.
 //
@@ -159,7 +161,7 @@ export function stationHttp(opts: { requester?: Requester; lookup?: LookupFuncti
 				}
 				const status = res.statusCode ?? 0;
 				if (status >= 300 && status <= 399 && status !== 304) {
-					res.resume();
+					res.destroy();
 					const next: URL | null = res.headers.location ? URL.parse(res.headers.location, target.href) : null;
 					if (!next) throw new FeedUnavailableError(`the station API redirected (HTTP ${status}) without saying where`);
 					if (next.origin !== origin) {
@@ -170,20 +172,20 @@ export function stationHttp(opts: { requester?: Requester; lookup?: LookupFuncti
 					continue;
 				}
 				if (status === 401 || status === 403) {
-					res.resume();
+					res.destroy();
 					throw new FeedKeyRefusedError(status);
 				}
 				if (status === 404) {
-					res.resume();
+					res.destroy();
 					throw new FeedFormatError(`the station API answered HTTP 404 at ${safeUrl(target)}: check the URL and the station`);
 				}
 				if (status === 429 || status === 503) {
-					res.resume();
+					res.destroy();
 					const h = res.headers['retry-after'];
 					throw new FeedThrottledError(status, retryAfterSeconds(Array.isArray(h) ? h[0]! : (h ?? null)));
 				}
 				if (status !== 200) {
-					res.resume();
+					res.destroy();
 					throw new FeedUnavailableError(`the station API answered HTTP ${status}`);
 				}
 				const encoding = res.headers['content-encoding'];

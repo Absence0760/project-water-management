@@ -46,7 +46,7 @@ export const STATION_FIRST_DAYS = 90;
 
 /** A key problem's fixed texts (errors.ts FeedKeyError), each with the label the fetcher logs as its detail. */
 export const STATION_KEY_PROBLEMS = {
-	missing: ['no key is saved: add one (Replace key)', 'no key saved'],
+	missing: ['no key is saved: add one (Add a key)', 'no key saved'],
 	unopened: ['the saved key could not be opened: enter it again (Replace key)', 'key not opened'],
 	noUser: ['Basic sign-in needs a user name with the key: enter both again (Replace key)', 'no user name']
 } as const satisfies Record<string, readonly [string, string]>;
@@ -93,15 +93,20 @@ export function stationChunks(start: string, end: string, maxDays: number): Stat
 	return out;
 }
 
+/** How far past the window's end a {end} written as a time reaches (stationRequestUrl). */
+export const STATION_END_SLACK_MS = 3_600_000;
+
 /** The URL for one request: the template's placeholders filled in, each value URL-encoded. No key: that goes on in authorise. */
 export function stationRequestUrl(config: StationApiConfig, chunk: StationChunk): string {
 	const range = stationRange(config.format, chunk.from, chunk.to);
 	const tz = config.format.timeZone ?? STATION_DEFAULT_TIME_ZONE;
 	const fmt = config.urlTimeFormat ?? STATION_DEFAULT_URL_TIME_FORMAT;
-	// {end}: the last instant the window covers. A date pattern names the last day itself (the range's end is the next
-	// day's start, exclusive); a time names the end instant, which every API we know of reads as up to.
+	// {end}: a date pattern names the last day itself (the range's end is the next day's start, exclusive). A time
+	// runs STATION_END_SLACK_MS past the window's end: an API that reads its end as exclusive would drop a reading
+	// stamped exactly there and the last day would be written short with no gap. Readings past the window are ignored
+	// (stationDays), so {end} may name a time after the last rain day.
 	const dateOnly = !/HH|iso|epoch/.test(fmt);
-	const endMs = dateOnly ? range.endMs - 1 : range.endMs;
+	const endMs = dateOnly ? range.endMs - 1 : range.endMs + STATION_END_SLACK_MS;
 	const values: Record<string, string> = {
 		'{station}': config.station ?? '',
 		'{start}': formatStationTime(range.startMs, fmt, tz),
@@ -123,11 +128,10 @@ export function authorise(config: StationApiConfig, url: string, credential: Fee
 		case 'header':
 			headers[auth.name] = `${auth.prefix}${credential.secret}`;
 			return { url, headers };
-		case 'query': {
-			const u = new URL(url);
-			u.searchParams.append(auth.name, credential.secret);
-			return { url: u.href, headers };
-		}
+		case 'query':
+			// Appended to the text, not through URLSearchParams, which would re-serialise the owner's whole query
+			// (%20 to +, : and ~ escaped): what they typed is sent byte for byte, the key after it.
+			return { url: `${url}${url.includes('?') ? (/[?&]$/.test(url) ? '' : '&') : '?'}${encodeURIComponent(auth.name)}=${encodeURIComponent(credential.secret)}`, headers };
 		case 'basic':
 			if (!credential.user) throw new FeedKeyError(STATION_KEY_PROBLEMS.noUser[0]);
 			headers.authorization = `Basic ${Buffer.from(`${credential.user}:${credential.secret}`, 'utf8').toString('base64')}`;
@@ -183,14 +187,39 @@ export interface StationFetch {
 	meta: Record<string, string | number>;
 }
 
-/** Every form of the key an error message could carry it in, to scrub (the raw secret, URL-encoded, and Basic's). */
-function scrubber(credential: FeedCredential | null): (s: string) => string {
-	if (!credential) return (s) => s;
+/** The shortest run of a message's characters that counts as part of the key when the key holds it (scrubKey). */
+export const SCRUB_MIN_RUN = 8;
+
+/**
+ * `message` with every trace of the key blanked (…): each whole form of it (the raw secret, URL-encoded, Basic's
+ * base64), and any run of at least SCRUB_MIN_RUN characters that is a piece of one. The parser quotes at most 40
+ * characters of a value and 120 of a CSV header, so an answer that echoed the key leaves a cut-off piece of it, which
+ * an exact match would miss.
+ */
+export function scrubKey(message: string, credential: FeedCredential | null): string {
+	if (!credential) return message;
 	const forms = [credential.secret, encodeURIComponent(credential.secret), credential.user ? Buffer.from(`${credential.user}:${credential.secret}`).toString('base64') : '']
 		.filter((f) => f.length >= 4)
 		.sort((a, b) => b.length - a.length);
-	return (s) => forms.reduce((acc, f) => acc.split(f).join('…'), s);
+	let s = forms.reduce((acc, f) => acc.split(f).join('…'), message);
+	// Mark every character inside a run of ≥ SCRUB_MIN_RUN that some form holds, then blank each marked stretch once.
+	const hit = new Array<boolean>(s.length).fill(false);
+	for (const f of forms) {
+		if (f.length < SCRUB_MIN_RUN) continue;
+		for (let i = 0; i + SCRUB_MIN_RUN <= s.length; i++) {
+			const seed = s.slice(i, i + SCRUB_MIN_RUN);
+			for (let at = f.indexOf(seed); at >= 0; at = f.indexOf(seed, at + 1)) {
+				let n = SCRUB_MIN_RUN;
+				while (i + n < s.length && at + n < f.length && s[i + n] === f[at + n]) n++;
+				for (let k = i; k < i + n; k++) hit[k] = true;
+			}
+		}
+	}
+	if (hit.some(Boolean)) s = s.replace(/[\s\S]/g, (c, k: number) => (hit[k] ? (k === 0 || !hit[k - 1] ? '…' : '') : c));
+	return s;
 }
+
+const scrubber = (credential: FeedCredential | null) => (s: string) => scrubKey(s, credential);
 
 /**
  * Fetch rain days `start`..`end` (inclusive) of a station API feed. `credential` is the opened key (null when none is

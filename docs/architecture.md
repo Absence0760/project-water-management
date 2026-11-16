@@ -1173,7 +1173,26 @@ row names a source, where to read it and the series it merges into:
     that reaches the end re-reads `revisionDays` (default 7) before the
     newest day. Readings from all the requests are merged (two answers
     disagreeing about one reading fail the fetch) and summed into days over
-    the whole window, and only days that have ended are written.
+    the whole window, and only days that have ended are written. A running
+    total's day whose first reading has nothing before it to rise from is a
+    gap, so a re-read never writes a short total over a stored day. `{end}`
+    written as a time runs an hour past the window's last rain day (an API
+    that reads its end as exclusive would otherwise drop the reading stamped
+    there); readings past the window are ignored.
+  - *Request volume*: anyone with an account may point a feed at any URL, so
+    a backfill's windows chain ten minutes apart
+    (`STATION_BACKFILL_NEXT_SECONDS`, not CHIRPS's minute), and after three
+    windows in a row that wrote no day of rain (`STATION_EMPTY_WINDOWS_MAX`,
+    counted in `last_meta.emptyWindows`) the chain stops and the backfill goes
+    on at the daily fetch, its read position still moving. The worst case for
+    one feed is 24 requests a window × 144 chained windows a day = **3,456
+    requests a day**, reached only while every window holds rain (a real
+    record being backfilled, at most a 20-year start date's ~7,300 days, so
+    about two days at one day a request); over an empty answer it is 3
+    windows (72 requests) the first day and 24 a day after, plus any Run now
+    (rate limited per feed). A failing fetch
+    stops at its first failed request and retries on the scheduler's backoff
+    (15 minutes doubling, hours after a refused key).
   - *The guard* (`stationHttp.ts`): the one feed path that asks a URL a
     person typed, from a fetcher with open egress. https on port 443 only,
     no `user:password@`; the host resolved at connect time and the whole

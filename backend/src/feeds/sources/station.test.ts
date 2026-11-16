@@ -3,7 +3,7 @@ import { StationApiConfig } from '../config.js';
 import { feedErrorMessage, FeedFormatError, FeedKeyError, FeedKeyRefusedError, FeedUnavailableError } from '../errors.js';
 import type { StationHttp, StationRequest } from '../stationHttp.js';
 import { fixtureStationHttp, STATION_FIXTURE_KEY, stationFixtureRain } from '../stationFixtures.js';
-import { authorise, fetchStation, mergeReadings, STATION_KEY_PROBLEMS, stationChunks, stationLastDay, stationRequestUrl, type StationClient } from './station.js';
+import { authorise, fetchStation, mergeReadings, scrubKey, STATION_KEY_PROBLEMS, stationChunks, stationLastDay, stationRequestUrl, type StationClient } from './station.js';
 
 // 2026-03-10 12:00 in Johannesburg (UTC+2).
 const NOW = Date.parse('2026-03-10T10:00:00Z');
@@ -64,7 +64,8 @@ describe('stationRequestUrl', () => {
 		});
 		const u = new URL(stationRequestUrl(c, { from: '2026-03-01', to: '2026-03-01' }));
 		expect(Number(u.searchParams.get('from')) * 1000).toBe(Date.parse('2026-03-01T06:00:00Z'));
-		expect(Number(u.searchParams.get('to')) * 1000).toBe(Date.parse('2026-03-02T06:00:00Z'));
+		// An hour past the window's end, so an API reading its end as exclusive still sends the reading stamped there.
+		expect(Number(u.searchParams.get('to')) * 1000).toBe(Date.parse('2026-03-02T07:00:00Z'));
 	});
 
 	it('cannot be steered by a station ID: & and = stay inside the value', () => {
@@ -96,6 +97,13 @@ describe('authorise', () => {
 		expect(new URL(r.url).searchParams.get('apikey')).toBe('a b&c');
 		expect(r.headers).toEqual({});
 		expect(c.url).not.toContain('apikey');
+	});
+	it('sends the owner’s query byte for byte, the key appended after it', () => {
+		const c = daily({ auth: { kind: 'query', name: 'apikey' } });
+		const typed = 'https://api.example.com/v1/rain?q=a%20b&t=10:00&x=~y,z';
+		expect(authorise(c, typed, { secret: 'k+y/=' }).url).toBe(`${typed}&apikey=k%2By%2F%3D`);
+		expect(authorise(c, 'https://api.example.com/v1/rain', { secret: 'k' }).url).toBe('https://api.example.com/v1/rain?apikey=k');
+		expect(authorise(c, 'https://api.example.com/v1/rain?', { secret: 'k' }).url).toBe('https://api.example.com/v1/rain?apikey=k');
 	});
 });
 
@@ -163,6 +171,26 @@ describe('fetchStation', () => {
 		expect(err.message).toMatch(/^the station API’s answer: record 1: the value/);
 		expect(feedErrorMessage(err)).not.toContain(SECRET);
 		expect(feedErrorMessage(err)).not.toContain(SECRET.slice(0, 20));
+	});
+
+	it('blanks a cut-off piece of a 47-character key the answer echoed into a value or a CSV header', async () => {
+		const key = 'pk_live_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t';
+		expect(key).toHaveLength(47);
+		const leaks = (msg: string) => [...Array(key.length - 7).keys()].some((i) => msg.includes(key.slice(i, i + 8)));
+		// The parser quotes 40 characters of the value: the key's first 39, cut, which an exact match misses.
+		const value = recorder(() => JSON.stringify({ data: [{ date: '2026-03-01', mm: key }] }));
+		const e1 = await fetchStation(daily({ auth: { kind: 'bearer' } }), { start: '2026-03-01', end: '2026-03-01' }, { secret: key }, value.client, NOW).catch((e) => e);
+		expect(e1).toBeInstanceOf(FeedFormatError);
+		expect(e1.message).toMatch(/the value “…/);
+		expect(leaks(feedErrorMessage(e1))).toBe(false);
+		// The CSV header names quoted (120 characters) end in the middle of the key.
+		const csv = daily({ auth: { kind: 'header', name: 'X-Key', prefix: '' }, format: { format: 'csv', time: 'time', value: 'rain', timeFormat: 'iso', resolution: 'daily' } });
+		const header = recorder(() => `time,${'padding_column_'.repeat(6)},${key}\n2026-03-01,1,2\n`);
+		const e2 = await fetchStation(csv, { start: '2026-03-01', end: '2026-03-01' }, { secret: key }, header.client, NOW).catch((e) => e);
+		expect(e2.message).toMatch(/no “rain” column/);
+		expect(leaks(feedErrorMessage(e2))).toBe(false);
+		// A message with nothing of the key is left as it was.
+		expect(scrubKey('the answer is not valid JSON', { secret: key })).toBe('the answer is not valid JSON');
 	});
 
 	it('passes the client’s refusals through, with no key or query in the stored message', async () => {

@@ -153,6 +153,7 @@ describe('running totals', () => {
 	const obs = (pairs: [string, number][]) => JSON.stringify({ obs: pairs.map(([t, total]) => ({ t: at(t) / 1000, total })) });
 	it('sums the rises, and a drop is a reset whose new value is rain since it', () => {
 		const text = obs([
+			['2024-02-29T23:30:00Z', 10], // the reading before the window, to rise from
 			['2024-03-01T00:30:00Z', 10],
 			['2024-03-01T06:00:00Z', 12],
 			['2024-03-01T23:30:00Z', 15],
@@ -161,6 +162,24 @@ describe('running totals', () => {
 		]);
 		const d = stationDays(readStationAnswer(text, f), f, '2024-03-01', '2024-03-02', LATER);
 		expect(d.values).toEqual([5, 1]);
+	});
+	it('makes a day a gap when its first reading has nothing before it to rise from (3-hourly, a window starting mid-record)', () => {
+		const three = { ...f, dayStartHour: 8 };
+		// 3-hourly totals from 08:00 on the 1st: a correct re-read would see the 05:00 reading of the day before, this answer doesn't.
+		const text = obs([
+			['2024-03-01T08:00:00Z', 20],
+			['2024-03-01T11:00:00Z', 22],
+			['2024-03-01T14:00:00Z', 25],
+			['2024-03-02T05:00:00Z', 26],
+			['2024-03-02T08:00:00Z', 26.5],
+			['2024-03-02T11:00:00Z', 27],
+			['2024-03-03T08:00:00Z', 27]
+		]);
+		const d = stationDays(readStationAnswer(text, three), three, '2024-02-29', '2024-03-02', LATER);
+		// The 29th's rain day (to 08:00 on the 1st) holds the first reading, with nothing before it: a gap, not 0 (a
+		// re-read would otherwise write a short total over a stored one). The 1st rises 22→26.5 = 6.5, the 2nd 26.5→27.
+		expect(d.values).toEqual([null, 6.5, 0.5]);
+		expect(d.gaps).toBe(1);
 	});
 	it('asks from an hour before the first rain day, so its first interval has a reading to rise from', () => {
 		const r = stationRange(f, '2024-03-01', '2024-03-01');

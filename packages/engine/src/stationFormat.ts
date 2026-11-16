@@ -20,6 +20,9 @@
 //   unknown. A day with no readings at all is a gap unless the owner says
 //   their logger only reports when it rains (noReadingsMeans: 'zero'), and
 //   even then an answer with no readings at all writes nothing.
+// - A running total's day whose first reading has nothing before it to rise
+//   from (the answer starts inside the day) is a gap: its rain up to that
+//   reading is unknown.
 // - A day is written only once it has ended (its rain day's end has passed),
 //   so today's running total never lands as a day's rain.
 // - The rain day: from dayStartHour (08:00 in South African practice, SAWS)
@@ -453,7 +456,13 @@ export function stationDays(r: StationReadings, f: StationFormat, from: string, 
 			const i = rainDay(x.at, f, tz) - a;
 			if (i < 0 || i >= n) continue;
 			counts[i]!++;
-			if (rise === null) continue;
+			// No reading before it to rise from (the answer starts inside this day, e.g. 3-hourly readings and the hour
+			// asked before the window): the rain up to it is unknown, so the day is a gap, never a short total that a
+			// re-read would write over a complete one.
+			if (rise === null) {
+				broken[i] = true;
+				continue;
+			}
 			sums[i]! += rise;
 		}
 	} else {

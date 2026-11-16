@@ -15,6 +15,7 @@
 //   GET /v1/keyed/daily.json?…  daily.json, only with STATION_FIXTURE_KEY sent as
 //       a bearer token, an X-Api-Key header, an api_key query parameter, or
 //       Basic (user STATION_FIXTURE_USER); else HTTP 401
+//   GET /v1/empty.json          {"data": []}: a station with no readings (a backfill's empty stretch)
 //   GET /v1/denied              HTTP 401, whatever is sent
 //   GET /v1/moved               HTTP 302 to https://elsewhere.example/… (another site)
 //   GET /v1/loop                HTTP 302 to itself (too many redirects)
@@ -129,6 +130,8 @@ export function stationFixtureAnswer(url: URL, headers: Record<string, unknown>,
 			return fiveMinute(q, now);
 		case '/v1/keyed/daily.json':
 			return keyed(url, headers) ? daily(q, now) : { status: 401, headers: { 'www-authenticate': 'Bearer' }, body: '{"error":"unauthorised"}' };
+		case '/v1/empty.json':
+			return json({ station: q.get('station'), unit: 'mm', data: [] });
 		case '/v1/denied':
 			return { status: 401, body: '{"error":"unauthorised"}' };
 		case '/v1/moved':

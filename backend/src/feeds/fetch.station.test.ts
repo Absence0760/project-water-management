@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { STATION_MAX_REQUESTS, StationApiConfig } from './config.js';
-import { generateFeedCredentialKeys, sealFeedCredential } from './credential.js';
+import { credentialBinding, generateFeedCredentialKeys, sealFeedCredential } from './credential.js';
 import { FEED_KEY_PREFIX, FEED_REFUSED_PREFIX } from './errors.js';
 import { fetchFailure, FetchRequestSchema, fetchWindow, runFetch, type FetchRequest } from './fetch.js';
 import type { FeedHttp } from './http.js';
@@ -98,7 +98,7 @@ describe('runFetch (station_api) on the fixtures', () => {
 	const budget = { now: () => NOW };
 	const keys = generateFeedCredentialKeys();
 	afterEach(() => vi.unstubAllEnvs());
-	const sealed = (secret: string, feedId = FEED) => sealFeedCredential({ secret }, feedId, { FEED_CREDENTIAL_PUBLIC_KEY: keys.publicKey });
+	const sealed = (secret: string, feedId = FEED, target: StationApiConfig = keyed) => sealFeedCredential({ secret }, credentialBinding(feedId, target), { FEED_CREDENTIAL_PUBLIC_KEY: keys.publicKey });
 	const withKeys = () => {
 		vi.stubEnv('FEED_CREDENTIAL_PUBLIC_KEY', keys.publicKey);
 		vi.stubEnv('FEED_CREDENTIAL_PRIVATE_KEY', keys.privateKey);
@@ -119,6 +119,13 @@ describe('runFetch (station_api) on the fixtures', () => {
 	it('a key sealed for another feed doesn’t open: the owner is told to enter it again', async () => {
 		withKeys();
 		const r = await runFetch(request(keyed, { credential: sealed(STATION_FIXTURE_KEY, '00000000-0000-4000-8000-000000000000') }), noHttp, budget, { station });
+		expect(r).toEqual({ ok: false, error: `${FEED_KEY_PREFIX}: ${STATION_KEY_PROBLEMS.unopened[0]}` });
+	});
+
+	it('a key sealed for another site doesn’t open on this one', async () => {
+		withKeys();
+		const elsewhere = config({ url: 'https://other.example/v1/daily.json?station={station}&start={start}&end={end}', auth: { kind: 'bearer' } });
+		const r = await runFetch(request(keyed, { credential: sealed(STATION_FIXTURE_KEY, FEED, elsewhere) }), noHttp, budget, { station });
 		expect(r).toEqual({ ok: false, error: `${FEED_KEY_PREFIX}: ${STATION_KEY_PROBLEMS.unopened[0]}` });
 	});
 

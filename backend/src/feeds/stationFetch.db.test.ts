@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
 import { FEED_KEY_PREFIX, FEED_REFUSED_PREFIX } from './errors.js';
+import { STATION_BACKFILL_NEXT_SECONDS, STATION_EMPTY_WINDOWS_MAX } from './ingest.js';
 import { STATION_FIRST_DAYS, STATION_KEY_PROBLEMS } from './sources/station.js';
 import { STATION_FIXTURE_KEY, stationFixtureRain } from './stationFixtures.js';
 
@@ -86,5 +87,29 @@ describe('station API feed: fetched inline from the synthetic API', () => {
 		const owner = await signUp('StationNoKeyOwner');
 		const { row } = await attach(owner, { config: config() });
 		expect(row).toMatchObject({ consecutive_failures: 1, last_error: `${FEED_KEY_PREFIX}: ${STATION_KEY_PROBLEMS.missing[0]}` });
+	});
+
+	it('chains a backfill ten minutes apart, and stops after three windows with no rain, its read position still moving', async () => {
+		const owner = await signUp('StationEmptyOwner');
+		const start = fromEpochDay(toEpochDay(yesterday()) - 2000);
+		const { fid, row } = await attach(owner, {
+			config: config({ url: 'https://station.example/v1/empty.json?station={station}&start={start}&end={end}', auth: { kind: 'none' }, startDate: start, maxDaysPerRequest: 1 })
+		});
+		expect(row).toMatchObject({ consecutive_failures: 0, last_data_date: null, last_meta: { emptyWindows: 1, requests: 24 } });
+		const throughs = [row.last_meta!.through as string];
+		for (let n = 2; n <= STATION_EMPTY_WINDOWS_MAX; n++) {
+			const queued = (await asOwner(`SELECT id, extract(epoch FROM run_after - now()) AS wait FROM job WHERE kind = 'feed_fetch' AND status = 'queued'`)) as { id: string; wait: number }[];
+			expect(queued).toHaveLength(1);
+			expect(Number(queued[0]!.wait)).toBeGreaterThan(STATION_BACKFILL_NEXT_SECONDS - 30);
+			await asOwner(`UPDATE job SET run_after = now() WHERE id = $1`, [queued[0]!.id]);
+			expect((await tick()).done).toBe(1);
+			const meta = ((await asOwner('SELECT last_meta FROM data_feed WHERE id = $1', [fid]))[0] as { last_meta: Record<string, unknown> }).last_meta;
+			expect(meta.emptyWindows).toBe(n);
+			throughs.push(meta.through as string);
+		}
+		// Each window moved on; after the third empty one nothing is chained (the daily fetch goes on from there).
+		expect(new Set(throughs).size).toBe(STATION_EMPTY_WINDOWS_MAX);
+		expect([...throughs].sort()).toEqual(throughs);
+		expect(await asOwner(`SELECT id FROM job WHERE kind = 'feed_fetch' AND status = 'queued'`)).toEqual([]);
 	});
 });

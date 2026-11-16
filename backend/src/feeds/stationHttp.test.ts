@@ -130,6 +130,18 @@ describe('stationHttp: answers', () => {
 		await expect(get(fake(() => res(500, {}, 'Internal error at /srv/app')).requester, 'https://api.example.com/x')).rejects.toThrow(/^the station API answered HTTP 500$/);
 	});
 
+	it('destroys an answer it doesn’t read (redirect, refusal, error), never draining an endless body', async () => {
+		for (const status of [302, 401, 404, 429, 500]) {
+			let pulled = 0;
+			const endless = new Readable({ read() { pulled++; this.push(Buffer.alloc(64 * 1024, 120)); } }) as unknown as IncomingMessage;
+			endless.statusCode = status;
+			endless.headers = status === 302 ? { location: 'https://evil.example.net/' } : {};
+			await expect(get(fake(() => endless).requester, 'https://api.example.com/x')).rejects.toThrow();
+			expect(endless.destroyed).toBe(true);
+			expect(pulled).toBeLessThan(3);
+		}
+	});
+
 	it('refuses a compressed answer', async () => {
 		await expect(get(fake(() => res(200, { 'content-encoding': 'gzip' }, 'xx')).requester, 'https://api.example.com/x')).rejects.toThrow(/compressed/);
 	});
