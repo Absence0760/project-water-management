@@ -53,6 +53,7 @@ const {
 	S2_BUDGET_SHARE_WITH_S1,
 	scenePassShares,
 	fetchBudgetFor,
+	wrongQueue,
 	STATION_FETCH_BUDGET_MS,
 	stationWithDeadline,
 	WATERBODIES_BUDGET_SHARE,
@@ -1156,6 +1157,28 @@ describe('the fetcher and station API feeds (issue #784)', () => {
 		expect(fetchFailureReason('the source’s data could not be read: the URL redirects to another site (https://evil.example): save that site’s URL instead, if you trust it with the key')).toBe('format');
 		expect(failureDetail('the source’s data could not be read: the URL redirects to another site (https://evil.example): save that site’s URL instead, if you trust it with the key')).toBeNull();
 		expect(failureDetail('the source’s data could not be read: the station API’s answer: record 1: the value “x” is not a number')).toBeNull();
+	});
+
+	it('refuses a request that came in on the other queue than its source’s', () => {
+		const shared = 'arn:aws:sqs:af-south-1:123456789012:water-management-fetch-requests.fifo';
+		const stations = 'arn:aws:sqs:af-south-1:123456789012:water-management-station-fetch-requests.fifo';
+		expect(wrongQueue(shared, 'station_api')).toBe(true);
+		expect(wrongQueue(stations, 'chirps')).toBe(true);
+		expect(wrongQueue(stations, 'dws')).toBe(true);
+		expect(wrongQueue(stations, 'station_api')).toBe(false);
+		expect(wrongQueue(shared, 'chirps')).toBe(false);
+		expect(wrongQueue(undefined, 'station_api')).toBe(false);
+	});
+
+	it('answers a station request from the shared queue as invalid, without fetching', async () => {
+		vi.restoreAllMocks();
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		const rec = { ...record('m1', { v: 1, type: 'fetch', ...ids, request: station() }), eventSourceARN: 'arn:aws:sqs:af-south-1:1:water-management-fetch-requests.fifo' };
+		expect(await handler({ Records: [rec] } as never)).toEqual({ batchItemFailures: [] });
+		expect((sent[0]!.message as { result: { ok: boolean } }).result.ok).toBe(false);
+		expect(warn.mock.calls.map(([l]) => JSON.parse(l as string).event)).toContain('fetch_request_wrong_queue');
 	});
 
 	it('gives a station fetch at most two minutes, whatever the Lambda has left (a slow host can’t hold a run)', () => {

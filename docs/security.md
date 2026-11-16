@@ -3251,7 +3251,9 @@ the key another way.
   one (recorded as `cleared`); without this, a second owner could point the
   feed at their own server and receive a key they never saw. The binding
   makes sure of it if a code path ever forgot (`stationApiFeed.db.test.ts`,
-  `credential.test.ts`).
+  `credential.test.ts`). The URL's host is written out, never a placeholder
+  (`config.ts` `stationUrlProblem`): with `{station}` in the host, an edit of
+  the station ID would move the key to another site under the same binding.
 
 - **Who can open it: only the fetcher.** The private key
   (`FEED_CREDENTIAL_PRIVATE_KEY`) is the fetcher Lambda's runtime secret
@@ -3302,11 +3304,12 @@ while every window holds rain (a real backfill, about two days at one day a
 request); against an API that answers nothing, 72 on the first day and 24 a
 day after, plus a rate-limited **Run now** (6, then one every 10 minutes); a
 failing fetch stops at its first failed request and backs off (15 minutes,
-doubling; hours for a refused key). On at most 60 feeds per project
-(`MAX_FEEDS`). The requests come from our fetcher's address (the egress
+doubling; hours for a refused key). On at most 10 station feeds per
+project (`routes.ts` `MAX_STATION_FEEDS`), within its 60 feeds (`MAX_FEEDS`). The requests come from our fetcher's address (the egress
 VPC's Elastic IP with `fixed_egress_enabled`), so a target could block it
-for every station feed; our own upstreams can't be targeted, so their blocks
-can't come from this. The answers are parsed as rainfall and bounded, never
+for every station feed; the named hosts of our own upstreams are refused
+(`stationUrl.ts` `OWN_UPSTREAM_HOSTS`, path-style S3 in their regions
+included), so a block of those can't come from a station URL naming them. The answers are parsed as rainfall and bounded, never
 shown raw; an error quotes at most a short piece of one value, with the key
 and any run of 8 or more of its characters blanked (`sources/station.ts`
 `scrubKey`; keys are at least 8 characters), though a piece shorter than 8

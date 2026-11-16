@@ -879,6 +879,17 @@ export async function handler(
 	return fetchBatch(event as SQSEvent, context);
 }
 
+/**
+ * Whether a fetch request came in on the other queue than its source's: station API fetches have their own queue
+ * (infra/feeds.tf station-fetch-requests.fifo), every other source the shared fetch-requests queue. Read from the
+ * record's queue ARN; a record with none (a local or test invocation) is never refused.
+ */
+export function wrongQueue(eventSourceARN: string | undefined, source: string): boolean {
+	if (!eventSourceARN) return false;
+	const onStationQueue = eventSourceARN.endsWith('-station-fetch-requests.fifo');
+	return onStationQueue !== (source === 'station_api');
+}
+
 async function fetchBatch(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse> {
 	const failures: SQSBatchResponse['batchItemFailures'] = [];
 	const http = await feedHttp();
@@ -890,7 +901,14 @@ async function fetchBatch(event: SQSEvent, context?: Pick<Context, 'getRemaining
 		let ids: z.output<typeof FetchEnvelope>;
 		let result: FetchAnswer | HostBusyAnswer;
 		const started = Date.now();
-		if (req) {
+		if (req && wrongQueue(record.eventSourceARN, req.request.source)) {
+			// A station request on the shared queue, or another source's on the station queue: only the worker sends
+			// either, and it never crosses them (jobs/handlers/feed-fetch.ts fetchQueue). Answered as invalid rather than
+			// fetched, so a slow station host can never take a CHIRPS or DWS run (issue #784 security review).
+			ids = req;
+			logEvent('warn', { event: 'fetch_request_wrong_queue', messageId: record.messageId, feedId: req.feedId, source: req.request.source });
+			result = { ok: false, error: INVALID_REQUEST };
+		} else if (req) {
 			ids = req;
 			// The station client is made once a batch, and only for a station request (issue #784).
 			if (req.request.source === 'station_api') station ??= await stationClient(feedSourceMode());
