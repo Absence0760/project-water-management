@@ -35,7 +35,10 @@
 # plain number (`name = 10`). A new Lambda's variable is picked up by its
 # name, with no list here to keep in step. The renderer's reservation counts
 # even before renderer_image_tag creates the function: the quota must cover
-# the second apply too. --reserved <n> skips the parsing and uses n as the
+# the second apply too. With station_api_feeds = true in the var file, the
+# fetcher reserves local.station_fetch_concurrency more (feeds.tf, issue #784),
+# read from feeds.tf and added as station-fetch=<n>. --reserved <n> skips the
+# parsing and uses n as the
 # sum. The region and DB instance class come from --region / --var-file the
 # same way (defaults: variables.tf). Tested against a fake `aws`
 # (preapply-check.test.mjs, check-stubs/; `pnpm test:guards`).
@@ -154,6 +157,19 @@ if [ -z "$reserved" ]; then
 		reserved=$((reserved + v))
 		breakdown="$breakdown ${n%_reserved_concurrency}=$v"
 	done
+	# Station API feeds raise the fetcher's reservation by their trigger's
+	# ceiling (feeds.tf local.fetcher_reserved_concurrency), which no
+	# *_reserved_concurrency variable carries.
+	if [ -n "$reserved" ] && [ "$(var_value station_api_feeds)" = true ]; then
+		v="$(sed -n 's/^[[:space:]]*station_fetch_concurrency[[:space:]]*=[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$infra/feeds.tf" | head -n 1)"
+		if [[ "$v" =~ ^[0-9]+$ ]]; then
+			reserved=$((reserved + v))
+			breakdown="$breakdown station-fetch=$v"
+		else
+			fail lambda-quota "station_api_feeds is on, but local.station_fetch_concurrency in feeds.tf isn't a plain number; pass --reserved <sum>"
+			reserved=""
+		fi
+	fi
 fi
 if [ -n "$reserved" ]; then
 	need=$((reserved + 10))

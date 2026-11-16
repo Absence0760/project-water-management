@@ -138,6 +138,22 @@ test('the var file overrides the reservations, the region and the DB class', () 
 	assert.equal(r.calls.find((c) => c.op === 'describe-orderable-db-instance-options').args['--db-instance-class'], 'db.t4g.small');
 });
 
+test('station_api_feeds on adds the station trigger\'s 2 to the fetcher\'s reservation; off adds nothing', () => {
+	const quota = (Value) => ({ 'service-quotas get-service-quota': { Quota: { Value } } });
+	// 42 + station-fetch 2 = 44, + 10 unreserved = 54 (feeds.tf local.fetcher_reserved_concurrency).
+	const low = run({ varFile: 'station_api_feeds = true\n', state: quota(53.0) });
+	assert.equal(low.status, 1);
+	assert.match(low.line('lambda-quota'), /^FAIL .*quota 53 < 54 \(reservations 44 \+ 10 unreserved\)/);
+	assert.match(low.line('lambda-quota'), / fetcher=2 .* station-fetch=2/);
+	const exact = run({ varFile: 'station_api_feeds = true\n', state: quota(54.0) });
+	assert.equal(exact.status, 0, exact.stdout);
+	const off = run({ varFile: 'station_api_feeds = false\n', state: quota(52.0) });
+	assert.equal(off.status, 0, off.stdout);
+	assert.doesNotMatch(off.line('lambda-quota'), /station-fetch/);
+	const commented = run({ varFile: '# station_api_feeds = true\n', state: quota(52.0) });
+	assert.equal(commented.status, 0, commented.stdout);
+});
+
 test('--reserved replaces the parsed sum; a reservation that is not a number fails with that hint', () => {
 	const r = run({ args: ['--region', 'af-south-1', '--reserved', '5'], state: { 'service-quotas get-service-quota': { Quota: { Value: 15.0 } } } });
 	assert.equal(r.status, 0, r.stdout);
