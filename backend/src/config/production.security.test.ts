@@ -116,6 +116,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		NODE_EXTRA_CA_CERTS: CA,
 		FEED_FETCHER: 'sqs',
 		FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests.fifo'),
+		// Station API feeds' own queue (infra/feeds.tf, "Station fetches apart"), set while they are on, as here.
+		STATION_FETCH_REQUESTS_QUEUE_URL: SQS('station-fetch-requests.fifo'),
 		FEED_SOURCE: 'live',
 		CHIRPS_SOURCE: 'chc',
 		DWS_SOURCE: 'live',
@@ -718,6 +720,17 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		for (const v of [undefined, '', 'off']) expect(problemNames('worker', prod('worker', { ...cutover, STATION_API_FEEDS: v, FEED_FETCHER: undefined, FETCH_REQUESTS_QUEUE_URL: undefined })), String(v)).toEqual([]);
 		expect(problemNames('fetcher', prod('fetcher', { INGEST_RESULTS_QUEUE_URL: undefined }))).toContain('INGEST_RESULTS_QUEUE_URL');
 		for (const role of ['api', 'worker', 'fetcher'] as const) expect(problemNames(role, prod(role, { STATION_API_FEEDS: 'yes' })), role).toContain('STATION_API_FEEDS');
+	});
+
+	// Issue #784 re-audit: station fetches have their own queue and fetcher trigger, so slow station hosts can't take CHIRPS's and DWS's.
+	it('the worker sends station API fetches to their own queue: required while on, never the shared fetch-requests queue', () => {
+		for (const v of [undefined, '', 'http://localhost:9324/q', 'not a url'])
+			expect(problemNames('worker', prod('worker', { STATION_FETCH_REQUESTS_QUEUE_URL: v })), String(v)).toContain('STATION_FETCH_REQUESTS_QUEUE_URL');
+		expect(problemNames('worker', prod('worker', { STATION_FETCH_REQUESTS_QUEUE_URL: SQS('fetch-requests.fifo') }))).toContain('STATION_FETCH_REQUESTS_QUEUE_URL');
+		expect(problemNames('worker', prod('worker'))).toEqual([]); // positive control: its own queue
+		// Off: Terraform sets none, and none is needed; one set is still checked.
+		for (const v of [undefined, '']) expect(problemNames('worker', prod('worker', { STATION_API_FEEDS: 'off', STATION_FETCH_REQUESTS_QUEUE_URL: v })), String(v)).toEqual([]);
+		expect(problemNames('worker', prod('worker', { STATION_API_FEEDS: 'off', STATION_FETCH_REQUESTS_QUEUE_URL: 'http://localhost:9324/q' }))).toContain('STATION_FETCH_REQUESTS_QUEUE_URL');
 	});
 
 	it('only the fetcher holds the key that opens station API credentials, and only while they are on', () => {

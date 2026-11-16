@@ -3320,6 +3320,22 @@ Guards: `feeds/stationHttp.test.ts`, `feeds/stationUrl.test.ts`,
 `feeds/stationFetch.db.test.ts`, `lambda-fetcher.test.ts`,
 `config/production.security.test.ts`, `config/runtimeSecrets.test.ts`.
 
+**The fetcher's capacity (accepted, bounded).** Station fetches have their
+own FIFO queue and their own trigger into the fetcher (`infra/feeds.tf`,
+"Station fetches apart"; `jobs/handlers/feed-fetch.ts` `fetchQueue`), at
+most 2 at once, and the fetcher's reserved concurrency is
+`fetcher_reserved_concurrency` plus those 2. So however many slow hosts an
+owner points feeds at, station fetches never take the slots CHIRPS and DWS
+fetches use, nor the headroom of the scheduled passes (which a throttle
+would drop). A station fetch never falls back to the shared queue: with no
+station queue the job fails at once. What is still shared is the station
+side itself: every project's station feeds share those 2 executions, one
+fetch per host at a time, so one project's slow hosts (each fetch up to
+2 minutes) can delay **other projects' station feeds**, never by more than
+the backlog drains at 2 fetches at a time; the station queue's age alarm
+(over an hour) pages a backlog. Per-project fairness on the station side
+isn't built.
+
 ### Import reports
 
 The import dialog sends the review's notes and unmapped report with the

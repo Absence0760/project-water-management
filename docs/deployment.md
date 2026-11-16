@@ -1403,7 +1403,9 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 - **Fetcher Lambda** (`backend/src/lambda-fetcher.ts`, handler
   `lambda-fetcher.handler`): **no VPC** (it is the only Lambda with internet
   access, which is what keeps the feeds from needing a NAT), 512 MB, 900 s,
-  reserved concurrency `fetcher_reserved_concurrency` (2). `FEED_SOURCE=live`,
+  reserved concurrency `fetcher_reserved_concurrency` (2; plus 2 for station
+  API feeds' own trigger while `station_api_feeds` is on, [§ Station API
+  feeds](#station-api-feeds)). `FEED_SOURCE=live`,
   and `FEEDS_CONTACT` from `feeds_contact` (required; the contact in its user
   agent, which CHC asked for). It reads CHC one file at a time, about one
   request a second, and answers a long backfill window with the days it
@@ -3177,6 +3179,22 @@ What `station_api_feeds = true` changes (`infra/feeds.tf`, `secrets.tf`,
   copy, so the `fetch-requests` and `ingest-results` queues, their triggers
   and alarms, and the worker's `FEED_FETCHER=sqs` stay after [§ The
   cutover](#the-cutover) (or come back, if it was already applied).
+- Station fetches get their own FIFO queue, `station-fetch-requests.fifo`
+  (one message group per station host), with its DLQ, its DLQ-arrivals
+  alarm (essential tier) and its oldest-message-age alarm (full tier), and
+  their own SQS trigger into the fetcher at `maximum_concurrency` 2. The
+  worker sends them there (`STATION_FETCH_REQUESTS_QUEUE_URL`, with
+  `sqs:SendMessage` on that queue alone, and the SQS endpoint's
+  `WorkerSendsStationFetchRequests`); answers come back through
+  `ingest-results`. So an owner's slow station hosts can't hold the trigger
+  CHIRPS and DWS fetches use.
+- **The fetcher's reserved concurrency rises by 2**, to
+  `fetcher_reserved_concurrency` + 2 (4 at the default). Station fetches can
+  hold at most their trigger's 2, so CHC's and DWS's trigger and the
+  scheduled modes (daily ingest, GEFS, DWS weekly, dams, ET) keep the
+  `fetcher_reserved_concurrency` they had. The account's concurrency quota
+  needs that 2 more of headroom (the sum of every reservation + 10:
+  `infra/terraform.tfvars.example`).
 
 ### Turning it on
 
@@ -3201,8 +3219,15 @@ The operator does every step; nothing here is for an agent to run.
 5. **Plan, read it, then apply** (`infra/scripts/tf.sh plan -var-file=…`,
    then `apply` with your own go-ahead). Expect: a new
    `aws_secretsmanager_secret.runtime["fetcher"]` and its version, the
-   `read-runtime-secret` policy on the fetcher's role, new environment on
-   the backend, worker and fetcher functions, every runtime secret version
+   `read-runtime-secret` policy on the fetcher's role, the
+   `station-fetch-requests.fifo` queue and its DLQ (and redrive policy), the
+   fetcher's station trigger (`maximum_concurrency` 2), the
+   `station-fetch-queue` policies on the fetcher's and worker's roles, the
+   SQS endpoint's `WorkerSendsStationFetchRequests` statement, the two
+   station queue alarms, the fetcher's reserved concurrency going from
+   `fetcher_reserved_concurrency` to that + 2, new environment on
+   the backend, worker and fetcher functions (the worker's includes
+   `STATION_FETCH_REQUESTS_QUEUE_URL`), every runtime secret version
    rewritten (the sops edit moved `runtime_secret_version`, so every Lambda
    cold-starts), and, if the cutover was already applied, the per-feed
    queues, triggers and alarms back.
@@ -3219,8 +3244,10 @@ The operator does every step; nothing here is for an agent to run.
   owner enters it again (**Replace key**). Rotate only when needed.
 - **Turning it off:** `station_api_feeds = false` and apply. The API refuses
   new station API feeds (existing ones show, and their fetches fail with a
-  clear error), the fetcher's secret is scheduled for deletion, and the
-  per-feed queues go again if the cutover is in. Remove the sops key too.
+  clear error), the fetcher's secret is scheduled for deletion, the station
+  queue, its DLQ, trigger, grants and alarms go (check it is empty first:
+  `ApproximateNumberOfMessages` 0), the fetcher's reserved concurrency drops
+  back by 2, and the per-feed queues go again if the cutover is in. Remove the sops key too.
   Secrets Manager keeps a deleted secret 30 days: turning it back on within
   that window fails to create `water-management/runtime/fetcher`; restore it
   (`aws secretsmanager restore-secret --secret-id water-management/runtime/fetcher --profile water-management`)

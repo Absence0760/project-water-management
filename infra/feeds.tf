@@ -110,6 +110,23 @@
 # ones the client refuses. No HTTPS_PROXY / NODE_USE_ENV_PROXY is ever set
 # here: a proxy would resolve the name itself, past the guard's pinned
 # lookup (infra/tests/cutover.tftest.hcl checks).
+#
+# Station fetches apart (issue #784 re-audit). A station API feed's host is
+# one an owner chose, and a slow one can hold a fetch for its whole budget
+# (backend/src/lambda-fetcher.ts STATION_FETCH_BUDGET_MS, 2 minutes). Sharing
+# fetch-requests and its trigger (maximum_concurrency 2), one owner's many
+# slow station hosts (each its own message group) could keep both slots busy,
+# starving every project's CHIRPS and DWS fetches, and push the fetcher to
+# its reserved concurrency, where a scheduled run is throttled and dropped.
+# So station fetches have their own FIFO queue (station-fetch-requests, a
+# group per station host, the same visibility and retention), DLQ and
+# alarms, and their own trigger into the same fetcher with
+# maximum_concurrency 2. The fetcher's reserved concurrency is raised by
+# that 2 (local.fetcher_reserved_concurrency): with the default
+# fetcher_reserved_concurrency 2 it is 4, of which station fetches can take
+# at most 2, so CHC's and DWS's trigger and the scheduled modes keep the 2
+# they had. Station fetches now compete only with each other. Answers go
+# back through ingest-results like any other.
 # ----------------------------------------------------------------------------
 
 locals {
@@ -119,6 +136,18 @@ locals {
   # can't be read from our copy.
   per_feed_fetching = var.station_api_feeds || !(var.chirps_source == "mirror" && var.dws_source == "store")
   per_feed_count    = local.per_feed_fetching ? 1 : 0
+
+  # Station API feeds' own fetch queue and trigger (issue #784), only while
+  # they are on: see "Station fetches apart" below.
+  station_fetch_count = var.station_api_feeds ? 1 : 0
+  # The station trigger's maximum_concurrency: 2, the least SQS allows.
+  station_fetch_concurrency = 2
+  # The fetcher's reserved concurrency: the operator's fetcher_reserved_concurrency
+  # for CHC, DWS and the scheduled modes, plus exactly the station trigger's
+  # ceiling while it exists. Station fetches can hold at most
+  # station_fetch_concurrency executions, so the other invocations always keep
+  # at least fetcher_reserved_concurrency, as before station feeds existed.
+  fetcher_reserved_concurrency = var.fetcher_reserved_concurrency + (var.station_api_feeds ? local.station_fetch_concurrency : 0)
 
   # At about a request a second a CHIRPS day is 3–10 requests for one cell,
   # plus one per extra grid row of a box: a 120-day window of one cell's
@@ -213,6 +242,46 @@ resource "aws_sqs_queue_redrive_allow_policy" "ingest_results_dlq" {
   })
 }
 
+# Station API feeds' own fetch queue (issue #784; "Station fetches apart" in
+# the header): FIFO, one message group per station host
+# (backend/src/jobs/handlers/feed-fetch.ts fetchGroup), the same visibility
+# (twice the fetcher's timeout, as Lambda requires) and retention as
+# fetch-requests, dead-lettering after 5 receives.
+resource "aws_sqs_queue" "station_fetch_requests_dlq" {
+  count = local.station_fetch_count
+
+  name                      = "${local.project}-station-fetch-requests-dlq.fifo"
+  fifo_queue                = true
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
+}
+
+resource "aws_sqs_queue" "station_fetch_requests" {
+  count = local.station_fetch_count
+
+  name                        = "${local.project}-station-fetch-requests.fifo"
+  fifo_queue                  = true
+  content_based_deduplication = false
+  visibility_timeout_seconds  = local.fetch_requests_visibility_seconds
+  message_retention_seconds   = local.feed_queue_message_retention_seconds
+  sqs_managed_sse_enabled     = true
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.station_fetch_requests_dlq[0].arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_sqs_queue_redrive_allow_policy" "station_fetch_requests_dlq" {
+  count = local.station_fetch_count
+
+  queue_url = aws_sqs_queue.station_fetch_requests_dlq[0].id
+  redrive_allow_policy = jsonencode({
+    redrivePermission = "byQueue"
+    sourceQueueArns   = [aws_sqs_queue.station_fetch_requests[0].arn]
+  })
+}
+
 # --- Fetcher Lambda (no VPC) -----------------------------------------------------
 
 resource "aws_iam_role" "fetcher_lambda" {
@@ -245,6 +314,26 @@ resource "aws_iam_role_policy" "fetcher_lambda" {
   name   = "feed-queues"
   role   = aws_iam_role.fetcher_lambda.id
   policy = data.aws_iam_policy_document.fetcher_lambda[0].json
+}
+
+# Consume station API feeds' own queue, only while they are on. Its answers
+# go to ingest-results under feed-queues above.
+data "aws_iam_policy_document" "fetcher_station_queue" {
+  count = local.station_fetch_count
+
+  statement {
+    sid       = "ConsumeStationFetchRequests"
+    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
+    resources = [aws_sqs_queue.station_fetch_requests[0].arn]
+  }
+}
+
+resource "aws_iam_role_policy" "fetcher_station_queue" {
+  count = local.station_fetch_count
+
+  name   = "station-fetch-queue"
+  role   = aws_iam_role.fetcher_lambda.id
+  policy = data.aws_iam_policy_document.fetcher_station_queue[0].json
 }
 
 resource "aws_cloudwatch_log_group" "fetcher" {
@@ -280,8 +369,10 @@ resource "aws_lambda_function" "fetcher" {
   timeout       = local.fetcher_timeout_seconds
   memory_size   = 512
 
-  # Bounds spend and how hard the public sources are hit at once.
-  reserved_concurrent_executions = var.fetcher_reserved_concurrency
+  # Bounds spend and how hard the public sources are hit at once; plus the
+  # station trigger's 2 while station API feeds are on (header, "Station
+  # fetches apart").
+  reserved_concurrent_executions = local.fetcher_reserved_concurrency
 
   # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
   # local.lambda_logging).
@@ -342,6 +433,7 @@ resource "aws_lambda_function" "fetcher" {
     aws_cloudwatch_log_group.fetcher,
     aws_iam_role_policy.lambda_logs["fetcher"],
     aws_iam_role_policy.fetcher_lambda,
+    aws_iam_role_policy.fetcher_station_queue,
     aws_iam_role_policy.lambda_vpc_eni,
     aws_iam_role_policy.runtime_secret,
   ]
@@ -368,6 +460,24 @@ resource "aws_lambda_event_source_mapping" "fetcher_requests" {
   scaling_config {
     maximum_concurrency = 2
   }
+}
+
+# Station API feeds' own trigger (header, "Station fetches apart"): station
+# fetches hold at most station_fetch_concurrency executions, which the
+# fetcher's reserved concurrency adds on top of fetcher_reserved_concurrency.
+resource "aws_lambda_event_source_mapping" "fetcher_station_requests" {
+  count = local.station_fetch_count
+
+  event_source_arn        = aws_sqs_queue.station_fetch_requests[0].arn
+  function_name           = aws_lambda_function.fetcher.arn
+  batch_size              = 1
+  function_response_types = ["ReportBatchItemFailures"]
+
+  scaling_config {
+    maximum_concurrency = local.station_fetch_concurrency
+  }
+
+  depends_on = [aws_iam_role_policy.fetcher_station_queue]
 }
 
 # --- CHC's request slot (see the header) -----------------------------------------------
@@ -644,6 +754,25 @@ resource "aws_iam_role_policy" "worker_feeds" {
   policy = data.aws_iam_policy_document.worker_feeds[0].json
 }
 
+# The worker sends station API feeds' fetches to their own queue (issue #784).
+data "aws_iam_policy_document" "worker_station_queue" {
+  count = local.station_fetch_count
+
+  statement {
+    sid       = "SendStationFetchRequests"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.station_fetch_requests[0].arn]
+  }
+}
+
+resource "aws_iam_role_policy" "worker_station_queue" {
+  count = local.station_fetch_count
+
+  name   = "station-fetch-queue"
+  role   = aws_iam_role.worker_lambda.id
+  policy = data.aws_iam_policy_document.worker_station_queue[0].json
+}
+
 resource "aws_lambda_event_source_mapping" "worker_ingest_results" {
   count = local.per_feed_count
 
@@ -727,6 +856,38 @@ resource "aws_cloudwatch_metric_alarm" "ingest_results_dlq_depth" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "station_fetch_requests_dlq_depth" {
+  count = local.alarms_essential && var.station_api_feeds ? 1 : 0
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-station-fetch-requests-dlq-arrivals"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
+  threshold           = 0
+  alarm_description   = "A station API feed's fetch request was dead-lettered: the fetcher failed to send its result 5 times. The feed shows stale until its next scheduled fetch; check the fetcher's logs. ${local.dlq_arrivals_note}"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.station_fetch_requests_dlq[0].name
+      }
+    }
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "fetcher_errors" {
   count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-fetcher-errors"
@@ -789,6 +950,28 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
 
   dimensions = {
     QueueName = aws_sqs_queue.fetch_requests[0].name
+  }
+}
+
+# The same for station API feeds' own queue. An hour-old message there is
+# also what a backlog looks like: many slow station hosts sharing the
+# station trigger's 2 executions (header, "Station fetches apart").
+resource "aws_cloudwatch_metric_alarm" "station_fetch_requests_age" {
+  count               = local.alarms_full && var.station_api_feeds ? 1 : 0
+  alarm_name          = "${local.project}-station-fetch-requests-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 3600
+  alarm_description   = "A station API feed's fetch request has waited over an hour in station-fetch-requests: the fetcher isn't consuming it (its station trigger disabled or throttled), or slow station hosts are holding the station trigger's 2 executions. Station feeds go stale meanwhile; CHIRPS and DWS fetches are unaffected (their own queue). Logs Insights on the fetcher log group: filter message.source = \"station_api\" | stats count() by message.reason, message.detail."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.station_fetch_requests[0].name
   }
 }
 

@@ -99,6 +99,18 @@ export function fetchGroup(source: FeedSource, config?: FeedConfig): string {
 	return 'chc';
 }
 
+/**
+ * The queue a fetch request goes to (issue #784): station API feeds have their own
+ * (STATION_FETCH_REQUESTS_QUEUE_URL) with its own fetcher trigger (infra/feeds.tf, "Station fetches apart"), so a
+ * project's slow station hosts can't hold the trigger that CHIRPS and DWS fetches use; every other source goes to
+ * fetch-requests. A station fetch never falls back to the shared queue: with its queue unset it fails (feedFetchHandler).
+ */
+export function fetchQueue(source: FeedSource, env: Record<string, string | undefined> = process.env): { url: string | undefined; name: string } {
+	return source === 'station_api'
+		? { url: env.STATION_FETCH_REQUESTS_QUEUE_URL, name: 'STATION_FETCH_REQUESTS_QUEUE_URL' }
+		: { url: env.FETCH_REQUESTS_QUEUE_URL, name: 'FETCH_REQUESTS_QUEUE_URL' };
+}
+
 export const feedFetchHandler = defineHandler({
 	role: 'editor',
 	payload: FeedFetchPayload,
@@ -176,6 +188,12 @@ export const feedFetchHandler = defineHandler({
 			if (recheck) request.recheck = { cells: grid(cells), head: recheck.head, read: recheck.read };
 		}
 		if (feedFetcher() === 'sqs') {
+			const queue = fetchQueue(feed.source);
+			// No retry fixes a missing station queue (station API feeds switched off on this server, or Terraform not
+			// applied): fail at once, before recording a fetch that can't go out, and never use the shared queue.
+			if (feed.source === 'station_api' && !queue.url) {
+				throw new JobError('station API feeds have no fetch queue on this server (STATION_FETCH_REQUESTS_QUEUE_URL is not set): they are off here', { retry: false });
+			}
 			// Committed now, on its own connection, before the request leaves (as
 			// report-render.ts commits its token): the answer is applied only if
 			// app_take_feed_fetch finds this record, and it can't see one this
@@ -187,7 +205,7 @@ export const feedFetchHandler = defineHandler({
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };
 			try {
 				// One message group per source host (fetchGroup): the FIFO queue hands the fetcher one fetch per group at a time (infra/feeds.tf).
-				await sendToQueue(process.env.FETCH_REQUESTS_QUEUE_URL, 'FETCH_REQUESTS_QUEUE_URL', message, { group: fetchGroup(feed.source, feed.config), dedupe: job.id });
+				await sendToQueue(queue.url, queue.name, message, { group: fetchGroup(feed.source, feed.config), dedupe: job.id });
 			} catch (err) {
 				// Nothing went out: withdraw the record, so the feed isn't held as
 				// "a fetch is still out" (fromBoundary.ts, fromUnits.ts) by an

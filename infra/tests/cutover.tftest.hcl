@@ -625,6 +625,27 @@ override_resource {
   }
 }
 
+# Station API feeds' own fetch queue and DLQ (feeds.tf), only with station_api_feeds on.
+override_resource {
+  target          = aws_sqs_queue.station_fetch_requests
+  override_during = plan
+  values = {
+    arn  = "arn:aws:sqs:af-south-1:000000000000:water-management-station-fetch-requests.fifo"
+    url  = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-station-fetch-requests.fifo"
+    name = "water-management-station-fetch-requests.fifo"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.station_fetch_requests_dlq
+  override_during = plan
+  values = {
+    arn  = "arn:aws:sqs:af-south-1:000000000000:water-management-station-fetch-requests-dlq.fifo"
+    url  = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-station-fetch-requests-dlq.fifo"
+    name = "water-management-station-fetch-requests-dlq.fifo"
+  }
+}
+
 # The fetcher's, only with station_api_feeds on (secrets.tf).
 override_resource {
   target          = aws_secretsmanager_secret.runtime["fetcher"]
@@ -921,6 +942,21 @@ run "station_api_feeds_off_by_default" {
   }
   assert {
     condition = (
+      length(aws_sqs_queue.station_fetch_requests) == 0 && length(aws_sqs_queue.station_fetch_requests_dlq) == 0 &&
+      length(aws_lambda_event_source_mapping.fetcher_station_requests) == 0 &&
+      length(aws_iam_role_policy.fetcher_station_queue) == 0 && length(aws_iam_role_policy.worker_station_queue) == 0 &&
+      length(aws_cloudwatch_metric_alarm.station_fetch_requests_dlq_depth) == 0 && length(aws_cloudwatch_metric_alarm.station_fetch_requests_age) == 0 &&
+      !contains(keys(aws_lambda_function.worker.environment[0].variables), "STATION_FETCH_REQUESTS_QUEUE_URL") &&
+      !contains([for s in data.aws_iam_policy_document.sqs_endpoint.statement : s.sid], "WorkerSendsStationFetchRequests")
+    )
+    error_message = "Without station API feeds there is no station fetch queue, DLQ, trigger, grant, alarm, endpoint statement or worker setting."
+  }
+  assert {
+    condition     = aws_lambda_function.fetcher.reserved_concurrent_executions == var.fetcher_reserved_concurrency && var.fetcher_reserved_concurrency == 2
+    error_message = "Without station API feeds the fetcher's reserved concurrency is fetcher_reserved_concurrency (2 by default), unchanged."
+  }
+  assert {
+    condition = (
       aws_lambda_function.backend.environment[0].variables["STATION_API_FEEDS"] == "off" &&
       aws_lambda_function.worker.environment[0].variables["STATION_API_FEEDS"] == "off" &&
       aws_lambda_function.fetcher.environment[0].variables["STATION_API_FEEDS"] == "off" &&
@@ -1020,6 +1056,64 @@ run "station_api_feeds_keep_per_feed_fetching_after_the_cutover" {
     condition     = !contains([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement : s.sid], "ReadRuntimeSecretFetcher") && contains([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement : s.sid], "ReadRuntimeSecretWorker")
     error_message = "The private VPC's Secrets Manager endpoint doesn't admit the fetcher (it is outside the VPC, on the public endpoint); the worker's statement stays (positive control)."
   }
+  # Station fetches apart: their own FIFO queue, DLQ and trigger, and the fetcher's ceiling raised by exactly that trigger's 2.
+  assert {
+    condition = (
+      length(aws_sqs_queue.station_fetch_requests) == 1 && aws_sqs_queue.station_fetch_requests[0].fifo_queue &&
+      aws_sqs_queue.station_fetch_requests[0].content_based_deduplication == false &&
+      aws_sqs_queue.station_fetch_requests[0].visibility_timeout_seconds == aws_sqs_queue.fetch_requests[0].visibility_timeout_seconds &&
+      aws_sqs_queue.station_fetch_requests_dlq[0].fifo_queue &&
+      jsondecode(aws_sqs_queue.station_fetch_requests[0].redrive_policy).maxReceiveCount == 5 &&
+      jsondecode(aws_sqs_queue.station_fetch_requests[0].redrive_policy).deadLetterTargetArn == aws_sqs_queue.station_fetch_requests_dlq[0].arn
+    )
+    error_message = "Station API feeds have their own FIFO fetch queue (the fetch-requests visibility), dead-lettering after 5 receives into their own FIFO DLQ."
+  }
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.fetcher_station_requests[0].event_source_arn == aws_sqs_queue.station_fetch_requests[0].arn &&
+      aws_lambda_event_source_mapping.fetcher_station_requests[0].function_name == aws_lambda_function.fetcher.arn &&
+      aws_lambda_event_source_mapping.fetcher_station_requests[0].batch_size == 1 &&
+      aws_lambda_event_source_mapping.fetcher_station_requests[0].scaling_config[0].maximum_concurrency == 2 &&
+      aws_lambda_event_source_mapping.fetcher_requests[0].event_source_arn == aws_sqs_queue.fetch_requests[0].arn &&
+      aws_lambda_event_source_mapping.fetcher_requests[0].scaling_config[0].maximum_concurrency == 2
+    )
+    error_message = "The station queue has its own trigger into the fetcher, at most 2 at once; CHC's and DWS's trigger stays on fetch-requests at 2."
+  }
+  assert {
+    # Station fetches hold at most their trigger's 2, so CHC, DWS and the scheduled modes keep fetcher_reserved_concurrency.
+    condition = (
+      aws_lambda_function.fetcher.reserved_concurrent_executions == var.fetcher_reserved_concurrency + aws_lambda_event_source_mapping.fetcher_station_requests[0].scaling_config[0].maximum_concurrency &&
+      aws_lambda_function.fetcher.reserved_concurrent_executions == 4
+    )
+    error_message = "With station API feeds on, the fetcher's reserved concurrency is fetcher_reserved_concurrency plus the station trigger's 2 (4 by default)."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.worker.environment[0].variables["STATION_FETCH_REQUESTS_QUEUE_URL"] == aws_sqs_queue.station_fetch_requests[0].url &&
+      aws_lambda_function.worker.environment[0].variables["STATION_FETCH_REQUESTS_QUEUE_URL"] != aws_lambda_function.worker.environment[0].variables["FETCH_REQUESTS_QUEUE_URL"]
+    )
+    error_message = "The worker names the station queue, apart from fetch-requests."
+  }
+  assert {
+    condition = (
+      toset(flatten([for s in data.aws_iam_policy_document.worker_station_queue[0].statement : s.resources])) == toset([aws_sqs_queue.station_fetch_requests[0].arn]) &&
+      toset(flatten([for s in data.aws_iam_policy_document.worker_station_queue[0].statement : s.actions])) == toset(["sqs:SendMessage"]) &&
+      aws_iam_role_policy.worker_station_queue[0].role == aws_iam_role.worker_lambda.id &&
+      toset(flatten([for s in data.aws_iam_policy_document.fetcher_station_queue[0].statement : s.resources])) == toset([aws_sqs_queue.station_fetch_requests[0].arn]) &&
+      !contains(flatten([for s in data.aws_iam_policy_document.fetcher_station_queue[0].statement : s.actions]), "sqs:SendMessage") &&
+      aws_iam_role_policy.fetcher_station_queue[0].role == aws_iam_role.fetcher_lambda.id &&
+      contains([for s in data.aws_iam_policy_document.sqs_endpoint.statement : s.sid], "WorkerSendsStationFetchRequests")
+    )
+    error_message = "The worker may only send to the station queue (through the SQS endpoint too), and the fetcher only consume it."
+  }
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.station_fetch_requests_dlq_depth) == 1 &&
+      length(aws_cloudwatch_metric_alarm.station_fetch_requests_age) == 1 &&
+      aws_cloudwatch_metric_alarm.station_fetch_requests_age[0].dimensions["QueueName"] == aws_sqs_queue.station_fetch_requests[0].name
+    )
+    error_message = "The station queue has the fetch-requests alarms: DLQ arrivals and the oldest message's age."
+  }
   assert {
     condition     = length(toset([for s in aws_secretsmanager_secret.runtime : s.arn])) == 4
     error_message = "Positive control: four distinct secret ARNs, so matching the fetcher's grant to its own secret can fail."
@@ -1074,4 +1168,20 @@ run "rejects_a_malformed_private_key" {
   }
 
   expect_failures = [var.feed_credential_private_key]
+}
+
+run "station_api_feeds_add_their_two_to_a_raised_fetcher_ceiling" {
+  command = plan
+
+  variables {
+    station_api_feeds            = true
+    feed_credential_public_key   = "synthetic-feed-public-key-0000000000000000A"
+    feed_credential_private_key  = "synthetic-feed-private-key-000000000000000A"
+    fetcher_reserved_concurrency = 5
+  }
+
+  assert {
+    condition     = aws_lambda_function.fetcher.reserved_concurrent_executions == 7
+    error_message = "The station trigger's 2 is added to whatever fetcher_reserved_concurrency the operator chose (5 + 2)."
+  }
 }

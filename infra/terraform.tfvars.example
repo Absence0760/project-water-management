@@ -89,7 +89,7 @@ feeds_contact = "you@example.com"
 lambda_reserved_concurrency  = 25
 migrate_reserved_concurrency = 1
 # worker_reserved_concurrency   = 8 # at least 8: its four SQS triggers x 2
-# fetcher_reserved_concurrency  = 2
+# fetcher_reserved_concurrency  = 2 # + 2 more reserved while station_api_feeds is on (their own trigger)
 # renderer_reserved_concurrency = 2
 
 # Issued evidence packs' PDFs (packs.tf): Object Lock default retention in

@@ -255,6 +255,11 @@ resource "aws_lambda_function" "worker" {
       local.per_feed_fetching ? {
         FEED_FETCHER             = "sqs"
         FETCH_REQUESTS_QUEUE_URL = one(aws_sqs_queue.fetch_requests[*].url)
+      } : {},
+      # Station API feeds' own fetch queue (feeds.tf, "Station fetches apart"):
+      # their fetches never share fetch-requests or its trigger with CHC's and DWS's.
+      var.station_api_feeds ? {
+        STATION_FETCH_REQUESTS_QUEUE_URL = one(aws_sqs_queue.station_fetch_requests[*].url)
       } : {}
     )
   }
@@ -264,6 +269,7 @@ resource "aws_lambda_function" "worker" {
     aws_iam_role_policy.lambda_logs["worker"],
     aws_iam_role_policy.lambda_vpc_eni["worker"],
     aws_iam_role_policy.worker_lambda,
+    aws_iam_role_policy.worker_station_queue,
     aws_iam_role_policy.worker_dem,
     aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.sqs,
@@ -460,6 +466,20 @@ data "aws_iam_policy_document" "sqs_endpoint" {
     for_each = aws_sqs_queue.fetch_requests
     content {
       sid       = "WorkerSendsFetchRequests"
+      actions   = ["sqs:SendMessage"]
+      resources = [statement.value.arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.worker_lambda.arn]
+      }
+    }
+  }
+
+  # Station API feeds' own fetch queue, while they are on (feeds.tf).
+  dynamic "statement" {
+    for_each = aws_sqs_queue.station_fetch_requests
+    content {
+      sid       = "WorkerSendsStationFetchRequests"
       actions   = ["sqs:SendMessage"]
       resources = [statement.value.arn]
       principals {

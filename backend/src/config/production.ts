@@ -189,6 +189,17 @@ const feedCredentialPrivateKeyFor: Check = (v, env) => (env === undefined || sta
 /** The public key on the API: required with STATION_API_FEEDS=on (the attach route seals with it), checked when set otherwise. */
 const feedCredentialPublicKeyFor: Check = (v, env) => (env === undefined || stationApiFeedsOn(env) ? feedCredentialPublicKey(v) : optional(feedCredentialPublicKey)(v));
 
+/**
+ * STATION_FETCH_REQUESTS_QUEUE_URL on the worker: station API feeds' own fetch queue (infra/feeds.tf, issue #784),
+ * required with STATION_API_FEEDS=on (and without an env, so Terraform must set it), checked when set otherwise, and
+ * never the shared fetch-requests queue: station fetches must not take CHC's and DWS's trigger.
+ */
+const stationFetchRequestsUrlFor: Check = (v, env) => {
+	const p = env === undefined || stationApiFeedsOn(env) ? publicHttps(v) : optional(publicHttps)(v);
+	if (p) return p;
+	return set(v) && v.trim() === env?.FETCH_REQUESTS_QUEUE_URL?.trim() ? 'must be its own queue, not FETCH_REQUESTS_QUEUE_URL (station fetches would take CHIRPS’s and DWS’s fetcher slots)' : null;
+};
+
 /** FETCH_REQUESTS_QUEUE_URL on the worker: required with FEED_FETCHER=sqs (a send to no queue fails every fetch), else checked only when set. */
 const fetchRequestsUrlFor: Check = (v, env) => (env === undefined || env.FEED_FETCHER?.trim() === 'sqs' ? publicHttps(v) : optional(publicHttps)(v));
 
@@ -434,6 +445,10 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { worker: feedFetcherFor }
 	},
 	FETCH_REQUESTS_QUEUE_URL: { why: 'Where the worker sends fetch requests: required with FEED_FETCHER=sqs; Terraform sets it only while the queue exists.', checks: { worker: fetchRequestsUrlFor } },
+	STATION_FETCH_REQUESTS_QUEUE_URL: {
+		why: 'Where the worker sends station API feeds’ fetch requests (jobs/handlers/feed-fetch.ts fetchQueue, issue #784): their own FIFO queue and fetcher trigger (infra/feeds.tf, "Station fetches apart"), so slow station hosts an owner chose can’t hold the trigger CHIRPS and DWS fetches use. Terraform sets it only with station_api_feeds on; required then, and never the same as FETCH_REQUESTS_QUEUE_URL. A station feed’s fetch never falls back to the shared queue. The API bundles the handler but runs no fetch job.',
+		checks: { worker: stationFetchRequestsUrlFor }
+	},
 	FEED_SOURCE: {
 		why: 'fixtures (the default) is synthetic data. Only the fetcher fetches in production, but it is also which CHIRPS cell cache a process reads (feeds/cellCacheStore.ts cacheOrigin: live reads the chc rows the worker merges, fixtures a set production never fills), so a run started on the API with it unset reads no CHIRPS cell for its reference cell or rainfall stations, and the Data feeds panel calls live feeds sample data. Every Lambda that reaches it must say live (the assistant too: it carries the API’s modules, and its tools read the same runs and feeds).',
 		checks: { api: oneOf('live'), worker: oneOf('live'), fetcher: oneOf('live'), assistant: oneOf('live') }
