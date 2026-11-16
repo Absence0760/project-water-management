@@ -11,7 +11,7 @@ import { credentialBinding, openFeedCredential } from './credential.js';
 
 /** What a key saved on feed `id` with config() is sealed to. */
 const bound = (id: string, cfg: Record<string, unknown> = config()) => credentialBinding(id, cfg as { url: string; auth: { kind: string; name?: string } });
-import { CREDENTIAL_MISSING_WARNING, STATION_API_OFF_MESSAGE } from './routes.js';
+import { CREDENTIAL_MISSING_WARNING, MAX_STATION_FEEDS, STATION_API_OFF_MESSAGE } from './routes.js';
 import { feedForJob } from './store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -308,5 +308,24 @@ describe('station API feed: a key goes only where it was saved for (issue #784 r
 		expect(res.status).toBe(400);
 		expect(res.body.error).toBe(STATION_API_OFF_MESSAGE);
 		expect(await sealedOf(fid)).toBeNull();
+	});
+});
+
+describe('station API feed: the per-project cap (issue #784 security review)', () => {
+	it('a project takes at most MAX_STATION_FEEDS station feeds, attached or moved onto the source; other feeds are unaffected', async () => {
+		const owner = await signUp('StationCap');
+		const pid = await project(owner);
+		for (let i = 0; i < MAX_STATION_FEEDS; i++) {
+			expect((await owner.call('POST', `/projects/${pid}/feeds`, station({ targetName: `Gauge ${i}` }))).status).toBe(201);
+		}
+		const over = await owner.call('POST', `/projects/${pid}/feeds`, station({ targetName: 'One too many' }));
+		expect(over.status).toBe(409);
+		expect(over.body.error).toBe(`a project can have at most ${MAX_STATION_FEEDS} weather station API feeds`);
+		// Positive control: another source still attaches.
+		const chirps = await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] }, enabled: false });
+		expect(chirps.status).toBe(201);
+		// Moving it onto the source counts too.
+		const moved = await owner.call('PATCH', `/projects/${pid}/feeds/${chirps.body.feed.id}`, { source: 'station_api', config: config(), targetKind: 'rain_catchment_mm', targetName: 'Moved' });
+		expect(moved.status).toBe(409);
 	});
 });

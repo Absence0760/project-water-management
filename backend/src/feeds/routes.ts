@@ -302,11 +302,24 @@ const credentialWarning = (feed: FeedMeta | null): string | undefined =>
  * Count and insert one attach at a time per project, so concurrent attaches
  * can't pass the cap together: takes the project's lock, then refuses past MAX_FEEDS.
  */
-export async function attachSlot(db: Db, projectId: string): Promise<void> {
+export async function attachSlot(db: Db, projectId: string, source?: string): Promise<void> {
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('data_feed_cap:' || $1::text, 0))`, [projectId]);
-	const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM data_feed WHERE project_id = $1', [projectId]);
+	const { rows } = await db.query<{ n: number; stations: number }>(
+		`SELECT count(*)::int AS n, count(*) FILTER (WHERE source = 'station_api')::int AS stations FROM data_feed WHERE project_id = $1`,
+		[projectId]
+	);
 	if (rows[0]!.n >= MAX_FEEDS) throw new ApiError(409, `a project can have at most ${MAX_FEEDS} feeds`);
+	if (source === 'station_api' && rows[0]!.stations >= MAX_STATION_FEEDS) {
+		throw new ApiError(409, `a project can have at most ${MAX_STATION_FEEDS} weather station API feeds`);
+	}
 }
+
+/**
+ * The most station API feeds a project may have (issue #784 security review): each asks a host its owner chose, and
+ * sign-up is open, so the fetcher time one project can claim is bounded here as well as per feed. A catchment has a
+ * handful of rain gauges; more is a request to the operator.
+ */
+export const MAX_STATION_FEEDS = 10;
 
 /**
  * The boundary mark (config.ts BoundaryMark) is written by the from-boundary
@@ -371,7 +384,7 @@ export const feedRoutes = new Hono<AuthEnv>()
 		const feed = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			if (input.source === 'station_api' && !stationApiFeedsOn()) throw new ApiError(400, STATION_API_OFF_MESSAGE);
-			await attachSlot(db, id);
+			await attachSlot(db, id, input.source);
 			await refuseTakeOver(db, id, input);
 			const { input: checked, replaceFrom } = await versionCheck(db, id, input, true);
 			const fid = await createFeed(db, id, checked, replaceFrom ?? null).catch(conflict);
@@ -413,7 +426,10 @@ export const feedRoutes = new Hono<AuthEnv>()
 				...(patch.credential ? { credential: patch.credential } : {})
 			});
 			// Moving a feed onto the source is attaching one: refused while the server has them off.
-			if (input.source === 'station_api' && cur.source !== 'station_api' && !stationApiFeedsOn()) throw new ApiError(400, STATION_API_OFF_MESSAGE);
+			if (input.source === 'station_api' && cur.source !== 'station_api') {
+				if (!stationApiFeedsOn()) throw new ApiError(400, STATION_API_OFF_MESSAGE);
+				await attachSlot(db, id, 'station_api');
+			}
 			// Clearing a key is a station API feed's alone, as saving one is.
 			if (patch.credential === null && input.source !== 'station_api') throw new ApiError(400, credentialProblem(input.source, input.config)!);
 			// Asked when the save changes where the feed writes or what it writes (source, product, target).

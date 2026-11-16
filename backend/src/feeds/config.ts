@@ -366,7 +366,7 @@ export const STATION_URL_MAX = 2000;
 /** The most requests one fetch makes (one per maxDaysPerRequest days); a longer backfill continues on the next fetch. */
 export const STATION_MAX_REQUESTS = 24;
 /** Query parameter names that carry a key: one in the typed URL is refused, so a key never sits where viewers read it. */
-export const STATION_KEY_PARAMS = /key|token|secret|passw|^pass$|^pwd$|sig|auth|appid|credential|session/i;
+export const STATION_KEY_PARAMS = /key|token|secret|pass|^pwd$|sig|auth|app_?id|credential|session|jwt|bearer|hmac|^code$|^otp$|^pin$|^hash$|^access$|licen[cs]e/i;
 /** Header names that carry a key the same way: refused as extra headers (choose “Header” as how the key is sent). */
 export const STATION_KEY_HEADERS = /key|token|secret|passw|auth|sig|credential|session|cookie/i;
 /**
@@ -494,6 +494,10 @@ export type StationApiConfig = z.output<typeof StationApiConfig>;
 export function stationUrlProblem(raw: string): string | null {
 	const unknown = raw.match(/\{[^}]*\}/g)?.find((p) => !(STATION_PLACEHOLDERS as readonly string[]).includes(p));
 	if (unknown) return `${unknown} is not a placeholder: use {station}, {start} and {end}`;
+	// The site itself is fixed: a placeholder in the host would let an edit of the station ID (or the dates) send the
+	// key to another site while its binding (credential.ts credentialBinding) still read the same origin.
+	const authority = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(raw.trim())?.[1] ?? '';
+	if (authority.includes('{')) return 'the URL’s site (its host) must be written out: put {station}, {start} and {end} in its path or query';
 	const url = URL.parse(raw.replace(/\{(station|start|end)\}/g, 'x'));
 	if (!url) return 'not a valid URL (it starts https://)';
 	const problem = urlProblem(url);

@@ -118,6 +118,14 @@ export const OWN_UPSTREAM_HOSTS: readonly string[] = [
 	'cds.climate.copernicus.eu',
 	'power.larc.nasa.gov',
 	'ecmwf-forecasts.s3.eu-central-1.amazonaws.com',
+	'nex-gddp-cmip6.s3.us-west-2.amazonaws.com',
+	'chc.ucsb.edu',
+	'.chc.ucsb.edu',
+	'.storage.googleapis.com',
+	// Path-style S3 in the regions our buckets live in (s3.<region>.amazonaws.com/<bucket>/…).
+	's3.af-south-1.amazonaws.com',
+	's3.eu-central-1.amazonaws.com',
+	's3.us-west-2.amazonaws.com',
 	'.earthdata.nasa.gov',
 	'.eosdis.nasa.gov'
 ];
