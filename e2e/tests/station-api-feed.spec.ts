@@ -83,7 +83,11 @@ test('an owner attaches a station API feed with a key, tries a sample, runs it, 
 	await expect(urlField.getByRole('alert')).toHaveText('The URL points at a private or reserved address.');
 	await expect(form.getByLabel('The API’s URL')).toBeFocused();
 	await expect(form.getByLabel('The API’s URL')).toHaveAttribute('aria-invalid', 'true');
+	// Editing the field steps its problem aside (it may no longer be true); the next Attach checks again.
 	await form.getByLabel('The API’s URL').fill(URL_TEMPLATE);
+	await expect(urlField.getByRole('alert')).toHaveCount(0);
+	await expect(form.getByLabel('The API’s URL')).not.toHaveAttribute('aria-invalid');
+	await expect(form.getByLabel('The API’s URL')).not.toHaveAccessibleDescription(/private or reserved/);
 
 	// A problem inside a closed fold opens it and focuses the field.
 	const requests = form.getByTestId('station-requests');

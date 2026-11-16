@@ -63,8 +63,19 @@
 	let sample = $state('');
 	let preview = $state<{ result: StationPreviewResult } | { error: string } | null>(null);
 
+	/**
+	 * Whether the owner has changed the field the problem is about since it was shown: the problem then steps aside
+	 * (its words, the field's invalid mark and its description), since it may no longer be true. The next Attach
+	 * checks again (build), and shows it again if it still is.
+	 */
+	let edited = $state(false);
+	const onEdit = (e: Event) => {
+		if (errorField && (e.target as HTMLElement | null)?.id === `${uid}-${errorField}`) edited = true;
+	};
+
 	/** The request body's parts, or the first problem and its field (the panel shows it and focuses the field). */
 	export function build(): { body: StationBody } | { error: string; field: StationField } {
+		edited = false;
 		return stationDraftToBody(d, name);
 	}
 
@@ -103,16 +114,18 @@
 		}
 	}
 
-	const inv = (f: StationField) => (errorField === f ? true : undefined);
-	const desc = (f: StationField, ...ids: string[]) => [...ids, errorField === f ? errorId : ''].filter(Boolean).join(' ') || undefined;
+	/** The field whose problem is showing: the panel's, until the owner edits that field. */
+	const shownField = $derived(edited ? null : errorField);
+	const inv = (f: StationField) => (shownField === f ? true : undefined);
+	const desc = (f: StationField, ...ids: string[]) => [...ids, shownField === f ? errorId : ''].filter(Boolean).join(' ') || undefined;
 	const hours = Array.from({ length: 24 }, (_, h) => h);
 </script>
 
 <!-- The fields in the order someone reads their provider's documentation: which API and station, the key, how to read the
      answer, then a sample; the rarely changed ones folded into their values. A problem shows under its own field. -->
-<div class="station" data-testid="station-api-form">
+<div class="station" data-testid="station-api-form" oninput={onEdit} onchange={onEdit}>
 	{#snippet problem(f: StationField)}
-		{#if error && errorField === f}<p class="err num-err" id={errorId} role="alert">{error}</p>{/if}
+		{#if error && shownField === f}<p class="err num-err" id={errorId} role="alert">{error}</p>{/if}
 	{/snippet}
 
 	<h4 class="sub first">The API and the station</h4>
