@@ -267,7 +267,7 @@ Keys this app needs:
 | `db_app_password` | The `water_app` role's password (RLS-bound runtime role; 24+ alphanumeric characters): in the API's and worker's `DATABASE_URL` and the migrate Lambda's `WATER_APP_PASSWORD`, each in that Lambda's runtime secret |
 | `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links and the "Was this useful?" links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent, and the feedback links of the last 30 days |
 | `app_encryption_key` | `APP_ENCRYPTION_KEY` in the API's runtime secret: seals two-step sign-in's TOTP secrets at rest (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it voids every authenticator ([§ Runbooks](#runbooks) 15) |
-| `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
+| `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars.sops` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
 
 The key list is `infra/prod.sops.yaml.example`. There is no `db_owner_password`
 key: the owner/migration role always uses RDS-managed master credentials in
@@ -327,7 +327,7 @@ until it has).
 
 The API signs report download links with `cloudfront_private_key` (sops);
 CloudFront trusts the public keys in `report_download_public_keys`
-(`prod.tfvars`, name → PEM) through one key group, and
+(`prod.tfvars.sops`, name → PEM) through one key group, and
 `report_download_signing_key` names the entry the private key belongs to.
 First setup, and every rotation, generate the pair outside any repo:
 
@@ -335,7 +335,8 @@ First setup, and every rotation, generate the pair outside any repo:
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out report-downloads.key && openssl pkey -in report-downloads.key -pubout
 ```
 
-The second command prints the public key for `prod.tfvars`; the private key
+The second command prints the public key for `prod.tfvars.sops`
+(`AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`); the private key
 goes into sops as `cloudfront_private_key` (a YAML block scalar), then delete
 `report-downloads.key`. To rotate without a single failed download, overlap
 the two keys:
@@ -498,7 +499,9 @@ Fill in `backend.config` (the tfstate bucket) and `terraform.tfvars`:
 `water-management.jaredhoward.com`; `{}` once retired),
 `bootstrap_slug = "water-management"`, the region, the budget
 email and the DMARC report mailbox. Both files are gitignored (the estate
-keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
+keeps the canonical tfvars sops-encrypted in `infra-secrets/water-management/prod.tfvars.sops`;
+edit it with `AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`, and pass the `.sops` file itself as the var file to
+`scripts/tf.sh` and the check scripts, which decrypt it to a private temporary copy).
 
 Before the first plan, run the read-only pre-apply check (the Lambda
 concurrency quota against the reservations, the state bucket and sops key in
@@ -508,7 +511,7 @@ the database KMS key alarm needs; PASS/FAIL per check, exit 1 on any FAIL;
 infra/README.md § Operator steps, step 7a):
 
 ```bash
-cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
+cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops
 ```
 
 ```bash
@@ -600,7 +603,7 @@ without the shared secret (infra/README.md § Operator steps, steps 8, 10a
 and 10c; `--rds-event-test` proves RDS events reach the topic):
 
 ```bash
-cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
+cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops
 ```
 
 While `redirect_domains` holds a former hostname, add `--redirect-from <host>`
@@ -1893,7 +1896,7 @@ addresses.
 - **Cost.** About $13 a month in af-south-1: the instance, the Elastic IP's
   public-IPv4 charge and 8 GB of gp3. No per-GB processing charge.
 - **Turning it on takes two applies.** Set `fixed_egress_enabled = true` in
-  the prod tfvars (`infra-secrets/water-management/prod.tfvars`), then:
+  the prod tfvars (`infra-secrets/water-management/prod.tfvars.sops`), then:
   1. `scripts/tf.sh plan -target=module.fixed_egress …` and apply it: the
      egress VPC and NAT instance only (24 resources).
   2. A plain plan and apply (§ Runbooks, `scripts/tf.sh`): both Lambdas
@@ -1918,7 +1921,7 @@ addresses.
   reboot, and Terraform ignores newer AMIs so an unrelated apply never
   replaces the instance. Every few months (or for a kernel advisory), replace
   it on purpose:
-  `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace='module.fixed_egress[0].aws_instance.nat'`
+  `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars.sops -replace='module.fixed_egress[0].aws_instance.nat'`
   (review the plan it shows: only the instance is replaced).
   The address stays (the Elastic IP moves to the new instance); outbound calls stop for the minute or two the
   new instance takes to boot, so do it outside 02:00–03:30 and 08:30–12:00
@@ -4454,7 +4457,7 @@ the backend treats an unset value on Lambda as closed too ([security.md §
 Sign-up by invitation](./security.md#sign-up-by-invitation)); people then
 join only through an invite from a project or team member. Production ran
 that way from 2026-10-05 and has been **open since 2026-10-06**
-(`signup_open = true` in `prod.tfvars`, applied), before go-live Gates A and
+(`signup_open = true` in `prod.tfvars.sops`, applied), before go-live Gates A and
 C in [legal-status.md](./legal-status.md). To close it again, set it back to
 `false`, plan and apply (no release needed).
 
@@ -4497,8 +4500,8 @@ IDs as you go (`Z…`, without the `/hostedzone/` prefix):
 6. Delegate the new zone from the parent (the same NS record the bootstrap's stage 3 wrote for the old zone, here by hand): `aws route53 change-resource-record-sets --hosted-zone-id <PARENT_ZONE_ID> --profile dns-parent --change-batch '{"Changes":[{"Action":"CREATE","ResourceRecordSet":{"Name":"icwbt.jaredhoward.com","Type":"NS","TTL":3600,"ResourceRecords":[{"Value":"<NS1>"},{"Value":"<NS2>"},{"Value":"<NS3>"},{"Value":"<NS4>"}]}}]}'`
 7. Wait until the delegation resolves (the four servers from step 4): `dig +short NS icwbt.jaredhoward.com`
 8. Look up the old zone's ID: `aws route53 list-hosted-zones-by-name --dns-name water-management.jaredhoward.com --max-items 1 --profile water-management --query 'HostedZones[0].[Name,Id]' --output text`
-9. In `infra-secrets/water-management/prod.tfvars` set `domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id = "<NEW_ZONE_ID>"` and `redirect_domains = { "water-management.jaredhoward.com" = "<OLD_ZONE_ID>" }`, remove any `mail_from_display_name` line (the default is now `IC-WBT`), and commit it there.
-10. Plan: `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+9. In `infra-secrets/water-management/prod.tfvars.sops` (`AWS_PROFILE=water-management sops ~/github/infra-secrets/water-management/prod.tfvars.sops`) set `domain_name = "icwbt.jaredhoward.com"`, `route53_zone_id = "<NEW_ZONE_ID>"` and `redirect_domains = { "water-management.jaredhoward.com" = "<OLD_ZONE_ID>" }`, remove any `mail_from_display_name` line (the default is now `IC-WBT`), and commit it there.
+10. Plan: `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars.sops -out="$HOME/.cache/water-management/prod.tfplan"`
     The plan should show: the certificate replaced (create before destroy) for `icwbt.jaredhoward.com` with the old name as a SAN, and a validation record for the new name; the distribution updated in place (aliases, certificate) and `spa_rewrite` updated; `aws_route53_record.site_a` and `site_aaaa` **moved** to `["water-management.jaredhoward.com"]` with no change, plus new `["icwbt.jaredhoward.com"]` records; the SES identity replaced, with its DKIM, MAIL FROM and DMARC records recreated in the new zone and deleted from the old; the WAF CAPTCHA API key replaced; the Lambdas' `MAIL_FROM`, `SITE_URL`, `ALLOWED_ORIGINS` and `RENDER_SITE_URL`, and the From pins in the IAM and SES endpoint policies, updated. No database, bucket, queue or secret change: stop and ask if there is one.
 11. Apply, in a quiet hour: `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
     Until SES has verified the new domain (minutes, up to an hour), sends fail: the request still answers, the failure is logged, and `mail-send-failed` may fire. SES production access belongs to the account, so it carries over. Go on to steps 12–15 straight away: until the web release (step 15) the old build's sign-in CAPTCHA key no longer exists.
@@ -4506,7 +4509,7 @@ IDs as you go (`Z…`, without the `/hostedzone/` prefix):
 13. Push the changed outputs (`PUBLIC_SITE_URL` and the new `WAF_CAPTCHA_API_KEY`) to GitHub: `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`
 14. Release the backend (the new name in emails and the authenticator label), and approve it in the `production` environment ([§ Releasing](#releasing)): `gh release create backend@<next version> --target main --generate-notes`
 15. Once that deploy has finished, release the web app, which ships the new name and carries the new CAPTCHA key (the old build's key no longer exists, so until this release a sign-in that hits the CAPTCHA can't solve it): `gh release create web@<next version> --target main --generate-notes`
-16. Run the post-apply check, with the redirect: `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars --redirect-from water-management.jaredhoward.com`
+16. Run the post-apply check, with the redirect: `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars.sops --redirect-from water-management.jaredhoward.com`
 17. Point the repository's website at the new address: `gh repo edit Absence0760/project-water-management --homepage https://icwbt.jaredhoward.com`
 
 What people notice: the session cookie belongs to the host, so anyone signed
@@ -5060,7 +5063,7 @@ replace or destroy; don't apply one.
    (`terraform init -backend-config=backend.config`, § 3).
 3. Dry run. It makes only read calls (the caller, `terraform output`, the
    instance, its restore window) and prints every command it would run:
-   `infra/scripts/restore-db.sh --region <region> --profile water-management --var-file ../infra-secrets/water-management/prod.tfvars --restore-time 2026-09-28T08:15:00Z`
+   `infra/scripts/restore-db.sh --region <region> --profile water-management --var-file ../infra-secrets/water-management/prod.tfvars.sops --restore-time 2026-09-28T08:15:00Z`
    (or `--latest`, or `--snapshot <id>`). It refuses a time outside the
    restore window, a region that isn't the stack's, and a missing profile or
    region.
@@ -5070,7 +5073,7 @@ replace or destroy; don't apply one.
    15 to 30 minutes for a small database. If it stops part-way, it prints
    where and the command that finishes or undoes that step.
 5. Read the plan it printed, then apply it (the script never applies):
-   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`.
+   `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars.sops`.
 6. Invoke the migrate Lambda (the script prints the command). It applies any
    migration newer than the restore point and resets `water_app`'s password.
 6a. **Re-apply erasures and revocations** (POPIA s14(4), s24; provisional

@@ -1,6 +1,7 @@
 # Copy to terraform.tfvars (gitignored) — or, per the estate pattern, keep the
-# canonical copy in the private repo as infra-secrets/water-management/prod.tfvars
-# and pass it with -var-file (infra/README.md § First apply). Nothing here is
+# canonical copy in the private repo, sops-encrypted, as
+# infra-secrets/water-management/prod.tfvars.sops and pass that with -var-file
+# (scripts/tf.sh decrypts it) (infra/README.md § First apply). Nothing here is
 # secret; secrets come from infra-secrets/water-management/prod.sops.yaml
 # through infra/scripts/tf.sh (ephemeral variables, secrets.tf), never from
 # tfvars.

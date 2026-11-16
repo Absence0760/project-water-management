@@ -82,7 +82,7 @@ The checklist for these is issue #62; the history scrub is #63.
          `aws ec2 describe-vpc-endpoint-services --region af-south-1 --service-names com.amazonaws.af-south-1.bedrock-runtime --query 'ServiceDetails[0].ServiceName' --output text`
          (expect the name back), and that the Lambda concurrency quota
          covers 2 more reserved (infra/README.md § Operator steps).
-      4. Set `assistant_enabled = true` in `prod.tfvars`, plan, and apply
+      4. Set `assistant_enabled = true` in `prod.tfvars.sops`, plan, and apply
          through `scripts/tf.sh`.
       5. Re-run `~/github/templates/scripts/export-tf-vars.sh infra/` so the
          repository variable `ASSISTANT_FUNCTION_NAME` exists, then release

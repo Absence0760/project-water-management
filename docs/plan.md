@@ -424,7 +424,7 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, 
 - ✅ Secrets (2026-10-04): `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`,
   then `sops water-management/prod.sops.yaml` with the keys in
   `infra/prod.sops.yaml.example` (the owner/migration password is RDS-managed,
-  not a sops key). `prod.tfvars` sits beside it. Terraform gets them as ephemeral variables
+  not a sops key). `prod.tfvars.sops` (the non-secret variables, sops-encrypted too) sits beside it. Terraform gets them as ephemeral variables
   through `infra/scripts/tf.sh` (`sops exec-env`), so they stay out of state
   too (issue #126). Plaintext never touches this repo.
 - ✅ **Region** (af-south-1 enabled 2026-10-04). Given POPIA and latency to South Africa, `af-south-1` (Cape

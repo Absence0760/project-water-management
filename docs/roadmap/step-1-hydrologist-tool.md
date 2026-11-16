@@ -835,7 +835,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - Check that RDS PG17 on t4g.micro is offered there:
       `aws rds describe-orderable-db-instance-options --engine postgres --engine-version 17 --db-instance-class db.t4g.micro --region af-south-1`.
     - If af-south-1: set `budget_monthly_usd ≈ 70` and `dmarc_report_email`
-      in `infra-secrets/water-management/prod.tfvars`.
+      in `infra-secrets/water-management/prod.tfvars.sops`.
   - Also:
     - request the SES production-access review early (step 8a takes about a
       day);
