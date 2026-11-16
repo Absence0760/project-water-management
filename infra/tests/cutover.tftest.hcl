@@ -1017,6 +1017,10 @@ run "station_api_feeds_keep_per_feed_fetching_after_the_cutover" {
     error_message = "The fetcher may read its own runtime secret, and nothing else; the worker's grant stays on the worker's role."
   }
   assert {
+    condition     = !contains([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement : s.sid], "ReadRuntimeSecretFetcher") && contains([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement : s.sid], "ReadRuntimeSecretWorker")
+    error_message = "The private VPC's Secrets Manager endpoint doesn't admit the fetcher (it is outside the VPC, on the public endpoint); the worker's statement stays (positive control)."
+  }
+  assert {
     condition     = length(toset([for s in aws_secretsmanager_secret.runtime : s.arn])) == 4
     error_message = "Positive control: four distinct secret ARNs, so matching the fetcher's grant to its own secret can fail."
   }

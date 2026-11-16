@@ -2872,7 +2872,9 @@ In short:
   - Only fixed hosts are fetched: the URL is built from the source and a
     validated config (cells or a bounding box as numbers in range, a station matching
     `^[A-Z]\d[A-Z]\d{3}$`), never from user text, so a feed can't be pointed
-    at an arbitrary URL (no SSRF). The live client enforces it too: it asks
+    at an arbitrary URL (no SSRF). The one exception is a station API feed,
+    whose URL its owner types; it has its own guarded client and rules
+    ([§ Station API feeds](#station-api-feeds)). The live client enforces it too: it asks
     only those two hosts over HTTPS (`FEED_HOSTS`, `feeds/http.ts`) and
     follows redirects itself, at most 3, each re-checked, so a redirect
     can't send the fetcher (open egress) to another host or plain HTTP.
@@ -3169,6 +3171,124 @@ In short:
   the file name is the summary CSV's server-made ASCII slug. The worker loads
   from `'self'` only (`worker-src 'self'`), and it only writes (`writer.ts`); it
   never parses anything uploaded.
+
+### Station API feeds
+
+A station API feed (issue #784, `data_feed.source = 'station_api'`,
+321_feed_source_station_api) reads a rainfall station from whatever web API
+its provider offers: the owner types the URL template, how the key is sent
+and how to read the answer. It is the one feed path that asks a URL a person
+typed rather than one of `FEED_HOSTS`, and the one that sends a credential
+of the owner's to a third party. Off in production until the operator sets
+`station_api_feeds` ([deployment.md § Station API feeds](./deployment.md#station-api-feeds));
+`STATION_API_FEEDS=on` is what lets the attach route accept one.
+
+**The SSRF guard** (`backend/src/feeds/stationUrl.ts`, `stationHttp.ts`).
+The fetcher has open internet egress, so the client, not the network, keeps
+a typed URL (or a redirect, or a DNS answer) from reaching anything but a
+public HTTPS server:
+
+- **https on port 443 only**, no `user:password@` in the URL, no fragment;
+  the host must be a public name (not `localhost`, `*.localhost`,
+  `*.internal`, `*.local` or a single label). Checked when the feed is saved
+  (`stationUrlProblem`, `feeds/config.ts`) and again before every request and
+  every redirect hop.
+- **Address ranges refused**, IPv4: `0.0.0.0/8`, `10/8`, `100.64/10` (CGNAT),
+  `127/8`, `169.254/16` (link-local: the Lambda runtime and metadata APIs),
+  `172.16/12`, `192.0.0/24`, the documentation nets, `192.88.99/24`,
+  `192.168/16`, `198.18/15`, multicast and `240/4`. IPv6: anything outside
+  `2000::/3` (so loopback, unspecified, IPv4-compatible, ULA including EC2's
+  `fd00:ec2::254`, link- and site-local, multicast), and inside it NAT64,
+  Teredo, 6to4, documentation and `3fff::/20`; an IPv4-mapped address is
+  judged by its IPv4 (`addressAllowed`).
+- **DNS pinned at connect time.** A hostname resolves through
+  `guardedLookup`, Node's `lookup` option on the request: it refuses the
+  whole name if **any** address it returns is refused, and Node connects
+  only to the addresses that lookup returned, so a name that answers
+  differently a second time (DNS rebinding) gains nothing. An IP literal
+  never reaches a lookup, so it is checked before the request. No proxy is
+  ever configured on the fetcher (no `HTTPS_PROXY` / `NODE_USE_ENV_PROXY`:
+  a proxy would resolve the name itself, past the pinned lookup;
+  `infra/tests/cutover.tftest.hcl` checks the fetcher's environment). With
+  `fixed_egress_enabled` the fetcher sits in the egress VPC behind a NAT
+  instance; the guard is unchanged, and that VPC's own addresses are private
+  ones it refuses.
+- **Redirects followed by hand**, at most 3, and **only within the URL's own
+  origin**: one to another site fails with a message naming that site, so
+  the key is never sent anywhere the owner didn't type.
+- **Bounded**: one 30 s deadline over every hop and the body, an 8 MB cap
+  counted while reading (and on a declared `Content-Length`),
+  `Accept-Encoding: identity` with a compressed answer refused (no
+  decompression bomb), at most 24 requests a fetch (`STATION_MAX_REQUESTS`;
+  a longer backfill continues on the next fetch), one request at a time per
+  host at a polite pace (`hostPacer`), our user agent with the operator's
+  contact (`FEEDS_CONTACT`).
+- **Header validation**: at most 8 extra headers, each name and value checked
+  by Node's own validators (no CR/LF), values ≤ 4096 characters, and names
+  the transport or the app sets refused (`Host`, `Content-Length`,
+  `Transfer-Encoding`, `Connection`, `Cookie`, `User-Agent`,
+  `Accept-Encoding`, `Proxy-*`, `Sec-*`, …). A key-carrying header
+  (`Authorization`, `X-Api-Key`, …) can't be an extra header, whose value
+  every viewer reads: it must be the auth method, whose value is sealed.
+- **Errors are ours.** A stored or shown error never quotes the answer's
+  body, the URL's query (it may carry a key) or the key; a URL in a message
+  is scheme, host and path only (`safeUrl`), and the fetcher's log carries a
+  fixed label (`STATION_FAILURES`).
+
+**Credential sealing** (`backend/src/feeds/credential.ts`). The secret part
+(a token, a key, a password, Basic's user name) is sealed by the API to the
+fetcher's X25519 public key (`FEED_CREDENTIAL_PUBLIC_KEY`): ECIES with a
+fresh ephemeral key per seal, HKDF-SHA256, AES-256-GCM, the feed's id as the
+additional authenticated data, so a sealed credential copied onto another
+feed's row (or another project's) doesn't open.
+
+- **Who can open it: only the fetcher.** The private key
+  (`FEED_CREDENTIAL_PRIVATE_KEY`) is the fetcher Lambda's runtime secret
+  (§ Runtime secrets), from sops, readable by the fetcher's role alone. The
+  database (`data_feed_credential`: owners write, editors read the sealed
+  bytes for the fetch job, RLS), a dump of it, the API (it only seals) and
+  the production worker (it forwards the sealed bytes to the fetcher over
+  the fetch-requests queue, unopened) hold ciphertext. Production refuses
+  to start the API or the worker with the private key set, and the fetcher
+  with it set while station API feeds are off (`config/production.ts`).
+  Locally the worker fetches inline, so it holds the committed dev-only
+  pair, which production refuses (the public half by value, the private
+  half by what it decodes to).
+- **Write-only.** The card shows only "key saved · ends …abcd" (the last four
+  characters, and only for a secret of 16 or more) and **Replace key**. The
+  key is never in an API response, an export, the feed's history (a change
+  is recorded as `saved`, `replaced` or `cleared`), an audit event, a log
+  line or an error message.
+- **Never in the URL.** A URL template whose query carries a key-like
+  parameter (`api_key`, `key`, `token`, `access_token`, `signature`, …,
+  `STATION_KEY_PARAMS`) is refused at save, since every viewer reads the
+  config: the key goes in the key field with "Query parameter" as the
+  method, and is added only when the request is made.
+- **Rotation** of the fetcher's key voids every saved station key: each feed
+  then says its key can't be opened, and its owner enters it again.
+
+**401 and 403 back off for hours.** A station API that refuses the saved key
+(HTTP 401 or 403, `FeedKeyRefusedError`) is treated like a source that
+blocked us: the feed's error says to check or replace the key, and the
+scheduler backs it off 2 h × 2ⁿ (242_feed_refused_backoff) rather than
+retrying, so a wrong or revoked key never hammers the owner's provider
+account into a lockout. A 429 or 503 waits for its `Retry-After`.
+
+**What remains (accepted).** A hostile URL owner, an owner of a project, can
+make our fetcher send `GET` requests to any public HTTPS host on port 443 of
+their choosing, with headers they choose (within the rules above): at most
+24 requests per feed per fetch, a fetch a day plus a rate-limited
+**Run now** (6, then one every 10 minutes), on at most 60 feeds per project
+(`MAX_FEEDS`). The requests come from our fetcher's address (the egress
+VPC's Elastic IP with `fixed_egress_enabled`), so a target could block it
+for every feed, CHC's included; the answers are parsed as rainfall and
+bounded, never shown raw. Owners are trusted to that degree (they are
+named, invited, and every change is in the feed's history). A provider's
+terms and licence are the project owner's responsibility
+([data-sources.md § station-api](./data-sources.md#station-api)).
+Guards: `feeds/stationHttp.test.ts`, `feeds/config.test.ts`,
+`feeds/credential.test.ts`, `feeds/stationApiFeed.db.test.ts`,
+`config/production.security.test.ts`, `config/runtimeSecrets.test.ts`.
 
 ### Import reports
 
@@ -4239,7 +4359,9 @@ readable by anyone. The rules:
   nothing is written to Terraform state either ([§ Runtime
   secrets](#runtime-secrets)). See `../infra-secrets/README.md`.
 - This app's production secrets: `AUTH_JWT_SECRET`, the `water_app` DB
-  password and the alert unsubscribe-token secret, all in sops. The owner
+  password and the alert unsubscribe-token secret, all in sops, and, once
+  station API feeds are on, the fetcher's `feed_credential_private_key`
+  (generated by the operator with `pnpm gen:feed-credential-key`). The owner
   (`water`) password is managed and rotated by RDS in Secrets Manager
   (`manage_master_user_password`), read only by the migrate Lambda at run
   time. The CloudFront shared secret is generated by Terraform
@@ -4261,7 +4383,8 @@ key there would let any read-only principal forge any user's session.
   | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET`, `CLOUDFRONT_PRIVATE_KEY` (signs report downloads, § Reports), `APP_ENCRYPTION_KEY` (seals two-step sign-in's secrets, § Two-step sign-in) |
   | worker | `AUTH_JWT_SECRET` (run stamps), `DATABASE_URL`, `ALERTS_TOKEN_SECRET` |
   | migrate | `WATER_APP_PASSWORD` |
-  | fetcher, renderer | none: no database, no session |
+  | fetcher | `FEED_CREDENTIAL_PRIVATE_KEY` (opens station API feeds' keys, § Station API feeds), and only while `station_api_feeds` is on; otherwise no secret. Never a database or a session |
+  | renderer | none: no database, no session |
 
   One secret per Lambda rather than one shared, so each role reads only what
   it uses: the worker can't read the CloudFront secret, the API can't read
@@ -4271,10 +4394,14 @@ key there would let any read-only principal forge any user's session.
   on its own secret's ARN and nothing else. The VPC Lambdas reach Secrets
   Manager through its interface endpoint, whose policy names each secret with
   its one role, and whose security group admits only the API, worker and
-  migrate Lambdas. The deploy role has no Secrets Manager permission.
+  migrate Lambdas. The fetcher, outside the VPC, reads its secret over the
+  public endpoint (through the NAT with `fixed_egress_enabled`), and the
+  private endpoint's policy doesn't name it. The deploy role has no Secrets Manager permission.
   Encryption is the AWS-managed `aws/secretsmanager` key.
 - **How they are loaded.** `backend/src/config/runtimeSecrets.ts`, called
-  first by `lambda.ts`, `lambda-worker.ts` and `lambda-migrate.ts` (a
+  first by `lambda.ts`, `lambda-worker.ts`, `lambda-migrate.ts`,
+  `lambda-assistant.ts` and `lambda-fetcher.ts` (the fetcher reads its
+  secret only with `STATION_API_FEEDS=on`, `runtimeSecretKeys`; a
   top-level `await`, before the production config check): one
   `GetSecretValue` per cold start, never per request, pinned to
   `RUNTIME_SECRET_VERSION`, and the values go into `process.env`, where the

@@ -28,6 +28,13 @@ Every source gets:
    fires if the job stops running (`TreatMissingData=breaching`).
 5. **A polite client** (the checklist below).
 
+**The one deliberate exception: station API feeds** ([§
+station-api](#station-api), issue #784). A project's owner points a feed at
+their own station's provider (often their own account with it), so the
+request is theirs to make, the data theirs to bring in, and there is no
+public upstream to copy once for everyone: each feed fetches its own
+station through the fetcher, at a polite pace, with the owner's own key.
+
 Today the three live feeds (CHIRPS, CHIRPS-GEFS, DWS) still fetch per feed
 from the fetcher Lambda. They break the rule, and Rounds 1–3 of #604 move
 them onto the copy. Until then their rows say what the code does now and
@@ -62,7 +69,10 @@ Every job that fetches from an upstream:
   (run by `pnpm test:guards` and CI) fails when a host in `FEED_HOSTS`
   (`backend/src/feeds/http.ts`) or a value `data_feed.source` may take
   (`FEED_SOURCES` and the table's CHECK) has no row here, with the value in
-  backticks in the Hosts or Feed source column.
+  backticks in the Hosts or Feed source column. A feed source's row must
+  name its hosts, or, for a source whose URL each feed's owner gives, start
+  its Hosts cell with `user-configured` (no backticks; the guard's
+  `USER_CONFIGURED`), so a row can't leave out where it fetches by accident.
 - **Licences** are recorded as read on the publisher's own page, with the
   date. Decision D-B (#326) applies: commercial use allowed and attribution
   fine; non-commercial or share-alike on our output rejected.
@@ -74,6 +84,7 @@ Every job that fetches from an upstream:
 | [chirps](#chirps) | CHIRPS v3 daily rainfall (`rnl`, `sat` final and preliminary) | live (feeds paused since 2026-10-25, CHC's 403s); the copy in R1–R3 | `data.chc.ucsb.edu` | `chirps` | `backend/src/feeds/sources/chirps.ts`; R2 `ingest/chirps_final.py`, `backend/src/ingest/daily.ts` |
 | [chirps-gefs](#chirps-gefs) | CHIRPS-GEFS v3 16-day forecast | live; the copy built (R3-A), read with `CHIRPS_SOURCE=mirror` | `data.chc.ucsb.edu` | `chirps_gefs` | `backend/src/ingest/gefs.ts` (the copy), `backend/src/feeds/fromMirrorGefs.ts` (feeds read it); `backend/src/feeds/sources/chirps.ts` until the cutover |
 | [dws-flow](#dws-flow) | DWS verified daily flow | live (`DWS_SOURCE=live`); the store, its weekly pass and the reply's import built in R3-B, off in production until the stations' records are loaded (`load-reference.yml` kind `dws`) | `www.dws.gov.za` | `dws` | `backend/src/feeds/sources/dws.ts`, `backend/src/ingest/dws.ts`, `backend/scripts/import-dws.ts` |
+| [station-api](#station-api) | User-configured station APIs: a rainfall station's readings from its provider's own web API, set up by the project's owner (issue #784) | built; off in production until `station_api_feeds` | user-configured (each feed's own https URL, typed by its owner; never `FEED_HOSTS`) | `station_api` | `backend/src/feeds/sources/station.ts`, `backend/src/feeds/stationHttp.ts`, `backend/src/feeds/credential.ts` |
 | [deafrica-waterbodies-series](#deafrica-waterbodies-series) | DE Africa Waterbodies v0.0.3: per-waterbody wet-area series from their Waterbodies API (by `wb_id`, from their WFS) and the polygons (built R5-A) | built; off in production until `dam_observations_enabled` | `api.digitalearth.africa`, `geoserver.digitalearth.africa` | – | `backend/src/dams/observed/` (`waterbodies.ts`, `match.ts`, `tick.ts`), `backend/scripts/import-waterbodies.ts` |
 | [deafrica-wofs-scenes](#deafrica-wofs-scenes) | DE Africa WOfS (`wofs_ls`, per Landsat scene) and its STAC search, summed inside our own dam outlines (built R5-C) | built; runs in the fetcher's `dams-weekly` mode, off in production until `dam_observations_enabled` | `explorer.digitalearth.africa`, `deafrica-services.s3.af-south-1.amazonaws.com` | – | `backend/src/dams/observed/wofs/` (`pass.ts`, `stac.ts`, `sum.ts`), `backend/src/raster/` (`cog.ts`, `mask.ts`, `utm.ts`) |
 | [deafrica-sentinel-2-c1](#deafrica-sentinel-2-c1) | DE Africa Sentinel-2 L2A Collection 1 (`s2_l2a_c1`), our own water classification inside traced dam outlines (issue #624) | built, off by default (#624 step 4: the pass, behind `DAM_OBSERVATIONS_S2` / `dam_s2_enabled`; not shown on a screen yet) | `deafrica-sentinel-2-l2a-c1.s3.af-south-1.amazonaws.com`, `explorer.digitalearth.africa` | – | `backend/src/dams/observed/sentinel/` (`s2.ts`, `pass.ts`); `wofs/stac.ts` (`assetUrl`, `s2_l2a_c1`) |
@@ -276,6 +287,53 @@ in `infra/feeds.tf`):
 - **Owner:** the operator; code `backend/src/feeds/sources/dws.ts`,
   `backend/src/ingest/dws.ts`, `backend/src/feeds/fromGaugeRecord.ts`,
   `backend/scripts/import-dws.ts`.
+
+### station-api
+
+- **Source:** whatever web API a rainfall station's provider offers (a
+  weather-station network, a logger vendor's cloud, a municipality's
+  portal). The owner sets the URL template (`{station}`, `{start}`,
+  `{end}`), how the key is sent (none, Bearer, a named header, a query
+  parameter, Basic) and how to read the answer (CSV or JSON, the date and
+  value fields, time zone, day boundary, scale, missing markers), with
+  presets for known providers ([api.md](./api.md), [ui.md](./ui.md)).
+- **Hosts:** none fixed. Each feed asks only its own https URL, on port 443,
+  through its own guarded client, never `FEED_HOSTS`: every address checked
+  at connect time (no private, loopback, link-local, CGNAT or reserved
+  range), redirects only within the URL's origin
+  ([security.md § Station API feeds](./security.md#station-api-feeds)).
+- **Licence and terms:** **the project owner's responsibility.** The data is
+  the owner's (or their provider's) and the request is made with their own
+  key under their own agreement with the provider; the app neither reads nor
+  records the provider's terms; the operator owns nothing here beyond
+  running the client politely.
+- **Attribution:** the station's provider, as the owner names the feed; the
+  series records the feed (source `station_api`) as where its days came from.
+- **Contact:** the owner's own, with their provider. Our user agent carries
+  the operator's contact (`FEEDS_CONTACT`), as every live fetch does.
+- **Access pattern:** once a day per feed (and **Run now**, rate-limited: 6,
+  then one every 10 minutes), at most 24 requests a fetch
+  (`STATION_MAX_REQUESTS`), each covering at most the feed's
+  `maxDaysPerRequest` (default 31), re-reading the last `revisionDays`
+  (default 7) for late readings.
+- **Limits we keep to (the polite-client checklist, as far as it applies):**
+  one descriptive user agent with a contact; one request at a time per host,
+  about one a second (`hostPacer`); `Retry-After` honoured on 429 and 503; a **401 or 403
+  stops the feed and backs it off for hours** (2 h × 2ⁿ, 242), never a retry
+  storm against the owner's provider account; a 30 s deadline and an 8 MB cap
+  per answer; no compression. No conditional GETs: these APIs answer a query,
+  not a file.
+- **Offline:** `FEED_SOURCE=fixtures` (the default) serves a synthetic
+  station API on a reserved `station.example` host
+  (`backend/src/feeds/stationFixtures.ts`), so dev, CI and e2e never call out.
+- **Fallback:** the owner's own upload of the station's readings (Add data),
+  as before the feed existed.
+- **Owner:** the project's owner (the configuration, the key, the provider's
+  terms); the operator owns the client and the fetcher's key
+  (`pnpm gen:feed-credential-key`, [deployment.md § Station API
+  feeds](./deployment.md#station-api-feeds)). Code
+  `backend/src/feeds/sources/station.ts`, `backend/src/feeds/stationHttp.ts`,
+  `backend/src/feeds/stationUrl.ts`, `backend/src/feeds/credential.ts`.
 
 ## Dam observations
 
